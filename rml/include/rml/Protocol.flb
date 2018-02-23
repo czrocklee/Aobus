@@ -1,0 +1,31 @@
+namespace rml;
+
+table MetaData
+{
+  filepath:string;
+  lastModified:ulong;
+  checkSum:[ubyte];
+}
+
+struct Index
+{
+  trackNumber:ushort;
+  totalTracks:ushort;
+  discNumber:ushort;
+  totalDiscs:ushort;
+}
+
+table Track
+{
+  title:string;  
+  artist:string;
+  album:string;
+  albumArtist:string;
+  
+  index:Index;
+  metaData:MetaData;
+  extraArtists:[string];
+  extraMetaData:[MetaData];
+}
+
+root_type Track;
