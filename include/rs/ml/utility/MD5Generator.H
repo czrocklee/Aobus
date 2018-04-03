@@ -17,22 +17,31 @@
 
 #pragma once
 
-#include <vector>
-#include <string>
-#include <system_error>
+#include <openssl/md5.h>
+#include <istream>
 
-namespace cli
+namespace rs::ml
 {
-  class Command
+  std::array<std::uint8_t, 16> calculateMD5(std::istream& is)
   {
-  public:
-    virtual ~Command() { };
+    constexpr std::size_t BufferSize = 1024 * 1024;
+    std::array<std::uint8_t, 16> digest;
+    std::streamsize bytes = 0;
+    MD5_CTX mdContext;
+    MD5_Init (&mdContext);
 
-    virtual std::error_code execute(int argc, const char *argv[]) = 0;
-  };
+    do
+    {
+      char buffer[BufferSize];
+      bytes = is.readsome(buffer, BufferSize);
+      MD5_Update (&mdContext, buffer, bytes);
+    }
+    while (is && bytes > 0);
 
+    MD5_Final (digest.data(), &mdContext);
+    return digest;
+  }
 }
-
 
 
 

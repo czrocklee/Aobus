@@ -15,7 +15,6 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "rml/include/lmdb++.h"
 #include <stdio.h>
 #include <regex.h>
 #include <taglib/taglib.h>
@@ -27,12 +26,12 @@
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/timer/timer.hpp>
 
-#include <rml/MediaLibrary.H>
-//#include <rml/Protocol_generated.h>
-#include <rml/Finder.H>
-#include <rml/MD5Generator.H>
-#include <cli/BasicCommand.H>
-#include <cli/ComboCommand.H>
+#include <rs/ml/core/MediaLibrary.H>
+//#include <rs/ml/Protocol_generated.h>
+#include <rs/ml/utility/Finder.H>
+//#include <rs/ml/MD5Generator.H>
+#include <rs/cli/BasicCommand.H>
+#include <rs/cli/ComboCommand.H>
 
 struct Data
 {
@@ -41,10 +40,10 @@ struct Data
 
 int main(int argc, const char *argv[])
 {
-  rml::MediaLibrary ml{"/home/rocklee/RockStudio/mylib"};
+  rs::ml::core::MediaLibrary ml{"/home/rocklee/RockStudio/mylib"};
 
-  cli::ComboCommand root;
-  root.addCommand<cli::BasicCommand>("show", [&ml](const auto& vm)
+  rs::cli::ComboCommand root;
+  root.addCommand<rs::cli::BasicCommand>("show", [&ml](const auto& vm)
   {
     //std::cout << tk.getArtist().cStr() << " " << tk.getTitle().cStr() << std::endl;
     for (const auto& pair: ml)
@@ -55,7 +54,7 @@ int main(int argc, const char *argv[])
         std::cout << pair.first << " " << pair.second.metaData()->filepath()->str() << std::endl;
       }*/
       std::cout << pair.first << " "; 
-      pair.second([](rml::Track::Reader track)
+      pair.second([](rs::ml::core::Track::Reader track)
       {
         std::cout << track.getArtist().cStr() << " " << track.getTitle().cStr() << std::endl;
       });
@@ -64,21 +63,23 @@ int main(int argc, const char *argv[])
     return std::error_code{};
   });
 
-  root.addCommand<cli::BasicCommand>("add", [&ml](const auto& vm)
+  root.addCommand<rs::cli::BasicCommand>("add", [&ml](const auto& vm)
   {
-    rml::Finder finder{"/home/rocklee/RockStudio/mylib", {".mp3"}};
+    rs::ml::Finder finder{"/media/rocklee/900E07FE0E07DC5A/Music/", {".m4a"}};
 
     for (const boost::filesystem::path& path : finder)
     {
       TagLib::FileRef file(path.string().c_str());
     //  TagLib::MP3::File file(path.string().c_str());
 
-      ml.add([&file, &path](rml::Track::Builder track)
+      ml.add([&file, &path](rs::ml::core::Track::Builder track)
       {
   //      std::ifstream ifs{path.string(), std::ios::in | std::ios::binary};
-  //      auto digest = rml::calculateMD5(ifs);
+  //      auto digest = rs::ml::calculateMD5(ifs);
 
   //      auto artist = fbb.CreateString(file.tag()->artist().toCString(true));
+
+        std::cout << std::strlen(file.tag()->artist().toCString(true)) << ' ' << file.tag()->artist().toCString(true) << std::endl;
 
         track.setArtist(file.tag()->artist().toCString(true));
         track.setAlbum(file.tag()->album().toCString(true));
@@ -88,20 +89,23 @@ int main(int argc, const char *argv[])
 
   //      auto album = fbb.CreateString(file.tag()->album().toCString(true));
   //      auto title = fbb.CreateString(file.tag()->title().toCString(true));
-  //      auto metaData = rml::CreateMetaData(fbb, fbb.CreateString(path.string()), boost::filesystem::last_write_time(path), fbb.CreateVector(digest.data(), digest.size()));
+  //      auto metaData = rs::ml::CreateMetaData(fbb, fbb.CreateString(path.string()), boost::filesystem::last_write_time(path), fbb.CreateVector(digest.data(), digest.size()));
       });
 
-      std::cout << path << std::endl;
+ //     std::cout << path << std::endl;
     }
 
     return std::error_code{};
   });
 
+
+  
+
   std::vector<std::string> args(argv + 1, argv + argc);
   root.execute(argc - 1, argv + 1);
 
   /*
-  rml::Finder finder{"/home/rocklee/RockStudio/mylib", {".mp3"}};
+  rs::ml::Finder finder{"/home/rocklee/RockStudio/mylib", {".mp3"}};
 
 
   for (const boost::filesystem::path& path : finder)
@@ -109,10 +113,10 @@ int main(int argc, const char *argv[])
     TagLib::FileRef file(path.string().c_str());
   //  TagLib::MP3::File file(path.string().c_str());
 
-    ml.add([&file, &path](rml::Track::Builder track)
+    ml.add([&file, &path](rs::ml::Track::Builder track)
     {
 //      std::ifstream ifs{path.string(), std::ios::in | std::ios::binary};
-//      auto digest = rml::calculateMD5(ifs);
+//      auto digest = rs::ml::calculateMD5(ifs);
 
 //      auto artist = fbb.CreateString(file.tag()->artist().toCString(true));
 
@@ -124,7 +128,7 @@ int main(int argc, const char *argv[])
 
 //      auto album = fbb.CreateString(file.tag()->album().toCString(true));
 //      auto title = fbb.CreateString(file.tag()->title().toCString(true));
-//      auto metaData = rml::CreateMetaData(fbb, fbb.CreateString(path.string()), boost::filesystem::last_write_time(path), fbb.CreateVector(digest.data(), digest.size()));
+//      auto metaData = rs::ml::CreateMetaData(fbb, fbb.CreateString(path.string()), boost::filesystem::last_write_time(path), fbb.CreateVector(digest.data(), digest.size()));
     });
 
     std::cout << path << std::endl;
@@ -194,5 +198,7 @@ int main(int argc, const char *argv[])
    std::cout << a << std::endl;
    cursor.close();
    rtxn.abort();*/
-   std::cout << "done" << std::endl;
+   std::cout << "done" << std::strstr(u8"久石譲", u8"譲") << std::endl;
+ 
+
 }

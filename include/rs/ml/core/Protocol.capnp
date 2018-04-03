@@ -1,7 +1,7 @@
 @0x8e501efc7848a202;
 
 using Cxx = import "/capnp/c++.capnp";
-$Cxx.namespace("rml");
+$Cxx.namespace("rs::ml::core");
 
 struct AudioSource
 {
@@ -24,16 +24,15 @@ struct Track
 {
   title @0 :Text;
   artist @1 :Text;
-  artists @2 :List(Text);
-  album @3 :Text;
-  albumArtist @4 :Text;
-  genre @5 :Text;
+  album @2 :Text;
+  albumArtist @3 :Text;
+  genre @4 :Text;
 
-  trackNumber @6 :UInt16;
-  totalTracks @7 :UInt16;
-  diskNumber @8 :UInt16;
-  totalDisks @9 :UInt16;
+  trackNumber @5 :UInt16;
+  totalTracks @6 :UInt16;
+  diskNumber @7 :UInt16;
+  totalDisks @8 :UInt16;
 
+  classical @9 :Classical;
   source @10 :AudioSource;
-  sources @11 :List(AudioSource);
 }

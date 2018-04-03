@@ -1,6 +1,7 @@
 -- premake5.lua
 
 workspace "RockStudio"
+  location "build"
   configurations { "Debug", "Release" }
   filter "configurations:Debug"
     defines {"DEBUG"}
@@ -10,17 +11,7 @@ workspace "RockStudio"
     defines {"NDEBUG"}
     optimize "On"
     
-    
-include "rml"
+include "lib"
+include "app"
 
-project "rml"
-  kind "ConsoleApp"
-  language "C++"
-  targetdir "bin/%{cfg.buildcfg}"
-    includedirs {"rml/include"}
-  
-  files { "*.h", "*.cpp", "*.c++" }
 
-	buildoptions {'-fPIC', '--std=c++1z'} 
-	links {'rml', 'capnp', 'kj', 'lmdb', 'tag', 'crypto', 'boost_program_options', 'boost_system', 'boost_filesystem'}
- 

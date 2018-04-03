@@ -1,0 +1,9 @@
+[submodule "3rd/premake-core"]
+	path = 3rd/premake-core
+	url = https://github.com/premake/premake-core.git
+[submodule "3rd/lmdbxx"]
+	path = 3rd/lmdbxx
+	url = https://github.com/bendiken/lmdbxx.git
+[submodule "3rd/premake-qt"]
+	path = 3rd/premake-qt
+	url = https://github.com/dcourtois/premake-qt.git

@@ -17,18 +17,17 @@
 
 #pragma once
 
-#include <lmdb++.h>
-#include <boost/iterator/iterator_facade.hpp>
-#include <boost/optional.hpp>
+#include <rs/ml/core/Protocol.capnp.h>
+#include <lmdbxx/lmdb++.h>
 #include <capnp/serialize.h>
 #include <capnp/message.h>
-//#include <flatbuffers/flatbuffers.h>
-#include <rml/Protocol.capnp.h>
-#include <memory.h>
+#include <boost/iterator/iterator_facade.hpp>
+
+#include <cassert>
 #include <functional>
 #include <iostream>
 
-namespace rml
+namespace rs::ml::core
 {
   class MediaLibrary
   {
@@ -85,7 +84,7 @@ namespace rml
       assert(buffer.size() % sizeof(word) == 0);
       kj::ArrayPtr<const word> segment{buffer.data<word>(), buffer.size() / sizeof(word)};
       ::capnp::FlatArrayMessageReader message{segment};
-      std::invoke(std::forward<Accessor>(accessor), message.getRoot<rml::Track>());
+      std::invoke(std::forward<Accessor>(accessor), message.getRoot<Track>());
     }
 
     const lmdb::val& value;

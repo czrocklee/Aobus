@@ -21,7 +21,9 @@ CAPNP_DECLARE_SCHEMA(8a8395a7f0227a8f);
 }  // namespace schemas
 }  // namespace capnp
 
-namespace rml {
+namespace rs {
+namespace ml {
+namespace core {
 
 struct AudioSource {
   AudioSource() = delete;
@@ -61,7 +63,7 @@ struct Track {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(8a8395a7f0227a8f, 1, 8)
+    CAPNP_DECLARE_STRUCT_HEADER(8a8395a7f0227a8f, 1, 7)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
     #endif  // !CAPNP_LITE
@@ -300,9 +302,6 @@ public:
   inline bool hasArtist() const;
   inline  ::capnp::Text::Reader getArtist() const;
 
-  inline bool hasArtists() const;
-  inline  ::capnp::List< ::capnp::Text>::Reader getArtists() const;
-
   inline bool hasAlbum() const;
   inline  ::capnp::Text::Reader getAlbum() const;
 
@@ -320,11 +319,11 @@ public:
 
   inline  ::uint16_t getTotalDisks() const;
 
-  inline bool hasSource() const;
-  inline  ::rml::AudioSource::Reader getSource() const;
+  inline bool hasClassical() const;
+  inline  ::rs::ml::core::Classical::Reader getClassical() const;
 
-  inline bool hasSources() const;
-  inline  ::capnp::List< ::rml::AudioSource>::Reader getSources() const;
+  inline bool hasSource() const;
+  inline  ::rs::ml::core::AudioSource::Reader getSource() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -368,14 +367,6 @@ public:
   inline void adoptArtist(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownArtist();
 
-  inline bool hasArtists();
-  inline  ::capnp::List< ::capnp::Text>::Builder getArtists();
-  inline void setArtists( ::capnp::List< ::capnp::Text>::Reader value);
-  inline void setArtists(::kj::ArrayPtr<const  ::capnp::Text::Reader> value);
-  inline  ::capnp::List< ::capnp::Text>::Builder initArtists(unsigned int size);
-  inline void adoptArtists(::capnp::Orphan< ::capnp::List< ::capnp::Text>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::Text>> disownArtists();
-
   inline bool hasAlbum();
   inline  ::capnp::Text::Builder getAlbum();
   inline void setAlbum( ::capnp::Text::Reader value);
@@ -409,19 +400,19 @@ public:
   inline  ::uint16_t getTotalDisks();
   inline void setTotalDisks( ::uint16_t value);
 
-  inline bool hasSource();
-  inline  ::rml::AudioSource::Builder getSource();
-  inline void setSource( ::rml::AudioSource::Reader value);
-  inline  ::rml::AudioSource::Builder initSource();
-  inline void adoptSource(::capnp::Orphan< ::rml::AudioSource>&& value);
-  inline ::capnp::Orphan< ::rml::AudioSource> disownSource();
+  inline bool hasClassical();
+  inline  ::rs::ml::core::Classical::Builder getClassical();
+  inline void setClassical( ::rs::ml::core::Classical::Reader value);
+  inline  ::rs::ml::core::Classical::Builder initClassical();
+  inline void adoptClassical(::capnp::Orphan< ::rs::ml::core::Classical>&& value);
+  inline ::capnp::Orphan< ::rs::ml::core::Classical> disownClassical();
 
-  inline bool hasSources();
-  inline  ::capnp::List< ::rml::AudioSource>::Builder getSources();
-  inline void setSources( ::capnp::List< ::rml::AudioSource>::Reader value);
-  inline  ::capnp::List< ::rml::AudioSource>::Builder initSources(unsigned int size);
-  inline void adoptSources(::capnp::Orphan< ::capnp::List< ::rml::AudioSource>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::rml::AudioSource>> disownSources();
+  inline bool hasSource();
+  inline  ::rs::ml::core::AudioSource::Builder getSource();
+  inline void setSource( ::rs::ml::core::AudioSource::Reader value);
+  inline  ::rs::ml::core::AudioSource::Builder initSource();
+  inline void adoptSource(::capnp::Orphan< ::rs::ml::core::AudioSource>&& value);
+  inline ::capnp::Orphan< ::rs::ml::core::AudioSource> disownSource();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -441,7 +432,8 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::rml::AudioSource::Pipeline getSource();
+  inline  ::rs::ml::core::Classical::Pipeline getClassical();
+  inline  ::rs::ml::core::AudioSource::Pipeline getSource();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -714,136 +706,100 @@ inline ::capnp::Orphan< ::capnp::Text> Track::Builder::disownArtist() {
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-inline bool Track::Reader::hasArtists() const {
+inline bool Track::Reader::hasAlbum() const {
   return !_reader.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
-inline bool Track::Builder::hasArtists() {
-  return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
-}
-inline  ::capnp::List< ::capnp::Text>::Reader Track::Reader::getArtists() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::Text>>::get(
-      _reader.getPointerField(2 * ::capnp::POINTERS));
-}
-inline  ::capnp::List< ::capnp::Text>::Builder Track::Builder::getArtists() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::Text>>::get(
-      _builder.getPointerField(2 * ::capnp::POINTERS));
-}
-inline void Track::Builder::setArtists( ::capnp::List< ::capnp::Text>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::Text>>::set(
-      _builder.getPointerField(2 * ::capnp::POINTERS), value);
-}
-inline void Track::Builder::setArtists(::kj::ArrayPtr<const  ::capnp::Text::Reader> value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::Text>>::set(
-      _builder.getPointerField(2 * ::capnp::POINTERS), value);
-}
-inline  ::capnp::List< ::capnp::Text>::Builder Track::Builder::initArtists(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::Text>>::init(
-      _builder.getPointerField(2 * ::capnp::POINTERS), size);
-}
-inline void Track::Builder::adoptArtists(
-    ::capnp::Orphan< ::capnp::List< ::capnp::Text>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::Text>>::adopt(
-      _builder.getPointerField(2 * ::capnp::POINTERS), kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::List< ::capnp::Text>> Track::Builder::disownArtists() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::Text>>::disown(
-      _builder.getPointerField(2 * ::capnp::POINTERS));
-}
-
-inline bool Track::Reader::hasAlbum() const {
-  return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
-}
 inline bool Track::Builder::hasAlbum() {
-  return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Track::Reader::getAlbum() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader.getPointerField(3 * ::capnp::POINTERS));
+      _reader.getPointerField(2 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Track::Builder::getAlbum() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder.getPointerField(3 * ::capnp::POINTERS));
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 inline void Track::Builder::setAlbum( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder.getPointerField(3 * ::capnp::POINTERS), value);
+      _builder.getPointerField(2 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Track::Builder::initAlbum(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder.getPointerField(3 * ::capnp::POINTERS), size);
+      _builder.getPointerField(2 * ::capnp::POINTERS), size);
 }
 inline void Track::Builder::adoptAlbum(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
+      _builder.getPointerField(2 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Track::Builder::disownAlbum() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder.getPointerField(3 * ::capnp::POINTERS));
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 
 inline bool Track::Reader::hasAlbumArtist() const {
-  return !_reader.getPointerField(4 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline bool Track::Builder::hasAlbumArtist() {
-  return !_builder.getPointerField(4 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Track::Reader::getAlbumArtist() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader.getPointerField(4 * ::capnp::POINTERS));
+      _reader.getPointerField(3 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Track::Builder::getAlbumArtist() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder.getPointerField(4 * ::capnp::POINTERS));
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Track::Builder::setAlbumArtist( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder.getPointerField(4 * ::capnp::POINTERS), value);
+      _builder.getPointerField(3 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Track::Builder::initAlbumArtist(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder.getPointerField(4 * ::capnp::POINTERS), size);
+      _builder.getPointerField(3 * ::capnp::POINTERS), size);
 }
 inline void Track::Builder::adoptAlbumArtist(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder.getPointerField(4 * ::capnp::POINTERS), kj::mv(value));
+      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Track::Builder::disownAlbumArtist() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder.getPointerField(4 * ::capnp::POINTERS));
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
 inline bool Track::Reader::hasGenre() const {
-  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(4 * ::capnp::POINTERS).isNull();
 }
 inline bool Track::Builder::hasGenre() {
-  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(4 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Track::Reader::getGenre() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader.getPointerField(5 * ::capnp::POINTERS));
+      _reader.getPointerField(4 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Track::Builder::getGenre() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder.getPointerField(5 * ::capnp::POINTERS));
+      _builder.getPointerField(4 * ::capnp::POINTERS));
 }
 inline void Track::Builder::setGenre( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder.getPointerField(5 * ::capnp::POINTERS), value);
+      _builder.getPointerField(4 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Track::Builder::initGenre(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder.getPointerField(5 * ::capnp::POINTERS), size);
+      _builder.getPointerField(4 * ::capnp::POINTERS), size);
 }
 inline void Track::Builder::adoptGenre(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder.getPointerField(5 * ::capnp::POINTERS), kj::mv(value));
+      _builder.getPointerField(4 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Track::Builder::disownGenre() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder.getPointerField(5 * ::capnp::POINTERS));
+      _builder.getPointerField(4 * ::capnp::POINTERS));
 }
 
 inline  ::uint16_t Track::Reader::getTrackNumber() const {
@@ -902,75 +858,82 @@ inline void Track::Builder::setTotalDisks( ::uint16_t value) {
       3 * ::capnp::ELEMENTS, value);
 }
 
+inline bool Track::Reader::hasClassical() const {
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
+}
+inline bool Track::Builder::hasClassical() {
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
+}
+inline  ::rs::ml::core::Classical::Reader Track::Reader::getClassical() const {
+  return ::capnp::_::PointerHelpers< ::rs::ml::core::Classical>::get(
+      _reader.getPointerField(5 * ::capnp::POINTERS));
+}
+inline  ::rs::ml::core::Classical::Builder Track::Builder::getClassical() {
+  return ::capnp::_::PointerHelpers< ::rs::ml::core::Classical>::get(
+      _builder.getPointerField(5 * ::capnp::POINTERS));
+}
+#if !CAPNP_LITE
+inline  ::rs::ml::core::Classical::Pipeline Track::Pipeline::getClassical() {
+  return  ::rs::ml::core::Classical::Pipeline(_typeless.getPointerField(5));
+}
+#endif  // !CAPNP_LITE
+inline void Track::Builder::setClassical( ::rs::ml::core::Classical::Reader value) {
+  ::capnp::_::PointerHelpers< ::rs::ml::core::Classical>::set(
+      _builder.getPointerField(5 * ::capnp::POINTERS), value);
+}
+inline  ::rs::ml::core::Classical::Builder Track::Builder::initClassical() {
+  return ::capnp::_::PointerHelpers< ::rs::ml::core::Classical>::init(
+      _builder.getPointerField(5 * ::capnp::POINTERS));
+}
+inline void Track::Builder::adoptClassical(
+    ::capnp::Orphan< ::rs::ml::core::Classical>&& value) {
+  ::capnp::_::PointerHelpers< ::rs::ml::core::Classical>::adopt(
+      _builder.getPointerField(5 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::rs::ml::core::Classical> Track::Builder::disownClassical() {
+  return ::capnp::_::PointerHelpers< ::rs::ml::core::Classical>::disown(
+      _builder.getPointerField(5 * ::capnp::POINTERS));
+}
+
 inline bool Track::Reader::hasSource() const {
   return !_reader.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline bool Track::Builder::hasSource() {
   return !_builder.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
-inline  ::rml::AudioSource::Reader Track::Reader::getSource() const {
-  return ::capnp::_::PointerHelpers< ::rml::AudioSource>::get(
+inline  ::rs::ml::core::AudioSource::Reader Track::Reader::getSource() const {
+  return ::capnp::_::PointerHelpers< ::rs::ml::core::AudioSource>::get(
       _reader.getPointerField(6 * ::capnp::POINTERS));
 }
-inline  ::rml::AudioSource::Builder Track::Builder::getSource() {
-  return ::capnp::_::PointerHelpers< ::rml::AudioSource>::get(
+inline  ::rs::ml::core::AudioSource::Builder Track::Builder::getSource() {
+  return ::capnp::_::PointerHelpers< ::rs::ml::core::AudioSource>::get(
       _builder.getPointerField(6 * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::rml::AudioSource::Pipeline Track::Pipeline::getSource() {
-  return  ::rml::AudioSource::Pipeline(_typeless.getPointerField(6));
+inline  ::rs::ml::core::AudioSource::Pipeline Track::Pipeline::getSource() {
+  return  ::rs::ml::core::AudioSource::Pipeline(_typeless.getPointerField(6));
 }
 #endif  // !CAPNP_LITE
-inline void Track::Builder::setSource( ::rml::AudioSource::Reader value) {
-  ::capnp::_::PointerHelpers< ::rml::AudioSource>::set(
+inline void Track::Builder::setSource( ::rs::ml::core::AudioSource::Reader value) {
+  ::capnp::_::PointerHelpers< ::rs::ml::core::AudioSource>::set(
       _builder.getPointerField(6 * ::capnp::POINTERS), value);
 }
-inline  ::rml::AudioSource::Builder Track::Builder::initSource() {
-  return ::capnp::_::PointerHelpers< ::rml::AudioSource>::init(
+inline  ::rs::ml::core::AudioSource::Builder Track::Builder::initSource() {
+  return ::capnp::_::PointerHelpers< ::rs::ml::core::AudioSource>::init(
       _builder.getPointerField(6 * ::capnp::POINTERS));
 }
 inline void Track::Builder::adoptSource(
-    ::capnp::Orphan< ::rml::AudioSource>&& value) {
-  ::capnp::_::PointerHelpers< ::rml::AudioSource>::adopt(
+    ::capnp::Orphan< ::rs::ml::core::AudioSource>&& value) {
+  ::capnp::_::PointerHelpers< ::rs::ml::core::AudioSource>::adopt(
       _builder.getPointerField(6 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::rml::AudioSource> Track::Builder::disownSource() {
-  return ::capnp::_::PointerHelpers< ::rml::AudioSource>::disown(
+inline ::capnp::Orphan< ::rs::ml::core::AudioSource> Track::Builder::disownSource() {
+  return ::capnp::_::PointerHelpers< ::rs::ml::core::AudioSource>::disown(
       _builder.getPointerField(6 * ::capnp::POINTERS));
 }
 
-inline bool Track::Reader::hasSources() const {
-  return !_reader.getPointerField(7 * ::capnp::POINTERS).isNull();
-}
-inline bool Track::Builder::hasSources() {
-  return !_builder.getPointerField(7 * ::capnp::POINTERS).isNull();
-}
-inline  ::capnp::List< ::rml::AudioSource>::Reader Track::Reader::getSources() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::rml::AudioSource>>::get(
-      _reader.getPointerField(7 * ::capnp::POINTERS));
-}
-inline  ::capnp::List< ::rml::AudioSource>::Builder Track::Builder::getSources() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::rml::AudioSource>>::get(
-      _builder.getPointerField(7 * ::capnp::POINTERS));
-}
-inline void Track::Builder::setSources( ::capnp::List< ::rml::AudioSource>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::rml::AudioSource>>::set(
-      _builder.getPointerField(7 * ::capnp::POINTERS), value);
-}
-inline  ::capnp::List< ::rml::AudioSource>::Builder Track::Builder::initSources(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::rml::AudioSource>>::init(
-      _builder.getPointerField(7 * ::capnp::POINTERS), size);
-}
-inline void Track::Builder::adoptSources(
-    ::capnp::Orphan< ::capnp::List< ::rml::AudioSource>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::rml::AudioSource>>::adopt(
-      _builder.getPointerField(7 * ::capnp::POINTERS), kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::List< ::rml::AudioSource>> Track::Builder::disownSources() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::rml::AudioSource>>::disown(
-      _builder.getPointerField(7 * ::capnp::POINTERS));
-}
-
+}  // namespace
+}  // namespace
 }  // namespace
 
 #endif  // CAPNP_INCLUDED_8e501efc7848a202_

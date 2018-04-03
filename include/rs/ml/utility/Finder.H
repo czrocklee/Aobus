@@ -21,7 +21,7 @@
 #include <boost/iterator/filter_iterator.hpp>
 #include <set>
 
-namespace rml
+namespace rs::ml
 {
   class Finder
   {

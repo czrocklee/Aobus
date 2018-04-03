@@ -17,10 +17,12 @@
 
 #pragma once
 
-#include <cli/Command.H>
+#include <rs/cli/Command.H>
 #include <boost/program_options.hpp>
+#include <boost/make_shared.hpp>
+#include <functional>
 
-namespace cli
+namespace rs::cli
 {
   class BasicCommand : public Command
   {
@@ -28,13 +30,32 @@ namespace cli
     using VariablesMap = boost::program_options::variables_map;
     using Executor = std::function<std::error_code(const VariablesMap&)>;
 
-    BasicCommand(const Executor& excutor);
+    BasicCommand(const Executor& executor) : _executor{executor} {}
 
-    std::error_code execute(int argc, const char *argv[]) override;
+    std::error_code execute(int argc, const char *argv[])
+    {
+      boost::program_options::command_line_parser parser{argc, argv};
+      parser.options(_optDesc).positional(_posOptDesc);
+      VariablesMap vm;
+      boost::program_options::store(parser.run(), vm);
+      boost::program_options::notify(vm);
 
-    BasicCommand& addOption(const char* name, const boost::program_options::value_semantic* s, const char* description);
+      return _executor(vm);
+    }
 
-    BasicCommand& addPostionalOption(const char* name, int maxCount);
+    template<typename... Args>
+    BasicCommand& addOption(Args&&... args)
+    {
+      _optDesc.add(boost::make_shared<boost::program_options::option_description>(std::forward<Args>(args)...));
+      return *this;
+    }
+
+    template<typename... Args>
+    BasicCommand& addPostionalOption(Args&&... args)
+    {
+      _posOptDesc.add(std::forward<Args>(args)...);
+      return *this;
+    }
 
   private:
     Executor _executor;

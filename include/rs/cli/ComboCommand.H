@@ -17,17 +17,21 @@
 
 #pragma once
 
-#include <cli/Command.H>
+#include <rs/cli/Command.H>
 #include <map>
 #include <memory>
 #include <boost/program_options.hpp>
 
-namespace cli
+namespace rs::cli
 {
   class ComboCommand : public Command
   {
   public:
-    ComboCommand();
+    ComboCommand()
+    {
+      _optDesc.add_options()("command", boost::program_options::value<std::string>()->required(), "sub command");
+      _posOptDesc.add("command", 1);
+    }
 
     template<typename T, typename... Args>
     T& addCommand(std::string cmd, Args&&... args)
@@ -37,7 +41,20 @@ namespace cli
       return *(static_cast<T*>(iter.first->second.get()));
     }
 
-    std::error_code execute(int argc, const char *argv[]) override;
+    std::error_code execute(int argc, const char *argv[]) override
+    {
+      std::string command = argv[0];
+      auto iter = _cmds.find(command);
+
+      if (iter != _cmds.end())
+      {
+        return iter->second->execute(argc - 1, argv + 1);
+      }
+      else
+      {
+        return std::make_error_code(std::errc::invalid_argument);
+      }
+    }
 
   private:
     std::map<std::string, std::unique_ptr<Command>> _cmds;
