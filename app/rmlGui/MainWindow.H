@@ -17,22 +17,12 @@
 
 #pragma once
 
-#include <rs/ml/query/Expression.H>
-#include <rs/ml/core/Track.H>
+#include <ui_main.h>
 
-namespace rs::ml::query
+class MainWindow : public QMainWindow, public Ui::MainWindow
 {
-  class TrackFilter
-  {
-  public:
-    explicit TrackFilter(const std::string& quick);
+    Q_OBJECT
 
-    explicit TrackFilter(Expression&& root);
-
-    bool operator()(const core::Track* track) const;
-
-  private:
-    struct Impl;
-    std::shared_ptr<Impl> _impl;
-  };
-}
+public:
+    MainWindow();
+};

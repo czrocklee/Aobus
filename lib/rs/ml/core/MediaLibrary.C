@@ -16,6 +16,7 @@
  */
 
 #include <rs/ml/core/MediaLibrary.H>
+#include <rs/ml/core/Protocol_generated.h>
 
 namespace rs::ml::core
 {
@@ -56,11 +57,41 @@ namespace rs::ml::core
     return {};
   }
 
+  MediaLibrary::TrackId MediaLibrary::add(const Creator& creator)
+  {
+    return put(_nextTrackId, creator) ? _nextTrackId++ : 0;
+  }
+
   void MediaLibrary::remove(TrackId id)
   {
     _metaDb.del(_txn, id);
   }
 
+  void MediaLibrary::update(TrackId id, const Creator& creator)
+  {
+    put(id, creator);
+  }
+
+  const Track* MediaLibrary::get(TrackId id)
+  {
+    lmdb::val key{&id, sizeof(TrackId)};
+    lmdb::val value;
+    _metaDb.get(_txn, key, value);
+    return GetTrack(value.data());
+  }
+
+  bool MediaLibrary::put(TrackId id, const Creator& creator)
+  {
+    flatbuffers::Offset<Track> track = creator(_fbb);
+    _fbb.Finish(track);
+
+    lmdb::val key{&id, sizeof(TrackId)};
+    lmdb::val value{_fbb.GetBufferPointer(), _fbb.GetSize()};
+    bool success = _metaDb.put(_txn, key, value);
+    _fbb.Clear();
+
+    return success;
+  }
 
   MediaLibrary::Iterator::Iterator()
     : _cursor{nullptr}, _key{nullptr, 0}
@@ -103,11 +134,15 @@ namespace rs::ml::core
     {
       _key = lmdb::val{nullptr, 0};
     }
+    else
+    {
+      _track = GetTrack(_value.data());
+    }
   }
 
   MediaLibrary::Value MediaLibrary::Iterator::dereference() const
   {
-    return {*_key.data<TrackId>(), Decoder{_value}};
+    return Value(*_key.data<TrackId>(), _track);
   }
 }
 

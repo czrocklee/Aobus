@@ -24,7 +24,6 @@
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression::Operation, op, operand)
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression, operand, operations)
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::UnaryExpression, op, operand)
-BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::VariableExpression, name)
 
 namespace
 {
@@ -44,6 +43,15 @@ namespace
     }
   };
 
+  x3::symbols<Variable> variables
+  {
+    {
+      {"%artist%", Variable::Artist},
+      {"%album%", Variable::Album},
+      {"%title%", Variable::Title}
+    }
+  };
+
   const x3::rule<class logicalOr, BinaryExpression> logicalOr{"or"};
   const x3::rule<class logicalAnd, BinaryExpression> logicalAnd{"and"};
   const x3::rule<class relational, BinaryExpression> relational{"relational"};
@@ -52,17 +60,19 @@ namespace
   const x3::rule<class variable, VariableExpression> variable{"variable"};
   const x3::rule<class constant, ConstantExpression> constant{"constant"};
   const x3::rule<class string, std::string> string{"string"};
+  const x3::rule<class customVariable, std::string> customVariable{"string"};
  
   const auto logicalOr_def = logicalAnd >> *(logicalOrOperator >> logicalOr);
   const auto logicalAnd_def = relational >> *(logicalAndOperator >> logicalAnd);
   const auto relational_def = primary >> *(relationalOperator >> relational);
   const auto primary_def = constant | variable | ('(' > logicalOr > ')') | logicalNot;
   const auto logicalNot_def = logicalNotOperator >> primary;
-  const auto variable_def = '%' >> *(x3::char_ - '%') >> '%';
+  const auto variable_def = variables | customVariable;
   const auto constant_def = x3::bool_ | x3::int_ | string;
   const auto string_def = '"' >> x3::no_skip[*~x3::char_('"')] >> '"';
+  const auto customVariable_def = '%' >> *(x3::char_ - '%') >> '%';
 
-  BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, logicalNot, primary, variable, constant, string);
+  BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, logicalNot, primary, variable, constant, string, customVariable);
 }
 
 namespace rs::ml::query

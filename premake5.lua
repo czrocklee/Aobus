@@ -10,6 +10,7 @@ workspace "RockStudio"
   filter "configurations:Release"
     defines {"NDEBUG"}
     optimize "On"
+    symbols "On"
     
 include "lib"
 include "app"

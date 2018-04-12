@@ -17,22 +17,5 @@
 
 #pragma once
 
-#include <rs/ml/query/Expression.H>
-#include <rs/ml/core/Track.H>
+#include <rs/ml/core/Protocol_generated.h>
 
-namespace rs::ml::query
-{
-  class TrackFilter
-  {
-  public:
-    explicit TrackFilter(const std::string& quick);
-
-    explicit TrackFilter(Expression&& root);
-
-    bool operator()(const core::Track* track) const;
-
-  private:
-    struct Impl;
-    std::shared_ptr<Impl> _impl;
-  };
-}

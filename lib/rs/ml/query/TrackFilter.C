@@ -18,7 +18,10 @@
 #include <rs/ml/query/TrackFilter.H>
 #include <rs/ml/core/DataValue.H>
 #include <rs/ml/utility/VariantVisitor.H>
+
+#include <boost/pool/pool_alloc.hpp>
 #include <functional>
+#include <algorithm>
 
 namespace
 {
@@ -27,14 +30,33 @@ namespace
   using namespace rs::ml::query;
   
   #define TRACK_FIELD_ACCESSOR_STR(field) \
-  DataValue get##field(const Track::Reader& track) \
+  DataValue field(const Track* track) \
   { \
-    auto string = track.get##field(); \
-    return std::string_view{string.begin(), string.size()};\
+    auto string = track->field(); \
+    return std::string_view{string->c_str(), string->size()};\
   } 
 
-  TRACK_FIELD_ACCESSOR_STR(Title);
-  TRACK_FIELD_ACCESSOR_STR(Artist);
+  TRACK_FIELD_ACCESSOR_STR(title);
+  TRACK_FIELD_ACCESSOR_STR(artist);
+  TRACK_FIELD_ACCESSOR_STR(album);
+
+  DataValue quick(const Track* track);
+
+  using FieldAccessor = DataValue(*)(const Track*);
+  std::array<FieldAccessor, 4> accessors = {&quick, &artist, &album, &title};
+
+  DataValue quick(const Track* track)
+  {
+    using Allocator = boost::fast_pool_allocator<DataValueVector>;
+    DataValueVectorPtr val{new (Allocator::allocate()) DataValueVector{}, Allocator::deallocate};
+    
+    for (auto i = 1u; i < 4; ++i)
+    {
+      val->emplace_back(std::invoke(accessors[i], track));
+    }
+
+    return std::move(val);
+  }
 
   struct Eval
   {
@@ -44,7 +66,7 @@ namespace
 
       for (const auto& operation : binary.operations)
       {
-        val = evaluateBinary(operation.op, val, operation.operand);
+        val = evaluateBinary(operation.op, std::move(val), operation.operand);
       }
 
       return val;
@@ -58,9 +80,9 @@ namespace
 
     DataValue operator()(const VariableExpression& variable)
     {
-      using FieldAccessor = DataValue(*)(const Track::Reader&);
-      static std::map<std::string, FieldAccessor> accessors = {{"title", &getTitle}, {"artist", &getArtist}};
-      return std::invoke(accessors[variable.name], track);
+      return std::visit(rs::ml::utility::makeVisitor(
+        [this](Variable val) { return std::invoke(accessors[static_cast<int>(val)], track); },
+        [](const std::string&) { return DataValue{}; }), variable);
     }
 
     DataValue operator()(const ConstantExpression& constant)
@@ -74,11 +96,19 @@ namespace
         [](boost::blank) { return false; },
         [](bool val) { return val; },
         [](int val) { return static_cast<bool>(val); },
-        [](std::string_view) { return true; }), val); 
+        [](std::string_view) { return true; }, 
+        [](const DataValueVectorPtr& val) { return std::any_of(val->begin(), val->end(), convertToBool); }), val); 
     }
 
-    bool evaluateBinary(Operator op, const DataValue& lhs, const Expression& rhs)
+    bool evaluateBinary(Operator op, DataValue&& lhs, const Expression& rhs)
     {
+      auto vector = std::get_if<DataValueVectorPtr>(&lhs);
+
+      if (vector != nullptr)
+      {
+        return std::any_of((*vector)->begin(), (*vector)->end(), [this, op, &rhs](auto&& l) { return evaluateBinary(op, std::move(l), rhs); });
+      }
+
       switch (op)
       {
         case Operator::And: 
@@ -86,18 +116,18 @@ namespace
 
         case Operator::Or: 
           return convertToBool(lhs) ? true : convertToBool(evaluate(rhs));
-
+        
         case Operator::Less:
           return std::visit(rs::ml::utility::makeVisitor(
             [](int l, int r) { return l < r; },
             [](std::string_view l, std::string_view r) { return l < r; },
-            [](auto, auto) { return false; }), lhs, evaluate(rhs));
+            [](auto&, auto&) { return false; }), lhs, evaluate(rhs));
 
         case Operator::Greater:
           return std::visit(rs::ml::utility::makeVisitor(
             [](int l, int r) { return l > r; },
             [](std::string_view l, std::string_view r) { return l > r; },
-            [](auto, auto) { return false; }), lhs, evaluate(rhs));
+            [](auto&, auto&) { return false; }), lhs, evaluate(rhs));
 
         case Operator::Equal: 
           return lhs == evaluate(rhs);
@@ -105,21 +135,25 @@ namespace
         case Operator::Like: 
           return std::visit(rs::ml::utility::makeVisitor(
             [](std::string_view l, std::string_view r) { return l.find(r) != std::string_view::npos; },
-            [](auto, auto) { return false; }), lhs, evaluate(rhs));
+            [](auto&, auto&) { return false; }), lhs, evaluate(rhs));
 
         default: return false;
       }
     }
 
-    DataValue evaluate(const Expression& root)
+    const DataValue evaluate(const Expression& root)
     {
       return boost::apply_visitor(*this, root);
     }
 
-    const Track::Reader& track;
+    const Track* track;
   };
 
-
+  inline Expression makeQuickExpression(const std::string& val)
+  { 
+    return Expression{BinaryExpression{Expression{VariableExpression{}}, 
+                                       {{Operator::Like, Expression{ConstantExpression{val}}}}}};
+  }
 }
 
 
@@ -131,12 +165,17 @@ namespace rs::ml::query
     Expression root;
   };
 
+  TrackFilter::TrackFilter(const std::string& quick)
+    : TrackFilter{makeQuickExpression(quick)}
+  {
+  }
+
   TrackFilter::TrackFilter(Expression&& root)
     : _impl{std::make_shared<Impl>(std::move(root))}
   {
   }
 
-  bool TrackFilter::operator()(const Track::Reader& track) const
+  bool TrackFilter::operator()(const Track* track) const
   {
     Eval eval{track};
     return Eval::convertToBool(eval.evaluate(_impl->root));

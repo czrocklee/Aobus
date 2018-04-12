@@ -17,22 +17,48 @@
 
 #pragma once
 
-#include <rs/ml/core/Protocol.capnp.h>
 #include <lmdbxx/lmdb++.h>
-#include <capnp/serialize.h>
-#include <capnp/message.h>
 #include <boost/iterator/iterator_facade.hpp>
+#include <boost/optional.hpp>
+#include <capnp/serialize.h>
+#include <flatbuffers/flatbuffers.h>
 
-#include <cassert>
+#include <memory.h>
 #include <functional>
-#include <iostream>
+
+
+
+auto reader = ml.reader();
+reader.release();
+reader.aquire();
+
+reader.release();
+
+
+struct Listener
+{
+  void begin()
+
+  void onUpdate(TrackId id, const Track*);
+
+  void onDelete(Track id);
+
+  void onCreate(Track id, const Track*);
+
+  void end();
+};
+
 
 namespace rs::ml::core
 {
+  class Track;  
+
   class MediaLibrary
   {
   public:
     using TrackId = std::uint64_t;
+    using Creator = std::function<flatbuffers::Offset<Track>(flatbuffers::FlatBufferBuilder&)>;
+    using Value = std::pair<TrackId, const Track*>;
     class Iterator;
 
     MediaLibrary(const std::string& folder);
@@ -43,23 +69,16 @@ namespace rs::ml::core
 
     Iterator end() const;
 
-    template<typename Encoder>
-    TrackId add(Encoder&& encoder);
+    TrackId add(const Creator& creator);
 
     void remove(TrackId id);
 
-    template<typename Encoder>
-    void update(TrackId id, Encoder&& encoder);
+    void update(TrackId id, const Creator& creator);
 
-    template<typename Accessor>
-    void get(TrackId id, Accessor&& accesor);
+    const Track* get(TrackId id);
 
   private:
-    struct Decoder;
-    using Value = std::pair<TrackId, Decoder>;
-
-    template<typename Encoder>
-    bool put(TrackId id, Encoder&& encoder);
+    bool put(TrackId id, const Creator& creator);
 
   private:
     lmdb::env _env;
@@ -67,27 +86,7 @@ namespace rs::ml::core
     lmdb::dbi _metaDb;
     lmdb::dbi _resourceDb;
     TrackId _nextTrackId;
-  };
-
-  struct MediaLibrary::Decoder
-  {
-    template<typename Accessor>
-    void operator()(Accessor&& accessor) const
-    {
-      decode(value, std::forward<Accessor>(accessor));
-    }
-    
-    template<typename Accessor>
-    static void decode(const lmdb::val& buffer, Accessor&& accessor)
-    {
-      using ::capnp::word;
-      assert(buffer.size() % sizeof(word) == 0);
-      kj::ArrayPtr<const word> segment{buffer.data<word>(), buffer.size() / sizeof(word)};
-      ::capnp::FlatArrayMessageReader message{segment};
-      std::invoke(std::forward<Accessor>(accessor), message.getRoot<Track>());
-    }
-
-    const lmdb::val& value;
+    flatbuffers::FlatBufferBuilder _fbb;
   };
 
   class MediaLibrary::Iterator : public boost::iterator_facade<Iterator, Value, boost::forward_traversal_tag, Value>
@@ -113,51 +112,9 @@ namespace rs::ml::core
     lmdb::cursor _cursor;
     lmdb::val _key;
     lmdb::val _value;
+    const Track* _track;
 
     friend class MediaLibrary;
   };
-
-  template<typename Encoder>
-  MediaLibrary::TrackId MediaLibrary::add(Encoder&& encoder)
-  {
-    return put(_nextTrackId, std::forward<Encoder>(encoder)) ? _nextTrackId++ : 0;
-  }
-
-  template<typename Encoder>
-  void MediaLibrary::update(TrackId id, Encoder&& encoder)
-  {
-    put(id, std::forward<Encoder>(encoder));
-  }
-
-  template<typename Accessor>
-  void MediaLibrary::get(TrackId id, Accessor&& accessor)
-  {
-    lmdb::val key{&id, sizeof(TrackId)};
-    lmdb::val value;
-    _metaDb.get(_txn, key, value);
-    Decoder::decode(value, std::forward<Accessor>(accessor));
-  }
-
-  template<typename Encoder>
-  bool MediaLibrary::put(TrackId id, Encoder&& encoder)
-  {
-    ::kj::FixedArray<::capnp::word, 1024> tmpBuffer;
-    ::capnp::MallocMessageBuilder message(tmpBuffer);
-
-    std::invoke(encoder, message.initRoot<Track>());
-
-    lmdb::val key{&id, sizeof(TrackId)};
-    lmdb::val value{nullptr, ::capnp::computeSerializedSizeInWords(message) * sizeof(::capnp::word)};
-
-    if (!_metaDb.put(_txn, key, value, MDB_RESERVE))
-    {
-      return false;
-    }
-
-    kj::ArrayPtr<::capnp::byte> buffer{value.data<::capnp::byte>(), value.size() / sizeof(::capnp::byte)};
-    kj::ArrayOutputStream stream{buffer};
-    ::capnp::writeMessage(stream, message);
-    return true;
-  }
 
 }

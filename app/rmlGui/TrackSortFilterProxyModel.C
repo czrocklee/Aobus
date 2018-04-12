@@ -15,24 +15,33 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include <TrackSortFilterProxyModel.H>
 
-#include <rs/ml/query/Expression.H>
-#include <rs/ml/core/Track.H>
-
-namespace rs::ml::query
+void TrackSortFilterProxyModel::onQuickFilterChanged(const QString& filter)
 {
-  class TrackFilter
+  beginResetModel();
+
+  if (filter.isEmpty())
   {
-  public:
-    explicit TrackFilter(const std::string& quick);
+    _filter.reset();
+  }
+  else
+  {
+    _filter = rs::ml::query::TrackFilter{filter.toStdString()};
+  }
 
-    explicit TrackFilter(Expression&& root);
+  endResetModel();
+}
 
-    bool operator()(const core::Track* track) const;
-
-  private:
-    struct Impl;
-    std::shared_ptr<Impl> _impl;
-  };
+bool TrackSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
+{
+  if (!_filter)
+  {
+    return true;
+  }
+  else
+  {
+    auto index = sourceModel()->index(sourceRow, 0);
+    return std::invoke(_filter.value(), static_cast<rs::ml::core::Track*>(index.internalPointer()));
+  }
 }

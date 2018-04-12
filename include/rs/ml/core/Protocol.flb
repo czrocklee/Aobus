@@ -1,0 +1,33 @@
+namespace rs.ml.core;
+
+table AudioSource
+{
+  filepath:string;
+  lastModified:ulong;
+  length:uint;
+  bitRate:uint;
+  sampleRate:uint;
+  bitDepth:ubyte;
+}
+
+struct Index
+{
+  trackNumber:ushort;
+  totalTracks:ushort;
+  discNumber:ushort;
+  totalDiscs:ushort;
+}
+
+table Track
+{
+  title:string;  
+  artist:string;
+  album:string;
+  albumArtist:string;
+  genre:string;
+  
+  index:Index;
+  source:AudioSource;
+}
+
+root_type Track;

@@ -15,24 +15,13 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include <MainWindow.H>
+#include <QApplication>
 
-#include <rs/ml/query/Expression.H>
-#include <rs/ml/core/Track.H>
-
-namespace rs::ml::query
+int main(int argc, char *argv[])
 {
-  class TrackFilter
-  {
-  public:
-    explicit TrackFilter(const std::string& quick);
-
-    explicit TrackFilter(Expression&& root);
-
-    bool operator()(const core::Track* track) const;
-
-  private:
-    struct Impl;
-    std::shared_ptr<Impl> _impl;
-  };
+  QApplication app(argc, argv);
+  MainWindow mw;
+  mw.show();
+  return app.exec();
 }

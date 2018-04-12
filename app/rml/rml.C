@@ -26,6 +26,7 @@
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/timer/timer.hpp>
 
+#include <rs/ml/core/Protocol_generated.h>
 #include <rs/ml/core/MediaLibrary.H>
 //#include <rs/ml/Protocol_generated.h>
 #include <rs/ml/utility/Finder.H>
@@ -53,11 +54,7 @@ int main(int argc, const char *argv[])
       {
         std::cout << pair.first << " " << pair.second.metaData()->filepath()->str() << std::endl;
       }*/
-      std::cout << pair.first << " "; 
-      pair.second([](rs::ml::core::Track::Reader track)
-      {
-        std::cout << track.getArtist().cStr() << " " << track.getTitle().cStr() << std::endl;
-      });
+      std::cout << pair.first << " " << pair.second->artist()->str() << " " << pair.second->title()->str() << std::endl;
     }
 
     return std::error_code{};
@@ -66,35 +63,35 @@ int main(int argc, const char *argv[])
   root.addCommand<rs::cli::BasicCommand>("add", [&ml](const auto& vm)
   {
     rs::ml::Finder finder{"/media/rocklee/900E07FE0E07DC5A/Music/", {".m4a"}};
-
+    
     for (const boost::filesystem::path& path : finder)
     {
       TagLib::FileRef file(path.string().c_str());
     //  TagLib::MP3::File file(path.string().c_str());
+    for (auto i = 0; i < 500; ++i)
+    {
 
-      ml.add([&file, &path](rs::ml::core::Track::Builder track)
+      ml.add([&file, &path](flatbuffers::FlatBufferBuilder& fbb)
       {
-  //      std::ifstream ifs{path.string(), std::ios::in | std::ios::binary};
-  //      auto digest = rs::ml::calculateMD5(ifs);
+        auto artist = fbb.CreateString(file.tag()->artist().toCString(true));
+        auto album = fbb.CreateString(file.tag()->album().toCString(true));
+        auto title = fbb.CreateString(file.tag()->title().toCString(true));
 
-  //      auto artist = fbb.CreateString(file.tag()->artist().toCString(true));
+        rs::ml::core::TrackBuilder builder{fbb};
 
-        std::cout << std::strlen(file.tag()->artist().toCString(true)) << ' ' << file.tag()->artist().toCString(true) << std::endl;
+        builder.add_artist(artist);
+        builder.add_album(album);
+        builder.add_title(title);
 
-        track.setArtist(file.tag()->artist().toCString(true));
-        track.setAlbum(file.tag()->album().toCString(true));
-        track.setTitle(file.tag()->title().toCString(true));
-        
-
-
-  //      auto album = fbb.CreateString(file.tag()->album().toCString(true));
-  //      auto title = fbb.CreateString(file.tag()->title().toCString(true));
-  //      auto metaData = rs::ml::CreateMetaData(fbb, fbb.CreateString(path.string()), boost::filesystem::last_write_time(path), fbb.CreateVector(digest.data(), digest.size()));
+        return builder.Finish();
       });
-
- //     std::cout << path << std::endl;
+  //  std::cout << i << std::endl;
     }
 
+
+      std::cout << path << std::endl;
+    }
+    
     return std::error_code{};
   });
 
