@@ -16,32 +16,49 @@
  */
 
 #include <TrackSortFilterProxyModel.H>
+#include <rs/ml/query/TrackFilter.H>
+#include <rs/ml/query/Parser.H>
+#include <QtConcurrent>
+
+
+TrackSortFilterProxyModel::TrackSortFilterProxyModel(rs::ml::core::MediaLibrary& ml, QObject *parent)
+  : QSortFilterProxyModel{parent}, _ml{ml}
+{
+}
 
 void TrackSortFilterProxyModel::onQuickFilterChanged(const QString& filter)
 {
-  beginResetModel();
-
+  _quick = filter.toStdString();
+  /*
   if (filter.isEmpty())
   {
     _filter.reset();
   }
   else
-  {
+ 
     _filter = rs::ml::query::TrackFilter{filter.toStdString()};
-  }
+  }*/
 
-  endResetModel();
+  invalidateFilter();
 }
 
 bool TrackSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
-  if (!_filter)
+  if (_quick.empty())
   {
     return true;
   }
   else
   {
     auto index = sourceModel()->index(sourceRow, 0);
-    return std::invoke(_filter.value(), static_cast<rs::ml::core::Track*>(index.internalPointer()));
+    const auto& track = *static_cast<rs::ml::core::TrackT*>(index.internalPointer());
+    return track.title.find(_quick) != std::string::npos || 
+           track.album.find(_quick) != std::string::npos ||
+           track.artist.find(_quick) != std::string::npos;
+    /*
+    auto index = sourceModel()->index(sourceRow, 0);
+    auto reader = _ml.reader();
+    auto track = reader[static_cast<rs::ml::core::TrackId>(index.internalId())];
+    return std::invoke(_filter.value(), track);*/
   }
 }

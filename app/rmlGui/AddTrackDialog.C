@@ -15,21 +15,19 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include <AddTrackDialog.H>
 
-#include <rs/ml/core/Track_generated.h>
-
-namespace rs::ml::core
+AddTrackDialog::AddTrackDialog(QWidget *parent, Qt::WindowFlags f)
+  : QDialog{parent, f}
 {
-  using TrackId = std::uint64_t;
-  constexpr TrackId InvalidTrackId = 0;
+  setupUi(this);
+}
 
-  inline TrackT clone(const TrackT& track)
-  {
-    TrackT t;
-    t.artist = track.artist;
-    t.title = track.title;
-    t.album = track.album;
-    return t;
-  }
+rs::ml::core::TrackT AddTrackDialog::track() const
+{
+  rs::ml::core::TrackT t;
+  t.title = lineEditTitle->text().toStdString();
+  t.artist = lineEditArtist->text().toStdString();
+  t.album = lineEditAlbum->text().toStdString();
+  return t;
 }

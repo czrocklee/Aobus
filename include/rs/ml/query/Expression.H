@@ -28,10 +28,14 @@ namespace rs::ml::query
 {
   struct BinaryExpression;
   struct UnaryExpression;
-  using ConstantExpression = std::variant<bool, int, std::string>;
+  
+  struct VariableExpression
+  {
+    std::string name;
+    int fieldId = -1; // fieldId to rs::ml::core::Track 
+  };
 
-  enum class Variable { Quick = 0, Artist = 1, Album = 2, Title = 3 };
-  using VariableExpression = std::variant<Variable, std::string>;
+  using ConstantExpression = std::variant<bool, std::int64_t, std::string>;
 
   using Expression = boost::spirit::x3::variant<
     ConstantExpression,
@@ -40,7 +44,7 @@ namespace rs::ml::query
     boost::spirit::x3::forward_ast<UnaryExpression>
   >;
 
-  enum class Operator { And, Or, Not, Equal, Less, Greater, GreaterEqual, LessEqual, Like };
+  enum class Operator { And, Or, Not, Equal, Like, Less, LessEqual, Greater, GreaterEqual };
 
   struct BinaryExpression
   {
@@ -59,11 +63,6 @@ namespace rs::ml::query
     Operator op;
     Expression operand;
   };
-
-/*  {
-    std::variant<Variable, std::string> name;
-  };*/
-
 }
 
 

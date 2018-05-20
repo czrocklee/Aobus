@@ -17,104 +17,88 @@
 
 #pragma once
 
+#include <rs/ml/core/Track.H>
+#include <rs/ml/core/UpdateObserver.H>
 #include <lmdbxx/lmdb++.h>
 #include <boost/iterator/iterator_facade.hpp>
-#include <boost/optional.hpp>
-#include <capnp/serialize.h>
-#include <flatbuffers/flatbuffers.h>
-
-#include <memory.h>
-#include <functional>
-
-
-
-auto reader = ml.reader();
-reader.release();
-reader.aquire();
-
-reader.release();
-
-
-struct Listener
-{
-  void begin()
-
-  void onUpdate(TrackId id, const Track*);
-
-  void onDelete(Track id);
-
-  void onCreate(Track id, const Track*);
-
-  void end();
-};
-
+#include <mutex>
 
 namespace rs::ml::core
 {
-  class Track;  
-
   class MediaLibrary
   {
   public:
-    using TrackId = std::uint64_t;
-    using Creator = std::function<flatbuffers::Offset<Track>(flatbuffers::FlatBufferBuilder&)>;
+    class Reader;
+    class Writer;
+
+    MediaLibrary(const std::string& folder);
+    ~MediaLibrary();
+
+    Reader reader() const;
+    Writer writer();
+
+    using Observer = UpdateObserver<TrackId, const Track*>;
+
+    void attach(Observer& observer);
+    void detach(Observer& observer);
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
+  };
+
+
+  class MediaLibrary::Reader
+  {
+  public:
     using Value = std::pair<TrackId, const Track*>;
     class Iterator;
 
-    MediaLibrary(const std::string& folder);
-
-    ~MediaLibrary();
-
+    Reader(MediaLibrary::Impl& impl);
+    ~Reader();
     Iterator begin() const;
-
     Iterator end() const;
-
-    TrackId add(const Creator& creator);
-
-    void remove(TrackId id);
-
-    void update(TrackId id, const Creator& creator);
-
-    const Track* get(TrackId id);
+    const Track* operator[](TrackId id) const;
 
   private:
-    bool put(TrackId id, const Creator& creator);
-
-  private:
-    lmdb::env _env;
-    lmdb::txn _txn;
-    lmdb::dbi _metaDb;
-    lmdb::dbi _resourceDb;
-    TrackId _nextTrackId;
-    flatbuffers::FlatBufferBuilder _fbb;
+    MediaLibrary::Impl& _mli;
+    using Impl = std::pair<lmdb::txn, lmdb::cursor>;
+    mutable Impl _impl;
   };
 
-  class MediaLibrary::Iterator : public boost::iterator_facade<Iterator, Value, boost::forward_traversal_tag, Value>
+  class MediaLibrary::Reader::Iterator : 
+    public boost::iterator_facade<Iterator, const Value, boost::forward_traversal_tag>
   {
   public:
     friend class boost::iterator_core_access;
 
     Iterator();
-
     Iterator(lmdb::cursor&& cursor);
-
     Iterator(const Iterator& other);
-
     Iterator(Iterator&& other);
-
     bool equal(const Iterator& other) const;
-
     void increment();
-
-    Value dereference() const;
+    const Value& dereference() const;
 
   private:
     lmdb::cursor _cursor;
-    lmdb::val _key;
-    lmdb::val _value;
-    const Track* _track;
+    Value _value;
+  };
 
-    friend class MediaLibrary;
+  class MediaLibrary::Writer
+  {
+  public:
+    Writer(MediaLibrary::Impl& impl);
+    ~Writer();
+
+    TrackId create(const TrackT& track);
+    bool modify(TrackId id, const TrackT& track);
+    void remove(TrackId id);
+  
+  private:
+    MediaLibrary::Impl& _mli;
+    lmdb::txn _txn;
+    std::lock_guard<std::mutex> _lock;
   };
 
 }

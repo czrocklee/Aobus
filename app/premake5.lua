@@ -1,5 +1,6 @@
 -- premake5.lua
 
+
 project "rml"
   kind "ConsoleApp"
   language "C++"
@@ -8,12 +9,11 @@ project "rml"
   warnings "Extra"
   buildoptions {'--std=c++1z'} 
   linkoptions {'-no-pie'}
-  links {'ml', 'capnp', 'kj', 'lmdb', 'tag', 'crypto', 'boost_program_options', 'boost_system', 'boost_filesystem'}
+  links {'ml', 'lmdb', 'tag', 'boost_program_options', 'boost_system', 'boost_filesystem', 'boost_timer'}
 
 package.path = package.path .. ";../3rd/premake-qt/?.lua"
 require ("qt")
 local qt = premake.extensions.qt
-
 
 project "rmlGui"
   kind "ConsoleApp"
@@ -27,11 +27,11 @@ project "rmlGui"
   qtprefix "Qt5"
 
   includedirs {"rmlGui", "../include", "../3rd"}
-  files {"rmlGui/*.H", "rmlGui/*.C", "rmlGui/*.ui", "rmlGui/*.qrc"}
+  files {"rmlGui/*.H", "rmlGui/*.C", "rmlGui/ui/*.ui", "rmlGui/*.qrc"}
   warnings "Extra"
   buildoptions {'-fPIC', '--std=c++1z'}
   linkoptions {'-no-pie', '-Wl,--no-as-needed'}
-  links {'ml', 'capnp', 'kj', 'lmdb', 'tag', 'crypto', 'boost_program_options', 'boost_system', 'boost_filesystem'}
+  links {'ml', 'lmdb', 'tag', 'crypto', 'boost_program_options', 'boost_system', 'boost_filesystem', 'boost_timer'}
 
 
 

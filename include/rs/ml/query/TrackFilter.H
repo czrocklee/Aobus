@@ -25,11 +25,15 @@ namespace rs::ml::query
   class TrackFilter
   {
   public:
-    explicit TrackFilter(const std::string& quick);
+    TrackFilter() = default;
 
     explicit TrackFilter(Expression&& root);
 
     bool operator()(const core::Track* track) const;
+    
+    bool operator()(const core::TrackT& track) const;
+
+    void dump() const;
 
   private:
     struct Impl;

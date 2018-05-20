@@ -17,19 +17,15 @@
 
 #pragma once
 
-#include <rs/ml/core/Track_generated.h>
+#include <ui_AddTrackDialog.h>
+#include <rs/ml/core/Track.H>
 
-namespace rs::ml::core
+class AddTrackDialog : public QDialog, public Ui::AddTrackDialog
 {
-  using TrackId = std::uint64_t;
-  constexpr TrackId InvalidTrackId = 0;
+    Q_OBJECT
 
-  inline TrackT clone(const TrackT& track)
-  {
-    TrackT t;
-    t.artist = track.artist;
-    t.title = track.title;
-    t.album = track.album;
-    return t;
-  }
-}
+public:
+    AddTrackDialog(QWidget *parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
+
+    rs::ml::core::TrackT track() const;
+};

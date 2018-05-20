@@ -16,18 +16,25 @@
  */
 
 #include <MainWindow.H>
+#include <AddTrackDialog.H>
 #include <TableModel.H>
 #include <TrackSortFilterProxyModel.H>
 
-#include <rs/ml/core/MediaLibrary.H>
+#include <rs/ml/core/TrackListZero.H>
+#include <rs/ml/query/TrackFilter.H>
+#include <rs/ml/query/Parser.H>
 
 MainWindow::MainWindow()
+  : _ml{"/home/rocklee/RockStudio/mylib"}
 {
   setupUi(this);
-  static rs::ml::core::MediaLibrary ml{"/home/rocklee/RockStudio/mylib"};
 
-  auto model = new TableModel{ml, this};
-  auto proxy = new TrackSortFilterProxyModel{this};
+  rs::ml::query::Parser parser;
+  auto expr = parser.parse("%title% ~ \"Bach\"");
+  static rs::ml::core::TrackListZero root{_ml, {}};//rs::ml::query::TrackFilter{std::move(expr)}};
+
+  auto model = new TableModel{root, this};
+  auto proxy = new TrackSortFilterProxyModel{_ml, this};
   proxy->setSourceModel(model);
 
   tableView->setModel(proxy);
@@ -38,6 +45,17 @@ MainWindow::MainWindow()
  // tableView->setSelectionMode(QAbstractItemView::SingleSelection);
 
 
+  connect(actionFile, &QAction::triggered, [this]
+  { 
+    auto dialog = new AddTrackDialog{this};
+
+    if (dialog->exec())
+    {
+      auto writer = _ml.writer();
+      writer.create(dialog->track());
+    }
+  });
+
   connect(lineEdit, SIGNAL(textChanged(const QString&)),
-          model, SLOT(onQuickFilterChanged(const QString&)));
+          proxy, SLOT(onQuickFilterChanged(const QString&)));
 }

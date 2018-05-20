@@ -17,12 +17,16 @@
 
 #pragma once
 
-#include <ui_main.h>
+#include <rs/ml/core/MediaLibrary.H>
+#include <ui_MainWindow.h>
 
 class MainWindow : public QMainWindow, public Ui::MainWindow
 {
-    Q_OBJECT
+  Q_OBJECT
 
 public:
-    MainWindow();
+  MainWindow();
+
+private:
+  rs::ml::core::MediaLibrary _ml;
 };

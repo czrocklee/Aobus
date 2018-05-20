@@ -16,6 +16,7 @@
  */
 
 
+#include <rs/ml/core/MediaLibrary.H>
 #include <rs/ml/query/TrackFilter.H>
 #include <QSortFilterProxyModel>
 
@@ -24,7 +25,8 @@ class TrackSortFilterProxyModel : public QSortFilterProxyModel
   Q_OBJECT
 
 public:
-  using QSortFilterProxyModel::QSortFilterProxyModel;
+ // using QSortFilterProxyModel::QSortFilterProxyModel;
+  TrackSortFilterProxyModel(rs::ml::core::MediaLibrary& ml, QObject *parent = 0);
 
 public slots:
   void onQuickFilterChanged(const QString& filter);
@@ -33,5 +35,7 @@ protected:
   bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
 
 private:
+  rs::ml::core::MediaLibrary& _ml;
   std::optional<rs::ml::query::TrackFilter> _filter;
+  std::string _quick;
 };

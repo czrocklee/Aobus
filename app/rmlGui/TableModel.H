@@ -16,18 +16,18 @@
  */
 
 
-#include <rs/ml/core/Track.H>
-#include <rs/ml/core/MediaLibrary.H>
+#include <rs/ml/core/TrackList.H>
 #include <QAbstractTableModel>
-#include <QList>
 
-class TableModel : public QAbstractTableModel
+class TableModel : public QAbstractTableModel, private rs::ml::core::TrackList::Observer
 {
+  using TrackId = rs::ml::core::TrackId;
+  using TrackT = rs::ml::core::TrackT;
   Q_OBJECT
 
 public:
   TableModel(QObject *parent = 0);
-  TableModel(rs::ml::core::MediaLibrary& ml, QObject *parent = 0);
+  TableModel(rs::ml::core::TrackList& list, QObject *parent = 0);
 
   int rowCount(const QModelIndex &parent) const override;
   int columnCount(const QModelIndex &parent) const override;
@@ -45,7 +45,10 @@ public slots:
   void onQuickFilterChanged(const QString& filter);
 
 private:
-  rs::ml::core::MediaLibrary& _ml;
-  QList<const rs::ml::core::Track*> _tracks;
-  QList<const rs::ml::core::Track*> _allTracks;
+  void onCreate(rs::ml::core::TrackId, const rs::ml::core::TrackT&, std::size_t index) override;  
+  void onModify(rs::ml::core::TrackId, const rs::ml::core::TrackT&, std::size_t index) override;
+  void onRemove(rs::ml::core::TrackId, const rs::ml::core::TrackT&, std::size_t index) override;
+
+private:
+  rs::ml::core::TrackList& _list;
 };

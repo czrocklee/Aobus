@@ -16,133 +16,217 @@
  */
 
 #include <rs/ml/core/MediaLibrary.H>
-#include <rs/ml/core/Protocol_generated.h>
+#include <rs/ml/core/UpdateObserverable.H>
+#include <flatbuffers/flatbuffers.h>
+#include "ReaderImplCache.H"
+
+namespace
+{
+  struct BuilderGuard
+  {
+    flatbuffers::FlatBufferBuilder& fbb;
+    ~BuilderGuard() { fbb.Clear(); }
+  };
+}
 
 namespace rs::ml::core
 {
+  using Writer = MediaLibrary::Writer;
+  using Reader = MediaLibrary::Reader;
+
+  struct MediaLibrary::Impl
+  {
+    lmdb::env env = lmdb::env::create();
+    lmdb::dbi trackDb = {MDB_dbi{}};
+    lmdb::dbi resourceDb = {MDB_dbi{}};
+    TrackId nextTrackId;
+    std::mutex writerMutex;
+    UpdateObserverable<TrackId, const Track*> observerable;
+    flatbuffers::FlatBufferBuilder fbb;
+    impl::ReaderImplCache readerImplCache;
+  };
+  
+  MediaLibrary::MediaLibrary(const std::string& folder)
+    : _impl{std::make_unique<Impl>()}
+  {
+    _impl->env.set_mapsize(1UL * 1024UL * 1024UL * 1024UL);
+    _impl->env.set_max_dbs(2);
+    _impl->env.open(folder.c_str(), MDB_NOTLS, 0664);
+
+    auto txn = lmdb::txn::begin(_impl->env);
+    _impl->trackDb = lmdb::dbi::open(txn, "track", MDB_CREATE | MDB_INTEGERKEY);
+    _impl->resourceDb = lmdb::dbi::open(txn, "resource", MDB_CREATE);
+    
+    {  
+      lmdb::val key;
+      auto cursor = lmdb::cursor::open(txn, _impl->trackDb);
+      _impl->nextTrackId = cursor.get(key, MDB_LAST) ? *key.data<TrackId>() + 1 : 1;
+    }
+
+    txn.commit();
+  }
+
   MediaLibrary::~MediaLibrary()
   {
-    TrackId id = 0;
-    _metaDb.put(_txn, id, _nextTrackId);
-    _txn.commit();
   }
 
-  MediaLibrary::MediaLibrary(const std::string& folder)
-    : _env{nullptr}, _txn{nullptr}, _metaDb{MDB_dbi{}}, _resourceDb{MDB_dbi{}}, _nextTrackId{1}
+  Reader MediaLibrary::reader() const
   {
-    _env = lmdb::env::create();
-    _env.set_mapsize(1UL * 1024UL * 1024UL * 1024UL);
-    _env.set_max_dbs(2);
-    _env.open(folder.c_str(), 0, 0664);
-
-    _txn = lmdb::txn::begin(_env);
-    _metaDb = lmdb::dbi::open(_txn, "meta", MDB_CREATE | MDB_INTEGERKEY);
-    _resourceDb = lmdb::dbi::open(_txn, "resource", MDB_CREATE);
-
-    TrackId id = 0;
-
-    if (_metaDb.get(_txn, id, _nextTrackId))
-    {
-      _metaDb.del(_txn, id);
-    }
+    return {*_impl};
   }
 
-  MediaLibrary::Iterator MediaLibrary::begin() const
+  Writer MediaLibrary::writer()
   {
-    return {lmdb::cursor::open(_txn, _metaDb)};
+    return {*_impl};
   }
 
-  MediaLibrary::Iterator MediaLibrary::end() const
+  void MediaLibrary::attach(Observer& observer)
+  {
+    std::lock_guard{_impl->writerMutex};
+    _impl->observerable.attach(observer);
+  }
+
+  void MediaLibrary::detach(Observer& observer)
+  {
+    std::lock_guard{_impl->writerMutex};
+    _impl->observerable.detach(observer);
+  }
+
+
+  Reader::Reader(MediaLibrary::Impl& mli)
+    : _mli{mli}, 
+      _impl{mli.readerImplCache.get(mli.env, mli.trackDb)}
+  {
+  }
+
+  Reader::~Reader()
+  {
+    _mli.readerImplCache.put(std::move(_impl));
+  }
+
+  Reader::Iterator Reader::begin() const
+  {
+    return {lmdb::cursor::open(_impl.first, _mli.trackDb)};
+  }
+
+  Reader::Iterator Reader::end() const
   {
     return {};
   }
 
-  MediaLibrary::TrackId MediaLibrary::add(const Creator& creator)
-  {
-    return put(_nextTrackId, creator) ? _nextTrackId++ : 0;
-  }
-
-  void MediaLibrary::remove(TrackId id)
-  {
-    _metaDb.del(_txn, id);
-  }
-
-  void MediaLibrary::update(TrackId id, const Creator& creator)
-  {
-    put(id, creator);
-  }
-
-  const Track* MediaLibrary::get(TrackId id)
+  const Track* Reader::operator[](TrackId id) const
   {
     lmdb::val key{&id, sizeof(TrackId)};
     lmdb::val value;
-    _metaDb.get(_txn, key, value);
-    return GetTrack(value.data());
+    return _impl.second.get(key, value, MDB_SET_KEY) ? GetTrack(value.data()) : nullptr;
   }
 
-  bool MediaLibrary::put(TrackId id, const Creator& creator)
-  {
-    flatbuffers::Offset<Track> track = creator(_fbb);
-    _fbb.Finish(track);
-
-    lmdb::val key{&id, sizeof(TrackId)};
-    lmdb::val value{_fbb.GetBufferPointer(), _fbb.GetSize()};
-    bool success = _metaDb.put(_txn, key, value);
-    _fbb.Clear();
-
-    return success;
-  }
-
-  MediaLibrary::Iterator::Iterator()
-    : _cursor{nullptr}, _key{nullptr, 0}
+  Reader::Iterator::Iterator()
+    : _cursor{nullptr}, _value{}
   {
   }
 
-  MediaLibrary::Iterator::Iterator(lmdb::cursor&& cursor)
+  Reader::Iterator::Iterator(lmdb::cursor&& cursor)
     : _cursor{std::move(cursor)}
   {
     increment();
   }
 
-  MediaLibrary::Iterator::Iterator(const Iterator& other)
-    : _cursor{nullptr},
-      _key{other._key.data(), other._key.size()},
-      _value{other._value.data(), other._value.size()}
+  Reader::Iterator::Iterator(const Iterator& other)
+    : _cursor{nullptr}, _value{other._value}
   {
-    if (other._cursor.handle() != nullptr)
+    if (other._cursor != nullptr)
     {
       _cursor = lmdb::cursor::open(other._cursor.txn(), other._cursor.dbi());
-
-      if (_key.data() != nullptr)
-      {
-        TrackId* id = _key.data<TrackId>();
-        _cursor.find(*id);
-      }
+      _cursor.find(_value.first);
     }
   }
 
-  MediaLibrary::Iterator::Iterator(Iterator&& other) = default;
+  Reader::Iterator::Iterator(Iterator&& other) = default;
 
-  bool MediaLibrary::Iterator::equal(const Iterator& other) const
+  bool Reader::Iterator::equal(const Iterator& other) const
   {
-    return _key.data() == other._key.data();
+    return _cursor == other._cursor && _value.first == other._value.first;
   }
 
-  void MediaLibrary::Iterator::increment()
+  void Reader::Iterator::increment()
   {
-    if (!_cursor.get(_key, _value, MDB_NEXT))
+    lmdb::val key, value;
+
+    if (!_cursor.get(key, value, MDB_NEXT))
     {
-      _key = lmdb::val{nullptr, 0};
+      _value = Value{};
+      _cursor.close();
     }
     else
     {
-      _track = GetTrack(_value.data());
+      _value.first = *key.data<TrackId>();
+      _value.second = GetTrack(value.data());
     }
   }
 
-  MediaLibrary::Value MediaLibrary::Iterator::dereference() const
+  const Reader::Value& Reader::Iterator::dereference() const
   {
-    return Value(*_key.data<TrackId>(), _track);
+    return _value;
   }
+
+  Writer::Writer(MediaLibrary::Impl& mli)
+    : _mli{mli}, _txn{lmdb::txn::begin(_mli.env)}, _lock{_mli.writerMutex}
+    
+  {
+    _mli.observerable.beginUpdate();
+  }
+
+  Writer::~Writer()
+  {
+    _txn.commit();
+    _mli.observerable.endUpdate();
+  }
+
+  TrackId Writer::create(const TrackT& track)
+  {
+    BuilderGuard guard{_mli.fbb};
+    _mli.fbb.Finish(Track::Pack(_mli.fbb, &track));
+
+    lmdb::val key{&_mli.nextTrackId, sizeof(TrackId)};
+    lmdb::val value{_mli.fbb.GetBufferPointer(), _mli.fbb.GetSize()};
+    
+    if (!_mli.trackDb.put(_txn, key, value, MDB_NOOVERWRITE | MDB_APPEND))
+    {
+      return 0;
+    }
+    
+    _mli.observerable.create(_mli.nextTrackId, GetTrack(value.data()));
+    return _mli.nextTrackId++;
+  }
+
+  bool Writer::modify(TrackId id, const TrackT& track)
+  {
+    BuilderGuard guard{_mli.fbb};
+    _mli.fbb.Finish(Track::Pack(_mli.fbb, &track));
+
+    lmdb::val key{&id, sizeof(TrackId)};
+    lmdb::val value{_mli.fbb.GetBufferPointer(), _mli.fbb.GetSize()};
+    
+    if (!_mli.trackDb.put(_txn, key, value))
+    {
+      return false;
+    }
+    
+    _mli.observerable.modify(id, GetTrack(value.data()));
+    return true;
+  }
+
+  void Writer::remove(TrackId id)
+  {
+    lmdb::val key{&id, sizeof(TrackId)}, value{};
+    
+    if (_mli.trackDb.get(_txn, key, value))
+    {
+      _mli.observerable.remove(id, GetTrack(value.data()));
+      _mli.trackDb.del(_txn, id);
+    }
+  }
+
 }
 

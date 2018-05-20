@@ -17,19 +17,21 @@
 
 #pragma once
 
-#include <rs/ml/core/Track_generated.h>
+#include <rs/ml/core/Track.H>
 
 namespace rs::ml::core
 {
-  using TrackId = std::uint64_t;
-  constexpr TrackId InvalidTrackId = 0;
-
-  inline TrackT clone(const TrackT& track)
+  template<typename... Contexts>
+  class UpdateObserver
   {
-    TrackT t;
-    t.artist = track.artist;
-    t.title = track.title;
-    t.album = track.album;
-    return t;
-  }
+  public:
+    virtual ~UpdateObserver() = default;
+    virtual void onAttached() {};
+    virtual void onBeginUpdate() {};
+    virtual void onCreate(Contexts...) {};
+    virtual void onModify(Contexts...) {};
+    virtual void onRemove(Contexts...) {};
+    virtual void onEndUpdate() {};
+    virtual void onDetached() {};
+  };
 }

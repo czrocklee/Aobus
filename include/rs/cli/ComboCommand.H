@@ -43,7 +43,7 @@ namespace rs::cli
 
     std::error_code execute(int argc, const char *argv[]) override
     {
-      std::string command = argv[0];
+      std::string command = argv[1];
       auto iter = _cmds.find(command);
 
       if (iter != _cmds.end())

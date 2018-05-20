@@ -17,19 +17,25 @@
 
 #pragma once
 
-#include <rs/ml/core/Track_generated.h>
+#include <rs/ml/core/Track.H>
+#include <rs/ml/core/UpdateObserver.H>
 
 namespace rs::ml::core
 {
-  using TrackId = std::uint64_t;
-  constexpr TrackId InvalidTrackId = 0;
-
-  inline TrackT clone(const TrackT& track)
+  class TrackList
   {
-    TrackT t;
-    t.artist = track.artist;
-    t.title = track.title;
-    t.album = track.album;
-    return t;
-  }
+  public:
+    using Value = std::pair<TrackId, const TrackT&>;
+
+    virtual ~TrackList() = default;
+
+    virtual std::size_t size() const = 0;
+    virtual Value operator[](std::size_t index) const = 0;
+    virtual void mutate(std::size_t index, const TrackT& value) = 0;
+
+    using Observer = UpdateObserver<TrackId, const TrackT&, std::size_t>;
+    virtual void attach(Observer& observer) = 0;
+    virtual void detach(Observer& observer) = 0;
+  };
 }
+

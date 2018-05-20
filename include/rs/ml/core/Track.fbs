@@ -1,0 +1,26 @@
+namespace rs.ml.core;
+
+attribute "alias";
+
+table Track
+{
+  title:string (alias: "t");  
+  artist:string (alias: "a");
+  album:string (alias: "al");
+  albumArtist:string (alias: "aa");
+  genre:string (alias: "g");
+
+  trackNumber:ushort;
+  totalTracks:ushort;
+  discNumber:ushort;
+  totalDiscs:ushort;
+
+  filepath:string;
+  lastModified:ulong;
+  length:uint (alias: "l");
+  bitRate:uint (alias: "br");
+  sampleRate:uint (alias: "sr");
+  bitDepth:ubyte (alias: "bd");
+}
+
+root_type Track;

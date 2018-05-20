@@ -21,9 +21,13 @@
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/spirit/home/x3.hpp>
 
+#include "gen/TrackFieldAccessor.H"
+#include <iostream>
+
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression::Operation, op, operand)
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression, operand, operations)
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::UnaryExpression, op, operand)
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::VariableExpression, name)
 
 namespace
 {
@@ -38,18 +42,18 @@ namespace
     {
       {"=", Operator::Equal},
       {"~", Operator::Like},
+      {"<", Operator::Less},
+      {"<", Operator::LessEqual},
       {">", Operator::Greater},
-      {"<", Operator::Less}
+      {">", Operator::GreaterEqual},
     }
   };
-
-  x3::symbols<Variable> variables
+ 
+  auto setupFieldId = [](auto& ctx) 
   {
-    {
-      {"%artist%", Variable::Artist},
-      {"%album%", Variable::Album},
-      {"%title%", Variable::Title}
-    }
+    VariableExpression& var = _val(ctx);
+    var.name = _attr(ctx);
+    var.fieldId = TrackFieldAccessor::name2Id(var.name);
   };
 
   const x3::rule<class logicalOr, BinaryExpression> logicalOr{"or"};
@@ -60,19 +64,17 @@ namespace
   const x3::rule<class variable, VariableExpression> variable{"variable"};
   const x3::rule<class constant, ConstantExpression> constant{"constant"};
   const x3::rule<class string, std::string> string{"string"};
-  const x3::rule<class customVariable, std::string> customVariable{"string"};
  
   const auto logicalOr_def = logicalAnd >> *(logicalOrOperator >> logicalOr);
   const auto logicalAnd_def = relational >> *(logicalAndOperator >> logicalAnd);
   const auto relational_def = primary >> *(relationalOperator >> relational);
-  const auto primary_def = constant | variable | ('(' > logicalOr > ')') | logicalNot;
+  const auto primary_def = variable | constant | ('(' > logicalOr > ')') | logicalNot;
   const auto logicalNot_def = logicalNotOperator >> primary;
-  const auto variable_def = variables | customVariable;
-  const auto constant_def = x3::bool_ | x3::int_ | string;
-  const auto string_def = '"' >> x3::no_skip[*~x3::char_('"')] >> '"';
-  const auto customVariable_def = '%' >> *(x3::char_ - '%') >> '%';
+  const auto variable_def = ('@' >> +x3::alpha)[setupFieldId];
+  const auto constant_def = x3::bool_ | x3::int64 | string;
+  const auto string_def = '\'' >> x3::no_skip[*~x3::char_('\'')] >> '\'';
 
-  BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, logicalNot, primary, variable, constant, string, customVariable);
+  BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, logicalNot, primary, variable, constant, string);
 }
 
 namespace rs::ml::query

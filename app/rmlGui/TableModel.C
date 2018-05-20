@@ -16,30 +16,29 @@
  */
 
 #include <TableModel.H>
-#include <rs/ml/query/TrackFilter.H>
-#include <rs/ml/query/Parser.H>
-#include <QtConcurrent>
-#include <boost/iterator/transform_iterator.hpp>
-
 #include <iostream>
 
-TableModel::TableModel(rs::ml::core::MediaLibrary& ml, QObject *parent)
-    : QAbstractTableModel(parent), _ml{ml}
+/*
+QVariant getString(const flatbuffers::String* str)
 {
-  for (auto pair : ml)
+  if (str == nullptr)
   {
-    _allTracks.append(pair.second);
+    return {};
   }
 
-  _tracks = _allTracks;
-}
-//! [0]
+  return QString::fromUtf8(str->c_str(), str->size());
+}*/
 
-//! [1]
+TableModel::TableModel(rs::ml::core::TrackList& list, QObject *parent)
+    : QAbstractTableModel(parent), _list{list}
+{
+  _list.attach(*this);
+}
+
 int TableModel::rowCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
-    return _tracks.size();
+    return _list.size();
 }
 
 int TableModel::columnCount(const QModelIndex &parent) const
@@ -47,33 +46,27 @@ int TableModel::columnCount(const QModelIndex &parent) const
     Q_UNUSED(parent);
     return 3;
 }
-//! [1]
 
-//! [2]
 QVariant TableModel::data(const QModelIndex &index, int role) const
 {
-    std::cout << index.row() << ' ' << index.column() << std::endl;
     if (!index.isValid())
         return QVariant();
 
-    if (index.row() >= _tracks.size() || index.row() < 0)
+    if (index.row() >= _list.size() || index.row() < 0)
         return QVariant();
 
     if (role == Qt::DisplayRole) {
-        auto track = _tracks.at(index.row());
-
+        const auto& track = _list[index.row()].second;
         if (index.column() == 0)
-            return QString::fromUtf8(track->artist()->c_str(), track->artist()->size());
+            return QString::fromUtf8(track.artist.c_str());
         else if (index.column() == 1)
-            return QString::fromUtf8(track->album()->c_str(), track->album()->size());
+            return QString::fromUtf8(track.album.c_str());
         else if (index.column() == 2)
-            return QString::fromUtf8(track->title()->c_str(), track->title()->size());
+            return QString::fromUtf8(track.title.c_str());
     }
-    return QVariant();
+    return {};
 }
-//! [2]
 
-//! [3]
 QVariant TableModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
     if (role != Qt::DisplayRole)
@@ -103,7 +96,7 @@ bool TableModel::insertRows(int position, int rows, const QModelIndex &index)
     beginInsertRows(QModelIndex(), position, position + rows - 1);
 
     for (int row = 0; row < rows; ++row)
- //       _tracks.insert(position, { QString(), QString() });
+ //       _list.insert(position, { QString(), QString() });
 
     endInsertRows();
     return true;
@@ -117,7 +110,7 @@ bool TableModel::removeRows(int position, int rows, const QModelIndex &index)
     beginRemoveRows(QModelIndex(), position, position + rows - 1);
 
     for (int row = 0; row < rows; ++row)
- //       _tracks.removeAt(position);
+ //       _list.removeAt(position);
 
     endRemoveRows();
     return true;
@@ -128,20 +121,29 @@ bool TableModel::removeRows(int position, int rows, const QModelIndex &index)
 bool TableModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {
     if (index.isValid() && role == Qt::EditRole) {
+      std::cout << "setData " << index.row() << ' ' << index.column() << std::endl;
         int row = index.row();
-        /*
-        auto contact = _tracks.value(row);
 
+        auto track = rs::ml::core::clone(_list[row].second);
         if (index.column() == 0)
-            contact.name = value.toString();
+        {
+          track.artist = value.toString().toStdString();
+        }
         else if (index.column() == 1)
-            contact.address = value.toString();
+        {
+          track.album = value.toString().toStdString();
+        }
+        else if (index.column() == 2)
+        {
+          track.title = value.toString().toStdString();
+        }
         else
-            return false;
+        {
+          return false;
+        }
 
-        _tracks.replace(row, contact);
-        emit(dataChanged(index, index));
-*/
+        _list.mutate(row, track);
+
         return true;
     }
 
@@ -160,16 +162,48 @@ Qt::ItemFlags TableModel::flags(const QModelIndex &index) const
 
 QModelIndex TableModel::index(int row, int column, const QModelIndex &parent) const
 {
-  return createIndex(row, column, const_cast<void*>(static_cast<const void*>(_tracks[row])));
+  //return createIndex(row, column, _list[row].first);
+  return createIndex(row, column, const_cast<rs::ml::core::TrackT*>(&_list[row].second));
 }
 
 void TableModel::onQuickFilterChanged(const QString& filter)
 {
+  /*
   beginResetModel();
   rs::ml::query::TrackFilter f{filter.toStdString()};
-  auto future = QtConcurrent::filtered(_allTracks, f);
-  future.waitForFinished();
-  _tracks = future.results();
-  endResetModel();
+//  auto future = QtConcurrent::filtered(_allTracks, f);
+//  future.waitForFinished();
+//  _list = future.results();
+  
+
+  _list.clear();
+  for (auto pair : _ml.reader())
+  {
+    if (f(pair.second))
+    {
+      _list.append(pair.first);
+    }
+  }
+
+
+  endResetModel();*/
+}
+
+void TableModel::onCreate(rs::ml::core::TrackId, const rs::ml::core::TrackT&, std::size_t index)
+{
+  std::cout << "created " << index << std::endl;
+  beginInsertRows({}, index, index);
+  endInsertRows();
+}
+
+void TableModel::onModify(rs::ml::core::TrackId, const rs::ml::core::TrackT&, std::size_t index)
+{
+
+  std::cout << "modify " << index << std::endl;
+  emit(dataChanged(this->index(index, 0, {}), this->index(index, 2, {})));
+}
+
+void TableModel::onRemove(rs::ml::core::TrackId, const rs::ml::core::TrackT&, std::size_t index)
+{
 }
 

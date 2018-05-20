@@ -17,19 +17,31 @@
 
 #pragma once
 
-#include <rs/ml/core/Track_generated.h>
+#include <rs/ml/core/MediaLibrary.H>
+#include <rs/ml/core/TrackList.H>
+#include <functional>
+#include <memory>
 
 namespace rs::ml::core
 {
-  using TrackId = std::uint64_t;
-  constexpr TrackId InvalidTrackId = 0;
-
-  inline TrackT clone(const TrackT& track)
+  class DynamicTrackList : public TrackList
   {
-    TrackT t;
-    t.artist = track.artist;
-    t.title = track.title;
-    t.album = track.album;
-    return t;
-  }
+  public:
+    using Filter = std::function<bool(const TrackT&)>;
+
+    TrackListZero(TrackList&, Filter filter);
+		~TrackListZero() override;
+
+		std::size_t size() const override;
+    Value operator[](std::size_t index) const override;
+
+    using Observer = UpdateObserver<TrackId, const TrackT&, std::size_t>;
+    void attach(Observer& observer) override;
+    void detach(Observer& observer) override;
+	
+	private:
+		struct Impl;
+		std::unique_ptr<Impl> _impl;
+  };
 }
+

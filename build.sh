@@ -1,24 +1,21 @@
-#/bin/bash
+#/bin/sh
 
-OPTS=`getopt -o c:t: --long config:,target: -n 'parse-options' -- "$@"`
+ARGS=`getopt -o c:t: --long config:,target:,clean -- "$@"`
 
-if [ $? != 0 ] ; then echo "Failed parsing options." >&2 ; exit 1 ; fi
-
-echo "$OPTS"
-eval set -- "$OPTS"
+eval set -- "${ARGS}"
 
 CONFIG=debug
 TARGET=
 
-while true; do
+while true ; do
   case "$1" in
-    -c | --config ) CONFIG="$2"; shift 2 ;;
-    -t | --target ) CONFIG="$2"; shift 2 ;;
-    -- ) shift; break ;;
-    * ) break ;;
+    -c|--config) CONFIG=$2; shift 2;;
+    -t|--target) TARGET=$2; shift 2;;
+    -g|--clean) rm -rf build; pushd include/rs/ml/core; flatc -c --gen-object-api -b --schema Track.fbs; popd; shift 1;;
+    --) shift ; break ;;
   esac
 done
 
-3rd/premake-core/bin/release/premake5 gmake 
-make config=$CONFIG -C build $TARGET -j12
+3rd/premake-core/bin/release/premake5 gmake
+make -C build config=$CONFIG $TARGET -j12
 

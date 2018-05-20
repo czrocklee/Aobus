@@ -26,18 +26,17 @@
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/timer/timer.hpp>
 
-#include <rs/ml/core/Protocol_generated.h>
+#include <rs/ml/core/Track.H>
 #include <rs/ml/core/MediaLibrary.H>
+#include <rs/ml/query/TrackFilter.H>
+#include <rs/ml/query/Parser.H>
 //#include <rs/ml/Protocol_generated.h>
 #include <rs/ml/utility/Finder.H>
 //#include <rs/ml/MD5Generator.H>
 #include <rs/cli/BasicCommand.H>
 #include <rs/cli/ComboCommand.H>
 
-struct Data
-{
-  char value[10] = "jkackerer";
-};
+namespace bpo = boost::program_options;
 
 int main(int argc, const char *argv[])
 {
@@ -46,48 +45,55 @@ int main(int argc, const char *argv[])
   rs::cli::ComboCommand root;
   root.addCommand<rs::cli::BasicCommand>("show", [&ml](const auto& vm)
   {
-    //std::cout << tk.getArtist().cStr() << " " << tk.getTitle().cStr() << std::endl;
-    for (const auto& pair: ml)
+    auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
+
+    if (vm.count("filter") > 0)
     {
-      /*
-      if (pair.second.metaData()->lastModified() != boost::filesystem::last_write_time(pair.second.metaData()->filepath()->c_str()))
+      rs::ml::query::Parser parser;
+      std::cout << vm["filter"].template as<std::string>() << std::endl;
+      auto expr = parser.parse(vm["filter"].template as<std::string>());
+
+ //     auto expr = parser.parse("%title% ~ \"Bach\"");
+      rs::ml::query::TrackFilter filter{std::move(expr)};
+      filter.dump();
+
+      for (auto pair: ml.reader())
       {
-        std::cout << pair.first << " " << pair.second.metaData()->filepath()->str() << std::endl;
-      }*/
-      std::cout << pair.first << " " << pair.second->artist()->str() << " " << pair.second->title()->str() << std::endl;
+        if (filter(pair.second))
+        {
+          std::cout << pair.first << " " << cstr(pair.second->artist()) << " " << cstr(pair.second->title()) << std::endl;
+        }
+      }
+
+    }
+    else
+    {
+      for (auto pair: ml.reader())
+      {
+        std::cout << pair.first << " " << cstr(pair.second->artist()) << " " << cstr(pair.second->title()) << std::endl;
+      }
     }
 
     return std::error_code{};
-  });
+  }).addOption("filter,f", bpo::value<std::string>(), "filter expression");
 
   root.addCommand<rs::cli::BasicCommand>("add", [&ml](const auto& vm)
   {
     rs::ml::Finder finder{"/media/rocklee/900E07FE0E07DC5A/Music/", {".m4a"}};
+    auto writer = ml.writer();
     
     for (const boost::filesystem::path& path : finder)
     {
       TagLib::FileRef file(path.string().c_str());
     //  TagLib::MP3::File file(path.string().c_str());
-    for (auto i = 0; i < 500; ++i)
-    {
+      rs::ml::core::TrackT track;
+      track.artist = file.tag()->artist().toCString(true);
+      track.album = file.tag()->album().toCString(true);
+      track.title = file.tag()->title().toCString(true);
+      track.trackNumber = file.tag()->track();
 
-      ml.add([&file, &path](flatbuffers::FlatBufferBuilder& fbb)
-      {
-        auto artist = fbb.CreateString(file.tag()->artist().toCString(true));
-        auto album = fbb.CreateString(file.tag()->album().toCString(true));
-        auto title = fbb.CreateString(file.tag()->title().toCString(true));
-
-        rs::ml::core::TrackBuilder builder{fbb};
-
-        builder.add_artist(artist);
-        builder.add_album(album);
-        builder.add_title(title);
-
-        return builder.Finish();
-      });
-  //  std::cout << i << std::endl;
-    }
-
+ //     for (auto i = 0u; i < 50; ++i)
+        writer.create(track);
 
       std::cout << path << std::endl;
     }
@@ -95,107 +101,43 @@ int main(int argc, const char *argv[])
     return std::error_code{};
   });
 
-
-  
-
-  std::vector<std::string> args(argv + 1, argv + argc);
-  root.execute(argc - 1, argv + 1);
-
-  /*
-  rs::ml::Finder finder{"/home/rocklee/RockStudio/mylib", {".mp3"}};
-
-
-  for (const boost::filesystem::path& path : finder)
+  root.addCommand<rs::cli::BasicCommand>("del", [&ml](const bpo::variables_map& vm)
   {
-    TagLib::FileRef file(path.string().c_str());
-  //  TagLib::MP3::File file(path.string().c_str());
+    auto writer = ml.writer();
+    writer.remove(vm["track"].as<rs::ml::core::TrackId>());
+    return std::error_code{};
+  }).addOption("track", bpo::value<rs::ml::core::TrackId>()->required(), "track id");
 
-    ml.add([&file, &path](rs::ml::Track::Builder track)
+
+  root.addCommand<rs::cli::BasicCommand>("test", [&ml](const bpo::variables_map& vm)
+  {
+    std::deque<rs::ml::core::TrackId> tracks;
+
+    for (auto pair : ml.reader())
     {
-//      std::ifstream ifs{path.string(), std::ios::in | std::ios::binary};
-//      auto digest = rs::ml::calculateMD5(ifs);
+      tracks.push_back(pair.first);
+    }
 
-//      auto artist = fbb.CreateString(file.tag()->artist().toCString(true));
+ //   std::random_shuffle(tracks.begin(), tracks.end());
 
-      track.setArtist(file.tag()->artist().toCString(true));
-      track.setAlbum(file.tag()->album().toCString(true));
-      track.setTitle(file.tag()->title().toCString(true));
+    std::size_t i = 0;
+
+    {
+
+        auto reader = ml.reader();
+      boost::timer::auto_cpu_timer timer;
+      for (auto track : tracks)
+      {
+        i += (std::size_t)reader[track];
+      }
+    }
+  
+    std::cout << i << std::endl;
       
+    return std::error_code{};
+  });
 
 
-//      auto album = fbb.CreateString(file.tag()->album().toCString(true));
-//      auto title = fbb.CreateString(file.tag()->title().toCString(true));
-//      auto metaData = rs::ml::CreateMetaData(fbb, fbb.CreateString(path.string()), boost::filesystem::last_write_time(path), fbb.CreateVector(digest.data(), digest.size()));
-    });
-
-    std::cout << path << std::endl;
-
-  }*/
-
-  /*
-  TagLib::Tag* tag = f.tag();
-  auto map = tag->properties();
-
-  for (const auto& pair : map)
-  {
-    std::cout << pair.first << ' ' << pair.second.toString(":") << std::endl;
-  }
-
-  auto env = lmdb::env::create();
-   env.set_mapsize(1UL * 1024UL * 1024UL * 1024UL);
-   env.open("testdb", 0, 0664);
-
-
-
-   auto wtxn = lmdb::txn::begin(env);
-   auto dbi = lmdb::dbi::open(wtxn, nullptr, 0);
-
-   std::uint64_t index = 0;
-   Data data;
-
-   int trans_count = 0;
-   boost::timer::auto_cpu_timer t;
-   boost::multiprecision::uint128_t a = 0;
-
-   while (index < 10000000L)
-   {
-     std::string n = std::to_string(index);
-     boost::multiprecision::uint128_t md5;
-     //MD5Value md5;
-     MD5((const unsigned char*)n.c_str(), n.length(), (unsigned char*)&md5);
-     a += md5;
-
-     char mdString[33];
-
-         for(int i = 0; i < 16; i++)
-              sprintf(&mdString[i*2], "%02x", (unsigned int)digest[i]);
-
-         printf("md5 digest: %s\n", mdString);
-
-
-     //lmdb::val{&index, sizeof(index)};
-
-     //dbi.put(wtxn, md5, data);
-     //++index;
-    // dbi.put(wtxn, "email", "jhacker@example.org");
-    // dbi.put(wtxn, "fullname", "J. Random Hacker");
-
-   }
-   wtxn.commit();
-   std::cout << a << std::endl;
-
-   auto rtxn = lmdb::txn::begin(env, nullptr, MDB_RDONLY);
-   auto cursor = lmdb::cursor::open(rtxn, dbi);
-   lmdb::val key, value;
-   while (cursor.get(key, value, MDB_NEXT)) {
-     a += *key.data<boost::multiprecision::uint128_t>();
-     //std::cout << *key.data<boost::multiprecision::uint128_t>() << ' ' << key.size() << std::endl;
-     //std::printf("key: '%d', value: '%s'\n", *((int *)key.c_str()), value.c_str());
-   }
-   std::cout << a << std::endl;
-   cursor.close();
-   rtxn.abort();*/
-   std::cout << "done" << std::strstr(u8"久石譲", u8"譲") << std::endl;
- 
-
+//  std::vector<std::string> args(argv + 1, argv + argc);
+  return root.execute(argc, argv).value();
 }

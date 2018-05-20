@@ -27,11 +27,12 @@
 
 namespace rs::ml::core
 {
-  struct DataValueVector;
+//  struct DataValueVector;
 
-  using DataValueVectorPtr = std::unique_ptr<DataValueVector, void(*)(DataValueVector*)>;
+//  using DataValueVectorPtr = std::unique_ptr<DataValueVector, void(*)(DataValueVector*)>;
 
-  using DataValue = std::variant<boost::blank, bool, int, std::string_view, DataValueVectorPtr>;
+  //using DataValue = std::variant<boost::blank, bool, std::int64_t, std::string_view, DataValueVectorPtr>;
+  using DataValue = std::variant<boost::blank, bool, std::int64_t, std::string_view>;
 
-  struct DataValueVector : public boost::container::small_vector<DataValue, 4> { };
+//  struct DataValueVector : public boost::container::small_vector<DataValue, 4> { };
 }
