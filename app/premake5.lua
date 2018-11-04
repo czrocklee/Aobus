@@ -31,7 +31,7 @@ project "rmlGui"
   warnings "Extra"
   buildoptions {'-fPIC', '--std=c++1z'}
   linkoptions {'-no-pie', '-Wl,--no-as-needed'}
-  links {'ml', 'lmdb', 'tag', 'crypto', 'boost_program_options', 'boost_system', 'boost_filesystem', 'boost_timer'}
+  links {'ml', 'lmdb', 'tag', 'boost_program_options', 'boost_system', 'boost_filesystem', 'boost_timer'}
 
 
 

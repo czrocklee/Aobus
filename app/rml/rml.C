@@ -22,7 +22,7 @@
 
 #include <taglib/fileref.h>
 #include <taglib/tpropertymap.h>
-#include <openssl/md5.h>
+//#include <openssl/md5.h>
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/timer/timer.hpp>
 
@@ -71,6 +71,7 @@ int main(int argc, const char *argv[])
       for (auto pair: ml.reader())
       {
         std::cout << pair.first << " " << cstr(pair.second->artist()) << " " << cstr(pair.second->title()) << std::endl;
+        std::cout << (pair.second->custom()->LookupByKey("pop") != nullptr);
       }
     }
 
@@ -79,21 +80,39 @@ int main(int argc, const char *argv[])
 
   root.addCommand<rs::cli::BasicCommand>("add", [&ml](const auto& vm)
   {
-    rs::ml::Finder finder{"/media/rocklee/900E07FE0E07DC5A/Music/", {".m4a"}};
+    rs::ml::Finder finder{"/home/rocklee/RockStudio/mylib/", {".m4a", ".mp3", ".flac"}};
     auto writer = ml.writer();
     
     for (const boost::filesystem::path& path : finder)
     {
-      TagLib::FileRef file(path.string().c_str());
-    //  TagLib::MP3::File file(path.string().c_str());
-      rs::ml::core::TrackT track;
-      track.artist = file.tag()->artist().toCString(true);
-      track.album = file.tag()->album().toCString(true);
-      track.title = file.tag()->title().toCString(true);
-      track.trackNumber = file.tag()->track();
+      writer.create([&path] (flatbuffers::FlatBufferBuilder& fbb)
+      {
+        TagLib::FileRef file(path.string().c_str());
+        auto tag = file.tag();
 
- //     for (auto i = 0u; i < 50; ++i)
-        writer.create(track);
+        auto artist = fbb.CreateString(tag->artist().toCString(true));
+        auto album = fbb.CreateString(tag->album().toCString(true));
+        auto title = fbb.CreateString(tag->title().toCString(true));
+        auto track = tag->track();
+
+        std::vector<std::string> t{"tag", "tag1", "tag2"};
+        auto tags = fbb.CreateVectorOfStrings(t);
+
+        std::vector<flatbuffers::Offset<rs::ml::core::CustomMetaEntry>> entries;
+        entries.push_back(rs::ml::core::CreateCustomMetaEntry(fbb, fbb.CreateString("pop")));
+        entries.push_back(rs::ml::core::CreateCustomMetaEntry(fbb, fbb.CreateString("classic")));
+        auto custom = fbb.CreateVectorOfSortedTables(&entries);
+
+        rs::ml::core::TrackBuilder builder{fbb};
+        builder.add_artist(artist);
+        builder.add_album(album);
+        builder.add_title(title);
+        builder.add_trackNumber(track);
+        builder.add_tags(tags);
+        builder.add_custom(custom);
+
+        return builder.Finish();
+      });
 
       std::cout << path << std::endl;
     }

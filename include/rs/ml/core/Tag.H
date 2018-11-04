@@ -17,45 +17,23 @@
 
 #pragma once
 
-#include <rs/ml/query/Expression.H>
+#include <rs/ml/core/Track.H>
+#include <rs/ml/core/DataValue.H>
 
-namespace rs::ml::query::detail
+namespace rs::ml::core
 {
-  void normalize(Expression& root);
-
-  struct Normalizer
+  inline DataValue tag(const Track* track, const char* tagName)
   {
-    void operator()(BinaryExpression& binary)
-    {
-      normalize(binary.operand);
+    auto tags = track->tags();
+    auto iter = std::find_if(tags->begin(), tags->end(),
+      [tagName](auto t) { return ::strcmp(t->c_str(), tagName) == 0; });
+    return iter == tags->end() ? DataValue{} : DataValue{Tag{}};
+  }
 
-      if (binary.operations.empty())
-      {
-        std::swap(root, binary.operand);
-      }
-
-      for (auto& operation : binary.operations)
-      {
-        normalize(operation.operand);
-      }
-    }
-
-    void operator()(UnaryExpression& unary)
-    {
-      normalize(unary.operand);
-    }
-
-    template<typename T>
-    void operator()(T&&)
-    {
-    }
-    
-    Expression& root;
-  };
-
-  inline void normalize(Expression& root)
+  inline DataValue tag(const TrackT& track, const char* tagName)
   {
-    Normalizer normalizer{root};
-    boost::apply_visitor(normalizer, root);
+    auto iter = std::find_if(track.tags.begin(), track.tags.end(),
+      [tagName](const auto& t) { return t == tagName; });
+    return iter == track.tags.end() ? DataValue{} : DataValue{Tag{}};
   }
 }

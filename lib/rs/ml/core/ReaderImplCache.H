@@ -15,7 +15,7 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <lmdbxx/lmdb++.h>
+#include <lmdb++.h>
 #include <stack>
 
 namespace rs::ml::core::impl

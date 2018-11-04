@@ -18,7 +18,7 @@
 #include <TrackSortFilterProxyModel.H>
 #include <rs/ml/query/TrackFilter.H>
 #include <rs/ml/query/Parser.H>
-#include <QtConcurrent>
+//#include <QtConcurrent>
 
 
 TrackSortFilterProxyModel::TrackSortFilterProxyModel(rs::ml::core::MediaLibrary& ml, QObject *parent)

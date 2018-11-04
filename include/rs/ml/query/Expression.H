@@ -28,6 +28,11 @@ namespace rs::ml::query
 {
   struct BinaryExpression;
   struct UnaryExpression;
+
+  struct TagExpression
+  {
+    std::string name;
+  };
   
   struct VariableExpression
   {
@@ -38,8 +43,9 @@ namespace rs::ml::query
   using ConstantExpression = std::variant<bool, std::int64_t, std::string>;
 
   using Expression = boost::spirit::x3::variant<
-    ConstantExpression,
+    TagExpression,
     VariableExpression,
+    ConstantExpression,
     boost::spirit::x3::forward_ast<BinaryExpression>,
     boost::spirit::x3::forward_ast<UnaryExpression>
   >;

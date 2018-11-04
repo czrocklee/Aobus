@@ -2,6 +2,16 @@ namespace rs.ml.core;
 
 attribute "alias";
 
+table Int { value:long; }
+table Bool { value:bool; }
+union Value { bool:Bool, int:Int, str:string }
+
+table CustomMetaEntry
+{
+  key:string (key);
+  value:Value;
+}
+
 table Track
 {
   title:string (alias: "t");  
@@ -21,6 +31,9 @@ table Track
   bitRate:uint (alias: "br");
   sampleRate:uint (alias: "sr");
   bitDepth:ubyte (alias: "bd");
+
+  tags:[string];
+  custom:[CustomMetaEntry];
 }
 
 root_type Track;

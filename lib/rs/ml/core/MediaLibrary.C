@@ -183,10 +183,21 @@ namespace rs::ml::core
     _mli.observerable.endUpdate();
   }
 
+
+  TrackId Writer::create(const Creator& creator)
+  {
+    return create(creator(_mli.fbb));
+  }
+
   TrackId Writer::create(const TrackT& track)
   {
+    return create(Track::Pack(_mli.fbb, &track));
+  }
+
+  TrackId Writer::create(flatbuffers::Offset<Track> track)
+  {
     BuilderGuard guard{_mli.fbb};
-    _mli.fbb.Finish(Track::Pack(_mli.fbb, &track));
+    _mli.fbb.Finish(track);
 
     lmdb::val key{&_mli.nextTrackId, sizeof(TrackId)};
     lmdb::val value{_mli.fbb.GetBufferPointer(), _mli.fbb.GetSize()};

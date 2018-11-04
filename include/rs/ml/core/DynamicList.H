@@ -17,45 +17,31 @@
 
 #pragma once
 
-#include <rs/ml/query/Expression.H>
+#include <rs/ml/core/MediaLibrary.H>
+#include <rs/ml/core/UpdateObserver.H>
+#include <memory>
 
-namespace rs::ml::query::detail
+namespace rs::ml::core
 {
-  void normalize(Expression& root);
-
-  struct Normalizer
+  class DynamicList
   {
-    void operator()(BinaryExpression& binary)
-    {
-      normalize(binary.operand);
+  public:
+    using Filter = std::function<bool(const Track*)>;
+    using Value = std::pair<TrackId, const TrackT&>;
 
-      if (binary.operations.empty())
-      {
-        std::swap(root, binary.operand);
-      }
+    DynamicList(MediaLibrary& ml, Filter filter);
+    ~DynamicList();
 
-      for (auto& operation : binary.operations)
-      {
-        normalize(operation.operand);
-      }
-    }
+    std::size_t size() const;
+    Value operator[](std::size_t index) const;
 
-    void operator()(UnaryExpression& unary)
-    {
-      normalize(unary.operand);
-    }
+    using Observer = UpdateObserver<std::size_t>;
+    void attach(Observer& observer);
+    void detach(Observer& observer);
 
-    template<typename T>
-    void operator()(T&&)
-    {
-    }
-    
-    Expression& root;
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
   };
-
-  inline void normalize(Expression& root)
-  {
-    Normalizer normalizer{root};
-    boost::apply_visitor(normalizer, root);
-  }
 }
+

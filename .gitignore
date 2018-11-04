@@ -31,5 +31,8 @@
 *.out
 *.app
 
+# Vim Swaps
+*.sw?
+
 # build
 build/

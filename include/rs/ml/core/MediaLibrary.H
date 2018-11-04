@@ -19,7 +19,7 @@
 
 #include <rs/ml/core/Track.H>
 #include <rs/ml/core/UpdateObserver.H>
-#include <lmdbxx/lmdb++.h>
+#include <lmdb++.h>
 #include <boost/iterator/iterator_facade.hpp>
 #include <mutex>
 
@@ -88,14 +88,18 @@ namespace rs::ml::core
   class MediaLibrary::Writer
   {
   public:
+    using Creator = std::function<flatbuffers::Offset<Track>(flatbuffers::FlatBufferBuilder&)>;
     Writer(MediaLibrary::Impl& impl);
     ~Writer();
 
+    TrackId create(const Creator& creator);
     TrackId create(const TrackT& track);
     bool modify(TrackId id, const TrackT& track);
     void remove(TrackId id);
   
   private:
+    TrackId create(flatbuffers::Offset<Track> track);
+
     MediaLibrary::Impl& _mli;
     lmdb::txn _txn;
     std::lock_guard<std::mutex> _lock;

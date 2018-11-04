@@ -37,6 +37,7 @@ namespace rs::ml::query
              | ""
              | "#include <rs/ml/core/Track.H>"
              | "#include <rs/ml/core/DataValue.H>"
+             | "#include <rs/ml/core/CustomMeta.H>"
              | "#include <unordered_map>"
              | ""
              | "class TrackFieldAccessor"
@@ -89,10 +90,12 @@ namespace rs::ml::query
     {
       auto indent = writer.indent();
 
-      writer | "static rs::ml::core::DataValue get(const rs::ml::core::Track* track, std::uint16_t fieldId)"
+      writer | "static rs::ml::core::DataValue get(const rs::ml::core::Track* track, int fieldId, const char* name)"
              | "{"
              | "  switch (fieldId)"
-             | "  {";
+             | "  {"
+             | "    case -1:"
+             | "      return rs::ml::core::customMeta(track, name);";
         
       for (auto field : fields)
       {
@@ -124,11 +127,13 @@ namespace rs::ml::query
     {
       auto indent = writer.indent();
 
-      writer | "static rs::ml::core::DataValue get(const rs::ml::core::TrackT& track, std::uint16_t fieldId)"
+      writer | "static rs::ml::core::DataValue get(const rs::ml::core::TrackT& track, int fieldId, const char* name)"
              | "{"
              | "  switch (fieldId)"
-             | "  {";
-        
+             | "  {"
+             | "    case -1:"
+             | "      return rs::ml::core::customMeta(track, name);";
+ 
       for (auto field : fields)
       {
         auto indent = writer.indent(2);

@@ -30,8 +30,8 @@ MainWindow::MainWindow()
   setupUi(this);
 
   rs::ml::query::Parser parser;
-  auto expr = parser.parse("%title% ~ \"Bach\"");
-  static rs::ml::core::TrackListZero root{_ml, {}};//rs::ml::query::TrackFilter{std::move(expr)}};
+  auto expr = parser.parse("@pop and #tag");
+  static rs::ml::core::TrackListZero root{_ml, rs::ml::query::TrackFilter{std::move(expr)}};
 
   auto model = new TableModel{root, this};
   auto proxy = new TrackSortFilterProxyModel{_ml, this};

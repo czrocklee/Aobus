@@ -18,9 +18,9 @@
 
 #include <rs/ml/query/TrackFilter.H>
 #include <rs/ml/core/DataValue.H>
+#include <rs/ml/core/Tag.H>
 #include <rs/ml/utility/VariantVisitor.H>
 
-#include <boost/pool/pool_alloc.hpp>
 #include <functional>
 #include <algorithm>
 
@@ -48,10 +48,15 @@ namespace
       assert(unary.op == Operator::Not);
       return !convertToBool(evaluate(unary.operand));
     }
+    
+    DataValue operator()(const TagExpression& tag)
+    {
+      return rs::ml::core::tag(track, tag.name.c_str()); 
+    }
 
     DataValue operator()(const VariableExpression& variable)
     {
-      return TrackFieldAccessor::get(track, variable.fieldId); 
+      return TrackFieldAccessor::get(track, variable.fieldId, variable.name.c_str()); 
     }
 
     DataValue operator()(const ConstantExpression& constant)
@@ -86,14 +91,12 @@ namespace
           return convertToBool(lhs) ? convertToBool(evaluate(rhs)) : false;
         case Operator::Or: 
           return convertToBool(lhs) ? true : convertToBool(evaluate(rhs));
-        
         case Operator::Equal: 
           return lhs == evaluate(rhs);
         case Operator::Like: 
           return std::visit(rs::ml::utility::makeVisitor(
             [](std::string_view l, std::string_view r) { return l.find(r) != std::string_view::npos; },
             [](auto&, auto&) { return false; }), lhs, evaluate(rhs));
-
         case Operator::Less:
           return RELATIONAL(lhs, <, rhs);
         case Operator::LessEqual:
@@ -111,6 +114,7 @@ namespace
     {
       return std::visit(rs::ml::utility::makeVisitor(
         [](boost::blank) { return false; },
+        [](Tag) { return true; },
         [](bool val) { return val; },
         [](std::int64_t val) { return static_cast<bool>(val); },
         [](std::string_view) { return true; }), val);
@@ -181,6 +185,11 @@ namespace rs::ml::query
       std::cout << ")";
     }
 
+    void operator()(const TagExpression& tag)
+    {
+      std::cout << '#' << tag.name;
+    }
+
     void operator()(const VariableExpression& variable)
     {
       std::cout << "[" << variable.name << ", " << variable.fieldId << "]";
@@ -188,7 +197,6 @@ namespace rs::ml::query
 
     void operator()(const ConstantExpression& constant)
     {
-      std::cout << "which " << constant.index() << std::endl;
       std::visit(rs::ml::utility::makeVisitor([](const auto& val) { std::cout << val; }), constant);
     }
 
@@ -197,28 +205,23 @@ namespace rs::ml::query
       switch (op)
       {
         case Operator::And: 
-          std::cout << " + ";
-          break;
-
+          std::cout << " & "; break;
         case Operator::Or: 
-          std::cout << " + ";
-          break;
-        
+          std::cout << " | "; break;
         case Operator::Less:
-          std::cout << " < ";
-          break;
-
+          std::cout << " < "; break;
+        case Operator::LessEqual:
+          std::cout << " <= "; break;
         case Operator::Greater:
-          std::cout << " > ";
-          break;
-
+          std::cout << " > "; break;
+        case Operator::GreaterEqual:
+          std::cout << " >= "; break;
         case Operator::Equal: 
-          std::cout << " = ";
-          break;
-
+          std::cout << " = "; break;
         case Operator::Like: 
-          std::cout << " ~ ";
-          break;
+          std::cout << " ~ "; break;
+
+        default: break;
       }
 
       boost::apply_visitor(*this, rhs);

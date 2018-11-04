@@ -32,7 +32,9 @@ namespace rs::ml::core
 //  using DataValueVectorPtr = std::unique_ptr<DataValueVector, void(*)(DataValueVector*)>;
 
   //using DataValue = std::variant<boost::blank, bool, std::int64_t, std::string_view, DataValueVectorPtr>;
-  using DataValue = std::variant<boost::blank, bool, std::int64_t, std::string_view>;
+
+  struct Tag { inline bool operator==(Tag) const { return false; } };
+  using DataValue = std::variant<boost::blank, Tag, bool, std::int64_t, std::string_view>;
 
 //  struct DataValueVector : public boost::container::small_vector<DataValue, 4> { };
 }

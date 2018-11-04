@@ -27,6 +27,7 @@
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression::Operation, op, operand)
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression, operand, operations)
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::UnaryExpression, op, operand)
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::TagExpression, name)
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::VariableExpression, name)
 
 namespace
@@ -61,20 +62,24 @@ namespace
   const x3::rule<class relational, BinaryExpression> relational{"relational"};
   const x3::rule<class logicalNot, UnaryExpression>  logicalNot{"not"};
   const x3::rule<class primary, Expression> primary{"primary"};
+  const x3::rule<class variable, TagExpression> tag{"tag"};
   const x3::rule<class variable, VariableExpression> variable{"variable"};
   const x3::rule<class constant, ConstantExpression> constant{"constant"};
   const x3::rule<class string, std::string> string{"string"};
+  const x3::rule<class identifier, std::string> identifier{"identifer"};
  
   const auto logicalOr_def = logicalAnd >> *(logicalOrOperator >> logicalOr);
   const auto logicalAnd_def = relational >> *(logicalAndOperator >> logicalAnd);
   const auto relational_def = primary >> *(relationalOperator >> relational);
-  const auto primary_def = variable | constant | ('(' > logicalOr > ')') | logicalNot;
+  const auto primary_def = tag | variable | constant | ('(' > logicalOr > ')') | logicalNot;
   const auto logicalNot_def = logicalNotOperator >> primary;
-  const auto variable_def = ('@' >> +x3::alpha)[setupFieldId];
+  const auto tag_def = ('#' >> identifier);
+  const auto variable_def = ('@' >> identifier)[setupFieldId];
   const auto constant_def = x3::bool_ | x3::int64 | string;
   const auto string_def = '\'' >> x3::no_skip[*~x3::char_('\'')] >> '\'';
+  const auto identifier_def = x3::lexeme[(x3::alpha | '_') >> *(x3::alnum | '_')];
 
-  BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, logicalNot, primary, variable, constant, string);
+  BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, logicalNot, primary, tag, variable, constant, string, identifier);
 }
 
 namespace rs::ml::query

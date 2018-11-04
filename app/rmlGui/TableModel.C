@@ -17,6 +17,7 @@
 
 #include <TableModel.H>
 #include <iostream>
+#include <boost/algorithm/string/join.hpp>
 
 /*
 QVariant getString(const flatbuffers::String* str)
@@ -44,7 +45,7 @@ int TableModel::rowCount(const QModelIndex &parent) const
 int TableModel::columnCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
-    return 3;
+    return 4;
 }
 
 QVariant TableModel::data(const QModelIndex &index, int role) const
@@ -63,6 +64,11 @@ QVariant TableModel::data(const QModelIndex &index, int role) const
             return QString::fromUtf8(track.album.c_str());
         else if (index.column() == 2)
             return QString::fromUtf8(track.title.c_str());
+        else if (index.column() == 3)
+        {
+          auto val = boost::algorithm::join(track.tags, "|");
+          return QString::fromUtf8(val.c_str());
+        }
     }
     return {};
 }
@@ -80,6 +86,8 @@ QVariant TableModel::headerData(int section, Qt::Orientation orientation, int ro
                 return tr("Album");
             case 2:
                 return tr("Title");
+            case 3:
+                return tr("Tags");
 
             default:
                 return QVariant();
@@ -137,7 +145,7 @@ bool TableModel::setData(const QModelIndex &index, const QVariant &value, int ro
         {
           track.title = value.toString().toStdString();
         }
-        else
+       else
         {
           return false;
         }
