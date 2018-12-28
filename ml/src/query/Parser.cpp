@@ -1,0 +1,122 @@
+/*
+ * Copyright (C) <year> <name of author>
+ *
+ * This program is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as published by the Free
+ * Software Foundation, either version 3 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License along with
+ * this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#define BOOST_SPIRIT_X3_UNICODE
+#include <rs/ml/query/Parser.h>
+#include <rs/ml/query/detail/Normalizer.h>
+#include <rs/ml/query/gen/TrackFieldAccessor.h>
+#include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/spirit/home/x3.hpp>
+#include <iostream>
+
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression::Operation, op, operand)
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression, operand, operations)
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::UnaryExpression, op, operand)
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::VariableExpression, type, name)
+
+namespace
+{
+  namespace x3 = boost::spirit::x3;
+  using namespace rs::ml::query;
+
+  x3::symbols<VariableType> varType 
+  {
+    {
+      {"$", VariableType::Metadata},
+      {"@", VariableType::Property},
+      {"#", VariableType::Tag},
+      {"%", VariableType::Custom},
+    }
+  };
+
+  x3::symbols<Operator> logicalAndOperator{{{"and", Operator::And}, {"&&", Operator::And}}};
+  x3::symbols<Operator> logicalOrOperator{{{"or", Operator::Or}, {"||", Operator::Or}}};
+  x3::symbols<Operator> logicalNotOperator{{{"not", Operator::Not}, {"!", Operator::Not}}};
+  x3::symbols<Operator> relationalOperator
+  {
+    {
+      {"=", Operator::Equal},
+      {"~", Operator::Like},
+      {"<", Operator::Less},
+      {"<", Operator::LessEqual},
+      {">", Operator::Greater},
+      {">", Operator::GreaterEqual},
+    }
+  };
+
+  auto setupFieldId = [](auto& ctx) 
+  {
+    VariableExpression& var = _val(ctx);
+    var.type = boost::fusion::at_c<0>(_attr(ctx));
+    var.name = boost::fusion::at_c<1>(_attr(ctx));
+
+    if (var.type == VariableType::Metadata)
+    {
+      var.fieldId = gen::MetadataAccessor::name2Id(var.name);
+    }
+    else if (var.type == VariableType::Property)
+    {
+      var.fieldId = gen::PropertyAccessor::name2Id(var.name);
+    }
+  };
+
+  auto quoteString = [](char ch) { return ch >> x3::no_skip[*~x3::char_(ch)] >> ch; };
+
+  const x3::rule<class logicalOr, BinaryExpression> logicalOr{"or"};
+  const x3::rule<class logicalAnd, BinaryExpression> logicalAnd{"and"};
+  const x3::rule<class relational, BinaryExpression> relational{"relational"};
+  const x3::rule<class logicalNot, UnaryExpression>  logicalNot{"not"};
+  const x3::rule<class primary, Expression> primary{"primary"};
+  const x3::rule<class variable, VariableExpression> variable{"variable"};
+  const x3::rule<class constant, ConstantExpression> constant{"constant"};
+  const x3::rule<class string, std::string> string{"string"};
+  const x3::rule<class identifier, std::string> identifier{"identifer"};
+ 
+  const auto logicalOr_def = logicalAnd >> *(logicalOrOperator >> logicalOr);
+  const auto logicalAnd_def = relational >> *(logicalAndOperator >> logicalAnd);
+  const auto relational_def = primary >> *(relationalOperator >> relational);
+  const auto primary_def = variable | constant | ('(' > logicalOr > ')') | logicalNot;
+  const auto logicalNot_def = logicalNotOperator >> primary;
+  const auto variable_def = (varType >> identifier)[setupFieldId];
+  const auto constant_def = x3::bool_ | x3::int64 | string;
+  const auto string_def = quoteString('\'') | quoteString('\"');
+  const auto identifier_def = x3::lexeme[(x3::alpha | '_') >> *(x3::alnum | '_')];
+
+  BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, logicalNot, primary, variable, constant, string, identifier);
+}
+
+namespace rs::ml::query
+{
+  Expression Parser::parse(const std::string& str)
+  {
+    auto iter = str.begin();
+    auto end = str.end();
+    x3::unicode::space_type space;
+    BinaryExpression binary;
+    
+    if (x3::phrase_parse(iter, end, logicalOr, space, binary) && iter == end)
+    {
+      Expression root{std::move(binary)};
+      detail::normalize(root);
+      return root;
+    }
+    else
+    {
+      throw std::runtime_error{std::string(iter, end)};     
+    }
+  }
+}

@@ -1,0 +1,4 @@
+namespace rs.ml.core;
+
+attribute "alias";
+
