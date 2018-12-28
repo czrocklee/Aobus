@@ -1,0 +1,26 @@
+include "Metadata.fbs";
+include "Properties.fbs";
+
+namespace rs.ml.core;
+
+attribute "alias";
+
+struct Int { value:long; }
+struct Bool { value:bool; }
+union Value { bool:Bool, int:Int, str:string }
+
+table CustomEntry
+{
+  key:string (key);
+  value:Value;
+}
+
+table Track
+{
+  meta:Metadata;
+  prop:Properties;
+  tags:[string];
+  custom:[CustomEntry];
+}
+
+root_type Track;

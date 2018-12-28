@@ -1,0 +1,15 @@
+include "Attributes.fbs";
+
+namespace rs.ml.core;
+
+table Properties
+{
+  filepath:string;
+  lastModified:ulong;
+  length:uint (alias: "l");
+  bitRate:uint (alias: "br");
+  sampleRate:uint (alias: "sr");
+  bitDepth:ubyte (alias: "bd");
+}
+
+root_type Properties;

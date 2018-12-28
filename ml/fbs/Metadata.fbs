@@ -1,0 +1,19 @@
+include "Attributes.fbs";
+
+namespace rs.ml.core;
+
+table Metadata
+{
+  title:string (alias: "t");  
+  artist:string (alias: "a");
+  album:string (alias: "al");
+  albumArtist:string (alias: "aa");
+  genre:string (alias: "g");
+
+  trackNumber:ushort;
+  totalTracks:ushort;
+  discNumber:ushort;
+  totalDiscs:ushort;
+}
+
+root_type Metadata;
