@@ -30,6 +30,7 @@
 #include <rs/ml/core/MediaLibrary.h>
 #include <rs/ml/query/TrackFilter.h>
 #include <rs/ml/query/Parser.h>
+#include <rs/ml/query/Serializer.h>
 //#include <rs/ml/Protocol_generated.h>
 #include <rs/ml/utility/Finder.h>
 //#include <rs/ml/MD5Generator.h>
@@ -49,13 +50,10 @@ int main(int argc, const char *argv[])
 
     if (vm.count("filter") > 0)
     {
-      rs::ml::query::Parser parser;
       std::cout << vm["filter"].template as<std::string>() << std::endl;
-      auto expr = parser.parse(vm["filter"].template as<std::string>());
-
- //     auto expr = parser.parse("%title% ~ \"Bach\"");
+      auto expr = rs::ml::query::parse(vm["filter"].template as<std::string>());
+      std::cout << rs::ml::query::serialize(expr) << std::endl;
       rs::ml::query::TrackFilter filter{std::move(expr)};
-      filter.dump();
 
       for (auto pair: ml.reader())
       {

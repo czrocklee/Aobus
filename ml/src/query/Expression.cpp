@@ -15,24 +15,51 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
-
 #include <rs/ml/query/Expression.h>
-#include <rs/ml/Protocol.capnp.h>
+
+namespace
+{
+  using namespace rs::ml::query;
+
+  struct Normalizer
+  {
+    void operator()(BinaryExpression& binary)
+    {
+      normalize(binary.operand);
+
+      if (!binary.operation)
+      {
+        std::swap(root, binary.operand);
+      }
+      else
+      {
+        normalize(binary.operation->operand);
+      }
+    }
+
+    void operator()(UnaryExpression& unary)
+    {
+      normalize(unary.operand);
+    }
+
+    void operator()(VariableExpression& variable)
+    {
+    }
+
+    void operator()(ConstantExpression& constant)
+    {
+    }
+   
+    Expression& root;
+  };
+}
 
 namespace rs::ml::query
 {
-  class JitFilter
+  void normalize(Expression& expr)
   {
-  public:
-    explicit JitFilter(RootExpression&& root);
-
-    bool operator()(const Track::Reader& track) const;
-
-    void dump() const;
-
-  private:
-    struct Impl;
-    std::shared_ptr<Impl> _impl;
-  };
+    Normalizer normalizer{expr};
+    boost::apply_visitor(normalizer, expr);
+  }
 }
+

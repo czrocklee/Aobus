@@ -18,6 +18,7 @@
 #pragma once
 
 #include <boost/spirit/home/x3/support/ast/variant.hpp>
+#include <boost/optional.hpp>
 
 #include <variant>
 #include <string>
@@ -58,7 +59,7 @@ namespace rs::ml::query
     };
 
     Expression operand;
-    std::vector<Operation> operations;
+    boost::optional<Operation> operation;
   };
 
   struct UnaryExpression
@@ -66,6 +67,6 @@ namespace rs::ml::query
     Operator op;
     Expression operand;
   };
+
+  void normalize(Expression& expr);
 }
-
-

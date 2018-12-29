@@ -15,7 +15,6 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 #include <rs/ml/query/TrackFilter.h>
 #include <rs/ml/core/DataValue.h>
 #include <rs/ml/core/Tag.h>
@@ -25,7 +24,6 @@
 
 #include <functional>
 #include <algorithm>
-#include <iostream>
 
 namespace
 {
@@ -49,12 +47,6 @@ namespace
       return !convertToBool(evaluate(unary.operand));
     }
     
-    /*
-    DataValue operator()(const TagExpression& tag)
-    {
-      return rs::ml::core::tag(track, tag.name.c_str()); 
-    }*/
-
     DataValue operator()(const VariableExpression& variable)
     {
       switch (variable.type)
@@ -80,9 +72,9 @@ namespace
     {
       DataValue val = evaluate(binary.operand);
 
-      for (const auto& operation : binary.operations)
+      if (binary.operation)
       {
-        val = evaluateBinary(operation.op, std::move(val), operation.operand);
+        val = evaluateBinary(binary.operation->op, std::move(val), binary.operation->operand);
       }
 
       return val;
@@ -139,128 +131,21 @@ namespace
   };
 }
 
-
 namespace rs::ml::query
 {
-  struct TrackFilter::Impl
-  {
-    Impl(Expression&& root) : root{std::move(root)} {}
-    Expression root;
-  };
-
-  TrackFilter::TrackFilter(Expression&& root)
-    : _impl{std::make_shared<Impl>(std::move(root))}
+  TrackFilter::TrackFilter(Expression expr)
+    : _expr{std::move(expr)}
   {
   }
 
   bool TrackFilter::operator()(const Track* track) const
   {
-    if (!_impl)
-    {
-      return true;
-    }
-
-    return std::invoke(Evaluator<const Track*>{track}, _impl->root);
+    return std::invoke(Evaluator<const Track*>{track}, _expr);
   }
   
   bool TrackFilter::operator()(const TrackT& track) const
   {
-    if (!_impl)
-    {
-      return true;
-    }
-
-    return std::invoke(Evaluator<const TrackT&>{track}, _impl->root);
-  }
-
-
-  struct Printer
-  {
-    void operator()(const BinaryExpression& binary)
-    {
-      std::cout << "(";
-      boost::apply_visitor(*this, binary.operand);
-
-      for (const auto& operation : binary.operations)
-      {
-        printBinary(operation.op, operation.operand);
-      }
-    
-      std::cout << ")";
-    }
-    
-    void operator()(const UnaryExpression& unary)
-    {
-      std::cout << "(!";
-      boost::apply_visitor(*this, unary.operand);
-      std::cout << ")";
-    }
-
-    /*
-    void operator()(const TagExpression& tag)
-    {
-      std::cout << '#' << tag.name;
-    }*/
-
-    void operator()(const VariableExpression& variable)
-    {
-      std::cout << '[';
-
-      switch (variable.type)
-      {
-        case VariableType::Metadata: std::cout << '$'; break;
-        case VariableType::Property: std::cout << '@'; break;
-        case VariableType::Tag: std::cout << '#'; break;
-        case VariableType::Custom: std::cout << '%'; break;
-        default : break;
-      }
-
-      std::cout << variable.name << ", " << variable.fieldId << "]";
-    }
-
-    void operator()(const ConstantExpression& constant)
-    {
-      std::visit(rs::ml::utility::makeVisitor([](const auto& val) { std::cout << val; }), constant);
-    }
-
-    void printBinary(Operator op, const Expression& rhs)
-    {
-      switch (op)
-      {
-        case Operator::And: 
-          std::cout << " & "; break;
-        case Operator::Or: 
-          std::cout << " | "; break;
-        case Operator::Less:
-          std::cout << " < "; break;
-        case Operator::LessEqual:
-          std::cout << " <= "; break;
-        case Operator::Greater:
-          std::cout << " > "; break;
-        case Operator::GreaterEqual:
-          std::cout << " >= "; break;
-        case Operator::Equal: 
-          std::cout << " = "; break;
-        case Operator::Like: 
-          std::cout << " ~ "; break;
-
-        default: break;
-      }
-
-      boost::apply_visitor(*this, rhs);
-    }
-
-    void print(const Expression& root)
-    {
-      return boost::apply_visitor(*this, root);
-    }
-  };
-
-  void TrackFilter::dump() const
-  {
-    Printer printer{};
-    printer.print(_impl->root);
-    std::cout << std::endl;
+    return std::invoke(Evaluator<const TrackT&>{track}, _expr);
   }
 }
 

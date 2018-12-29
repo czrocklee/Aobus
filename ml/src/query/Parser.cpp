@@ -17,14 +17,12 @@
 
 #define BOOST_SPIRIT_X3_UNICODE
 #include <rs/ml/query/Parser.h>
-#include <rs/ml/query/detail/Normalizer.h>
 #include <rs/ml/query/gen/TrackFieldAccessor.h>
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/spirit/home/x3.hpp>
-#include <iostream>
 
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression::Operation, op, operand)
-BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression, operand, operations)
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression, operand, operation)
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::UnaryExpression, op, operand)
 BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::VariableExpression, type, name)
 
@@ -52,9 +50,9 @@ namespace
       {"=", Operator::Equal},
       {"~", Operator::Like},
       {"<", Operator::Less},
-      {"<", Operator::LessEqual},
+      {"<=", Operator::LessEqual},
       {">", Operator::Greater},
-      {">", Operator::GreaterEqual},
+      {">=", Operator::GreaterEqual},
     }
   };
 
@@ -74,8 +72,6 @@ namespace
     }
   };
 
-  auto quoteString = [](char ch) { return ch >> x3::no_skip[*~x3::char_(ch)] >> ch; };
-
   const x3::rule<class logicalOr, BinaryExpression> logicalOr{"or"};
   const x3::rule<class logicalAnd, BinaryExpression> logicalAnd{"and"};
   const x3::rule<class relational, BinaryExpression> relational{"relational"};
@@ -85,15 +81,20 @@ namespace
   const x3::rule<class constant, ConstantExpression> constant{"constant"};
   const x3::rule<class string, std::string> string{"string"};
   const x3::rule<class identifier, std::string> identifier{"identifer"};
+
+  //https://stackoverflow.com/questions/49932608/boost-spirit-x3-attribute-does-not-have-the-expected-size-redux
+  template <typename T> 
+  auto as = [](auto p) { return x3::rule<struct tag, T> {"as"} = p; };
+  auto quoteString = [](char ch) { return ch >> x3::no_skip[*~x3::char_(ch)] >> ch; };
  
-  const auto logicalOr_def = logicalAnd >> *(logicalOrOperator >> logicalOr);
-  const auto logicalAnd_def = relational >> *(logicalAndOperator >> logicalAnd);
-  const auto relational_def = primary >> *(relationalOperator >> relational);
+  const auto logicalOr_def = logicalAnd >> -as<BinaryExpression::Operation>(logicalOrOperator >> logicalOr);
+  const auto logicalAnd_def = relational >> -as<BinaryExpression::Operation>(logicalAndOperator >> logicalAnd);
+  const auto relational_def = primary >> -as<BinaryExpression::Operation>(relationalOperator >> relational);
   const auto primary_def = variable | constant | ('(' > logicalOr > ')') | logicalNot;
   const auto logicalNot_def = logicalNotOperator >> primary;
   const auto variable_def = (varType >> identifier)[setupFieldId];
   const auto constant_def = x3::bool_ | x3::int64 | string;
-  const auto string_def = quoteString('\'') | quoteString('\"');
+  const auto string_def = quoteString('\'') | quoteString('\"') | x3::lexeme[(~x3::char_({'$', '@', '#', '%', '!', '('}) >> *(~x3::char_(')') - x3::blank))];
   const auto identifier_def = x3::lexeme[(x3::alpha | '_') >> *(x3::alnum | '_')];
 
   BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, logicalNot, primary, variable, constant, string, identifier);
@@ -101,22 +102,24 @@ namespace
 
 namespace rs::ml::query
 {
-  Expression Parser::parse(const std::string& str)
+  Expression parse(const std::string& expr)
   {
-    auto iter = str.begin();
-    auto end = str.end();
+    auto iter = expr.begin();
+    auto end = expr.end();
     x3::unicode::space_type space;
     BinaryExpression binary;
     
     if (x3::phrase_parse(iter, end, logicalOr, space, binary) && iter == end)
     {
       Expression root{std::move(binary)};
-      detail::normalize(root);
+      normalize(root);
       return root;
     }
     else
     {
-      throw std::runtime_error{std::string(iter, end)};     
+      std::ostringstream oss;
+      oss << "parsing " << expr << " error from [" << std::string{iter, end} << ']';
+      throw std::runtime_error{oss.str()};
     }
   }
 }

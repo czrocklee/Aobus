@@ -21,9 +21,5 @@
 
 namespace rs::ml::query
 {
-  class Parser
-  {
-  public:
-    Expression parse(const std::string& expression);
-  };
+  Expression parse(const std::string& expr);
 }

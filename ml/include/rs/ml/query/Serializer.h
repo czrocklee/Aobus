@@ -19,43 +19,7 @@
 
 #include <rs/ml/query/Expression.h>
 
-namespace rs::ml::query::detail
+namespace rs::ml::query
 {
-  void normalize(Expression& root);
-
-  struct Normalizer
-  {
-    void operator()(BinaryExpression& binary)
-    {
-      normalize(binary.operand);
-
-      if (binary.operations.empty())
-      {
-        std::swap(root, binary.operand);
-      }
-
-      for (auto& operation : binary.operations)
-      {
-        normalize(operation.operand);
-      }
-    }
-
-    void operator()(UnaryExpression& unary)
-    {
-      normalize(unary.operand);
-    }
-
-    template<typename T>
-    void operator()(T&&)
-    {
-    }
-    
-    Expression& root;
-  };
-
-  inline void normalize(Expression& root)
-  {
-    Normalizer normalizer{root};
-    boost::apply_visitor(normalizer, root);
-  }
+  std::string serialize(const Expression& expr);
 }
