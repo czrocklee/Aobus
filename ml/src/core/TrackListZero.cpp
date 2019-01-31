@@ -16,7 +16,7 @@
  */
 
 #include "DynamicTrackListImpl.h"
-#include <rs/ml/core/MediaLibrary.h>
+#include <rs/ml/core/MusicLibrary.h>
 #include <rs/ml/core/TrackListZero.h>
 
 #include <iostream>
@@ -32,12 +32,12 @@ namespace
 
 namespace rs::ml::core
 {
-  struct TrackListZero::Impl : public DynamicTrackListImpl<const Track*, UnPack>, public MediaLibrary::Observer
+  struct TrackListZero::Impl : public DynamicTrackListImpl<const Track*, UnPack>, public MusicLibrary::Observer
   {
     using Base = DynamicTrackListImpl<const Track*, UnPack>;
 
   public:
-    Impl(MediaLibrary& ml, Filter&& filter) : Base{std::move(filter)}, _ml{ml} { _ml.attach(*this); }
+    Impl(MusicLibrary& ml, Filter&& filter) : Base{std::move(filter)}, _ml{ml} { _ml.attach(*this); }
     ~Impl() { _ml.detach(*this);  std::cout << "impl destroied" << std::endl; }
 
     void mutate(std::size_t index, const TrackT& value);
@@ -48,7 +48,7 @@ namespace rs::ml::core
     void onRemove(TrackId id, const Track* track) override;
 
   private:
-    MediaLibrary& _ml;
+    MusicLibrary& _ml;
   };
 
   void TrackListZero::Impl::mutate(std::size_t index, const TrackT& value)
@@ -81,7 +81,7 @@ namespace rs::ml::core
     Base::onRemove(id);
   }
 
-  TrackListZero::TrackListZero(MediaLibrary& ml, Filter filter)
+  TrackListZero::TrackListZero(MusicLibrary& ml, Filter filter)
     : _impl{std::make_unique<Impl>(ml, std::move(filter))}
   {
   }

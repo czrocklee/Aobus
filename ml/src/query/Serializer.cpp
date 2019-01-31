@@ -49,7 +49,7 @@ namespace
     
     void operator()(const UnaryExpression& unary)
     {
-      oss << "!";
+      oss << "not ";
       boost::apply_visitor(*this, unary.operand);
     }
 

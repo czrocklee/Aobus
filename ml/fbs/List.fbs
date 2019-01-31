@@ -1,0 +1,10 @@
+namespace rs.ml.core;
+
+table List
+{
+  name:string;
+  expr:string;
+  desc:string;
+}
+
+root_type List;

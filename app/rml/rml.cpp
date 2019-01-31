@@ -27,7 +27,7 @@
 #include <boost/timer/timer.hpp>
 
 #include <rs/ml/core/Track.h>
-#include <rs/ml/core/MediaLibrary.h>
+#include <rs/ml/core/MusicLibrary.h>
 #include <rs/ml/query/TrackFilter.h>
 #include <rs/ml/query/Parser.h>
 #include <rs/ml/query/Serializer.h>
@@ -37,13 +37,17 @@
 #include <rs/cli/BasicCommand.h>
 #include <rs/cli/ComboCommand.h>
 
+#include "ListCommand.h"
+
 namespace bpo = boost::program_options;
 
 int main(int argc, const char *argv[])
 {
-  rs::ml::core::MediaLibrary ml{"/home/rocklee/RockStudio/mylib"};
+  rs::ml::core::MusicLibrary ml{"/home/rocklee/RockStudio/mylib"};
 
   rs::cli::ComboCommand root;
+
+  /*
   root.addCommand<rs::cli::BasicCommand>("show", [&ml](const auto& vm)
   {
     auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
@@ -55,7 +59,7 @@ int main(int argc, const char *argv[])
       std::cout << rs::ml::query::serialize(expr) << std::endl;
       rs::ml::query::TrackFilter filter{std::move(expr)};
 
-      for (auto pair: ml.reader())
+      for (auto pair: ml.tracks().readTransaction())
       {
         if (filter(pair.second))
         {
@@ -66,10 +70,10 @@ int main(int argc, const char *argv[])
     }
     else
     {
-      for (auto pair: ml.reader())
+      for (auto pair: ml.tracks().readTransaction())
       {
         std::cout << pair.first << " " << cstr(pair.second->meta()->artist()) << " " << cstr(pair.second->meta()->title()) << std::endl;
-        std::cout << (pair.second->custom()->LookupByKey("pop") != nullptr);
+     //   std::cout << (pair.second->custom()->LookupByKey("pop") != nullptr);
       }
     }
 
@@ -79,11 +83,11 @@ int main(int argc, const char *argv[])
   root.addCommand<rs::cli::BasicCommand>("add", [&ml](const auto& vm)
   {
     rs::ml::Finder finder{"/home/rocklee/RockStudio/mylib/", {".m4a", ".mp3", ".flac"}};
-    auto writer = ml.writer();
+    auto txn = ml.tracks().writeTransaction();
     
     for (const boost::filesystem::path& path : finder)
     {
-      writer.create([&path] (flatbuffers::FlatBufferBuilder& fbb)
+      auto id = txn.create([&path] (flatbuffers::FlatBufferBuilder& fbb)
       {
         TagLib::FileRef file(path.string().c_str());
         
@@ -126,16 +130,18 @@ int main(int argc, const char *argv[])
         return builder.Finish();
       });
 
-      std::cout << path << std::endl;
+        std::cout << id << " " << path << std::endl;
     }
-    
+
+    txn.commit();
     return std::error_code{};
   });
 
   root.addCommand<rs::cli::BasicCommand>("del", [&ml](const bpo::variables_map& vm)
   {
-    auto writer = ml.writer();
-    writer.remove(vm["track"].as<rs::ml::core::TrackId>());
+    auto txn = ml.tracks().writeTransaction();
+    txn.del(vm["track"].as<rs::ml::core::TrackId>());
+    txn.commit();
     return std::error_code{};
   }).addOption("track", bpo::value<rs::ml::core::TrackId>()->required(), "track id");
 
@@ -144,7 +150,7 @@ int main(int argc, const char *argv[])
   {
     std::deque<rs::ml::core::TrackId> tracks;
 
-    for (auto pair : ml.reader())
+    for (auto pair : ml.tracks().readTransaction())
     {
       tracks.push_back(pair.first);
     }
@@ -155,11 +161,11 @@ int main(int argc, const char *argv[])
 
     {
 
-        auto reader = ml.reader();
+      auto txn = ml.tracks().readTransaction();
       boost::timer::auto_cpu_timer timer;
       for (auto track : tracks)
       {
-        i += (std::size_t)reader[track];
+        i += (std::size_t)txn[track];
       }
     }
   
@@ -167,8 +173,19 @@ int main(int argc, const char *argv[])
       
     return std::error_code{};
   });
-
+*/
 
 //  std::vector<std::string> args(argv + 1, argv + argc);
-  return root.execute(argc, argv).value();
+
+  root.addCommand<rs::rml::ListCommand>("list", ml);
+
+  try 
+  {
+    std::cout << root.execute(argc, argv) << std::endl;
+  }
+  catch (const std::exception& e)
+  {
+    std::cerr << e.what() << std::endl;
+    return 1;
+  }
 }

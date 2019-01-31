@@ -17,22 +17,17 @@
 
 #pragma once
 
-#include <vector>
-#include <string>
-#include <system_error>
+#include <rs/cli/ComboCommand.h>
+#include <rs/ml/core/MusicLibrary.h>
 
-namespace rs::cli
+namespace rs::rml
 {
-  class Command
+  class ListCommand : public cli::ComboCommand
   {
   public:
-    virtual ~Command() { };
+    explicit ListCommand(rs::ml::core::MusicLibrary& ml);
 
-    virtual std::string execute(int argc, const char *argv[]) = 0;
+  private:
+    rs::ml::core::MusicLibrary& _ml;
   };
-
 }
-
-
-
-

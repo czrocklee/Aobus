@@ -29,7 +29,7 @@ namespace rs::cli
   public:
     ComboCommand()
     {
-      _optDesc.add_options()("command", boost::program_options::value<std::string>()->required(), "sub command");
+      _optDesc.add_options()("command", boost::program_options::value<std::string>(), "sub command");
       _posOptDesc.add("command", 1);
     }
 
@@ -41,9 +41,9 @@ namespace rs::cli
       return *(static_cast<T*>(iter.first->second.get()));
     }
 
-    std::error_code execute(int argc, const char *argv[]) override
+    std::string execute(int argc, const char *argv[]) override
     {
-      std::string command = argv[1];
+      std::string_view command = argc > 1 ? argv[1] : "";
       auto iter = _cmds.find(command);
 
       if (iter != _cmds.end())
@@ -52,12 +52,12 @@ namespace rs::cli
       }
       else
       {
-        return std::make_error_code(std::errc::invalid_argument);
+        throw std::invalid_argument(std::string{"invalid sub command "}.append(command));
       }
     }
 
   private:
-    std::map<std::string, std::unique_ptr<Command>> _cmds;
+    std::map<std::string, std::unique_ptr<Command>, std::less<>> _cmds;
     boost::program_options::options_description _optDesc;
     boost::program_options::positional_options_description _posOptDesc;
   };

@@ -3,8 +3,6 @@ include "Properties.fbs";
 
 namespace rs.ml.core;
 
-attribute "alias";
-
 struct Int { value:long; }
 struct Bool { value:bool; }
 union Value { bool:Bool, int:Int, str:string }

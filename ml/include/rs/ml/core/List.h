@@ -17,22 +17,10 @@
 
 #pragma once
 
-#include <vector>
-#include <string>
-#include <system_error>
+#include <rs/ml/core/List_generated.h>
 
-namespace rs::cli
+namespace rs::ml::core
 {
-  class Command
-  {
-  public:
-    virtual ~Command() { };
-
-    virtual std::string execute(int argc, const char *argv[]) = 0;
-  };
-
+  using ListId = std::uint64_t;
+  constexpr ListId InvalidListId = 0;
 }
-
-
-
-

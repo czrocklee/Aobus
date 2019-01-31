@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <rs/ml/core/MediaLibrary.h>
+#include <rs/ml/core/MusicLibrary.h>
 #include <rs/ml/core/UpdateObserver.h>
 #include <memory>
 
@@ -29,7 +29,7 @@ namespace rs::ml::core
     using Filter = std::function<bool(const Track*)>;
     using Value = std::pair<TrackId, const TrackT&>;
 
-    DynamicList(MediaLibrary& ml, Filter filter);
+    DynamicList(MusicLibrary& ml, Filter filter);
     ~DynamicList();
 
     std::size_t size() const;

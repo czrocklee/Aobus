@@ -17,22 +17,28 @@
 
 #pragma once
 
-#include <vector>
-#include <string>
-#include <system_error>
+#include <rs/ml/core/Track.h>
+#include <rs/ml/core/List.h>
+#include <rs/ml/core/FlatBuffersStore.h>
 
-namespace rs::cli
+namespace rs::ml::core
 {
-  class Command
+  class MusicLibrary
   {
   public:
-    virtual ~Command() { };
+    using TrackStore = FlatBuffersStore<Track, GetTrack>;
+    using ListStore = FlatBuffersStore<List, GetList>;
 
-    virtual std::string execute(int argc, const char *argv[]) = 0;
+    explicit MusicLibrary(const std::string& rootDir);
+    TrackStore& tracks() { return _tracks; }
+    const TrackStore& tracks() const { return _tracks; }
+
+    ListStore& lists() { return _lists; }
+    const ListStore& lists() const { return _lists; }
+
+  private:
+    lmdb::env _env;
+    TrackStore _tracks;
+    ListStore _lists;
   };
-
 }
-
-
-
-

@@ -23,17 +23,17 @@
 
 namespace rs::ml::core
 {
-  using Writer = MediaLibrary::Writer;
-  using Reader = MediaLibrary::Reader;
+  using Writer = MusicLibrary::Writer;
+  using Reader = MusicLibrary::Reader;
 
-  struct DynamicList::Impl : public MediaLibrary::Observer
+  struct DynamicList::Impl : public MusicLibrary::Observer
   {
-    MediaLibrary& ml;
+    MusicLibrary& ml;
     Filter filter;
     boost::container::flat_map<TrackId, std::unique_ptr<TrackT>> tracks;
     UpdateObserverable<std::size_t> observerable;
 
-    Impl(MediaLibrary& ml, Filter&& filter): ml{ml}, filter{std::move(filter)} { ml.attach(*this); }
+    Impl(MusicLibrary& ml, Filter&& filter): ml{ml}, filter{std::move(filter)} { ml.attach(*this); }
     ~Impl() { ml.detach(*this); }
     void onAttached() override;
     void onCreate(TrackId id, const Track* track) override;  
@@ -101,7 +101,7 @@ namespace rs::ml::core
     }
   }
 
-  DynamicList::DynamicList(MediaLibrary& ml, Filter filter)
+  DynamicList::DynamicList(MusicLibrary& ml, Filter filter)
     : _impl{std::make_unique<Impl>(ml, std::move(filter))}
   {
   }

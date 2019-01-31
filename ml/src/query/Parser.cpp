@@ -31,7 +31,7 @@ namespace
   namespace x3 = boost::spirit::x3;
   using namespace rs::ml::query;
 
-  x3::symbols<VariableType> varType 
+  const x3::symbols<VariableType> varType 
   {
     {
       {"$", VariableType::Metadata},
@@ -41,10 +41,10 @@ namespace
     }
   };
 
-  x3::symbols<Operator> logicalAndOperator{{{"and", Operator::And}, {"&&", Operator::And}}};
-  x3::symbols<Operator> logicalOrOperator{{{"or", Operator::Or}, {"||", Operator::Or}}};
-  x3::symbols<Operator> logicalNotOperator{{{"not", Operator::Not}, {"!", Operator::Not}}};
-  x3::symbols<Operator> relationalOperator
+  const x3::symbols<Operator> logicalAndOperator{{{"and", Operator::And}, {"&&", Operator::And}}};
+  const x3::symbols<Operator> logicalOrOperator{{{"or", Operator::Or}, {"||", Operator::Or}}};
+  const x3::symbols<Operator> logicalNotOperator{{{"not", Operator::Not}, {"!", Operator::Not}}};
+  const x3::symbols<Operator> relationalOperator
   {
     {
       {"=", Operator::Equal},
@@ -90,8 +90,8 @@ namespace
   const auto logicalOr_def = logicalAnd >> -as<BinaryExpression::Operation>(logicalOrOperator >> logicalOr);
   const auto logicalAnd_def = relational >> -as<BinaryExpression::Operation>(logicalAndOperator >> logicalAnd);
   const auto relational_def = primary >> -as<BinaryExpression::Operation>(relationalOperator >> relational);
-  const auto primary_def = variable | constant | ('(' > logicalOr > ')') | logicalNot;
-  const auto logicalNot_def = logicalNotOperator >> primary;
+  const auto primary_def = logicalNot | variable | constant | ('(' > logicalOr > ')');
+  const auto logicalNot_def = logicalNotOperator >> logicalOr;
   const auto variable_def = (varType >> identifier)[setupFieldId];
   const auto constant_def = x3::bool_ | x3::int64 | string;
   const auto string_def = quoteString('\'') | quoteString('\"') | x3::lexeme[(~x3::char_({'$', '@', '#', '%', '!', '('}) >> *(~x3::char_(')') - x3::blank))];

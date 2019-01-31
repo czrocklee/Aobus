@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <rs/ml/core/MediaLibrary.h>
+#include <rs/ml/core/MusicLibrary.h>
 #include <rs/ml/core/TrackList.h>
 #include <functional>
 #include <memory>

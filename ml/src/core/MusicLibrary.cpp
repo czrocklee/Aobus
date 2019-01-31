@@ -15,24 +15,27 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include <rs/ml/core/MusicLibrary.h>
 
-#include <vector>
-#include <string>
-#include <system_error>
-
-namespace rs::cli
+namespace
 {
-  class Command
+  lmdb::env createEnv(const std::string& rootDir)
   {
-  public:
-    virtual ~Command() { };
-
-    virtual std::string execute(int argc, const char *argv[]) = 0;
-  };
-
+    auto env = lmdb::env::create();
+    env.set_mapsize(1UL * 1024UL * 1024UL * 1024UL);
+    env.set_max_dbs(2);
+    env.open(rootDir.c_str(), MDB_NOTLS, 0664);
+    return env;
+  }
 }
 
-
-
+namespace rs::ml::core
+{
+  MusicLibrary::MusicLibrary(const std::string& rootDir)
+    : _env{createEnv(rootDir)},
+      _tracks{_env, "tracks"},
+      _lists{_env, "lists"}
+  {
+  }
+}
 

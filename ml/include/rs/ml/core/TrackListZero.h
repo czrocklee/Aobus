@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <rs/ml/core/MediaLibrary.h>
+#include <rs/ml/core/MusicLibrary.h>
 #include <rs/ml/core/TrackList.h>
 #include <functional>
 #include <memory>
@@ -29,7 +29,7 @@ namespace rs::ml::core
   public:
     using Filter = std::function<bool(const Track*)>;
 
-    TrackListZero(MediaLibrary&, Filter filter);
+    TrackListZero(MusicLibrary&, Filter filter);
 		~TrackListZero() override;
 
 		std::size_t size() const override;

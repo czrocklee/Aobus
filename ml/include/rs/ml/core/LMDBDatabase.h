@@ -21,59 +21,53 @@
 #include <rs/ml/core/UpdateObserver.h>
 #include <lmdb++.h>
 #include <boost/iterator/iterator_facade.hpp>
+#include <boost/asio/buffer.hpp>
 #include <mutex>
 
 namespace rs::ml::core
 {
-  class MediaLibrary
+  class LMDBDatabase
   {
   public:
-    class Reader;
-    class Writer;
+    class ReadTransaction;
+    class WriteTransaction;
 
-    MediaLibrary(const std::string& folder);
-    ~MediaLibrary();
+    LMDBDatabase(lmdb::env& env, const std::string& db);
+    ~LMDBDatabase();
 
-    Reader reader() const;
-    Writer writer();
-
-    using Observer = UpdateObserver<TrackId, const Track*>;
-
-    void attach(Observer& observer);
-    void detach(Observer& observer);
+    ReadTransaction readTransaction() const;
+    WriteTransaction writeTransaction();
 
   private:
     struct Impl;
     std::unique_ptr<Impl> _impl;
   };
 
-
-  class MediaLibrary::Reader
+  class LMDBDatabase::ReadTransaction
   {
   public:
-    using Value = std::pair<TrackId, const Track*>;
+    using Value = std::pair<std::uint64_t, boost::asio::const_buffer>;
     class Iterator;
 
-    Reader(MediaLibrary::Impl& impl);
-    ~Reader();
     Iterator begin() const;
     Iterator end() const;
-    const Track* operator[](TrackId id) const;
+    boost::asio::const_buffer operator[](std::uint64_t id) const;
 
   private:
-    MediaLibrary::Impl& _mli;
-    using Impl = std::pair<lmdb::txn, lmdb::cursor>;
-    mutable Impl _impl;
+    explicit ReadTransaction(LMDBDatabase::Impl& impl);
+
+    lmdb::dbi& _dbi;
+    lmdb::txn _txn;
+    friend class LMDBDatabase;
   };
 
-  class MediaLibrary::Reader::Iterator : 
+  class LMDBDatabase::ReadTransaction::Iterator : 
     public boost::iterator_facade<Iterator, const Value, boost::forward_traversal_tag>
   {
   public:
     friend class boost::iterator_core_access;
 
     Iterator();
-    Iterator(lmdb::cursor&& cursor);
     Iterator(const Iterator& other);
     Iterator(Iterator&& other);
     bool equal(const Iterator& other) const;
@@ -81,28 +75,28 @@ namespace rs::ml::core
     const Value& dereference() const;
 
   private:
+    Iterator(lmdb::cursor&& cursor);
+ 
     lmdb::cursor _cursor;
     Value _value;
+    friend class ReadTransaction;
   };
 
-  class MediaLibrary::Writer
+  class LMDBDatabase::WriteTransaction
   {
   public:
-    using Creator = std::function<flatbuffers::Offset<Track>(flatbuffers::FlatBufferBuilder&)>;
-    Writer(MediaLibrary::Impl& impl);
-    ~Writer();
-
-    TrackId create(const Creator& creator);
-    TrackId create(const TrackT& track);
-    bool modify(TrackId id, const TrackT& track);
-    void remove(TrackId id);
+    std::uint64_t create(boost::asio::const_buffer data);
+    bool update(std::uint64_t id, boost::asio::const_buffer data);
+    bool del(std::uint64_t id);
+    void commit();
   
   private:
-    TrackId create(flatbuffers::Offset<Track> track);
+    explicit WriteTransaction(LMDBDatabase::Impl& impl);
 
-    MediaLibrary::Impl& _mli;
+    LMDBDatabase::Impl& _impl;
     lmdb::txn _txn;
-    std::lock_guard<std::mutex> _lock;
+
+    friend class LMDBDatabase;
   };
 
 }
