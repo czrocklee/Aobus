@@ -17,11 +17,33 @@
 
 #pragma once
 
-#include <rs/ml/fbs/List_generated.h>
-#include <rs/ml/core/Item.h>
+#include <rs/ml/utility/TaggedInteger.h>
 
 namespace rs::ml::core
 {
-  using List = Item<rs::ml::fbs::List>;
-  using ListT = ItemT<rs::ml::fbs::List>;
+  template<typename T>
+  struct Item
+  {
+    using Id = utility::TaggedInteger<std::uint64_t, struct IdTag>;
+    using Value = T;
+
+    Id id;
+    const Value* value;
+  };
+
+  template<typename T>
+  struct ItemT
+  {
+    using Id = typename Item<T>::Id;
+    Id id;
+    typename T::NativeTableType value;
+
+    static ItemT fromItem(const Item<T>& t)
+    {
+      ItemT item{t.id};
+      t.value->UnPackTo(&item.value);
+      return item;
+    }
+  };
+
 }

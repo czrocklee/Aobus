@@ -15,27 +15,13 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include "MainWindow.h"
+#include <QtWidgets/QApplication>
 
-#include <rs/ml/core/Track.h>
-#include <rs/ml/core/UpdateObserver.h>
-
-namespace rs::ml::core
+int main(int argc, char *argv[])
 {
-  class TrackList
-  {
-  public:
-    using Value = std::pair<TrackId, const TrackT&>;
-
-    virtual ~TrackList() = default;
-
-    virtual std::size_t size() const = 0;
-    virtual Value operator[](std::size_t index) const = 0;
-    virtual void mutate(std::size_t index, const TrackT& value) = 0;
-
-    using Observer = UpdateObserver<TrackId, const TrackT&, std::size_t>;
-    virtual void attach(Observer& observer) = 0;
-    virtual void detach(Observer& observer) = 0;
-  };
+  QApplication app(argc, argv);
+  MainWindow mw("/home/rocklee/RockStudio/mylib/");
+  mw.show();
+  return app.exec();
 }
-

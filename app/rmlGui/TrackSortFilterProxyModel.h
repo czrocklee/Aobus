@@ -15,33 +15,26 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
 
 #include <rs/ml/core/MusicLibrary.h>
-#include <rs/ml/core/UpdateObserver.h>
-#include <memory>
+#include <rs/ml/query/TrackFilter.h>
+#include <QtCore/QSortFilterProxyModel>
 
-namespace rs::ml::core
+class TrackSortFilterProxyModel : public QSortFilterProxyModel
 {
-  class DynamicList
-  {
-  public:
-    using Filter = std::function<bool(const Track*)>;
-    using Value = std::pair<TrackId, const TrackT&>;
+  Q_OBJECT
 
-    DynamicList(MusicLibrary& ml, Filter filter);
-    ~DynamicList();
+public:
+  using QSortFilterProxyModel::QSortFilterProxyModel;
+  //TrackSortFilterProxyModel(rs::ml::core::MusicLibrary& ml, QObject *parent = 0);
 
-    std::size_t size() const;
-    Value operator[](std::size_t index) const;
+public slots:
+  void onQuickFilterChanged(const QString& filter);
 
-    using Observer = UpdateObserver<std::size_t>;
-    void attach(Observer& observer);
-    void detach(Observer& observer);
+protected:
+  bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
 
-  private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
-  };
-}
-
+private:
+  std::optional<rs::ml::query::TrackFilter> _filter;
+  std::string _quick;
+};

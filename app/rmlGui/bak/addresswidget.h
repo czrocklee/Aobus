@@ -69,7 +69,7 @@ class AddressWidget : public QTabWidget
     Q_OBJECT
 
 public:
-    AddressWidget(rs::ml::core::MediaLibrary& ml, QWidget *parent = 0);
+    AddressWidget(rs::ml::core::MusicLibrary& ml, QWidget *parent = 0);
     void readFromFile(const QString &fileName);
     void writeToFile(const QString &fileName);
 

@@ -56,7 +56,7 @@
 
 
 //! [0]
-AddressWidget::AddressWidget(rs::ml::core::MediaLibrary& ml, QWidget *parent)
+AddressWidget::AddressWidget(rs::ml::core::MusicLibrary& ml, QWidget *parent)
     : QTabWidget(parent)
 {
     table = new TableModel(ml, this);

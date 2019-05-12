@@ -17,10 +17,11 @@
 
 #pragma once
 
-#include <rs/ml/core/Track_generated.h>
+#include <rs/ml/fbs/Track_generated.h>
+#include <rs/ml/core/Item.h>
 
 namespace rs::ml::core
 {
-  using TrackId = std::uint64_t;
-  constexpr TrackId InvalidTrackId = 0;
+  using Track = Item<rs::ml::fbs::Track>;
+  using TrackT = ItemT<rs::ml::fbs::Track>;
 }

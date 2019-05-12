@@ -17,23 +17,28 @@
 
 #pragma once
 
-#include <rs/ml/query/Expression.h>
-#include <rs/ml/core/Track.h>
+#include <cstddef>
+#include <limits>
 
-namespace rs::ml::query
+namespace rs::ml::utility
 {
-  class TrackFilter
+  template<typename T, typename Tag, T Default = T{}>
+  class TaggedInteger
   {
   public:
-    explicit TrackFilter(Expression expr);
+    TaggedInteger() : _value{Default} {}
+    explicit TaggedInteger(T value) : _value(value) {}
+    operator T() const { return _value; }
+    static TaggedInteger invalid() { return {}; }
 
-    bool operator()(const core::Track& track) const;
+    friend bool operator<(TaggedInteger a, TaggedInteger b) { return a._value < b._value; }
+    friend bool operator==(TaggedInteger a, TaggedInteger b) { return a._value == b._value; }
+    friend bool operator!=(TaggedInteger a, TaggedInteger b) { return a._value != b._value; }
     
-    bool operator()(const core::TrackT& track) const;
-
-    const Expression& expression() const { return _expr; }
-
   private:
-    Expression _expr;
+    T _value;
   };
+
+  template<typename Tag>
+  using TaggedIndex = TaggedInteger<std::size_t, Tag, std::numeric_limits<std::size_t>::max()>;
 }

@@ -17,32 +17,15 @@
 
 #pragma once
 
-#include <rs/ml/core/MusicLibrary.h>
-#include <rs/ml/core/TrackList.h>
-#include <functional>
-#include <memory>
+#include "app/rmlGui/ui_AddTrackDialog.h"
+#include <rs/ml/core/Track.h>
 
-namespace rs::ml::core
+class AddTrackDialog : public QDialog, public Ui::AddTrackDialog
 {
-  class TrackListZero : public TrackList
-  {
-  public:
-    using Filter = std::function<bool(const Track*)>;
+    Q_OBJECT
 
-    TrackListZero(MusicLibrary&, Filter filter);
-		~TrackListZero() override;
+public:
+    AddTrackDialog(QWidget *parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
 
-		std::size_t size() const override;
-    Value operator[](std::size_t index) const override;
-    void mutate(std::size_t index, const TrackT& value) override;
-
-    using Observer = UpdateObserver<TrackId, const TrackT&, std::size_t>;
-    void attach(Observer& observer) override;
-    void detach(Observer& observer) override;
-	
-	private:
-		struct Impl;
-		std::unique_ptr<Impl> _impl;
-  };
-}
-
+    rs::ml::core::TrackT track() const;
+};

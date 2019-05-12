@@ -1,4 +1,4 @@
-namespace rs.ml.core;
+namespace rs.ml.fbs;
 
 table List
 {

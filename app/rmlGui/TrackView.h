@@ -17,11 +17,14 @@
 
 #pragma once
 
-#include <rs/ml/fbs/List_generated.h>
-#include <rs/ml/core/Item.h>
+#include "app/rmlGui/ui_TrackView.h"
+#include "TableModel.h"
 
-namespace rs::ml::core
+class TrackView : public QWidget, public Ui_TrackView
 {
-  using List = Item<rs::ml::fbs::List>;
-  using ListT = ItemT<rs::ml::fbs::List>;
-}
+  Q_OBJECT
+
+public:
+  TrackView(TableModel::TrackList& list, QWidget* parent = nullptr);
+  ~TrackView() override;
+};

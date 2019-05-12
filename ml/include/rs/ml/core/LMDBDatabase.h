@@ -17,12 +17,11 @@
 
 #pragma once
 
-#include <rs/ml/core/Track.h>
-#include <rs/ml/core/UpdateObserver.h>
 #include <lmdb++.h>
 #include <boost/iterator/iterator_facade.hpp>
 #include <boost/asio/buffer.hpp>
 #include <mutex>
+#include <memory>
 
 namespace rs::ml::core
 {

@@ -1,14 +1,25 @@
 cc_binary(
     name = "rml",
     srcs = [
-      "rml/rml.cpp", 
-      "rml/ListCommand.h",
-      "rml/ListCommand.cpp" 
+        "rml/ListCommand.cpp",
+        "rml/ListCommand.h",
+        "rml/TrackCommand.cpp",
+        "rml/TrackCommand.h",
+        "rml/rml.cpp",
     ],
-    copts = ["-std=c++1z"],
-    linkopts = ["-lboost_system", "-lboost_filesystem", "-lboost_timer", "-ltag"],
-#    linkstatic = False,
-    deps = ["//ml:rs-ml", "//cli:rs-cli"]
+    copts = ["-std=c++17"],
+    defines = ["BOOST_ERROR_CODE_HEADER_ONLY"],
+    linkopts = [
+        "-ltag",
+    ],
+    #    linkstatic = False,
+    deps = [
+        "//cli:rs-cli",
+        "//ml:rs-ml",
+        "@boost//:timer",
+        "@boost//:filesystem",
+        "@boost//:system"
+
+
+    ],
 )
-
-

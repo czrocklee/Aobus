@@ -22,7 +22,7 @@
 
 namespace rs::ml::core
 {
-  inline DataValue tag(const Track* track, const char* tagName)
+  inline DataValue tag(const fbs::Track* track, const char* tagName)
   {
     auto tags = track->tags();
     auto iter = std::find_if(tags->begin(), tags->end(),
@@ -30,7 +30,7 @@ namespace rs::ml::core
     return iter == tags->end() ? DataValue{false} : DataValue{true};
   }
 
-  inline DataValue tag(const TrackT& track, const char* tagName)
+  inline DataValue tag(const fbs::TrackT& track, const char* tagName)
   {
     auto iter = std::find_if(track.tags.begin(), track.tags.end(),
       [tagName](const auto& t) { return t == tagName; });

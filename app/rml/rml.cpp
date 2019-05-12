@@ -23,14 +23,10 @@
 #include <taglib/fileref.h>
 #include <taglib/tpropertymap.h>
 //#include <openssl/md5.h>
-#include <boost/multiprecision/cpp_int.hpp>
 #include <boost/timer/timer.hpp>
 
 #include <rs/ml/core/Track.h>
 #include <rs/ml/core/MusicLibrary.h>
-#include <rs/ml/query/TrackFilter.h>
-#include <rs/ml/query/Parser.h>
-#include <rs/ml/query/Serializer.h>
 //#include <rs/ml/Protocol_generated.h>
 #include <rs/ml/utility/Finder.h>
 //#include <rs/ml/MD5Generator.h>
@@ -38,6 +34,7 @@
 #include <rs/cli/ComboCommand.h>
 
 #include "ListCommand.h"
+#include "TrackCommand.h"
 
 namespace bpo = boost::program_options;
 
@@ -46,40 +43,8 @@ int main(int argc, const char *argv[])
   rs::ml::core::MusicLibrary ml{"/home/rocklee/RockStudio/mylib"};
 
   rs::cli::ComboCommand root;
-
+  
   /*
-  root.addCommand<rs::cli::BasicCommand>("show", [&ml](const auto& vm)
-  {
-    auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
-
-    if (vm.count("filter") > 0)
-    {
-      std::cout << vm["filter"].template as<std::string>() << std::endl;
-      auto expr = rs::ml::query::parse(vm["filter"].template as<std::string>());
-      std::cout << rs::ml::query::serialize(expr) << std::endl;
-      rs::ml::query::TrackFilter filter{std::move(expr)};
-
-      for (auto pair: ml.tracks().readTransaction())
-      {
-        if (filter(pair.second))
-        {
-          std::cout << pair.first << " " << cstr(pair.second->meta()->artist()) << " " << cstr(pair.second->meta()->title()) << std::endl;
-        }
-      }
-
-    }
-    else
-    {
-      for (auto pair: ml.tracks().readTransaction())
-      {
-        std::cout << pair.first << " " << cstr(pair.second->meta()->artist()) << " " << cstr(pair.second->meta()->title()) << std::endl;
-     //   std::cout << (pair.second->custom()->LookupByKey("pop") != nullptr);
-      }
-    }
-
-    return std::error_code{};
-  }).addOption("filter,f", bpo::value<std::string>(), "filter expression");
-
   root.addCommand<rs::cli::BasicCommand>("add", [&ml](const auto& vm)
   {
     rs::ml::Finder finder{"/home/rocklee/RockStudio/mylib/", {".m4a", ".mp3", ".flac"}};
@@ -177,6 +142,7 @@ int main(int argc, const char *argv[])
 
 //  std::vector<std::string> args(argv + 1, argv + argc);
 
+  root.addCommand<rs::rml::TrackCommand>("track", ml);
   root.addCommand<rs::rml::ListCommand>("list", ml);
 
   try 

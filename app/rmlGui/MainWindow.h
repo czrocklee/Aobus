@@ -17,28 +17,34 @@
 
 #pragma once
 
-#include <rs/ml/core/Track.h>
+#include <rs/ml/core/MusicLibrary.h>
 #include <rs/ml/core/List.h>
-#include <rs/ml/core/FlatBuffersStore.h>
+#include <rs/ml/reactive/ItemList.h>
+#include <rs/ml/reactive/ItemFilterList.h>
 
-namespace rs::ml::core
+#include "TrackView.h"
+#include "app/rmlGui/ui_MainWindow.h"
+
+class MainWindow : public QMainWindow, public Ui::MainWindow
 {
-  class MusicLibrary 
+  Q_OBJECT
+
+public:
+  MainWindow(const std::string& rootDir);
+
+private:
+  using TrackList = rs::ml::reactive::ItemList<rs::ml::core::TrackT>;
+  using TrackFilterList = rs::ml::reactive::ItemFilterList<rs::ml::core::TrackT>;
+
+  struct ListItem : public QListWidgetItem
   {
-  public:
-    using TrackStore = FlatBuffersStore<Track>;
-    using ListStore = FlatBuffersStore<List>;
+    using QListWidgetItem::QListWidgetItem;
 
-    explicit MusicLibrary(const std::string& rootDir);
-    TrackStore& tracks() { return _tracks; }
-    const TrackStore& tracks() const { return _tracks; }
-
-    ListStore& lists() { return _lists; }
-    const ListStore& lists() const { return _lists; }
-
-  private:
-    lmdb::env _env;
-    TrackStore _tracks;
-    ListStore _lists;
+    rs::ml::core::ListT list;
+    TrackView* trackView;
+    std::unique_ptr<TrackFilterList> tracks;
   };
-}
+
+  rs::ml::core::MusicLibrary _ml;
+  TrackList _tracks;
+};

@@ -21,6 +21,10 @@
 #include <map>
 #include <memory>
 #include <boost/program_options.hpp>
+#include <boost/algorithm/string/join.hpp>
+#include <boost/range/adaptor/map.hpp>
+
+//#include <boost/range/adaptor/transformed.hpp>
 
 namespace rs::cli
 {
@@ -43,16 +47,27 @@ namespace rs::cli
 
     std::string execute(int argc, const char *argv[]) override
     {
-      std::string_view command = argc > 1 ? argv[1] : "";
+      std::string_view command = "";
+      
+      if (argc > 1)
+      {
+        command = argv[1];
+        --argc, ++argv;
+      }
+
       auto iter = _cmds.find(command);
 
       if (iter != _cmds.end())
       {
-        return iter->second->execute(argc - 1, argv + 1);
+        return iter->second->execute(argc, argv);
       }
       else
       {
-        throw std::invalid_argument(std::string{"invalid sub command "}.append(command));
+        std::ostringstream oss;
+        oss << "invalid sub command " << command << "available: ["
+            << boost::algorithm::join(boost::adaptors::keys(_cmds), "|")
+            << "]";
+        throw std::invalid_argument(oss.str());
       }
     }
 
@@ -62,8 +77,5 @@ namespace rs::cli
     boost::program_options::positional_options_description _posOptDesc;
   };
 }
-
-
-
 
 

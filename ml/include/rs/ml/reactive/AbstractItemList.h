@@ -17,31 +17,25 @@
 
 #pragma once
 
-#include <rs/ml/core/MusicLibrary.h>
-#include <rs/ml/core/TrackList.h>
-#include <functional>
-#include <memory>
+#include <rs/ml/utility/TaggedInteger.h>
+#include <rs/ml/reactive/Observerable.h>
 
-namespace rs::ml::core
+namespace rs::ml::reactive
 {
-  class DynamicTrackList : public TrackList
+  template<typename T>
+  class AbstractItemList
   {
   public:
-    using Filter = std::function<bool(const TrackT&)>;
+    using Value = T;
+    using Index = utility::TaggedIndex<struct IndexTag>;
+    using Observer = rs::ml::reactive::Observer<const T&, Index>;
 
-    TrackListZero(TrackList&, Filter filter);
-		~TrackListZero() override;
+    virtual ~AbstractItemList() = default;
 
-		std::size_t size() const override;
-    Value operator[](std::size_t index) const override;
+    virtual std::size_t size() const = 0;
+    virtual const Value& at(Index index) const = 0;
 
-    using Observer = UpdateObserver<TrackId, const TrackT&, std::size_t>;
-    void attach(Observer& observer) override;
-    void detach(Observer& observer) override;
-	
-	private:
-		struct Impl;
-		std::unique_ptr<Impl> _impl;
+    virtual void attach(Observer& observer) = 0;
+    virtual void detach(Observer& observer) = 0;
   };
 }
-

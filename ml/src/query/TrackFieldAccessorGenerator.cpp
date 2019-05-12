@@ -115,7 +115,7 @@ namespace rs::ml::query
     {
       auto indent = writer.indent();
 
-      writer | "static rs::ml::core::DataValue get(const rs::ml::core::Track* track, int fieldId)"
+      writer | "static rs::ml::core::DataValue get(const rs::ml::fbs::Track* track, int fieldId)"
              | "{"
              | "  switch (fieldId)"
              | "  {";
@@ -149,7 +149,7 @@ namespace rs::ml::query
     {
       auto indent = writer.indent();
 
-      writer | "static rs::ml::core::DataValue get(const rs::ml::core::TrackT& track, int fieldId)"
+      writer | "static rs::ml::core::DataValue get(const rs::ml::fbs::TrackT& track, int fieldId)"
              | "{"
              | "  switch (fieldId)"
              | "  {";

@@ -22,12 +22,13 @@
 
 namespace rs::ml::core
 {
-  template<typename T, const T* GetT(const void*)>
+  template<typename T>
   class FlatBuffersStore
   {
   public:
     class ReadTransaction;
     class WriteTransaction;
+    using Id = typename T::Id;
 
     FlatBuffersStore(lmdb::env& env, const std::string& db) : _database{env, db} {}
 
@@ -39,30 +40,29 @@ namespace rs::ml::core
   };
 
 
-  template<typename T, const T* GetT(const void*)>
-  class FlatBuffersStore<T, GetT>::ReadTransaction
+  template<typename T>
+  class FlatBuffersStore<T>::ReadTransaction
   {
   public:
-    using Value = std::pair<TrackId, const T*>;
     auto begin() const { return boost::make_transform_iterator(_txn.begin(), decode); }
     auto end() const { return boost::make_transform_iterator(_txn.end(), decode); }
-    const T* operator[](TrackId id) const { return GetT(_txn[id].data()); }
+    const T operator[](Id id) const { return {id, ::flatbuffers::GetRoot<typename T::Value>(_txn[id].data())}; }
 
   private:
     ReadTransaction(LMDBDatabase::ReadTransaction&& txn) : _txn{std::move(txn)} {}
-    static Value decode(LMDBDatabase::ReadTransaction::Value value) { return std::make_pair(value.first, GetT(value.second.data())); }
+    static const T decode(LMDBDatabase::ReadTransaction::Value value); 
     LMDBDatabase::ReadTransaction _txn;
     friend class FlatBuffersStore;
   };
 
 
-  template<typename T, const T* GetT(const void*)>
-  class FlatBuffersStore<T, GetT>::WriteTransaction
+  template<typename T>
+  class FlatBuffersStore<T>::WriteTransaction
   {
   public:
     template<typename Creator>
-    TrackId create(Creator&& creator);
-    bool del(TrackId id) { return _txn.del(id); }
+    const Id create(Creator&& creator);
+    bool del(Id id) { return _txn.del(id); }
     void commit() { _txn.commit(); }
   
   private:
@@ -72,10 +72,16 @@ namespace rs::ml::core
     flatbuffers::FlatBufferBuilder _fbb;
     friend class FlatBuffersStore;
   };
+  
+  template<typename T>
+  inline const T FlatBuffersStore<T>::ReadTransaction::decode(LMDBDatabase::ReadTransaction::Value value)
+  {
+    return {Id{value.first}, ::flatbuffers::GetRoot<typename T::Value>(value.second.data())}; 
+  }
 
-  template<typename T, const T* GetT(const void*)>
+  template<typename T>
   template<typename Creator>
-  inline TrackId FlatBuffersStore<T, GetT>::WriteTransaction::create(Creator&& creator)
+  inline const typename T::Id FlatBuffersStore<T>::WriteTransaction::create(Creator&& creator)
   {
     struct BuilderGuard
     {
@@ -85,6 +91,6 @@ namespace rs::ml::core
 
     BuilderGuard guard{_fbb};
     _fbb.Finish(std::invoke(std::forward<Creator>(creator), _fbb));
-    return _txn.create(boost::asio::buffer(_fbb.GetBufferPointer(), _fbb.GetSize()));
+    return Id{_txn.create(boost::asio::buffer(_fbb.GetBufferPointer(), _fbb.GetSize()))};
   }
 }

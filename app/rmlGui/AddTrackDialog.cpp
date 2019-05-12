@@ -15,13 +15,19 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include "AddTrackDialog.h"
 
-#include <rs/ml/fbs/List_generated.h>
-#include <rs/ml/core/Item.h>
-
-namespace rs::ml::core
+AddTrackDialog::AddTrackDialog(QWidget *parent, Qt::WindowFlags f)
+  : QDialog{parent, f}
 {
-  using List = Item<rs::ml::fbs::List>;
-  using ListT = ItemT<rs::ml::fbs::List>;
+  setupUi(this);
+}
+
+rs::ml::core::TrackT AddTrackDialog::track() const
+{
+  rs::ml::core::TrackT t;
+  //t.title = lineEditTitle->text().toStdString();
+  //t.artist = lineEditArtist->text().toStdString();
+  //t.album = lineEditAlbum->text().toStdString();
+  return t;
 }

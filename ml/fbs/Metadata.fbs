@@ -1,6 +1,6 @@
 include "Attributes.fbs";
 
-namespace rs.ml.core;
+namespace rs.ml.fbs;
 
 table Metadata
 {

@@ -52,13 +52,13 @@ namespace
       switch (variable.type)
       {
         case VariableType::Metadata:
-          return gen::MetadataAccessor::get(track, variable.fieldId);
+          return gen::MetadataAccessor::get(track.value, variable.fieldId);
         case VariableType::Property:
-          return gen::PropertyAccessor::get(track, variable.fieldId);
+          return gen::PropertyAccessor::get(track.value, variable.fieldId);
         case VariableType::Tag:
-          return rs::ml::core::tag(track, variable.name.c_str());
+          return rs::ml::core::tag(track.value, variable.name.c_str());
         case VariableType::Custom: 
-          return rs::ml::core::custom(track, variable.name.c_str());
+          return rs::ml::core::custom(track.value, variable.name.c_str());
         default : return{};
       }
     }
@@ -138,9 +138,9 @@ namespace rs::ml::query
   {
   }
 
-  bool TrackFilter::operator()(const Track* track) const
+  bool TrackFilter::operator()(const Track& track) const
   {
-    return std::invoke(Evaluator<const Track*>{track}, _expr);
+    return std::invoke(Evaluator<const Track&>{track}, _expr);
   }
   
   bool TrackFilter::operator()(const TrackT& track) const

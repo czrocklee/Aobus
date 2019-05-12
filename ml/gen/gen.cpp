@@ -33,12 +33,6 @@ namespace bfs = boost::filesystem;
 
 namespace
 {
-  /*
-  std::vector<std::pair<std::string, Generator>> generators = 
-  {
-    {"rs/ml/query/gen/TrackFieldAccessor.h", rs::ml::query::TrackFieldAccessorGenerator{}}
-  };*/
-
   bool getFields(const std::string& schemaContent, const char* name, Fields& fields)
   {
     ::flatbuffers::Verifier verifier(reinterpret_cast<const std::uint8_t *>(schemaContent.c_str()), schemaContent.length());
@@ -127,8 +121,8 @@ int main(int argc, char* argv[])
 
   Fields metaFields, propFields;
     
-  if (!getFields(metaSchemaContent, "rs.ml.core.Metadata", metaFields) 
-      || !getFields(propSchemaContent, "rs.ml.core.Properties", propFields))
+  if (!getFields(metaSchemaContent, "rs.ml.fbs.Metadata", metaFields) 
+      || !getFields(propSchemaContent, "rs.ml.fbs.Properties", propFields))
   {
     std::cerr << "Failed to get fields info from schema" << std::endl;
     return 1;

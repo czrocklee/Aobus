@@ -22,7 +22,7 @@
 
 namespace rs::ml::core
 {
-  inline DataValue custom(const Track* track, const char* fieldName)
+  inline DataValue custom(const fbs::Track* track, const char* fieldName)
   {
     auto entry = track->custom()->LookupByKey(fieldName);
 
@@ -33,10 +33,10 @@ namespace rs::ml::core
 
     switch (entry->value_type())
     {
-      case Value_NONE: return {};
-      case Value_bool_: return static_cast<const Bool*>(entry->value())->value();
-      case Value_int_: return static_cast<const Int*>(entry->value())->value();
-      case Value_str:
+      case fbs::Value::NONE: return {};
+      case fbs::Value::bool_: return static_cast<const fbs::Bool*>(entry->value())->value();
+      case fbs::Value::int_: return static_cast<const fbs::Int*>(entry->value())->value();
+      case fbs::Value::str:
       {
         auto val = static_cast<const ::flatbuffers::String*>(entry->value());
         return std::string_view{val->c_str(), val->size()};
@@ -45,7 +45,7 @@ namespace rs::ml::core
     }
   }
 
-  inline DataValue custom(const TrackT& track, const char* fieldName)
+  inline DataValue custom(const fbs::TrackT& track, const char* fieldName)
   {
     auto iter = std::lower_bound(track.custom.begin(), track.custom.end(), fieldName, 
       [](auto& i, const char* v) { return i->key < v; });
@@ -59,10 +59,10 @@ namespace rs::ml::core
 
     switch (value.type)
     {
-      case Value_NONE: return {};
-      case Value_bool_: return static_cast<const Bool*>(value.value)->value();
-      case Value_int_: return static_cast<const Int*>(value.value)->value();
-      case Value_str: return std::string_view{*static_cast<const std::string*>(value.value)};
+      case fbs::Value::NONE: return {};
+      case fbs::Value::bool_: return static_cast<const fbs::Bool*>(value.value)->value();
+      case fbs::Value::int_: return static_cast<const fbs::Int*>(value.value)->value();
+      case fbs::Value::str: return std::string_view{*static_cast<const std::string*>(value.value)};
       default: return {};
     }
   }

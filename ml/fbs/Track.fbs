@@ -1,7 +1,7 @@
 include "Metadata.fbs";
 include "Properties.fbs";
 
-namespace rs.ml.core;
+namespace rs.ml.fbs;
 
 struct Int { value:long; }
 struct Bool { value:bool; }

@@ -17,21 +17,17 @@
 
 #pragma once
 
-#include <rs/ml/core/Track.h>
+#include <rs/cli/ComboCommand.h>
+#include <rs/ml/core/MusicLibrary.h>
 
-namespace rs::ml::core
+namespace rs::rml
 {
-  template<typename... Contexts>
-  class UpdateObserver
+  class TrackCommand : public cli::ComboCommand
   {
   public:
-    virtual ~UpdateObserver() = default;
-    virtual void onAttached() {};
-    virtual void onBeginUpdate() {};
-    virtual void onCreate(Contexts...) {};
-    virtual void onModify(Contexts...) {};
-    virtual void onRemove(Contexts...) {};
-    virtual void onEndUpdate() {};
-    virtual void onDetached() {};
+    explicit TrackCommand(rs::ml::core::MusicLibrary& ml);
+
+  private:
+    rs::ml::core::MusicLibrary& _ml;
   };
 }

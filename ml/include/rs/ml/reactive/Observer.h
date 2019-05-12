@@ -17,11 +17,24 @@
 
 #pragma once
 
-#include <rs/ml/fbs/List_generated.h>
-#include <rs/ml/core/Item.h>
-
-namespace rs::ml::core
+namespace rs::ml::reactive
 {
-  using List = Item<rs::ml::fbs::List>;
-  using ListT = ItemT<rs::ml::fbs::List>;
+  template<typename... Contexts>
+  class Observerable;
+
+  template<typename... Contexts>
+  class Observer
+  {
+  public:
+    virtual ~Observer() = default;
+
+  protected:
+    virtual void onAttached() {};
+    virtual void onInsert(Contexts...) {};
+    virtual void onUpdate(Contexts...) {};
+    virtual void onRemove(Contexts...) {};
+    virtual void onDetached() {};
+
+    friend class Observerable<Contexts...>;
+  };
 }
