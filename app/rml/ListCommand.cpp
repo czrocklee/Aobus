@@ -29,70 +29,76 @@ namespace
   namespace bpo = boost::program_options;
   using namespace rs::ml;
 
-  std::string list(core::MusicLibrary& ml, core::List::Id id = core::List::Id::invalid())
+  void list(core::MusicLibrary& ml, core::List::Id id, std::ostream& os)
   {
     auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
-
-    std::ostringstream oss;
+    auto txn = ml.readTransaction();
 
     if (id != core::List::Id::invalid())
     {
-      auto txn = ml.lists().readTransaction();
-      const core::List list = txn[id];
-      oss << std::setw(5) << id;
-      oss << std::setw(10) << cstr(list.value->name()) << std::setw(50) << cstr(list.value->expr()) << std::setw(50) << cstr(list.value->desc()) << std::endl;
-      return oss.str();
+      auto reader = ml.lists().reader(txn);
+      const core::List list = reader[id];
+      os << std::setw(5) << id;
+      os << std::setw(10) << cstr(list.value->name()) << std::setw(50) << cstr(list.value->expr()) << std::setw(50)
+         << cstr(list.value->desc()) << std::endl;
+      return;
     }
 
-    for (const auto& l: ml.lists().readTransaction())
+    for (const auto& l : ml.lists().reader(txn))
     {
-      oss << std::setw(5) << l.id;
-      oss << std::setw(10) << cstr(l.value->name()) << std::setw(50) << cstr(l.value->expr()) << std::setw(50) << cstr(l.value->desc()) << std::endl;
+      os << std::setw(5) << l.id;
+      os << std::setw(10) << cstr(l.value->name()) << std::setw(50) << cstr(l.value->expr()) << std::setw(50)
+         << cstr(l.value->desc()) << std::endl;
     }
-
-    return oss.str();
   }
 
-  std::string create(core::MusicLibrary& ml, const std::string& name, const std::string& expr, const std::string& desc)
+  void create(core::MusicLibrary& ml,
+              const std::string& name,
+              const std::string& expr,
+              const std::string& desc,
+              std::ostream& os)
   {
     auto expression = query::parse(expr);
     query::normalize(expression);
     std::string exprStr = query::serialize(expression);
-    auto txn = ml.lists().writeTransaction();
+    auto txn = ml.writeTransaction();
+    auto writer = ml.lists().writer(txn);
 
-    auto id = txn.create([&name, &exprStr, &desc] (flatbuffers::FlatBufferBuilder& fbb) 
-    {
+    core::List l = writer.create([&name, &exprStr, &desc](flatbuffers::FlatBufferBuilder& fbb) {
       return fbs::CreateListDirect(fbb, name.c_str(), exprStr.c_str(), desc.c_str());
     });
 
     txn.commit();
-    return list(ml, id);
+    list(ml, l.id, os);
   }
 
-  std::string del(core::MusicLibrary& ml, core::List::Id id)
-  {
-    auto txn = ml.lists().writeTransaction();
-    txn.del(id);
+  void del(core::MusicLibrary& ml, core::List::Id id, std::ostream&)
+  {    
+    auto txn = ml.writeTransaction();
+    ml.lists().writer(txn).del(id);
     txn.commit();
-    return {};
   }
 }
 
 namespace rs::rml
 {
-  ListCommand::ListCommand(ml::core::MusicLibrary& ml) 
-    : _ml{ml}
+  ListCommand::ListCommand(ml::core::MusicLibrary& ml) : _ml{ml}
   {
-    addCommand<rs::cli::BasicCommand>("show", [this](const auto& vm) { return list(_ml); });
+    addCommand<rs::cli::BasicCommand>("show",
+                                      [this](const auto& vm, auto& os) { return list(_ml, core::List::Id::invalid(), os); });
 
     addCommand<rs::cli::BasicCommand>("create")
       .addOption("name, n", bpo::value<std::string>()->required(), "list name", 1)
       .addOption("filter, f", bpo::value<std::string>()->required(), "track filter expression", 1)
       .addOption("desc, d", bpo::value<std::string>()->default_value(""), "list description", 1)
-      .setExecutor([this](const bpo::variables_map & vm) { return create(this->_ml, vm["name"].as<std::string>(), vm["filter"].as<std::string>(), vm["desc"].as<std::string>()); });
+      .setExecutor([this](const bpo::variables_map& vm, std::ostream& os) {
+        create(this->_ml, vm["name"].as<std::string>(), vm["filter"].as<std::string>(), vm["desc"].as<std::string>(), os);
+      });
 
     addCommand<rs::cli::BasicCommand>("delete")
       .addOption("id", bpo::value<std::uint64_t>()->required(), "list id", 1)
-      .setExecutor([this](const bpo::variables_map& vm) { return del(_ml, core::List::Id{vm["id"].as<std::uint64_t>()}); });
+      .setExecutor([this](const bpo::variables_map& vm, std::ostream& os) {
+        return del(_ml, core::List::Id{vm["id"].as<std::uint64_t>()}, os);
+      });
   }
 }

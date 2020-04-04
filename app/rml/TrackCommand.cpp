@@ -30,41 +30,39 @@ namespace
   namespace bpo = boost::program_options;
   using namespace rs::ml;
 
-  std::string list(core::MusicLibrary& ml, const std::string& filter)
+  void list(core::MusicLibrary& ml, const std::string& filter, std::ostream& os)
   {
     std::ostringstream oss;
 
     auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
     rs::ml::reactive::ItemList<rs::ml::core::TrackT> ts;
-
+    auto txn = ml.readTransaction();
 
     if (filter.empty())
     {
-      for (auto t: ml.tracks().readTransaction())
+      for (auto t: ml.tracks().reader(txn))
       {
         rs::ml::core::TrackT tt{t.id};
         t.value->UnPackTo(&tt.value);
 
         ts.insert(std::move(tt));
-        oss << t.id << " " << cstr(t.value->meta()->artist()) << " " << cstr(t.value->meta()->title()) << std::endl;
+        os << t.id << " " << cstr(t.value->meta()->artist()) << " " << cstr(t.value->meta()->title()) << std::endl;
       }
     }
     else
     {
-      oss << filter << std::endl;
+      os << filter << std::endl;
       auto expr = rs::ml::query::parse(filter);
       rs::ml::query::TrackFilter filter{std::move(expr)};
       
-      for (auto t: ml.tracks().readTransaction())
+      for (auto t: ml.tracks().reader(txn))
       {
         if (filter(t))
         {
-          oss << t.id << " " << cstr(t.value->meta()->artist()) << " " << cstr(t.value->meta()->title()) << std::endl;
+          os << t.id << " " << cstr(t.value->meta()->artist()) << " " << cstr(t.value->meta()->title()) << std::endl;
         }
       }
     }
-
-    return oss.str();
   }
 
   /*
@@ -104,13 +102,13 @@ namespace rs::rml
   {
     addCommand<rs::cli::BasicCommand>("show")
       .addOption("filter, f", bpo::value<std::string>()->default_value(""), "track filter expression", 1)
-      .setExecutor([this](const auto& vm) { return list(_ml, vm["filter"].template as<std::string>()); });
+      .setExecutor([this](const auto& vm, auto& os) { return list(_ml, vm["filter"].template as<std::string>(), os); });
 
     addCommand<rs::cli::BasicCommand>("create")
       .addOption("name, n", bpo::value<std::string>()->required(), "list name", 1)
       .addOption("filter, f", bpo::value<std::string>()->required(), "track filter expression", 1)
       .addOption("desc, d", bpo::value<std::string>(), "list description", 1)
-      .setExecutor([this](const auto& vm) { return ""; }); // create(this->_ml, vm["name"].as<std::string>(), vm["filter"].as<std::string>(), vm["desc"].as<std::string>()); });
+      .setExecutor([this](const auto& vm, auto& os) { return ""; }); // create(this->_ml, vm["name"].as<std::string>(), vm["filter"].as<std::string>(), vm["desc"].as<std::string>()); });
 
     addCommand<rs::cli::BasicCommand>("delete")
       .addOption("id", bpo::value<std::uint64_t>()->required(), "list id", 1);

@@ -15,24 +15,19 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include "NewListDialog.h"
 
-#include <vector>
-#include <ostream>
-#include <system_error>
-
-namespace rs::cli
+NewListDialog::NewListDialog(QWidget *parent, Qt::WindowFlags f)
+  : QDialog{parent, f}
 {
-  class Command
-  {
-  public:
-    virtual ~Command() { };
-
-    virtual void execute(int argc, const char *argv[], std::ostream& os) = 0;
-  };
-
+  setupUi(this);
 }
 
-
-
-
+rs::ml::fbs::ListT NewListDialog::list() const
+{
+  rs::ml::fbs::ListT l;
+  l.name = lineEditName->text().toStdString();
+  l.desc = lineEditDesc->text().toStdString();
+  l.expr = lineEditExpr->text().toStdString();
+  return l;
+}

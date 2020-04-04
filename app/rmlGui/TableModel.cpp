@@ -18,6 +18,7 @@
 #include "TableModel.h"
 #include <iostream>
 #include <boost/algorithm/string/join.hpp>
+#include <QtCore/QDebug>
 
 using TrackList = rs::ml::reactive::AbstractItemList<rs::ml::core::TrackT>;
 
@@ -82,11 +83,12 @@ QVariant TableModel::data(const QModelIndex& index, int role) const
 {
   if (!index.isValid()) return QVariant();
 
-  if (index.row() >= d_ptr->tracks.size() || index.row() < 0) return QVariant();
+  if (index.row() >= static_cast<int>(d_ptr->tracks.size()) || index.row() < 0) return QVariant();
+
+  const auto& track = d_ptr->tracks.at(TrackList::Index{index.row()}).value;
 
   if (role == Qt::DisplayRole)
   {
-    const auto& track = d_ptr->tracks.at(TrackList::Index{index.row()}).value;
     if (index.column() == 0)
       return QString::fromUtf8(track.meta->artist.c_str());
     else if (index.column() == 1)
@@ -99,6 +101,12 @@ QVariant TableModel::data(const QModelIndex& index, int role) const
       return QString::fromUtf8(val.c_str());
     }
   }
+
+  if (role == Qt::UserRole && !track.rsrc.empty())
+  {
+    return static_cast<qulonglong>(track.rsrc.front()->id);
+  }
+
   return {};
 }
 
@@ -192,7 +200,6 @@ Qt::ItemFlags TableModel::flags(const QModelIndex& index) const
 
 QModelIndex TableModel::index(int row, int column, const QModelIndex& parent) const
 {
-  // return createIndex(row, column, _list[row].first);
   return createIndex(row, column, &const_cast<rs::ml::core::TrackT&>(d_ptr->tracks.at(TrackList::Index{row})));
 }
 

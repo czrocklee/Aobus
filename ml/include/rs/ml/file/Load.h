@@ -17,31 +17,11 @@
 
 #pragma once
 
-#include <openssl/md5.h>
-#include <istream>
 
-namespace rs::ml
+#include <rs/ml/fbs/Track_generated.h>
+#
+
+namespace rs::ml::file
 {
-  std::array<std::uint8_t, 16> calculateMD5(std::istream& is)
-  {
-    constexpr std::size_t BufferSize = 1024 * 1024;
-    std::array<std::uint8_t, 16> digest;
-    std::streamsize bytes = 0;
-    MD5_CTX mdContext;
-    MD5_Init (&mdContext);
-
-    do
-    {
-      char buffer[BufferSize];
-      bytes = is.readsome(buffer, BufferSize);
-      MD5_Update (&mdContext, buffer, bytes);
-    }
-    while (is && bytes > 0);
-
-    MD5_Final (digest.data(), &mdContext);
-    return digest;
-  }
+  fbs::TrackT loadTrack(const std::string& path);
 }
-
-
-

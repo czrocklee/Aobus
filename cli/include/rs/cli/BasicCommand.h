@@ -28,7 +28,7 @@ namespace rs::cli
   {
   public:
     using VariablesMap = boost::program_options::variables_map;
-    using Executor = std::function<std::string(const VariablesMap&)>;
+    using Executor = std::function<void(const VariablesMap&, std::ostream& os)>;
 
     BasicCommand()
     {
@@ -42,7 +42,7 @@ namespace rs::cli
       addOption("help, h", "help message");
     }
 
-    std::string execute(int argc, const char *argv[]) override
+    void execute(int argc, const char *argv[], std::ostream& os) override
     {
       boost::program_options::command_line_parser parser{argc, argv};
       parser.options(_optDesc).positional(_posOptDesc);
@@ -51,13 +51,12 @@ namespace rs::cli
       
       if (vm.count("help") > 0)
       {
-        std::ostringstream oss;
-        oss << _optDesc;
-        return oss.str();
+        os << _optDesc;
+        return;
       }
 
       boost::program_options::notify(vm);
-      return _executor(vm);
+      _executor(vm, os);
     }
 
     BasicCommand& addOption(const char* name, const char* description, int positional = 0)
@@ -84,7 +83,7 @@ namespace rs::cli
     }
 
   private:
-    std::function<std::string(const VariablesMap&)> _executor;
+    Executor _executor;
     boost::program_options::options_description _optDesc;
     boost::program_options::positional_options_description _posOptDesc;
   };

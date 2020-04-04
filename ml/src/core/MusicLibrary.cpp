@@ -23,7 +23,7 @@ namespace
   {
     auto env = lmdb::env::create();
     env.set_mapsize(1UL * 1024UL * 1024UL * 1024UL);
-    env.set_max_dbs(2);
+    env.set_max_dbs(3);
     env.open(rootDir.c_str(), MDB_NOTLS, 0664);
     return env;
   }
@@ -34,7 +34,8 @@ namespace rs::ml::core
   MusicLibrary::MusicLibrary(const std::string& rootDir)
     : _env{createEnv(rootDir)},
       _tracks{_env, "tracks"},
-      _lists{_env, "lists"}
+      _lists{_env, "lists"},
+      _resources{_env, "resources"}
   {
   }
 }

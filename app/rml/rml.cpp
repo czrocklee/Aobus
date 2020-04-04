@@ -15,26 +15,22 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <regex.h>
-#include <taglib/taglib.h>
-#include <taglib/flacfile.h>
 
-#include <taglib/fileref.h>
-#include <taglib/tpropertymap.h>
 //#include <openssl/md5.h>
 #include <boost/timer/timer.hpp>
 
 #include <rs/ml/core/Track.h>
 #include <rs/ml/core/MusicLibrary.h>
-//#include <rs/ml/Protocol_generated.h>
 #include <rs/ml/utility/Finder.h>
-//#include <rs/ml/MD5Generator.h>
+#include <rs/ml/file/MusicFile.h>
+
 #include <rs/cli/BasicCommand.h>
 #include <rs/cli/ComboCommand.h>
 
 #include "ListCommand.h"
 #include "TrackCommand.h"
+
+#include <iostream>
 
 namespace bpo = boost::program_options;
 
@@ -101,53 +97,48 @@ int main(int argc, const char *argv[])
     txn.commit();
     return std::error_code{};
   });
-
-  root.addCommand<rs::cli::BasicCommand>("del", [&ml](const bpo::variables_map& vm)
-  {
-    auto txn = ml.tracks().writeTransaction();
-    txn.del(vm["track"].as<rs::ml::core::TrackId>());
-    txn.commit();
-    return std::error_code{};
-  }).addOption("track", bpo::value<rs::ml::core::TrackId>()->required(), "track id");
-
-
-  root.addCommand<rs::cli::BasicCommand>("test", [&ml](const bpo::variables_map& vm)
-  {
-    std::deque<rs::ml::core::TrackId> tracks;
-
-    for (auto pair : ml.tracks().readTransaction())
-    {
-      tracks.push_back(pair.first);
-    }
-
- //   std::random_shuffle(tracks.begin(), tracks.end());
-
-    std::size_t i = 0;
-
-    {
-
-      auto txn = ml.tracks().readTransaction();
-      boost::timer::auto_cpu_timer timer;
-      for (auto track : tracks)
-      {
-        i += (std::size_t)txn[track];
-      }
-    }
-  
-    std::cout << i << std::endl;
-      
-    return std::error_code{};
-  });
-*/
-
-//  std::vector<std::string> args(argv + 1, argv + argc);
+  */
 
   root.addCommand<rs::rml::TrackCommand>("track", ml);
   root.addCommand<rs::rml::ListCommand>("list", ml);
+  
+  
+  root.addCommand<rs::cli::BasicCommand>("init", [](const bpo::variables_map& vm, std::ostream& os) 
+  {
+    rs::ml::core::MusicLibrary ml{"."};
+    rs::ml::Finder finder{".", {".m4a", ".mp3", ".flac"}};
+
+    auto txn = ml.writeTransaction();
+    auto trackWriter = ml.tracks().writer(txn);
+    auto resourceWriter = ml.resources().writer(txn);
+    auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
+
+    for (const boost::filesystem::path& path : finder)
+    {
+      rs::ml::file::MusicFile file(path.string());
+      auto tt = file.loadTrack();
+      auto aa = file.loadAlbumArt();
+      //os << "load track " << tt.meta->title << " ca size: " << ca.size() << std::endl;
+
+      if (!aa.isEmpty())
+      {
+        std::uint64_t id = resourceWriter.create(boost::asio::buffer(aa.data(), aa.size()));
+        auto resource = std::make_unique<rs::ml::fbs::ResourceT>();
+        resource->type = rs::ml::fbs::ResourceType::AlbumArt;
+        resource->id = id;
+        tt.rsrc.push_back(std::move(resource));
+      }
+
+      auto track = trackWriter.createT(tt);
+      os << "add track: " << cstr(track.value->meta()->title()) << std::endl;
+    }
+
+    txn.commit();
+  });
 
   try 
   {
-    std::cout << root.execute(argc, argv) << std::endl;
+    root.execute(argc, argv, std::cout);
   }
   catch (const std::exception& e)
   {

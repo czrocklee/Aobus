@@ -17,10 +17,10 @@
 
 #pragma once
 
+#include <rs/ml/core/LMDBTransaction.h>
 #include <lmdb++.h>
 #include <boost/iterator/iterator_facade.hpp>
 #include <boost/asio/buffer.hpp>
-#include <mutex>
 #include <memory>
 
 namespace rs::ml::core
@@ -28,21 +28,21 @@ namespace rs::ml::core
   class LMDBDatabase
   {
   public:
-    class ReadTransaction;
-    class WriteTransaction;
+    class Reader;
+    class Writer;
 
     LMDBDatabase(lmdb::env& env, const std::string& db);
     ~LMDBDatabase();
 
-    ReadTransaction readTransaction() const;
-    WriteTransaction writeTransaction();
+    Reader reader(LMDBReadTransaction& txn) const;
+    Writer writer(LMDBWriteTransaction& txn);
 
   private:
     struct Impl;
     std::unique_ptr<Impl> _impl;
   };
 
-  class LMDBDatabase::ReadTransaction
+  class LMDBDatabase::Reader
   {
   public:
     using Value = std::pair<std::uint64_t, boost::asio::const_buffer>;
@@ -52,16 +52,16 @@ namespace rs::ml::core
     Iterator end() const;
     boost::asio::const_buffer operator[](std::uint64_t id) const;
 
-  private:
-    explicit ReadTransaction(LMDBDatabase::Impl& impl);
+  protected:
+    Reader(lmdb::dbi& dbi, lmdb::txn& txn);
 
     lmdb::dbi& _dbi;
-    lmdb::txn _txn;
+    lmdb::txn& _txn;
     friend class LMDBDatabase;
   };
 
-  class LMDBDatabase::ReadTransaction::Iterator : 
-    public boost::iterator_facade<Iterator, const Value, boost::forward_traversal_tag>
+  class LMDBDatabase::Reader::Iterator
+    : public boost::iterator_facade<Iterator, const Value, boost::forward_traversal_tag>
   {
   public:
     friend class boost::iterator_core_access;
@@ -75,26 +75,29 @@ namespace rs::ml::core
 
   private:
     Iterator(lmdb::cursor&& cursor);
- 
+
     lmdb::cursor _cursor;
     Value _value;
-    friend class ReadTransaction;
+    friend class Reader;
   };
 
-  class LMDBDatabase::WriteTransaction
+  class LMDBDatabase::Writer
   {
   public:
-    std::uint64_t create(boost::asio::const_buffer data);
-    bool update(std::uint64_t id, boost::asio::const_buffer data);
+    const void* create(std::uint64_t id, boost::asio::const_buffer data);
+    void* create(std::uint64_t id, std::size_t size);
+    std::pair<std::uint64_t, const void*> append(boost::asio::const_buffer data);
+    std::pair<std::uint64_t, void*> append(std::size_t size);
+    const void* update(std::uint64_t id, boost::asio::const_buffer data);
     bool del(std::uint64_t id);
-    void commit();
-  
+
   private:
-    explicit WriteTransaction(LMDBDatabase::Impl& impl);
+    Writer(lmdb::dbi& dbi, lmdb::txn& txn);
 
-    LMDBDatabase::Impl& _impl;
-    lmdb::txn _txn;
-
+    lmdb::dbi& _dbi;
+    lmdb::txn& _txn;
+    lmdb::cursor _cursor;
+    std::uint64_t _lastId;
     friend class LMDBDatabase;
   };
 

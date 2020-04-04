@@ -20,78 +20,62 @@
 
 namespace rs::ml::core
 {
-  using WriteTransaction = LMDBDatabase::WriteTransaction;
-  using ReadTransaction = LMDBDatabase::ReadTransaction;
+  using Writer = LMDBDatabase::Writer;
+  using Reader = LMDBDatabase::Reader;
 
   struct LMDBDatabase::Impl
   {
     Impl(lmdb::env& env) : env{env} {}
     lmdb::env& env;
     lmdb::dbi dbi = {MDB_dbi{}};
-    std::atomic<uint64_t> nextId;
   };
 
-  LMDBDatabase::LMDBDatabase(lmdb::env& env, const std::string& db)
-    : _impl{std::make_unique<Impl>(env)}
+  LMDBDatabase::LMDBDatabase(lmdb::env& env, const std::string& db) : _impl{std::make_unique<Impl>(env)}
   {
     auto txn = lmdb::txn::begin(_impl->env);
     _impl->dbi = lmdb::dbi::open(txn, db.c_str(), MDB_CREATE | MDB_INTEGERKEY);
-
-    lmdb::val key;
-    auto cursor = lmdb::cursor::open(txn, _impl->dbi);
-    _impl->nextId = cursor.get(key, MDB_LAST) ? *key.data<std::uint64_t>() + 1 : 1;
-
     txn.commit();
   }
 
   LMDBDatabase::~LMDBDatabase() = default;
 
-  ReadTransaction LMDBDatabase::readTransaction() const
+  Reader LMDBDatabase::reader(LMDBReadTransaction& txn) const
   {
-    return ReadTransaction{*_impl};
+    return Reader{_impl->dbi, txn._txn};
   }
 
-  WriteTransaction LMDBDatabase::writeTransaction()
+  Writer LMDBDatabase::writer(LMDBWriteTransaction& txn)
   {
-    return WriteTransaction{*_impl};
+    return Writer{_impl->dbi, txn._txn};
   }
 
-  ReadTransaction::ReadTransaction(LMDBDatabase::Impl& impl)
-    : _dbi{impl.dbi}, 
-      _txn{lmdb::txn::begin(impl.env, nullptr, MDB_RDONLY)}
-  {
-  }
+  Reader::Reader(lmdb::dbi& dbi, lmdb::txn& txn) : _dbi{dbi}, _txn{txn} {}
 
-  ReadTransaction::Iterator ReadTransaction::begin() const
+  Reader::Iterator Reader::begin() const
   {
     return Iterator{lmdb::cursor::open(_txn, _dbi)};
   }
 
-  ReadTransaction::Iterator ReadTransaction::end() const
+  Reader::Iterator Reader::end() const
   {
     return Iterator{};
   }
 
-  boost::asio::const_buffer ReadTransaction::operator[](std::uint64_t id) const
+  boost::asio::const_buffer Reader::operator[](std::uint64_t id) const
   {
     lmdb::val key{&id, sizeof(id)};
     lmdb::val value;
     return _dbi.get(_txn, key, value) ? boost::asio::buffer(value.data(), value.size()) : boost::asio::const_buffer{};
   }
 
-  ReadTransaction::Iterator::Iterator()
-    : _cursor{nullptr}, _value{}
-  {
-  }
+  Reader::Iterator::Iterator() : _cursor{nullptr}, _value{} {}
 
-  ReadTransaction::Iterator::Iterator(lmdb::cursor&& cursor)
-    : _cursor{std::move(cursor)}
+  Reader::Iterator::Iterator(lmdb::cursor&& cursor) : _cursor{std::move(cursor)}
   {
     increment();
   }
 
-  ReadTransaction::Iterator::Iterator(const Iterator& other)
-    : _cursor{nullptr}, _value{other._value}
+  Reader::Iterator::Iterator(const Iterator& other) : _cursor{nullptr}, _value{other._value}
   {
     if (other._cursor != nullptr)
     {
@@ -100,15 +84,14 @@ namespace rs::ml::core
     }
   }
 
-  ReadTransaction::Iterator::Iterator(Iterator&& other) = default;
+  Reader::Iterator::Iterator(Iterator&& other) = default;
 
-  bool ReadTransaction::Iterator::equal(const Iterator& other) const
+  bool Reader::Iterator::equal(const Iterator& other) const
   {
     return _cursor == other._cursor && _value.first == other._value.first;
   }
 
-
-  void ReadTransaction::Iterator::increment()
+  void Reader::Iterator::increment()
   {
     lmdb::val key, value;
 
@@ -124,43 +107,66 @@ namespace rs::ml::core
     }
   }
 
-  const ReadTransaction::Value& ReadTransaction::Iterator::dereference() const
+  const Reader::Value& Reader::Iterator::dereference() const
   {
     return _value;
   }
 
-  WriteTransaction::WriteTransaction(LMDBDatabase::Impl& impl)
-    : _impl{impl},
-      _txn{lmdb::txn::begin(impl.env)}
-    
+  Writer::Writer(lmdb::dbi& dbi, lmdb::txn& txn) : _dbi{dbi}, _txn{txn}, _cursor{lmdb::cursor::open(_txn, _dbi)}
   {
+    lmdb::val key;
+    _cursor.get(key, MDB_LAST) ? *key.data<std::uint64_t>() : 0;
   }
 
-  std::uint64_t WriteTransaction::create(boost::asio::const_buffer buffer)
+  namespace
   {
-    std::uint64_t id = _impl.nextId.fetch_add(1, std::memory_order_relaxed);
-    lmdb::val key{&id, sizeof(id)};
-    lmdb::val value{buffer.data(), buffer.size()};
-    _impl.dbi.put(_txn, key, value, MDB_NOOVERWRITE | MDB_APPEND);
-    return id;
+    const void* put(lmdb::cursor& cursor, std::uint64_t id, boost::asio::const_buffer data, unsigned int flags)
+    {
+      lmdb::val key{&id, sizeof(id)};
+      lmdb::val value{data.data(), data.size()};
+      lmdb::cursor_put(cursor.handle(), key, value, flags);
+      cursor.get(key, value, MDB_GET_CURRENT);
+      return value.data();
+    }
+
+    void* put(lmdb::cursor& cursor, std::uint64_t id, std::size_t size, unsigned int flags)
+    {
+      lmdb::val key{&id, sizeof(id)};
+      lmdb::val value{nullptr, size};
+      lmdb::cursor_put(cursor.handle(), key, value, flags | MDB_RESERVE);
+      return value.data();
+    }
   }
 
-  bool WriteTransaction::update(std::uint64_t id, boost::asio::const_buffer buffer)
+  const void* Writer::create(std::uint64_t id, boost::asio::const_buffer data)
   {
-    lmdb::val key{&id, sizeof(id)};
-    lmdb::val value{buffer.data(), buffer.size()};
-    return _impl.dbi.put(_txn, key, value);
+    return put(_cursor, id, data, MDB_NOOVERWRITE);
   }
 
-  bool WriteTransaction::del(std::uint64_t id)
+  void* Writer::create(std::uint64_t id, std::size_t size)
   {
-    return _impl.dbi.del(_txn, id);
+    return put(_cursor, id, size, MDB_NOOVERWRITE);
   }
 
-  void WriteTransaction::commit()
+  std::pair<std::uint64_t, const void*> Writer::append(boost::asio::const_buffer data)
   {
-    _txn.commit();
+    auto id = ++_lastId;
+    return {id, put(_cursor, ++_lastId, data, MDB_NOOVERWRITE | MDB_APPEND)};
   }
 
+  std::pair<std::uint64_t, void*> Writer::append(std::size_t size)
+  {
+    auto id = ++_lastId;
+    return {id, put(_cursor, ++_lastId, size, MDB_NOOVERWRITE | MDB_APPEND)};
+  }
+
+  const void* Writer::update(std::uint64_t id, boost::asio::const_buffer data)
+  {
+    return put(_cursor, id, data, 0);
+  }
+
+  bool Writer::del(std::uint64_t id)
+  {
+    return _dbi.del(_txn, id);
+  }
 }
-

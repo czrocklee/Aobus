@@ -30,11 +30,15 @@ class MainWindow : public QMainWindow, public Ui::MainWindow
   Q_OBJECT
 
 public:
-  MainWindow(const std::string& rootDir);
+  MainWindow();
+
+  void openMusicLibrary(const std::string& root);
 
 private:
   using TrackList = rs::ml::reactive::ItemList<rs::ml::core::TrackT>;
   using TrackFilterList = rs::ml::reactive::ItemFilterList<rs::ml::core::TrackT>;
+  using MusicLibrary = rs::ml::core::MusicLibrary;
+  using ReadTransaction = rs::ml::core::LMDBReadTransaction;
 
   struct ListItem : public QListWidgetItem
   {
@@ -45,6 +49,12 @@ private:
     std::unique_ptr<TrackFilterList> tracks;
   };
 
-  rs::ml::core::MusicLibrary _ml;
-  TrackList _tracks;
+  void loadTracks(ReadTransaction& txn);
+  void loadLists(ReadTransaction& txn);
+
+  void onTrackClicked(const QModelIndex& index);
+  void addListItem(const rs::ml::fbs::List* list);
+
+  std::unique_ptr<MusicLibrary> _ml;
+  TrackList _allTracks;
 };

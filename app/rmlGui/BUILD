@@ -1,33 +1,56 @@
 load(":qt.bzl", "qt_cc_library")
 
+filegroup(
+    name = "resources",
+    srcs = [
+        "images/nocoverart.jpg",
+    ],
+)
+
 qt_cc_library(
     name = "rmlQt",
-    hdrs = ["AddTrackDialog.h", "MainWindow.h", "TrackView.h", "TableModel.h", "TrackSortFilterProxyModel.h"],
-    srcs = ["AddTrackDialog.cpp", "MainWindow.cpp", "TrackView.cpp", "TableModel.cpp", "TrackSortFilterProxyModel.cpp"],
-    uis = ["AddTrackDialog.ui", "MainWindow.ui", "TrackView.ui"],
+    srcs = [
+        "AddTrackDialog.cpp",
+        "CoverArtLabel.cpp",
+        "MainWindow.cpp",
+        "NewListDialog.cpp",
+        "TableModel.cpp",
+        "TrackSortFilterProxyModel.cpp",
+        "TrackView.cpp",
+    ],
+    hdrs = [
+        "AddTrackDialog.h",
+        "CoverArtLabel.h",
+        "MainWindow.h",
+        "NewListDialog.h",
+        "TableModel.h",
+        "TrackSortFilterProxyModel.h",
+        "TrackView.h",
+    ],
+    copts = ["-std=c++17"],
+    includes = ["."],
+    qrcs = ["resources.qrc"],
+    uis = [
+        "AddTrackDialog.ui",
+        "MainWindow.ui",
+        "TrackView.ui",
+        "NewListDialog.ui",
+    ],
     deps = [
         "//ml:rs-ml",
         "@qt//:qt_widgets",
     ],
-    copts = ["-std=c++17"],
 )
 
 cc_binary(
     name = "rmlGui",
     #includes = ["."],
-
     srcs = [
-        "rmlGui.cpp"
-        # "rmlGui/TrackSortFilterProxyModel.h",
-        # "rmlGui/TrackSortFilterProxyModel.cpp",
-        # "rmlGui/MainWindow.h",
-        # "rmlGui/MainWindow.cpp",
-        # "rmlGui/AddTrackDialog.h",
-        # "rmlGui/AddTrackDialog.cpp"
+        "rmlGui.cpp",
     ],
     copts = ["-std=c++17"],
+    linkstatic = True,
     deps = [
-        ":rmlQt"
-
+        ":rmlQt",
     ],
 )

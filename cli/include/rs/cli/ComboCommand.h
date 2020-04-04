@@ -45,7 +45,7 @@ namespace rs::cli
       return *(static_cast<T*>(iter.first->second.get()));
     }
 
-    std::string execute(int argc, const char *argv[]) override
+    void execute(int argc, const char *argv[], std::ostream& os) override
     {
       std::string_view command = "";
       
@@ -59,7 +59,7 @@ namespace rs::cli
 
       if (iter != _cmds.end())
       {
-        return iter->second->execute(argc, argv);
+        iter->second->execute(argc, argv, os);
       }
       else
       {

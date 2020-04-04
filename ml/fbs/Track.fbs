@@ -13,11 +13,20 @@ table CustomEntry
   value:Value;
 }
 
+enum ResourceType : byte { AlbumArt }
+
+table Resource
+{
+  type:ResourceType;
+  id:ulong;
+}
+
 table Track
 {
-  meta:Metadata;
+  meta:Metadata ;
   prop:Properties;
   tags:[string];
+  rsrc:[Resource];
   custom:[CustomEntry];
 }
 

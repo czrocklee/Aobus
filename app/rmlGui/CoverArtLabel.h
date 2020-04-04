@@ -17,22 +17,24 @@
 
 #pragma once
 
-#include <vector>
-#include <ostream>
-#include <system_error>
+#include <QtWidgets/QLabel>
+#include <QtGui/QPixmap>
+#include <QtGui/QResizeEvent>
 
-namespace rs::cli
+class CoverArtLabel : public QLabel
 {
-  class Command
-  {
-  public:
-    virtual ~Command() { };
+  Q_OBJECT
 
-    virtual void execute(int argc, const char *argv[], std::ostream& os) = 0;
-  };
+public:
+  explicit CoverArtLabel(QWidget* parent = 0);
+  virtual int heightForWidth(int width) const;
+  virtual QSize sizeHint() const;
+  QPixmap scaledPixmap() const;
 
-}
+public slots:
+  void setPixmap(const QPixmap&);
+  void resizeEvent(QResizeEvent*);
 
-
-
-
+private:
+  QPixmap _pix;
+};

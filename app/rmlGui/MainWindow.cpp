@@ -17,6 +17,7 @@
 
 #include "MainWindow.h"
 #include "AddTrackDialog.h"
+#include "NewListDialog.h"
 #include "TableModel.h"
 #include "TrackSortFilterProxyModel.h"
 
@@ -24,75 +25,117 @@
 #include <rs/ml/query/TrackFilter.h>
 #include <rs/ml/query/Parser.h>
 #include <QtCore/QDebug>
+#include <QtWidgets/QFileDialog>
+#include <QtCore/QSettings>
 
 using TrackList = rs::ml::reactive::ItemList<rs::ml::core::TrackT>;
 
-MainWindow::MainWindow(const std::string& rootDir) : _ml{rootDir}
+MainWindow::MainWindow()
 {
   setupUi(this);
 
-  for (const auto& track : _ml.tracks().readTransaction())
+  connect(actionOpen, &QAction::triggered, [this] {
+    if (QString dir = QFileDialog::getExistingDirectory(
+          this, tr("Open Directory"), "/home", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+        !dir.isNull())
+    {
+      openMusicLibrary(dir.toStdString());
+    }
+  });
+
+  if (auto lastSession = QSettings{"settings.ini"}.value("session.lastMusicLibaryOpened"); !lastSession.isNull())
   {
-    _tracks.insert(rs::ml::core::TrackT::fromItem(track));
+    openMusicLibrary(lastSession.toString().toStdString());
   }
+}
 
-  /*    ListItem(const rs::ml::core::List& list)
-       : QListWidgetItem{QString::fromUtf8(list.value->name()->c_str())}, list{rs::ml::core::ListT::fromItem(list)}
-     {} */
-  auto* all = new ListItem{"all", listWidget};
-  all->trackView = new TrackView{_tracks, stackedWidget};
-  stackedWidget->addWidget(all->trackView);
+void MainWindow::openMusicLibrary(const std::string& dir)
+{
+  _ml = std::make_unique<MusicLibrary>(dir);
 
-  for (const auto& list : _ml.lists().readTransaction())
+  auto txn = _ml->readTransaction();
+  loadTracks(txn);
+  loadLists(txn);
+  QSettings settings{"settings.ini"};
+  settings.setValue("session.lastMusicLibaryOpened", QString::fromStdString(dir));
+}
+
+void MainWindow::loadTracks(ReadTransaction& txn)
+{
+  for (const auto& track : _ml->tracks().reader(txn))
   {
-    auto* listItem = new ListItem{QString::fromUtf8(list.value->name()->c_str()), listWidget};
-    auto expr = rs::ml::query::parse(list.value->expr()->c_str());
-    //auto expr = rs::ml::query::parse("#tag1");
+    _allTracks.insert(rs::ml::core::TrackT::fromItem(track));
+  }
+}
 
-    listItem->tracks = std::make_unique<TrackFilterList>(_tracks, rs::ml::query::TrackFilter{std::move(expr)});
-    listItem->trackView = new TrackView{*listItem->tracks, stackedWidget};
-    stackedWidget->addWidget(listItem->trackView);
+void MainWindow::loadLists(ReadTransaction& txn)
+{
+  auto* all = new ListItem{"all", listWidget};
+  all->trackView = new TrackView{_allTracks, stackedWidget};
+  stackedWidget->addWidget(all->trackView);
+  connect(
+    all->trackView->tableView, &QAbstractItemView::clicked, [this](const QModelIndex& index) { this->onTrackClicked(index); });
+
+  for (const auto& list : _ml->lists().reader(txn))
+  {
+    addListItem(list.value);
   }
 
   connect(listWidget, &QListWidget::currentItemChanged, [this](auto* curr, auto*) {
     stackedWidget->setCurrentWidget(dynamic_cast<ListItem*>(curr)->trackView);
   });
 
+  listWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(listWidget, &QListWidget::customContextMenuRequested, [this](QPoint pos) {
+    // Handle global position
+    QPoint globalPos = listWidget->mapToGlobal(pos);
 
-  for (auto i = 0u; i < _tracks.size(); ++i) {
-    qInfo() << &_tracks.at(TrackList::Index{i});
-  }
-
-
- 
-
-    // rs::ml::query::Parser parser;
-    // auto expr = parser.parse("@pop and #tag");
-    /*  auto tracks = std::make_unique<RootTrackList>();
-
-
-     auto model = new TableModel{std::move(tracks), this};
-     auto proxy = new TrackSortFilterProxyModel{_ml, this};
-     proxy->setSourceModel(model);
-
-     tableView->setModel(proxy);
-     tableView->resizeColumnsToContents();
-     tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive); */
-    // tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
-    // tableView->horizontalHeader()->setStretchLastSection(true);
-    // tableView->verticalHeader()->hide();
-    // tableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    // tableView->setSelectionMode(QAbstractItemView::SingleSelection);
-
-    connect(actionFile, &QAction::triggered, [this] {
-      auto dialog = new AddTrackDialog{this};
-
-      if (dialog->exec())
+    // Create menu and insert some actions
+    QMenu myMenu;
+    myMenu.addAction("New", [this] {
+      if (auto* dialog = new NewListDialog{this}; dialog->exec())
       {
-        // auto writer = _ml.writer();
-        // writer.create(dialog->track());
+        auto txn = _ml->writeTransaction();
+        auto writer = _ml->lists().writer(txn);
+        auto list = writer.createT(dialog->list());
+        addListItem(list.value);
+        txn.commit();
       }
     });
+    myMenu.addAction("Delete", this, SLOT(eraseItem()));
 
-  // connect(lineEdit, SIGNAL(textChanged(const QString&)), proxy, SLOT(onQuickFilterChanged(const QString&)));
+    // Show context menu at handling position
+    myMenu.exec(globalPos);
+  });
+}
+
+void MainWindow::onTrackClicked(const QModelIndex& index)
+{
+  if (QVariant resourceId = index.model()->data(index, Qt::UserRole); resourceId.isValid())
+  {
+    auto txn = _ml->readTransaction();
+    auto data = _ml->resources().reader(txn)[resourceId.toULongLong()];
+
+    if (QPixmap pix; pix.loadFromData(static_cast<const uchar*>(data.data()), data.size(), "JPG"))
+    {
+      coverArtLabel->setPixmap(pix);
+    }
+  }
+  else
+  {
+    Q_INIT_RESOURCE(resources);
+    coverArtLabel->setPixmap(QPixmap{":/images/nocoverart.jpg"});
+  }
+}
+
+void MainWindow::addListItem(const rs::ml::fbs::List* list)
+{
+  auto* listItem = new ListItem{QString::fromUtf8(list->name()->c_str()), listWidget};
+  auto expr = rs::ml::query::parse(list->expr()->c_str());
+  listItem->tracks = std::make_unique<TrackFilterList>(_allTracks, rs::ml::query::TrackFilter{std::move(expr)});
+  listItem->trackView = new TrackView{*listItem->tracks, stackedWidget};
+  stackedWidget->addWidget(listItem->trackView);
+  connect(listItem->trackView->tableView, &QAbstractItemView::clicked, [this](const QModelIndex& index) {
+    this->onTrackClicked(index);
+  });
 }

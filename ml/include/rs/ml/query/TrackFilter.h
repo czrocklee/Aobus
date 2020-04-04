@@ -28,7 +28,7 @@ namespace rs::ml::query
     explicit TrackFilter(Expression expr);
 
     bool operator()(const core::Track& track) const;
-    
+
     bool operator()(const core::TrackT& track) const;
 
     const Expression& expression() const { return _expr; }

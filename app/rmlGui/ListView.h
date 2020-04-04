@@ -17,22 +17,20 @@
 
 #pragma once
 
-#include <vector>
-#include <ostream>
-#include <system_error>
+#include <QtWidgets/QListWidget>
+#include "app/rmlGui/ui_TrackView.h"
+#include "TableModel.h"
+#include <rs/ml/core/MusicLibrary.h>
 
-namespace rs::cli
+class ListView : public QListWidget
 {
-  class Command
-  {
-  public:
-    virtual ~Command() { };
+  Q_OBJECT
 
-    virtual void execute(int argc, const char *argv[], std::ostream& os) = 0;
-  };
+public:
+  ListView(TableModel::TrackList& list, QWidget* parent = nullptr);
+  ~ListView() override;
+  void reset(rs::ml::core::MusicLibrary& ml);
 
-}
-
-
-
-
+private:
+  rs::ml::core::MusicLibrary* _ml;
+};

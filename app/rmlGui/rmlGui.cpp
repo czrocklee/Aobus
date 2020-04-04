@@ -20,8 +20,12 @@
 
 int main(int argc, char *argv[])
 {
+  QCoreApplication::setOrganizationName("RockStudio");
+  QCoreApplication::setOrganizationDomain("rs.com");
+  QCoreApplication::setApplicationName("rmlGui");
+  
   QApplication app(argc, argv);
-  MainWindow mw("/home/rocklee/RockStudio/mylib/");
+  MainWindow mw;
   mw.show();
   return app.exec();
 }

@@ -35,8 +35,10 @@ namespace rs::ml::core
   struct ItemT
   {
     using Id = typename Item<T>::Id;
+    using Value = typename T::NativeTableType;
+
     Id id;
-    typename T::NativeTableType value;
+    Value value;
 
     static ItemT fromItem(const Item<T>& t)
     {

@@ -1,4 +1,6 @@
-cc_binary(
+load("//bazel:rs.bzl", "rs_cc_binary")
+
+rs_cc_binary(
     name = "rml",
     srcs = [
         "rml/ListCommand.cpp",
@@ -7,7 +9,6 @@ cc_binary(
         "rml/TrackCommand.h",
         "rml/rml.cpp",
     ],
-    copts = ["-std=c++17"],
     defines = ["BOOST_ERROR_CODE_HEADER_ONLY"],
     linkopts = [
         "-ltag",
@@ -19,7 +20,5 @@ cc_binary(
         "@boost//:timer",
         "@boost//:filesystem",
         "@boost//:system"
-
-
     ],
 )

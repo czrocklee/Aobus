@@ -17,22 +17,15 @@
 
 #pragma once
 
-#include <vector>
-#include <ostream>
-#include <system_error>
+#include "app/rmlGui/ui_NewListDialog.h"
+#include <rs/ml/core/List.h>
 
-namespace rs::cli
+class NewListDialog : public QDialog, public Ui::NewListDialog
 {
-  class Command
-  {
-  public:
-    virtual ~Command() { };
+  Q_OBJECT
 
-    virtual void execute(int argc, const char *argv[], std::ostream& os) = 0;
-  };
+public:
+  NewListDialog(QWidget* parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
 
-}
-
-
-
-
+  rs::ml::fbs::ListT list() const;
+};

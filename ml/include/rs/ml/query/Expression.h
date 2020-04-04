@@ -18,8 +18,8 @@
 #pragma once
 
 #include <boost/spirit/home/x3/support/ast/variant.hpp>
-#include <boost/optional.hpp>
 
+#include <optional>
 #include <variant>
 #include <string>
 #include <vector>
@@ -59,7 +59,7 @@ namespace rs::ml::query
     };
 
     Expression operand;
-    boost::optional<Operation> operation;
+    std::optional<Operation> operation;
   };
 
   struct UnaryExpression

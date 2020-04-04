@@ -4,6 +4,7 @@ def qt_cc_library(
         hdrs,
         normal_hdrs = [],
         uis = [],
+        qrcs = [],
         **kwargs):
 
     for hdr in hdrs:
@@ -28,6 +29,16 @@ def qt_cc_library(
         hdrs.append(":%s_uic" % base)
 
     hdrs += normal_hdrs
+
+    for qrc in qrcs:
+        base = qrc.split(".")[0]
+        native.genrule(
+            name = "%s_qrc" % base,
+            srcs = [qrc, ":%s" % base],
+            outs = ["%s_qrc.cpp" % base],
+            cmd = "rcc -name %s $(locations %s) -o $@" % (base, qrc),
+        )
+        srcs.append(":%s_qrc" % base)
 
     native.cc_library(
         name = name,

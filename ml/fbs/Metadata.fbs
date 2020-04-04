@@ -9,6 +9,7 @@ table Metadata
   album:string (alias: "al");
   albumArtist:string (alias: "aa");
   genre:string (alias: "g");
+  year:ushort (alias: "y");
 
   trackNumber:ushort;
   totalTracks:ushort;

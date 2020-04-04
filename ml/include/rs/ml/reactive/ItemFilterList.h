@@ -23,7 +23,6 @@
 #include <boost/container/flat_map.hpp>
 #include <functional>
 #include <iostream>
-#include <QtCore/QDebug>
 
 namespace rs::ml::reactive
 {
@@ -110,11 +109,8 @@ namespace rs::ml::reactive
 
     void insert(const T& t, Index index)
     {
-      // qInfo() << "before insert " << t.id << " " << i << " " << &(t);
-
       auto iter = _items.emplace_hint(_items.end(), t.id, index);
       _observerable.insert(t, Index{_items.index_of(iter)});
-      // qInfo() << "after insert" << (_items.index_of(iter)) << " " << *iter;
     }
 
     void update(const T& t, typename Container::iterator iter)

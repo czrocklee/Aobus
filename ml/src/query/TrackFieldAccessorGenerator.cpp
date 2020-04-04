@@ -15,7 +15,7 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <flatbuffers/reflection.h>
+//#include <flatbuffers/reflection.h>
 #include "Generator.h"
 #include "CppCodeWriter.h"
  

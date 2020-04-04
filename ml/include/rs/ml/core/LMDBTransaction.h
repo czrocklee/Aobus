@@ -17,22 +17,30 @@
 
 #pragma once
 
-#include <vector>
-#include <ostream>
-#include <system_error>
+#include <lmdb++.h>
 
-namespace rs::cli
+namespace rs::ml::core
 {
-  class Command
+  class LMDBReadTransaction
   {
   public:
-    virtual ~Command() { };
+    LMDBReadTransaction(const lmdb::env& env) : _txn{lmdb::txn::begin(env, nullptr, MDB_RDONLY)} {}
 
-    virtual void execute(int argc, const char *argv[], std::ostream& os) = 0;
+  protected:
+    LMDBReadTransaction(lmdb::txn&& txn) : _txn{std::move(txn)} {}
+
+    lmdb::txn _txn;
+    friend class LMDBDatabase;
   };
 
+  class LMDBWriteTransaction : public LMDBReadTransaction
+  {
+  public:
+    LMDBWriteTransaction(lmdb::env& env) : LMDBReadTransaction{lmdb::txn::begin(env, nullptr)} {}
+    LMDBWriteTransaction(LMDBWriteTransaction& parent) : LMDBReadTransaction{lmdb::txn::begin(parent._txn.env(), parent._txn)} {}
+    void commit() { _txn.commit(); }
+
+  private:
+    friend class LMDBDatabase;
+  };
 }
-
-
-
-

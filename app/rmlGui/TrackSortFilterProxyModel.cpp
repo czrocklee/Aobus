@@ -41,7 +41,7 @@ void TrackSortFilterProxyModel::onQuickFilterChanged(const QString& filter)
 
   invalidateFilter();
 }
-
+#include <QtCore/QDebug>
 bool TrackSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
   if (_quick.empty())
@@ -52,6 +52,7 @@ bool TrackSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelInde
   {
     auto index = sourceModel()->index(sourceRow, 0);
     const auto& track = *static_cast<rs::ml::core::TrackT*>(index.internalPointer());
+
     return track.value.meta->title.find(_quick) != std::string::npos || 
            track.value.meta->album.find(_quick) != std::string::npos ||
            track.value.meta->artist.find(_quick) != std::string::npos;

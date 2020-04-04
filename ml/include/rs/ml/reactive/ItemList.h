@@ -42,7 +42,6 @@ namespace rs::ml::reactive
     void insert(Args&&... args)
     {
       auto iter = _items.emplace_hint(_items.end(), std::forward<Args>(args)...);
-      std::cout << "WTF " << &(*iter) << std::endl;
       _observerable.insert(*iter, Index{_items.index_of(iter)});
     }
 

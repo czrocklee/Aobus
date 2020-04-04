@@ -17,22 +17,23 @@
 
 #pragma once
 
-#include <vector>
-#include <ostream>
-#include <system_error>
+#include <rs/ml/fbs/Track_generated.h>
+#include <taglib/fileref.h>
+#include <taglib/tbytevector.h>
 
-namespace rs::cli
+#include <boost/asio/buffer.hpp>
+
+namespace rs::ml::file
 {
-  class Command
+  class MusicFile
   {
   public:
-    virtual ~Command() { };
+    explicit MusicFile(const std::string& path) : _fileRef(path.c_str()){};
+    fbs::TrackT loadTrack() const;
+    TagLib::ByteVector loadAlbumArt() const;
 
-    virtual void execute(int argc, const char *argv[], std::ostream& os) = 0;
+  private:
+    TagLib::FileRef _fileRef;
   };
 
 }
-
-
-
-

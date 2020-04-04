@@ -26,62 +26,62 @@ namespace rs::ml::core
   class FlatBuffersStore
   {
   public:
-    class ReadTransaction;
-    class WriteTransaction;
+    class Reader;
+    class Writer;
     using Id = typename T::Id;
 
     FlatBuffersStore(lmdb::env& env, const std::string& db) : _database{env, db} {}
 
-    ReadTransaction readTransaction() const { return ReadTransaction{_database.readTransaction()}; }
-    WriteTransaction writeTransaction() { return WriteTransaction{_database.writeTransaction()}; }
+    Reader reader(LMDBReadTransaction& txn) const { return Reader{_database.reader(txn)}; }
+    Writer writer(LMDBWriteTransaction& txn) { return Writer{_database.writer(txn)}; }
 
   private:
     LMDBDatabase _database;
   };
 
-
   template<typename T>
-  class FlatBuffersStore<T>::ReadTransaction
+  class FlatBuffersStore<T>::Reader
   {
   public:
-    auto begin() const { return boost::make_transform_iterator(_txn.begin(), decode); }
-    auto end() const { return boost::make_transform_iterator(_txn.end(), decode); }
-    const T operator[](Id id) const { return {id, ::flatbuffers::GetRoot<typename T::Value>(_txn[id].data())}; }
+    auto begin() const { return boost::make_transform_iterator(_reader.begin(), decode); }
+    auto end() const { return boost::make_transform_iterator(_reader.end(), decode); }
+    const T operator[](Id id) const { return {id, ::flatbuffers::GetRoot<typename T::Value>(_reader[id].data())}; }
 
   private:
-    ReadTransaction(LMDBDatabase::ReadTransaction&& txn) : _txn{std::move(txn)} {}
-    static const T decode(LMDBDatabase::ReadTransaction::Value value); 
-    LMDBDatabase::ReadTransaction _txn;
+    Reader(LMDBDatabase::Reader&& reader) : _reader{std::move(reader)} {}
+    static const T decode(LMDBDatabase::Reader::Value value);
+    LMDBDatabase::Reader _reader;
     friend class FlatBuffersStore;
   };
 
-
   template<typename T>
-  class FlatBuffersStore<T>::WriteTransaction
+  class FlatBuffersStore<T>::Writer
   {
   public:
-    template<typename Creator>
-    const Id create(Creator&& creator);
-    bool del(Id id) { return _txn.del(id); }
-    void commit() { _txn.commit(); }
-  
-  private:
-    explicit WriteTransaction(LMDBDatabase::WriteTransaction&& txn) : _txn{std::move(txn)} {}
+    using NativeType = typename T::Value::NativeTableType;
 
-    LMDBDatabase::WriteTransaction _txn;
+    template<typename Builder>
+    T create(Builder&& builder);
+    T createT(const NativeType& tt);
+    bool del(Id id) { return _writer.del(id); }
+
+  private:
+    explicit Writer(LMDBDatabase::Writer&& writer) : _writer{std::move(writer)} {}
+  
+    LMDBDatabase::Writer _writer;
     flatbuffers::FlatBufferBuilder _fbb;
     friend class FlatBuffersStore;
   };
-  
+
   template<typename T>
-  inline const T FlatBuffersStore<T>::ReadTransaction::decode(LMDBDatabase::ReadTransaction::Value value)
+  inline const T FlatBuffersStore<T>::Reader::decode(LMDBDatabase::Reader::Value value)
   {
-    return {Id{value.first}, ::flatbuffers::GetRoot<typename T::Value>(value.second.data())}; 
+    return {Id{value.first}, ::flatbuffers::GetRoot<typename T::Value>(value.second.data())};
   }
 
   template<typename T>
-  template<typename Creator>
-  inline const typename T::Id FlatBuffersStore<T>::WriteTransaction::create(Creator&& creator)
+  template<typename Builder>
+  inline T FlatBuffersStore<T>::Writer::create(Builder&& builder)
   {
     struct BuilderGuard
     {
@@ -90,7 +90,14 @@ namespace rs::ml::core
     };
 
     BuilderGuard guard{_fbb};
-    _fbb.Finish(std::invoke(std::forward<Creator>(creator), _fbb));
-    return Id{_txn.create(boost::asio::buffer(_fbb.GetBufferPointer(), _fbb.GetSize()))};
+    _fbb.Finish(std::invoke(std::forward<Builder>(builder), _fbb));
+    auto [id, buffer] = _writer.append(boost::asio::buffer(_fbb.GetBufferPointer(), _fbb.GetSize()));
+    return T{typename T::Id{id}, ::flatbuffers::GetRoot<typename T::Value>(buffer)};
+  }
+
+  template<typename T>
+  inline T FlatBuffersStore<T>::Writer::createT(const NativeType& tt)
+  {
+    return create([&tt](flatbuffers::FlatBufferBuilder& fbb) { return T::Value::Pack(fbb, &tt); });
   }
 }

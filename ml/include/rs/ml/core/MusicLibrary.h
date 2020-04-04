@@ -20,6 +20,8 @@
 #include <rs/ml/core/Track.h>
 #include <rs/ml/core/List.h>
 #include <rs/ml/core/FlatBuffersStore.h>
+#include <rs/ml/core/ResourceStore.h>
+#include <rs/ml/core/LMDBTransaction.h>
 
 namespace rs::ml::core
 {
@@ -30,15 +32,23 @@ namespace rs::ml::core
     using ListStore = FlatBuffersStore<List>;
 
     explicit MusicLibrary(const std::string& rootDir);
+
+    LMDBReadTransaction readTransaction() const { return LMDBReadTransaction{_env}; }
+    LMDBWriteTransaction writeTransaction() { return LMDBWriteTransaction{_env}; }
+
     TrackStore& tracks() { return _tracks; }
     const TrackStore& tracks() const { return _tracks; }
 
     ListStore& lists() { return _lists; }
     const ListStore& lists() const { return _lists; }
 
+    ResourceStore& resources() { return _resources; }
+    const ResourceStore& resources() const { return _resources; }
+
   private:
     lmdb::env _env;
     TrackStore _tracks;
     ListStore _lists;
+    ResourceStore _resources;
   };
 }
