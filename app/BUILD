@@ -17,8 +17,8 @@ rs_cc_binary(
     deps = [
         "//cli:rs-cli",
         "//ml:rs-ml",
-        "@boost//:timer",
-        "@boost//:filesystem",
-        "@boost//:system"
+        "@conan_boost//:boost_timer",
+        "@conan_boost//:boost_filesystem",
+        #"@boost//:system"
     ],
 )

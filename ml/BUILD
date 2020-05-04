@@ -1,6 +1,4 @@
-load("@com_github_nelhage_rules_boost//:boost/boost.bzl", "boost_library")
 load("//bazel:rs.bzl", "rs_cc_binary", "rs_cc_library")
-load("@rules_foreign_cc//tools/build_defs:cmake.bzl", "cmake_external")
 
 genrule(
     name = "fbs_meta_schema",
@@ -9,8 +7,8 @@ genrule(
         "fbs/Attributes.fbs",
     ],
     outs = ["Metadata.bfbs"],
-    cmd = "$(location @com_google_flatbuffers//:flatc) -o $(@D) -b --schema $(SRCS)",
-    tools = ["@com_google_flatbuffers//:flatc"],
+    cmd = "$(location @conan_flatc//:flatc) -o $(@D) -b --schema $(SRCS)",
+    tools = ["@conan_flatc//:flatc"],
 )
 
 genrule(
@@ -20,24 +18,24 @@ genrule(
         "fbs/Attributes.fbs",
     ],
     outs = ["Properties.bfbs"],
-    cmd = "$(location @com_google_flatbuffers//:flatc) -o $(@D) -b --schema $(SRCS)",
-    tools = ["@com_google_flatbuffers//:flatc"],
+    cmd = "$(location @conan_flatc//:flatc) -o $(@D) -b --schema $(SRCS)",
+    tools = ["@conan_flatc//:flatc"],
 )
 
 genrule(
     name = "fbs_track_gen",
     srcs = glob(["fbs/*.fbs"]),
     outs = ["include/rs/ml/fbs/Track_generated.h"],
-    cmd = "$(location @com_google_flatbuffers//:flatc) -o $(@D) --cpp --gen-all --gen-object-api --scoped-enums $(location fbs/Track.fbs)",
-    tools = ["@com_google_flatbuffers//:flatc"],
+    cmd = "$(location @conan_flatc//:flatc) -o $(@D) --cpp --gen-all --gen-object-api --scoped-enums $(location fbs/Track.fbs)",
+    tools = ["@conan_flatc//:flatc"],
 )
 
 genrule(
     name = "fbs_list_gen",
     srcs = glob(["fbs/*.fbs"]),
     outs = ["include/rs/ml/fbs/List_generated.h"],
-    cmd = "$(location @com_google_flatbuffers//:flatc) -o $(@D) --cpp --gen-all --gen-object-api --scoped-enums $(location fbs/List.fbs)",
-    tools = ["@com_google_flatbuffers//:flatc"],
+    cmd = "$(location @conan_flatc//:flatc) -o $(@D) --cpp --gen-all --gen-object-api --scoped-enums $(location fbs/List.fbs)",
+    tools = ["@conan_flatc//:flatc"],
 )
 
 rs_cc_library(
@@ -46,8 +44,8 @@ rs_cc_library(
     includes = ["gen"],
     visibility = ["//visibility:public"],
     deps = [
-        "@boost//:format",
-        "@com_google_flatbuffers//:flatbuffers",
+        "@conan_boost//:headers",
+        "@conan_flatbuffers//:flatbuffers",
     ],
 )
 
@@ -63,11 +61,9 @@ rs_cc_binary(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "@boost//:dll",
-        "@boost//:filesystem",
-        "@boost//:program_options",
-        "@boost//:system",
-        "@com_google_flatbuffers//:flatbuffers",
+        "@conan_boost//:boost_filesystem",
+        "@conan_boost//:boost_program_options",
+        "@conan_flatbuffers//:flatbuffers",
     ],
 )
 
@@ -109,16 +105,8 @@ rs_cc_library(
     includes = ["include"],
     visibility = ["//visibility:public"],
     deps = [
-        "@boost//:asio",
-        "@boost//:fusion",
-        "@boost//:iterator",
-        "@boost//:spirit",
-        "@boost//:tti",
-        "@boost//:uuid",
-        "@boost//:variant",
-        "@boost//:version",
         "@com_drycpp_lmdbxx//:lmdb++",
-        "@com_google_flatbuffers//:flatbuffers",
-        "@taglib//:taglib",
+        "@conan_boost//:headers",
+        "@conan_flatbuffers//:flatbuffers",
     ],
 )
