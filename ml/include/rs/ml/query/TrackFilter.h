@@ -18,7 +18,7 @@
 #pragma once
 
 #include <rs/ml/query/Expression.h>
-#include <rs/ml/core/Track.h>
+#include <rs/ml/fbs/Track_generated.h>
 
 namespace rs::ml::query
 {
@@ -27,9 +27,9 @@ namespace rs::ml::query
   public:
     explicit TrackFilter(Expression expr);
 
-    bool operator()(const core::Track& track) const;
+    bool operator()(const fbs::Track* track) const;
 
-    bool operator()(const core::TrackT& track) const;
+    bool operator()(const fbs::TrackT& track) const;
 
     const Expression& expression() const { return _expr; }
 

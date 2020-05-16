@@ -3,30 +3,29 @@ def default_copts():
         "@bazel_tools//src/conditions:linux_x86_64": ["-std=c++17"],
         "@bazel_tools//src/conditions:windows": ["/std:c++latest"],
     })
+    
+DEFINES = ["_GLIBCXX_USE_CXX11_ABI=1"]
 
-def rs_cc_library(name, **kwargs):
+def rs_cc_library(name, defines=[], **kwargs):
     native.cc_library(
         name = name,
-        copts = select({
-            "@bazel_tools//src/conditions:linux_x86_64": ["-std=c++17"],
-            "@bazel_tools//src/conditions:windows": ["/std:c++latest"],
-        }),
+        defines = defines + DEFINES,
+        copts = default_copts(),
         **kwargs
     )
 
-def rs_cc_binary(name, **kwargs):
+def rs_cc_binary(name, defines=[], **kwargs):
     native.cc_binary(
         name = name,
-        copts = select({
-            "@bazel_tools//src/conditions:linux_x86_64": ["-std=c++17"],
-            "@bazel_tools//src/conditions:windows": ["/std:c++latest"],
-        }),
+        defines = defines + DEFINES,
+        copts = default_copts(),
         **kwargs
     )
 
-def rs_cc_test(name, **kwargs):
+def rs_cc_test(name, defines=[], **kwargs):
     native.cc_test(
         name = name,
+        defines = defines + DEFINES,
         copts = default_copts(),
         **kwargs
     )

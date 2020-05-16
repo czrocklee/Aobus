@@ -16,7 +16,6 @@
  */
 
 #include "TrackCommand.h"
-#include <rs/ml/core/Track.h>
 #include <rs/ml/query/Parser.h>
 #include <rs/ml/query/Serializer.h>
 #include <rs/ml/query/TrackFilter.h>
@@ -30,23 +29,18 @@ namespace
   namespace bpo = boost::program_options;
   using namespace rs::ml;
 
-  void list(core::MusicLibrary& ml, const std::string& filter, std::ostream& os)
+  void show(core::MusicLibrary& ml, const std::string& filter, std::ostream& os)
   {
     std::ostringstream oss;
 
     auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
-    rs::ml::reactive::ItemList<rs::ml::core::TrackT> ts;
     auto txn = ml.readTransaction();
 
     if (filter.empty())
     {
-      for (auto t: ml.tracks().reader(txn))
+      for (auto [id, track]: ml.tracks().reader(txn))
       {
-        rs::ml::core::TrackT tt{t.id};
-        t.value->UnPackTo(&tt.value);
-
-        ts.insert(std::move(tt));
-        os << t.id << " " << cstr(t.value->meta()->artist()) << " " << cstr(t.value->meta()->title()) << std::endl;
+        os << id << " " << cstr(track->meta()->artist()) << " " << cstr(track->meta()->title()) << std::endl;
       }
     }
     else
@@ -55,11 +49,11 @@ namespace
       auto expr = rs::ml::query::parse(filter);
       rs::ml::query::TrackFilter filter{std::move(expr)};
       
-      for (auto t: ml.tracks().reader(txn))
+      for (auto [id, track]: ml.tracks().reader(txn))
       {
-        if (filter(t))
+        if (filter(track))
         {
-          os << t.id << " " << cstr(t.value->meta()->artist()) << " " << cstr(t.value->meta()->title()) << std::endl;
+          os << id << " " << cstr(track->meta()->artist()) << " " << cstr(track->meta()->title()) << std::endl;
         }
       }
     }
@@ -102,7 +96,7 @@ namespace rs::rml
   {
     addCommand<rs::cli::BasicCommand>("show")
       .addOption("filter, f", bpo::value<std::string>()->default_value(""), "track filter expression", 1)
-      .setExecutor([this](const auto& vm, auto& os) { return list(_ml, vm["filter"].template as<std::string>(), os); });
+      .setExecutor([this](const auto& vm, auto& os) { return show(_ml, vm["filter"].template as<std::string>(), os); });
 
     addCommand<rs::cli::BasicCommand>("create")
       .addOption("name, n", bpo::value<std::string>()->required(), "list name", 1)

@@ -17,18 +17,22 @@
 
 #pragma once
 
-#include <rs/ml/utility/TaggedInteger.h>
+#include <rs/common/utility/TaggedInteger.h>
 #include <rs/ml/reactive/Observerable.h>
 
 namespace rs::ml::reactive
 {
-  template<typename T>
+  template<typename Id, typename T>
   class AbstractItemList
   {
+    template<typename N>
+    struct IndexTag
+    {};
+
   public:
-    using Value = T;
-    using Index = utility::TaggedIndex<struct IndexTag>;
-    using Observer = rs::ml::reactive::Observer<const T&, Index>;
+    using Value = std::pair<Id, T>;
+    using Index = common::utility::TaggedIndex<IndexTag<T>>;
+    using Observer = rs::ml::reactive::Observer<Id, const T&, Index>;
 
     virtual ~AbstractItemList() = default;
 

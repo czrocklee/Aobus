@@ -20,56 +20,61 @@
 #include <rs/ml/reactive/AbstractItemList.h>
 #include <rs/ml/reactive/Observerable.h>
 
-#include <boost/container/flat_set.hpp>
+#include <boost/container/flat_map.hpp>
 #include <iostream>
 namespace rs::ml::reactive
 {
-  template<typename T>
-  class ItemList : public AbstractItemList<T>
+  template<typename Id, typename T>
+  class ItemList : public AbstractItemList<Id, T>
   {
   public:
-    using Id = typename T::Id;
-    using Index = typename AbstractItemList<T>::Index;
-    using Observer = typename AbstractItemList<T>::Observer;
+    using Value = typename AbstractItemList<Id, T>::Value;
+    using Index = typename AbstractItemList<Id, T>::Index;
+    using Observer = typename AbstractItemList<Id, T>::Observer;
 
     std::size_t size() const override { return _items.size(); }
-    const T& at(Index index) const override { return *_items.nth(index); }
+    const Value& at(Index index) const override { return *_items.nth(index); }
 
     void attach(Observer& observer) override { _observerable.attach(observer); }
     void detach(Observer& observer) override { _observerable.detach(observer); }
 
     template<typename... Args>
-    void insert(Args&&... args)
+    Value& insert(Id id, Args&&... args)
     {
-      auto iter = _items.emplace_hint(_items.end(), std::forward<Args>(args)...);
-      _observerable.insert(*iter, Index{_items.index_of(iter)});
+      auto iter = _items.emplace_hint(_items.end(), id, std::forward<Args>(args)...);
+      _observerable.insert(iter->first, iter->second, Index{_items.index_of(iter)});
+      return *iter;
     }
 
     template<typename F>
     void update(Id id, F&& f)
     {
-      auto iter = _items.find(id);
-      std::invoke(std::forward<F>(f), *iter);
-      _observerable.update(*iter, Index{_items.index_of(iter)});
+      if (auto iter = _items.find(id); iter != _items.end())
+      {
+        std::invoke(std::forward<F>(f), iter->second);
+        _observerable.update(id, iter->second, Index{_items.index_of(iter)});
+      }
     }
 
     void erase(Id id)
     {
-      auto iter = _items.find(id);
-      auto index = _items.index_of(iter);
-      _items.erase(id);
-      _observerable.erase(id, Index{index});
+      if (auto iter = _items.find(id); iter != _items.end())
+      {
+        auto index = _items.index_of(iter);
+        _observerable.erase(id, iter->second, Index{index});
+        _items.erase(id);
+      }
     }
 
   private:
-    struct Compare
+/*     struct Compare
     {
       using is_transparent = void;
       bool operator()(const T& a, const T& b) const { return a.id < b.id; }
       bool operator()(const T& a, Id id) const { return a.id < id; }
-    };
+    }; */
 
-    boost::container::flat_set<T, Compare> _items;
-    Observerable<const T&, Index> _observerable;
+    boost::container::flat_map<Id, T> _items;
+    Observerable<Id, const T&, Index> _observerable;
   };
 }

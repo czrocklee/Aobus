@@ -18,7 +18,7 @@
 #pragma once
 
 #include "app/rmlGui/ui_AddTrackDialog.h"
-#include <rs/ml/core/Track.h>
+#include <rs/ml/fbs/Track_generated.h>
 
 class AddTrackDialog : public QDialog, public Ui::AddTrackDialog
 {
@@ -27,5 +27,5 @@ class AddTrackDialog : public QDialog, public Ui::AddTrackDialog
 public:
     AddTrackDialog(QWidget *parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
 
-    rs::ml::core::TrackT track() const;
+    rs::ml::fbs::TrackT track() const;
 };

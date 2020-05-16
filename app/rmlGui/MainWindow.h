@@ -18,7 +18,7 @@
 #pragma once
 
 #include <rs/ml/core/MusicLibrary.h>
-#include <rs/ml/core/List.h>
+#include <rs/ml/fbs/List_generated.h>
 #include <rs/ml/reactive/ItemList.h>
 #include <rs/ml/reactive/ItemFilterList.h>
 
@@ -35,16 +35,17 @@ public:
   void openMusicLibrary(const std::string& root);
 
 private:
-  using TrackList = rs::ml::reactive::ItemList<rs::ml::core::TrackT>;
-  using TrackFilterList = rs::ml::reactive::ItemFilterList<rs::ml::core::TrackT>;
+
   using MusicLibrary = rs::ml::core::MusicLibrary;
+  using TrackList = rs::ml::reactive::ItemList<MusicLibrary::TrackId, rs::ml::fbs::TrackT>;
+  using TrackFilterList = rs::ml::reactive::ItemFilterList<MusicLibrary::TrackId, rs::ml::fbs::TrackT>;
   using ReadTransaction = rs::ml::core::LMDBReadTransaction;
 
   struct ListItem : public QListWidgetItem
   {
     using QListWidgetItem::QListWidgetItem;
 
-    rs::ml::core::ListT list;
+    rs::ml::fbs::ListT list;
     TrackView* trackView;
     std::unique_ptr<TrackFilterList> tracks;
   };

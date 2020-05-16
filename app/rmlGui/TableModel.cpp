@@ -20,35 +20,33 @@
 #include <boost/algorithm/string/join.hpp>
 #include <QtCore/QDebug>
 
-using TrackList = rs::ml::reactive::AbstractItemList<rs::ml::core::TrackT>;
+//using IdTrackPair = TableModel::IdTrackPair;
+using AbstractTrackList = TableModel::AbstractTrackList;
 
-struct TableModelPrivate : TrackList::Observer
+struct TableModelPrivate : AbstractTrackList::Observer
 {
   Q_DECLARE_PUBLIC(TableModel)
 
-  TableModelPrivate(TableModel* q, TrackList& tracks) : q_ptr{q}, tracks{tracks}
-  {
-    tracks.attach(*this);
-  }
+  TableModelPrivate(TableModel* q, AbstractTrackList& tracks) : q_ptr{q}, tracks{tracks} { tracks.attach(*this); }
 
   ~TableModelPrivate()
   {
-    //tracks.detach(*this);
+    // tracks.detach(*this);
   }
 
-  void onInsert(const rs::ml::core::TrackT&, TrackList::Index index) override
+  void onInsert(TableModel::TrackId, const rs::ml::fbs::TrackT&, AbstractTrackList::Index index) override
   {
     Q_Q(TableModel);
     q->beginInsertRows({}, index, index);
     q->endInsertRows();
   }
-  void onUpdate(const rs::ml::core::TrackT&, TrackList::Index index) override
+  void onUpdate(TableModel::TrackId, const rs::ml::fbs::TrackT&, AbstractTrackList::Index index) override
   {
     Q_Q(TableModel);
     emit(q->dataChanged(q->index(index, 0, {}), q->index(index, 2, {})));
   }
 
-  void onRemove(const rs::ml::core::TrackT&, TrackList::Index index) override
+  void onRemove(TableModel::TrackId, const rs::ml::fbs::TrackT&, AbstractTrackList::Index index) override
   {
     Q_Q(TableModel);
     q->beginRemoveRows({}, index, index);
@@ -56,12 +54,12 @@ struct TableModelPrivate : TrackList::Observer
   }
 
   TableModel* q_ptr;
-  TrackList& tracks;
+  AbstractTrackList& tracks;
 };
 
 TableModel::TableModel(QObject* parent) : QAbstractTableModel(parent) {}
 
-TableModel::TableModel(TrackList& tracks, QObject* parent)
+TableModel::TableModel(AbstractTrackList& tracks, QObject* parent)
   : QAbstractTableModel{parent}, d_ptr{std::make_unique<TableModelPrivate>(this, tracks)}
 {}
 
@@ -81,11 +79,13 @@ int TableModel::columnCount(const QModelIndex& parent) const
 
 QVariant TableModel::data(const QModelIndex& index, int role) const
 {
-  if (!index.isValid()) return QVariant();
+  if (!index.isValid())
+    return QVariant();
 
-  if (index.row() >= static_cast<int>(d_ptr->tracks.size()) || index.row() < 0) return QVariant();
+  if (index.row() >= static_cast<int>(d_ptr->tracks.size()) || index.row() < 0)
+    return QVariant();
 
-  const auto& track = d_ptr->tracks.at(TrackList::Index{index.row()}).value;
+  const auto& track = d_ptr->tracks.at(AbstractTrackList::Index{static_cast<std::size_t>(index.row())}).second;
 
   if (role == Qt::DisplayRole)
   {
@@ -112,7 +112,8 @@ QVariant TableModel::data(const QModelIndex& index, int role) const
 
 QVariant TableModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
-  if (role != Qt::DisplayRole) return QVariant();
+  if (role != Qt::DisplayRole)
+    return QVariant();
 
   if (orientation == Qt::Horizontal)
   {
@@ -193,14 +194,17 @@ bool TableModel::setData(const QModelIndex& index, const QVariant& value, int ro
 //! [7]
 Qt::ItemFlags TableModel::flags(const QModelIndex& index) const
 {
-  if (!index.isValid()) return Qt::ItemIsEnabled;
+  if (!index.isValid())
+    return Qt::ItemIsEnabled;
 
   return QAbstractTableModel::flags(index) | Qt::ItemIsEditable;
 }
 
 QModelIndex TableModel::index(int row, int column, const QModelIndex& parent) const
 {
-  return createIndex(row, column, &const_cast<rs::ml::core::TrackT&>(d_ptr->tracks.at(TrackList::Index{row})));
+
+  return createIndex(
+    row, column, &const_cast<AbstractTrackList::Value&>(d_ptr->tracks.at(AbstractTrackList::Index{static_cast<std::size_t>(row)})));
 }
 
 /* void TableModel::onQuickFilterChanged(const QString& filter)

@@ -97,7 +97,7 @@ namespace rs::ml::core
     lmdb::dbi& _dbi;
     lmdb::txn& _txn;
     lmdb::cursor _cursor;
-    std::uint64_t _lastId;
+    std::uint64_t _lastId = 0;
     friend class LMDBDatabase;
   };
 

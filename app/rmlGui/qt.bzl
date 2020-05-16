@@ -6,15 +6,15 @@ def qt_cc_library(
         uis = [],
         qrcs = [],
         **kwargs):
-
     for hdr in hdrs:
         base = hdr.split(".")[0]
         native.genrule(
             name = "%s_moc" % base,
             srcs = [hdr],
             outs = ["moc_%s.cpp" % base],
-            cmd = "moc $(location %s) -o $@ -f'%s'" %
-                (hdr, "%s/%s" % (native.package_name(), hdr)),
+            cmd = "$(location @conan_qt//:moc) $(location %s) -o $@ -f'%s'" %
+                  (hdr, "%s/%s" % (native.package_name(), hdr)),
+            tools = ["@conan_qt//:moc"],
         )
         srcs.append(":%s_moc" % base)
 
@@ -24,7 +24,8 @@ def qt_cc_library(
             name = "%s_uic" % base,
             srcs = [ui],
             outs = ["ui_%s.h" % base],
-            cmd = "uic $(locations %s) -o $@" % ui,
+            cmd = "$(location @conan_qt//:uic) $(locations %s) -o $@" % ui,
+            tools = ["@conan_qt//:uic"],
         )
         hdrs.append(":%s_uic" % base)
 
@@ -36,7 +37,9 @@ def qt_cc_library(
             name = "%s_qrc" % base,
             srcs = [qrc, ":%s" % base],
             outs = ["%s_qrc.cpp" % base],
-            cmd = "rcc -name %s $(locations %s) -o $@" % (base, qrc),
+            cmd = "$(location @conan_qt//:rcc) -name %s $(locations %s) -o $@" % (base, qrc),
+            tools = ["@conan_qt//:rcc"],
+
         )
         srcs.append(":%s_qrc" % base)
 

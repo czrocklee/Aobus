@@ -1,7 +1,7 @@
 #include "TrackView.h"
 #include "TrackSortFilterProxyModel.h"
 
-TrackView::TrackView(TableModel::TrackList& tracks, QWidget* parent) : QWidget(parent)
+TrackView::TrackView(TableModel::AbstractTrackList& tracks, QWidget* parent) : QWidget(parent)
 {
   setupUi(this);
   auto* model = new TableModel{tracks, this};

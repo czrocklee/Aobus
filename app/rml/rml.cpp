@@ -15,14 +15,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 //#include <openssl/md5.h>
 #include <boost/timer/timer.hpp>
 
-#include <rs/ml/core/Track.h>
 #include <rs/ml/core/MusicLibrary.h>
 #include <rs/ml/utility/Finder.h>
-#include <rs/ml/file/MusicFile.h>
+#include <rs/tag/mp4/File.h>
 
 #include <rs/cli/BasicCommand.h>
 #include <rs/cli/ComboCommand.h>
@@ -34,109 +32,93 @@
 
 namespace bpo = boost::program_options;
 
-int main(int argc, const char *argv[])
+namespace
 {
-  rs::ml::core::MusicLibrary ml{"/home/rocklee/RockStudio/mylib"};
+  ::flatbuffers::Offset<::flatbuffers::String> buildString(::flatbuffers::FlatBufferBuilder& fbb,
+                                                           const rs::tag::ValueType& value)
+  {
+    return rs::tag::isNull(value) ? ::flatbuffers::Offset<::flatbuffers::String>{}
+                                  : fbb.CreateString(std::get<std::string>(value));
+  }
+}
+
+int main(int argc, const char* argv[])
+{
+  rs::ml::core::MusicLibrary ml{"."};
 
   rs::cli::ComboCommand root;
-  
-  /*
-  root.addCommand<rs::cli::BasicCommand>("add", [&ml](const auto& vm)
-  {
-    rs::ml::Finder finder{"/home/rocklee/RockStudio/mylib/", {".m4a", ".mp3", ".flac"}};
-    auto txn = ml.tracks().writeTransaction();
-    
-    for (const boost::filesystem::path& path : finder)
-    {
-      auto id = txn.create([&path] (flatbuffers::FlatBufferBuilder& fbb)
-      {
-        TagLib::FileRef file(path.string().c_str());
-        
-        ::flatbuffers::Offset<rs::ml::core::Metadata> meta;
-        {
-          auto tag = file.tag();
-          auto artist = fbb.CreateString(tag->artist().toCString(true));
-          auto album = fbb.CreateString(tag->album().toCString(true));
-          auto title = fbb.CreateString(tag->title().toCString(true));
-          auto track = tag->track();
-          rs::ml::core::MetadataBuilder builder{fbb};
-          builder.add_artist(artist);
-          builder.add_album(album);
-          builder.add_title(title);
-          builder.add_trackNumber(track);
-          meta = builder.Finish();
-        }
-
-        ::flatbuffers::Offset<rs::ml::core::Properties> prop;
-        {
-          auto ap = file.audioProperties();
-          rs::ml::core::PropertiesBuilder builder{fbb};
-          builder.add_length(ap->lengthInSeconds());
-          prop = builder.Finish();
-        }
-
-        std::vector<std::string> t{"tag", "tag1", "tag2"};
-        auto tags = fbb.CreateVectorOfStrings(t);
-
-        std::vector<flatbuffers::Offset<rs::ml::core::CustomEntry>> entries;
-        entries.push_back(rs::ml::core::CreateCustomEntry(fbb, fbb.CreateString("pop")));
-        entries.push_back(rs::ml::core::CreateCustomEntry(fbb, fbb.CreateString("classic")));
-        auto custom = fbb.CreateVectorOfSortedTables(&entries);
-
-        rs::ml::core::TrackBuilder builder{fbb};
-        builder.add_meta(meta);
-        builder.add_prop(prop);
-        builder.add_tags(tags);
-        builder.add_custom(custom);
-        return builder.Finish();
-      });
-
-        std::cout << id << " " << path << std::endl;
-    }
-
-    txn.commit();
-    return std::error_code{};
-  });
-  */
 
   root.addCommand<rs::rml::TrackCommand>("track", ml);
   root.addCommand<rs::rml::ListCommand>("list", ml);
-  
-  
-  root.addCommand<rs::cli::BasicCommand>("init", [](const bpo::variables_map& vm, std::ostream& os) 
-  {
+
+  root.addCommand<rs::cli::BasicCommand>("init", [](const bpo::variables_map& vm, std::ostream& os) {
     rs::ml::core::MusicLibrary ml{"."};
-    rs::ml::Finder finder{".", {".m4a", ".mp3", ".flac"}};
+    rs::ml::Finder finder{".", {".m4a"}};
 
     auto txn = ml.writeTransaction();
     auto trackWriter = ml.tracks().writer(txn);
     auto resourceWriter = ml.resources().writer(txn);
-    auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
 
-    for (const boost::filesystem::path& path : finder)
+    for (const std::filesystem::path& path : finder)
     {
-      rs::ml::file::MusicFile file(path.string());
-      auto tt = file.loadTrack();
-      auto aa = file.loadAlbumArt();
-      //os << "load track " << tt.meta->title << " ca size: " << ca.size() << std::endl;
+      rs::tag::mp4::File file{path.string(), rs::tag::File::Mode::ReadOnly};
+      auto metadata = file.loadMetadata();
 
-      if (!aa.isEmpty())
-      {
-        std::uint64_t id = resourceWriter.create(boost::asio::buffer(aa.data(), aa.size()));
-        auto resource = std::make_unique<rs::ml::fbs::ResourceT>();
-        resource->type = rs::ml::fbs::ResourceType::AlbumArt;
-        resource->id = id;
-        tt.rsrc.push_back(std::move(resource));
-      }
+      auto [id, track] = trackWriter.create([&metadata, &resourceWriter](::flatbuffers::FlatBufferBuilder& fbb) {
+        ::flatbuffers::Offset<rs::ml::fbs::Metadata> metaOffset;
+        {
+          auto titleOffset = buildString(fbb, metadata.get(rs::tag::MetaField::Title));
+          auto albumOffset = buildString(fbb, metadata.get(rs::tag::MetaField::Album));
+          auto artistOffset = buildString(fbb, metadata.get(rs::tag::MetaField::Artist));
+          auto albumArtistOffset = buildString(fbb, metadata.get(rs::tag::MetaField::AlbumArtist));
+          auto genreOffset = buildString(fbb, metadata.get(rs::tag::MetaField::Genre));
 
-      auto track = trackWriter.createT(tt);
-      os << "add track: " << cstr(track.value->meta()->title()) << std::endl;
+          rs::ml::fbs::MetadataBuilder builder{fbb};
+          builder.add_title(titleOffset);
+          builder.add_album(albumOffset);
+          builder.add_artist(artistOffset);
+          builder.add_albumArtist(albumArtistOffset);
+          builder.add_genre(genreOffset);
+          metaOffset = builder.Finish();
+        }
+
+        std::vector<::flatbuffers::Offset<rs::ml::fbs::Resource>> rsrc;
+
+        if (auto albumArt = metadata.get(rs::tag::MetaField::AlbumArt); !rs::tag::isNull(albumArt))
+        {
+          const auto& blob = std::get<rs::tag::Blob>(albumArt);
+          std::uint64_t id = resourceWriter.create(boost::asio::buffer(blob.data(), blob.size()));
+          rs::ml::fbs::ResourceBuilder builder{fbb};
+          builder.add_type(rs::ml::fbs::ResourceType::AlbumArt);
+          builder.add_id(id);
+          rsrc.push_back(builder.Finish());
+        }
+
+        auto rsrcOffset = fbb.CreateVector(rsrc);
+
+        /*         std::vector<std::string> t{"tag", "tag1", "tag2"};
+                auto tags = fbb.CreateVectorOfStrings(t);
+
+                std::vector<flatbuffers::Offset<rs::ml::core::CustomEntry>> entries;
+                entries.push_back(rs::ml::core::CreateCustomEntry(fbb, fbb.CreateString("pop")));
+                entries.push_back(rs::ml::core::CreateCustomEntry(fbb, fbb.CreateString("classic")));
+                auto custom = fbb.CreateVectorOfSortedTables(&entries);
+                */
+
+        rs::ml::fbs::TrackBuilder builder{fbb};
+        builder.add_meta(metaOffset);
+        builder.add_rsrc(rsrcOffset);
+        // builder.add_custom(custom);
+        return builder.Finish();
+      });
+      auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
+      os << "add track: " << id << " " << cstr(track->meta()->title()) << std::endl;
     }
 
     txn.commit();
   });
 
-  try 
+  try
   {
     root.execute(argc, argv, std::cout);
   }

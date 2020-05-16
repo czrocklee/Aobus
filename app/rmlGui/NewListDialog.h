@@ -18,7 +18,7 @@
 #pragma once
 
 #include "app/rmlGui/ui_NewListDialog.h"
-#include <rs/ml/core/List.h>
+#include <rs/ml/fbs/List_generated.h>
 
 class NewListDialog : public QDialog, public Ui::NewListDialog
 {

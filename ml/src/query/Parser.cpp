@@ -84,8 +84,9 @@ namespace
 
   //https://stackoverflow.com/questions/49932608/boost-spirit-x3-attribute-does-not-have-the-expected-size-redux
   template <typename T> 
-  auto as = [](auto p) { return x3::rule<struct tag, T> {"as"} = p; };
-  auto quoteString = [](char ch) { return ch >> x3::no_skip[*~x3::char_(ch)] >> ch; };
+  const auto as = [](auto p) { return x3::rule<struct tag, T> {"as"} = p; };
+  const auto quoteString = [](char ch) { return ch >> x3::no_skip[*~x3::char_(ch)] >> ch; };
+  const auto keyCharSet = x3::char_(R"( "'$@#%!()&|!=<>)");
  
   const auto logicalOr_def = logicalAnd >> -as<BinaryExpression::Operation>(logicalOrOperator >> logicalOr);
   const auto logicalAnd_def = relational >> -as<BinaryExpression::Operation>(logicalAndOperator >> logicalAnd);
@@ -94,7 +95,7 @@ namespace
   const auto logicalNot_def = logicalNotOperator >> logicalOr;
   const auto variable_def = (varType >> identifier)[setupFieldId];
   const auto constant_def = x3::bool_ | x3::int64 | string;
-  const auto string_def = quoteString('\'') | quoteString('\"') | x3::lexeme[(~x3::char_({'$', '@', '#', '%', '!', '('}) >> *(~x3::char_(')') - x3::blank))];
+  const auto string_def = quoteString('\'') | quoteString('\"') | x3::lexeme[+(~keyCharSet)];
   const auto identifier_def = x3::lexeme[(x3::alpha | '_') >> *(x3::alnum | '_')];
 
   BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, logicalNot, primary, variable, constant, string, identifier);

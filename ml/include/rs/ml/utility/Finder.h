@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <boost/filesystem.hpp>
+#include <filesystem>
 #include <boost/iterator/filter_iterator.hpp>
 #include <set>
 
@@ -30,7 +30,7 @@ namespace rs::ml
       : _rootPath{rootPath},
         _extensions{extensions.begin(), extensions.end()}
     {
-      _filter = [this](const boost::filesystem::path& path)
+      _filter = [this](const std::filesystem::path& path)
       {
         return _extensions.find(path.extension().string()) != _extensions.end();
       };
@@ -47,11 +47,11 @@ namespace rs::ml
     }
 
   private:
-    using Iterator = boost::filesystem::recursive_directory_iterator;
+    using Iterator = std::filesystem::recursive_directory_iterator;
 
     std::string _rootPath;
     std::set<std::string> _extensions;
-    std::function<bool(const boost::filesystem::path&)> _filter;
+    std::function<bool(const std::filesystem::path&)> _filter;
   };
 
 }

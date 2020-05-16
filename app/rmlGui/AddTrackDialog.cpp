@@ -23,9 +23,9 @@ AddTrackDialog::AddTrackDialog(QWidget *parent, Qt::WindowFlags f)
   setupUi(this);
 }
 
-rs::ml::core::TrackT AddTrackDialog::track() const
+rs::ml::fbs::TrackT AddTrackDialog::track() const
 {
-  rs::ml::core::TrackT t;
+  rs::ml::fbs::TrackT t;
   //t.title = lineEditTitle->text().toStdString();
   //t.artist = lineEditArtist->text().toStdString();
   //t.album = lineEditAlbum->text().toStdString();

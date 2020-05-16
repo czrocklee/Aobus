@@ -17,8 +17,9 @@
 
 #pragma once
 
+#include <rs/ml/core/MusicLibrary.h>
 #include <rs/ml/reactive/AbstractItemList.h>
-#include <rs/ml/core/Track.h>
+#include <rs/ml/fbs/Track_generated.h>
 
 #include <QtCore/QAbstractTableModel>
 #include <memory>
@@ -32,10 +33,12 @@ class TableModel : public QAbstractTableModel
   friend class TableModelPrivate;
 
 public:
-  using TrackList = rs::ml::reactive::AbstractItemList<rs::ml::core::TrackT>;
+  using MusicLibrary = rs::ml::core::MusicLibrary;
+  using TrackId = MusicLibrary::TrackId;
+  using AbstractTrackList = rs::ml::reactive::AbstractItemList<TrackId, rs::ml::fbs::TrackT>;
 
   TableModel(QObject* parent = nullptr);
-  TableModel(TrackList& tracks, QObject* parent = nullptr);
+  TableModel(AbstractTrackList& tracks, QObject* parent = nullptr);
   ~TableModel() override;
 
   int rowCount(const QModelIndex& parent) const override;

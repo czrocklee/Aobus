@@ -16,7 +16,7 @@
  */
 
 #include <rs/ml/query/Serializer.h>
-#include <rs/ml/utility/VariantVisitor.h>
+#include <rs/common/utility/VariantVisitor.h>
 
 #include <sstream>
 
@@ -69,7 +69,7 @@ namespace
 
     void operator()(const ConstantExpression& constant)
     {
-      std::visit(rs::ml::utility::makeVisitor(
+      std::visit(rs::common::utility::makeVisitor(
         [](boost::blank) { },
         [this](bool val) { oss << (val ? "true" : "false"); },
         [this](std::int64_t val) { oss << val; },

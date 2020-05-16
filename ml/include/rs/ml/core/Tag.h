@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <rs/ml/core/Track.h>
+#include <rs/ml/fbs/Track_generated.h>
 #include <rs/ml/core/DataValue.h>
 
 namespace rs::ml::core

@@ -11,9 +11,9 @@ table Metadata
   genre:string (alias: "g");
   year:ushort (alias: "y");
 
-  trackNumber:ushort;
+  trackNumber:ushort (alias: "tn");
   totalTracks:ushort;
-  discNumber:ushort;
+  discNumber:ushort (alias: "dn");
   totalDiscs:ushort;
 }
 

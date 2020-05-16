@@ -26,24 +26,24 @@
 
 namespace rs::ml::reactive
 {
-  template<typename T>
-  class ItemFilterList : public AbstractItemList<T>, public Observer<const T&, utility::TaggedIndex<struct IndexTag>>
+  template<typename Id, typename T>
+  class ItemFilterList : public AbstractItemList<Id, T>, public Observer<Id, const T&, typename AbstractItemList<Id, T>::Index>
   {
   public:
-    using Id = typename T::Id;
-    using Index = typename AbstractItemList<T>::Index;
-    using Observer = rs::ml::reactive::Observer<const T&, utility::TaggedIndex<struct IndexTag>>;
+    using Value = typename AbstractItemList<Id, T>::Value;
+    using Index = typename AbstractItemList<Id, T>::Index;
+    using Observer = rs::ml::reactive::Observer<Id, const T&, Index>;
     using Filter = std::function<bool(const T&)>;
 
-    ItemFilterList(AbstractItemList<T>& source, const Filter& filter) : _source{source}, _filter{filter} 
+    ItemFilterList(AbstractItemList<Id, T>& source, const Filter& filter) : _source{source}, _filter{filter}
     {
       for (auto i = 0u; i < _source.size(); ++i)
       {
-        const auto& t = source.at(Index{i});
+        const auto& [id, t] = source.at(Index{i});
 
         if (!_filter || _filter(t))
         {
-          _items.emplace_hint(_items.end(), t.id, Index{i});
+          _items.emplace_hint(_items.end(), id, Index{i});
         }
       }
 
@@ -51,83 +51,83 @@ namespace rs::ml::reactive
     }
 
     std::size_t size() const override { return _items.size(); }
-    const T& at(Index index) const override { return _source.at(_items.nth(index)->second); }
+    const Value& at(Index index) const override { return _source.at(_items.nth(index)->second); }
 
     void attach(Observer& observer) override { _observerable.attach(observer); }
     void detach(Observer& observer) override { _observerable.detach(observer); }
 
   protected:
-    void onInsert(const T& t, Index index) override
+    void onInsert(Id id, const T& t, Index index) override
     {
       if (!_filter || _filter(t))
       {
-        insert(t, index);
+        insert(id, t, index);
       }
     };
 
-    void onUpdate(const T& t, Index index) override
+    void onUpdate(Id id, const T& t, Index index) override
     {
-      auto iter = _items.find(t.id);
+      auto iter = _items.find(id);
 
       if (!_filter || _filter(t))
       {
         if (iter == _items.end())
         {
-          insert(t, index);
+          insert(id, t, index);
         }
         else
         {
-          update(t, iter);
+          update(id, t, iter);
         }
       }
       else if (iter != _items.end())
       {
-        remove(t, iter);
+        remove(id, t, iter);
       }
     };
 
-    void onRemove(const T& t, Index) override
+    void onRemove(Id id, const T& t, Index) override
     {
-      auto iter = _items.find(t.id);
+      auto iter = _items.find(id);
 
       if (iter != _items.end())
       {
-        remove(t, iter);
+        remove(id, t, iter);
       }
     };
 
   private:
-/*     struct Compare
-    {
-      using is_transparent = void;
-      bool operator()(Id a, Id b) const { return a < b; }
-      // bool operator()(const T* a, Id id) const { return a->id < id; }
-      // bool operator()(Id id, const T* a) const { return id < a->id; }
-    }; */
+    /*     struct Compare
+        {
+          using is_transparent = void;
+          bool operator()(Id a, Id b) const { return a < b; }
+          // bool operator()(const T* a, Id id) const { return a->id < id; }
+          // bool operator()(Id id, const T* a) const { return id < a->id; }
+        }; */
 
     using Container = boost::container::flat_map<Id, Index>;
 
-    void insert(const T& t, Index index)
+    void insert(Id id, const T& t, Index index)
     {
-      auto iter = _items.emplace_hint(_items.end(), t.id, index);
-      _observerable.insert(t, Index{_items.index_of(iter)});
+      auto iter = _items.emplace_hint(_items.end(), id, index);
+      _observerable.insert(id, t, Index{_items.index_of(iter)});
     }
 
-    void update(const T& t, typename Container::iterator iter)
+    void update(Id id, const T& t, typename Container::iterator iter)
     {
-      _observerable.update(t, Index{_items.index_of(iter)});
+      _observerable.update(id, t, Index{_items.index_of(iter)});
     }
 
-    void remove(const T& t, typename Container::iterator iter)
+    void remove(Id id, const T& t, typename Container::iterator iter)
     {
       std::size_t index = _items.index_of(iter);
-      _observerable.remove(t, Index{index});
+      _observerable.remove(id, t, Index{index});
       _items.erase(iter);
     }
 
-    AbstractItemList<T>& _source;
+    AbstractItemList<Id, T>& _source;
     Filter _filter;
     Container _items;
-    Observerable<const T&, Index> _observerable;
+    Observerable<Id, const T&, Index> _observerable;
   };
 }

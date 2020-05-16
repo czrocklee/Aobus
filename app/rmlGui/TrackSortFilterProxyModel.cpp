@@ -51,11 +51,12 @@ bool TrackSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelInde
   else
   {
     auto index = sourceModel()->index(sourceRow, 0);
-    const auto& track = *static_cast<rs::ml::core::TrackT*>(index.internalPointer());
+    using IdTrackPair = std::pair<rs::ml::core::MusicLibrary::TrackId, rs::ml::fbs::TrackT>;
+    const auto& track = static_cast<IdTrackPair*>(index.internalPointer())->second;
 
-    return track.value.meta->title.find(_quick) != std::string::npos || 
-           track.value.meta->album.find(_quick) != std::string::npos ||
-           track.value.meta->artist.find(_quick) != std::string::npos;
+    return track.meta->title.find(_quick) != std::string::npos || 
+           track.meta->album.find(_quick) != std::string::npos ||
+           track.meta->artist.find(_quick) != std::string::npos;
     /*
     auto index = sourceModel()->index(sourceRow, 0);
     auto reader = _ml.reader();

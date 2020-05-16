@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <rs/ml/core/Track.h>
-#include <rs/ml/core/List.h>
+#include <rs/ml/fbs/Track_generated.h>
+#include <rs/ml/fbs/List_generated.h>
 #include <rs/ml/core/FlatBuffersStore.h>
 #include <rs/ml/core/ResourceStore.h>
 #include <rs/ml/core/LMDBTransaction.h>
@@ -28,8 +28,10 @@ namespace rs::ml::core
   class MusicLibrary 
   {
   public:
-    using TrackStore = FlatBuffersStore<Track>;
-    using ListStore = FlatBuffersStore<List>;
+    using TrackStore = FlatBuffersStore<fbs::Track>;
+    using ListStore = FlatBuffersStore<fbs::List>;
+    using TrackId = typename TrackStore::Id;
+    using ListId = typename ListStore::Id;
 
     explicit MusicLibrary(const std::string& rootDir);
 

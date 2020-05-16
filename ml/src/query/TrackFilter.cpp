@@ -19,8 +19,8 @@
 #include <rs/ml/core/DataValue.h>
 #include <rs/ml/core/Tag.h>
 #include <rs/ml/core/Custom.h>
-#include <rs/ml/utility/VariantVisitor.h>
 #include <rs/ml/query/gen/TrackFieldAccessor.h>
+#include <rs/common/utility/VariantVisitor.h>
 
 #include <functional>
 #include <algorithm>
@@ -52,20 +52,20 @@ namespace
       switch (variable.type)
       {
         case VariableType::Metadata:
-          return gen::MetadataAccessor::get(track.value, variable.fieldId);
+          return gen::MetadataAccessor::get(track, variable.fieldId);
         case VariableType::Property:
-          return gen::PropertyAccessor::get(track.value, variable.fieldId);
+          return gen::PropertyAccessor::get(track, variable.fieldId);
         case VariableType::Tag:
-          return rs::ml::core::tag(track.value, variable.name.c_str());
+          return rs::ml::core::tag(track, variable.name.c_str());
         case VariableType::Custom: 
-          return rs::ml::core::custom(track.value, variable.name.c_str());
+          return rs::ml::core::custom(track, variable.name.c_str());
         default : return{};
       }
     }
 
     DataValue operator()(const ConstantExpression& constant)
     {
-      return std::visit(rs::ml::utility::makeVisitor([](const auto& val) { return DataValue{val}; }), constant);
+      return std::visit(rs::common::utility::makeVisitor([](const auto& val) { return DataValue{val}; }), constant);
     }
 
     DataValue operator()(const BinaryExpression& binary)
@@ -84,7 +84,7 @@ namespace
     bool evaluateBinary(Operator op, DataValue&& lhs, const Expression& rhs)
     {
 #define RELATIONAL(lhs, op, rhs) \
-  std::visit(rs::ml::utility::makeVisitor( \
+  std::visit(rs::common::utility::makeVisitor( \
     [](std::int64_t l, std::int64_t r) { return l op r; }, \
     [](std::string_view l, std::string_view r) { return l op r; }, \
     [](auto&, auto&) { return false; }), lhs, evaluate(rhs));
@@ -98,7 +98,7 @@ namespace
         case Operator::Equal: 
           return lhs == evaluate(rhs);
         case Operator::Like: 
-          return std::visit(rs::ml::utility::makeVisitor(
+          return std::visit(rs::common::utility::makeVisitor(
             [](std::string_view l, std::string_view r) { return l.find(r) != std::string_view::npos; },
             [](auto&, auto&) { return false; }), lhs, evaluate(rhs));
         case Operator::Less:
@@ -116,8 +116,8 @@ namespace
 
     static bool convertToBool(const DataValue& val)
     {
-      return std::visit(rs::ml::utility::makeVisitor(
-        [](boost::blank) { return false; },
+      return std::visit(rs::common::utility::makeVisitor(
+        [](std::monostate) { return false; },
         [](bool val) { return val; },
         [](std::int64_t val) { return static_cast<bool>(val); },
         [](std::string_view) { return true; }), val);
@@ -138,14 +138,14 @@ namespace rs::ml::query
   {
   }
 
-  bool TrackFilter::operator()(const Track& track) const
+  bool TrackFilter::operator()(const fbs::Track* track) const
   {
-    return std::invoke(Evaluator<const Track&>{track}, _expr);
+    return std::invoke(Evaluator<const fbs::Track*>{track}, _expr);
   }
   
-  bool TrackFilter::operator()(const TrackT& track) const
+  bool TrackFilter::operator()(const fbs::TrackT& track) const
   {
-    return std::invoke(Evaluator<const TrackT&>{track}, _expr);
+    return std::invoke(Evaluator<const fbs::TrackT&>{track}, _expr);
   }
 }
 

@@ -8,12 +8,14 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceRoot}/bazel-bin/app/rmlGui/rmlGui",
+            //"program": "${workspaceRoot}/bazel-bin/app/rmlGui/rmlGui",
+            "program": "${workspaceRoot}/bazel-bin/app/tag/tag",
+            "preLaunchTask": "bazel build",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "externalConsole": true,
+            "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [
                 {

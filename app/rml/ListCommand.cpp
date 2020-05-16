@@ -16,8 +16,6 @@
  */
 
 #include "ListCommand.h"
-#include <rs/ml/core/List.h>
-#include <rs/ml/core/Track.h>
 #include <rs/ml/query/Parser.h>
 #include <rs/ml/query/Serializer.h>
 #include <rs/cli/BasicCommand.h>
@@ -29,26 +27,26 @@ namespace
   namespace bpo = boost::program_options;
   using namespace rs::ml;
 
-  void list(core::MusicLibrary& ml, core::List::Id id, std::ostream& os)
+  void show(core::MusicLibrary& ml, core::MusicLibrary::ListId id, std::ostream& os)
   {
     auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
     auto txn = ml.readTransaction();
 
-    if (id != core::List::Id::invalid())
+    if (id != core::MusicLibrary::ListId::invalid())
     {
       auto reader = ml.lists().reader(txn);
-      const core::List list = reader[id];
+      const auto* list = reader[id];
       os << std::setw(5) << id;
-      os << std::setw(10) << cstr(list.value->name()) << std::setw(50) << cstr(list.value->expr()) << std::setw(50)
-         << cstr(list.value->desc()) << std::endl;
+      os << std::setw(10) << cstr(list->name()) << std::setw(50) << cstr(list->expr()) << std::setw(50)
+         << cstr(list->desc()) << std::endl;
       return;
     }
 
-    for (const auto& l : ml.lists().reader(txn))
+    for (auto [id, list] : ml.lists().reader(txn))
     {
-      os << std::setw(5) << l.id;
-      os << std::setw(10) << cstr(l.value->name()) << std::setw(50) << cstr(l.value->expr()) << std::setw(50)
-         << cstr(l.value->desc()) << std::endl;
+      os << std::setw(5) << id;
+      os << std::setw(10) << cstr(list->name()) << std::setw(50) << cstr(list->expr()) << std::setw(50)
+         << cstr(list->desc()) << std::endl;
     }
   }
 
@@ -64,15 +62,15 @@ namespace
     auto txn = ml.writeTransaction();
     auto writer = ml.lists().writer(txn);
 
-    core::List l = writer.create([&name, &exprStr, &desc](flatbuffers::FlatBufferBuilder& fbb) {
+    auto [id, list] = writer.create([&name, &exprStr, &desc](flatbuffers::FlatBufferBuilder& fbb) {
       return fbs::CreateListDirect(fbb, name.c_str(), exprStr.c_str(), desc.c_str());
     });
 
     txn.commit();
-    list(ml, l.id, os);
+    show(ml, id, os);
   }
 
-  void del(core::MusicLibrary& ml, core::List::Id id, std::ostream&)
+  void del(core::MusicLibrary& ml, core::MusicLibrary::ListId id, std::ostream&)
   {    
     auto txn = ml.writeTransaction();
     ml.lists().writer(txn).del(id);
@@ -85,7 +83,7 @@ namespace rs::rml
   ListCommand::ListCommand(ml::core::MusicLibrary& ml) : _ml{ml}
   {
     addCommand<rs::cli::BasicCommand>("show",
-                                      [this](const auto& vm, auto& os) { return list(_ml, core::List::Id::invalid(), os); });
+                                      [this](const auto& vm, auto& os) { return show(_ml, core::MusicLibrary::ListId::invalid(), os); });
 
     addCommand<rs::cli::BasicCommand>("create")
       .addOption("name, n", bpo::value<std::string>()->required(), "list name", 1)
@@ -98,7 +96,7 @@ namespace rs::rml
     addCommand<rs::cli::BasicCommand>("delete")
       .addOption("id", bpo::value<std::uint64_t>()->required(), "list id", 1)
       .setExecutor([this](const bpo::variables_map& vm, std::ostream& os) {
-        return del(_ml, core::List::Id{vm["id"].as<std::uint64_t>()}, os);
+        return del(_ml, core::MusicLibrary::ListId{vm["id"].as<std::uint64_t>()}, os);
       });
   }
 }

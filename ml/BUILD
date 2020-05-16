@@ -1,4 +1,4 @@
-load("//bazel:rs.bzl", "rs_cc_binary", "rs_cc_library")
+load("//bazel:rs.bzl", "rs_cc_binary", "rs_cc_library", "rs_cc_test")
 
 genrule(
     name = "fbs_meta_schema",
@@ -96,7 +96,7 @@ rs_cc_library(
         "src/query/Parser.cpp",
         "src/query/Serializer.cpp",
         "src/query/TrackFilter.cpp",
-        "src/file/MusicFile.cpp",
+        #"src/file/MusicFile.cpp",
     ] + [":track_field_accesor"],
     hdrs = glob(["include/**/*.h"]) + [
         "//ml:fbs_track_gen",
@@ -105,8 +105,22 @@ rs_cc_library(
     includes = ["include"],
     visibility = ["//visibility:public"],
     deps = [
+        "//common:rs-common",
         "@com_drycpp_lmdbxx//:lmdb++",
         "@conan_boost//:headers",
         "@conan_flatbuffers//:flatbuffers",
+    ],
+)
+
+rs_cc_test(
+    name = "rs-ml-test",
+    srcs = [
+        "test/query/ParserTest.cpp",
+    ],
+    deps = [
+        ":rs-ml",
+        "@conan_gtest//:gmock_main",
+        "@conan_gtest//:gmock",
+        "@conan_gtest//:gtest",
     ],
 )

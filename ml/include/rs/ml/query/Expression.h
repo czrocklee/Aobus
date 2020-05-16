@@ -36,7 +36,7 @@ namespace rs::ml::query
   {
     VariableType type;
     std::string name;
-    int fieldId = -1; // fieldId to rs::ml::core::Track 
+    int fieldId = -1; // fieldId to rs::ml::fbs::Track 
   };
 
   using ConstantExpression = std::variant<bool, std::int64_t, std::string>;

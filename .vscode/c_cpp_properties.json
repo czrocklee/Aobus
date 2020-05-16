@@ -4,15 +4,16 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/usr/include/x86_64-linux-gnu/qt5/",
                 "${workspaceFolder}/bazel-RockStudio/external/**",
-                "/home/rocklee/.cache/bazel/_bazel_rocklee/865e01336d50b332e264fa9a1d2bc4e7/external/boost"
+                "${workspaceFolder}/bazel-RockStudio/bazel-out/k8-dbg/bin/",
+                "/home/rocklee/.conan/data/**",
+                "/home/rocklee/.cache/bazel/_bazel_rocklee/865e01336d50b332e264fa9a1d2bc4e7/execroot/__main__/bazel-out/k8-dbg/bin/ml/include"
             ],
             "defines": [],
-            "compilerPath": "/usr/bin/gcc",
+            "compilerPath": "/usr/bin/g++",
             "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "clang-x64"
+            "cppStandard": "c++20",
+            "intelliSenseMode": "gcc-x64"
         }
     ],
     "version": 4

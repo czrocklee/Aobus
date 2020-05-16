@@ -25,6 +25,6 @@ class TrackView : public QWidget, public Ui_TrackView
   Q_OBJECT
 
 public:
-  TrackView(TableModel::TrackList& list, QWidget* parent = nullptr);
+  TrackView(TableModel::AbstractTrackList& list, QWidget* parent = nullptr);
   ~TrackView() override;
 };

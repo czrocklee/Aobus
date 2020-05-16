@@ -41,8 +41,9 @@ namespace rs::ml::query
              | ""
              | "#pragma once"
              | ""
-             | "#include <rs/ml/core/Track.h>"
+             | "#include <rs/ml/fbs/Track_generated.h>"
              | "#include <rs/ml/core/DataValue.h>"
+             | "#include <rs/common/Exception.h>"
              | "#include <unordered_map>"
              | ""
              | "namespace rs::ml::query::gen"
@@ -89,7 +90,13 @@ namespace rs::ml::query
 
       for (auto i = 0u; i < fields.size(); ++i)
       {
-        writer ( "    {\"%1%\", %2%},", fields[i]->name()->c_str(), fields[i]->id()); 
+        auto upperFirst = [](std::string name) {
+          assert(!name.empty());
+          name[0] = std::toupper(name[0]);
+          return name;
+        };
+
+        writer ( "    {\"%1%\", %2%},", upperFirst(fields[i]->name()->c_str()), fields[i]->id()); 
         auto attributes = fields[i]->attributes();
 
         if (attributes != nullptr)
@@ -105,7 +112,14 @@ namespace rs::ml::query
 
       writer | "  };"
              | ""
-             | "  return name2IdMap.at(name);"
+             | "  if (auto iter = name2IdMap.find(name); iter == name2IdMap.end())"
+             | "  {"
+             | "    RS_THROW_FORMAT(common::Exception, \"Invalid field name : {} for track \", name);"
+             | "  }"
+             | "  else"
+             | "  {"
+             | "    return name2IdMap.at(name);"
+             | "  }"
              | "};";
     }
 

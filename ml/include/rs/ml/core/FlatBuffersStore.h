@@ -18,6 +18,7 @@
 #pragma once
 
 #include <rs/ml/core/LMDBDatabase.h>
+#include <rs/common/utility/TaggedInteger.h>
 #include <boost/iterator/transform_iterator.hpp>
 
 namespace rs::ml::core
@@ -25,10 +26,14 @@ namespace rs::ml::core
   template<typename T>
   class FlatBuffersStore
   {
+    template<typename N>
+    struct IdTag
+    {};
+
   public:
     class Reader;
     class Writer;
-    using Id = typename T::Id;
+    using Id = common::utility::TaggedInteger<std::uint64_t, IdTag<T>>;
 
     FlatBuffersStore(lmdb::env& env, const std::string& db) : _database{env, db} {}
 
@@ -45,11 +50,11 @@ namespace rs::ml::core
   public:
     auto begin() const { return boost::make_transform_iterator(_reader.begin(), decode); }
     auto end() const { return boost::make_transform_iterator(_reader.end(), decode); }
-    const T operator[](Id id) const { return {id, ::flatbuffers::GetRoot<typename T::Value>(_reader[id].data())}; }
+    const T* operator[](Id id) const { return ::flatbuffers::GetRoot<T>(_reader[id].data()); }
 
   private:
     Reader(LMDBDatabase::Reader&& reader) : _reader{std::move(reader)} {}
-    static const T decode(LMDBDatabase::Reader::Value value);
+    static std::pair<Id, const T*> decode(LMDBDatabase::Reader::Value value);
     LMDBDatabase::Reader _reader;
     friend class FlatBuffersStore;
   };
@@ -58,30 +63,30 @@ namespace rs::ml::core
   class FlatBuffersStore<T>::Writer
   {
   public:
-    using NativeType = typename T::Value::NativeTableType;
+    using NativeType = typename T::NativeTableType;
 
     template<typename Builder>
-    T create(Builder&& builder);
-    T createT(const NativeType& tt);
+    std::pair<Id, const T*> create(Builder&& builder);
+    std::pair<Id, const T*> createT(const NativeType& tt);
     bool del(Id id) { return _writer.del(id); }
 
   private:
     explicit Writer(LMDBDatabase::Writer&& writer) : _writer{std::move(writer)} {}
-  
+
     LMDBDatabase::Writer _writer;
     flatbuffers::FlatBufferBuilder _fbb;
     friend class FlatBuffersStore;
   };
 
   template<typename T>
-  inline const T FlatBuffersStore<T>::Reader::decode(LMDBDatabase::Reader::Value value)
+  inline std::pair<typename FlatBuffersStore<T>::Id, const T*> FlatBuffersStore<T>::Reader::decode(LMDBDatabase::Reader::Value value)
   {
-    return {Id{value.first}, ::flatbuffers::GetRoot<typename T::Value>(value.second.data())};
+    return {Id{value.first}, ::flatbuffers::GetRoot<T>(value.second.data())};
   }
 
   template<typename T>
   template<typename Builder>
-  inline T FlatBuffersStore<T>::Writer::create(Builder&& builder)
+  inline std::pair<typename FlatBuffersStore<T>::Id, const T*> FlatBuffersStore<T>::Writer::create(Builder&& builder)
   {
     struct BuilderGuard
     {
@@ -92,12 +97,12 @@ namespace rs::ml::core
     BuilderGuard guard{_fbb};
     _fbb.Finish(std::invoke(std::forward<Builder>(builder), _fbb));
     auto [id, buffer] = _writer.append(boost::asio::buffer(_fbb.GetBufferPointer(), _fbb.GetSize()));
-    return T{typename T::Id{id}, ::flatbuffers::GetRoot<typename T::Value>(buffer)};
+    return {Id{id}, ::flatbuffers::GetRoot<T>(buffer)};
   }
 
   template<typename T>
-  inline T FlatBuffersStore<T>::Writer::createT(const NativeType& tt)
+  inline std::pair<typename FlatBuffersStore<T>::Id, const T*> FlatBuffersStore<T>::Writer::createT(const NativeType& tt)
   {
-    return create([&tt](flatbuffers::FlatBufferBuilder& fbb) { return T::Value::Pack(fbb, &tt); });
+    return create([&tt](flatbuffers::FlatBufferBuilder& fbb) { return T::Pack(fbb, &tt); });
   }
 }

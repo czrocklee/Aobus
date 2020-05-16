@@ -27,8 +27,9 @@
 #include <QtCore/QDebug>
 #include <QtWidgets/QFileDialog>
 #include <QtCore/QSettings>
+#include <filesystem>
 
-using TrackList = rs::ml::reactive::ItemList<rs::ml::core::TrackT>;
+//using TrackList = rs::ml::reactive::ItemList<rs::ml::core::MusicLibrary::TrackId, rs::ml::fbs::TrackT>;
 
 MainWindow::MainWindow()
 {
@@ -43,7 +44,8 @@ MainWindow::MainWindow()
     }
   });
 
-  if (auto lastSession = QSettings{"settings.ini"}.value("session.lastMusicLibaryOpened"); !lastSession.isNull())
+  if (auto lastSession = QSettings{"settings.ini"}.value("session.lastMusicLibaryOpened");
+      !lastSession.isNull() && std::filesystem::exists({lastSession.toString().toStdString()}))
   {
     openMusicLibrary(lastSession.toString().toStdString());
   }
@@ -62,9 +64,14 @@ void MainWindow::openMusicLibrary(const std::string& dir)
 
 void MainWindow::loadTracks(ReadTransaction& txn)
 {
-  for (const auto& track : _ml->tracks().reader(txn))
+  for (auto [id, track] : _ml->tracks().reader(txn))
   {
-    _allTracks.insert(rs::ml::core::TrackT::fromItem(track));
+    auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
+
+    std::cout << cstr(track->meta()->album());
+    rs::ml::fbs::TrackT tt;
+    track->UnPackTo(&tt);
+    _allTracks.insert(id, std::move(tt));
   }
 }
 
@@ -76,9 +83,9 @@ void MainWindow::loadLists(ReadTransaction& txn)
   connect(
     all->trackView->tableView, &QAbstractItemView::clicked, [this](const QModelIndex& index) { this->onTrackClicked(index); });
 
-  for (const auto& list : _ml->lists().reader(txn))
+  for (const auto [_, list] : _ml->lists().reader(txn))
   {
-    addListItem(list.value);
+    addListItem(list);
   }
 
   connect(listWidget, &QListWidget::currentItemChanged, [this](auto* curr, auto*) {
@@ -97,8 +104,8 @@ void MainWindow::loadLists(ReadTransaction& txn)
       {
         auto txn = _ml->writeTransaction();
         auto writer = _ml->lists().writer(txn);
-        auto list = writer.createT(dialog->list());
-        addListItem(list.value);
+        auto [_, list] = writer.createT(dialog->list());
+        addListItem(list);
         txn.commit();
       }
     });
