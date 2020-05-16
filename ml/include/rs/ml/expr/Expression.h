@@ -25,7 +25,7 @@
 #include <vector>
 #include <regex>
 
-namespace rs::ml::query
+namespace rs::ml::expr
 {
   struct BinaryExpression;
   struct UnaryExpression;
@@ -48,7 +48,7 @@ namespace rs::ml::query
     boost::spirit::x3::forward_ast<UnaryExpression>
   >;
 
-  enum class Operator { And, Or, Not, Equal, Like, Less, LessEqual, Greater, GreaterEqual };
+  enum class Operator { And, Or, Not, Equal, Like, Less, LessEqual, Greater, GreaterEqual, Add };
 
   struct BinaryExpression
   {

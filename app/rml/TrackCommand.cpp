@@ -16,9 +16,9 @@
  */
 
 #include "TrackCommand.h"
-#include <rs/ml/query/Parser.h>
-#include <rs/ml/query/Serializer.h>
-#include <rs/ml/query/TrackFilter.h>
+#include <rs/ml/expr/Parser.h>
+#include <rs/ml/expr/Serializer.h>
+#include <rs/ml/expr/TrackFilter.h>
 #include <rs/cli/BasicCommand.h>
 #include <rs/ml/reactive/ItemList.h>
 
@@ -46,8 +46,8 @@ namespace
     else
     {
       os << filter << std::endl;
-      auto expr = rs::ml::query::parse(filter);
-      rs::ml::query::TrackFilter filter{std::move(expr)};
+      auto expr = rs::ml::expr::parse(filter);
+      rs::ml::expr::TrackFilter filter{std::move(expr)};
       
       for (auto [id, track]: ml.tracks().reader(txn))
       {

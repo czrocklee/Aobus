@@ -69,7 +69,7 @@ rs_cc_binary(
 
 rs_cc_binary(
     name = "track_field_accesor_gen.so",
-    srcs = ["src/query/TrackFieldAccessorGenerator.cpp"],
+    srcs = ["src/expr/TrackFieldAccessorGenerator.cpp"],
     linkshared = 1,
     deps = [":ml_gen_interface"],
 )
@@ -81,7 +81,7 @@ genrule(
         ":fbs_meta_schema",
         ":fbs_prop_schema",
     ],
-    outs = ["include/rs/ml/query/gen/TrackFieldAccessor.h"],
+    outs = ["include/rs/ml/expr/gen/TrackFieldAccessor.h"],
     cmd = "$(location :ml_gen) --out-dir $(@D) --meta-schema $(location :fbs_meta_schema) --prop-schema $(location :fbs_prop_schema) --generators $(execpath :track_field_accesor_gen.so)",
     tools = [":ml_gen"],
 )
@@ -92,10 +92,10 @@ rs_cc_library(
         "src/core/LMDBDatabase.cpp",
         "src/core/ResourceStore.cpp",
         "src/core/MusicLibrary.cpp",
-        "src/query/Expression.cpp",
-        "src/query/Parser.cpp",
-        "src/query/Serializer.cpp",
-        "src/query/TrackFilter.cpp",
+        "src/expr/Expression.cpp",
+        "src/expr/Evaluator.cpp",
+        "src/expr/Parser.cpp",
+        "src/expr/Serializer.cpp",
         #"src/file/MusicFile.cpp",
     ] + [":track_field_accesor"],
     hdrs = glob(["include/**/*.h"]) + [
@@ -123,4 +123,5 @@ rs_cc_test(
         "@conan_gtest//:gmock",
         "@conan_gtest//:gtest",
     ],
+    linkstatic = True,
 )

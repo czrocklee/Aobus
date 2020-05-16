@@ -16,20 +16,24 @@
  */
 
 #define BOOST_SPIRIT_X3_UNICODE
-#include <rs/ml/query/Parser.h>
-#include <rs/ml/query/gen/TrackFieldAccessor.h>
+#include <rs/ml/expr/Parser.h>
+#include <rs/ml/expr/gen/TrackFieldAccessor.h>
+#include <rs/common/Exception.h>
+
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/spirit/home/x3.hpp>
+#include <rs/ml/expr/Serializer.h>
+#include <iostream>
 
-BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression::Operation, op, operand)
-BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::BinaryExpression, operand, operation)
-BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::UnaryExpression, op, operand)
-BOOST_FUSION_ADAPT_STRUCT(rs::ml::query::VariableExpression, type, name)
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::expr::BinaryExpression::Operation, op, operand)
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::expr::BinaryExpression, operand, operation)
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::expr::UnaryExpression, op, operand)
+BOOST_FUSION_ADAPT_STRUCT(rs::ml::expr::VariableExpression, type, name)
 
 namespace
 {
   namespace x3 = boost::spirit::x3;
-  using namespace rs::ml::query;
+  using namespace rs::ml::expr;
 
   const x3::symbols<VariableType> varType 
   {
@@ -44,6 +48,8 @@ namespace
   const x3::symbols<Operator> logicalAndOperator{{{"and", Operator::And}, {"&&", Operator::And}}};
   const x3::symbols<Operator> logicalOrOperator{{{"or", Operator::Or}, {"||", Operator::Or}}};
   const x3::symbols<Operator> logicalNotOperator{{{"not", Operator::Not}, {"!", Operator::Not}}};
+  const x3::symbols<Operator> arithmeticOperator{{{"+", Operator::Add}}};
+  const x3::symbols<Operator> strcatOperator{{{"", Operator::Add}}};
   const x3::symbols<Operator> relationalOperator
   {
     {
@@ -52,7 +58,7 @@ namespace
       {"<", Operator::Less},
       {"<=", Operator::LessEqual},
       {">", Operator::Greater},
-      {">=", Operator::GreaterEqual},
+      {">=", Operator::GreaterEqual}
     }
   };
 
@@ -75,6 +81,7 @@ namespace
   const x3::rule<class logicalOr, BinaryExpression> logicalOr{"or"};
   const x3::rule<class logicalAnd, BinaryExpression> logicalAnd{"and"};
   const x3::rule<class relational, BinaryExpression> relational{"relational"};
+  const x3::rule<class arithmetic, BinaryExpression> arithmetic{"arithmetic"};
   const x3::rule<class logicalNot, UnaryExpression>  logicalNot{"not"};
   const x3::rule<class primary, Expression> primary{"primary"};
   const x3::rule<class variable, VariableExpression> variable{"variable"};
@@ -86,22 +93,24 @@ namespace
   template <typename T> 
   const auto as = [](auto p) { return x3::rule<struct tag, T> {"as"} = p; };
   const auto quoteString = [](char ch) { return ch >> x3::no_skip[*~x3::char_(ch)] >> ch; };
-  const auto keyCharSet = x3::char_(R"( "'$@#%!()&|!=<>)");
+  const auto keyCharSet = x3::char_(R"( "'$@#%!()&|!=~<>+)");
  
   const auto logicalOr_def = logicalAnd >> -as<BinaryExpression::Operation>(logicalOrOperator >> logicalOr);
   const auto logicalAnd_def = relational >> -as<BinaryExpression::Operation>(logicalAndOperator >> logicalAnd);
-  const auto relational_def = primary >> -as<BinaryExpression::Operation>(relationalOperator >> relational);
-  const auto primary_def = logicalNot | variable | constant | ('(' > logicalOr > ')');
+  const auto relational_def = arithmetic >> -as<BinaryExpression::Operation>(relationalOperator >> relational);
+  const auto arithmetic_def = primary >> -as<BinaryExpression::Operation>((arithmeticOperator | x3::attr(Operator::Add)) >> arithmetic);
+ 
+  const auto primary_def =  logicalNot | variable | constant | ('(' > logicalOr > ')');
   const auto logicalNot_def = logicalNotOperator >> logicalOr;
   const auto variable_def = (varType >> identifier)[setupFieldId];
   const auto constant_def = x3::bool_ | x3::int64 | string;
   const auto string_def = quoteString('\'') | quoteString('\"') | x3::lexeme[+(~keyCharSet)];
   const auto identifier_def = x3::lexeme[(x3::alpha | '_') >> *(x3::alnum | '_')];
-
-  BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, logicalNot, primary, variable, constant, string, identifier);
+  
+  BOOST_SPIRIT_DEFINE(logicalOr, logicalAnd, relational, arithmetic, logicalNot, primary, variable, constant, string, identifier);
 }
 
-namespace rs::ml::query
+namespace rs::ml::expr
 {
   Expression parse(const std::string& expr)
   {
@@ -120,7 +129,7 @@ namespace rs::ml::query
     {
       std::ostringstream oss;
       oss << "parsing " << expr << " error from [" << std::string{iter, end} << ']';
-      throw std::runtime_error{oss.str()};
+      RS_THROW_FORMAT(common::Exception, "parsing {} error from [{}]", expr, std::string{iter, end});
     }
   }
 }

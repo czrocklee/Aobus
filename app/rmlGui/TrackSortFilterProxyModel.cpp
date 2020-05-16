@@ -16,8 +16,8 @@
  */
 
 #include "TrackSortFilterProxyModel.h"
-#include <rs/ml/query/TrackFilter.h>
-#include <rs/ml/query/Parser.h>
+#include <rs/ml/expr/Evaluator.h>
+#include <rs/ml/expr/Parser.h>
 //#include <QtConcurrent>
 
 

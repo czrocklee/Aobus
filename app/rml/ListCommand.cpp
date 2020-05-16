@@ -16,8 +16,8 @@
  */
 
 #include "ListCommand.h"
-#include <rs/ml/query/Parser.h>
-#include <rs/ml/query/Serializer.h>
+#include <rs/ml/expr/Parser.h>
+#include <rs/ml/expr/Serializer.h>
 #include <rs/cli/BasicCommand.h>
 
 #include <iomanip>
@@ -56,9 +56,9 @@ namespace
               const std::string& desc,
               std::ostream& os)
   {
-    auto expression = query::parse(expr);
-    query::normalize(expression);
-    std::string exprStr = query::serialize(expression);
+    auto expression = expr::parse(expr);
+    expr::normalize(expression);
+    std::string exprStr = expr::serialize(expression);
     auto txn = ml.writeTransaction();
     auto writer = ml.lists().writer(txn);
 

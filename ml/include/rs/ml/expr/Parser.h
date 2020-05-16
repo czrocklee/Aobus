@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <rs/ml/query/Expression.h>
+#include <rs/ml/expr/Expression.h>
 
-namespace rs::ml::query
+namespace rs::ml::expr
 {
-  std::string serialize(const Expression& expr);
+  Expression parse(const std::string& expr);
 }

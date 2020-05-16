@@ -17,23 +17,10 @@
 
 #pragma once
 
-#include <boost/container/small_vector.hpp>
-#include <boost/variant.hpp>
 #include <variant>
-
-#include <vector>
 #include <string>
 
 namespace rs::ml::core
 {
-//  struct DataValueVector;
-
-//  using DataValueVectorPtr = std::unique_ptr<DataValueVector, void(*)(DataValueVector*)>;
-
-  //using DataValue = std::variant<boost::blank, bool, std::int64_t, std::string_view, DataValueVectorPtr>;
-
-//  struct Tag { inline bool operator==(Tag) const { return false; } };
   using DataValue = std::variant<std::monostate, bool, std::int64_t, std::string_view, std::string>;
-
-//  struct DataValueVector : public boost::container::small_vector<DataValue, 4> { };
 }

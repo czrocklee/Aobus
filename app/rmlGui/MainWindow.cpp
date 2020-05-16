@@ -22,14 +22,14 @@
 #include "TrackSortFilterProxyModel.h"
 
 #include <rs/ml/reactive/ItemList.h>
-#include <rs/ml/query/TrackFilter.h>
-#include <rs/ml/query/Parser.h>
+#include <rs/ml/expr/Evaluator.h>
+#include <rs/ml/expr/Parser.h>
 #include <QtCore/QDebug>
 #include <QtWidgets/QFileDialog>
 #include <QtCore/QSettings>
 #include <filesystem>
 
-//using TrackList = rs::ml::reactive::ItemList<rs::ml::core::MusicLibrary::TrackId, rs::ml::fbs::TrackT>;
+// using TrackList = rs::ml::reactive::ItemList<rs::ml::core::MusicLibrary::TrackId, rs::ml::fbs::TrackT>;
 
 MainWindow::MainWindow()
 {
@@ -138,8 +138,10 @@ void MainWindow::onTrackClicked(const QModelIndex& index)
 void MainWindow::addListItem(const rs::ml::fbs::List* list)
 {
   auto* listItem = new ListItem{QString::fromUtf8(list->name()->c_str()), listWidget};
-  auto expr = rs::ml::query::parse(list->expr()->c_str());
-  listItem->tracks = std::make_unique<TrackFilterList>(_allTracks, rs::ml::query::TrackFilter{std::move(expr)});
+  listItem->tracks =
+    std::make_unique<TrackFilterList>(_allTracks, [expr = rs::ml::expr::parse(list->expr()->c_str())](const auto& tt) {
+      return rs::ml::expr::toBool(rs::ml::expr::evaluate(expr, tt));
+    });
   listItem->trackView = new TrackView{*listItem->tracks, stackedWidget};
   stackedWidget->addWidget(listItem->trackView);
   connect(listItem->trackView->tableView, &QAbstractItemView::clicked, [this](const QModelIndex& index) {

@@ -15,14 +15,14 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <rs/ml/query/Serializer.h>
+#include <rs/ml/expr/Serializer.h>
 #include <rs/common/utility/VariantVisitor.h>
 
 #include <sstream>
 
 namespace
 {
-  using namespace rs::ml::query;
+  using namespace rs::ml::expr;
 
   struct ParenthesisGuard
   {
@@ -96,7 +96,8 @@ namespace
           oss << " = "; break;
         case Operator::Like: 
           oss << " ~ "; break;
-
+        case Operator::Add: 
+          oss << " + "; break;
         default: break;
       }
 
@@ -108,7 +109,7 @@ namespace
   };
 }
 
-namespace rs::ml::query
+namespace rs::ml::expr
 {
   std::string serialize(const Expression& expr)
   {

@@ -17,9 +17,17 @@
 
 #pragma once
 
-#include <rs/ml/query/Expression.h>
+#include <rs/ml/expr/Expression.h>
+#include <rs/ml/core/DataValue.h>
+#include <rs/ml/fbs/Track_generated.h>
 
-namespace rs::ml::query
+namespace rs::ml::expr
 {
-  Expression parse(const std::string& expr);
+  bool toBool(const core::DataValue& val);
+
+  core::DataValue evaluate(const Expression& expr);
+
+  core::DataValue evaluate(const Expression& expr, const fbs::Track* track);
+
+  core::DataValue evaluate(const Expression& expr, const fbs::TrackT& track);
 }

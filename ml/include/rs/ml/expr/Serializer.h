@@ -17,11 +17,9 @@
 
 #pragma once
 
+#include <rs/ml/expr/Expression.h>
 
-#include <rs/ml/fbs/Track_generated.h>
-#
-
-namespace rs::ml::file
+namespace rs::ml::expr
 {
-  fbs::TrackT loadTrack(const std::string& path);
+  std::string serialize(const Expression& expr);
 }

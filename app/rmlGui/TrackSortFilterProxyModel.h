@@ -17,7 +17,7 @@
 
 
 #include <rs/ml/core/MusicLibrary.h>
-#include <rs/ml/query/TrackFilter.h>
+#include <rs/ml/expr/Expression.h>
 #include <QtCore/QSortFilterProxyModel>
 
 class TrackSortFilterProxyModel : public QSortFilterProxyModel
@@ -35,6 +35,6 @@ protected:
   bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
 
 private:
-  std::optional<rs::ml::query::TrackFilter> _filter;
+  std::optional<rs::ml::expr::Expression> _filter;
   std::string _quick;
 };

@@ -21,7 +21,7 @@
  
 #include <boost/config.hpp> 
 
-namespace rs::ml::query
+namespace rs::ml::expr
 {
   class TrackFieldAccessorGenerator : public gen::Generator
   {
@@ -46,7 +46,7 @@ namespace rs::ml::query
              | "#include <rs/common/Exception.h>"
              | "#include <unordered_map>"
              | ""
-             | "namespace rs::ml::query::gen"
+             | "namespace rs::ml::expr::gen"
              | "{";
       
       {
