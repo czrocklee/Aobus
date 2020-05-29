@@ -26,7 +26,6 @@
 
 namespace rs::tag::mp4
 {
-
   class Atom
   {
   public:

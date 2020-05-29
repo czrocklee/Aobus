@@ -27,15 +27,6 @@ namespace rs::tag::mp4
 {
   namespace
   {
-    /*    template<typename T>
-       T load(const void* data, std::size_t offset)
-       {
-         static_assert(std::is_pod_v<T>);
-         T t;
-         std::memcpy(&t, static_cast<const char*>(data) + offset);
-         return t;
-       }
-    */
     const Atom* findNode(const Atom& node, const std::vector<std::string>& path, std::size_t startPos)
     {
       if (startPos >= path.size() || path[startPos] != node.type())

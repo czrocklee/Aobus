@@ -130,8 +130,7 @@ namespace rs::ml::expr
 
   TEST(ParserTest, Equal)
   {
-    EXPECT_EQ("[b{eq}[v{m}Artist],[c{s}hello]]", canonicalize(parse("$Artist~\"Bach\"")));
-    EXPECT_EQ("[b{eq}[v{m}Artist],[c{s}hello]]", canonicalize(parse("$Artist>Bach")));
+    EXPECT_EQ("[b{eq}[v{m}Artist],[c{s}Bach]]", canonicalize(parse("$Artist=Bach")));
     EXPECT_EQ("[b{eq}[v{m}TrackNumber],[c{i}12]]", canonicalize(parse("$TrackNumber=12")));
   }
 

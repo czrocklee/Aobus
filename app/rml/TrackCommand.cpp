@@ -18,9 +18,10 @@
 #include "TrackCommand.h"
 #include <rs/ml/expr/Parser.h>
 #include <rs/ml/expr/Serializer.h>
-#include <rs/ml/expr/TrackFilter.h>
+#include <rs/ml/expr/Evaluator.h>
 #include <rs/cli/BasicCommand.h>
 #include <rs/ml/reactive/ItemList.h>
+#include <rs/ml/expr/Evaluator.h>
 
 #include <iomanip>
 
@@ -28,6 +29,8 @@ namespace
 {
   namespace bpo = boost::program_options;
   using namespace rs::ml;
+
+
 
   void show(core::MusicLibrary& ml, const std::string& filter, std::ostream& os)
   {
@@ -37,21 +40,22 @@ namespace
     auto txn = ml.readTransaction();
 
     if (filter.empty())
-    {
+    {  expr::Expression root = expr::parse("$AlbumArtist/$Album/($TrackNumber + 12)-$Title");
+
       for (auto [id, track]: ml.tracks().reader(txn))
       {
-        os << id << " " << cstr(track->meta()->artist()) << " " << cstr(track->meta()->title()) << std::endl;
+      os << std::setw(5) << id << std::get<std::string>(expr::evaluate(root, track)) << std::endl;
+        //os << id << " " << // << cstr(track->meta()->artist()) << " " << cstr(track->meta()->title()) << std::endl;
       }
     }
     else
     {
       os << filter << std::endl;
       auto expr = rs::ml::expr::parse(filter);
-      rs::ml::expr::TrackFilter filter{std::move(expr)};
       
       for (auto [id, track]: ml.tracks().reader(txn))
       {
-        if (filter(track))
+        if (rs::ml::expr::toBool(rs::ml::expr::evaluate(expr, track)))
         {
           os << id << " " << cstr(track->meta()->artist()) << " " << cstr(track->meta()->title()) << std::endl;
         }
