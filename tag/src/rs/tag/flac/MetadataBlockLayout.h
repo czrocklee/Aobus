@@ -20,6 +20,7 @@
 #include <boost/endian/buffers.hpp>
 #include <array>
 #include <type_traits>
+#include <cstdint>
 
 namespace rs::tag::flac
 {
@@ -46,22 +47,6 @@ namespace rs::tag::flac
 
   static_assert(sizeof(MetadataBlockLayout) == 4);
   static_assert(alignof(MetadataBlockLayout) == 1);
-  static_assert(std::is_pod_v<MetadataBlockLayout>);
-
+  static_assert(std::is_trivial_v<MetadataBlockLayout>);
   
-/*   struct DiskAtomLayout
-  {
-    using FixedSize = std::true_type;
-
-    DataAtomLayout common;
-    boost::endian::big_uint16_buf_t pad1;
-    boost::endian::big_uint16_buf_t discNumber;
-    boost::endian::big_uint16_buf_t totalDiscs;
-
-    static constexpr const char* Type = "disk";
-  };
-
-  static_assert(sizeof(DiskAtomLayout) == 30);
-  static_assert(alignof(DiskAtomLayout) == 1);
-  static_assert(std::is_pod_v<DiskAtomLayout>); */
 }

@@ -17,19 +17,7 @@
 
 #pragma once
 
-#include <rs/tag/File.h>
-
-namespace rs::tag::mp4
+namespace rs::common
 {
-  class File : public rs::tag::File
-  {
-  public:
-    using rs::tag::File::File;
-
-    const Metadata loadMetadata() const override;
-
-    void saveMetadata(const Metadata& metadata) override;
-  };
+  #define RS_EXPORT __attribute__ ((visibility ("default")))
 }
-
-

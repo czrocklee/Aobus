@@ -30,9 +30,9 @@ class Bazel(Generator):
             name = "conan_{dep_name.replace("-", "_")}",
             path = "{dep_cpp_info.cpp_info.rootpath}",
             build_file_content =
-            \"\"\"{self.__gen_build_file_content(dep_cpp_info)}
+                \"\"\"{self.__gen_build_file_content(dep_cpp_info)}
 \"\"\",
-    )
+        )
 """
         return output
 

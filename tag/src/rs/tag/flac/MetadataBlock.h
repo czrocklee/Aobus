@@ -18,10 +18,11 @@
 #pragma once
 
 #include "MetadataBlockLayout.h"
-#include <rs/common/Exception.h>
-
-#include <boost/endian/conversion.hpp>
+#include <boost/asio/buffer.hpp>
 #include <boost/iterator/iterator_facade.hpp>
+#include <vector>
+#include <cassert>
+#include <string_view>
 
 namespace rs::tag::flac
 {
@@ -71,56 +72,15 @@ namespace rs::tag::flac
   public:
     using MetadataBlockView::MetadataBlockView;
 
-    std::vector<std::string_view> comments() const
-    {
-      auto* ptr = static_cast<const char*>(data()) + sizeof(MetadataBlockLayout);
-      auto* end = ptr + size() - sizeof(MetadataBlockLayout);
-      parseString(ptr, end); // vendor string
+    std::vector<std::string_view> comments() const;
+  };
 
-      std::uint32_t count = parseLength(ptr, end);
-      std::vector<std::string_view> comments;
-      comments.reserve(count);
+  class PictureBlockView : public MetadataBlockView
+  {
+  public:
+    using MetadataBlockView::MetadataBlockView;
 
-      for (auto i = 0u; i < count; ++i)
-      {
-        comments.push_back(parseString(ptr, end));
-      }
-
-      if (auto sizeLeft = static_cast<std::size_t>(end - ptr); sizeLeft > 0)
-      {
-        RS_THROW_FORMAT(
-          common::Exception, "invalid flac vorbis_comment block, unexpected content \"{}\"", std::string_view{ptr, sizeLeft});
-      }
-
-      return comments;
-    }
-
-  private:
-    static std::uint32_t parseLength(const char*& ptr, const char* end)
-    {
-      if (ptr + sizeof(std::uint32_t) > end)
-      {
-        RS_THROW(common::Exception, "invalid flac vorbis_comment block, expect length field size > 4");
-      }
-
-      std::uint32_t length = boost::endian::load_little_u32(reinterpret_cast<const unsigned char*>(ptr));
-      ptr += sizeof(std::uint32_t);
-      return length;
-    }
-
-    static std::string_view parseString(const char*& ptr, const char* end)
-    {
-      std::uint32_t length = parseLength(ptr, end);
-
-      if (ptr + length > end)
-      {
-        RS_THROW_FORMAT(common::Exception, "invalid flac vorbis_comment block, expect available string length >= {}", length);
-      }
-
-      const char* start = ptr;
-      ptr += length;
-      return {start, length};
-    }
+    boost::asio::const_buffer blob() const;
   };
 
   class MetadataBlockViewIterator
@@ -131,33 +91,12 @@ namespace rs::tag::flac
 
     MetadataBlockViewIterator() : _view{nullptr}, _sizeLeft{0} {}
 
-    MetadataBlockViewIterator(const void* data, std::size_t size) : _view{data}, _sizeLeft{size}
-    {
-      if (size < StreamInfoBlockSize || _view.type() != MetadataBlockType::StreamInfo)
-      {
-        RS_THROW(common::Exception, "invalid flac metadata blocks, first block must be StreamInfo");
-      }
-    }
+    MetadataBlockViewIterator(const void* data, std::size_t size);
 
   private:
     friend class boost::iterator_core_access;
 
-    void increment()
-    {
-      if (_view.layout<MetadataBlockLayout>().isLastBlock)
-      {
-        _view = MetadataBlockView{nullptr};
-        return;
-      }
-
-      _sizeLeft -= _view.size();
-      _view = MetadataBlockView{static_cast<const char*>(_view.data()) + _view.size()};
-
-      if (_view.size() > _sizeLeft)
-      {
-        RS_THROW(common::Exception, "invalid flac metadata blocks size, exceeding the file boundary");
-      }
-    }
+    void increment();
 
     bool equal(const MetadataBlockViewIterator& other) const { return _view._data == other._view._data; }
 

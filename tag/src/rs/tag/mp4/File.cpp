@@ -16,10 +16,8 @@
  */
 
 #include <rs/tag/mp4/File.h>
-#include <boost/asio/buffer.hpp>
-#include <boost/endian/conversion.hpp>
 #include "Atom.h"
-#include <iostream>
+#include "../Decoder.h"
 #include <map>
 #include <charconv>
 
@@ -44,47 +42,15 @@ namespace rs::tag::mp4
       return found;
     }
 
-    struct StringDecoder
-    {
-      static ValueType decode(const DataAtomLayout& layout)
-      {
-        const char* data = reinterpret_cast<const char*>(&layout + 1);
-        std::size_t size = layout.common.length.value() - sizeof(DataAtomLayout);
-        return std::string{data, size};
-      }
-    };
-
-    struct IntDecoder
-    {
-      static ValueType decode(const DataAtomLayout& layout)
-      {
-        const char* data = reinterpret_cast<const char*>(&layout + 1);
-        std::size_t size = layout.common.length.value() - sizeof(DataAtomLayout);
-        std::int64_t result;
-        auto [_, ec] = std::from_chars(data, data + size, result);
-        return ec == std::errc() ? ValueType{result} : ValueType{};
-      }
-    };
-
-    struct BlobDecoder
-    {
-      static ValueType decode(const DataAtomLayout& layout)
-      {
-        const char* data = reinterpret_cast<const char*>(&layout + 1);
-        std::size_t size = layout.common.length.value() - sizeof(DataAtomLayout);
-        std::vector<char> blob;
-        blob.assign(data, data + size);
-        return {std::move(blob)};
-      }
-    };
-
     template<MetaField Field, typename Decoder>
     struct FieldSetter
     {
       void operator()(Metadata& meta, const Atom& atom)
       {
         const auto& layout = static_cast<const AtomView&>(atom).layout<DataAtomLayout>();
-        meta.set(Field, Decoder::decode(layout));
+        const auto* buffer = reinterpret_cast<const char*>(&layout + 1);
+        std::size_t size = layout.common.length.value() - sizeof(DataAtomLayout);
+        meta.set(Field, Decoder::decode(buffer, size));
       }
     };
 
@@ -108,8 +74,7 @@ namespace rs::tag::mp4
       {"aART", FieldSetter<MetaField::AlbumArtist, StringDecoder>{}},
       {"covr", FieldSetter<MetaField::AlbumArt, BlobDecoder>{}},
       {"grne", FieldSetter<MetaField::Genre, StringDecoder>{}},
-      {"\251day", FieldSetter<MetaField::Year, IntDecoder>{}}
-    };
+      {"\251day", FieldSetter<MetaField::Year, IntDecoder>{}}};
   }
 
   const Metadata File::loadMetadata() const
@@ -126,10 +91,9 @@ namespace rs::tag::mp4
       {
         const auto& data = static_cast<const AtomView&>(atom).layout<DataAtomLayout>();
         std::string value{reinterpret_cast<const char*>(&data + 1), data.common.length.value() - sizeof(DataAtomLayout)};
-        //std::cout << atom.type() <<  "  xxx  " << value << value.size() << std::endl;
         metadata.setCustom(atom.type(), std::move(value));
       }
-      
+
       return true;
     });
 

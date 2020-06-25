@@ -34,5 +34,8 @@
 # Vim Swaps
 *.sw?
 
+# VS Code
+.vscode
+
 # bazel
 bazel-*

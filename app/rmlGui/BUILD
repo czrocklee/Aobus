@@ -42,6 +42,7 @@ qt_cc_library(
     ],
 )
 
+
 cc_binary(
     name = "rmlGui",
     #includes = ["."],
@@ -53,4 +54,5 @@ cc_binary(
     deps = [
         ":rmlQt",
     ],
+    data = ["@qt//:qt_platform_plugins"],
 )

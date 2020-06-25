@@ -39,7 +39,6 @@ def qt_cc_library(
             outs = ["%s_qrc.cpp" % base],
             cmd = "$(location @conan_qt//:rcc) -name %s $(locations %s) -o $@" % (base, qrc),
             tools = ["@conan_qt//:rcc"],
-
         )
         srcs.append(":%s_qrc" % base)
 

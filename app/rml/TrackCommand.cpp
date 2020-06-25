@@ -30,8 +30,6 @@ namespace
   namespace bpo = boost::program_options;
   using namespace rs::ml;
 
-
-
   void show(core::MusicLibrary& ml, const std::string& filter, std::ostream& os)
   {
     std::ostringstream oss;

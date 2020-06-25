@@ -1,5 +1,13 @@
 package(default_visibility = ["//visibility:public"])
 
+filegroup(
+    name = "qt_platform_plugins",
+    srcs = [
+        "plugins/platforms/libqxcb.so",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 cc_import(
     name = "qt_dbus_lib",
     shared_library = "lib/libQt5DBus.so.5",
@@ -20,12 +28,11 @@ cc_import(
 
 cc_library(
     name = "qt_core",
-    hdrs = glob(["QtCore/**"]),
+    hdrs = glob(["include/QtCore/**"]),
     includes = ["include"],
     linkstatic = False,
     deps = [
         ":qt_core_lib",
-        #        "@conan_qt//:headers",
     ],
 )
 
@@ -37,7 +44,7 @@ cc_import(
 
 cc_library(
     name = "qt_gui",
-    hdrs = glob(["QtGui/**"]),
+    hdrs = glob(["include/QtGui/**"]),
     includes = ["include"],
     deps = [
         ":qt_core",
@@ -55,7 +62,7 @@ cc_import(
 
 cc_library(
     name = "qt_widgets",
-    hdrs = glob(["QtWidgets/**"]),
+    hdrs = glob(["include/QtWidgets/**"]),
     includes = ["include"],
     deps = [
         ":qt_gui",

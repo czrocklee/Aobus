@@ -18,11 +18,12 @@
 #pragma once
 
 #include "AtomLayout.h"
-#include <string>
+#include <string_view>
 #include <vector>
 #include <memory>
 #include <functional>
 #include <numeric>
+#include <cassert>
 
 namespace rs::tag::mp4
 {

@@ -20,6 +20,7 @@
 #include <boost/endian/buffers.hpp>
 #include <array>
 #include <type_traits>
+#include <cstdint>
 
 namespace rs::tag::mp4
 {
@@ -33,7 +34,7 @@ namespace rs::tag::mp4
 
   static_assert(sizeof(AtomLayout) == 8);
   static_assert(alignof(AtomLayout) == 1);
-  static_assert(std::is_pod_v<AtomLayout>);
+  static_assert(std::is_trivial_v<AtomLayout>);
 
   struct DataAtomLayout 
   {
@@ -54,7 +55,7 @@ namespace rs::tag::mp4
   
   static_assert(sizeof(DataAtomLayout) == 24);
   static_assert(alignof(DataAtomLayout) == 1);
-  static_assert(std::is_pod_v<DataAtomLayout>);
+  static_assert(std::is_trivial_v<DataAtomLayout>);
 
   struct TrknAtomLayout
   {
@@ -71,7 +72,7 @@ namespace rs::tag::mp4
 
   static_assert(sizeof(TrknAtomLayout) == 32);
   static_assert(alignof(TrknAtomLayout) == 1);
-  static_assert(std::is_pod_v<TrknAtomLayout>);
+  static_assert(std::is_trivial_v<TrknAtomLayout>);
 
   struct DiskAtomLayout
   {
@@ -87,5 +88,5 @@ namespace rs::tag::mp4
 
   static_assert(sizeof(DiskAtomLayout) == 30);
   static_assert(alignof(DiskAtomLayout) == 1);
-  static_assert(std::is_pod_v<DiskAtomLayout>);
+  static_assert(std::is_trivial_v<DiskAtomLayout>);
 }
