@@ -1,4 +1,4 @@
-load("//bazel:rs.bzl", "rs_cc_binary", "rs_cc_library")
+load("//bazel:rs.bzl", "rs_cc_library")
 
 rs_cc_library(
     name = "rs-tag",
