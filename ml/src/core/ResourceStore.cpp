@@ -28,7 +28,9 @@ namespace
     md5::digest_type digest;
     hash.process_bytes(buffer.data(), buffer.size());
     hash.get_digest(digest);
-    return *reinterpret_cast<std::uint64_t*>(digest);
+    std::uint64_t value;
+    std::memcpy(&value, digest, sizeof(std::uint64_t));
+    return value;
   }
 }
 

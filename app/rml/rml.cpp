@@ -22,6 +22,7 @@
 #include <rs/ml/utility/Finder.h>
 #include <rs/tag/mp4/File.h>
 #include <rs/tag/flac/File.h>
+#include <rs/tag/mpeg/File.h>
 
 #include <rs/cli/BasicCommand.h>
 #include <rs/cli/ComboCommand.h>
@@ -44,6 +45,21 @@ namespace
   }
 }
 
+namespace
+{
+  std::unique_ptr<rs::tag::File> createTagFileByExtension(const std::filesystem::path& path)
+  {
+    static const std::unordered_map<std::string, std::function<std::unique_ptr<rs::tag::File>(const std::filesystem::path)>> CreatorMap = 
+    {
+      {".mp3", [](const auto& path) { return std::make_unique<rs::tag::mpeg::File>(path, rs::tag::File::Mode::ReadOnly); }},
+      {".m4a", [](const auto& path) { return std::make_unique<rs::tag::mp4::File>(path, rs::tag::File::Mode::ReadOnly); }},
+      {".flac", [](const auto& path) { return std::make_unique<rs::tag::flac::File>(path, rs::tag::File::Mode::ReadOnly); }}
+    };
+
+    return std::invoke(CreatorMap.at(path.extension()), path);
+  }
+}
+
 int main(int argc, const char* argv[])
 {
   rs::ml::core::MusicLibrary ml{"."};
@@ -55,18 +71,31 @@ int main(int argc, const char* argv[])
 
   root.addCommand<rs::cli::BasicCommand>("init", [](const bpo::variables_map& vm, std::ostream& os) {
     rs::ml::core::MusicLibrary ml{"."};
-    rs::ml::Finder finder{".", {".flac", "*.mp4"}};
-
+   // rs::ml::Finder finder{".", {".flac", "*.mp4"}};
+    rs::ml::Finder finder{".", {".flac", ".mp3", ".m4a"}};
     auto txn = ml.writeTransaction();
     auto trackWriter = ml.tracks().writer(txn);
     auto resourceWriter = ml.resources().writer(txn);
 
     for (const std::filesystem::path& path : finder)
     {
-      rs::tag::flac::File file{path.string(), rs::tag::File::Mode::ReadOnly};
-      auto metadata = file.loadMetadata();
+      auto file = createTagFileByExtension(path);
+      //auto metadata = file->loadMetadata();
+
+      rs::tag::Metadata metadata;
+      
+      try
+      {
+        metadata = file->loadMetadata();
+      }
+      catch (const std::exception& e)
+      {
+        std::cerr << "failed to parse metadata for " << path.filename() << ": " << e.what() << std::endl;
+        continue;
+      }
+      
       std::cout << path << std::endl;
-      //std::cout << metadata.get(rs::tag::MetaField::AlbumArtist).index() << std::endl;
+      //std::cout << std::get<std::string>(metadata.get(rs::tag::MetaField::Title)) << std::endl;
 
       auto [id, track] = trackWriter.create([&metadata, &resourceWriter](::flatbuffers::FlatBufferBuilder& fbb) {
         ::flatbuffers::Offset<rs::ml::fbs::Metadata> metaOffset;

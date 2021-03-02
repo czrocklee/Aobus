@@ -68,7 +68,7 @@ void MainWindow::loadTracks(ReadTransaction& txn)
   {
     auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
 
-    std::cout << cstr(track->meta()->album());
+    //std::cout << cstr(track->meta()->album());
     rs::ml::fbs::TrackT tt;
     track->UnPackTo(&tt);
     _allTracks.insert(id, std::move(tt));

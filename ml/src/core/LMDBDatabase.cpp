@@ -115,7 +115,7 @@ namespace rs::ml::core
   Writer::Writer(lmdb::dbi& dbi, lmdb::txn& txn) : _dbi{dbi}, _txn{txn}, _cursor{lmdb::cursor::open(_txn, _dbi)}
   {
     lmdb::val key;
-    _cursor.get(key, MDB_LAST) ? *key.data<std::uint64_t>() : 0;
+    _lastId = _cursor.get(key, MDB_LAST) ? *key.data<std::uint64_t>() : 0;
   }
 
   namespace

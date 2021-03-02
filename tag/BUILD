@@ -13,6 +13,11 @@ rs_cc_library(
         "src/rs/tag/mp4/Atom.h",
         "src/rs/tag/mp4/AtomLayout.h",
         "src/rs/tag/mp4/File.cpp",
+        "src/rs/tag/mpeg/File.cpp",
+        "src/rs/tag/mpeg/id3v2/Frame.h",
+        "src/rs/tag/mpeg/id3v2/Layout.h",
+        "src/rs/tag/mpeg/id3v2/Reader.cpp",
+        "src/rs/tag/mpeg/id3v2/Reader.h",
     ],
     hdrs = glob(["include/**/*.h"]),
     defines = ["BOOST_ENDIAN_NO_CTORS"],  #suppress warning 'ignoring packed attribute because of unpacked non-POD field'
@@ -21,5 +26,6 @@ rs_cc_library(
     deps = [
         "//common:rs-common",
         "@conan_boost//:headers",
+        "@conan_boost//:boost_locale",
     ],
 )

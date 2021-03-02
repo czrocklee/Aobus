@@ -130,7 +130,7 @@ namespace rs::ml::expr
                 [](std::string_view l, std::string&& r) { return DataValue{l.find(r) != std::string_view::npos}; },
                 [](std::string&& l, std::string_view r) { return DataValue{l.find(r) != std::string_view::npos}; },
                 [](std::string&& l, std::string&& r) { return DataValue{l.find(r) != std::string_view::npos}; },
-                [](auto&&, auto&&) { RS_THROW(common::Exception, "Invalid operand types for operator LIKE"); return DataValue{}; }),
+                [](auto&&, auto&&) { return DataValue{false}; }),
               std::move(lhs),
               evaluate(rhs)); 
           case Operator::Less: return RELATIONAL(lhs, <, rhs);

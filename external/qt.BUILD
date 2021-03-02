@@ -10,19 +10,19 @@ filegroup(
 
 cc_import(
     name = "qt_dbus_lib",
-    shared_library = "lib/libQt5DBus.so.5",
+    shared_library = "lib/libQt6DBus.so",
     visibility = ["//visibility:private"],
 )
 
 cc_import(
     name = "qt_qpa_lib",
-    shared_library = "lib/libQt5XcbQpa.so.5",
+    shared_library = "lib/libQt6XcbQpa.so",
     visibility = ["//visibility:private"],
 )
 
 cc_import(
     name = "qt_core_lib",
-    shared_library = "lib/libQt5Core.so.5",
+    shared_library = "lib/libQt6Core.so",
     visibility = ["//visibility:public"],
 )
 
@@ -38,7 +38,7 @@ cc_library(
 
 cc_import(
     name = "qt_gui_lib",
-    shared_library = "lib/libQt5Gui.so.5",
+    shared_library = "lib/libQt6Gui.so",
     visibility = ["//visibility:private"],
 )
 
@@ -56,7 +56,7 @@ cc_library(
 
 cc_import(
     name = "qt_widgets_lib",
-    shared_library = "lib/libQt5Widgets.so.5",
+    shared_library = "lib/libQt6Widgets.so",
     visibility = ["//visibility:private"],
 )
 

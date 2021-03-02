@@ -24,10 +24,11 @@ class Bazel(Generator):
         return output
 
     def __gen_local_repo(self, dep_name, dep_cpp_info):
+        name_escaped = dep_name.replace("-", "_")
         output = f"""
-    if "conan_{dep_name}" not in native.existing_rules():
+    if "conan_{name_escaped}" not in native.existing_rules():
         native.new_local_repository(
-            name = "conan_{dep_name.replace("-", "_")}",
+            name = "conan_{name_escaped}",
             path = "{dep_cpp_info.cpp_info.rootpath}",
             build_file_content =
                 \"\"\"{self.__gen_build_file_content(dep_cpp_info)}
@@ -102,7 +103,7 @@ cc_library(
             if os.access(binary, os.X_OK):
                 output += f"""
 sh_binary(
-    name = "{Path(binary).stem}",
+    name = "{Path(binary).stem}_bin",
     srcs = ["{os.path.relpath(binary, root_dir)}"],
     visibility = ["//visibility:public"],
 )

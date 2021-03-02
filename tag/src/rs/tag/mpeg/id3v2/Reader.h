@@ -17,19 +17,11 @@
 
 #pragma once
 
-#include <rs/tag/File.h>
+#include <rs/tag/Metadata.h>
 
-namespace rs::tag::mpeg
+namespace rs::tag::mpeg::id3v2
 {
-  class File : public rs::tag::File
-  {
-  public:
-    using rs::tag::File::File;
+  struct HeaderLayout;
 
-    const Metadata loadMetadata() const override;
-
-    void saveMetadata(const Metadata& metadata) override;
-  };
+  Metadata loadFrames(const HeaderLayout& header, const void* buffer, std::size_t size);
 }
-
-

@@ -79,7 +79,8 @@ namespace rs::ml::core
   };
 
   template<typename T>
-  inline std::pair<typename FlatBuffersStore<T>::Id, const T*> FlatBuffersStore<T>::Reader::decode(LMDBDatabase::Reader::Value value)
+  inline std::pair<typename FlatBuffersStore<T>::Id, const T*> FlatBuffersStore<T>::Reader::decode(
+    LMDBDatabase::Reader::Value value)
   {
     return {Id{value.first}, ::flatbuffers::GetRoot<T>(value.second.data())};
   }

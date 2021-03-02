@@ -12,7 +12,7 @@ rs_cc_binary(
         #"@boost//:interprocess",
         #"@boost//:system",
         "//tag:rs-tag",
-                "@qt//:qt_core",
+        "@conan_qt//:Qt6Core",
 
     ],
 )
