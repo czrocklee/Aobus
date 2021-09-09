@@ -26,6 +26,7 @@
 #include <rs/ml/expr/Parser.h>
 #include <QtCore/QDebug>
 #include <QtWidgets/QFileDialog>
+#include <QtWidgets/QInputDialog>
 #include <QtCore/QSettings>
 #include <filesystem>
 
@@ -33,9 +34,9 @@
 
 MainWindow::MainWindow()
 {
-  setupUi(this);
+  _ui.setupUi(this);
 
-  connect(actionOpen, &QAction::triggered, [this] {
+  connect(_ui.actionOpen, &QAction::triggered, [this] {
     if (QString dir = QFileDialog::getExistingDirectory(
           this, tr("Open Directory"), "/home", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
         !dir.isNull())
@@ -66,36 +67,83 @@ void MainWindow::loadTracks(ReadTransaction& txn)
 {
   for (auto [id, track] : _ml->tracks().reader(txn))
   {
-    auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
+    [[maybe_unused]] auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
 
-    //std::cout << cstr(track->meta()->album());
+    // std::cout << cstr(track->meta()->album());
     rs::ml::fbs::TrackT tt;
     track->UnPackTo(&tt);
     _allTracks.insert(id, std::move(tt));
   }
 }
 
+TrackView* MainWindow::createTrackView(TableModel::AbstractTrackList& list)
+{
+  auto* trackView = new TrackView{list, _ui.stackedWidget};
+  _ui.stackedWidget->addWidget(trackView);
+  trackView->setContextMenuPolicy(Qt::CustomContextMenu);
+
+  connect(trackView->tableView, &QAbstractItemView::clicked, [this](const QModelIndex& index) { this->onTrackClicked(index); });
+  connect(trackView, &QTableView::customContextMenuRequested, [trackView, this](QPoint pos) {
+    // Handle global position
+    QPoint globalPos = trackView->mapToGlobal(pos);
+
+    // Create menu and insert some actions
+    QMenu myMenu;
+    myMenu.addAction("Tag", [trackView, this] {
+      bool isOk;
+      if (QString text = QInputDialog::getText(this, tr("New Tag"), tr("Tag:"), QLineEdit::Normal, "", &isOk); isOk)
+      {
+        QItemSelectionModel* select = trackView->tableView->selectionModel();
+        auto txn = _ml->writeTransaction();
+        auto writer = _ml->tracks().writer(txn);
+        for (const QModelIndex& index : select->selectedRows())
+        {
+          using IdTrackPair = std::pair<rs::ml::core::MusicLibrary::TrackId, rs::ml::fbs::TrackT>;
+          QModelIndex sourceIndex = static_cast<QAbstractProxyModel*>(trackView->tableView->model())->mapToSource(index);
+          rs::ml::core::MusicLibrary::TrackId id = static_cast<IdTrackPair*>(sourceIndex.internalPointer())->first;
+          _allTracks.update(id, [id, &writer, &text](auto& track) {
+            track.tags.push_back(text.toStdString());
+            writer.updateT(id, track);
+          });
+        }
+        txn.commit();
+      }
+
+      /*       if (auto* dialog = new NewListDialog{this}; dialog->exec())
+            {
+              auto txn = _ml->writeTransaction();
+              auto writer = _ml->lists().writer(txn);
+              auto [_, list] = writer.createT(dialog->list());
+              addListItem(list);
+              t xn.commit();
+            }*/
+    });
+    /*     myMenu.addAction("Delete", this, SLOT(eraseItem()));
+     */
+    // Show context menu at handling position
+    myMenu.exec(globalPos);
+  });
+  return trackView;
+}
+
 void MainWindow::loadLists(ReadTransaction& txn)
 {
-  auto* all = new ListItem{"all", listWidget};
-  all->trackView = new TrackView{_allTracks, stackedWidget};
-  stackedWidget->addWidget(all->trackView);
-  connect(
-    all->trackView->tableView, &QAbstractItemView::clicked, [this](const QModelIndex& index) { this->onTrackClicked(index); });
+  auto* all = new ListItem{"all", _ui.listWidget};
+  all->trackView = createTrackView(_allTracks);
 
   for (const auto [_, list] : _ml->lists().reader(txn))
   {
     addListItem(list);
   }
 
-  connect(listWidget, &QListWidget::currentItemChanged, [this](auto* curr, auto*) {
-    stackedWidget->setCurrentWidget(dynamic_cast<ListItem*>(curr)->trackView);
+  connect(_ui.listWidget, &QListWidget::currentItemChanged, [this](auto* curr, auto*) {
+    _ui.stackedWidget->setCurrentWidget(dynamic_cast<ListItem*>(curr)->trackView);
   });
 
-  listWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-  connect(listWidget, &QListWidget::customContextMenuRequested, [this](QPoint pos) {
+  _ui.listWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(_ui.listWidget, &QListWidget::customContextMenuRequested, [this](QPoint pos) {
     // Handle global position
-    QPoint globalPos = listWidget->mapToGlobal(pos);
+    QPoint globalPos = _ui.listWidget->mapToGlobal(pos);
 
     // Create menu and insert some actions
     QMenu myMenu;
@@ -125,26 +173,22 @@ void MainWindow::onTrackClicked(const QModelIndex& index)
 
     if (QPixmap pix; pix.loadFromData(static_cast<const uchar*>(data.data()), data.size(), "JPG"))
     {
-      coverArtLabel->setPixmap(pix);
+      _ui.coverArtLabel->setPixmap(pix);
     }
   }
   else
   {
     Q_INIT_RESOURCE(resources);
-    coverArtLabel->setPixmap(QPixmap{":/images/nocoverart.jpg"});
+    _ui.coverArtLabel->setPixmap(QPixmap{":/images/nocoverart.jpg"});
   }
 }
 
 void MainWindow::addListItem(const rs::ml::fbs::List* list)
 {
-  auto* listItem = new ListItem{QString::fromUtf8(list->name()->c_str()), listWidget};
+  auto* listItem = new ListItem{QString::fromUtf8(list->name()->c_str()), _ui.listWidget};
   listItem->tracks =
     std::make_unique<TrackFilterList>(_allTracks, [expr = rs::ml::expr::parse(list->expr()->c_str())](const auto& tt) {
       return rs::ml::expr::toBool(rs::ml::expr::evaluate(expr, tt));
     });
-  listItem->trackView = new TrackView{*listItem->tracks, stackedWidget};
-  stackedWidget->addWidget(listItem->trackView);
-  connect(listItem->trackView->tableView, &QAbstractItemView::clicked, [this](const QModelIndex& index) {
-    this->onTrackClicked(index);
-  });
+  listItem->trackView = createTrackView(*listItem->tracks);
 }

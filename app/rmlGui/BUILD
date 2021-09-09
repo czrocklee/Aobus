@@ -17,6 +17,7 @@ qt_cc_library(
         "TableModel.cpp",
         "TrackSortFilterProxyModel.cpp",
         "TrackView.cpp",
+        "TagsDelegate.cpp",
     ],
     hdrs = [
         "AddTrackDialog.h",
@@ -26,6 +27,7 @@ qt_cc_library(
         "TableModel.h",
         "TrackSortFilterProxyModel.h",
         "TrackView.h",
+        "TagsDelegate.h",
     ],
     copts = ["-std=c++17"],
     includes = ["."],

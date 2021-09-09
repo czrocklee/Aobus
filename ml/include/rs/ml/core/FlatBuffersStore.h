@@ -68,10 +68,18 @@ namespace rs::ml::core
     template<typename Builder>
     std::pair<Id, const T*> create(Builder&& builder);
     std::pair<Id, const T*> createT(const NativeType& tt);
+    const T* updateT(Id id, const NativeType& tt);
+
     bool del(Id id) { return _writer.del(id); }
 
   private:
     explicit Writer(LMDBDatabase::Writer&& writer) : _writer{std::move(writer)} {}
+    
+    struct BuilderGuard
+    {
+      flatbuffers::FlatBufferBuilder& fbb;
+      ~BuilderGuard() { fbb.Clear(); }
+    };
 
     LMDBDatabase::Writer _writer;
     flatbuffers::FlatBufferBuilder _fbb;
@@ -89,12 +97,6 @@ namespace rs::ml::core
   template<typename Builder>
   inline std::pair<typename FlatBuffersStore<T>::Id, const T*> FlatBuffersStore<T>::Writer::create(Builder&& builder)
   {
-    struct BuilderGuard
-    {
-      flatbuffers::FlatBufferBuilder& fbb;
-      ~BuilderGuard() { fbb.Clear(); }
-    };
-
     BuilderGuard guard{_fbb};
     _fbb.Finish(std::invoke(std::forward<Builder>(builder), _fbb));
     auto [id, buffer] = _writer.append(boost::asio::buffer(_fbb.GetBufferPointer(), _fbb.GetSize()));
@@ -105,5 +107,13 @@ namespace rs::ml::core
   inline std::pair<typename FlatBuffersStore<T>::Id, const T*> FlatBuffersStore<T>::Writer::createT(const NativeType& tt)
   {
     return create([&tt](flatbuffers::FlatBufferBuilder& fbb) { return T::Pack(fbb, &tt); });
+  }
+
+  template<typename T>
+  inline const T* FlatBuffersStore<T>::Writer::updateT(Id id, const NativeType& tt)
+  {
+    BuilderGuard guard{_fbb};
+    _fbb.Finish(T::Pack(_fbb, &tt));
+    return ::flatbuffers::GetRoot<T>(_writer.update(id, boost::asio::buffer(_fbb.GetBufferPointer(), _fbb.GetSize())));
   }
 }

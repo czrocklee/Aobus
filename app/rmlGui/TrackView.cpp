@@ -1,5 +1,6 @@
 #include "TrackView.h"
 #include "TrackSortFilterProxyModel.h"
+#include "TagsDelegate.h"
 
 TrackView::TrackView(TableModel::AbstractTrackList& tracks, QWidget* parent) : QWidget(parent)
 {
@@ -9,8 +10,9 @@ TrackView::TrackView(TableModel::AbstractTrackList& tracks, QWidget* parent) : Q
   proxyModel->setSourceModel(model);
   tableView->setModel(proxyModel);
 
-  tableView->resizeColumnsToContents();
   tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+  tableView->resizeColumnsToContents();
+  tableView->setItemDelegateForColumn(3, new TagsDelegate{});
 
   connect(lineEdit, &QLineEdit::textChanged, [proxyModel](const QString& text) { proxyModel->onQuickFilterChanged(text); });
 }

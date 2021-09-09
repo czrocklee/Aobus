@@ -97,8 +97,9 @@ QVariant TableModel::data(const QModelIndex& index, int role) const
       return QString::fromUtf8(track.meta->title.c_str());
     else if (index.column() == 3)
     {
-      auto val = boost::algorithm::join(track.tags, "|");
-      return QString::fromUtf8(val.c_str());
+      QStringList tags;
+      std::transform(track.tags.begin(), track.tags.end(), std::back_inserter(tags), [](const auto& tag) { return QString::fromUtf8(tag.c_str()); });
+      return tags;
     }
   }
 

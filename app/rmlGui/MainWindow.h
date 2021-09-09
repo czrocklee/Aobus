@@ -25,7 +25,7 @@
 #include "TrackView.h"
 #include "app/rmlGui/ui_MainWindow.h"
 
-class MainWindow : public QMainWindow, public Ui::MainWindow
+class MainWindow : public QMainWindow
 {
   Q_OBJECT
 
@@ -49,13 +49,15 @@ private:
     TrackView* trackView;
     std::unique_ptr<TrackFilterList> tracks;
   };
-
+  
+  TrackView* createTrackView(TableModel::AbstractTrackList &list);
   void loadTracks(ReadTransaction& txn);
   void loadLists(ReadTransaction& txn);
 
   void onTrackClicked(const QModelIndex& index);
   void addListItem(const rs::ml::fbs::List* list);
 
+  Ui::MainWindow _ui;
   std::unique_ptr<MusicLibrary> _ml;
   TrackList _allTracks;
 };
