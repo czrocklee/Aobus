@@ -1,0 +1,20 @@
+{
+  "dependencies": [
+    "flatbuffers",
+    "lmdb",
+    "boost-asio",
+    "boost-iterator",
+    "boost-interprocess",
+    "boost-locale",
+    "boost-spirit",
+    "boost-fusion",
+    "boost-uuid",
+    "boost-program-options",
+    "boost-dll",
+    "boost-format",
+    "boost-timer",
+    "qtwayland"
+
+  ],
+  "builtin-baseline": "300239058e33420acd153135b3f6e6b187828992"
+}

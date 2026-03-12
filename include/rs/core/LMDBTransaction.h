@@ -1,0 +1,61 @@
+/*
+ * Copyright (C) <year> <name of author>
+ *
+ * This program is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as published by the Free
+ * Software Foundation, either version 3 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License along with
+ * this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#pragma once
+
+#include "lmdb++.h"
+
+namespace rs::core
+{
+  class LMDBReadTransaction
+  {
+  public:
+    LMDBReadTransaction(const lmdb::env& env) : _txn{lmdb::txn::begin(env, nullptr, MDB_RDONLY)} {}
+
+    LMDBReadTransaction(LMDBReadTransaction&&) = default;
+
+  protected:
+    LMDBReadTransaction(lmdb::txn&& txn) : _txn{std::move(txn)} {}
+
+    lmdb::txn _txn;
+    friend class LMDBDatabase;
+  };
+
+  class LMDBWriteTransaction : public LMDBReadTransaction
+  {
+  public:
+    LMDBWriteTransaction(lmdb::env& env) : LMDBReadTransaction{lmdb::txn::begin(env, nullptr)} {}
+
+    LMDBWriteTransaction(LMDBWriteTransaction& parent)
+      : LMDBReadTransaction{lmdb::txn::begin(parent._txn.env(), parent._txn)}
+    {
+    }
+
+    LMDBWriteTransaction(LMDBWriteTransaction&&) = default;
+
+    ~LMDBWriteTransaction()
+    {
+      if (_toCommit) { _txn.commit(); }
+    }
+
+    void commit() { _toCommit = true; }
+
+  private:
+    friend class LMDBDatabase;
+    bool _toCommit = false;
+  };
+}

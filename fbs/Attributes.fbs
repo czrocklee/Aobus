@@ -1,0 +1,4 @@
+namespace rs.fbs;
+
+attribute "alias";
+

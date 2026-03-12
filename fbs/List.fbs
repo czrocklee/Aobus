@@ -1,0 +1,10 @@
+namespace rs.fbs;
+
+table List
+{
+  name:string;
+  expr:string;
+  desc:string;
+}
+
+root_type List;

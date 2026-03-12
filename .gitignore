@@ -1,0 +1,74 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Vim Swaps
+*.sw?
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build systems
+build/
+build-*/
+out/
+CMakeFiles/
+CMakeCache.txt
+CMakeUserPresets.json
+cmake_install.cmake
+compile_commands.json
+install/
+
+# Vcpkg
+vcpkg_installed/
+
+# Environment and Cache
+.cache/
+.direnv/
+.env
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Qt generated files (usually in build, but for safety)
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+
+# Test results and logs
+*.log
+tests/test_results/
