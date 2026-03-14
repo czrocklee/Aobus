@@ -1,12 +1,26 @@
 cmake_minimum_required(VERSION 3.30)
 #set (VCPKG_TARGET_TRIPLET x64-linux-dynamic)
 
-project(gtk_demo)
+project(rockstudio)
 set (CMAKE_CXX_STANDARD 20)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(lmdb REQUIRED)
 pkg_search_module(MIMALLOC REQUIRED mimalloc)
+pkg_check_modules(GTK4 REQUIRED gtk4)
+pkg_check_modules(GTKMM REQUIRED gtkmm-4.0)
+
+find_program(GLIB_COMPILE_RESOURCES_EXECUTABLE glib-compile-resources REQUIRED)
+
+add_library(GTK4 INTERFACE)
+target_include_directories(GTK4 INTERFACE ${GTK4_INCLUDE_DIRS})
+target_link_libraries(GTK4 INTERFACE ${GTK4_LIBRARIES})
+target_compile_options(GTK4 INTERFACE ${GTK4_CFLAGS_OTHER})
+
+add_library(GTKMM INTERFACE)
+target_include_directories(GTKMM INTERFACE ${GTKMM_INCLUDE_DIRS})
+target_link_libraries(GTKMM INTERFACE ${GTKMM_LIBRARIES})
+target_compile_options(GTKMM INTERFACE ${GTKMM_CFLAGS_OTHER})
 
 find_package(flatbuffers REQUIRED)
 find_package(Boost REQUIRED COMPONENTS headers program_options locale timer filesystem)
@@ -43,8 +57,9 @@ add_custom_command(
 )
 
 
-add_library(rs OBJECT 
-    src/core/LMDBDatabase.cpp 
+add_library(rs OBJECT
+    src/lmdb/Type.cpp
+    src/lmdb/Database.cpp
     src/core/MusicLibrary.cpp 
     src/core/ResourceStore.cpp 
     src/expr/Evaluator.cpp 
@@ -69,6 +84,73 @@ target_link_libraries(rs lmdb Boost::locale)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
+
+# TODO: Migrate to gtkmm4 - see GTKMM4_MIGRATION_PLAN.md
+# add_executable(RockStudioGTK4
+#     app/gtk/main.cpp
+#     app/gtk/MainWindow.cpp
+#     app/gtk/TrackModel.cpp
+#     app/gtk/TrackFilterModel.cpp
+#     app/gtk/List.cpp
+#     app/gtk/TrackView.cpp
+#     app/gtk/AddTrackDialog.cpp
+#     app/gtk/NewListDialog.cpp
+#     app/gtk/CoverArtLabel.cpp
+#     app/gtk/ImportProgressDialog.cpp
+#     app/gtk/TrackListModel.cpp
+#     app/gtk/PlaylistExporter.cpp
+# )
+# target_include_directories(RockStudioGTK4 PRIVATE app/gtk ${GEN})
+# target_link_libraries(RockStudioGTK4 PRIVATE
+#     rs
+#     GTK4
+#     mimalloc
+# )
+
+# TODO: Migrate to gtkmm4 - see GTKMM4_MIGRATION_PLAN.md
+# add_executable(RockStudioGTKmm
+#     app/gtkmm/main.cpp
+#     app/gtkmm/MainWindow.cpp
+#     app/gtkmm/TableModel.cpp
+#     app/gtkmm/TrackSortFilterModel.cpp
+#     app/gtkmm/TrackView.cpp
+#     app/gtkmm/ListView.cpp
+#     app/gtk/TrackModel.cpp
+#     app/gtk/TrackFilterModel.cpp
+#     app/gtkmm/AddTrackDialog.cpp
+#     app/gtkmm/NewListDialog.cpp
+#     app/gtkmm/CoverArtLabel.cpp
+#     app/gtkmm/ImportProgressDialog.cpp
+#     app/gtkmm/ImportWorker.cpp
+#     app/gtkmm/PlaylistExporter.cpp
+# )
+# target_include_directories(RockStudioGTKmm PRIVATE app/gtkmm app/gtk ${GEN})
+# target_link_libraries(RockStudioGTKmm PRIVATE
+#     rs
+#     GTKMM
+#     mimalloc
+# )
+
+# Phase 1-2: gtkmm4 skeleton - see GTKMM4_MIGRATION_PLAN.md
+add_executable(RockStudioGTKmm4
+    app/gtkmm4/main.cpp
+    app/gtkmm4/MainWindow.cpp
+    app/gtkmm4/TrackRow.cpp
+    app/gtkmm4/TrackListAdapter.cpp
+    app/gtkmm4/TrackViewPage.cpp
+    app/gtkmm4/ListRow.cpp
+    app/gtkmm4/ImportWorker.cpp
+    app/gtkmm4/ImportProgressDialog.cpp
+    app/gtkmm4/NewListDialog.cpp
+    app/gtkmm4/TagPromptDialog.cpp
+    app/gtkmm4/PlaylistExporter.cpp
+)
+target_include_directories(RockStudioGTKmm4 PRIVATE app/gtkmm4 ${GEN})
+target_link_libraries(RockStudioGTKmm4 PRIVATE
+    rs
+    GTKMM
+    mimalloc
+)
 
 add_executable(RockStudio
     app/ImportProgressDialog.cpp

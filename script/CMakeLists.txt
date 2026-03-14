@@ -46,8 +46,9 @@ add_custom_command(
 )
 
 
-add_library(rs OBJECT 
-    src/core/LMDBDatabase.cpp 
+add_library(rs OBJECT
+    src/lmdb/Type.cpp
+    src/lmdb/Database.cpp
     src/core/MusicLibrary.cpp 
     src/core/ResourceStore.cpp 
     src/expr/Evaluator.cpp 

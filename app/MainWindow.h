@@ -39,7 +39,7 @@ public:
 private:
   using MusicLibrary = rs::core::MusicLibrary;
   using TrackList = rs::reactive::ItemList<MusicLibrary::TrackId, rs::fbs::TrackT>;
-  using ReadTransaction = rs::core::LMDBReadTransaction;
+  using ReadTransaction = rs::lmdb::ReadTransaction;
 
   TrackView* createTrackView(std::string_view name, TableModel::AbstractTrackList& list);
   void loadTracks(ReadTransaction& txn);

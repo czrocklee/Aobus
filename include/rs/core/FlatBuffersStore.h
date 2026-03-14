@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <rs/core/LMDBDatabase.h>
+#include <rs/lmdb/Database.h>
 #include <rs/utility/TaggedInteger.h>
 #include <boost/iterator/transform_iterator.hpp>
 #include <flatbuffers/buffer.h>
@@ -37,13 +37,13 @@ namespace rs::core
     class Writer;
     using Id = utility::TaggedInteger<std::uint64_t, IdTag<T>>;
 
-    FlatBuffersStore(lmdb::env& env, const std::string& db) : _database{env, db} {}
+    FlatBuffersStore(lmdb::Environment& env, const std::string& db) : _database{env, db} {}
 
-    Reader reader(LMDBReadTransaction& txn) const { return Reader{_database.reader(txn)}; }
-    Writer writer(LMDBWriteTransaction& txn) { return Writer{_database.writer(txn)}; }
+    Reader reader(lmdb::ReadTransaction& txn) const { return Reader{_database.reader(txn)}; }
+    Writer writer(lmdb::WriteTransaction& txn) { return Writer{_database.writer(txn)}; }
 
   private:
-    LMDBDatabase _database;
+    lmdb::Database _database;
   };
 
   template<typename T>
@@ -55,9 +55,9 @@ namespace rs::core
     const T* operator[](Id id) const { return ::flatbuffers::GetRoot<T>(_reader[id].data()); }
 
   private:
-    Reader(LMDBDatabase::Reader&& reader) : _reader{std::move(reader)} {}
-    static std::pair<Id, const T*> decode(LMDBDatabase::Reader::Value value);
-    LMDBDatabase::Reader _reader;
+    Reader(lmdb::Database::Reader&& reader) : _reader{std::move(reader)} {}
+    static std::pair<Id, const T*> decode(lmdb::Database::Reader::Value value);
+    lmdb::Database::Reader _reader;
     friend class FlatBuffersStore;
   };
 
@@ -75,7 +75,7 @@ namespace rs::core
     bool del(Id id) { return _writer.del(id); }
 
   private:
-    explicit Writer(LMDBDatabase::Writer&& writer) : _writer{std::move(writer)} {}
+    explicit Writer(lmdb::Database::Writer&& writer) : _writer{std::move(writer)} {}
 
     struct BuilderGuard
     {
@@ -83,14 +83,14 @@ namespace rs::core
       ~BuilderGuard() { fbb.Clear(); }
     };
 
-    LMDBDatabase::Writer _writer;
+    lmdb::Database::Writer _writer;
     flatbuffers::FlatBufferBuilder _fbb;
     friend class FlatBuffersStore;
   };
 
   template<typename T>
   inline std::pair<typename FlatBuffersStore<T>::Id, const T*> FlatBuffersStore<T>::Reader::decode(
-    LMDBDatabase::Reader::Value value)
+    lmdb::Database::Reader::Value value)
   {
     return {Id{value.first}, ::flatbuffers::GetRoot<T>(value.second.data())};
   }

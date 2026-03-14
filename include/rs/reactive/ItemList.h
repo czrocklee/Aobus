@@ -73,6 +73,24 @@ namespace rs::reactive
       }
     }
 
+    T* find(Id id)
+    {
+      if (auto iter = _items.find(id); iter != _items.end())
+      {
+        return std::addressof(iter->second);
+      }
+      return nullptr;
+    }
+
+    const T* find(Id id) const
+    {
+      if (auto iter = _items.find(id); iter != _items.end())
+      {
+        return std::addressof(iter->second);
+      }
+      return nullptr;
+    }
+
     void clear()
     {
       _observerable.beginClear();

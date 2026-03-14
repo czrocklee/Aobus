@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <rs/core/LMDBDatabase.h>
+#include <rs/lmdb/Database.h>
 #include <boost/iterator/transform_iterator.hpp>
 
 namespace rs::core
@@ -26,16 +26,16 @@ namespace rs::core
   {
   public:
     using Id = std::uint64_t;
-    using Reader = LMDBDatabase::Reader;
+    using Reader = lmdb::Database::Reader;
     class Writer;
 
-    ResourceStore(lmdb::env& env, const std::string& db) : _database{env, db} {}
+    ResourceStore(lmdb::Environment& env, const std::string& db) : _database{env, db} {}
 
-    Reader reader(LMDBReadTransaction& txn) const { return _database.reader(txn); };
-    Writer writer(LMDBWriteTransaction& txn);
+    Reader reader(lmdb::ReadTransaction& txn) const { return _database.reader(txn); };
+    Writer writer(lmdb::WriteTransaction& txn);
 
   private:
-    LMDBDatabase _database;
+    lmdb::Database _database;
   };
 
   class ResourceStore::Writer
@@ -45,12 +45,12 @@ namespace rs::core
     bool del(Id id) { return _writer.del(id); }
 
   private:
-    explicit Writer(LMDBDatabase::Reader&& reader, LMDBDatabase::Writer&& writer) 
-      : _reader{std::move(reader)}, _writer{std::move(writer)} 
+    explicit Writer(lmdb::Database::Reader&& reader, lmdb::Database::Writer&& writer)
+      : _reader{std::move(reader)}, _writer{std::move(writer)}
     {}
 
-    LMDBDatabase::Reader _reader;
-    LMDBDatabase::Writer _writer;
+    lmdb::Database::Reader _reader;
+    lmdb::Database::Writer _writer;
     friend class ResourceStore;
   };
 

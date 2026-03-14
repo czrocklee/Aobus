@@ -17,37 +17,37 @@
 
 #pragma once
 
-#include "lmdb++.h"
+#include <rs/lmdb/Type.h>
 
-namespace rs::core
+namespace rs::lmdb
 {
-  class LMDBReadTransaction
+  class ReadTransaction
   {
   public:
-    LMDBReadTransaction(const lmdb::env& env) : _txn{lmdb::txn::begin(env, nullptr, MDB_RDONLY)} {}
+    ReadTransaction(const lmdb::Environment& env) : _txn{lmdb::Transaction::begin(env, nullptr, MDB_RDONLY)} {}
 
-    LMDBReadTransaction(LMDBReadTransaction&&) = default;
+    ReadTransaction(ReadTransaction&&) = default;
 
   protected:
-    LMDBReadTransaction(lmdb::txn&& txn) : _txn{std::move(txn)} {}
+    ReadTransaction(lmdb::Transaction&& txn) : _txn{std::move(txn)} {}
 
-    lmdb::txn _txn;
-    friend class LMDBDatabase;
+    lmdb::Transaction _txn;
+    friend class Database;
   };
 
-  class LMDBWriteTransaction : public LMDBReadTransaction
+  class WriteTransaction : public ReadTransaction
   {
   public:
-    LMDBWriteTransaction(lmdb::env& env) : LMDBReadTransaction{lmdb::txn::begin(env, nullptr)} {}
+    WriteTransaction(lmdb::Environment& env) : ReadTransaction{lmdb::Transaction::begin(env, nullptr)} {}
 
-    LMDBWriteTransaction(LMDBWriteTransaction& parent)
-      : LMDBReadTransaction{lmdb::txn::begin(parent._txn.env(), parent._txn)}
+    WriteTransaction(WriteTransaction& parent)
+      : ReadTransaction{lmdb::Transaction::begin(parent._txn.environment(), parent._txn.raw())}
     {
     }
 
-    LMDBWriteTransaction(LMDBWriteTransaction&&) = default;
+    WriteTransaction(WriteTransaction&&) = default;
 
-    ~LMDBWriteTransaction()
+    ~WriteTransaction()
     {
       if (_toCommit) { _txn.commit(); }
     }
@@ -55,7 +55,7 @@ namespace rs::core
     void commit() { _toCommit = true; }
 
   private:
-    friend class LMDBDatabase;
+    friend class Database;
     bool _toCommit = false;
   };
 }

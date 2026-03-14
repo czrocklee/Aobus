@@ -1,15 +1,13 @@
 {
-  pkgs ?
-    import (builtins.fetchTarball {
-      # Pinning to the NixOS 25.11 stable channel.
-      url = "https://github.com/NixOS/nixpkgs/archive/refs/heads/nixos-25.11.tar.gz";
-    }) {},
+  pkgs ? import (builtins.fetchTarball {
+    url = "https://github.com/NixOS/nixpkgs/archive/refs/heads/nixos-25.11.tar.gz";
+  }) { },
 }:
 pkgs.mkShell {
   name = "cpp-dev-env";
-  #pkgs.boost.override { enableShared = false; enabledStatic = true; }
   buildInputs = with pkgs; [
     cmake
+    ripgrep
     pkg-config
     ninja
     gcc
@@ -21,12 +19,21 @@ pkgs.mkShell {
     flatbuffers
     mimalloc
 
+    (gtk4.overrideAttrs (old: {
+      dontStrip = true;
+    }))
+    gtkmm4
+    glib.dev
+    gobject-introspection
+    adwaita-icon-theme
+    gsettings-desktop-schemas
+
     kdePackages.qtbase
-    kdePackages.qtwayland
-    kdePackages.qtstyleplugin-kvantum
   ];
   shellHook = ''
-    export QT_QPA_PLATFORM=xcb
+    export PATH="$PATH:/run/current-system/sw/bin"
+    # Include gtk4 schemas - need both desktop schemas and gtk4 schemas
+    export GSETTINGS_SCHEMA_DIR="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.version}/glib-2.0/schemas:${pkgs.gtk4}/share/gsettings-schemas/gtk4-${pkgs.gtk4.version}/glib-2.0/schemas:$GSETTINGS_SCHEMA_DIR"
     echo "Using nixpkgs pinned to NixOS 25.11 (stable release)"
   '';
 }

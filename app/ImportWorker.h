@@ -43,6 +43,6 @@ protected:
 
 private:
   rs::core::MusicLibrary& _ml;
-  std::optional<rs::core::LMDBWriteTransaction> _txn;
+  std::optional<rs::lmdb::WriteTransaction> _txn;
   const std::vector<std::filesystem::path>& _files;
 };

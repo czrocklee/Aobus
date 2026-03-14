@@ -38,7 +38,7 @@ namespace rs::core
 {
   using Writer = ResourceStore::Writer;
 
-  Writer ResourceStore::writer(LMDBWriteTransaction& txn)
+  Writer ResourceStore::writer(lmdb::WriteTransaction& txn)
   {
     return Writer{_database.reader(txn), _database.writer(txn)};
   }

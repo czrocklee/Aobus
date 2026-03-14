@@ -18,7 +18,7 @@
 #pragma once
 
 #include <rs/core/FlatBuffersStore.h>
-#include <rs/core/LMDBTransaction.h>
+#include <rs/lmdb/Transaction.h>
 #include <rs/core/ResourceStore.h>
 #include <rs/fbs/List_generated.h>
 #include <rs/fbs/Track_generated.h>
@@ -37,9 +37,9 @@ namespace rs::core
 
     explicit MusicLibrary(std::filesystem::path rootPath);
 
-    LMDBReadTransaction readTransaction() const { return LMDBReadTransaction{_env}; }
+    rs::lmdb::ReadTransaction readTransaction() const { return rs::lmdb::ReadTransaction{_env}; }
 
-    LMDBWriteTransaction writeTransaction() { return LMDBWriteTransaction{_env}; }
+    rs::lmdb::WriteTransaction writeTransaction() { return rs::lmdb::WriteTransaction{_env}; }
 
     TrackStore& tracks() { return _tracks; }
     const TrackStore& tracks() const { return _tracks; }
@@ -54,7 +54,7 @@ namespace rs::core
 
   private:
     const std::filesystem::path _root;
-    lmdb::env _env;
+    rs::lmdb::Environment _env;
     TrackStore _tracks;
     ListStore _lists;
     ResourceStore _resources;

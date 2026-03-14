@@ -19,11 +19,11 @@
 
 namespace
 {
-  lmdb::env createEnv(const char* path)
+  rs::lmdb::Environment createEnv(const char* path)
   {
-    auto env = lmdb::env::create();
-    env.set_mapsize(1UL * 1024UL * 1024UL * 1024UL);
-    env.set_max_dbs(3);
+    auto env = rs::lmdb::Environment::create();
+    env.setMapSize(1UL * 1024UL * 1024UL * 1024UL);
+    env.setMaxDatabases(3);
     env.open(path, MDB_NOTLS, 0664);
     return env;
   }
