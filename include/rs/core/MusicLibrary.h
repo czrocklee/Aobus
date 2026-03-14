@@ -1,5 +1,5 @@
 /*
- * Copyright (C) <year> <name of author>
+ * Copyright (C) 2025 RockStudio
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the Free
@@ -7,7 +7,7 @@
  * any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
  * more details.
  *
@@ -17,23 +17,21 @@
 
 #pragma once
 
-#include <rs/core/FlatBuffersStore.h>
-#include <rs/lmdb/Transaction.h>
+#include <rs/core/Dictionary.h>
+#include <rs/core/ListStore.h>
 #include <rs/core/ResourceStore.h>
-#include <rs/fbs/List_generated.h>
-#include <rs/fbs/Track_generated.h>
+#include <rs/core/TrackStore.h>
+#include <rs/lmdb/Transaction.h>
 
 #include <filesystem>
+#include <memory>
 
 namespace rs::core
 {
   class MusicLibrary
   {
   public:
-    using TrackStore = FlatBuffersStore<fbs::Track>;
-    using ListStore = FlatBuffersStore<fbs::List>;
-    using TrackId = typename TrackStore::Id;
-    using ListId = typename ListStore::Id;
+    using TrackId = TrackStore::Id;
 
     explicit MusicLibrary(std::filesystem::path rootPath);
 
@@ -50,6 +48,9 @@ namespace rs::core
     ResourceStore& resources() { return _resources; }
     const ResourceStore& resources() const { return _resources; }
 
+    Dictionary& dictionary() { return *_dictionary; }
+    const Dictionary& dictionary() const { return *_dictionary; }
+
     const std::filesystem::path& rootPath() const { return _root; }
 
   private:
@@ -58,5 +59,8 @@ namespace rs::core
     TrackStore _tracks;
     ListStore _lists;
     ResourceStore _resources;
+    std::unique_ptr<Dictionary> _dictionary;
+    lmdb::MDB _dictReadDb;
+    lmdb::MDB _dictWriteDb;
   };
 }

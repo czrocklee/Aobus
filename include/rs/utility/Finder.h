@@ -17,8 +17,9 @@
 
 #pragma once
 
-#include <filesystem>
 #include <boost/iterator/filter_iterator.hpp>
+#include <filesystem>
+#include <functional>
 #include <set>
 
 namespace rs::utility
@@ -27,24 +28,17 @@ namespace rs::utility
   {
   public:
     Finder(const std::string& rootPath, const std::vector<std::string>& extensions)
-      : _rootPath{rootPath},
-        _extensions{extensions.begin(), extensions.end()}
+      : _rootPath{rootPath}
+      , _extensions{extensions.begin(), extensions.end()}
     {
-      _filter = [this](const std::filesystem::path& path)
-      {
+      _filter = [this](const std::filesystem::path& path) {
         return _extensions.find(path.extension().string()) != _extensions.end();
       };
     }
 
-    auto begin() const
-    {
-      return boost::make_filter_iterator(_filter, Iterator{_rootPath});
-    }
+    auto begin() const { return boost::make_filter_iterator(_filter, Iterator{_rootPath}); }
 
-    auto end() const
-    {
-      return boost::make_filter_iterator(_filter, Iterator{});
-    }
+    auto end() const { return boost::make_filter_iterator(_filter, Iterator{}); }
 
   private:
     using Iterator = std::filesystem::recursive_directory_iterator;
@@ -55,4 +49,3 @@ namespace rs::utility
   };
 
 }
-

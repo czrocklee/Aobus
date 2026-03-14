@@ -21,12 +21,17 @@
 
 namespace rs::lmdb
 {
+  class MusicLibrary;
+
   class ReadTransaction
   {
   public:
     ReadTransaction(const lmdb::Environment& env) : _txn{lmdb::Transaction::begin(env, nullptr, MDB_RDONLY)} {}
 
     ReadTransaction(ReadTransaction&&) = default;
+
+    [[nodiscard]] lmdb::Transaction& transaction() noexcept { return _txn; }
+    [[nodiscard]] const lmdb::Transaction& transaction() const noexcept { return _txn; }
 
   protected:
     ReadTransaction(lmdb::Transaction&& txn) : _txn{std::move(txn)} {}
@@ -49,7 +54,10 @@ namespace rs::lmdb
 
     ~WriteTransaction()
     {
-      if (_toCommit) { _txn.commit(); }
+      if (_toCommit)
+      {
+        _txn.commit();
+      }
     }
 
     void commit() { _toCommit = true; }

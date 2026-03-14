@@ -72,7 +72,10 @@ namespace rs::reactive
     template<typename Memfun>
     void forAll(Memfun memfun, Args... args)
     {
-      for (auto* ob : _observers) { std::invoke(memfun, ob, std::forward<Args>(args)...); }
+      for (auto* ob : _observers)
+      {
+        std::invoke(memfun, ob, std::forward<Args>(args)...);
+      }
     }
 
     std::vector<ObserverT*> _observers;

@@ -28,7 +28,8 @@ namespace rs::tag
   }
 
   File::File(const std::filesystem::path& path, Mode mode)
-    : _fileMapping{path.c_str(), fromMode(mode)},
-      _mappedRegion{_fileMapping, fromMode(mode)}
-  {}
+    : _fileMapping{path.c_str(), fromMode(mode)}
+    , _mappedRegion{_fileMapping, fromMode(mode)}
+  {
+  }
 }

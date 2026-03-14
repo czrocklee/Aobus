@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <variant>
 #include <string>
+#include <variant>
 
 namespace rs::core
 {

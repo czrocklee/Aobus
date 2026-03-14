@@ -16,14 +16,14 @@
  */
 
 #include "Reader.h"
-#include "Layout.h"
 #include "Frame.h"
+#include "Layout.h"
 // #include ""
 
+#include <functional>
+#include <iostream>
 #include <map>
 #include <memory>
-#include <iostream>
-#include <functional>
 
 namespace rs::tag::mpeg::id3v2
 {
@@ -111,8 +111,10 @@ namespace rs::tag::mpeg::id3v2
   {
     switch (header.majorVersion)
     {
-      case 2: return loadV22Frames(buffer, size);
-      case 3: return loadV23Frames(buffer, size);
+      case 2:
+        return loadV22Frames(buffer, size);
+      case 3:
+        return loadV23Frames(buffer, size);
       default:
         return {};
     }

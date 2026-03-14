@@ -18,13 +18,13 @@
 #pragma once
 
 #include "FrameLayout.h"
+#include <cassert>
+#include <functional>
+#include <memory>
+#include <numeric>
+#include <optional>
 #include <string_view>
 #include <vector>
-#include <memory>
-#include <functional>
-#include <numeric>
-#include <cassert>
-#include <optional>
 
 namespace rs::tag::mpeg
 {
@@ -34,11 +34,11 @@ namespace rs::tag::mpeg
     FrameView(const void* data, std::size_t size) : _data{data}, _size{size} {}
 
     std::size_t length() const;
-    
+
     bool isValid() const;
 
     const FrameLayout& layout() const { return *static_cast<const FrameLayout*>(_data); }
-   
+
   private:
     const void* _data;
     std::size_t _size;

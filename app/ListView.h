@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <QtWidgets/QListWidget>
-#include "app/ui_TrackView.h"
 #include "TableModel.h"
+#include "app/ui_TrackView.h"
+#include <QtWidgets/QListWidget>
 #include <rs/core/MusicLibrary.h>
 
 class ListView : public QListWidget

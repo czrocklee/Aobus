@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <boost/endian/buffers.hpp>
-#include <type_traits>
-#include <cstdint>
 #include <array>
+#include <boost/endian/buffers.hpp>
+#include <cstdint>
+#include <type_traits>
 
 namespace rs::tag::mpeg::id3v2
 {

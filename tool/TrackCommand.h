@@ -20,11 +20,11 @@
 #include "ComboCommand.h"
 #include <rs/core/MusicLibrary.h>
 
-  class TrackCommand : public ComboCommand
-  {
-  public:
-    explicit TrackCommand(rs::core::MusicLibrary& ml);
+class TrackCommand : public ComboCommand
+{
+public:
+  explicit TrackCommand(rs::core::MusicLibrary& ml);
 
-  private:
-    rs::core::MusicLibrary& _ml;
-  };
+private:
+  rs::core::MusicLibrary& _ml;
+};

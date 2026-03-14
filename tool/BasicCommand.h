@@ -18,8 +18,8 @@
 #pragma once
 
 #include "Command.h"
-#include <boost/program_options.hpp>
 #include <boost/make_shared.hpp>
+#include <boost/program_options.hpp>
 #include <functional>
 
 class BasicCommand : public Command
@@ -58,8 +58,10 @@ public:
     return addOption(name, new boost::program_options::untyped_value{true}, description, positional);
   }
 
-  BasicCommand&
-  addOption(const char* name, const boost::program_options::value_semantic* s, const char* description, int positional = 0)
+  BasicCommand& addOption(const char* name,
+                          const boost::program_options::value_semantic* s,
+                          const char* description,
+                          int positional = 0)
   {
     _optDesc.add(boost::make_shared<boost::program_options::option_description>(name, s, description));
 

@@ -16,8 +16,8 @@
  */
 
 #include "Frame.h"
-#include <cstring>
 #include <array>
+#include <cstring>
 
 namespace rs::tag::mpeg
 {
@@ -72,9 +72,8 @@ namespace rs::tag::mpeg
     }
     else
     {
-      return 
+      return
     } */
-    
   }
 
   bool FrameView::isValid() const { return false; }

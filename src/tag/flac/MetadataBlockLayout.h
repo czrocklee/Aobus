@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <boost/endian/buffers.hpp>
 #include <array>
-#include <type_traits>
+#include <boost/endian/buffers.hpp>
 #include <cstdint>
+#include <type_traits>
 
 namespace rs::tag::flac
 {
@@ -48,5 +48,5 @@ namespace rs::tag::flac
   static_assert(sizeof(MetadataBlockLayout) == 4);
   static_assert(alignof(MetadataBlockLayout) == 1);
   static_assert(std::is_trivial_v<MetadataBlockLayout>);
-  
+
 }

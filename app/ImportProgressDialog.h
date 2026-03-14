@@ -20,7 +20,9 @@
 #include "app/ui_ImportProgressDialog.h"
 #include <rs/fbs/Track_generated.h>
 
-class ImportProgressDialog : public QDialog, public Ui::ImportProgressDialog
+class ImportProgressDialog
+  : public QDialog
+  , public Ui::ImportProgressDialog
 {
   Q_OBJECT
 

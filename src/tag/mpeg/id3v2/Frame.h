@@ -18,9 +18,9 @@
 #pragma once
 
 #include "Layout.h"
-#include <rs/core/Exception.h>
 #include <boost/iterator/iterator_facade.hpp>
 #include <boost/locale/encoding.hpp>
+#include <rs/core/Exception.h>
 #include <string_view>
 
 namespace rs::tag::mpeg::id3v2
@@ -34,7 +34,8 @@ namespace rs::tag::mpeg::id3v2
     {
       if (availableSize > 0 && (availableSize < sizeof(CommonFrameLayout) || availableSize < size()))
       {
-        RS_THROW_FORMAT(core::Exception, "invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
+        RS_THROW_FORMAT(
+          core::Exception, "invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
       }
     }
 
@@ -53,11 +54,13 @@ namespace rs::tag::mpeg::id3v2
     {
       if (sizeof(Layout) > size())
       {
-        RS_THROW_FORMAT(core::Exception, "invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
+        RS_THROW_FORMAT(
+          core::Exception, "invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
       }
 
       return *static_cast<const Layout*>(_data);
     }
+
   protected:
     std::size_t contentSize() const { return frameSize(*static_cast<const CommonFrameLayout*>(_data)); }
 
@@ -91,7 +94,8 @@ namespace rs::tag::mpeg::id3v2
   using V23TextFrameView = TextFrameView<V23TextFrameLayout>;
 
   template<typename ViewT>
-  class FrameViewIterator : public boost::iterator_facade<FrameViewIterator<ViewT>, const ViewT, boost::forward_traversal_tag>
+  class FrameViewIterator
+    : public boost::iterator_facade<FrameViewIterator<ViewT>, const ViewT, boost::forward_traversal_tag>
   {
   public:
     FrameViewIterator() : _view{nullptr, 0}, _sizeLeft{0} {}
@@ -114,7 +118,7 @@ namespace rs::tag::mpeg::id3v2
       {
         _view = ViewT{nullptr, 0};
       }
-      
+
       const char* nextFrame = static_cast<const char*>(_view.data()) + _view.size();
       bool isPadding = (*nextFrame == 0 && std::memcmp(nextFrame, nextFrame + 1, _sizeLeft - 1) == 0);
       _view = isPadding ? ViewT{nullptr, 0} : ViewT{nextFrame, _sizeLeft};

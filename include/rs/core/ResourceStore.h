@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <rs/lmdb/Database.h>
 #include <boost/iterator/transform_iterator.hpp>
+#include <rs/lmdb/Database.h>
 
 namespace rs::core
 {
@@ -46,8 +46,10 @@ namespace rs::core
 
   private:
     explicit Writer(lmdb::Database::Reader&& reader, lmdb::Database::Writer&& writer)
-      : _reader{std::move(reader)}, _writer{std::move(writer)}
-    {}
+      : _reader{std::move(reader)}
+      , _writer{std::move(writer)}
+    {
+    }
 
     lmdb::Database::Reader _reader;
     lmdb::Database::Writer _writer;

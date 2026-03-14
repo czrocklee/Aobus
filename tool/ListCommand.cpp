@@ -1,5 +1,5 @@
 /*
- * Copyright (C) <year> <name of author>
+ * Copyright (C) 2025 RockStudio
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the Free
@@ -7,7 +7,7 @@
  * any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
  * more details.
  *
@@ -16,8 +16,8 @@
  */
 
 #include "ListCommand.h"
-#include <rs/expr/Parser.h>
-#include <rs/expr/Serializer.h>
+#include <rs/core/ListLayout.h>
+
 #include "BasicCommand.h"
 
 #include <iomanip>
@@ -27,70 +27,43 @@ namespace
   namespace bpo = boost::program_options;
   using namespace rs;
 
-  void show(core::MusicLibrary& ml, core::MusicLibrary::ListId id, std::ostream& os)
+  void show(core::MusicLibrary& ml, std::ostream& os)
   {
-    auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
     auto txn = ml.readTransaction();
+    auto reader = ml.lists().reader(txn);
 
-    if (id != core::MusicLibrary::ListId::invalid())
+    for (auto [id, view] : reader)
     {
-      auto reader = ml.lists().reader(txn);
-      const auto* list = reader[id];
-      os << std::setw(5) << id;
-      os << std::setw(10) << cstr(list->name()) << std::setw(50) << cstr(list->expr()) << std::setw(50) << cstr(list->desc())
-         << std::endl;
-      return;
+      os << std::setw(5) << static_cast<std::uint64_t>(id) << " " << view.name() << std::endl;
     }
-
-    for (auto [id, list] : ml.lists().reader(txn))
-    {
-      os << std::setw(5) << id;
-      os << std::setw(10) << cstr(list->name()) << std::setw(50) << cstr(list->expr()) << std::setw(50) << cstr(list->desc())
-         << std::endl;
-    }
-  }
-
-  void
-  create(core::MusicLibrary& ml, const std::string& name, const std::string& expr, const std::string& desc, std::ostream& os)
-  {
-    auto expression = expr::parse(expr);
-    expr::normalize(expression);
-    std::string exprStr = expr::serialize(expression);
-    auto txn = ml.writeTransaction();
-    auto writer = ml.lists().writer(txn);
-
-    auto [id, list] = writer.create([&name, &exprStr, &desc](flatbuffers::FlatBufferBuilder& fbb) {
-      return fbs::CreateListDirect(fbb, name.c_str(), exprStr.c_str(), desc.c_str());
-    });
-
-    txn.commit();
-    show(ml, id, os);
-  }
-
-  void del(core::MusicLibrary& ml, core::MusicLibrary::ListId id, std::ostream&)
-  {
-    auto txn = ml.writeTransaction();
-    ml.lists().writer(txn).del(id);
-    txn.commit();
   }
 }
 
 ListCommand::ListCommand(core::MusicLibrary& ml) : _ml{ml}
 {
-  addCommand<BasicCommand>(
-    "show", [this](const auto& vm, auto& os) { return show(_ml, core::MusicLibrary::ListId::invalid(), os); });
+  addCommand<BasicCommand>("show").setExecutor([this](const auto& vm, auto& os) { return show(_ml, os); });
 
   addCommand<BasicCommand>("create")
     .addOption("name, n", bpo::value<std::string>()->required(), "list name", 1)
     .addOption("filter, f", bpo::value<std::string>()->required(), "track filter expression", 1)
-    .addOption("desc, d", bpo::value<std::string>()->default_value(""), "list description", 1)
-    .setExecutor([this](const bpo::variables_map& vm, std::ostream& os) {
-      create(this->_ml, vm["name"].as<std::string>(), vm["filter"].as<std::string>(), vm["desc"].as<std::string>(), os);
-    });
+    .addOption("desc, d", bpo::value<std::string>(), "list description", 1)
+    .setExecutor([this](const auto& vm, auto& os) { return ""; });
 
   addCommand<BasicCommand>("delete")
     .addOption("id", bpo::value<std::uint64_t>()->required(), "list id", 1)
-    .setExecutor([this](const bpo::variables_map& vm, std::ostream& os) {
-      return del(_ml, core::MusicLibrary::ListId{vm["id"].as<std::uint64_t>()}, os);
+    .setExecutor([this](const auto& vm, auto& os) {
+      auto id = core::ListStore::Id{vm["id"].template as<std::uint64_t>()};
+      auto txn = _ml.writeTransaction();
+      auto writer = _ml.lists().writer(txn);
+      if (writer.del(id))
+      {
+        os << "deleted list: " << static_cast<std::uint64_t>(id) << std::endl;
+        txn.commit();
+      }
+      else
+      {
+        os << "list not found: " << static_cast<std::uint64_t>(id) << std::endl;
+      }
+      return "";
     });
 }

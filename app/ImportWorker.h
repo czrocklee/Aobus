@@ -18,8 +18,8 @@
 #pragma once
 
 #include "app/ui_TrackView.h"
-#include <rs/core/MusicLibrary.h>
 #include <QtCore/QThread>
+#include <rs/core/MusicLibrary.h>
 
 #include <filesystem>
 #include <optional>

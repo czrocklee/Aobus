@@ -15,8 +15,8 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <rs/tag/ValueType.h>
 #include <charconv>
+#include <rs/tag/ValueType.h>
 
 namespace rs::tag
 {

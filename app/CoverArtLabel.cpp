@@ -29,15 +29,9 @@ void CoverArtLabel::setPixmap(const QPixmap& p)
   QLabel::setPixmap(scaledPixmap());
 }
 
-int CoverArtLabel::heightForWidth(int width) const
-{
-  return width;
-}
+int CoverArtLabel::heightForWidth(int width) const { return width; }
 
-QSize CoverArtLabel::sizeHint() const
-{
-  return QSize(width(), width());
-}
+QSize CoverArtLabel::sizeHint() const { return QSize(width(), width()); }
 
 QPixmap CoverArtLabel::scaledPixmap() const
 {

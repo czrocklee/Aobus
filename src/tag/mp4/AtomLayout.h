@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <boost/endian/buffers.hpp>
 #include <array>
-#include <type_traits>
+#include <boost/endian/buffers.hpp>
 #include <cstdint>
+#include <type_traits>
 
 namespace rs::tag::mp4
 {
@@ -36,11 +36,11 @@ namespace rs::tag::mp4
   static_assert(alignof(AtomLayout) == 1);
   static_assert(std::is_trivial_v<AtomLayout>);
 
-  struct DataAtomLayout 
+  struct DataAtomLayout
   {
     using FixedSize = std::false_type;
 
-    enum class Type : std::uint32_t 
+    enum class Type : std::uint32_t
     {
       Text = 1,
       Binary = 0
@@ -52,7 +52,7 @@ namespace rs::tag::mp4
     boost::endian::big_uint32_buf_t type;
     boost::endian::big_uint32_buf_t reserved;
   };
-  
+
   static_assert(sizeof(DataAtomLayout) == 24);
   static_assert(alignof(DataAtomLayout) == 1);
   static_assert(std::is_trivial_v<DataAtomLayout>);

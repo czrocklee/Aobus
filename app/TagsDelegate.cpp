@@ -22,8 +22,8 @@ void TagsDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option, 
 {
   QStringList tags = index.data().value<QStringList>();
   auto frame = option.rect.marginsRemoved(QMargins{3, 3, 3, 3});
-  
-  for (const auto& tag: tags)
+
+  for (const auto& tag : tags)
   {
     painter->save();
     auto textFrame = frame.marginsRemoved(QMargins{5, 5, 5, 5});
@@ -33,15 +33,17 @@ void TagsDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option, 
     frame.adjust(rect.width() + 3, 0, 0, 0);
     qDebug() << frame.topLeft() << frame.bottomLeft();
     painter->drawLine(frame.topLeft(), frame.bottomLeft());
-    
-    //qDebug() << adjustedRect;
-    //adjustedRect.setWidth(rect.width());
-    //painter->drawRect(adjustedRect);
-    //painter->setBackground(QBrush{Qt::GlobalColor::lightGray});
-    //painter->setBackgroundMode(Qt::BGMode::OpaqueMode);
-    //painter->restore();
+
+    // qDebug() << adjustedRect;
+    // adjustedRect.setWidth(rect.width());
+    // painter->drawRect(adjustedRect);
+    // painter->setBackground(QBrush{Qt::GlobalColor::lightGray});
+    // painter->setBackgroundMode(Qt::BGMode::OpaqueMode);
+    // painter->restore();
   }
-  
 }
 
-QSize TagsDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const { return QSize{100, 20}; }
+QSize TagsDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const
+{
+  return QSize{100, 20};
+}

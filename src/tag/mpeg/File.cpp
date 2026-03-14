@@ -15,24 +15,24 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <rs/tag/mpeg/File.h>
-#include "id3v2/Reader.h"
-#include "id3v2/Layout.h"
 #include "../Decoder.h"
-#include <map>
+#include "id3v2/Layout.h"
+#include "id3v2/Reader.h"
 #include <charconv>
+#include <map>
+#include <rs/tag/mpeg/File.h>
 
 namespace rs::tag::mpeg
 {
   namespace
   {
-    
 
   }
 
   const Metadata File::loadMetadata() const
   {
-    if (_mappedRegion.get_size() < sizeof(id3v2::HeaderLayout) || std::memcmp(_mappedRegion.get_address(), "ID3", 3) != 0)
+    if (_mappedRegion.get_size() < sizeof(id3v2::HeaderLayout) ||
+        std::memcmp(_mappedRegion.get_address(), "ID3", 3) != 0)
     {
       return {};
     }

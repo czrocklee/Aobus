@@ -17,8 +17,8 @@
 #pragma once
 
 #include <exception>
-#include <string>
 #include <format>
+#include <string>
 
 namespace rs::core
 {

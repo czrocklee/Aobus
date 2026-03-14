@@ -16,9 +16,9 @@
  */
 
 #include "Atom.h"
-#include <map>
-#include <iostream>
 #include <cassert>
+#include <iostream>
+#include <map>
 
 namespace rs::tag::mp4
 {

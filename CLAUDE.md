@@ -1,0 +1,81 @@
+# CLAUDE.md
+
+Guidance for Claude Code when working in this repository.
+
+## Project Summary
+
+RockStudio is a C++20 music library application with multiple frontends and a shared core:
+
+- Core/data/logic: `include/rs/**`, `src/core/**`, `src/expr/**`, `src/tag/**`
+- Qt frontend: `app/**`
+- GTK frontends: `app/gtk/**`, `app/gtkmm/**`
+- CLI tool: `tool/**` (`rsc` target)
+- FlatBuffers schemas and generated code inputs: `fbs/**`
+
+Build is CMake-based and relies on generated artifacts (FlatBuffers + custom generator).
+
+## Environment Setup
+
+Dependencies are managed with Nix. Start work inside the project shell before running build, test, or search commands:
+
+```bash
+nix-shell
+```
+
+Core tools expected to be available in the shell include `cmake`, `pkg-config`, `gcc`, `flatbuffers`, Qt/GTK dependencies, and `rg` (ripgrep).
+
+## Working Rules
+
+1. Make the smallest correct change that solves the request.
+2. Do not rewrite unrelated files or refactor broadly unless asked.
+3. Preserve existing coding style in each touched file.
+4. Prefer `rg`/`rg --files` for search.
+5. If assumptions are required, state them clearly in your final response.
+
+## Build And Validation
+
+All builds should be run from within `nix-shell`:
+
+```bash
+nix-shell --run "cmake --preset linux-debug"
+nix-shell --run "cmake --build --preset linux-debug"
+```
+
+Or use direct commands:
+
+```bash
+nix-shell --run "cmake -S . -B /tmp/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+nix-shell --run "cmake --build /tmp/build"
+```
+
+The project builds into `/tmp/build` (as configured in CMakePresets.json).
+
+When changing core logic (`src/core`, `src/expr`, `src/tag`, `include/rs`), always run at least a debug build before finishing.
+
+## Generated Code Notes
+
+This project generates code from FlatBuffers schemas.
+
+- Schemas: `fbs/*.fbs`
+- Generated output directory: `${build_dir}/gen`
+
+Do not hand-edit generated files in build output. Instead edit sources (`fbs/**` or generator sources in `src/gen/**`).
+
+## Editing Guidance
+
+1. For parser/evaluator work, keep `src/expr/*` and `include/rs/expr/*` in sync.
+2. For tag parsing, keep format-specific code constrained to:
+   - MP3/MPEG: `src/tag/mpeg/**`
+   - FLAC: `src/tag/flac/**`
+   - MP4: `src/tag/mp4/**`
+3. For UI changes, avoid mixing Qt and GTK concerns in one patch unless required.
+4. Avoid changing public headers in `include/rs/**` unless needed for the feature or fix.
+
+## Response Expectations
+
+In final responses:
+
+1. List exactly which files were changed.
+2. Explain user-visible or behavior-impacting changes first.
+3. Report what validation was run (or why not run).
+4. Call out risks, assumptions, or follow-up tasks when relevant.

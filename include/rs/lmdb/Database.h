@@ -17,11 +17,11 @@
 
 #pragma once
 
+#include <boost/asio/buffer.hpp>
+#include <boost/iterator/iterator_facade.hpp>
+#include <memory>
 #include <rs/lmdb/Transaction.h>
 #include <rs/lmdb/Type.h>
-#include <boost/iterator/iterator_facade.hpp>
-#include <boost/asio/buffer.hpp>
-#include <memory>
 
 namespace rs::lmdb
 {

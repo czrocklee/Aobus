@@ -31,5 +31,3 @@ namespace rs::tag::mpeg
     void saveMetadata(const Metadata& metadata) override;
   };
 }
-
-

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) <year> <name of author>
+ * Copyright (C) 2025 RockStudio
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the Free
@@ -7,7 +7,7 @@
  * any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
  * more details.
  *
@@ -16,12 +16,11 @@
  */
 
 #include "TrackCommand.h"
-#include <rs/expr/Parser.h>
-#include <rs/expr/Serializer.h>
-#include <rs/expr/Evaluator.h>
 #include "BasicCommand.h"
-#include <rs/reactive/ItemList.h>
-#include <rs/expr/Evaluator.h>
+#include <rs/core/TrackLayout.h>
+#include <rs/expr/ExecutionPlan.h>
+#include <rs/expr/Parser.h>
+#include <rs/expr/PlanEvaluator.h>
 
 #include <iomanip>
 
@@ -32,62 +31,32 @@ namespace
 
   void show(core::MusicLibrary& ml, const std::string& filter, std::ostream& os)
   {
-    std::ostringstream oss;
-
-    auto cstr = [](const flatbuffers::String* str) { return str == nullptr ? "nil" : str->str(); };
     auto txn = ml.readTransaction();
+    auto reader = ml.tracks().reader(txn);
 
     if (filter.empty())
     {
-      expr::Expression root = expr::parse("$AlbumArtist/$Album/($TrackNumber + 12)-$Title");
-
-      for (auto [id, track] : ml.tracks().reader(txn))
+      for (auto [id, view] : reader)
       {
-        os << std::setw(5) << id << std::get<std::string>(expr::evaluate(root, track)) << std::endl;
-        // os << id << " " << // << cstr(track->meta()->artist()) << " " << cstr(track->meta()->title()) << std::endl;
+        os << std::setw(5) << id << " " << view.metadata().title() << std::endl;
       }
     }
     else
     {
-      os << filter << std::endl;
       auto expr = rs::expr::parse(filter);
+      rs::expr::QueryCompiler compiler;
+      auto plan = compiler.compile(expr);
+      rs::expr::PlanEvaluator evaluator;
 
-      for (auto [id, track] : ml.tracks().reader(txn))
+      for (auto [id, view] : reader)
       {
-        if (rs::expr::toBool(rs::expr::evaluate(expr, track)))
+        if (evaluator.evaluateFull(plan, view))
         {
-          os << id << " " << cstr(track->meta()->artist()) << " " << cstr(track->meta()->title()) << std::endl;
+          os << std::setw(5) << id << " " << view.metadata().title() << std::endl;
         }
       }
     }
   }
-
-  /*
-
-  std::string create(core::MusicLibrary& ml, const std::string& name, const std::string& expr, const std::string& desc)
-  {
-    auto expression = query::parse(expr);
-    query::normalize(expression);
-    std::string exprStr = query::serialize(expression);
-    auto txn = ml.lists().writeTransaction();
-
-    auto id = txn.create([&name, &exprStr, &desc] (flatbuffers::FlatBufferBuilder& fbb)
-    {
-      return core::CreateTrackDirect(fbb, name.c_str(), exprStr.c_str(), desc.c_str());
-    });
-
-    txn.commit();
-    return list(ml, id);
-  }
-
-  std::string del(core::MusicLibrary& ml, core::TrackId id)
-  {
-    auto txn = ml.lists().writeTransaction();
-    txn.del(id);
-    txn.commit();
-    return {};
-  }*/
-
 }
 
 TrackCommand::TrackCommand(core::MusicLibrary& ml) : _ml{ml}
@@ -100,10 +69,7 @@ TrackCommand::TrackCommand(core::MusicLibrary& ml) : _ml{ml}
     .addOption("name, n", bpo::value<std::string>()->required(), "list name", 1)
     .addOption("filter, f", bpo::value<std::string>()->required(), "track filter expression", 1)
     .addOption("desc, d", bpo::value<std::string>(), "list description", 1)
-    .setExecutor([this](const auto& vm, auto& os) {
-      return "";
-    }); // create(this->_ml, vm["name"].as<std::string>(), vm["filter"].as<std::string>(), vm["desc"].as<std::string>()); });
+    .setExecutor([this](const auto& vm, auto& os) { return ""; });
 
   addCommand<BasicCommand>("delete").addOption("id", bpo::value<std::uint64_t>()->required(), "list id", 1);
-  //     .setExecutor([this](const auto& vm) { del(_ml, vm["id"].as<core::TrackId>()); });
 }

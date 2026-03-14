@@ -1,8 +1,8 @@
 #pragma once
 
 #include <rs/core/MusicLibrary.h>
-#include <rs/reactive/AbstractItemList.h>
 #include <rs/fbs/Track_generated.h>
+#include <rs/reactive/AbstractItemList.h>
 
 using MusicLibrary = rs::core::MusicLibrary;
 using TrackId = MusicLibrary::TrackId;

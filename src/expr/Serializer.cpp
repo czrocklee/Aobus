@@ -26,8 +26,16 @@ namespace
 
   struct ParenthesisGuard
   {
-    ParenthesisGuard(std::ostringstream& oss, bool apply) : oss{oss}, apply{apply} { if (apply) oss << "("; }
-    ~ParenthesisGuard() { if (apply) oss << ")"; }
+    ParenthesisGuard(std::ostringstream& oss, bool apply) : oss{oss}, apply{apply}
+    {
+      if (apply)
+        oss << "(";
+    }
+    ~ParenthesisGuard()
+    {
+      if (apply)
+        oss << ")";
+    }
     std::ostringstream& oss;
     bool apply;
   };
@@ -46,7 +54,7 @@ namespace
         serializeBinary(binary.operation->op, binary.operation->operand);
       }
     }
-    
+
     void operator()(const UnaryExpression& unary)
     {
       oss << "not ";
@@ -57,11 +65,15 @@ namespace
     {
       switch (variable.type)
       {
-        case VariableType::Metadata: oss << '$'; break;
-        case VariableType::Property: oss << '@'; break;
-        case VariableType::Tag: oss << '#'; break;
-        case VariableType::Custom: oss << '%'; break;
-        default : break;
+        case VariableType::Metadata:
+          oss << '$';
+          break;
+        case VariableType::Property:
+          oss << '@';
+          break;
+        case VariableType::Tag:
+          oss << '#';
+          break;
       }
 
       oss << variable.name;
@@ -69,36 +81,46 @@ namespace
 
     void operator()(const ConstantExpression& constant)
     {
-      std::visit(rs::utility::makeVisitor(
-        [](boost::blank) { },
-        [this](bool val) { oss << (val ? "true" : "false"); },
-        [this](std::int64_t val) { oss << val; },
-        [this](std::string_view val) { oss << "\"" << val << "\""; }), constant);
+      std::visit(rs::utility::makeVisitor([](boost::blank) {},
+                                          [this](bool val) { oss << (val ? "true" : "false"); },
+                                          [this](std::int64_t val) { oss << val; },
+                                          [this](std::string_view val) { oss << "\"" << val << "\""; }),
+                 constant);
     }
 
     void serializeBinary(Operator op, const Expression& rhs)
     {
       switch (op)
       {
-        case Operator::And: 
-          oss << " and "; break;
-        case Operator::Or: 
-          oss << " or "; break;
+        case Operator::And:
+          oss << " and ";
+          break;
+        case Operator::Or:
+          oss << " or ";
+          break;
         case Operator::Less:
-          oss << " < "; break;
+          oss << " < ";
+          break;
         case Operator::LessEqual:
-          oss << " <= "; break;
+          oss << " <= ";
+          break;
         case Operator::Greater:
-          oss << " > "; break;
+          oss << " > ";
+          break;
         case Operator::GreaterEqual:
-          oss << " >= "; break;
-        case Operator::Equal: 
-          oss << " = "; break;
-        case Operator::Like: 
-          oss << " ~ "; break;
-        case Operator::Add: 
-          oss << " + "; break;
-        default: break;
+          oss << " >= ";
+          break;
+        case Operator::Equal:
+          oss << " = ";
+          break;
+        case Operator::Like:
+          oss << " ~ ";
+          break;
+        case Operator::Add:
+          oss << " + ";
+          break;
+        default:
+          break;
       }
 
       boost::apply_visitor(*this, rhs);
@@ -118,4 +140,3 @@ namespace rs::expr
     return serializer.oss.str();
   }
 }
-

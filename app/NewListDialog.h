@@ -20,7 +20,9 @@
 #include "app/ui_NewListDialog.h"
 #include <rs/fbs/List_generated.h>
 
-class NewListDialog : public QDialog, public Ui::NewListDialog
+class NewListDialog
+  : public QDialog
+  , public Ui::NewListDialog
 {
   Q_OBJECT
 

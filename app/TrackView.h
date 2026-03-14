@@ -17,10 +17,12 @@
 
 #pragma once
 
-#include "app/ui_TrackView.h"
 #include "TableModel.h"
+#include "app/ui_TrackView.h"
 
-class TrackView : public QWidget, public Ui_TrackView
+class TrackView
+  : public QWidget
+  , public Ui_TrackView
 {
   Q_OBJECT
 

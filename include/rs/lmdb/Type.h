@@ -45,7 +45,10 @@ namespace rs::lmdb
 
   inline void throwOnError(const char* origin, int code)
   {
-    if (code != MDB_SUCCESS) { Error::raise(origin, code); }
+    if (code != MDB_SUCCESS)
+    {
+      Error::raise(origin, code);
+    }
   }
 
   class Environment
@@ -144,7 +147,10 @@ namespace rs::lmdb
     ~Cursor() noexcept;
 
     [[nodiscard]] MDB_cursor* raw() const noexcept { return _handle; }
-    [[nodiscard]] MDB_txn* transaction() const noexcept { return _handle != nullptr ? mdb_cursor_txn(_handle) : nullptr; }
+    [[nodiscard]] MDB_txn* transaction() const noexcept
+    {
+      return _handle != nullptr ? mdb_cursor_txn(_handle) : nullptr;
+    }
     [[nodiscard]] MDB_dbi database() const noexcept { return _handle != nullptr ? mdb_cursor_dbi(_handle) : 0; }
     [[nodiscard]] bool valid() const noexcept { return _handle != nullptr; }
 
@@ -174,7 +180,10 @@ namespace rs::lmdb
   template<typename T>
   [[nodiscard]] T read(std::string_view bytes)
   {
-    if (bytes.size() != sizeof(T)) { Error::raise("lmdb::read", MDB_BAD_VALSIZE); }
+    if (bytes.size() != sizeof(T))
+    {
+      Error::raise("lmdb::read", MDB_BAD_VALSIZE);
+    }
     T value;
     std::memcpy(&value, bytes.data(), sizeof(T));
     return value;

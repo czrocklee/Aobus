@@ -19,8 +19,8 @@
 
 #include <rs/core/MusicLibrary.h>
 #include <rs/fbs/List_generated.h>
-#include <rs/reactive/ItemList.h>
 #include <rs/reactive/ItemFilterList.h>
+#include <rs/reactive/ItemList.h>
 
 #include "TrackView.h"
 #include "app/ui_MainWindow.h"
@@ -35,7 +35,7 @@ public:
   void openMusicLibrary(const std::string& root);
 
   void importMusicLibrary(const std::string& root);
-  
+
 private:
   using MusicLibrary = rs::core::MusicLibrary;
   using TrackList = rs::reactive::ItemList<MusicLibrary::TrackId, rs::fbs::TrackT>;

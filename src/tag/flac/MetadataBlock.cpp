@@ -16,8 +16,8 @@
  */
 
 #include "MetadataBlock.h"
-#include <rs/core/Exception.h>
 #include <boost/endian/conversion.hpp>
+#include <rs/core/Exception.h>
 #include <string_view>
 
 namespace rs::tag::flac
@@ -47,7 +47,8 @@ namespace rs::tag::flac
 
       if (ptr + length > end)
       {
-        RS_THROW_FORMAT(core::Exception, "invalid flac block, expect available field length {} >= {}", end - ptr, length);
+        RS_THROW_FORMAT(
+          core::Exception, "invalid flac block, expect available field length {} >= {}", end - ptr, length);
       }
 
       const char* start = ptr;
@@ -73,8 +74,9 @@ namespace rs::tag::flac
 
     if (auto sizeLeft = static_cast<std::size_t>(end - ptr); sizeLeft > 0)
     {
-      RS_THROW_FORMAT(
-        core::Exception, "invalid flac vorbis_comment block, unexpected content \"{}\"", std::string_view{ptr, sizeLeft});
+      RS_THROW_FORMAT(core::Exception,
+                      "invalid flac vorbis_comment block, unexpected content \"{}\"",
+                      std::string_view{ptr, sizeLeft});
     }
 
     return comments;
@@ -92,7 +94,9 @@ namespace rs::tag::flac
     return boost::asio::buffer(blob.data(), blob.size());
   }
 
-  MetadataBlockViewIterator::MetadataBlockViewIterator(const void* data, std::size_t size) : _view{data}, _sizeLeft{size}
+  MetadataBlockViewIterator::MetadataBlockViewIterator(const void* data, std::size_t size)
+    : _view{data}
+    , _sizeLeft{size}
   {
     if (size < StreamInfoBlockSize || _view.type() != MetadataBlockType::StreamInfo)
     {

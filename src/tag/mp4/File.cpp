@@ -15,11 +15,11 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <rs/tag/mp4/File.h>
-#include "Atom.h"
 #include "../Decoder.h"
-#include <map>
+#include "Atom.h"
 #include <charconv>
+#include <map>
+#include <rs/tag/mp4/File.h>
 
 namespace rs::tag::mp4
 {
@@ -90,7 +90,8 @@ namespace rs::tag::mp4
       else
       {
         const auto& data = static_cast<const AtomView&>(atom).layout<DataAtomLayout>();
-        std::string value{reinterpret_cast<const char*>(&data + 1), data.common.length.value() - sizeof(DataAtomLayout)};
+        std::string value{
+          reinterpret_cast<const char*>(&data + 1), data.common.length.value() - sizeof(DataAtomLayout)};
         metadata.setCustom(atom.type(), std::move(value));
       }
 

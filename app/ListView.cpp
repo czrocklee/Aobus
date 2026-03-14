@@ -1,5 +1,5 @@
-#include "TrackView.h"
 #include "TrackSortFilterProxyModel.h"
+#include "TrackView.h"
 
 TrackView::TrackView(TableModel::TrackList& tracks, QWidget* parent) : QWidget(parent)
 {
@@ -8,11 +8,11 @@ TrackView::TrackView(TableModel::TrackList& tracks, QWidget* parent) : QWidget(p
   auto* proxyModel = new TrackSortFilterProxyModel{this};
   proxyModel->setSourceModel(model);
   tableView->setModel(proxyModel);
-xx
-  tableView->resizeColumnsToContents();
+  xx tableView->resizeColumnsToContents();
   tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
 
-  connect(lineEdit, &QLineEdit::textChanged, [proxyModel](const QString& text) { proxyModel->onQuickFilterChanged(text); });
+  connect(
+    lineEdit, &QLineEdit::textChanged, [proxyModel](const QString& text) { proxyModel->onQuickFilterChanged(text); });
 }
 
 TrackView::~TrackView() {}

@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <type_traits>
 #include <cstdint>
+#include <type_traits>
 
 namespace rs::tag::mpeg
 {

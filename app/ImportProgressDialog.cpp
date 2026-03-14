@@ -19,8 +19,7 @@
 
 #include <QtWidgets/QPushButton>
 
-ImportProgressDialog::ImportProgressDialog(int maxItems, QWidget *parent, Qt::WindowFlags f)
-  : QDialog{parent, f}
+ImportProgressDialog::ImportProgressDialog(int maxItems, QWidget* parent, Qt::WindowFlags f) : QDialog{parent, f}
 {
   setupUi(this);
   buttonBox->button(QDialogButtonBox::StandardButton::Ok)->setEnabled(false);
@@ -33,7 +32,4 @@ void ImportProgressDialog::onNewTrack(QString path, int itemIndex)
   progressBar->setValue(itemIndex);
 }
 
-void ImportProgressDialog::ready()
-{
-  buttonBox->button(QDialogButtonBox::StandardButton::Ok)->setEnabled(true);
-}
+void ImportProgressDialog::ready() { buttonBox->button(QDialogButtonBox::StandardButton::Ok)->setEnabled(true); }

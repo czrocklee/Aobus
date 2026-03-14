@@ -18,13 +18,13 @@
 // #include <lib/rs/expr/TrackFieldAccessorGenerator.h>
 
 #include "Generator.h"
+#include <boost/dll/import.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/program_options.hpp>
 #include <flatbuffers/reflection.h>
 #include <flatbuffers/util.h>
-#include <boost/program_options.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/dll/import.hpp>
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 
 namespace
@@ -90,7 +90,7 @@ int main(int argc, char* argv[])
   std::vector<std::string> generatorPaths;
 
   bpo::options_description desc("Allowed options");
-  
+
   // clang-format off
   desc.add_options()
     ("help", "produce help message")
@@ -118,9 +118,8 @@ int main(int argc, char* argv[])
 
     std::string metaSchemaContent, propSchemaContent;
 
-    if (
-      !::flatbuffers::LoadFile(metaSchemaPath.c_str(), true, &metaSchemaContent) ||
-      !::flatbuffers::LoadFile(propSchemaPath.c_str(), true, &propSchemaContent))
+    if (!::flatbuffers::LoadFile(metaSchemaPath.c_str(), true, &metaSchemaContent) ||
+        !::flatbuffers::LoadFile(propSchemaPath.c_str(), true, &propSchemaContent))
     {
       std::cerr << "Failed to load schema file content" << std::endl;
       return 1;
@@ -128,9 +127,8 @@ int main(int argc, char* argv[])
 
     Fields metaFields, propFields;
 
-    if (
-      !getFields(metaSchemaContent, "rs.fbs.Metadata", metaFields) ||
-      !getFields(propSchemaContent, "rs.fbs.Properties", propFields))
+    if (!getFields(metaSchemaContent, "rs.fbs.Metadata", metaFields) ||
+        !getFields(propSchemaContent, "rs.fbs.Properties", propFields))
     {
       std::cerr << "Failed to get fields info from schema" << std::endl;
       return 1;

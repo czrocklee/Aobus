@@ -27,7 +27,7 @@ namespace rs::gen
   class IndentingOStreambuf : public std::streambuf
   {
   public:
-    explicit IndentingOStreambuf(std::streambuf& buf) : _buf{buf} { }
+    explicit IndentingOStreambuf(std::streambuf& buf) : _buf{buf} {}
 
     std::streambuf& buf() { return _buf; }
 
@@ -56,22 +56,12 @@ namespace rs::gen
   class IndentingOStreambuf::Guard
   {
   public:
-    Guard(IndentingOStreambuf& isb, int level) 
-      : _isb{isb}, _level{level} 
-    { 
-      _isb.adjust(_level); 
-    } 
+    Guard(IndentingOStreambuf& isb, int level) : _isb{isb}, _level{level} { _isb.adjust(_level); }
 
-    ~Guard() 
-    { 
-      _isb.adjust(-1 * _level); 
-    }
+    ~Guard() { _isb.adjust(-1 * _level); }
 
   private:
     IndentingOStreambuf& _isb;
     int _level;
   };
 }
-
-
-

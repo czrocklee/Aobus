@@ -18,11 +18,11 @@
 #pragma once
 
 #include "Command.h"
+#include <boost/algorithm/string/join.hpp>
+#include <boost/program_options.hpp>
+#include <boost/range/adaptor/map.hpp>
 #include <map>
 #include <memory>
-#include <boost/program_options.hpp>
-#include <boost/algorithm/string/join.hpp>
-#include <boost/range/adaptor/map.hpp>
 
 // #include <boost/range/adaptor/transformed.hpp>
 
@@ -62,8 +62,8 @@ public:
     else
     {
       std::ostringstream oss;
-      oss << "invalid sub command " << command << "available: [" << boost::algorithm::join(boost::adaptors::keys(_cmds), "|")
-          << "]";
+      oss << "invalid sub command " << command << "available: ["
+          << boost::algorithm::join(boost::adaptors::keys(_cmds), "|") << "]";
       throw std::invalid_argument(oss.str());
     }
   }

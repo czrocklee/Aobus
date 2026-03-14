@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <vector>
 #include <ostream>
 #include <system_error>
+#include <vector>
 
 class Command
 {

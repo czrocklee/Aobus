@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <rs/tag/Metadata.h>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <filesystem>
+#include <rs/tag/Metadata.h>
 
 namespace rs::tag
 {

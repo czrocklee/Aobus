@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <QtWidgets/QLabel>
 #include <QtGui/QPixmap>
 #include <QtGui/QResizeEvent>
+#include <QtWidgets/QLabel>
 
 class CoverArtLabel : public QLabel
 {

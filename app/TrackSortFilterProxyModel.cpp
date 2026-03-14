@@ -18,8 +18,7 @@
 #include "TrackSortFilterProxyModel.h"
 #include <rs/expr/Evaluator.h>
 #include <rs/expr/Parser.h>
-//#include <QtConcurrent>
-
+// #include <QtConcurrent>
 
 /* TrackSortFilterProxyModel::TrackSortFilterProxyModel(rs::core::MusicLibrary& ml, QObject *parent)
   : QSortFilterProxyModel{parent}, _ml{ml}
@@ -35,7 +34,7 @@ void TrackSortFilterProxyModel::onQuickFilterChanged(const QString& filter)
     _filter.reset();
   }
   else
- 
+
     _filter = rs::query::TrackFilter{filter.toStdString()};
   }*/
 
@@ -47,7 +46,7 @@ void TrackSortFilterProxyModel::onQuickFilterChanged(const QString& filter)
 #endif
 }
 #include <QtCore/QDebug>
-bool TrackSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
+bool TrackSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const
 {
   if (_quick.empty())
   {
@@ -59,8 +58,7 @@ bool TrackSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelInde
     using IdTrackPair = std::pair<rs::core::MusicLibrary::TrackId, rs::fbs::TrackT>;
     const auto& track = static_cast<IdTrackPair*>(index.internalPointer())->second;
 
-    return track.meta->title.find(_quick) != std::string::npos || 
-           track.meta->album.find(_quick) != std::string::npos ||
+    return track.meta->title.find(_quick) != std::string::npos || track.meta->album.find(_quick) != std::string::npos ||
            track.meta->artist.find(_quick) != std::string::npos;
     /*
     auto index = sourceModel()->index(sourceRow, 0);

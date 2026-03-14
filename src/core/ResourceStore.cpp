@@ -15,9 +15,9 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <rs/core/ResourceStore.h>
 #include <boost/uuid/detail/md5.hpp>
 #include <iostream>
+#include <rs/core/ResourceStore.h>
 
 namespace
 {
@@ -45,21 +45,21 @@ namespace rs::core
 
   std::uint64_t Writer::create(boost::asio::const_buffer buffer)
   {
-    for (std::uint64_t key = hash(buffer); true ;++key) // linear probe
+    for (std::uint64_t key = hash(buffer); true; ++key) // linear probe
     {
-      //std::cout << key << std::endl;
+      // std::cout << key << std::endl;
       boost::asio::const_buffer value = _writer[key];
-      std::cout << key << " : " << value.data() << std::endl; 
+      std::cout << key << " : " << value.data() << std::endl;
 
       if (value.data() == nullptr)
       {
         _writer.create(key, buffer);
-        //void* data = _writer.create(key, buffer.size());
+        // void* data = _writer.create(key, buffer.size());
         /*   */
-        //std::memcpy(data, buffer.data(), buffer.size());
+        // std::memcpy(data, buffer.data(), buffer.size());
         return key;
       }
-      
+
       if (value.size() == buffer.size() && std::memcmp(value.data(), buffer.data(), buffer.size()) == 0)
       {
         return key;

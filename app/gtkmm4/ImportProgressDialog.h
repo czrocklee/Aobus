@@ -1,0 +1,21 @@
+#pragma once
+
+#include <gtkmm.h>
+
+class ImportProgressDialog : public Gtk::Dialog
+{
+public:
+  ImportProgressDialog(int maxItems, Gtk::Window& parent);
+  virtual ~ImportProgressDialog();
+
+  void onNewTrack(const std::string& path, int itemIndex);
+  void ready();
+
+private:
+  void setupUi(int maxItems);
+
+  Gtk::Label _progressLabel;
+  Gtk::ProgressBar _progressBar;
+  Gtk::Button _okButton;
+  int _maxItems;
+};

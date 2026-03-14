@@ -35,7 +35,11 @@ namespace rs::gen
     IndentGuard indent(int level = 1) { return {_isb, level}; }
 
     template<typename... Args>
-    CppCodeWriter& operator()(const char* format, Args&&... args) { _os << (boost::format{format} % ... % args) << '\n'; return *this; }
+    CppCodeWriter& operator()(const char* format, Args&&... args)
+    {
+      _os << (boost::format{format} % ... % args) << '\n';
+      return *this;
+    }
 
     std::ostream& os() { return _os; }
 
@@ -45,14 +49,14 @@ namespace rs::gen
   };
 
   template<typename T>
-  inline CppCodeWriter& operator << (CppCodeWriter& writer, T&& t)
+  inline CppCodeWriter& operator<<(CppCodeWriter& writer, T&& t)
   {
     writer.os() << std::forward<T>(t);
     return writer;
   }
 
   template<typename T>
-  inline CppCodeWriter& operator | (CppCodeWriter& writer, T&& t)
+  inline CppCodeWriter& operator|(CppCodeWriter& writer, T&& t)
   {
     writer << std::forward<T>(t) << '\n';
     return writer;

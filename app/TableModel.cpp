@@ -16,8 +16,8 @@
  */
 
 #include "TableModel.h"
-#include <boost/algorithm/string/join.hpp>
 #include <QtCore/QDebug>
+#include <boost/algorithm/string/join.hpp>
 #include <iostream>
 
 // using IdTrackPair = TableModel::IdTrackPair;
@@ -84,7 +84,8 @@ public:
 TableModel::TableModel(QObject* parent) : QAbstractTableModel(parent) {}
 
 TableModel::TableModel(AbstractTrackList& tracks, QObject* parent)
-  : QAbstractTableModel{parent}, d_ptr{std::make_unique<TableModelPrivate>(this, tracks)}
+  : QAbstractTableModel{parent}
+  , d_ptr{std::make_unique<TableModelPrivate>(this, tracks)}
 {
 }
 
@@ -104,9 +105,11 @@ int TableModel::columnCount(const QModelIndex& parent) const
 
 QVariant TableModel::data(const QModelIndex& index, int role) const
 {
-  if (!index.isValid()) return QVariant();
+  if (!index.isValid())
+    return QVariant();
 
-  if (index.row() >= static_cast<int>(d_ptr->tracks.size()) || index.row() < 0) return QVariant();
+  if (index.row() >= static_cast<int>(d_ptr->tracks.size()) || index.row() < 0)
+    return QVariant();
 
   const auto& track = d_ptr->tracks.at(AbstractTrackList::Index{static_cast<std::size_t>(index.row())}).second;
 
@@ -128,25 +131,34 @@ QVariant TableModel::data(const QModelIndex& index, int role) const
     }
   }
 
-  if (role == Qt::UserRole && !track.rsrc.empty()) { return static_cast<qulonglong>(track.rsrc.front()->id); }
+  if (role == Qt::UserRole && !track.rsrc.empty())
+  {
+    return static_cast<qulonglong>(track.rsrc.front()->id);
+  }
 
   return {};
 }
 
 QVariant TableModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
-  if (role != Qt::DisplayRole) return QVariant();
+  if (role != Qt::DisplayRole)
+    return QVariant();
 
   if (orientation == Qt::Horizontal)
   {
     switch (section)
     {
-      case 0: return tr("Artist");
-      case 1: return tr("Album");
-      case 2: return tr("Title");
-      case 3: return tr("Tags");
+      case 0:
+        return tr("Artist");
+      case 1:
+        return tr("Album");
+      case 2:
+        return tr("Title");
+      case 3:
+        return tr("Tags");
 
-      default: return QVariant();
+      default:
+        return QVariant();
     }
   }
   return QVariant();
@@ -216,7 +228,8 @@ bool TableModel::setData(const QModelIndex& index, const QVariant& value, int ro
 //! [7]
 Qt::ItemFlags TableModel::flags(const QModelIndex& index) const
 {
-  if (!index.isValid()) return Qt::ItemIsEnabled;
+  if (!index.isValid())
+    return Qt::ItemIsEnabled;
 
   return QAbstractTableModel::flags(index) | Qt::ItemIsEditable;
 }

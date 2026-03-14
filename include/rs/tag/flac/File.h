@@ -31,5 +31,3 @@ namespace rs::tag::flac
     void saveMetadata(const Metadata& metadata) override;
   };
 }
-
-

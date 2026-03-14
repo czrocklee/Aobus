@@ -18,12 +18,12 @@
 #pragma once
 
 #include "AtomLayout.h"
+#include <cassert>
+#include <functional>
+#include <memory>
+#include <numeric>
 #include <string_view>
 #include <vector>
-#include <memory>
-#include <functional>
-#include <numeric>
-#include <cassert>
 
 namespace rs::tag::mp4
 {
@@ -118,7 +118,8 @@ namespace rs::tag::mp4
   public:
     std::uint32_t length() const override
     {
-      return std::accumulate(_children.begin(), _children.end(), 0, [](auto size, auto& ptr) { return size + ptr->length(); });
+      return std::accumulate(
+        _children.begin(), _children.end(), 0, [](auto size, auto& ptr) { return size + ptr->length(); });
     }
 
     std::string_view type() const override { return "root"; }

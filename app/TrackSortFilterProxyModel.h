@@ -15,10 +15,9 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
+#include <QtCore/QSortFilterProxyModel>
 #include <rs/core/MusicLibrary.h>
 #include <rs/expr/Expression.h>
-#include <QtCore/QSortFilterProxyModel>
 
 class TrackSortFilterProxyModel : public QSortFilterProxyModel
 {
@@ -26,13 +25,13 @@ class TrackSortFilterProxyModel : public QSortFilterProxyModel
 
 public:
   using QSortFilterProxyModel::QSortFilterProxyModel;
-  //TrackSortFilterProxyModel(rs::core::MusicLibrary& ml, QObject *parent = 0);
+  // TrackSortFilterProxyModel(rs::core::MusicLibrary& ml, QObject *parent = 0);
 
 public slots:
   void onQuickFilterChanged(const QString& filter);
 
 protected:
-  bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
+  bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
 
 private:
   std::optional<rs::expr::Expression> _filter;

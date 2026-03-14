@@ -18,6 +18,7 @@ pkgs.mkShell {
     lmdb.dev
     flatbuffers
     mimalloc
+    catch2
 
     (gtk4.overrideAttrs (old: {
       dontStrip = true;

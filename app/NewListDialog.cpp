@@ -17,11 +17,7 @@
 
 #include "NewListDialog.h"
 
-NewListDialog::NewListDialog(QWidget *parent, Qt::WindowFlags f)
-  : QDialog{parent, f}
-{
-  setupUi(this);
-}
+NewListDialog::NewListDialog(QWidget* parent, Qt::WindowFlags f) : QDialog{parent, f} { setupUi(this); }
 
 rs::fbs::ListT NewListDialog::list() const
 {
