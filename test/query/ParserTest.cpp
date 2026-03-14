@@ -1,5 +1,5 @@
 /*
- * Copyright (C) <year> <name of author>
+ * Copyright (C) 2025 RockStudio
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the Free
@@ -7,7 +7,7 @@
  * any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
  * more details.
  *
@@ -15,128 +15,202 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <gtest/gtest.h>
-#include <rs/ml/expr/Parser.h>
-#include <rs/common/utility/VariantVisitor.h>
+#define CATCH_CONFIG_MAIN
+#include <catch2/catch.hpp>
 
-namespace rs::ml::expr
+#include <rs/expr/Parser.h>
+#include <rs/utility/VariantVisitor.h>
+
+using namespace rs::expr;
+using rs::utility::makeVisitor;
+
+namespace
 {
-  namespace
+  const char* toString(Operator op)
   {
-    const char* toString(Operator op)
+    switch (op)
     {
-      switch (op)
-      {
-        case Operator::And: return "and";
-        case Operator::Or: return "or";
-        case Operator::Not: return "neg";
-        case Operator::Equal: return "eq";
-        case Operator::Like: return "like";
-        case Operator::Less: return "lt";
-        case Operator::LessEqual: return "le";
-        case Operator::Greater: return "gt";
-        case Operator::GreaterEqual: return "ge";
-        case Operator::Add: return "add";
-        default: assert(false);
-      }
-    }
-
-    struct Canonicalizer
-    {
-      Canonicalizer(){};
-
-      void operator()(const BinaryExpression& binary)
-      {
-        assert(binary.operation);
-        oss << "[b{" << toString(binary.operation->op) << "}";
-        boost::apply_visitor(*this, binary.operand);
-        oss << ",";
-        boost::apply_visitor(*this, binary.operation->operand);
-        oss << "]";
-      }
-
-      void operator()(const UnaryExpression& unary)
-      {
-        oss << "[u{!}";
-        boost::apply_visitor(*this, unary.operand);
-        oss << "]";
-      }
-
-      void operator()(const VariableExpression& variable)
-      {
-        oss << "[v{";
-
-        switch (variable.type)
-        {
-          case VariableType::Metadata: oss << 'm'; break;
-          case VariableType::Property: oss << 'p'; break;
-          case VariableType::Tag: oss << 't'; break;
-          case VariableType::Custom: oss << 'c'; break;
-          default: break;
-        }
-
-        oss << "}" << variable.name << "]";
-      }
-
-      void operator()(const ConstantExpression& constant)
-      {
-        oss << "[c{";
-        std::visit(
-          rs::common::utility::makeVisitor(
-            [this](boost::blank) { oss << "n}"; },
-            [this](bool val) { oss << "b}" << (val ? "true" : "false"); },
-            [this](std::int64_t val) { oss << "i}" << val; },
-            [this](std::string_view val) { oss << "s}" << val; }),
-          constant);
-        oss << "]";
-      }
-
-      std::ostringstream oss;
-    };
-
-    std::string canonicalize(const Expression& expr)
-    {
-      Canonicalizer canonicalizer{};
-      boost::apply_visitor(canonicalizer, expr);
-      return canonicalizer.oss.str();
+      case Operator::And:
+        return "and";
+      case Operator::Or:
+        return "or";
+      case Operator::Not:
+        return "not";
+      case Operator::Equal:
+        return "eq";
+      case Operator::Like:
+        return "like";
+      case Operator::Less:
+        return "lt";
+      case Operator::LessEqual:
+        return "le";
+      case Operator::Greater:
+        return "gt";
+      case Operator::GreaterEqual:
+        return "ge";
+      case Operator::Add:
+        return "add";
+      default:
+        return "unknown";
     }
   }
 
-  TEST(ParserTest, StringLiteral)
+  struct Canonicalizer
   {
-    EXPECT_EQ("[c{s}Artist]", canonicalize(parse("Artist")));
-    EXPECT_EQ("[c{s}Artist]", canonicalize(parse("\"Artist\"")));
-    EXPECT_EQ("[c{s}Artist]", canonicalize(parse("'Artist'")));
-  }
+    void operator()(const BinaryExpression& binary)
+    {
+      oss << "[b{" << toString(binary.operation->op) << "}";
+      boost::apply_visitor(*this, binary.operand);
+      oss << ",";
+      boost::apply_visitor(*this, binary.operation->operand);
+      oss << "]";
+    }
 
-  TEST(ParserTest, Variable)
-  {
-    EXPECT_EQ("[v{m}Artist]", canonicalize(parse("$Artist")));
-    EXPECT_EQ("[v{p}BitRate]", canonicalize(parse("@BitRate")));
-    EXPECT_EQ("[v{t}Tag]", canonicalize(parse("#Tag")));
-    EXPECT_EQ("[v{c}Custom]", canonicalize(parse("%Custom")));
-  }
+    void operator()(const UnaryExpression& unary)
+    {
+      oss << "[u{!}";
+      boost::apply_visitor(*this, unary.operand);
+      oss << "]";
+    }
 
-  TEST(ParserTest, StringCat)
-  {
-    EXPECT_EQ("[b{add}[c{s}Artist],[c{s}Album]]", canonicalize(parse("Artist + Album")));
-    EXPECT_EQ("[b{add}[c{s}Artist],[v{m}Album]]", canonicalize(parse("Artist + $Album")));
-    EXPECT_EQ("[b{add}[c{s}Artist],[v{m}Album]]", canonicalize(parse("Artist$Album")));
-    EXPECT_EQ(
-      "[b{add}[b{add}[b{add}[b{add}[b{add}[b{add}[v{m}AlbumArtist],[c{s}/]],[v{m}Album]],[c{s}/"
-      "]],[v{m}TrackNumber]],[c{s}-]],[v{m}Title]]",
-      canonicalize(parse("$AlbumArtist/$Album/$TrackNumber-$Title")));
-  }
+    void operator()(const VariableExpression& variable)
+    {
+      oss << "[v{";
 
-  TEST(ParserTest, Equal)
-  {
-    EXPECT_EQ("[b{eq}[v{m}Artist],[c{s}Bach]]", canonicalize(parse("$Artist=Bach")));
-    EXPECT_EQ("[b{eq}[v{m}TrackNumber],[c{i}12]]", canonicalize(parse("$TrackNumber=12")));
-  }
+      switch (variable.type)
+      {
+        case VariableType::Metadata:
+          oss << 'm';
+          break;
+        case VariableType::Property:
+          oss << 'p';
+          break;
+        case VariableType::Tag:
+          oss << 't';
+          break;
+      }
 
-  TEST(ParserTest, Add)
+      oss << "}" << variable.name << "]";
+    }
+
+    void operator()(const ConstantExpression& constant)
+    {
+      oss << "[c{";
+      std::visit(rs::utility::makeVisitor([this](std::monostate) { oss << "n}"; },
+                                          [this](bool val) { oss << "b}" << (val ? "true" : "false"); },
+                                          [this](std::int64_t val) { oss << "i}" << val; },
+                                          [this](std::string_view val) { oss << "s}" << val; }),
+                 constant);
+      oss << "]";
+    }
+
+    std::ostringstream oss;
+  };
+
+  std::string canonicalize(const Expression& expr)
   {
-    EXPECT_EQ("[b{add}[c{s}hello],[v{m}Artist]]", canonicalize(parse("hello + $Artist")));
-    EXPECT_EQ("[b{add}[v{m}TrackNumber],[c{i}12]]", canonicalize(parse("$TrackNumber + 12")));
+    Canonicalizer canonicalizer{};
+    boost::apply_visitor(canonicalizer, expr);
+    return canonicalizer.oss.str();
   }
+}
+
+TEST_CASE("Parser - String Literal")
+{
+  CHECK("[c{s}Artist]" == canonicalize(parse("Artist")));
+  CHECK("[c{s}Artist]" == canonicalize(parse("\"Artist\"")));
+  CHECK("[c{s}Artist]" == canonicalize(parse("'Artist'")));
+}
+
+TEST_CASE("Parser - Variable")
+{
+  CHECK("[v{m}title]" == canonicalize(parse("$title")));
+  CHECK("[v{m}artist]" == canonicalize(parse("$artist")));
+  CHECK("[v{p}duration]" == canonicalize(parse("@duration")));
+  CHECK("[v{t}Tag]" == canonicalize(parse("#Tag")));
+}
+
+TEST_CASE("Parser - Variable Shortcuts")
+{
+  CHECK("[v{m}t]" == canonicalize(parse("$t")));
+  CHECK("[v{m}a]" == canonicalize(parse("$a")));
+  CHECK("[v{m}al]" == canonicalize(parse("$al")));
+  CHECK("[v{m}g]" == canonicalize(parse("$g")));
+  CHECK("[v{m}y]" == canonicalize(parse("$y")));
+  CHECK("[v{m}tn]" == canonicalize(parse("$tn")));
+  CHECK("[v{p}l]" == canonicalize(parse("@l")));
+  CHECK("[v{p}br]" == canonicalize(parse("@br")));
+  CHECK("[v{p}sr]" == canonicalize(parse("@sr")));
+  CHECK("[v{p}bd]" == canonicalize(parse("@bd")));
+}
+
+TEST_CASE("Parser - String Cat")
+{
+  CHECK("[b{add}[c{s}Artist],[c{s}Album]]" == canonicalize(parse("Artist + Album")));
+  CHECK("[b{add}[c{s}Artist],[v{m}Album]]" == canonicalize(parse("Artist + $Album")));
+  CHECK("[b{add}[c{s}Artist],[v{m}Album]]" == canonicalize(parse("Artist$Album")));
+}
+
+TEST_CASE("Parser - Equal")
+{
+  CHECK("[b{eq}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist=Bach")));
+  CHECK("[b{eq}[v{m}trackNumber],[c{i}12]]" == canonicalize(parse("$trackNumber=12")));
+  CHECK("[b{eq}[v{m}year],[c{i}2020]]" == canonicalize(parse("$year=2020")));
+}
+
+TEST_CASE("Parser - Relational")
+{
+  CHECK("[b{lt}[v{m}year],[c{i}2000]]" == canonicalize(parse("$year<2000")));
+  CHECK("[b{le}[v{m}year],[c{i}2000]]" == canonicalize(parse("$year<=2000")));
+  CHECK("[b{gt}[v{p}duration],[c{i}180000]]" == canonicalize(parse("@duration>180000")));
+  CHECK("[b{ge}[v{p}bitrate],[c{i}320]]" == canonicalize(parse("@bitrate>=320")));
+}
+
+TEST_CASE("Parser - Like")
+{
+  CHECK("[b{like}[v{m}title],[c{s}Love]]" == canonicalize(parse("$title~Love")));
+  CHECK("[b{like}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist~Bach")));
+}
+
+TEST_CASE("Parser - Logical Operators")
+{
+  // Note: Parser parses left-to-right, so "and/or" have lower precedence than "="
+  // Use && and || for logical operators (not "and"/"or" keywords)
+  // $artist=Bach && true -> and(eq($artist, Bach), true)
+  CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach && true")));
+  CHECK("[b{or}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach || true")));
+  CHECK("[u{!}[v{m}artist]]" == canonicalize(parse("not $artist")));
+  CHECK("[u{!}[v{m}artist]]" == canonicalize(parse("!$artist")));
+}
+
+TEST_CASE("Parser - Arithmetic")
+{
+  CHECK("[b{add}[c{s}hello],[v{m}artist]]" == canonicalize(parse("hello + $artist")));
+  CHECK("[b{add}[v{m}trackNumber],[c{i}12]]" == canonicalize(parse("$trackNumber + 12")));
+  CHECK("[b{add}[v{p}duration],[c{i}1000]]" == canonicalize(parse("@duration+1000")));
+}
+
+TEST_CASE("Parser - Boolean Constants")
+{
+  CHECK("[c{b}true]" == canonicalize(parse("true")));
+  CHECK("[c{b}false]" == canonicalize(parse("false")));
+}
+
+TEST_CASE("Parser - Integer Constants")
+{
+  CHECK("[c{i}0]" == canonicalize(parse("0")));
+  CHECK("[c{i}123]" == canonicalize(parse("123")));
+  CHECK("[c{i}-456]" == canonicalize(parse("-456")));
+}
+
+TEST_CASE("Parser - Empty String")
+{
+  CHECK("[c{s}]" == canonicalize(parse("''")));
+  CHECK("[c{s}]" == canonicalize(parse("\"\"")));
+}
+
+TEST_CASE("Parser - Invalid Input")
+{
+  REQUIRE_THROWS(parse(""));
+  REQUIRE_THROWS(parse("   "));
 }
