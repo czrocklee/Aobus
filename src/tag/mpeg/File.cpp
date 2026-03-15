@@ -24,12 +24,7 @@
 
 namespace rs::tag::mpeg
 {
-  namespace
-  {
-
-  }
-
-  const Metadata File::loadMetadata() const
+  Metadata File::loadMetadata() const
   {
     if (_mappedRegion.get_size() < sizeof(id3v2::HeaderLayout) ||
         std::memcmp(_mappedRegion.get_address(), "ID3", 3) != 0)

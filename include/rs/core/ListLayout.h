@@ -27,7 +27,7 @@ namespace rs::core
    * ListHeader - POD struct for binary list storage.
    * Total size: 32 bytes with 8-byte alignment.
    */
-  struct ListHeader
+  struct ListHeader final
   {
     // 8-byte section
     std::uint64_t trackIdsOffset; // Offset to track IDs array in payload
@@ -48,16 +48,21 @@ namespace rs::core
     std::uint8_t flags; // List flags (0 = manual, 1 = smart)
 
     // Padding
+    // NOLINTNEXTLINE(readability-magic-numbers) - Required padding for binary layout
     std::uint8_t reserved[5];
   };
 
-  static_assert(sizeof(ListHeader) == 48, "ListHeader must be exactly 48 bytes");
-  static_assert(alignof(ListHeader) == 8, "ListHeader must have 8-byte alignment");
+  // Binary layout constants
+  constexpr std::size_t kListHeaderSize = 48;
+  constexpr std::size_t kListHeaderAlignment = 8;
+
+  static_assert(sizeof(ListHeader) == kListHeaderSize, "ListHeader must be exactly 48 bytes");
+  static_assert(alignof(ListHeader) == kListHeaderAlignment, "ListHeader must have 8-byte alignment");
 
   /**
    * ListView - Safe accessor for list data stored in binary format.
    */
-  class ListView
+  class ListView final
   {
   public:
     ListView() noexcept : _header(nullptr), _payloadBase(nullptr), _size(0) {}
@@ -69,24 +74,23 @@ namespace rs::core
     {
     }
 
-    bool is_valid() const noexcept { return _header != nullptr && _size >= sizeof(ListHeader); }
+    [[nodiscard]] bool isValid() const noexcept { return _header != nullptr && _size >= sizeof(ListHeader); }
 
-    const ListHeader* header() const noexcept { return _header; }
+    [[nodiscard]] const ListHeader* header() const noexcept { return _header; }
 
-    std::uint64_t trackIdsCount() const noexcept { return _header->trackIdsCount; }
-    std::uint32_t nameId() const noexcept { return _header->nameId; }
-    std::uint32_t descId() const noexcept { return _header->descId; }
-    std::uint32_t filterId() const noexcept { return _header->filterId; }
-    std::uint8_t flags() const noexcept { return _header->flags; }
+    [[nodiscard]] std::uint64_t trackIdsCount() const noexcept { return _header->trackIdsCount; }
+    [[nodiscard]] std::uint32_t nameId() const noexcept { return _header->nameId; }
+    [[nodiscard]] std::uint32_t descId() const noexcept { return _header->descId; }
+    [[nodiscard]] std::uint32_t filterId() const noexcept { return _header->filterId; }
+    [[nodiscard]] std::uint8_t flags() const noexcept { return _header->flags; }
 
-    std::string_view name() const { return getString(_header->nameOffset, _header->nameLen); }
+    [[nodiscard]] std::string_view name() const { return getString(_header->nameOffset, _header->nameLen); }
 
-    std::string_view description() const { return getString(_header->descOffset, _header->descLen); }
+    [[nodiscard]] std::string_view description() const { return getString(_header->descOffset, _header->descLen); }
 
-    std::string_view payload() const
+    [[nodiscard]] std::string_view payload() const
     {
-      if (!is_valid())
-        return {};
+      if (!isValid()) { return {}; }
       auto payloadStart = _payloadBase + sizeof(ListHeader);
       auto payloadSize = _size - sizeof(ListHeader);
       return {reinterpret_cast<const char*>(payloadStart), payloadSize};
@@ -97,7 +101,7 @@ namespace rs::core
     const std::uint8_t* _payloadBase;
     std::size_t _size;
 
-    std::string_view getString(std::uint16_t offset, std::uint16_t len) const;
+    [[nodiscard]] std::string_view getString(std::uint16_t offset, std::uint16_t len) const;
   };
 
 } // namespace rs::core

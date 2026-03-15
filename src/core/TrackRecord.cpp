@@ -19,9 +19,12 @@
 
 namespace rs::core
 {
+  // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
+  constexpr unsigned int kBloomBitMask = 31;
+
   TrackRecord::TrackRecord(const TrackView& view, const Dictionary& dict, lmdb::Transaction& txn)
   {
-    if (!view.is_valid())
+    if (!view.isValid())
     {
       return;
     }
@@ -97,7 +100,7 @@ namespace rs::core
     std::uint32_t bloom = 0;
     for (auto tagId : tags.ids)
     {
-      bloom |= (1U << (tagId.value() & 31));
+      bloom |= (1U << (tagId.value() & kBloomBitMask));
     }
     h.tagBloom = bloom;
 

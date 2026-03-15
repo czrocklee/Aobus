@@ -29,7 +29,7 @@ namespace rs::core
   TrackStore::Writer TrackStore::writer(lmdb::WriteTransaction& txn) { return Writer{_database.writer(txn)}; }
 
   // TrackStore::Reader implementation
-  TrackStore::Reader::Reader(lmdb::Database::Reader&& reader) : _reader{std::move(reader)} {}
+  TrackStore::Reader::Reader(lmdb::Database::Reader&& reader) : _reader{reader} {}
 
   TrackStore::Reader::Iterator TrackStore::Reader::begin() const
   {

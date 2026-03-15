@@ -19,12 +19,17 @@
 
 namespace
 {
+  // LMDB configuration constants
+  constexpr std::size_t kLmdbMapSize = 1 * 1024 * 1024 * 1024;  // 1 GB
+  constexpr int kLmdbMaxDatabases = 5;       // tracks, lists, resources, dict_read, dict_write
+  constexpr int kLmdbFileMode = 0664;
+
   rs::lmdb::Environment createEnv(const char* path)
   {
     auto env = rs::lmdb::Environment::create();
-    env.setMapSize(1UL * 1024UL * 1024UL * 1024UL);
-    env.setMaxDatabases(5); // tracks, lists, resources, dict_read, dict_write
-    env.open(path, MDB_NOTLS, 0664);
+    env.setMapSize(kLmdbMapSize);
+    env.setMaxDatabases(kLmdbMaxDatabases);
+    env.open(path, MDB_NOTLS, kLmdbFileMode);
     return env;
   }
 }

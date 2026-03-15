@@ -75,7 +75,7 @@ namespace rs::expr
   /**
    * Instruction - A single operation in the execution plan.
    */
-  struct Instruction
+  struct Instruction final
   {
     OpCode op;
     std::uint8_t field;   // Field index (for LoadField)
@@ -130,7 +130,7 @@ namespace rs::expr
      * @param expr The expression AST to compile
      * @return Compiled execution plan
      */
-    ExecutionPlan compile(const Expression& expr);
+    [[nodiscard]] ExecutionPlan compile(const Expression& expr);
 
   private:
     std::uint32_t addStringConstant(std::string_view str);
@@ -142,7 +142,7 @@ namespace rs::expr
     void compileConstant(const ConstantExpression& constant);
 
     // Resolve string to ID using dictionary (if available)
-    std::int64_t resolveStringConstant(const std::string& str, Field field) const;
+    [[nodiscard]] std::int64_t resolveStringConstant(const std::string& str, Field field) const;
 
     ExecutionPlan _plan;
     std::uint32_t _nextReg = 0;

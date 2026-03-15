@@ -34,8 +34,8 @@ namespace rs::lmdb
     Database(lmdb::Environment& env, const std::string& db);
     ~Database();
 
-    Reader reader(ReadTransaction& txn) const;
-    Writer writer(WriteTransaction& txn);
+    [[nodiscard]] Reader reader(ReadTransaction& txn) const;
+    [[nodiscard]] Writer writer(WriteTransaction& txn);
 
   private:
     struct Impl;
@@ -48,9 +48,9 @@ namespace rs::lmdb
     using Value = std::pair<std::uint64_t, boost::asio::const_buffer>;
     class Iterator;
 
-    Iterator begin() const;
-    Iterator end() const;
-    boost::asio::const_buffer operator[](std::uint64_t id) const;
+    [[nodiscard]] Iterator begin() const;
+    [[nodiscard]] Iterator end() const;
+    [[nodiscard]] boost::asio::const_buffer operator[](std::uint64_t id) const;
 
   protected:
     Reader(lmdb::MDB& dbi, lmdb::Transaction& txn);
@@ -68,9 +68,9 @@ namespace rs::lmdb
     Iterator();
     Iterator(const Iterator& other);
     Iterator(Iterator&& other);
-    bool equal(const Iterator& other) const;
+    [[nodiscard]] bool equal(const Iterator& other) const;
     void increment();
-    const Value& dereference() const;
+    [[nodiscard]] const Value& dereference() const;
 
   private:
     Iterator(lmdb::Cursor&& cursor);
@@ -83,13 +83,13 @@ namespace rs::lmdb
   class Database::Writer
   {
   public:
-    const void* create(std::uint64_t id, boost::asio::const_buffer data);
-    void* create(std::uint64_t id, std::size_t size);
-    std::pair<std::uint64_t, const void*> append(boost::asio::const_buffer data);
-    std::pair<std::uint64_t, void*> append(std::size_t size);
-    const void* update(std::uint64_t id, boost::asio::const_buffer data);
+    [[nodiscard]] const void* create(std::uint64_t id, boost::asio::const_buffer data);
+    [[nodiscard]] void* create(std::uint64_t id, std::size_t size);
+    [[nodiscard]] std::pair<std::uint64_t, const void*> append(boost::asio::const_buffer data);
+    [[nodiscard]] std::pair<std::uint64_t, void*> append(std::size_t size);
+    [[nodiscard]] const void* update(std::uint64_t id, boost::asio::const_buffer data);
     bool del(std::uint64_t id);
-    boost::asio::const_buffer operator[](std::uint64_t id) const;
+    [[nodiscard]] boost::asio::const_buffer operator[](std::uint64_t id) const;
 
   private:
     Writer(lmdb::MDB& dbi, lmdb::Transaction& txn);

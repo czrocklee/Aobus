@@ -100,7 +100,7 @@ namespace
   TEST_CASE("ListView - Default Constructor")
   {
     ListView view;
-    CHECK(view.is_valid() == false);
+    CHECK(view.isValid() == false);
   }
 
   TEST_CASE("ListView - Construct from Data")
@@ -108,7 +108,7 @@ namespace
     auto data = createListData();
     ListView view(data.data(), data.size());
 
-    CHECK(view.is_valid() == true);
+    CHECK(view.isValid() == true);
     CHECK(view.header() != nullptr);
   }
 
@@ -144,12 +144,12 @@ namespace
   {
     // Null data
     ListView nullView(nullptr, 100);
-    CHECK(nullView.is_valid() == false);
+    CHECK(nullView.isValid() == false);
 
     // Too small
     char smallData[10] = {};
     ListView smallView(smallData, sizeof(smallData));
-    CHECK(smallView.is_valid() == false);
+    CHECK(smallView.isValid() == false);
   }
 
   TEST_CASE("ListView - Zero Values")

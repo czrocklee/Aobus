@@ -77,7 +77,7 @@ namespace rs::tag::mp4
       {"\251day", FieldSetter<MetaField::Year, IntDecoder>{}}};
   }
 
-  const Metadata File::loadMetadata() const
+  Metadata File::loadMetadata() const
   {
     RootAtom root = rs::tag::mp4::fromBuffer(_mappedRegion.get_address(), _mappedRegion.get_size());
     const Atom* ilstNode = findNode(root, {"root", "moov", "udta", "meta", "ilst"}, 0);

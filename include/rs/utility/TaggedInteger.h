@@ -31,9 +31,9 @@ namespace rs::utility
   public:
     TaggedInteger() : _value{Default} {}
     explicit TaggedInteger(T value) : _value(value) {}
-    T value() const { return _value; }
+    [[nodiscard]] T value() const { return _value; }
     explicit operator T() const { return _value; }
-    static TaggedInteger invalid() { return {}; }
+    [[nodiscard]] static TaggedInteger invalid() { return {}; }
 
     // Increment/decrement operators
     TaggedInteger& operator++()

@@ -98,12 +98,12 @@ namespace rs::core
      *
      * @return Vector of bytes suitable for TrackStore::create
      */
-    std::vector<std::byte> serialize() const;
+    [[nodiscard]] std::vector<std::byte> serialize() const;
 
     /**
      * Get the header with current field values.
      */
-    TrackHeader header() const;
+    [[nodiscard]] TrackHeader header() const;
   };
 
 } // namespace rs::core

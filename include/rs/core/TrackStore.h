@@ -62,14 +62,14 @@ namespace rs::core
   public:
     class Iterator;
 
-    Iterator begin() const;
-    Iterator end() const;
+    [[nodiscard]] Iterator begin() const;
+    [[nodiscard]] Iterator end() const;
 
     /**
      * Get a track by ID.
      * @return TrackView pointing to the track data, or invalid TrackView if not found
      */
-    TrackView operator[](Id id) const;
+    [[nodiscard]] TrackView operator[](Id id) const;
 
   private:
     Reader(lmdb::Database::Reader&& reader);
@@ -89,9 +89,9 @@ namespace rs::core
     Iterator() = default;
     Iterator(const Iterator& other) = default;
 
-    bool operator==(const Iterator& other) const;
+    [[nodiscard]] bool operator==(const Iterator& other) const;
     Iterator& operator++();
-    value_type operator*() const;
+    [[nodiscard]] value_type operator*() const;
 
   private:
     Iterator(lmdb::Database::Reader::Iterator&& iter);
@@ -115,7 +115,7 @@ namespace rs::core
      * @param size Size of the data
      * @return Pair of (track ID, TrackView pointing to stored data)
      */
-    std::pair<Id, TrackView> create(const void* data, std::size_t size);
+    [[nodiscard]] std::pair<Id, TrackView> create(const void* data, std::size_t size);
 
     /**
      * Update an existing track.
@@ -124,14 +124,14 @@ namespace rs::core
      * @param size Size of the data
      * @return TrackView pointing to updated data
      */
-    TrackView update(Id id, const void* data, std::size_t size);
+    [[nodiscard]] TrackView update(Id id, const void* data, std::size_t size);
 
     bool del(Id id);
 
     /**
      * Get a track by ID.
      */
-    TrackView operator[](Id id) const;
+    [[nodiscard]] TrackView operator[](Id id) const;
 
   private:
     explicit Writer(lmdb::Database::Writer&& writer);

@@ -25,6 +25,9 @@ namespace rs::expr
 
   namespace
   {
+    // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
+    constexpr unsigned int kBloomBitMask = 31;
+
     Field variableTypeToField(VariableType type, std::string_view name)
     {
       switch (type)
@@ -174,7 +177,7 @@ namespace rs::expr
         auto tagId = _dict->getStringId(var.name);
         if (tagId.value() > 0)
         {
-          _plan.tagBloomMask |= (1U << (tagId.value() & 31));
+          _plan.tagBloomMask |= (1U << (tagId.value() & kBloomBitMask));
 
           // Generate implicit tag comparison: track.tags().has(tagId)
           // This handles standalone "#tagname" queries like "#rock"

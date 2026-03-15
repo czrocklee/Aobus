@@ -93,3 +93,25 @@ target_link_libraries(expr_test PRIVATE rs Catch2)
 #     app/gtkmm4/main.cpp
 #     ...
 # )
+
+# Lint target for clang-tidy (cppgen enforcement)
+# Checks are defined in .clang-tidy
+find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
+if(CLANG_TIDY_EXECUTABLE)
+  # Get source files for rs library
+  get_target_property(RS_SOURCES rs SOURCES)
+
+  add_custom_target(clang-tidy
+    COMMAND ${CLANG_TIDY_EXECUTABLE}
+      -header-filter='.*'
+      -p=${CMAKE_SOURCE_DIR}/compile_commands.json
+      ${RS_SOURCES}
+    COMMENT "Running clang-tidy on rs library..."
+    VERBATIM
+  )
+
+  message(STATUS "clang-tidy found: ${CLANG_TIDY_EXECUTABLE}")
+  message(STATUS "Run 'cmake --build . --target clang-tidy' to lint")
+else()
+  message(STATUS "clang-tidy not found - install it for linting")
+endif()

@@ -26,7 +26,7 @@ namespace rs::tag::mpeg
   public:
     using rs::tag::File::File;
 
-    const Metadata loadMetadata() const override;
+    Metadata loadMetadata() const override;
 
     void saveMetadata(const Metadata& metadata) override;
   };

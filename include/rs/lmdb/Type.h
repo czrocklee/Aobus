@@ -121,9 +121,9 @@ namespace rs::lmdb
 
     [[nodiscard]] MDB_dbi raw() const noexcept { return _handle; }
 
-    bool get(Transaction& transaction, std::string_view key, std::string_view& value) const;
-    bool put(Transaction& transaction, std::string_view key, std::string_view value, unsigned int flags = 0) const;
-    bool del(Transaction& transaction, std::string_view key) const;
+    [[nodiscard]] bool get(Transaction& transaction, std::string_view key, std::string_view& value) const;
+    [[nodiscard]] bool put(Transaction& transaction, std::string_view key, std::string_view value, unsigned int flags = 0) const;
+    [[nodiscard]] bool del(Transaction& transaction, std::string_view key) const;
 
   private:
     MDB_dbi _handle = (std::numeric_limits<MDB_dbi>::max)();
@@ -156,10 +156,10 @@ namespace rs::lmdb
 
     void close() noexcept;
 
-    bool get(std::string_view& key, MDB_cursor_op op) const;
-    bool get(std::string_view& key, std::string_view& value, MDB_cursor_op op) const;
-    bool put(std::string_view key, std::string_view value, unsigned int flags = 0) const;
-    void* reserve(std::string_view key, std::size_t size, unsigned int flags = 0) const;
+    [[nodiscard]] bool get(std::string_view& key, MDB_cursor_op op) const;
+    [[nodiscard]] bool get(std::string_view& key, std::string_view& value, MDB_cursor_op op) const;
+    [[nodiscard]] bool put(std::string_view key, std::string_view value, unsigned int flags = 0) const;
+    [[nodiscard]] void* reserve(std::string_view key, std::size_t size, unsigned int flags = 0) const;
 
   private:
     MDB_cursor* _handle = nullptr;

@@ -286,6 +286,7 @@ namespace rs::lmdb
 
   void* Cursor::reserve(std::string_view key, std::size_t size, unsigned int flags) const
   {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast) - LMDB C API requires non-const
     MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
     MDB_val valueBuffer{size, nullptr};
     throwOnError("mdb_cursor_put", mdb_cursor_put(_handle, &keyValue, &valueBuffer, flags | MDB_RESERVE));

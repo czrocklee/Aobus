@@ -31,9 +31,9 @@ namespace rs::reactive
     using Index = AbstractItemList<Id, T>::Index;
     using Observer = AbstractItemList<Id, T>::Observer;
 
-    std::size_t size() const override { return _items.size(); }
+    [[nodiscard]] std::size_t size() const override { return _items.size(); }
 
-    const Value& at(Index idx) const override { return *_items.nth(idx); }
+    [[nodiscard]] const Value& at(Index idx) const override { return *_items.nth(idx); }
 
     void attach(Observer& observer) override { _observerable.attach(observer); }
 

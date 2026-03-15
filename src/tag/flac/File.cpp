@@ -86,7 +86,7 @@ namespace rs::tag::flac
         {"GENRE", FieldSetter<MetaField::Genre, StringDecoder>{}}};
   }
 
-  const Metadata File::loadMetadata() const
+  Metadata File::loadMetadata() const
   {
     if (_mappedRegion.get_size() < 4 || std::memcmp(_mappedRegion.get_address(), "fLaC", 4) != 0)
     {

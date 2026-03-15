@@ -22,6 +22,9 @@
 namespace rs::expr
 {
 
+  // Number of reserved registers for intermediate values
+  constexpr std::size_t kReservedRegisters = 16;
+
   namespace
   {
     // Helper to check if track has a tag ID
@@ -81,10 +84,8 @@ namespace rs::expr
         return static_cast<std::int64_t>(track.property().rating());
       case Field::TagCount:
         return static_cast<std::int64_t>(track.tags().count());
-      case Field::Tag:
-        // For tag field, we need to handle string comparison in loadStringField
-        return 0;
       default:
+        // Field::Tag and other unsupported fields return 0
         return 0;
     }
   }
@@ -97,11 +98,8 @@ namespace rs::expr
         return track.metadata().title();
       case Field::Uri:
         return track.property().uri();
-      case Field::Tag:
-        // For tag field, we don't return a single string
-        // Instead, we check in the Eq/Like operations
-        return {};
       default:
+        // Field::Tag and other unsupported fields return empty
         return {};
     }
   }
@@ -135,6 +133,7 @@ namespace rs::expr
     return evaluateFull(plan, track);
   }
 
+  // NOLINTNEXTLINE(readability-function-size) - Complex eval function, splitting would reduce readability
   bool PlanEvaluator::evaluateFull(const ExecutionPlan& plan, const core::TrackView& track) const
   {
     if (plan.matchesAll)
@@ -143,7 +142,7 @@ namespace rs::expr
     }
 
     // Return false for invalid/empty track views
-    if (!track.is_valid())
+    if (!track.isValid())
     {
       return false;
     }
@@ -152,7 +151,7 @@ namespace rs::expr
     _currentPlan = &plan;
 
     _registers.clear();
-    _registers.resize(plan.instructions.size() + 16, 0);
+    _registers.resize(plan.instructions.size() + kReservedRegisters, 0);
 
     for (const auto& instr : plan.instructions)
     {

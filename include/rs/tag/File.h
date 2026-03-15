@@ -37,7 +37,7 @@ namespace rs::tag
 
     virtual ~File() = default;
 
-    virtual const Metadata loadMetadata() const = 0;
+    [[nodiscard]] virtual Metadata loadMetadata() const = 0;
 
     virtual void saveMetadata(const Metadata& metadata) = 0;
 

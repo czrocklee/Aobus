@@ -58,8 +58,8 @@ namespace rs::core
   public:
     class Iterator;
 
-    Iterator begin() const;
-    Iterator end() const;
+    [[nodiscard]] Iterator begin() const;
+    [[nodiscard]] Iterator end() const;
 
     ListView operator[](Id id) const;
 

@@ -74,11 +74,11 @@ namespace
 
   // https://stackoverflow.com/questions/49932608/boost-spirit-x3-attribute-does-not-have-the-expected-size-redux
   template<typename T>
-  const auto as = [](auto p) { return x3::rule<struct tag, T>{"as"} = p; };
+  const auto as = [](auto const& p) { return x3::rule<struct tag, T>{"as"} = p; };
   const auto quoteString = [](char ch) { return ch >> x3::no_skip[*~x3::char_(ch)] >> ch; };
 
   // Keyword parser: ensures keywords aren't followed by alphanumeric or underscore
-  const auto keyword = [](auto p) { return x3::lexeme[p >> !(x3::alnum | '_')]; };
+  const auto keyword = [](auto const& p) { return x3::lexeme[p >> !(x3::alnum | '_')]; };
 
   // Characters not allowed in unquoted strings
   const auto keyCharSet = x3::char_(R"( "'$@#%!()&|!=~<>+-)");

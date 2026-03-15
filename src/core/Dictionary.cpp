@@ -53,8 +53,16 @@ namespace rs::core
 
     // Create new ID
     auto id = _nextId++;
-    _writeDb.put(txn, value, lmdb::bytesOf(id.value()));
-    _readDb.put(txn, lmdb::bytesOf(id.value()), value);
+
+    if (!_writeDb.put(txn, value, lmdb::bytesOf(id.value())))
+    {
+      throw std::runtime_error{"Failed to write to dictionary"};
+    }
+    
+    if (!_readDb.put(txn, lmdb::bytesOf(id.value()), value))
+    {
+      throw std::runtime_error{"Failed to read from dictionary"};
+    }
 
     // Update cache
     _stringToIdCache[std::string(value)] = id;

@@ -125,7 +125,7 @@ namespace
   TEST_CASE("TrackView - Default Constructor")
   {
     TrackView view;
-    CHECK(view.is_valid() == false);
+    CHECK(view.isValid() == false);
   }
 
   TEST_CASE("TrackView - Construct from Data")
@@ -133,7 +133,7 @@ namespace
     auto data = createMinimalData();
     TrackView view(data.data(), data.size());
 
-    CHECK(view.is_valid() == true);
+    CHECK(view.isValid() == true);
     CHECK(view.header() != nullptr);
   }
 
@@ -168,7 +168,7 @@ namespace
     auto data = createTrackWithStrings("Test Title", "/path/to/file.flac");
     TrackView view(data.data(), data.size());
 
-    CHECK(view.is_valid() == true);
+    CHECK(view.isValid() == true);
     CHECK(view.metadata().title() == "Test Title");
     CHECK(view.property().uri() == "/path/to/file.flac");
   }
@@ -187,16 +187,16 @@ namespace
   {
     // Null data
     TrackView nullView(nullptr, 100);
-    CHECK(nullView.is_valid() == false);
+    CHECK(nullView.isValid() == false);
 
     // Too small
     char smallData[10] = {};
     TrackView smallView(smallData, sizeof(smallData));
-    CHECK(smallView.is_valid() == false);
+    CHECK(smallView.isValid() == false);
 
     // Empty
     TrackView emptyView;
-    CHECK(emptyView.is_valid() == false);
+    CHECK(emptyView.isValid() == false);
   }
 
   TEST_CASE("TrackView - Payload Access")

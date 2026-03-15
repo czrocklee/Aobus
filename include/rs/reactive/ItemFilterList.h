@@ -50,9 +50,9 @@ namespace rs::reactive
       source.attach(*this);
     }
 
-    std::size_t size() const override { return _items.size(); }
+    [[nodiscard]] std::size_t size() const override { return _items.size(); }
 
-    const Value& at(Index idx) const override { return _source.at(_items.nth(idx)->second); }
+    [[nodiscard]] const Value& at(Index idx) const override { return _source.at(_items.nth(idx)->second); }
 
     void attach(Observer& observer) override { _observerable.attach(observer); }
 

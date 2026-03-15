@@ -52,7 +52,7 @@ namespace rs::core
      * @param str The string to look up
      * @return The ID if found, or 0 if not found
      */
-    virtual DictionaryId getStringId(std::string_view str) const = 0;
+    [[nodiscard]] virtual DictionaryId getStringId(std::string_view str) const = 0;
   };
 
   /**
@@ -95,7 +95,7 @@ namespace rs::core
      * @param str The string to look up
      * @return The ID if found, or 0 if not found
      */
-    DictionaryId getStringId(std::string_view str) const override;
+    [[nodiscard]] DictionaryId getStringId(std::string_view str) const override;
 
     /**
      * Get the next available ID (for batch operations).

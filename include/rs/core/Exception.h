@@ -27,11 +27,11 @@ namespace rs::core
   public:
     Exception(const std::string& what, const char* file, int line) : _what{what}, _file{file}, _line{line} {}
 
-    const char* file() const { return _file; }
+    [[nodiscard]] const char* file() const { return _file; }
 
-    int line() const { return _line; }
+    [[nodiscard]] int line() const { return _line; }
 
-    const char* what() const throw() override { return _what.c_str(); }
+    [[nodiscard]] const char* what() const noexcept override { return _what.c_str(); }
 
   private:
     const char* _file;

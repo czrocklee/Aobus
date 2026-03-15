@@ -39,14 +39,14 @@ namespace rs::tag
     LAST_FIELD
   };
 
-  class Metadata
+  class Metadata final
   {
   public:
-    const ValueType& get(MetaField field) const { return _fields[static_cast<std::size_t>(field)]; }
+    [[nodiscard]] const ValueType& get(MetaField field) const { return _fields[static_cast<std::size_t>(field)]; }
 
     void set(MetaField field, ValueType value) { _fields[static_cast<std::size_t>(field)] = std::move(value); }
 
-    const ValueType& getCustom(std::string_view field) const
+    [[nodiscard]] const ValueType& getCustom(std::string_view field) const
     {
       if (auto iter = _customFields.find(field); iter != _customFields.end())
       {
