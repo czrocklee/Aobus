@@ -39,7 +39,7 @@ namespace rs::reactive
 
     [[nodiscard]] virtual std::size_t size() const = 0;
 
-    [[nodiscard]] virtual const Value& at(Index idx) const = 0;
+    [[nodiscard]] virtual Value const& at(Index idx) const = 0;
 
     virtual void attach(Observer& observer) = 0;
 
@@ -60,13 +60,13 @@ namespace rs::reactive
 
     virtual void onBeginInsert(Id, Index){};
 
-    virtual void onEndInsert(Id, const T&, Index) {};
+    virtual void onEndInsert(Id, T const&, Index) {};
 
-    virtual void onBeginUpdate(Id, const T&, Index) {};
+    virtual void onBeginUpdate(Id, T const&, Index) {};
 
-    virtual void onEndUpdate(Id, const T&, Index) {};
+    virtual void onEndUpdate(Id, T const&, Index) {};
 
-    virtual void onBeginRemove(Id, const T&, Index) {};
+    virtual void onBeginRemove(Id, T const&, Index) {};
 
     virtual void onEndRemove(Id id, Index) {};
 
@@ -99,13 +99,13 @@ namespace rs::reactive
 
     void beginInsert(Id id, Index idx) { forAll(std::mem_fn(&Observer::onBeginInsert), id, idx); }
 
-    void endInsert(Id id, const T& val, Index idx) { forAll(std::mem_fn(&Observer::onEndInsert), id, val, idx); }
+    void endInsert(Id id, T const& val, Index idx) { forAll(std::mem_fn(&Observer::onEndInsert), id, val, idx); }
 
-    void beginUpdate(Id id, const T& val, Index idx) { forAll(std::mem_fn(&Observer::onBeginUpdate), id, val, idx); }
+    void beginUpdate(Id id, T const& val, Index idx) { forAll(std::mem_fn(&Observer::onBeginUpdate), id, val, idx); }
 
-    void endUpdate(Id id, const T& val, Index idx) { forAll(std::mem_fn(&Observer::onEndUpdate), id, val, idx); }
+    void endUpdate(Id id, T const& val, Index idx) { forAll(std::mem_fn(&Observer::onEndUpdate), id, val, idx); }
 
-    void beginRemove(Id id, const T& val, Index idx) { forAll(std::mem_fn(&Observer::onBeginRemove), id, val, idx); }
+    void beginRemove(Id id, T const& val, Index idx) { forAll(std::mem_fn(&Observer::onBeginRemove), id, val, idx); }
 
     void endRemove(Id id, Index idx) { forAll(std::mem_fn(&Observer::onEndRemove), id, idx); }
 

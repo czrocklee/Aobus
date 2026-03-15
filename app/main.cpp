@@ -33,7 +33,7 @@ int main(int argc, char* argv[])
   QApplication::setStyle("fusion");
 #elif defined(__linux__)
   const auto platformTheme = qgetenv("QT_QPA_PLATFORMTHEME").toLower();
-  const auto styleOverride = qgetenv("QT_STYLE_OVERRIDE").toLower();
+  auto const styleOverride = qgetenv("QT_STYLE_OVERRIDE").toLower();
 
   if (platformTheme.contains("qt5ct") || platformTheme.contains("qt6ct"))
   {

@@ -26,7 +26,7 @@ class BasicCommand : public Command
 {
 public:
   using VariablesMap = boost::program_options::variables_map;
-  using Executor = std::function<void(const VariablesMap&, std::ostream& os)>;
+  using Executor = std::function<void(VariablesMap const&, std::ostream& os)>;
 
   BasicCommand() { addOption("help, h", "help message"); }
 
@@ -36,7 +36,7 @@ public:
     addOption("help, h", "help message");
   }
 
-  void execute(int argc, const char* argv[], std::ostream& os) override
+  void execute(int argc, char const* argv[], std::ostream& os) override
   {
     boost::program_options::command_line_parser parser{argc, argv};
     parser.options(_optDesc).positional(_posOptDesc);
@@ -53,14 +53,14 @@ public:
     _executor(vm, os);
   }
 
-  BasicCommand& addOption(const char* name, const char* description, int positional = 0)
+  BasicCommand& addOption(char const* name, char const* description, int positional = 0)
   {
     return addOption(name, new boost::program_options::untyped_value{true}, description, positional);
   }
 
-  BasicCommand& addOption(const char* name,
-                          const boost::program_options::value_semantic* s,
-                          const char* description,
+  BasicCommand& addOption(char const* name,
+                          boost::program_options::value_semantic const* s,
+                          char const* description,
                           int positional = 0)
   {
     _optDesc.add(boost::make_shared<boost::program_options::option_description>(name, s, description));

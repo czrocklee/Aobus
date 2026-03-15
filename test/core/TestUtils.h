@@ -28,12 +28,12 @@ namespace test
    * Serialize a POD struct to a byte vector.
    */
   template<typename T>
-  std::vector<char> serializeHeader(const T& header)
+  std::vector<char> serializeHeader(T const& header)
   {
     static_assert(std::is_trivially_copyable_v<T>, "Header must be trivially copyable");
 
     std::vector<char> data;
-    data.insert(data.end(), reinterpret_cast<const char*>(&header), reinterpret_cast<const char*>(&header + 1));
+    data.insert(data.end(), reinterpret_cast<char const*>(&header), reinterpret_cast<char const*>(&header + 1));
     return data;
   }
 

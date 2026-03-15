@@ -75,14 +75,14 @@ void MainWindow::openLibrary()
         }
       }
     }
-    catch (const Glib::Error& e)
+    catch (Glib::Error const& e)
     {
       std::cerr << "Error selecting folder: " << e.what() << std::endl;
     }
   });
 }
 
-void MainWindow::openMusicLibrary(const std::filesystem::path& path)
+void MainWindow::openMusicLibrary(std::filesystem::path const& path)
 {
   // Create new music library at the path
   _musicLibrary = std::make_unique<rs::core::MusicLibrary>(path.string());
@@ -104,13 +104,13 @@ void MainWindow::openMusicLibrary(const std::filesystem::path& path)
   saveSession();
 }
 
-void MainWindow::scanDirectory(const std::filesystem::path& dir, std::vector<std::filesystem::path>& files)
+void MainWindow::scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files)
 {
-  static const std::unordered_set<std::string> supportedExtensions = {".mp3", ".m4a", ".flac"};
+  static std::unordered_set<std::string> const supportedExtensions = {".mp3", ".m4a", ".flac"};
 
   try
   {
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir))
+    for (auto const& entry : std::filesystem::recursive_directory_iterator(dir))
     {
       if (entry.is_regular_file())
       {
@@ -123,7 +123,7 @@ void MainWindow::scanDirectory(const std::filesystem::path& dir, std::vector<std
       }
     }
   }
-  catch (const std::exception& e)
+  catch (std::exception const& e)
   {
     std::cerr << "Error scanning directory: " << e.what() << std::endl;
   }
@@ -174,7 +174,7 @@ void MainWindow::importFiles()
       auto worker = std::make_unique<ImportWorker>(
         *_musicLibrary,
         files,
-        [dialogPtr](const std::filesystem::path& path, int index) {
+        [dialogPtr](std::filesystem::path const& path, int index) {
           // Progress callback - marshal to main thread
           Glib::MainContext::get_default()->invoke([dialogPtr, path, index]() {
             if (dialogPtr)
@@ -207,14 +207,14 @@ void MainWindow::importFiles()
 
       _importDialog->show();
     }
-    catch (const Glib::Error& e)
+    catch (Glib::Error const& e)
     {
       std::cerr << "Error selecting folder: " << e.what() << std::endl;
     }
   });
 }
 
-void MainWindow::importFilesFromPath(const std::filesystem::path& path)
+void MainWindow::importFilesFromPath(std::filesystem::path const& path)
 {
   // Create new music library at the path
   _musicLibrary = std::make_unique<rs::core::MusicLibrary>(path.string());
@@ -237,7 +237,7 @@ void MainWindow::importFilesFromPath(const std::filesystem::path& path)
   auto worker = std::make_unique<ImportWorker>(
     *_musicLibrary,
     files,
-    [&progressDialog](const std::filesystem::path& path, int index) {
+    [&progressDialog](std::filesystem::path const& path, int index) {
       Glib::MainContext::get_default()->invoke([&progressDialog, path, index]() {
         progressDialog->onNewTrack(path.string(), index);
         return false;
@@ -292,15 +292,15 @@ void MainWindow::setupMenu()
 
   // Create actions
   auto openAction = Gio::SimpleAction::create("open-library");
-  openAction->signal_activate().connect([this]([[maybe_unused]] const Glib::VariantBase& v) { openLibrary(); });
+  openAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& v) { openLibrary(); });
   add_action(openAction);
 
   auto importAction = Gio::SimpleAction::create("import-files");
-  importAction->signal_activate().connect([this]([[maybe_unused]] const Glib::VariantBase& v) { importFiles(); });
+  importAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& v) { importFiles(); });
   add_action(importAction);
 
   auto newListAction = Gio::SimpleAction::create("new-list");
-  newListAction->signal_activate().connect([this](const Glib::VariantBase& variant) {
+  newListAction->signal_activate().connect([this](Glib::VariantBase const& variant) {
     [[maybe_unused]] auto variantCopy = variant;
     // Create dialog - GTK4 will manage its lifetime when closed
     auto* dialog = Gtk::make_managed<NewListDialog>(*this);
@@ -338,12 +338,12 @@ void MainWindow::setupLayout()
 
   // List view for the sidebar
   auto factory = Gtk::SignalListItemFactory::create();
-  factory->signal_setup().connect([](const Glib::RefPtr<Gtk::ListItem>& listItem) {
+  factory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     listItem->set_child(*label);
   });
-  factory->signal_bind().connect([](const Glib::RefPtr<Gtk::ListItem>& listItem) {
+  factory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<ListRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
@@ -409,7 +409,7 @@ void MainWindow::setupLayout()
   set_child(*mainBox);
 }
 
-void MainWindow::createList(const rs::fbs::ListT& list)
+void MainWindow::createList(rs::fbs::ListT const& list)
 {
   if (!_musicLibrary)
   {
@@ -516,7 +516,7 @@ void MainWindow::loadLists(rs::lmdb::ReadTransaction& txn)
   _listStore->append(allRow);
 
   // Load existing lists from library
-  for (const auto [id, list] : _musicLibrary->lists().reader(txn))
+  for (auto const [id, list] : _musicLibrary->lists().reader(txn))
   {
     rs::fbs::ListT lt;
     list->UnPackTo(&lt);
@@ -562,7 +562,7 @@ void MainWindow::setupTrackContextMenu()
 {
   // Create track tag action
   auto tagTrackAction = Gio::SimpleAction::create("tag-track");
-  tagTrackAction->signal_activate().connect([this](const Glib::VariantBase& v) {
+  tagTrackAction->signal_activate().connect([this](Glib::VariantBase const& v) {
     [[maybe_unused]] auto vCopy = v;
     onTagTrack();
   });
@@ -573,8 +573,7 @@ void MainWindow::onTagTrack()
 {
   // Get current visible track page
   Glib::ustring pageName = _stack.get_visible_child_name();
-  if (pageName.empty())
-    return;
+  if (pageName.empty()) return;
 
   auto pageId = std::stoi(pageName);
   auto it = _trackPages.find(rs::core::MusicLibrary::ListId(pageId));
@@ -641,7 +640,7 @@ void MainWindow::onListSelectionChanged(std::uint32_t position, [[maybe_unused]]
   _stack.set_visible_child(pageId);
 }
 
-void MainWindow::updateCoverArt(const std::vector<rs::core::MusicLibrary::TrackId>& selectedIds)
+void MainWindow::updateCoverArt(std::vector<rs::core::MusicLibrary::TrackId> const& selectedIds)
 {
   if (!_musicLibrary || selectedIds.empty())
   {
@@ -663,7 +662,7 @@ void MainWindow::updateCoverArt(const std::vector<rs::core::MusicLibrary::TrackI
     if (!tt.rsrc.empty())
     {
       // Get the first resource (album art)
-      const auto& rsrc = tt.rsrc[0];
+      auto const& rsrc = tt.rsrc[0];
       if (rsrc->type == rs::fbs::ResourceType::AlbumArt)
       {
         // Read the resource data
@@ -677,11 +676,11 @@ void MainWindow::updateCoverArt(const std::vector<rs::core::MusicLibrary::TrackI
           // Load image from memory - write to temp file first
           try
           {
-            const std::uint8_t* bytes = static_cast<const std::uint8_t*>(data.data());
+            std::uint8_t const* bytes = static_cast<std::uint8_t const*>(data.data());
             // Write to temp file
             std::filesystem::path tempPath = std::filesystem::temp_directory_path() / "rockstudio_coverart.jpg";
             std::ofstream ofs(tempPath, std::ios::binary);
-            ofs.write(reinterpret_cast<const char*>(bytes), size);
+            ofs.write(reinterpret_cast<char const*>(bytes), size);
             ofs.close();
 
             // Load from file
@@ -692,7 +691,7 @@ void MainWindow::updateCoverArt(const std::vector<rs::core::MusicLibrary::TrackI
             std::filesystem::remove(tempPath);
             return;
           }
-          catch (const Glib::Error& e)
+          catch (Glib::Error const& e)
           {
             std::cerr << "Failed to load cover art: " << e.what() << std::endl;
           }
@@ -707,8 +706,7 @@ void MainWindow::updateCoverArt(const std::vector<rs::core::MusicLibrary::TrackI
 
 void MainWindow::saveSession()
 {
-  if (!_musicLibrary)
-    return;
+  if (!_musicLibrary) return;
 
   try
   {
@@ -724,7 +722,7 @@ void MainWindow::saveSession()
 
     keyfile->save_to_file(configPath.string());
   }
-  catch (const Glib::Error& e)
+  catch (Glib::Error const& e)
   {
     std::cerr << "Failed to save session: " << e.what() << std::endl;
   }
@@ -737,15 +735,13 @@ void MainWindow::loadSession()
     auto configDir = Glib::get_user_config_dir();
     auto configPath = std::filesystem::path(configDir) / "rockstudio" / "session.ini";
 
-    if (!std::filesystem::exists(configPath))
-      return;
+    if (!std::filesystem::exists(configPath)) return;
 
     auto keyfile = Glib::KeyFile::create();
     keyfile->load_from_file(configPath.string());
 
     auto lastPath = keyfile->get_string("session", "lastLibraryPath");
-    if (lastPath.empty())
-      return;
+    if (lastPath.empty()) return;
 
     // Check if path exists
     std::filesystem::path libPath(lastPath);
@@ -758,7 +754,7 @@ void MainWindow::loadSession()
       }
     }
   }
-  catch (const Glib::Error& e)
+  catch (Glib::Error const& e)
   {
     std::cerr << "Failed to load session: " << e.what() << std::endl;
   }

@@ -25,7 +25,7 @@ private:
   void scheduleForWrite();
 
   AbstractTrackList& _list;
-  const std::filesystem::path _root;
-  const std::filesystem::path _path;
+  std::filesystem::path const _root;
+  std::filesystem::path const _path;
   std::unique_ptr<sigc::connection> _timeoutConnection;
 };

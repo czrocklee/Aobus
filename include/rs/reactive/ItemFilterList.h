@@ -33,13 +33,13 @@ namespace rs::reactive
     using Value = AbstractItemList<Id, T>::Value;
     using Index = AbstractItemList<Id, T>::Index;
     using Observer = AbstractItemList<Id, T>::Observer;
-    using Filter = std::function<bool(const T&)>;
+    using Filter = std::function<bool(T const&)>;
 
-    ItemFilterList(AbstractItemList<Id, T>& source, const Filter& filter) : _source{source}, _filter{filter}
+    ItemFilterList(AbstractItemList<Id, T>& source, Filter const& filter) : _source{source}, _filter{filter}
     {
       for (auto i = 0u; i < _source.size(); ++i)
       {
-        const auto& [id, t] = source.at(Index{i});
+        auto const& [id, t] = source.at(Index{i});
 
         if (!_filter || _filter(t))
         {
@@ -52,14 +52,14 @@ namespace rs::reactive
 
     [[nodiscard]] std::size_t size() const override { return _items.size(); }
 
-    [[nodiscard]] const Value& at(Index idx) const override { return _source.at(_items.nth(idx)->second); }
+    [[nodiscard]] Value const& at(Index idx) const override { return _source.at(_items.nth(idx)->second); }
 
     void attach(Observer& observer) override { _observerable.attach(observer); }
 
     void detach(Observer& observer) override { _observerable.detach(observer); }
 
   protected:
-    void onEndInsert(Id id, const T& val, Index idx) override
+    void onEndInsert(Id id, T const& val, Index idx) override
     {
       if (!_filter || _filter(val))
       {
@@ -67,11 +67,11 @@ namespace rs::reactive
       }
     };
 
-    void onBeginUpdate(Id id, const T& val, Index idx) override { onBeginRemove(id, val, idx); };
+    void onBeginUpdate(Id id, T const& val, Index idx) override { onBeginRemove(id, val, idx); };
 
-    void onEndUpdate(Id id, const T& val, Index idx) { onEndInsert(id, val, idx); }
+    void onEndUpdate(Id id, T const& val, Index idx) { onEndInsert(id, val, idx); }
 
-    void onBeginRemove(Id id, const T& val, Index) override
+    void onBeginRemove(Id id, T const& val, Index) override
     {
       if (auto iter = _items.find(id); iter != _items.end())
       {
@@ -97,7 +97,7 @@ namespace rs::reactive
 
     using Container = boost::container::flat_map<Id, Index>;
 
-    void insert(Id id, const T& val, Index idx)
+    void insert(Id id, T const& val, Index idx)
     {
       auto iterHint = (!_items.empty() && _items.rbegin()->first < id) ? _items.end() : _items.lower_bound(id);
       auto localIdx = Index{_items.index_of(iterHint)};
@@ -106,7 +106,7 @@ namespace rs::reactive
       _observerable.endInsert(id, val, localIdx);
     }
 
-    void remove(Id id, const T& val, typename Container::iterator iter)
+    void remove(Id id, T const& val, typename Container::iterator iter)
     {
       auto idx = Index{_items.index_of(iter)};
       _observerable.beginRemove(id, val, idx);

@@ -49,7 +49,7 @@ namespace rs::tag::mpeg::id3v2
           }}
         }; */
 
-    Metadata loadV22Frames(const void* buffer, std::size_t size)
+    Metadata loadV22Frames(void const* buffer, std::size_t size)
     {
       Metadata metadata;
 
@@ -76,7 +76,7 @@ namespace rs::tag::mpeg::id3v2
       {"TIT2", TextFieldSetter<MetaField::Title, V23TextFrameView>{}},
       {"TALB", TextFieldSetter<MetaField::Album, V23TextFrameView>{}}};
 
-    Metadata loadV23Frames(const void* buffer, std::size_t size)
+    Metadata loadV23Frames(void const* buffer, std::size_t size)
     {
       Metadata metadata;
 
@@ -99,15 +99,15 @@ namespace rs::tag::mpeg::id3v2
 
   namespace
   {
-    Metadata loadV24(const void* data, std::size_t size)
+    [[maybe_unused]] Metadata loadV24(void const* data, std::size_t size)
     {
-      while (size > 0)
-      {
-      }
+      (void) data;
+      (void) size;
+      return {};
     }
   }
 
-  Metadata loadFrames(const HeaderLayout& header, const void* buffer, std::size_t size)
+  Metadata loadFrames(HeaderLayout const& header, void const* buffer, std::size_t size)
   {
     switch (header.majorVersion)
     {

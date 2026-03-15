@@ -8,7 +8,7 @@ public:
   ImportProgressDialog(int maxItems, Gtk::Window& parent);
   virtual ~ImportProgressDialog();
 
-  void onNewTrack(const std::string& path, int itemIndex);
+  void onNewTrack(std::string const& path, int itemIndex);
   void ready();
 
 private:

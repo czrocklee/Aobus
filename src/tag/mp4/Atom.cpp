@@ -30,11 +30,11 @@ namespace rs::tag::mp4
                                                                               {"ilst", 0}};
 
     template<typename ContainerAtom>
-    void parseAtoms(ContainerAtom& parent, const char* data, std::size_t size)
+    void parseAtoms(ContainerAtom& parent, char const* data, std::size_t size)
     {
       for (auto end = data + size; data != end;)
       {
-        const auto* layout = reinterpret_cast<const AtomLayout*>(data);
+        auto const* layout = reinterpret_cast<AtomLayout const*>(data);
         auto length = layout->length.value();
         std::string_view type{layout->type.data(), 4};
 
@@ -54,10 +54,10 @@ namespace rs::tag::mp4
     }
   }
 
-  RootAtom fromBuffer(const void* data, std::size_t size)
+  RootAtom fromBuffer(void const* data, std::size_t size)
   {
     RootAtom root;
-    parseAtoms(root, static_cast<const char*>(data), size);
+    parseAtoms(root, static_cast<char const*>(data), size);
     return root;
   }
 }

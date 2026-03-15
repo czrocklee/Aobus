@@ -43,7 +43,7 @@ namespace rs::expr
      * @param track The track view to evaluate
      * @return true if the track matches the query
      */
-    bool matches(const ExecutionPlan& plan, const core::TrackView& track) const;
+    bool matches(ExecutionPlan const& plan, core::TrackView const& track) const;
 
     /**
      * Evaluate the full execution plan (without bloom filter optimization).
@@ -52,15 +52,15 @@ namespace rs::expr
      * @param track The track view to evaluate
      * @return true if the track matches the query
      */
-    bool evaluateFull(const ExecutionPlan& plan, const core::TrackView& track) const;
+    bool evaluateFull(ExecutionPlan const& plan, core::TrackView const& track) const;
 
   private:
-    std::int64_t loadField(const core::TrackView& track, Field field) const;
-    std::string_view loadStringField(const core::TrackView& track, Field field) const;
-    std::int64_t loadConstant(const Instruction& instr) const;
+    std::int64_t loadField(core::TrackView const& track, Field field) const;
+    std::string_view loadStringField(core::TrackView const& track, Field field) const;
+    std::int64_t loadConstant(Instruction const& instr) const;
 
     // Pointer to current plan for string constant access
-    mutable const ExecutionPlan* _currentPlan = nullptr;
+    mutable ExecutionPlan const* _currentPlan = nullptr;
 
     // Register stack for evaluation
     mutable std::vector<std::int64_t> _registers;

@@ -31,7 +31,7 @@ namespace rs::lmdb
     class Reader;
     class Writer;
 
-    Database(lmdb::Environment& env, const std::string& db);
+    Database(lmdb::Environment& env, std::string const& db);
     ~Database();
 
     [[nodiscard]] Reader reader(ReadTransaction& txn) const;
@@ -60,17 +60,17 @@ namespace rs::lmdb
     friend class Database;
   };
 
-  class Database::Reader::Iterator : public boost::iterator_facade<Iterator, const Value, boost::forward_traversal_tag>
+  class Database::Reader::Iterator : public boost::iterator_facade<Iterator, Value const, boost::forward_traversal_tag>
   {
   public:
     friend class boost::iterator_core_access;
 
     Iterator();
-    Iterator(const Iterator& other);
+    Iterator(Iterator const& other);
     Iterator(Iterator&& other);
-    [[nodiscard]] bool equal(const Iterator& other) const;
+    [[nodiscard]] bool equal(Iterator const& other) const;
     void increment();
-    [[nodiscard]] const Value& dereference() const;
+    [[nodiscard]] Value const& dereference() const;
 
   private:
     Iterator(lmdb::Cursor&& cursor);
@@ -83,11 +83,11 @@ namespace rs::lmdb
   class Database::Writer
   {
   public:
-    [[nodiscard]] const void* create(std::uint64_t id, boost::asio::const_buffer data);
+    [[nodiscard]] void const* create(std::uint64_t id, boost::asio::const_buffer data);
     [[nodiscard]] void* create(std::uint64_t id, std::size_t size);
-    [[nodiscard]] std::pair<std::uint64_t, const void*> append(boost::asio::const_buffer data);
+    [[nodiscard]] std::pair<std::uint64_t, void const*> append(boost::asio::const_buffer data);
     [[nodiscard]] std::pair<std::uint64_t, void*> append(std::size_t size);
-    [[nodiscard]] const void* update(std::uint64_t id, boost::asio::const_buffer data);
+    [[nodiscard]] void const* update(std::uint64_t id, boost::asio::const_buffer data);
     bool del(std::uint64_t id);
     [[nodiscard]] boost::asio::const_buffer operator[](std::uint64_t id) const;
 

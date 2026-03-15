@@ -45,7 +45,7 @@ namespace rs::core
     class Reader;
     class Writer;
 
-    TrackStore(lmdb::Environment& env, const std::string& db);
+    TrackStore(lmdb::Environment& env, std::string const& db);
 
     Reader reader(lmdb::ReadTransaction& txn) const;
     Writer writer(lmdb::WriteTransaction& txn);
@@ -87,9 +87,9 @@ namespace rs::core
     using value_type = std::pair<Id, TrackView>;
 
     Iterator() = default;
-    Iterator(const Iterator& other) = default;
+    Iterator(Iterator const& other) = default;
 
-    [[nodiscard]] bool operator==(const Iterator& other) const;
+    [[nodiscard]] bool operator==(Iterator const& other) const;
     Iterator& operator++();
     [[nodiscard]] value_type operator*() const;
 
@@ -115,7 +115,7 @@ namespace rs::core
      * @param size Size of the data
      * @return Pair of (track ID, TrackView pointing to stored data)
      */
-    [[nodiscard]] std::pair<Id, TrackView> create(const void* data, std::size_t size);
+    [[nodiscard]] std::pair<Id, TrackView> create(void const* data, std::size_t size);
 
     /**
      * Update an existing track.
@@ -124,7 +124,7 @@ namespace rs::core
      * @param size Size of the data
      * @return TrackView pointing to updated data
      */
-    [[nodiscard]] TrackView update(Id id, const void* data, std::size_t size);
+    [[nodiscard]] TrackView update(Id id, void const* data, std::size_t size);
 
     bool del(Id id);
 

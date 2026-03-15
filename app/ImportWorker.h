@@ -29,7 +29,7 @@ class ImportWorker : public QThread
   Q_OBJECT
 
 public:
-  ImportWorker(rs::core::MusicLibrary& ml, const std::vector<std::filesystem::path>& files, QObject* parent = nullptr);
+  ImportWorker(rs::core::MusicLibrary& ml, std::vector<std::filesystem::path> const& files, QObject* parent = nullptr);
 
   void commit();
 
@@ -44,5 +44,5 @@ protected:
 private:
   rs::core::MusicLibrary& _ml;
   std::optional<rs::lmdb::WriteTransaction> _txn;
-  const std::vector<std::filesystem::path>& _files;
+  std::vector<std::filesystem::path> const& _files;
 };

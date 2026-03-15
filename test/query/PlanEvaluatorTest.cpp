@@ -76,6 +76,8 @@ namespace
               std::vector<std::uint32_t> tagIds = {})
     {
       _record.metadata.title = std::move(title);
+      _record.metadata.artist = std::move(artist);
+      _record.metadata.album = std::move(album);
       _record.metadata.uri = std::move(uri);
       _record.metadata.year = year;
       _record.metadata.trackNumber = trackNumber;
@@ -92,8 +94,8 @@ namespace
 
       // Serialize to get proper binary layout
       auto serialized = _record.serialize();
-      _data.assign(reinterpret_cast<const char*>(serialized.data()),
-                   reinterpret_cast<const char*>(serialized.data()) + serialized.size());
+      _data.assign(reinterpret_cast<char const*>(serialized.data()),
+                   reinterpret_cast<char const*>(serialized.data()) + serialized.size());
 
       // Fix up the header with IDs and other fields
       auto* header = reinterpret_cast<rs::core::TrackHeader*>(_data.data());
@@ -110,7 +112,7 @@ namespace
     }
 
     rs::core::TrackView& view() { return _view; }
-    const rs::core::TrackView& view() const { return _view; }
+    rs::core::TrackView const& view() const { return _view; }
 
   private:
     rs::core::TrackRecord _record;
@@ -488,19 +490,19 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Track Computation")
   // Tag ID 10 -> bit 10 (10 & 31 = 10)
   record.tags.ids = {DictionaryId{10}};
   auto data = record.serialize();
-  auto* header = reinterpret_cast<const rs::core::TrackHeader*>(data.data());
+  auto* header = reinterpret_cast<rs::core::TrackHeader const*>(data.data());
   CHECK((header->tagBloom & (1U << 10)) != 0); // Bit 10 should be set
 
   // Tag ID 32 -> bit 0 (32 & 31 = 0)
   record.tags.ids = {DictionaryId{32}};
   data = record.serialize();
-  header = reinterpret_cast<const rs::core::TrackHeader*>(data.data());
+  header = reinterpret_cast<rs::core::TrackHeader const*>(data.data());
   CHECK((header->tagBloom & 1U) != 0); // Bit 0 should be set
 
   // Multiple tags: ID 5 and ID 20
   record.tags.ids = {DictionaryId{5}, DictionaryId{20}};
   data = record.serialize();
-  header = reinterpret_cast<const rs::core::TrackHeader*>(data.data());
+  header = reinterpret_cast<rs::core::TrackHeader const*>(data.data());
   CHECK((header->tagBloom & (1U << 5)) != 0);  // Bit 5 should be set
   CHECK((header->tagBloom & (1U << 20)) != 0); // Bit 20 should be set
 }
@@ -517,7 +519,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   h.tagBloom = 0x00000001U; // Only bit 0 set
 
   std::vector<char> data;
-  data.insert(data.end(), reinterpret_cast<const char*>(&h), reinterpret_cast<const char*>(&h + 1));
+  data.insert(data.end(), reinterpret_cast<char const*>(&h), reinterpret_cast<char const*>(&h + 1));
 
   data.push_back('\0'); // empty title
   data.push_back('\0'); // empty uri
@@ -542,7 +544,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
   h.tagBloom = 0xFFFFFFFFU; // All bits set
 
   std::vector<char> data;
-  data.insert(data.end(), reinterpret_cast<const char*>(&h), reinterpret_cast<const char*>(&h + 1));
+  data.insert(data.end(), reinterpret_cast<char const*>(&h), reinterpret_cast<char const*>(&h + 1));
 
   data.push_back('\0'); // empty title
   data.push_back('\0'); // empty uri

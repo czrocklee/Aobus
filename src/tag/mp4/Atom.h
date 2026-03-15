@@ -30,7 +30,7 @@ namespace rs::tag::mp4
   class Atom
   {
   public:
-    using Visitor = std::function<bool(const Atom&)>;
+    using Visitor = std::function<bool(Atom const&)>;
 
     virtual ~Atom() = default;
 
@@ -38,28 +38,28 @@ namespace rs::tag::mp4
 
     virtual std::string_view type() const = 0;
 
-    virtual const Atom* parent() const = 0;
+    virtual Atom const* parent() const = 0;
 
     virtual bool isLeaf() const = 0;
 
-    virtual void visitChildren(const Visitor& visitor) const = 0;
+    virtual void visitChildren(Visitor const& visitor) const = 0;
   };
 
   class AtomView : public Atom
   {
   public:
-    AtomView(const void* data, std::size_t size, Atom& parent) : _data{data}, _size{size}, _parent{parent} {}
+    AtomView(void const* data, std::size_t size, Atom& parent) : _data{data}, _size{size}, _parent{parent} {}
 
     std::uint32_t length() const override { return layout<AtomLayout>().length.value(); }
 
     std::string_view type() const override { return std::string_view{layout<AtomLayout>().type.data(), 4}; }
 
-    const Atom* parent() const override { return &_parent; }
+    Atom const* parent() const override { return &_parent; }
 
     template<typename Layout>
-    const Layout& layout() const
+    Layout const& layout() const
     {
-      if (auto length = static_cast<const AtomLayout*>(_data)->length.value(); typename Layout::FixedSize{})
+      if (auto length = static_cast<AtomLayout const*>(_data)->length.value(); typename Layout::FixedSize{})
       {
         assert(length == sizeof(Layout));
       }
@@ -68,11 +68,11 @@ namespace rs::tag::mp4
         assert(length >= sizeof(Layout));
       }
 
-      return *static_cast<const Layout*>(_data);
+      return *static_cast<Layout const*>(_data);
     }
 
   private:
-    const void* _data;
+    void const* _data;
     std::size_t _size;
     Atom& _parent;
   };
@@ -85,7 +85,7 @@ namespace rs::tag::mp4
 
     bool isLeaf() const override { return true; };
 
-    void visitChildren(const Visitor& visitor) const override { return; }
+    void visitChildren(Visitor const&) const override {}
   };
 
   class ContainerAtomView : public AtomView
@@ -96,9 +96,9 @@ namespace rs::tag::mp4
 
     bool isLeaf() const override { return false; };
 
-    void visitChildren(const Visitor& visitor) const override
+    void visitChildren(Visitor const& visitor) const override
     {
-      for (const auto& child : _children)
+      for (auto const& child : _children)
       {
         if (!std::invoke(visitor, *child))
         {
@@ -124,13 +124,13 @@ namespace rs::tag::mp4
 
     std::string_view type() const override { return "root"; }
 
-    const Atom* parent() const override { return nullptr; }
+    Atom const* parent() const override { return nullptr; }
 
     bool isLeaf() const override { return false; };
 
-    void visitChildren(const Visitor& visitor) const override
+    void visitChildren(Visitor const& visitor) const override
     {
-      for (const auto& child : _children)
+      for (auto const& child : _children)
       {
         if (!std::invoke(visitor, *child))
         {
@@ -145,5 +145,5 @@ namespace rs::tag::mp4
     std::vector<std::unique_ptr<Atom>> _children;
   };
 
-  RootAtom fromBuffer(const void* data, std::size_t);
+  RootAtom fromBuffer(void const* data, std::size_t);
 }

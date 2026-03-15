@@ -32,7 +32,7 @@ namespace rs::tag::mpeg
       return {};
     }
 
-    const auto* id3v2Header = static_cast<const id3v2::HeaderLayout*>(_mappedRegion.get_address());
+    auto const* id3v2Header = static_cast<id3v2::HeaderLayout const*>(_mappedRegion.get_address());
     std::size_t size = id3v2::decodeSize(id3v2Header->size);
 
     if (size + sizeof(id3v2::HeaderLayout) > _mappedRegion.get_size())
@@ -43,5 +43,5 @@ namespace rs::tag::mpeg
     return id3v2::loadFrames(*id3v2Header, id3v2Header + 1, size);
   }
 
-  void File::saveMetadata(const Metadata& metadata) {}
+  void File::saveMetadata(Metadata const&) {}
 }

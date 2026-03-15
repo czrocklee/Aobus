@@ -60,10 +60,10 @@ private:
 
   // List selection callback
   void onListSelectionChanged(std::uint32_t position, std::uint32_t nItems);
-  void updateCoverArt(const std::vector<rs::core::MusicLibrary::TrackId>& selectedIds);
+  void updateCoverArt(std::vector<rs::core::MusicLibrary::TrackId> const& selectedIds);
 
   // List context menu
-  void showListContextMenu(Gtk::ListView& listView, const Gdk::Rectangle& rect);
+  void showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle const& rect);
 
   // Track context menu (tagging)
   void showTrackContextMenu(TrackViewPage& page, double x, double y);
@@ -72,11 +72,11 @@ private:
   void setupMenu();
   void setupLayout();
   void openLibrary();
-  void openMusicLibrary(const std::filesystem::path& path);
+  void openMusicLibrary(std::filesystem::path const& path);
   void importFiles();
-  void importFilesFromPath(const std::filesystem::path& path);
-  void scanDirectory(const std::filesystem::path& dir, std::vector<std::filesystem::path>& files);
-  void createList(const rs::fbs::ListT& list);
+  void importFilesFromPath(std::filesystem::path const& path);
+  void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files);
+  void createList(rs::fbs::ListT const& list);
   void onDeleteList();
   void onTagTrack();
   void setupTrackContextMenu();

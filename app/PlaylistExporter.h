@@ -38,17 +38,17 @@ private slots:
 private:
   void scheduleForWrite();
 
-  void onEndInsert(TrackId, const rs::fbs::TrackT&, AbstractTrackList::Index) override { scheduleForWrite(); }
+  void onEndInsert(TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index) override { scheduleForWrite(); }
 
-  void onEndUpdate(TrackId, const rs::fbs::TrackT&, AbstractTrackList::Index) override { scheduleForWrite(); }
+  void onEndUpdate(TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index) override { scheduleForWrite(); }
 
   void onEndRemove(TrackId, AbstractTrackList::Index) override { scheduleForWrite(); }
 
   void onEndClear() override { scheduleForWrite(); }
 
   AbstractTrackList& _list;
-  const std::filesystem::path _root;
-  const std::filesystem::path _path;
-  const std::string _name;
+  std::filesystem::path const _root;
+  std::filesystem::path const _path;
+  std::string const _name;
   QTimer* _timer;
 };

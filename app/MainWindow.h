@@ -32,9 +32,9 @@ class MainWindow : public QMainWindow
 public:
   MainWindow();
 
-  void openMusicLibrary(const std::string& root);
+  void openMusicLibrary(std::string const& root);
 
-  void importMusicLibrary(const std::string& root);
+  void importMusicLibrary(std::string const& root);
 
 private:
   using MusicLibrary = rs::core::MusicLibrary;
@@ -45,8 +45,8 @@ private:
   void loadTracks(ReadTransaction& txn);
   void loadLists(ReadTransaction& txn);
 
-  void onTrackClicked(const QModelIndex& index);
-  void addListItem(rs::core::MusicLibrary::ListId id, const rs::fbs::List* list);
+  void onTrackClicked(QModelIndex const& index);
+  void addListItem(rs::core::MusicLibrary::ListId id, rs::fbs::List const* list);
 
   Ui::MainWindow _ui;
   std::unique_ptr<MusicLibrary> _ml;

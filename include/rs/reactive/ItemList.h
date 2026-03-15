@@ -33,7 +33,7 @@ namespace rs::reactive
 
     [[nodiscard]] std::size_t size() const override { return _items.size(); }
 
-    [[nodiscard]] const Value& at(Index idx) const override { return *_items.nth(idx); }
+    [[nodiscard]] Value const& at(Index idx) const override { return *_items.nth(idx); }
 
     void attach(Observer& observer) override { _observerable.attach(observer); }
 
@@ -82,7 +82,7 @@ namespace rs::reactive
       return nullptr;
     }
 
-    const T* find(Id id) const
+    T const* find(Id id) const
     {
       if (auto iter = _items.find(id); iter != _items.end())
       {

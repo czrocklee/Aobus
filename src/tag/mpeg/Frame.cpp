@@ -26,7 +26,7 @@ namespace rs::tag::mpeg
     using SamplingRateArray = std::array<std::uint32_t, 4>;
     using VersionSamplingRateArray = std::array<SamplingRateArray, 4>;
 
-    VersionSamplingRateArray VersionSamplingRateTable = {{
+    [[maybe_unused]] VersionSamplingRateArray VersionSamplingRateTable = {{
       {44100, 48000, 32000, 0}, // V2.5
       {0, 0, 0, 0},             // Reserved
       {22050, 24000, 16000, 0}, // V2
@@ -45,7 +45,7 @@ namespace rs::tag::mpeg
     using LayerBitrateArray = std::array<BitrateArray, 4>;
     using VersionLayerBitrateArray = std::array<LayerBitrateArray, 4>;
 
-    VersionLayerBitrateArray VersionLayerBitrateTable = {{
+    [[maybe_unused]] VersionLayerBitrateArray VersionLayerBitrateTable = {{
       {BitrateTableReserved, BitrateTableV2L23, BitrateTableV2L23, BitrateTableV2L1},           // V2.5
       {BitrateTableReserved, BitrateTableReserved, BitrateTableReserved, BitrateTableReserved}, // Reserved,
       {BitrateTableReserved, BitrateTableV2L23, BitrateTableV2L23, BitrateTableV2L1},           // V2
@@ -55,11 +55,11 @@ namespace rs::tag::mpeg
 
   std::size_t FrameView::length() const
   {
-    const auto& frameLayout = layout();
-    std::size_t versionId = static_cast<std::size_t>(frameLayout.versionId);
-    std::size_t layer = static_cast<std::size_t>(frameLayout.layer);
-    std::size_t bitrateIndex = static_cast<std::size_t>(frameLayout.bitrateIndex);
-    std::size_t samplingRateIndex = static_cast<std::size_t>(frameLayout.samplingRateIndex);
+    auto const& frameLayout = layout();
+    [[maybe_unused]] std::size_t versionId = static_cast<std::size_t>(frameLayout.versionId);
+    [[maybe_unused]] std::size_t layer = static_cast<std::size_t>(frameLayout.layer);
+    [[maybe_unused]] std::size_t bitrateIndex = static_cast<std::size_t>(frameLayout.bitrateIndex);
+    [[maybe_unused]] std::size_t samplingRateIndex = static_cast<std::size_t>(frameLayout.samplingRateIndex);
     return 0;
     /* if (frameLayout.layer == LayerDescription::LayerI)
     {
@@ -84,11 +84,11 @@ namespace rs::tag::mpeg
     constexpr std::uint8_t FrameSyncByte2Mask = 0xE0;
     constexpr std::size_t FrameSyncSkipSize = 2;
 
-    const std::uint8_t* findFrameSync(const std::uint8_t* begin, const std::uint8_t* end)
+    std::uint8_t const* findFrameSync(std::uint8_t const* begin, std::uint8_t const* end)
     {
       for (auto size = static_cast<std::size_t>(end - begin); size >= sizeof(FrameLayout);)
       {
-        if (begin = static_cast<const std::uint8_t*>(std::memchr(begin, FrameSyncByte1, size)); begin == nullptr)
+        if (begin = static_cast<std::uint8_t const*>(std::memchr(begin, FrameSyncByte1, size)); begin == nullptr)
         {
           return nullptr;
         }
@@ -111,12 +111,12 @@ namespace rs::tag::mpeg
     }
   }
 
-  std::optional<FrameView> locate(const void* buffer, std::size_t size)
+  std::optional<FrameView> locate(void const* buffer, std::size_t size)
   {
-    auto begin = static_cast<const std::uint8_t*>(buffer);
+    auto begin = static_cast<std::uint8_t const*>(buffer);
     auto end = begin + size;
 
-    for (const std::uint8_t* frameCandidate = findFrameSync(begin, end); frameCandidate != nullptr;
+    for (std::uint8_t const* frameCandidate = findFrameSync(begin, end); frameCandidate != nullptr;
          frameCandidate = findFrameSync(frameCandidate + FrameSyncSkipSize, end))
     {
       if (FrameView view{frameCandidate, static_cast<std::size_t>(end - frameCandidate)}; view.isValid())

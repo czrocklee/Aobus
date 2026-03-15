@@ -67,16 +67,16 @@ namespace rs::core
   public:
     ListView() noexcept : _header(nullptr), _payloadBase(nullptr), _size(0) {}
 
-    ListView(const void* data, std::size_t size) noexcept
-      : _header(static_cast<const ListHeader*>(data))
-      , _payloadBase(static_cast<const std::uint8_t*>(data))
+    ListView(void const* data, std::size_t size) noexcept
+      : _header(static_cast<ListHeader const*>(data))
+      , _payloadBase(static_cast<std::uint8_t const*>(data))
       , _size(size)
     {
     }
 
     [[nodiscard]] bool isValid() const noexcept { return _header != nullptr && _size >= sizeof(ListHeader); }
 
-    [[nodiscard]] const ListHeader* header() const noexcept { return _header; }
+    [[nodiscard]] ListHeader const* header() const noexcept { return _header; }
 
     [[nodiscard]] std::uint64_t trackIdsCount() const noexcept { return _header->trackIdsCount; }
     [[nodiscard]] std::uint32_t nameId() const noexcept { return _header->nameId; }
@@ -90,15 +90,18 @@ namespace rs::core
 
     [[nodiscard]] std::string_view payload() const
     {
-      if (!isValid()) { return {}; }
+      if (!isValid())
+      {
+        return {};
+      }
       auto payloadStart = _payloadBase + sizeof(ListHeader);
       auto payloadSize = _size - sizeof(ListHeader);
-      return {reinterpret_cast<const char*>(payloadStart), payloadSize};
+      return {reinterpret_cast<char const*>(payloadStart), payloadSize};
     }
 
   private:
-    const ListHeader* _header;
-    const std::uint8_t* _payloadBase;
+    ListHeader const* _header;
+    std::uint8_t const* _payloadBase;
     std::size_t _size;
 
     [[nodiscard]] std::string_view getString(std::uint16_t offset, std::uint16_t len) const;

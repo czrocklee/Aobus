@@ -39,7 +39,7 @@ void ImportProgressDialog::setupUi([[maybe_unused]] int maxItems)
   set_child(box);
 }
 
-void ImportProgressDialog::onNewTrack(const std::string& path, int itemIndex)
+void ImportProgressDialog::onNewTrack(std::string const& path, int itemIndex)
 {
   auto fraction = static_cast<double>(itemIndex) / _maxItems;
   _progressBar.set_fraction(fraction);

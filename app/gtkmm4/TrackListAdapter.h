@@ -26,18 +26,18 @@ public:
   Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
 
   // Set filter text - filters by artist, album, or title containing the text
-  void setFilter(const Glib::ustring& filterText);
+  void setFilter(Glib::ustring const& filterText);
 
   // Set expression filter - filters based on expression
-  void setExprFilter(const std::string& exprString);
+  void setExprFilter(std::string const& exprString);
 
   // Observer overrides
   void onAttached() override;
   void onBeginInsert(TrackId id, AbstractTrackList::Index index) override;
-  void onEndInsert(TrackId id, const rs::fbs::TrackT& track, AbstractTrackList::Index index) override;
-  void onBeginUpdate(TrackId id, const rs::fbs::TrackT& track, AbstractTrackList::Index index) override;
-  void onEndUpdate(TrackId id, const rs::fbs::TrackT& track, AbstractTrackList::Index index) override;
-  void onBeginRemove(TrackId id, const rs::fbs::TrackT& track, AbstractTrackList::Index index) override;
+  void onEndInsert(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index) override;
+  void onBeginUpdate(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index) override;
+  void onEndUpdate(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index) override;
+  void onBeginRemove(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index) override;
   void onEndRemove(TrackId id, AbstractTrackList::Index index) override;
   void onBeginClear() override;
   void onEndClear() override;

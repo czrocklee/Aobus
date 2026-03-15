@@ -39,9 +39,9 @@ namespace rs::tag::flac
   class MetadataBlockView : public MetadataBlock
   {
   public:
-    MetadataBlockView(const void* data) : _data{data} {}
+    MetadataBlockView(void const* data) : _data{data} {}
 
-    const void* data() const { return _data; }
+    void const* data() const { return _data; }
 
     std::uint32_t size() const override
     {
@@ -51,9 +51,9 @@ namespace rs::tag::flac
     MetadataBlockType type() const override { return layout<MetadataBlockLayout>().type; }
 
     template<typename Layout>
-    const Layout& layout() const
+    Layout const& layout() const
     {
-      if (auto size = static_cast<const MetadataBlockLayout*>(_data)->size.value(); typename Layout::FixedSize{})
+      if (auto size = static_cast<MetadataBlockLayout const*>(_data)->size.value(); typename Layout::FixedSize{})
       {
         assert(size == sizeof(Layout));
       }
@@ -62,11 +62,11 @@ namespace rs::tag::flac
         assert(size >= sizeof(Layout));
       }
 
-      return *static_cast<const Layout*>(_data);
+      return *static_cast<Layout const*>(_data);
     }
 
   private:
-    const void* _data;
+    void const* _data;
     friend class MetadataBlockViewIterator;
   };
 
@@ -87,23 +87,23 @@ namespace rs::tag::flac
   };
 
   class MetadataBlockViewIterator
-    : public boost::iterator_facade<MetadataBlockViewIterator, const MetadataBlockView, boost::forward_traversal_tag>
+    : public boost::iterator_facade<MetadataBlockViewIterator, MetadataBlockView const, boost::forward_traversal_tag>
   {
   public:
     static constexpr std::size_t StreamInfoBlockSize = 38;
 
     MetadataBlockViewIterator() : _view{nullptr}, _sizeLeft{0} {}
 
-    MetadataBlockViewIterator(const void* data, std::size_t size);
+    MetadataBlockViewIterator(void const* data, std::size_t size);
 
   private:
     friend class boost::iterator_core_access;
 
     void increment();
 
-    bool equal(const MetadataBlockViewIterator& other) const { return _view._data == other._view._data; }
+    bool equal(MetadataBlockViewIterator const& other) const { return _view._data == other._view._data; }
 
-    const MetadataBlockView& dereference() const { return _view; }
+    MetadataBlockView const& dereference() const { return _view; }
 
     MetadataBlockView _view;
     std::size_t _sizeLeft;

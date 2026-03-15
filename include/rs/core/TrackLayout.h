@@ -96,7 +96,7 @@ namespace rs::core
     class PropertyProxy
     {
     public:
-      explicit PropertyProxy(const TrackView& track) : _h(*track.header()), _track(track) {}
+      explicit PropertyProxy(TrackView const& track) : _h(*track.header()), _track(track) {}
 
       [[nodiscard]] std::uint32_t durationMs() const noexcept { return _h.durationMs; }
       [[nodiscard]] std::uint32_t bitrate() const noexcept { return _h.bitrate; }
@@ -110,8 +110,8 @@ namespace rs::core
       [[nodiscard]] std::string_view uri() const { return _track.uri(); }
 
     private:
-      const TrackHeader& _h;
-      const TrackView& _track;
+      TrackHeader const& _h;
+      TrackView const& _track;
     };
 
     /**
@@ -120,7 +120,7 @@ namespace rs::core
     class MetadataProxy
     {
     public:
-      explicit MetadataProxy(const TrackView& track) : _track(track) {}
+      explicit MetadataProxy(TrackView const& track) : _track(track) {}
 
       [[nodiscard]] std::string_view title() const { return _track.title(); }
       [[nodiscard]] DictionaryId artistId() const noexcept { return _track.header()->artistId; }
@@ -132,7 +132,7 @@ namespace rs::core
       [[nodiscard]] std::uint16_t trackNumber() const noexcept { return _track.header()->trackNumber; }
 
     private:
-      const TrackView& _track;
+      TrackView const& _track;
     };
 
     /**
@@ -141,7 +141,7 @@ namespace rs::core
     class TagProxy
     {
     public:
-      explicit TagProxy(const TrackView& track) : _track(track) {}
+      explicit TagProxy(TrackView const& track) : _track(track) {}
 
       [[nodiscard]] std::uint8_t count() const noexcept { return _track.header()->tagCount; }
       [[nodiscard]] std::uint32_t bloom() const noexcept { return _track.header()->tagBloom; }
@@ -150,14 +150,14 @@ namespace rs::core
       [[nodiscard]] bool has(DictionaryId tagIdToCheck) const;
 
     private:
-      const TrackView& _track;
+      TrackView const& _track;
     };
 
     TrackView() noexcept : _header(nullptr), _payloadBase(nullptr), _size(0) {}
 
-    TrackView(const void* data, std::size_t size) noexcept
-      : _header(static_cast<const TrackHeader*>(data))
-      , _payloadBase(static_cast<const std::uint8_t*>(data))
+    TrackView(void const* data, std::size_t size) noexcept
+      : _header(static_cast<TrackHeader const*>(data))
+      , _payloadBase(static_cast<std::uint8_t const*>(data))
       , _size(size)
     {
     }
@@ -170,7 +170,7 @@ namespace rs::core
     [[nodiscard]] TagProxy tags() const { return TagProxy(*this); }
 
     // Essential accessors
-    [[nodiscard]] const TrackHeader* header() const noexcept { return _header; }
+    [[nodiscard]] TrackHeader const* header() const noexcept { return _header; }
 
     // Get the raw payload data (everything after the header)
     [[nodiscard]] std::string_view payload() const
@@ -178,12 +178,12 @@ namespace rs::core
       if (!isValid()) return {};
       auto payloadStart = _payloadBase + sizeof(TrackHeader);
       auto payloadSize = _size - sizeof(TrackHeader);
-      return {reinterpret_cast<const char*>(payloadStart), payloadSize};
+      return {reinterpret_cast<char const*>(payloadStart), payloadSize};
     }
 
   private:
-    const TrackHeader* _header;
-    const std::uint8_t* _payloadBase;
+    TrackHeader const* _header;
+    std::uint8_t const* _payloadBase;
     std::size_t _size;
 
     [[nodiscard]] std::string_view getString(std::uint16_t offset, std::uint16_t len) const;

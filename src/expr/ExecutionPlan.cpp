@@ -33,30 +33,19 @@ namespace rs::expr
       switch (type)
       {
         case VariableType::Property:
-          if (name == "duration" || name == "l")
-            return Field::DurationMs;
-          if (name == "bitrate" || name == "br")
-            return Field::Bitrate;
-          if (name == "sampleRate" || name == "sr")
-            return Field::SampleRate;
-          if (name == "channels")
-            return Field::Channels;
-          if (name == "bitDepth" || name == "bd")
-            return Field::BitDepth;
+          if (name == "duration" || name == "l") return Field::DurationMs;
+          if (name == "bitrate" || name == "br") return Field::Bitrate;
+          if (name == "sampleRate" || name == "sr") return Field::SampleRate;
+          if (name == "channels") return Field::Channels;
+          if (name == "bitDepth" || name == "bd") return Field::BitDepth;
           break;
         case VariableType::Metadata:
-          if (name == "year" || name == "y")
-            return Field::Year;
-          if (name == "trackNumber" || name == "tn")
-            return Field::TrackNumber;
-          if (name == "artist" || name == "a")
-            return Field::ArtistId;
-          if (name == "album" || name == "al")
-            return Field::AlbumId;
-          if (name == "genre" || name == "g")
-            return Field::GenreId;
-          if (name == "title" || name == "t")
-            return Field::Title;
+          if (name == "year" || name == "y") return Field::Year;
+          if (name == "trackNumber" || name == "tn") return Field::TrackNumber;
+          if (name == "artist" || name == "a") return Field::ArtistId;
+          if (name == "album" || name == "al") return Field::AlbumId;
+          if (name == "genre" || name == "g") return Field::GenreId;
+          if (name == "title" || name == "t") return Field::Title;
           break;
         case VariableType::Tag:
           return Field::Tag;
@@ -101,7 +90,7 @@ namespace rs::expr
     bool isTagField(Field field) { return field == Field::Tag; }
   }
 
-  QueryCompiler::QueryCompiler(const core::IDictionary& dict) : _dict(&dict) {}
+  QueryCompiler::QueryCompiler(core::IDictionary const& dict) : _dict(&dict) {}
 
   std::uint32_t QueryCompiler::addStringConstant(std::string_view str)
   {
@@ -114,17 +103,17 @@ namespace rs::expr
     return static_cast<std::uint32_t>(_plan.stringConstants.size() - 1);
   }
 
-  void QueryCompiler::compileExpression(const Expression& expr)
+  void QueryCompiler::compileExpression(Expression const& expr)
   {
     boost::apply_visitor(
-      utility::makeVisitor([this](const BinaryExpression& binary) { compileBinary(binary); },
-                           [this](const UnaryExpression& unary) { compileUnary(unary); },
-                           [this](const VariableExpression& var) { compileVariable(var); },
-                           [this](const ConstantExpression& constant) { compileConstant(constant); }),
+      utility::makeVisitor([this](BinaryExpression const& binary) { compileBinary(binary); },
+                           [this](UnaryExpression const& unary) { compileUnary(unary); },
+                           [this](VariableExpression const& var) { compileVariable(var); },
+                           [this](ConstantExpression const& constant) { compileConstant(constant); }),
       expr);
   }
 
-  void QueryCompiler::compileBinary(const BinaryExpression& binary)
+  void QueryCompiler::compileBinary(BinaryExpression const& binary)
   {
     // Compile left operand
     compileExpression(binary.operand);
@@ -153,7 +142,7 @@ namespace rs::expr
     }
   }
 
-  void QueryCompiler::compileUnary(const UnaryExpression& unary)
+  void QueryCompiler::compileUnary(UnaryExpression const& unary)
   {
     compileExpression(unary.operand);
 
@@ -167,7 +156,7 @@ namespace rs::expr
     _plan.instructions.push_back(instr);
   }
 
-  void QueryCompiler::compileVariable(const VariableExpression& var)
+  void QueryCompiler::compileVariable(VariableExpression const& var)
   {
     if (var.type == VariableType::Tag)
     {
@@ -227,7 +216,7 @@ namespace rs::expr
     _plan.instructions.push_back(instr);
   }
 
-  void QueryCompiler::compileConstant(const ConstantExpression& constant)
+  void QueryCompiler::compileConstant(ConstantExpression const& constant)
   {
     std::visit(utility::makeVisitor(
                  [this](bool val) {
@@ -250,7 +239,7 @@ namespace rs::expr
                    instr.strData = nullptr;
                    _plan.instructions.push_back(instr);
                  },
-                 [this](const std::string& val) {
+                 [this](std::string const& val) {
                    // Check if we should resolve this string via dictionary
                    // For metadata ID fields (artist, album, genre), resolve to numeric ID
                    auto resolvedId = resolveStringConstant(val, _lastField);
@@ -279,7 +268,7 @@ namespace rs::expr
                constant);
   }
 
-  std::int64_t QueryCompiler::resolveStringConstant(const std::string& str, Field field) const
+  std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field) const
   {
     // Only resolve for metadata ID fields and tag fields
     if (!isMetadataFieldId(field) && !isTagField(field))
@@ -302,15 +291,15 @@ namespace rs::expr
     return static_cast<std::int64_t>(id.value());
   }
 
-  ExecutionPlan QueryCompiler::compile(const Expression& expr)
+  ExecutionPlan QueryCompiler::compile(Expression const& expr)
   {
     _plan = ExecutionPlan{};
     _nextReg = 0;
 
     // Check if the expression is a constant "true"
-    if (const auto* constant = boost::get<ConstantExpression>(&expr))
+    if (auto const* constant = boost::get<ConstantExpression>(&expr))
     {
-      if (const bool* val = std::get_if<bool>(constant))
+      if (bool const* val = std::get_if<bool>(constant))
       {
         if (*val)
         {

@@ -10,7 +10,7 @@
 class TrackViewPage : public Gtk::Box
 {
 public:
-  explicit TrackViewPage(const Glib::RefPtr<TrackListAdapter>& adapter);
+  explicit TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter);
   ~TrackViewPage() override;
 
   // Get the selected track IDs

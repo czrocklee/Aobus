@@ -26,5 +26,5 @@ class Command
 public:
   virtual ~Command() {};
 
-  virtual void execute(int argc, const char* argv[], std::ostream& os) = 0;
+  virtual void execute(int argc, char const* argv[], std::ostream& os) = 0;
 };

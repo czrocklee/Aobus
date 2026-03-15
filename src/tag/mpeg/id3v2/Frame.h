@@ -30,7 +30,7 @@ namespace rs::tag::mpeg::id3v2
   class FrameView
   {
   public:
-    FrameView(const void* data, std::size_t availableSize) : _data{data}
+    FrameView(void const* data, std::size_t availableSize) : _data{data}
     {
       if (availableSize > 0 && (availableSize < sizeof(CommonFrameLayout) || availableSize < size()))
       {
@@ -39,18 +39,18 @@ namespace rs::tag::mpeg::id3v2
       }
     }
 
-    const void* data() const { return _data; }
+    void const* data() const { return _data; }
 
     std::size_t size() const { return contentSize() + sizeof(CommonFrameLayout); }
 
     std::string_view id() const
     {
-      const auto& id = static_cast<const CommonFrameLayout*>(_data)->id;
+      auto const& id = static_cast<CommonFrameLayout const*>(_data)->id;
       return {id.data(), id.size()};
     }
 
     template<typename Layout>
-    const Layout& layout() const
+    Layout const& layout() const
     {
       if (sizeof(Layout) > size())
       {
@@ -58,14 +58,14 @@ namespace rs::tag::mpeg::id3v2
           core::Exception, "invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
       }
 
-      return *static_cast<const Layout*>(_data);
+      return *static_cast<Layout const*>(_data);
     }
 
   protected:
-    std::size_t contentSize() const { return frameSize(*static_cast<const CommonFrameLayout*>(_data)); }
+    std::size_t contentSize() const { return frameSize(*static_cast<CommonFrameLayout const*>(_data)); }
 
   private:
-    const void* _data;
+    void const* _data;
   };
 
   using V22FrameView = FrameView<V22CommonFrameLayout>;
@@ -84,8 +84,8 @@ namespace rs::tag::mpeg::id3v2
 
     std::string text() const
     {
-      auto begin = static_cast<const char*>(Base::data()) + sizeof(FrameViewLayout);
-      auto end = static_cast<const char*>(Base::data()) + Base::size();
+      auto begin = static_cast<char const*>(Base::data()) + sizeof(FrameViewLayout);
+      auto end = static_cast<char const*>(Base::data()) + Base::size();
       auto encoding = Base::template layout<FrameViewLayout>().encoding;
       return boost::locale::conv::to_utf<char>(begin, end, encoding == Encoding::Latin_1 ? "Latin1" : "UCS-2");
     }
@@ -95,12 +95,12 @@ namespace rs::tag::mpeg::id3v2
 
   template<typename ViewT>
   class FrameViewIterator
-    : public boost::iterator_facade<FrameViewIterator<ViewT>, const ViewT, boost::forward_traversal_tag>
+    : public boost::iterator_facade<FrameViewIterator<ViewT>, ViewT const, boost::forward_traversal_tag>
   {
   public:
     FrameViewIterator() : _view{nullptr, 0}, _sizeLeft{0} {}
 
-    FrameViewIterator(const void* data, std::size_t size) : _view{size > 0 ? data : nullptr, size}, _sizeLeft{size} {}
+    FrameViewIterator(void const* data, std::size_t size) : _view{size > 0 ? data : nullptr, size}, _sizeLeft{size} {}
 
   private:
     friend class boost::iterator_core_access;
@@ -119,14 +119,14 @@ namespace rs::tag::mpeg::id3v2
         _view = ViewT{nullptr, 0};
       }
 
-      const char* nextFrame = static_cast<const char*>(_view.data()) + _view.size();
+      char const* nextFrame = static_cast<char const*>(_view.data()) + _view.size();
       bool isPadding = (*nextFrame == 0 && std::memcmp(nextFrame, nextFrame + 1, _sizeLeft - 1) == 0);
       _view = isPadding ? ViewT{nullptr, 0} : ViewT{nextFrame, _sizeLeft};
     }
 
-    bool equal(const FrameViewIterator& other) const { return _view.data() == other._view.data(); }
+    bool equal(FrameViewIterator const& other) const { return _view.data() == other._view.data(); }
 
-    const ViewT& dereference() const { return _view; }
+    ViewT const& dereference() const { return _view; }
 
     ViewT _view;
     std::size_t _sizeLeft;

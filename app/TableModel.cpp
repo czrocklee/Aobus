@@ -41,19 +41,19 @@ public:
     q->beginInsertRows({}, index, index);
   }
 
-  void onEndInsert(TableModel::TrackId, const rs::fbs::TrackT&, AbstractTrackList::Index index)
+  void onEndInsert(TableModel::TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index index)
   {
     Q_Q(TableModel);
     q->endInsertRows();
   }
 
-  void onEndUpdate(TableModel::TrackId, const rs::fbs::TrackT&, AbstractTrackList::Index index) override
+  void onEndUpdate(TableModel::TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index index) override
   {
     Q_Q(TableModel);
     emit(q->dataChanged(q->index(index, 0, {}), q->index(index, 2, {})));
   }
 
-  void onBeginRemove(TableModel::TrackId, const rs::fbs::TrackT&, AbstractTrackList::Index index) override
+  void onBeginRemove(TableModel::TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index index) override
   {
     Q_Q(TableModel);
     q->beginRemoveRows({}, index, index);
@@ -91,27 +91,25 @@ TableModel::TableModel(AbstractTrackList& tracks, QObject* parent)
 
 TableModel::~TableModel() {}
 
-int TableModel::rowCount(const QModelIndex& parent) const
+int TableModel::rowCount(QModelIndex const& parent) const
 {
   Q_UNUSED(parent);
   return d_ptr->tracks.size();
 }
 
-int TableModel::columnCount(const QModelIndex& parent) const
+int TableModel::columnCount(QModelIndex const& parent) const
 {
   Q_UNUSED(parent);
   return 4;
 }
 
-QVariant TableModel::data(const QModelIndex& index, int role) const
+QVariant TableModel::data(QModelIndex const& index, int role) const
 {
-  if (!index.isValid())
-    return QVariant();
+  if (!index.isValid()) return QVariant();
 
-  if (index.row() >= static_cast<int>(d_ptr->tracks.size()) || index.row() < 0)
-    return QVariant();
+  if (index.row() >= static_cast<int>(d_ptr->tracks.size()) || index.row() < 0) return QVariant();
 
-  const auto& track = d_ptr->tracks.at(AbstractTrackList::Index{static_cast<std::size_t>(index.row())}).second;
+  auto const& track = d_ptr->tracks.at(AbstractTrackList::Index{static_cast<std::size_t>(index.row())}).second;
 
   if (role == Qt::DisplayRole)
   {
@@ -124,7 +122,7 @@ QVariant TableModel::data(const QModelIndex& index, int role) const
     else if (index.column() == 3)
     {
       QStringList tags;
-      std::transform(track.tags.begin(), track.tags.end(), std::back_inserter(tags), [](const auto& tag) {
+      std::transform(track.tags.begin(), track.tags.end(), std::back_inserter(tags), [](auto const& tag) {
         return QString::fromUtf8(tag.c_str());
       });
       return tags;
@@ -141,8 +139,7 @@ QVariant TableModel::data(const QModelIndex& index, int role) const
 
 QVariant TableModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
-  if (role != Qt::DisplayRole)
-    return QVariant();
+  if (role != Qt::DisplayRole) return QVariant();
 
   if (orientation == Qt::Horizontal)
   {
@@ -166,7 +163,7 @@ QVariant TableModel::headerData(int section, Qt::Orientation orientation, int ro
 //! [3]
 
 //! [4]
-bool TableModel::insertRows(int position, int rows, const QModelIndex& index)
+bool TableModel::insertRows(int position, int rows, QModelIndex const& index)
 {
   Q_UNUSED(index);
   beginInsertRows(QModelIndex(), position, position + rows - 1);
@@ -180,7 +177,7 @@ bool TableModel::insertRows(int position, int rows, const QModelIndex& index)
 //! [4]
 
 //! [5]
-bool TableModel::removeRows(int position, int rows, const QModelIndex& index)
+bool TableModel::removeRows(int position, int rows, QModelIndex const& index)
 {
   Q_UNUSED(index);
   beginRemoveRows(QModelIndex(), position, position + rows - 1);
@@ -194,7 +191,7 @@ bool TableModel::removeRows(int position, int rows, const QModelIndex& index)
 //! [5]
 
 //! [6]
-bool TableModel::setData(const QModelIndex& index, const QVariant& value, int role)
+bool TableModel::setData(QModelIndex const& index, QVariant const& value, int role)
 {
   /*   if (index.isValid() && role == Qt::EditRole)
     {
@@ -226,15 +223,14 @@ bool TableModel::setData(const QModelIndex& index, const QVariant& value, int ro
 //! [6]
 
 //! [7]
-Qt::ItemFlags TableModel::flags(const QModelIndex& index) const
+Qt::ItemFlags TableModel::flags(QModelIndex const& index) const
 {
-  if (!index.isValid())
-    return Qt::ItemIsEnabled;
+  if (!index.isValid()) return Qt::ItemIsEnabled;
 
   return QAbstractTableModel::flags(index) | Qt::ItemIsEditable;
 }
 
-QModelIndex TableModel::index(int row, int column, const QModelIndex& parent) const
+QModelIndex TableModel::index(int row, int column, QModelIndex const& parent) const
 {
   return createIndex(
     row,

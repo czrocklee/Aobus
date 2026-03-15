@@ -273,8 +273,8 @@ namespace
     // Add tag IDs (4 bytes each)
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert(data.end(), reinterpret_cast<const char*>(&tag1), reinterpret_cast<const char*>(&tag1 + 1));
-    data.insert(data.end(), reinterpret_cast<const char*>(&tag2), reinterpret_cast<const char*>(&tag2 + 1));
+    data.insert(data.end(), reinterpret_cast<char const*>(&tag1), reinterpret_cast<char const*>(&tag1 + 1));
+    data.insert(data.end(), reinterpret_cast<char const*>(&tag2), reinterpret_cast<char const*>(&tag2 + 1));
 
     TrackView view(data.data(), data.size());
 

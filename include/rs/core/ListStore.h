@@ -41,7 +41,7 @@ namespace rs::core
     class Reader;
     class Writer;
 
-    ListStore(lmdb::Environment& env, const std::string& db);
+    ListStore(lmdb::Environment& env, std::string const& db);
 
     Reader reader(lmdb::ReadTransaction& txn) const;
     Writer writer(lmdb::WriteTransaction& txn);
@@ -79,9 +79,9 @@ namespace rs::core
     using value_type = std::pair<Id, ListView>;
 
     Iterator() = default;
-    Iterator(const Iterator& other) = default;
+    Iterator(Iterator const& other) = default;
 
-    bool operator==(const Iterator& other) const;
+    bool operator==(Iterator const& other) const;
     Iterator& operator++();
     value_type operator*() const;
 
@@ -101,8 +101,8 @@ namespace rs::core
   public:
     Writer() = default;
 
-    std::pair<Id, ListView> create(const void* data, std::size_t size);
-    ListView update(Id id, const void* data, std::size_t size);
+    std::pair<Id, ListView> create(void const* data, std::size_t size);
+    ListView update(Id id, void const* data, std::size_t size);
     bool del(Id id);
 
     ListView operator[](Id id) const;

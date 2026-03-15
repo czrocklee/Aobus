@@ -8,7 +8,7 @@ public:
   CoverArtWidget();
   ~CoverArtWidget() override;
 
-  void setCoverPixbuf(const Glib::RefPtr<Gdk::Pixbuf>& pixbuf);
+  void setCoverPixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
   void clearCover();
 };
 
@@ -21,7 +21,7 @@ inline CoverArtWidget::CoverArtWidget()
 
 inline CoverArtWidget::~CoverArtWidget() = default;
 
-inline void CoverArtWidget::setCoverPixbuf(const Glib::RefPtr<Gdk::Pixbuf>& pixbuf)
+inline void CoverArtWidget::setCoverPixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
 {
   if (pixbuf)
   {

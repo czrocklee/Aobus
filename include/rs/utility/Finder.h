@@ -27,11 +27,11 @@ namespace rs::utility
   class Finder
   {
   public:
-    Finder(const std::string& rootPath, const std::vector<std::string>& extensions)
+    Finder(std::string const& rootPath, std::vector<std::string> const& extensions)
       : _rootPath{rootPath}
       , _extensions{extensions.begin(), extensions.end()}
     {
-      _filter = [this](const std::filesystem::path& path) {
+      _filter = [this](std::filesystem::path const& path) {
         return _extensions.find(path.extension().string()) != _extensions.end();
       };
     }
@@ -45,7 +45,7 @@ namespace rs::utility
 
     std::string _rootPath;
     std::set<std::string> _extensions;
-    std::function<bool(const std::filesystem::path&)> _filter;
+    std::function<bool(std::filesystem::path const&)> _filter;
   };
 
 }

@@ -25,7 +25,7 @@ namespace rs::tag::mp4
 {
   namespace
   {
-    const Atom* findNode(const Atom& node, const std::vector<std::string>& path, std::size_t startPos)
+    Atom const* findNode(Atom const& node, std::vector<std::string> const& path, std::size_t startPos)
     {
       if (startPos >= path.size() || path[startPos] != node.type())
       {
@@ -37,33 +37,33 @@ namespace rs::tag::mp4
         return &node;
       }
 
-      const Atom* found = nullptr;
-      node.visitChildren([&](const auto& child) { return ((found = findNode(child, path, startPos + 1)) == nullptr); });
+      Atom const* found = nullptr;
+      node.visitChildren([&](auto const& child) { return ((found = findNode(child, path, startPos + 1)) == nullptr); });
       return found;
     }
 
     template<MetaField Field, typename Decoder>
     struct FieldSetter
     {
-      void operator()(Metadata& meta, const Atom& atom)
+      void operator()(Metadata& meta, Atom const& atom)
       {
-        const auto& layout = static_cast<const AtomView&>(atom).layout<DataAtomLayout>();
-        const auto* buffer = reinterpret_cast<const char*>(&layout + 1);
+        auto const& layout = static_cast<AtomView const&>(atom).layout<DataAtomLayout>();
+        auto const* buffer = reinterpret_cast<char const*>(&layout + 1);
         std::size_t size = layout.common.length.value() - sizeof(DataAtomLayout);
         meta.set(Field, Decoder::decode(buffer, size));
       }
     };
 
-    std::map<std::string, std::function<void(Metadata&, const Atom&)>, std::less<>> MetadataSetters = {
+    std::map<std::string, std::function<void(Metadata&, Atom const&)>, std::less<>> MetadataSetters = {
       {TrknAtomLayout::Type,
-       [](auto& meta, const auto& atom) {
-         const auto& trkn = static_cast<const AtomView&>(atom).layout<TrknAtomLayout>();
+       [](auto& meta, auto const& atom) {
+         auto const& trkn = static_cast<AtomView const&>(atom).layout<TrknAtomLayout>();
          meta.set(MetaField::TrackNumber, static_cast<std::int64_t>(trkn.trackNumber.value()));
          meta.set(MetaField::TotalTracks, static_cast<std::int64_t>(trkn.totalTracks.value()));
        }},
       {DiskAtomLayout::Type,
-       [](auto& meta, const auto& atom) {
-         const auto& disk = static_cast<const AtomView&>(atom).layout<DiskAtomLayout>();
+       [](auto& meta, auto const& atom) {
+         auto const& disk = static_cast<AtomView const&>(atom).layout<DiskAtomLayout>();
          meta.set(MetaField::DiscNumber, static_cast<std::int64_t>(disk.discNumber.value()));
          meta.set(MetaField::TotalDiscs, static_cast<std::int64_t>(disk.totalDiscs.value()));
        }},
@@ -80,18 +80,18 @@ namespace rs::tag::mp4
   Metadata File::loadMetadata() const
   {
     RootAtom root = rs::tag::mp4::fromBuffer(_mappedRegion.get_address(), _mappedRegion.get_size());
-    const Atom* ilstNode = findNode(root, {"root", "moov", "udta", "meta", "ilst"}, 0);
+    Atom const* ilstNode = findNode(root, {"root", "moov", "udta", "meta", "ilst"}, 0);
     Metadata metadata;
-    ilstNode->visitChildren([&metadata](const Atom& atom) {
+    ilstNode->visitChildren([&metadata](Atom const& atom) {
       if (auto iter = MetadataSetters.find(atom.type()); iter != MetadataSetters.end())
       {
         std::invoke(iter->second, metadata, atom);
       }
       else
       {
-        const auto& data = static_cast<const AtomView&>(atom).layout<DataAtomLayout>();
+        auto const& data = static_cast<AtomView const&>(atom).layout<DataAtomLayout>();
         std::string value{
-          reinterpret_cast<const char*>(&data + 1), data.common.length.value() - sizeof(DataAtomLayout)};
+          reinterpret_cast<char const*>(&data + 1), data.common.length.value() - sizeof(DataAtomLayout)};
         metadata.setCustom(atom.type(), std::move(value));
       }
 
@@ -101,5 +101,5 @@ namespace rs::tag::mp4
     return metadata;
   }
 
-  void File::saveMetadata(const Metadata& metadata) {}
+  void File::saveMetadata(Metadata const&) {}
 }

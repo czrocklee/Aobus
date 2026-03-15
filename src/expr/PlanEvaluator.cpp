@@ -28,10 +28,13 @@ namespace rs::expr
   namespace
   {
     // Helper to check if track has a tag ID
-    bool trackHasTagId(const core::TrackView& track, core::DictionaryId tagId) { return track.tags().has(tagId); }
+    [[maybe_unused]] bool trackHasTagId(core::TrackView const& track, core::DictionaryId tagId)
+    {
+      return track.tags().has(tagId);
+    }
 
     // Helper to find the previous LoadField instruction
-    const Instruction* findPrevLoadField(const std::vector<Instruction>& instructions, const Instruction* current)
+    Instruction const* findPrevLoadField(std::vector<Instruction> const& instructions, Instruction const* current)
     {
       for (size_t i = 0; i < instructions.size(); ++i)
       {
@@ -52,7 +55,7 @@ namespace rs::expr
     }
   }
 
-  std::int64_t PlanEvaluator::loadField(const core::TrackView& track, Field field) const
+  std::int64_t PlanEvaluator::loadField(core::TrackView const& track, Field field) const
   {
     switch (field)
     {
@@ -90,7 +93,7 @@ namespace rs::expr
     }
   }
 
-  std::string_view PlanEvaluator::loadStringField(const core::TrackView& track, Field field) const
+  std::string_view PlanEvaluator::loadStringField(core::TrackView const& track, Field field) const
   {
     switch (field)
     {
@@ -104,14 +107,14 @@ namespace rs::expr
     }
   }
 
-  std::int64_t PlanEvaluator::loadConstant(const Instruction& instr) const
+  std::int64_t PlanEvaluator::loadConstant(Instruction const& instr) const
   {
     // For string constants, constValue contains the string index
     // For numeric constants, constValue contains the value itself
     return instr.constValue;
   }
 
-  bool PlanEvaluator::matches(const ExecutionPlan& plan, const core::TrackView& track) const
+  bool PlanEvaluator::matches(ExecutionPlan const& plan, core::TrackView const& track) const
   {
     // Fast path: empty query matches all
     if (plan.matchesAll)
@@ -134,7 +137,7 @@ namespace rs::expr
   }
 
   // NOLINTNEXTLINE(readability-function-size) - Complex eval function, splitting would reduce readability
-  bool PlanEvaluator::evaluateFull(const ExecutionPlan& plan, const core::TrackView& track) const
+  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, core::TrackView const& track) const
   {
     if (plan.matchesAll)
     {
@@ -153,7 +156,7 @@ namespace rs::expr
     _registers.clear();
     _registers.resize(plan.instructions.size() + kReservedRegisters, 0);
 
-    for (const auto& instr : plan.instructions)
+    for (auto const& instr : plan.instructions)
     {
       switch (instr.op)
       {
@@ -169,7 +172,7 @@ namespace rs::expr
         case OpCode::Eq:
         {
           // Check if this is a tag field comparison
-          const Instruction* prevLoadField = findPrevLoadField(plan.instructions, &instr);
+          Instruction const* prevLoadField = findPrevLoadField(plan.instructions, &instr);
           bool isTagComparison = prevLoadField && static_cast<Field>(prevLoadField->field) == Field::Tag;
 
           if (isTagComparison)
@@ -261,7 +264,7 @@ namespace rs::expr
 
           // Find the LoadField instruction that loads the string field
           // Search backwards from the current Like instruction
-          const Instruction* prevLoadField = nullptr;
+          Instruction const* prevLoadField = nullptr;
           for (size_t i = 0; i < plan.instructions.size(); ++i)
           {
             if (&plan.instructions[i] == &instr)

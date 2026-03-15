@@ -10,7 +10,7 @@ TrackRow::TrackRow()
   _resourceId = 0;
 }
 
-Glib::RefPtr<TrackRow> TrackRow::create(TrackId id, const rs::fbs::TrackT& track)
+Glib::RefPtr<TrackRow> TrackRow::create(TrackId id, rs::fbs::TrackT const& track)
 {
   std::string artistStr, albumStr, titleStr;
 

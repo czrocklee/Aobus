@@ -22,7 +22,7 @@ namespace rs::core
   // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
   constexpr unsigned int kBloomBitMask = 31;
 
-  TrackRecord::TrackRecord(const TrackView& view, const Dictionary& dict, lmdb::Transaction& txn)
+  TrackRecord::TrackRecord(TrackView const& view, Dictionary const& dict, lmdb::Transaction& txn)
   {
     if (!view.isValid())
     {
@@ -126,23 +126,23 @@ namespace rs::core
     h.tagsOffset = tagsOffset;
 
     // Write header
-    auto* headerPtr = reinterpret_cast<const std::byte*>(&h);
+    auto* headerPtr = reinterpret_cast<std::byte const*>(&h);
     data.insert(data.end(), headerPtr, headerPtr + sizeof(TrackHeader));
 
     // Write tags first: 4-byte tag IDs
     for (auto tagId : tags.ids)
     {
-      auto* idPtr = reinterpret_cast<const std::byte*>(&tagId);
+      auto* idPtr = reinterpret_cast<std::byte const*>(&tagId);
       data.insert(data.end(), idPtr, idPtr + sizeof(std::uint32_t));
     }
 
     // Write title
-    auto* titlePtr = reinterpret_cast<const std::byte*>(metadata.title.data());
+    auto* titlePtr = reinterpret_cast<std::byte const*>(metadata.title.data());
     data.insert(data.end(), titlePtr, titlePtr + metadata.title.size());
     data.push_back(static_cast<std::byte>('\0'));
 
     // Write uri
-    auto* uriPtr = reinterpret_cast<const std::byte*>(metadata.uri.data());
+    auto* uriPtr = reinterpret_cast<std::byte const*>(metadata.uri.data());
     data.insert(data.end(), uriPtr, uriPtr + metadata.uri.size());
     data.push_back(static_cast<std::byte>('\0'));
 

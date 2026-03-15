@@ -53,7 +53,10 @@ namespace rs::core
 
       if (value.data() == nullptr)
       {
-        _writer.create(key, buffer);
+        if (_writer.create(key, buffer) == nullptr)
+        {
+          throw std::runtime_error("Failed to create resource");
+        }
         // void* data = _writer.create(key, buffer.size());
         /*   */
         // std::memcpy(data, buffer.data(), buffer.size());

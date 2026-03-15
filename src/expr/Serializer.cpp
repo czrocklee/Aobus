@@ -28,13 +28,11 @@ namespace
   {
     ParenthesisGuard(std::ostringstream& oss, bool apply) : oss{oss}, apply{apply}
     {
-      if (apply)
-        oss << "(";
+      if (apply) oss << "(";
     }
     ~ParenthesisGuard()
     {
-      if (apply)
-        oss << ")";
+      if (apply) oss << ")";
     }
     std::ostringstream& oss;
     bool apply;
@@ -44,7 +42,7 @@ namespace
   {
     Serializer() {};
 
-    void operator()(const BinaryExpression& binary)
+    void operator()(BinaryExpression const& binary)
     {
       ParenthesisGuard guard{oss, (counter++ > 0) && binary.operation};
       boost::apply_visitor(*this, binary.operand);
@@ -55,13 +53,13 @@ namespace
       }
     }
 
-    void operator()(const UnaryExpression& unary)
+    void operator()(UnaryExpression const& unary)
     {
       oss << "not ";
       boost::apply_visitor(*this, unary.operand);
     }
 
-    void operator()(const VariableExpression& variable)
+    void operator()(VariableExpression const& variable)
     {
       switch (variable.type)
       {
@@ -79,7 +77,7 @@ namespace
       oss << variable.name;
     }
 
-    void operator()(const ConstantExpression& constant)
+    void operator()(ConstantExpression const& constant)
     {
       std::visit(rs::utility::makeVisitor([](boost::blank) {},
                                           [this](bool val) { oss << (val ? "true" : "false"); },
@@ -88,7 +86,7 @@ namespace
                  constant);
     }
 
-    void serializeBinary(Operator op, const Expression& rhs)
+    void serializeBinary(Operator op, Expression const& rhs)
     {
       switch (op)
       {
@@ -133,7 +131,7 @@ namespace
 
 namespace rs::expr
 {
-  std::string serialize(const Expression& expr)
+  std::string serialize(Expression const& expr)
   {
     Serializer serializer{};
     boost::apply_visitor(serializer, expr);

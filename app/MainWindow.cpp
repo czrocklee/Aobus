@@ -43,7 +43,7 @@ MainWindow::MainWindow()
 {
   _ui.setupUi(this);
 
-  const auto updateWindowTitle = [this](const auto& dir) { setWindowTitle(QString("RockStudio [%1]").arg(dir)); };
+  auto const updateWindowTitle = [this](auto const& dir) { setWindowTitle(QString("RockStudio [%1]").arg(dir)); };
 
   connect(_ui.actionOpen, &QAction::triggered, [this, updateWindowTitle] {
     if (QString dir = QFileDialog::getExistingDirectory(
@@ -74,7 +74,7 @@ MainWindow::MainWindow()
   }
 }
 
-void MainWindow::openMusicLibrary(const std::string& root)
+void MainWindow::openMusicLibrary(std::string const& root)
 {
   _ml = std::make_unique<MusicLibrary>(root);
 
@@ -88,11 +88,11 @@ namespace
   class FileFilter
   {
   public:
-    FileFilter(const std::string& rootPath, const std::vector<std::string>& extensions)
+    FileFilter(std::string const& rootPath, std::vector<std::string> const& extensions)
       : _rootPath{rootPath}
       , _extensions{extensions.begin(), extensions.end()}
     {
-      _filter = [this](const std::filesystem::path& path) {
+      _filter = [this](std::filesystem::path const& path) {
         return _extensions.find(path.extension().string()) != _extensions.end();
       };
     }
@@ -106,7 +106,7 @@ namespace
 
     std::string _rootPath;
     std::set<std::string> _extensions;
-    std::function<bool(const std::filesystem::path&)> _filter;
+    std::function<bool(std::filesystem::path const&)> _filter;
   };
 
 }
@@ -115,7 +115,7 @@ namespace
                                   : fbb.CreateString(std::get<std::string>(value));
   }; */
 
-void MainWindow::importMusicLibrary(const std::string& root)
+void MainWindow::importMusicLibrary(std::string const& root)
 {
   _ml = std::make_unique<MusicLibrary>(root);
 
@@ -166,7 +166,7 @@ TrackView* MainWindow::createTrackView(std::string_view name, TableModel::Abstra
 
   new PlaylistExporter{list, _ml->rootPath(), playlistDir / std::format("{}.m3u", name), trackView};
 
-  connect(trackView->tableView, &QAbstractItemView::clicked, [this](const QModelIndex& index) {
+  connect(trackView->tableView, &QAbstractItemView::clicked, [this](QModelIndex const& index) {
     this->onTrackClicked(index);
   });
 
@@ -185,7 +185,7 @@ TrackView* MainWindow::createTrackView(std::string_view name, TableModel::Abstra
         QItemSelectionModel* select = trackView->tableView->selectionModel();
         auto txn = _ml->writeTransaction();
         auto writer = _ml->tracks().writer(txn);
-        for (const QModelIndex& index : select->selectedRows())
+        for (QModelIndex const& index : select->selectedRows())
         {
           using IdTrackPair = std::pair<rs::core::MusicLibrary::TrackId, rs::fbs::TrackT>;
           QModelIndex sourceIndex =
@@ -226,7 +226,7 @@ void MainWindow::loadLists(ReadTransaction& txn)
   auto* all = new ListItem{"all", _ui.listWidget};
   all->trackView = createTrackView("all", _allTracks);
 
-  for (const auto [id, list] : _ml->lists().reader(txn))
+  for (auto const [id, list] : _ml->lists().reader(txn))
   {
     addListItem(id, list);
   }
@@ -250,7 +250,7 @@ void MainWindow::loadLists(ReadTransaction& txn)
           addListItem(id, list);
           txn.commit();
         }
-        catch (const std::exception& ex)
+        catch (std::exception const& ex)
         {
           QMessageBox::critical(this, "Failed to create list", ex.what());
         }
@@ -270,14 +270,14 @@ void MainWindow::loadLists(ReadTransaction& txn)
   });
 }
 
-void MainWindow::onTrackClicked(const QModelIndex& index)
+void MainWindow::onTrackClicked(QModelIndex const& index)
 {
   if (QVariant resourceId = index.model()->data(index, Qt::UserRole); resourceId.isValid())
   {
     auto txn = _ml->readTransaction();
     auto data = _ml->resources().reader(txn)[resourceId.toULongLong()];
 
-    if (QPixmap pix; pix.loadFromData(static_cast<const uchar*>(data.data()), static_cast<uint>(data.size())))
+    if (QPixmap pix; pix.loadFromData(static_cast<uchar const*>(data.data()), static_cast<uint>(data.size())))
     {
       _ui.coverArtLabel->setPixmap(pix);
     }
@@ -289,12 +289,12 @@ void MainWindow::onTrackClicked(const QModelIndex& index)
   }
 }
 
-void MainWindow::addListItem(rs::core::MusicLibrary::ListId id, const rs::fbs::List* list)
+void MainWindow::addListItem(rs::core::MusicLibrary::ListId id, rs::fbs::List const* list)
 {
   auto expr = rs::expr::parse(list->expr()->string_view());
   auto* listItem = new ListItem{QString::fromUtf8(list->name()->c_str()), _ui.listWidget};
   listItem->id = id;
   listItem->tracks = std::make_unique<ListItem::TrackFilterList>(
-    _allTracks, [expr](const auto& tt) { return rs::expr::toBool(rs::expr::evaluate(expr, tt)); });
+    _allTracks, [expr](auto const& tt) { return rs::expr::toBool(rs::expr::evaluate(expr, tt)); });
   listItem->trackView = createTrackView(list->name()->string_view(), *listItem->tracks);
 }

@@ -18,12 +18,12 @@
 #include "TagsDelegate.h"
 #include <QtGui/QPainter>
 
-void TagsDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
+void TagsDelegate::paint(QPainter* painter, QStyleOptionViewItem const& option, QModelIndex const& index) const
 {
   QStringList tags = index.data().value<QStringList>();
   auto frame = option.rect.marginsRemoved(QMargins{3, 3, 3, 3});
 
-  for (const auto& tag : tags)
+  for (auto const& tag : tags)
   {
     painter->save();
     auto textFrame = frame.marginsRemoved(QMargins{5, 5, 5, 5});
@@ -43,7 +43,7 @@ void TagsDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option, 
   }
 }
 
-QSize TagsDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const
+QSize TagsDelegate::sizeHint(QStyleOptionViewItem const& option, QModelIndex const& index) const
 {
   return QSize{100, 20};
 }

@@ -22,16 +22,15 @@ namespace rs::core
 
   std::string_view ListView::getString(std::uint16_t offset, std::uint16_t len) const
   {
-    if (len == 0)
-      return {};
+    if (len == 0) return {};
 
-    const std::size_t start = sizeof(ListHeader) + offset;
+    std::size_t const start = sizeof(ListHeader) + offset;
     if (start + len > _size)
     {
       return {};
     }
 
-    return {reinterpret_cast<const char*>(_payloadBase + start), len};
+    return {reinterpret_cast<char const*>(_payloadBase + start), len};
   }
 
 } // namespace rs::core

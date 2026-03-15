@@ -28,7 +28,7 @@ namespace rs::core
     using Value = T;
 
     Id id;
-    const Value* value;
+    Value const* value;
   };
 
   template<typename T>
@@ -40,7 +40,7 @@ namespace rs::core
     Id id;
     Value value;
 
-    static ItemT fromItem(const Item<T>& t)
+    static ItemT fromItem(Item<T> const& t)
     {
       ItemT item{t.id};
       t.value->UnPackTo(&item.value);

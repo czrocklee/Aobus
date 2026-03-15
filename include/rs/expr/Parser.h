@@ -21,5 +21,5 @@
 
 namespace rs::expr
 {
-  Expression parse(const std::string_view expr);
+  Expression parse(std::string_view const expr);
 }

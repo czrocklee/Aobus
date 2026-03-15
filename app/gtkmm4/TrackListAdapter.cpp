@@ -8,10 +8,9 @@
 namespace
 {
   // Case-insensitive substring search
-  bool containsCi(const std::string& haystack, const std::string& needle)
+  bool containsCi(std::string const& haystack, std::string const& needle)
   {
-    if (needle.empty())
-      return true;
+    if (needle.empty()) return true;
 
     auto it = std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(), [](char c1, char c2) {
       return ::std::tolower(c1) == ::std::tolower(c2);
@@ -19,30 +18,25 @@ namespace
     return it != haystack.end();
   }
 
-  bool matchesFilter(const rs::fbs::TrackT& track, const Glib::ustring& filter)
+  bool matchesFilter(rs::fbs::TrackT const& track, Glib::ustring const& filter)
   {
-    if (filter.empty())
-      return true;
+    if (filter.empty()) return true;
 
     auto filterStr = filter.lowercase();
 
     // Check artist
-    if (track.meta && containsCi(track.meta->artist, filterStr))
-      return true;
+    if (track.meta && containsCi(track.meta->artist, filterStr)) return true;
 
     // Check album
-    if (track.meta && containsCi(track.meta->album, filterStr))
-      return true;
+    if (track.meta && containsCi(track.meta->album, filterStr)) return true;
 
     // Check title
-    if (track.meta && containsCi(track.meta->title, filterStr))
-      return true;
+    if (track.meta && containsCi(track.meta->title, filterStr)) return true;
 
     // Check tags
-    for (const auto& tag : track.custom)
+    for (auto const& tag : track.custom)
     {
-      if (containsCi(tag->key, filterStr))
-        return true;
+      if (containsCi(tag->key, filterStr)) return true;
     }
 
     return false;
@@ -59,13 +53,13 @@ TrackListAdapter::TrackListAdapter(AbstractTrackList& tracks)
 
 TrackListAdapter::~TrackListAdapter() { _tracks.detach(*this); }
 
-void TrackListAdapter::setFilter(const Glib::ustring& filterText)
+void TrackListAdapter::setFilter(Glib::ustring const& filterText)
 {
   _filterText = filterText;
   refreshFilteredView();
 }
 
-void TrackListAdapter::setExprFilter(const std::string& exprString)
+void TrackListAdapter::setExprFilter(std::string const& exprString)
 {
   if (exprString.empty())
   {
@@ -88,11 +82,10 @@ void TrackListAdapter::refreshFilteredView()
 
   for (std::size_t i = 0; i < _tracks.size(); ++i)
   {
-    const auto& [id, track] = _tracks.at(AbstractTrackList::Index{i});
+    auto const& [id, track] = _tracks.at(AbstractTrackList::Index{i});
 
     // Check quick filter
-    if (!matchesFilter(track, filter))
-      continue;
+    if (!matchesFilter(track, filter)) continue;
 
     // Check expression filter if set
     if (_exprFilter.has_value())
@@ -100,8 +93,7 @@ void TrackListAdapter::refreshFilteredView()
       try
       {
         auto result = rs::expr::evaluate(*_exprFilter, track);
-        if (!rs::expr::toBool(result))
-          continue;
+        if (!rs::expr::toBool(result)) continue;
       }
       catch (...)
       {
@@ -120,7 +112,7 @@ void TrackListAdapter::onAttached()
   // Initial population - iterate all tracks
   for (std::size_t i = 0; i < _tracks.size(); ++i)
   {
-    const auto& [id, track] = _tracks.at(AbstractTrackList::Index{i});
+    auto const& [id, track] = _tracks.at(AbstractTrackList::Index{i});
     auto row = TrackRow::create(id, track);
     _listModel->append(row);
   }
@@ -131,7 +123,7 @@ void TrackListAdapter::onBeginInsert(TrackId, AbstractTrackList::Index)
   // No action needed before insert
 }
 
-void TrackListAdapter::onEndInsert(TrackId id, const rs::fbs::TrackT& track, AbstractTrackList::Index index)
+void TrackListAdapter::onEndInsert(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index)
 {
   // If filter is active, refresh the entire view to recalculate filtered positions
   if (!_filterText.empty() || _exprFilter.has_value())
@@ -144,12 +136,12 @@ void TrackListAdapter::onEndInsert(TrackId id, const rs::fbs::TrackT& track, Abs
   _listModel->insert(static_cast<std::uint32_t>(index), row);
 }
 
-void TrackListAdapter::onBeginUpdate(TrackId, const rs::fbs::TrackT&, AbstractTrackList::Index)
+void TrackListAdapter::onBeginUpdate(TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index)
 {
   // No action needed before update
 }
 
-void TrackListAdapter::onEndUpdate(TrackId id, const rs::fbs::TrackT& track, AbstractTrackList::Index index)
+void TrackListAdapter::onEndUpdate(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index)
 {
   // If filter is active, refresh the entire view to recalculate filtered positions
   if (!_filterText.empty() || _exprFilter.has_value())
@@ -168,7 +160,7 @@ void TrackListAdapter::onEndUpdate(TrackId id, const rs::fbs::TrackT& track, Abs
   }
 }
 
-void TrackListAdapter::onBeginRemove(TrackId, const rs::fbs::TrackT&, AbstractTrackList::Index)
+void TrackListAdapter::onBeginRemove(TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index)
 {
   // No action needed before remove
 }

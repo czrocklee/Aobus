@@ -107,7 +107,7 @@ TEST_CASE("TrackRecord - Serialize With Strings")
   CHECK(data.size() >= sizeof(TrackHeader));
 
   // Parse the serialized data back
-  const auto* header = reinterpret_cast<const TrackHeader*>(data.data());
+  auto const* header = reinterpret_cast<TrackHeader const*>(data.data());
 
   CHECK(header->titleLen == 11); // "Hello World"
   CHECK(header->uriLen == 16);   // "/music/test.flac"
@@ -115,7 +115,7 @@ TEST_CASE("TrackRecord - Serialize With Strings")
   CHECK(header->durationMs == 240000);
 
   // Verify strings are in the payload
-  auto payloadStart = reinterpret_cast<const char*>(data.data()) + sizeof(TrackHeader);
+  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHeader);
   CHECK(std::strncmp(payloadStart, "Hello World", 11) == 0);
 }
 
@@ -147,7 +147,7 @@ TEST_CASE("TrackRecord - Serialize With Special Characters")
 
   auto data = record.serialize();
 
-  const auto* header = reinterpret_cast<const TrackHeader*>(data.data());
+  auto const* header = reinterpret_cast<TrackHeader const*>(data.data());
   CHECK(header->titleLen == record.metadata.title.size());
   CHECK(header->uriLen == record.metadata.uri.size());
 }
@@ -176,7 +176,7 @@ TEST_CASE("TrackRecord - Tag Serialization - Empty Tags")
 
   auto data = record.serialize();
 
-  const auto* header = reinterpret_cast<const TrackHeader*>(data.data());
+  auto const* header = reinterpret_cast<TrackHeader const*>(data.data());
   CHECK(header->tagCount == 0);
   CHECK(header->tagBloom == 0);
 }
@@ -190,14 +190,14 @@ TEST_CASE("TrackRecord - Tag Serialization - With Tags")
 
   auto data = record.serialize();
 
-  const auto* header = reinterpret_cast<const TrackHeader*>(data.data());
+  auto const* header = reinterpret_cast<TrackHeader const*>(data.data());
   CHECK(header->tagCount == 3);
   CHECK(header->tagBloom != 0); // Bloom should be computed from tag IDs
 
   // Verify tag IDs are in the payload
-  auto payloadStart = reinterpret_cast<const char*>(data.data()) + sizeof(TrackHeader);
+  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHeader);
 
-  const auto* tagIdsPtr = reinterpret_cast<const std::uint32_t*>(payloadStart + header->tagsOffset);
+  auto const* tagIdsPtr = reinterpret_cast<std::uint32_t const*>(payloadStart + header->tagsOffset);
   CHECK(tagIdsPtr[0] == 10);
   CHECK(tagIdsPtr[1] == 20);
   CHECK(tagIdsPtr[2] == 30);
@@ -212,11 +212,11 @@ TEST_CASE("TrackRecord - Tag Serialization - Single Tag")
 
   auto data = record.serialize();
 
-  const auto* header = reinterpret_cast<const TrackHeader*>(data.data());
+  auto const* header = reinterpret_cast<TrackHeader const*>(data.data());
   CHECK(header->tagCount == 1);
 
-  auto payloadStart = reinterpret_cast<const char*>(data.data()) + sizeof(TrackHeader);
-  const auto* tagIdPtr = reinterpret_cast<const std::uint32_t*>(payloadStart + header->tagsOffset);
+  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHeader);
+  auto const* tagIdPtr = reinterpret_cast<std::uint32_t const*>(payloadStart + header->tagsOffset);
   CHECK(*tagIdPtr == 42);
 }
 

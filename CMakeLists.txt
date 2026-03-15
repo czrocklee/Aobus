@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.30)
 project(rockstudio)
 set (CMAKE_CXX_STANDARD 20)
 
+# Strict compiler warnings
+add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(lmdb REQUIRED)
 pkg_search_module(MIMALLOC REQUIRED mimalloc)

@@ -54,7 +54,7 @@ TEST_CASE("ExecutionPlan - Compile Metadata Field")
   CHECK(plan.instructions[0].op == OpCode::LoadField);
 
   bool hasEq = false;
-  for (const auto& instr : plan.instructions)
+  for (auto const& instr : plan.instructions)
   {
     if (instr.op == OpCode::Eq)
     {
@@ -75,7 +75,7 @@ TEST_CASE("ExecutionPlan - Compile Property Field")
   CHECK(plan.instructions[0].op == OpCode::LoadField);
 
   bool hasGt = false;
-  for (const auto& instr : plan.instructions)
+  for (auto const& instr : plan.instructions)
   {
     if (instr.op == OpCode::Gt)
     {
@@ -94,7 +94,7 @@ TEST_CASE("ExecutionPlan - Compile Logical And")
   auto plan = compiler.compile(expr);
 
   bool hasAnd = false;
-  for (const auto& instr : plan.instructions)
+  for (auto const& instr : plan.instructions)
   {
     if (instr.op == OpCode::And)
     {
@@ -113,7 +113,7 @@ TEST_CASE("ExecutionPlan - Compile Logical Or")
   auto plan = compiler.compile(expr);
 
   bool hasOr = false;
-  for (const auto& instr : plan.instructions)
+  for (auto const& instr : plan.instructions)
   {
     if (instr.op == OpCode::Or)
     {
@@ -131,7 +131,7 @@ TEST_CASE("ExecutionPlan - Compile Logical Not")
   auto plan = compiler.compile(expr);
 
   bool hasNot = false;
-  for (const auto& instr : plan.instructions)
+  for (auto const& instr : plan.instructions)
   {
     if (instr.op == OpCode::Not)
     {
@@ -149,7 +149,7 @@ TEST_CASE("ExecutionPlan - Compile Relational Operators")
   auto plan = compiler.compile(expr);
 
   bool hasLt = false;
-  for (const auto& instr : plan.instructions)
+  for (auto const& instr : plan.instructions)
   {
     if (instr.op == OpCode::Lt)
     {
@@ -164,7 +164,7 @@ TEST_CASE("ExecutionPlan - Compile Relational Operators")
   plan = compiler.compile(expr);
 
   bool hasLe = false;
-  for (const auto& instr : plan.instructions)
+  for (auto const& instr : plan.instructions)
   {
     if (instr.op == OpCode::Le)
     {
@@ -182,7 +182,7 @@ TEST_CASE("ExecutionPlan - Compile Like")
   auto plan = compiler.compile(expr);
 
   bool hasLike = false;
-  for (const auto& instr : plan.instructions)
+  for (auto const& instr : plan.instructions)
   {
     if (instr.op == OpCode::Like)
     {

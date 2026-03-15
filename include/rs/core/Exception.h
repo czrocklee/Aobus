@@ -25,16 +25,16 @@ namespace rs::core
   class Exception : public std::exception
   {
   public:
-    Exception(const std::string& what, const char* file, int line) : _what{what}, _file{file}, _line{line} {}
+    Exception(std::string const& what, char const* file, int line) : _file{file}, _line{line}, _what{what} {}
 
-    [[nodiscard]] const char* file() const { return _file; }
+    [[nodiscard]] char const* file() const { return _file; }
 
     [[nodiscard]] int line() const { return _line; }
 
-    [[nodiscard]] const char* what() const noexcept override { return _what.c_str(); }
+    [[nodiscard]] char const* what() const noexcept override { return _what.c_str(); }
 
   private:
-    const char* _file;
+    char const* _file;
     int _line;
     std::string _what;
   };

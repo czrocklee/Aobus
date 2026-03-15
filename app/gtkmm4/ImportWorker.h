@@ -12,11 +12,11 @@
 class ImportWorker
 {
 public:
-  using ProgressCallback = std::function<void(const std::filesystem::path& path, std::int32_t itemIndex)>;
+  using ProgressCallback = std::function<void(std::filesystem::path const& path, std::int32_t itemIndex)>;
   using FinishedCallback = std::function<void()>;
 
   ImportWorker(rs::core::MusicLibrary& ml,
-               const std::vector<std::filesystem::path>& files,
+               std::vector<std::filesystem::path> const& files,
                ProgressCallback progressCallback,
                FinishedCallback finishedCallback);
 

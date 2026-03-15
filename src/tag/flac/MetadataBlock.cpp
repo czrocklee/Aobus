@@ -25,7 +25,7 @@ namespace rs::tag::flac
   namespace
   {
     template<typename LengthType, boost::endian::order Order = boost::endian::order::big>
-    static LengthType parseLength(const char*& ptr, const char* end)
+    static LengthType parseLength(char const*& ptr, char const* end)
     {
       if (ptr + sizeof(LengthType) > end)
       {
@@ -41,7 +41,7 @@ namespace rs::tag::flac
     }
 
     template<typename LengthType, boost::endian::order Order = boost::endian::order::big>
-    static std::string_view parseString(const char*& ptr, const char* end)
+    static std::string_view parseString(char const*& ptr, char const* end)
     {
       LengthType length = parseLength<LengthType, Order>(ptr, end);
 
@@ -51,7 +51,7 @@ namespace rs::tag::flac
           core::Exception, "invalid flac block, expect available field length {} >= {}", end - ptr, length);
       }
 
-      const char* start = ptr;
+      char const* start = ptr;
       ptr += length;
       return {start, length};
     }
@@ -59,7 +59,7 @@ namespace rs::tag::flac
 
   std::vector<std::string_view> VorbisCommentBlockView::comments() const
   {
-    auto ptr = static_cast<const char*>(data()) + sizeof(MetadataBlockLayout);
+    auto ptr = static_cast<char const*>(data()) + sizeof(MetadataBlockLayout);
     auto end = ptr + size() - sizeof(MetadataBlockLayout);
     parseString<std::uint32_t, boost::endian::order::little>(ptr, end); // vendor string
 
@@ -84,7 +84,7 @@ namespace rs::tag::flac
 
   boost::asio::const_buffer PictureBlockView::blob() const
   {
-    auto ptr = static_cast<const char*>(data()) + sizeof(MetadataBlockLayout);
+    auto ptr = static_cast<char const*>(data()) + sizeof(MetadataBlockLayout);
     auto end = ptr + size() - sizeof(MetadataBlockLayout);
     ptr += 4;                             // picture type
     parseString<std::uint32_t>(ptr, end); // MIME type
@@ -94,7 +94,7 @@ namespace rs::tag::flac
     return boost::asio::buffer(blob.data(), blob.size());
   }
 
-  MetadataBlockViewIterator::MetadataBlockViewIterator(const void* data, std::size_t size)
+  MetadataBlockViewIterator::MetadataBlockViewIterator(void const* data, std::size_t size)
     : _view{data}
     , _sizeLeft{size}
   {
@@ -113,7 +113,7 @@ namespace rs::tag::flac
     }
 
     _sizeLeft -= _view.size();
-    _view = MetadataBlockView{static_cast<const char*>(_view.data()) + _view.size()};
+    _view = MetadataBlockView{static_cast<char const*>(_view.data()) + _view.size()};
 
     if (_view.size() > _sizeLeft)
     {

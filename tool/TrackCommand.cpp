@@ -29,7 +29,7 @@ namespace
   namespace bpo = boost::program_options;
   using namespace rs;
 
-  void show(core::MusicLibrary& ml, const std::string& filter, std::ostream& os)
+  void show(core::MusicLibrary& ml, std::string const& filter, std::ostream& os)
   {
     auto txn = ml.readTransaction();
     auto reader = ml.tracks().reader(txn);
@@ -63,13 +63,13 @@ TrackCommand::TrackCommand(core::MusicLibrary& ml) : _ml{ml}
 {
   addCommand<BasicCommand>("show")
     .addOption("filter, f", bpo::value<std::string>()->default_value(""), "track filter expression", 1)
-    .setExecutor([this](const auto& vm, auto& os) { return show(_ml, vm["filter"].template as<std::string>(), os); });
+    .setExecutor([this](auto const& vm, auto& os) { return show(_ml, vm["filter"].template as<std::string>(), os); });
 
   addCommand<BasicCommand>("create")
     .addOption("name, n", bpo::value<std::string>()->required(), "list name", 1)
     .addOption("filter, f", bpo::value<std::string>()->required(), "track filter expression", 1)
     .addOption("desc, d", bpo::value<std::string>(), "list description", 1)
-    .setExecutor([this](const auto& vm, auto& os) { return ""; });
+    .setExecutor([this](auto const& vm, auto& os) { (void) vm; (void) os; return ""; });
 
   addCommand<BasicCommand>("delete").addOption("id", bpo::value<std::uint64_t>()->required(), "list id", 1);
 }

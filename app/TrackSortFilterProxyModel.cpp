@@ -25,7 +25,7 @@
 {
 } */
 
-void TrackSortFilterProxyModel::onQuickFilterChanged(const QString& filter)
+void TrackSortFilterProxyModel::onQuickFilterChanged(QString const& filter)
 {
   _quick = filter.toStdString();
   /*
@@ -56,7 +56,7 @@ bool TrackSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelInde
   {
     auto index = sourceModel()->index(sourceRow, 0);
     using IdTrackPair = std::pair<rs::core::MusicLibrary::TrackId, rs::fbs::TrackT>;
-    const auto& track = static_cast<IdTrackPair*>(index.internalPointer())->second;
+    auto const& track = static_cast<IdTrackPair*>(index.internalPointer())->second;
 
     return track.meta->title.find(_quick) != std::string::npos || track.meta->album.find(_quick) != std::string::npos ||
            track.meta->artist.find(_quick) != std::string::npos;

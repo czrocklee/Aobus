@@ -17,21 +17,21 @@ public:
   void setTrackId(TrackId id) { _trackId = id; }
 
   Glib::ustring getArtist() const { return _artist; }
-  void setArtist(const Glib::ustring& artist) { _artist = artist; }
+  void setArtist(Glib::ustring const& artist) { _artist = artist; }
 
   Glib::ustring getAlbum() const { return _album; }
-  void setAlbum(const Glib::ustring& album) { _album = album; }
+  void setAlbum(Glib::ustring const& album) { _album = album; }
 
   Glib::ustring getTitle() const { return _title; }
-  void setTitle(const Glib::ustring& title) { _title = title; }
+  void setTitle(Glib::ustring const& title) { _title = title; }
 
   Glib::ustring getTags() const { return _tags; }
-  void setTags(const Glib::ustring& tags) { _tags = tags; }
+  void setTags(Glib::ustring const& tags) { _tags = tags; }
 
   std::uint64_t getResourceId() const { return _resourceId; }
   void setResourceId(std::uint64_t id) { _resourceId = id; }
 
-  static Glib::RefPtr<TrackRow> create(TrackId id, const rs::fbs::TrackT& track);
+  static Glib::RefPtr<TrackRow> create(TrackId id, rs::fbs::TrackT const& track);
 
 protected:
   explicit TrackRow();

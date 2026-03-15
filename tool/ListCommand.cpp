@@ -41,17 +41,17 @@ namespace
 
 ListCommand::ListCommand(core::MusicLibrary& ml) : _ml{ml}
 {
-  addCommand<BasicCommand>("show").setExecutor([this](const auto& vm, auto& os) { return show(_ml, os); });
+  addCommand<BasicCommand>("show").setExecutor([this](auto const& vm, auto& os) { (void) vm; return show(_ml, os); });
 
   addCommand<BasicCommand>("create")
     .addOption("name, n", bpo::value<std::string>()->required(), "list name", 1)
     .addOption("filter, f", bpo::value<std::string>()->required(), "track filter expression", 1)
     .addOption("desc, d", bpo::value<std::string>(), "list description", 1)
-    .setExecutor([this](const auto& vm, auto& os) { return ""; });
+    .setExecutor([this](auto const& vm, auto& os) { (void) vm; (void) os; return ""; });
 
   addCommand<BasicCommand>("delete")
     .addOption("id", bpo::value<std::uint64_t>()->required(), "list id", 1)
-    .setExecutor([this](const auto& vm, auto& os) {
+    .setExecutor([this](auto const& vm, auto& os) {
       auto id = core::ListStore::Id{vm["id"].template as<std::uint64_t>()};
       auto txn = _ml.writeTransaction();
       auto writer = _ml.lists().writer(txn);

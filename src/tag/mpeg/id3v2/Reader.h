@@ -23,5 +23,5 @@ namespace rs::tag::mpeg::id3v2
 {
   struct HeaderLayout;
 
-  Metadata loadFrames(const HeaderLayout& header, const void* buffer, std::size_t size);
+  Metadata loadFrames(HeaderLayout const& header, void const* buffer, std::size_t size);
 }

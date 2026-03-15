@@ -21,5 +21,5 @@
 
 namespace rs::expr
 {
-  std::string serialize(const Expression& expr);
+  std::string serialize(Expression const& expr);
 }

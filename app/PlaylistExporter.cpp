@@ -47,7 +47,7 @@ void PlaylistExporter::writeFile()
 
   for (auto i = 0u; i < _list.size(); ++i)
   {
-    const auto& [_, t] = _list.at(AbstractTrackList::Index{i});
+    auto const& [_, t] = _list.at(AbstractTrackList::Index{i});
     ofs << std::filesystem::relative(_root / t.prop->filepath, _path.parent_path()).c_str() << std::endl;
   }
 }

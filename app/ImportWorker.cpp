@@ -5,7 +5,7 @@
 
 #include <iostream>
 
-ImportWorker::ImportWorker(rs::core::MusicLibrary& ml, const std::vector<std::filesystem::path>& files, QObject* parent)
+ImportWorker::ImportWorker(rs::core::MusicLibrary& ml, std::vector<std::filesystem::path> const& files, QObject* parent)
   : QThread{parent}
   , _ml{ml}
   , _txn{_ml.writeTransaction()}
@@ -21,7 +21,7 @@ void ImportWorker::commit()
 
 namespace
 {
-  QString fromPath(const std::filesystem::path& filePath)
+  QString fromPath(std::filesystem::path const& filePath)
   {
 #ifdef _WIN32
     return QString::fromStdWString(filePath.generic_wstring());
@@ -30,20 +30,20 @@ namespace
 #endif
   }
 
-  std::unique_ptr<rs::tag::File> createTagFileByExtension(const std::filesystem::path& path)
+  std::unique_ptr<rs::tag::File> createTagFileByExtension(std::filesystem::path const& path)
   {
     using namespace rs::tag;
-    static const std::unordered_map<std::string, std::function<std::unique_ptr<File>(const std::filesystem::path)>>
+    static std::unordered_map<std::string, std::function<std::unique_ptr<File>(std::filesystem::path const)>> const
       CreatorMap = {
-        {".mp3", [](const auto& path) { return std::make_unique<mpeg::File>(path, File::Mode::ReadOnly); }},
-        {".m4a", [](const auto& path) { return std::make_unique<mp4::File>(path, File::Mode::ReadOnly); }},
-        {".flac", [](const auto& path) { return std::make_unique<flac::File>(path, File::Mode::ReadOnly); }}};
+        {".mp3", [](auto const& path) { return std::make_unique<mpeg::File>(path, File::Mode::ReadOnly); }},
+        {".m4a", [](auto const& path) { return std::make_unique<mp4::File>(path, File::Mode::ReadOnly); }},
+        {".flac", [](auto const& path) { return std::make_unique<flac::File>(path, File::Mode::ReadOnly); }}};
 
     return std::invoke(CreatorMap.at(path.extension().string()), path);
   }
 
   ::flatbuffers::Offset<::flatbuffers::String> buildString(::flatbuffers::FlatBufferBuilder& fbb,
-                                                           const rs::tag::ValueType& value)
+                                                           rs::tag::ValueType const& value)
   {
     return rs::tag::isNull(value) ? ::flatbuffers::Offset<::flatbuffers::String>{}
                                   : fbb.CreateString(std::get<std::string>(value));
@@ -59,10 +59,10 @@ void ImportWorker::run()
   {
     try
     {
-      const auto& path = _files[i];
+      auto const& path = _files[i];
       emit progressUpdated(fromPath(path), i);
 
-      const auto file = createTagFileByExtension(path);
+      auto const file = createTagFileByExtension(path);
       rs::tag::Metadata metadata;
       metadata = file->loadMetadata();
 
@@ -104,7 +104,7 @@ void ImportWorker::run()
 
         if (auto albumArt = metadata.get(rs::tag::MetaField::AlbumArt); !rs::tag::isNull(albumArt))
         {
-          const auto& blob = std::get<rs::tag::Blob>(albumArt);
+          auto const& blob = std::get<rs::tag::Blob>(albumArt);
           std::uint64_t id = resourceWriter.create(boost::asio::buffer(blob.data(), blob.size()));
           std::cout << "id " << id << std::endl;
           rs::fbs::ResourceBuilder builder{fbb};
@@ -130,7 +130,7 @@ void ImportWorker::run()
         return builder.Finish();
       });
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
       // std::cerr << "failed to parse metadata " << e.what() << std::endl;
       continue;

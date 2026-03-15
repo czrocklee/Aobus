@@ -32,7 +32,7 @@ public:
   QPixmap scaledPixmap() const;
 
 public slots:
-  void setPixmap(const QPixmap&);
+  void setPixmap(QPixmap const&);
   void resizeEvent(QResizeEvent*);
 
 private:

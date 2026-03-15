@@ -21,7 +21,7 @@
 namespace rs::core
 {
 
-  ListStore::ListStore(lmdb::Environment& env, const std::string& db) : _database{env, db} {}
+  ListStore::ListStore(lmdb::Environment& env, std::string const& db) : _database{env, db} {}
 
   ListStore::Reader ListStore::reader(lmdb::ReadTransaction& txn) const { return Reader{_database.reader(txn)}; }
 
@@ -55,7 +55,7 @@ namespace rs::core
   // Iterator implementation
   ListStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& iter) : _iter{std::move(iter)} {}
 
-  bool ListStore::Reader::Iterator::operator==(const Iterator& other) const { return _iter == other._iter; }
+  bool ListStore::Reader::Iterator::operator==(Iterator const& other) const { return _iter == other._iter; }
 
   ListStore::Reader::Iterator& ListStore::Reader::Iterator::operator++()
   {
@@ -72,13 +72,13 @@ namespace rs::core
   // Writer implementation
   ListStore::Writer::Writer(lmdb::Database::Writer&& writer) : _writer{std::move(writer)} {}
 
-  std::pair<ListStore::Id, ListView> ListStore::Writer::create(const void* data, std::size_t size)
+  std::pair<ListStore::Id, ListView> ListStore::Writer::create(void const* data, std::size_t size)
   {
     auto [id, buffer] = _writer.append(boost::asio::buffer(data, size));
     return {Id{id}, ListView(buffer, size)};
   }
 
-  ListView ListStore::Writer::update(Id id, const void* data, std::size_t size)
+  ListView ListStore::Writer::update(Id id, void const* data, std::size_t size)
   {
     auto buffer = _writer.update(id.value(), boost::asio::buffer(data, size));
     return ListView(buffer, size);

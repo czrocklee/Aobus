@@ -26,7 +26,7 @@ using rs::utility::makeVisitor;
 
 namespace
 {
-  const char* toString(Operator op)
+  char const* toString(Operator op)
   {
     switch (op)
     {
@@ -57,7 +57,7 @@ namespace
 
   struct Canonicalizer
   {
-    void operator()(const BinaryExpression& binary)
+    void operator()(BinaryExpression const& binary)
     {
       oss << "[b{" << toString(binary.operation->op) << "}";
       boost::apply_visitor(*this, binary.operand);
@@ -66,14 +66,14 @@ namespace
       oss << "]";
     }
 
-    void operator()(const UnaryExpression& unary)
+    void operator()(UnaryExpression const& unary)
     {
       oss << "[u{!}";
       boost::apply_visitor(*this, unary.operand);
       oss << "]";
     }
 
-    void operator()(const VariableExpression& variable)
+    void operator()(VariableExpression const& variable)
     {
       oss << "[v{";
 
@@ -93,7 +93,7 @@ namespace
       oss << "}" << variable.name << "]";
     }
 
-    void operator()(const ConstantExpression& constant)
+    void operator()(ConstantExpression const& constant)
     {
       oss << "[c{";
       std::visit(rs::utility::makeVisitor([this](std::monostate) { oss << "n}"; },
@@ -107,7 +107,7 @@ namespace
     std::ostringstream oss;
   };
 
-  std::string canonicalize(const Expression& expr)
+  std::string canonicalize(Expression const& expr)
   {
     Canonicalizer canonicalizer{};
     boost::apply_visitor(canonicalizer, expr);

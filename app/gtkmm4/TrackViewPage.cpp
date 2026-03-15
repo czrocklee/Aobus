@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-TrackViewPage::TrackViewPage(const Glib::RefPtr<TrackListAdapter>& adapter)
+TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
   : Gtk::Box(Gtk::Orientation::VERTICAL)
   , _adapter(adapter)
 {
@@ -46,12 +46,12 @@ void TrackViewPage::setupColumns()
 {
   // Artist column
   auto artistFactory = Gtk::SignalListItemFactory::create();
-  artistFactory->signal_setup().connect([](const Glib::RefPtr<Gtk::ListItem>& listItem) {
+  artistFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     listItem->set_child(*label);
   });
-  artistFactory->signal_bind().connect([](const Glib::RefPtr<Gtk::ListItem>& listItem) {
+  artistFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
@@ -68,12 +68,12 @@ void TrackViewPage::setupColumns()
 
   // Album column
   auto albumFactory = Gtk::SignalListItemFactory::create();
-  albumFactory->signal_setup().connect([](const Glib::RefPtr<Gtk::ListItem>& listItem) {
+  albumFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     listItem->set_child(*label);
   });
-  albumFactory->signal_bind().connect([](const Glib::RefPtr<Gtk::ListItem>& listItem) {
+  albumFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
@@ -90,12 +90,12 @@ void TrackViewPage::setupColumns()
 
   // Title column
   auto titleFactory = Gtk::SignalListItemFactory::create();
-  titleFactory->signal_setup().connect([](const Glib::RefPtr<Gtk::ListItem>& listItem) {
+  titleFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     listItem->set_child(*label);
   });
-  titleFactory->signal_bind().connect([](const Glib::RefPtr<Gtk::ListItem>& listItem) {
+  titleFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
@@ -112,12 +112,12 @@ void TrackViewPage::setupColumns()
 
   // Tags column
   auto tagsFactory = Gtk::SignalListItemFactory::create();
-  tagsFactory->signal_setup().connect([](const Glib::RefPtr<Gtk::ListItem>& listItem) {
+  tagsFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     listItem->set_child(*label);
   });
-  tagsFactory->signal_bind().connect([](const Glib::RefPtr<Gtk::ListItem>& listItem) {
+  tagsFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());

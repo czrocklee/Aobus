@@ -54,16 +54,15 @@ namespace rs::core
   // TrackView private implementation
   std::string_view TrackView::getString(std::uint16_t offset, std::uint16_t len) const
   {
-    if (len == 0)
-      return {};
+    if (len == 0) return {};
 
-    const std::size_t start = sizeof(TrackHeader) + offset;
+    std::size_t const start = sizeof(TrackHeader) + offset;
     if (start + len > _size)
     {
       return {};
     }
 
-    return {reinterpret_cast<const char*>(_payloadBase + start), len};
+    return {reinterpret_cast<char const*>(_payloadBase + start), len};
   }
 
   std::uint32_t TrackView::tagId(std::uint8_t index) const
@@ -77,7 +76,7 @@ namespace rs::core
     {
       return 0;
     }
-    return *reinterpret_cast<const std::uint32_t*>(_payloadBase + offset);
+    return *reinterpret_cast<std::uint32_t const*>(_payloadBase + offset);
   }
 
 } // namespace rs::core

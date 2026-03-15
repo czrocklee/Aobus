@@ -33,13 +33,13 @@ namespace rs::tag
       ReadWrite
     };
 
-    File(const std::filesystem::path& path, Mode mode);
+    File(std::filesystem::path const& path, Mode mode);
 
     virtual ~File() = default;
 
     [[nodiscard]] virtual Metadata loadMetadata() const = 0;
 
-    virtual void saveMetadata(const Metadata& metadata) = 0;
+    virtual void saveMetadata(Metadata const& metadata) = 0;
 
   protected:
     boost::interprocess::file_mapping _fileMapping;

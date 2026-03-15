@@ -12,7 +12,7 @@ TrackView::TrackView(TableModel::TrackList& tracks, QWidget* parent) : QWidget(p
   tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
 
   connect(
-    lineEdit, &QLineEdit::textChanged, [proxyModel](const QString& text) { proxyModel->onQuickFilterChanged(text); });
+    lineEdit, &QLineEdit::textChanged, [proxyModel](QString const& text) { proxyModel->onQuickFilterChanged(text); });
 }
 
 TrackView::~TrackView() {}

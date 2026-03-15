@@ -29,7 +29,7 @@ namespace rs::core
     using Reader = lmdb::Database::Reader;
     class Writer;
 
-    ResourceStore(lmdb::Environment& env, const std::string& db) : _database{env, db} {}
+    ResourceStore(lmdb::Environment& env, std::string const& db) : _database{env, db} {}
 
     Reader reader(lmdb::ReadTransaction& txn) const { return _database.reader(txn); };
     Writer writer(lmdb::WriteTransaction& txn);

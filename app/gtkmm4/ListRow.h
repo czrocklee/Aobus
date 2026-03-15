@@ -15,9 +15,9 @@ public:
   void setListId(ListId id) { _listId = id; }
 
   Glib::ustring getName() const { return _name; }
-  void setName(const Glib::ustring& name) { _name = name; }
+  void setName(Glib::ustring const& name) { _name = name; }
 
-  static Glib::RefPtr<ListRow> create(ListId id, const Glib::ustring& name);
+  static Glib::RefPtr<ListRow> create(ListId id, Glib::ustring const& name);
 
 protected:
   explicit ListRow();

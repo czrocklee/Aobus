@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
 
   // Add about action to application
   auto aboutAction = Gio::SimpleAction::create("about");
-  aboutAction->signal_activate().connect([&app]([[maybe_unused]] const Glib::VariantBase& v) {
+  aboutAction->signal_activate().connect([&app]([[maybe_unused]] Glib::VariantBase const& v) {
     Gtk::AboutDialog dialog;
     dialog.set_program_name("RockStudio");
     dialog.set_version("1.0");

@@ -22,7 +22,7 @@ namespace rs::core
 {
 
   // TrackStore implementation
-  TrackStore::TrackStore(lmdb::Environment& env, const std::string& db) : _database{env, db} {}
+  TrackStore::TrackStore(lmdb::Environment& env, std::string const& db) : _database{env, db} {}
 
   TrackStore::Reader TrackStore::reader(lmdb::ReadTransaction& txn) const { return Reader{_database.reader(txn)}; }
 
@@ -36,7 +36,7 @@ namespace rs::core
     auto iter = _reader.begin();
     if (iter != _reader.end())
     {
-      auto&& [id, buffer] = *iter;
+      [[maybe_unused]] auto&& [id, buffer] = *iter;
       return Iterator{std::move(iter)};
     }
     return end();
@@ -57,7 +57,7 @@ namespace rs::core
   // TrackStore::Reader::Iterator implementation
   TrackStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& iter) : _iter{std::move(iter)} {}
 
-  bool TrackStore::Reader::Iterator::operator==(const Iterator& other) const { return _iter == other._iter; }
+  bool TrackStore::Reader::Iterator::operator==(Iterator const& other) const { return _iter == other._iter; }
 
   TrackStore::Reader::Iterator& TrackStore::Reader::Iterator::operator++()
   {
@@ -74,13 +74,13 @@ namespace rs::core
   // TrackStore::Writer implementation
   TrackStore::Writer::Writer(lmdb::Database::Writer&& writer) : _writer{std::move(writer)} {}
 
-  std::pair<TrackStore::Id, TrackView> TrackStore::Writer::create(const void* data, std::size_t size)
+  std::pair<TrackStore::Id, TrackView> TrackStore::Writer::create(void const* data, std::size_t size)
   {
     auto [id, buffer] = _writer.append(boost::asio::buffer(data, size));
     return {Id{id}, TrackView{buffer, size}};
   }
 
-  TrackView TrackStore::Writer::update(Id id, const void* data, std::size_t size)
+  TrackView TrackStore::Writer::update(Id id, void const* data, std::size_t size)
   {
     auto buffer = _writer.update(id.value(), boost::asio::buffer(data, size));
     return TrackView(buffer, size);

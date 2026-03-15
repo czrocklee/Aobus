@@ -43,7 +43,7 @@ public:
     return *(static_cast<T*>(iter.first->second.get()));
   }
 
-  void execute(int argc, const char* argv[], std::ostream& os) override
+  void execute(int argc, char const* argv[], std::ostream& os) override
   {
     std::string_view command = "";
 

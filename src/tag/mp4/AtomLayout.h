@@ -67,7 +67,7 @@ namespace rs::tag::mp4
     boost::endian::big_uint16_buf_t totalTracks;
     boost::endian::big_uint16_buf_t pad2;
 
-    static constexpr const char* Type = "trkn";
+    static constexpr char const* Type = "trkn";
   };
 
   static_assert(sizeof(TrknAtomLayout) == 32);
@@ -83,7 +83,7 @@ namespace rs::tag::mp4
     boost::endian::big_uint16_buf_t discNumber;
     boost::endian::big_uint16_buf_t totalDiscs;
 
-    static constexpr const char* Type = "disk";
+    static constexpr char const* Type = "disk";
   };
 
   static_assert(sizeof(DiskAtomLayout) == 30);

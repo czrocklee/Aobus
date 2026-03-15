@@ -21,7 +21,6 @@
 #include <rs/core/ListStore.h>
 #include <rs/core/ResourceStore.h>
 #include <rs/core/TrackStore.h>
-#include <rs/lmdb/Transaction.h>
 
 #include <filesystem>
 #include <memory>
@@ -40,21 +39,21 @@ namespace rs::core
     [[nodiscard]] rs::lmdb::WriteTransaction writeTransaction() { return rs::lmdb::WriteTransaction{_env}; }
 
     [[nodiscard]] TrackStore& tracks() { return _tracks; }
-    [[nodiscard]] const TrackStore& tracks() const { return _tracks; }
+    [[nodiscard]] TrackStore const& tracks() const { return _tracks; }
 
     [[nodiscard]] ListStore& lists() { return _lists; }
-    [[nodiscard]] const ListStore& lists() const { return _lists; }
+    [[nodiscard]] ListStore const& lists() const { return _lists; }
 
     [[nodiscard]] ResourceStore& resources() { return _resources; }
-    [[nodiscard]] const ResourceStore& resources() const { return _resources; }
+    [[nodiscard]] ResourceStore const& resources() const { return _resources; }
 
     [[nodiscard]] Dictionary& dictionary() { return *_dictionary; }
-    [[nodiscard]] const Dictionary& dictionary() const { return *_dictionary; }
+    [[nodiscard]] Dictionary const& dictionary() const { return *_dictionary; }
 
-    [[nodiscard]] const std::filesystem::path& rootPath() const { return _root; }
+    [[nodiscard]] std::filesystem::path const& rootPath() const { return _root; }
 
   private:
-    const std::filesystem::path _root;
+    std::filesystem::path const _root;
     rs::lmdb::Environment _env;
     TrackStore _tracks;
     ListStore _lists;

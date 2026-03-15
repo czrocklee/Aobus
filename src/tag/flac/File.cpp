@@ -46,8 +46,8 @@ namespace rs::tag::flac
     {
       void operator()(Metadata& meta, boost::asio::const_buffer buffer)
       {
-        const char* begin = static_cast<const char*>(buffer.data());
-        const char* end = begin + buffer.size();
+        char const* begin = static_cast<char const*>(buffer.data());
+        char const* end = begin + buffer.size();
 
         if (auto iter = std::find(begin, end, '/'); iter != end)
         {
@@ -65,7 +65,7 @@ namespace rs::tag::flac
     {
       using is_transparent = void;
 
-      bool operator()(const std::string_view& lhs, const std::string_view& rhs) const
+      bool operator()(std::string_view const& lhs, std::string_view const& rhs) const
       {
         return std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(), boost::is_iless{});
       }
@@ -95,7 +95,7 @@ namespace rs::tag::flac
 
     Metadata metadata;
     MetadataBlockViewIterator iter{
-      static_cast<const char*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};
+      static_cast<char const*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};
     MetadataBlockViewIterator end{};
 
     for (; iter != end; ++iter)
@@ -141,5 +141,5 @@ namespace rs::tag::flac
     return metadata;
   }
 
-  void File::saveMetadata(const Metadata& metadata) {}
+  void File::saveMetadata(Metadata const&) {}
 }

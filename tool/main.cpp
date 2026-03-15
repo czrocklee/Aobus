@@ -38,30 +38,29 @@ using namespace rs;
 
 namespace
 {
-  std::unique_ptr<rs::tag::File> createTagFileByExtension(const std::filesystem::path& path)
+  std::unique_ptr<rs::tag::File> createTagFileByExtension(std::filesystem::path const& path)
   {
-    static const std::unordered_map<std::string,
-                                    std::function<std::unique_ptr<rs::tag::File>(const std::filesystem::path)>>
+    static std::unordered_map<std::string,
+                              std::function<std::unique_ptr<rs::tag::File>(std::filesystem::path const)>> const
       CreatorMap = {
         {".mp3",
-         [](const auto& path) { return std::make_unique<rs::tag::mpeg::File>(path, rs::tag::File::Mode::ReadOnly); }},
+         [](auto const& path) { return std::make_unique<rs::tag::mpeg::File>(path, rs::tag::File::Mode::ReadOnly); }},
         {".m4a",
-         [](const auto& path) { return std::make_unique<rs::tag::mp4::File>(path, rs::tag::File::Mode::ReadOnly); }},
+         [](auto const& path) { return std::make_unique<rs::tag::mp4::File>(path, rs::tag::File::Mode::ReadOnly); }},
         {".flac",
-         [](const auto& path) { return std::make_unique<rs::tag::flac::File>(path, rs::tag::File::Mode::ReadOnly); }}};
+         [](auto const& path) { return std::make_unique<rs::tag::flac::File>(path, rs::tag::File::Mode::ReadOnly); }}};
 
     return std::invoke(CreatorMap.at(path.extension().string()), path);
   }
 
-  std::string getString(const rs::tag::ValueType& val)
+  std::string getString(rs::tag::ValueType const& val)
   {
-    if (rs::tag::isNull(val))
-      return {};
+    if (rs::tag::isNull(val)) return {};
     return std::get<std::string>(val);
   }
 }
 
-int main(int argc, const char* argv[])
+int main(int argc, char const* argv[])
 {
   rs::core::MusicLibrary ml{"."};
 
@@ -70,14 +69,14 @@ int main(int argc, const char* argv[])
   root.addCommand<TrackCommand>("track", ml);
   root.addCommand<ListCommand>("list", ml);
 
-  root.addCommand<BasicCommand>("init", [](const bpo::variables_map& vm, std::ostream& os) {
+  root.addCommand<BasicCommand>("init", [](bpo::variables_map const&, std::ostream& os) {
     rs::core::MusicLibrary ml{"."};
     rs::utility::Finder finder{".", {".flac", ".m4a"}};
     auto txn = ml.writeTransaction();
     auto trackWriter = ml.tracks().writer(txn);
-    auto& dictionary = ml.dictionary();
+    [[maybe_unused]] auto& dictionary = ml.dictionary();
 
-    for (const std::filesystem::path& path : finder)
+    for (std::filesystem::path const& path : finder)
     {
       std::unique_ptr<rs::tag::File> file;
       rs::tag::Metadata metadata;
@@ -87,7 +86,7 @@ int main(int argc, const char* argv[])
         file = createTagFileByExtension(path);
         metadata = file->loadMetadata();
       }
-      catch (const std::exception& e)
+      catch (std::exception const& e)
       {
         std::cerr << "failed to parse metadata for " << path.filename() << ": " << e.what() << std::endl;
         continue;
@@ -151,7 +150,7 @@ int main(int argc, const char* argv[])
   {
     root.execute(argc, argv, std::cout);
   }
-  catch (const std::exception& e)
+  catch (std::exception const& e)
   {
     std::cerr << e.what() << std::endl;
     return 1;

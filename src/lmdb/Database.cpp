@@ -29,7 +29,7 @@ namespace rs::lmdb
     lmdb::MDB dbi;
   };
 
-  Database::Database(lmdb::Environment& env, const std::string& db) : _impl{std::make_unique<Impl>(env)}
+  Database::Database(lmdb::Environment& env, std::string const& db) : _impl{std::make_unique<Impl>(env)}
   {
     auto txn = lmdb::Transaction::begin(_impl->env);
     _impl->dbi = lmdb::MDB::open(txn, db.c_str(), MDB_CREATE | MDB_INTEGERKEY);
@@ -59,19 +59,19 @@ namespace rs::lmdb
 
   Reader::Iterator::Iterator(lmdb::Cursor&& cursor) : _cursor{std::move(cursor)} { increment(); }
 
-  Reader::Iterator::Iterator(const Iterator& other) : _cursor{}, _value{other._value}
+  Reader::Iterator::Iterator(Iterator const& other) : _cursor{}, _value{other._value}
   {
     if (other._cursor.valid())
     {
       _cursor = lmdb::Cursor::open(other._cursor.transaction(), other._cursor.database());
       std::string_view key = lmdb::bytesOf(_value.first);
-      _cursor.get(key, MDB_SET);
+      [[maybe_unused]] bool ok = _cursor.get(key, MDB_SET);
     }
   }
 
   Reader::Iterator::Iterator(Iterator&& other) = default;
 
-  bool Reader::Iterator::equal(const Iterator& other) const
+  bool Reader::Iterator::equal(Iterator const& other) const
   {
     return _cursor.valid() == other._cursor.valid() && _value.first == other._value.first;
   }
@@ -92,7 +92,7 @@ namespace rs::lmdb
     }
   }
 
-  const Reader::Value& Reader::Iterator::dereference() const { return _value; }
+  Reader::Value const& Reader::Iterator::dereference() const { return _value; }
 
   Writer::Writer(lmdb::MDB& dbi, lmdb::Transaction& txn) : _dbi{dbi}, _txn{txn}, _cursor{lmdb::Cursor::open(_txn, _dbi)}
   {
@@ -104,15 +104,18 @@ namespace rs::lmdb
   {
     std::string_view toStrView(boost::asio::const_buffer data)
     {
-      return {static_cast<const char*>(data.data()), data.size()};
+      return {static_cast<char const*>(data.data()), data.size()};
     }
 
-    const void* put(lmdb::Cursor& cursor, std::uint64_t id, boost::asio::const_buffer data, unsigned int flags)
+    void const* put(lmdb::Cursor& cursor, std::uint64_t id, boost::asio::const_buffer data, unsigned int flags)
     {
       auto key = lmdb::bytesOf(id);
       auto value = toStrView(data);
-      cursor.put(key, value, flags);
-      cursor.get(key, value, MDB_GET_CURRENT);
+
+      if (!cursor.put(key, value, flags)) return nullptr;
+
+      if (!cursor.get(key, value, MDB_GET_CURRENT)) return nullptr;
+
       return value.data();
     }
 
@@ -122,14 +125,14 @@ namespace rs::lmdb
     }
   }
 
-  const void* Writer::create(std::uint64_t id, boost::asio::const_buffer data)
+  void const* Writer::create(std::uint64_t id, boost::asio::const_buffer data)
   {
     return put(_cursor, id, data, MDB_NOOVERWRITE);
   }
 
   void* Writer::create(std::uint64_t id, std::size_t size) { return reserve(_cursor, id, size, MDB_NOOVERWRITE); }
 
-  std::pair<std::uint64_t, const void*> Writer::append(boost::asio::const_buffer data)
+  std::pair<std::uint64_t, void const*> Writer::append(boost::asio::const_buffer data)
   {
     auto id = ++_lastId;
     return {id, put(_cursor, id, data, MDB_NOOVERWRITE | MDB_APPEND)};
@@ -141,7 +144,7 @@ namespace rs::lmdb
     return {id, reserve(_cursor, id, size, MDB_NOOVERWRITE | MDB_APPEND)};
   }
 
-  const void* Writer::update(std::uint64_t id, boost::asio::const_buffer data) { return put(_cursor, id, data, 0); }
+  void const* Writer::update(std::uint64_t id, boost::asio::const_buffer data) { return put(_cursor, id, data, 0); }
 
   bool Writer::del(std::uint64_t id) { return _dbi.del(_txn, lmdb::bytesOf(id)); }
 

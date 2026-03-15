@@ -27,5 +27,5 @@ namespace rs::tag
   using Blob = std::vector<char>;
   using ValueType = std::variant<std::monostate, std::string, std::int64_t, double, Blob>;
 
-  inline bool isNull(const ValueType& value) { return value == ValueType{}; }
+  inline bool isNull(ValueType const& value) { return value == ValueType{}; }
 }

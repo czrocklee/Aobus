@@ -15,7 +15,7 @@ TrackView::TrackView(TableModel::AbstractTrackList& tracks, QWidget* parent) : Q
   tableView->setItemDelegateForColumn(3, new TagsDelegate{tableView});
 
   connect(
-    lineEdit, &QLineEdit::textChanged, [proxyModel](const QString& text) { proxyModel->onQuickFilterChanged(text); });
+    lineEdit, &QLineEdit::textChanged, [proxyModel](QString const& text) { proxyModel->onQuickFilterChanged(text); });
 }
 
 TrackView::~TrackView() {}

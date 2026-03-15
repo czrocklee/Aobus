@@ -42,18 +42,18 @@ namespace rs::tag
   class Metadata final
   {
   public:
-    [[nodiscard]] const ValueType& get(MetaField field) const { return _fields[static_cast<std::size_t>(field)]; }
+    [[nodiscard]] ValueType const& get(MetaField field) const { return _fields[static_cast<std::size_t>(field)]; }
 
     void set(MetaField field, ValueType value) { _fields[static_cast<std::size_t>(field)] = std::move(value); }
 
-    [[nodiscard]] const ValueType& getCustom(std::string_view field) const
+    [[nodiscard]] ValueType const& getCustom(std::string_view field) const
     {
       if (auto iter = _customFields.find(field); iter != _customFields.end())
       {
         return iter->second;
       }
 
-      static const ValueType empty{};
+      static ValueType const empty{};
       return empty;
     }
 

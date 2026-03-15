@@ -39,9 +39,9 @@ namespace rs::expr
 
       void operator()(UnaryExpression& unary) { normalize(unary.operand); }
 
-      void operator()(VariableExpression& variable) {}
+      void operator()(VariableExpression&) {}
 
-      void operator()(ConstantExpression& constant) {}
+      void operator()(ConstantExpression&) {}
 
       void shiftAdd(BinaryExpression& binary)
       {

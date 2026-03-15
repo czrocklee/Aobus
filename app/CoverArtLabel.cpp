@@ -23,7 +23,7 @@ CoverArtLabel::CoverArtLabel(QWidget* parent) : QLabel(parent)
   setScaledContents(false);
 }
 
-void CoverArtLabel::setPixmap(const QPixmap& p)
+void CoverArtLabel::setPixmap(QPixmap const& p)
 {
   _pix = p;
   QLabel::setPixmap(scaledPixmap());

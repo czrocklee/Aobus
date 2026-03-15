@@ -28,10 +28,10 @@ public:
   // TrackSortFilterProxyModel(rs::core::MusicLibrary& ml, QObject *parent = 0);
 
 public slots:
-  void onQuickFilterChanged(const QString& filter);
+  void onQuickFilterChanged(QString const& filter);
 
 protected:
-  bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const override;
+  bool filterAcceptsRow(int sourceRow, QModelIndex const& sourceParent) const override;
 
 private:
   std::optional<rs::expr::Expression> _filter;

@@ -87,7 +87,7 @@ namespace rs::expr
     // For string constants, we store the length and a pointer to the data
     // The actual string data will be stored separately in the plan
     std::uint32_t strLen;
-    const char* strData;
+    char const* strData;
   };
 
   /**
@@ -122,7 +122,7 @@ namespace rs::expr
      *
      * @param dict Dictionary for resolving string constants to IDs
      */
-    explicit QueryCompiler(const core::IDictionary& dict);
+    explicit QueryCompiler(core::IDictionary const& dict);
 
     /**
      * Compile an expression AST into an execution plan.
@@ -130,23 +130,23 @@ namespace rs::expr
      * @param expr The expression AST to compile
      * @return Compiled execution plan
      */
-    [[nodiscard]] ExecutionPlan compile(const Expression& expr);
+    [[nodiscard]] ExecutionPlan compile(Expression const& expr);
 
   private:
     std::uint32_t addStringConstant(std::string_view str);
 
-    void compileExpression(const Expression& expr);
-    void compileBinary(const BinaryExpression& binary);
-    void compileUnary(const UnaryExpression& unary);
-    void compileVariable(const VariableExpression& var);
-    void compileConstant(const ConstantExpression& constant);
+    void compileExpression(Expression const& expr);
+    void compileBinary(BinaryExpression const& binary);
+    void compileUnary(UnaryExpression const& unary);
+    void compileVariable(VariableExpression const& var);
+    void compileConstant(ConstantExpression const& constant);
 
     // Resolve string to ID using dictionary (if available)
-    [[nodiscard]] std::int64_t resolveStringConstant(const std::string& str, Field field) const;
+    [[nodiscard]] std::int64_t resolveStringConstant(std::string const& str, Field field) const;
 
     ExecutionPlan _plan;
     std::uint32_t _nextReg = 0;
-    const core::IDictionary* _dict = nullptr;
+    core::IDictionary const* _dict = nullptr;
     Field _lastField = Field::TagBloom; // Track last field for context
   };
 

@@ -22,7 +22,7 @@
 
 namespace rs::core
 {
-  inline DataValue custom(const TrackView& track, std::string_view fieldName)
+  inline DataValue custom(TrackView const& track, std::string_view fieldName)
   {
     // For now, return empty - custom fields are not yet implemented
     (void)track;
