@@ -60,7 +60,6 @@ namespace rs::core
     ListStore _lists;
     ResourceStore _resources;
     std::unique_ptr<Dictionary> _dictionary;
-    lmdb::Database _dictReadDb;
-    lmdb::Database _dictWriteDb;
+    lmdb::Database _dictionaryDb;
   };
 }

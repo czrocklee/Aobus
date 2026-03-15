@@ -40,7 +40,7 @@ namespace
     {
     }
 
-    rs::core::DictionaryId getStringId(std::string_view str) const override
+    rs::core::DictionaryId getId(std::string_view str) const override
     {
       auto it = _tagToId.find(std::string(str));
       if (it != _tagToId.end())

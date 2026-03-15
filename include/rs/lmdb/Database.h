@@ -19,9 +19,7 @@
 
 #include <boost/asio/buffer.hpp>
 #include <boost/iterator/iterator_facade.hpp>
-#include <memory>
 #include <rs/lmdb/Transaction.h>
-#include <rs/lmdb/Type.h>
 
 namespace rs::lmdb
 {
@@ -37,13 +35,8 @@ namespace rs::lmdb
     [[nodiscard]] Reader reader(ReadTransaction& txn) const;
     [[nodiscard]] Writer writer(WriteTransaction& txn);
 
-    // Access to internal MDB handle for advanced use cases (e.g., string-keyed databases)
-    // This is intentionally exposed for classes like Dictionary that need raw LMDB access
-    [[nodiscard]] detail::MDB& raw();
-
   private:
-    struct Impl;
-    std::unique_ptr<Impl> _impl;
+    MDB_dbi _dbi = (std::numeric_limits<MDB_dbi>::max)();
   };
 
   class Database::Reader
@@ -57,10 +50,10 @@ namespace rs::lmdb
     [[nodiscard]] boost::asio::const_buffer operator[](std::uint64_t id) const;
 
   protected:
-    Reader(detail::MDB& dbi, detail::Transaction& txn);
+    Reader(MDB_dbi dbi, MDB_txn* txn);
 
-    detail::MDB& _dbi;
-    detail::Transaction& _txn;
+    MDB_dbi _dbi;
+    MDB_txn* _txn;
     friend class Database;
   };
 
@@ -96,10 +89,10 @@ namespace rs::lmdb
     [[nodiscard]] boost::asio::const_buffer operator[](std::uint64_t id) const;
 
   private:
-    Writer(detail::MDB& dbi, detail::Transaction& txn);
+    Writer(MDB_dbi dbi, WriteTransaction& txn);
 
-    detail::MDB& _dbi;
-    detail::Transaction& _txn;
+    MDB_dbi _dbi;
+    WriteTransaction& _txn;
     detail::Cursor _cursor;
     std::uint64_t _lastId = 0;
     friend class Database;

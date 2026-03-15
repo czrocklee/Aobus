@@ -18,7 +18,6 @@
 #pragma once
 
 #include <rs/lmdb/Database.h>
-#include <rs/lmdb/Type.h>
 #include <rs/utility/TaggedInteger.h>
 
 #include <cstdint>
@@ -39,86 +38,75 @@ namespace rs::core
   /**
    * IDictionary - Abstract interface for string-to-ID lookups.
    *
-   * Used by QueryCompiler to resolve string constants to numeric IDs
-   * without coupling to LMDB or any specific implementation.
+   * Used by QueryCompiler to resolve string constants to numeric IDs.
    */
   class IDictionary
   {
   public:
     virtual ~IDictionary() = default;
-
-    /**
-     * Look up a string and get its ID.
-     *
-     * @param str The string to look up
-     * @return The ID if found, or 0 if not found
-     */
-    [[nodiscard]] virtual DictionaryId getStringId(std::string_view str) const = 0;
+    [[nodiscard]] virtual DictionaryId getId(std::string_view str) const = 0;
   };
 
   /**
-   * Dictionary - Bidirectional string-to-ID lookup for track metadata.
+   * Dictionary - Stores id → string mappings with in-memory string → id index.
    *
-   * Provides string interning: strings are stored once and assigned unique IDs.
-   * This enables efficient storage and comparison in track queries.
+   * Uses LMDB for persistent storage (id → string) and builds an in-memory
+   * hash map for fast string → id lookups when loaded.
    *
-   * Uses two LMDB databases:
-   * - dict_read: Key=uint32_t ID, Value=string (for ID → string lookup)
-   * - dict_write: Key=string, Value=uint32_t ID (for string → ID lookup)
-   *
-   * Note: Must be used within a write transaction. The transaction must remain
+   * Note: Must be used within a transaction. The transaction must remain
    * alive for the duration of Dictionary operations.
    */
   class Dictionary : public IDictionary
   {
   public:
-    Dictionary(lmdb::Database& readDb, lmdb::Database& writeDb, DictionaryId nextId);
+    /**
+     * Construct and load existing entries from the database.
+     * Builds in-memory string → id index from existing data.
+     */
+    explicit Dictionary(lmdb::Database& db);
 
     /**
-     * Get or create an ID for the given string.
-     * If the string already exists, returns its existing ID.
-     * If new, allocates a new ID and stores the mapping.
-     *
+     * Store a string with the given ID.
      * @param txn Write transaction that must remain alive
-     * @return The ID associated with the string
+     * @param id The ID to associate with the string
+     * @param value The string to store
+     * @return Pointer to stored data, or nullptr on failure
      */
-    DictionaryId getId(lmdb::WriteTransaction& txn, std::string_view value);
+    void const* store(lmdb::WriteTransaction& txn, DictionaryId id, std::string_view value);
 
     /**
      * Look up a string by its ID.
      * @param txn Transaction that must remain alive
      * @return The string, or empty string_view if not found
      */
-    std::string_view getString(lmdb::ReadTransaction& txn, DictionaryId id) const;
+    std::string_view get(lmdb::ReadTransaction& txn, DictionaryId id) const;
 
     /**
-     * Look up a string and get its ID (for QueryCompiler).
+     * Look up an ID by its string.
      * @param str The string to look up
      * @return The ID if found, or 0 if not found
      */
-    [[nodiscard]] DictionaryId getStringId(std::string_view str) const override;
+    [[nodiscard]] DictionaryId getId(std::string_view str) const override;
 
     /**
-     * Get the next available ID (for batch operations).
+     * Check if an ID exists.
+     * @param txn Transaction that must remain alive
+     * @return true if the ID exists
      */
-    DictionaryId nextId() const { return _nextId; }
+    bool contains(lmdb::ReadTransaction& txn, DictionaryId id) const;
 
     /**
-     * Set the next available ID.
+     * Check if a string exists.
+     * @param str The string to look up
+     * @return true if the string exists
      */
-    void setNextId(DictionaryId id) { _nextId = id; }
+    bool contains(std::string_view str) const;
 
   private:
-    lmdb::Database& _readDb;
-    lmdb::Database& _writeDb;
-    DictionaryId _nextId;
+    lmdb::Database& _db;
 
-    // In-memory cache for read-heavy workloads
-    std::unordered_map<std::string, DictionaryId> _stringToIdCache;
-    std::unordered_map<DictionaryId, std::string> _idToStringCache;
-
-    // Access to raw MDB for string key operations in write DB
-    [[nodiscard]] lmdb::detail::MDB& writeDbRaw(lmdb::WriteTransaction& txn);
+    // In-memory index: string → id (built on load)
+    std::unordered_map<std::string, DictionaryId> _stringToId;
   };
 
 } // namespace rs::core

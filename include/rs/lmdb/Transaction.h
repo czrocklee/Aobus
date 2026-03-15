@@ -17,53 +17,46 @@
 
 #pragma once
 
+#include <lmdb.h>
+
 #include <rs/lmdb/Type.h>
 
 namespace rs::lmdb
 {
-  class MusicLibrary;
-
+  // Read-only transaction
   class ReadTransaction
   {
   public:
-    ReadTransaction(const lmdb::Environment& env) : _txn{lmdb::detail::Transaction::begin(env, nullptr, MDB_RDONLY)} {}
+    ReadTransaction(const Environment& env);
+    ReadTransaction(WriteTransaction& parent);  // NOLINT(google-explicit-constructor) - implicit conversion
 
     ReadTransaction(ReadTransaction&&) = default;
 
-    [[nodiscard]] lmdb::detail::Transaction& transaction() noexcept { return _txn; }
-    [[nodiscard]] const lmdb::detail::Transaction& transaction() const noexcept { return _txn; }
+    ~ReadTransaction() noexcept;
+
+    [[nodiscard]] MDB_txn* raw() const noexcept { return _handle; }
+    [[nodiscard]] MDB_env* environment() const noexcept { return _handle != nullptr ? mdb_txn_env(_handle) : nullptr; }
 
   protected:
-    ReadTransaction(lmdb::detail::Transaction&& txn) : _txn{std::move(txn)} {}
-
-    lmdb::detail::Transaction _txn;
+    explicit ReadTransaction(MDB_txn* handle) noexcept : _handle{handle} {}
+    MDB_txn* _handle = nullptr;
     friend class Database;
   };
 
+  // Read-write transaction (inherits from ReadTransaction for read capabilities)
   class WriteTransaction : public ReadTransaction
   {
   public:
-    WriteTransaction(lmdb::Environment& env) : ReadTransaction{lmdb::detail::Transaction::begin(env, nullptr)} {}
-
-    WriteTransaction(WriteTransaction& parent)
-      : ReadTransaction{lmdb::detail::Transaction::begin(parent._txn.environment(), parent._txn.raw())}
-    {
-    }
+    WriteTransaction(Environment& env);
+    WriteTransaction(WriteTransaction& parent);
 
     WriteTransaction(WriteTransaction&&) = default;
 
-    ~WriteTransaction()
-    {
-      if (_toCommit)
-      {
-        _txn.commit();
-      }
-    }
+    ~WriteTransaction();
 
-    void commit() { _toCommit = true; }
+    void commit();
 
   private:
-    friend class Database;
     bool _toCommit = false;
   };
 }

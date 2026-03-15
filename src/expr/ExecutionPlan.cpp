@@ -163,7 +163,7 @@ namespace rs::expr
       // Try to resolve tag name to ID via dictionary for bloom filter
       if (_dict)
       {
-        auto tagId = _dict->getStringId(var.name);
+        auto tagId = _dict->getId(var.name);
         if (tagId.value() > 0)
         {
           _plan.tagBloomMask |= (1U << (tagId.value() & kBloomBitMask));
@@ -282,7 +282,7 @@ namespace rs::expr
     }
 
     // Look up the string in the dictionary
-    auto id = _dict->getStringId(str);
+    auto id = _dict->getId(str);
     if (id.value() == 0)
     {
       return -1; // String not found in dictionary

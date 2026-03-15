@@ -42,6 +42,7 @@ set(CMAKE_AUTORCC ON)
 
 add_library(rs OBJECT
     src/lmdb/Type.cpp
+    src/lmdb/Transaction.cpp
     src/lmdb/Database.cpp
     src/core/MusicLibrary.cpp
     src/core/ResourceStore.cpp

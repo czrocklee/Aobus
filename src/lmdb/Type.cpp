@@ -16,6 +16,7 @@
  */
 
 #include <rs/lmdb/Type.h>
+#include <rs/lmdb/Transaction.h>
 
 namespace rs::lmdb
 {
@@ -103,112 +104,6 @@ namespace rs::lmdb
     }
   }
 
-  // Transaction implementation
-  detail::Transaction detail::Transaction::begin(MDB_env* env, MDB_txn* parent, unsigned int flags)
-  {
-    MDB_txn* handle = nullptr;
-    throwOnError("mdb_txn_begin", mdb_txn_begin(env, parent, flags, &handle));
-    return detail::Transaction{handle};
-  }
-
-  detail::Transaction detail::Transaction::begin(::rs::lmdb::Environment const& env, MDB_txn* parent, unsigned int flags)
-  {
-    return begin(env.raw(), parent, flags);
-  }
-
-  detail::Transaction::Transaction() = default;
-
-  detail::Transaction::Transaction(MDB_txn* handle) noexcept : _handle{handle} {}
-
-  detail::Transaction::Transaction(Transaction&& other) noexcept : _handle{other._handle} { other._handle = nullptr; }
-
-  detail::Transaction& detail::Transaction::operator=(Transaction&& other) noexcept
-  {
-    if (this != &other)
-    {
-      abort();
-      _handle = other._handle;
-      other._handle = nullptr;
-    }
-
-    return *this;
-  }
-
-  detail::Transaction::~Transaction() noexcept { abort(); }
-
-  void detail::Transaction::commit()
-  {
-    auto* handle = _handle;
-    _handle = nullptr;
-    throwOnError("mdb_txn_commit", mdb_txn_commit(handle));
-  }
-
-  void detail::Transaction::abort() noexcept
-  {
-    if (_handle != nullptr)
-    {
-      mdb_txn_abort(_handle);
-      _handle = nullptr;
-    }
-  }
-
-  // MDB implementation
-  detail::MDB detail::MDB::open(Transaction& transaction, const char* name, unsigned int flags)
-  {
-    MDB_dbi handle = (std::numeric_limits<MDB_dbi>::max)();
-    throwOnError("mdb_dbi_open", mdb_dbi_open(transaction.raw(), name, flags, &handle));
-    return detail::MDB{handle};
-  }
-
-  detail::MDB detail::MDB::open(Transaction& transaction, std::string_view name, unsigned int flags)
-  {
-    const std::string ownedName{name};
-    return open(transaction, ownedName.c_str(), flags);
-  }
-
-  detail::MDB::MDB() = default;
-
-  detail::MDB::MDB(MDB_dbi handle) noexcept : _handle{handle} {}
-
-  bool detail::MDB::get(Transaction& transaction, std::string_view key, std::string_view& value) const
-  {
-    MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
-    MDB_val valueBuffer{0, nullptr};
-    const int rc = mdb_get(transaction.raw(), _handle, &keyValue, &valueBuffer);
-    if (rc == MDB_NOTFOUND)
-    {
-      return false;
-    }
-    throwOnError("mdb_get", rc);
-    value = {static_cast<const char*>(valueBuffer.mv_data), valueBuffer.mv_size};
-    return true;
-  }
-
-  bool detail::MDB::put(Transaction& transaction, std::string_view key, std::string_view value, unsigned int flags) const
-  {
-    MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
-    MDB_val valueBuffer{value.size(), const_cast<char*>(value.data())};
-    const int rc = mdb_put(transaction.raw(), _handle, &keyValue, &valueBuffer, flags);
-    if (rc == MDB_KEYEXIST)
-    {
-      return false;
-    }
-    throwOnError("mdb_put", rc);
-    return true;
-  }
-
-  bool detail::MDB::del(Transaction& transaction, std::string_view key) const
-  {
-    MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
-    const int rc = mdb_del(transaction.raw(), _handle, &keyValue, nullptr);
-    if (rc == MDB_NOTFOUND)
-    {
-      return false;
-    }
-    throwOnError("mdb_del", rc);
-    return true;
-  }
-
   // Cursor implementation
   detail::Cursor detail::Cursor::open(MDB_txn* transaction, MDB_dbi database)
   {
@@ -217,7 +112,15 @@ namespace rs::lmdb
     return detail::Cursor{handle};
   }
 
-  detail::Cursor detail::Cursor::open(Transaction& transaction, MDB database) { return open(transaction.raw(), database.raw()); }
+  detail::Cursor detail::Cursor::open(ReadTransaction& transaction, MDB_dbi database)
+  {
+    return open(transaction.raw(), database);
+  }
+
+  detail::Cursor detail::Cursor::open(WriteTransaction& transaction, MDB_dbi database)
+  {
+    return open(transaction.raw(), database);
+  }
 
   detail::Cursor::Cursor() = default;
 

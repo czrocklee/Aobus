@@ -42,22 +42,8 @@ namespace rs::core
     , _tracks{_env, "tracks"}
     , _lists{_env, "lists"}
     , _resources{_env, "resources"}
-    , _dictReadDb{_env, "dict_read"}
-    , _dictWriteDb{_env, "dict_write"}
+    , _dictionaryDb{_env, "dictionary"}
   {
-    // Find the highest existing ID to determine next available ID
-    DictionaryId nextId{0};
-    rs::lmdb::ReadTransaction readTxn{_env};
-    auto reader = _dictReadDb.reader(readTxn);
-    for (auto const& [id, value] : reader)
-    {
-      (void)value; // We only care about the key (id)
-      if (static_cast<std::uint32_t>(id) >= nextId.value())
-      {
-        nextId = DictionaryId{static_cast<std::uint32_t>(id) + 1};
-      }
-    }
-
-    _dictionary = std::make_unique<Dictionary>(_dictReadDb, _dictWriteDb, nextId);
+    _dictionary = std::make_unique<Dictionary>(_dictionaryDb);
   }
 }

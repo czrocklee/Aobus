@@ -17,34 +17,27 @@
 
 #include <rs/lmdb/Database.h>
 
+#include <lmdb.h>
+
 namespace rs::lmdb
 {
   using Writer = Database::Writer;
   using Reader = Database::Reader;
 
-  struct Database::Impl
+  Database::Database(lmdb::Environment& env, std::string const& db)
   {
-    Impl(lmdb::Environment& env) : env{env} {}
-    lmdb::Environment& env;
-    detail::MDB dbi;
-  };
-
-  Database::Database(lmdb::Environment& env, std::string const& db) : _impl{std::make_unique<Impl>(env)}
-  {
-    auto txn = detail::Transaction::begin(_impl->env);
-    _impl->dbi = detail::MDB::open(txn, db.c_str(), MDB_CREATE | MDB_INTEGERKEY);
+    WriteTransaction txn{env};
+    throwOnError("mdb_dbi_open", mdb_dbi_open(txn.raw(), db.c_str(), MDB_CREATE | MDB_INTEGERKEY, &_dbi));
     txn.commit();
   }
 
   Database::~Database() = default;
 
-  Reader Database::reader(ReadTransaction& txn) const { return Reader{_impl->dbi, txn._txn}; }
+  Reader Database::reader(ReadTransaction& txn) const { return Reader{_dbi, txn.raw()}; }
 
-  Writer Database::writer(WriteTransaction& txn) { return Writer{_impl->dbi, txn._txn}; }
+  Writer Database::writer(WriteTransaction& txn) { return Writer{_dbi, txn}; }
 
-  detail::MDB& Database::raw() { return _impl->dbi; }
-
-  Reader::Reader(detail::MDB& dbi, detail::Transaction& txn) : _dbi{dbi}, _txn{txn} {}
+  Reader::Reader(MDB_dbi dbi, MDB_txn* txn) : _dbi{dbi}, _txn{txn} {}
 
   Reader::Iterator Reader::begin() const { return Iterator{detail::Cursor::open(_txn, _dbi)}; }
 
@@ -52,9 +45,15 @@ namespace rs::lmdb
 
   boost::asio::const_buffer Reader::operator[](std::uint64_t id) const
   {
-    std::string_view value;
-    return _dbi.get(_txn, lmdb::bytesOf(id), value) ? boost::asio::buffer(value.data(), value.size())
-                                                    : boost::asio::const_buffer{};
+    MDB_val key{id, const_cast<std::uint64_t*>(&id)};
+    MDB_val value{0, nullptr};
+    const int rc = mdb_get(_txn, _dbi, &key, &value);
+    if (rc == MDB_NOTFOUND)
+    {
+      return boost::asio::const_buffer{};
+    }
+    throwOnError("mdb_get", rc);
+    return boost::asio::buffer(value.mv_data, value.mv_size);
   }
 
   Reader::Iterator::Iterator() : _cursor{}, _value{} {}
@@ -96,7 +95,7 @@ namespace rs::lmdb
 
   Reader::Value const& Reader::Iterator::dereference() const { return _value; }
 
-  Writer::Writer(detail::MDB& dbi, detail::Transaction& txn) : _dbi{dbi}, _txn{txn}, _cursor{detail::Cursor::open(_txn, _dbi)}
+  Writer::Writer(MDB_dbi dbi, WriteTransaction& txn) : _dbi{dbi}, _txn{txn}, _cursor{detail::Cursor::open(txn.raw(), _dbi)}
   {
     std::string_view key;
     _lastId = _cursor.get(key, MDB_LAST) ? lmdb::read<std::uint64_t>(key) : 0;
@@ -148,12 +147,28 @@ namespace rs::lmdb
 
   void const* Writer::update(std::uint64_t id, boost::asio::const_buffer data) { return put(_cursor, id, data, 0); }
 
-  bool Writer::del(std::uint64_t id) { return _dbi.del(_txn, lmdb::bytesOf(id)); }
+  bool Writer::del(std::uint64_t id)
+  {
+    MDB_val key{sizeof(id), const_cast<std::uint64_t*>(&id)};
+    const int rc = mdb_del(_txn.raw(), _dbi, &key, nullptr);
+    if (rc == MDB_NOTFOUND)
+    {
+      return false;
+    }
+    throwOnError("mdb_del", rc);
+    return true;
+  }
 
   boost::asio::const_buffer Writer::operator[](std::uint64_t id) const
   {
-    std::string_view value;
-    return _dbi.get(_txn, lmdb::bytesOf(id), value) ? boost::asio::buffer(value.data(), value.size())
-                                                    : boost::asio::const_buffer{};
+    MDB_val key{id, const_cast<std::uint64_t*>(&id)};
+    MDB_val value{0, nullptr};
+    const int rc = mdb_get(_txn.raw(), _dbi, &key, &value);
+    if (rc == MDB_NOTFOUND)
+    {
+      return boost::asio::const_buffer{};
+    }
+    throwOnError("mdb_get", rc);
+    return boost::asio::buffer(value.mv_data, value.mv_size);
   }
 }

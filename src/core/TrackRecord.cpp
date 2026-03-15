@@ -51,19 +51,19 @@ namespace rs::core
     // Resolve dictionary IDs to strings
     if (meta.artistId() > 0)
     {
-      metadata.artist = std::string(dict.getString(txn, DictionaryId{meta.artistId()}));
+      metadata.artist = std::string(dict.get(txn, DictionaryId{meta.artistId()}));
     }
     if (meta.albumId() > 0)
     {
-      metadata.album = std::string(dict.getString(txn, DictionaryId{meta.albumId()}));
+      metadata.album = std::string(dict.get(txn, DictionaryId{meta.albumId()}));
     }
     if (meta.albumArtistId() > 0)
     {
-      metadata.albumArtist = std::string(dict.getString(txn, DictionaryId{meta.albumArtistId()}));
+      metadata.albumArtist = std::string(dict.get(txn, DictionaryId{meta.albumArtistId()}));
     }
     if (meta.genreId() > 0)
     {
-      metadata.genre = std::string(dict.getString(txn, DictionaryId{meta.genreId()}));
+      metadata.genre = std::string(dict.get(txn, DictionaryId{meta.genreId()}));
     }
 
     // Deserialize tag IDs from payload

@@ -31,6 +31,8 @@ namespace rs::lmdb
 {
   // Forward declarations
   class Environment;
+  class ReadTransaction;
+  class WriteTransaction;
 
   // Internal detail namespace - not part of public API
   namespace detail
@@ -49,59 +51,12 @@ namespace rs::lmdb
       int _code;
     };
 
-    class Transaction
-    {
-    public:
-      static Transaction begin(::rs::lmdb::Environment const& env, MDB_txn* parent = nullptr, unsigned int flags = 0);
-      static Transaction begin(MDB_env* env, MDB_txn* parent = nullptr, unsigned int flags = 0);
-
-      Transaction();
-      explicit Transaction(MDB_txn* handle) noexcept;
-
-      Transaction(const Transaction&) = delete;
-      Transaction& operator=(const Transaction&) = delete;
-
-      Transaction(Transaction&& other) noexcept;
-      Transaction& operator=(Transaction&& other) noexcept;
-
-      ~Transaction() noexcept;
-
-      [[nodiscard]] MDB_txn* raw() const noexcept { return _handle; }
-      [[nodiscard]] MDB_env* environment() const noexcept { return _handle != nullptr ? mdb_txn_env(_handle) : nullptr; }
-
-      void commit();
-      void abort() noexcept;
-
-    private:
-      MDB_txn* _handle = nullptr;
-    };
-
-    class MDB
-    {
-    public:
-      static constexpr unsigned int DefaultFlags = 0;
-
-      static MDB open(Transaction& transaction, const char* name = nullptr, unsigned int flags = DefaultFlags);
-      static MDB open(Transaction& transaction, std::string_view name, unsigned int flags = DefaultFlags);
-
-      MDB();
-      explicit MDB(MDB_dbi handle) noexcept;
-
-      [[nodiscard]] MDB_dbi raw() const noexcept { return _handle; }
-
-      [[nodiscard]] bool get(Transaction& transaction, std::string_view key, std::string_view& value) const;
-      [[nodiscard]] bool put(Transaction& transaction, std::string_view key, std::string_view value, unsigned int flags = 0) const;
-      [[nodiscard]] bool del(Transaction& transaction, std::string_view key) const;
-
-    private:
-      MDB_dbi _handle = (std::numeric_limits<MDB_dbi>::max)();
-    };
-
     class Cursor
     {
     public:
       static Cursor open(MDB_txn* transaction, MDB_dbi database);
-      static Cursor open(Transaction& transaction, MDB database);
+      static Cursor open(ReadTransaction& transaction, MDB_dbi database);
+      static Cursor open(WriteTransaction& transaction, MDB_dbi database);
 
       Cursor();
       explicit Cursor(MDB_cursor* handle) noexcept;
