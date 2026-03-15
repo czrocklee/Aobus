@@ -66,13 +66,12 @@ namespace rs::core
     explicit Dictionary(lmdb::Database& db);
 
     /**
-     * Store a string with the given ID.
+     * Store a string and auto-generate a unique ID.
      * @param txn Write transaction that must remain alive
-     * @param id The ID to associate with the string
      * @param value The string to store
-     * @return Pointer to stored data, or nullptr on failure
+     * @return The generated ID, or 0 on failure
      */
-    void const* store(lmdb::WriteTransaction& txn, DictionaryId id, std::string_view value);
+    DictionaryId put(lmdb::WriteTransaction& txn, std::string_view value);
 
     /**
      * Look up a string by its ID.
@@ -106,7 +105,22 @@ namespace rs::core
     lmdb::Database& _db;
 
     // In-memory index: string → id (built on load)
-    std::unordered_map<std::string, DictionaryId> _stringToId;
+    // Uses transparent lookup (C++20) to avoid creating string objects for lookups
+    struct StringHash
+    {
+      using is_transparent = void;
+      std::size_t operator()(std::string_view sv) const { return std::hash<std::string_view>{}(sv); }
+      std::size_t operator()(std::string const& s) const { return std::hash<std::string>{}(s); }
+    };
+    struct StringEq
+    {
+      using is_transparent = void;
+      bool operator()(std::string_view a, std::string_view b) const { return a == b; }
+      bool operator()(std::string const& a, std::string const& b) const { return a == b; }
+      bool operator()(std::string const& a, std::string_view b) const { return a == b; }
+      bool operator()(std::string_view a, std::string const& b) const { return a == b; }
+    };
+    std::unordered_map<std::string, DictionaryId, StringHash, StringEq> _stringToId;
   };
 
 } // namespace rs::core

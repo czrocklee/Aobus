@@ -26,15 +26,41 @@ namespace rs::core
   {
   }
 
-  void const* Dictionary::store(lmdb::WriteTransaction& txn, DictionaryId id, std::string_view value)
+  DictionaryId Dictionary::put(lmdb::WriteTransaction& txn, std::string_view value)
   {
-    auto writer = _db.writer(txn);
-    auto* ptr = writer.update(id.value(), boost::asio::buffer(value.data(), value.size()));
-    if (ptr != nullptr)
+    // Check in-memory index first (transparent lookup - no string creation)
+    auto it = _stringToId.find(value);
+    if (it != _stringToId.end())
     {
-      _stringToId[std::string(value)] = id;
+      return it->second;
     }
-    return ptr;
+
+    // Check database for existing entry
+    auto reader = _db.reader(txn);
+    for (auto&& [id, buf] : reader)
+    {
+      auto size = boost::asio::buffer_size(buf);
+      if (size > 0)
+      {
+        auto existing = std::string_view(static_cast<char const*>(buf.data()), size);
+        if (existing == value)
+        {
+          auto dictId = static_cast<std::uint32_t>(id);
+          _stringToId[std::string(value)] = DictionaryId{dictId};
+          return DictionaryId{dictId};
+        }
+      }
+    }
+
+    // Not found - append new entry
+    auto writer = _db.writer(txn);
+    auto [id, buffer] = writer.append(boost::asio::buffer(value.data(), value.size()));
+    auto dictId = static_cast<std::uint32_t>(id);
+    if (buffer != nullptr)
+    {
+      _stringToId[std::string(value)] = DictionaryId{dictId};
+    }
+    return DictionaryId{dictId};
   }
 
   std::string_view Dictionary::get(lmdb::ReadTransaction& txn, DictionaryId id) const
@@ -55,7 +81,7 @@ namespace rs::core
     {
       return DictionaryId{0};
     }
-    auto it = _stringToId.find(std::string(str));
+    auto it = _stringToId.find(str);
     if (it != _stringToId.end())
     {
       return it->second;
@@ -72,7 +98,7 @@ namespace rs::core
 
   bool Dictionary::contains(std::string_view str) const
   {
-    return _stringToId.contains(std::string(str));
+    return _stringToId.contains(str);
   }
 
 } // namespace rs::core

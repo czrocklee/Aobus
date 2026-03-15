@@ -42,7 +42,7 @@ fi
 # Configure and build
 echo "Building RockStudio ($CMAKE_BUILD_TYPE)..."
 nix-shell --run "cmake -S . -B $BUILD_DIR -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-nix-shell --run "cmake --build $BUILD_DIR"
+nix-shell --run "cmake --build $BUILD_DIR -j$(nproc)"
 
 echo ""
 echo "Build complete!"

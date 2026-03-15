@@ -42,6 +42,7 @@ set(CMAKE_AUTORCC ON)
 
 add_library(rs OBJECT
     src/lmdb/Type.cpp
+    src/lmdb/Environment.cpp
     src/lmdb/Transaction.cpp
     src/lmdb/Database.cpp
     src/core/MusicLibrary.cpp
@@ -83,6 +84,11 @@ add_executable(expr_test
     test/core/TrackLayoutTest.cpp
     test/core/TrackRecordTest.cpp
     test/core/ListLayoutTest.cpp
+    test/core/DictionaryTest.cpp
+    test/core/ResourceStoreTest.cpp
+    test/core/TrackStoreTest.cpp
+    test/core/ListStoreTest.cpp
+    test/lmdb/LmdbTest.cpp
 )
 target_include_directories(expr_test PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(expr_test PRIVATE rs Catch2)

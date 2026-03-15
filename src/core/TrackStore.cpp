@@ -22,7 +22,7 @@ namespace rs::core
 {
 
   // TrackStore implementation
-  TrackStore::TrackStore(lmdb::Environment& env, std::string const& db) : _database{env, db} {}
+  TrackStore::TrackStore(lmdb::WriteTransaction& txn, std::string const& db) : _database{txn, db} {}
 
   TrackStore::Reader TrackStore::reader(lmdb::ReadTransaction& txn) const { return Reader{_database.reader(txn)}; }
 

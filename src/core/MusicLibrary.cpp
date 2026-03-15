@@ -26,7 +26,7 @@ namespace
 
   rs::lmdb::Environment createEnv(char const* path)
   {
-    auto env = rs::lmdb::Environment::create();
+    auto env = rs::lmdb::Environment{};
     env.setMapSize(kLmdbMapSize);
     env.setMaxDatabases(kLmdbMaxDatabases);
     env.open(path, MDB_NOTLS, kLmdbFileMode);
@@ -39,11 +39,13 @@ namespace rs::core
   MusicLibrary::MusicLibrary(std::filesystem::path rootPath)
     : _root{std::move(rootPath)}
     , _env{createEnv(_root.c_str())}
-    , _tracks{_env, "tracks"}
-    , _lists{_env, "lists"}
-    , _resources{_env, "resources"}
-    , _dictionaryDb{_env, "dictionary"}
+    , _txn{_env}
+    , _tracks{_txn, "tracks"}
+    , _lists{_txn, "lists"}
+    , _resources{_txn, "resources"}
+    , _dictionaryDb{_txn, "dictionary"}
   {
+    _txn.commit();
     _dictionary = std::make_unique<Dictionary>(_dictionaryDb);
   }
 }

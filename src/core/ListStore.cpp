@@ -21,7 +21,7 @@
 namespace rs::core
 {
 
-  ListStore::ListStore(lmdb::Environment& env, std::string const& db) : _database{env, db} {}
+  ListStore::ListStore(lmdb::WriteTransaction& txn, std::string const& db) : _database{txn, db} {}
 
   ListStore::Reader ListStore::reader(lmdb::ReadTransaction& txn) const { return Reader{_database.reader(txn)}; }
 

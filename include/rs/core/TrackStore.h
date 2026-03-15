@@ -45,7 +45,7 @@ namespace rs::core
     class Reader;
     class Writer;
 
-    TrackStore(lmdb::Environment& env, std::string const& db);
+    TrackStore(lmdb::WriteTransaction& txn, std::string const& db);
 
     Reader reader(lmdb::ReadTransaction& txn) const;
     Writer writer(lmdb::WriteTransaction& txn);

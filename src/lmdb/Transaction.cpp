@@ -16,60 +16,36 @@
  */
 
 #include <rs/lmdb/Transaction.h>
+#include <rs/lmdb/Type.h>
 
 namespace rs::lmdb
 {
-  ReadTransaction::ReadTransaction(const Environment& env)
-  {
-    throwOnError("mdb_txn_begin", mdb_txn_begin(env.raw(), nullptr, MDB_RDONLY, &_handle));
-  }
-
-  ReadTransaction::ReadTransaction(WriteTransaction& parent)
-  {
-    throwOnError("mdb_txn_begin", mdb_txn_begin(parent.environment(), parent._handle, MDB_RDONLY, &_handle));
-  }
-
-  ReadTransaction::~ReadTransaction() noexcept
-  {
-    if (_handle != nullptr)
-    {
-      mdb_txn_abort(_handle);
-      _handle = nullptr;
-    }
-  }
-
-  WriteTransaction::WriteTransaction(Environment& env) : ReadTransaction(nullptr)
+  ReadTransaction::ReadTransaction(Environment const& env)
   {
     MDB_txn* handle = nullptr;
-    throwOnError("mdb_txn_begin", mdb_txn_begin(env.raw(), nullptr, 0, &handle));
-    _handle = handle;
+    throwOnError("mdb_txn_begin", mdb_txn_begin(env._handle.get(), nullptr, MDB_RDONLY, &handle));
+    _handle.reset(handle);
   }
 
-  WriteTransaction::WriteTransaction(WriteTransaction& parent) : ReadTransaction(nullptr)
+  WriteTransaction::WriteTransaction(Environment& env)
   {
     MDB_txn* handle = nullptr;
-    throwOnError("mdb_txn_begin", mdb_txn_begin(parent.environment(), parent._handle, 0, &handle));
-    _handle = handle;
+    throwOnError("mdb_txn_begin", mdb_txn_begin(env._handle.get(), nullptr, 0, &handle));
+    _handle.reset(handle);
   }
 
-  WriteTransaction::~WriteTransaction()
+  // Nested write transaction - child of parent write transaction
+  WriteTransaction::WriteTransaction(WriteTransaction& parent) : ReadTransaction()
   {
-    if (_handle != nullptr)
-    {
-      if (_toCommit)
-      {
-        mdb_txn_commit(_handle);
-      }
-      else
-      {
-        mdb_txn_abort(_handle);
-      }
-      _handle = nullptr;
-    }
+    MDB_txn* handle = nullptr;
+    MDB_env* env = mdb_txn_env(parent._handle.get());
+    throwOnError("mdb_txn_begin", mdb_txn_begin(env, parent._handle.get(), 0, &handle));
+    _handle.reset(handle);
   }
 
   void WriteTransaction::commit()
   {
-    _toCommit = true;
+    throwOnError("mdb_txn_commit", mdb_txn_commit(_handle.get()));
+    _handle.release(); // Prevent destructor from committing/aborting
   }
 }

@@ -41,7 +41,7 @@ namespace rs::core
     class Reader;
     class Writer;
 
-    ListStore(lmdb::Environment& env, std::string const& db);
+    ListStore(lmdb::WriteTransaction& txn, std::string const& db);
 
     Reader reader(lmdb::ReadTransaction& txn) const;
     Writer writer(lmdb::WriteTransaction& txn);

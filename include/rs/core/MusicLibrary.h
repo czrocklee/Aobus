@@ -56,6 +56,7 @@ namespace rs::core
   private:
     std::filesystem::path const _root;
     rs::lmdb::Environment _env;
+    rs::lmdb::WriteTransaction _txn;
     TrackStore _tracks;
     ListStore _lists;
     ResourceStore _resources;

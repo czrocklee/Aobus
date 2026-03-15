@@ -19,6 +19,7 @@
 
 #include <boost/asio/buffer.hpp>
 #include <boost/iterator/iterator_facade.hpp>
+#include <memory>
 #include <rs/lmdb/Transaction.h>
 
 namespace rs::lmdb
@@ -29,7 +30,9 @@ namespace rs::lmdb
     class Reader;
     class Writer;
 
-    Database(lmdb::Environment& env, std::string const& db);
+    Database() = default;
+    Database(WriteTransaction& txn, std::string const& db);
+    Database(ReadTransaction& txn, std::string const& db);
     ~Database();
 
     [[nodiscard]] Reader reader(ReadTransaction& txn) const;
@@ -64,15 +67,17 @@ namespace rs::lmdb
 
     Iterator();
     Iterator(Iterator const& other);
-    Iterator(Iterator&& other);
+    Iterator(Iterator&& other) noexcept;
+    ~Iterator();
     [[nodiscard]] bool equal(Iterator const& other) const;
     void increment();
     [[nodiscard]] Value const& dereference() const;
 
   private:
-    Iterator(detail::Cursor&& cursor);
+    struct CursorDeleter { void operator()(MDB_cursor* cur) const { mdb_cursor_close(cur); } };
+    Iterator(MDB_cursor* cursor);
 
-    detail::Cursor _cursor;
+    std::unique_ptr<MDB_cursor, CursorDeleter> _cursor;
     Value _value;
     friend class Reader;
   };
@@ -80,6 +85,9 @@ namespace rs::lmdb
   class Database::Writer
   {
   public:
+    Writer(Writer&&) noexcept;
+    ~Writer();
+
     [[nodiscard]] void const* create(std::uint64_t id, boost::asio::const_buffer data);
     [[nodiscard]] void* create(std::uint64_t id, std::size_t size);
     [[nodiscard]] std::pair<std::uint64_t, void const*> append(boost::asio::const_buffer data);
@@ -89,11 +97,12 @@ namespace rs::lmdb
     [[nodiscard]] boost::asio::const_buffer operator[](std::uint64_t id) const;
 
   private:
+    struct CursorDeleter { void operator()(MDB_cursor* cur) const { mdb_cursor_close(cur); } };
     Writer(MDB_dbi dbi, WriteTransaction& txn);
 
     MDB_dbi _dbi;
     WriteTransaction& _txn;
-    detail::Cursor _cursor;
+    std::unique_ptr<MDB_cursor, CursorDeleter> _cursor;
     std::uint64_t _lastId = 0;
     friend class Database;
   };

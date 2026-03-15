@@ -19,27 +19,27 @@
 
 #include <lmdb.h>
 
-#include <rs/lmdb/Type.h>
+#include <memory>
+#include <rs/lmdb/Environment.h>
 
 namespace rs::lmdb
 {
+  class WriteTransaction;  // Forward declaration
+
   // Read-only transaction
   class ReadTransaction
   {
   public:
     ReadTransaction(const Environment& env);
-    ReadTransaction(WriteTransaction& parent);  // NOLINT(google-explicit-constructor) - implicit conversion
-
     ReadTransaction(ReadTransaction&&) = default;
-
-    ~ReadTransaction() noexcept;
-
-    [[nodiscard]] MDB_txn* raw() const noexcept { return _handle; }
-    [[nodiscard]] MDB_env* environment() const noexcept { return _handle != nullptr ? mdb_txn_env(_handle) : nullptr; }
+    ReadTransaction& operator=(ReadTransaction&&) = default;
 
   protected:
+    ReadTransaction() = default;
     explicit ReadTransaction(MDB_txn* handle) noexcept : _handle{handle} {}
-    MDB_txn* _handle = nullptr;
+
+    struct TxnDeleter { void operator()(MDB_txn* txn) const { mdb_txn_abort(txn); } };
+    std::unique_ptr<MDB_txn, TxnDeleter> _handle;
     friend class Database;
   };
 
@@ -48,15 +48,14 @@ namespace rs::lmdb
   {
   public:
     WriteTransaction(Environment& env);
-    WriteTransaction(WriteTransaction& parent);
+    // Nested transaction - child of parent write transaction
+    explicit WriteTransaction(WriteTransaction& parent);
 
+    WriteTransaction(WriteTransaction const&) = delete;
+    WriteTransaction& operator=(WriteTransaction const&) = delete;
     WriteTransaction(WriteTransaction&&) = default;
-
-    ~WriteTransaction();
+    WriteTransaction& operator=(WriteTransaction&&) = default;
 
     void commit();
-
-  private:
-    bool _toCommit = false;
   };
 }
