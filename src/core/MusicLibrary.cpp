@@ -42,34 +42,22 @@ namespace rs::core
     , _tracks{_env, "tracks"}
     , _lists{_env, "lists"}
     , _resources{_env, "resources"}
+    , _dictReadDb{_env, "dict_read"}
+    , _dictWriteDb{_env, "dict_write"}
   {
-    // Open dictionary databases within a write transaction
-    rs::lmdb::WriteTransaction writeTxn{_env};
-    _dictReadDb = lmdb::MDB::open(writeTxn.transaction(), "dict_read", MDB_CREATE);
-    _dictWriteDb = lmdb::MDB::open(writeTxn.transaction(), "dict_write", MDB_CREATE);
-
     // Find the highest existing ID to determine next available ID
     DictionaryId nextId{0};
-    std::string_view key;
-    std::string_view value;
-    auto cursor = lmdb::Cursor::open(writeTxn.transaction().raw(), _dictReadDb.raw());
-    if (cursor.get(key, value, MDB_FIRST))
+    rs::lmdb::ReadTransaction readTxn{_env};
+    auto reader = _dictReadDb.reader(readTxn);
+    for (auto const& [id, value] : reader)
     {
-      do
+      (void)value; // We only care about the key (id)
+      if (static_cast<std::uint32_t>(id) >= nextId.value())
       {
-        if (key.size() == sizeof(std::uint32_t))
-        {
-          auto id = DictionaryId{lmdb::read<std::uint32_t>(key)};
-          if (id.value() >= nextId.value())
-          {
-            nextId = DictionaryId{id.value() + 1};
-          }
-        }
+        nextId = DictionaryId{static_cast<std::uint32_t>(id) + 1};
       }
-      while (cursor.get(key, value, MDB_NEXT));
     }
 
     _dictionary = std::make_unique<Dictionary>(_dictReadDb, _dictWriteDb, nextId);
-    writeTxn.commit();
   }
 }

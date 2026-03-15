@@ -21,6 +21,7 @@
 #include <rs/core/ListStore.h>
 #include <rs/core/ResourceStore.h>
 #include <rs/core/TrackStore.h>
+#include <rs/lmdb/Database.h>
 
 #include <filesystem>
 #include <memory>
@@ -59,7 +60,7 @@ namespace rs::core
     ListStore _lists;
     ResourceStore _resources;
     std::unique_ptr<Dictionary> _dictionary;
-    lmdb::MDB _dictReadDb;
-    lmdb::MDB _dictWriteDb;
+    lmdb::Database _dictReadDb;
+    lmdb::Database _dictWriteDb;
   };
 }

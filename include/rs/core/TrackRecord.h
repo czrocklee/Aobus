@@ -47,7 +47,7 @@ namespace rs::core
      * @param dict Dictionary to resolve artist/album/genre IDs
      * @param txn Transaction for dictionary lookups
      */
-    TrackRecord(TrackView const& view, Dictionary const& dict, lmdb::Transaction& txn);
+    TrackRecord(TrackView const& view, Dictionary const& dict, lmdb::ReadTransaction& txn);
 
     /**
      * Property - Audio file technical properties (@ prefix).

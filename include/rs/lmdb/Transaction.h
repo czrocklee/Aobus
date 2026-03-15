@@ -26,27 +26,27 @@ namespace rs::lmdb
   class ReadTransaction
   {
   public:
-    ReadTransaction(const lmdb::Environment& env) : _txn{lmdb::Transaction::begin(env, nullptr, MDB_RDONLY)} {}
+    ReadTransaction(const lmdb::Environment& env) : _txn{lmdb::detail::Transaction::begin(env, nullptr, MDB_RDONLY)} {}
 
     ReadTransaction(ReadTransaction&&) = default;
 
-    [[nodiscard]] lmdb::Transaction& transaction() noexcept { return _txn; }
-    [[nodiscard]] const lmdb::Transaction& transaction() const noexcept { return _txn; }
+    [[nodiscard]] lmdb::detail::Transaction& transaction() noexcept { return _txn; }
+    [[nodiscard]] const lmdb::detail::Transaction& transaction() const noexcept { return _txn; }
 
   protected:
-    ReadTransaction(lmdb::Transaction&& txn) : _txn{std::move(txn)} {}
+    ReadTransaction(lmdb::detail::Transaction&& txn) : _txn{std::move(txn)} {}
 
-    lmdb::Transaction _txn;
+    lmdb::detail::Transaction _txn;
     friend class Database;
   };
 
   class WriteTransaction : public ReadTransaction
   {
   public:
-    WriteTransaction(lmdb::Environment& env) : ReadTransaction{lmdb::Transaction::begin(env, nullptr)} {}
+    WriteTransaction(lmdb::Environment& env) : ReadTransaction{lmdb::detail::Transaction::begin(env, nullptr)} {}
 
     WriteTransaction(WriteTransaction& parent)
-      : ReadTransaction{lmdb::Transaction::begin(parent._txn.environment(), parent._txn.raw())}
+      : ReadTransaction{lmdb::detail::Transaction::begin(parent._txn.environment(), parent._txn.raw())}
     {
     }
 

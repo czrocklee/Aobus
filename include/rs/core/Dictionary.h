@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <rs/lmdb/Database.h>
 #include <rs/lmdb/Type.h>
 #include <rs/utility/TaggedInteger.h>
 
@@ -71,7 +72,7 @@ namespace rs::core
   class Dictionary : public IDictionary
   {
   public:
-    Dictionary(lmdb::MDB readDb, lmdb::MDB writeDb, DictionaryId nextId);
+    Dictionary(lmdb::Database& readDb, lmdb::Database& writeDb, DictionaryId nextId);
 
     /**
      * Get or create an ID for the given string.
@@ -81,14 +82,14 @@ namespace rs::core
      * @param txn Write transaction that must remain alive
      * @return The ID associated with the string
      */
-    DictionaryId getId(lmdb::Transaction& txn, std::string_view value);
+    DictionaryId getId(lmdb::WriteTransaction& txn, std::string_view value);
 
     /**
      * Look up a string by its ID.
      * @param txn Transaction that must remain alive
      * @return The string, or empty string_view if not found
      */
-    std::string_view getString(lmdb::Transaction& txn, DictionaryId id) const;
+    std::string_view getString(lmdb::ReadTransaction& txn, DictionaryId id) const;
 
     /**
      * Look up a string and get its ID (for QueryCompiler).
@@ -108,13 +109,16 @@ namespace rs::core
     void setNextId(DictionaryId id) { _nextId = id; }
 
   private:
-    lmdb::MDB _readDb;
-    lmdb::MDB _writeDb;
+    lmdb::Database& _readDb;
+    lmdb::Database& _writeDb;
     DictionaryId _nextId;
 
     // In-memory cache for read-heavy workloads
     std::unordered_map<std::string, DictionaryId> _stringToIdCache;
     std::unordered_map<DictionaryId, std::string> _idToStringCache;
+
+    // Access to raw MDB for string key operations in write DB
+    [[nodiscard]] lmdb::detail::MDB& writeDbRaw(lmdb::WriteTransaction& txn);
   };
 
 } // namespace rs::core

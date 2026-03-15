@@ -29,25 +29,119 @@
 
 namespace rs::lmdb
 {
-  class Error : public std::runtime_error
+  // Forward declarations
+  class Environment;
+
+  // Internal detail namespace - not part of public API
+  namespace detail
   {
-  public:
-    Error(std::string origin, int code);
-    static void raise(const char* origin, int code);
+    class Error : public std::runtime_error
+    {
+    public:
+      Error(std::string origin, int code);
+      static void raise(const char* origin, int code);
 
-    [[nodiscard]] int code() const noexcept { return _code; }
-    [[nodiscard]] const std::string& origin() const noexcept { return _origin; }
+      [[nodiscard]] int code() const noexcept { return _code; }
+      [[nodiscard]] const std::string& origin() const noexcept { return _origin; }
 
-  private:
-    std::string _origin;
-    int _code;
-  };
+    private:
+      std::string _origin;
+      int _code;
+    };
+
+    class Transaction
+    {
+    public:
+      static Transaction begin(::rs::lmdb::Environment const& env, MDB_txn* parent = nullptr, unsigned int flags = 0);
+      static Transaction begin(MDB_env* env, MDB_txn* parent = nullptr, unsigned int flags = 0);
+
+      Transaction();
+      explicit Transaction(MDB_txn* handle) noexcept;
+
+      Transaction(const Transaction&) = delete;
+      Transaction& operator=(const Transaction&) = delete;
+
+      Transaction(Transaction&& other) noexcept;
+      Transaction& operator=(Transaction&& other) noexcept;
+
+      ~Transaction() noexcept;
+
+      [[nodiscard]] MDB_txn* raw() const noexcept { return _handle; }
+      [[nodiscard]] MDB_env* environment() const noexcept { return _handle != nullptr ? mdb_txn_env(_handle) : nullptr; }
+
+      void commit();
+      void abort() noexcept;
+
+    private:
+      MDB_txn* _handle = nullptr;
+    };
+
+    class MDB
+    {
+    public:
+      static constexpr unsigned int DefaultFlags = 0;
+
+      static MDB open(Transaction& transaction, const char* name = nullptr, unsigned int flags = DefaultFlags);
+      static MDB open(Transaction& transaction, std::string_view name, unsigned int flags = DefaultFlags);
+
+      MDB();
+      explicit MDB(MDB_dbi handle) noexcept;
+
+      [[nodiscard]] MDB_dbi raw() const noexcept { return _handle; }
+
+      [[nodiscard]] bool get(Transaction& transaction, std::string_view key, std::string_view& value) const;
+      [[nodiscard]] bool put(Transaction& transaction, std::string_view key, std::string_view value, unsigned int flags = 0) const;
+      [[nodiscard]] bool del(Transaction& transaction, std::string_view key) const;
+
+    private:
+      MDB_dbi _handle = (std::numeric_limits<MDB_dbi>::max)();
+    };
+
+    class Cursor
+    {
+    public:
+      static Cursor open(MDB_txn* transaction, MDB_dbi database);
+      static Cursor open(Transaction& transaction, MDB database);
+
+      Cursor();
+      explicit Cursor(MDB_cursor* handle) noexcept;
+
+      Cursor(const Cursor&) = delete;
+      Cursor& operator=(const Cursor&) = delete;
+
+      Cursor(Cursor&& other) noexcept;
+      Cursor& operator=(Cursor&& other) noexcept;
+
+      ~Cursor() noexcept;
+
+      [[nodiscard]] MDB_cursor* raw() const noexcept { return _handle; }
+      [[nodiscard]] MDB_txn* transaction() const noexcept
+      {
+        return _handle != nullptr ? mdb_cursor_txn(_handle) : nullptr;
+      }
+      [[nodiscard]] MDB_dbi database() const noexcept { return _handle != nullptr ? mdb_cursor_dbi(_handle) : 0; }
+      [[nodiscard]] bool valid() const noexcept { return _handle != nullptr; }
+
+      void close() noexcept;
+
+      [[nodiscard]] bool get(std::string_view& key, MDB_cursor_op op) const;
+      [[nodiscard]] bool get(std::string_view& key, std::string_view& value, MDB_cursor_op op) const;
+      [[nodiscard]] bool put(std::string_view key, std::string_view value, unsigned int flags = 0) const;
+      [[nodiscard]] void* reserve(std::string_view key, std::size_t size, unsigned int flags = 0) const;
+
+    private:
+      MDB_cursor* _handle = nullptr;
+    };
+
+  } // namespace detail
+
+  // Public API
 
   inline void throwOnError(const char* origin, int code)
   {
     if (code != MDB_SUCCESS)
     {
-      Error::raise(origin, code);
+      detail::Error::raise(origin, code);
     }
   }
 
@@ -81,90 +175,6 @@ namespace rs::lmdb
     MDB_env* _handle = nullptr;
   };
 
-  class Transaction
-  {
-  public:
-    static Transaction begin(MDB_env* env, MDB_txn* parent = nullptr, unsigned int flags = 0);
-    static Transaction begin(const Environment& env, MDB_txn* parent = nullptr, unsigned int flags = 0);
-
-    Transaction();
-    explicit Transaction(MDB_txn* handle) noexcept;
-
-    Transaction(const Transaction&) = delete;
-    Transaction& operator=(const Transaction&) = delete;
-
-    Transaction(Transaction&& other) noexcept;
-    Transaction& operator=(Transaction&& other) noexcept;
-
-    ~Transaction() noexcept;
-
-    [[nodiscard]] MDB_txn* raw() const noexcept { return _handle; }
-    [[nodiscard]] MDB_env* environment() const noexcept { return _handle != nullptr ? mdb_txn_env(_handle) : nullptr; }
-
-    void commit();
-    void abort() noexcept;
-
-  private:
-    MDB_txn* _handle = nullptr;
-  };
-
-  class MDB
-  {
-  public:
-    static constexpr unsigned int DefaultFlags = 0;
-
-    static MDB open(Transaction& transaction, const char* name = nullptr, unsigned int flags = DefaultFlags);
-    static MDB open(Transaction& transaction, std::string_view name, unsigned int flags = DefaultFlags);
-
-    MDB();
-    explicit MDB(MDB_dbi handle) noexcept;
-
-    [[nodiscard]] MDB_dbi raw() const noexcept { return _handle; }
-
-    [[nodiscard]] bool get(Transaction& transaction, std::string_view key, std::string_view& value) const;
-    [[nodiscard]] bool put(Transaction& transaction, std::string_view key, std::string_view value, unsigned int flags = 0) const;
-    [[nodiscard]] bool del(Transaction& transaction, std::string_view key) const;
-
-  private:
-    MDB_dbi _handle = (std::numeric_limits<MDB_dbi>::max)();
-  };
-
-  class Cursor
-  {
-  public:
-    static Cursor open(MDB_txn* transaction, MDB_dbi database);
-    static Cursor open(Transaction& transaction, MDB database);
-
-    Cursor();
-    explicit Cursor(MDB_cursor* handle) noexcept;
-
-    Cursor(const Cursor&) = delete;
-    Cursor& operator=(const Cursor&) = delete;
-
-    Cursor(Cursor&& other) noexcept;
-    Cursor& operator=(Cursor&& other) noexcept;
-
-    ~Cursor() noexcept;
-
-    [[nodiscard]] MDB_cursor* raw() const noexcept { return _handle; }
-    [[nodiscard]] MDB_txn* transaction() const noexcept
-    {
-      return _handle != nullptr ? mdb_cursor_txn(_handle) : nullptr;
-    }
-    [[nodiscard]] MDB_dbi database() const noexcept { return _handle != nullptr ? mdb_cursor_dbi(_handle) : 0; }
-    [[nodiscard]] bool valid() const noexcept { return _handle != nullptr; }
-
-    void close() noexcept;
-
-    [[nodiscard]] bool get(std::string_view& key, MDB_cursor_op op) const;
-    [[nodiscard]] bool get(std::string_view& key, std::string_view& value, MDB_cursor_op op) const;
-    [[nodiscard]] bool put(std::string_view key, std::string_view value, unsigned int flags = 0) const;
-    [[nodiscard]] void* reserve(std::string_view key, std::size_t size, unsigned int flags = 0) const;
-
-  private:
-    MDB_cursor* _handle = nullptr;
-  };
-
   template<typename T>
   [[nodiscard]] std::string_view bytesOf(const T& value)
   {
@@ -182,7 +192,7 @@ namespace rs::lmdb
   {
     if (bytes.size() != sizeof(T))
     {
-      Error::raise("lmdb::read", MDB_BAD_VALSIZE);
+      detail::Error::raise("lmdb::read", MDB_BAD_VALSIZE);
     }
     T value;
     std::memcpy(&value, bytes.data(), sizeof(T));

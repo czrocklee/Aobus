@@ -19,15 +19,17 @@
 
 namespace rs::lmdb
 {
-  Error::Error(std::string origin, int code)
+  // Error implementation
+  detail::Error::Error(std::string origin, int code)
     : std::runtime_error{origin + ": " + mdb_strerror(code)}
     , _origin{std::move(origin)}
     , _code{code}
   {
   }
 
-  void Error::raise(const char* origin, int code) { throw Error{origin, code}; }
+  void detail::Error::raise(const char* origin, int code) { throw Error{origin, code}; }
 
+  // Environment implementation
   Environment Environment::create(unsigned int flags)
   {
     MDB_env* handle = nullptr;
@@ -101,25 +103,26 @@ namespace rs::lmdb
     }
   }
 
-  Transaction Transaction::begin(MDB_env* env, MDB_txn* parent, unsigned int flags)
+  // Transaction implementation
+  detail::Transaction detail::Transaction::begin(MDB_env* env, MDB_txn* parent, unsigned int flags)
   {
     MDB_txn* handle = nullptr;
     throwOnError("mdb_txn_begin", mdb_txn_begin(env, parent, flags, &handle));
-    return Transaction{handle};
+    return detail::Transaction{handle};
   }
 
-  Transaction Transaction::begin(const Environment& env, MDB_txn* parent, unsigned int flags)
+  detail::Transaction detail::Transaction::begin(::rs::lmdb::Environment const& env, MDB_txn* parent, unsigned int flags)
   {
     return begin(env.raw(), parent, flags);
   }
 
-  Transaction::Transaction() = default;
+  detail::Transaction::Transaction() = default;
 
-  Transaction::Transaction(MDB_txn* handle) noexcept : _handle{handle} {}
+  detail::Transaction::Transaction(MDB_txn* handle) noexcept : _handle{handle} {}
 
-  Transaction::Transaction(Transaction&& other) noexcept : _handle{other._handle} { other._handle = nullptr; }
+  detail::Transaction::Transaction(Transaction&& other) noexcept : _handle{other._handle} { other._handle = nullptr; }
 
-  Transaction& Transaction::operator=(Transaction&& other) noexcept
+  detail::Transaction& detail::Transaction::operator=(Transaction&& other) noexcept
   {
     if (this != &other)
     {
@@ -131,16 +134,16 @@ namespace rs::lmdb
     return *this;
   }
 
-  Transaction::~Transaction() noexcept { abort(); }
+  detail::Transaction::~Transaction() noexcept { abort(); }
 
-  void Transaction::commit()
+  void detail::Transaction::commit()
   {
     auto* handle = _handle;
     _handle = nullptr;
     throwOnError("mdb_txn_commit", mdb_txn_commit(handle));
   }
 
-  void Transaction::abort() noexcept
+  void detail::Transaction::abort() noexcept
   {
     if (_handle != nullptr)
     {
@@ -149,24 +152,25 @@ namespace rs::lmdb
     }
   }
 
-  MDB MDB::open(Transaction& transaction, const char* name, unsigned int flags)
+  // MDB implementation
+  detail::MDB detail::MDB::open(Transaction& transaction, const char* name, unsigned int flags)
   {
     MDB_dbi handle = (std::numeric_limits<MDB_dbi>::max)();
     throwOnError("mdb_dbi_open", mdb_dbi_open(transaction.raw(), name, flags, &handle));
-    return MDB{handle};
+    return detail::MDB{handle};
   }
 
-  MDB MDB::open(Transaction& transaction, std::string_view name, unsigned int flags)
+  detail::MDB detail::MDB::open(Transaction& transaction, std::string_view name, unsigned int flags)
   {
     const std::string ownedName{name};
     return open(transaction, ownedName.c_str(), flags);
   }
 
-  MDB::MDB() = default;
+  detail::MDB::MDB() = default;
 
-  MDB::MDB(MDB_dbi handle) noexcept : _handle{handle} {}
+  detail::MDB::MDB(MDB_dbi handle) noexcept : _handle{handle} {}
 
-  bool MDB::get(Transaction& transaction, std::string_view key, std::string_view& value) const
+  bool detail::MDB::get(Transaction& transaction, std::string_view key, std::string_view& value) const
   {
     MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
     MDB_val valueBuffer{0, nullptr};
@@ -180,7 +184,7 @@ namespace rs::lmdb
     return true;
   }
 
-  bool MDB::put(Transaction& transaction, std::string_view key, std::string_view value, unsigned int flags) const
+  bool detail::MDB::put(Transaction& transaction, std::string_view key, std::string_view value, unsigned int flags) const
   {
     MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
     MDB_val valueBuffer{value.size(), const_cast<char*>(value.data())};
@@ -193,7 +197,7 @@ namespace rs::lmdb
     return true;
   }
 
-  bool MDB::del(Transaction& transaction, std::string_view key) const
+  bool detail::MDB::del(Transaction& transaction, std::string_view key) const
   {
     MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
     const int rc = mdb_del(transaction.raw(), _handle, &keyValue, nullptr);
@@ -205,22 +209,23 @@ namespace rs::lmdb
     return true;
   }
 
-  Cursor Cursor::open(MDB_txn* transaction, MDB_dbi database)
+  // Cursor implementation
+  detail::Cursor detail::Cursor::open(MDB_txn* transaction, MDB_dbi database)
   {
     MDB_cursor* handle = nullptr;
     throwOnError("mdb_cursor_open", mdb_cursor_open(transaction, database, &handle));
-    return Cursor{handle};
+    return detail::Cursor{handle};
   }
 
-  Cursor Cursor::open(Transaction& transaction, MDB database) { return open(transaction.raw(), database.raw()); }
+  detail::Cursor detail::Cursor::open(Transaction& transaction, MDB database) { return open(transaction.raw(), database.raw()); }
 
-  Cursor::Cursor() = default;
+  detail::Cursor::Cursor() = default;
 
-  Cursor::Cursor(MDB_cursor* handle) noexcept : _handle{handle} {}
+  detail::Cursor::Cursor(MDB_cursor* handle) noexcept : _handle{handle} {}
 
-  Cursor::Cursor(Cursor&& other) noexcept : _handle{other._handle} { other._handle = nullptr; }
+  detail::Cursor::Cursor(Cursor&& other) noexcept : _handle{other._handle} { other._handle = nullptr; }
 
-  Cursor& Cursor::operator=(Cursor&& other) noexcept
+  detail::Cursor& detail::Cursor::operator=(Cursor&& other) noexcept
   {
     if (this != &other)
     {
@@ -232,9 +237,9 @@ namespace rs::lmdb
     return *this;
   }
 
-  Cursor::~Cursor() noexcept { close(); }
+  detail::Cursor::~Cursor() noexcept { close(); }
 
-  void Cursor::close() noexcept
+  void detail::Cursor::close() noexcept
   {
     if (_handle != nullptr)
     {
@@ -243,7 +248,7 @@ namespace rs::lmdb
     }
   }
 
-  bool Cursor::get(std::string_view& key, MDB_cursor_op op) const
+  bool detail::Cursor::get(std::string_view& key, MDB_cursor_op op) const
   {
     MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
     const int rc = mdb_cursor_get(_handle, &keyValue, nullptr, op);
@@ -256,7 +261,7 @@ namespace rs::lmdb
     return true;
   }
 
-  bool Cursor::get(std::string_view& key, std::string_view& value, MDB_cursor_op op) const
+  bool detail::Cursor::get(std::string_view& key, std::string_view& value, MDB_cursor_op op) const
   {
     MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
     MDB_val valueBuffer{value.size(), const_cast<char*>(value.data())};
@@ -271,7 +276,7 @@ namespace rs::lmdb
     return true;
   }
 
-  bool Cursor::put(std::string_view key, std::string_view value, unsigned int flags) const
+  bool detail::Cursor::put(std::string_view key, std::string_view value, unsigned int flags) const
   {
     MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
     MDB_val valueBuffer{value.size(), const_cast<char*>(value.data())};
@@ -284,7 +289,7 @@ namespace rs::lmdb
     return true;
   }
 
-  void* Cursor::reserve(std::string_view key, std::size_t size, unsigned int flags) const
+  void* detail::Cursor::reserve(std::string_view key, std::size_t size, unsigned int flags) const
   {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast) - LMDB C API requires non-const
     MDB_val keyValue{key.size(), const_cast<char*>(key.data())};

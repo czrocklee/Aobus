@@ -22,7 +22,7 @@ namespace rs::core
   // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
   constexpr unsigned int kBloomBitMask = 31;
 
-  TrackRecord::TrackRecord(TrackView const& view, Dictionary const& dict, lmdb::Transaction& txn)
+  TrackRecord::TrackRecord(TrackView const& view, Dictionary const& dict, lmdb::ReadTransaction& txn)
   {
     if (!view.isValid())
     {

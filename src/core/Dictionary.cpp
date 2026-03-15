@@ -17,17 +17,27 @@
 
 #include <rs/core/Dictionary.h>
 
+#include <boost/asio/buffer.hpp>
+
 namespace rs::core
 {
 
-  Dictionary::Dictionary(lmdb::MDB readDb, lmdb::MDB writeDb, DictionaryId nextId)
+  Dictionary::Dictionary(lmdb::Database& readDb, lmdb::Database& writeDb, DictionaryId nextId)
     : _readDb{readDb}
     , _writeDb{writeDb}
     , _nextId{nextId}
   {
   }
 
-  DictionaryId Dictionary::getId(lmdb::Transaction& txn, std::string_view value)
+  lmdb::detail::MDB& Dictionary::writeDbRaw(lmdb::WriteTransaction& txn)
+  {
+    // We need to access the raw MDB for string-key operations
+    // This is a workaround - in a proper design, Database would support string keys
+    (void)txn; // txn is not used but kept for potential future use
+    return _writeDb.raw();
+  }
+
+  DictionaryId Dictionary::getId(lmdb::WriteTransaction& txn, std::string_view value)
   {
     if (value.empty())
     {
@@ -41,9 +51,13 @@ namespace rs::core
       return cacheIt->second;
     }
 
+    // Use raw MDB access for string key operations in write DB
+    auto& writeDb = writeDbRaw(txn);
+    auto& transaction = txn.transaction();
+
     // Check write DB (string → ID)
     std::string_view existingIdBytes;
-    if (_writeDb.get(txn, value, existingIdBytes))
+    if (writeDb.get(transaction, value, existingIdBytes))
     {
       auto id = DictionaryId{lmdb::read<std::uint32_t>(existingIdBytes)};
       _stringToIdCache[std::string(value)] = id;
@@ -54,14 +68,17 @@ namespace rs::core
     // Create new ID
     auto id = _nextId++;
 
-    if (!_writeDb.put(txn, value, lmdb::bytesOf(id.value())))
+    // Store string → ID in write DB
+    if (!writeDb.put(transaction, value, lmdb::bytesOf(id.value())))
     {
       throw std::runtime_error{"Failed to write to dictionary"};
     }
-    
-    if (!_readDb.put(txn, lmdb::bytesOf(id.value()), value))
+
+    // Store ID → string in read DB
+    auto writer = _readDb.writer(txn);
+    if (!writer.update(id.value(), boost::asio::buffer(value.data(), value.size())))
     {
-      throw std::runtime_error{"Failed to read from dictionary"};
+      throw std::runtime_error{"Failed to write to read dictionary"};
     }
 
     // Update cache
@@ -71,7 +88,7 @@ namespace rs::core
     return id;
   }
 
-  std::string_view Dictionary::getString(lmdb::Transaction& txn, DictionaryId id) const
+  std::string_view Dictionary::getString(lmdb::ReadTransaction& txn, DictionaryId id) const
   {
     if (id.value() == 0)
     {
@@ -85,11 +102,13 @@ namespace rs::core
       return cacheIt->second;
     }
 
-    // Look up in read DB
-    std::string_view result;
-    if (_readDb.get(txn, lmdb::bytesOf(id.value()), result))
+    // Look up in read DB using Database::Reader
+    auto reader = _readDb.reader(txn);
+    auto value = reader[id.value()];
+    auto size = boost::asio::buffer_size(value);
+    if (size > 0)
     {
-      return result;
+      return {static_cast<char const*>(value.data()), size};
     }
 
     return {};
