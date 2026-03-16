@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
+
 #include "MainWindow.h"
 
 #include <rs/core/MusicLibrary.h>
@@ -653,8 +656,7 @@ void MainWindow::updateCoverArt(std::vector<rs::core::MusicLibrary::TrackId> con
   auto trackId = selectedIds.front();
 
   // Look up the track in _allTracks to get resource ID
-  auto* ttPtr = _allTracks.find(trackId);
-  if (ttPtr)
+  if (auto* ttPtr = _allTracks.find(trackId))
   {
     auto& tt = *ttPtr;
 

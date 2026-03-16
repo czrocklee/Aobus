@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
@@ -38,6 +24,8 @@ namespace
         return "not";
       case Operator::Equal:
         return "eq";
+      case Operator::NotEqual:
+        return "ne";
       case Operator::Like:
         return "like";
       case Operator::Less:
@@ -156,6 +144,12 @@ TEST_CASE("Parser - Equal")
   CHECK("[b{eq}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist=Bach")));
   CHECK("[b{eq}[v{m}trackNumber],[c{i}12]]" == canonicalize(parse("$trackNumber=12")));
   CHECK("[b{eq}[v{m}year],[c{i}2020]]" == canonicalize(parse("$year=2020")));
+}
+
+TEST_CASE("Parser - NotEqual")
+{
+  CHECK("[b{ne}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("$artist!=Bach")));
+  CHECK("[b{ne}[v{m}year],[c{i}2020]]" == canonicalize(parse("$year!=2020")));
 }
 
 TEST_CASE("Parser - Relational")

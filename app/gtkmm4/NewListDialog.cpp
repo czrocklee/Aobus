@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
+
 #include "NewListDialog.h"
 
 NewListDialog::NewListDialog(Gtk::Window& parent) : Gtk::Dialog()

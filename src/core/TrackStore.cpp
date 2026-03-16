@@ -1,21 +1,6 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <boost/asio/buffer.hpp>
 #include <rs/core/TrackStore.h>
 
 namespace rs::core
@@ -44,14 +29,14 @@ namespace rs::core
 
   TrackStore::Reader::Iterator TrackStore::Reader::end() const { return Iterator{_reader.end()}; }
 
-  TrackView TrackStore::Reader::operator[](Id id) const
+  std::optional<TrackView> TrackStore::Reader::get(Id id) const
   {
-    auto buffer = _reader[id.value()];
-    if (buffer.size() == 0)
+    auto optBuffer = _reader.get(id.value());
+    if (!optBuffer || optBuffer->size() == 0)
     {
-      return TrackView{};
+      return std::nullopt;
     }
-    return TrackView(buffer.data(), buffer.size());
+    return TrackView(optBuffer->data(), optBuffer->size());
   }
 
   // TrackStore::Reader::Iterator implementation
@@ -68,34 +53,34 @@ namespace rs::core
   TrackStore::Reader::Iterator::value_type TrackStore::Reader::Iterator::operator*() const
   {
     auto&& [id, buffer] = *_iter;
-    return {Id{id}, TrackView(buffer.data(), buffer.size())};
+    return {TrackStore::Id{(id)}, TrackView(buffer.data(), buffer.size())};
   }
 
   // TrackStore::Writer implementation
   TrackStore::Writer::Writer(lmdb::Database::Writer&& writer) : _writer{std::move(writer)} {}
 
-  std::pair<TrackStore::Id, TrackView> TrackStore::Writer::create(void const* data, std::size_t size)
+  std::pair<TrackStore::Id, TrackView> TrackStore::Writer::create(std::span<std::byte const> data)
   {
-    auto [id, buffer] = _writer.append(boost::asio::buffer(data, size));
-    return {Id{id}, TrackView{buffer, size}};
+    auto [id, buffer] = _writer.append(data);
+    return {TrackStore::Id{id}, TrackView{buffer, data.size()}};
   }
 
-  TrackView TrackStore::Writer::update(Id id, void const* data, std::size_t size)
+  TrackView TrackStore::Writer::update(Id id, std::span<std::byte const> data)
   {
-    auto buffer = _writer.update(id.value(), boost::asio::buffer(data, size));
-    return TrackView(buffer, size);
+    auto buffer = _writer.update(id.value(), data);
+    return TrackView(buffer, data.size());
   }
 
   bool TrackStore::Writer::del(Id id) { return _writer.del(id.value()); }
 
-  TrackView TrackStore::Writer::operator[](Id id) const
+  std::optional<TrackView> TrackStore::Writer::get(Id id) const
   {
-    auto buffer = _writer[id.value()];
-    if (buffer.size() == 0)
+    auto optBuffer = _writer.get(id.value());
+    if (!optBuffer || optBuffer->size() == 0)
     {
-      return TrackView{};
+      return std::nullopt;
     }
-    return TrackView(buffer.data(), buffer.size());
+    return TrackView(optBuffer->data(), optBuffer->size());
   }
 
 } // namespace rs::core

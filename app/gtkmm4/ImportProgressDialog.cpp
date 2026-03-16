@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
+
 #include "ImportProgressDialog.h"
 
 ImportProgressDialog::ImportProgressDialog(int maxItems, Gtk::Window& parent) : Gtk::Dialog(), _maxItems(maxItems)

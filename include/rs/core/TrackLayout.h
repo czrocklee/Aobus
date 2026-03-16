@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #pragma once
 
@@ -51,6 +37,9 @@ namespace rs::core
     // 2-byte section
     std::uint16_t year;        // Release year
     std::uint16_t trackNumber; // Track number
+    std::uint16_t totalTracks; // Total tracks in album
+    std::uint16_t discNumber;  // Disc number
+    std::uint16_t totalDiscs;  // Total discs in album
     std::uint16_t codecId;     // Audio codec identifier
     std::uint16_t titleOffset; // Offset to title string in payload
     std::uint16_t titleLen;    // Length of title string
@@ -66,11 +55,11 @@ namespace rs::core
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackHeaderSize = 72;
+  constexpr std::size_t kTrackHeaderSize = 80;
   constexpr std::size_t kTrackHeaderAlignment = 8;
 
   /* Static assertions to guarantee layout - placed after struct definition */
-  static_assert(sizeof(TrackHeader) == kTrackHeaderSize, "TrackHeader must be exactly 72 bytes");
+  static_assert(sizeof(TrackHeader) == kTrackHeaderSize, "TrackHeader must be exactly 80 bytes");
   static_assert(alignof(TrackHeader) == kTrackHeaderAlignment, "TrackHeader must have 8-byte alignment");
 
   /**
@@ -130,6 +119,9 @@ namespace rs::core
       [[nodiscard]] std::uint32_t coverArtId() const noexcept { return _track.header()->coverArtId; }
       [[nodiscard]] std::uint16_t year() const noexcept { return _track.header()->year; }
       [[nodiscard]] std::uint16_t trackNumber() const noexcept { return _track.header()->trackNumber; }
+      [[nodiscard]] std::uint16_t totalTracks() const noexcept { return _track.header()->totalTracks; }
+      [[nodiscard]] std::uint16_t discNumber() const noexcept { return _track.header()->discNumber; }
+      [[nodiscard]] std::uint16_t totalDiscs() const noexcept { return _track.header()->totalDiscs; }
 
     private:
       TrackView const& _track;

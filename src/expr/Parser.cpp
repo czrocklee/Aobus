@@ -1,28 +1,14 @@
-/*
- * Copyright (C) <year> <name of author>
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #define BOOST_SPIRIT_X3_UNICODE
+
 #include <rs/core/Exception.h>
 #include <rs/expr/Parser.h>
+#include <rs/expr/Serializer.h>
 
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/spirit/home/x3.hpp>
-#include <rs/expr/Serializer.h>
-#include <sstream>
 
 BOOST_FUSION_ADAPT_STRUCT(rs::expr::BinaryExpression::Operation, op, operand)
 BOOST_FUSION_ADAPT_STRUCT(rs::expr::BinaryExpression, operand, operation)
@@ -46,6 +32,7 @@ namespace
   x3::symbols<Operator> const arithmeticOperator{{{"+", Operator::Add}}};
   x3::symbols<Operator> const strcatOperator{{{"", Operator::Add}}};
   x3::symbols<Operator> const relationalOperator{{{"=", Operator::Equal},
+                                                  {"!=", Operator::NotEqual},
                                                   {"~", Operator::Like},
                                                   {"<", Operator::Less},
                                                   {"<=", Operator::LessEqual},
@@ -56,9 +43,6 @@ namespace
     VariableExpression& var = _val(ctx);
     var.type = boost::fusion::at_c<0>(_attr(ctx));
     var.name = boost::fusion::at_c<1>(_attr(ctx));
-
-    // Field ID is no longer needed - we use name-based lookup
-    var.fieldId = 0;
   };
 
   x3::rule<class logicalOr, BinaryExpression> const logicalOr{"or"};
@@ -126,8 +110,6 @@ namespace rs::expr
     }
     else
     {
-      std::ostringstream oss;
-      oss << "parsing " << expr << " error from [" << std::string{iter, end} << ']';
       RS_THROW_FORMAT(core::Exception, "parsing {} error from [{}]", expr, std::string{iter, end});
     }
   }

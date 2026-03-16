@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <catch2/catch.hpp>
 
@@ -97,7 +83,7 @@ namespace
 
   TEST_CASE("TrackHeader - Size and Alignment")
   {
-    CHECK(sizeof(TrackHeader) == 72);
+    CHECK(sizeof(TrackHeader) == 80);
     CHECK(alignof(TrackHeader) == 8);
   }
 
@@ -116,10 +102,14 @@ namespace
 
     // Check 2-byte section starts at offset 52
     CHECK(reinterpret_cast<char*>(&h.year) - reinterpret_cast<char*>(&h) == 52);
+    CHECK(reinterpret_cast<char*>(&h.trackNumber) - reinterpret_cast<char*>(&h) == 54);
+    CHECK(reinterpret_cast<char*>(&h.totalTracks) - reinterpret_cast<char*>(&h) == 56);
+    CHECK(reinterpret_cast<char*>(&h.discNumber) - reinterpret_cast<char*>(&h) == 58);
+    CHECK(reinterpret_cast<char*>(&h.totalDiscs) - reinterpret_cast<char*>(&h) == 60);
 
     // Check 1-byte section
-    CHECK(reinterpret_cast<char*>(&h.channels) - reinterpret_cast<char*>(&h) == 68);
-    CHECK(reinterpret_cast<char*>(&h.bitDepth) - reinterpret_cast<char*>(&h) == 69);
+    CHECK(reinterpret_cast<char*>(&h.channels) - reinterpret_cast<char*>(&h) == 74);
+    CHECK(reinterpret_cast<char*>(&h.bitDepth) - reinterpret_cast<char*>(&h) == 75);
   }
 
   TEST_CASE("TrackView - Default Constructor")

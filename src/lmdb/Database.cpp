@@ -1,27 +1,41 @@
-/*
- * Copyright (C) <year> <name of author>
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
+#include "ThrowError.h"
 #include <rs/lmdb/Database.h>
-#include <rs/lmdb/Type.h>
 
+#include <cstring>
 #include <lmdb.h>
 
 namespace rs::lmdb
 {
+  namespace
+  {
+    template<typename T>
+    [[nodiscard]] MDB_val makeVal(T const& value)
+    {
+      return {sizeof(T), const_cast<T*>(&value)};
+    }
+
+    [[nodiscard]] inline MDB_val makeVal(void const* data, std::size_t size)
+    {
+      return {size, const_cast<void*>(data)};
+    }
+
+    template<typename T>
+    [[nodiscard]] T read(std::string_view bytes)
+    {
+      if (bytes.size() != sizeof(T))
+      {
+        throw std::runtime_error{"read: bad value size"};
+      }
+
+      T value;
+      std::memcpy(&value, bytes.data(), sizeof(T));
+      return value;
+    }
+  }
+
   using Writer = Database::Writer;
   using Reader = Database::Reader;
 
@@ -37,9 +51,15 @@ namespace rs::lmdb
 
   Database::~Database() = default;
 
-  Reader Database::reader(ReadTransaction& txn) const { return Reader{_dbi, txn._handle.get()}; }
+  Reader Database::reader(ReadTransaction& txn) const
+  {
+    return Reader{_dbi, txn._handle.get()};
+  }
 
-  Writer Database::writer(WriteTransaction& txn) { return Writer{_dbi, txn}; }
+  Writer Database::writer(WriteTransaction& txn)
+  {
+    return Writer{_dbi, txn};
+  }
 
   Reader::Reader(MDB_dbi dbi, MDB_txn* txn) : _dbi{dbi}, _txn{txn} {}
 
@@ -50,24 +70,30 @@ namespace rs::lmdb
     return Iterator{cursor};
   }
 
-  Reader::Iterator Reader::end() const { return Iterator{}; }
-
-  boost::asio::const_buffer Reader::operator[](std::uint64_t id) const
+  Reader::Iterator Reader::end() const
   {
-    MDB_val key{sizeof(id), &id};
-    MDB_val value{0, nullptr};
+    return Iterator{};
+  }
+
+  std::optional<std::span<std::byte const>> Reader::get(std::uint32_t id) const
+  {
+    auto key = makeVal(id);
+    auto value = makeVal(nullptr, 0);
     int const rc = mdb_get(_txn, _dbi, &key, &value);
     if (rc == MDB_NOTFOUND)
     {
-      return boost::asio::const_buffer{};
+      return std::nullopt;
     }
     throwOnError("mdb_get", rc);
-    return boost::asio::buffer(value.mv_data, value.mv_size);
+    return std::span<std::byte const>{static_cast<std::byte const*>(value.mv_data), value.mv_size};
   }
 
   Reader::Iterator::Iterator() : _value{} {}
 
-  Reader::Iterator::Iterator(MDB_cursor* cursor) : _cursor{cursor} { increment(); }
+  Reader::Iterator::Iterator(MDB_cursor* cursor) : _cursor{cursor}
+  {
+    increment();
+  }
 
   Reader::Iterator::~Iterator() = default;
 
@@ -79,7 +105,7 @@ namespace rs::lmdb
       throwOnError("mdb_cursor_open",
                    mdb_cursor_open(mdb_cursor_txn(other._cursor.get()), mdb_cursor_dbi(other._cursor.get()), &cursor));
       _cursor.reset(cursor);
-      MDB_val keyValue{sizeof(std::uint64_t), const_cast<std::uint64_t*>(&_value.first)};
+      MDB_val keyValue{sizeof(std::uint32_t), const_cast<std::uint32_t*>(&_value.first)};
       throwOnError("mdb_cursor_get", mdb_cursor_get(_cursor.get(), &keyValue, nullptr, MDB_SET));
     }
   }
@@ -96,8 +122,7 @@ namespace rs::lmdb
     MDB_val keyValue{0, nullptr};
     MDB_val valueBuffer{0, nullptr};
 
-    int const rc = mdb_cursor_get(_cursor.get(), &keyValue, &valueBuffer, MDB_NEXT);
-    if (rc == MDB_NOTFOUND)
+    if (int const rc = mdb_cursor_get(_cursor.get(), &keyValue, &valueBuffer, MDB_NEXT); rc == MDB_NOTFOUND)
     {
       _value = Value{};
       _cursor.reset();
@@ -107,12 +132,15 @@ namespace rs::lmdb
       throwOnError("mdb_cursor_get", rc);
       std::string_view key{static_cast<char const*>(keyValue.mv_data), keyValue.mv_size};
       std::string_view value{static_cast<char const*>(valueBuffer.mv_data), valueBuffer.mv_size};
-      _value.first = lmdb::read<std::uint64_t>(key);
-      _value.second = boost::asio::buffer(value.data(), value.size());
+      _value.first = read<std::uint32_t>(key);
+      _value.second = std::span<std::byte const>{reinterpret_cast<std::byte const*>(value.data()), value.size()};
     }
   }
 
-  Reader::Value const& Reader::Iterator::dereference() const { return _value; }
+  Reader::Value const& Reader::Iterator::dereference() const
+  {
+    return _value;
+  }
 
   Writer::Writer(MDB_dbi dbi, WriteTransaction& txn) : _dbi{dbi}, _txn{txn}
   {
@@ -120,11 +148,11 @@ namespace rs::lmdb
     throwOnError("mdb_cursor_open", mdb_cursor_open(txn._handle.get(), _dbi, &cursor));
     _cursor.reset(cursor);
     MDB_val keyValue{0, nullptr};
-    int const rc = mdb_cursor_get(_cursor.get(), &keyValue, nullptr, MDB_LAST);
-    if (rc == MDB_SUCCESS)
+
+    if (int const rc = mdb_cursor_get(_cursor.get(), &keyValue, nullptr, MDB_LAST); rc == MDB_SUCCESS)
     {
       std::string_view key{static_cast<char const*>(keyValue.mv_data), keyValue.mv_size};
-      _lastId = lmdb::read<std::uint64_t>(key);
+      _lastId = read<std::uint32_t>(key);
     }
     else if (rc != MDB_NOTFOUND)
     {
@@ -144,24 +172,18 @@ namespace rs::lmdb
 
   namespace
   {
-    std::string_view toStrView(boost::asio::const_buffer data)
+    void const* put(MDB_cursor* cursor, std::uint32_t id, std::span<std::byte const> data, unsigned int flags)
     {
-      return {static_cast<char const*>(data.data()), data.size()};
-    }
-
-    void const* put(MDB_cursor* cursor, std::uint64_t id, boost::asio::const_buffer data, unsigned int flags)
-    {
-      auto key = lmdb::bytesOf(id);
-      auto value = toStrView(data);
-
-      MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
-      MDB_val valueBuffer{value.size(), const_cast<char*>(value.data())};
+      auto keyValue = makeVal(id);
+      auto valueBuffer = makeVal(data.data(), data.size());
 
       int const rc = mdb_cursor_put(cursor, &keyValue, &valueBuffer, flags);
+
       if (rc == MDB_KEYEXIST)
       {
         return nullptr;
       }
+      
       throwOnError("mdb_cursor_put", rc);
 
       // Get the actual stored value
@@ -173,62 +195,66 @@ namespace rs::lmdb
       return valueBuffer.mv_data;
     }
 
-    void* reserve(MDB_cursor* cursor, std::uint64_t id, std::size_t size, unsigned int flags)
+    void* reserve(MDB_cursor* cursor, std::uint32_t id, std::size_t size, unsigned int flags)
     {
-      auto key = lmdb::bytesOf(id);
-      MDB_val keyValue{key.size(), const_cast<char*>(key.data())};
-      MDB_val valueBuffer{size, nullptr};
+      auto keyValue = makeVal(id);
+      auto valueBuffer = makeVal(nullptr, size);
       throwOnError("mdb_cursor_put", mdb_cursor_put(cursor, &keyValue, &valueBuffer, flags | MDB_RESERVE));
       return valueBuffer.mv_data;
     }
   }
 
-  void const* Writer::create(std::uint64_t id, boost::asio::const_buffer data)
+  void const* Writer::create(std::uint32_t id, std::span<std::byte const> data)
   {
     return put(_cursor.get(), id, data, MDB_NOOVERWRITE);
   }
 
-  void* Writer::create(std::uint64_t id, std::size_t size) { return reserve(_cursor.get(), id, size, MDB_NOOVERWRITE); }
+  void* Writer::create(std::uint32_t id, std::size_t size)
+  {
+    return reserve(_cursor.get(), id, size, MDB_NOOVERWRITE);
+  }
 
-  std::pair<std::uint64_t, void const*> Writer::append(boost::asio::const_buffer data)
+  std::pair<std::uint32_t, void const*> Writer::append(std::span<std::byte const> data)
   {
     auto id = ++_lastId;
     return {id, put(_cursor.get(), id, data, MDB_NOOVERWRITE | MDB_APPEND)};
   }
 
-  std::pair<std::uint64_t, void*> Writer::append(std::size_t size)
+  std::pair<std::uint32_t, void*> Writer::append(std::size_t size)
   {
     auto id = ++_lastId;
     return {id, reserve(_cursor.get(), id, size, MDB_NOOVERWRITE | MDB_APPEND)};
   }
 
-  void const* Writer::update(std::uint64_t id, boost::asio::const_buffer data)
+  void const* Writer::update(std::uint32_t id, std::span<std::byte const> data)
   {
     return put(_cursor.get(), id, data, 0);
   }
 
-  bool Writer::del(std::uint64_t id)
+  bool Writer::del(std::uint32_t id)
   {
-    MDB_val key{sizeof(id), const_cast<std::uint64_t*>(&id)};
+    MDB_val key{sizeof(id), const_cast<std::uint32_t*>(&id)};
     int const rc = mdb_del(_txn._handle.get(), _dbi, &key, nullptr);
+
     if (rc == MDB_NOTFOUND)
     {
       return false;
     }
+
     throwOnError("mdb_del", rc);
     return true;
   }
 
-  boost::asio::const_buffer Writer::operator[](std::uint64_t id) const
+  std::optional<std::span<std::byte const>> Writer::get(std::uint32_t id) const
   {
-    MDB_val key{sizeof(id), &id};
-    MDB_val value{0, nullptr};
+    auto key = makeVal(id);
+    auto value = makeVal(nullptr, 0);
     int const rc = mdb_get(_txn._handle.get(), _dbi, &key, &value);
     if (rc == MDB_NOTFOUND)
     {
-      return boost::asio::const_buffer{};
+      return std::nullopt;
     }
     throwOnError("mdb_get", rc);
-    return boost::asio::buffer(value.mv_data, value.mv_size);
+    return std::span<std::byte const>{static_cast<std::byte const*>(value.mv_data), value.mv_size};
   }
 }

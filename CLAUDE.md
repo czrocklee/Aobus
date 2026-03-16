@@ -48,6 +48,8 @@ nix-shell --run "cmake -S . -B /tmp/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_VERBO
 nix-shell --run "cmake --build /tmp/build"
 ```
 
+**IMPORTANT**: Always use `cmake --build` (not `make` directly). CMake automatically uses all available CPU cores for parallel builds.
+
 The project builds into `/tmp/build` (as configured in CMakePresets.json).
 
 When changing core logic (`src/core`, `src/expr`, `src/tag`, `include/rs`), always run at least a debug build before finishing.

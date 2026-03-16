@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #pragma once
 
@@ -24,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace rs::core
 {
@@ -36,34 +23,21 @@ namespace rs::core
   using DictionaryId = utility::TaggedInteger<std::uint32_t, DictionaryIdTag>;
 
   /**
-   * IDictionary - Abstract interface for string-to-ID lookups.
-   *
-   * Used by QueryCompiler to resolve string constants to numeric IDs.
-   */
-  class IDictionary
-  {
-  public:
-    virtual ~IDictionary() = default;
-    [[nodiscard]] virtual DictionaryId getId(std::string_view str) const = 0;
-  };
-
-  /**
    * Dictionary - Stores id → string mappings with in-memory string → id index.
    *
    * Uses LMDB for persistent storage (id → string) and builds an in-memory
    * hash map for fast string → id lookups when loaded.
-   *
-   * Note: Must be used within a transaction. The transaction must remain
-   * alive for the duration of Dictionary operations.
    */
-  class Dictionary : public IDictionary
+  class Dictionary
   {
   public:
     /**
      * Construct and load existing entries from the database.
      * Builds in-memory string → id index from existing data.
+     * @param txn Write transaction for loading existing entries (must remain alive)
+     * @param db Database name
      */
-    explicit Dictionary(lmdb::Database& db);
+    explicit Dictionary(lmdb::WriteTransaction& txn, std::string const& db);
 
     /**
      * Store a string and auto-generate a unique ID.
@@ -74,53 +48,36 @@ namespace rs::core
     DictionaryId put(lmdb::WriteTransaction& txn, std::string_view value);
 
     /**
-     * Look up a string by its ID.
-     * @param txn Transaction that must remain alive
-     * @return The string, or empty string_view if not found
+     * Look up a string by its ID using in-memory index.
+     * @param id The dictionary ID
+     * @return The string
+     * @throws std::runtime_error if id is not found
      */
-    std::string_view get(lmdb::ReadTransaction& txn, DictionaryId id) const;
+    [[nodiscard]] std::string_view get(DictionaryId id) const;
 
     /**
      * Look up an ID by its string.
      * @param str The string to look up
-     * @return The ID if found, or 0 if not found
+     * @return The ID
+     * @throws std::runtime_error if string is not found
      */
-    [[nodiscard]] DictionaryId getId(std::string_view str) const override;
-
-    /**
-     * Check if an ID exists.
-     * @param txn Transaction that must remain alive
-     * @return true if the ID exists
-     */
-    bool contains(lmdb::ReadTransaction& txn, DictionaryId id) const;
+    [[nodiscard]] DictionaryId getId(std::string_view str) const;
 
     /**
      * Check if a string exists.
      * @param str The string to look up
      * @return true if the string exists
      */
-    bool contains(std::string_view str) const;
+    [[nodiscard]] bool contains(std::string_view str) const;
 
   private:
-    lmdb::Database& _db;
+    lmdb::Database _database;
 
-    // In-memory index: string → id (built on load)
-    // Uses transparent lookup (C++20) to avoid creating string objects for lookups
-    struct StringHash
-    {
-      using is_transparent = void;
-      std::size_t operator()(std::string_view sv) const { return std::hash<std::string_view>{}(sv); }
-      std::size_t operator()(std::string const& s) const { return std::hash<std::string>{}(s); }
-    };
-    struct StringEq
-    {
-      using is_transparent = void;
-      bool operator()(std::string_view a, std::string_view b) const { return a == b; }
-      bool operator()(std::string const& a, std::string const& b) const { return a == b; }
-      bool operator()(std::string const& a, std::string_view b) const { return a == b; }
-      bool operator()(std::string_view a, std::string const& b) const { return a == b; }
-    };
-    std::unordered_map<std::string, DictionaryId, StringHash, StringEq> _stringToId;
+    // In-memory index: string_view → id (views into _idToStringStorage)
+    std::unordered_map<std::string_view, DictionaryId> _stringToId;
+
+    // In-memory index: id → string (owner of all strings)
+    std::vector<std::string> _idToStringStorage;
   };
 
 } // namespace rs::core

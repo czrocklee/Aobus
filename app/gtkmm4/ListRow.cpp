@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
+
 #include "ListRow.h"
 
 ListRow::ListRow() : _listId{ListId{0}}, _name{} {}

@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/utility/VariantVisitor.h>
@@ -42,9 +28,14 @@ namespace rs::expr
         case VariableType::Metadata:
           if (name == "year" || name == "y") return Field::Year;
           if (name == "trackNumber" || name == "tn") return Field::TrackNumber;
+          if (name == "totalTracks" || name == "tt") return Field::TotalTracks;
+          if (name == "discNumber" || name == "dn") return Field::DiscNumber;
+          if (name == "totalDiscs" || name == "td") return Field::TotalDiscs;
           if (name == "artist" || name == "a") return Field::ArtistId;
           if (name == "album" || name == "al") return Field::AlbumId;
           if (name == "genre" || name == "g") return Field::GenreId;
+          if (name == "albumArtist" || name == "aa") return Field::AlbumArtistId;
+          if (name == "coverArt" || name == "ca") return Field::CoverArtId;
           if (name == "title" || name == "t") return Field::Title;
           break;
         case VariableType::Tag:
@@ -67,6 +58,8 @@ namespace rs::expr
           return OpCode::Not;
         case Operator::Equal:
           return OpCode::Eq;
+        case Operator::NotEqual:
+          return OpCode::Ne;
         case Operator::Like:
           return OpCode::Like;
         case Operator::Less:
@@ -90,7 +83,7 @@ namespace rs::expr
     bool isTagField(Field field) { return field == Field::Tag; }
   }
 
-  QueryCompiler::QueryCompiler(core::IDictionary const& dict) : _dict(&dict) {}
+  QueryCompiler::QueryCompiler(core::Dictionary const* dict) : _dict(dict) {}
 
   std::uint32_t QueryCompiler::addStringConstant(std::string_view str)
   {
@@ -128,13 +121,14 @@ namespace rs::expr
       auto rightReg = _nextReg - 1;
 
       auto opcode = toOpCode(binary.operation->op);
-      Instruction instr;
-      instr.op = opcode;
-      instr.field = 0;
-      instr.operand = rightReg;
-      instr.strLen = 0;
-      instr.strData = nullptr;
-      _plan.instructions.push_back(instr);
+      _plan.instructions.push_back(Instruction{
+        .op = opcode,
+        .field = 0,
+        .operand = static_cast<std::int32_t>(rightReg),
+        .constValue = 0,
+        .strLen = 0,
+        .strData = nullptr,
+      });
 
       // After binary op, the result is stored in the left register (rightReg - 1)
       // The right register is now free, so decrement _nextReg
@@ -147,13 +141,14 @@ namespace rs::expr
     compileExpression(unary.operand);
 
     auto opcode = toOpCode(unary.op);
-    Instruction instr;
-    instr.op = opcode;
-    instr.field = 0;
-    instr.operand = static_cast<std::int32_t>(_nextReg - 1);
-    instr.strLen = 0;
-    instr.strData = nullptr;
-    _plan.instructions.push_back(instr);
+    _plan.instructions.push_back(Instruction{
+      .op = opcode,
+      .field = 0,
+      .operand = static_cast<std::int32_t>(_nextReg - 1),
+      .constValue = 0,
+      .strLen = 0,
+      .strData = nullptr,
+    });
   }
 
   void QueryCompiler::compileVariable(VariableExpression const& var)
@@ -164,106 +159,112 @@ namespace rs::expr
       if (_dict)
       {
         auto tagId = _dict->getId(var.name);
-        if (tagId.value() > 0)
-        {
-          _plan.tagBloomMask |= (1U << (tagId.value() & kBloomBitMask));
+        // getId throws if not found, so any returned ID is valid (including 0)
+        _plan.tagBloomMask |= (1U << (tagId.value() & kBloomBitMask));
 
           // Generate implicit tag comparison: track.tags().has(tagId)
           // This handles standalone "#tagname" queries like "#rock"
           // First, load the tag field (for the Eq instruction to detect it's a tag comparison)
-          Instruction loadField;
-          loadField.op = OpCode::LoadField;
-          loadField.field = static_cast<std::uint8_t>(Field::Tag);
-          loadField.operand = static_cast<std::int32_t>(_nextReg++);
-          loadField.strLen = 0;
-          loadField.strData = nullptr;
-          _plan.instructions.push_back(loadField);
+          _plan.instructions.push_back(Instruction{
+            .op = OpCode::LoadField,
+            .field = static_cast<std::uint8_t>(Field::Tag),
+            .operand = static_cast<std::int32_t>(_nextReg++),
+            .constValue = 0,
+            .strLen = 0,
+            .strData = nullptr,
+          });
 
           // Then load the tag ID as constant
-          Instruction loadConst;
-          loadConst.op = OpCode::LoadConstant;
-          loadConst.field = 0;
-          loadConst.operand = static_cast<std::int32_t>(_nextReg++);
-          loadConst.constValue = static_cast<std::int64_t>(tagId.value());
-          loadConst.strLen = 0;
-          loadConst.strData = nullptr;
-          _plan.instructions.push_back(loadConst);
+          _plan.instructions.push_back(Instruction{
+            .op = OpCode::LoadConstant,
+            .field = 0,
+            .operand = static_cast<std::int32_t>(_nextReg++),
+            .constValue = static_cast<std::int64_t>(tagId.value()),
+            .strLen = 0,
+            .strData = nullptr,
+          });
 
           // Eq instruction - PlanEvaluator will detect Tag field and use tags.has()
-          Instruction eqInstr;
-          eqInstr.op = OpCode::Eq;
-          eqInstr.field = 0;
-          eqInstr.operand = static_cast<std::int32_t>(_nextReg - 1); // Right operand
-          eqInstr.strLen = 0;
-          eqInstr.strData = nullptr;
-          _plan.instructions.push_back(eqInstr);
+          _plan.instructions.push_back(Instruction{
+            .op = OpCode::Eq,
+            .field = 0,
+            .operand = static_cast<std::int32_t>(_nextReg - 1), // Right operand
+            .constValue = 0,
+            .strLen = 0,
+            .strData = nullptr,
+          });
 
           _nextReg--; // Eq result is in the left register
           return;
-        }
       }
     }
 
     auto field = variableTypeToField(var.type, var.name);
     _lastField = field; // Track for string resolution context
 
-    Instruction instr;
-    instr.op = OpCode::LoadField;
-    instr.field = static_cast<std::uint8_t>(field);
-    instr.operand = static_cast<std::int32_t>(_nextReg++);
-    instr.strLen = 0;
-    instr.strData = nullptr;
-    _plan.instructions.push_back(instr);
+    _plan.instructions.push_back(Instruction{
+      .op = OpCode::LoadField,
+      .field = static_cast<std::uint8_t>(field),
+      .operand = static_cast<std::int32_t>(_nextReg++),
+      .constValue = 0,
+      .strLen = 0,
+      .strData = nullptr,
+    });
   }
 
   void QueryCompiler::compileConstant(ConstantExpression const& constant)
   {
     std::visit(utility::makeVisitor(
                  [this](bool val) {
-                   Instruction instr;
-                   instr.op = OpCode::LoadConstant;
-                   instr.field = 0;
-                   instr.operand = static_cast<std::int32_t>(_nextReg++);
-                   instr.constValue = val ? 1 : 0;
-                   instr.strLen = 0;
-                   instr.strData = nullptr;
-                   _plan.instructions.push_back(instr);
+                   _plan.instructions.push_back(Instruction{
+                     .op = OpCode::LoadConstant,
+                     .field = 0,
+                     .operand = static_cast<std::int32_t>(_nextReg++),
+                     .constValue = val ? 1 : 0,
+                     .strLen = 0,
+                     .strData = nullptr,
+                   });
                  },
                  [this](std::int64_t val) {
-                   Instruction instr;
-                   instr.op = OpCode::LoadConstant;
-                   instr.field = 0;
-                   instr.operand = static_cast<std::int32_t>(_nextReg++);
-                   instr.constValue = val;
-                   instr.strLen = 0;
-                   instr.strData = nullptr;
-                   _plan.instructions.push_back(instr);
+                   _plan.instructions.push_back(Instruction{
+                     .op = OpCode::LoadConstant,
+                     .field = 0,
+                     .operand = static_cast<std::int32_t>(_nextReg++),
+                     .constValue = val,
+                     .strLen = 0,
+                     .strData = nullptr,
+                   });
                  },
                  [this](std::string const& val) {
                    // Check if we should resolve this string via dictionary
                    // For metadata ID fields (artist, album, genre), resolve to numeric ID
                    auto resolvedId = resolveStringConstant(val, _lastField);
 
-                   Instruction instr;
-                   instr.op = OpCode::LoadConstant;
-                   instr.field = 0;
-                   instr.operand = static_cast<std::int32_t>(_nextReg++);
-
                    if (resolvedId >= 0)
                    {
                      // Successfully resolved to ID - store as numeric constant
-                     instr.constValue = resolvedId;
-                     instr.strLen = 0;
+                     _plan.instructions.push_back(Instruction{
+                       .op = OpCode::LoadConstant,
+                       .field = 0,
+                       .operand = static_cast<std::int32_t>(_nextReg++),
+                       .constValue = resolvedId,
+                       .strLen = 0,
+                       .strData = nullptr,
+                     });
                    }
                    else
                    {
                      // Not resolved (no dictionary or not a metadata ID field) - store as string constant
                      auto idx = addStringConstant(val);
-                     instr.constValue = static_cast<std::int64_t>(idx);
-                     instr.strLen = static_cast<std::uint32_t>(val.size());
+                     _plan.instructions.push_back(Instruction{
+                       .op = OpCode::LoadConstant,
+                       .field = 0,
+                       .operand = static_cast<std::int32_t>(_nextReg++),
+                       .constValue = static_cast<std::int64_t>(idx),
+                       .strLen = static_cast<std::uint32_t>(val.size()),
+                       .strData = nullptr,
+                     });
                    }
-                   instr.strData = nullptr;
-                   _plan.instructions.push_back(instr);
                  }),
                constant);
   }

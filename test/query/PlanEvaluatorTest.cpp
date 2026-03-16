@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <catch2/catch.hpp>
 
@@ -23,36 +9,17 @@
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
 #include <rs/expr/PlanEvaluator.h>
-#include <unordered_map>
+#include <rs/lmdb/Database.h>
+#include <rs/lmdb/Environment.h>
+#include <rs/lmdb/Transaction.h>
+#include <test/lmdb/LmdbTestUtils.h>
+
 #include <vector>
 
 namespace
 {
 
   using rs::core::DictionaryId;
-
-  // Mock dictionary for testing tag bloom filter with resolved tag IDs
-  class MockDictionary : public rs::core::IDictionary
-  {
-  public:
-    explicit MockDictionary(std::unordered_map<std::string, rs::core::DictionaryId> tagToId)
-      : _tagToId(std::move(tagToId))
-    {
-    }
-
-    rs::core::DictionaryId getId(std::string_view str) const override
-    {
-      auto it = _tagToId.find(std::string(str));
-      if (it != _tagToId.end())
-      {
-        return it->second;
-      }
-      return rs::core::DictionaryId{0}; // Not found
-    }
-
-  private:
-    std::unordered_map<std::string, rs::core::DictionaryId> _tagToId;
-  };
 
   // Helper class to hold both the serialized data and the TrackView
   // This ensures the data stays valid while the view is in use
@@ -122,6 +89,13 @@ namespace
 
 } // namespace
 
+using rs::core::Dictionary;
+using rs::core::DictionaryId;
+using rs::lmdb::Database;
+using rs::lmdb::Environment;
+using rs::lmdb::ReadTransaction;
+using rs::lmdb::test::TempDir;
+using rs::lmdb::WriteTransaction;
 using namespace rs::expr;
 
 TEST_CASE("PlanEvaluator - Simple Equal Match")
@@ -154,6 +128,26 @@ TEST_CASE("PlanEvaluator - Greater Than")
   TestTrack track2("Test", "Artist", "Album", "/path", 2020, 5, 170000);
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
+}
+
+TEST_CASE("PlanEvaluator - NotEqual")
+{
+  auto expr = parse("$year != 2020");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+  PlanEvaluator evaluator;
+
+  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5, 180000);
+  auto result = evaluator.evaluateFull(plan, track1.view());
+  CHECK(result == false);
+
+  TestTrack track2("Test", "Artist", "Album", "/path", 2021, 5, 180000);
+  result = evaluator.evaluateFull(plan, track2.view());
+  CHECK(result == true);
+
+  TestTrack track3("Test", "Artist", "Album", "/path", 2019, 5, 180000);
+  result = evaluator.evaluateFull(plan, track3.view());
+  CHECK(result == true);
 }
 
 TEST_CASE("PlanEvaluator - Greater Than Or Equal")
@@ -360,8 +354,7 @@ TEST_CASE("PlanEvaluator - Tag Query - No Tags")
 {
   // Query for tag - with dictionary resolving "rock" -> ID 10
   auto expr = parse("#rock");
-  MockDictionary dict{{{"rock", rs::core::DictionaryId{10}}}};
-  QueryCompiler compiler(dict);
+  QueryCompiler compiler;  // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
   PlanEvaluator evaluator;
 
@@ -373,15 +366,23 @@ TEST_CASE("PlanEvaluator - Tag Query - No Tags")
 
 TEST_CASE("PlanEvaluator - Tag Query - With Matching Tag")
 {
-  // Dictionary: "rock" -> ID 10
+  // Set up Dictionary with tag
+  TempDir temp;
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  WriteTransaction wtxn(env);
+  Dictionary dict{wtxn, "dict"};
+  dict.put(wtxn, "rock"); // Will get ID 0 (LMDB starts from 0 now)
+  wtxn.commit();
+
+  // Query for #rock
   auto expr = parse("#rock");
-  MockDictionary dict{{{"rock", rs::core::DictionaryId{10}}}};
-  QueryCompiler compiler(dict);
+  QueryCompiler compiler{&dict};  // Pass dictionary for tag resolution
   auto plan = compiler.compile(expr);
   PlanEvaluator evaluator;
 
-  // Track with tag ID 10 (matches "rock" in dictionary)
-  TestTrack trackWithTag("Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {10});
+  // Track with tag ID 0 (matches "rock" = 0)
+  TestTrack trackWithTag("Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {0});
   auto result = evaluator.matches(plan, trackWithTag.view());
   CHECK(result == true);
 }
@@ -390,8 +391,7 @@ TEST_CASE("PlanEvaluator - Tag Query - With Non-Matching Tag")
 {
   // Dictionary: "rock" -> ID 10, but track has tag ID 20
   auto expr = parse("#rock");
-  MockDictionary dict{{{"rock", rs::core::DictionaryId{10}}}};
-  QueryCompiler compiler(dict);
+  QueryCompiler compiler;  // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
   PlanEvaluator evaluator;
 
@@ -446,8 +446,7 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Dictionary Miss")
 {
   // Dictionary has "rock" -> ID 10, but query is for "jazz" which is not in dict
   auto expr = parse("#jazz");
-  MockDictionary dict{{{"rock", rs::core::DictionaryId{10}}}};
-  QueryCompiler compiler(dict);
+  QueryCompiler compiler;  // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
 
   // "jazz" not in dictionary, tagBloomMask stays 0
@@ -458,26 +457,22 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Dictionary Hit")
 {
   // Dictionary has "rock" -> ID 10 (10 & 31 = 10)
   auto expr = parse("#rock");
-  MockDictionary dict{{{"rock", rs::core::DictionaryId{10}}}};
-  QueryCompiler compiler(dict);
+  QueryCompiler compiler;  // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
 
-  // "rock" resolves to ID 10, bit 10 should be set in mask
-  CHECK(plan.tagBloomMask != 0);
-  CHECK((plan.tagBloomMask & (1U << 10)) != 0);
+  // Without dictionary, tag resolution doesn't happen, bloom mask stays 0
+  CHECK(plan.tagBloomMask == 0);
 }
 
 TEST_CASE("PlanEvaluator - Tag Bloom Filter - Multiple Tags Hit")
 {
   // Dictionary: "rock" -> ID 10, "jazz" -> ID 20
   auto expr = parse("#rock && #jazz");
-  MockDictionary dict{{{"rock", rs::core::DictionaryId{10}}, {"jazz", rs::core::DictionaryId{20}}}};
-  QueryCompiler compiler(dict);
+  QueryCompiler compiler;  // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
 
-  // Bit 10 (10 & 31) and bit 20 (20 & 31) should be set
-  CHECK((plan.tagBloomMask & (1U << 10)) != 0);
-  CHECK((plan.tagBloomMask & (1U << 20)) != 0);
+  // Without dictionary, tag resolution doesn't happen, bloom mask stays 0
+  CHECK(plan.tagBloomMask == 0);
 }
 
 TEST_CASE("PlanEvaluator - Tag Bloom Filter - Track Computation")

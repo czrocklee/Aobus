@@ -1,21 +1,6 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <boost/asio/buffer.hpp>
 #include <rs/core/ListStore.h>
 
 namespace rs::core
@@ -42,14 +27,14 @@ namespace rs::core
 
   ListStore::Reader::Iterator ListStore::Reader::end() const { return Iterator{_reader.end()}; }
 
-  ListView ListStore::Reader::operator[](Id id) const
+  std::optional<ListView> ListStore::Reader::get(Id id) const
   {
-    auto buffer = _reader[id.value()];
-    if (buffer.size() == 0)
+    auto optBuffer = _reader.get(id.value());
+    if (!optBuffer || optBuffer->size() == 0)
     {
-      return ListView{};
+      return std::nullopt;
     }
-    return ListView(buffer.data(), buffer.size());
+    return ListView(optBuffer->data(), optBuffer->size());
   }
 
   // Iterator implementation
@@ -72,28 +57,28 @@ namespace rs::core
   // Writer implementation
   ListStore::Writer::Writer(lmdb::Database::Writer&& writer) : _writer{std::move(writer)} {}
 
-  std::pair<ListStore::Id, ListView> ListStore::Writer::create(void const* data, std::size_t size)
+  std::pair<ListStore::Id, ListView> ListStore::Writer::create(std::span<std::byte const> data)
   {
-    auto [id, buffer] = _writer.append(boost::asio::buffer(data, size));
-    return {Id{id}, ListView(buffer, size)};
+    auto [id, buffer] = _writer.append(data);
+    return {Id{id}, ListView(buffer, data.size())};
   }
 
-  ListView ListStore::Writer::update(Id id, void const* data, std::size_t size)
+  ListView ListStore::Writer::update(Id id, std::span<std::byte const> data)
   {
-    auto buffer = _writer.update(id.value(), boost::asio::buffer(data, size));
-    return ListView(buffer, size);
+    auto buffer = _writer.update(id.value(), data);
+    return ListView(buffer, data.size());
   }
 
   bool ListStore::Writer::del(Id id) { return _writer.del(id.value()); }
 
-  ListView ListStore::Writer::operator[](Id id) const
+  std::optional<ListView> ListStore::Writer::get(Id id) const
   {
-    auto buffer = _writer[id.value()];
-    if (buffer.size() == 0)
+    auto optBuffer = _writer.get(id.value());
+    if (!optBuffer || optBuffer->size() == 0)
     {
-      return ListView{};
+      return std::nullopt;
     }
-    return ListView(buffer.data(), buffer.size());
+    return ListView(optBuffer->data(), optBuffer->size());
   }
 
 } // namespace rs::core

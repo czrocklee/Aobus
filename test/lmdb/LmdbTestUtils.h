@@ -1,23 +1,9 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #pragma once
 
-#include <boost/asio/buffer.hpp>
+#include <span>
 
 #include <cstdint>
 #include <filesystem>
@@ -67,17 +53,17 @@ namespace rs::lmdb::test
   /**
    * Create a test buffer from a vector of bytes.
    */
-  [[nodiscard]] inline boost::asio::const_buffer makeBuffer(const std::vector<char>& data)
+  [[nodiscard]] inline std::span<std::byte const> makeBuffer(const std::vector<char>& data)
   {
-    return boost::asio::const_buffer{data.data(), data.size()};
+    return std::span<std::byte const>{reinterpret_cast<std::byte const*>(data.data()), data.size()};
   }
 
   /**
    * Create a mutable buffer from a vector of bytes.
    */
-  [[nodiscard]] inline boost::asio::mutable_buffer makeMutableBuffer(std::vector<char>& data)
+  [[nodiscard]] inline std::span<std::byte> makeMutableBuffer(std::vector<char>& data)
   {
-    return boost::asio::mutable_buffer{data.data(), data.size()};
+    return std::span<std::byte>{reinterpret_cast<std::byte*>(data.data()), data.size()};
   }
 
   /**

@@ -1,23 +1,10 @@
-/*
- * Copyright (C) <year> <name of author>
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #pragma once
 
 #include <boost/iterator/transform_iterator.hpp>
+#include <span>
 #include <rs/lmdb/Database.h>
 
 namespace rs::core
@@ -25,7 +12,7 @@ namespace rs::core
   class ResourceStore
   {
   public:
-    using Id = std::uint64_t;
+    using Id = std::uint32_t;
     using Reader = lmdb::Database::Reader;
     class Writer;
 
@@ -41,7 +28,7 @@ namespace rs::core
   class ResourceStore::Writer
   {
   public:
-    Id create(boost::asio::const_buffer);
+    Id create(std::span<std::byte const> data);
     bool del(Id id) { return _writer.del(id); }
 
   private:

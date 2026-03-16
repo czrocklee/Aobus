@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <catch2/catch.hpp>
 
@@ -36,73 +22,45 @@ using rs::lmdb::WriteTransaction;
 TEST_CASE("Dictionary - store and get", "[core][dictionary]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Database db{wtxn, "dict"};
-  Dictionary dict{db};
+  Dictionary dict{wtxn, "dict"};
   wtxn.commit();
 
   // Store a value
   WriteTransaction wtxn2(env);
   auto id = dict.put(wtxn2, "test value");
-  REQUIRE(id.value() > 0);
+  // If put() failed, it would throw
   wtxn2.commit();
 
-  // Get by ID
-  ReadTransaction rtxn(env);
-  auto result = dict.get(rtxn, id);
+  // Get by ID (using in-memory index)
+  auto result = dict.get(id);
   REQUIRE(result == "test value");
 }
 
 TEST_CASE("Dictionary - getId", "[core][dictionary]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Database db{wtxn, "dict"};
-  Dictionary dict{db};
+  Dictionary dict{wtxn, "dict"};
   dict.put(wtxn, "artist1");
   wtxn.commit();
 
   // Get ID by string
-  auto id = dict.getId("artist1");
-  REQUIRE(id.value() > 0);
-}
-
-TEST_CASE("Dictionary - contains by id", "[core][dictionary]")
-{
-  TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
-
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "dict"};
-  Dictionary dict{db};
-  auto id = dict.put(wtxn, "exists");
-  wtxn.commit();
-
-  ReadTransaction rtxn(env);
-  REQUIRE(dict.contains(rtxn, id));
-  REQUIRE(!dict.contains(rtxn, DictionaryId{999}));
+  [[maybe_unused]] auto id = dict.getId("artist1");
+  // If getId() failed, it would throw
 }
 
 TEST_CASE("Dictionary - contains by string", "[core][dictionary]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Database db{wtxn, "dict"};
-  Dictionary dict{db};
+  Dictionary dict{wtxn, "dict"};
   dict.put(wtxn, "exists");
   wtxn.commit();
 
@@ -113,19 +71,16 @@ TEST_CASE("Dictionary - contains by string", "[core][dictionary]")
 TEST_CASE("Dictionary - put duplicate string returns existing ID", "[core][dictionary]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Database db{wtxn, "dict"};
-  Dictionary dict{db};
+  Dictionary dict{wtxn, "dict"};
   wtxn.commit();
 
   // Store a value
   WriteTransaction wtxn2(env);
   auto id1 = dict.put(wtxn2, "first");
-  REQUIRE(id1.value() > 0);
+  // If put() failed, it would throw
   wtxn2.commit();
 
   // Try to store same string again - returns existing ID
@@ -133,8 +88,64 @@ TEST_CASE("Dictionary - put duplicate string returns existing ID", "[core][dicti
   auto id2 = dict.put(wtxn3, "first");
   REQUIRE(id2 == id1);
 
-  // Original value should still exist
-  ReadTransaction rtxn(env);
-  auto result = dict.get(rtxn, id1);
+  // Original value should still exist (using in-memory index)
+  auto result = dict.get(id1);
   REQUIRE(result == "first");
+}
+
+TEST_CASE("Dictionary - get throws on invalid ID", "[core][dictionary]")
+{
+  TempDir temp;
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  WriteTransaction wtxn(env);
+  Dictionary dict{wtxn, "dict"};
+  dict.put(wtxn, "first");
+  wtxn.commit();
+
+  // ID 999 doesn't exist - should throw
+  CHECK_THROWS(dict.get(DictionaryId{999}));
+}
+
+TEST_CASE("Dictionary - getId throws on non-existent string", "[core][dictionary]")
+{
+  TempDir temp;
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  WriteTransaction wtxn(env);
+  Dictionary dict{wtxn, "dict"};
+  dict.put(wtxn, "exists");
+  wtxn.commit();
+
+  // Non-existent string should throw
+  CHECK_THROWS(dict.getId("not exists"));
+}
+
+TEST_CASE("Dictionary - get with first valid ID (0)", "[core][dictionary]")
+{
+  TempDir temp;
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  WriteTransaction wtxn(env);
+  Dictionary dict{wtxn, "dict"};
+  auto id = dict.put(wtxn, "first");
+  wtxn.commit();
+
+  REQUIRE(id.value() == 0);
+  auto result = dict.get(id);
+  REQUIRE(result == "first");
+}
+
+TEST_CASE("Dictionary - get throws on out-of-bounds ID", "[core][dictionary]")
+{
+  TempDir temp;
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  WriteTransaction wtxn(env);
+  Dictionary dict{wtxn, "dict"};
+  dict.put(wtxn, "only one");
+  wtxn.commit();
+
+  // ID 1 is out of bounds (only 0 is valid)
+  CHECK_THROWS(dict.get(DictionaryId{1}));
 }

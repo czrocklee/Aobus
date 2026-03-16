@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
+
 #include "ImportWorker.h"
 #include <rs/tag/flac/File.h>
 #include <rs/tag/mp4/File.h>

@@ -1,7 +1,7 @@
 # Clang-tidy configuration for RockStudio
 # Single source of truth for checks
 
-Checks: '-*,readability-include-declaration,modernize-use-nullptr,modernize-use-std-arrays,modernize-raw-string-literal,modernize-use-std-numbers,modernize-loop-convert,modernize-use-emplace,modernize-use-nodiscard,modernize-use-requires,modernize-use-final,cppcoreguidelines-avoid-goto,performance-move-const-arg,performance-unnecessary-copy,performance-unnecessary-value-param,performance-noexcept,performance-type-promotion,bugprone-assert-side-effect,bugprone-branch-clone,bugprone-unused-local-non-trivial-type,readability-const-return-type,readability-redundant-string-init,readability-function-size,readability-magic-numbers'
+Checks: '-*,readability-include-declaration,modernize-use-nullptr,modernize-use-std-arrays,modernize-raw-string-literal,modernize-use-std-numbers,modernize-loop-convert,modernize-use-emplace,modernize-use-nodiscard,modernize-use-requires,modernize-use-final,cppcoreguidelines-avoid-goto,performance-move-const-arg,performance-unnecessary-copy,performance-unnecessary-value-param,performance-noexcept,performance-type-promotion,bugprone-assert-side-effect,bugprone-branch-clone,bugprone-unused-local-non-trivial-type,bugprone-reserved-identifier,hicpp-vararg,readability-const-return-type,readability-redundant-string-init,readability-function-size,readability-magic-numbers'
 
 # Check options
 CheckOptions:

@@ -1,19 +1,5 @@
-/*
- * Copyright (C) <year> <name of author>
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "MetadataBlock.h"
 #include <boost/endian/conversion.hpp>
@@ -82,7 +68,7 @@ namespace rs::tag::flac
     return comments;
   }
 
-  boost::asio::const_buffer PictureBlockView::blob() const
+  std::span<std::byte const> PictureBlockView::blob() const
   {
     auto ptr = static_cast<char const*>(data()) + sizeof(MetadataBlockLayout);
     auto end = ptr + size() - sizeof(MetadataBlockLayout);
@@ -91,7 +77,7 @@ namespace rs::tag::flac
     parseString<std::uint32_t>(ptr, end); // description
     ptr += 16;                            // width/height/color depth/color count
     std::string_view blob = parseString<std::uint32_t>(ptr, end);
-    return boost::asio::buffer(blob.data(), blob.size());
+    return {reinterpret_cast<std::byte const*>(blob.data()), blob.size()};
   }
 
   MetadataBlockViewIterator::MetadataBlockViewIterator(void const* data, std::size_t size)

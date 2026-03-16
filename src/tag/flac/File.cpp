@@ -1,28 +1,15 @@
-/*
- * Copyright (C) <year> <name of author>
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "../Decoder.h"
 #include "MetadataBlock.h"
 #include <rs/core/Exception.h>
 #include <rs/tag/flac/File.h>
 
-#include <algorithm>
 #include <boost/algorithm/string/compare.hpp>
-#include <boost/asio/buffer.hpp>
+
+#include <algorithm>
+#include <span>
 #include <functional>
 #include <iostream>
 #include <map>
@@ -35,7 +22,7 @@ namespace rs::tag::flac
     template<MetaField Field, typename Decoder>
     struct FieldSetter
     {
-      void operator()(Metadata& meta, boost::asio::const_buffer buffer)
+      void operator()(Metadata& meta, std::span<std::byte const> buffer)
       {
         meta.set(Field, Decoder::decode(buffer.data(), buffer.size()));
       }
@@ -44,9 +31,9 @@ namespace rs::tag::flac
     template<MetaField PrimaryField, MetaField SecondaryField, typename Decoder>
     struct SlashFieldsSetter
     {
-      void operator()(Metadata& meta, boost::asio::const_buffer buffer)
+      void operator()(Metadata& meta, std::span<std::byte const> buffer)
       {
-        char const* begin = static_cast<char const*>(buffer.data());
+        char const* begin = reinterpret_cast<char const*>(buffer.data());
         char const* end = begin + buffer.size();
 
         if (auto iter = std::find(begin, end, '/'); iter != end)
@@ -71,7 +58,7 @@ namespace rs::tag::flac
       }
     };
 
-    std::map<std::string, std::function<void(Metadata&, boost::asio::const_buffer)>, CaseInsensitiveComparator>
+    std::map<std::string, std::function<void(Metadata&, std::span<std::byte const>)>, CaseInsensitiveComparator>
       MetadataSetters = {
         {"TITLE", FieldSetter<MetaField::Title, StringDecoder>{}},
         {"ARTIST", FieldSetter<MetaField::Artist, StringDecoder>{}},
@@ -113,7 +100,8 @@ namespace rs::tag::flac
 
               if (auto iter = MetadataSetters.find(key); iter != MetadataSetters.end())
               {
-                std::invoke(iter->second, metadata, boost::asio::buffer(value.data(), value.size()));
+                std::invoke(iter->second, metadata,
+                            std::span<std::byte const>{reinterpret_cast<std::byte const*>(value.data()), value.size()});
               }
               else
               {

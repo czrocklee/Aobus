@@ -1,25 +1,13 @@
-/*
- * Copyright (C) <year> <name of author>
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #pragma once
 
-#include <boost/asio/buffer.hpp>
 #include <boost/iterator/iterator_facade.hpp>
+#include <limits>
 #include <memory>
+#include <optional>
+#include <span>
 #include <rs/lmdb/Transaction.h>
 
 namespace rs::lmdb
@@ -45,12 +33,12 @@ namespace rs::lmdb
   class Database::Reader
   {
   public:
-    using Value = std::pair<std::uint64_t, boost::asio::const_buffer>;
+    using Value = std::pair<std::uint32_t, std::span<std::byte const>>;
     class Iterator;
 
     [[nodiscard]] Iterator begin() const;
     [[nodiscard]] Iterator end() const;
-    [[nodiscard]] boost::asio::const_buffer operator[](std::uint64_t id) const;
+    [[nodiscard]] std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
 
   protected:
     Reader(MDB_dbi dbi, MDB_txn* txn);
@@ -74,7 +62,10 @@ namespace rs::lmdb
     [[nodiscard]] Value const& dereference() const;
 
   private:
-    struct CursorDeleter { void operator()(MDB_cursor* cur) const { mdb_cursor_close(cur); } };
+    struct CursorDeleter
+    {
+      void operator()(MDB_cursor* cur) const { mdb_cursor_close(cur); }
+    };
     Iterator(MDB_cursor* cursor);
 
     std::unique_ptr<MDB_cursor, CursorDeleter> _cursor;
@@ -88,22 +79,25 @@ namespace rs::lmdb
     Writer(Writer&&) noexcept;
     ~Writer();
 
-    [[nodiscard]] void const* create(std::uint64_t id, boost::asio::const_buffer data);
-    [[nodiscard]] void* create(std::uint64_t id, std::size_t size);
-    [[nodiscard]] std::pair<std::uint64_t, void const*> append(boost::asio::const_buffer data);
-    [[nodiscard]] std::pair<std::uint64_t, void*> append(std::size_t size);
-    [[nodiscard]] void const* update(std::uint64_t id, boost::asio::const_buffer data);
-    bool del(std::uint64_t id);
-    [[nodiscard]] boost::asio::const_buffer operator[](std::uint64_t id) const;
+    [[nodiscard]] void const* create(std::uint32_t id, std::span<std::byte const> data);
+    [[nodiscard]] void* create(std::uint32_t id, std::size_t size);
+    [[nodiscard]] std::pair<std::uint32_t, void const*> append(std::span<std::byte const> data);
+    [[nodiscard]] std::pair<std::uint32_t, void*> append(std::size_t size);
+    [[nodiscard]] void const* update(std::uint32_t id, std::span<std::byte const> data);
+    bool del(std::uint32_t id);
+    [[nodiscard]] std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
 
   private:
-    struct CursorDeleter { void operator()(MDB_cursor* cur) const { mdb_cursor_close(cur); } };
+    struct CursorDeleter
+    {
+      void operator()(MDB_cursor* cur) const { mdb_cursor_close(cur); }
+    };
     Writer(MDB_dbi dbi, WriteTransaction& txn);
 
     MDB_dbi _dbi;
     WriteTransaction& _txn;
     std::unique_ptr<MDB_cursor, CursorDeleter> _cursor;
-    std::uint64_t _lastId = 0;
+    std::uint32_t _lastId = UINT32_MAX;
     friend class Database;
   };
 

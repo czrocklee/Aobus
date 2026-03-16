@@ -2,34 +2,35 @@
 
 This guide covers C++ coding conventions for RockStudio contributors.
 
-## C++ Standards
+## 1. C++ Standards
 
-- **Target**: C++20 (without modules)
+1.1. Target: C++20 (without modules)
 
-## Code Style
+## 2. Code Style
 
-### Indentation & Formatting
+### 2.1 Indentation & Formatting
 
-- Use `clang-format` for the consistent style
-- Keep blank lines before and after logical blocks
+2.1.1. Use `clang-format` for consistent style
+2.1.2. Keep blank lines before and after logical blocks
 
-### Naming Conventions
+### 2.2 Naming Conventions
 
-| Type | Convention | Example |
-|------|------------|---------|
-| Classes/Types | PascalCase | `TrackStore`, `Metadata` |
-| Functions | CamelCase | `loadMetadata()`, `getString()` |
-| Variables | CamelCase | `trackCount`, `filePath` |
-| Member variables | `_camelCase` | `_handle`, `_tracks` |
-| Constants | `kCamelCase` | `kMaxSize`, `kDefaultFlags` |
+2.2.1. Classes/Types: PascalCase - `TrackStore`, `Metadata`
+2.2.2. Functions: CamelCase - `loadMetadata()`, `getString()`
+2.2.3. Variables: CamelCase - `trackCount`, `filePath`
+2.2.4. Member variables: `_camelCase` - `_handle`, `_tracks`
+2.2.5. Constants: `kCamelCase` - `kMaxSize`, `kDefaultFlags`
 
-### Headers
+### 2.3 Headers
 
-- Use `#pragma once` for header guards
+2.3.1. Use `#pragma once` for header guards
 
-### Includes (3 Paragraphs)
+### 2.4 Includes
 
-Separate includes with blank lines:
+2.4.1. Separate includes with blank lines in order:
+  - Paired header and project local
+  - Third-party
+  - Standard library
 
 ```cpp
 // 1. Paired header and project local
@@ -45,67 +46,62 @@ Separate includes with blank lines:
 #include <vector>
 ```
 
-### Namespaces
+### 2.5 Namespaces
 
-- Use nested namespace definition: `namespace rs::core { ... }`
-- Use `rs::` prefix for project code
-- Prefer anonymous namespace over static functions for internal linkage
-- Prefix `::` for C functions and types: `::memcpy()`, `::malloc()`
+2.5.1. Use nested namespace definition: `namespace rs::core { ... }`
+2.5.2. Use `rs::` prefix for project code
+2.5.3. Prefer anonymous namespace over static functions for internal linkage
+2.5.4. Prefix `::` for C functions and types: `::memcpy()`, `::malloc()`
 
-### Types
+### 2.6 Types
 
-- Use `std::` for integer types: `std::int32_t`, `std::uint64_t`
-- Prefer `std::string` over `char*`
-- Use `std::string_view` for string parameters that don't own data
+2.6.1. Use `std::` for integer types: `std::int32_t`, `std::uint64_t`
+2.6.2. Prefer `std::string` over `char*`
+2.6.3. Use `std::string_view` for string parameters that don't own data
 
-## Modern C++ Features
+## 3. Modern C++ Features
 
-### C++20 Features (Preferred)
+### 3.1 C++20 Features (Preferred)
 
-| Feature | Usage |
-|---------|-------|
-| Concepts | `template<typename T> requires std::integral<T>` |
-| std::format | Instead of printf/sprintf |
-| std::span | For array views (prefer over gsl::span) |
-| std::ranges | Range algorithms and views |
-| [[no_unique_address]] | Empty member optimization |
-| Generic lambdas | `[]<typename T>(T&& arg) { }` |
-| starts_with/ends_with | String prefix/suffix checks |
+3.1.1. Concepts: `template<typename T> requires std::integral<T>`
+3.1.2. std::format: Instead of printf/sprintf
+3.1.3. std::span: For array views (prefer over gsl::span)
+3.1.4. std::ranges: Range algorithms and views
+3.1.5. [[no_unique_address]]: Empty member optimization
+3.1.6. Generic lambdas: `[]<typename T>(T&& arg) { }`
+3.1.7. starts_with/ends_with: String prefix/suffix checks
+3.1.8. Designated initializers: For struct initialization
 
-### C++17 Features (Preferred)
+### 3.2 C++17 Features (Preferred)
 
-| Feature | Usage |
-|---------|-------|
-| std::optional | Functions that may or may not return a value |
-| std::variant | Type-safe unions |
-| std::string_view | Non-owning string parameters |
-| if constexpr | Compile-time branch elimination |
-| Structured bindings | `auto [key, value] : map` |
-| Init statement | `if (auto&& var = get(); condition)` |
+3.2.1. std::optional: Functions that may or may not return a value
+3.2.2. std::variant: Type-safe unions
+3.2.3. std::string_view: Non-owning string parameters
+3.2.4. if constexpr: Compile-time branch elimination
+3.2.5. Structured bindings: `auto [key, value] : map`
+3.2.6. Init statement: `if (auto&& var = get(); condition)`
 
-### C++11 Features (Preferred)
+### 3.3 C++11 Features (Preferred)
 
-| Feature | Usage |
-|---------|-------|
-| RAII | Use `std::unique_ptr` for owned resources |
-| `[[nodiscard]]` | Mark functions that must not ignore return values |
-| `[[maybe_unused]]` | Suppress unused warnings |
-| `noexcept` | Mark functions that won't throw |
+3.3.1. RAII: Use `std::unique_ptr` for owned resources
+3.3.2. [[nodiscard]]: Mark functions that must not ignore return values
+3.3.3. [[maybe_unused]]: Suppress unused warnings
+3.3.4. noexcept: Mark functions that won't throw
 
-## Best Practices
+## 4. Best Practices
 
-### Getters and Accessors
+### 4.1 Getters and Accessors
 
-- Keep simple one-liner getters/setters inline in headers
-- Mark getters with `[[nodiscard]]` to prevent ignored return values
+4.1.1. Keep simple one-liner getters/setters inline in headers
+4.1.2. Mark getters with `[[nodiscard]]` to prevent ignored return values
 
-### Class Design
+### 4.2 Class Design
 
-- Use `final` on classes not designed for inheritance:
+4.2.1. Use `final` on classes not designed for inheritance:
   - POD structs (e.g., `TrackHeader`, `ListHeader`)
   - Concrete data classes (e.g., `Metadata`, `TrackView`)
 
-### Const Correctness
+### 4.3 Const Correctness
 
-- Use `const` wherever possible
-- Prefer `const&` for input references
+4.3.1. Use `const` wherever possible
+4.3.2. Prefer `const&` for input references

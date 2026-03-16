@@ -30,6 +30,7 @@ pkgs.mkShell {
     gsettings-desktop-schemas
 
     kdePackages.qtbase
+    ffmpeg
   ];
   shellHook = ''
     export PATH="$PATH:/run/current-system/sw/bin"

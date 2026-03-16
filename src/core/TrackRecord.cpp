@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <rs/core/TrackRecord.h>
 
@@ -22,7 +8,7 @@ namespace rs::core
   // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
   constexpr unsigned int kBloomBitMask = 31;
 
-  TrackRecord::TrackRecord(TrackView const& view, Dictionary const& dict, lmdb::ReadTransaction& txn)
+  TrackRecord::TrackRecord(TrackView const& view, Dictionary const& dict)
   {
     if (!view.isValid())
     {
@@ -46,24 +32,27 @@ namespace rs::core
     metadata.title = std::string(meta.title());
     metadata.year = meta.year();
     metadata.trackNumber = meta.trackNumber();
+    metadata.totalTracks = meta.totalTracks();
+    metadata.discNumber = meta.discNumber();
+    metadata.totalDiscs = meta.totalDiscs();
     metadata.coverArtId = meta.coverArtId();
 
     // Resolve dictionary IDs to strings
     if (meta.artistId() > 0)
     {
-      metadata.artist = std::string(dict.get(txn, DictionaryId{meta.artistId()}));
+      metadata.artist = std::string(dict.get(DictionaryId{meta.artistId()}));
     }
     if (meta.albumId() > 0)
     {
-      metadata.album = std::string(dict.get(txn, DictionaryId{meta.albumId()}));
+      metadata.album = std::string(dict.get(DictionaryId{meta.albumId()}));
     }
     if (meta.albumArtistId() > 0)
     {
-      metadata.albumArtist = std::string(dict.get(txn, DictionaryId{meta.albumArtistId()}));
+      metadata.albumArtist = std::string(dict.get(DictionaryId{meta.albumArtistId()}));
     }
     if (meta.genreId() > 0)
     {
-      metadata.genre = std::string(dict.get(txn, DictionaryId{meta.genreId()}));
+      metadata.genre = std::string(dict.get(DictionaryId{meta.genreId()}));
     }
 
     // Deserialize tag IDs from payload
@@ -81,30 +70,41 @@ namespace rs::core
 
   TrackHeader TrackRecord::header() const
   {
-    TrackHeader h{};
-    h.fileSize = property.fileSize;
-    h.mtime = property.mtime;
-    h.durationMs = property.durationMs;
-    h.bitrate = property.bitrate;
-    h.sampleRate = property.sampleRate;
-    h.year = metadata.year;
-    h.trackNumber = metadata.trackNumber;
-    h.coverArtId = metadata.coverArtId;
-    h.channels = property.channels;
-    h.bitDepth = property.bitDepth;
-    h.rating = property.rating;
-    h.codecId = property.codecId;
-    h.tagCount = static_cast<std::uint8_t>(tags.ids.size());
-
-    // Compute bloom filter from tag IDs
+    // Compute bloom filter from tag IDs first
     std::uint32_t bloom = 0;
     for (auto tagId : tags.ids)
     {
       bloom |= (1U << (tagId.value() & kBloomBitMask));
     }
-    h.tagBloom = bloom;
 
-    return h;
+    return TrackHeader{
+      .fileSize = property.fileSize,
+      .mtime = property.mtime,
+      .tagBloom = bloom,
+      .durationMs = property.durationMs,
+      .bitrate = property.bitrate,
+      .sampleRate = property.sampleRate,
+      .artistId = artistId,
+      .albumId = albumId,
+      .genreId = genreId,
+      .albumArtistId = albumArtistId,
+      .coverArtId = metadata.coverArtId,
+      .year = metadata.year,
+      .trackNumber = metadata.trackNumber,
+      .totalTracks = metadata.totalTracks,
+      .discNumber = metadata.discNumber,
+      .totalDiscs = metadata.totalDiscs,
+      .codecId = property.codecId,
+      .titleOffset = 0,
+      .titleLen = 0,
+      .uriOffset = 0,
+      .uriLen = 0,
+      .tagsOffset = 0,
+      .channels = property.channels,
+      .bitDepth = property.bitDepth,
+      .rating = property.rating,
+      .tagCount = static_cast<std::uint8_t>(tags.ids.size()),
+    };
   }
 
   std::vector<std::byte> TrackRecord::serialize() const

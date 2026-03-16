@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #pragma once
 
@@ -30,26 +16,41 @@ namespace rs::expr
 
   /**
    * Field - Identifies which field to read from a track.
+   * Ordered by category: string -> property -> metadata -> tags
    */
   enum class Field : std::uint8_t
   {
-    TagBloom = 0,
-    DurationMs = 1,
-    Bitrate = 2,
-    SampleRate = 3,
-    ArtistId = 4,
-    AlbumId = 5,
-    GenreId = 6,
-    Year = 7,
-    TrackNumber = 8,
-    CodecId = 9,
-    Channels = 10,
-    BitDepth = 11,
-    Rating = 12,
-    TagCount = 13,
-    Title = 14,
-    Uri = 15,
-    Tag = 16,
+    // String fields
+    Title = 0,
+    Uri = 1,
+
+    // Property fields (@ prefix) - audio technical properties
+    DurationMs = 2,
+    Bitrate = 3,
+    SampleRate = 4,
+    Channels = 5,
+    BitDepth = 6,
+    CodecId = 7,
+    Rating = 8,
+
+    // Metadata ID fields (Dictionary IDs)
+    ArtistId = 9,
+    AlbumId = 10,
+    GenreId = 11,
+    AlbumArtistId = 12,
+    CoverArtId = 13,
+
+    // Metadata numeric fields
+    Year = 14,
+    TrackNumber = 15,
+    TotalTracks = 16,
+    DiscNumber = 17,
+    TotalDiscs = 18,
+
+    // Tag fields
+    TagBloom = 19,
+    TagCount = 20,
+    Tag = 21,
   };
 
   /**
@@ -109,7 +110,7 @@ namespace rs::expr
   /**
    * QueryCompiler - Compiles an AST expression into an ExecutionPlan.
    *
-   * Uses IDictionary to resolve string constants to numeric IDs for metadata fields
+   * Uses Dictionary to resolve string constants to numeric IDs for metadata fields
    * (artist, album, genre) to enable efficient numeric comparison at evaluation time.
    */
   class QueryCompiler
@@ -120,9 +121,9 @@ namespace rs::expr
     /**
      * Construct with a dictionary for string resolution.
      *
-     * @param dict Dictionary for resolving string constants to IDs
+     * @param dict Pointer to Dictionary for resolving string constants to IDs, can be nullptr
      */
-    explicit QueryCompiler(core::IDictionary const& dict);
+    explicit QueryCompiler(core::Dictionary const* dict);
 
     /**
      * Compile an expression AST into an execution plan.
@@ -146,7 +147,7 @@ namespace rs::expr
 
     ExecutionPlan _plan;
     std::uint32_t _nextReg = 0;
-    core::IDictionary const* _dict = nullptr;
+    core::Dictionary const* _dict = nullptr;
     Field _lastField = Field::TagBloom; // Track last field for context
   };
 

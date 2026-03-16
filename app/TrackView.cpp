@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
+
 #include "TrackView.h"
 #include "TagsDelegate.h"
 #include "TrackSortFilterProxyModel.h"

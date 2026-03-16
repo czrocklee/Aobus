@@ -18,7 +18,7 @@ C++20 music library application with LMDB storage.
 ## Running Tests
 
 ```bash
-/tmp/build/expr_test
+/tmp/build/rs_test
 ```
 
 ## Static Analysis

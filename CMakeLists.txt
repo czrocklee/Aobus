@@ -41,7 +41,6 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 add_library(rs OBJECT
-    src/lmdb/Type.cpp
     src/lmdb/Environment.cpp
     src/lmdb/Transaction.cpp
     src/lmdb/Database.cpp
@@ -72,12 +71,14 @@ target_link_libraries(rs lmdb Boost::locale)
 
 add_executable(rsc
     tool/main.cpp
+    tool/InitCommand.cpp
     tool/ListCommand.cpp
+    tool/TagCommand.cpp
     tool/TrackCommand.cpp
 )
 target_link_libraries(rsc PRIVATE rs Qt6::Core Boost::program_options)
 
-add_executable(expr_test
+add_executable(rs_test
     test/query/ParserTest.cpp
     test/query/ExecutionPlanTest.cpp
     test/query/PlanEvaluatorTest.cpp
@@ -90,8 +91,8 @@ add_executable(expr_test
     test/core/ListStoreTest.cpp
     test/lmdb/LmdbTest.cpp
 )
-target_include_directories(expr_test PRIVATE ${CMAKE_SOURCE_DIR})
-target_link_libraries(expr_test PRIVATE rs Catch2)
+target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(rs_test PRIVATE rs Catch2)
 
 # UI disabled - requires FlatBuffers migration
 # add_executable(RockStudio

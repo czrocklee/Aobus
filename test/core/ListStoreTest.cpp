@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <catch2/catch.hpp>
 
@@ -39,9 +25,7 @@ using rs::lmdb::WriteTransaction;
 TEST_CASE("ListStore - create and read", "[core][list]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
   ListStore store{wtxn, "lists"};
@@ -51,12 +35,12 @@ TEST_CASE("ListStore - create and read", "[core][list]")
   ListHeader header{};
   header.trackIdsCount = 5;
 
-  std::vector<char> data(sizeof(ListHeader));
+  std::vector<std::byte> data(sizeof(ListHeader));
   std::memcpy(data.data(), &header, sizeof(ListHeader));
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data.data(), data.size());
-  REQUIRE(id.value() > 0);
+  auto [id, view] = store.writer(wtxn2).create(data);
+  // If create() failed, it would throw
   wtxn2.commit();
 
   // Read the list
@@ -70,9 +54,7 @@ TEST_CASE("ListStore - create and read", "[core][list]")
 TEST_CASE("ListStore - read by id", "[core][list]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
   ListStore store{wtxn, "lists"};
@@ -82,25 +64,25 @@ TEST_CASE("ListStore - read by id", "[core][list]")
   ListHeader header{};
   header.trackIdsCount = 10;
 
-  std::vector<char> data(sizeof(ListHeader));
+  std::vector<std::byte> data(sizeof(ListHeader));
   std::memcpy(data.data(), &header, sizeof(ListHeader));
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data.data(), data.size());
+  auto [id, view] = store.writer(wtxn2).create(data);
   wtxn2.commit();
 
   // Read by ID
   ReadTransaction rtxn(env);
-  auto found = store.reader(rtxn)[id];
+  auto optFound = store.reader(rtxn).get(id);
+  REQUIRE(optFound.has_value());
+  auto& found = *optFound;
   REQUIRE(found.header()->trackIdsCount == 10);
 }
 
 TEST_CASE("ListStore - delete", "[core][list]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
   ListStore store{wtxn, "lists"};
@@ -109,11 +91,11 @@ TEST_CASE("ListStore - delete", "[core][list]")
   // Create a list
   ListHeader header{};
 
-  std::vector<char> data(sizeof(ListHeader));
+  std::vector<std::byte> data(sizeof(ListHeader));
   std::memcpy(data.data(), &header, sizeof(ListHeader));
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data.data(), data.size());
+  auto [id, view] = store.writer(wtxn2).create(data);
   wtxn2.commit();
 
   // Delete it

@@ -1,19 +1,5 @@
-/*
- * Copyright (C) <year> <name of author>
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #pragma once
 
@@ -31,7 +17,7 @@ class ComboCommand : public Command
 public:
   ComboCommand()
   {
-    _optDesc.add_options()("command", boost::program_options::value<std::string>(), "sub command");
+    _optDesc.add_options()("command", boost::program_options::value<std::string>(), "sub command")("help,h", "show help");
     _posOptDesc.add("command", 1);
   }
 
@@ -50,22 +36,48 @@ public:
     if (argc > 1)
     {
       command = argv[1];
-      --argc, ++argv;
-    }
 
-    auto iter = _cmds.find(command);
+      // Handle rsc --help or rsc help (root level help)
+      if (command == "--help" || command == "help")
+      {
+        showHelp(os);
+        return;
+      }
 
-    if (iter != _cmds.end())
-    {
-      iter->second->execute(argc, argv, os);
-    }
-    else
-    {
+      // Check if this is a valid subcommand
+      if (_cmds.find(command) != _cmds.end())
+      {
+        // Pass remaining arguments to subcommand (which may include --help)
+        --argc, ++argv;
+        if (auto iter = _cmds.find(command); iter != _cmds.end())
+        {
+          iter->second->execute(argc, argv, os);
+        }
+        return;
+      }
+
+      // Unknown command - show error with available commands
       std::ostringstream oss;
-      oss << "invalid sub command " << command << "available: ["
+      oss << "invalid sub command: " << command << "\navailable: ["
           << boost::algorithm::join(boost::adaptors::keys(_cmds), "|") << "]";
       throw std::invalid_argument(oss.str());
     }
+
+    // No command provided, show help
+    showHelp(os);
+  }
+
+  void showHelp(std::ostream& os) const
+  {
+    os << "RockStudio CLI - rsc\n\n";
+    os << "Usage: rsc <command> [options]\n\n";
+    os << "Commands:\n";
+    for (auto const& [name, _] : _cmds)
+    {
+      os << "  " << name << "\n";
+    }
+    os << "\nOptions:\n";
+    os << "  --help, -h     show help\n";
   }
 
 private:

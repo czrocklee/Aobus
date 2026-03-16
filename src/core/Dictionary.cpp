@@ -1,99 +1,66 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <rs/core/Dictionary.h>
 
-#include <boost/asio/buffer.hpp>
+#include <span>
+#include <string_view>
 
 namespace rs::core
 {
+  // Initial capacity for dictionary entries (suitable for most music libraries)
+  constexpr std::uint32_t kInitialCapacity = 4096;
 
-  Dictionary::Dictionary(lmdb::Database& db) : _db{db}
+  Dictionary::Dictionary(lmdb::WriteTransaction& txn, std::string const& db) : _database{txn, db}
   {
+    // Reserve initial capacity to avoid frequent resizes
+    _idToStringStorage.reserve(kInitialCapacity);
+
+    for (auto [id, buf] : _database.reader(txn))
+    {
+      std::string_view str{reinterpret_cast<char const*>(buf.data()), buf.size()};
+      _idToStringStorage.emplace_back(str);
+      _stringToId.emplace(_idToStringStorage.back(), DictionaryId{id});
+    }
   }
 
   DictionaryId Dictionary::put(lmdb::WriteTransaction& txn, std::string_view value)
   {
-    // Check in-memory index first (transparent lookup - no string creation)
-    auto it = _stringToId.find(value);
-    if (it != _stringToId.end())
+    // Check in-memory index first
+    if (auto it = _stringToId.find(value); it != _stringToId.end())
     {
       return it->second;
     }
 
-    // Check database for existing entry
-    auto reader = _db.reader(txn);
-    for (auto&& [id, buf] : reader)
-    {
-      auto size = boost::asio::buffer_size(buf);
-      if (size > 0)
-      {
-        auto existing = std::string_view(static_cast<char const*>(buf.data()), size);
-        if (existing == value)
-        {
-          auto dictId = static_cast<std::uint32_t>(id);
-          _stringToId[std::string(value)] = DictionaryId{dictId};
-          return DictionaryId{dictId};
-        }
-      }
-    }
-
-    // Not found - append new entry
-    auto writer = _db.writer(txn);
-    auto [id, buffer] = writer.append(boost::asio::buffer(value.data(), value.size()));
-    auto dictId = static_cast<std::uint32_t>(id);
-    if (buffer != nullptr)
-    {
-      _stringToId[std::string(value)] = DictionaryId{dictId};
-    }
-    return DictionaryId{dictId};
+    // Not found in memory - append to database
+    auto writer = _database.writer(txn);
+    std::span<std::byte const> data{reinterpret_cast<std::byte const*>(value.data()), value.size()};
+    auto [id, ptr] = writer.append(data);
+    std::string_view str{static_cast<char const*>(ptr), value.size()};
+    _idToStringStorage.emplace_back(str);
+    _stringToId.emplace(_idToStringStorage.back(), DictionaryId{id});
+    return DictionaryId{id};
   }
 
-  std::string_view Dictionary::get(lmdb::ReadTransaction& txn, DictionaryId id) const
+  std::string_view Dictionary::get(DictionaryId id) const
   {
-    auto reader = _db.reader(txn);
-    auto value = reader[id.value()];
-    auto size = boost::asio::buffer_size(value);
-    if (size > 0)
+    auto idx = id.value();
+    if (idx >= _idToStringStorage.size())
     {
-      return {static_cast<char const*>(value.data()), size};
+      throw std::runtime_error{"Invalid dictionary ID"};
     }
-    return {};
+
+    return _idToStringStorage[idx];
   }
 
   DictionaryId Dictionary::getId(std::string_view str) const
   {
-    if (str.empty())
-    {
-      return DictionaryId{0};
-    }
-    auto it = _stringToId.find(str);
-    if (it != _stringToId.end())
+    if (auto it = _stringToId.find(str); it != _stringToId.end())
     {
       return it->second;
     }
-    return DictionaryId{0};
-  }
 
-  bool Dictionary::contains(lmdb::ReadTransaction& txn, DictionaryId id) const
-  {
-    auto reader = _db.reader(txn);
-    auto value = reader[id.value()];
-    return boost::asio::buffer_size(value) > 0;
+    throw std::runtime_error{"String not found in dictionary"};
   }
 
   bool Dictionary::contains(std::string_view str) const

@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <catch2/catch.hpp>
 
@@ -39,9 +25,7 @@ using rs::lmdb::WriteTransaction;
 TEST_CASE("TrackStore - create and read", "[core][track]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
   TrackStore store{wtxn, "tracks"};
@@ -53,12 +37,12 @@ TEST_CASE("TrackStore - create and read", "[core][track]")
   header.durationMs = 180000;
   header.trackNumber = 1;
 
-  std::vector<char> data(sizeof(TrackHeader));
+  std::vector<std::byte> data(sizeof(TrackHeader));
   std::memcpy(data.data(), &header, sizeof(TrackHeader));
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data.data(), data.size());
-  REQUIRE(id.value() > 0);
+  auto [id, view] = store.writer(wtxn2).create(data);
+  // If create() failed, it would throw
   wtxn2.commit();
 
   // Read the track
@@ -72,9 +56,7 @@ TEST_CASE("TrackStore - create and read", "[core][track]")
 TEST_CASE("TrackStore - read by id", "[core][track]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
   TrackStore store{wtxn, "tracks"};
@@ -84,25 +66,25 @@ TEST_CASE("TrackStore - read by id", "[core][track]")
   TrackHeader header{};
   header.fileSize = 2000;
 
-  std::vector<char> data(sizeof(TrackHeader));
+  std::vector<std::byte> data(sizeof(TrackHeader));
   std::memcpy(data.data(), &header, sizeof(TrackHeader));
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data.data(), data.size());
+  auto [id, view] = store.writer(wtxn2).create(data);
   wtxn2.commit();
 
   // Read by ID
   ReadTransaction rtxn(env);
-  auto found = store.reader(rtxn)[id];
+  auto optFound = store.reader(rtxn).get(id);
+  REQUIRE(optFound.has_value());
+  auto& found = *optFound;
   REQUIRE(found.property().fileSize() == 2000);
 }
 
 TEST_CASE("TrackStore - update", "[core][track]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
   TrackStore store{wtxn, "tracks"};
@@ -112,22 +94,22 @@ TEST_CASE("TrackStore - update", "[core][track]")
   TrackHeader header{};
   header.fileSize = 1000;
 
-  std::vector<char> data(sizeof(TrackHeader));
+  std::vector<std::byte> data(sizeof(TrackHeader));
   std::memcpy(data.data(), &header, sizeof(TrackHeader));
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data.data(), data.size());
+  auto [id, view] = store.writer(wtxn2).create(data);
   wtxn2.commit();
 
   // Update the track
   TrackHeader header2{};
   header2.fileSize = 3000;
 
-  std::vector<char> data2(sizeof(TrackHeader));
+  std::vector<std::byte> data2(sizeof(TrackHeader));
   std::memcpy(data2.data(), &header2, sizeof(TrackHeader));
 
   WriteTransaction wtxn3(env);
-  auto updated = store.writer(wtxn3).update(id, data2.data(), data2.size());
+  auto updated = store.writer(wtxn3).update(id, data2);
   REQUIRE(updated.property().fileSize() == 3000);
   wtxn3.commit();
 }
@@ -135,9 +117,7 @@ TEST_CASE("TrackStore - update", "[core][track]")
 TEST_CASE("TrackStore - delete", "[core][track]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
   TrackStore store{wtxn, "tracks"};
@@ -146,11 +126,11 @@ TEST_CASE("TrackStore - delete", "[core][track]")
   // Create a track
   TrackHeader header{};
 
-  std::vector<char> data(sizeof(TrackHeader));
+  std::vector<std::byte> data(sizeof(TrackHeader));
   std::memcpy(data.data(), &header, sizeof(TrackHeader));
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data.data(), data.size());
+  auto [id, view] = store.writer(wtxn2).create(data);
   wtxn2.commit();
 
   // Delete it
@@ -169,9 +149,7 @@ TEST_CASE("TrackStore - delete", "[core][track]")
 TEST_CASE("TrackStore - create multiple tracks unique IDs", "[core][track]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
   TrackStore store{wtxn, "tracks"};
@@ -180,13 +158,13 @@ TEST_CASE("TrackStore - create multiple tracks unique IDs", "[core][track]")
   // Create multiple tracks - each should get unique ID
   TrackHeader header{};
 
-  std::vector<char> data(sizeof(TrackHeader));
+  std::vector<std::byte> data(sizeof(TrackHeader));
   std::memcpy(data.data(), &header, sizeof(TrackHeader));
 
   WriteTransaction wtxn2(env);
-  auto [id1, view1] = store.writer(wtxn2).create(data.data(), data.size());
-  auto [id2, view2] = store.writer(wtxn2).create(data.data(), data.size());
-  auto [id3, view3] = store.writer(wtxn2).create(data.data(), data.size());
+  auto [id1, view1] = store.writer(wtxn2).create(data);
+  auto [id2, view2] = store.writer(wtxn2).create(data);
+  auto [id3, view3] = store.writer(wtxn2).create(data);
   wtxn2.commit();
 
   // All IDs should be unique

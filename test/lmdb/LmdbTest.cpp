@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <catch2/catch.hpp>
 
@@ -21,7 +7,6 @@
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
-#include <rs/lmdb/Type.h>
 #include <test/lmdb/LmdbTestUtils.h>
 
 #include <cstring>
@@ -31,112 +16,24 @@ namespace rs::lmdb::test
 {
 
 // ============================================================================
-// Type Utility Tests
-// ============================================================================
-
-TEST_CASE("Type - throwOnError", "[lmdb][type]")
-{
-  SECTION("MDB_SUCCESS does not throw")
-  {
-    REQUIRE_NOTHROW(throwOnError("test", MDB_SUCCESS));
-  }
-
-  SECTION("MDB_NOTFOUND throws runtime_error")
-  {
-    REQUIRE_THROWS_AS(throwOnError("test", MDB_NOTFOUND), std::runtime_error);
-  }
-
-  SECTION("MDB_KEYEXIST throws runtime_error")
-  {
-    REQUIRE_THROWS_AS(throwOnError("test", MDB_KEYEXIST), std::runtime_error);
-  }
-
-  SECTION("Error message contains description")
-  {
-    try
-    {
-      throwOnError("test_origin", MDB_NOTFOUND);
-      FAIL("Expected exception");
-    }
-    catch (const std::runtime_error& e)
-    {
-      REQUIRE(std::string{e.what()}.find("test_origin") != std::string::npos);
-    }
-  }
-}
-
-TEST_CASE("Type - bytesOf", "[lmdb][type]")
-{
-  SECTION("bytesOf with reference")
-  {
-    std::uint64_t value = 0x123456789ABCDEF0ULL;
-    auto bytes = bytesOf(value);
-    REQUIRE(bytes.size() == sizeof(std::uint64_t));
-    REQUIRE(std::memcmp(bytes.data(), &value, sizeof(value)) == 0);
-  }
-
-  SECTION("bytesOf with pointer")
-  {
-    std::uint32_t value = 0xDEADBEEF;
-    auto bytes = bytesOf(value); // Use reference version instead
-    REQUIRE(bytes.size() == sizeof(std::uint32_t));
-    REQUIRE(std::memcmp(bytes.data(), &value, sizeof(value)) == 0);
-  }
-}
-
-TEST_CASE("Type - read", "[lmdb][type]")
-{
-  SECTION("read with correct size")
-  {
-    std::uint32_t original = 0xCAFEBABE;
-    auto bytes = bytesOf(original);
-    auto result = read<std::uint32_t>(bytes);
-    REQUIRE(result == original);
-  }
-
-  SECTION("read with incorrect size throws")
-  {
-    std::string_view short_bytes = "abc";
-    REQUIRE_THROWS_AS(read<std::uint32_t>(short_bytes), std::runtime_error);
-  }
-
-  SECTION("read with oversized buffer throws")
-  {
-    std::vector<char> large(8, 'x');
-    auto bytes = std::string_view{large.data(), large.size()};
-    REQUIRE_THROWS_AS(read<std::uint32_t>(bytes), std::runtime_error);
-  }
-}
-
-// ============================================================================
 // Environment Tests
 // ============================================================================
 
 TEST_CASE("Environment - create", "[lmdb][environment]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Verify by starting a transaction
   WriteTransaction txn(env);
 }
 
-TEST_CASE("Environment - default constructor", "[lmdb][environment]")
-{
-  Environment env;
-  // Default constructed environment should be in invalid state
-  // Attempting operations should fail gracefully or throw
-}
-
 TEST_CASE("Environment - move constructor", "[lmdb][environment]")
 {
-  auto env1 = Environment{};
   auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_test";
   std::filesystem::create_directory(path);
 
-  env1.open(path.string().c_str(), MDB_CREATE, 0644);
+  auto env1 = Environment{path.string(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   Environment env2{std::move(env1)};
   // env1 is now in moved-from state
@@ -147,80 +44,25 @@ TEST_CASE("Environment - move constructor", "[lmdb][environment]")
 
 TEST_CASE("Environment - move assignment", "[lmdb][environment]")
 {
-  auto env1 = Environment{};
   auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_assign_test";
   std::filesystem::create_directory(path);
 
-  env1.open(path.string().c_str(), MDB_CREATE, 0644);
+  auto env1 = Environment{path.string(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  Environment env2;
+  auto env2 = Environment{path.string(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   env2 = std::move(env1);
 
   std::filesystem::remove_all(path);
 }
 
-TEST_CASE("Environment - open", "[lmdb][environment]")
+TEST_CASE("Environment - constructor with path", "[lmdb][environment]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Verify we can create a transaction
   ReadTransaction txn(env);
   WriteTransaction wtxn(env);
-}
-
-TEST_CASE("Environment - setMapSize", "[lmdb][environment]")
-{
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  auto& result = env.setMapSize(1024 * 1024); // 1MB
-  REQUIRE(&result == &env); // Method chaining
-}
-
-TEST_CASE("Environment - setMaxDatabases", "[lmdb][environment]")
-{
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  auto& result = env.setMaxDatabases(10);
-  REQUIRE(&result == &env); // Method chaining
-}
-
-TEST_CASE("Environment - setMaxReaders", "[lmdb][environment]")
-{
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  auto& result = env.setMaxReaders(100);
-  REQUIRE(&result == &env); // Method chaining
-}
-
-TEST_CASE("Environment - close", "[lmdb][environment]")
-{
-  TempDir temp;
-  {
-    auto env = Environment{};
-  env.setMaxDatabases(20);
-    env.open(temp.path().c_str(), MDB_CREATE, 0644);
-    env.close();
-  }
-  // After close, should be able to create new environment in same path
-  auto env2 = Environment{};
-  env2.open(temp.path().c_str(), MDB_CREATE, 0644);
-}
-
-TEST_CASE("Environment - destructor closes", "[lmdb][environment]")
-{
-  TempDir temp;
-  {
-    auto env = Environment{};
-  env.setMaxDatabases(20);
-    env.open(temp.path().c_str(), MDB_CREATE, 0644);
-    // env goes out of scope and destructor should close it
-  }
-  // Should be able to create new environment in same path
-  auto env2 = Environment{};
-  env2.open(temp.path().c_str(), MDB_CREATE, 0644);
 }
 
 // ============================================================================
@@ -230,9 +72,7 @@ TEST_CASE("Environment - destructor closes", "[lmdb][environment]")
 TEST_CASE("NestedTransaction - child commit merges to parent", "[lmdb][nested]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Create parent write transaction
   WriteTransaction parentTxn(env);
@@ -269,9 +109,7 @@ TEST_CASE("NestedTransaction - read transaction under write transaction", "[lmdb
 TEST_CASE("ReadTransaction - constructor starts transaction", "[lmdb][transaction]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // First create database with write transaction
   {
@@ -290,9 +128,7 @@ TEST_CASE("ReadTransaction - constructor starts transaction", "[lmdb][transactio
 TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][transaction]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Create database first with write transaction
   {
@@ -318,9 +154,7 @@ TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][transaction]")
 TEST_CASE("ReadTransaction - move", "[lmdb][transaction]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Create database first with write transaction
   {
@@ -344,9 +178,7 @@ TEST_CASE("ReadTransaction - move", "[lmdb][transaction]")
 TEST_CASE("WriteTransaction - constructor starts transaction", "[lmdb][transaction]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction txn(env);
   // Verify transaction is valid by using it to create a database
@@ -358,9 +190,7 @@ TEST_CASE("WriteTransaction - constructor starts transaction", "[lmdb][transacti
 TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 {
   TempDir temp;
-  auto env = Environment{};
-  env.setMaxDatabases(20);
-  env.open(temp.path().c_str(), MDB_CREATE, 0644);
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Create database, write data, commit
   WriteTransaction wtxn(env);
@@ -381,9 +211,7 @@ TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 // TEST_CASE("WriteTransaction - destructor without commit aborts", "[lmdb][transaction]")
 // {
 //   TempDir temp;
-//   auto env = Environment{};
-//   env.setMaxDatabases(20);
-//   env.open(temp.path().c_str(), MDB_CREATE, 0644);
+//   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
 //   WriteTransaction dbTxn(env);
 //   Database db{dbTxn,"test"};
@@ -406,9 +234,7 @@ TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 // TEST_CASE("WriteTransaction - move", "[lmdb][transaction]")
 // {
 //   TempDir temp;
-//   auto env = Environment{};
-//   env.setMaxDatabases(20);
-//   env.open(temp.path().c_str(), MDB_CREATE, 0644);
+//   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
 //   WriteTransaction txn1(env);
 //   WriteTransaction txn2{std::move(txn1)};
@@ -427,9 +253,7 @@ TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 // TEST_CASE("Database - constructor opens database", "[lmdb][database]")
 // {
 //   TempDir temp;
-//   auto env = Environment{};
-//   env.setMaxDatabases(20);
-//   env.open(temp.path().c_str(), MDB_CREATE, 0644);
+//   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
 //   WriteTransaction parentTxn(env);
 //   WriteTransaction dbTxn(&parentTxn);  // Nested transaction
@@ -450,9 +274,7 @@ TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 // TEST_CASE("Database::Reader - begin and end", "[lmdb][database][reader]")
 // {
 //   TempDir temp;
-//   auto env = Environment{};
-//   env.setMaxDatabases(20);
-//   env.open(temp.path().c_str(), MDB_CREATE, 0644);
+//   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
 //   WriteTransaction parentTxn(env);
 //   WriteTransaction dbTxn(&parentTxn);
@@ -498,9 +320,7 @@ TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 // TEST_CASE("Database::Reader - operator[]", "[lmdb][database][reader]")
 // {
 //   TempDir temp;
-//   auto env = Environment{};
-//   env.setMaxDatabases(20);
-//   env.open(temp.path().c_str(), MDB_CREATE, 0644);
+//   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
 //   WriteTransaction parentTxn(env);
 //   WriteTransaction dbTxn(&parentTxn);
@@ -540,9 +360,7 @@ TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 // TEST_CASE("Database::Reader::Iterator - copy constructor", "[lmdb][database][reader]")
 // {
 //   TempDir temp;
-//   auto env = Environment{};
-//   env.setMaxDatabases(20);
-//   env.open(temp.path().c_str(), MDB_CREATE, 0644);
+//   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
 //   WriteTransaction parentTxn(env);
 //   WriteTransaction dbTxn(&parentTxn);
@@ -567,9 +385,7 @@ TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 // TEST_CASE("Database::Reader::Iterator - move constructor", "[lmdb][database][reader]")
 // {
 //   TempDir temp;
-//   auto env = Environment{};
-//   env.setMaxDatabases(20);
-//   env.open(temp.path().c_str(), MDB_CREATE, 0644);
+//   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
 //   WriteTransaction parentTxn(env);
 //   WriteTransaction dbTxn(&parentTxn);
@@ -593,9 +409,7 @@ TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 // TEST_CASE("Database::Reader::Iterator - dereference", "[lmdb][database][reader]")
 // {
 //   TempDir temp;
-//   auto env = Environment{};
-//   env.setMaxDatabases(20);
-//   env.open(temp.path().c_str(), MDB_CREATE, 0644);
+//   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
 //   WriteTransaction parentTxn(env);
 //   WriteTransaction dbTxn(&parentTxn);

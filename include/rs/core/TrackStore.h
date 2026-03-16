@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #pragma once
 
@@ -22,6 +8,8 @@
 #include <rs/utility/TaggedInteger.h>
 
 #include <boost/iterator/transform_iterator.hpp>
+#include <optional>
+#include <span>
 #include <vector>
 
 namespace rs::core
@@ -31,7 +19,7 @@ namespace rs::core
    * TrackStore - Binary storage for tracks using TrackLayout.
    *
    * Uses a simple LMDB database with:
-   * - Key: uint64_t track ID
+   * - Key: uint32_t track ID
    * - Value: TrackHeader + payload (variable length)
    */
   class TrackStore
@@ -40,7 +28,7 @@ namespace rs::core
     struct IdTag
     {};
 
-    using Id = utility::TaggedInteger<std::uint64_t, IdTag>;
+    using Id = utility::TaggedInteger<std::uint32_t, IdTag>;
 
     class Reader;
     class Writer;
@@ -67,9 +55,9 @@ namespace rs::core
 
     /**
      * Get a track by ID.
-     * @return TrackView pointing to the track data, or invalid TrackView if not found
+     * @return TrackView pointing to the track data, or std::nullopt if not found
      */
-    [[nodiscard]] TrackView operator[](Id id) const;
+    [[nodiscard]] std::optional<TrackView> get(Id id) const;
 
   private:
     Reader(lmdb::Database::Reader&& reader);
@@ -111,27 +99,25 @@ namespace rs::core
 
     /**
      * Create a new track from raw binary data.
-     * @param data Pointer to TrackHeader + payload
-     * @param size Size of the data
+     * @param data TrackHeader + payload
      * @return Pair of (track ID, TrackView pointing to stored data)
      */
-    [[nodiscard]] std::pair<Id, TrackView> create(void const* data, std::size_t size);
+    [[nodiscard]] std::pair<Id, TrackView> create(std::span<std::byte const> data);
 
     /**
      * Update an existing track.
      * @param id Track ID to update
-     * @param data Pointer to new TrackHeader + payload
-     * @param size Size of the data
+     * @param data New TrackHeader + payload
      * @return TrackView pointing to updated data
      */
-    [[nodiscard]] TrackView update(Id id, void const* data, std::size_t size);
+    [[nodiscard]] TrackView update(Id id, std::span<std::byte const> data);
 
     bool del(Id id);
 
     /**
      * Get a track by ID.
      */
-    [[nodiscard]] TrackView operator[](Id id) const;
+    [[nodiscard]] std::optional<TrackView> get(Id id) const;
 
   private:
     explicit Writer(lmdb::Database::Writer&& writer);

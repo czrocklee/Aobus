@@ -1,23 +1,10 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
+
+#include <rs/expr/PlanEvaluator.h>
 
 #include <algorithm>
 #include <cstring>
-#include <rs/expr/PlanEvaluator.h>
 
 namespace rs::expr
 {
@@ -27,13 +14,7 @@ namespace rs::expr
 
   namespace
   {
-    // Helper to check if track has a tag ID
-    [[maybe_unused]] bool trackHasTagId(core::TrackView const& track, core::DictionaryId tagId)
-    {
-      return track.tags().has(tagId);
-    }
-
-    // Helper to find the previous LoadField instruction
+  // Helper to find the previous LoadField instruction
     Instruction const* findPrevLoadField(std::vector<Instruction> const& instructions, Instruction const* current)
     {
       for (size_t i = 0; i < instructions.size(); ++i)
@@ -59,36 +40,54 @@ namespace rs::expr
   {
     switch (field)
     {
-      case Field::TagBloom:
-        return static_cast<std::int64_t>(track.tags().bloom());
+      // Property fields (@ prefix)
       case Field::DurationMs:
         return static_cast<std::int64_t>(track.property().durationMs());
       case Field::Bitrate:
         return static_cast<std::int64_t>(track.property().bitrate());
       case Field::SampleRate:
         return static_cast<std::int64_t>(track.property().sampleRate());
+      case Field::Channels:
+        return static_cast<std::int64_t>(track.property().channels());
+      case Field::BitDepth:
+        return static_cast<std::int64_t>(track.property().bitDepth());
+      case Field::CodecId:
+        return static_cast<std::int64_t>(track.property().codecId());
+      case Field::Rating:
+        return static_cast<std::int64_t>(track.property().rating());
+
+      // Metadata ID fields
       case Field::ArtistId:
         return static_cast<std::int64_t>(track.metadata().artistId().value());
       case Field::AlbumId:
         return static_cast<std::int64_t>(track.metadata().albumId().value());
       case Field::GenreId:
         return static_cast<std::int64_t>(track.metadata().genreId().value());
+      case Field::AlbumArtistId:
+        return static_cast<std::int64_t>(track.metadata().albumArtistId().value());
+      case Field::CoverArtId:
+        return static_cast<std::int64_t>(track.metadata().coverArtId());
+
+      // Metadata numeric fields
       case Field::Year:
         return static_cast<std::int64_t>(track.metadata().year());
       case Field::TrackNumber:
         return static_cast<std::int64_t>(track.metadata().trackNumber());
-      case Field::CodecId:
-        return static_cast<std::int64_t>(track.property().codecId());
-      case Field::Channels:
-        return static_cast<std::int64_t>(track.property().channels());
-      case Field::BitDepth:
-        return static_cast<std::int64_t>(track.property().bitDepth());
-      case Field::Rating:
-        return static_cast<std::int64_t>(track.property().rating());
+      case Field::TotalTracks:
+        return static_cast<std::int64_t>(track.metadata().totalTracks());
+      case Field::DiscNumber:
+        return static_cast<std::int64_t>(track.metadata().discNumber());
+      case Field::TotalDiscs:
+        return static_cast<std::int64_t>(track.metadata().totalDiscs());
+
+      // Tag fields
+      case Field::TagBloom:
+        return static_cast<std::int64_t>(track.tags().bloom());
       case Field::TagCount:
         return static_cast<std::int64_t>(track.tags().count());
+
       default:
-        // Field::Tag and other unsupported fields return 0
+        // Field::Title, Field::Uri, Field::Tag and other unsupported fields return 0
         return 0;
     }
   }
@@ -263,24 +262,7 @@ namespace rs::expr
           auto stringIdx = _registers[instr.operand];
 
           // Find the LoadField instruction that loads the string field
-          // Search backwards from the current Like instruction
-          Instruction const* prevLoadField = nullptr;
-          for (size_t i = 0; i < plan.instructions.size(); ++i)
-          {
-            if (&plan.instructions[i] == &instr)
-            {
-              // Search backwards for a LoadField
-              for (size_t j = i; j > 0; --j)
-              {
-                if (plan.instructions[j - 1].op == OpCode::LoadField)
-                {
-                  prevLoadField = &plan.instructions[j - 1];
-                  break;
-                }
-              }
-              break;
-            }
-          }
+          Instruction const* prevLoadField = findPrevLoadField(plan.instructions, &instr);
 
           // Load the string from the track if we found the field
           std::string_view fieldStr;

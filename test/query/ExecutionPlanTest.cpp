@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <catch2/catch.hpp>
 
@@ -205,11 +191,26 @@ TEST_CASE("ExecutionPlan - Compile String Constant")
 
 TEST_CASE("ExecutionPlan - Field Enum Values")
 {
-  CHECK(static_cast<std::uint8_t>(Field::TagBloom) == 0);
-  CHECK(static_cast<std::uint8_t>(Field::DurationMs) == 1);
-  CHECK(static_cast<std::uint8_t>(Field::Bitrate) == 2);
-  CHECK(static_cast<std::uint8_t>(Field::SampleRate) == 3);
-  CHECK(static_cast<std::uint8_t>(Field::ArtistId) == 4);
+  // String fields
+  CHECK(static_cast<std::uint8_t>(Field::Title) == 0);
+  CHECK(static_cast<std::uint8_t>(Field::Uri) == 1);
+
+  // Property fields
+  CHECK(static_cast<std::uint8_t>(Field::DurationMs) == 2);
+  CHECK(static_cast<std::uint8_t>(Field::Bitrate) == 3);
+  CHECK(static_cast<std::uint8_t>(Field::SampleRate) == 4);
+
+  // Metadata ID fields
+  CHECK(static_cast<std::uint8_t>(Field::ArtistId) == 9);
+  CHECK(static_cast<std::uint8_t>(Field::AlbumId) == 10);
+
+  // Metadata numeric fields
+  CHECK(static_cast<std::uint8_t>(Field::Year) == 14);
+  CHECK(static_cast<std::uint8_t>(Field::TrackNumber) == 15);
+
+  // Tag fields
+  CHECK(static_cast<std::uint8_t>(Field::TagBloom) == 19);
+  CHECK(static_cast<std::uint8_t>(Field::TagCount) == 20);
 }
 
 TEST_CASE("ExecutionPlan - OpCode Enum Values")

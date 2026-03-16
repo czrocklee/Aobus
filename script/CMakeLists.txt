@@ -71,6 +71,7 @@ set_target_properties(RockStudio PROPERTIES OUTPUT_NAME "RockStudio")
 
 add_executable(rsc
     tool/main.cpp
+    tool/InitCommand.cpp
     tool/ListCommand.cpp
     tool/TrackCommand.cpp
 )

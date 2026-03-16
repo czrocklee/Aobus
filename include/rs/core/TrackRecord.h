@@ -1,19 +1,5 @@
-/*
- * Copyright (C) 2025 RockStudio
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
 #pragma once
 
@@ -45,9 +31,8 @@ namespace rs::core
      *
      * @param view The binary track view
      * @param dict Dictionary to resolve artist/album/genre IDs
-     * @param txn Transaction for dictionary lookups
      */
-    TrackRecord(TrackView const& view, Dictionary const& dict, lmdb::ReadTransaction& txn);
+    TrackRecord(TrackView const& view, Dictionary const& dict);
 
     /**
      * Property - Audio file technical properties (@ prefix).
@@ -78,6 +63,9 @@ namespace rs::core
       std::string genre;
       std::uint16_t year = 0;
       std::uint16_t trackNumber = 0;
+      std::uint16_t totalTracks = 0;
+      std::uint16_t discNumber = 0;
+      std::uint16_t totalDiscs = 0;
       std::uint32_t coverArtId = 0; // ResourceStore ID for cover art
     };
 
@@ -92,6 +80,12 @@ namespace rs::core
     Property property;
     Metadata metadata;
     Tags tags;
+
+    // Dictionary IDs - resolved at creation time
+    DictionaryId artistId;
+    DictionaryId albumId;
+    DictionaryId genreId;
+    DictionaryId albumArtistId;
 
     /**
      * Serialize this record to binary format for LMDB storage.

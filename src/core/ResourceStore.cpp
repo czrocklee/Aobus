@@ -1,36 +1,31 @@
-/*
- * Copyright (C) <year> <name of author>
- *
- * This program is free software: you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation, either version 3 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of  MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
- * more details.
- *
- * You should have received a copy of the GNU Lesser General Public License along with
- * this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <boost/uuid/detail/md5.hpp>
-#include <iostream>
 #include <rs/core/ResourceStore.h>
+
+#include <cstdint>
+#include <cstring>
+#include <span>
 
 namespace
 {
-  std::uint64_t hash(boost::asio::const_buffer buffer)
+  // FNV-1a 32-bit hash
+  // Created by Glenn Fowler, Landon Curt Noll, and Peter Vo in 1991
+  // Simple, fast, and good distribution for content-addressable storage
+  std::uint32_t fnv1a(std::span<std::byte const> data)
   {
-    using boost::uuids::detail::md5;
-    md5 hash;
-    md5::digest_type digest;
-    hash.process_bytes(buffer.data(), buffer.size());
-    hash.get_digest(digest);
-    std::uint64_t value;
-    std::memcpy(&value, digest, sizeof(std::uint64_t));
-    return value;
+    constexpr std::uint32_t kFnvOffsetBasis = 2166136261U;
+    constexpr std::uint32_t kFnvPrime = 16777619U;
+
+    std::uint32_t hash = kFnvOffsetBasis;
+
+    for (std::byte b : data)
+    {
+      hash ^= static_cast<std::uint8_t>(b);
+      hash *= kFnvPrime;
+    }
+
+    return hash;
   }
 }
 
@@ -43,29 +38,32 @@ namespace rs::core
     return Writer{_database.reader(txn), _database.writer(txn)};
   }
 
-  std::uint64_t Writer::create(boost::asio::const_buffer buffer)
+  std::uint32_t Writer::create(std::span<std::byte const> buffer)
   {
-    for (std::uint64_t key = hash(buffer); true; ++key) // linear probe
+    for (std::uint32_t key = fnv1a(buffer);; ++key)
     {
-      // std::cout << key << std::endl;
-      boost::asio::const_buffer value = _writer[key];
-      std::cout << key << " : " << value.data() << std::endl;
+      auto optValue = _writer.get(key);
 
-      if (value.data() == nullptr)
+      if (!optValue)
       {
         if (_writer.create(key, buffer) == nullptr)
         {
           throw std::runtime_error("Failed to create resource");
         }
-        // void* data = _writer.create(key, buffer.size());
-        /*   */
-        // std::memcpy(data, buffer.data(), buffer.size());
+
         return key;
       }
 
+      auto& value = *optValue;
       if (value.size() == buffer.size() && std::memcmp(value.data(), buffer.data(), buffer.size()) == 0)
       {
         return key;
+      }
+
+      // Prevent infinite loop (though extremely unlikely with 32-bit hash space)
+      if (key == std::numeric_limits<std::uint32_t>::max())
+      {
+        throw std::runtime_error("Hash table full");
       }
     }
   }
