@@ -13,8 +13,6 @@ using rs::core::ResourceStore;
 using rs::lmdb::Database;
 using rs::lmdb::Environment;
 using rs::lmdb::ReadTransaction;
-using rs::lmdb::test::TempDir;
-using rs::lmdb::test::makeBuffer;
 using rs::lmdb::WriteTransaction;
 
 TEST_CASE("ResourceStore - create and read", "[core][resource]")
@@ -27,7 +25,7 @@ TEST_CASE("ResourceStore - create and read", "[core][resource]")
   wtxn.commit();
 
   // Create a resource
-  auto data = rs::lmdb::test::createStringData("hello");
+  auto data = createStringData("hello");
   auto buffer = makeBuffer(data);
 
   WriteTransaction wtxn2(env);
@@ -53,7 +51,7 @@ TEST_CASE("ResourceStore - delete", "[core][resource]")
   wtxn.commit();
 
   // Create a resource
-  auto data = rs::lmdb::test::createStringData("test");
+  auto data = createStringData("test");
   auto buffer = makeBuffer(data);
 
   WriteTransaction wtxn2(env);
@@ -83,7 +81,7 @@ TEST_CASE("ResourceStore - deduplication", "[core][resource]")
   wtxn.commit();
 
   // Create first resource
-  auto data = rs::lmdb::test::createStringData("samedata");
+  auto data = ::createStringData("samedata");
   auto buffer = makeBuffer(data);
 
   WriteTransaction wtxn2(env);

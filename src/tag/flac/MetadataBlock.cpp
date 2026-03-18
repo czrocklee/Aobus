@@ -4,6 +4,7 @@
 #include "MetadataBlock.h"
 #include <boost/endian/conversion.hpp>
 #include <rs/core/Exception.h>
+#include <rs/utility/ByteView.h>
 #include <string_view>
 
 namespace rs::tag::flac
@@ -77,7 +78,7 @@ namespace rs::tag::flac
     parseString<std::uint32_t>(ptr, end); // description
     ptr += 16;                            // width/height/color depth/color count
     std::string_view blob = parseString<std::uint32_t>(ptr, end);
-    return {reinterpret_cast<std::byte const*>(blob.data()), blob.size()};
+    return utility::asBytes(blob);
   }
 
   MetadataBlockViewIterator::MetadataBlockViewIterator(void const* data, std::size_t size)

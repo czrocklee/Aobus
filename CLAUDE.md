@@ -81,3 +81,30 @@ In final responses:
 2. Explain user-visible or behavior-impacting changes first.
 3. Report what validation was run (or why not run).
 4. Call out risks, assumptions, or follow-up tasks when relevant.
+
+## Btrfs Snapshot Safety Net
+
+Before making multi-file or cross-module edits, create a btrfs snapshot to protect against data loss.
+
+Treat a task as requiring a snapshot when any of the following is true:
+
+1. You expect to modify 2 or more files.
+2. The change touches multiple subsystems (for example core + UI, or parser + tag code).
+3. The task is a refactor, migration, or broad mechanical update.
+
+For these tasks, run the snapshot command **before** your first file edit:
+
+```bash
+# Create snapshot
+btrfs-snap /home/rocklee/dev rockstudio-<description>-$(date +%Y%m%d-%H%M%S)
+
+# Create read-only snapshot
+btrfs-snap /home/rocklee/dev rockstudio-<description>-$(date +%Y%m%d-%H%M%S) -r
+
+# List snapshots
+ls -la /.snapshots/
+```
+
+After creating the snapshot, mention the snapshot name once in your next progress update so recovery points are traceable.
+
+**Important**: Do NOT attempt to restore snapshots yourself. If restoration is needed, ask the user to do it manually.

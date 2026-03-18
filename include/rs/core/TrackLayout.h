@@ -6,7 +6,9 @@
 #include <rs/core/Dictionary.h>
 
 #include <cstdint>
+#include <span>
 #include <string_view>
+#include <rs/utility/ByteView.h>
 #include <vector>
 
 namespace rs::core
@@ -147,10 +149,10 @@ namespace rs::core
 
     TrackView() noexcept : _header(nullptr), _payloadBase(nullptr), _size(0) {}
 
-    TrackView(void const* data, std::size_t size) noexcept
-      : _header(static_cast<TrackHeader const*>(data))
-      , _payloadBase(static_cast<std::uint8_t const*>(data))
-      , _size(size)
+    explicit TrackView(std::span<std::byte const> data) noexcept
+      : _header(utility::as<TrackHeader>(data))
+      , _payloadBase(utility::as<std::uint8_t>(data))
+      , _size(data.size())
     {
     }
 

@@ -36,7 +36,7 @@ namespace rs::core
     {
       return std::nullopt;
     }
-    return TrackView(optBuffer->data(), optBuffer->size());
+    return TrackView(*optBuffer);
   }
 
   // TrackStore::Reader::Iterator implementation
@@ -53,7 +53,7 @@ namespace rs::core
   TrackStore::Reader::Iterator::value_type TrackStore::Reader::Iterator::operator*() const
   {
     auto&& [id, buffer] = *_iter;
-    return {TrackStore::Id{(id)}, TrackView(buffer.data(), buffer.size())};
+    return {TrackStore::Id{(id)}, TrackView(buffer)};
   }
 
   // TrackStore::Writer implementation
@@ -62,13 +62,13 @@ namespace rs::core
   std::pair<TrackStore::Id, TrackView> TrackStore::Writer::create(std::span<std::byte const> data)
   {
     auto [id, buffer] = _writer.append(data);
-    return {TrackStore::Id{id}, TrackView{buffer, data.size()}};
+    return {TrackStore::Id{id}, TrackView{data}};
   }
 
   TrackView TrackStore::Writer::update(Id id, std::span<std::byte const> data)
   {
     auto buffer = _writer.update(id.value(), data);
-    return TrackView(buffer, data.size());
+    return TrackView(data);
   }
 
   bool TrackStore::Writer::del(Id id) { return _writer.del(id.value()); }
@@ -80,7 +80,7 @@ namespace rs::core
     {
       return std::nullopt;
     }
-    return TrackView(optBuffer->data(), optBuffer->size());
+    return TrackView(*optBuffer);
   }
 
 } // namespace rs::core

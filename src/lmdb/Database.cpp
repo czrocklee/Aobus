@@ -4,7 +4,9 @@
 #include "ThrowError.h"
 #include <rs/lmdb/Database.h>
 
+#include <rs/utility/ByteView.h>
 #include <cstring>
+#include <vector>
 #include <lmdb.h>
 
 namespace rs::lmdb
@@ -133,7 +135,7 @@ namespace rs::lmdb
       std::string_view key{static_cast<char const*>(keyValue.mv_data), keyValue.mv_size};
       std::string_view value{static_cast<char const*>(valueBuffer.mv_data), valueBuffer.mv_size};
       _value.first = read<std::uint32_t>(key);
-      _value.second = std::span<std::byte const>{reinterpret_cast<std::byte const*>(value.data()), value.size()};
+      _value.second = utility::asBytes(value);
     }
   }
 
@@ -172,7 +174,7 @@ namespace rs::lmdb
 
   namespace
   {
-    void const* put(MDB_cursor* cursor, std::uint32_t id, std::span<std::byte const> data, unsigned int flags)
+    void put(MDB_cursor* cursor, std::uint32_t id, std::span<std::byte const> data, unsigned int flags, std::vector<std::byte>& out)
     {
       auto keyValue = makeVal(id);
       auto valueBuffer = makeVal(data.data(), data.size());
@@ -181,54 +183,63 @@ namespace rs::lmdb
 
       if (rc == MDB_KEYEXIST)
       {
-        return nullptr;
+        out.clear();
+        return;
       }
-      
+
       throwOnError("mdb_cursor_put", rc);
 
       // Get the actual stored value
       if (mdb_cursor_get(cursor, &keyValue, &valueBuffer, MDB_GET_CURRENT) != MDB_SUCCESS)
       {
-        return nullptr;
+        out.clear();
+        return;
       }
 
-      return valueBuffer.mv_data;
+      out.assign(static_cast<std::byte const*>(valueBuffer.mv_data),
+                 static_cast<std::byte const*>(valueBuffer.mv_data) + valueBuffer.mv_size);
     }
 
-    void* reserve(MDB_cursor* cursor, std::uint32_t id, std::size_t size, unsigned int flags)
+    void reserve(MDB_cursor* cursor, std::uint32_t id, std::size_t size, unsigned int flags, std::vector<std::byte>& out)
     {
       auto keyValue = makeVal(id);
       auto valueBuffer = makeVal(nullptr, size);
       throwOnError("mdb_cursor_put", mdb_cursor_put(cursor, &keyValue, &valueBuffer, flags | MDB_RESERVE));
-      return valueBuffer.mv_data;
+      out.resize(size);
+      std::memcpy(out.data(), valueBuffer.mv_data, size);
     }
   }
 
-  void const* Writer::create(std::uint32_t id, std::span<std::byte const> data)
+  std::span<std::byte const> Writer::create(std::uint32_t id, std::span<std::byte const> data)
   {
-    return put(_cursor.get(), id, data, MDB_NOOVERWRITE);
+    put(_cursor.get(), id, data, MDB_NOOVERWRITE, _lastData);
+    return _lastData;
   }
 
-  void* Writer::create(std::uint32_t id, std::size_t size)
+  std::span<std::byte> Writer::create(std::uint32_t id, std::size_t size)
   {
-    return reserve(_cursor.get(), id, size, MDB_NOOVERWRITE);
+    reserve(_cursor.get(), id, size, MDB_NOOVERWRITE, _lastData);
+    return _lastData;
   }
 
-  std::pair<std::uint32_t, void const*> Writer::append(std::span<std::byte const> data)
+  std::pair<std::uint32_t, std::span<std::byte const>> Writer::append(std::span<std::byte const> data)
   {
     auto id = ++_lastId;
-    return {id, put(_cursor.get(), id, data, MDB_NOOVERWRITE | MDB_APPEND)};
+    put(_cursor.get(), id, data, MDB_NOOVERWRITE | MDB_APPEND, _lastData);
+    return {id, _lastData};
   }
 
-  std::pair<std::uint32_t, void*> Writer::append(std::size_t size)
+  std::pair<std::uint32_t, std::span<std::byte>> Writer::append(std::size_t size)
   {
     auto id = ++_lastId;
-    return {id, reserve(_cursor.get(), id, size, MDB_NOOVERWRITE | MDB_APPEND)};
+    reserve(_cursor.get(), id, size, MDB_NOOVERWRITE | MDB_APPEND, _lastData);
+    return {id, _lastData};
   }
 
-  void const* Writer::update(std::uint32_t id, std::span<std::byte const> data)
+  std::span<std::byte const> Writer::update(std::uint32_t id, std::span<std::byte const> data)
   {
-    return put(_cursor.get(), id, data, 0);
+    put(_cursor.get(), id, data, 0, _lastData);
+    return _lastData;
   }
 
   bool Writer::del(std::uint32_t id)

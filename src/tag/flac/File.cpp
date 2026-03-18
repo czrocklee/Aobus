@@ -5,6 +5,7 @@
 #include "MetadataBlock.h"
 #include <rs/core/Exception.h>
 #include <rs/tag/flac/File.h>
+#include <rs/utility/ByteView.h>
 
 #include <boost/algorithm/string/compare.hpp>
 
@@ -33,8 +34,9 @@ namespace rs::tag::flac
     {
       void operator()(Metadata& meta, std::span<std::byte const> buffer)
       {
-        char const* begin = reinterpret_cast<char const*>(buffer.data());
-        char const* end = begin + buffer.size();
+        auto str = utility::asString(buffer);
+        auto const* begin = str.data();
+        auto const* end = begin + str.size();
 
         if (auto iter = std::find(begin, end, '/'); iter != end)
         {
@@ -43,7 +45,7 @@ namespace rs::tag::flac
         }
         else
         {
-          meta.set(PrimaryField, Decoder::decode(begin, buffer.size()));
+          meta.set(PrimaryField, Decoder::decode(begin, str.size()));
         }
       }
     };
@@ -100,8 +102,7 @@ namespace rs::tag::flac
 
               if (auto iter = MetadataSetters.find(key); iter != MetadataSetters.end())
               {
-                std::invoke(iter->second, metadata,
-                            std::span<std::byte const>{reinterpret_cast<std::byte const*>(value.data()), value.size()});
+                std::invoke(iter->second, metadata, utility::asBytes(value));
               }
               else
               {

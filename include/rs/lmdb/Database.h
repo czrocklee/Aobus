@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <vector>
 #include <rs/lmdb/Transaction.h>
 
 namespace rs::lmdb
@@ -79,11 +80,11 @@ namespace rs::lmdb
     Writer(Writer&&) noexcept;
     ~Writer();
 
-    [[nodiscard]] void const* create(std::uint32_t id, std::span<std::byte const> data);
-    [[nodiscard]] void* create(std::uint32_t id, std::size_t size);
-    [[nodiscard]] std::pair<std::uint32_t, void const*> append(std::span<std::byte const> data);
-    [[nodiscard]] std::pair<std::uint32_t, void*> append(std::size_t size);
-    [[nodiscard]] void const* update(std::uint32_t id, std::span<std::byte const> data);
+    [[nodiscard]] std::span<std::byte const> create(std::uint32_t id, std::span<std::byte const> data);
+    [[nodiscard]] std::span<std::byte> create(std::uint32_t id, std::size_t size);
+    [[nodiscard]] std::pair<std::uint32_t, std::span<std::byte const>> append(std::span<std::byte const> data);
+    [[nodiscard]] std::pair<std::uint32_t, std::span<std::byte>> append(std::size_t size);
+    [[nodiscard]] std::span<std::byte const> update(std::uint32_t id, std::span<std::byte const> data);
     bool del(std::uint32_t id);
     [[nodiscard]] std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
 
@@ -98,6 +99,7 @@ namespace rs::lmdb
     WriteTransaction& _txn;
     std::unique_ptr<MDB_cursor, CursorDeleter> _cursor;
     std::uint32_t _lastId = UINT32_MAX;
+    std::vector<std::byte> _lastData;
     friend class Database;
   };
 

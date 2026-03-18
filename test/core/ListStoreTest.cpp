@@ -19,7 +19,6 @@ using rs::core::ListView;
 using rs::lmdb::Database;
 using rs::lmdb::Environment;
 using rs::lmdb::ReadTransaction;
-using rs::lmdb::test::TempDir;
 using rs::lmdb::WriteTransaction;
 
 TEST_CASE("ListStore - create and read", "[core][list]")

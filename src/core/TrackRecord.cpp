@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <rs/core/TrackRecord.h>
+#include <rs/utility/ByteView.h>
 
 namespace rs::core
 {
@@ -126,24 +127,24 @@ namespace rs::core
     h.tagsOffset = tagsOffset;
 
     // Write header
-    auto* headerPtr = reinterpret_cast<std::byte const*>(&h);
-    data.insert(data.end(), headerPtr, headerPtr + sizeof(TrackHeader));
+    auto headerBytes = utility::toBytes(h);
+    data.insert(data.end(), headerBytes.begin(), headerBytes.end());
 
     // Write tags first: 4-byte tag IDs
     for (auto tagId : tags.ids)
     {
-      auto* idPtr = reinterpret_cast<std::byte const*>(&tagId);
-      data.insert(data.end(), idPtr, idPtr + sizeof(std::uint32_t));
+      auto idBytes = utility::toBytes(tagId);
+      data.insert(data.end(), idBytes.begin(), idBytes.end());
     }
 
     // Write title
-    auto* titlePtr = reinterpret_cast<std::byte const*>(metadata.title.data());
-    data.insert(data.end(), titlePtr, titlePtr + metadata.title.size());
+    auto titleBytes = utility::asBytes(metadata.title);
+    data.insert(data.end(), titleBytes.begin(), titleBytes.end());
     data.push_back(static_cast<std::byte>('\0'));
 
     // Write uri
-    auto* uriPtr = reinterpret_cast<std::byte const*>(metadata.uri.data());
-    data.insert(data.end(), uriPtr, uriPtr + metadata.uri.size());
+    auto uriBytes = utility::asBytes(metadata.uri);
+    data.insert(data.end(), uriBytes.begin(), uriBytes.end());
     data.push_back(static_cast<std::byte>('\0'));
 
     return data;

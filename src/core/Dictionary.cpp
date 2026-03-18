@@ -3,6 +3,7 @@
 
 #include <rs/core/Dictionary.h>
 
+#include <rs/utility/ByteView.h>
 #include <span>
 #include <string_view>
 
@@ -18,7 +19,7 @@ namespace rs::core
 
     for (auto [id, buf] : _database.reader(txn))
     {
-      std::string_view str{reinterpret_cast<char const*>(buf.data()), buf.size()};
+      std::string_view str = utility::asString(buf);
       _idToStringStorage.emplace_back(str);
       _stringToId.emplace(_idToStringStorage.back(), DictionaryId{id});
     }
@@ -34,9 +35,9 @@ namespace rs::core
 
     // Not found in memory - append to database
     auto writer = _database.writer(txn);
-    std::span<std::byte const> data{reinterpret_cast<std::byte const*>(value.data()), value.size()};
-    auto [id, ptr] = writer.append(data);
-    std::string_view str{static_cast<char const*>(ptr), value.size()};
+    auto data = utility::asBytes(value);
+    auto [id, result] = writer.append(data);
+    std::string_view str = utility::asString(result);
     _idToStringStorage.emplace_back(str);
     _stringToId.emplace(_idToStringStorage.back(), DictionaryId{id});
     return DictionaryId{id};

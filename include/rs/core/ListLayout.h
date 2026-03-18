@@ -4,7 +4,9 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string_view>
+#include <rs/utility/ByteView.h>
 
 namespace rs::core
 {
@@ -53,10 +55,10 @@ namespace rs::core
   public:
     ListView() noexcept : _header(nullptr), _payloadBase(nullptr), _size(0) {}
 
-    ListView(void const* data, std::size_t size) noexcept
-      : _header(static_cast<ListHeader const*>(data))
-      , _payloadBase(static_cast<std::uint8_t const*>(data))
-      , _size(size)
+    explicit ListView(std::span<std::byte const> data) noexcept
+      : _header(utility::as<ListHeader>(data))
+      , _payloadBase(utility::as<std::uint8_t>(data))
+      , _size(data.size())
     {
     }
 

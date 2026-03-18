@@ -46,7 +46,8 @@ namespace rs::core
 
       if (!optValue)
       {
-        if (_writer.create(key, buffer) == nullptr)
+        auto result = _writer.create(key, buffer);
+        if (result.empty())
         {
           throw std::runtime_error("Failed to create resource");
         }

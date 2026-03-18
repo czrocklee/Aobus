@@ -34,7 +34,7 @@ namespace rs::core
     {
       return std::nullopt;
     }
-    return ListView(optBuffer->data(), optBuffer->size());
+    return ListView(*optBuffer);
   }
 
   // Iterator implementation
@@ -51,7 +51,7 @@ namespace rs::core
   ListStore::Reader::Iterator::value_type ListStore::Reader::Iterator::operator*() const
   {
     auto&& [id, buffer] = *_iter;
-    return {Id{id}, ListView(buffer.data(), buffer.size())};
+    return {Id{id}, ListView(buffer)};
   }
 
   // Writer implementation
@@ -60,13 +60,13 @@ namespace rs::core
   std::pair<ListStore::Id, ListView> ListStore::Writer::create(std::span<std::byte const> data)
   {
     auto [id, buffer] = _writer.append(data);
-    return {Id{id}, ListView(buffer, data.size())};
+    return {Id{id}, ListView{buffer}};
   }
 
   ListView ListStore::Writer::update(Id id, std::span<std::byte const> data)
   {
     auto buffer = _writer.update(id.value(), data);
-    return ListView(buffer, data.size());
+    return ListView{data};
   }
 
   bool ListStore::Writer::del(Id id) { return _writer.del(id.value()); }
@@ -78,7 +78,7 @@ namespace rs::core
     {
       return std::nullopt;
     }
-    return ListView(optBuffer->data(), optBuffer->size());
+    return ListView(*optBuffer);
   }
 
 } // namespace rs::core

@@ -3,8 +3,12 @@ cmake_minimum_required(VERSION 3.30)
 project(rockstudio)
 set (CMAKE_CXX_STANDARD 20)
 
-# Strict compiler warnings
-add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+# Strict compiler warnings (disable -Werror when using sanitizers)
+if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+else()
+  add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(lmdb REQUIRED)
@@ -89,7 +93,9 @@ add_executable(rs_test
     test/core/ResourceStoreTest.cpp
     test/core/TrackStoreTest.cpp
     test/core/ListStoreTest.cpp
-    test/lmdb/LmdbTest.cpp
+    test/lmdb/EnvironmentTest.cpp
+    test/lmdb/TransactionTest.cpp
+    test/lmdb/DatabaseTest.cpp
 )
 target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(rs_test PRIVATE rs Catch2)

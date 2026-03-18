@@ -3,6 +3,7 @@
 
 #include <catch2/catch.hpp>
 
+#include <span>
 #include <rs/core/ListLayout.h>
 #include <test/core/TestUtils.h>
 
@@ -92,7 +93,7 @@ namespace
   TEST_CASE("ListView - Construct from Data")
   {
     auto data = createListData();
-    ListView view(data.data(), data.size());
+    ListView view(std::as_bytes(std::span{data}));
 
     CHECK(view.isValid() == true);
     CHECK(view.header() != nullptr);
@@ -101,7 +102,7 @@ namespace
   TEST_CASE("ListView - Field Accessors")
   {
     auto data = createListData(42, 1, 2, 3, 5);
-    ListView view(data.data(), data.size());
+    ListView view(std::as_bytes(std::span{data}));
 
     CHECK(view.trackIdsCount() == 42);
     CHECK(view.nameId() == 1);
@@ -113,7 +114,7 @@ namespace
   TEST_CASE("ListView - Name Accessor")
   {
     auto data = createListData(5, 0, 0, 0, 0, "My Playlist");
-    ListView view(data.data(), data.size());
+    ListView view(std::as_bytes(std::span{data}));
 
     CHECK(view.name() == "My Playlist");
   }
@@ -121,7 +122,7 @@ namespace
   TEST_CASE("ListView - Empty Name")
   {
     auto data = createListData(0, 0, 0, 0, 0, "");
-    ListView view(data.data(), data.size());
+    ListView view(std::as_bytes(std::span{data}));
 
     CHECK(view.name().empty());
   }
@@ -129,19 +130,21 @@ namespace
   TEST_CASE("ListView - Invalid Data")
   {
     // Null data
-    ListView nullView(nullptr, 100);
+    std::span<std::byte const> nullSpan{static_cast<std::byte const*>(nullptr), 100};
+    ListView nullView(nullSpan);
     CHECK(nullView.isValid() == false);
 
     // Too small
     char smallData[10] = {};
-    ListView smallView(smallData, sizeof(smallData));
+    std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
+    ListView smallView(smallSpan);
     CHECK(smallView.isValid() == false);
   }
 
   TEST_CASE("ListView - Zero Values")
   {
     auto data = createListData(0, 0, 0, 0, 0);
-    ListView view(data.data(), data.size());
+    ListView view(std::as_bytes(std::span{data}));
 
     CHECK(view.trackIdsCount() == 0);
     CHECK(view.nameId() == 0);
@@ -154,7 +157,7 @@ namespace
   TEST_CASE("ListView - Large Values")
   {
     auto data = createListData(0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF);
-    ListView view(data.data(), data.size());
+    ListView view(std::as_bytes(std::span{data}));
 
     CHECK(view.trackIdsCount() == 0xFFFFFFFFFFFFFFFFULL);
     CHECK(view.nameId() == 0xFFFFFFFF);

@@ -3,6 +3,7 @@
 
 #include <catch2/catch.hpp>
 
+#include <span>
 #include <rs/core/Dictionary.h>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/TrackRecord.h>
@@ -75,7 +76,7 @@ namespace
       header->fileSize = 1000000;
       header->mtime = 1234567890;
 
-      _view = rs::core::TrackView{_data.data(), _data.size()};
+      _view = rs::core::TrackView{std::as_bytes(std::span{_data})};
     }
 
     rs::core::TrackView& view() { return _view; }
@@ -94,7 +95,6 @@ using rs::core::DictionaryId;
 using rs::lmdb::Database;
 using rs::lmdb::Environment;
 using rs::lmdb::ReadTransaction;
-using rs::lmdb::test::TempDir;
 using rs::lmdb::WriteTransaction;
 using namespace rs::expr;
 
@@ -519,7 +519,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   data.push_back('\0'); // empty title
   data.push_back('\0'); // empty uri
 
-  rs::core::TrackView view(data.data(), data.size());
+  rs::core::TrackView view(std::as_bytes(std::span{data}));
 
   // Bloom filter rejects because query mask doesn't match track bloom
   auto result = evaluator.matches(plan, view);
@@ -544,7 +544,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
   data.push_back('\0'); // empty title
   data.push_back('\0'); // empty uri
 
-  rs::core::TrackView view(data.data(), data.size());
+  rs::core::TrackView view(std::as_bytes(std::span{data}));
 
   // With mask 0, bloom check passes (no filtering), falls through to full eval
   auto result = evaluator.matches(plan, view);

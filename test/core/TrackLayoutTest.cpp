@@ -3,6 +3,7 @@
 
 #include <catch2/catch.hpp>
 
+#include <span>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/TrackRecord.h>
 #include <test/core/TestUtils.h>
@@ -121,7 +122,7 @@ namespace
   TEST_CASE("TrackView - Construct from Data")
   {
     auto data = createMinimalData();
-    TrackView view(data.data(), data.size());
+    TrackView view(std::as_bytes(std::span{data}));
 
     CHECK(view.isValid() == true);
     CHECK(view.header() != nullptr);
@@ -130,7 +131,7 @@ namespace
   TEST_CASE("TrackView - Fixed Field Accessors")
   {
     auto data = createMinimalData();
-    TrackView view(data.data(), data.size());
+    TrackView view(std::as_bytes(std::span{data}));
 
     auto prop = view.property();
     auto meta = view.metadata();
@@ -156,7 +157,7 @@ namespace
   TEST_CASE("TrackView - String Accessors")
   {
     auto data = createTrackWithStrings("Test Title", "/path/to/file.flac");
-    TrackView view(data.data(), data.size());
+    TrackView view(std::as_bytes(std::span{data}));
 
     CHECK(view.isValid() == true);
     CHECK(view.metadata().title() == "Test Title");
@@ -166,7 +167,7 @@ namespace
   TEST_CASE("TrackView - Empty String Handling")
   {
     auto data = createMinimalData();
-    TrackView view(data.data(), data.size());
+    TrackView view(std::as_bytes(std::span{data}));
 
     // Empty strings should return empty string_view
     CHECK(view.metadata().title().empty());
@@ -176,12 +177,14 @@ namespace
   TEST_CASE("TrackView - Invalid Data")
   {
     // Null data
-    TrackView nullView(nullptr, 100);
+    std::span<std::byte const> nullSpan{static_cast<std::byte const*>(nullptr), 100};
+    TrackView nullView(nullSpan);
     CHECK(nullView.isValid() == false);
 
     // Too small
     char smallData[10] = {};
-    TrackView smallView(smallData, sizeof(smallData));
+    std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
+    TrackView smallView(smallSpan);
     CHECK(smallView.isValid() == false);
 
     // Empty
@@ -192,7 +195,7 @@ namespace
   TEST_CASE("TrackView - Payload Access")
   {
     auto data = createTrackWithStrings("Hello", "/world");
-    TrackView view(data.data(), data.size());
+    TrackView view(std::as_bytes(std::span{data}));
 
     auto payload = view.payload();
     CHECK(payload.size() > 0);
@@ -207,14 +210,14 @@ namespace
 
     auto data = serializeHeader(h);
 
-    TrackView view(data.data(), data.size());
+    TrackView view(std::as_bytes(std::span{data}));
     CHECK(view.tags().bloom() == 0xCAFE);
   }
 
   TEST_CASE("TrackView - Tag Accessors - No Tags")
   {
     auto data = createTrackWithStrings("Test", "/path/to/file.flac");
-    TrackView view(data.data(), data.size());
+    TrackView view(std::as_bytes(std::span{data}));
 
     CHECK(view.tags().count() == 0);
     CHECK(view.tags().id(0) == 0);
@@ -266,7 +269,7 @@ namespace
     data.insert(data.end(), reinterpret_cast<char const*>(&tag1), reinterpret_cast<char const*>(&tag1 + 1));
     data.insert(data.end(), reinterpret_cast<char const*>(&tag2), reinterpret_cast<char const*>(&tag2 + 1));
 
-    TrackView view(data.data(), data.size());
+    TrackView view(std::as_bytes(std::span{data}));
 
     CHECK(view.tags().count() == 2);
     CHECK(view.tags().id(0) == 10);
