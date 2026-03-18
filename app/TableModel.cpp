@@ -5,6 +5,7 @@
 #include <QtCore/QDebug>
 #include <boost/algorithm/string/join.hpp>
 #include <iostream>
+#include <ranges>
 
 // using IdTrackPair = TableModel::IdTrackPair;
 using AbstractTrackList = TableModel::AbstractTrackList;
@@ -67,7 +68,7 @@ public:
   AbstractTrackList& tracks;
 };
 
-TableModel::TableModel(QObject* parent) : QAbstractTableModel(parent) {}
+TableModel::TableModel(QObject* parent) : QAbstractTableModel{parent} {}
 
 TableModel::TableModel(AbstractTrackList& tracks, QObject* parent)
   : QAbstractTableModel{parent}
@@ -107,11 +108,8 @@ QVariant TableModel::data(QModelIndex const& index, int role) const
       return QString::fromUtf8(track.meta->title.c_str());
     else if (index.column() == 3)
     {
-      QStringList tags;
-      std::transform(track.tags.begin(), track.tags.end(), std::back_inserter(tags), [](auto const& tag) {
-        return QString::fromUtf8(tag.c_str());
-      });
-      return tags;
+      auto tagViews = track.tags | std::views::transform([](auto const& tag) { return QString::fromUtf8(tag.c_str()); });
+      return QStringList{tagViews.begin(), tagViews.end()};
     }
   }
 

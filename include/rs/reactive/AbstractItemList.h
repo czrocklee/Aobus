@@ -23,9 +23,9 @@ namespace rs::reactive
 
     virtual ~AbstractItemList() = default;
 
-    [[nodiscard]] virtual std::size_t size() const = 0;
+    virtual std::size_t size() const = 0;
 
-    [[nodiscard]] virtual Value const& at(Index idx) const = 0;
+    virtual Value const& at(Index idx) const = 0;
 
     virtual void attach(Observer& observer) = 0;
 

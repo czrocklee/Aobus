@@ -3,7 +3,7 @@
 
 #define BOOST_SPIRIT_X3_UNICODE
 
-#include <rs/core/Exception.h>
+#include <rs/Exception.h>
 #include <rs/expr/Parser.h>
 #include <rs/expr/Serializer.h>
 
@@ -110,7 +110,7 @@ namespace rs::expr
     }
     else
     {
-      RS_THROW_FORMAT(core::Exception, "parsing {} error from [{}]", expr, std::string{iter, end});
+      RS_THROW_FORMAT(rs::Exception, "parsing {} error from [{}]", expr, std::string{iter, end});
     }
   }
 }

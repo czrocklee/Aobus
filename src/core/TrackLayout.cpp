@@ -40,7 +40,7 @@ namespace rs::core
   // TrackView private implementation
   std::string_view TrackView::getString(std::uint16_t offset, std::uint16_t len) const
   {
-    if (len == 0) return {};
+    if (len == 0) { return {}; };
 
     std::size_t const start = sizeof(TrackHeader) + offset;
     if (start + len > _size)

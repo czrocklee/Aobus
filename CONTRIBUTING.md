@@ -55,9 +55,10 @@ This guide covers C++ coding conventions for RockStudio contributors.
 
 ### 2.6 Types
 
-2.6.1. Use `std::` for integer types: `std::int32_t`, `std::uint64_t`
+2.6.1. Use `std::` for integer types: `std::int32_t`, `std::uint64_t`, avoid `int`, `unsigned`. 
 2.6.2. Prefer `std::string` over `char*`
 2.6.3. Use `std::string_view` for string parameters that don't own data
+
 
 ## 3. Modern C++ Features
 
@@ -79,7 +80,7 @@ This guide covers C++ coding conventions for RockStudio contributors.
 3.2.3. std::string_view: Non-owning string parameters
 3.2.4. if constexpr: Compile-time branch elimination
 3.2.5. Structured bindings: `auto [key, value] : map`
-3.2.6. Init statement: `if (auto&& var = get(); condition)`
+3.2.6. Init statement: `if (auto var = get(); condition)`
 
 ### 3.3 C++11 Features (Preferred)
 
@@ -87,6 +88,8 @@ This guide covers C++ coding conventions for RockStudio contributors.
 3.3.2. [[nodiscard]]: Mark functions that must not ignore return values
 3.3.3. [[maybe_unused]]: Suppress unused warnings
 3.3.4. noexcept: Mark functions that won't throw
+3.3.5. Prefer uniform initialization `{}` over parentheses `()`:
+
 
 ## 4. Best Practices
 

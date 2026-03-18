@@ -192,17 +192,6 @@ namespace
     CHECK(emptyView.isValid() == false);
   }
 
-  TEST_CASE("TrackView - Payload Access")
-  {
-    auto data = createTrackWithStrings("Hello", "/world");
-    TrackView view(std::as_bytes(std::span{data}));
-
-    auto payload = view.payload();
-    CHECK(payload.size() > 0);
-    // Payload should contain "Hello\0/world\0"
-    CHECK(payload.find("Hello") != std::string_view::npos);
-  }
-
   TEST_CASE("TrackView - Tag Bloom")
   {
     TrackHeader h{};

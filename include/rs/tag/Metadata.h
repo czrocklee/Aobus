@@ -28,11 +28,11 @@ namespace rs::tag
   class Metadata final
   {
   public:
-    [[nodiscard]] ValueType const& get(MetaField field) const { return _fields[static_cast<std::size_t>(field)]; }
+    ValueType const& get(MetaField field) const { return _fields[static_cast<std::size_t>(field)]; }
 
     void set(MetaField field, ValueType value) { _fields[static_cast<std::size_t>(field)] = std::move(value); }
 
-    [[nodiscard]] ValueType const& getCustom(std::string_view field) const
+    ValueType const& getCustom(std::string_view field) const
     {
       if (auto iter = _customFields.find(field); iter != _customFields.end())
       {

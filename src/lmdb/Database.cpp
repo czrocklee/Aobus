@@ -14,18 +14,18 @@ namespace rs::lmdb
   namespace
   {
     template<typename T>
-    [[nodiscard]] MDB_val makeVal(T const& value)
+    MDB_val makeVal(T const& value)
     {
       return {sizeof(T), const_cast<T*>(&value)};
     }
 
-    [[nodiscard]] inline MDB_val makeVal(void const* data, std::size_t size)
+    inline MDB_val makeVal(void const* data, std::size_t size)
     {
       return {size, const_cast<void*>(data)};
     }
 
     template<typename T>
-    [[nodiscard]] T read(std::string_view bytes)
+    T read(std::string_view bytes)
     {
       if (bytes.size() != sizeof(T))
       {

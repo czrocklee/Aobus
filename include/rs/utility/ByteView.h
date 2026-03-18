@@ -13,40 +13,40 @@ namespace rs::utility
 {
   // Cast span<byte> to pointer of type T (for deserialization)
   template<typename T>
-  [[nodiscard]] constexpr T const* as(std::span<std::byte const> span) noexcept
+  constexpr T const* as(std::span<std::byte const> span) noexcept
   {
     return reinterpret_cast<T const*>(span.data());
   }
 
   // Cast typed pointer with offset (e.g., uint8_t* + offset -> T const*)
   template<typename T, typename Base>
-  [[nodiscard]] constexpr T const* as(Base const* base, std::size_t offset) noexcept
+  constexpr T const* as(Base const* base, std::size_t offset) noexcept
   {
     return reinterpret_cast<T const*>(reinterpret_cast<std::uint8_t const*>(base) + offset);
   }
 
   // Cast pointer to span<byte> (for serialization)
   template<typename T>
-  [[nodiscard]] constexpr std::span<std::byte const> asBytes(T const* ptr, std::size_t count = 1) noexcept
+  constexpr std::span<std::byte const> asBytes(T const* ptr, std::size_t count = 1) noexcept
   {
     return {reinterpret_cast<std::byte const*>(ptr), count * sizeof(T)};
   }
 
   // Get bytes span from a single object
   template<typename T>
-  [[nodiscard]] constexpr std::span<std::byte const> toBytes(T const& obj) noexcept
+  constexpr std::span<std::byte const> toBytes(T const& obj) noexcept
   {
     return asBytes(std::addressof(obj));
   }
 
   // Get bytes span from string_view
-  [[nodiscard]] inline std::span<std::byte const> asBytes(std::string_view str) noexcept
+  inline std::span<std::byte const> asBytes(std::string_view str) noexcept
   {
     return asBytes(str.data(), str.size());
   }
 
   // Get string_view from span<byte>
-  [[nodiscard]] inline std::string_view asString(std::span<std::byte const> span) noexcept
+  inline std::string_view asString(std::span<std::byte const> span) noexcept
   {
     return {reinterpret_cast<char const*>(span.data()), span.size()};
   }

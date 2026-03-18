@@ -3,12 +3,13 @@
 
 #pragma once
 
+#include <rs/Exception.h>
 #include <rs/core/Dictionary.h>
 
 #include <cstdint>
+#include <rs/utility/ByteView.h>
 #include <span>
 #include <string_view>
-#include <rs/utility/ByteView.h>
 #include <vector>
 
 namespace rs::core
@@ -87,21 +88,20 @@ namespace rs::core
     class PropertyProxy
     {
     public:
-      explicit PropertyProxy(TrackView const& track) : _h(*track.header()), _track(track) {}
+      explicit PropertyProxy(TrackView const& track) : _track(track) {}
 
-      [[nodiscard]] std::uint32_t durationMs() const noexcept { return _h.durationMs; }
-      [[nodiscard]] std::uint32_t bitrate() const noexcept { return _h.bitrate; }
-      [[nodiscard]] std::uint32_t sampleRate() const noexcept { return _h.sampleRate; }
-      [[nodiscard]] std::uint8_t channels() const noexcept { return _h.channels; }
-      [[nodiscard]] std::uint8_t bitDepth() const noexcept { return _h.bitDepth; }
-      [[nodiscard]] std::uint8_t rating() const noexcept { return _h.rating; }
-      [[nodiscard]] std::uint64_t fileSize() const noexcept { return _h.fileSize; }
-      [[nodiscard]] std::uint64_t mtime() const noexcept { return _h.mtime; }
-      [[nodiscard]] std::uint16_t codecId() const noexcept { return _h.codecId; }
-      [[nodiscard]] std::string_view uri() const { return _track.uri(); }
+      std::uint32_t durationMs() const noexcept { return _track.header()->durationMs; }
+      std::uint32_t bitrate() const noexcept { return _track.header()->bitrate; }
+      std::uint32_t sampleRate() const noexcept { return _track.header()->sampleRate; }
+      std::uint8_t channels() const noexcept { return _track.header()->channels; }
+      std::uint8_t bitDepth() const noexcept { return _track.header()->bitDepth; }
+      std::uint8_t rating() const noexcept { return _track.header()->rating; }
+      std::uint64_t fileSize() const noexcept { return _track.header()->fileSize; }
+      std::uint64_t mtime() const noexcept { return _track.header()->mtime; }
+      std::uint16_t codecId() const noexcept { return _track.header()->codecId; }
+      std::string_view uri() const { return _track.uri(); }
 
     private:
-      TrackHeader const& _h;
       TrackView const& _track;
     };
 
@@ -113,17 +113,17 @@ namespace rs::core
     public:
       explicit MetadataProxy(TrackView const& track) : _track(track) {}
 
-      [[nodiscard]] std::string_view title() const { return _track.title(); }
-      [[nodiscard]] DictionaryId artistId() const noexcept { return _track.header()->artistId; }
-      [[nodiscard]] DictionaryId albumId() const noexcept { return _track.header()->albumId; }
-      [[nodiscard]] DictionaryId genreId() const noexcept { return _track.header()->genreId; }
-      [[nodiscard]] DictionaryId albumArtistId() const noexcept { return _track.header()->albumArtistId; }
-      [[nodiscard]] std::uint32_t coverArtId() const noexcept { return _track.header()->coverArtId; }
-      [[nodiscard]] std::uint16_t year() const noexcept { return _track.header()->year; }
-      [[nodiscard]] std::uint16_t trackNumber() const noexcept { return _track.header()->trackNumber; }
-      [[nodiscard]] std::uint16_t totalTracks() const noexcept { return _track.header()->totalTracks; }
-      [[nodiscard]] std::uint16_t discNumber() const noexcept { return _track.header()->discNumber; }
-      [[nodiscard]] std::uint16_t totalDiscs() const noexcept { return _track.header()->totalDiscs; }
+      std::string_view title() const { return _track.title(); }
+      DictionaryId artistId() const noexcept { return _track.header()->artistId; }
+      DictionaryId albumId() const noexcept { return _track.header()->albumId; }
+      DictionaryId genreId() const noexcept { return _track.header()->genreId; }
+      DictionaryId albumArtistId() const noexcept { return _track.header()->albumArtistId; }
+      std::uint32_t coverArtId() const noexcept { return _track.header()->coverArtId; }
+      std::uint16_t year() const noexcept { return _track.header()->year; }
+      std::uint16_t trackNumber() const noexcept { return _track.header()->trackNumber; }
+      std::uint16_t totalTracks() const noexcept { return _track.header()->totalTracks; }
+      std::uint16_t discNumber() const noexcept { return _track.header()->discNumber; }
+      std::uint16_t totalDiscs() const noexcept { return _track.header()->totalDiscs; }
 
     private:
       TrackView const& _track;
@@ -137,55 +137,47 @@ namespace rs::core
     public:
       explicit TagProxy(TrackView const& track) : _track(track) {}
 
-      [[nodiscard]] std::uint8_t count() const noexcept { return _track.header()->tagCount; }
-      [[nodiscard]] std::uint32_t bloom() const noexcept { return _track.header()->tagBloom; }
-      [[nodiscard]] DictionaryId id(std::uint8_t index) const { return DictionaryId{_track.tagId(index)}; }
-      [[nodiscard]] std::vector<DictionaryId> ids() const;
-      [[nodiscard]] bool has(DictionaryId tagIdToCheck) const;
+      std::uint8_t count() const noexcept { return _track.header()->tagCount; }
+      std::uint32_t bloom() const noexcept { return _track.header()->tagBloom; }
+      DictionaryId id(std::uint8_t index) const { return DictionaryId{_track.tagId(index)}; }
+      std::vector<DictionaryId> ids() const;
+      bool has(DictionaryId tagIdToCheck) const;
 
     private:
       TrackView const& _track;
     };
 
-    TrackView() noexcept : _header(nullptr), _payloadBase(nullptr), _size(0) {}
+    TrackView() noexcept : _header{nullptr}, _payloadBase{nullptr}, _size{0} {}
 
-    explicit TrackView(std::span<std::byte const> data) noexcept
-      : _header(utility::as<TrackHeader>(data))
-      , _payloadBase(utility::as<std::uint8_t>(data))
-      , _size(data.size())
+    explicit TrackView(std::span<std::byte const> data)
+      : _header{utility::as<TrackHeader>(data)}
+      , _payloadBase{utility::as<std::byte>(data)}
+      , _size{data.size()}
     {
+      if (data.size() < sizeof(TrackHeader)) { RS_THROW(rs::Exception, "Invalid track data: size too small"); }
     }
 
-    [[nodiscard]] bool isValid() const noexcept { return _header != nullptr && _size >= sizeof(TrackHeader); }
+    bool isValid() const noexcept { return _header != nullptr && _size >= sizeof(TrackHeader); }
 
     // Proxy accessors for type-safe field access
-    [[nodiscard]] PropertyProxy property() const { return PropertyProxy(*this); }
-    [[nodiscard]] MetadataProxy metadata() const { return MetadataProxy(*this); }
-    [[nodiscard]] TagProxy tags() const { return TagProxy(*this); }
+    PropertyProxy property() const { return PropertyProxy{*this}; }
+    MetadataProxy metadata() const { return MetadataProxy{*this}; }
+    TagProxy tags() const { return TagProxy{*this}; }
 
     // Essential accessors
-    [[nodiscard]] TrackHeader const* header() const noexcept { return _header; }
-
-    // Get the raw payload data (everything after the header)
-    [[nodiscard]] std::string_view payload() const
-    {
-      if (!isValid()) return {};
-      auto payloadStart = _payloadBase + sizeof(TrackHeader);
-      auto payloadSize = _size - sizeof(TrackHeader);
-      return {reinterpret_cast<char const*>(payloadStart), payloadSize};
-    }
+    TrackHeader const* header() const noexcept { return _header; }
 
   private:
     TrackHeader const* _header;
-    std::uint8_t const* _payloadBase;
+    std::byte const* _payloadBase;
     std::size_t _size;
 
-    [[nodiscard]] std::string_view getString(std::uint16_t offset, std::uint16_t len) const;
+    std::string_view getString(std::uint16_t offset, std::uint16_t len) const;
 
     // For proxy access
-    [[nodiscard]] std::string_view title() const { return getString(_header->titleOffset, _header->titleLen); }
-    [[nodiscard]] std::string_view uri() const { return getString(_header->uriOffset, _header->uriLen); }
-    [[nodiscard]] std::uint32_t tagId(std::uint8_t index) const;
+    std::string_view title() const { return getString(_header->titleOffset, _header->titleLen); }
+    std::string_view uri() const { return getString(_header->uriOffset, _header->uriLen); }
+    std::uint32_t tagId(std::uint8_t index) const;
   };
 
 } // namespace rs::core

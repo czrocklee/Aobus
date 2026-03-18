@@ -7,7 +7,7 @@
 namespace rs::core
 {
   // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
-  constexpr unsigned int kBloomBitMask = 31;
+  constexpr std::uint32_t kBloomBitMask = 31;
 
   TrackRecord::TrackRecord(TrackView const& view, Dictionary const& dict)
   {
@@ -30,7 +30,7 @@ namespace rs::core
 
     // Get metadata strings
     auto meta = view.metadata();
-    metadata.title = std::string(meta.title());
+    metadata.title = std::string{meta.title()};
     metadata.year = meta.year();
     metadata.trackNumber = meta.trackNumber();
     metadata.totalTracks = meta.totalTracks();
@@ -41,19 +41,19 @@ namespace rs::core
     // Resolve dictionary IDs to strings
     if (meta.artistId() > 0)
     {
-      metadata.artist = std::string(dict.get(DictionaryId{meta.artistId()}));
+      metadata.artist = std::string{dict.get(DictionaryId{meta.artistId()})};
     }
     if (meta.albumId() > 0)
     {
-      metadata.album = std::string(dict.get(DictionaryId{meta.albumId()}));
+      metadata.album = std::string{dict.get(DictionaryId{meta.albumId()})};
     }
     if (meta.albumArtistId() > 0)
     {
-      metadata.albumArtist = std::string(dict.get(DictionaryId{meta.albumArtistId()}));
+      metadata.albumArtist = std::string{dict.get(DictionaryId{meta.albumArtistId()})};
     }
     if (meta.genreId() > 0)
     {
-      metadata.genre = std::string(dict.get(DictionaryId{meta.genreId()}));
+      metadata.genre = std::string{dict.get(DictionaryId{meta.genreId()})};
     }
 
     // Deserialize tag IDs from payload
@@ -75,7 +75,7 @@ namespace rs::core
     std::uint32_t bloom = 0;
     for (auto tagId : tags.ids)
     {
-      bloom |= (1U << (tagId.value() & kBloomBitMask));
+      bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask));
     }
 
     return TrackHeader{

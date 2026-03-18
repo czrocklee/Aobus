@@ -46,8 +46,8 @@ namespace rs::core
   public:
     class Iterator;
 
-    [[nodiscard]] Iterator begin() const;
-    [[nodiscard]] Iterator end() const;
+    Iterator begin() const;
+    Iterator end() const;
 
     std::optional<ListView> get(Id id) const;
 

@@ -24,8 +24,8 @@ namespace rs::lmdb
     Database(ReadTransaction& txn, std::string const& db);
     ~Database();
 
-    [[nodiscard]] Reader reader(ReadTransaction& txn) const;
-    [[nodiscard]] Writer writer(WriteTransaction& txn);
+    Reader reader(ReadTransaction& txn) const;
+    Writer writer(WriteTransaction& txn);
 
   private:
     MDB_dbi _dbi = (std::numeric_limits<MDB_dbi>::max)();
@@ -37,9 +37,9 @@ namespace rs::lmdb
     using Value = std::pair<std::uint32_t, std::span<std::byte const>>;
     class Iterator;
 
-    [[nodiscard]] Iterator begin() const;
-    [[nodiscard]] Iterator end() const;
-    [[nodiscard]] std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
+    Iterator begin() const;
+    Iterator end() const;
+    std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
 
   protected:
     Reader(MDB_dbi dbi, MDB_txn* txn);
@@ -58,9 +58,9 @@ namespace rs::lmdb
     Iterator(Iterator const& other);
     Iterator(Iterator&& other) noexcept;
     ~Iterator();
-    [[nodiscard]] bool equal(Iterator const& other) const;
+    bool equal(Iterator const& other) const;
     void increment();
-    [[nodiscard]] Value const& dereference() const;
+    Value const& dereference() const;
 
   private:
     struct CursorDeleter
@@ -80,13 +80,13 @@ namespace rs::lmdb
     Writer(Writer&&) noexcept;
     ~Writer();
 
-    [[nodiscard]] std::span<std::byte const> create(std::uint32_t id, std::span<std::byte const> data);
-    [[nodiscard]] std::span<std::byte> create(std::uint32_t id, std::size_t size);
-    [[nodiscard]] std::pair<std::uint32_t, std::span<std::byte const>> append(std::span<std::byte const> data);
-    [[nodiscard]] std::pair<std::uint32_t, std::span<std::byte>> append(std::size_t size);
-    [[nodiscard]] std::span<std::byte const> update(std::uint32_t id, std::span<std::byte const> data);
+    std::span<std::byte const> create(std::uint32_t id, std::span<std::byte const> data);
+    std::span<std::byte> create(std::uint32_t id, std::size_t size);
+    std::pair<std::uint32_t, std::span<std::byte const>> append(std::span<std::byte const> data);
+    std::pair<std::uint32_t, std::span<std::byte>> append(std::size_t size);
+    std::span<std::byte const> update(std::uint32_t id, std::span<std::byte const> data);
     bool del(std::uint32_t id);
-    [[nodiscard]] std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
+    std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
 
   private:
     struct CursorDeleter

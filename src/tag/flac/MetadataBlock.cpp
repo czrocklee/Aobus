@@ -3,7 +3,7 @@
 
 #include "MetadataBlock.h"
 #include <boost/endian/conversion.hpp>
-#include <rs/core/Exception.h>
+#include <rs/Exception.h>
 #include <rs/utility/ByteView.h>
 #include <string_view>
 
@@ -17,7 +17,7 @@ namespace rs::tag::flac
       if (ptr + sizeof(LengthType) > end)
       {
         RS_THROW_FORMAT(
-          core::Exception, "invalid flac block, expect length field size {} >= {}", end - ptr, sizeof(LengthType));
+          rs::Exception, "invalid flac block, expect length field size {} >= {}", end - ptr, sizeof(LengthType));
       }
 
       LengthType length;
@@ -35,7 +35,7 @@ namespace rs::tag::flac
       if (ptr + length > end)
       {
         RS_THROW_FORMAT(
-          core::Exception, "invalid flac block, expect available field length {} >= {}", end - ptr, length);
+          rs::Exception, "invalid flac block, expect available field length {} >= {}", end - ptr, length);
       }
 
       char const* start = ptr;
@@ -61,7 +61,7 @@ namespace rs::tag::flac
 
     if (auto sizeLeft = static_cast<std::size_t>(end - ptr); sizeLeft > 0)
     {
-      RS_THROW_FORMAT(core::Exception,
+      RS_THROW_FORMAT(rs::Exception,
                       "invalid flac vorbis_comment block, unexpected content \"{}\"",
                       std::string_view{ptr, sizeLeft});
     }
@@ -87,7 +87,7 @@ namespace rs::tag::flac
   {
     if (size < StreamInfoBlockSize || _view.type() != MetadataBlockType::StreamInfo)
     {
-      RS_THROW(core::Exception, "invalid flac metadata blocks, first block must be StreamInfo");
+      RS_THROW(rs::Exception, "invalid flac metadata blocks, first block must be StreamInfo");
     }
   }
 
@@ -104,7 +104,7 @@ namespace rs::tag::flac
 
     if (_view.size() > _sizeLeft)
     {
-      RS_THROW(core::Exception, "invalid flac metadata blocks size, exceeding the file boundary");
+      RS_THROW(rs::Exception, "invalid flac metadata blocks size, exceeding the file boundary");
     }
   }
 }

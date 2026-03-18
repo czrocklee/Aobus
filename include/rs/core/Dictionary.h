@@ -53,7 +53,7 @@ namespace rs::core
      * @return The string
      * @throws std::runtime_error if id is not found
      */
-    [[nodiscard]] std::string_view get(DictionaryId id) const;
+    std::string_view get(DictionaryId id) const;
 
     /**
      * Look up an ID by its string.
@@ -61,14 +61,14 @@ namespace rs::core
      * @return The ID
      * @throws std::runtime_error if string is not found
      */
-    [[nodiscard]] DictionaryId getId(std::string_view str) const;
+    DictionaryId getId(std::string_view str) const;
 
     /**
      * Check if a string exists.
      * @param str The string to look up
      * @return true if the string exists
      */
-    [[nodiscard]] bool contains(std::string_view str) const;
+    bool contains(std::string_view str) const;
 
   private:
     lmdb::Database _database;

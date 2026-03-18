@@ -62,21 +62,21 @@ namespace rs::core
     {
     }
 
-    [[nodiscard]] bool isValid() const noexcept { return _header != nullptr && _size >= sizeof(ListHeader); }
+    bool isValid() const noexcept { return _header != nullptr && _size >= sizeof(ListHeader); }
 
-    [[nodiscard]] ListHeader const* header() const noexcept { return _header; }
+    ListHeader const* header() const noexcept { return _header; }
 
-    [[nodiscard]] std::uint64_t trackIdsCount() const noexcept { return _header->trackIdsCount; }
-    [[nodiscard]] std::uint32_t nameId() const noexcept { return _header->nameId; }
-    [[nodiscard]] std::uint32_t descId() const noexcept { return _header->descId; }
-    [[nodiscard]] std::uint32_t filterId() const noexcept { return _header->filterId; }
-    [[nodiscard]] std::uint8_t flags() const noexcept { return _header->flags; }
+    std::uint64_t trackIdsCount() const noexcept { return _header->trackIdsCount; }
+    std::uint32_t nameId() const noexcept { return _header->nameId; }
+    std::uint32_t descId() const noexcept { return _header->descId; }
+    std::uint32_t filterId() const noexcept { return _header->filterId; }
+    std::uint8_t flags() const noexcept { return _header->flags; }
 
-    [[nodiscard]] std::string_view name() const { return getString(_header->nameOffset, _header->nameLen); }
+    std::string_view name() const { return getString(_header->nameOffset, _header->nameLen); }
 
-    [[nodiscard]] std::string_view description() const { return getString(_header->descOffset, _header->descLen); }
+    std::string_view description() const { return getString(_header->descOffset, _header->descLen); }
 
-    [[nodiscard]] std::string_view payload() const
+    std::string_view payload() const
     {
       if (!isValid())
       {
@@ -92,7 +92,7 @@ namespace rs::core
     std::uint8_t const* _payloadBase;
     std::size_t _size;
 
-    [[nodiscard]] std::string_view getString(std::uint16_t offset, std::uint16_t len) const;
+    std::string_view getString(std::uint16_t offset, std::uint16_t len) const;
   };
 
 } // namespace rs::core

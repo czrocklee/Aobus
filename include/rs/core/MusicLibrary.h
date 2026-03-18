@@ -21,23 +21,23 @@ namespace rs::core
 
     explicit MusicLibrary(std::filesystem::path rootPath);
 
-    [[nodiscard]] rs::lmdb::ReadTransaction readTransaction() const { return rs::lmdb::ReadTransaction{_env}; }
+    rs::lmdb::ReadTransaction readTransaction() const { return rs::lmdb::ReadTransaction{_env}; }
 
-    [[nodiscard]] rs::lmdb::WriteTransaction writeTransaction() { return rs::lmdb::WriteTransaction{_env}; }
+    rs::lmdb::WriteTransaction writeTransaction() { return rs::lmdb::WriteTransaction{_env}; }
 
-    [[nodiscard]] TrackStore& tracks() { return _tracks; }
-    [[nodiscard]] TrackStore const& tracks() const { return _tracks; }
+    TrackStore& tracks() { return _tracks; }
+    TrackStore const& tracks() const { return _tracks; }
 
-    [[nodiscard]] ListStore& lists() { return _lists; }
-    [[nodiscard]] ListStore const& lists() const { return _lists; }
+    ListStore& lists() { return _lists; }
+    ListStore const& lists() const { return _lists; }
 
-    [[nodiscard]] ResourceStore& resources() { return _resources; }
-    [[nodiscard]] ResourceStore const& resources() const { return _resources; }
+    ResourceStore& resources() { return _resources; }
+    ResourceStore const& resources() const { return _resources; }
 
-    [[nodiscard]] Dictionary& dictionary() { return _dictionary; }
-    [[nodiscard]] Dictionary const& dictionary() const { return _dictionary; }
+    Dictionary& dictionary() { return _dictionary; }
+    Dictionary const& dictionary() const { return _dictionary; }
 
-    [[nodiscard]] std::filesystem::path const& rootPath() const { return _root; }
+    std::filesystem::path const& rootPath() const { return _root; }
 
   private:
     std::filesystem::path const _root;

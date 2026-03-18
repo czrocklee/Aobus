@@ -5,6 +5,7 @@
 #include <rs/utility/VariantVisitor.h>
 
 #include <algorithm>
+#include <ranges>
 
 namespace rs::expr
 {
@@ -12,7 +13,7 @@ namespace rs::expr
   namespace
   {
     // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
-    constexpr unsigned int kBloomBitMask = 31;
+    constexpr std::uint32_t kBloomBitMask = 31;
 
     Field variableTypeToField(VariableType type, std::string_view name)
     {
@@ -38,10 +39,8 @@ namespace rs::expr
           if (name == "coverArt" || name == "ca") return Field::CoverArtId;
           if (name == "title" || name == "t") return Field::Title;
           break;
-        case VariableType::Tag:
-          return Field::Tag;
-        default:
-          break;
+        case VariableType::Tag: return Field::Tag;
+        default: break;
       }
       return Field::TagBloom;
     }
@@ -50,28 +49,17 @@ namespace rs::expr
     {
       switch (op)
       {
-        case Operator::And:
-          return OpCode::And;
-        case Operator::Or:
-          return OpCode::Or;
-        case Operator::Not:
-          return OpCode::Not;
-        case Operator::Equal:
-          return OpCode::Eq;
-        case Operator::NotEqual:
-          return OpCode::Ne;
-        case Operator::Like:
-          return OpCode::Like;
-        case Operator::Less:
-          return OpCode::Lt;
-        case Operator::LessEqual:
-          return OpCode::Le;
-        case Operator::Greater:
-          return OpCode::Gt;
-        case Operator::GreaterEqual:
-          return OpCode::Ge;
-        default:
-          return OpCode::Nop;
+        case Operator::And: return OpCode::And;
+        case Operator::Or: return OpCode::Or;
+        case Operator::Not: return OpCode::Not;
+        case Operator::Equal: return OpCode::Eq;
+        case Operator::NotEqual: return OpCode::Ne;
+        case Operator::Like: return OpCode::Like;
+        case Operator::Less: return OpCode::Lt;
+        case Operator::LessEqual: return OpCode::Le;
+        case Operator::Greater: return OpCode::Gt;
+        case Operator::GreaterEqual: return OpCode::Ge;
+        default: return OpCode::Nop;
       }
     }
 
@@ -80,18 +68,24 @@ namespace rs::expr
       return field == Field::ArtistId || field == Field::AlbumId || field == Field::GenreId;
     }
 
-    bool isTagField(Field field) { return field == Field::Tag; }
+    bool isTagField(Field field)
+    {
+      return field == Field::Tag;
+    }
   }
 
-  QueryCompiler::QueryCompiler(core::Dictionary const* dict) : _dict(dict) {}
+  QueryCompiler::QueryCompiler(core::Dictionary const* dict) : _dict{dict}
+  {
+  }
 
   std::uint32_t QueryCompiler::addStringConstant(std::string_view str)
   {
-    auto it = std::find(_plan.stringConstants.begin(), _plan.stringConstants.end(), std::string(str));
-    if (it != _plan.stringConstants.end())
+    if (auto it = std::ranges::find_if(_plan.stringConstants, [str](auto const& v) { return v == str; });
+        it != _plan.stringConstants.end())
     {
       return static_cast<std::uint32_t>(std::distance(_plan.stringConstants.begin(), it));
     }
+
     _plan.stringConstants.emplace_back(str);
     return static_cast<std::uint32_t>(_plan.stringConstants.size() - 1);
   }
@@ -160,42 +154,42 @@ namespace rs::expr
       {
         auto tagId = _dict->getId(var.name);
         // getId throws if not found, so any returned ID is valid (including 0)
-        _plan.tagBloomMask |= (1U << (tagId.value() & kBloomBitMask));
+        _plan.tagBloomMask |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask));
 
-          // Generate implicit tag comparison: track.tags().has(tagId)
-          // This handles standalone "#tagname" queries like "#rock"
-          // First, load the tag field (for the Eq instruction to detect it's a tag comparison)
-          _plan.instructions.push_back(Instruction{
-            .op = OpCode::LoadField,
-            .field = static_cast<std::uint8_t>(Field::Tag),
-            .operand = static_cast<std::int32_t>(_nextReg++),
-            .constValue = 0,
-            .strLen = 0,
-            .strData = nullptr,
-          });
+        // Generate implicit tag comparison: track.tags().has(tagId)
+        // This handles standalone "#tagname" queries like "#rock"
+        // First, load the tag field (for the Eq instruction to detect it's a tag comparison)
+        _plan.instructions.push_back(Instruction{
+          .op = OpCode::LoadField,
+          .field = static_cast<std::uint8_t>(Field::Tag),
+          .operand = static_cast<std::int32_t>(_nextReg++),
+          .constValue = 0,
+          .strLen = 0,
+          .strData = nullptr,
+        });
 
-          // Then load the tag ID as constant
-          _plan.instructions.push_back(Instruction{
-            .op = OpCode::LoadConstant,
-            .field = 0,
-            .operand = static_cast<std::int32_t>(_nextReg++),
-            .constValue = static_cast<std::int64_t>(tagId.value()),
-            .strLen = 0,
-            .strData = nullptr,
-          });
+        // Then load the tag ID as constant
+        _plan.instructions.push_back(Instruction{
+          .op = OpCode::LoadConstant,
+          .field = 0,
+          .operand = static_cast<std::int32_t>(_nextReg++),
+          .constValue = static_cast<std::int64_t>(tagId.value()),
+          .strLen = 0,
+          .strData = nullptr,
+        });
 
-          // Eq instruction - PlanEvaluator will detect Tag field and use tags.has()
-          _plan.instructions.push_back(Instruction{
-            .op = OpCode::Eq,
-            .field = 0,
-            .operand = static_cast<std::int32_t>(_nextReg - 1), // Right operand
-            .constValue = 0,
-            .strLen = 0,
-            .strData = nullptr,
-          });
+        // Eq instruction - PlanEvaluator will detect Tag field and use tags.has()
+        _plan.instructions.push_back(Instruction{
+          .op = OpCode::Eq,
+          .field = 0,
+          .operand = static_cast<std::int32_t>(_nextReg - 1), // Right operand
+          .constValue = 0,
+          .strLen = 0,
+          .strData = nullptr,
+        });
 
-          _nextReg--; // Eq result is in the left register
-          return;
+        _nextReg--; // Eq result is in the left register
+        return;
       }
     }
 
@@ -272,21 +266,16 @@ namespace rs::expr
   std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field) const
   {
     // Only resolve for metadata ID fields and tag fields
-    if (!isMetadataFieldId(field) && !isTagField(field))
-    {
-      return -1; // Not applicable
-    }
+    if (!isMetadataFieldId(field) && !isTagField(field)) { return -1; }
 
-    if (!_dict)
-    {
-      return -1; // No dictionary available
-    }
+    if (!_dict) { return -1; }
 
     // Look up the string in the dictionary
     auto id = _dict->getId(str);
+
     if (id.value() == 0)
     {
-      return -1; // String not found in dictionary
+      return -1; 
     }
 
     return static_cast<std::int64_t>(id.value());
@@ -302,10 +291,7 @@ namespace rs::expr
     {
       if (bool const* val = std::get_if<bool>(constant))
       {
-        if (*val)
-        {
-          _plan.matchesAll = true;
-        }
+        if (*val) { _plan.matchesAll = true; }
       }
     }
 

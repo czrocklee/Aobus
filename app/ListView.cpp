@@ -12,7 +12,7 @@ TrackView::TrackView(TableModel::TrackList& tracks, QWidget* parent) : QWidget(p
   proxyModel->setSourceModel(model);
   tableView->setModel(proxyModel);
   xx tableView->resizeColumnsToContents();
-  tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+  tableView->horizontalheader().setSectionResizeMode(QHeaderView::Interactive);
 
   connect(
     lineEdit, &QLineEdit::textChanged, [proxyModel](QString const& text) { proxyModel->onQuickFilterChanged(text); });

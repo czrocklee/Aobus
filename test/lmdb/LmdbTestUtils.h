@@ -40,8 +40,8 @@ public:
   TempDir(TempDir&&) = default;
   TempDir& operator=(TempDir&&) = default;
 
-  [[nodiscard]] std::string path() const { return _path.string(); }
-  [[nodiscard]] std::string_view path_view() const { return _path.string(); }
+  std::string path() const { return _path.string(); }
+  std::string_view path_view() const { return _path.string(); }
 
 private:
   std::filesystem::path _path;
@@ -50,7 +50,7 @@ private:
 /**
  * Create a test buffer from a vector of bytes.
  */
-[[nodiscard]] inline std::span<std::byte const> makeBuffer(const std::vector<char>& data)
+inline std::span<std::byte const> makeBuffer(const std::vector<char>& data)
 {
   return std::span<std::byte const>{reinterpret_cast<std::byte const*>(data.data()), data.size()};
 }
@@ -58,7 +58,7 @@ private:
 /**
  * Create a mutable buffer from a vector of bytes.
  */
-[[nodiscard]] inline std::span<std::byte> makeMutableBuffer(std::vector<char>& data)
+inline std::span<std::byte> makeMutableBuffer(std::vector<char>& data)
 {
   return std::span<std::byte>{reinterpret_cast<std::byte*>(data.data()), data.size()};
 }
@@ -66,7 +66,7 @@ private:
 /**
  * Create a vector filled with test data.
  */
-[[nodiscard]] inline std::vector<char> createTestData(std::size_t size)
+inline std::vector<char> createTestData(std::size_t size)
 {
   std::vector<char> data(size);
   for (std::size_t i = 0; i < size; ++i)
@@ -79,7 +79,7 @@ private:
 /**
  * Simple string data for testing.
  */
-[[nodiscard]] inline std::vector<char> createStringData(std::string_view str)
+inline std::vector<char> createStringData(std::string_view str)
 {
   return std::vector<char>{str.begin(), str.end()};
 }

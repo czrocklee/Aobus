@@ -6,7 +6,7 @@
 #include "Layout.h"
 #include <boost/iterator/iterator_facade.hpp>
 #include <boost/locale/encoding.hpp>
-#include <rs/core/Exception.h>
+#include <rs/Exception.h>
 #include <string_view>
 
 namespace rs::tag::mpeg::id3v2
@@ -21,7 +21,7 @@ namespace rs::tag::mpeg::id3v2
       if (availableSize > 0 && (availableSize < sizeof(CommonFrameLayout) || availableSize < size()))
       {
         RS_THROW_FORMAT(
-          core::Exception, "invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
+          rs::Exception, "invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
       }
     }
 
@@ -41,7 +41,7 @@ namespace rs::tag::mpeg::id3v2
       if (sizeof(Layout) > size())
       {
         RS_THROW_FORMAT(
-          core::Exception, "invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
+          rs::Exception, "invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
       }
 
       return *static_cast<Layout const*>(_data);

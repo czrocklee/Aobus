@@ -18,8 +18,7 @@ namespace rs::core
 
   TrackStore::Reader::Iterator TrackStore::Reader::begin() const
   {
-    auto iter = _reader.begin();
-    if (iter != _reader.end())
+    if (auto iter = _reader.begin(); iter != _reader.end())
     {
       [[maybe_unused]] auto&& [id, buffer] = *iter;
       return Iterator{std::move(iter)};
@@ -36,7 +35,7 @@ namespace rs::core
     {
       return std::nullopt;
     }
-    return TrackView(*optBuffer);
+    return TrackView{*optBuffer};
   }
 
   // TrackStore::Reader::Iterator implementation
@@ -68,7 +67,7 @@ namespace rs::core
   TrackView TrackStore::Writer::update(Id id, std::span<std::byte const> data)
   {
     auto buffer = _writer.update(id.value(), data);
-    return TrackView(data);
+    return TrackView{data};
   }
 
   bool TrackStore::Writer::del(Id id) { return _writer.del(id.value()); }
@@ -80,7 +79,7 @@ namespace rs::core
     {
       return std::nullopt;
     }
-    return TrackView(*optBuffer);
+    return TrackView{*optBuffer};
   }
 
 } // namespace rs::core

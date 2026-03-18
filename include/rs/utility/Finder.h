@@ -22,9 +22,9 @@ namespace rs::utility
       };
     }
 
-    [[nodiscard]] auto begin() const { return boost::make_filter_iterator(_filter, Iterator{_rootPath}); }
+    auto begin() const { return boost::make_filter_iterator(_filter, Iterator{_rootPath}); }
 
-    [[nodiscard]] auto end() const { return boost::make_filter_iterator(_filter, Iterator{}); }
+    auto end() const { return boost::make_filter_iterator(_filter, Iterator{}); }
 
   private:
     using Iterator = std::filesystem::recursive_directory_iterator;

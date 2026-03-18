@@ -3,13 +3,14 @@
 
 #include "../Decoder.h"
 #include "MetadataBlock.h"
-#include <rs/core/Exception.h>
+#include <rs/Exception.h>
 #include <rs/tag/flac/File.h>
 #include <rs/utility/ByteView.h>
 
 #include <boost/algorithm/string/compare.hpp>
 
 #include <algorithm>
+#include <ranges>
 #include <span>
 #include <functional>
 #include <iostream>
@@ -35,17 +36,16 @@ namespace rs::tag::flac
       void operator()(Metadata& meta, std::span<std::byte const> buffer)
       {
         auto str = utility::asString(buffer);
-        auto const* begin = str.data();
-        auto const* end = begin + str.size();
 
-        if (auto iter = std::find(begin, end, '/'); iter != end)
+        if (auto iter = std::ranges::find(str, '/'); iter != str.end())
         {
-          meta.set(PrimaryField, Decoder::decode(begin, iter - begin));
-          meta.set(SecondaryField, Decoder::decode(iter, end - iter - 1));
+          auto dist = std::distance(str.begin(), iter);
+          meta.set(PrimaryField, Decoder::decode(str.data(), dist));
+          meta.set(SecondaryField, Decoder::decode(iter, std::distance(iter, str.end()) - 1));
         }
         else
         {
-          meta.set(PrimaryField, Decoder::decode(begin, str.size()));
+          meta.set(PrimaryField, Decoder::decode(str.data(), str.size()));
         }
       }
     };
@@ -79,7 +79,7 @@ namespace rs::tag::flac
   {
     if (_mappedRegion.get_size() < 4 || std::memcmp(_mappedRegion.get_address(), "fLaC", 4) != 0)
     {
-      RS_THROW(core::Exception, "unrecognized flac file content");
+      RS_THROW(rs::Exception, "unrecognized flac file content");
     }
 
     Metadata metadata;

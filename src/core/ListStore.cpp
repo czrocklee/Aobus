@@ -17,8 +17,7 @@ namespace rs::core
 
   ListStore::Reader::Iterator ListStore::Reader::begin() const
   {
-    auto iter = _reader.begin();
-    if (iter != _reader.end())
+    if (auto iter = _reader.begin(); iter != _reader.end())
     {
       return Iterator{std::move(iter)};
     }
@@ -34,7 +33,7 @@ namespace rs::core
     {
       return std::nullopt;
     }
-    return ListView(*optBuffer);
+    return ListView{*optBuffer};
   }
 
   // Iterator implementation
@@ -78,7 +77,7 @@ namespace rs::core
     {
       return std::nullopt;
     }
-    return ListView(*optBuffer);
+    return ListView{*optBuffer};
   }
 
 } // namespace rs::core

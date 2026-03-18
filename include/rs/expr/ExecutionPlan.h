@@ -131,7 +131,7 @@ namespace rs::expr
      * @param expr The expression AST to compile
      * @return Compiled execution plan
      */
-    [[nodiscard]] ExecutionPlan compile(Expression const& expr);
+    ExecutionPlan compile(Expression const& expr);
 
   private:
     std::uint32_t addStringConstant(std::string_view str);
@@ -143,7 +143,7 @@ namespace rs::expr
     void compileConstant(ConstantExpression const& constant);
 
     // Resolve string to ID using dictionary (if available)
-    [[nodiscard]] std::int64_t resolveStringConstant(std::string const& str, Field field) const;
+    std::int64_t resolveStringConstant(std::string const& str, Field field) const;
 
     ExecutionPlan _plan;
     std::uint32_t _nextReg = 0;

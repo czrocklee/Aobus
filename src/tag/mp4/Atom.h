@@ -104,8 +104,7 @@ namespace rs::tag::mp4
   public:
     std::uint32_t length() const override
     {
-      return std::accumulate(
-        _children.begin(), _children.end(), 0, [](auto size, auto& ptr) { return size + ptr->length(); });
+      return std::accumulate(_children.begin(), _children.end(), 0u, [](auto size, auto& ptr) { return size + ptr->length(); });
     }
 
     std::string_view type() const override { return "root"; }
