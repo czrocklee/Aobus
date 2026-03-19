@@ -4,7 +4,7 @@
 #include <catch2/catch.hpp>
 
 #include <cstddef>
-#include <rs/core/TrackLayout.h>
+#include <rs/core/TrackView.h>
 #include <rs/core/TrackRecord.h>
 #include <span>
 #include <test/core/TestUtils.h>
@@ -271,6 +271,259 @@ namespace
     CHECK(view.tags().has(DictionaryId{10}) == true);
     CHECK(view.tags().has(DictionaryId{20}) == true);
     CHECK(view.tags().has(DictionaryId{30}) == false);
+  }
+
+  // === Cold Layout Tests ===
+
+  using rs::core::encodeColdData;
+  using rs::core::normalizeKey;
+  using rs::core::TrackColdHeader;
+  using rs::core::TrackColdView;
+
+  // Helper to create a full cold data blob for testing
+  std::vector<std::byte> createColdData(
+      TrackColdHeader const& header = {},
+      std::vector<std::pair<std::string, std::string>> const& customMeta = {},
+      std::string_view uri = "")
+  {
+    return encodeColdData(header, customMeta, uri);
+  }
+
+  TrackColdView makeColdView(std::vector<std::byte> const& data)
+  {
+    return TrackColdView(std::as_bytes(std::span{data}));
+  }
+
+  TEST_CASE("TrackColdHeader - Size and Alignment")
+  {
+    CHECK(sizeof(TrackColdHeader) == 40);
+    CHECK(alignof(TrackColdHeader) == 8);
+  }
+
+  TEST_CASE("TrackColdView - Default Constructor")
+  {
+    TrackColdView view;
+    CHECK(view.isNull() == true);
+    CHECK(view.isEmpty() == true);
+    CHECK(view.isValid() == false);
+    CHECK(view.size() == 0);
+  }
+
+  TEST_CASE("TrackColdView - Empty Data - Default Constructor")
+  {
+    // Empty data uses default constructor (not span constructor which throws)
+    TrackColdView view;
+    CHECK(view.isNull() == true);
+    CHECK(view.isEmpty() == true);
+    CHECK(view.isValid() == false);
+  }
+
+  TEST_CASE("TrackColdView - Empty Span - Throws")
+  {
+    std::vector<std::byte> empty;
+    std::span<std::byte const> emptySpan{empty};
+    CHECK_THROWS(TrackColdView(emptySpan));
+  }
+
+  TEST_CASE("TrackColdView - Invalid Data - Throws")
+  {
+    char smallData[10] = {};
+    std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
+    CHECK_THROWS(TrackColdView(smallSpan));
+  }
+
+  TEST_CASE("TrackColdView - Roundtrip Empty")
+  {
+    auto data = createColdData();
+    auto view = makeColdView(data);
+
+    CHECK(view.isNull() == false);
+    CHECK(view.isEmpty() == false);
+    CHECK(view.isValid() == true);
+    CHECK(view.customMeta().empty());
+    CHECK(view.uri().empty());
+  }
+
+  TEST_CASE("TrackColdView - Roundtrip Single Pair")
+  {
+    auto pairs = std::vector<std::pair<std::string, std::string>>{{"key1", "value1"}};
+    auto data = createColdData({}, pairs, "/path/to/file.flac");
+    auto view = makeColdView(data);
+
+    auto meta = view.customMeta();
+    CHECK(meta.size() == 1);
+    CHECK(meta[0].first == "key1");
+    CHECK(meta[0].second == "value1");
+    CHECK(view.uri() == "/path/to/file.flac");
+  }
+
+  TEST_CASE("TrackColdView - Roundtrip Multiple Pairs")
+  {
+    auto pairs = std::vector<std::pair<std::string, std::string>>{
+      {"replaygain_track_gain_db", "-6.5"},
+      {"isrc", "USSM19999999"},
+      {"edition", "remaster"}
+    };
+    auto data = createColdData({}, pairs, "/path/to/file.flac");
+    auto view = makeColdView(data);
+
+    auto meta = view.customMeta();
+    CHECK(meta.size() == 3);
+    CHECK(meta[0].first == "replaygain_track_gain_db");
+    CHECK(meta[0].second == "-6.5");
+    CHECK(meta[1].first == "isrc");
+    CHECK(meta[1].second == "USSM19999999");
+    CHECK(meta[2].first == "edition");
+    CHECK(meta[2].second == "remaster");
+  }
+
+  TEST_CASE("TrackColdView - Custom Value Lookup - Found")
+  {
+    auto pairs = std::vector<std::pair<std::string, std::string>>{
+      {"replaygain_track_gain_db", "-6.5"},
+      {"isrc", "USSM19999999"}
+    };
+    auto data = createColdData({}, pairs);
+    auto view = makeColdView(data);
+
+    auto value = view.customValue("isrc");
+    CHECK(value.has_value() == true);
+    CHECK(*value == "USSM19999999");
+  }
+
+  TEST_CASE("TrackColdView - Custom Value Lookup - Not Found")
+  {
+    auto pairs = std::vector<std::pair<std::string, std::string>>{
+      {"replaygain_track_gain_db", "-6.5"}
+    };
+    auto data = createColdData({}, pairs);
+    auto view = makeColdView(data);
+
+    auto value = view.customValue("nonexistent");
+    CHECK(value.has_value() == false);
+  }
+
+  TEST_CASE("TrackColdView - Custom Value Lookup - Case Sensitive")
+  {
+    auto pairs = std::vector<std::pair<std::string, std::string>>{
+      {"ISRC", "USSM19999999"}
+    };
+    auto data = createColdData({}, pairs);
+    auto view = makeColdView(data);
+
+    auto value = view.customValue("isrc");
+    CHECK(value.has_value() == false);
+  }
+
+  TEST_CASE("TrackColdView - Empty Key And Value")
+  {
+    auto pairs = std::vector<std::pair<std::string, std::string>>{{"", ""}};
+    auto data = createColdData({}, pairs);
+    auto view = makeColdView(data);
+
+    auto meta = view.customMeta();
+    CHECK(meta.size() == 1);
+    CHECK(meta[0].first.empty());
+    CHECK(meta[0].second.empty());
+
+    auto value = view.customValue("");
+    CHECK(value.has_value() == true);
+    CHECK(value->empty());
+  }
+
+  TEST_CASE("TrackColdView - Special Characters In Value")
+  {
+    auto pairs = std::vector<std::pair<std::string, std::string>>{
+      {"comment", "Hello, World! 你好"}
+    };
+    auto data = createColdData({}, pairs);
+    auto view = makeColdView(data);
+
+    auto meta = view.customMeta();
+    CHECK(meta[0].second == "Hello, World! 你好");
+  }
+
+  TEST_CASE("TrackColdView - Fixed Fields")
+  {
+    TrackColdHeader header{};
+    header.fileSize = 12345678;
+    header.mtime = 987654321;
+    header.coverArtId = 42;
+    header.trackNumber = 5;
+    header.totalTracks = 10;
+    header.discNumber = 1;
+    header.totalDiscs = 2;
+
+    auto data = createColdData(header, {}, "/path/to/file.flac");
+    auto view = makeColdView(data);
+
+    CHECK(view.isValid() == true);
+    CHECK(view.fileSize() == 12345678);
+    CHECK(view.mtime() == 987654321);
+    CHECK(view.coverArtId() == 42);
+    CHECK(view.trackNumber() == 5);
+    CHECK(view.totalTracks() == 10);
+    CHECK(view.discNumber() == 1);
+    CHECK(view.totalDiscs() == 2);
+    CHECK(view.uri() == "/path/to/file.flac");
+  }
+
+  TEST_CASE("TrackColdView - PropertyProxy")
+  {
+    TrackColdHeader header{};
+    header.fileSize = 12345678;
+    header.mtime = 987654321;
+    header.coverArtId = 42;
+    header.trackNumber = 5;
+    header.totalTracks = 10;
+    header.discNumber = 1;
+    header.totalDiscs = 2;
+
+    auto data = createColdData(header, {}, "/path/to/file.flac");
+    auto view = makeColdView(data);
+
+    auto prop = view.property();
+    CHECK(prop.fileSize() == 12345678);
+    CHECK(prop.mtime() == 987654321);
+    CHECK(prop.coverArtId() == 42);
+    CHECK(prop.trackNumber() == 5);
+    CHECK(prop.totalTracks() == 10);
+    CHECK(prop.discNumber() == 1);
+    CHECK(prop.totalDiscs() == 2);
+    CHECK(prop.uri() == "/path/to/file.flac");
+  }
+
+  TEST_CASE("normalizeKey - Lowercase")
+  {
+    CHECK(normalizeKey("ISRC") == "isrc");
+    CHECK(normalizeKey("ReplayGain_Track_Gain_DB") == "replaygain_track_gain_db");
+    CHECK(normalizeKey("MiXeD_CaSe") == "mixed_case");
+  }
+
+  TEST_CASE("normalizeKey - Trim Whitespace")
+  {
+    CHECK(normalizeKey("  key") == "key");
+    CHECK(normalizeKey("key  ") == "key");
+    CHECK(normalizeKey("  key  ") == "key");
+    CHECK(normalizeKey("\tkey\t") == "key");
+  }
+
+  TEST_CASE("normalizeKey - Lowercase And Trim")
+  {
+    CHECK(normalizeKey("  ISRC  ") == "isrc");
+    CHECK(normalizeKey("\t ReplayGain \n") == "replaygain");
+  }
+
+  TEST_CASE("normalizeKey - Empty")
+  {
+    CHECK(normalizeKey("") == "");
+    CHECK(normalizeKey("   ") == "");
+  }
+
+  TEST_CASE("normalizeKey - Special Characters Preserved")
+  {
+    CHECK(normalizeKey("replaygain_track_gain_db") == "replaygain_track_gain_db");
+    CHECK(normalizeKey("isrc-code-123") == "isrc-code-123");
   }
 
 } // anonymous namespace

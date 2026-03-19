@@ -13,56 +13,78 @@ This plan follows three explicit constraints:
 1. Keep common filter/search fast by scanning compact hot records first.
 2. Preserve extensibility by placing long-tail metadata in cold custom KV.
 3. Avoid schema churn for custom fields while keeping expression semantics predictable.
-4. Minimize migration risk and keep implementation incremental.
+4. keep implementation incremental.
 
 ## Non-Goals
 
-1. No secondary index implementation in this phase.
-2. No custom-key dictionary or typed custom-value schema.
-3. No broad query-language redesign beyond what is needed for hot/cold routing and runtime conversion.
+1. No custom-key dictionary or typed custom-value schema.
+2. No broad query-language redesign beyond what is needed for hot/cold routing and runtime conversion.
 
 ## Data Model
 
 ### Hot Store (`tracks_hot`)
 
-Hot store holds all high-frequency filter/search fields and minimal listing payload.
+Hot store holds all high-frequency filter/search fields.
 
-Required hot fields:
+**Hot fields (from existing TrackHeader)**:
 
-1. `title` (search/filter high frequency).
-2. `artistId`, `albumId`, `year`.
-3. Existing commonly filtered technical fields already used by expr (`durationMs`, `bitrate`, `sampleRate`, `channels`, `bitDepth`, `rating`, `codecId`).
-4. Tag fast-path fields (`tagBloom`, `tagCount`, tag IDs payload).
-5. Stable identity glue (`fileSize`, `mtime`) if needed for refresh/update checks.
+| Field | Type | Notes |
+|-------|------|-------|
+| tagBloom | uint32_t | Bloom filter for tags |
+| durationMs | uint32_t | Track duration in milliseconds |
+| bitrate | uint32_t | Bitrate in bps |
+| sampleRate | uint32_t | Sample rate in Hz |
+| artistId | DictionaryId | Artist dictionary ID |
+| albumId | DictionaryId | Album dictionary ID |
+| genreId | DictionaryId | Genre dictionary ID |
+| albumArtistId | DictionaryId | Album artist dictionary ID |
+| year | uint16_t | Release year |
+| title | string | Track title (variable length) |
+| codecId | uint16_t | Audio codec identifier |
+| channels | uint8_t | Number of audio channels |
+| bitDepth | uint8_t | Bits per sample |
+| rating | uint8_t | User rating (0-5) |
+| tagCount | uint8_t | Number of tags |
+| (tag IDs) | variable | Tag IDs payload |
+
+Notes:
+- `fileSize`, `mtime` moved to cold store (display/refresh only)
+- `coverArtId`, `trackNumber`, `totalTracks`, `discNumber`, `totalDiscs`, `uri` moved to cold store
+- `title` remains in hot for fast search/filter
 
 ### Cold Store (`tracks_cold`)
 
-Cold store is keyed by `TrackId` and contains:
+Cold store is keyed by `TrackId` and contains display-only metadata and custom KV payload.
 
-1. Non-filter/sort display metadata.
-2. `custom KV` payload (string key + string value pairs).
+**Cold fixed fields** (TrackColdHeader, 40 bytes):
 
-Suggested payload structure (binary, simple):
+| Field | Type | Description |
+|-------|------|-------------|
+| fileSize | uint64_t | File size in bytes |
+| mtime | uint64_t | Last modification time (unix timestamp) |
+| coverArtId | uint32_t | ResourceStore ID for cover art |
+| trackNumber | uint16_t | Track number |
+| totalTracks | uint16_t | Total tracks in album |
+| discNumber | uint16_t | Disc number |
+| totalDiscs | uint16_t | Total discs in album |
+| uriOffset | uint16_t | Offset to URI string |
+| uriLen | uint16_t | Length of URI string |
+| reserved | uint8_t | Padding for alignment |
 
-1. `uint16_t pairCount`.
-2. Repeated entries: `uint16_t keyLen`, `uint16_t valueLen`, then raw bytes for key/value (UTF-8 expected by convention).
+**Variable payload** (after header):
+
+1. `uint16_t customPairCount`
+2. Repeated entries: `uint16_t keyLen`, `uint16_t valueLen`, then raw bytes for key/value (UTF-8)
+3. `char[uriLen]` URI string (null-terminated)
 
 Notes:
 
-1. Key is stored directly as string (no dictionary ID).
-2. Value is stored directly as string.
-3. Keys are normalized on write (`lowercase`, trim surrounding spaces) for stable query behavior.
+1. Custom keys are stored as-is (no dictionary deduplication per Constraint #1).
+2. Custom values are stored as plain strings.
+3. Keys are stored as-is (case preserved) for now. No normalization on write.
 
 ## Storage Layer Changes
 
-## MusicLibrary
-
-Update `MusicLibrary` initialization to open additional DB handles:
-
-1. `tracks_hot`.
-2. `tracks_cold`.
-
-Also increase `maxDatabases` to cover new DB count with headroom.
 
 ## Track Store API
 
@@ -70,9 +92,8 @@ Refactor `TrackStore` into a dual-store abstraction while preserving `TrackId` k
 
 Suggested API additions:
 
-1. `Reader::getHot(TrackId)` and `Reader::getCold(TrackId)`.
-2. `Reader::get(TrackId, LoadMode)` where `LoadMode = HotOnly | ColdOnly | HotAndCold`.
-3. Iteration remains hot-driven (`begin/end` iterate `tracks_hot`).
+1. `Reader::hot(TrackId)` and `Reader::cold(TrackId)` - returns hot/cold view directly
+2. `Reader::hot()` and `Reader::cold()` - return iterators for each store 
 
 Write path:
 
@@ -143,29 +164,25 @@ Load strategy by profile:
 
 ## Runtime Type Conversion For Custom KV
 
-Because custom values are stored as strings, conversion is operator-driven and constant-driven.
+**⚠️ WARNING: Lexicographic Comparison Pitfall ⚠️**
 
-### Conversion Rules
+All custom KV values are treated as **strings only**. No runtime type conversion is performed.
 
-1. For `~` (LIKE): always string compare.
-2. For `=` and `!=`:
-   1. If RHS constant is numeric, attempt numeric parse of LHS string.
-   2. If parse succeeds, numeric compare.
-   3. Else fallback to string compare against literal representation.
-3. For `<`, `<=`, `>`, `>=`:
-   1. Require numeric RHS.
-   2. Attempt numeric parse of LHS string.
-   3. Parse failure => expression result is `false`.
+### String Comparison Semantics
 
-Numeric parse behavior:
+1. For `~` (LIKE): string contains match.
+2. For `=` and `!=`: string equality comparison.
+3. For `<`, `<=`, `>`, `>=`: **lexicographic** (dictionary order) comparison.
 
-1. Prefer `double` parse for simplicity.
-2. Accept integer literals as subset of double parse.
-3. Reject NaN/Inf text forms unless explicitly supported.
+### Important Behavioral Caveat
 
-Optional boolean convenience:
+Numeric values stored as strings compare lexicographically, not numerically:
 
-1. For boolean constants, accept case-insensitive `true/false/1/0`.
+- `%replaygain_track_gain_db < -6` will compare as strings, NOT as numbers
+- `"10" < "6"` is `true` (because `"1" < "6"` in ASCII)
+- This may surprise users expecting numeric semantics
+
+Future work may add runtime type detection and numeric comparison for custom KV, but not in this phase.
 
 ## Query Execution Flow
 
@@ -190,27 +207,6 @@ When reading tags:
 5. Persist them into cold custom KV payload.
 
 No custom-key dictionary lookup is performed.
-
-## Backward Compatibility And Migration
-
-## Compatibility Mode
-
-Short-term dual-read support:
-
-1. If `tracks_hot`/`tracks_cold` entries exist for `TrackId`, use new path.
-2. Else fallback to legacy `tracks` entry path.
-
-## Migration Command
-
-Add a one-shot migration command:
-
-1. Scan old `tracks` records.
-2. Reconstruct `TrackRecord`.
-3. Split into hot + cold payload.
-4. Write to new DBs in batches.
-5. Validate counts and random spot checks.
-
-After validation, switch read path to new DBs only.
 
 ## Testing Plan
 
@@ -243,23 +239,24 @@ After validation, switch read path to new DBs only.
 3. Phase 3: Wire importer and track creation paths to populate both stores.
 4. Phase 4: Extend parser/AST/compiler for `%` and `AccessProfile`.
 5. Phase 5: Refactor evaluator to `TrackId + lazy loaders` and implement runtime string conversion logic.
-6. Phase 6: Add migration command and compatibility path.
-7. Phase 7: Add regression tests and remove legacy fallback after migration confidence.
+6. Phase 6: Add regression tests and finalize.
+7. Phase 7 (Future): Secondary index support for custom KV search optimization.
 
 ## Risks And Mitigations
 
-1. Risk: Runtime conversion ambiguity for `=`. Mitigation: define deterministic precedence and document it.
+1. ⚠️ **Known Limitation: Lexicographic comparison** - Numeric custom KV values (e.g., `%replaygain_track_gain_db < -6`) compare as strings. Document this clearly in user-facing documentation.
 2. Risk: Cold loads accidentally happen in hot-only queries. Mitigation: explicit `AccessProfile` tests and loader-call counters in tests.
-3. Risk: Key normalization drift across importers. Mitigation: centralize normalization helper in core.
-4. Risk: Parser complexity growth. Mitigation: minimal grammar extension (`%` only) and preserve existing operators.
+3. Risk: Parser complexity growth. Mitigation: minimal grammar extension (`%` only) and preserve existing operators.
+4. Risk: Hot/cold write non-atomicity if not properly sharing WriteTransaction. Mitigation: Both stores must open within the same transaction context (see Commit 3).
 
 ## Acceptance Criteria
 
 1. Hot-only filters run without cold DB reads.
-2. Custom KV filters work with string storage and runtime conversion.
+2. Custom KV filters work with string storage and string comparison.
 3. No custom-key dictionary exists in schema or code path.
 4. Existing `$`, `@`, `#` expressions keep behavior compatibility.
-5. Migration tool can convert legacy data to new hot/cold layout without data loss for known fields and custom key/value strings.
+5. Create/update/delete operations are atomic across hot and cold stores.
+6. Custom KV lexicographic comparison behavior is documented.
 
 ## Commit-By-Commit Execution Checklist
 
@@ -275,12 +272,15 @@ Files:
 Changes:
 
 1. Add DB handles for `tracks_hot` and `tracks_cold`.
-2. Keep legacy `tracks` DB open for compatibility in migration window.
-3. Raise LMDB `maxDatabases` with safe headroom.
+2. Raise LMDB `maxDatabases` from 4 to 6 (tracks_hot, tracks_cold, lists, resources, dictionary + headroom).
+3. Remove legacy `tracks` DB. This is a clean-start design: no migration path, existing data is not preserved.
+
+**Note:** LMDB supports atomic multi-DBI operations within a single WriteTransaction. Both hot and cold DBs must be opened within the same transaction context for atomic create/update/delete.
 
 Validation:
 
-1. Existing startup/tests still pass with no behavior change.
+1. Existing startup/tests still pass with no behavior change (for new/empty DBs).
+2. Two new DBs are created on disk.
 
 ### Commit 2: Add Cold Layout + Custom KV Codec
 
@@ -311,10 +311,10 @@ Files:
 
 Changes:
 
-1. Add `LoadMode` and `Reader::get(..., LoadMode)`.
-2. Add `getHot/getCold` primitives.
+1. Add `Reader::hot(TrackId)` and `Reader::cold(TrackId)` for direct view access.
+2. Add `Reader::hot()` and `Reader::cold()` for iterator access to each store.
 3. Add `Writer::create(hot, cold)`, `updateHot`, `updateCold`, and synchronized `del`.
-4. Keep old single-store methods temporarily as wrapper/fallback for migration period.
+4. **Critical:** Ensure both stores share the same WriteTransaction context so that create/update/delete are atomic across hot and cold.
 
 Validation:
 
@@ -333,7 +333,7 @@ Changes:
 
 1. Add `customMeta: vector<pair<string,string>>` field.
 2. Implement `serializeHot()` and `serializeCold()`.
-3. Keep `serialize()` as temporary compatibility wrapper if needed.
+3. Replace legacy `serialize()` with hot/cold split.
 
 Validation:
 
@@ -415,7 +415,7 @@ Validation:
 1. Loader-call-count tests verify no cold load for `HotOnly` plans.
 2. Mixed plan triggers cold load only on-demand.
 
-### Commit 9: Runtime String Conversion Semantics
+### Commit 9: Runtime String Comparison Semantics
 
 Files:
 
@@ -424,14 +424,13 @@ Files:
 
 Changes:
 
-1. Implement numeric-on-demand parsing for custom string values.
-2. Implement deterministic fallback for `=` / `!=` and strict behavior for range ops.
-3. Keep `~` as pure string contains.
+1. Implement string comparison for all custom KV operators (`=`, `!=`, `<`, `<=`, `>`, `>=`, `~`).
+2. No runtime type conversion - all values are strings.
 
 Validation:
 
-1. Conversion success/failure matrix tests.
-2. Edge-case tests for malformed numbers and empty strings.
+1. String comparison tests for all operators.
+2. Edge-case tests for empty strings and special characters.
 
 ### Commit 10: Integrate Query Pipeline In `track show`
 
@@ -450,26 +449,8 @@ Validation:
 1. Existing filter scenarios still return equivalent results.
 2. Hot-only filters show reduced cold reads (instrumentation/log assertion in tests where feasible).
 
-### Commit 11: Migration Command + Compatibility Removal Gate
 
-Files:
-
-1. `tool/*` migration command file (new)
-2. `src/core/*` migration helpers (new)
-3. tests for migration (new)
-
-Changes:
-
-1. Add one-shot migrator from legacy `tracks` to `tracks_hot` + `tracks_cold`.
-2. Add verification summary output (counts + failed IDs).
-3. Keep fallback read path until migration is validated.
-
-Validation:
-
-1. Migration test on temporary LMDB env.
-2. Data parity checks for core fields and custom KV text pairs.
-
-### Commit 12: Cleanup And Finalization
+### Commit 11: Cleanup And Finalization
 
 Files:
 
@@ -477,9 +458,8 @@ Files:
 
 Changes:
 
-1. Remove temporary wrappers and dead compatibility branches when safe.
-2. Finalize comments/docs for new `%` semantics and runtime conversion rules.
-3. Ensure style and test coverage are consistent.
+1. Finalize comments/docs for new `%` semantics and lexicographic comparison behavior.
+2. Ensure style and test coverage are consistent.
 
 Validation:
 
@@ -501,4 +481,3 @@ Use this checklist in PR description to keep rollout visible:
 9. [ ] Commit 9 done
 10. [ ] Commit 10 done
 11. [ ] Commit 11 done
-12. [ ] Commit 12 done

@@ -4,7 +4,7 @@
 #pragma once
 
 #include <rs/core/DictionaryStore.h>
-#include <rs/core/TrackLayout.h>
+#include <rs/core/TrackView.h>
 
 #include <string>
 #include <string_view>

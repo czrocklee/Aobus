@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/core/TrackLayout.h>
+#include <rs/core/TrackView.h>
 #include <rs/expr/ExecutionPlan.h>
 
 #include <string_view>
