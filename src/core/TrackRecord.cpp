@@ -16,11 +16,7 @@ namespace rs::core
 
     // Copy hot property fields
     auto prop = hotView.property();
-    property.durationMs = prop.durationMs();
-    property.bitrate = prop.bitrate();
-    property.sampleRate = prop.sampleRate();
     property.codecId = prop.codecId();
-    property.channels = prop.channels();
     property.bitDepth = prop.bitDepth();
     property.rating = prop.rating();
 
@@ -28,6 +24,10 @@ namespace rs::core
     auto coldProp = coldView.property();
     property.fileSize = coldProp.fileSize();
     property.mtime = coldProp.mtime();
+    property.durationMs = coldProp.durationMs();
+    property.sampleRate = coldProp.sampleRate();
+    property.bitrate = coldProp.bitrate();
+    property.channels = coldProp.channels();
 
     // Get hot metadata strings
     auto meta = hotView.metadata();
@@ -66,25 +66,21 @@ namespace rs::core
   TrackHotHeader TrackRecord::hotHeader() const
   {
     // Compute bloom filter from tag IDs first
-    std::uint32_t bloom = 0;
-    for (auto tagId : tags.ids) { bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask)); }
+    std::uint64_t bloom = 0;
+    for (auto tagId : tags.ids) { bloom |= (std::uint64_t{1} << (tagId.value() & kBloomBitMask)); }
 
     return TrackHotHeader{
       .tagBloom = bloom,
-      .durationMs = property.durationMs,
-      .bitrate = property.bitrate,
-      .sampleRate = property.sampleRate,
       .artistId = artistId,
       .albumId = albumId,
       .genreId = genreId,
       .albumArtistId = albumArtistId,
       .year = metadata.year,
       .codecId = property.codecId,
+      .bitDepth = property.bitDepth,
       .titleOffset = 0,
       .titleLen = 0,
       .tagsOffset = 0,
-      .channels = property.channels,
-      .bitDepth = property.bitDepth,
       .rating = property.rating,
       .tagCount = static_cast<std::uint8_t>(tags.ids.size()),
     };
@@ -95,14 +91,17 @@ namespace rs::core
     return TrackColdHeader{
       .fileSize = cold.fileSize,
       .mtime = cold.mtime,
+      .durationMs = property.durationMs,
+      .sampleRate = property.sampleRate,
       .coverArtId = cold.coverArtId,
+      .bitrate = property.bitrate,
       .trackNumber = cold.trackNumber,
       .totalTracks = cold.totalTracks,
       .discNumber = cold.discNumber,
       .totalDiscs = cold.totalDiscs,
       .uriOffset = 0,
       .uriLen = 0,
-      .reserved = 0,
+      .channels = property.channels,
     };
   }
 

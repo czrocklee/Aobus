@@ -19,16 +19,15 @@ namespace rs::core
    * TrackHotHeader - POD struct for hot track storage.
    * Hot fields are used for fast filtering/sorting operations.
    *
-   * Layout uses strictly descending member sizes (4→2→1) for natural alignment.
-   * Total size: 48 bytes with 4-byte alignment.
+   * Layout uses strictly descending member sizes (8→4→2→1) for natural alignment.
+   * Total size: 40 bytes with 8-byte alignment.
    */
   struct TrackHotHeader final
   {
+    // 8-byte section
+    std::uint64_t tagBloom; // Bloom filter for tags (64-bit, extended)
+
     // 4-byte section
-    std::uint32_t tagBloom;     // Bloom filter for tags (32-bit)
-    std::uint32_t durationMs;   // Track duration in milliseconds
-    std::uint32_t bitrate;      // Bitrate in bps
-    std::uint32_t sampleRate;   // Sample rate in Hz
     DictionaryId artistId;      // Dictionary ID for artist
     DictionaryId albumId;       // Dictionary ID for album
     DictionaryId genreId;       // Dictionary ID for genre
@@ -37,23 +36,22 @@ namespace rs::core
     // 2-byte section
     std::uint16_t year;        // Release year
     std::uint16_t codecId;     // Audio codec identifier
+    std::uint16_t bitDepth;    // Bits per sample
     std::uint16_t titleOffset; // Offset to title string in payload
     std::uint16_t titleLen;    // Length of title string
     std::uint16_t tagsOffset;  // Offset to tags blob in payload
 
     // 1-byte section
-    std::uint8_t channels; // Number of audio channels
-    std::uint8_t bitDepth; // Bits per sample
     std::uint8_t rating;   // User rating (0-5)
     std::uint8_t tagCount; // Number of tags
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackHotHeaderSize = 48;
-  constexpr std::size_t kTrackHotHeaderAlignment = 4;
+  constexpr std::size_t kTrackHotHeaderSize = 40;
+  constexpr std::size_t kTrackHotHeaderAlignment = 8;
 
-  static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 48 bytes");
-  static_assert(alignof(TrackHotHeader) == kTrackHotHeaderAlignment, "TrackHotHeader must have 4-byte alignment");
+  static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 40 bytes");
+  static_assert(alignof(TrackHotHeader) == kTrackHotHeaderAlignment, "TrackHotHeader must have 8-byte alignment");
 
   /**
    * TrackColdHeader - POD struct for cold track fixed fields.
@@ -61,38 +59,42 @@ namespace rs::core
    *
    * Cold fixed fields are those not used in high-frequency filter/sort operations:
    *   - fileSize, mtime: file identity / refresh detection
+   *   - durationMs, bitrate, sampleRate, channels: audio properties
    *   - coverArtId: display only
    *   - trackNumber, totalTracks, discNumber, totalDiscs: display only
    *   - uri: playback path, not filtered
    *
-   * Total size: 40 bytes with 8-byte alignment.
+   * Total size: 48 bytes with 8-byte alignment.
    */
   struct TrackColdHeader final
   {
     // 8-byte section
-    std::uint64_t fileSize; // File size in bytes
-    std::uint64_t mtime;    // Last modification time (unix timestamp)
+    std::uint64_t fileSize;   // File size in bytes
+    std::uint64_t mtime;      // Last modification time (unix timestamp)
 
     // 4-byte section
+    std::uint32_t durationMs; // Track duration in milliseconds
+    std::uint32_t sampleRate; // Sample rate in Hz
     std::uint32_t coverArtId; // ResourceStore ID for cover art
 
     // 2-byte section
-    std::uint16_t trackNumber; // Track number
+    std::uint16_t bitrate;     // Bitrate in bps
+    std::uint16_t trackNumber;  // Track number
     std::uint16_t totalTracks; // Total tracks in album
-    std::uint16_t discNumber;  // Disc number
+    std::uint16_t discNumber;   // Disc number
     std::uint16_t totalDiscs;  // Total discs in album
-    std::uint16_t uriOffset;   // Offset to URI string in payload
-    std::uint16_t uriLen;      // Length of URI string
+    std::uint16_t uriOffset;    // Offset to URI string in payload
+    std::uint16_t uriLen;       // Length of URI string
 
-    // 1-byte section (padding to 8-byte alignment)
-    std::uint8_t reserved; // Padding for alignment
+    // 1-byte section
+    std::uint8_t channels; // Number of audio channels
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackColdHeaderSize = 40; // 33 bytes + 7 padding for 8-byte alignment
+  constexpr std::size_t kTrackColdHeaderSize = 48; // 41 bytes + 7 padding for 8-byte alignment
   constexpr std::size_t kTrackColdHeaderAlignment = 8;
 
-  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 40 bytes");
+  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 48 bytes");
   static_assert(alignof(TrackColdHeader) == kTrackColdHeaderAlignment, "TrackColdHeader must have 8-byte alignment");
 
   /**

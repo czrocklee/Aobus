@@ -106,7 +106,6 @@ TEST_CASE("TrackRecord - Serialize With Strings")
   record.metadata.title = "Hello World";
   record.cold.uri = "/music/test.flac";
   record.metadata.year = 2021;
-  record.property.durationMs = 240000;
 
   auto data = record.serializeHot();
 
@@ -118,7 +117,6 @@ TEST_CASE("TrackRecord - Serialize With Strings")
 
   CHECK(header->titleLen == 11); // "Hello World"
   CHECK(header->year == 2021);
-  CHECK(header->durationMs == 240000);
 
   // Verify strings are in the payload
   auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHotHeader);
@@ -129,16 +127,12 @@ TEST_CASE("TrackRecord - hotHeader Method")
 {
   TrackRecord record;
   record.metadata.year = 1999;
-  record.property.durationMs = 300000;
-  record.property.channels = 2;
   record.property.bitDepth = 24;
   record.property.rating = 5;
 
   auto header = record.hotHeader();
 
   CHECK(header.year == 1999);
-  CHECK(header.durationMs == 300000);
-  CHECK(header.channels == 2);
   CHECK(header.bitDepth == 24);
   CHECK(header.rating == 5);
 }
@@ -238,13 +232,10 @@ TEST_CASE("TrackRecord - hotHeader Method With Tags")
 TEST_CASE("TrackRecord - hotHeader")
 {
   TrackRecord record;
-  record.property.fileSize = 1000;
-  record.property.durationMs = 180000;
   record.tags.ids = {DictionaryId{1}, DictionaryId{2}};
 
   auto header = record.hotHeader();
 
-  CHECK(header.durationMs == 180000);
   CHECK(header.tagCount == 2);
   CHECK(header.tagBloom != 0);
 }
@@ -274,7 +265,6 @@ TEST_CASE("TrackRecord - serializeHot")
 {
   TrackRecord record;
   record.property.fileSize = 1000;
-  record.property.durationMs = 180000;
   record.metadata.title = "Test Title";
   record.cold.uri = "/path/to/file.flac";
   record.tags.ids = {DictionaryId{10}, DictionaryId{20}};
@@ -283,7 +273,6 @@ TEST_CASE("TrackRecord - serializeHot")
 
   // Verify hot header
   auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->durationMs == 180000);
   CHECK(header->tagCount == 2);
 
   // Verify bloom is computed

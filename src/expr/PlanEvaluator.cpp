@@ -81,14 +81,6 @@ namespace rs::expr
     switch (field)
     {
       // Property fields (@ prefix)
-      case Field::DurationMs:
-        return static_cast<std::int64_t>(hotView.property().durationMs());
-      case Field::Bitrate:
-        return static_cast<std::int64_t>(hotView.property().bitrate());
-      case Field::SampleRate:
-        return static_cast<std::int64_t>(hotView.property().sampleRate());
-      case Field::Channels:
-        return static_cast<std::int64_t>(hotView.property().channels());
       case Field::BitDepth:
         return static_cast<std::int64_t>(hotView.property().bitDepth());
       case Field::CodecId:
@@ -136,6 +128,14 @@ namespace rs::expr
   {
     switch (field)
     {
+      case Field::DurationMs:
+        return static_cast<std::int64_t>(coldView.property().durationMs());
+      case Field::Bitrate:
+        return static_cast<std::int64_t>(coldView.property().bitrate());
+      case Field::SampleRate:
+        return static_cast<std::int64_t>(coldView.property().sampleRate());
+      case Field::Channels:
+        return static_cast<std::int64_t>(coldView.property().channels());
       case Field::CoverArtId:
         return static_cast<std::int64_t>(coldView.property().coverArtId());
       case Field::TrackNumber:

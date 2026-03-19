@@ -22,16 +22,13 @@ namespace
   std::vector<std::byte> createMinimalData()
   {
     TrackHotHeader h{};
-    h.durationMs = 180000;
-    h.bitrate = 320000;
-    h.sampleRate = 44100;
+    h.tagBloom = 0;
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
     h.year = 2020;
     h.codecId = 0;
-    h.channels = 2;
     h.bitDepth = 16;
     h.rating = 3;
     h.tagCount = 0;
@@ -45,16 +42,13 @@ namespace
   std::vector<std::byte> createTrackWithStrings(std::string_view title)
   {
     TrackHotHeader h{};
-    h.durationMs = 180000;
-    h.bitrate = 320000;
-    h.sampleRate = 44100;
+    h.tagBloom = 0;
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
     h.year = 2020;
     h.codecId = 0;
-    h.channels = 2;
     h.bitDepth = 16;
     h.rating = 3;
     h.tagCount = 0;
@@ -74,29 +68,33 @@ namespace
 
   TEST_CASE("TrackHotHeader - Size and Alignment")
   {
-    CHECK(sizeof(TrackHotHeader) == 64);
+    CHECK(sizeof(TrackHotHeader) == 40);
     CHECK(alignof(TrackHotHeader) == 8);
   }
 
   TEST_CASE("TrackHotHeader - Field Offsets")
   {
     // Verify key field offsets for ABI compatibility
-    // Check 4-byte section starts at offset 0
+    // Check 8-byte section
     CHECK(offsetof(TrackHotHeader, tagBloom) == 0);
-    CHECK(offsetof(TrackHotHeader, durationMs) == 4);
 
-    // Check 2-byte section starts at offset 32
-    CHECK(offsetof(TrackHotHeader, year) == 32);
-    CHECK(offsetof(TrackHotHeader, codecId) == 34);
-    CHECK(offsetof(TrackHotHeader, titleOffset) == 36);
-    CHECK(offsetof(TrackHotHeader, titleLen) == 38);
-    CHECK(offsetof(TrackHotHeader, tagsOffset) == 40);
+    // Check 4-byte section starts at offset 8
+    CHECK(offsetof(TrackHotHeader, artistId) == 8);
+    CHECK(offsetof(TrackHotHeader, albumId) == 12);
+    CHECK(offsetof(TrackHotHeader, genreId) == 16);
+    CHECK(offsetof(TrackHotHeader, albumArtistId) == 20);
+
+    // Check 2-byte section starts at offset 24
+    CHECK(offsetof(TrackHotHeader, year) == 24);
+    CHECK(offsetof(TrackHotHeader, codecId) == 26);
+    CHECK(offsetof(TrackHotHeader, bitDepth) == 28);
+    CHECK(offsetof(TrackHotHeader, titleOffset) == 30);
+    CHECK(offsetof(TrackHotHeader, titleLen) == 32);
+    CHECK(offsetof(TrackHotHeader, tagsOffset) == 34);
 
     // Check 1-byte section
-    CHECK(offsetof(TrackHotHeader, channels) == 42);
-    CHECK(offsetof(TrackHotHeader, bitDepth) == 43);
-    CHECK(offsetof(TrackHotHeader, rating) == 44);
-    CHECK(offsetof(TrackHotHeader, tagCount) == 45);
+    CHECK(offsetof(TrackHotHeader, rating) == 36);
+    CHECK(offsetof(TrackHotHeader, tagCount) == 37);
   }
 
   TEST_CASE("TrackHotView - Default Constructor")
@@ -122,16 +120,12 @@ namespace
     auto prop = view.property();
     auto meta = view.metadata();
 
-    CHECK(prop.durationMs() == 180000);
-    CHECK(prop.bitrate() == 320000);
-    CHECK(prop.sampleRate() == 44100);
     CHECK(meta.artistId() == 1);
     CHECK(meta.albumId() == 2);
     CHECK(meta.genreId() == 3);
     CHECK(meta.albumArtistId() == 0);
     CHECK(meta.year() == 2020);
     CHECK(prop.codecId() == 0);
-    CHECK(prop.channels() == 2);
     CHECK(prop.bitDepth() == 16);
     CHECK(prop.rating() == 3);
     CHECK(view.tags().count() == 0);
@@ -200,16 +194,13 @@ namespace
   {
     // Create a track with 2 tags (tag IDs: 10, 20)
     TrackHotHeader h{};
-    h.durationMs = 180000;
-    h.bitrate = 320000;
-    h.sampleRate = 44100;
+    h.tagBloom = 0;
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
     h.year = 2020;
     h.codecId = 0;
-    h.channels = 2;
     h.bitDepth = 16;
     h.rating = 3;
     h.tagCount = 2;

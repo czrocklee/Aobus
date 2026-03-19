@@ -35,13 +35,9 @@ namespace rs::core
     public:
       explicit HotPropertyProxy(TrackHotView const& track) : _track(track) {}
 
-      std::uint32_t durationMs() const noexcept { return _track.header()->durationMs; }
-      std::uint32_t bitrate() const noexcept { return _track.header()->bitrate; }
-      std::uint32_t sampleRate() const noexcept { return _track.header()->sampleRate; }
-      std::uint8_t channels() const noexcept { return _track.header()->channels; }
+      std::uint16_t codecId() const noexcept { return _track.header()->codecId; }
       std::uint8_t bitDepth() const noexcept { return _track.header()->bitDepth; }
       std::uint8_t rating() const noexcept { return _track.header()->rating; }
-      std::uint16_t codecId() const noexcept { return _track.header()->codecId; }
 
     private:
       TrackHotView const& _track;
@@ -134,11 +130,15 @@ namespace rs::core
 
       std::uint64_t fileSize() const noexcept { return _track.header()->fileSize; }
       std::uint64_t mtime() const noexcept { return _track.header()->mtime; }
+      std::uint32_t durationMs() const noexcept { return _track.header()->durationMs; }
+      std::uint32_t sampleRate() const noexcept { return _track.header()->sampleRate; }
       std::uint32_t coverArtId() const noexcept { return _track.header()->coverArtId; }
+      std::uint16_t bitrate() const noexcept { return _track.header()->bitrate; }
       std::uint16_t trackNumber() const noexcept { return _track.header()->trackNumber; }
       std::uint16_t totalTracks() const noexcept { return _track.header()->totalTracks; }
       std::uint16_t discNumber() const noexcept { return _track.header()->discNumber; }
       std::uint16_t totalDiscs() const noexcept { return _track.header()->totalDiscs; }
+      std::uint8_t channels() const noexcept { return _track.header()->channels; }
       std::string_view uri() const { return _track.uri(); }
 
     private:
@@ -165,11 +165,15 @@ namespace rs::core
     // Fixed field accessors (direct)
     std::uint64_t fileSize() const noexcept { return _header->fileSize; }
     std::uint64_t mtime() const noexcept { return _header->mtime; }
+    std::uint32_t durationMs() const noexcept { return _header->durationMs; }
+    std::uint32_t sampleRate() const noexcept { return _header->sampleRate; }
     std::uint32_t coverArtId() const noexcept { return _header->coverArtId; }
+    std::uint16_t bitrate() const noexcept { return _header->bitrate; }
     std::uint16_t trackNumber() const noexcept { return _header->trackNumber; }
     std::uint16_t totalTracks() const noexcept { return _header->totalTracks; }
     std::uint16_t discNumber() const noexcept { return _header->discNumber; }
     std::uint16_t totalDiscs() const noexcept { return _header->totalDiscs; }
+    std::uint8_t channels() const noexcept { return _header->channels; }
     std::string_view uri() const;
 
     /**
