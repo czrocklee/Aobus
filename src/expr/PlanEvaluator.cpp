@@ -105,20 +105,10 @@ namespace rs::expr
         return static_cast<std::int64_t>(hotView.metadata().genreId().value());
       case Field::AlbumArtistId:
         return static_cast<std::int64_t>(hotView.metadata().albumArtistId().value());
-      case Field::CoverArtId:
-        return static_cast<std::int64_t>(hotView.metadata().coverArtId());
 
       // Metadata numeric fields
       case Field::Year:
         return static_cast<std::int64_t>(hotView.metadata().year());
-      case Field::TrackNumber:
-        return static_cast<std::int64_t>(hotView.metadata().trackNumber());
-      case Field::TotalTracks:
-        return static_cast<std::int64_t>(hotView.metadata().totalTracks());
-      case Field::DiscNumber:
-        return static_cast<std::int64_t>(hotView.metadata().discNumber());
-      case Field::TotalDiscs:
-        return static_cast<std::int64_t>(hotView.metadata().totalDiscs());
 
       // Tag fields
       case Field::TagBloom:
@@ -137,8 +127,6 @@ namespace rs::expr
     {
       case Field::Title:
         return hotView.metadata().title();
-      case Field::Uri:
-        return hotView.property().uri();
       default:
         return {};
     }

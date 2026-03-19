@@ -44,7 +44,6 @@ namespace rs::core
       std::uint64_t fileSize() const noexcept { return _track.header()->fileSize; }
       std::uint64_t mtime() const noexcept { return _track.header()->mtime; }
       std::uint16_t codecId() const noexcept { return _track.header()->codecId; }
-      std::string_view uri() const { return _track.uri(); }
 
     private:
       TrackHotView const& _track;
@@ -60,12 +59,7 @@ namespace rs::core
       DictionaryId albumId() const noexcept { return _track.header()->albumId; }
       DictionaryId genreId() const noexcept { return _track.header()->genreId; }
       DictionaryId albumArtistId() const noexcept { return _track.header()->albumArtistId; }
-      std::uint32_t coverArtId() const noexcept { return _track.header()->coverArtId; }
       std::uint16_t year() const noexcept { return _track.header()->year; }
-      std::uint16_t trackNumber() const noexcept { return _track.header()->trackNumber; }
-      std::uint16_t totalTracks() const noexcept { return _track.header()->totalTracks; }
-      std::uint16_t discNumber() const noexcept { return _track.header()->discNumber; }
-      std::uint16_t totalDiscs() const noexcept { return _track.header()->totalDiscs; }
 
     private:
       TrackHotView const& _track;
@@ -110,7 +104,6 @@ namespace rs::core
     std::string_view getString(std::uint16_t offset, std::uint16_t len) const;
 
     std::string_view title() const { return getString(_header->titleOffset, _header->titleLen); }
-    std::string_view uri() const { return getString(_header->uriOffset, _header->uriLen); }
     std::uint32_t tagId(std::uint8_t index) const;
   };
 

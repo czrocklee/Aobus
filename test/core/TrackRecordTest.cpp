@@ -117,7 +117,6 @@ TEST_CASE("TrackRecord - Serialize With Strings")
   auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
 
   CHECK(header->titleLen == 11); // "Hello World"
-  CHECK(header->uriLen == 16);   // "/music/test.flac"
   CHECK(header->year == 2021);
   CHECK(header->durationMs == 240000);
 
@@ -130,7 +129,6 @@ TEST_CASE("TrackRecord - hotHeader Method")
 {
   TrackRecord record;
   record.metadata.year = 1999;
-  record.metadata.trackNumber = 7;
   record.property.durationMs = 300000;
   record.property.channels = 2;
   record.property.bitDepth = 24;
@@ -139,7 +137,6 @@ TEST_CASE("TrackRecord - hotHeader Method")
   auto header = record.hotHeader();
 
   CHECK(header.year == 1999);
-  CHECK(header.trackNumber == 7);
   CHECK(header.durationMs == 300000);
   CHECK(header.channels == 2);
   CHECK(header.bitDepth == 24);
@@ -150,13 +147,11 @@ TEST_CASE("TrackRecord - Serialize With Special Characters")
 {
   TrackRecord record;
   record.metadata.title = "Test: \"Quotes\" & 'Apostrophes'";
-  record.cold.uri = "/path/with spaces/file.mp3";
 
   auto data = record.serializeHot();
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
   CHECK(header->titleLen == record.metadata.title.size());
-  CHECK(header->uriLen == record.cold.uri.size());
 }
 
 TEST_CASE("TrackRecord - Serialize Preserves Data")

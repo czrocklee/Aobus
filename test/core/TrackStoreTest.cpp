@@ -36,7 +36,6 @@ TEST_CASE("TrackStore - create and read", "[core][track]")
   TrackHotHeader hotHeader{};
   hotHeader.fileSize = 1000;
   hotHeader.durationMs = 180000;
-  hotHeader.trackNumber = 1;
 
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
@@ -198,7 +197,6 @@ TEST_CASE("TrackStore - hot/cold createHotCold", "[core][track]")
   TrackHotHeader hotHeader{};
   hotHeader.fileSize = 1000;
   hotHeader.durationMs = 180000;
-  hotHeader.trackNumber = 1;
 
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));

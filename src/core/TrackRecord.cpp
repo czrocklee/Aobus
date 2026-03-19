@@ -30,7 +30,6 @@ namespace rs::core
     auto meta = hotView.metadata();
     metadata.title = std::string{meta.title()};
     metadata.year = meta.year();
-    metadata.coverArtId = meta.coverArtId();
 
     // Resolve dictionary IDs to strings
     if (meta.artistId() > 0) { metadata.artist = std::string{dict.get(meta.artistId())}; }
@@ -78,17 +77,10 @@ namespace rs::core
       .albumId = albumId,
       .genreId = genreId,
       .albumArtistId = albumArtistId,
-      .coverArtId = metadata.coverArtId,
       .year = metadata.year,
-      .trackNumber = metadata.trackNumber,
-      .totalTracks = metadata.totalTracks,
-      .discNumber = metadata.discNumber,
-      .totalDiscs = metadata.totalDiscs,
       .codecId = property.codecId,
       .titleOffset = 0,
       .titleLen = 0,
-      .uriOffset = 0,
-      .uriLen = 0,
       .tagsOffset = 0,
       .channels = property.channels,
       .bitDepth = property.bitDepth,
@@ -123,12 +115,9 @@ namespace rs::core
     // Calculate offsets - tags first (hot data for filtering)
     std::uint16_t tagsOffset = 0;
     std::uint16_t titleOffset = static_cast<std::uint16_t>(tags.ids.size() * sizeof(std::uint32_t));
-    std::uint16_t uriOffset = static_cast<std::uint16_t>(titleOffset + metadata.title.size() + 1);
 
     h.titleOffset = titleOffset;
     h.titleLen = static_cast<std::uint16_t>(metadata.title.size());
-    h.uriOffset = uriOffset;
-    h.uriLen = static_cast<std::uint16_t>(cold.uri.size());
     h.tagsOffset = tagsOffset;
 
     // Write header
@@ -145,11 +134,6 @@ namespace rs::core
     // Write title
     auto titleBytes = utility::asBytes(metadata.title);
     data.insert(data.end(), titleBytes.begin(), titleBytes.end());
-    data.push_back(static_cast<std::byte>('\0'));
-
-    // Write uri (for display, even though it's also in cold)
-    auto uriBytes = utility::asBytes(cold.uri);
-    data.insert(data.end(), uriBytes.begin(), uriBytes.end());
     data.push_back(static_cast<std::byte>('\0'));
 
     return data;

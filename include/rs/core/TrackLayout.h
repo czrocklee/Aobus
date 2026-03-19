@@ -17,8 +17,10 @@ namespace rs::core
 
   /**
    * TrackHotHeader - POD struct for hot track storage.
+   * Hot fields are used for fast filtering/sorting operations.
+   *
    * Layout uses strictly descending member sizes (8→4→2→1) for natural alignment.
-   * Total size: 80 bytes with 8-byte alignment.
+   * Total size: 48 bytes with 8-byte alignment.
    */
   struct TrackHotHeader final
   {
@@ -35,19 +37,12 @@ namespace rs::core
     DictionaryId albumId;       // Dictionary ID for album
     DictionaryId genreId;       // Dictionary ID for genre
     DictionaryId albumArtistId; // Dictionary ID for album artist
-    std::uint32_t coverArtId;   // ResourceStore ID for cover art
 
     // 2-byte section
     std::uint16_t year;        // Release year
-    std::uint16_t trackNumber; // Track number
-    std::uint16_t totalTracks; // Total tracks in album
-    std::uint16_t discNumber;  // Disc number
-    std::uint16_t totalDiscs;  // Total discs in album
     std::uint16_t codecId;     // Audio codec identifier
     std::uint16_t titleOffset; // Offset to title string in payload
     std::uint16_t titleLen;    // Length of title string
-    std::uint16_t uriOffset;   // Offset to URI string in payload
-    std::uint16_t uriLen;      // Length of URI string
     std::uint16_t tagsOffset;  // Offset to tags blob in payload
 
     // 1-byte section
@@ -58,7 +53,7 @@ namespace rs::core
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackHotHeaderSize = 80;    // 76 bytes + 4 padding for 8-byte alignment
+  constexpr std::size_t kTrackHotHeaderSize = 64;
   constexpr std::size_t kTrackHotHeaderAlignment = 8;
 
   static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 80 bytes");

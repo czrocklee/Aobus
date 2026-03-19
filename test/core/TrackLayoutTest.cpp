@@ -32,7 +32,6 @@ namespace
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
     h.year = 2020;
-    h.trackNumber = 5;
     h.codecId = 0;
     h.channels = 2;
     h.bitDepth = 16;
@@ -40,14 +39,12 @@ namespace
     h.tagCount = 0;
     h.titleOffset = 0;
     h.titleLen = 0;
-    h.uriOffset = 0;
-    h.uriLen = 0;
     h.tagsOffset = 0;
 
     return serializeHeader(h);
   }
 
-  std::vector<std::byte> createTrackWithStrings(std::string_view title, std::string_view uri)
+  std::vector<std::byte> createTrackWithStrings(std::string_view title)
   {
     TrackHotHeader h{};
     h.fileSize = 1000;
@@ -60,32 +57,28 @@ namespace
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
     h.year = 2020;
-    h.trackNumber = 5;
     h.codecId = 0;
     h.channels = 2;
     h.bitDepth = 16;
     h.rating = 3;
     h.tagCount = 0;
 
-    // Title at offset 0 in payload, URI after title + null terminator
+    // Title at offset 0 in payload, tags after title + null terminator
     h.titleOffset = 0;
     h.titleLen = static_cast<std::uint16_t>(title.size());
-    h.uriOffset = static_cast<std::uint16_t>(title.size() + 1);
-    h.uriLen = static_cast<std::uint16_t>(uri.size());
-    h.tagsOffset = static_cast<std::uint16_t>(title.size() + 1 + uri.size() + 1);
+    h.tagsOffset = static_cast<std::uint16_t>(title.size() + 1);
 
     auto data = serializeHeader(h);
 
-    // Add title + null + uri + null
+    // Add title + null
     appendString(data, title);
-    appendString(data, uri);
 
     return data;
   }
 
   TEST_CASE("TrackHotHeader - Size and Alignment")
   {
-    CHECK(sizeof(TrackHotHeader) == 80);
+    CHECK(sizeof(TrackHotHeader) == 64);
     CHECK(alignof(TrackHotHeader) == 8);
   }
 
@@ -100,16 +93,18 @@ namespace
     CHECK(offsetof(TrackHotHeader, tagBloom) == 16);
     CHECK(offsetof(TrackHotHeader, durationMs) == 20);
 
-    // Check 2-byte section starts at offset 52
-    CHECK(offsetof(TrackHotHeader, year) == 52);
-    CHECK(offsetof(TrackHotHeader, trackNumber) == 54);
-    CHECK(offsetof(TrackHotHeader, totalTracks) == 56);
-    CHECK(offsetof(TrackHotHeader, discNumber) == 58);
-    CHECK(offsetof(TrackHotHeader, totalDiscs) == 60);
+    // Check 2-byte section starts at offset 48
+    CHECK(offsetof(TrackHotHeader, year) == 48);
+    CHECK(offsetof(TrackHotHeader, codecId) == 50);
+    CHECK(offsetof(TrackHotHeader, titleOffset) == 52);
+    CHECK(offsetof(TrackHotHeader, titleLen) == 54);
+    CHECK(offsetof(TrackHotHeader, tagsOffset) == 56);
 
     // Check 1-byte section
-    CHECK(offsetof(TrackHotHeader, channels) == 74);
-    CHECK(offsetof(TrackHotHeader, bitDepth) == 75);
+    CHECK(offsetof(TrackHotHeader, channels) == 58);
+    CHECK(offsetof(TrackHotHeader, bitDepth) == 59);
+    CHECK(offsetof(TrackHotHeader, rating) == 60);
+    CHECK(offsetof(TrackHotHeader, tagCount) == 61);
   }
 
   TEST_CASE("TrackHotView - Default Constructor")
@@ -145,7 +140,6 @@ namespace
     CHECK(meta.genreId() == 3);
     CHECK(meta.albumArtistId() == 0);
     CHECK(meta.year() == 2020);
-    CHECK(meta.trackNumber() == 5);
     CHECK(prop.codecId() == 0);
     CHECK(prop.channels() == 2);
     CHECK(prop.bitDepth() == 16);
@@ -155,12 +149,11 @@ namespace
 
   TEST_CASE("TrackHotView - String Accessors")
   {
-    auto data = createTrackWithStrings("Test Title", "/path/to/file.flac");
+    auto data = createTrackWithStrings("Test Title");
     TrackHotView view(std::as_bytes(std::span{data}));
 
     CHECK(view.isValid() == true);
     CHECK(view.metadata().title() == "Test Title");
-    CHECK(view.property().uri() == "/path/to/file.flac");
   }
 
   TEST_CASE("TrackHotView - Empty String Handling")
@@ -170,7 +163,6 @@ namespace
 
     // Empty strings should return empty string_view
     CHECK(view.metadata().title().empty());
-    CHECK(view.property().uri().empty());
   }
 
   TEST_CASE("TrackHotView - Invalid Data")
@@ -203,7 +195,7 @@ namespace
 
   TEST_CASE("TrackHotView - Tag Accessors - No Tags")
   {
-    auto data = createTrackWithStrings("Test", "/path/to/file.flac");
+    auto data = createTrackWithStrings("Test");
     TrackHotView view(std::as_bytes(std::span{data}));
 
     CHECK(view.tags().count() == 0);
@@ -228,27 +220,22 @@ namespace
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
     h.year = 2020;
-    h.trackNumber = 5;
     h.codecId = 0;
     h.channels = 2;
     h.bitDepth = 16;
     h.rating = 3;
     h.tagCount = 2;
 
-    // Title at offset 0, URI after title, tags after URI
+    // Title at offset 0, tags after title
     std::string title = "Test Title";
-    std::string uri = "/path/to/file.flac";
     h.titleOffset = 0;
     h.titleLen = static_cast<std::uint16_t>(title.size());
-    h.uriOffset = static_cast<std::uint16_t>(title.size() + 1);
-    h.uriLen = static_cast<std::uint16_t>(uri.size());
-    h.tagsOffset = static_cast<std::uint16_t>(title.size() + 1 + uri.size() + 1);
+    h.tagsOffset = static_cast<std::uint16_t>(title.size() + 1);
 
     auto data = serializeHeader(h);
 
-    // Add title + null + uri + null
+    // Add title + null
     appendString(data, title);
-    appendString(data, uri);
 
     // Add tag IDs (4 bytes each)
     std::uint32_t tag1 = 10;
