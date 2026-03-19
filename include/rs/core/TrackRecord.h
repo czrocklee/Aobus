@@ -35,6 +35,15 @@ namespace rs::core
     TrackRecord(TrackView const& view, DictionaryStore const& dict);
 
     /**
+     * Construct from hot and cold views by resolving dictionary IDs.
+     *
+     * @param hotView The binary hot track view
+     * @param coldView The binary cold track view
+     * @param dict DictionaryStore to resolve artist/album/genre IDs
+     */
+    TrackRecord(TrackHotView const& hotView, TrackColdView const& coldView, DictionaryStore const& dict);
+
+    /**
      * Property - Audio file technical properties (@ prefix).
      */
     struct Property
@@ -77,9 +86,28 @@ namespace rs::core
       std::vector<DictionaryId> ids; // Tag IDs for serialization
     };
 
+    /**
+     * Cold - Fields stored in cold storage (display/extended).
+     */
+    struct Cold
+    {
+      std::string uri;
+      std::uint64_t fileSize = 0;
+      std::uint64_t mtime = 0;
+      std::uint32_t coverArtId = 0;
+      std::uint16_t trackNumber = 0;
+      std::uint16_t totalTracks = 0;
+      std::uint16_t discNumber = 0;
+      std::uint16_t totalDiscs = 0;
+    };
+
     Property property;
     Metadata metadata;
     Tags tags;
+    Cold cold;
+
+    // Custom key-value pairs (stored in cold storage)
+    std::vector<std::pair<std::string, std::string>> customMeta;
 
     // Dictionary IDs - resolved at creation time
     DictionaryId artistId;
@@ -88,16 +116,40 @@ namespace rs::core
     DictionaryId albumArtistId;
 
     /**
-     * Serialize this record to binary format for LMDB storage.
+     * Serialize hot fields to binary format for tracks_hot DB.
+     *
+     * @return Vector of bytes suitable for TrackStore::Writer::createHotCold
+     */
+    std::vector<std::byte> serializeHot() const;
+
+    /**
+     * Serialize cold fields to binary format for tracks_cold DB.
+     *
+     * @return Vector of bytes suitable for TrackStore::Writer::createHotCold
+     */
+    std::vector<std::byte> serializeCold() const;
+
+    /**
+     * Serialize this record to binary format for LMDB storage (legacy).
      *
      * @return Vector of bytes suitable for TrackStore::create
      */
     std::vector<std::byte> serialize() const;
 
     /**
-     * Get the header with current field values.
+     * Get the hot header with current field values.
      */
-    TrackHeader header() const;
+    TrackHotHeader hotHeader() const;
+
+    /**
+     * Get the cold header with current field values.
+     */
+    TrackColdHeader coldHeader() const;
+
+    /**
+     * Get the header (alias for hotHeader, for backward compatibility).
+     */
+    TrackHotHeader header() const { return hotHeader(); }
   };
 
 } // namespace rs::core

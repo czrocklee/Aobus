@@ -9,7 +9,11 @@
 #include <cstring>
 
 using rs::core::DictionaryId;
+using rs::core::TrackColdHeader;
+using rs::core::TrackColdView;
 using rs::core::TrackHeader;
+using rs::core::TrackHotHeader;
+using rs::core::TrackHotView;
 using rs::core::TrackRecord;
 using rs::core::TrackView;
 
@@ -236,4 +240,111 @@ TEST_CASE("TrackRecord - Header Method With Tags")
 
   CHECK(header.tagCount == 5);
   CHECK(header.tagBloom != 0);
+}
+
+TEST_CASE("TrackRecord - hotHeader")
+{
+  TrackRecord record;
+  record.property.fileSize = 1000;
+  record.property.durationMs = 180000;
+  record.tags.ids = {DictionaryId{1}, DictionaryId{2}};
+
+  auto header = record.hotHeader();
+
+  CHECK(header.fileSize == 1000);
+  CHECK(header.durationMs == 180000);
+  CHECK(header.tagCount == 2);
+  CHECK(header.tagBloom != 0);
+}
+
+TEST_CASE("TrackRecord - coldHeader")
+{
+  TrackRecord record;
+  record.cold.fileSize = 2000;
+  record.cold.mtime = 1234567890;
+  record.cold.trackNumber = 5;
+  record.cold.totalTracks = 10;
+  record.cold.discNumber = 1;
+  record.cold.totalDiscs = 2;
+  record.cold.uri = "/path/to/file.flac";
+
+  auto header = record.coldHeader();
+
+  CHECK(header.fileSize == 2000);
+  CHECK(header.mtime == 1234567890);
+  CHECK(header.trackNumber == 5);
+  CHECK(header.totalTracks == 10);
+  CHECK(header.discNumber == 1);
+  CHECK(header.totalDiscs == 2);
+}
+
+TEST_CASE("TrackRecord - serializeHot")
+{
+  TrackRecord record;
+  record.property.fileSize = 1000;
+  record.property.durationMs = 180000;
+  record.metadata.title = "Test Title";
+  record.cold.uri = "/path/to/file.flac";
+  record.tags.ids = {DictionaryId{10}, DictionaryId{20}};
+
+  auto data = record.serializeHot();
+
+  // Verify hot header
+  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
+  CHECK(header->fileSize == 1000);
+  CHECK(header->durationMs == 180000);
+  CHECK(header->tagCount == 2);
+
+  // Verify bloom is computed
+  CHECK(header->tagBloom != 0);
+}
+
+TEST_CASE("TrackRecord - serializeCold")
+{
+  TrackRecord record;
+  record.cold.fileSize = 2000;
+  record.cold.mtime = 9876543210;
+  record.cold.trackNumber = 3;
+  record.cold.uri = "/path/to/file.flac";
+  record.customMeta = {{"key1", "value1"}, {"key2", "value2"}};
+
+  auto data = record.serializeCold();
+
+  // Verify cold view can parse it
+  TrackColdView view(std::as_bytes(std::span{data}));
+  CHECK(view.isValid());
+  CHECK(view.fileSize() == 2000);
+  CHECK(view.mtime() == 9876543210);
+  CHECK(view.trackNumber() == 3);
+
+  // Verify custom meta
+  auto meta = view.customMeta();
+  CHECK(meta.size() == 2);
+  CHECK(meta[0].first == "key1");
+  CHECK(meta[0].second == "value1");
+  CHECK(meta[1].first == "key2");
+  CHECK(meta[1].second == "value2");
+}
+
+TEST_CASE("TrackRecord - customMeta field")
+{
+  TrackRecord record;
+  record.customMeta = {{"replaygain_track_gain_db", "-6.5"}, {"isrc", "USSM19999999"}};
+
+  CHECK(record.customMeta.size() == 2);
+  CHECK(record.customMeta[0].first == "replaygain_track_gain_db");
+  CHECK(record.customMeta[0].second == "-6.5");
+}
+
+TEST_CASE("TrackRecord - Cold struct default values")
+{
+  TrackRecord record;
+
+  CHECK(record.cold.fileSize == 0);
+  CHECK(record.cold.mtime == 0);
+  CHECK(record.cold.trackNumber == 0);
+  CHECK(record.cold.totalTracks == 0);
+  CHECK(record.cold.discNumber == 0);
+  CHECK(record.cold.totalDiscs == 0);
+  CHECK(record.cold.uri.empty());
 }

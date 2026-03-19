@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <rs/core/TrackRecord.h>
+#include <rs/core/TrackLayout.h>
 #include <rs/utility/ByteView.h>
 
 namespace rs::core
@@ -55,14 +56,64 @@ namespace rs::core
     }
   }
 
-  TrackHeader TrackRecord::header() const
+  TrackRecord::TrackRecord(TrackHotView const& hotView, TrackColdView const& coldView, DictionaryStore const& dict)
+  {
+    if (!hotView.isValid()) { return; }
+
+    // Copy hot property fields
+    auto prop = hotView.property();
+    property.fileSize = prop.fileSize();
+    property.mtime = prop.mtime();
+    property.durationMs = prop.durationMs();
+    property.bitrate = prop.bitrate();
+    property.sampleRate = prop.sampleRate();
+    property.codecId = prop.codecId();
+    property.channels = prop.channels();
+    property.bitDepth = prop.bitDepth();
+    property.rating = prop.rating();
+
+    // Get hot metadata strings
+    auto meta = hotView.metadata();
+    metadata.title = std::string{meta.title()};
+    metadata.year = meta.year();
+    metadata.coverArtId = meta.coverArtId();
+
+    // Resolve dictionary IDs to strings
+    if (meta.artistId() > 0) { metadata.artist = std::string{dict.get(meta.artistId())}; }
+    if (meta.albumId() > 0) { metadata.album = std::string{dict.get(meta.albumId())}; }
+    if (meta.albumArtistId() > 0) { metadata.albumArtist = std::string{dict.get(meta.albumArtistId())}; }
+    if (meta.genreId() > 0) { metadata.genre = std::string{dict.get(meta.genreId())}; }
+
+    // Deserialize tag IDs from hot payload
+    auto tagProxy = hotView.tags();
+    auto tagCount = tagProxy.count();
+    for (std::uint8_t i = 0; i < tagCount; ++i)
+    {
+      auto tagId = tagProxy.id(i);
+      tags.ids.push_back(tagId);
+    }
+
+    // Copy cold fields
+    cold.uri = std::string{coldView.uri()};
+    cold.fileSize = coldView.fileSize();
+    cold.mtime = coldView.mtime();
+    cold.coverArtId = coldView.coverArtId();
+    cold.trackNumber = coldView.trackNumber();
+    cold.totalTracks = coldView.totalTracks();
+    cold.discNumber = coldView.discNumber();
+    cold.totalDiscs = coldView.totalDiscs();
+
+    // Load custom meta from cold view
+    customMeta = coldView.customMeta();
+  }
+
+  TrackHotHeader TrackRecord::hotHeader() const
   {
     // Compute bloom filter from tag IDs first
     std::uint32_t bloom = 0;
-
     for (auto tagId : tags.ids) { bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask)); }
 
-    return TrackHeader{
+    return TrackHotHeader{
       .fileSize = property.fileSize,
       .mtime = property.mtime,
       .tagBloom = bloom,
@@ -92,12 +143,75 @@ namespace rs::core
     };
   }
 
+  TrackColdHeader TrackRecord::coldHeader() const
+  {
+    return TrackColdHeader{
+      .fileSize = cold.fileSize,
+      .mtime = cold.mtime,
+      .coverArtId = cold.coverArtId,
+      .trackNumber = cold.trackNumber,
+      .totalTracks = cold.totalTracks,
+      .discNumber = cold.discNumber,
+      .totalDiscs = cold.totalDiscs,
+      .uriOffset = 0,
+      .uriLen = 0,
+      .reserved = 0,
+    };
+  }
+
+  std::vector<std::byte> TrackRecord::serializeHot() const
+  {
+    std::vector<std::byte> data;
+
+    // Build header
+    auto h = hotHeader();
+
+    // Calculate offsets - tags first (hot data for filtering)
+    std::uint16_t tagsOffset = 0;
+    std::uint16_t titleOffset = static_cast<std::uint16_t>(tags.ids.size() * sizeof(std::uint32_t));
+    std::uint16_t uriOffset = static_cast<std::uint16_t>(titleOffset + metadata.title.size() + 1);
+
+    h.titleOffset = titleOffset;
+    h.titleLen = static_cast<std::uint16_t>(metadata.title.size());
+    h.uriOffset = uriOffset;
+    h.uriLen = static_cast<std::uint16_t>(cold.uri.size());
+    h.tagsOffset = tagsOffset;
+
+    // Write header
+    auto headerBytes = utility::asBytes(h);
+    data.insert(data.end(), headerBytes.begin(), headerBytes.end());
+
+    // Write tags first: 4-byte tag IDs
+    for (auto tagId : tags.ids)
+    {
+      auto idBytes = utility::asBytes(tagId);
+      data.insert(data.end(), idBytes.begin(), idBytes.end());
+    }
+
+    // Write title
+    auto titleBytes = utility::asBytes(metadata.title);
+    data.insert(data.end(), titleBytes.begin(), titleBytes.end());
+    data.push_back(static_cast<std::byte>('\0'));
+
+    // Write uri (for display, even though it's also in cold)
+    auto uriBytes = utility::asBytes(cold.uri);
+    data.insert(data.end(), uriBytes.begin(), uriBytes.end());
+    data.push_back(static_cast<std::byte>('\0'));
+
+    return data;
+  }
+
+  std::vector<std::byte> TrackRecord::serializeCold() const
+  {
+    return encodeColdData(coldHeader(), customMeta, cold.uri);
+  }
+
   std::vector<std::byte> TrackRecord::serialize() const
   {
     std::vector<std::byte> data;
 
     // Build header
-    auto h = header();
+    auto h = hotHeader();
 
     // Calculate offsets - tags first (hot data for filtering)
     std::uint16_t tagsOffset = 0;
