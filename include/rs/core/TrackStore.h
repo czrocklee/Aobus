@@ -8,6 +8,7 @@
 #include <rs/lmdb/Database.h>
 
 #include <boost/iterator/transform_iterator.hpp>
+#include <functional>
 #include <optional>
 #include <span>
 #include <vector>
@@ -56,7 +57,8 @@ namespace rs::core
       explicit HotProxy(Reader const& reader) : _reader(reader) {}
 
       std::optional<TrackHotView> get(TrackId id) const;
-      Iterator begin() const;
+      Iterator begin(ColdLoadHint hint = ColdLoadHint::Lazy) const;
+      Iterator beginEager() const;
       Iterator end() const;
 
     private:
@@ -79,7 +81,8 @@ namespace rs::core
       Reader const& _reader;
     };
 
-    Iterator begin() const;
+    Iterator begin(ColdLoadHint hint = ColdLoadHint::Lazy) const;
+    Iterator beginEager() const;
     Iterator end() const;
 
     /**
@@ -97,16 +100,23 @@ namespace rs::core
 
     lmdb::Database::Reader _hotReader;
     lmdb::Database::Reader _coldReader;
+    std::function<std::optional<TrackColdView>(TrackId)> _coldLoader;
     friend class TrackStore;
   };
 
   /**
    * TrackStore::Reader::Iterator - Iterator over tracks (using hot database).
+   *
+   * For Eager mode (ColdLoadHint::Eager), uses two iterators advancing together
+   * to avoid random I/O when accessing cold data.
+   *
+   * For Lazy mode (ColdLoadHint::Lazy), cold data is loaded on demand via
+   * the coldLoader callback.
    */
   class TrackStore::Reader::Iterator
   {
   public:
-    using value_type = std::pair<TrackId, TrackHotView>;
+    using value_type = std::pair<TrackId, TrackView>;
 
     Iterator() = default;
     Iterator(Iterator const& other) = default;
@@ -116,10 +126,15 @@ namespace rs::core
     value_type operator*() const;
 
   private:
-    Iterator(lmdb::Database::Reader::Iterator&& iter);
+    Iterator(lmdb::Database::Reader::Iterator&& hotIter,
+             std::optional<lmdb::Database::Reader::Iterator> coldIter,
+             ColdLoadHint hint,
+             std::function<std::optional<TrackColdView>(TrackId)> coldLoader);
 
-    lmdb::Database::Reader::Iterator _iter;
-    TrackHotView _view;
+    lmdb::Database::Reader::Iterator _hotIter;
+    std::optional<lmdb::Database::Reader::Iterator> _coldIter;
+    ColdLoadHint _hint = ColdLoadHint::Lazy;
+    std::function<std::optional<TrackColdView>(TrackId)> _coldLoader;
     friend class Reader;
     friend class HotProxy;
     friend class ColdProxy;

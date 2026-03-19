@@ -54,6 +54,15 @@ namespace rs::expr
     bool matches(ExecutionPlan const& plan, core::TrackHotView const& hotView, core::TrackColdView const& coldView) const;
 
     /**
+     * Check if a track matches using a unified TrackView.
+     *
+     * @param plan The compiled execution plan
+     * @param view The unified track view
+     * @return true if the track matches the query
+     */
+    bool matches(ExecutionPlan const& plan, core::TrackView const& view) const;
+
+    /**
      * Evaluate the full execution plan (without bloom filter optimization).
      * Accepts hot view only - use for HotOnly profile.
      *
@@ -83,6 +92,16 @@ namespace rs::expr
      * @return true if the track matches the query
      */
     bool evaluateFull(ExecutionPlan const& plan, core::TrackHotView const& hotView, core::TrackColdView const& coldView) const;
+
+    /**
+     * Evaluate the full execution plan using a unified TrackView.
+     * The TrackView must have cold data loaded if the query accesses cold fields.
+     *
+     * @param plan The compiled execution plan
+     * @param view The unified track view
+     * @return true if the track matches the query
+     */
+    bool evaluateFull(ExecutionPlan const& plan, core::TrackView const& view) const;
 
   private:
     std::int64_t loadField(core::TrackHotView const& hotView, Field field) const;

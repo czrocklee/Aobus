@@ -69,33 +69,33 @@ namespace
 
   TEST_CASE("TrackHotHeader - Size and Alignment")
   {
-    CHECK(sizeof(TrackHotHeader) == 40);
-    CHECK(alignof(TrackHotHeader) == 8);
+    CHECK(sizeof(TrackHotHeader) == 36);
+    CHECK(alignof(TrackHotHeader) == 4);
   }
 
   TEST_CASE("TrackHotHeader - Field Offsets")
   {
     // Verify key field offsets for ABI compatibility
-    // Check 8-byte section
+    // Check 4-byte section
     CHECK(offsetof(TrackHotHeader, tagBloom) == 0);
 
-    // Check 4-byte section starts at offset 8
-    CHECK(offsetof(TrackHotHeader, artistId) == 8);
-    CHECK(offsetof(TrackHotHeader, albumId) == 12);
-    CHECK(offsetof(TrackHotHeader, genreId) == 16);
-    CHECK(offsetof(TrackHotHeader, albumArtistId) == 20);
+    // Check 4-byte section continues
+    CHECK(offsetof(TrackHotHeader, artistId) == 4);
+    CHECK(offsetof(TrackHotHeader, albumId) == 8);
+    CHECK(offsetof(TrackHotHeader, genreId) == 12);
+    CHECK(offsetof(TrackHotHeader, albumArtistId) == 16);
 
-    // Check 2-byte section starts at offset 24
-    CHECK(offsetof(TrackHotHeader, year) == 24);
-    CHECK(offsetof(TrackHotHeader, codecId) == 26);
-    CHECK(offsetof(TrackHotHeader, bitDepth) == 28);
-    CHECK(offsetof(TrackHotHeader, titleOffset) == 30);
-    CHECK(offsetof(TrackHotHeader, titleLen) == 32);
-    CHECK(offsetof(TrackHotHeader, tagsOffset) == 34);
+    // Check 2-byte section starts at offset 20
+    CHECK(offsetof(TrackHotHeader, year) == 20);
+    CHECK(offsetof(TrackHotHeader, codecId) == 22);
+    CHECK(offsetof(TrackHotHeader, bitDepth) == 24);
+    CHECK(offsetof(TrackHotHeader, titleOffset) == 26);
+    CHECK(offsetof(TrackHotHeader, titleLen) == 28);
+    CHECK(offsetof(TrackHotHeader, tagsOffset) == 30);
 
     // Check 1-byte section
-    CHECK(offsetof(TrackHotHeader, rating) == 36);
-    CHECK(offsetof(TrackHotHeader, tagCount) == 37);
+    CHECK(offsetof(TrackHotHeader, rating) == 32);
+    CHECK(offsetof(TrackHotHeader, tagCount) == 33);
   }
 
   TEST_CASE("TrackHotView - Default Constructor")
@@ -263,7 +263,7 @@ namespace
   TEST_CASE("TrackColdHeader - Size and Alignment")
   {
     CHECK(sizeof(TrackColdHeader) == 48);
-    CHECK(alignof(TrackColdHeader) == 8);
+    CHECK(alignof(TrackColdHeader) == 4);
   }
 
   TEST_CASE("TrackColdView - Default Constructor")

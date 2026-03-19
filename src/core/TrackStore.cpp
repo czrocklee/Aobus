@@ -29,22 +29,29 @@ namespace rs::core
   TrackStore::Reader::Reader(lmdb::Database::Reader&& hotReader, lmdb::Database::Reader&& coldReader)
     : _hotReader{std::move(hotReader)}
     , _coldReader{std::move(coldReader)}
+    , _coldLoader{[this](TrackId id) -> std::optional<TrackColdView> {
+      return cold().get(id);
+    }}
   {
   }
 
-  TrackStore::Reader::Iterator TrackStore::Reader::begin() const
+  TrackStore::Reader::Iterator TrackStore::Reader::begin(ColdLoadHint hint) const
   {
-    if (auto iter = _hotReader.begin(); iter != _hotReader.end())
-    {
-      [[maybe_unused]] auto&& [id, buffer] = *iter;
-      return Iterator{std::move(iter)};
+    if (hint == ColdLoadHint::Eager) {
+      return Iterator{_hotReader.begin(), _coldReader.begin(), hint, _coldLoader};
     }
-    return end();
+    std::optional<lmdb::Database::Reader::Iterator> coldIter;
+    return Iterator{_hotReader.begin(), coldIter, hint, _coldLoader};
+  }
+
+  TrackStore::Reader::Iterator TrackStore::Reader::beginEager() const
+  {
+    return Iterator{_hotReader.begin(), std::optional{_coldReader.begin()}, ColdLoadHint::Eager, _coldLoader};
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::end() const
   {
-    return Iterator{_hotReader.end()};
+    return Iterator{_hotReader.end(), std::nullopt, ColdLoadHint::Lazy, _coldLoader};
   }
 
   // HotProxy implementation
@@ -55,9 +62,14 @@ namespace rs::core
     return TrackHotView{*optBuffer};
   }
 
-  TrackStore::Reader::Iterator TrackStore::Reader::HotProxy::begin() const
+  TrackStore::Reader::Iterator TrackStore::Reader::HotProxy::begin(ColdLoadHint hint) const
   {
-    return _reader.begin();
+    return _reader.begin(hint);
+  }
+
+  TrackStore::Reader::Iterator TrackStore::Reader::HotProxy::beginEager() const
+  {
+    return _reader.beginEager();
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::HotProxy::end() const
@@ -84,25 +96,44 @@ namespace rs::core
   }
 
   // TrackStore::Reader::Iterator implementation
-  TrackStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& iter) : _iter{std::move(iter)}
+  TrackStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& hotIter,
+                                         std::optional<lmdb::Database::Reader::Iterator> coldIter,
+                                         ColdLoadHint hint,
+                                         std::function<std::optional<TrackColdView>(TrackId)> coldLoader)
+    : _hotIter{std::move(hotIter)}
+    , _coldIter{std::move(coldIter)}
+    , _hint{hint}
+    , _coldLoader{std::move(coldLoader)}
   {
   }
 
   bool TrackStore::Reader::Iterator::operator==(Iterator const& other) const
   {
-    return _iter == other._iter;
+    return _hotIter == other._hotIter;
   }
 
   TrackStore::Reader::Iterator& TrackStore::Reader::Iterator::operator++()
   {
-    ++_iter;
+    ++_hotIter;
+    if (_coldIter) {
+      ++(*_coldIter);
+    }
     return *this;
   }
 
   TrackStore::Reader::Iterator::value_type TrackStore::Reader::Iterator::operator*() const
   {
-    auto&& [id, buffer] = *_iter;
-    return {TrackId{(id)}, TrackHotView(buffer)};
+    auto&& [id, buffer] = *_hotIter;
+    auto trackId = TrackId{id};
+    auto hotView = TrackHotView{buffer};
+
+    std::optional<TrackColdView> coldView;
+    if (_hint == ColdLoadHint::Eager && _coldIter) {
+      auto&& [coldId, coldBuffer] = **_coldIter;
+      coldView = TrackColdView{coldBuffer};
+    }
+
+    return {trackId, TrackView{trackId, std::move(hotView), std::move(coldView), _coldLoader}};
   }
 
   // TrackStore::Writer implementation

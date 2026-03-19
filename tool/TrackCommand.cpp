@@ -46,14 +46,14 @@ namespace
     auto txn = ml.readTransaction();
     auto reader = ml.tracks().reader(txn);
 
-    // Collect matching track IDs first
-    std::vector<std::pair<core::TrackId, core::TrackHotView>> matches;
+    // Collect matching tracks
+    std::vector<core::TrackView> matches;
 
     if (filter.empty())
     {
-      for (auto [id, hotView] : reader)
+      for (auto [id, view] : reader)
       {
-        matches.emplace_back(id, hotView);
+        matches.emplace_back(std::move(view));
       }
     }
     else
@@ -67,35 +67,33 @@ namespace
       {
         case rs::expr::AccessProfile::HotOnly:
         {
-          for (auto [id, hotView] : reader)
+          for (auto [id, view] : reader)
           {
-            if (evaluator.matches(plan, hotView))
+            if (evaluator.matches(plan, view.hot()))
             {
-              matches.emplace_back(id, hotView);
+              matches.emplace_back(std::move(view));
             }
           }
           break;
         }
         case rs::expr::AccessProfile::ColdOnly:
         {
-          for (auto [id, hotView] : reader)
+          for (auto [id, view] : reader)
           {
-            auto coldView = reader.cold().get(id);
-            if (coldView && evaluator.matches(plan, *coldView))
+            if (evaluator.matches(plan, view.cold()))
             {
-              matches.emplace_back(id, hotView);
+              matches.emplace_back(std::move(view));
             }
           }
           break;
         }
         case rs::expr::AccessProfile::HotAndCold:
         {
-          for (auto [id, hotView] : reader)
+          for (auto [id, view] : reader)
           {
-            auto coldView = reader.cold().get(id);
-            if (coldView && evaluator.matches(plan, hotView, *coldView))
+            if (evaluator.matches(plan, view.hot(), view.cold()))
             {
-              matches.emplace_back(id, hotView);
+              matches.emplace_back(std::move(view));
             }
           }
           break;
@@ -121,16 +119,17 @@ namespace
       os << "[\n";
       for (std::size_t i = offset; i < end; ++i)
       {
-        auto [id, view] = matches[i];
-        os << "  {\"id\": " << id
-           << ", \"title\": \"" << view.metadata().title() << "\"";
-        if (view.metadata().artistId() > 0)
+        auto const& view = matches[i];
+        auto const& hot = view.hot();
+        os << "  {\"id\": " << view.id()
+           << ", \"title\": \"" << hot.metadata().title() << "\"";
+        if (hot.metadata().artistId() > 0)
         {
-          os << ", \"artist\": \"" << ml.dictionary().get(view.metadata().artistId()) << "\"";
+          os << ", \"artist\": \"" << ml.dictionary().get(hot.metadata().artistId()) << "\"";
         }
-        if (view.metadata().albumId() > 0)
+        if (hot.metadata().albumId() > 0)
         {
-          os << ", \"album\": \"" << ml.dictionary().get(view.metadata().albumId()) << "\"";
+          os << ", \"album\": \"" << ml.dictionary().get(hot.metadata().albumId()) << "\"";
         }
         os << "}";
         if (i < end - 1) os << ",";
@@ -142,8 +141,8 @@ namespace
     {
       for (std::size_t i = offset; i < end; ++i)
       {
-        auto [id, view] = matches[i];
-        os << std::setw(5) << id << " " << view.metadata().title() << std::endl;
+        auto const& view = matches[i];
+        os << std::setw(5) << view.id() << " " << view.hot().metadata().title() << std::endl;
       }
       if (limit > 0 && offset + limit < matches.size())
       {

@@ -6,6 +6,7 @@
 #include <rs/core/DictionaryStore.h>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/TrackRecord.h>
+#include <rs/core/TrackStore.h>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
 #include <rs/expr/PlanEvaluator.h>
@@ -62,6 +63,10 @@ namespace
       _hotData = _record.serializeHot();
       _hotView = rs::core::TrackHotView{std::span<std::byte const>{_hotData.data(), _hotData.size()}};
 
+      // Serialize cold data
+      _coldData = _record.serializeCold();
+      _coldView = rs::core::TrackColdView{std::span<std::byte const>{_coldData.data(), _coldData.size()}};
+
       // Fix up the header with IDs and other fields
       auto* header = const_cast<rs::core::TrackHotHeader*>(_hotView.header());
       header->artistId = DictionaryId{artistId};
@@ -72,13 +77,24 @@ namespace
       header->rating = 0;
     }
 
-    rs::core::TrackHotView& view() { return _hotView; }
-    rs::core::TrackHotView const& view() const { return _hotView; }
+    rs::core::TrackHotView const& hotView() const { return _hotView; }
+    rs::core::TrackColdView const& coldView() const { return _coldView; }
+
+    // Returns TrackView with both hot and cold data
+    rs::core::TrackView view() const {
+      return rs::core::TrackView{
+        rs::core::TrackId{0},  // dummy ID for tests
+        _hotView,
+        _coldView
+      };
+    }
 
   private:
     rs::core::TrackRecord _record;
     std::vector<std::byte> _hotData;
+    std::vector<std::byte> _coldData;
     rs::core::TrackHotView _hotView;
+    rs::core::TrackColdView _coldView;
   };
 
 } // namespace

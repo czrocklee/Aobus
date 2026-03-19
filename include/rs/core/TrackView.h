@@ -5,8 +5,10 @@
 
 #include <rs/Exception.h>
 #include <rs/core/TrackLayout.h>
+#include <rs/core/Type.h>
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <rs/utility/ByteView.h>
 #include <span>
@@ -16,6 +18,15 @@
 
 namespace rs::core
 {
+
+  /**
+   * ColdLoadHint - Controls when cold data is loaded for TrackView.
+   */
+  enum class ColdLoadHint
+  {
+    Lazy,  // Don't load cold data, load on demand
+    Eager  // Load cold data immediately
+  };
 
   /**
    * TrackHotView - Safe accessor for hot track data stored in binary format.
@@ -194,6 +205,69 @@ namespace rs::core
 
     TrackColdHeader const* _header = nullptr;
     std::size_t _size = 0;
+  };
+
+  /**
+   * TrackView - Unified view of a track with hot and optional cold data.
+   *
+   * Provides lazy loading of cold data - cold is only loaded when accessed
+   * if not provided at construction time.
+   *
+   * Use ColdLoadHint::Lazy when iterating for hot-only queries (performance).
+   * Use ColdLoadHint::Eager when you need cold data for every track.
+   */
+  class TrackView final
+  {
+  public:
+    /**
+     * Construct a TrackView with hot data and optional cold data.
+     *
+     * @param id Track ID (LMDB key)
+     * @param hot Hot track view (always required)
+     * @param cold Cold track view (optional, for eager loading)
+     * @param coldLoader Function to lazily load cold data (optional)
+     */
+    TrackView(TrackId id,
+              TrackHotView hot,
+              std::optional<TrackColdView> cold = std::nullopt,
+              std::function<std::optional<TrackColdView>(TrackId)> coldLoader = nullptr)
+      : _id(id)
+      , _hot(std::move(hot))
+      , _cold(std::move(cold))
+      , _coldLoader(std::move(coldLoader))
+    {}
+
+    // TrackView owns its data, non-copyable but movable
+    TrackView(TrackView&&) = default;
+    TrackView& operator=(TrackView&&) = default;
+    TrackView(TrackView const&) = delete;
+    TrackView& operator=(TrackView const&) = delete;
+
+    // Track ID (LMDB key)
+    TrackId id() const { return _id; }
+
+    // Hot - always available immediately
+    TrackHotView const& hot() const { return _hot; }
+
+    // Cold - lazy loaded if not provided at construction
+    TrackColdView const& cold() const {
+      if (!_cold && _coldLoader) {
+        _cold = _coldLoader(_id);
+      }
+      return *_cold;
+    }
+
+    // Check if cold data is available (loaded or loader exists)
+    bool hasCold() const { return _cold.has_value() || _coldLoader != nullptr; }
+
+    // Check if cold data has been loaded
+    bool isColdLoaded() const { return _cold.has_value(); }
+
+  private:
+    TrackId _id;
+    TrackHotView _hot;
+    mutable std::optional<TrackColdView> _cold;
+    std::function<std::optional<TrackColdView>(TrackId)> _coldLoader;
   };
 
 } // namespace rs::core

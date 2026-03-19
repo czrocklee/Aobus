@@ -216,6 +216,11 @@ namespace rs::expr
     return evaluateFull(plan, hotView, coldView);
   }
 
+  bool PlanEvaluator::matches(ExecutionPlan const& plan, core::TrackView const& view) const
+  {
+    return matches(plan, view.hot(), view.cold());
+  }
+
   // NOLINTNEXTLINE(readability-function-size)
   bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, core::TrackHotView const& hotView) const
   {
@@ -1013,6 +1018,11 @@ namespace rs::expr
     }
 
     return _registers.empty() ? true : (_registers[0] != 0);
+  }
+
+  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, core::TrackView const& view) const
+  {
+    return evaluateFull(plan, view.hot(), view.cold());
   }
 
 } // namespace rs::expr
