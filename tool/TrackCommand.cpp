@@ -63,11 +63,44 @@ namespace
       auto plan = compiler.compile(expr);
       rs::expr::PlanEvaluator evaluator;
 
-      for (auto [id, view] : reader)
+      switch (plan.accessProfile)
       {
-        if (evaluator.matches(plan, view))
+        case rs::expr::AccessProfile::HotOnly:
         {
-          matches.emplace_back(id, view);
+          for (auto [id, view] : reader)
+          {
+            auto hotView = reader.hot().get(id);
+            if (hotView && evaluator.matches(plan, *hotView))
+            {
+              matches.emplace_back(id, view);
+            }
+          }
+          break;
+        }
+        case rs::expr::AccessProfile::ColdOnly:
+        {
+          for (auto [id, view] : reader)
+          {
+            auto coldView = reader.cold().get(id);
+            if (coldView && evaluator.matches(plan, *coldView))
+            {
+              matches.emplace_back(id, view);
+            }
+          }
+          break;
+        }
+        case rs::expr::AccessProfile::HotAndCold:
+        {
+          for (auto [id, view] : reader)
+          {
+            auto hotView = reader.hot().get(id);
+            auto coldView = reader.cold().get(id);
+            if (hotView && coldView && evaluator.matches(plan, *hotView, *coldView))
+            {
+              matches.emplace_back(id, view);
+            }
+          }
+          break;
         }
       }
     }

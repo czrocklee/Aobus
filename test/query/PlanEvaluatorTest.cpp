@@ -23,7 +23,7 @@ namespace
 
   using rs::core::DictionaryId;
 
-  // Helper class to hold both the serialized data and the TrackView
+  // Helper class to hold both the serialized data and the TrackHotView
   // This ensures the data stays valid while the view is in use
   class TestTrack
   {
@@ -58,12 +58,12 @@ namespace
       // Convert uint32_t tagIds to DictionaryId
       for (auto id : tagIds) { _record.tags.ids.push_back(DictionaryId{id}); }
 
-      // Serialize to get proper binary layout
-      _data = _record.serialize();
-      _view = rs::core::TrackView{std::span<std::byte const>{_data.data(), _data.size()}};
+      // Serialize hot data to get proper binary layout
+      _hotData = _record.serializeHot();
+      _hotView = rs::core::TrackHotView{std::span<std::byte const>{_hotData.data(), _hotData.size()}};
 
       // Fix up the header with IDs and other fields
-      auto* header = const_cast<rs::core::TrackHeader*>(_view.header());
+      auto* header = const_cast<rs::core::TrackHotHeader*>(_hotView.header());
       header->artistId = DictionaryId{artistId};
       header->albumId = DictionaryId{albumId};
       header->genreId = DictionaryId{genreId};
@@ -74,13 +74,13 @@ namespace
       header->mtime = 1234567890;
     }
 
-    rs::core::TrackView& view() { return _view; }
-    rs::core::TrackView const& view() const { return _view; }
+    rs::core::TrackHotView& view() { return _hotView; }
+    rs::core::TrackHotView const& view() const { return _hotView; }
 
   private:
     rs::core::TrackRecord _record;
-    std::vector<std::byte> _data;
-    rs::core::TrackView _view;
+    std::vector<std::byte> _hotData;
+    rs::core::TrackHotView _hotView;
   };
 
 } // namespace
@@ -368,7 +368,7 @@ TEST_CASE("PlanEvaluator - Invalid Track View")
   auto plan = compiler.compile(expr);
   PlanEvaluator evaluator;
 
-  rs::core::TrackView emptyView;
+  rs::core::TrackHotView emptyView;
   auto result = evaluator.evaluateFull(plan, emptyView);
   CHECK(result == false);
 }
@@ -405,9 +405,10 @@ TEST_CASE("PlanEvaluator - SampleRate Comparison")
   CHECK(result == false);
 }
 
-TEST_CASE("PlanEvaluator - TrackNumber Comparison")
+TEST_CASE("PlanEvaluator - Year Comparison")
 {
-  auto expr = parse("$trackNumber = 5");
+  // Note: $trackNumber is a cold field, so we use $year instead which is hot
+  auto expr = parse("$year = 2020");
   QueryCompiler compiler;
   auto plan = compiler.compile(expr);
   PlanEvaluator evaluator;
@@ -416,7 +417,7 @@ TEST_CASE("PlanEvaluator - TrackNumber Comparison")
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2020, 3);
+  TestTrack track2("Test", "Artist", "Album", "/path", 2019, 5);
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -581,7 +582,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   PlanEvaluator evaluator;
 
   // Create a track with tag bloom bit 0 set (simulating tag ID 32)
-  rs::core::TrackHeader h{};
+  rs::core::TrackHotHeader h{};
   h.tagBloom = 0x00000001U; // Only bit 0 set
 
   std::vector<std::byte> data;
@@ -590,7 +591,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  rs::core::TrackView view(std::as_bytes(std::span{data}));
+  rs::core::TrackHotView view(std::as_bytes(std::span{data}));
 
   // Bloom filter rejects because query mask doesn't match track bloom
   auto result = evaluator.matches(plan, view);
@@ -606,7 +607,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
 
   // Create a track with tag bloom that has some bits set
   // (without dictionary, mask is 0, so this won't actually test fast path)
-  rs::core::TrackHeader h{};
+  rs::core::TrackHotHeader h{};
   h.tagBloom = 0xFFFFFFFFU; // All bits set
 
   std::vector<std::byte> data;
@@ -615,7 +616,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  rs::core::TrackView view(std::as_bytes(std::span{data}));
+  rs::core::TrackHotView view(std::as_bytes(std::span{data}));
 
   // With mask 0, bloom check passes (no filtering), falls through to full eval
   auto result = evaluator.matches(plan, view);
