@@ -21,7 +21,8 @@ namespace rs::expr
   {
     Metadata,
     Property,
-    Tag
+    Tag,
+    Custom
   };
 
   struct VariableExpression

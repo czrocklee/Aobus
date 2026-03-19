@@ -193,6 +193,82 @@ TEST_CASE("PlanEvaluator - Like Match")
   CHECK(result == false);
 }
 
+TEST_CASE("PlanEvaluator - Title String Equal")
+{
+  auto expr = parse("$title = 'Hello World'");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+  PlanEvaluator evaluator;
+
+  TestTrack track1("Hello World");
+  auto result = evaluator.evaluateFull(plan, track1.view());
+  CHECK(result == true);
+
+  TestTrack track2("hello world"); // case-sensitive
+  result = evaluator.evaluateFull(plan, track2.view());
+  CHECK(result == false);
+
+  TestTrack track3("Hello");
+  result = evaluator.evaluateFull(plan, track3.view());
+  CHECK(result == false);
+}
+
+TEST_CASE("PlanEvaluator - Title String Not Equal")
+{
+  auto expr = parse("$title != 'Hello'");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+  PlanEvaluator evaluator;
+
+  TestTrack track1("Hello World");
+  auto result = evaluator.evaluateFull(plan, track1.view());
+  CHECK(result == true);
+
+  TestTrack track2("Hello");
+  result = evaluator.evaluateFull(plan, track2.view());
+  CHECK(result == false);
+}
+
+TEST_CASE("PlanEvaluator - Title String Less Than")
+{
+  auto expr = parse("$title < 'zoo'");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+  PlanEvaluator evaluator;
+
+  TestTrack track1("apple");
+  auto result = evaluator.evaluateFull(plan, track1.view());
+  CHECK(result == true);
+
+  TestTrack track2("zoo");
+  result = evaluator.evaluateFull(plan, track2.view());
+  CHECK(result == false);
+
+  TestTrack track3("zooExtra");
+  result = evaluator.evaluateFull(plan, track3.view());
+  CHECK(result == false);
+}
+
+TEST_CASE("PlanEvaluator - Title String Greater Than")
+{
+  auto expr = parse("$title > 'apple'");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+  PlanEvaluator evaluator;
+
+  TestTrack track1("banana");
+  auto result = evaluator.evaluateFull(plan, track1.view());
+  CHECK(result == true);
+
+  TestTrack track2("apple");
+  result = evaluator.evaluateFull(plan, track2.view());
+  CHECK(result == false);
+
+  TestTrack track3("Apple"); // case-sensitive
+  result = evaluator.evaluateFull(plan, track3.view());
+  CHECK(result == false);
+}
+
 TEST_CASE("PlanEvaluator - Logical And")
 {
   auto expr = parse("$year = 2020 && @duration > 100000");

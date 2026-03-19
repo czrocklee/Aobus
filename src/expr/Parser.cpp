@@ -24,6 +24,7 @@ namespace
     {"$", VariableType::Metadata},
     {"@", VariableType::Property},
     {"#", VariableType::Tag},
+    {"%", VariableType::Custom},
   }};
 
   x3::symbols<Operator> const logicalAndOperator{{{"and", Operator::And}, {"&&", Operator::And}}};

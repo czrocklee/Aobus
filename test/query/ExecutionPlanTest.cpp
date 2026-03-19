@@ -221,3 +221,83 @@ TEST_CASE("ExecutionPlan - OpCode Enum Values")
   CHECK(static_cast<std::uint8_t>(OpCode::Eq) == 3);
   CHECK(static_cast<std::uint8_t>(OpCode::Ne) == 4);
 }
+
+TEST_CASE("ExecutionPlan - AccessProfile HotOnly")
+{
+  // Metadata variable -> HotOnly
+  auto expr = parse("$artist = Bach");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+
+  CHECK(plan.accessProfile == AccessProfile::HotOnly);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile ColdOnly")
+{
+  // Custom variable -> ColdOnly
+  auto expr = parse("%customkey = value");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+
+  CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile HotAndCold")
+{
+  // Mix of hot and cold -> HotAndCold
+  auto expr = parse("$artist = Bach && %customkey = value");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+
+  CHECK(plan.accessProfile == AccessProfile::HotAndCold);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile Property Field")
+{
+  // Property variable -> HotOnly
+  auto expr = parse("@duration > 180000");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+
+  CHECK(plan.accessProfile == AccessProfile::HotOnly);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile Tag Field")
+{
+  // Tag variable -> HotOnly
+  auto expr = parse("#rock");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+
+  CHECK(plan.accessProfile == AccessProfile::HotOnly);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile Cold Field")
+{
+  // TrackNumber field is in cold storage -> ColdOnly
+  auto expr = parse("$trackNumber > 5");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+
+  CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile Mixed HotAndCold")
+{
+  // Mix of hot ($year) and cold ($trackNumber) -> HotAndCold
+  auto expr = parse("$year > 2020 && $trackNumber > 5");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+
+  CHECK(plan.accessProfile == AccessProfile::HotAndCold);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile Custom Field")
+{
+  // Custom variable -> ColdOnly
+  auto expr = parse("%customkey = value");
+  QueryCompiler compiler;
+  auto plan = compiler.compile(expr);
+
+  CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+}

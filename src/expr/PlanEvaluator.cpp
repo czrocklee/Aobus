@@ -34,6 +34,28 @@ namespace rs::expr
       }
       return nullptr;
     }
+
+    // Check if a field requires string comparison (not numeric)
+    bool isStringField(Field field)
+    {
+      switch (field)
+      {
+        case Field::Title:
+        case Field::Uri:
+        case Field::Custom:
+          return true;
+        default:
+          return false;
+      }
+    }
+
+    // Compare two strings lexicographically, return -1, 0, or 1
+    int compareStrings(std::string_view lhs, std::string_view rhs)
+    {
+      if (lhs < rhs) return -1;
+      if (lhs > rhs) return 1;
+      return 0;
+    }
   }
 
   std::int64_t PlanEvaluator::loadField(core::TrackView const& track, Field field) const
@@ -85,6 +107,12 @@ namespace rs::expr
         return static_cast<std::int64_t>(track.tags().bloom());
       case Field::TagCount:
         return static_cast<std::int64_t>(track.tags().count());
+
+      // Custom field - placeholder return, actual lookup requires cold data access
+      // The custom key is stored in instr.constValue as index into stringConstants
+      // TODO: Implement proper custom field lookup from cold storage
+      case Field::Custom:
+        return 0;
 
       default:
         // Field::Title, Field::Uri, Field::Tag and other unsupported fields return 0
@@ -181,6 +209,22 @@ namespace rs::expr
             auto matches = track.tags().has(tagIdToMatch);
             _registers[instr.operand - 1] = matches ? 1 : 0;
           }
+          else if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
+          {
+            // String comparison for Title, Uri, Custom fields
+            auto field = static_cast<Field>(prevLoadField->field);
+            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view constantStr;
+            if (_currentPlan)
+            {
+              auto stringIdx = _registers[instr.operand];
+              if (stringIdx >= 0 && static_cast<size_t>(stringIdx) < _currentPlan->stringConstants.size())
+              {
+                constantStr = _currentPlan->stringConstants[stringIdx];
+              }
+            }
+            _registers[instr.operand - 1] = (fieldStr == constantStr) ? 1 : 0;
+          }
           else
           {
             auto rhs = _registers[instr.operand];
@@ -192,41 +236,141 @@ namespace rs::expr
 
         case OpCode::Ne:
         {
-          auto rhs = _registers[instr.operand];
-          auto lhs = _registers[instr.operand - 1];
-          _registers[instr.operand - 1] = (lhs != rhs) ? 1 : 0;
+          // Check if this is a string field comparison
+          Instruction const* prevLoadField = findPrevLoadField(plan.instructions, &instr);
+          if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
+          {
+            auto field = static_cast<Field>(prevLoadField->field);
+            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view constantStr;
+            if (_currentPlan)
+            {
+              auto stringIdx = _registers[instr.operand];
+              if (stringIdx >= 0 && static_cast<size_t>(stringIdx) < _currentPlan->stringConstants.size())
+              {
+                constantStr = _currentPlan->stringConstants[stringIdx];
+              }
+            }
+            _registers[instr.operand - 1] = (fieldStr != constantStr) ? 1 : 0;
+          }
+          else
+          {
+            auto rhs = _registers[instr.operand];
+            auto lhs = _registers[instr.operand - 1];
+            _registers[instr.operand - 1] = (lhs != rhs) ? 1 : 0;
+          }
           break;
         }
 
         case OpCode::Lt:
         {
-          auto rhs = _registers[instr.operand];
-          auto lhs = _registers[instr.operand - 1];
-          _registers[instr.operand - 1] = (lhs < rhs) ? 1 : 0;
+          // Check if this is a string field comparison
+          Instruction const* prevLoadField = findPrevLoadField(plan.instructions, &instr);
+          if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
+          {
+            auto field = static_cast<Field>(prevLoadField->field);
+            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view constantStr;
+            if (_currentPlan)
+            {
+              auto stringIdx = _registers[instr.operand];
+              if (stringIdx >= 0 && static_cast<size_t>(stringIdx) < _currentPlan->stringConstants.size())
+              {
+                constantStr = _currentPlan->stringConstants[stringIdx];
+              }
+            }
+            _registers[instr.operand - 1] = (fieldStr < constantStr) ? 1 : 0;
+          }
+          else
+          {
+            auto rhs = _registers[instr.operand];
+            auto lhs = _registers[instr.operand - 1];
+            _registers[instr.operand - 1] = (lhs < rhs) ? 1 : 0;
+          }
           break;
         }
 
         case OpCode::Le:
         {
-          auto rhs = _registers[instr.operand];
-          auto lhs = _registers[instr.operand - 1];
-          _registers[instr.operand - 1] = (lhs <= rhs) ? 1 : 0;
+          // Check if this is a string field comparison
+          Instruction const* prevLoadField = findPrevLoadField(plan.instructions, &instr);
+          if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
+          {
+            auto field = static_cast<Field>(prevLoadField->field);
+            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view constantStr;
+            if (_currentPlan)
+            {
+              auto stringIdx = _registers[instr.operand];
+              if (stringIdx >= 0 && static_cast<size_t>(stringIdx) < _currentPlan->stringConstants.size())
+              {
+                constantStr = _currentPlan->stringConstants[stringIdx];
+              }
+            }
+            _registers[instr.operand - 1] = (fieldStr <= constantStr) ? 1 : 0;
+          }
+          else
+          {
+            auto rhs = _registers[instr.operand];
+            auto lhs = _registers[instr.operand - 1];
+            _registers[instr.operand - 1] = (lhs <= rhs) ? 1 : 0;
+          }
           break;
         }
 
         case OpCode::Gt:
         {
-          auto rhs = _registers[instr.operand];
-          auto lhs = _registers[instr.operand - 1];
-          _registers[instr.operand - 1] = (lhs > rhs) ? 1 : 0;
+          // Check if this is a string field comparison
+          Instruction const* prevLoadField = findPrevLoadField(plan.instructions, &instr);
+          if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
+          {
+            auto field = static_cast<Field>(prevLoadField->field);
+            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view constantStr;
+            if (_currentPlan)
+            {
+              auto stringIdx = _registers[instr.operand];
+              if (stringIdx >= 0 && static_cast<size_t>(stringIdx) < _currentPlan->stringConstants.size())
+              {
+                constantStr = _currentPlan->stringConstants[stringIdx];
+              }
+            }
+            _registers[instr.operand - 1] = (fieldStr > constantStr) ? 1 : 0;
+          }
+          else
+          {
+            auto rhs = _registers[instr.operand];
+            auto lhs = _registers[instr.operand - 1];
+            _registers[instr.operand - 1] = (lhs > rhs) ? 1 : 0;
+          }
           break;
         }
 
         case OpCode::Ge:
         {
-          auto rhs = _registers[instr.operand];
-          auto lhs = _registers[instr.operand - 1];
-          _registers[instr.operand - 1] = (lhs >= rhs) ? 1 : 0;
+          // Check if this is a string field comparison
+          Instruction const* prevLoadField = findPrevLoadField(plan.instructions, &instr);
+          if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
+          {
+            auto field = static_cast<Field>(prevLoadField->field);
+            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view constantStr;
+            if (_currentPlan)
+            {
+              auto stringIdx = _registers[instr.operand];
+              if (stringIdx >= 0 && static_cast<size_t>(stringIdx) < _currentPlan->stringConstants.size())
+              {
+                constantStr = _currentPlan->stringConstants[stringIdx];
+              }
+            }
+            _registers[instr.operand - 1] = (fieldStr >= constantStr) ? 1 : 0;
+          }
+          else
+          {
+            auto rhs = _registers[instr.operand];
+            auto lhs = _registers[instr.operand - 1];
+            _registers[instr.operand - 1] = (lhs >= rhs) ? 1 : 0;
+          }
           break;
         }
 

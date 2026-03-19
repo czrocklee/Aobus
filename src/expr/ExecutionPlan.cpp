@@ -39,8 +39,12 @@ namespace rs::expr
           if (name == "coverArt" || name == "ca") return Field::CoverArtId;
           if (name == "title" || name == "t") return Field::Title;
           break;
-        case VariableType::Tag: return Field::Tag;
-        default: break;
+        case VariableType::Tag:
+          return Field::Tag;
+        case VariableType::Custom:
+          return Field::Custom;
+        default:
+          break;
       }
       return Field::TagBloom;
     }
@@ -71,6 +75,24 @@ namespace rs::expr
     bool isTagField(Field field)
     {
       return field == Field::Tag;
+    }
+
+    bool isColdField(Field field)
+    {
+      // Cold fields are stored in TrackColdHeader or custom KV storage
+      switch (field)
+      {
+        case Field::Uri:              // cold: TrackColdHeader
+        case Field::CoverArtId:        // cold: TrackColdHeader
+        case Field::TrackNumber:       // cold: TrackColdHeader
+        case Field::TotalTracks:       // cold: TrackColdHeader
+        case Field::DiscNumber:        // cold: TrackColdHeader
+        case Field::TotalDiscs:        // cold: TrackColdHeader
+        case Field::Custom:            // cold: custom KV storage
+          return true;
+        default:
+          return false;
+      }
     }
   }
 
@@ -147,8 +169,10 @@ namespace rs::expr
 
   void QueryCompiler::compileVariable(VariableExpression const& var)
   {
+    // Tags are hot data
     if (var.type == VariableType::Tag)
     {
+      _hasHotAccess = true;
       // Try to resolve tag name to ID via dictionary for bloom filter
       if (_dict)
       {
@@ -196,11 +220,28 @@ namespace rs::expr
     auto field = variableTypeToField(var.type, var.name);
     _lastField = field; // Track for string resolution context
 
+    // Track access profile for hot/cold determination based on field storage location
+    if (isColdField(field))
+    {
+      _hasColdAccess = true;
+    }
+    else
+    {
+      _hasHotAccess = true;
+    }
+
+    // For custom fields, store the key name as a string constant and use constValue as the index
+    std::int64_t constValue = 0;
+    if (var.type == VariableType::Custom)
+    {
+      constValue = static_cast<std::int64_t>(addStringConstant(var.name));
+    }
+
     _plan.instructions.push_back(Instruction{
       .op = OpCode::LoadField,
       .field = static_cast<std::uint8_t>(field),
       .operand = static_cast<std::int32_t>(_nextReg++),
-      .constValue = 0,
+      .constValue = constValue,
       .strLen = 0,
       .strData = nullptr,
     });
@@ -285,6 +326,8 @@ namespace rs::expr
   {
     _plan = ExecutionPlan{};
     _nextReg = 0;
+    _hasHotAccess = false;
+    _hasColdAccess = false;
 
     // Check if the expression is a constant "true"
     if (auto const* constant = boost::get<ConstantExpression>(&expr))
@@ -296,6 +339,20 @@ namespace rs::expr
     }
 
     compileExpression(expr);
+
+    // Set access profile based on what data was accessed
+    if (_hasHotAccess && _hasColdAccess)
+    {
+      _plan.accessProfile = AccessProfile::HotAndCold;
+    }
+    else if (_hasColdAccess)
+    {
+      _plan.accessProfile = AccessProfile::ColdOnly;
+    }
+    else
+    {
+      _plan.accessProfile = AccessProfile::HotOnly;
+    }
 
     return _plan;
   }

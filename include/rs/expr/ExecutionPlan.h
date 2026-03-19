@@ -51,6 +51,9 @@ namespace rs::expr
     TagBloom = 19,
     TagCount = 20,
     Tag = 21,
+
+    // Custom field (for %custom_key lookups from cold storage)
+    Custom = 22,
   };
 
   /**
@@ -92,6 +95,16 @@ namespace rs::expr
   };
 
   /**
+   * AccessProfile - Indicates which storage tier(s) the query accesses.
+   */
+  enum class AccessProfile : std::uint8_t
+  {
+    HotOnly,   // Only accesses hot data (metadata, property, tags)
+    ColdOnly,  // Only accesses cold data (custom KV)
+    HotAndCold // Mixed access
+  };
+
+  /**
    * ExecutionPlan - Compiled query ready for fast execution.
    */
   class ExecutionPlan
@@ -105,6 +118,9 @@ namespace rs::expr
 
     // If true, the query matches all tracks (no conditions)
     bool matchesAll = false;
+
+    // Access profile for the query
+    AccessProfile accessProfile = AccessProfile::HotOnly;
   };
 
   /**
@@ -149,6 +165,8 @@ namespace rs::expr
     std::uint32_t _nextReg = 0;
     core::DictionaryStore const* _dict = nullptr;
     Field _lastField = Field::TagBloom; // Track last field for context
+    bool _hasHotAccess = false;  // Track if expression uses hot (metadata/property/tag) variables
+    bool _hasColdAccess = false; // Track if expression uses cold (custom) variables
   };
 
 } // namespace rs::expr

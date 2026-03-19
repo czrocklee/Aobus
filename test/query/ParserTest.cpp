@@ -76,6 +76,9 @@ namespace
         case VariableType::Tag:
           oss << 't';
           break;
+        case VariableType::Custom:
+          oss << 'c';
+          break;
       }
 
       oss << "}" << variable.name << "]";
@@ -116,6 +119,8 @@ TEST_CASE("Parser - Variable")
   CHECK("[v{m}artist]" == canonicalize(parse("$artist")));
   CHECK("[v{p}duration]" == canonicalize(parse("@duration")));
   CHECK("[v{t}Tag]" == canonicalize(parse("#Tag")));
+  CHECK("[v{c}isrc]" == canonicalize(parse("%isrc")));
+  CHECK("[v{c}replaygaintrackgaindb]" == canonicalize(parse("%replaygaintrackgaindb")));
 }
 
 TEST_CASE("Parser - Variable Shortcuts")
