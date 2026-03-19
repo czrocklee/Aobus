@@ -34,7 +34,6 @@ TEST_CASE("TrackStore - create and read", "[core][track]")
 
   // Create a track with hot+cold
   TrackHotHeader hotHeader{};
-  hotHeader.fileSize = 1000;
   hotHeader.durationMs = 180000;
 
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
@@ -67,7 +66,6 @@ TEST_CASE("TrackStore - read by id", "[core][track]")
 
   // Create a track with hot+cold
   TrackHotHeader hotHeader{};
-  hotHeader.fileSize = 2000;
 
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
@@ -82,8 +80,6 @@ TEST_CASE("TrackStore - read by id", "[core][track]")
   ReadTransaction rtxn(env);
   auto optFound = store.reader(rtxn).hot().get(id);
   REQUIRE(optFound.has_value());
-  auto& found = *optFound;
-  REQUIRE(found.property().fileSize() == 2000);
 }
 
 TEST_CASE("TrackStore - update", "[core][track]")
@@ -97,7 +93,6 @@ TEST_CASE("TrackStore - update", "[core][track]")
 
   // Create a track
   TrackHotHeader hotHeader{};
-  hotHeader.fileSize = 1000;
 
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
@@ -110,14 +105,14 @@ TEST_CASE("TrackStore - update", "[core][track]")
 
   // Update the track
   TrackHotHeader hotHeader2{};
-  hotHeader2.fileSize = 3000;
+  hotHeader2.durationMs = 200000;
 
   std::vector<std::byte> hotData2(sizeof(TrackHotHeader));
   std::memcpy(hotData2.data(), &hotHeader2, sizeof(TrackHotHeader));
 
   WriteTransaction wtxn3(env);
   auto updated = store.writer(wtxn3).updateHot(id, hotData2);
-  REQUIRE(updated.property().fileSize() == 3000);
+  REQUIRE(updated.property().durationMs() == 200000);
   wtxn3.commit();
 }
 
@@ -195,7 +190,6 @@ TEST_CASE("TrackStore - hot/cold createHotCold", "[core][track]")
 
   // Create hot header
   TrackHotHeader hotHeader{};
-  hotHeader.fileSize = 1000;
   hotHeader.durationMs = 180000;
 
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
@@ -221,7 +215,6 @@ TEST_CASE("TrackStore - hot/cold createHotCold", "[core][track]")
   ReadTransaction rtxn(env);
   auto hotOpt = store.reader(rtxn).hot().get(id);
   REQUIRE(hotOpt.has_value());
-  REQUIRE(hotOpt->property().fileSize() == 1000);
   REQUIRE(hotOpt->property().durationMs() == 180000);
 
   // Verify cold data
@@ -244,7 +237,6 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
 
   // Create initial hot+cold
   TrackHotHeader hotHeader{};
-  hotHeader.fileSize = 1000;
 
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
@@ -262,7 +254,6 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
 
   // Update hot only
   TrackHotHeader hotHeader2{};
-  hotHeader2.fileSize = 2000;
   hotHeader2.durationMs = 200000;
 
   std::vector<std::byte> hotData2(sizeof(TrackHotHeader));
@@ -270,7 +261,6 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
 
   WriteTransaction wtxn3(env);
   auto updatedHot = store.writer(wtxn3).updateHot(id, hotData2);
-  REQUIRE(updatedHot.property().fileSize() == 2000);
   REQUIRE(updatedHot.property().durationMs() == 200000);
   wtxn3.commit();
 
@@ -293,7 +283,6 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
   // Verify both persisted
   ReadTransaction rtxn(env);
   auto hotOpt = store.reader(rtxn).hot().get(id);
-  REQUIRE(hotOpt->property().fileSize() == 2000);
   REQUIRE(hotOpt->property().durationMs() == 200000);
 
   auto coldOpt = store.reader(rtxn).cold().get(id);
@@ -350,7 +339,6 @@ TEST_CASE("TrackStore - hot/cold Writer getHot and getCold", "[core][track]")
 
   // Create hot+cold
   TrackHotHeader hotHeader{};
-  hotHeader.fileSize = 3000;
   hotHeader.durationMs = 240000;
 
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
@@ -372,7 +360,6 @@ TEST_CASE("TrackStore - hot/cold Writer getHot and getCold", "[core][track]")
   auto writer = store.writer(wtxn3);
   auto hotOpt = writer.getHot(id);
   REQUIRE(hotOpt.has_value());
-  REQUIRE(hotOpt->property().fileSize() == 3000);
   REQUIRE(hotOpt->property().durationMs() == 240000);
 
   auto coldOpt = writer.getCold(id);
@@ -393,7 +380,6 @@ TEST_CASE("TrackStore - hot/cold proxy iteration", "[core][track]")
   // Create multiple tracks
   for (int i = 0; i < 3; ++i) {
     TrackHotHeader hotHeader{};
-    hotHeader.fileSize = 1000 + i;
     std::vector<std::byte> hotData(sizeof(TrackHotHeader));
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 

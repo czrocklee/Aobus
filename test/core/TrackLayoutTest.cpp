@@ -22,8 +22,6 @@ namespace
   std::vector<std::byte> createMinimalData()
   {
     TrackHotHeader h{};
-    h.fileSize = 1000;
-    h.mtime = 1234567890;
     h.durationMs = 180000;
     h.bitrate = 320000;
     h.sampleRate = 44100;
@@ -47,8 +45,6 @@ namespace
   std::vector<std::byte> createTrackWithStrings(std::string_view title)
   {
     TrackHotHeader h{};
-    h.fileSize = 1000;
-    h.mtime = 1234567890;
     h.durationMs = 180000;
     h.bitrate = 320000;
     h.sampleRate = 44100;
@@ -85,26 +81,22 @@ namespace
   TEST_CASE("TrackHotHeader - Field Offsets")
   {
     // Verify key field offsets for ABI compatibility
-    // Check 8-byte section
-    CHECK(offsetof(TrackHotHeader, fileSize) == 0);
-    CHECK(offsetof(TrackHotHeader, mtime) == 8);
+    // Check 4-byte section starts at offset 0
+    CHECK(offsetof(TrackHotHeader, tagBloom) == 0);
+    CHECK(offsetof(TrackHotHeader, durationMs) == 4);
 
-    // Check 4-byte section starts at offset 16
-    CHECK(offsetof(TrackHotHeader, tagBloom) == 16);
-    CHECK(offsetof(TrackHotHeader, durationMs) == 20);
-
-    // Check 2-byte section starts at offset 48
-    CHECK(offsetof(TrackHotHeader, year) == 48);
-    CHECK(offsetof(TrackHotHeader, codecId) == 50);
-    CHECK(offsetof(TrackHotHeader, titleOffset) == 52);
-    CHECK(offsetof(TrackHotHeader, titleLen) == 54);
-    CHECK(offsetof(TrackHotHeader, tagsOffset) == 56);
+    // Check 2-byte section starts at offset 32
+    CHECK(offsetof(TrackHotHeader, year) == 32);
+    CHECK(offsetof(TrackHotHeader, codecId) == 34);
+    CHECK(offsetof(TrackHotHeader, titleOffset) == 36);
+    CHECK(offsetof(TrackHotHeader, titleLen) == 38);
+    CHECK(offsetof(TrackHotHeader, tagsOffset) == 40);
 
     // Check 1-byte section
-    CHECK(offsetof(TrackHotHeader, channels) == 58);
-    CHECK(offsetof(TrackHotHeader, bitDepth) == 59);
-    CHECK(offsetof(TrackHotHeader, rating) == 60);
-    CHECK(offsetof(TrackHotHeader, tagCount) == 61);
+    CHECK(offsetof(TrackHotHeader, channels) == 42);
+    CHECK(offsetof(TrackHotHeader, bitDepth) == 43);
+    CHECK(offsetof(TrackHotHeader, rating) == 44);
+    CHECK(offsetof(TrackHotHeader, tagCount) == 45);
   }
 
   TEST_CASE("TrackHotView - Default Constructor")
@@ -130,8 +122,6 @@ namespace
     auto prop = view.property();
     auto meta = view.metadata();
 
-    CHECK(prop.fileSize() == 1000);
-    CHECK(prop.mtime() == 1234567890);
     CHECK(prop.durationMs() == 180000);
     CHECK(prop.bitrate() == 320000);
     CHECK(prop.sampleRate() == 44100);
@@ -210,8 +200,6 @@ namespace
   {
     // Create a track with 2 tags (tag IDs: 10, 20)
     TrackHotHeader h{};
-    h.fileSize = 1000;
-    h.mtime = 1234567890;
     h.durationMs = 180000;
     h.bitrate = 320000;
     h.sampleRate = 44100;

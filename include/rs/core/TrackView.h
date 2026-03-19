@@ -41,8 +41,6 @@ namespace rs::core
       std::uint8_t channels() const noexcept { return _track.header()->channels; }
       std::uint8_t bitDepth() const noexcept { return _track.header()->bitDepth; }
       std::uint8_t rating() const noexcept { return _track.header()->rating; }
-      std::uint64_t fileSize() const noexcept { return _track.header()->fileSize; }
-      std::uint64_t mtime() const noexcept { return _track.header()->mtime; }
       std::uint16_t codecId() const noexcept { return _track.header()->codecId; }
 
     private:

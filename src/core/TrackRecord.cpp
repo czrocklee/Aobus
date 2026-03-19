@@ -16,8 +16,6 @@ namespace rs::core
 
     // Copy hot property fields
     auto prop = hotView.property();
-    property.fileSize = prop.fileSize();
-    property.mtime = prop.mtime();
     property.durationMs = prop.durationMs();
     property.bitrate = prop.bitrate();
     property.sampleRate = prop.sampleRate();
@@ -25,6 +23,11 @@ namespace rs::core
     property.channels = prop.channels();
     property.bitDepth = prop.bitDepth();
     property.rating = prop.rating();
+
+    // Copy cold property fields
+    auto coldProp = coldView.property();
+    property.fileSize = coldProp.fileSize();
+    property.mtime = coldProp.mtime();
 
     // Get hot metadata strings
     auto meta = hotView.metadata();
@@ -67,8 +70,6 @@ namespace rs::core
     for (auto tagId : tags.ids) { bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask)); }
 
     return TrackHotHeader{
-      .fileSize = property.fileSize,
-      .mtime = property.mtime,
       .tagBloom = bloom,
       .durationMs = property.durationMs,
       .bitrate = property.bitrate,

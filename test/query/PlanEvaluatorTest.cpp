@@ -70,8 +70,6 @@ namespace
       header->albumArtistId = DictionaryId{0};
       header->codecId = 0;
       header->rating = 0;
-      header->fileSize = 1000000;
-      header->mtime = 1234567890;
     }
 
     rs::core::TrackHotView& view() { return _hotView; }

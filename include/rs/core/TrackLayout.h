@@ -19,15 +19,11 @@ namespace rs::core
    * TrackHotHeader - POD struct for hot track storage.
    * Hot fields are used for fast filtering/sorting operations.
    *
-   * Layout uses strictly descending member sizes (8→4→2→1) for natural alignment.
-   * Total size: 48 bytes with 8-byte alignment.
+   * Layout uses strictly descending member sizes (4→2→1) for natural alignment.
+   * Total size: 48 bytes with 4-byte alignment.
    */
   struct TrackHotHeader final
   {
-    // 8-byte section
-    std::uint64_t fileSize; // File size in bytes
-    std::uint64_t mtime;    // Last modification time (unix timestamp)
-
     // 4-byte section
     std::uint32_t tagBloom;     // Bloom filter for tags (32-bit)
     std::uint32_t durationMs;   // Track duration in milliseconds
@@ -53,11 +49,11 @@ namespace rs::core
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackHotHeaderSize = 64;
-  constexpr std::size_t kTrackHotHeaderAlignment = 8;
+  constexpr std::size_t kTrackHotHeaderSize = 48;
+  constexpr std::size_t kTrackHotHeaderAlignment = 4;
 
-  static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 80 bytes");
-  static_assert(alignof(TrackHotHeader) == kTrackHotHeaderAlignment, "TrackHotHeader must have 8-byte alignment");
+  static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 48 bytes");
+  static_assert(alignof(TrackHotHeader) == kTrackHotHeaderAlignment, "TrackHotHeader must have 4-byte alignment");
 
   /**
    * TrackColdHeader - POD struct for cold track fixed fields.

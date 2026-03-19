@@ -244,7 +244,6 @@ TEST_CASE("TrackRecord - hotHeader")
 
   auto header = record.hotHeader();
 
-  CHECK(header.fileSize == 1000);
   CHECK(header.durationMs == 180000);
   CHECK(header.tagCount == 2);
   CHECK(header.tagBloom != 0);
@@ -284,7 +283,6 @@ TEST_CASE("TrackRecord - serializeHot")
 
   // Verify hot header
   auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->fileSize == 1000);
   CHECK(header->durationMs == 180000);
   CHECK(header->tagCount == 2);
 
