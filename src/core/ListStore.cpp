@@ -26,7 +26,7 @@ namespace rs::core
 
   ListStore::Reader::Iterator ListStore::Reader::end() const { return Iterator{_reader.end()}; }
 
-  std::optional<ListView> ListStore::Reader::get(Id id) const
+  std::optional<ListView> ListStore::Reader::get(ListId id) const
   {
     auto optBuffer = _reader.get(id.value());
     if (!optBuffer || optBuffer->size() == 0)
@@ -50,27 +50,27 @@ namespace rs::core
   ListStore::Reader::Iterator::value_type ListStore::Reader::Iterator::operator*() const
   {
     auto&& [id, buffer] = *_iter;
-    return {Id{id}, ListView(buffer)};
+    return {ListId{id}, ListView(buffer)};
   }
 
   // Writer implementation
   ListStore::Writer::Writer(lmdb::Database::Writer&& writer) : _writer{std::move(writer)} {}
 
-  std::pair<ListStore::Id, ListView> ListStore::Writer::create(std::span<std::byte const> data)
+  std::pair<ListId, ListView> ListStore::Writer::create(std::span<std::byte const> data)
   {
     auto [id, buffer] = _writer.append(data);
-    return {Id{id}, ListView{buffer}};
+    return {ListId{id}, ListView{buffer}};
   }
 
-  ListView ListStore::Writer::update(Id id, std::span<std::byte const> data)
+  ListView ListStore::Writer::update(ListId id, std::span<std::byte const> data)
   {
     auto buffer = _writer.update(id.value(), data);
     return ListView{data};
   }
 
-  bool ListStore::Writer::del(Id id) { return _writer.del(id.value()); }
+  bool ListStore::Writer::del(ListId id) { return _writer.del(id.value()); }
 
-  std::optional<ListView> ListStore::Writer::get(Id id) const
+  std::optional<ListView> ListStore::Writer::get(ListId id) const
   {
     auto optBuffer = _writer.get(id.value());
     if (!optBuffer || optBuffer->size() == 0)

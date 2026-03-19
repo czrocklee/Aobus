@@ -3,7 +3,7 @@
 
 #include <catch2/catch.hpp>
 
-#include <rs/core/Dictionary.h>
+#include <rs/core/DictionaryStore.h>
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
@@ -11,7 +11,7 @@
 
 #include <string_view>
 
-using rs::core::Dictionary;
+using rs::core::DictionaryStore;
 using rs::core::DictionaryId;
 using rs::lmdb::Database;
 using rs::lmdb::Environment;
@@ -24,7 +24,7 @@ TEST_CASE("Dictionary - store and get", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Dictionary dict{wtxn, "dict"};
+  DictionaryStore dict{wtxn, "dict"};
   wtxn.commit();
 
   // Store a value
@@ -44,7 +44,7 @@ TEST_CASE("Dictionary - getId", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Dictionary dict{wtxn, "dict"};
+  DictionaryStore dict{wtxn, "dict"};
   dict.put(wtxn, "artist1");
   wtxn.commit();
 
@@ -59,7 +59,7 @@ TEST_CASE("Dictionary - contains by string", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Dictionary dict{wtxn, "dict"};
+  DictionaryStore dict{wtxn, "dict"};
   dict.put(wtxn, "exists");
   wtxn.commit();
 
@@ -73,7 +73,7 @@ TEST_CASE("Dictionary - put duplicate string returns existing ID", "[core][dicti
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Dictionary dict{wtxn, "dict"};
+  DictionaryStore dict{wtxn, "dict"};
   wtxn.commit();
 
   // Store a value
@@ -98,7 +98,7 @@ TEST_CASE("Dictionary - get throws on invalid ID", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Dictionary dict{wtxn, "dict"};
+  DictionaryStore dict{wtxn, "dict"};
   dict.put(wtxn, "first");
   wtxn.commit();
 
@@ -112,7 +112,7 @@ TEST_CASE("Dictionary - getId throws on non-existent string", "[core][dictionary
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Dictionary dict{wtxn, "dict"};
+  DictionaryStore dict{wtxn, "dict"};
   dict.put(wtxn, "exists");
   wtxn.commit();
 
@@ -126,7 +126,7 @@ TEST_CASE("Dictionary - get with first valid ID (0)", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Dictionary dict{wtxn, "dict"};
+  DictionaryStore dict{wtxn, "dict"};
   auto id = dict.put(wtxn, "first");
   wtxn.commit();
 
@@ -141,7 +141,7 @@ TEST_CASE("Dictionary - get throws on out-of-bounds ID", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Dictionary dict{wtxn, "dict"};
+  DictionaryStore dict{wtxn, "dict"};
   dict.put(wtxn, "only one");
   wtxn.commit();
 

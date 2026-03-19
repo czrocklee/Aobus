@@ -20,7 +20,7 @@ add_library(rs OBJECT
     src/lmdb/Database.cpp
     src/core/MusicLibrary.cpp
     src/core/ResourceStore.cpp
-    src/core/Dictionary.cpp
+    src/core/DictionaryStore.cpp
     src/core/TrackStore.cpp
     src/expr/Evaluator.cpp
     src/expr/ExecutionPlan.cpp

@@ -7,28 +7,6 @@
 #include <cstring>
 #include <span>
 
-namespace
-{
-  // FNV-1a 32-bit hash
-  // Created by Glenn Fowler, Landon Curt Noll, and Peter Vo in 1991
-  // Simple, fast, and good distribution for content-addressable storage
-  std::uint32_t fnv1a(std::span<std::byte const> data)
-  {
-    constexpr std::uint32_t kFnvOffsetBasis = 2166136261U;
-    constexpr std::uint32_t kFnvPrime = 16777619U;
-
-    std::uint32_t hash = kFnvOffsetBasis;
-
-    for (std::byte b : data)
-    {
-      hash ^= static_cast<std::uint8_t>(b);
-      hash *= kFnvPrime;
-    }
-
-    return hash;
-  }
-}
-
 namespace rs::core
 {
   using Writer = ResourceStore::Writer;
@@ -38,7 +16,29 @@ namespace rs::core
     return Writer{_database.reader(txn), _database.writer(txn)};
   }
 
-  std::uint32_t Writer::create(std::span<std::byte const> buffer)
+  namespace
+  {
+    // FNV-1a 32-bit hash
+    // Created by Glenn Fowler, Landon Curt Noll, and Peter Vo in 1991
+    // Simple, fast, and good distribution for content-addressable storage
+    std::uint32_t fnv1a(std::span<std::byte const> data)
+    {
+      constexpr std::uint32_t kFnvOffsetBasis = 2166136261U;
+      constexpr std::uint32_t kFnvPrime = 16777619U;
+
+      std::uint32_t hash = kFnvOffsetBasis;
+
+      for (std::byte b : data)
+      {
+        hash ^= static_cast<std::uint8_t>(b);
+        hash *= kFnvPrime;
+      }
+
+      return hash;
+    }
+  }
+
+  ResourceId Writer::create(std::span<std::byte const> buffer)
   {
     for (std::uint32_t key = fnv1a(buffer);; ++key)
     {
@@ -47,25 +47,19 @@ namespace rs::core
       if (!optValue)
       {
         auto result = _writer.create(key, buffer);
-        if (result.empty())
-        {
-          throw std::runtime_error("Failed to create resource");
-        }
+        if (result.empty()) { throw std::runtime_error("Failed to create resource"); }
 
-        return key;
+        return ResourceId{key};
       }
 
       auto& value = *optValue;
       if (value.size() == buffer.size() && std::memcmp(value.data(), buffer.data(), buffer.size()) == 0)
       {
-        return key;
+        return ResourceId{key};
       }
 
       // Prevent infinite loop (though extremely unlikely with 32-bit hash space)
-      if (key == std::numeric_limits<std::uint32_t>::max())
-      {
-        throw std::runtime_error("Hash table full");
-      }
+      if (key == std::numeric_limits<std::uint32_t>::max()) { throw std::runtime_error("Hash table full"); }
     }
   }
 }

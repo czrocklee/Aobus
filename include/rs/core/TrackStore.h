@@ -4,8 +4,8 @@
 #pragma once
 
 #include <rs/core/TrackLayout.h>
+#include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
-#include <rs/utility/TaggedInteger.h>
 
 #include <boost/iterator/transform_iterator.hpp>
 #include <optional>
@@ -25,11 +25,6 @@ namespace rs::core
   class TrackStore
   {
   public:
-    struct IdTag
-    {};
-
-    using Id = utility::TaggedInteger<std::uint32_t, IdTag>;
-
     class Reader;
     class Writer;
 
@@ -57,7 +52,7 @@ namespace rs::core
      * Get a track by ID.
      * @return TrackView pointing to the track data, or std::nullopt if not found
      */
-    std::optional<TrackView> get(Id id) const;
+    std::optional<TrackView> get(TrackId id) const;
 
   private:
     Reader(lmdb::Database::Reader&& reader);
@@ -72,7 +67,7 @@ namespace rs::core
   class TrackStore::Reader::Iterator
   {
   public:
-    using value_type = std::pair<Id, TrackView>;
+    using value_type = std::pair<TrackId, TrackView>;
 
     Iterator() = default;
     Iterator(Iterator const& other) = default;
@@ -102,7 +97,7 @@ namespace rs::core
      * @param data TrackHeader + payload
      * @return Pair of (track ID, TrackView pointing to stored data)
      */
-    std::pair<Id, TrackView> create(std::span<std::byte const> data);
+    std::pair<TrackId, TrackView> create(std::span<std::byte const> data);
 
     /**
      * Update an existing track.
@@ -110,14 +105,14 @@ namespace rs::core
      * @param data New TrackHeader + payload
      * @return TrackView pointing to updated data
      */
-    TrackView update(Id id, std::span<std::byte const> data);
+    TrackView update(TrackId id, std::span<std::byte const> data);
 
-    bool del(Id id);
+    bool del(TrackId id);
 
     /**
      * Get a track by ID.
      */
-    std::optional<TrackView> get(Id id) const;
+    std::optional<TrackView> get(TrackId id) const;
 
   private:
     explicit Writer(lmdb::Database::Writer&& writer);

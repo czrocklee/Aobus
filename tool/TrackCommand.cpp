@@ -47,7 +47,7 @@ namespace
     auto reader = ml.tracks().reader(txn);
 
     // Collect matching track IDs first
-    std::vector<std::pair<core::TrackStore::Id, core::TrackView>> matches;
+    std::vector<std::pair<core::TrackId, core::TrackView>> matches;
 
     if (filter.empty())
     {
@@ -233,7 +233,7 @@ TrackCommand::TrackCommand(core::MusicLibrary& ml) : _ml{ml}
   addCommand<BasicCommand>("delete")
     .addOption("id", bpo::value<std::uint64_t>()->required(), "track id", 1)
     .setExecutor([this](auto const& vm, auto& os) {
-      auto id = core::TrackStore::Id{vm["id"].template as<std::uint32_t>()};
+      auto id = core::TrackId{vm["id"].template as<std::uint32_t>()};
       auto txn = _ml.writeTransaction();
       auto writer = _ml.tracks().writer(txn);
       if (writer.del(id))

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.30)
 
 project(rockstudio)
-set (CMAKE_CXX_STANDARD 20)
+set (CMAKE_CXX_STANDARD 23)
 
 # Strict compiler warnings (disable -Werror when using sanitizers)
 if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
@@ -50,7 +50,7 @@ add_library(rs OBJECT
     src/lmdb/Database.cpp
     src/core/MusicLibrary.cpp
     src/core/ResourceStore.cpp
-    src/core/Dictionary.cpp
+    src/core/DictionaryStore.cpp
     src/core/TrackStore.cpp
     src/core/TrackRecord.cpp
     src/core/TrackLayout.cpp

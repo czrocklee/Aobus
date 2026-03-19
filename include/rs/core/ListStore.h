@@ -4,8 +4,8 @@
 #pragma once
 
 #include <rs/core/ListLayout.h>
+#include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
-#include <rs/utility/TaggedInteger.h>
 
 #include <boost/iterator/transform_iterator.hpp>
 #include <optional>
@@ -21,11 +21,6 @@ namespace rs::core
   class ListStore
   {
   public:
-    struct IdTag
-    {};
-
-    using Id = utility::TaggedInteger<std::uint32_t, IdTag>;
-
     class Reader;
     class Writer;
 
@@ -49,7 +44,7 @@ namespace rs::core
     Iterator begin() const;
     Iterator end() const;
 
-    std::optional<ListView> get(Id id) const;
+    std::optional<ListView> get(ListId id) const;
 
   private:
     Reader(lmdb::Database::Reader&& reader);
@@ -64,7 +59,7 @@ namespace rs::core
   class ListStore::Reader::Iterator
   {
   public:
-    using value_type = std::pair<Id, ListView>;
+    using value_type = std::pair<ListId, ListView>;
 
     Iterator() = default;
     Iterator(Iterator const& other) = default;
@@ -89,11 +84,11 @@ namespace rs::core
   public:
     Writer() = default;
 
-    std::pair<Id, ListView> create(std::span<std::byte const> data);
-    ListView update(Id id, std::span<std::byte const> data);
-    bool del(Id id);
+    std::pair<ListId, ListView> create(std::span<std::byte const> data);
+    ListView update(ListId id, std::span<std::byte const> data);
+    bool del(ListId id);
 
-    std::optional<ListView> get(Id id) const;
+    std::optional<ListView> get(ListId id) const;
 
   private:
     explicit Writer(lmdb::Database::Writer&& writer);

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/core/Dictionary.h>
+#include <rs/core/DictionaryStore.h>
 #include <rs/core/TrackLayout.h>
 #include <rs/expr/Expression.h>
 
@@ -119,11 +119,11 @@ namespace rs::expr
     explicit QueryCompiler() = default;
 
     /**
-     * Construct with a dictionary for string resolution.
+     * Construct with a DictionaryStore for string resolution.
      *
-     * @param dict Pointer to Dictionary for resolving string constants to IDs, can be nullptr
+     * @param dict Pointer to DictionaryStore for resolving string constants to IDs, can be nullptr
      */
-    explicit QueryCompiler(core::Dictionary const* dict);
+    explicit QueryCompiler(core::DictionaryStore const* dict);
 
     /**
      * Compile an expression AST into an execution plan.
@@ -147,7 +147,7 @@ namespace rs::expr
 
     ExecutionPlan _plan;
     std::uint32_t _nextReg = 0;
-    core::Dictionary const* _dict = nullptr;
+    core::DictionaryStore const* _dict = nullptr;
     Field _lastField = Field::TagBloom; // Track last field for context
   };
 

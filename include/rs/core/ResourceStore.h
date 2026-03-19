@@ -4,15 +4,16 @@
 #pragma once
 
 #include <boost/iterator/transform_iterator.hpp>
-#include <span>
+#include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
+#include <span>
 
 namespace rs::core
 {
+
   class ResourceStore
   {
   public:
-    using Id = std::uint32_t;
     using Reader = lmdb::Database::Reader;
     class Writer;
 
@@ -28,8 +29,8 @@ namespace rs::core
   class ResourceStore::Writer
   {
   public:
-    Id create(std::span<std::byte const> data);
-    bool del(Id id) { return _writer.del(id); }
+    ResourceId create(std::span<std::byte const> data);
+    bool del(ResourceId id) { return _writer.del(id.value()); }
 
   private:
     explicit Writer(lmdb::Database::Reader&& reader, lmdb::Database::Writer&& writer)

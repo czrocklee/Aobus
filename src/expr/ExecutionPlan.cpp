@@ -74,7 +74,7 @@ namespace rs::expr
     }
   }
 
-  QueryCompiler::QueryCompiler(core::Dictionary const* dict) : _dict{dict}
+  QueryCompiler::QueryCompiler(core::DictionaryStore const* dict) : _dict{dict}
   {
   }
 

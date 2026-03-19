@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/core/Dictionary.h>
+#include <rs/core/DictionaryStore.h>
 #include <rs/core/ListStore.h>
 #include <rs/core/ResourceStore.h>
 #include <rs/core/TrackStore.h>
@@ -17,8 +17,6 @@ namespace rs::core
   class MusicLibrary
   {
   public:
-    using TrackId = TrackStore::Id;
-
     explicit MusicLibrary(std::filesystem::path rootPath);
 
     rs::lmdb::ReadTransaction readTransaction() const { return rs::lmdb::ReadTransaction{_env}; }
@@ -34,8 +32,8 @@ namespace rs::core
     ResourceStore& resources() { return _resources; }
     ResourceStore const& resources() const { return _resources; }
 
-    Dictionary& dictionary() { return _dictionary; }
-    Dictionary const& dictionary() const { return _dictionary; }
+    DictionaryStore& dictionary() { return _dictionary; }
+    DictionaryStore const& dictionary() const { return _dictionary; }
 
     std::filesystem::path const& rootPath() const { return _root; }
 
@@ -46,6 +44,6 @@ namespace rs::core
     TrackStore _tracks;
     ListStore _lists;
     ResourceStore _resources;
-    Dictionary _dictionary;
+    DictionaryStore _dictionary;
   };
 }

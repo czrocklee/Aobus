@@ -3,8 +3,7 @@
 
 #include <catch2/catch.hpp>
 
-#include <span>
-#include <rs/core/Dictionary.h>
+#include <rs/core/DictionaryStore.h>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/TrackRecord.h>
 #include <rs/expr/ExecutionPlan.h>
@@ -13,6 +12,8 @@
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
+#include <rs/utility/ByteView.h>
+#include <span>
 #include <test/lmdb/LmdbTestUtils.h>
 
 #include <vector>
@@ -55,18 +56,14 @@ namespace
       _record.property.channels = channels;
       _record.property.bitDepth = bitDepth;
       // Convert uint32_t tagIds to DictionaryId
-      for (auto id : tagIds)
-      {
-        _record.tags.ids.push_back(DictionaryId{id});
-      }
+      for (auto id : tagIds) { _record.tags.ids.push_back(DictionaryId{id}); }
 
       // Serialize to get proper binary layout
-      auto serialized = _record.serialize();
-      _data.assign(reinterpret_cast<char const*>(serialized.data()),
-                   reinterpret_cast<char const*>(serialized.data()) + serialized.size());
+      _data = _record.serialize();
+      _view = rs::core::TrackView{rs::utility::asBytes(_data)};
 
       // Fix up the header with IDs and other fields
-      auto* header = reinterpret_cast<rs::core::TrackHeader*>(_data.data());
+      auto* header = const_cast<rs::core::TrackHeader*>(_view.header());
       header->artistId = DictionaryId{artistId};
       header->albumId = DictionaryId{albumId};
       header->genreId = DictionaryId{genreId};
@@ -75,8 +72,6 @@ namespace
       header->rating = 0;
       header->fileSize = 1000000;
       header->mtime = 1234567890;
-
-      _view = rs::core::TrackView{std::as_bytes(std::span{_data})};
     }
 
     rs::core::TrackView& view() { return _view; }
@@ -84,13 +79,13 @@ namespace
 
   private:
     rs::core::TrackRecord _record;
-    std::vector<char> _data;
+    std::vector<std::byte> _data;
     rs::core::TrackView _view;
   };
 
 } // namespace
 
-using rs::core::Dictionary;
+using rs::core::DictionaryStore;
 using rs::core::DictionaryId;
 using rs::lmdb::Database;
 using rs::lmdb::Environment;
@@ -354,7 +349,7 @@ TEST_CASE("PlanEvaluator - Tag Query - No Tags")
 {
   // Query for tag - with dictionary resolving "rock" -> ID 10
   auto expr = parse("#rock");
-  QueryCompiler compiler;  // No dictionary - tag resolution disabled
+  QueryCompiler compiler; // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
   PlanEvaluator evaluator;
 
@@ -366,18 +361,18 @@ TEST_CASE("PlanEvaluator - Tag Query - No Tags")
 
 TEST_CASE("PlanEvaluator - Tag Query - With Matching Tag")
 {
-  // Set up Dictionary with tag
+  // Set up DictionaryStore with tag
   TempDir temp;
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   WriteTransaction wtxn(env);
-  Dictionary dict{wtxn, "dict"};
+  DictionaryStore dict{wtxn, "dict"};
   dict.put(wtxn, "rock"); // Will get ID 0 (LMDB starts from 0 now)
   wtxn.commit();
 
   // Query for #rock
   auto expr = parse("#rock");
-  QueryCompiler compiler{&dict};  // Pass dictionary for tag resolution
+  QueryCompiler compiler{&dict}; // Pass dictionary for tag resolution
   auto plan = compiler.compile(expr);
   PlanEvaluator evaluator;
 
@@ -391,7 +386,7 @@ TEST_CASE("PlanEvaluator - Tag Query - With Non-Matching Tag")
 {
   // Dictionary: "rock" -> ID 10, but track has tag ID 20
   auto expr = parse("#rock");
-  QueryCompiler compiler;  // No dictionary - tag resolution disabled
+  QueryCompiler compiler; // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
   PlanEvaluator evaluator;
 
@@ -446,7 +441,7 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Dictionary Miss")
 {
   // Dictionary has "rock" -> ID 10, but query is for "jazz" which is not in dict
   auto expr = parse("#jazz");
-  QueryCompiler compiler;  // No dictionary - tag resolution disabled
+  QueryCompiler compiler; // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
 
   // "jazz" not in dictionary, tagBloomMask stays 0
@@ -457,7 +452,7 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Dictionary Hit")
 {
   // Dictionary has "rock" -> ID 10 (10 & 31 = 10)
   auto expr = parse("#rock");
-  QueryCompiler compiler;  // No dictionary - tag resolution disabled
+  QueryCompiler compiler; // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
 
   // Without dictionary, tag resolution doesn't happen, bloom mask stays 0
@@ -468,7 +463,7 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Multiple Tags Hit")
 {
   // Dictionary: "rock" -> ID 10, "jazz" -> ID 20
   auto expr = parse("#rock && #jazz");
-  QueryCompiler compiler;  // No dictionary - tag resolution disabled
+  QueryCompiler compiler; // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
 
   // Without dictionary, tag resolution doesn't happen, bloom mask stays 0
@@ -485,19 +480,19 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Track Computation")
   // Tag ID 10 -> bit 10 (10 & 31 = 10)
   record.tags.ids = {DictionaryId{10}};
   auto data = record.serialize();
-  auto* header = reinterpret_cast<rs::core::TrackHeader const*>(data.data());
+  auto* header = rs::utility::as<rs::core::TrackHeader const>(data);
   CHECK((header->tagBloom & (1U << 10)) != 0); // Bit 10 should be set
 
   // Tag ID 32 -> bit 0 (32 & 31 = 0)
   record.tags.ids = {DictionaryId{32}};
   data = record.serialize();
-  header = reinterpret_cast<rs::core::TrackHeader const*>(data.data());
+  header = rs::utility::as<rs::core::TrackHeader const>(data);
   CHECK((header->tagBloom & 1U) != 0); // Bit 0 should be set
 
   // Multiple tags: ID 5 and ID 20
   record.tags.ids = {DictionaryId{5}, DictionaryId{20}};
   data = record.serialize();
-  header = reinterpret_cast<rs::core::TrackHeader const*>(data.data());
+  header = rs::utility::as<rs::core::TrackHeader const>(data);
   CHECK((header->tagBloom & (1U << 5)) != 0);  // Bit 5 should be set
   CHECK((header->tagBloom & (1U << 20)) != 0); // Bit 20 should be set
 }
@@ -513,11 +508,11 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   rs::core::TrackHeader h{};
   h.tagBloom = 0x00000001U; // Only bit 0 set
 
-  std::vector<char> data;
-  data.insert(data.end(), reinterpret_cast<char const*>(&h), reinterpret_cast<char const*>(&h + 1));
+  std::vector<std::byte> data;
+  data.insert_range(data.end(), rs::utility::asBytes(h));
 
-  data.push_back('\0'); // empty title
-  data.push_back('\0'); // empty uri
+  data.push_back(static_cast<std::byte>('\0')); // empty title
+  data.push_back(static_cast<std::byte>('\0')); // empty uri
 
   rs::core::TrackView view(std::as_bytes(std::span{data}));
 
@@ -538,11 +533,11 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
   rs::core::TrackHeader h{};
   h.tagBloom = 0xFFFFFFFFU; // All bits set
 
-  std::vector<char> data;
-  data.insert(data.end(), reinterpret_cast<char const*>(&h), reinterpret_cast<char const*>(&h + 1));
+  std::vector<std::byte> data;
+  data.insert_range(data.end(), rs::utility::asBytes(h));
 
-  data.push_back('\0'); // empty title
-  data.push_back('\0'); // empty uri
+  data.push_back(static_cast<std::byte>('\0')); // empty title
+  data.push_back(static_cast<std::byte>('\0')); // empty uri
 
   rs::core::TrackView view(std::as_bytes(std::span{data}));
 

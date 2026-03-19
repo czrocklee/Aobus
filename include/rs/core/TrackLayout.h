@@ -4,7 +4,7 @@
 #pragma once
 
 #include <rs/Exception.h>
-#include <rs/core/Dictionary.h>
+#include <rs/core/DictionaryStore.h>
 
 #include <cstdint>
 #include <rs/utility/ByteView.h>

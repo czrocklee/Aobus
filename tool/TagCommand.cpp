@@ -6,7 +6,7 @@
 #include <rs/core/TrackRecord.h>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/TrackStore.h>
-#include <rs/core/Dictionary.h>
+#include <rs/core/DictionaryStore.h>
 
 #include <algorithm>
 #include <sstream>
@@ -16,7 +16,7 @@ namespace
   namespace bpo = boost::program_options;
   using namespace rs;
 
-  void addTag(core::MusicLibrary& ml, core::TrackStore::Id trackId, std::string const& tagName, std::ostream& os)
+  void addTag(core::MusicLibrary& ml, core::TrackId trackId, std::string const& tagName, std::ostream& os)
   {
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
@@ -62,7 +62,7 @@ namespace
     os << "added tag: " << tagName << " to track " << trackId << std::endl;
   }
 
-  void removeTag(core::MusicLibrary& ml, core::TrackStore::Id trackId, std::string const& tagName, std::ostream& os)
+  void removeTag(core::MusicLibrary& ml, core::TrackId trackId, std::string const& tagName, std::ostream& os)
   {
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
@@ -99,7 +99,7 @@ namespace
     os << "removed tag: " << tagName << " from track " << trackId << std::endl;
   }
 
-  void showTags(core::MusicLibrary& ml, core::TrackStore::Id trackId, std::ostream& os)
+  void showTags(core::MusicLibrary& ml, core::TrackId trackId, std::ostream& os)
   {
     auto txn = ml.readTransaction();
     auto reader = ml.tracks().reader(txn);
@@ -137,7 +137,7 @@ TagCommand::TagCommand(rs::core::MusicLibrary& ml) : _ml{ml}
     .addOption("id", bpo::value<std::uint64_t>()->required(), "track id", 1)
     .addOption("tag", bpo::value<std::string>()->required(), "tag name", 1)
     .setExecutor([this](auto const& vm, auto& os) {
-      auto id = rs::core::TrackStore::Id{vm["id"].template as<std::uint32_t>()};
+      auto id = rs::core::TrackId{vm["id"].template as<std::uint32_t>()};
       auto tag = vm["tag"].template as<std::string>();
       addTag(_ml, id, tag, os);
       return "";
@@ -147,7 +147,7 @@ TagCommand::TagCommand(rs::core::MusicLibrary& ml) : _ml{ml}
     .addOption("id", bpo::value<std::uint64_t>()->required(), "track id", 1)
     .addOption("tag", bpo::value<std::string>()->required(), "tag name", 1)
     .setExecutor([this](auto const& vm, auto& os) {
-      auto id = rs::core::TrackStore::Id{vm["id"].template as<std::uint32_t>()};
+      auto id = rs::core::TrackId{vm["id"].template as<std::uint32_t>()};
       auto tag = vm["tag"].template as<std::string>();
       removeTag(_ml, id, tag, os);
       return "";
@@ -156,7 +156,7 @@ TagCommand::TagCommand(rs::core::MusicLibrary& ml) : _ml{ml}
   addCommand<BasicCommand>("show")
     .addOption("id", bpo::value<std::uint64_t>()->required(), "track id", 1)
     .setExecutor([this](auto const& vm, auto& os) {
-      auto id = rs::core::TrackStore::Id{vm["id"].template as<std::uint32_t>()};
+      auto id = rs::core::TrackId{vm["id"].template as<std::uint32_t>()};
       showTags(_ml, id, os);
       return "";
     });

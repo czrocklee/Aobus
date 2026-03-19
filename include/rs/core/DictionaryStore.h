@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
-#include <rs/utility/TaggedInteger.h>
 
 #include <cstdint>
 #include <string>
@@ -16,19 +16,12 @@ namespace rs::core
 {
 
   /**
-   * Tag type for Dictionary IDs - provides type safety.
-   */
-  struct DictionaryIdTag
-  {};
-  using DictionaryId = utility::TaggedInteger<std::uint32_t, DictionaryIdTag>;
-
-  /**
-   * Dictionary - Stores id → string mappings with in-memory string → id index.
+   * DictionaryStore - Stores id → string mappings with in-memory string → id index.
    *
    * Uses LMDB for persistent storage (id → string) and builds an in-memory
    * hash map for fast string → id lookups when loaded.
    */
-  class Dictionary
+  class DictionaryStore
   {
   public:
     /**
@@ -37,7 +30,7 @@ namespace rs::core
      * @param txn Write transaction for loading existing entries (must remain alive)
      * @param db Database name
      */
-    explicit Dictionary(lmdb::WriteTransaction& txn, std::string const& db);
+    explicit DictionaryStore(lmdb::WriteTransaction& txn, std::string const& db);
 
     /**
      * Store a string and auto-generate a unique ID.

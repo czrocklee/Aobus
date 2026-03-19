@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/core/Dictionary.h>
+#include <rs/core/DictionaryStore.h>
 #include <rs/core/TrackLayout.h>
 
 #include <string>
@@ -30,9 +30,9 @@ namespace rs::core
      * Construct from a TrackView by resolving dictionary IDs.
      *
      * @param view The binary track view
-     * @param dict Dictionary to resolve artist/album/genre IDs
+     * @param dict DictionaryStore to resolve artist/album/genre IDs
      */
-    TrackRecord(TrackView const& view, Dictionary const& dict);
+    TrackRecord(TrackView const& view, DictionaryStore const& dict);
 
     /**
      * Property - Audio file technical properties (@ prefix).

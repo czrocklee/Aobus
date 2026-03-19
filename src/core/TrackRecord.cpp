@@ -9,12 +9,9 @@ namespace rs::core
   // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
   constexpr std::uint32_t kBloomBitMask = 31;
 
-  TrackRecord::TrackRecord(TrackView const& view, Dictionary const& dict)
+  TrackRecord::TrackRecord(TrackView const& view, DictionaryStore const& dict)
   {
-    if (!view.isValid())
-    {
-      return;
-    }
+    if (!view.isValid()) { return; }
 
     // Copy property fields
     auto prop = view.property();
@@ -39,33 +36,22 @@ namespace rs::core
     metadata.coverArtId = meta.coverArtId();
 
     // Resolve dictionary IDs to strings
-    if (meta.artistId() > 0)
-    {
-      metadata.artist = std::string{dict.get(DictionaryId{meta.artistId()})};
-    }
-    if (meta.albumId() > 0)
-    {
-      metadata.album = std::string{dict.get(DictionaryId{meta.albumId()})};
-    }
-    if (meta.albumArtistId() > 0)
-    {
-      metadata.albumArtist = std::string{dict.get(DictionaryId{meta.albumArtistId()})};
-    }
-    if (meta.genreId() > 0)
-    {
-      metadata.genre = std::string{dict.get(DictionaryId{meta.genreId()})};
-    }
+    if (meta.artistId() > 0) { metadata.artist = std::string{dict.get(DictionaryId{meta.artistId()})}; }
+
+    if (meta.albumId() > 0) { metadata.album = std::string{dict.get(DictionaryId{meta.albumId()})}; }
+
+    if (meta.albumArtistId() > 0) { metadata.albumArtist = std::string{dict.get(DictionaryId{meta.albumArtistId()})}; }
+
+    if (meta.genreId() > 0) { metadata.genre = std::string{dict.get(DictionaryId{meta.genreId()})}; }
 
     // Deserialize tag IDs from payload
     auto tagProxy = view.tags();
     auto tagCount = tagProxy.count();
+
     for (std::uint8_t i = 0; i < tagCount; ++i)
     {
       auto tagId = tagProxy.id(i);
-      if (tagId > 0)
-      {
-        tags.ids.push_back(tagId);
-      }
+      tags.ids.push_back(tagId);
     }
   }
 
@@ -73,10 +59,8 @@ namespace rs::core
   {
     // Compute bloom filter from tag IDs first
     std::uint32_t bloom = 0;
-    for (auto tagId : tags.ids)
-    {
-      bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask));
-    }
+
+    for (auto tagId : tags.ids) { bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask)); }
 
     return TrackHeader{
       .fileSize = property.fileSize,
@@ -127,13 +111,13 @@ namespace rs::core
     h.tagsOffset = tagsOffset;
 
     // Write header
-    auto headerBytes = utility::toBytes(h);
+    auto headerBytes = utility::asBytes(h);
     data.insert(data.end(), headerBytes.begin(), headerBytes.end());
 
     // Write tags first: 4-byte tag IDs
     for (auto tagId : tags.ids)
     {
-      auto idBytes = utility::toBytes(tagId);
+      auto idBytes = utility::asBytes(tagId);
       data.insert(data.end(), idBytes.begin(), idBytes.end());
     }
 

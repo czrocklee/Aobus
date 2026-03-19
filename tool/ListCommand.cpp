@@ -4,7 +4,7 @@
 #include "ListCommand.h"
 #include <rs/core/ListLayout.h>
 #include <rs/core/ListStore.h>
-#include <rs/core/Dictionary.h>
+#include <rs/core/DictionaryStore.h>
 
 #include "BasicCommand.h"
 
@@ -80,7 +80,7 @@ ListCommand::ListCommand(core::MusicLibrary& ml) : _ml{ml}
   addCommand<BasicCommand>("delete")
     .addOption("id", bpo::value<std::uint64_t>()->required(), "list id", 1)
     .setExecutor([this](auto const& vm, auto& os) {
-      auto id = core::ListStore::Id{vm["id"].template as<std::uint32_t>()};
+      auto id = core::ListId{vm["id"].template as<std::uint32_t>()};
       auto txn = _ml.writeTransaction();
       auto writer = _ml.lists().writer(txn);
       if (writer.del(id))

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/core/Dictionary.h>
+#include <rs/core/DictionaryStore.h>
 
 #include <rs/utility/ByteView.h>
 #include <span>
@@ -12,7 +12,7 @@ namespace rs::core
   // Initial capacity for dictionary entries (suitable for most music libraries)
   constexpr std::uint32_t kInitialCapacity = 4096;
 
-  Dictionary::Dictionary(lmdb::WriteTransaction& txn, std::string const& db) : _database{txn, db}
+  DictionaryStore::DictionaryStore(lmdb::WriteTransaction& txn, std::string const& db) : _database{txn, db}
   {
     // Reserve initial capacity to avoid frequent resizes
     _idToStringStorage.reserve(kInitialCapacity);
@@ -25,7 +25,7 @@ namespace rs::core
     }
   }
 
-  DictionaryId Dictionary::put(lmdb::WriteTransaction& txn, std::string_view value)
+  DictionaryId DictionaryStore::put(lmdb::WriteTransaction& txn, std::string_view value)
   {
     // Check in-memory index first
     if (auto it = _stringToId.find(value); it != _stringToId.end())
@@ -43,7 +43,7 @@ namespace rs::core
     return DictionaryId{id};
   }
 
-  std::string_view Dictionary::get(DictionaryId id) const
+  std::string_view DictionaryStore::get(DictionaryId id) const
   {
     auto idx = id.value();
     if (idx >= _idToStringStorage.size())
@@ -54,7 +54,7 @@ namespace rs::core
     return _idToStringStorage[idx];
   }
 
-  DictionaryId Dictionary::getId(std::string_view str) const
+  DictionaryId DictionaryStore::getId(std::string_view str) const
   {
     if (auto it = _stringToId.find(str); it != _stringToId.end())
     {
@@ -64,7 +64,7 @@ namespace rs::core
     throw std::runtime_error{"String not found in dictionary"};
   }
 
-  bool Dictionary::contains(std::string_view str) const
+  bool DictionaryStore::contains(std::string_view str) const
   {
     return _stringToId.contains(str);
   }
