@@ -4,10 +4,10 @@
 #include "ThrowError.h"
 #include <rs/lmdb/Database.h>
 
-#include <rs/utility/ByteView.h>
 #include <cstring>
-#include <vector>
 #include <lmdb.h>
+#include <rs/utility/ByteView.h>
+#include <vector>
 
 namespace rs::lmdb
 {
@@ -27,10 +27,7 @@ namespace rs::lmdb
     template<typename T>
     T read(std::string_view bytes)
     {
-      if (bytes.size() != sizeof(T))
-      {
-        throw std::runtime_error{"read: bad value size"};
-      }
+      if (bytes.size() != sizeof(T)) { throw std::runtime_error{"read: bad value size"}; }
 
       T value;
       std::memcpy(&value, bytes.data(), sizeof(T));
@@ -63,7 +60,9 @@ namespace rs::lmdb
     return Writer{_dbi, txn};
   }
 
-  Reader::Reader(MDB_dbi dbi, MDB_txn* txn) : _dbi{dbi}, _txn{txn} {}
+  Reader::Reader(MDB_dbi dbi, MDB_txn* txn) : _dbi{dbi}, _txn{txn}
+  {
+  }
 
   Reader::Iterator Reader::begin() const
   {
@@ -82,15 +81,14 @@ namespace rs::lmdb
     auto key = makeVal(id);
     auto value = makeVal(nullptr, 0);
     int const rc = mdb_get(_txn, _dbi, &key, &value);
-    if (rc == MDB_NOTFOUND)
-    {
-      return std::nullopt;
-    }
+    if (rc == MDB_NOTFOUND) { return std::nullopt; }
     throwOnError("mdb_get", rc);
     return std::span<std::byte const>{static_cast<std::byte const*>(value.mv_data), value.mv_size};
   }
 
-  Reader::Iterator::Iterator() : _value{} {}
+  Reader::Iterator::Iterator() : _value{}
+  {
+  }
 
   Reader::Iterator::Iterator(MDB_cursor* cursor) : _cursor{cursor}
   {
@@ -112,7 +110,9 @@ namespace rs::lmdb
     }
   }
 
-  Reader::Iterator::Iterator(Iterator&& other) noexcept : _cursor{std::move(other._cursor)}, _value{other._value} {}
+  Reader::Iterator::Iterator(Iterator&& other) noexcept : _cursor{std::move(other._cursor)}, _value{other._value}
+  {
+  }
 
   bool Reader::Iterator::equal(Iterator const& other) const
   {
@@ -156,10 +156,7 @@ namespace rs::lmdb
       std::string_view key{static_cast<char const*>(keyValue.mv_data), keyValue.mv_size};
       _lastId = read<std::uint32_t>(key);
     }
-    else if (rc != MDB_NOTFOUND)
-    {
-      throwOnError("mdb_cursor_get", rc);
-    }
+    else if (rc != MDB_NOTFOUND) { throwOnError("mdb_cursor_get", rc); }
   }
 
   Writer::Writer(Writer&& other) noexcept
@@ -174,7 +171,11 @@ namespace rs::lmdb
 
   namespace
   {
-    void put(MDB_cursor* cursor, std::uint32_t id, std::span<std::byte const> data, unsigned int flags, std::vector<std::byte>& out)
+    void put(MDB_cursor* cursor,
+             std::uint32_t id,
+             std::span<std::byte const> data,
+             unsigned int flags,
+             std::vector<std::byte>& out)
     {
       auto keyValue = makeVal(id);
       auto valueBuffer = makeVal(data.data(), data.size());
@@ -200,7 +201,11 @@ namespace rs::lmdb
                  static_cast<std::byte const*>(valueBuffer.mv_data) + valueBuffer.mv_size);
     }
 
-    void reserve(MDB_cursor* cursor, std::uint32_t id, std::size_t size, unsigned int flags, std::vector<std::byte>& out)
+    void reserve(MDB_cursor* cursor,
+                 std::uint32_t id,
+                 std::size_t size,
+                 unsigned int flags,
+                 std::vector<std::byte>& out)
     {
       auto keyValue = makeVal(id);
       auto valueBuffer = makeVal(nullptr, size);
@@ -247,10 +252,7 @@ namespace rs::lmdb
     MDB_val key{sizeof(id), const_cast<std::uint32_t*>(&id)};
     int const rc = mdb_del(_txn._handle.get(), _dbi, &key, nullptr);
 
-    if (rc == MDB_NOTFOUND)
-    {
-      return false;
-    }
+    if (rc == MDB_NOTFOUND) { return false; }
 
     throwOnError("mdb_del", rc);
     return true;
@@ -261,10 +263,7 @@ namespace rs::lmdb
     auto key = makeVal(id);
     auto value = makeVal(nullptr, 0);
     int const rc = mdb_get(_txn._handle.get(), _dbi, &key, &value);
-    if (rc == MDB_NOTFOUND)
-    {
-      return std::nullopt;
-    }
+    if (rc == MDB_NOTFOUND) { return std::nullopt; }
     throwOnError("mdb_get", rc);
     return std::span<std::byte const>{static_cast<std::byte const*>(value.mv_data), value.mv_size};
   }

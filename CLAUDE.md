@@ -4,7 +4,7 @@ Guidance for Claude Code when working in this repository.
 
 ## Project Summary
 
-RockStudio is a C++20 music library application with multiple frontends and a shared core:
+RockStudio is a C++23 music library application with multiple frontends and a shared core:
 
 - Core/data/logic: `include/rs/**`, `src/core/**`, `src/expr/**`, `src/tag/**`
 - Qt frontend: `app/**`

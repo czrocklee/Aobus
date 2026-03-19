@@ -3,9 +3,10 @@
 
 #include <catch2/catch.hpp>
 
-#include <span>
+#include <cstddef>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/TrackRecord.h>
+#include <span>
 #include <test/core/TestUtils.h>
 
 #include <vector>
@@ -18,7 +19,7 @@ namespace
   using rs::core::TrackView;
 
   // Helper to create a minimal valid TrackView for testing
-  std::vector<char> createMinimalData()
+  std::vector<std::byte> createMinimalData()
   {
     TrackHeader h{};
     h.fileSize = 1000;
@@ -46,7 +47,7 @@ namespace
     return serializeHeader(h);
   }
 
-  std::vector<char> createTrackWithStrings(std::string_view title, std::string_view uri)
+  std::vector<std::byte> createTrackWithStrings(std::string_view title, std::string_view uri)
   {
     TrackHeader h{};
     h.fileSize = 1000;
@@ -91,26 +92,24 @@ namespace
   TEST_CASE("TrackHeader - Field Offsets")
   {
     // Verify key field offsets for ABI compatibility
-    TrackHeader h{};
-
     // Check 8-byte section
-    CHECK(reinterpret_cast<char*>(&h.fileSize) - reinterpret_cast<char*>(&h) == 0);
-    CHECK(reinterpret_cast<char*>(&h.mtime) - reinterpret_cast<char*>(&h) == 8);
+    CHECK(offsetof(TrackHeader, fileSize) == 0);
+    CHECK(offsetof(TrackHeader, mtime) == 8);
 
     // Check 4-byte section starts at offset 16
-    CHECK(reinterpret_cast<char*>(&h.tagBloom) - reinterpret_cast<char*>(&h) == 16);
-    CHECK(reinterpret_cast<char*>(&h.durationMs) - reinterpret_cast<char*>(&h) == 20);
+    CHECK(offsetof(TrackHeader, tagBloom) == 16);
+    CHECK(offsetof(TrackHeader, durationMs) == 20);
 
     // Check 2-byte section starts at offset 52
-    CHECK(reinterpret_cast<char*>(&h.year) - reinterpret_cast<char*>(&h) == 52);
-    CHECK(reinterpret_cast<char*>(&h.trackNumber) - reinterpret_cast<char*>(&h) == 54);
-    CHECK(reinterpret_cast<char*>(&h.totalTracks) - reinterpret_cast<char*>(&h) == 56);
-    CHECK(reinterpret_cast<char*>(&h.discNumber) - reinterpret_cast<char*>(&h) == 58);
-    CHECK(reinterpret_cast<char*>(&h.totalDiscs) - reinterpret_cast<char*>(&h) == 60);
+    CHECK(offsetof(TrackHeader, year) == 52);
+    CHECK(offsetof(TrackHeader, trackNumber) == 54);
+    CHECK(offsetof(TrackHeader, totalTracks) == 56);
+    CHECK(offsetof(TrackHeader, discNumber) == 58);
+    CHECK(offsetof(TrackHeader, totalDiscs) == 60);
 
     // Check 1-byte section
-    CHECK(reinterpret_cast<char*>(&h.channels) - reinterpret_cast<char*>(&h) == 74);
-    CHECK(reinterpret_cast<char*>(&h.bitDepth) - reinterpret_cast<char*>(&h) == 75);
+    CHECK(offsetof(TrackHeader, channels) == 74);
+    CHECK(offsetof(TrackHeader, bitDepth) == 75);
   }
 
   TEST_CASE("TrackView - Default Constructor")
@@ -176,18 +175,17 @@ namespace
 
   TEST_CASE("TrackView - Invalid Data")
   {
-    // Null data
+    // Null data (valid size but nullptr) - creates invalid view, isValid is false
     std::span<std::byte const> nullSpan{static_cast<std::byte const*>(nullptr), 100};
     TrackView nullView(nullSpan);
     CHECK(nullView.isValid() == false);
 
-    // Too small
+    // Too small - throws on construction
     char smallData[10] = {};
     std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
-    TrackView smallView(smallSpan);
-    CHECK(smallView.isValid() == false);
+    CHECK_THROWS(TrackView(smallSpan));
 
-    // Empty
+    // Empty - uses default constructor, isValid is false
     TrackView emptyView;
     CHECK(emptyView.isValid() == false);
   }
@@ -255,8 +253,8 @@ namespace
     // Add tag IDs (4 bytes each)
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert(data.end(), reinterpret_cast<char const*>(&tag1), reinterpret_cast<char const*>(&tag1 + 1));
-    data.insert(data.end(), reinterpret_cast<char const*>(&tag2), reinterpret_cast<char const*>(&tag2 + 1));
+    data.insert(data.end(), reinterpret_cast<std::byte const*>(&tag1), reinterpret_cast<std::byte const*>(&tag1 + 1));
+    data.insert(data.end(), reinterpret_cast<std::byte const*>(&tag2), reinterpret_cast<std::byte const*>(&tag2 + 1));
 
     TrackView view(std::as_bytes(std::span{data}));
 

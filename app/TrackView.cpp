@@ -13,7 +13,7 @@ TrackView::TrackView(TableModel::AbstractTrackList& tracks, QWidget* parent) : Q
   proxyModel->setSourceModel(model);
   tableView->setModel(proxyModel);
 
-  tableView->horizontalheader().setSectionResizeMode(QHeaderView::Interactive);
+  tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
   tableView->resizeColumnsToContents();
   tableView->setItemDelegateForColumn(3, new TagsDelegate{tableView});
 

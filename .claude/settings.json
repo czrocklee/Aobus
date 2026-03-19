@@ -23,7 +23,13 @@
       "Bash(/tmp/build/rs_test --list-tests)",
       "Bash(/tmp/build/rs_test --list-tags)",
       "Bash(./rs_test \"[resource]\")",
-      "Bash(./rs_test)"
+      "Bash(./rs_test)",
+      "Bash(./rs_test --list-tests)",
+      "Bash(./rs_test \"TrackHeader - Field Offsets\")",
+      "Bash(./rs_test \"TrackHeader*\")",
+      "Bash(./rs_test \"ListHeader*\")",
+      "Bash(./rs_test \"PlanEvaluator*\")",
+      "Bash(/tmp/build/rs_test \"TrackRecord - Serialize With Strings\")"
     ],
     "additionalDirectories": [
       "/tmp/test_music_lib",

@@ -3,8 +3,9 @@
 
 #include <catch2/catch.hpp>
 
-#include <span>
+#include <cstddef>
 #include <rs/core/ListLayout.h>
+#include <span>
 #include <test/core/TestUtils.h>
 
 #include <vector>
@@ -16,13 +17,13 @@ namespace
   using rs::core::ListView;
 
   // Helper to create a ListView for testing
-  std::vector<char> createListData(std::uint64_t trackIdsCount = 0,
-                                   std::uint32_t nameId = 0,
-                                   std::uint32_t descId = 0,
-                                   std::uint32_t filterId = 0,
-                                   std::uint8_t flags = 0,
-                                   std::string_view name = "",
-                                   std::string_view desc = "")
+  std::vector<std::byte> createListData(std::uint64_t trackIdsCount = 0,
+                                        std::uint32_t nameId = 0,
+                                        std::uint32_t descId = 0,
+                                        std::uint32_t filterId = 0,
+                                        std::uint8_t flags = 0,
+                                        std::string_view name = "",
+                                        std::string_view desc = "")
   {
     ListHeader h{};
     h.trackIdsOffset = 0;
@@ -41,16 +42,10 @@ namespace
     auto data = serializeHeader(h);
 
     // Add name + null
-    if (!name.empty())
-    {
-      appendString(data, name);
-    }
+    if (!name.empty()) { appendString(data, name); }
 
     // Add description + null
-    if (!desc.empty())
-    {
-      appendString(data, desc);
-    }
+    if (!desc.empty()) { appendString(data, desc); }
 
     return data;
   }
@@ -63,25 +58,23 @@ namespace
 
   TEST_CASE("ListHeader - Field Offsets")
   {
-    ListHeader h{};
-
     // Check 8-byte section
-    CHECK(reinterpret_cast<char*>(&h.trackIdsOffset) - reinterpret_cast<char*>(&h) == 0);
-    CHECK(reinterpret_cast<char*>(&h.trackIdsCount) - reinterpret_cast<char*>(&h) == 8);
+    CHECK(offsetof(ListHeader, trackIdsOffset) == 0);
+    CHECK(offsetof(ListHeader, trackIdsCount) == 8);
 
     // Check 4-byte section
-    CHECK(reinterpret_cast<char*>(&h.nameId) - reinterpret_cast<char*>(&h) == 16);
-    CHECK(reinterpret_cast<char*>(&h.descId) - reinterpret_cast<char*>(&h) == 20);
-    CHECK(reinterpret_cast<char*>(&h.filterId) - reinterpret_cast<char*>(&h) == 24);
+    CHECK(offsetof(ListHeader, nameId) == 16);
+    CHECK(offsetof(ListHeader, descId) == 20);
+    CHECK(offsetof(ListHeader, filterId) == 24);
 
     // Check 2-byte section
-    CHECK(reinterpret_cast<char*>(&h.nameOffset) - reinterpret_cast<char*>(&h) == 28);
-    CHECK(reinterpret_cast<char*>(&h.nameLen) - reinterpret_cast<char*>(&h) == 30);
-    CHECK(reinterpret_cast<char*>(&h.descOffset) - reinterpret_cast<char*>(&h) == 32);
-    CHECK(reinterpret_cast<char*>(&h.descLen) - reinterpret_cast<char*>(&h) == 34);
+    CHECK(offsetof(ListHeader, nameOffset) == 28);
+    CHECK(offsetof(ListHeader, nameLen) == 30);
+    CHECK(offsetof(ListHeader, descOffset) == 32);
+    CHECK(offsetof(ListHeader, descLen) == 34);
 
     // Check 1-byte section
-    CHECK(reinterpret_cast<char*>(&h.flags) - reinterpret_cast<char*>(&h) == 36);
+    CHECK(offsetof(ListHeader, flags) == 36);
   }
 
   TEST_CASE("ListView - Default Constructor")

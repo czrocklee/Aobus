@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.30)
 project(rockstudio)
 set (CMAKE_CXX_STANDARD 23)
 
+# Precompiled Headers support
+set(CMAKE_CXX_PRECOMPILE_HEADERS ON)
+
 # Strict compiler warnings (disable -Werror when using sanitizers)
 if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -72,6 +75,7 @@ add_library(rs OBJECT
 )
 target_include_directories(rs PUBLIC include)
 target_link_libraries(rs lmdb Boost::locale)
+target_precompile_headers(rs PRIVATE include/rs/rs_pch.h)
 
 add_executable(rsc
     tool/main.cpp

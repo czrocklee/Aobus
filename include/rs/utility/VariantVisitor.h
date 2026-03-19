@@ -9,6 +9,7 @@ namespace rs::utility
     {
       using Ts::operator()...;
     };
+    
     template<typename... Ts>
     Overload(Ts...) -> Overload<Ts...>;
   }

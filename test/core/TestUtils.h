@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <rs/utility/ByteView.h>
+
 #include <cstdint>
 #include <string_view>
 #include <vector>
@@ -14,22 +16,22 @@ namespace test
    * Serialize a POD struct to a byte vector.
    */
   template<typename T>
-  std::vector<char> serializeHeader(T const& header)
+  std::vector<std::byte> serializeHeader(T const& header)
   {
     static_assert(std::is_trivially_copyable_v<T>, "Header must be trivially copyable");
 
-    std::vector<char> data;
-    data.insert(data.end(), reinterpret_cast<char const*>(&header), reinterpret_cast<char const*>(&header + 1));
+    std::vector<std::byte> data;
+    data.insert_range(data.end(), rs::utility::asBytes(header));
     return data;
   }
 
   /**
    * Append a null-terminated string to the payload.
    */
-  inline void appendString(std::vector<char>& payload, std::string_view str)
+  inline void appendString(std::vector<std::byte>& payload, std::string_view str)
   {
-    payload.insert(payload.end(), str.begin(), str.end());
-    payload.push_back('\0');
+    payload.insert_range(payload.end(), rs::utility::asBytes(str));
+    payload.push_back(std::byte{'\0'});
   }
 
 } // namespace test

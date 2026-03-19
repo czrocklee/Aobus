@@ -60,7 +60,7 @@ namespace
 
       // Serialize to get proper binary layout
       _data = _record.serialize();
-      _view = rs::core::TrackView{rs::utility::asBytes(_data)};
+      _view = rs::core::TrackView{std::span<std::byte const>{_data.data(), _data.size()}};
 
       // Fix up the header with IDs and other fields
       auto* header = const_cast<rs::core::TrackHeader*>(_view.header());

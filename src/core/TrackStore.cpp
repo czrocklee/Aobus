@@ -83,7 +83,7 @@ namespace rs::core
 
   TrackView TrackStore::Writer::update(TrackId id, std::span<std::byte const> data)
   {
-    auto buffer = _writer.update(id.value(), data);
+    [[maybe_unused]] auto buffer = _writer.update(id.value(), data);
     return TrackView{data};
   }
 

@@ -4,7 +4,7 @@ This guide covers C++ coding conventions for RockStudio contributors.
 
 ## 1. C++ Standards
 
-1.1. Target: C++20 (without modules)
+1.1. Target: C++23 (without modules)
 
 ## 2. Code Style
 

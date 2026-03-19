@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <string_view>
 #include <type_traits>
 
@@ -34,13 +35,19 @@ namespace rs::utility
 
   // Get bytes span from a single object
   template<typename T>
-  constexpr std::span<std::byte const> toBytes(T const& obj) noexcept
+  constexpr std::span<std::byte const> asBytes(T const& obj) noexcept
   {
     return asBytes(std::addressof(obj));
   }
 
   // Get bytes span from string_view
   inline std::span<std::byte const> asBytes(std::string_view str) noexcept
+  {
+    return asBytes(str.data(), str.size());
+  }
+
+  // Get bytes span from std::string
+  inline std::span<std::byte const> asBytes(std::string const& str) noexcept
   {
     return asBytes(str.data(), str.size());
   }

@@ -1,6 +1,6 @@
 # RockStudio
 
-C++20 music library application with LMDB storage.
+C++23 music library application with LMDB storage.
 
 ## Building
 

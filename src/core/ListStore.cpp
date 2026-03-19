@@ -64,7 +64,7 @@ namespace rs::core
 
   ListView ListStore::Writer::update(ListId id, std::span<std::byte const> data)
   {
-    auto buffer = _writer.update(id.value(), data);
+    [[maybe_unused]] auto buffer = _writer.update(id.value(), data);
     return ListView{data};
   }
 
