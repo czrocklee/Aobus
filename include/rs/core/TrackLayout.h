@@ -147,11 +147,10 @@ namespace rs::core
       TrackView const& _track;
     };
 
-    TrackView() noexcept : _header{nullptr}, _payloadBase{nullptr}, _size{0} {}
+    TrackView() noexcept : _header{nullptr}, _size{0} {}
 
     explicit TrackView(std::span<std::byte const> data)
       : _header{utility::as<TrackHeader>(data)}
-      , _payloadBase{utility::as<std::byte>(data)}
       , _size{data.size()}
     {
       if (data.size() < sizeof(TrackHeader)) { RS_THROW(rs::Exception, "Invalid track data: size too small"); }
@@ -169,7 +168,6 @@ namespace rs::core
 
   private:
     TrackHeader const* _header;
-    std::byte const* _payloadBase;
     std::size_t _size;
 
     std::string_view getString(std::uint16_t offset, std::uint16_t len) const;

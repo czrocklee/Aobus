@@ -48,7 +48,7 @@ namespace rs::core
       return {};
     }
 
-    return {reinterpret_cast<char const*>(_payloadBase + start), len};
+    return {utility::as<char>(_header, start), len};
   }
 
   std::uint32_t TrackView::tagId(std::uint8_t index) const
@@ -62,7 +62,7 @@ namespace rs::core
     {
       return 0;
     }
-    return *reinterpret_cast<std::uint32_t const*>(_payloadBase + offset);
+    return *utility::as<std::uint32_t>(_header, offset);
   }
 
 } // namespace rs::core

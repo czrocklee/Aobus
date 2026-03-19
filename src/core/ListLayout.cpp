@@ -16,7 +16,7 @@ namespace rs::core
       return {};
     }
 
-    return {reinterpret_cast<char const*>(_payloadBase + start), len};
+    return {utility::as<char>(_header, start), len};
   }
 
 } // namespace rs::core
