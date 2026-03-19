@@ -66,8 +66,8 @@ namespace rs::core
   TrackHotHeader TrackRecord::hotHeader() const
   {
     // Compute bloom filter from tag IDs first
-    std::uint64_t bloom = 0;
-    for (auto tagId : tags.ids) { bloom |= (std::uint64_t{1} << (tagId.value() & kBloomBitMask)); }
+    std::uint32_t bloom = 0;
+    for (auto tagId : tags.ids) { bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask)); }
 
     return TrackHotHeader{
       .tagBloom = bloom,
@@ -88,9 +88,14 @@ namespace rs::core
 
   TrackColdHeader TrackRecord::coldHeader() const
   {
+    auto [fileSizeLo, fileSizeHi] = utility::splitInt64(cold.fileSize);
+    auto [mtimeLo, mtimeHi] = utility::splitInt64(cold.mtime);
+
     return TrackColdHeader{
-      .fileSize = cold.fileSize,
-      .mtime = cold.mtime,
+      .fileSizeLo = fileSizeLo,
+      .fileSizeHi = fileSizeHi,
+      .mtimeLo = mtimeLo,
+      .mtimeHi = mtimeHi,
       .durationMs = property.durationMs,
       .sampleRate = property.sampleRate,
       .coverArtId = cold.coverArtId,
@@ -135,6 +140,11 @@ namespace rs::core
     auto titleBytes = utility::asBytes(metadata.title);
     data.insert(data.end(), titleBytes.begin(), titleBytes.end());
     data.push_back(static_cast<std::byte>('\0'));
+
+    // Pad to 4-byte alignment
+    while (data.size() % 4 != 0) {
+      data.push_back(std::byte{0});
+    }
 
     return data;
   }

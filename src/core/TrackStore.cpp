@@ -3,6 +3,8 @@
 
 #include <rs/core/TrackStore.h>
 
+#include <cassert>
+
 namespace rs::core
 {
 
@@ -115,6 +117,10 @@ namespace rs::core
       std::span<std::byte const> hotData,
       std::span<std::byte const> coldData)
   {
+    // Ensure size is multiple of 4 for LMDB
+    assert((hotData.size() % 4 == 0) && "hotData size must be multiple of 4");
+    assert((coldData.size() % 4 == 0) && "coldData size must be multiple of 4");
+
     auto [id, hotBuffer] = _hotWriter.append(hotData);
     [[maybe_unused]] auto [coldId, coldBuffer] = _coldWriter.append(coldData);
     return {TrackId{id}, TrackHotView{hotData}};
@@ -122,12 +128,18 @@ namespace rs::core
 
   TrackHotView TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
   {
+    // Ensure size is multiple of 4 for LMDB
+    assert((hotData.size() % 4 == 0) && "hotData size must be multiple of 4");
+
     [[maybe_unused]] auto buffer = _hotWriter.update(id.value(), hotData);
     return TrackHotView{hotData};
   }
 
   TrackColdView TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
   {
+    // Ensure size is multiple of 4 for LMDB
+    assert((coldData.size() % 4 == 0) && "coldData size must be multiple of 4");
+
     [[maybe_unused]] auto buffer = _coldWriter.update(id.value(), coldData);
     return TrackColdView{coldData};
   }

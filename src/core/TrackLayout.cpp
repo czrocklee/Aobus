@@ -239,6 +239,11 @@ namespace rs::core
     }
     result.push_back(std::byte{'\0'});
 
+    // Pad to 4-byte alignment
+    while (result.size() % 4 != 0) {
+      result.push_back(std::byte{0});
+    }
+
     return result;
   }
 
@@ -270,6 +275,11 @@ namespace rs::core
 
       auto const* valueBytes = reinterpret_cast<std::byte const*>(value.data());
       result.insert(result.end(), valueBytes, valueBytes + value.size());
+    }
+
+    // Pad to 4-byte alignment
+    while (result.size() % 4 != 0) {
+      result.push_back(std::byte{0});
     }
 
     return result;

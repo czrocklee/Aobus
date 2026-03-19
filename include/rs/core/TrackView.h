@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <rs/core/TrackLayout.h>
 #include <rs/Exception.h>
+#include <rs/core/TrackLayout.h>
 
 #include <cstdint>
 #include <optional>
@@ -128,8 +128,8 @@ namespace rs::core
     public:
       explicit PropertyProxy(TrackColdView const& track) : _track(track) {}
 
-      std::uint64_t fileSize() const noexcept { return _track.header()->fileSize; }
-      std::uint64_t mtime() const noexcept { return _track.header()->mtime; }
+      std::uint64_t fileSize() const noexcept { return _track.fileSize(); }
+      std::uint64_t mtime() const noexcept { return _track.mtime(); }
       std::uint32_t durationMs() const noexcept { return _track.header()->durationMs; }
       std::uint32_t sampleRate() const noexcept { return _track.header()->sampleRate; }
       std::uint32_t coverArtId() const noexcept { return _track.header()->coverArtId; }
@@ -163,8 +163,8 @@ namespace rs::core
     PropertyProxy property() const { return PropertyProxy{*this}; }
 
     // Fixed field accessors (direct)
-    std::uint64_t fileSize() const noexcept { return _header->fileSize; }
-    std::uint64_t mtime() const noexcept { return _header->mtime; }
+    std::uint64_t fileSize() const noexcept { return utility::combineInt64(_header->fileSizeLo, _header->fileSizeHi); }
+    std::uint64_t mtime() const noexcept { return utility::combineInt64(_header->mtimeLo, _header->mtimeHi); }
     std::uint32_t durationMs() const noexcept { return _header->durationMs; }
     std::uint32_t sampleRate() const noexcept { return _header->sampleRate; }
     std::uint32_t coverArtId() const noexcept { return _header->coverArtId; }

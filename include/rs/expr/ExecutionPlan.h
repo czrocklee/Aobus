@@ -114,7 +114,7 @@ namespace rs::expr
     std::vector<std::string> stringConstants;
 
     // Bloom filter for tag fast-path rejection
-    std::uint64_t tagBloomMask = 0;
+    std::uint32_t tagBloomMask = 0;
 
     // If true, the query matches all tracks (no conditions)
     bool matchesAll = false;

@@ -253,8 +253,10 @@ TEST_CASE("TrackRecord - coldHeader")
 
   auto header = record.coldHeader();
 
-  CHECK(header.fileSize == 2000);
-  CHECK(header.mtime == 1234567890);
+  CHECK(header.fileSizeLo == static_cast<std::uint32_t>(2000 & 0xFFFFFFFF));
+  CHECK(header.fileSizeHi == static_cast<std::uint32_t>(static_cast<std::uint64_t>(2000) >> 32));
+  CHECK(header.mtimeLo == static_cast<std::uint32_t>(1234567890 & 0xFFFFFFFF));
+  CHECK(header.mtimeHi == static_cast<std::uint32_t>(static_cast<std::uint64_t>(1234567890) >> 32));
   CHECK(header.trackNumber == 5);
   CHECK(header.totalTracks == 10);
   CHECK(header.discNumber == 1);

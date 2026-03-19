@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 namespace rs::utility
 {
@@ -56,5 +57,23 @@ namespace rs::utility
   inline std::string_view asString(std::span<std::byte const> span) noexcept
   {
     return {reinterpret_cast<char const*>(span.data()), span.size()};
+  }
+
+  /**
+   * Split a uint64_t into two uint32_t parts for storage.
+   * Use when 8-byte alignment is not available.
+   */
+  constexpr std::pair<std::uint32_t, std::uint32_t> splitInt64(std::uint64_t value) noexcept
+  {
+    return {static_cast<std::uint32_t>(value & 0xFFFFFFFF),
+            static_cast<std::uint32_t>(value >> 32)};
+  }
+
+  /**
+   * Combine two uint32_t parts back into a uint64_t.
+   */
+  constexpr std::uint64_t combineInt64(std::uint32_t lo, std::uint32_t hi) noexcept
+  {
+    return (static_cast<std::uint64_t>(hi) << 32) | lo;
   }
 }

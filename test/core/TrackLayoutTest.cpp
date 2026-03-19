@@ -4,8 +4,8 @@
 #include <catch2/catch.hpp>
 
 #include <cstddef>
-#include <rs/core/TrackView.h>
 #include <rs/core/TrackRecord.h>
+#include <rs/core/TrackView.h>
 #include <span>
 #include <test/core/TestUtils.h>
 
@@ -17,6 +17,7 @@ namespace
   using rs::core::DictionaryId;
   using rs::core::TrackHotHeader;
   using rs::core::TrackHotView;
+  using rs::utility::splitInt64;
 
   // Helper to create a minimal valid TrackHotView for testing
   std::vector<std::byte> createMinimalData()
@@ -247,10 +248,9 @@ namespace
   using rs::core::TrackColdView;
 
   // Helper to create a full cold data blob for testing
-  std::vector<std::byte> createColdData(
-      TrackColdHeader const& header = {},
-      std::vector<std::pair<std::string, std::string>> const& customMeta = {},
-      std::string_view uri = "")
+  std::vector<std::byte> createColdData(TrackColdHeader const& header = {},
+                                        std::vector<std::pair<std::string, std::string>> const& customMeta = {},
+                                        std::string_view uri = "")
   {
     return encodeColdData(header, customMeta, uri);
   }
@@ -262,7 +262,7 @@ namespace
 
   TEST_CASE("TrackColdHeader - Size and Alignment")
   {
-    CHECK(sizeof(TrackColdHeader) == 40);
+    CHECK(sizeof(TrackColdHeader) == 48);
     CHECK(alignof(TrackColdHeader) == 8);
   }
 
@@ -326,10 +326,7 @@ namespace
   TEST_CASE("TrackColdView - Roundtrip Multiple Pairs")
   {
     auto pairs = std::vector<std::pair<std::string, std::string>>{
-      {"replaygain_track_gain_db", "-6.5"},
-      {"isrc", "USSM19999999"},
-      {"edition", "remaster"}
-    };
+      {"replaygain_track_gain_db", "-6.5"}, {"isrc", "USSM19999999"}, {"edition", "remaster"}};
     auto data = createColdData({}, pairs, "/path/to/file.flac");
     auto view = makeColdView(data);
 
@@ -345,10 +342,8 @@ namespace
 
   TEST_CASE("TrackColdView - Custom Value Lookup - Found")
   {
-    auto pairs = std::vector<std::pair<std::string, std::string>>{
-      {"replaygain_track_gain_db", "-6.5"},
-      {"isrc", "USSM19999999"}
-    };
+    auto pairs =
+      std::vector<std::pair<std::string, std::string>>{{"replaygain_track_gain_db", "-6.5"}, {"isrc", "USSM19999999"}};
     auto data = createColdData({}, pairs);
     auto view = makeColdView(data);
 
@@ -359,9 +354,7 @@ namespace
 
   TEST_CASE("TrackColdView - Custom Value Lookup - Not Found")
   {
-    auto pairs = std::vector<std::pair<std::string, std::string>>{
-      {"replaygain_track_gain_db", "-6.5"}
-    };
+    auto pairs = std::vector<std::pair<std::string, std::string>>{{"replaygain_track_gain_db", "-6.5"}};
     auto data = createColdData({}, pairs);
     auto view = makeColdView(data);
 
@@ -371,9 +364,7 @@ namespace
 
   TEST_CASE("TrackColdView - Custom Value Lookup - Case Sensitive")
   {
-    auto pairs = std::vector<std::pair<std::string, std::string>>{
-      {"ISRC", "USSM19999999"}
-    };
+    auto pairs = std::vector<std::pair<std::string, std::string>>{{"ISRC", "USSM19999999"}};
     auto data = createColdData({}, pairs);
     auto view = makeColdView(data);
 
@@ -399,9 +390,7 @@ namespace
 
   TEST_CASE("TrackColdView - Special Characters In Value")
   {
-    auto pairs = std::vector<std::pair<std::string, std::string>>{
-      {"comment", "Hello, World! 你好"}
-    };
+    auto pairs = std::vector<std::pair<std::string, std::string>>{{"comment", "Hello, World! 你好"}};
     auto data = createColdData({}, pairs);
     auto view = makeColdView(data);
 
@@ -412,8 +401,8 @@ namespace
   TEST_CASE("TrackColdView - Fixed Fields")
   {
     TrackColdHeader header{};
-    header.fileSize = 12345678;
-    header.mtime = 987654321;
+    std::tie(header.fileSizeLo, header.fileSizeHi) = splitInt64(12345678);
+    std::tie(header.mtimeLo, header.mtimeHi) = splitInt64(987654321);
     header.coverArtId = 42;
     header.trackNumber = 5;
     header.totalTracks = 10;
@@ -437,8 +426,8 @@ namespace
   TEST_CASE("TrackColdView - PropertyProxy")
   {
     TrackColdHeader header{};
-    header.fileSize = 12345678;
-    header.mtime = 987654321;
+    std::tie(header.fileSizeLo, header.fileSizeHi) = splitInt64(12345678);
+    std::tie(header.mtimeLo, header.mtimeHi) = splitInt64(987654321);
     header.coverArtId = 42;
     header.trackNumber = 5;
     header.totalTracks = 10;

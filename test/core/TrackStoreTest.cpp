@@ -38,8 +38,8 @@ TEST_CASE("TrackStore - create and read", "[core][track]")
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  // Empty cold data
-  std::vector<std::byte> coldData(1);
+  // Empty cold data (padded to 4-byte alignment)
+  std::vector<std::byte> coldData(4, std::byte{0});
 
   WriteTransaction wtxn2(env);
   auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -69,7 +69,7 @@ TEST_CASE("TrackStore - read by id", "[core][track]")
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  std::vector<std::byte> coldData(1);
+  std::vector<std::byte> coldData(4, std::byte{0});
 
   WriteTransaction wtxn2(env);
   auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -96,7 +96,7 @@ TEST_CASE("TrackStore - update", "[core][track]")
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  std::vector<std::byte> coldData(1);
+  std::vector<std::byte> coldData(4, std::byte{0});
 
   WriteTransaction wtxn2(env);
   auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -128,7 +128,7 @@ TEST_CASE("TrackStore - delete", "[core][track]")
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  std::vector<std::byte> coldData(1);
+  std::vector<std::byte> coldData(4, std::byte{0});
 
   WriteTransaction wtxn2(env);
   auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -162,7 +162,7 @@ TEST_CASE("TrackStore - create multiple tracks unique IDs", "[core][track]")
   std::vector<std::byte> hotData(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  std::vector<std::byte> coldData(1);
+  std::vector<std::byte> coldData(4, std::byte{0});
 
   WriteTransaction wtxn2(env);
   auto [id1, view1] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -193,8 +193,10 @@ TEST_CASE("TrackStore - hot/cold createHotCold", "[core][track]")
 
   // Create cold header
   TrackColdHeader coldHeader{};
-  coldHeader.fileSize = 1000;
-  coldHeader.mtime = 1234567890;
+  coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
+  coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
+  coldHeader.mtimeLo = static_cast<std::uint32_t>(1234567890 & 0xFFFFFFFF);
+  coldHeader.mtimeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1234567890) >> 32);
   coldHeader.durationMs = 180000;
   coldHeader.trackNumber = 1;
   coldHeader.totalTracks = 10;
@@ -239,8 +241,10 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
   TrackColdHeader coldHeader{};
-  coldHeader.fileSize = 1000;
-  coldHeader.mtime = 1234567890;
+  coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
+  coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
+  coldHeader.mtimeLo = static_cast<std::uint32_t>(1234567890 & 0xFFFFFFFF);
+  coldHeader.mtimeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1234567890) >> 32);
   coldHeader.durationMs = 180000;
 
   std::vector<std::byte> coldData(sizeof(TrackColdHeader));
@@ -262,8 +266,10 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
 
   // Update cold only
   TrackColdHeader coldHeader2{};
-  coldHeader2.fileSize = 2000;
-  coldHeader2.mtime = 9876543210;
+  coldHeader2.fileSizeLo = static_cast<std::uint32_t>(2000 & 0xFFFFFFFF);
+  coldHeader2.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(2000) >> 32);
+  coldHeader2.mtimeLo = static_cast<std::uint32_t>(9876543210 & 0xFFFFFFFF);
+  coldHeader2.mtimeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(9876543210) >> 32);
   coldHeader2.durationMs = 200000;
   coldHeader2.trackNumber = 2;
 
@@ -342,7 +348,8 @@ TEST_CASE("TrackStore - hot/cold Writer getHot and getCold", "[core][track]")
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
   TrackColdHeader coldHeader{};
-  coldHeader.fileSize = 3000;
+  coldHeader.fileSizeLo = static_cast<std::uint32_t>(3000 & 0xFFFFFFFF);
+  coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(3000) >> 32);
   coldHeader.durationMs = 240000;
   coldHeader.coverArtId = 42;
 
