@@ -67,6 +67,9 @@ namespace
       record.metadata.uri = path.string();
       record.property.fileSize = std::filesystem::file_size(path);
       record.property.mtime = std::filesystem::last_write_time(path).time_since_epoch().count();
+      record.cold.uri = path.string();
+      record.cold.fileSize = record.property.fileSize;
+      record.cold.mtime = record.property.mtime;
 
       // Get metadata fields
       auto titleVal = metadata.get(rs::tag::MetaField::Title);
@@ -107,24 +110,28 @@ namespace
       if (!rs::tag::isNull(trackNum))
       {
         record.metadata.trackNumber = static_cast<std::uint16_t>(std::get<std::int64_t>(trackNum));
+        record.cold.trackNumber = record.metadata.trackNumber;
       }
 
       auto totalTracks = metadata.get(rs::tag::MetaField::TotalTracks);
       if (!rs::tag::isNull(totalTracks))
       {
         record.metadata.totalTracks = static_cast<std::uint16_t>(std::get<std::int64_t>(totalTracks));
+        record.cold.totalTracks = record.metadata.totalTracks;
       }
 
       auto discNum = metadata.get(rs::tag::MetaField::DiscNumber);
       if (!rs::tag::isNull(discNum))
       {
         record.metadata.discNumber = static_cast<std::uint16_t>(std::get<std::int64_t>(discNum));
+        record.cold.discNumber = record.metadata.discNumber;
       }
 
       auto totalDiscs = metadata.get(rs::tag::MetaField::TotalDiscs);
       if (!rs::tag::isNull(totalDiscs))
       {
         record.metadata.totalDiscs = static_cast<std::uint16_t>(std::get<std::int64_t>(totalDiscs));
+        record.cold.totalDiscs = record.metadata.totalDiscs;
       }
 
       // Add to dictionary and get IDs for header
@@ -154,8 +161,9 @@ namespace
       }
 
       // Serialize and store
-      auto data = record.serialize();
-      auto [id, trackView] = trackWriter.create(data);
+      auto hotData = record.serializeHot();
+      auto coldData = record.serializeCold();
+      auto [id, trackView] = trackWriter.createHotCold(hotData, coldData);
 
       os << "add track: " << id << " " << record.metadata.title << std::endl;
     }
