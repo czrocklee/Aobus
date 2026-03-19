@@ -83,12 +83,6 @@ namespace rs::core
     Iterator end() const;
 
     /**
-     * Get a track by ID (legacy, returns TrackView).
-     * @return TrackView pointing to the track data, or std::nullopt if not found
-     */
-    std::optional<TrackView> get(TrackId id) const;
-
-    /**
      * Accessor for hot track data.
      */
     HotProxy hot() const { return HotProxy{*this}; }
@@ -112,7 +106,7 @@ namespace rs::core
   class TrackStore::Reader::Iterator
   {
   public:
-    using value_type = std::pair<TrackId, TrackView>;
+    using value_type = std::pair<TrackId, TrackHotView>;
 
     Iterator() = default;
     Iterator(Iterator const& other) = default;
@@ -125,7 +119,7 @@ namespace rs::core
     Iterator(lmdb::Database::Reader::Iterator&& iter);
 
     lmdb::Database::Reader::Iterator _iter;
-    TrackView _view;
+    TrackHotView _view;
     friend class Reader;
     friend class HotProxy;
     friend class ColdProxy;
@@ -140,32 +134,10 @@ namespace rs::core
     Writer() = default;
 
     /**
-     * Create a new track from raw binary data.
-     * @param data TrackHeader + payload
-     * @return Pair of (track ID, TrackView pointing to stored data)
-     */
-    std::pair<TrackId, TrackView> create(std::span<std::byte const> data);
-
-    /**
-     * Update an existing track.
-     * @param id Track ID to update
-     * @param data New TrackHeader + payload
-     * @return TrackView pointing to updated data
-     */
-    TrackView update(TrackId id, std::span<std::byte const> data);
-
-    bool del(TrackId id);
-
-    /**
-     * Get a track by ID.
-     */
-    std::optional<TrackView> get(TrackId id) const;
-
-    /**
      * Create a new track with hot and cold data.
      * @param hotData TrackHotHeader + payload
      * @param coldData TrackColdHeader + custom KV + uri
-     * @return Pair of (track ID, TrackView pointing to stored hot data)
+     * @return Pair of (track ID, TrackHotView pointing to stored hot data)
      */
     std::pair<TrackId, TrackHotView> createHotCold(
         std::span<std::byte const> hotData,

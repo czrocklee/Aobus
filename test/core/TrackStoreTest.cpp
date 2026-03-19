@@ -15,11 +15,9 @@
 
 using rs::core::TrackColdHeader;
 using rs::core::TrackColdView;
-using rs::core::TrackHeader;
 using rs::core::TrackHotHeader;
 using rs::core::TrackHotView;
 using rs::core::TrackStore;
-using rs::core::TrackView;
 using rs::lmdb::Database;
 using rs::lmdb::Environment;
 using rs::lmdb::ReadTransaction;
@@ -34,18 +32,21 @@ TEST_CASE("TrackStore - create and read", "[core][track]")
   TrackStore store{wtxn, "tracks_hot", "tracks_cold"};
   wtxn.commit();
 
-  // Create a track
-  TrackHeader header{};
-  header.fileSize = 1000;
-  header.durationMs = 180000;
-  header.trackNumber = 1;
+  // Create a track with hot+cold
+  TrackHotHeader hotHeader{};
+  hotHeader.fileSize = 1000;
+  hotHeader.durationMs = 180000;
+  hotHeader.trackNumber = 1;
 
-  std::vector<std::byte> data(sizeof(TrackHeader));
-  std::memcpy(data.data(), &header, sizeof(TrackHeader));
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  // Empty cold data
+  std::vector<std::byte> coldData(1);
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data);
-  // If create() failed, it would throw
+  auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
+  // If createHotCold() failed, it would throw
   wtxn2.commit();
 
   // Read the track
@@ -65,20 +66,22 @@ TEST_CASE("TrackStore - read by id", "[core][track]")
   TrackStore store{wtxn, "tracks_hot", "tracks_cold"};
   wtxn.commit();
 
-  // Create a track
-  TrackHeader header{};
-  header.fileSize = 2000;
+  // Create a track with hot+cold
+  TrackHotHeader hotHeader{};
+  hotHeader.fileSize = 2000;
 
-  std::vector<std::byte> data(sizeof(TrackHeader));
-  std::memcpy(data.data(), &header, sizeof(TrackHeader));
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  std::vector<std::byte> coldData(1);
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data);
+  auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
   wtxn2.commit();
 
   // Read by ID
   ReadTransaction rtxn(env);
-  auto optFound = store.reader(rtxn).get(id);
+  auto optFound = store.reader(rtxn).hot().get(id);
   REQUIRE(optFound.has_value());
   auto& found = *optFound;
   REQUIRE(found.property().fileSize() == 2000);
@@ -94,25 +97,27 @@ TEST_CASE("TrackStore - update", "[core][track]")
   wtxn.commit();
 
   // Create a track
-  TrackHeader header{};
-  header.fileSize = 1000;
+  TrackHotHeader hotHeader{};
+  hotHeader.fileSize = 1000;
 
-  std::vector<std::byte> data(sizeof(TrackHeader));
-  std::memcpy(data.data(), &header, sizeof(TrackHeader));
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  std::vector<std::byte> coldData(1);
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data);
+  auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
   wtxn2.commit();
 
   // Update the track
-  TrackHeader header2{};
-  header2.fileSize = 3000;
+  TrackHotHeader hotHeader2{};
+  hotHeader2.fileSize = 3000;
 
-  std::vector<std::byte> data2(sizeof(TrackHeader));
-  std::memcpy(data2.data(), &header2, sizeof(TrackHeader));
+  std::vector<std::byte> hotData2(sizeof(TrackHotHeader));
+  std::memcpy(hotData2.data(), &hotHeader2, sizeof(TrackHotHeader));
 
   WriteTransaction wtxn3(env);
-  auto updated = store.writer(wtxn3).update(id, data2);
+  auto updated = store.writer(wtxn3).updateHot(id, hotData2);
   REQUIRE(updated.property().fileSize() == 3000);
   wtxn3.commit();
 }
@@ -127,18 +132,20 @@ TEST_CASE("TrackStore - delete", "[core][track]")
   wtxn.commit();
 
   // Create a track
-  TrackHeader header{};
+  TrackHotHeader hotHeader{};
 
-  std::vector<std::byte> data(sizeof(TrackHeader));
-  std::memcpy(data.data(), &header, sizeof(TrackHeader));
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  std::vector<std::byte> coldData(1);
 
   WriteTransaction wtxn2(env);
-  auto [id, view] = store.writer(wtxn2).create(data);
+  auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
   wtxn2.commit();
 
   // Delete it
   WriteTransaction wtxn3(env);
-  auto deleted = store.writer(wtxn3).del(id);
+  auto deleted = store.writer(wtxn3).delHotCold(id);
   REQUIRE(deleted);
   wtxn3.commit();
 
@@ -159,15 +166,17 @@ TEST_CASE("TrackStore - create multiple tracks unique IDs", "[core][track]")
   wtxn.commit();
 
   // Create multiple tracks - each should get unique ID
-  TrackHeader header{};
+  TrackHotHeader hotHeader{};
 
-  std::vector<std::byte> data(sizeof(TrackHeader));
-  std::memcpy(data.data(), &header, sizeof(TrackHeader));
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  std::vector<std::byte> coldData(1);
 
   WriteTransaction wtxn2(env);
-  auto [id1, view1] = store.writer(wtxn2).create(data);
-  auto [id2, view2] = store.writer(wtxn2).create(data);
-  auto [id3, view3] = store.writer(wtxn2).create(data);
+  auto [id1, view1] = store.writer(wtxn2).createHotCold(hotData, coldData);
+  auto [id2, view2] = store.writer(wtxn2).createHotCold(hotData, coldData);
+  auto [id3, view3] = store.writer(wtxn2).createHotCold(hotData, coldData);
   wtxn2.commit();
 
   // All IDs should be unique

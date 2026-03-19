@@ -11,11 +11,9 @@
 using rs::core::DictionaryId;
 using rs::core::TrackColdHeader;
 using rs::core::TrackColdView;
-using rs::core::TrackHeader;
 using rs::core::TrackHotHeader;
 using rs::core::TrackHotView;
 using rs::core::TrackRecord;
-using rs::core::TrackView;
 
 TEST_CASE("TrackRecord - Default Constructor")
 {
@@ -96,9 +94,9 @@ TEST_CASE("TrackRecord - Field Assignment")
 TEST_CASE("TrackRecord - Serialize Empty Record")
 {
   TrackRecord record;
-  auto data = record.serialize();
+  auto data = record.serializeHot();
 
-  CHECK(data.size() >= sizeof(TrackHeader));
+  CHECK(data.size() >= sizeof(TrackHotHeader));
   CHECK(!data.empty());
 }
 
@@ -106,17 +104,17 @@ TEST_CASE("TrackRecord - Serialize With Strings")
 {
   TrackRecord record;
   record.metadata.title = "Hello World";
-  record.metadata.uri = "/music/test.flac";
+  record.cold.uri = "/music/test.flac";
   record.metadata.year = 2021;
   record.property.durationMs = 240000;
 
-  auto data = record.serialize();
+  auto data = record.serializeHot();
 
   // Verify header size
-  CHECK(data.size() >= sizeof(TrackHeader));
+  CHECK(data.size() >= sizeof(TrackHotHeader));
 
   // Parse the serialized data back
-  auto const* header = reinterpret_cast<TrackHeader const*>(data.data());
+  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
 
   CHECK(header->titleLen == 11); // "Hello World"
   CHECK(header->uriLen == 16);   // "/music/test.flac"
@@ -124,11 +122,11 @@ TEST_CASE("TrackRecord - Serialize With Strings")
   CHECK(header->durationMs == 240000);
 
   // Verify strings are in the payload
-  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHeader);
+  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHotHeader);
   CHECK(std::strncmp(payloadStart, "Hello World", 11) == 0);
 }
 
-TEST_CASE("TrackRecord - Header Method")
+TEST_CASE("TrackRecord - hotHeader Method")
 {
   TrackRecord record;
   record.metadata.year = 1999;
@@ -138,7 +136,7 @@ TEST_CASE("TrackRecord - Header Method")
   record.property.bitDepth = 24;
   record.property.rating = 5;
 
-  auto header = record.header();
+  auto header = record.hotHeader();
 
   CHECK(header.year == 1999);
   CHECK(header.trackNumber == 7);
@@ -152,25 +150,25 @@ TEST_CASE("TrackRecord - Serialize With Special Characters")
 {
   TrackRecord record;
   record.metadata.title = "Test: \"Quotes\" & 'Apostrophes'";
-  record.metadata.uri = "/path/with spaces/file.mp3";
+  record.cold.uri = "/path/with spaces/file.mp3";
 
-  auto data = record.serialize();
+  auto data = record.serializeHot();
 
-  auto const* header = reinterpret_cast<TrackHeader const*>(data.data());
+  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
   CHECK(header->titleLen == record.metadata.title.size());
-  CHECK(header->uriLen == record.metadata.uri.size());
+  CHECK(header->uriLen == record.cold.uri.size());
 }
 
 TEST_CASE("TrackRecord - Serialize Preserves Data")
 {
   TrackRecord record;
   record.metadata.title = "Test";
-  record.metadata.uri = "/test";
+  record.cold.uri = "/test";
   record.property.fileSize = 12345;
   record.property.mtime = 9876543210;
 
-  auto data = record.serialize();
-  auto data2 = record.serialize();
+  auto data = record.serializeHot();
+  auto data2 = record.serializeHot();
 
   // Multiple serializations should produce same size and content
   CHECK(data.size() == data2.size());
@@ -181,11 +179,11 @@ TEST_CASE("TrackRecord - Tag Serialization - Empty Tags")
 {
   TrackRecord record;
   record.metadata.title = "Test";
-  record.metadata.uri = "/test";
+  record.cold.uri = "/test";
 
-  auto data = record.serialize();
+  auto data = record.serializeHot();
 
-  auto const* header = reinterpret_cast<TrackHeader const*>(data.data());
+  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
   CHECK(header->tagCount == 0);
   CHECK(header->tagBloom == 0);
 }
@@ -194,17 +192,17 @@ TEST_CASE("TrackRecord - Tag Serialization - With Tags")
 {
   TrackRecord record;
   record.metadata.title = "Test";
-  record.metadata.uri = "/test";
+  record.cold.uri = "/test";
   record.tags.ids = {DictionaryId{10}, DictionaryId{20}, DictionaryId{30}};
 
-  auto data = record.serialize();
+  auto data = record.serializeHot();
 
-  auto const* header = reinterpret_cast<TrackHeader const*>(data.data());
+  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
   CHECK(header->tagCount == 3);
   CHECK(header->tagBloom != 0); // Bloom should be computed from tag IDs
 
   // Verify tag IDs are in the payload
-  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHeader);
+  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHotHeader);
 
   auto const* tagIdsPtr = reinterpret_cast<std::uint32_t const*>(payloadStart + header->tagsOffset);
   CHECK(tagIdsPtr[0] == 10);
@@ -216,27 +214,27 @@ TEST_CASE("TrackRecord - Tag Serialization - Single Tag")
 {
   TrackRecord record;
   record.metadata.title = "Test";
-  record.metadata.uri = "/test";
+  record.cold.uri = "/test";
   record.tags.ids = {DictionaryId{42}};
 
-  auto data = record.serialize();
+  auto data = record.serializeHot();
 
-  auto const* header = reinterpret_cast<TrackHeader const*>(data.data());
+  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
   CHECK(header->tagCount == 1);
 
-  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHeader);
+  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHotHeader);
   auto const* tagIdPtr = reinterpret_cast<std::uint32_t const*>(payloadStart + header->tagsOffset);
   CHECK(*tagIdPtr == 42);
 }
 
-TEST_CASE("TrackRecord - Header Method With Tags")
+TEST_CASE("TrackRecord - hotHeader Method With Tags")
 {
   TrackRecord record;
   record.metadata.title = "Test";
   record.metadata.uri = "/test";
   record.tags.ids = {DictionaryId{1}, DictionaryId{2}, DictionaryId{3}, DictionaryId{4}, DictionaryId{5}};
 
-  auto header = record.header();
+  auto header = record.hotHeader();
 
   CHECK(header.tagCount == 5);
   CHECK(header.tagBloom != 0);

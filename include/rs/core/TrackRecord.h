@@ -27,14 +27,6 @@ namespace rs::core
     TrackRecord() = default;
 
     /**
-     * Construct from a TrackView by resolving dictionary IDs.
-     *
-     * @param view The binary track view
-     * @param dict DictionaryStore to resolve artist/album/genre IDs
-     */
-    TrackRecord(TrackView const& view, DictionaryStore const& dict);
-
-    /**
      * Construct from hot and cold views by resolving dictionary IDs.
      *
      * @param hotView The binary hot track view
@@ -130,13 +122,6 @@ namespace rs::core
     std::vector<std::byte> serializeCold() const;
 
     /**
-     * Serialize this record to binary format for LMDB storage (legacy).
-     *
-     * @return Vector of bytes suitable for TrackStore::create
-     */
-    std::vector<std::byte> serialize() const;
-
-    /**
      * Get the hot header with current field values.
      */
     TrackHotHeader hotHeader() const;
@@ -145,11 +130,6 @@ namespace rs::core
      * Get the cold header with current field values.
      */
     TrackColdHeader coldHeader() const;
-
-    /**
-     * Get the header (alias for hotHeader, for backward compatibility).
-     */
-    TrackHotHeader header() const { return hotHeader(); }
   };
 
 } // namespace rs::core

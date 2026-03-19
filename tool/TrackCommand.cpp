@@ -47,13 +47,13 @@ namespace
     auto reader = ml.tracks().reader(txn);
 
     // Collect matching track IDs first
-    std::vector<std::pair<core::TrackId, core::TrackView>> matches;
+    std::vector<std::pair<core::TrackId, core::TrackHotView>> matches;
 
     if (filter.empty())
     {
-      for (auto [id, view] : reader)
+      for (auto [id, hotView] : reader)
       {
-        matches.emplace_back(id, view);
+        matches.emplace_back(id, hotView);
       }
     }
     else
@@ -67,37 +67,35 @@ namespace
       {
         case rs::expr::AccessProfile::HotOnly:
         {
-          for (auto [id, view] : reader)
+          for (auto [id, hotView] : reader)
           {
-            auto hotView = reader.hot().get(id);
-            if (hotView && evaluator.matches(plan, *hotView))
+            if (evaluator.matches(plan, hotView))
             {
-              matches.emplace_back(id, view);
+              matches.emplace_back(id, hotView);
             }
           }
           break;
         }
         case rs::expr::AccessProfile::ColdOnly:
         {
-          for (auto [id, view] : reader)
+          for (auto [id, hotView] : reader)
           {
             auto coldView = reader.cold().get(id);
             if (coldView && evaluator.matches(plan, *coldView))
             {
-              matches.emplace_back(id, view);
+              matches.emplace_back(id, hotView);
             }
           }
           break;
         }
         case rs::expr::AccessProfile::HotAndCold:
         {
-          for (auto [id, view] : reader)
+          for (auto [id, hotView] : reader)
           {
-            auto hotView = reader.hot().get(id);
             auto coldView = reader.cold().get(id);
-            if (hotView && coldView && evaluator.matches(plan, *hotView, *coldView))
+            if (coldView && evaluator.matches(plan, hotView, *coldView))
             {
-              matches.emplace_back(id, view);
+              matches.emplace_back(id, hotView);
             }
           }
           break;
@@ -128,11 +126,11 @@ namespace
            << ", \"title\": \"" << view.metadata().title() << "\"";
         if (view.metadata().artistId() > 0)
         {
-          os << ", \"artist\": \"" << ml.dictionary().get(core::DictionaryId{view.metadata().artistId()}) << "\"";
+          os << ", \"artist\": \"" << ml.dictionary().get(view.metadata().artistId()) << "\"";
         }
         if (view.metadata().albumId() > 0)
         {
-          os << ", \"album\": \"" << ml.dictionary().get(core::DictionaryId{view.metadata().albumId()}) << "\"";
+          os << ", \"album\": \"" << ml.dictionary().get(view.metadata().albumId()) << "\"";
         }
         os << "}";
         if (i < end - 1) os << ",";

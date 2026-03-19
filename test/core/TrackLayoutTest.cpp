@@ -15,13 +15,13 @@ namespace
 {
   using namespace test;
   using rs::core::DictionaryId;
-  using rs::core::TrackHeader;
-  using rs::core::TrackView;
+  using rs::core::TrackHotHeader;
+  using rs::core::TrackHotView;
 
-  // Helper to create a minimal valid TrackView for testing
+  // Helper to create a minimal valid TrackHotView for testing
   std::vector<std::byte> createMinimalData()
   {
-    TrackHeader h{};
+    TrackHotHeader h{};
     h.fileSize = 1000;
     h.mtime = 1234567890;
     h.durationMs = 180000;
@@ -49,7 +49,7 @@ namespace
 
   std::vector<std::byte> createTrackWithStrings(std::string_view title, std::string_view uri)
   {
-    TrackHeader h{};
+    TrackHotHeader h{};
     h.fileSize = 1000;
     h.mtime = 1234567890;
     h.durationMs = 180000;
@@ -83,54 +83,54 @@ namespace
     return data;
   }
 
-  TEST_CASE("TrackHeader - Size and Alignment")
+  TEST_CASE("TrackHotHeader - Size and Alignment")
   {
-    CHECK(sizeof(TrackHeader) == 80);
-    CHECK(alignof(TrackHeader) == 8);
+    CHECK(sizeof(TrackHotHeader) == 80);
+    CHECK(alignof(TrackHotHeader) == 8);
   }
 
-  TEST_CASE("TrackHeader - Field Offsets")
+  TEST_CASE("TrackHotHeader - Field Offsets")
   {
     // Verify key field offsets for ABI compatibility
     // Check 8-byte section
-    CHECK(offsetof(TrackHeader, fileSize) == 0);
-    CHECK(offsetof(TrackHeader, mtime) == 8);
+    CHECK(offsetof(TrackHotHeader, fileSize) == 0);
+    CHECK(offsetof(TrackHotHeader, mtime) == 8);
 
     // Check 4-byte section starts at offset 16
-    CHECK(offsetof(TrackHeader, tagBloom) == 16);
-    CHECK(offsetof(TrackHeader, durationMs) == 20);
+    CHECK(offsetof(TrackHotHeader, tagBloom) == 16);
+    CHECK(offsetof(TrackHotHeader, durationMs) == 20);
 
     // Check 2-byte section starts at offset 52
-    CHECK(offsetof(TrackHeader, year) == 52);
-    CHECK(offsetof(TrackHeader, trackNumber) == 54);
-    CHECK(offsetof(TrackHeader, totalTracks) == 56);
-    CHECK(offsetof(TrackHeader, discNumber) == 58);
-    CHECK(offsetof(TrackHeader, totalDiscs) == 60);
+    CHECK(offsetof(TrackHotHeader, year) == 52);
+    CHECK(offsetof(TrackHotHeader, trackNumber) == 54);
+    CHECK(offsetof(TrackHotHeader, totalTracks) == 56);
+    CHECK(offsetof(TrackHotHeader, discNumber) == 58);
+    CHECK(offsetof(TrackHotHeader, totalDiscs) == 60);
 
     // Check 1-byte section
-    CHECK(offsetof(TrackHeader, channels) == 74);
-    CHECK(offsetof(TrackHeader, bitDepth) == 75);
+    CHECK(offsetof(TrackHotHeader, channels) == 74);
+    CHECK(offsetof(TrackHotHeader, bitDepth) == 75);
   }
 
-  TEST_CASE("TrackView - Default Constructor")
+  TEST_CASE("TrackHotView - Default Constructor")
   {
-    TrackView view;
+    TrackHotView view;
     CHECK(view.isValid() == false);
   }
 
-  TEST_CASE("TrackView - Construct from Data")
+  TEST_CASE("TrackHotView - Construct from Data")
   {
     auto data = createMinimalData();
-    TrackView view(std::as_bytes(std::span{data}));
+    TrackHotView view(std::as_bytes(std::span{data}));
 
     CHECK(view.isValid() == true);
     CHECK(view.header() != nullptr);
   }
 
-  TEST_CASE("TrackView - Fixed Field Accessors")
+  TEST_CASE("TrackHotView - Fixed Field Accessors")
   {
     auto data = createMinimalData();
-    TrackView view(std::as_bytes(std::span{data}));
+    TrackHotView view(std::as_bytes(std::span{data}));
 
     auto prop = view.property();
     auto meta = view.metadata();
@@ -153,58 +153,58 @@ namespace
     CHECK(view.tags().count() == 0);
   }
 
-  TEST_CASE("TrackView - String Accessors")
+  TEST_CASE("TrackHotView - String Accessors")
   {
     auto data = createTrackWithStrings("Test Title", "/path/to/file.flac");
-    TrackView view(std::as_bytes(std::span{data}));
+    TrackHotView view(std::as_bytes(std::span{data}));
 
     CHECK(view.isValid() == true);
     CHECK(view.metadata().title() == "Test Title");
     CHECK(view.property().uri() == "/path/to/file.flac");
   }
 
-  TEST_CASE("TrackView - Empty String Handling")
+  TEST_CASE("TrackHotView - Empty String Handling")
   {
     auto data = createMinimalData();
-    TrackView view(std::as_bytes(std::span{data}));
+    TrackHotView view(std::as_bytes(std::span{data}));
 
     // Empty strings should return empty string_view
     CHECK(view.metadata().title().empty());
     CHECK(view.property().uri().empty());
   }
 
-  TEST_CASE("TrackView - Invalid Data")
+  TEST_CASE("TrackHotView - Invalid Data")
   {
     // Null data (valid size but nullptr) - creates invalid view, isValid is false
     std::span<std::byte const> nullSpan{static_cast<std::byte const*>(nullptr), 100};
-    TrackView nullView(nullSpan);
+    TrackHotView nullView(nullSpan);
     CHECK(nullView.isValid() == false);
 
     // Too small - throws on construction
     char smallData[10] = {};
     std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
-    CHECK_THROWS(TrackView(smallSpan));
+    CHECK_THROWS(TrackHotView(smallSpan));
 
     // Empty - uses default constructor, isValid is false
-    TrackView emptyView;
+    TrackHotView emptyView;
     CHECK(emptyView.isValid() == false);
   }
 
-  TEST_CASE("TrackView - Tag Bloom")
+  TEST_CASE("TrackHotView - Tag Bloom")
   {
-    TrackHeader h{};
+    TrackHotHeader h{};
     h.tagBloom = 0xCAFE;
 
     auto data = serializeHeader(h);
 
-    TrackView view(std::as_bytes(std::span{data}));
+    TrackHotView view(std::as_bytes(std::span{data}));
     CHECK(view.tags().bloom() == 0xCAFE);
   }
 
-  TEST_CASE("TrackView - Tag Accessors - No Tags")
+  TEST_CASE("TrackHotView - Tag Accessors - No Tags")
   {
     auto data = createTrackWithStrings("Test", "/path/to/file.flac");
-    TrackView view(std::as_bytes(std::span{data}));
+    TrackHotView view(std::as_bytes(std::span{data}));
 
     CHECK(view.tags().count() == 0);
     CHECK(view.tags().id(0) == 0);
@@ -214,10 +214,10 @@ namespace
     CHECK(view.tags().has(DictionaryId{1}) == false);
   }
 
-  TEST_CASE("TrackView - Tag Accessors - With Tags")
+  TEST_CASE("TrackHotView - Tag Accessors - With Tags")
   {
     // Create a track with 2 tags (tag IDs: 10, 20)
-    TrackHeader h{};
+    TrackHotHeader h{};
     h.fileSize = 1000;
     h.mtime = 1234567890;
     h.durationMs = 180000;
@@ -256,7 +256,7 @@ namespace
     data.insert(data.end(), reinterpret_cast<std::byte const*>(&tag1), reinterpret_cast<std::byte const*>(&tag1 + 1));
     data.insert(data.end(), reinterpret_cast<std::byte const*>(&tag2), reinterpret_cast<std::byte const*>(&tag2 + 1));
 
-    TrackView view(std::as_bytes(std::span{data}));
+    TrackHotView view(std::as_bytes(std::span{data}));
 
     CHECK(view.tags().count() == 2);
     CHECK(view.tags().id(0) == 10);

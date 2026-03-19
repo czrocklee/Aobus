@@ -21,14 +21,15 @@ namespace
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
 
-    auto optView = writer.get(trackId);
-    if (!optView)
+    auto optHotView = writer.getHot(trackId);
+    auto optColdView = writer.getCold(trackId);
+    if (!optHotView)
     {
       os << "error: track not found: " << trackId << std::endl;
       return;
     }
 
-    core::TrackRecord record(*optView, ml.dictionary());
+    core::TrackRecord record(*optHotView, optColdView.value_or(core::TrackColdView{}), ml.dictionary());
 
     auto tagId = ml.dictionary().getId(tagName);
     bool tagExists = false;
@@ -55,8 +56,8 @@ namespace
 
     record.tags.ids.push_back(tagId);
 
-    auto data = record.serialize();
-    (void)writer.update(trackId, data);
+    auto hotData = record.serializeHot();
+    (void)writer.updateHot(trackId, hotData);
     txn.commit();
 
     os << "added tag: " << tagName << " to track " << trackId << std::endl;
@@ -67,14 +68,15 @@ namespace
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
 
-    auto optView = writer.get(trackId);
-    if (!optView)
+    auto optHotView = writer.getHot(trackId);
+    auto optColdView = writer.getCold(trackId);
+    if (!optHotView)
     {
       os << "error: track not found: " << trackId << std::endl;
       return;
     }
 
-    core::TrackRecord record(*optView, ml.dictionary());
+    core::TrackRecord record(*optHotView, optColdView.value_or(core::TrackColdView{}), ml.dictionary());
 
     auto tagId = ml.dictionary().getId(tagName);
     if (tagId.value() == 0)
@@ -92,8 +94,8 @@ namespace
     }
     tags.erase(it, tags.end());
 
-    auto data = record.serialize();
-    (void)writer.update(trackId, data);
+    auto hotData = record.serializeHot();
+    (void)writer.updateHot(trackId, hotData);
     txn.commit();
 
     os << "removed tag: " << tagName << " from track " << trackId << std::endl;
@@ -104,14 +106,14 @@ namespace
     auto txn = ml.readTransaction();
     auto reader = ml.tracks().reader(txn);
 
-    auto optView = reader.get(trackId);
-    if (!optView)
+    auto optHotView = reader.hot().get(trackId);
+    if (!optHotView)
     {
       os << "error: track not found: " << trackId << std::endl;
       return;
     }
 
-    core::TrackRecord record(*optView, ml.dictionary());
+    core::TrackRecord record(*optHotView, core::TrackColdView{}, ml.dictionary());
 
     if (record.tags.ids.empty())
     {

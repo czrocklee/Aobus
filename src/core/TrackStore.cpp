@@ -45,13 +45,6 @@ namespace rs::core
     return Iterator{_hotReader.end()};
   }
 
-  std::optional<TrackView> TrackStore::Reader::get(TrackId id) const
-  {
-    auto optBuffer = _hotReader.get(id.value());
-    if (!optBuffer || optBuffer->size() == 0) { return std::nullopt; }
-    return TrackView{*optBuffer};
-  }
-
   // HotProxy implementation
   std::optional<TrackHotView> TrackStore::Reader::HotProxy::get(TrackId id) const
   {
@@ -107,7 +100,7 @@ namespace rs::core
   TrackStore::Reader::Iterator::value_type TrackStore::Reader::Iterator::operator*() const
   {
     auto&& [id, buffer] = *_iter;
-    return {TrackId{(id)}, TrackView(buffer)};
+    return {TrackId{(id)}, TrackHotView(buffer)};
   }
 
   // TrackStore::Writer implementation
@@ -115,30 +108,6 @@ namespace rs::core
     : _hotWriter{std::move(hotWriter)}
     , _coldWriter{std::move(coldWriter)}
   {
-  }
-
-  std::pair<TrackId, TrackView> TrackStore::Writer::create(std::span<std::byte const> data)
-  {
-    auto [id, buffer] = _hotWriter.append(data);
-    return {TrackId{id}, TrackView{data}};
-  }
-
-  TrackView TrackStore::Writer::update(TrackId id, std::span<std::byte const> data)
-  {
-    [[maybe_unused]] auto buffer = _hotWriter.update(id.value(), data);
-    return TrackView{data};
-  }
-
-  bool TrackStore::Writer::del(TrackId id)
-  {
-    return _hotWriter.del(id.value());
-  }
-
-  std::optional<TrackView> TrackStore::Writer::get(TrackId id) const
-  {
-    auto optBuffer = _hotWriter.get(id.value());
-    if (!optBuffer || optBuffer->size() == 0) { return std::nullopt; }
-    return TrackView{*optBuffer};
   }
 
   // Hot/Cold split methods

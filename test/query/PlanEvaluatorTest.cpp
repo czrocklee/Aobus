@@ -556,20 +556,20 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Track Computation")
 
   // Tag ID 10 -> bit 10 (10 & 31 = 10)
   record.tags.ids = {DictionaryId{10}};
-  auto data = record.serialize();
-  auto* header = rs::utility::as<rs::core::TrackHeader const>(data);
+  auto data = record.serializeHot();
+  auto* header = rs::utility::as<rs::core::TrackHotHeader const>(data);
   CHECK((header->tagBloom & (1U << 10)) != 0); // Bit 10 should be set
 
   // Tag ID 32 -> bit 0 (32 & 31 = 0)
   record.tags.ids = {DictionaryId{32}};
-  data = record.serialize();
-  header = rs::utility::as<rs::core::TrackHeader const>(data);
+  data = record.serializeHot();
+  header = rs::utility::as<rs::core::TrackHotHeader const>(data);
   CHECK((header->tagBloom & 1U) != 0); // Bit 0 should be set
 
   // Multiple tags: ID 5 and ID 20
   record.tags.ids = {DictionaryId{5}, DictionaryId{20}};
-  data = record.serialize();
-  header = rs::utility::as<rs::core::TrackHeader const>(data);
+  data = record.serializeHot();
+  header = rs::utility::as<rs::core::TrackHotHeader const>(data);
   CHECK((header->tagBloom & (1U << 5)) != 0);  // Bit 5 should be set
   CHECK((header->tagBloom & (1U << 20)) != 0); // Bit 20 should be set
 }
