@@ -7,7 +7,7 @@ namespace
 {
   // LMDB configuration constants
   constexpr std::size_t kLmdbMapSize = 1 * 1024 * 1024 * 1024; // 1 GB
-  constexpr int kLmdbMaxDatabases = 4;                         // tracks, lists, resources, dictionary
+  constexpr int kLmdbMaxDatabases = 6;                         // tracks, tracks_hot, tracks_cold, lists, resources, dictionary
   constexpr int kLmdbFileMode = 0664;
 }
 
@@ -21,7 +21,7 @@ namespace rs::core
                                       .maxDatabases = kLmdbMaxDatabases,
                                       .mapSize = kLmdbMapSize}}
     , _txn{_env}
-    , _tracks{_txn, "tracks"}
+    , _tracks{_txn, "tracks_hot", "tracks_cold"}
     , _lists{_txn, "lists"}
     , _resources{_txn, "resources"}
     , _dictionary{_txn, "dictionary"}
