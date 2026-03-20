@@ -48,14 +48,6 @@ namespace rs::expr
           return false;
       }
     }
-
-    // Compare two strings lexicographically, return -1, 0, or 1
-    int compareStrings(std::string_view lhs, std::string_view rhs)
-    {
-      if (lhs < rhs) return -1;
-      if (lhs > rhs) return 1;
-      return 0;
-    }
   }
 
   std::int64_t PlanEvaluator::loadField(core::TrackView const& track, Field field) const
