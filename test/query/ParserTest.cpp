@@ -45,19 +45,21 @@ namespace
 
   struct Canonicalizer
   {
-    void operator()(BinaryExpression const& binary)
+    void operator()(std::unique_ptr<BinaryExpression> const& binary)
     {
-      oss << "[b{" << toString(binary.operation->op) << "}";
-      boost::apply_visitor(*this, binary.operand);
+      if (!binary) return;
+      oss << "[b{" << toString(binary->operation->op) << "}";
+      std::visit(*this, binary->operand);
       oss << ",";
-      boost::apply_visitor(*this, binary.operation->operand);
+      std::visit(*this, binary->operation->operand);
       oss << "]";
     }
 
-    void operator()(UnaryExpression const& unary)
+    void operator()(std::unique_ptr<UnaryExpression> const& unary)
     {
+      if (!unary) return;
       oss << "[u{!}";
-      boost::apply_visitor(*this, unary.operand);
+      std::visit(*this, unary->operand);
       oss << "]";
     }
 
@@ -101,7 +103,7 @@ namespace
   std::string canonicalize(Expression const& expr)
   {
     Canonicalizer canonicalizer{};
-    boost::apply_visitor(canonicalizer, expr);
+    std::visit(canonicalizer, expr);
     return canonicalizer.oss.str();
   }
 }

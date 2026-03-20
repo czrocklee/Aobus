@@ -28,21 +28,23 @@ namespace
   {
     Serializer() {};
 
-    void operator()(BinaryExpression const& binary)
+    void operator()(std::unique_ptr<BinaryExpression> const& binary)
     {
-      ParenthesisGuard guard{oss, (counter++ > 0) && binary.operation};
-      boost::apply_visitor(*this, binary.operand);
+      if (!binary) return;
+      ParenthesisGuard guard{oss, (counter++ > 0) && binary->operation};
+      std::visit(*this, binary->operand);
 
-      if (binary.operation)
+      if (binary->operation)
       {
-        serializeBinary(binary.operation->op, binary.operation->operand);
+        serializeBinary(binary->operation->op, binary->operation->operand);
       }
     }
 
-    void operator()(UnaryExpression const& unary)
+    void operator()(std::unique_ptr<UnaryExpression> const& unary)
     {
+      if (!unary) return;
       oss << "not ";
-      boost::apply_visitor(*this, unary.operand);
+      std::visit(*this, unary->operand);
     }
 
     void operator()(VariableExpression const& variable)
@@ -58,6 +60,9 @@ namespace
         case VariableType::Tag:
           oss << '#';
           break;
+        case VariableType::Custom:
+          oss << '%';
+          break;
       }
 
       oss << variable.name;
@@ -65,7 +70,7 @@ namespace
 
     void operator()(ConstantExpression const& constant)
     {
-      std::visit(rs::utility::makeVisitor([](boost::blank) {},
+      std::visit(rs::utility::makeVisitor([](std::monostate) {},
                                           [this](bool val) { oss << (val ? "true" : "false"); },
                                           [this](std::int64_t val) { oss << val; },
                                           [this](std::string_view val) { oss << "\"" << val << "\""; }),
@@ -110,7 +115,7 @@ namespace
           break;
       }
 
-      boost::apply_visitor(*this, rhs);
+      std::visit(*this, rhs);
     }
 
     std::ostringstream oss;
@@ -123,7 +128,7 @@ namespace rs::expr
   std::string serialize(Expression const& expr)
   {
     Serializer serializer{};
-    boost::apply_visitor(serializer, expr);
+    std::visit(serializer, expr);
     return serializer.oss.str();
   }
 }

@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include <boost/spirit/home/x3/support/ast/variant.hpp>
-
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <regex>
 #include <string>
@@ -33,14 +32,12 @@ namespace rs::expr
 
   using ConstantExpression = std::variant<bool, std::int64_t, std::string>;
 
-  // forward_ast is used for recursive types in the expression variant.
-  // Note: boost::spirit x3 with forward_ast in recursive variants has a known
-  // memory leak issue in ASAN due to how the variant's convert_construct
-  // handles recursive types. This is a library limitation, not our code.
-  using Expression = boost::spirit::x3::variant<VariableExpression,
-                                                ConstantExpression,
-                                                boost::spirit::x3::forward_ast<BinaryExpression>,
-                                                boost::spirit::x3::forward_ast<UnaryExpression>>;
+  // Expression uses std::unique_ptr for recursive types to avoid the memory leak issue
+  // that occurs with boost::spirit x3's forward_ast in recursive variants.
+  using Expression = std::variant<VariableExpression,
+                                 ConstantExpression,
+                                 std::unique_ptr<BinaryExpression>,
+                                 std::unique_ptr<UnaryExpression>>;
 
   enum class Operator
   {

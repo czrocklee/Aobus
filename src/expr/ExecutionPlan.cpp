@@ -114,9 +114,9 @@ namespace rs::expr
 
   void QueryCompiler::compileExpression(Expression const& expr)
   {
-    boost::apply_visitor(
-      utility::makeVisitor([this](BinaryExpression const& binary) { compileBinary(binary); },
-                           [this](UnaryExpression const& unary) { compileUnary(unary); },
+    std::visit(
+      utility::makeVisitor([this](std::unique_ptr<BinaryExpression> const& binary) { if (binary) compileBinary(*binary); },
+                           [this](std::unique_ptr<UnaryExpression> const& unary) { if (unary) compileUnary(*unary); },
                            [this](VariableExpression const& var) { compileVariable(var); },
                            [this](ConstantExpression const& constant) { compileConstant(constant); }),
       expr);
@@ -330,7 +330,7 @@ namespace rs::expr
     _hasColdAccess = false;
 
     // Check if the expression is a constant "true"
-    if (auto const* constant = boost::get<ConstantExpression>(&expr))
+    if (auto const* constant = std::get_if<ConstantExpression>(&expr))
     {
       if (bool const* val = std::get_if<bool>(constant))
       {

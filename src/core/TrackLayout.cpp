@@ -25,7 +25,9 @@ namespace rs::core
     if (_hotData.size() < offset + sizeof(std::uint32_t)) {
       return 0;
     }
-    return *utility::as<std::uint32_t>(hdr, offset);
+    std::uint32_t result;
+    std::memcpy(&result, utility::as<std::uint32_t>(hdr, offset), sizeof(std::uint32_t));
+    return result;
   }
 
   std::string_view TrackView::hotGetString(std::uint16_t offset, std::uint16_t len) const

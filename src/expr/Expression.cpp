@@ -9,21 +9,26 @@ namespace rs::expr
   {
     struct Normalizer
     {
-      void operator()(BinaryExpression& binary)
+      void operator()(std::unique_ptr<BinaryExpression> const& binary)
       {
-        normalize(binary.operand);
+        if (!binary) return;
+        normalize(binary->operand);
 
-        if (!binary.operation)
+        if (!binary->operation)
         {
-          std::swap(root, binary.operand);
+          std::swap(root, binary->operand);
           return;
         }
 
-        normalize(binary.operation->operand);
-        shiftAdd(binary);
+        normalize(binary->operation->operand);
+        shiftAdd(*binary);
       }
 
-      void operator()(UnaryExpression& unary) { normalize(unary.operand); }
+      void operator()(std::unique_ptr<UnaryExpression> const& unary)
+      {
+        if (!unary) return;
+        normalize(unary->operand);
+      }
 
       void operator()(VariableExpression&) {}
 
@@ -33,13 +38,13 @@ namespace rs::expr
       {
         if (binary.operation->op == Operator::Add)
         {
-          if (auto* rhs = boost::get<boost::spirit::x3::forward_ast<BinaryExpression>>(&binary.operation->operand);
-              rhs != nullptr && rhs->get().operation && rhs->get().operation->op == Operator::Add)
+          if (auto* rhs = std::get_if<std::unique_ptr<BinaryExpression>>(&binary.operation->operand);
+              rhs != nullptr && *rhs != nullptr && (*rhs)->operation && (*rhs)->operation->op == Operator::Add)
           {
-            std::swap(binary.operand, rhs->get().operation->operand);
-            std::swap(rhs->get().operand, rhs->get().operation->operand);
+            std::swap(binary.operand, (*rhs)->operation->operand);
+            std::swap((*rhs)->operand, (*rhs)->operation->operand);
             std::swap(binary.operand, binary.operation->operand);
-            shiftAdd(boost::get<boost::spirit::x3::forward_ast<BinaryExpression>>(binary.operand).get());
+            shiftAdd(**std::get_if<std::unique_ptr<BinaryExpression>>(&binary.operand));
           }
         }
       }
@@ -51,6 +56,6 @@ namespace rs::expr
   void normalize(Expression& expr)
   {
     Normalizer normalizer{expr};
-    boost::apply_visitor(normalizer, expr);
+    std::visit(normalizer, expr);
   }
 }
