@@ -95,15 +95,15 @@ namespace rs::core
    *   │  coverArtId, bitrate                │
    *   │  trackNumber, totalTracks,          │
    *   │  discNumber, totalDiscs             │
-   *   │  customLen, uriLen                  │
+   *   │  customCount, uriOffset, uriLen     │
    *   │  channels, padding[3]               │
-   *   ├─────────────────────────────────────┤  ← custom begin = header + sizeof(header)
-   *   │  keyLen (2)  │  valueLen (2)        │
-   *   │  key data... (keyLen bytes)         │
-   *   │  value data... (valueLen bytes)     │
-   *   ├─────────────────────────────────────┤
-   *   │  ... (more key-value pairs) ...     │
-   *   ├─────────────────────────────────────┤  ← custom end = customBegin + customLen
+   *   ├─────────────────────────────────────┤  ← entries = customCount * 8 bytes
+   *   │  [dictId(4), off(2), len(2)] × N   │
+   *   ├─────────────────────────────────────┤  ← values start
+   *   │  value 1                           │
+   *   │  value 2                           │
+   *   │  ...                               │
+   *   ├─────────────────────────────────────┤  ← uri starts at uriOffset
    *   │  uri data... (uriLen bytes)         │
    *   └─────────────────────────────────────┘  ← cold data end
    */
@@ -126,14 +126,15 @@ namespace rs::core
     std::uint16_t totalTracks; // Total tracks in album
     std::uint16_t discNumber;  // Disc number
     std::uint16_t totalDiscs;  // Total discs in album
-    std::uint16_t customLen;   // Length of custom data section
+    std::uint16_t customCount; // Number of custom key-value entries
+    std::uint16_t uriOffset;   // Byte offset from header start to uri string
     std::uint16_t uriLen;      // Length of URI string
 
     // 1-byte section
     std::uint8_t channels; // Number of audio channels
 
-    // 3 bytes padding to reach 48 bytes total
-    std::byte padding[3];
+    // 1 byte padding to reach 48 bytes total
+    std::byte padding;
   };
 
   // Binary layout constants

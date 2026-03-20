@@ -20,6 +20,13 @@ namespace rs::utility
     return reinterpret_cast<T const*>(span.data());
   }
 
+  // Cast span<byte> to span<T> (array of T)
+  template<typename T>
+  constexpr std::span<T const> asArray(std::span<std::byte const> span) noexcept
+  {
+    return {reinterpret_cast<T const*>(span.data()), span.size() / sizeof(T)};
+  }
+
   // Cast typed pointer with offset (e.g., uint8_t* + offset -> T const*)
   template<typename T, typename Base>
   constexpr T const* as(Base const* base, std::size_t offset) noexcept

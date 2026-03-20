@@ -155,7 +155,7 @@ namespace
 
       // Serialize and store
       auto hotData = record.serializeHot();
-      auto coldData = record.serializeCold();
+      auto coldData = record.serializeCold(dictionary);
       auto [id, trackView] = trackWriter.createHotCold(hotData, coldData);
 
       os << "add track: " << id << " " << record.metadata.title << std::endl;

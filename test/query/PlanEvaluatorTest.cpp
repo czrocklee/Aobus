@@ -62,8 +62,8 @@ namespace
       // Serialize hot data to get proper binary layout
       _hotData = _record.serializeHot();
 
-      // Serialize cold data
-      _coldData = _record.serializeCold();
+      // Serialize cold data (no custom pairs in tests, use dummy resolver)
+      _coldData = _record.serializeCold([](std::string_view) { return rs::core::DictionaryId{0}; });
 
       // Fix up the header with IDs and other fields
       // Note: we serialize then modify, so const_cast is safe

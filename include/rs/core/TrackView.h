@@ -124,13 +124,21 @@ namespace rs::core
       explicit CustomProxy(TrackView const& track) : _track(track) {}
 
       /**
-       * Iterator - Input iterator over custom key-value pairs.
-       * Yields std::pair<std::string_view, std::string_view> referencing the cold data buffer.
+       * Entry - Fixed-size entry in the custom metadata index.
+       * 8 bytes total, 4-byte aligned.
        */
+      struct Entry
+      {
+        DictionaryId dictId;  // 4 bytes
+        std::uint16_t offset; // 2 bytes - byte offset from header start to value
+        std::uint16_t len;    // 2 bytes - value length in bytes
+      };
+
       class Iterator;
       Iterator begin() const;
       Iterator end() const;
       std::optional<std::string_view> get(std::string_view key) const;
+      std::optional<std::string_view> get(DictionaryId dictId) const;
 
     private:
       std::optional<std::pair<std::byte const*, std::byte const*>> customRange() const;
@@ -188,30 +196,24 @@ namespace rs::core
     std::span<std::byte const> _coldData;
   };
 
+
   class TrackView::CustomProxy::Iterator
-    : public boost::iterator_facade<TrackView::CustomProxy::Iterator,
-                                    std::pair<std::string_view, std::string_view> const,
-                                    boost::forward_traversal_tag>
+    : public boost::iterator_facade<Iterator, std::pair<DictionaryId, std::string_view> const, boost::forward_traversal_tag>
   {
   public:
-    Iterator() : _currentPos(nullptr), _nextPos(nullptr), _end(nullptr) {}
-    Iterator(std::byte const* data, std::byte const* end);
+    Iterator() : _pos(nullptr), _coldDataBase(nullptr) {}
+    Iterator(CustomProxy::Entry const* pos, std::byte const* coldDataBase);
 
   private:
     friend class boost::iterator_core_access;
 
-    std::pair<std::string_view, std::string_view> const& dereference() const;
+    std::pair<DictionaryId, std::string_view> const& dereference() const;
     void increment();
     bool equal(Iterator const& other) const;
-    static bool decodeEntry(std::byte const* ptr,
-                            std::byte const* end,
-                            std::pair<std::string_view, std::string_view>& out,
-                            std::byte const*& next);
 
-    std::byte const* _currentPos;
-    std::byte const* _nextPos;
-    std::byte const* _end;
-    std::pair<std::string_view, std::string_view> _current;
+    CustomProxy::Entry const* _pos;
+    std::byte const* _coldDataBase;
+    mutable std::pair<DictionaryId, std::string_view> _currentValue;
   };
 
 } // namespace rs::core

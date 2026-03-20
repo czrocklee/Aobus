@@ -112,7 +112,7 @@ namespace rs::expr
     }
   }
 
-  std::string_view PlanEvaluator::loadStringField(core::TrackView const& track, Field field) const
+  std::string_view PlanEvaluator::loadStringField(core::TrackView const& track, Field field, Instruction const* instr) const
   {
     switch (field)
     {
@@ -120,6 +120,13 @@ namespace rs::expr
         return track.metadata().title();
       case Field::Uri:
         return track.property().uri();
+      case Field::Custom:
+        if (instr && instr->constValue > 0)
+        {
+          auto dictId = core::DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
+          return track.custom().get(dictId).value_or("");
+        }
+        return {};
       default:
         // Field::Tag and other unsupported fields return empty
         return {};
@@ -205,7 +212,7 @@ namespace rs::expr
           {
             // String comparison for Title, Uri, Custom fields
             auto field = static_cast<Field>(prevLoadField->field);
-            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view fieldStr = loadStringField(track, field, prevLoadField);
             std::string_view constantStr;
             if (_currentPlan)
             {
@@ -233,7 +240,7 @@ namespace rs::expr
           if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
           {
             auto field = static_cast<Field>(prevLoadField->field);
-            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view fieldStr = loadStringField(track, field, prevLoadField);
             std::string_view constantStr;
             if (_currentPlan)
             {
@@ -261,7 +268,7 @@ namespace rs::expr
           if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
           {
             auto field = static_cast<Field>(prevLoadField->field);
-            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view fieldStr = loadStringField(track, field, prevLoadField);
             std::string_view constantStr;
             if (_currentPlan)
             {
@@ -289,7 +296,7 @@ namespace rs::expr
           if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
           {
             auto field = static_cast<Field>(prevLoadField->field);
-            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view fieldStr = loadStringField(track, field, prevLoadField);
             std::string_view constantStr;
             if (_currentPlan)
             {
@@ -317,7 +324,7 @@ namespace rs::expr
           if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
           {
             auto field = static_cast<Field>(prevLoadField->field);
-            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view fieldStr = loadStringField(track, field, prevLoadField);
             std::string_view constantStr;
             if (_currentPlan)
             {
@@ -345,7 +352,7 @@ namespace rs::expr
           if (prevLoadField && isStringField(static_cast<Field>(prevLoadField->field)))
           {
             auto field = static_cast<Field>(prevLoadField->field);
-            std::string_view fieldStr = loadStringField(track, field);
+            std::string_view fieldStr = loadStringField(track, field, prevLoadField);
             std::string_view constantStr;
             if (_currentPlan)
             {
@@ -405,7 +412,7 @@ namespace rs::expr
           if (prevLoadField)
           {
             auto field = static_cast<Field>(prevLoadField->field);
-            fieldStr = loadStringField(track, field);
+            fieldStr = loadStringField(track, field, prevLoadField);
           }
 
           // Load the string constant from the plan

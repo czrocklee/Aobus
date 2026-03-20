@@ -208,7 +208,7 @@ namespace
     auto txn = ml.writeTransaction();
     auto trackWriter = ml.tracks().writer(txn);
     auto hotData = record.serializeHot();
-    auto coldData = record.serializeCold();
+    auto coldData = record.serializeCold(ml.dictionary());
     auto [id, trackView] = trackWriter.createHotCold(hotData, coldData);
     txn.commit();
 

@@ -287,7 +287,13 @@ TEST_CASE("TrackRecord - serializeCold")
   record.metadata.uri = "/path/to/file.flac";
   record.custom.pairs = {{"key1", "value1"}, {"key2", "value2"}};
 
-  auto data = record.serializeCold();
+  // Simple test resolver: map specific keys to specific IDs
+  auto resolver = [](std::string_view key) -> rs::core::DictionaryId {
+    if (key == "key1") return rs::core::DictionaryId{10};
+    if (key == "key2") return rs::core::DictionaryId{20};
+    return rs::core::DictionaryId{0};
+  };
+  auto data = record.serializeCold(resolver);
 
   // Verify cold view can parse it
   TrackView view{std::span<std::byte const>{}, data};
@@ -295,16 +301,10 @@ TEST_CASE("TrackRecord - serializeCold")
   CHECK(view.property().mtime() == 9876543210);
   CHECK(view.metadata().trackNumber() == 3);
 
-  // Verify custom meta
-  std::vector<std::pair<std::string, std::string>> result;
-  for (auto const& [k, v] : view.custom()) {
-    result.emplace_back(std::string{k}, std::string{v});
-  }
-  CHECK(result.size() == 2);
-  CHECK(result[0].first == "key1");
-  CHECK(result[0].second == "value1");
-  CHECK(result[1].first == "key2");
-  CHECK(result[1].second == "value2");
+  // Verify custom meta using get(DictionaryId)
+  CHECK(view.custom().get(rs::core::DictionaryId{10}) == "value1");
+  CHECK(view.custom().get(rs::core::DictionaryId{20}) == "value2");
+  CHECK(view.custom().get(rs::core::DictionaryId{30}) == std::nullopt);
 }
 
 TEST_CASE("TrackRecord - custom.pairs field")

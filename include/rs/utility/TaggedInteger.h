@@ -45,21 +45,10 @@ namespace rs::utility
       return tmp;
     }
 
-    friend bool operator<(TaggedInteger a, TaggedInteger b) { return a._value < b._value; }
-    friend bool operator==(TaggedInteger a, TaggedInteger b) { return a._value == b._value; }
-    friend bool operator!=(TaggedInteger a, TaggedInteger b) { return a._value != b._value; }
-
-    // Comparison with underlying type
-    friend bool operator<(TaggedInteger a, T b) { return a._value < b; }
-    friend bool operator<(T a, TaggedInteger b) { return a < b._value; }
-    friend bool operator==(TaggedInteger a, T b) { return a._value == b; }
-    friend bool operator==(T a, TaggedInteger b) { return a == b._value; }
-    friend bool operator!=(TaggedInteger a, T b) { return a._value != b; }
-    friend bool operator!=(T a, TaggedInteger b) { return a != b._value; }
-    friend bool operator>(TaggedInteger a, T b) { return a._value > b; }
-    friend bool operator>(T a, TaggedInteger b) { return a > b._value; }
-    friend bool operator<=(TaggedInteger a, T b) { return a._value <= b; }
-    friend bool operator>=(TaggedInteger a, T b) { return a._value >= b; }
+    friend auto operator<=>(TaggedInteger const&, TaggedInteger const&) = default;
+    friend bool operator==(TaggedInteger const&, TaggedInteger const&) = default;
+    friend auto operator<=>(TaggedInteger const& a, T const& b) { return a._value <=> b; }
+    friend bool operator==(TaggedInteger const& a, T const& b) { return a._value == b; }
 
     // Stream output
     friend std::ostream& operator<<(std::ostream& os, TaggedInteger val) { return os << val._value; }

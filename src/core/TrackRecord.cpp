@@ -4,7 +4,9 @@
 #include <rs/core/TrackRecord.h>
 #include <rs/utility/ByteView.h>
 
+#include <algorithm>
 #include <cstring>
+#include <functional>
 
 namespace rs::core
 {
@@ -60,8 +62,12 @@ namespace rs::core
     metadata.discNumber = meta.discNumber();
     metadata.totalDiscs = meta.totalDiscs();
 
-    // Load custom meta from cold view
-    for (auto const& [k, v] : view.custom()) { custom.pairs.emplace_back(std::string{k}, std::string{v}); }
+    // Load custom meta from cold view (keys are DictionaryIds, need to resolve to string via dict)
+    for (auto const& [dictId, value] : view.custom())
+    {
+      auto key = dict.get(dictId);
+      custom.pairs.emplace_back(std::string{key}, std::string{value});
+    }
   }
 
   TrackHotHeader TrackRecord::hotHeader() const
@@ -104,7 +110,8 @@ namespace rs::core
       .totalTracks = metadata.totalTracks,
       .discNumber = metadata.discNumber,
       .totalDiscs = metadata.totalDiscs,
-      .customLen = 0,
+      .customCount = 0,
+      .uriOffset = 0,
       .uriLen = 0,
       .channels = property.channels,
       .padding = std::byte{0},
@@ -140,41 +147,58 @@ namespace rs::core
     return data;
   }
 
-  std::vector<std::byte> TrackRecord::serializeCold() const
+  std::vector<std::byte> TrackRecord::serializeCold(DictionaryStore const& dict) const
   {
-    std::vector<std::byte> result;
+    return serializeCold([&dict](std::string_view key) { return dict.getId(key); });
+  }
 
-    // Calculate custom meta size
-    std::uint16_t customSize = 0;
+  std::vector<std::byte> TrackRecord::serializeCold(std::function<DictionaryId(std::string_view)> resolveKey) const
+  {
+    // Resolve keys to DictionaryIds
+    std::vector<std::pair<DictionaryId, std::string>> resolvedPairs;
+    resolvedPairs.reserve(custom.pairs.size());
     for (auto const& [key, value] : custom.pairs)
     {
-      customSize += sizeof(std::uint16_t) * 2; // keyLen + valueLen
-      customSize += static_cast<std::uint16_t>(key.size() + value.size());
+      auto dictId = resolveKey(key);
+      resolvedPairs.emplace_back(dictId, value);
     }
+
+    // Sort by dictId for binary search
+    std::ranges::sort(resolvedPairs, [](auto const& a, auto const& b) { return a.first < b.first; });
+
+    constexpr std::size_t kEntrySize = 8; // dictId(4) + offset(2) + len(2)
+    std::size_t entryCount = resolvedPairs.size();
+    std::size_t totalValueSize = 0;
+    for (auto const& [_, value] : resolvedPairs) { totalValueSize += value.size(); }
 
     std::uint16_t uriLen = static_cast<std::uint16_t>(metadata.uri.size());
 
-    // Reserve space
-    result.reserve(sizeof(TrackColdHeader) + customSize + uriLen + 1);
+    std::vector<std::byte> result;
+    result.reserve(sizeof(TrackColdHeader) + entryCount * kEntrySize + totalValueSize + uriLen + 4);
 
-    // Build header with correct offsets
+    // Build header
     TrackColdHeader hdr = coldHeader();
-    hdr.customLen = customSize;
+    hdr.customCount = static_cast<std::uint16_t>(entryCount);
+    hdr.uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + entryCount * kEntrySize + totalValueSize);
     hdr.uriLen = uriLen;
-
-    // Write fixed header
     result.insert_range(result.end(), utility::asBytes(hdr));
 
-    // Write custom key-value pairs
-    for (auto const& [key, value] : custom.pairs)
+    // Value data starts after header + entries
+    std::size_t valueOffset = sizeof(TrackColdHeader) + entryCount * kEntrySize;
+
+    // Write entries with calculated offsets
+    for (auto const& [dictId, value] : resolvedPairs)
     {
-      auto keyLen = static_cast<std::uint16_t>(key.size());
-      result.insert_range(result.end(), utility::asBytes(keyLen));
-
       auto valueLen = static_cast<std::uint16_t>(value.size());
+      result.insert_range(result.end(), utility::asBytes(dictId.value()));
+      result.insert_range(result.end(), utility::asBytes(static_cast<std::uint16_t>(valueOffset)));
       result.insert_range(result.end(), utility::asBytes(valueLen));
+      valueOffset += valueLen;
+    }
 
-      result.insert_range(result.end(), utility::asBytes(key));
+    // Write all values contiguously
+    for (auto const& [_, value] : resolvedPairs)
+    {
       result.insert_range(result.end(), utility::asBytes(value));
     }
 

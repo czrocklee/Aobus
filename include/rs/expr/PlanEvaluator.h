@@ -42,7 +42,7 @@ namespace rs::expr
 
   private:
     std::int64_t loadField(core::TrackView const& track, Field field) const;
-    std::string_view loadStringField(core::TrackView const& track, Field field) const;
+    std::string_view loadStringField(core::TrackView const& track, Field field, Instruction const* instr = nullptr) const;
     std::int64_t loadConstant(Instruction const& instr) const;
 
     // Pointer to current plan for string constant access

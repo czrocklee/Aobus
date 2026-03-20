@@ -106,9 +106,22 @@ namespace rs::core
     /**
      * Serialize cold fields to binary format for tracks_cold DB.
      *
+     * Custom keys are resolved to DictionaryIds via the provided DictionaryStore.
+     * The indexed format stores entries sorted by dictId for O(log n) binary search.
+     *
+     * @param dict DictionaryStore to resolve custom key strings to DictionaryIds
      * @return Vector of bytes suitable for TrackStore::Writer::createHotCold
      */
-    std::vector<std::byte> serializeCold() const;
+    std::vector<std::byte> serializeCold(DictionaryStore const& dict) const;
+
+    /**
+     * Serialize cold fields using a custom key resolver function.
+     * Convenience overload for testing without a full DictionaryStore.
+     *
+     * @param resolveKey Function that maps string key to DictionaryId
+     * @return Vector of bytes suitable for TrackStore::Writer::createHotCold
+     */
+    std::vector<std::byte> serializeCold(std::function<DictionaryId(std::string_view)> resolveKey) const;
 
     /**
      * Get the hot header with current field values.

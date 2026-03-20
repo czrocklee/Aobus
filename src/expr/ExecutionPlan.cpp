@@ -5,6 +5,7 @@
 #include <rs/utility/VariantVisitor.h>
 
 #include <algorithm>
+#include <exception>
 #include <ranges>
 
 namespace rs::expr
@@ -230,11 +231,27 @@ namespace rs::expr
       _hasHotAccess = true;
     }
 
-    // For custom fields, store the key name as a string constant and use constValue as the index
+    // For custom fields, pre-resolve dictId and store as constant (Option B)
+    // If resolution fails (key not in dictionary), store 0 - evaluator will return empty string
     std::int64_t constValue = 0;
     if (var.type == VariableType::Custom)
     {
-      constValue = static_cast<std::int64_t>(addStringConstant(var.name));
+      if (_dict)
+      {
+        try
+        {
+          auto dictId = _dict->getId(var.name);
+          constValue = static_cast<std::int64_t>(dictId.value());
+        }
+        catch (std::exception const&)
+        {
+          constValue = 0; // Key not found - will return empty string at evaluation
+        }
+      }
+      else
+      {
+        constValue = 0;
+      }
     }
 
     _plan.instructions.push_back(Instruction{

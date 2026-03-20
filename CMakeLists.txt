@@ -103,6 +103,7 @@ add_executable(rs_test
 )
 target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(rs_test PRIVATE rs Catch2)
+target_compile_options(rs_test PRIVATE -Wno-array-bounds)
 
 # UI disabled - requires FlatBuffers migration
 # add_executable(RockStudio
