@@ -81,10 +81,9 @@ namespace rs::core
 
   std::optional<std::string> TrackView::CustomProxy::get(std::string_view key) const
   {
-    for (auto const& [k, v] : *this) {
-      if (k == key) {
-        return std::string{v};
-      }
+    for (auto const& [k, v] : *this)
+    {
+      if (k == key) { return std::string{v}; }
     }
     return std::nullopt;
   }
@@ -122,9 +121,11 @@ namespace rs::core
   }
 
   TrackView::CustomProxy::Iterator::Iterator(std::byte const* data, std::byte const* end)
-    : _currentPos(data), _nextPos(data), _end(end)
+    : _currentPos(data)
+    , _nextPos(data)
+    , _end(end)
   {
-    if (!_currentPos || !_end || _currentPos >= _end || !loadCurrent())
+    if (!_currentPos || !_end || _currentPos >= _end || !decodeEntry(_currentPos, _end, _current, _nextPos))
     {
       _currentPos = _end;
       _nextPos = _end;
@@ -150,8 +151,8 @@ namespace rs::core
     if (!ptr || !end || ptr >= end) { return false; }
 
     constexpr std::size_t kLengthFieldsSize = sizeof(std::uint16_t) * 2;
-    auto const available = static_cast<std::size_t>(end - ptr);
-    if (available < kLengthFieldsSize) { return false; }
+
+    if (auto const available = static_cast<std::size_t>(end - ptr); available < kLengthFieldsSize) { return false; }
 
     std::uint16_t keyLen = 0;
     std::uint16_t valueLen = 0;
@@ -162,6 +163,7 @@ namespace rs::core
 
     auto const payloadLen = static_cast<std::size_t>(keyLen) + static_cast<std::size_t>(valueLen);
     auto const payloadAvailable = static_cast<std::size_t>(end - ptr);
+    
     if (payloadLen > payloadAvailable) { return false; }
 
     std::string_view key{reinterpret_cast<char const*>(ptr), static_cast<std::size_t>(keyLen)};
@@ -174,17 +176,13 @@ namespace rs::core
     return true;
   }
 
-  bool TrackView::CustomProxy::Iterator::loadCurrent()
-  {
-    return decodeEntry(_currentPos, _end, _current, _nextPos);
-  }
-
   void TrackView::CustomProxy::Iterator::increment()
   {
     if (_currentPos >= _end) { return; }
 
     _currentPos = _nextPos;
-    if (_currentPos >= _end || !loadCurrent())
+
+    if (_currentPos >= _end || !decodeEntry(_currentPos, _end, _current, _nextPos))
     {
       _currentPos = _end;
       _nextPos = _end;

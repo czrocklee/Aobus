@@ -151,7 +151,6 @@ namespace rs::core
         std::pair<std::string_view, std::string_view> const& dereference() const;
         void increment();
         bool equal(Iterator const& other) const;
-        bool loadCurrent();
         static bool decodeEntry(std::byte const* ptr,
                                 std::byte const* end,
                                 std::pair<std::string_view, std::string_view>& out,
