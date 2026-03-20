@@ -16,11 +16,11 @@ namespace
   using namespace test;
   using rs::core::DictionaryId;
   using rs::core::TrackHotHeader;
-  using rs::core::TrackHotView;
+  using rs::core::TrackId;
   using rs::utility::splitInt64;
 
-  // Helper to create a minimal valid TrackHotView for testing
-  std::vector<std::byte> createMinimalData()
+  // Helper to create a minimal valid hot TrackView for testing
+  std::vector<std::byte> createMinimalHotData()
   {
     TrackHotHeader h{};
     h.tagBloom = 0;
@@ -98,33 +98,35 @@ namespace
     CHECK(offsetof(TrackHotHeader, tagCount) == 33);
   }
 
-  TEST_CASE("TrackHotView - Default Constructor")
+  TEST_CASE("TrackView (Hot) - Empty View")
   {
-    TrackHotView view;
-    CHECK(view.isValid() == false);
+    // Create an "empty" view by using empty hot data
+    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, std::nullopt, nullptr};
+    CHECK(view.isHotValid() == false);
+    CHECK(view.hasCold() == false);
   }
 
-  TEST_CASE("TrackHotView - Construct from Data")
+  TEST_CASE("TrackView (Hot) - Construct from Hot Data")
   {
-    auto data = createMinimalData();
-    TrackHotView view(std::as_bytes(std::span{data}));
+    auto data = createMinimalHotData();
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
 
-    CHECK(view.isValid() == true);
-    CHECK(view.header() != nullptr);
+    CHECK(view.isHotValid() == true);
+    CHECK(view.hotHeader() != nullptr);
   }
 
-  TEST_CASE("TrackHotView - Fixed Field Accessors")
+  TEST_CASE("TrackView (Hot) - Fixed Field Accessors")
   {
-    auto data = createMinimalData();
-    TrackHotView view(std::as_bytes(std::span{data}));
+    auto data = createMinimalHotData();
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
 
     auto prop = view.property();
     auto meta = view.metadata();
 
-    CHECK(meta.artistId() == 1);
-    CHECK(meta.albumId() == 2);
-    CHECK(meta.genreId() == 3);
-    CHECK(meta.albumArtistId() == 0);
+    CHECK(meta.artistId() == DictionaryId{1});
+    CHECK(meta.albumId() == DictionaryId{2});
+    CHECK(meta.genreId() == DictionaryId{3});
+    CHECK(meta.albumArtistId() == DictionaryId{0});
     CHECK(meta.year() == 2020);
     CHECK(prop.codecId() == 0);
     CHECK(prop.bitDepth() == 16);
@@ -132,66 +134,67 @@ namespace
     CHECK(view.tags().count() == 0);
   }
 
-  TEST_CASE("TrackHotView - String Accessors")
+  TEST_CASE("TrackView (Hot) - String Accessors")
   {
     auto data = createTrackWithStrings("Test Title");
-    TrackHotView view(std::as_bytes(std::span{data}));
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
 
-    CHECK(view.isValid() == true);
+    CHECK(view.isHotValid() == true);
     CHECK(view.metadata().title() == "Test Title");
   }
 
-  TEST_CASE("TrackHotView - Empty String Handling")
+  TEST_CASE("TrackView (Hot) - Empty String Handling")
   {
-    auto data = createMinimalData();
-    TrackHotView view(std::as_bytes(std::span{data}));
+    auto data = createMinimalHotData();
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
 
     // Empty strings should return empty string_view
     CHECK(view.metadata().title().empty());
   }
 
-  TEST_CASE("TrackHotView - Invalid Data")
+  TEST_CASE("TrackView (Hot) - Invalid Data")
   {
-    // Null data (valid size but nullptr) - creates invalid view, isValid is false
+    // Null data (valid size but nullptr) - isHotValid is false
     std::span<std::byte const> nullSpan{static_cast<std::byte const*>(nullptr), 100};
-    TrackHotView nullView(nullSpan);
-    CHECK(nullView.isValid() == false);
+    rs::core::TrackView nullView{TrackId{0}, nullSpan, std::nullopt, nullptr};
+    CHECK(nullView.isHotValid() == false);
 
-    // Too small - throws on construction
+    // Too small - isHotValid is false (no exception thrown)
     char smallData[10] = {};
     std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
-    CHECK_THROWS(TrackHotView(smallSpan));
+    rs::core::TrackView smallView{TrackId{0}, smallSpan, std::nullopt, nullptr};
+    CHECK(smallView.isHotValid() == false);
 
-    // Empty - uses default constructor, isValid is false
-    TrackHotView emptyView;
-    CHECK(emptyView.isValid() == false);
+    // Empty hot - isHotValid is false
+    rs::core::TrackView emptyView{TrackId{0}, std::span<std::byte const>{}, std::nullopt, nullptr};
+    CHECK(emptyView.isHotValid() == false);
   }
 
-  TEST_CASE("TrackHotView - Tag Bloom")
+  TEST_CASE("TrackView (Hot) - Tag Bloom")
   {
     TrackHotHeader h{};
     h.tagBloom = 0xCAFE;
 
     auto data = serializeHeader(h);
 
-    TrackHotView view(std::as_bytes(std::span{data}));
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
     CHECK(view.tags().bloom() == 0xCAFE);
   }
 
-  TEST_CASE("TrackHotView - Tag Accessors - No Tags")
+  TEST_CASE("TrackView (Hot) - Tag Accessors - No Tags")
   {
     auto data = createTrackWithStrings("Test");
-    TrackHotView view(std::as_bytes(std::span{data}));
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
 
     CHECK(view.tags().count() == 0);
-    CHECK(view.tags().id(0) == 0);
+    CHECK(view.tags().id(0) == DictionaryId{0});
 
     auto ids = view.tags().ids();
     CHECK(ids.empty());
     CHECK(view.tags().has(DictionaryId{1}) == false);
   }
 
-  TEST_CASE("TrackHotView - Tag Accessors - With Tags")
+  TEST_CASE("TrackView (Hot) - Tag Accessors - With Tags")
   {
     // Create a track with 2 tags (tag IDs: 10, 20)
     TrackHotHeader h{};
@@ -223,17 +226,17 @@ namespace
     data.insert(data.end(), reinterpret_cast<std::byte const*>(&tag1), reinterpret_cast<std::byte const*>(&tag1 + 1));
     data.insert(data.end(), reinterpret_cast<std::byte const*>(&tag2), reinterpret_cast<std::byte const*>(&tag2 + 1));
 
-    TrackHotView view(std::as_bytes(std::span{data}));
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
 
     CHECK(view.tags().count() == 2);
-    CHECK(view.tags().id(0) == 10);
-    CHECK(view.tags().id(1) == 20);
-    CHECK(view.tags().id(2) == 0); // Out of bounds
+    CHECK(view.tags().id(0) == DictionaryId{10});
+    CHECK(view.tags().id(1) == DictionaryId{20});
+    CHECK(view.tags().id(2) == DictionaryId{0}); // Out of bounds
 
     auto ids = view.tags().ids();
     CHECK(ids.size() == 2);
-    CHECK(ids[0] == 10);
-    CHECK(ids[1] == 20);
+    CHECK(ids[0] == DictionaryId{10});
+    CHECK(ids[1] == DictionaryId{20});
 
     CHECK(view.tags().has(DictionaryId{10}) == true);
     CHECK(view.tags().has(DictionaryId{20}) == true);
@@ -245,7 +248,6 @@ namespace
   using rs::core::encodeColdData;
   using rs::core::normalizeKey;
   using rs::core::TrackColdHeader;
-  using rs::core::TrackColdView;
 
   // Helper to create a full cold data blob for testing
   std::vector<std::byte> createColdData(TrackColdHeader const& header = {},
@@ -255,9 +257,9 @@ namespace
     return encodeColdData(header, customMeta, uri);
   }
 
-  TrackColdView makeColdView(std::vector<std::byte> const& data)
+  rs::core::TrackView makeColdView(std::vector<std::byte> const& data)
   {
-    return TrackColdView(std::as_bytes(std::span{data}));
+    return rs::core::TrackView{TrackId{0}, std::span<std::byte const>{}, data, nullptr};
   }
 
   TEST_CASE("TrackColdHeader - Size and Alignment")
@@ -266,71 +268,58 @@ namespace
     CHECK(alignof(TrackColdHeader) == 4);
   }
 
-  TEST_CASE("TrackColdView - Default Constructor")
+  TEST_CASE("TrackView (Cold) - Cold-Only View")
   {
-    TrackColdView view;
-    CHECK(view.isNull() == true);
-    CHECK(view.isEmpty() == true);
-    CHECK(view.isValid() == false);
-    CHECK(view.size() == 0);
+    // Create a cold-only view (hot data is empty, but cold data is present)
+    auto data = createColdData();
+    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, data, nullptr};
+    CHECK(view.isHotValid() == false);
+    CHECK(view.hasCold() == true);
+    CHECK(view.isColdLoaded() == true);
   }
 
-  TEST_CASE("TrackColdView - Empty Data - Default Constructor")
+  TEST_CASE("TrackView (Cold) - Construct from Cold Data")
   {
-    // Empty data uses default constructor (not span constructor which throws)
-    TrackColdView view;
-    CHECK(view.isNull() == true);
-    CHECK(view.isEmpty() == true);
-    CHECK(view.isValid() == false);
+    auto data = createColdData();
+    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, data, nullptr};
+
+    CHECK(view.hasCold() == true);
+    CHECK(view.isColdLoaded() == true);
+    CHECK(view.coldHeader() != nullptr);
   }
 
-  TEST_CASE("TrackColdView - Empty Span - Throws")
-  {
-    std::vector<std::byte> empty;
-    std::span<std::byte const> emptySpan{empty};
-    CHECK_THROWS(TrackColdView(emptySpan));
-  }
-
-  TEST_CASE("TrackColdView - Invalid Data - Throws")
-  {
-    char smallData[10] = {};
-    std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
-    CHECK_THROWS(TrackColdView(smallSpan));
-  }
-
-  TEST_CASE("TrackColdView - Roundtrip Empty")
+  TEST_CASE("TrackView (Cold) - Roundtrip Empty")
   {
     auto data = createColdData();
     auto view = makeColdView(data);
 
-    CHECK(view.isNull() == false);
-    CHECK(view.isEmpty() == false);
-    CHECK(view.isValid() == true);
-    CHECK(view.customMeta().empty());
-    CHECK(view.uri().empty());
+    CHECK(view.hasCold() == true);
+    CHECK(view.isColdLoaded() == true);
+    CHECK(view.custom().all().empty());
+    CHECK(view.cold().uri().empty());
   }
 
-  TEST_CASE("TrackColdView - Roundtrip Single Pair")
+  TEST_CASE("TrackView (Cold) - Roundtrip Single Pair")
   {
     auto pairs = std::vector<std::pair<std::string, std::string>>{{"key1", "value1"}};
     auto data = createColdData({}, pairs, "/path/to/file.flac");
     auto view = makeColdView(data);
 
-    auto meta = view.customMeta();
+    auto meta = view.custom().all();
     CHECK(meta.size() == 1);
     CHECK(meta[0].first == "key1");
     CHECK(meta[0].second == "value1");
-    CHECK(view.uri() == "/path/to/file.flac");
+    CHECK(view.cold().uri() == "/path/to/file.flac");
   }
 
-  TEST_CASE("TrackColdView - Roundtrip Multiple Pairs")
+  TEST_CASE("TrackView (Cold) - Roundtrip Multiple Pairs")
   {
     auto pairs = std::vector<std::pair<std::string, std::string>>{
       {"replaygain_track_gain_db", "-6.5"}, {"isrc", "USSM19999999"}, {"edition", "remaster"}};
     auto data = createColdData({}, pairs, "/path/to/file.flac");
     auto view = makeColdView(data);
 
-    auto meta = view.customMeta();
+    auto meta = view.custom().all();
     CHECK(meta.size() == 3);
     CHECK(meta[0].first == "replaygain_track_gain_db");
     CHECK(meta[0].second == "-6.5");
@@ -340,65 +329,65 @@ namespace
     CHECK(meta[2].second == "remaster");
   }
 
-  TEST_CASE("TrackColdView - Custom Value Lookup - Found")
+  TEST_CASE("TrackView (Cold) - Custom Value Lookup - Found")
   {
     auto pairs =
       std::vector<std::pair<std::string, std::string>>{{"replaygain_track_gain_db", "-6.5"}, {"isrc", "USSM19999999"}};
     auto data = createColdData({}, pairs);
     auto view = makeColdView(data);
 
-    auto value = view.customValue("isrc");
+    auto value = view.custom().get("isrc");
     CHECK(value.has_value() == true);
     CHECK(*value == "USSM19999999");
   }
 
-  TEST_CASE("TrackColdView - Custom Value Lookup - Not Found")
+  TEST_CASE("TrackView (Cold) - Custom Value Lookup - Not Found")
   {
     auto pairs = std::vector<std::pair<std::string, std::string>>{{"replaygain_track_gain_db", "-6.5"}};
     auto data = createColdData({}, pairs);
     auto view = makeColdView(data);
 
-    auto value = view.customValue("nonexistent");
+    auto value = view.custom().get("nonexistent");
     CHECK(value.has_value() == false);
   }
 
-  TEST_CASE("TrackColdView - Custom Value Lookup - Case Sensitive")
+  TEST_CASE("TrackView (Cold) - Custom Value Lookup - Case Sensitive")
   {
     auto pairs = std::vector<std::pair<std::string, std::string>>{{"ISRC", "USSM19999999"}};
     auto data = createColdData({}, pairs);
     auto view = makeColdView(data);
 
-    auto value = view.customValue("isrc");
+    auto value = view.custom().get("isrc");
     CHECK(value.has_value() == false);
   }
 
-  TEST_CASE("TrackColdView - Empty Key And Value")
+  TEST_CASE("TrackView (Cold) - Empty Key And Value")
   {
     auto pairs = std::vector<std::pair<std::string, std::string>>{{"", ""}};
     auto data = createColdData({}, pairs);
     auto view = makeColdView(data);
 
-    auto meta = view.customMeta();
+    auto meta = view.custom().all();
     CHECK(meta.size() == 1);
     CHECK(meta[0].first.empty());
     CHECK(meta[0].second.empty());
 
-    auto value = view.customValue("");
+    auto value = view.custom().get("");
     CHECK(value.has_value() == true);
     CHECK(value->empty());
   }
 
-  TEST_CASE("TrackColdView - Special Characters In Value")
+  TEST_CASE("TrackView (Cold) - Special Characters In Value")
   {
     auto pairs = std::vector<std::pair<std::string, std::string>>{{"comment", "Hello, World! 你好"}};
     auto data = createColdData({}, pairs);
     auto view = makeColdView(data);
 
-    auto meta = view.customMeta();
+    auto meta = view.custom().all();
     CHECK(meta[0].second == "Hello, World! 你好");
   }
 
-  TEST_CASE("TrackColdView - Fixed Fields")
+  TEST_CASE("TrackView (Cold) - Fixed Fields")
   {
     TrackColdHeader header{};
     std::tie(header.fileSizeLo, header.fileSizeHi) = splitInt64(12345678);
@@ -412,18 +401,18 @@ namespace
     auto data = createColdData(header, {}, "/path/to/file.flac");
     auto view = makeColdView(data);
 
-    CHECK(view.isValid() == true);
-    CHECK(view.fileSize() == 12345678);
-    CHECK(view.mtime() == 987654321);
-    CHECK(view.coverArtId() == 42);
-    CHECK(view.trackNumber() == 5);
-    CHECK(view.totalTracks() == 10);
-    CHECK(view.discNumber() == 1);
-    CHECK(view.totalDiscs() == 2);
-    CHECK(view.uri() == "/path/to/file.flac");
+    CHECK(view.isColdLoaded() == true);
+    CHECK(view.cold().fileSize() == 12345678);
+    CHECK(view.cold().mtime() == 987654321);
+    CHECK(view.cold().coverArtId() == 42);
+    CHECK(view.cold().trackNumber() == 5);
+    CHECK(view.cold().totalTracks() == 10);
+    CHECK(view.cold().discNumber() == 1);
+    CHECK(view.cold().totalDiscs() == 2);
+    CHECK(view.cold().uri() == "/path/to/file.flac");
   }
 
-  TEST_CASE("TrackColdView - PropertyProxy")
+  TEST_CASE("TrackView (Cold) - ColdProxy")
   {
     TrackColdHeader header{};
     std::tie(header.fileSizeLo, header.fileSizeHi) = splitInt64(12345678);
@@ -437,15 +426,15 @@ namespace
     auto data = createColdData(header, {}, "/path/to/file.flac");
     auto view = makeColdView(data);
 
-    auto prop = view.property();
-    CHECK(prop.fileSize() == 12345678);
-    CHECK(prop.mtime() == 987654321);
-    CHECK(prop.coverArtId() == 42);
-    CHECK(prop.trackNumber() == 5);
-    CHECK(prop.totalTracks() == 10);
-    CHECK(prop.discNumber() == 1);
-    CHECK(prop.totalDiscs() == 2);
-    CHECK(prop.uri() == "/path/to/file.flac");
+    auto cold = view.cold();
+    CHECK(cold.fileSize() == 12345678);
+    CHECK(cold.mtime() == 987654321);
+    CHECK(cold.coverArtId() == 42);
+    CHECK(cold.trackNumber() == 5);
+    CHECK(cold.totalTracks() == 10);
+    CHECK(cold.discNumber() == 1);
+    CHECK(cold.totalDiscs() == 2);
+    CHECK(cold.uri() == "/path/to/file.flac");
   }
 
   TEST_CASE("normalizeKey - Lowercase")

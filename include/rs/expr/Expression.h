@@ -33,6 +33,10 @@ namespace rs::expr
 
   using ConstantExpression = std::variant<bool, std::int64_t, std::string>;
 
+  // forward_ast is used for recursive types in the expression variant.
+  // Note: boost::spirit x3 with forward_ast in recursive variants has a known
+  // memory leak issue in ASAN due to how the variant's convert_construct
+  // handles recursive types. This is a library limitation, not our code.
   using Expression = boost::spirit::x3::variant<VariableExpression,
                                                 ConstantExpression,
                                                 boost::spirit::x3::forward_ast<BinaryExpression>,

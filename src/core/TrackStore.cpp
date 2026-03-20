@@ -29,10 +29,25 @@ namespace rs::core
   TrackStore::Reader::Reader(lmdb::Database::Reader&& hotReader, lmdb::Database::Reader&& coldReader)
     : _hotReader{std::move(hotReader)}
     , _coldReader{std::move(coldReader)}
-    , _coldLoader{[this](TrackId id) -> std::optional<TrackColdView> {
-      return cold().get(id);
+    , _coldLoader{[this](TrackId id) -> std::optional<std::span<std::byte const>> {
+      auto optBuffer = _coldReader.get(id.value());
+      if (!optBuffer || optBuffer->size() == 0) { return std::nullopt; }
+      return optBuffer;
     }}
   {
+  }
+
+  std::optional<TrackView> TrackStore::Reader::get(TrackId id) const
+  {
+    auto optHotBuffer = _hotReader.get(id.value());
+    if (!optHotBuffer || optHotBuffer->size() == 0) { return std::nullopt; }
+
+    std::optional<std::span<std::byte const>> optColdBuffer = _coldReader.get(id.value());
+    if (optColdBuffer && optColdBuffer->size() == 0) {
+      optColdBuffer = std::nullopt;
+    }
+
+    return TrackView{id, *optHotBuffer, optColdBuffer, _coldLoader};
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::begin(ColdLoadHint hint) const
@@ -54,52 +69,11 @@ namespace rs::core
     return Iterator{_hotReader.end(), std::nullopt, ColdLoadHint::Lazy, _coldLoader};
   }
 
-  // HotProxy implementation
-  std::optional<TrackHotView> TrackStore::Reader::HotProxy::get(TrackId id) const
-  {
-    auto optBuffer = _reader._hotReader.get(id.value());
-    if (!optBuffer || optBuffer->size() == 0) { return std::nullopt; }
-    return TrackHotView{*optBuffer};
-  }
-
-  TrackStore::Reader::Iterator TrackStore::Reader::HotProxy::begin(ColdLoadHint hint) const
-  {
-    return _reader.begin(hint);
-  }
-
-  TrackStore::Reader::Iterator TrackStore::Reader::HotProxy::beginEager() const
-  {
-    return _reader.beginEager();
-  }
-
-  TrackStore::Reader::Iterator TrackStore::Reader::HotProxy::end() const
-  {
-    return _reader.end();
-  }
-
-  // ColdProxy implementation
-  std::optional<TrackColdView> TrackStore::Reader::ColdProxy::get(TrackId id) const
-  {
-    auto optBuffer = _reader._coldReader.get(id.value());
-    if (!optBuffer || optBuffer->size() == 0) { return std::nullopt; }
-    return TrackColdView{*optBuffer};
-  }
-
-  TrackStore::Reader::Iterator TrackStore::Reader::ColdProxy::begin() const
-  {
-    return _reader.begin();
-  }
-
-  TrackStore::Reader::Iterator TrackStore::Reader::ColdProxy::end() const
-  {
-    return _reader.end();
-  }
-
   // TrackStore::Reader::Iterator implementation
   TrackStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& hotIter,
                                          std::optional<lmdb::Database::Reader::Iterator> coldIter,
                                          ColdLoadHint hint,
-                                         std::function<std::optional<TrackColdView>(TrackId)> coldLoader)
+                                         std::function<std::optional<std::span<std::byte const>>(TrackId)> coldLoader)
     : _hotIter{std::move(hotIter)}
     , _coldIter{std::move(coldIter)}
     , _hint{hint}
@@ -123,17 +97,16 @@ namespace rs::core
 
   TrackStore::Reader::Iterator::value_type TrackStore::Reader::Iterator::operator*() const
   {
-    auto&& [id, buffer] = *_hotIter;
+    auto&& [id, hotBuffer] = *_hotIter;
     auto trackId = TrackId{id};
-    auto hotView = TrackHotView{buffer};
 
-    std::optional<TrackColdView> coldView;
+    std::optional<std::span<std::byte const>> coldBuffer;
     if (_hint == ColdLoadHint::Eager && _coldIter) {
-      auto&& [coldId, coldBuffer] = **_coldIter;
-      coldView = TrackColdView{coldBuffer};
+      auto&& [coldId, coldBuf] = **_coldIter;
+      coldBuffer = coldBuf;
     }
 
-    return {trackId, TrackView{trackId, std::move(hotView), std::move(coldView), _coldLoader}};
+    return {trackId, TrackView{trackId, hotBuffer, coldBuffer, _coldLoader}};
   }
 
   // TrackStore::Writer implementation
@@ -144,7 +117,7 @@ namespace rs::core
   }
 
   // Hot/Cold split methods
-  std::pair<TrackId, TrackHotView> TrackStore::Writer::createHotCold(
+  std::pair<TrackId, TrackView> TrackStore::Writer::createHotCold(
       std::span<std::byte const> hotData,
       std::span<std::byte const> coldData)
   {
@@ -154,25 +127,25 @@ namespace rs::core
 
     auto [id, hotBuffer] = _hotWriter.append(hotData);
     [[maybe_unused]] auto [coldId, coldBuffer] = _coldWriter.append(coldData);
-    return {TrackId{id}, TrackHotView{hotData}};
+    return {TrackId{id}, TrackView{TrackId{id}, hotData, coldData, nullptr}};
   }
 
-  TrackHotView TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
+  TrackView TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
   {
     // Ensure size is multiple of 4 for LMDB
     assert((hotData.size() % 4 == 0) && "hotData size must be multiple of 4");
 
     [[maybe_unused]] auto buffer = _hotWriter.update(id.value(), hotData);
-    return TrackHotView{hotData};
+    return TrackView{id, hotData, std::nullopt, nullptr};
   }
 
-  TrackColdView TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
+  TrackView TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
   {
     // Ensure size is multiple of 4 for LMDB
     assert((coldData.size() % 4 == 0) && "coldData size must be multiple of 4");
 
     [[maybe_unused]] auto buffer = _coldWriter.update(id.value(), coldData);
-    return TrackColdView{coldData};
+    return TrackView{id, std::span<std::byte const>{}, coldData, nullptr};
   }
 
   bool TrackStore::Writer::delHotCold(TrackId id)
@@ -182,18 +155,22 @@ namespace rs::core
     return hotDeleted && coldDeleted;
   }
 
-  std::optional<TrackHotView> TrackStore::Writer::getHot(TrackId id) const
+  std::optional<TrackView> TrackStore::Writer::getHot(TrackId id) const
   {
     auto optBuffer = _hotWriter.get(id.value());
     if (!optBuffer || optBuffer->size() == 0) { return std::nullopt; }
-    return TrackHotView{*optBuffer};
+    return TrackView{id, *optBuffer, std::nullopt, nullptr};
   }
 
-  std::optional<TrackColdView> TrackStore::Writer::getCold(TrackId id) const
+  std::optional<TrackView> TrackStore::Writer::getCold(TrackId id) const
   {
-    auto optBuffer = _coldWriter.get(id.value());
-    if (!optBuffer || optBuffer->size() == 0) { return std::nullopt; }
-    return TrackColdView{*optBuffer};
+    auto optColdBuffer = _coldWriter.get(id.value());
+    if (!optColdBuffer || optColdBuffer->size() == 0) { return std::nullopt; }
+
+    auto optHotBuffer = _hotWriter.get(id.value());
+    if (!optHotBuffer || optHotBuffer->size() == 0) { return std::nullopt; }
+
+    return TrackView{id, *optHotBuffer, *optColdBuffer, nullptr};
   }
 
 } // namespace rs::core

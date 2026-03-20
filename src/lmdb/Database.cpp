@@ -167,7 +167,22 @@ namespace rs::lmdb
   {
   }
 
-  Writer::~Writer() = default;
+  Writer::~Writer()
+  {
+    // When transaction is committed, LMDB automatically closes all cursors - release without closing
+    if (_cursor)
+    {
+      if (_txn.isCommitted())
+      {
+        _cursor.release(); // LMDB already closed this cursor
+      }
+      else
+      {
+        auto* raw = _cursor.release();
+        mdb_cursor_close(raw);
+      }
+    }
+  }
 
   namespace
   {

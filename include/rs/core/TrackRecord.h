@@ -27,13 +27,12 @@ namespace rs::core
     TrackRecord() = default;
 
     /**
-     * Construct from hot and cold views by resolving dictionary IDs.
+     * Construct from unified TrackView by resolving dictionary IDs.
      *
-     * @param hotView The binary hot track view
-     * @param coldView The binary cold track view
+     * @param view The unified track view (hot required, cold may be lazy-loaded)
      * @param dict DictionaryStore to resolve artist/album/genre IDs
      */
-    TrackRecord(TrackHotView const& hotView, TrackColdView const& coldView, DictionaryStore const& dict);
+    TrackRecord(TrackView const& view, DictionaryStore const& dict);
 
     /**
      * Property - Audio file technical properties (@ prefix).

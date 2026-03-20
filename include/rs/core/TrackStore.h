@@ -48,59 +48,22 @@ namespace rs::core
   public:
     class Iterator;
 
-    /**
-     * HotProxy - Accessor for hot track data.
-     */
-    class HotProxy
-    {
-    public:
-      explicit HotProxy(Reader const& reader) : _reader(reader) {}
-
-      std::optional<TrackHotView> get(TrackId id) const;
-      Iterator begin(ColdLoadHint hint = ColdLoadHint::Lazy) const;
-      Iterator beginEager() const;
-      Iterator end() const;
-
-    private:
-      Reader const& _reader;
-    };
-
-    /**
-     * ColdProxy - Accessor for cold track data.
-     */
-    class ColdProxy
-    {
-    public:
-      explicit ColdProxy(Reader const& reader) : _reader(reader) {}
-
-      std::optional<TrackColdView> get(TrackId id) const;
-      Iterator begin() const;
-      Iterator end() const;
-
-    private:
-      Reader const& _reader;
-    };
-
     Iterator begin(ColdLoadHint hint = ColdLoadHint::Lazy) const;
     Iterator beginEager() const;
     Iterator end() const;
 
     /**
-     * Accessor for hot track data.
+     * Get a track by ID with lazy cold loading.
+     * @return TrackView or std::nullopt if not found
      */
-    HotProxy hot() const { return HotProxy{*this}; }
-
-    /**
-     * Accessor for cold track data.
-     */
-    ColdProxy cold() const { return ColdProxy{*this}; }
+    std::optional<TrackView> get(TrackId id) const;
 
   private:
     Reader(lmdb::Database::Reader&& hotReader, lmdb::Database::Reader&& coldReader);
 
     lmdb::Database::Reader _hotReader;
     lmdb::Database::Reader _coldReader;
-    std::function<std::optional<TrackColdView>(TrackId)> _coldLoader;
+    std::function<std::optional<std::span<std::byte const>>(TrackId)> _coldLoader;
     friend class TrackStore;
   };
 
@@ -129,15 +92,13 @@ namespace rs::core
     Iterator(lmdb::Database::Reader::Iterator&& hotIter,
              std::optional<lmdb::Database::Reader::Iterator> coldIter,
              ColdLoadHint hint,
-             std::function<std::optional<TrackColdView>(TrackId)> coldLoader);
+             std::function<std::optional<std::span<std::byte const>>(TrackId)> coldLoader);
 
     lmdb::Database::Reader::Iterator _hotIter;
     std::optional<lmdb::Database::Reader::Iterator> _coldIter;
     ColdLoadHint _hint = ColdLoadHint::Lazy;
-    std::function<std::optional<TrackColdView>(TrackId)> _coldLoader;
+    std::function<std::optional<std::span<std::byte const>>(TrackId)> _coldLoader;
     friend class Reader;
-    friend class HotProxy;
-    friend class ColdProxy;
   };
 
   /**
@@ -152,21 +113,21 @@ namespace rs::core
      * Create a new track with hot and cold data.
      * @param hotData TrackHotHeader + payload
      * @param coldData TrackColdHeader + custom KV + uri
-     * @return Pair of (track ID, TrackHotView pointing to stored hot data)
+     * @return Pair of (track ID, TrackView)
      */
-    std::pair<TrackId, TrackHotView> createHotCold(
+    std::pair<TrackId, TrackView> createHotCold(
         std::span<std::byte const> hotData,
         std::span<std::byte const> coldData);
 
     /**
      * Update hot track data.
      */
-    TrackHotView updateHot(TrackId id, std::span<std::byte const> hotData);
+    TrackView updateHot(TrackId id, std::span<std::byte const> hotData);
 
     /**
      * Update cold track data.
      */
-    TrackColdView updateCold(TrackId id, std::span<std::byte const> coldData);
+    TrackView updateCold(TrackId id, std::span<std::byte const> coldData);
 
     /**
      * Delete both hot and cold track data.
@@ -176,12 +137,12 @@ namespace rs::core
     /**
      * Get hot track by ID.
      */
-    std::optional<TrackHotView> getHot(TrackId id) const;
+    std::optional<TrackView> getHot(TrackId id) const;
 
     /**
      * Get cold track by ID.
      */
-    std::optional<TrackColdView> getCold(TrackId id) const;
+    std::optional<TrackView> getCold(TrackId id) const;
 
   private:
     explicit Writer(lmdb::Database::Writer&& hotWriter, lmdb::Database::Writer&& coldWriter);

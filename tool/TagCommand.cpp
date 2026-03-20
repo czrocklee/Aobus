@@ -21,15 +21,14 @@ namespace
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
 
-    auto optHotView = writer.getHot(trackId);
-    auto optColdView = writer.getCold(trackId);
-    if (!optHotView)
+    auto optTrackView = writer.getCold(trackId);
+    if (!optTrackView)
     {
       os << "error: track not found: " << trackId << std::endl;
       return;
     }
 
-    core::TrackRecord record(*optHotView, optColdView.value_or(core::TrackColdView{}), ml.dictionary());
+    core::TrackRecord record(*optTrackView, ml.dictionary());
 
     auto tagId = ml.dictionary().getId(tagName);
     bool tagExists = false;
@@ -68,15 +67,14 @@ namespace
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
 
-    auto optHotView = writer.getHot(trackId);
-    auto optColdView = writer.getCold(trackId);
-    if (!optHotView)
+    auto optTrackView = writer.getCold(trackId);
+    if (!optTrackView)
     {
       os << "error: track not found: " << trackId << std::endl;
       return;
     }
 
-    core::TrackRecord record(*optHotView, optColdView.value_or(core::TrackColdView{}), ml.dictionary());
+    core::TrackRecord record(*optTrackView, ml.dictionary());
 
     auto tagId = ml.dictionary().getId(tagName);
     if (tagId.value() == 0)
@@ -106,14 +104,14 @@ namespace
     auto txn = ml.readTransaction();
     auto reader = ml.tracks().reader(txn);
 
-    auto optHotView = reader.hot().get(trackId);
-    if (!optHotView)
+    auto optTrackView = reader.get(trackId);
+    if (!optTrackView)
     {
       os << "error: track not found: " << trackId << std::endl;
       return;
     }
 
-    core::TrackRecord record(*optHotView, core::TrackColdView{}, ml.dictionary());
+    core::TrackRecord record(*optTrackView, ml.dictionary());
 
     if (record.tags.ids.empty())
     {

@@ -66,32 +66,12 @@ namespace
       switch (plan.accessProfile)
       {
         case rs::expr::AccessProfile::HotOnly:
-        {
-          for (auto [id, view] : reader)
-          {
-            if (evaluator.matches(plan, view.hot()))
-            {
-              matches.emplace_back(std::move(view));
-            }
-          }
-          break;
-        }
         case rs::expr::AccessProfile::ColdOnly:
-        {
-          for (auto [id, view] : reader)
-          {
-            if (evaluator.matches(plan, view.cold()))
-            {
-              matches.emplace_back(std::move(view));
-            }
-          }
-          break;
-        }
         case rs::expr::AccessProfile::HotAndCold:
         {
           for (auto [id, view] : reader)
           {
-            if (evaluator.matches(plan, view.hot(), view.cold()))
+            if (evaluator.matches(plan, view))
             {
               matches.emplace_back(std::move(view));
             }
@@ -120,16 +100,15 @@ namespace
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& view = matches[i];
-        auto const& hot = view.hot();
         os << "  {\"id\": " << view.id()
-           << ", \"title\": \"" << hot.metadata().title() << "\"";
-        if (hot.metadata().artistId() > 0)
+           << ", \"title\": \"" << view.metadata().title() << "\"";
+        if (view.metadata().artistId() > 0)
         {
-          os << ", \"artist\": \"" << ml.dictionary().get(hot.metadata().artistId()) << "\"";
+          os << ", \"artist\": \"" << ml.dictionary().get(view.metadata().artistId()) << "\"";
         }
-        if (hot.metadata().albumId() > 0)
+        if (view.metadata().albumId() > 0)
         {
-          os << ", \"album\": \"" << ml.dictionary().get(hot.metadata().albumId()) << "\"";
+          os << ", \"album\": \"" << ml.dictionary().get(view.metadata().albumId()) << "\"";
         }
         os << "}";
         if (i < end - 1) os << ",";
@@ -142,7 +121,7 @@ namespace
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& view = matches[i];
-        os << std::setw(5) << view.id() << " " << view.hot().metadata().title() << std::endl;
+        os << std::setw(5) << view.id() << " " << view.metadata().title() << std::endl;
       }
       if (limit > 0 && offset + limit < matches.size())
       {

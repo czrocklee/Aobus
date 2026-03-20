@@ -10,29 +10,29 @@ namespace rs::core
   // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
   constexpr std::uint32_t kBloomBitMask = 31;
 
-  TrackRecord::TrackRecord(TrackHotView const& hotView, TrackColdView const& coldView, DictionaryStore const& dict)
+  TrackRecord::TrackRecord(TrackView const& view, DictionaryStore const& dict)
   {
-    if (!hotView.isValid()) { return; }
+    if (!view.isHotValid()) { return; }
 
-    // Copy hot property fields
-    auto prop = hotView.property();
+    // Copy property fields from unified proxy
+    auto prop = view.property();
     property.codecId = prop.codecId();
     property.bitDepth = prop.bitDepth();
     property.rating = prop.rating();
+    property.fileSize = prop.fileSize();
+    property.mtime = prop.mtime();
+    property.durationMs = prop.durationMs();
+    property.sampleRate = prop.sampleRate();
+    property.bitrate = prop.bitrate();
+    property.channels = prop.channels();
 
-    // Copy cold property fields
-    auto coldProp = coldView.property();
-    property.fileSize = coldProp.fileSize();
-    property.mtime = coldProp.mtime();
-    property.durationMs = coldProp.durationMs();
-    property.sampleRate = coldProp.sampleRate();
-    property.bitrate = coldProp.bitrate();
-    property.channels = coldProp.channels();
-
-    // Get hot metadata strings
-    auto meta = hotView.metadata();
+    // Get metadata from unified proxy
+    auto meta = view.metadata();
     metadata.title = std::string{meta.title()};
     metadata.year = meta.year();
+
+    // Get uri from property proxy
+    metadata.uri = std::string{view.property().uri()};
 
     // Resolve dictionary IDs to strings
     if (meta.artistId() > 0) { metadata.artist = std::string{dict.get(meta.artistId())}; }
@@ -40,8 +40,8 @@ namespace rs::core
     if (meta.albumArtistId() > 0) { metadata.albumArtist = std::string{dict.get(meta.albumArtistId())}; }
     if (meta.genreId() > 0) { metadata.genre = std::string{dict.get(meta.genreId())}; }
 
-    // Deserialize tag IDs from hot payload
-    auto tagProxy = hotView.tags();
+    // Get tag IDs from hot payload
+    auto tagProxy = view.tags();
     auto tagCount = tagProxy.count();
     for (std::uint8_t i = 0; i < tagCount; ++i)
     {
@@ -49,18 +49,19 @@ namespace rs::core
       tags.ids.push_back(tagId);
     }
 
-    // Copy cold fields
-    cold.uri = std::string{coldView.uri()};
-    cold.fileSize = coldView.fileSize();
-    cold.mtime = coldView.mtime();
-    cold.coverArtId = coldView.coverArtId();
-    cold.trackNumber = coldView.trackNumber();
-    cold.totalTracks = coldView.totalTracks();
-    cold.discNumber = coldView.discNumber();
-    cold.totalDiscs = coldView.totalDiscs();
+    // Copy cold fields via cold proxy
+    auto coldProxy = view.cold();
+    cold.uri = std::string{coldProxy.uri()};
+    cold.fileSize = coldProxy.fileSize();
+    cold.mtime = coldProxy.mtime();
+    cold.coverArtId = coldProxy.coverArtId();
+    cold.trackNumber = coldProxy.trackNumber();
+    cold.totalTracks = coldProxy.totalTracks();
+    cold.discNumber = coldProxy.discNumber();
+    cold.totalDiscs = coldProxy.totalDiscs();
 
     // Load custom meta from cold view
-    customMeta = coldView.customMeta();
+    customMeta = view.custom().all();
   }
 
   TrackHotHeader TrackRecord::hotHeader() const

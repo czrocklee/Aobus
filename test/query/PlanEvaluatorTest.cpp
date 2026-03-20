@@ -24,7 +24,7 @@ namespace
 
   using rs::core::DictionaryId;
 
-  // Helper class to hold both the serialized data and the TrackHotView
+  // Helper class to hold both the serialized data and create TrackView
   // This ensures the data stays valid while the view is in use
   class TestTrack
   {
@@ -61,14 +61,13 @@ namespace
 
       // Serialize hot data to get proper binary layout
       _hotData = _record.serializeHot();
-      _hotView = rs::core::TrackHotView{std::span<std::byte const>{_hotData.data(), _hotData.size()}};
 
       // Serialize cold data
       _coldData = _record.serializeCold();
-      _coldView = rs::core::TrackColdView{std::span<std::byte const>{_coldData.data(), _coldData.size()}};
 
       // Fix up the header with IDs and other fields
-      auto* header = const_cast<rs::core::TrackHotHeader*>(_hotView.header());
+      // Note: we serialize then modify, so const_cast is safe
+      auto* header = const_cast<rs::core::TrackHotHeader*>(rs::utility::as<rs::core::TrackHotHeader>(std::span<std::byte const>{_hotData}));
       header->artistId = DictionaryId{artistId};
       header->albumId = DictionaryId{albumId};
       header->genreId = DictionaryId{genreId};
@@ -77,15 +76,23 @@ namespace
       header->rating = 0;
     }
 
-    rs::core::TrackHotView const& hotView() const { return _hotView; }
-    rs::core::TrackColdView const& coldView() const { return _coldView; }
-
     // Returns TrackView with both hot and cold data
     rs::core::TrackView view() const {
       return rs::core::TrackView{
         rs::core::TrackId{0},  // dummy ID for tests
-        _hotView,
-        _coldView
+        std::span<std::byte const>{_hotData.data(), _hotData.size()},
+        std::span<std::byte const>{_coldData.data(), _coldData.size()},
+        nullptr
+      };
+    }
+
+    // Returns TrackView with hot data only (for invalid cold tests)
+    rs::core::TrackView hotOnlyView() const {
+      return rs::core::TrackView{
+        rs::core::TrackId{0},
+        std::span<std::byte const>{_hotData.data(), _hotData.size()},
+        std::nullopt,
+        nullptr
       };
     }
 
@@ -93,8 +100,6 @@ namespace
     rs::core::TrackRecord _record;
     std::vector<std::byte> _hotData;
     std::vector<std::byte> _coldData;
-    rs::core::TrackHotView _hotView;
-    rs::core::TrackColdView _coldView;
   };
 
 } // namespace
@@ -382,7 +387,8 @@ TEST_CASE("PlanEvaluator - Invalid Track View")
   auto plan = compiler.compile(expr);
   PlanEvaluator evaluator;
 
-  rs::core::TrackHotView emptyView;
+  // Empty hot data creates an invalid TrackView
+  rs::core::TrackView emptyView{rs::core::TrackId{0}, std::span<std::byte const>{}, std::nullopt, nullptr};
   auto result = evaluator.evaluateFull(plan, emptyView);
   CHECK(result == false);
 }
@@ -605,7 +611,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  rs::core::TrackHotView view(std::as_bytes(std::span{data}));
+  rs::core::TrackView view(rs::core::TrackId{0}, std::span<std::byte const>{data.data(), data.size()}, std::nullopt, nullptr);
 
   // Bloom filter rejects because query mask doesn't match track bloom
   auto result = evaluator.matches(plan, view);
@@ -630,7 +636,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  rs::core::TrackHotView view(std::as_bytes(std::span{data}));
+  rs::core::TrackView view(rs::core::TrackId{0}, std::span<std::byte const>{data.data(), data.size()}, std::nullopt, nullptr);
 
   // With mask 0, bloom check passes (no filtering), falls through to full eval
   auto result = evaluator.matches(plan, view);

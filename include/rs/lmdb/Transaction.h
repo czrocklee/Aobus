@@ -46,5 +46,12 @@ namespace rs::lmdb
     WriteTransaction& operator=(WriteTransaction&&) = default;
 
     void commit();
+
+    // Check if transaction was committed (cursors are now invalid)
+    bool isCommitted() const { return _cursorClosed; }
+
+  private:
+    bool _cursorClosed = false;
+    friend class Database;
   };
 }

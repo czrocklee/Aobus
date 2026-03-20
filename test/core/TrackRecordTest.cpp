@@ -10,10 +10,10 @@
 
 using rs::core::DictionaryId;
 using rs::core::TrackColdHeader;
-using rs::core::TrackColdView;
 using rs::core::TrackHotHeader;
-using rs::core::TrackHotView;
+using rs::core::TrackId;
 using rs::core::TrackRecord;
+using rs::core::TrackView;
 
 TEST_CASE("TrackRecord - Default Constructor")
 {
@@ -293,14 +293,14 @@ TEST_CASE("TrackRecord - serializeCold")
   auto data = record.serializeCold();
 
   // Verify cold view can parse it
-  TrackColdView view(std::as_bytes(std::span{data}));
-  CHECK(view.isValid());
-  CHECK(view.fileSize() == 2000);
-  CHECK(view.mtime() == 9876543210);
-  CHECK(view.trackNumber() == 3);
+  TrackView view{TrackId{0}, std::span<std::byte const>{}, data, nullptr};
+  CHECK(view.isColdLoaded() == true);
+  CHECK(view.cold().fileSize() == 2000);
+  CHECK(view.cold().mtime() == 9876543210);
+  CHECK(view.cold().trackNumber() == 3);
 
   // Verify custom meta
-  auto meta = view.customMeta();
+  auto meta = view.custom().all();
   CHECK(meta.size() == 2);
   CHECK(meta[0].first == "key1");
   CHECK(meta[0].second == "value1");

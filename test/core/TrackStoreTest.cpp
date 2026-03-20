@@ -14,10 +14,9 @@
 #include <vector>
 
 using rs::core::TrackColdHeader;
-using rs::core::TrackColdView;
 using rs::core::TrackHotHeader;
-using rs::core::TrackHotView;
 using rs::core::TrackStore;
+using rs::core::TrackView;
 using rs::lmdb::Database;
 using rs::lmdb::Environment;
 using rs::lmdb::ReadTransaction;
@@ -77,7 +76,7 @@ TEST_CASE("TrackStore - read by id", "[core][track]")
 
   // Read by ID
   ReadTransaction rtxn(env);
-  auto optFound = store.reader(rtxn).hot().get(id);
+  auto optFound = store.reader(rtxn).get(id);
   REQUIRE(optFound.has_value());
 }
 
@@ -210,19 +209,15 @@ TEST_CASE("TrackStore - hot/cold createHotCold", "[core][track]")
   REQUIRE(id.value() >= 0);
   wtxn2.commit();
 
-  // Verify hot data
+  // Verify hot and cold data
   ReadTransaction rtxn(env);
-  auto hotOpt = store.reader(rtxn).hot().get(id);
-  REQUIRE(hotOpt.has_value());
-
-  // Verify cold data
-  auto coldOpt = store.reader(rtxn).cold().get(id);
-  REQUIRE(coldOpt.has_value());
-  REQUIRE(coldOpt->fileSize() == 1000);
-  REQUIRE(coldOpt->mtime() == 1234567890);
-  REQUIRE(coldOpt->durationMs() == 180000);
-  REQUIRE(coldOpt->trackNumber() == 1);
-  REQUIRE(coldOpt->totalTracks() == 10);
+  auto trackOpt = store.reader(rtxn).get(id);
+  REQUIRE(trackOpt.has_value());
+  REQUIRE(trackOpt->cold().fileSize() == 1000);
+  REQUIRE(trackOpt->cold().mtime() == 1234567890);
+  REQUIRE(trackOpt->cold().durationMs() == 180000);
+  REQUIRE(trackOpt->cold().trackNumber() == 1);
+  REQUIRE(trackOpt->cold().totalTracks() == 10);
 }
 
 TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
@@ -278,21 +273,20 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
 
   WriteTransaction wtxn4(env);
   auto updatedCold = store.writer(wtxn4).updateCold(id, coldData2);
-  REQUIRE(updatedCold.fileSize() == 2000);
-  REQUIRE(updatedCold.mtime() == 9876543210);
-  REQUIRE(updatedCold.durationMs() == 200000);
-  REQUIRE(updatedCold.trackNumber() == 2);
+  REQUIRE(updatedCold.cold().fileSize() == 2000);
+  REQUIRE(updatedCold.cold().mtime() == 9876543210);
+  REQUIRE(updatedCold.cold().durationMs() == 200000);
+  REQUIRE(updatedCold.cold().trackNumber() == 2);
   wtxn4.commit();
 
   // Verify both persisted
   ReadTransaction rtxn(env);
-  auto hotOpt = store.reader(rtxn).hot().get(id);
-
-  auto coldOpt = store.reader(rtxn).cold().get(id);
-  REQUIRE(coldOpt->fileSize() == 2000);
-  REQUIRE(coldOpt->mtime() == 9876543210);
-  REQUIRE(coldOpt->durationMs() == 200000);
-  REQUIRE(coldOpt->trackNumber() == 2);
+  auto trackOpt = store.reader(rtxn).get(id);
+  REQUIRE(trackOpt.has_value());
+  REQUIRE(trackOpt->cold().fileSize() == 2000);
+  REQUIRE(trackOpt->cold().mtime() == 9876543210);
+  REQUIRE(trackOpt->cold().durationMs() == 200000);
+  REQUIRE(trackOpt->cold().trackNumber() == 2);
 }
 
 TEST_CASE("TrackStore - hot/cold delHotCold", "[core][track]")
@@ -325,11 +319,8 @@ TEST_CASE("TrackStore - hot/cold delHotCold", "[core][track]")
 
   // Verify both are gone
   ReadTransaction rtxn(env);
-  auto hotOpt = store.reader(rtxn).hot().get(id);
-  REQUIRE(!hotOpt.has_value());
-
-  auto coldOpt = store.reader(rtxn).cold().get(id);
-  REQUIRE(!coldOpt.has_value());
+  auto trackOpt = store.reader(rtxn).get(id);
+  REQUIRE(!trackOpt.has_value());
 }
 
 TEST_CASE("TrackStore - hot/cold Writer getHot and getCold", "[core][track]")
@@ -368,12 +359,12 @@ TEST_CASE("TrackStore - hot/cold Writer getHot and getCold", "[core][track]")
 
   auto coldOpt = writer.getCold(id);
   REQUIRE(coldOpt.has_value());
-  REQUIRE(coldOpt->fileSize() == 3000);
-  REQUIRE(coldOpt->durationMs() == 240000);
-  REQUIRE(coldOpt->coverArtId() == 42);
+  REQUIRE(coldOpt->cold().fileSize() == 3000);
+  REQUIRE(coldOpt->cold().durationMs() == 240000);
+  REQUIRE(coldOpt->cold().coverArtId() == 42);
 }
 
-TEST_CASE("TrackStore - hot/cold proxy iteration", "[core][track]")
+TEST_CASE("TrackStore - unified TrackView iteration", "[core][track]")
 {
   TempDir temp;
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -398,11 +389,11 @@ TEST_CASE("TrackStore - hot/cold proxy iteration", "[core][track]")
     wtxn2.commit();
   }
 
-  // Iterate via hot proxy
+  // Iterate via unified TrackView
   ReadTransaction rtxn(env);
   auto reader = store.reader(rtxn);
   int count = 0;
-  for (auto it = reader.hot().begin(); it != reader.hot().end(); ++it) {
+  for (auto it = reader.begin(); it != reader.end(); ++it) {
     ++count;
   }
   REQUIRE(count == 3);

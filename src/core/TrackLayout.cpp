@@ -9,8 +9,145 @@
 namespace rs::core
 {
 
-  // TrackHotView::HotTagProxy implementation
-  std::vector<DictionaryId> TrackHotView::HotTagProxy::ids() const
+  // TrackView member implementations
+  std::string_view TrackView::hotTitle() const
+  {
+    return hotGetString(hotHeader()->titleOffset, hotHeader()->titleLen);
+  }
+
+  std::uint32_t TrackView::hotTagId(std::uint8_t index) const
+  {
+    auto* hdr = hotHeader();
+    if (!hdr || index >= hdr->tagCount) {
+      return 0;
+    }
+    auto offset = sizeof(TrackHotHeader) + hdr->tagsOffset + index * sizeof(std::uint32_t);
+    if (_hotData.size() < offset + sizeof(std::uint32_t)) {
+      return 0;
+    }
+    return *utility::as<std::uint32_t>(hdr, offset);
+  }
+
+  std::string_view TrackView::hotGetString(std::uint16_t offset, std::uint16_t len) const
+  {
+    if (len == 0) { return {}; }
+    std::size_t const start = sizeof(TrackHotHeader) + offset;
+    if (start + len > _hotData.size()) {
+      return {};
+    }
+    return {utility::as<char>(_hotData.data(), start), len};
+  }
+
+  std::string_view TrackView::coldUri() const
+  {
+    auto* hdr = coldHeader();
+    if (!hdr) { return {}; }
+    return coldGetString(hdr->uriOffset, hdr->uriLen);
+  }
+
+  std::uint64_t TrackView::coldFileSize() const noexcept
+  {
+    auto* hdr = coldHeader();
+    if (!hdr) { return 0; }
+    return utility::combineInt64(hdr->fileSizeLo, hdr->fileSizeHi);
+  }
+
+  std::uint64_t TrackView::coldMtime() const noexcept
+  {
+    auto* hdr = coldHeader();
+    if (!hdr) { return 0; }
+    return utility::combineInt64(hdr->mtimeLo, hdr->mtimeHi);
+  }
+
+  std::string_view TrackView::coldGetString(std::uint16_t offset, std::uint16_t len) const
+  {
+    if (!_coldData || len == 0 || offset + len > _coldData->size()) {
+      return {};
+    }
+    auto const* data = _coldData->data();
+    return std::string_view{reinterpret_cast<char const*>(data + offset), len};
+  }
+
+  std::vector<std::pair<std::string, std::string>> TrackView::coldCustomMeta() const
+  {
+    std::vector<std::pair<std::string, std::string>> result;
+    auto* hdr = coldHeader();
+    if (!_coldData || !hdr || _coldData->size() < sizeof(TrackColdHeader)) {
+      return result;
+    }
+
+    std::size_t offset = sizeof(TrackColdHeader);
+    if (offset + sizeof(std::uint16_t) > _coldData->size()) {
+      return result;
+    }
+    std::uint16_t pairCount = 0;
+    std::memcpy(&pairCount, reinterpret_cast<std::byte const*>(hdr) + offset, sizeof(pairCount));
+    offset += sizeof(pairCount);
+
+    result.reserve(pairCount);
+    auto const* data = _coldData->data();
+
+    for (std::uint16_t i = 0; i < pairCount && offset < _coldData->size(); ++i) {
+      if (offset + sizeof(std::uint16_t) * 2 > _coldData->size()) break;
+      std::uint16_t keyLen = 0, valueLen = 0;
+      std::memcpy(&keyLen, data + offset, sizeof(keyLen));
+      offset += sizeof(keyLen);
+      std::memcpy(&valueLen, data + offset, sizeof(valueLen));
+      offset += sizeof(valueLen);
+
+      if (offset + keyLen > _coldData->size()) break;
+      std::string key(reinterpret_cast<char const*>(data + offset), keyLen);
+      offset += keyLen;
+
+      if (offset + valueLen > _coldData->size()) break;
+      std::string value(reinterpret_cast<char const*>(data + offset), valueLen);
+      offset += valueLen;
+
+      result.emplace_back(std::move(key), std::move(value));
+    }
+    return result;
+  }
+
+  std::optional<std::string> TrackView::coldCustomValue(std::string_view key) const
+  {
+    auto* hdr = coldHeader();
+    if (!_coldData || !hdr || _coldData->size() < sizeof(TrackColdHeader)) {
+      return std::nullopt;
+    }
+
+    std::size_t offset = sizeof(TrackColdHeader);
+    if (offset + sizeof(std::uint16_t) > _coldData->size()) {
+      return std::nullopt;
+    }
+    std::uint16_t pairCount = 0;
+    std::memcpy(&pairCount, reinterpret_cast<std::byte const*>(hdr) + offset, sizeof(pairCount));
+    offset += sizeof(pairCount);
+    auto const* data = _coldData->data();
+
+    for (std::uint16_t i = 0; i < pairCount && offset < _coldData->size(); ++i) {
+      if (offset + sizeof(std::uint16_t) * 2 > _coldData->size()) break;
+      std::uint16_t keyLen = 0, valueLen = 0;
+      std::memcpy(&keyLen, data + offset, sizeof(keyLen));
+      offset += sizeof(keyLen);
+      std::memcpy(&valueLen, data + offset, sizeof(valueLen));
+      offset += sizeof(valueLen);
+
+      if (offset + keyLen > _coldData->size()) break;
+      std::string_view currentKey(reinterpret_cast<char const*>(data + offset), keyLen);
+      offset += keyLen;
+
+      if (currentKey == key) {
+        if (offset + valueLen > _coldData->size()) break;
+        std::string value(reinterpret_cast<char const*>(data + offset), valueLen);
+        return value;
+      }
+      offset += valueLen;
+    }
+    return std::nullopt;
+  }
+
+  // TrackView proxy implementations
+  std::vector<DictionaryId> TrackView::TagProxy::ids() const
   {
     std::vector<DictionaryId> result;
     auto c = count();
@@ -25,7 +162,7 @@ namespace rs::core
     return result;
   }
 
-  bool TrackHotView::HotTagProxy::has(DictionaryId tagIdToCheck) const
+  bool TrackView::TagProxy::has(DictionaryId tagIdToCheck) const
   {
     auto c = count();
     for (std::uint8_t i = 0; i < c; ++i)
@@ -38,144 +175,14 @@ namespace rs::core
     return false;
   }
 
-  std::string_view TrackHotView::getString(std::uint16_t offset, std::uint16_t len) const
+  std::vector<std::pair<std::string, std::string>> TrackView::CustomProxy::all() const
   {
-    if (len == 0) { return {}; };
-
-    std::size_t const start = sizeof(TrackHotHeader) + offset;
-    if (start + len > _size)
-    {
-      return {};
-    }
-
-    return {utility::as<char>(_header, start), len};
+    return _track.coldCustomMeta();
   }
 
-  std::uint32_t TrackHotView::tagId(std::uint8_t index) const
+  std::optional<std::string> TrackView::CustomProxy::get(std::string_view key) const
   {
-    if (index >= _header->tagCount)
-    {
-      return 0;
-    }
-    auto offset = sizeof(TrackHotHeader) + _header->tagsOffset + index * sizeof(std::uint32_t);
-    if (offset + sizeof(std::uint32_t) > _size)
-    {
-      return 0;
-    }
-    return *utility::as<std::uint32_t>(_header, offset);
-  }
-
-  // TrackColdView implementation
-  std::string_view TrackColdView::uri() const
-  {
-    return getString(_header->uriOffset, _header->uriLen);
-  }
-
-  std::string_view TrackColdView::getString(std::uint16_t offset, std::uint16_t len) const
-  {
-    if (len == 0 || offset + len > _size) {
-      return {};
-    }
-    auto const* data = reinterpret_cast<std::byte const*>(_header);
-    return std::string_view{reinterpret_cast<char const*>(data + offset), len};
-  }
-
-  std::vector<std::pair<std::string, std::string>> TrackColdView::customMeta() const
-  {
-    std::vector<std::pair<std::string, std::string>> result;
-
-    if (isNull() || _size < sizeof(TrackColdHeader)) {
-      return result;
-    }
-
-    // Custom meta starts right after the fixed header
-    std::size_t offset = sizeof(TrackColdHeader);
-
-    // Read customPairCount
-    if (offset + sizeof(std::uint16_t) > _size) {
-      return result;
-    }
-    std::uint16_t pairCount = 0;
-    std::memcpy(&pairCount, reinterpret_cast<std::byte const*>(_header) + offset, sizeof(pairCount));
-    offset += sizeof(pairCount);
-
-    result.reserve(pairCount);
-
-    for (std::uint16_t i = 0; i < pairCount && offset < _size; ++i) {
-      // Read keyLen
-      if (offset + sizeof(std::uint16_t) > _size) break;
-      std::uint16_t keyLen = 0;
-      std::memcpy(&keyLen, reinterpret_cast<std::byte const*>(_header) + offset, sizeof(keyLen));
-      offset += sizeof(keyLen);
-
-      // Read valueLen
-      if (offset + sizeof(std::uint16_t) > _size) break;
-      std::uint16_t valueLen = 0;
-      std::memcpy(&valueLen, reinterpret_cast<std::byte const*>(_header) + offset, sizeof(valueLen));
-      offset += sizeof(valueLen);
-
-      // Read key bytes
-      if (offset + keyLen > _size) break;
-      std::string key(reinterpret_cast<char const*>(reinterpret_cast<std::byte const*>(_header) + offset), keyLen);
-      offset += keyLen;
-
-      // Read value bytes
-      if (offset + valueLen > _size) break;
-      std::string value(reinterpret_cast<char const*>(reinterpret_cast<std::byte const*>(_header) + offset), valueLen);
-      offset += valueLen;
-
-      result.emplace_back(std::move(key), std::move(value));
-    }
-
-    return result;
-  }
-
-  std::optional<std::string> TrackColdView::customValue(std::string_view key) const
-  {
-    if (isNull() || _size < sizeof(TrackColdHeader)) {
-      return std::nullopt;
-    }
-
-    std::size_t offset = sizeof(TrackColdHeader);
-
-    // Read customPairCount
-    if (offset + sizeof(std::uint16_t) > _size) {
-      return std::nullopt;
-    }
-    std::uint16_t pairCount = 0;
-    std::memcpy(&pairCount, reinterpret_cast<std::byte const*>(_header) + offset, sizeof(pairCount));
-    offset += sizeof(pairCount);
-
-    for (std::uint16_t i = 0; i < pairCount && offset < _size; ++i) {
-      // Read keyLen
-      if (offset + sizeof(std::uint16_t) > _size) break;
-      std::uint16_t keyLen = 0;
-      std::memcpy(&keyLen, reinterpret_cast<std::byte const*>(_header) + offset, sizeof(keyLen));
-      offset += sizeof(keyLen);
-
-      // Read valueLen
-      if (offset + sizeof(std::uint16_t) > _size) break;
-      std::uint16_t valueLen = 0;
-      std::memcpy(&valueLen, reinterpret_cast<std::byte const*>(_header) + offset, sizeof(valueLen));
-      offset += sizeof(valueLen);
-
-      // Read and compare key
-      if (offset + keyLen > _size) break;
-      std::string_view currentKey(reinterpret_cast<char const*>(reinterpret_cast<std::byte const*>(_header) + offset), keyLen);
-      offset += keyLen;
-
-      if (currentKey == key) {
-        // Read value
-        if (offset + valueLen > _size) break;
-        std::string value(reinterpret_cast<char const*>(reinterpret_cast<std::byte const*>(_header) + offset), valueLen);
-        return value;
-      }
-
-      // Skip value
-      offset += valueLen;
-    }
-
-    return std::nullopt;
+    return _track.coldCustomValue(key);
   }
 
   std::vector<std::byte> encodeColdData(

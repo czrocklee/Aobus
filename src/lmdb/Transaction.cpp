@@ -33,5 +33,6 @@ namespace rs::lmdb
   {
     throwOnError("mdb_txn_commit", mdb_txn_commit(_handle.get()));
     _handle.release(); // Prevent destructor from committing/aborting
+    _cursorClosed = true;
   }
 }
