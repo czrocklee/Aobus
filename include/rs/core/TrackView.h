@@ -4,6 +4,8 @@
 #pragma once
 
 #include <rs/Exception.h>
+
+#include <boost/iterator/iterator_facade.hpp>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/Type.h>
 
@@ -24,8 +26,8 @@ namespace rs::core
    */
   enum class ColdLoadHint
   {
-    Lazy,  // Don't load cold data, load on demand
-    Eager  // Load cold data immediately
+    Lazy, // Don't load cold data, load on demand
+    Eager // Load cold data immediately
   };
 
   /**
@@ -111,7 +113,7 @@ namespace rs::core
     public:
       explicit TagProxy(TrackView const& track) : _track(track) {}
 
-      std::uint8_t count() const noexcept { return _track.hotHeader()->tagCount; }
+      std::uint8_t count() const noexcept { return _track.hotHeader()->tagLen / sizeof(DictionaryId); }
       std::uint32_t bloom() const noexcept { return _track.hotHeader()->tagBloom; }
       DictionaryId id(std::uint8_t index) const { return DictionaryId{_track.hotTagId(index)}; }
       std::vector<DictionaryId> ids() const;
@@ -129,10 +131,45 @@ namespace rs::core
     public:
       explicit CustomProxy(TrackView const& track) : _track(track) {}
 
-      std::vector<std::pair<std::string, std::string>> all() const;
+      /**
+       * Iterator - Input iterator over custom key-value pairs.
+       * Yields std::pair<std::string_view, std::string_view> referencing the cold data buffer.
+       */
+      class Iterator : public boost::iterator_facade<
+          Iterator,
+          std::pair<std::string_view, std::string_view>,
+          boost::single_pass_traversal_tag,
+          std::pair<std::string_view, std::string_view>>
+      {
+      public:
+        Iterator() : _currentPos(nullptr), _nextPos(nullptr), _end(nullptr) {}
+        Iterator(std::byte const* data, std::byte const* end);
+
+      private:
+        friend class boost::iterator_core_access;
+
+        std::pair<std::string_view, std::string_view> dereference() const;
+        void increment();
+        bool equal(Iterator const& other) const;
+        bool loadCurrent();
+        static bool decodeEntry(std::byte const* ptr,
+                                std::byte const* end,
+                                std::pair<std::string_view, std::string_view>& out,
+                                std::byte const*& next);
+
+        std::byte const* _currentPos;
+        std::byte const* _nextPos;
+        std::byte const* _end;
+        std::pair<std::string_view, std::string_view> _current;
+      };
+
       std::optional<std::string> get(std::string_view key) const;
 
+      Iterator begin() const;
+      Iterator end() const;
+
     private:
+      std::optional<std::pair<std::byte const*, std::byte const*>> customRange() const;
       TrackView const& _track;
     };
 
@@ -153,7 +190,8 @@ namespace rs::core
       , _coldData(coldData)
       , _coldLoaded(coldData.has_value())
       , _coldLoader(std::move(coldLoader))
-    {}
+    {
+    }
 
     // TrackView is movable
     TrackView(TrackView&&) = default;
@@ -165,9 +203,7 @@ namespace rs::core
     TrackId id() const { return _id; }
 
     // Validity checks
-    bool isHotValid() const noexcept {
-      return _hotData.data() != nullptr && _hotData.size() >= sizeof(TrackHotHeader);
-    }
+    bool isHotValid() const noexcept { return _hotData.data() != nullptr && _hotData.size() >= sizeof(TrackHotHeader); }
 
     // Check if cold data is available (loaded or loader exists)
     bool hasCold() const { return _coldData.has_value() || _coldLoader != nullptr; }
@@ -182,22 +218,21 @@ namespace rs::core
     CustomProxy custom() const { return CustomProxy{*this}; }
 
     // Direct header access (hot always available)
-    TrackHotHeader const* hotHeader() const {
-      return utility::as<TrackHotHeader>(_hotData);
-    }
+    TrackHotHeader const* hotHeader() const { return utility::as<TrackHotHeader>(_hotData); }
 
     // Cold header access (triggers lazy load)
-    TrackColdHeader const* coldHeader() const {
+    TrackColdHeader const* coldHeader() const
+    {
       ensureColdLoaded();
-      if (!_coldData || _coldData->size() < sizeof(TrackColdHeader)) {
-        return nullptr;
-      }
+      if (!_coldData || _coldData->size() < sizeof(TrackColdHeader)) { return nullptr; }
       return utility::as<TrackColdHeader>(*_coldData);
     }
 
   private:
-    void ensureColdLoaded() const {
-      if (!_coldLoaded && _coldLoader) {
+    void ensureColdLoaded() const
+    {
+      if (!_coldLoaded && _coldLoader)
+      {
         _coldData = _coldLoader(_id);
         _coldLoaded = true;
       }
@@ -210,8 +245,6 @@ namespace rs::core
     std::uint64_t coldFileSize() const noexcept;
     std::uint64_t coldMtime() const noexcept;
     std::string_view coldGetString(std::uint16_t offset, std::uint16_t len) const;
-    std::vector<std::pair<std::string, std::string>> coldCustomMeta() const;
-    std::optional<std::string> coldCustomValue(std::string_view key) const;
 
     TrackId _id;
     std::span<std::byte const> _hotData;

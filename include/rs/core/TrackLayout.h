@@ -20,54 +20,53 @@ namespace rs::core
    * Hot fields are used for fast filtering/sorting operations.
    *
    * Layout uses strictly descending member sizes (4→2→1) for natural alignment.
-   * Total size: 36 bytes with 4-byte alignment.
+   * Total size: 32 bytes with 4-byte alignment.
    *
-   * Byte layout:
-   *   [0-3]    tagBloom (4)
-   *   [4-7]    artistId (4)
-   *   [8-11]   albumId (4)
-   *   [12-15]  genreId (4)
-   *   [16-19]  albumArtistId (4)
-   *   [20-21]  year (2)
-   *   [22-23]  codecId (2)
-   *   [24-25]  bitDepth (2)
-   *   [26-27]  titleOffset (2)
-   *   [28-29]  titleLen (2)
-   *   [30-31]  tagsOffset (2)
-   *   [32]     rating (1)
-   *   [33]     tagCount (1)
-   *   [34-35]  padding (2)
+   * Layout:
+   *   ┌─────────────────────────────────────┐  ← hot data begin
+   *   │        TrackHotHeader (32B)         │
+   *   │  tagBloom, artistId, albumId,       │
+   *   │  genreId, albumArtistId             │
+   *   │  year, codecId, bitDepth            │
+   *   │  titleLen, tagLen, rating           │
+   *   │  padding                            │
+   *   ├─────────────────────────────────────┤  ← tags begin = header + sizeof(header)
+   *   │  tag ID 1 (4B)                      │
+   *   │  tag ID 2 (4B)                      │
+   *   │  ... (tagLen bytes total)           │
+   *   ├─────────────────────────────────────┤  ← title begin = tags begin + tagLen
+   *   │  title... (titleLen bytes)          │
+   *   │  '\0'                               │
+   *   └─────────────────────────────────────┘  ← hot data end
    */
   struct TrackHotHeader final
   {
     // 4-byte section
-    std::uint32_t tagBloom; // Bloom filter for tags (32-bit)
+    std::uint32_t tagBloom;     // Bloom filter for tags (32-bit)
     DictionaryId artistId;      // Dictionary ID for artist
     DictionaryId albumId;       // Dictionary ID for album
     DictionaryId genreId;       // Dictionary ID for genre
     DictionaryId albumArtistId; // Dictionary ID for album artist
 
     // 2-byte section
-    std::uint16_t year;        // Release year
-    std::uint16_t codecId;     // Audio codec identifier
-    std::uint16_t bitDepth;    // Bits per sample
-    std::uint16_t titleOffset; // Offset to title string in payload
-    std::uint16_t titleLen;    // Length of title string
-    std::uint16_t tagsOffset;  // Offset to tags blob in payload
+    std::uint16_t year;     // Release year
+    std::uint16_t codecId;  // Audio codec identifier
+    std::uint16_t bitDepth; // Bits per sample
+    std::uint16_t titleLen; // Length of title string
+    std::uint16_t tagLen;   // Length of tags blob in bytes
 
     // 1-byte section
-    std::uint8_t rating;   // User rating (0-5)
-    std::uint8_t tagCount; // Number of tags
+    std::uint8_t rating; // User rating (0-5)
 
-    // 2 bytes padding to reach 36 bytes total
-    std::uint8_t padding[2];
+    // 1 byte padding to reach 32 bytes total
+    std::byte padding;
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackHotHeaderSize = 36;
+  constexpr std::size_t kTrackHotHeaderSize = 32;
   constexpr std::size_t kTrackHotHeaderAlignment = 4;
 
-  static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 36 bytes");
+  static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 32 bytes");
   static_assert(alignof(TrackHotHeader) == kTrackHotHeaderAlignment, "TrackHotHeader must have 4-byte alignment");
 
   /**
@@ -85,25 +84,28 @@ namespace rs::core
    *   - trackNumber, totalTracks, discNumber, totalDiscs: display only
    *   - uri: playback path, not filtered
    *
-   * Total size: 44 bytes with 4-byte alignment.
+   * Total size: 48 bytes with 4-byte alignment.
    *
-   * Byte layout:
-   *   [0-3]    fileSizeLo (4) - Lower 32 bits of file size
-   *   [4-7]    fileSizeHi (4) - Upper 32 bits of file size
-   *   [8-11]   mtimeLo (4)    - Lower 32 bits of modification time
-   *   [12-15]  mtimeHi (4)    - Upper 32 bits of modification time
-   *   [16-19]  durationMs (4)
-   *   [20-23]  sampleRate (4)
-   *   [24-27]  coverArtId (4)
-   *   [28-31]  bitrate (4)
-   *   [32-33]  trackNumber (2)
-   *   [34-35]  totalTracks (2)
-   *   [36-37]  discNumber (2)
-   *   [38-39]  totalDiscs (2)
-   *   [40-41]  uriOffset (2)
-   *   [42-43]  uriLen (2)
-   *   [44]     channels (1)
-   *   [45-47]  padding (3)
+   *
+   * Layout:
+   *   ┌─────────────────────────────────────┐  ← cold data begin
+   *   │        TrackColdHeader (48B)        │
+   *   │  fileSizeLo/Hi, mtimeLo/Hi          │
+   *   │  durationMs, sampleRate,            │
+   *   │  coverArtId, bitrate                │
+   *   │  trackNumber, totalTracks,          │
+   *   │  discNumber, totalDiscs             │
+   *   │  customLen, uriLen                  │
+   *   │  channels, padding[3]               │
+   *   ├─────────────────────────────────────┤  ← custom begin = header + sizeof(header)
+   *   │  keyLen (2)  │  valueLen (2)        │
+   *   │  key data... (keyLen bytes)         │
+   *   │  value data... (valueLen bytes)     │
+   *   ├─────────────────────────────────────┤
+   *   │  ... (more key-value pairs) ...     │
+   *   ├─────────────────────────────────────┤  ← custom end = customBegin + customLen
+   *   │  uri data... (uriLen bytes)         │
+   *   └─────────────────────────────────────┘  ← cold data end
    */
   struct TrackColdHeader final
   {
@@ -117,21 +119,21 @@ namespace rs::core
     std::uint32_t durationMs; // Track duration in milliseconds
     std::uint32_t sampleRate; // Sample rate in Hz
     std::uint32_t coverArtId; // ResourceStore ID for cover art
-    std::uint32_t bitrate;     // Bitrate in bps
+    std::uint32_t bitrate;    // Bitrate in bps
 
     // 2-byte section
-    std::uint16_t trackNumber;  // Track number
+    std::uint16_t trackNumber; // Track number
     std::uint16_t totalTracks; // Total tracks in album
-    std::uint16_t discNumber;   // Disc number
+    std::uint16_t discNumber;  // Disc number
     std::uint16_t totalDiscs;  // Total discs in album
-    std::uint16_t uriOffset;    // Offset to URI string in payload
-    std::uint16_t uriLen;       // Length of URI string
+    std::uint16_t customLen;   // Length of custom data section
+    std::uint16_t uriLen;      // Length of URI string
 
     // 1-byte section
     std::uint8_t channels; // Number of audio channels
 
     // 3 bytes padding to reach 48 bytes total
-    std::uint8_t padding[3];
+    std::byte padding[3];
   };
 
   // Binary layout constants
@@ -140,23 +142,5 @@ namespace rs::core
 
   static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 48 bytes");
   static_assert(alignof(TrackColdHeader) == kTrackColdHeaderAlignment, "TrackColdHeader must have 4-byte alignment");
-
-  /**
-   * Encode cold track data: fixed header + custom KV + uri.
-   */
-  std::vector<std::byte> encodeColdData(TrackColdHeader const& header,
-                                        std::vector<std::pair<std::string, std::string>> const& customMeta,
-                                        std::string_view uri);
-
-  /**
-   * Encode just the custom key-value pairs into cold binary format.
-   */
-  std::vector<std::byte> encodeColdCustomMeta(std::vector<std::pair<std::string, std::string>> const& customMeta);
-
-  /**
-   * Normalize a custom key: lowercase + trim whitespace.
-   * Used during ingestion to ensure consistent key lookup.
-   */
-  std::string normalizeKey(std::string_view key);
 
 } // namespace rs::core

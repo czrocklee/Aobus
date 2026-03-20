@@ -12,19 +12,20 @@ namespace rs::core
   // TrackView member implementations
   std::string_view TrackView::hotTitle() const
   {
-    return hotGetString(hotHeader()->titleOffset, hotHeader()->titleLen);
+    auto* hdr = hotHeader();
+    if (!hdr) { return {}; }
+    auto titleOffset = hdr->tagLen; // title comes after tags
+    return hotGetString(titleOffset, hdr->titleLen);
   }
 
   std::uint32_t TrackView::hotTagId(std::uint8_t index) const
   {
     auto* hdr = hotHeader();
-    if (!hdr || index >= hdr->tagCount) {
-      return 0;
-    }
-    auto offset = sizeof(TrackHotHeader) + hdr->tagsOffset + index * sizeof(std::uint32_t);
-    if (_hotData.size() < offset + sizeof(std::uint32_t)) {
-      return 0;
-    }
+    if (!hdr) { return 0; }
+    auto tagCount = hdr->tagLen / sizeof(DictionaryId);
+    if (index >= tagCount) { return 0; }
+    auto offset = sizeof(TrackHotHeader) + index * sizeof(DictionaryId);
+    if (_hotData.size() < offset + sizeof(DictionaryId)) { return 0; }
     std::uint32_t result;
     std::memcpy(&result, utility::as<std::uint32_t>(hdr, offset), sizeof(std::uint32_t));
     return result;
@@ -34,9 +35,7 @@ namespace rs::core
   {
     if (len == 0) { return {}; }
     std::size_t const start = sizeof(TrackHotHeader) + offset;
-    if (start + len > _hotData.size()) {
-      return {};
-    }
+    if (start + len > _hotData.size()) { return {}; }
     return {utility::as<char>(_hotData.data(), start), len};
   }
 
@@ -44,7 +43,8 @@ namespace rs::core
   {
     auto* hdr = coldHeader();
     if (!hdr) { return {}; }
-    return coldGetString(hdr->uriOffset, hdr->uriLen);
+    auto uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + hdr->customLen);
+    return coldGetString(uriOffset, hdr->uriLen);
   }
 
   std::uint64_t TrackView::coldFileSize() const noexcept
@@ -63,89 +63,9 @@ namespace rs::core
 
   std::string_view TrackView::coldGetString(std::uint16_t offset, std::uint16_t len) const
   {
-    if (!_coldData || len == 0 || offset + len > _coldData->size()) {
-      return {};
-    }
+    if (!_coldData || len == 0 || offset + len > _coldData->size()) { return {}; }
     auto const* data = _coldData->data();
     return std::string_view{reinterpret_cast<char const*>(data + offset), len};
-  }
-
-  std::vector<std::pair<std::string, std::string>> TrackView::coldCustomMeta() const
-  {
-    std::vector<std::pair<std::string, std::string>> result;
-    auto* hdr = coldHeader();
-    if (!_coldData || !hdr || _coldData->size() < sizeof(TrackColdHeader)) {
-      return result;
-    }
-
-    std::size_t offset = sizeof(TrackColdHeader);
-    if (offset + sizeof(std::uint16_t) > _coldData->size()) {
-      return result;
-    }
-    std::uint16_t pairCount = 0;
-    std::memcpy(&pairCount, reinterpret_cast<std::byte const*>(hdr) + offset, sizeof(pairCount));
-    offset += sizeof(pairCount);
-
-    result.reserve(pairCount);
-    auto const* data = _coldData->data();
-
-    for (std::uint16_t i = 0; i < pairCount && offset < _coldData->size(); ++i) {
-      if (offset + sizeof(std::uint16_t) * 2 > _coldData->size()) break;
-      std::uint16_t keyLen = 0, valueLen = 0;
-      std::memcpy(&keyLen, data + offset, sizeof(keyLen));
-      offset += sizeof(keyLen);
-      std::memcpy(&valueLen, data + offset, sizeof(valueLen));
-      offset += sizeof(valueLen);
-
-      if (offset + keyLen > _coldData->size()) break;
-      std::string key(reinterpret_cast<char const*>(data + offset), keyLen);
-      offset += keyLen;
-
-      if (offset + valueLen > _coldData->size()) break;
-      std::string value(reinterpret_cast<char const*>(data + offset), valueLen);
-      offset += valueLen;
-
-      result.emplace_back(std::move(key), std::move(value));
-    }
-    return result;
-  }
-
-  std::optional<std::string> TrackView::coldCustomValue(std::string_view key) const
-  {
-    auto* hdr = coldHeader();
-    if (!_coldData || !hdr || _coldData->size() < sizeof(TrackColdHeader)) {
-      return std::nullopt;
-    }
-
-    std::size_t offset = sizeof(TrackColdHeader);
-    if (offset + sizeof(std::uint16_t) > _coldData->size()) {
-      return std::nullopt;
-    }
-    std::uint16_t pairCount = 0;
-    std::memcpy(&pairCount, reinterpret_cast<std::byte const*>(hdr) + offset, sizeof(pairCount));
-    offset += sizeof(pairCount);
-    auto const* data = _coldData->data();
-
-    for (std::uint16_t i = 0; i < pairCount && offset < _coldData->size(); ++i) {
-      if (offset + sizeof(std::uint16_t) * 2 > _coldData->size()) break;
-      std::uint16_t keyLen = 0, valueLen = 0;
-      std::memcpy(&keyLen, data + offset, sizeof(keyLen));
-      offset += sizeof(keyLen);
-      std::memcpy(&valueLen, data + offset, sizeof(valueLen));
-      offset += sizeof(valueLen);
-
-      if (offset + keyLen > _coldData->size()) break;
-      std::string_view currentKey(reinterpret_cast<char const*>(data + offset), keyLen);
-      offset += keyLen;
-
-      if (currentKey == key) {
-        if (offset + valueLen > _coldData->size()) break;
-        std::string value(reinterpret_cast<char const*>(data + offset), valueLen);
-        return value;
-      }
-      offset += valueLen;
-    }
-    return std::nullopt;
   }
 
   // TrackView proxy implementations
@@ -156,10 +76,7 @@ namespace rs::core
     for (std::uint8_t i = 0; i < c; ++i)
     {
       auto tagId = id(i);
-      if (tagId > 0)
-      {
-        result.push_back(tagId);
-      }
+      if (tagId > 0) { result.push_back(tagId); }
     }
     return result;
   }
@@ -169,154 +86,122 @@ namespace rs::core
     auto c = count();
     for (std::uint8_t i = 0; i < c; ++i)
     {
-      if (id(i) == tagIdToCheck)
-      {
-        return true;
-      }
+      if (id(i) == tagIdToCheck) { return true; }
     }
     return false;
   }
 
-  std::vector<std::pair<std::string, std::string>> TrackView::CustomProxy::all() const
-  {
-    return _track.coldCustomMeta();
-  }
-
   std::optional<std::string> TrackView::CustomProxy::get(std::string_view key) const
   {
-    return _track.coldCustomValue(key);
+    for (auto const& [k, v] : *this) {
+      if (k == key) {
+        return std::string{v};
+      }
+    }
+    return std::nullopt;
   }
 
-  std::vector<std::byte> encodeColdData(
-      TrackColdHeader const& header,
-      std::vector<std::pair<std::string, std::string>> const& customMeta,
-      std::string_view uri)
+  std::optional<std::pair<std::byte const*, std::byte const*>> TrackView::CustomProxy::customRange() const
   {
-    std::vector<std::byte> result;
+    _track.ensureColdLoaded();
+    auto* hdr = _track.coldHeader();
+    if (!_track._coldData || !hdr) { return std::nullopt; }
 
-    // Calculate custom meta size
-    std::uint16_t customMetaSize = sizeof(std::uint16_t); // pairCount
-    for (auto const& [key, value] : customMeta) {
-      customMetaSize += sizeof(std::uint16_t) * 2; // keyLen + valueLen
-      customMetaSize += static_cast<std::uint16_t>(key.size() + value.size());
-    }
+    constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
+    auto const coldSize = _track._coldData->size();
+    if (coldSize < kHeaderSize) { return std::nullopt; }
 
-    // Calculate uri offset
-    std::uint16_t varDataOffset = sizeof(TrackColdHeader);
-    std::uint16_t uriOffset = varDataOffset + customMetaSize;
-    std::uint16_t uriLen = static_cast<std::uint16_t>(uri.size());
+    auto const customLen = static_cast<std::size_t>(hdr->customLen);
+    if (customLen > coldSize - kHeaderSize) { return std::nullopt; }
 
-    // Reserve space
-    result.reserve(sizeof(TrackColdHeader) + customMetaSize + uriLen + 1);
-
-    // Build header with correct offsets
-    TrackColdHeader hdr = header;
-    hdr.uriOffset = uriOffset;
-    hdr.uriLen = uriLen;
-
-    // Write fixed header
-    auto const* headerBytes = reinterpret_cast<std::byte const*>(&hdr);
-    result.insert(result.end(), headerBytes, headerBytes + sizeof(TrackColdHeader));
-
-    // Write customPairCount
-    std::byte buf[sizeof(std::uint16_t)];
-    std::uint16_t pairCount = static_cast<std::uint16_t>(customMeta.size());
-    std::memcpy(buf, &pairCount, sizeof(pairCount));
-    result.insert(result.end(), buf, buf + sizeof(pairCount));
-
-    // Write custom key-value pairs
-    for (auto const& [key, value] : customMeta) {
-      std::uint16_t keyLen = static_cast<std::uint16_t>(key.size());
-      std::memcpy(buf, &keyLen, sizeof(keyLen));
-      result.insert(result.end(), buf, buf + sizeof(keyLen));
-
-      std::uint16_t valueLen = static_cast<std::uint16_t>(value.size());
-      std::memcpy(buf, &valueLen, sizeof(valueLen));
-      result.insert(result.end(), buf, buf + sizeof(valueLen));
-
-      auto const* keyBytes = reinterpret_cast<std::byte const*>(key.data());
-      result.insert(result.end(), keyBytes, keyBytes + key.size());
-
-      auto const* valueBytes = reinterpret_cast<std::byte const*>(value.data());
-      result.insert(result.end(), valueBytes, valueBytes + value.size());
-    }
-
-    // Write uri (null-terminated)
-    if (!uri.empty()) {
-      auto const* uriBytes = reinterpret_cast<std::byte const*>(uri.data());
-      result.insert(result.end(), uriBytes, uriBytes + uri.size());
-    }
-    result.push_back(std::byte{'\0'});
-
-    // Pad to 4-byte alignment
-    while (result.size() % 4 != 0) {
-      result.push_back(std::byte{0});
-    }
-
-    return result;
+    auto const* customStart = _track._coldData->data() + kHeaderSize;
+    auto const* customEnd = customStart + customLen;
+    return std::pair<std::byte const*, std::byte const*>{customStart, customEnd};
   }
 
-  std::vector<std::byte> encodeColdCustomMeta(
-      std::vector<std::pair<std::string, std::string>> const& customMeta)
+  TrackView::CustomProxy::Iterator TrackView::CustomProxy::begin() const
   {
-    std::vector<std::byte> result;
-
-    // Reserve approximate space: 2 bytes for count + per-pair overhead
-    result.reserve(2 + customMeta.size() * 4);
-
-    // Write pairCount
-    std::byte buf[sizeof(std::uint16_t)];
-    std::uint16_t pairCount = static_cast<std::uint16_t>(customMeta.size());
-    std::memcpy(buf, &pairCount, sizeof(pairCount));
-    result.insert(result.end(), buf, buf + sizeof(pairCount));
-
-    for (auto const& [key, value] : customMeta) {
-      std::uint16_t keyLen = static_cast<std::uint16_t>(key.size());
-      std::memcpy(buf, &keyLen, sizeof(keyLen));
-      result.insert(result.end(), buf, buf + sizeof(keyLen));
-
-      std::uint16_t valueLen = static_cast<std::uint16_t>(value.size());
-      std::memcpy(buf, &valueLen, sizeof(valueLen));
-      result.insert(result.end(), buf, buf + sizeof(valueLen));
-
-      auto const* keyBytes = reinterpret_cast<std::byte const*>(key.data());
-      result.insert(result.end(), keyBytes, keyBytes + key.size());
-
-      auto const* valueBytes = reinterpret_cast<std::byte const*>(value.data());
-      result.insert(result.end(), valueBytes, valueBytes + value.size());
-    }
-
-    // Pad to 4-byte alignment
-    while (result.size() % 4 != 0) {
-      result.push_back(std::byte{0});
-    }
-
-    return result;
+    auto range = customRange();
+    if (!range) { return CustomProxy::Iterator{}; }
+    return CustomProxy::Iterator{range->first, range->second};
   }
 
-  std::string normalizeKey(std::string_view key)
+  TrackView::CustomProxy::Iterator TrackView::CustomProxy::end() const
   {
-    std::string result;
-    result.reserve(key.size());
+    auto range = customRange();
+    if (!range) { return CustomProxy::Iterator{}; }
+    return CustomProxy::Iterator{range->second, range->second};
+  }
 
-    // Find first non-whitespace
-    std::size_t start = 0;
-    while (start < key.size() && std::isspace(static_cast<unsigned char>(key[start]))) {
-      ++start;
+  TrackView::CustomProxy::Iterator::Iterator(std::byte const* data, std::byte const* end)
+    : _currentPos(data), _nextPos(data), _end(end)
+  {
+    if (!_currentPos || !_end || _currentPos >= _end || !loadCurrent())
+    {
+      _currentPos = _end;
+      _nextPos = _end;
+      _current = {};
     }
+  }
 
-    // Find last non-whitespace
-    std::size_t end = key.size();
-    while (end > start && std::isspace(static_cast<unsigned char>(key[end - 1]))) {
-      --end;
+  std::pair<std::string_view, std::string_view> TrackView::CustomProxy::Iterator::dereference() const
+  {
+    return _current;
+  }
+
+  bool TrackView::CustomProxy::Iterator::equal(Iterator const& other) const
+  {
+    return _currentPos == other._currentPos;
+  }
+
+  bool TrackView::CustomProxy::Iterator::decodeEntry(std::byte const* ptr,
+                                                     std::byte const* end,
+                                                     std::pair<std::string_view, std::string_view>& out,
+                                                     std::byte const*& next)
+  {
+    if (!ptr || !end || ptr >= end) { return false; }
+
+    constexpr std::size_t kLengthFieldsSize = sizeof(std::uint16_t) * 2;
+    auto const available = static_cast<std::size_t>(end - ptr);
+    if (available < kLengthFieldsSize) { return false; }
+
+    std::uint16_t keyLen = 0;
+    std::uint16_t valueLen = 0;
+    std::memcpy(&keyLen, ptr, sizeof(keyLen));
+    ptr += sizeof(keyLen);
+    std::memcpy(&valueLen, ptr, sizeof(valueLen));
+    ptr += sizeof(valueLen);
+
+    auto const payloadLen = static_cast<std::size_t>(keyLen) + static_cast<std::size_t>(valueLen);
+    auto const payloadAvailable = static_cast<std::size_t>(end - ptr);
+    if (payloadLen > payloadAvailable) { return false; }
+
+    std::string_view key{reinterpret_cast<char const*>(ptr), static_cast<std::size_t>(keyLen)};
+    ptr += keyLen;
+    std::string_view value{reinterpret_cast<char const*>(ptr), static_cast<std::size_t>(valueLen)};
+    ptr += valueLen;
+
+    out = {key, value};
+    next = ptr;
+    return true;
+  }
+
+  bool TrackView::CustomProxy::Iterator::loadCurrent()
+  {
+    return decodeEntry(_currentPos, _end, _current, _nextPos);
+  }
+
+  void TrackView::CustomProxy::Iterator::increment()
+  {
+    if (_currentPos >= _end) { return; }
+
+    _currentPos = _nextPos;
+    if (_currentPos >= _end || !loadCurrent())
+    {
+      _currentPos = _end;
+      _nextPos = _end;
+      _current = {};
     }
-
-    // Convert to lowercase
-    for (std::size_t i = start; i < end; ++i) {
-      result += static_cast<char>(std::tolower(static_cast<unsigned char>(key[i])));
-    }
-
-    return result;
   }
 
 } // namespace rs::core

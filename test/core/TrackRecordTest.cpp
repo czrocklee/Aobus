@@ -173,7 +173,7 @@ TEST_CASE("TrackRecord - Tag Serialization - Empty Tags")
   auto data = record.serializeHot();
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->tagCount == 0);
+  CHECK(header->tagLen == 0);
   CHECK(header->tagBloom == 0);
 }
 
@@ -187,13 +187,11 @@ TEST_CASE("TrackRecord - Tag Serialization - With Tags")
   auto data = record.serializeHot();
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->tagCount == 3);
+  CHECK(header->tagLen == 12);  // 3 tags * 4 bytes each
   CHECK(header->tagBloom != 0); // Bloom should be computed from tag IDs
 
-  // Verify tag IDs are in the payload
-  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHotHeader);
-
-  auto const* tagIdsPtr = reinterpret_cast<std::uint32_t const*>(payloadStart + header->tagsOffset);
+  // Verify tag IDs are in the payload (at sizeof(TrackHotHeader))
+  auto const* tagIdsPtr = reinterpret_cast<std::uint32_t const*>(data.data() + sizeof(TrackHotHeader));
   CHECK(tagIdsPtr[0] == 10);
   CHECK(tagIdsPtr[1] == 20);
   CHECK(tagIdsPtr[2] == 30);
@@ -209,10 +207,9 @@ TEST_CASE("TrackRecord - Tag Serialization - Single Tag")
   auto data = record.serializeHot();
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->tagCount == 1);
+  CHECK(header->tagLen == 4);  // 1 tag * 4 bytes
 
-  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHotHeader);
-  auto const* tagIdPtr = reinterpret_cast<std::uint32_t const*>(payloadStart + header->tagsOffset);
+  auto const* tagIdPtr = reinterpret_cast<std::uint32_t const*>(data.data() + sizeof(TrackHotHeader));
   CHECK(*tagIdPtr == 42);
 }
 
@@ -225,7 +222,7 @@ TEST_CASE("TrackRecord - hotHeader Method With Tags")
 
   auto header = record.hotHeader();
 
-  CHECK(header.tagCount == 5);
+  CHECK(header.tagLen == 20);  // 5 tags * 4 bytes each
   CHECK(header.tagBloom != 0);
 }
 
@@ -236,7 +233,7 @@ TEST_CASE("TrackRecord - hotHeader")
 
   auto header = record.hotHeader();
 
-  CHECK(header.tagCount == 2);
+  CHECK(header.tagLen == 8);  // 2 tags * 4 bytes each
   CHECK(header.tagBloom != 0);
 }
 
@@ -275,7 +272,7 @@ TEST_CASE("TrackRecord - serializeHot")
 
   // Verify hot header
   auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->tagCount == 2);
+  CHECK(header->tagLen == 8);  // 2 tags * 4 bytes
 
   // Verify bloom is computed
   CHECK(header->tagBloom != 0);
@@ -300,12 +297,15 @@ TEST_CASE("TrackRecord - serializeCold")
   CHECK(view.metadata().trackNumber() == 3);
 
   // Verify custom meta
-  auto meta = view.custom().all();
-  CHECK(meta.size() == 2);
-  CHECK(meta[0].first == "key1");
-  CHECK(meta[0].second == "value1");
-  CHECK(meta[1].first == "key2");
-  CHECK(meta[1].second == "value2");
+  std::vector<std::pair<std::string, std::string>> result;
+  for (auto const& [k, v] : view.custom()) {
+    result.emplace_back(std::string{k}, std::string{v});
+  }
+  CHECK(result.size() == 2);
+  CHECK(result[0].first == "key1");
+  CHECK(result[0].second == "value1");
+  CHECK(result[1].first == "key2");
+  CHECK(result[1].second == "value2");
 }
 
 TEST_CASE("TrackRecord - customMeta field")

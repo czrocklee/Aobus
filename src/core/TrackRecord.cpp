@@ -5,6 +5,8 @@
 #include <rs/core/TrackLayout.h>
 #include <rs/utility/ByteView.h>
 
+#include <cstring>
+
 namespace rs::core
 {
   // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
@@ -60,7 +62,9 @@ namespace rs::core
     cold.totalDiscs = meta.totalDiscs();
 
     // Load custom meta from cold view
-    customMeta = view.custom().all();
+    for (auto const& [k, v] : view.custom()) {
+      customMeta.emplace_back(std::string{k}, std::string{v});
+    }
   }
 
   TrackHotHeader TrackRecord::hotHeader() const
@@ -78,12 +82,10 @@ namespace rs::core
       .year = metadata.year,
       .codecId = property.codecId,
       .bitDepth = property.bitDepth,
-      .titleOffset = 0,
-      .titleLen = 0,
-      .tagsOffset = 0,
+      .titleLen = static_cast<std::uint16_t>(metadata.title.size()),
+      .tagLen = static_cast<std::uint16_t>(tags.ids.size() * sizeof(DictionaryId)),
       .rating = property.rating,
-      .tagCount = static_cast<std::uint8_t>(tags.ids.size()),
-      .padding = 0,
+      .padding = std::byte{0},
     };
   }
 
@@ -105,10 +107,10 @@ namespace rs::core
       .totalTracks = cold.totalTracks,
       .discNumber = cold.discNumber,
       .totalDiscs = cold.totalDiscs,
-      .uriOffset = 0,
+      .customLen = 0,
       .uriLen = 0,
       .channels = property.channels,
-      .padding = 0,
+      .padding = std::byte{0},
     };
   }
 
@@ -116,29 +118,21 @@ namespace rs::core
   {
     std::vector<std::byte> data;
 
-    // Build header
+    // Build header (titleOffset and tagsOffset are now computed, not stored)
     auto h = hotHeader();
-
-    // Calculate offsets - tags first (hot data for filtering)
-    std::uint16_t tagsOffset = 0;
-    std::uint16_t titleOffset = static_cast<std::uint16_t>(tags.ids.size() * sizeof(std::uint32_t));
-
-    h.titleOffset = titleOffset;
-    h.titleLen = static_cast<std::uint16_t>(metadata.title.size());
-    h.tagsOffset = tagsOffset;
 
     // Write header
     auto headerBytes = utility::asBytes(h);
     data.insert(data.end(), headerBytes.begin(), headerBytes.end());
 
-    // Write tags first: 4-byte tag IDs
+    // Write tags first: 4-byte tag IDs (at offset sizeof(TrackHotHeader))
     for (auto tagId : tags.ids)
     {
       auto idBytes = utility::asBytes(tagId);
       data.insert(data.end(), idBytes.begin(), idBytes.end());
     }
 
-    // Write title
+    // Write title (at offset sizeof(TrackHotHeader) + tagLen)
     auto titleBytes = utility::asBytes(metadata.title);
     data.insert(data.end(), titleBytes.begin(), titleBytes.end());
     data.push_back(static_cast<std::byte>('\0'));
@@ -153,7 +147,61 @@ namespace rs::core
 
   std::vector<std::byte> TrackRecord::serializeCold() const
   {
-    return encodeColdData(coldHeader(), customMeta, cold.uri);
+    std::vector<std::byte> result;
+
+    // Calculate custom meta size
+    std::uint16_t customMetaSize = 0;
+    for (auto const& [key, value] : customMeta)
+    {
+      customMetaSize += sizeof(std::uint16_t) * 2; // keyLen + valueLen
+      customMetaSize += static_cast<std::uint16_t>(key.size() + value.size());
+    }
+
+    std::uint16_t uriLen = static_cast<std::uint16_t>(cold.uri.size());
+
+    // Reserve space
+    result.reserve(sizeof(TrackColdHeader) + customMetaSize + uriLen + 1);
+
+    // Build header with correct offsets
+    TrackColdHeader hdr = coldHeader();
+    hdr.customLen = customMetaSize;
+    hdr.uriLen = uriLen;
+
+    // Write fixed header
+    auto const* headerBytes = reinterpret_cast<std::byte const*>(&hdr);
+    result.insert(result.end(), headerBytes, headerBytes + sizeof(TrackColdHeader));
+
+    // Write custom key-value pairs
+    std::byte buf[sizeof(std::uint16_t)];
+    for (auto const& [key, value] : customMeta)
+    {
+      std::uint16_t keyLen = static_cast<std::uint16_t>(key.size());
+      std::memcpy(buf, &keyLen, sizeof(keyLen));
+      result.insert(result.end(), buf, buf + sizeof(keyLen));
+
+      std::uint16_t valueLen = static_cast<std::uint16_t>(value.size());
+      std::memcpy(buf, &valueLen, sizeof(valueLen));
+      result.insert(result.end(), buf, buf + sizeof(valueLen));
+
+      auto const* keyBytes = reinterpret_cast<std::byte const*>(key.data());
+      result.insert(result.end(), keyBytes, keyBytes + key.size());
+
+      auto const* valueBytes = reinterpret_cast<std::byte const*>(value.data());
+      result.insert(result.end(), valueBytes, valueBytes + value.size());
+    }
+
+    // Write uri (null-terminated)
+    if (!cold.uri.empty())
+    {
+      auto const* uriBytes = reinterpret_cast<std::byte const*>(cold.uri.data());
+      result.insert(result.end(), uriBytes, uriBytes + cold.uri.size());
+    }
+    result.push_back(std::byte{'\0'});
+
+    // Pad to 4-byte alignment
+    while (result.size() % 4 != 0) { result.push_back(std::byte{0}); }
+
+    return result;
   }
 
 } // namespace rs::core
