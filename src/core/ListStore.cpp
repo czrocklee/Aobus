@@ -58,8 +58,8 @@ namespace rs::core
 
   std::pair<ListId, ListView> ListStore::Writer::create(std::span<std::byte const> data)
   {
-    auto [id, buffer] = _writer.append(data);
-    return {ListId{id}, ListView{buffer}};
+    auto id = _writer.append(data);
+    return {ListId{id}, ListView{data}};
   }
 
   ListView ListStore::Writer::update(ListId id, std::span<std::byte const> data)

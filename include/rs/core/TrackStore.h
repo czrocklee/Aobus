@@ -48,33 +48,36 @@ namespace rs::core
   public:
     class Iterator;
 
-    Iterator begin(ColdLoadHint hint = ColdLoadHint::Lazy) const;
-    Iterator beginEager() const;
+    /**
+     * LoadMode - Controls which data is loaded for each track.
+     */
+    enum class LoadMode
+    {
+      Hot,  // Only hot data
+      Cold, // Only cold data
+      Both  // Both hot and cold
+    };
+
+    Iterator begin(LoadMode mode = LoadMode::Both) const;
     Iterator end() const;
 
     /**
-     * Get a track by ID with lazy cold loading.
+     * Get a track by ID.
      * @return TrackView or std::nullopt if not found
      */
-    std::optional<TrackView> get(TrackId id) const;
+    std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
   private:
-    Reader(lmdb::Database::Reader&& hotReader, lmdb::Database::Reader&& coldReader);
+    Reader(lmdb::Database::Reader&& hotReader, lmdb::Database::Reader&& coldReader, LoadMode mode);
 
     lmdb::Database::Reader _hotReader;
     lmdb::Database::Reader _coldReader;
-    std::function<std::optional<std::span<std::byte const>>(TrackId)> _coldLoader;
+    LoadMode _mode;
     friend class TrackStore;
   };
 
   /**
-   * TrackStore::Reader::Iterator - Iterator over tracks (using hot database).
-   *
-   * For Eager mode (ColdLoadHint::Eager), uses two iterators advancing together
-   * to avoid random I/O when accessing cold data.
-   *
-   * For Lazy mode (ColdLoadHint::Lazy), cold data is loaded on demand via
-   * the coldLoader callback.
+   * TrackStore::Reader::Iterator - Iterator over tracks.
    */
   class TrackStore::Reader::Iterator
   {
@@ -90,14 +93,11 @@ namespace rs::core
 
   private:
     Iterator(lmdb::Database::Reader::Iterator&& hotIter,
-             std::optional<lmdb::Database::Reader::Iterator> coldIter,
-             ColdLoadHint hint,
-             std::function<std::optional<std::span<std::byte const>>(TrackId)> coldLoader);
+             lmdb::Database::Reader::Iterator&& coldIter,
+             Reader::LoadMode mode);
 
-    lmdb::Database::Reader::Iterator _hotIter;
+    std::optional<lmdb::Database::Reader::Iterator> _hotIter;
     std::optional<lmdb::Database::Reader::Iterator> _coldIter;
-    ColdLoadHint _hint = ColdLoadHint::Lazy;
-    std::function<std::optional<std::span<std::byte const>>(TrackId)> _coldLoader;
     friend class Reader;
   };
 
@@ -132,17 +132,12 @@ namespace rs::core
     /**
      * Delete both hot and cold track data.
      */
-    bool delHotCold(TrackId id);
+    bool remove(TrackId id);
 
     /**
-     * Get hot track by ID.
+     * Get track by ID with specified load mode.
      */
-    std::optional<TrackView> getHot(TrackId id) const;
-
-    /**
-     * Get cold track by ID.
-     */
-    std::optional<TrackView> getCold(TrackId id) const;
+    std::optional<TrackView> get(TrackId id, Reader::LoadMode mode) const;
 
   private:
     explicit Writer(lmdb::Database::Writer&& hotWriter, lmdb::Database::Writer&& coldWriter);

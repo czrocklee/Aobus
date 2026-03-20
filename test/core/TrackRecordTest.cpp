@@ -104,7 +104,7 @@ TEST_CASE("TrackRecord - Serialize With Strings")
 {
   TrackRecord record;
   record.metadata.title = "Hello World";
-  record.cold.uri = "/music/test.flac";
+  record.metadata.uri = "/music/test.flac";
   record.metadata.year = 2021;
 
   auto data = record.serializeHot();
@@ -152,7 +152,7 @@ TEST_CASE("TrackRecord - Serialize Preserves Data")
 {
   TrackRecord record;
   record.metadata.title = "Test";
-  record.cold.uri = "/test";
+  record.metadata.uri = "/test";
   record.property.fileSize = 12345;
   record.property.mtime = 9876543210;
 
@@ -168,7 +168,7 @@ TEST_CASE("TrackRecord - Tag Serialization - Empty Tags")
 {
   TrackRecord record;
   record.metadata.title = "Test";
-  record.cold.uri = "/test";
+  record.metadata.uri = "/test";
 
   auto data = record.serializeHot();
 
@@ -181,7 +181,7 @@ TEST_CASE("TrackRecord - Tag Serialization - With Tags")
 {
   TrackRecord record;
   record.metadata.title = "Test";
-  record.cold.uri = "/test";
+  record.metadata.uri = "/test";
   record.tags.ids = {DictionaryId{10}, DictionaryId{20}, DictionaryId{30}};
 
   auto data = record.serializeHot();
@@ -201,7 +201,7 @@ TEST_CASE("TrackRecord - Tag Serialization - Single Tag")
 {
   TrackRecord record;
   record.metadata.title = "Test";
-  record.cold.uri = "/test";
+  record.metadata.uri = "/test";
   record.tags.ids = {DictionaryId{42}};
 
   auto data = record.serializeHot();
@@ -240,13 +240,13 @@ TEST_CASE("TrackRecord - hotHeader")
 TEST_CASE("TrackRecord - coldHeader")
 {
   TrackRecord record;
-  record.cold.fileSize = 2000;
-  record.cold.mtime = 1234567890;
-  record.cold.trackNumber = 5;
-  record.cold.totalTracks = 10;
-  record.cold.discNumber = 1;
-  record.cold.totalDiscs = 2;
-  record.cold.uri = "/path/to/file.flac";
+  record.property.fileSize = 2000;
+  record.property.mtime = 1234567890;
+  record.metadata.trackNumber = 5;
+  record.metadata.totalTracks = 10;
+  record.metadata.discNumber = 1;
+  record.metadata.totalDiscs = 2;
+  record.metadata.uri = "/path/to/file.flac";
 
   auto header = record.coldHeader();
 
@@ -265,7 +265,7 @@ TEST_CASE("TrackRecord - serializeHot")
   TrackRecord record;
   record.property.fileSize = 1000;
   record.metadata.title = "Test Title";
-  record.cold.uri = "/path/to/file.flac";
+  record.metadata.uri = "/path/to/file.flac";
   record.tags.ids = {DictionaryId{10}, DictionaryId{20}};
 
   auto data = record.serializeHot();
@@ -281,17 +281,16 @@ TEST_CASE("TrackRecord - serializeHot")
 TEST_CASE("TrackRecord - serializeCold")
 {
   TrackRecord record;
-  record.cold.fileSize = 2000;
-  record.cold.mtime = 9876543210;
-  record.cold.trackNumber = 3;
-  record.cold.uri = "/path/to/file.flac";
+  record.property.fileSize = 2000;
+  record.property.mtime = 9876543210;
+  record.metadata.trackNumber = 3;
+  record.metadata.uri = "/path/to/file.flac";
   record.customMeta = {{"key1", "value1"}, {"key2", "value2"}};
 
   auto data = record.serializeCold();
 
   // Verify cold view can parse it
-  TrackView view{TrackId{0}, std::span<std::byte const>{}, data, nullptr};
-  CHECK(view.isColdLoaded() == true);
+  TrackView view{TrackId{0}, std::span<std::byte const>{}, std::as_bytes(std::span{data})};
   CHECK(view.property().fileSize() == 2000);
   CHECK(view.property().mtime() == 9876543210);
   CHECK(view.metadata().trackNumber() == 3);
@@ -322,11 +321,11 @@ TEST_CASE("TrackRecord - Cold struct default values")
 {
   TrackRecord record;
 
-  CHECK(record.cold.fileSize == 0);
-  CHECK(record.cold.mtime == 0);
-  CHECK(record.cold.trackNumber == 0);
-  CHECK(record.cold.totalTracks == 0);
-  CHECK(record.cold.discNumber == 0);
-  CHECK(record.cold.totalDiscs == 0);
-  CHECK(record.cold.uri.empty());
+  CHECK(record.property.fileSize == 0);
+  CHECK(record.property.mtime == 0);
+  CHECK(record.metadata.trackNumber == 0);
+  CHECK(record.metadata.totalTracks == 0);
+  CHECK(record.metadata.discNumber == 0);
+  CHECK(record.metadata.totalDiscs == 0);
+  CHECK(record.metadata.uri.empty());
 }

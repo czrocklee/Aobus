@@ -81,8 +81,7 @@ namespace
       return rs::core::TrackView{
         rs::core::TrackId{0},  // dummy ID for tests
         std::span<std::byte const>{_hotData.data(), _hotData.size()},
-        std::span<std::byte const>{_coldData.data(), _coldData.size()},
-        nullptr
+        std::span<std::byte const>{_coldData.data(), _coldData.size()}
       };
     }
 
@@ -91,8 +90,7 @@ namespace
       return rs::core::TrackView{
         rs::core::TrackId{0},
         std::span<std::byte const>{_hotData.data(), _hotData.size()},
-        std::nullopt,
-        nullptr
+        std::span<std::byte const>{}
       };
     }
 
@@ -388,7 +386,7 @@ TEST_CASE("PlanEvaluator - Invalid Track View")
   PlanEvaluator evaluator;
 
   // Empty hot data creates an invalid TrackView
-  rs::core::TrackView emptyView{rs::core::TrackId{0}, std::span<std::byte const>{}, std::nullopt, nullptr};
+  rs::core::TrackView emptyView{rs::core::TrackId{0}, std::span<std::byte const>{}, std::span<std::byte const>{}};
   auto result = evaluator.evaluateFull(plan, emptyView);
   CHECK(result == false);
 }
@@ -611,7 +609,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  rs::core::TrackView view(rs::core::TrackId{0}, std::span<std::byte const>{data.data(), data.size()}, std::nullopt, nullptr);
+  rs::core::TrackView view(rs::core::TrackId{0}, std::span<std::byte const>{data.data(), data.size()}, std::span<std::byte const>{});
 
   // Bloom filter rejects because query mask doesn't match track bloom
   auto result = evaluator.matches(plan, view);
@@ -636,7 +634,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  rs::core::TrackView view(rs::core::TrackId{0}, std::span<std::byte const>{data.data(), data.size()}, std::nullopt, nullptr);
+  rs::core::TrackView view(rs::core::TrackId{0}, std::span<std::byte const>{data.data(), data.size()}, std::span<std::byte const>{});
 
   // With mask 0, bloom check passes (no filtering), falls through to full eval
   auto result = evaluator.matches(plan, view);

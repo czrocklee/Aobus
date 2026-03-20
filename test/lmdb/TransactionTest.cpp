@@ -109,7 +109,7 @@ TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
   WriteTransaction wtxn(env);
   Database db{wtxn, "test"};
   auto writer = db.writer(wtxn);
-  REQUIRE(!writer.create(1, makeBuffer(createStringData("test data"))).empty());
+  writer.create(1, makeBuffer(createStringData("test data")));
   wtxn.commit();
 
   // Start a new transaction - should work now
@@ -140,7 +140,7 @@ TEST_CASE("WriteTransaction - destructor without commit aborts", "[lmdb][transac
     {
       WriteTransaction txn(parentTxn);
       auto writer = db.writer(txn);
-      REQUIRE(!writer.create(1, makeBuffer(createStringData("uncommitted"))).empty());
+      writer.create(1, makeBuffer(createStringData("uncommitted")));
       // Without commit, nested transaction aborts on destruction
     }
     // Parent commit - but since nested txn didn't commit, data should not be visible
@@ -202,7 +202,7 @@ TEST_CASE("NestedTransaction - child commit merges to parent", "[lmdb][nested]")
   WriteTransaction childTxn(parentTxn);
   Database db{childTxn, "test"};
   auto writer = db.writer(childTxn);
-  REQUIRE(!writer.create(1, makeBuffer(createStringData("nested data"))).empty());
+  writer.create(1, makeBuffer(createStringData("nested data")));
 
   // Commit child - merges to parent
   childTxn.commit();
@@ -238,7 +238,7 @@ TEST_CASE("NestedTransaction - child abort does not affect parent", "[lmdb][nest
   {
     WriteTransaction childTxn(parentTxn);
     auto writer = db.writer(childTxn);
-    REQUIRE(!writer.create(1, makeBuffer(createStringData("child data"))).empty());
+    writer.create(1, makeBuffer(createStringData("child data")));
     // Child transaction aborts on destruction without commit
   }
 
@@ -270,7 +270,7 @@ TEST_CASE("NestedTransaction - read transaction under write transaction", "[lmdb
   WriteTransaction wtxn(env);
   Database db{wtxn, "test"};
   auto writer = db.writer(wtxn);
-  REQUIRE(!writer.create(1, makeBuffer(createStringData("test"))).empty());
+  writer.create(1, makeBuffer(createStringData("test")));
   wtxn.commit();
 
   // Verify read transaction works independently

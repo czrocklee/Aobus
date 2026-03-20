@@ -22,23 +22,11 @@ namespace rs::core
 {
 
   /**
-   * ColdLoadHint - Controls when cold data is loaded for TrackView.
-   */
-  enum class ColdLoadHint
-  {
-    Lazy, // Don't load cold data, load on demand
-    Eager // Load cold data immediately
-  };
-
-  /**
    * TrackView - Unified view of a track with hot and optional cold data.
    *
    * Stores raw binary data and parses on access via proxy classes.
-   * Provides lazy loading of cold data - cold is only loaded when accessed
-   * if not provided at construction time.
-   *
-   * Use ColdLoadHint::Lazy when iterating for hot-only queries (performance).
-   * Use ColdLoadHint::Eager when you need cold data for every track.
+   * If cold data was not provided, accessing cold accessors is undefined behavior (crash).
+   * Caller must ensure correct data is provided based on usage.
    */
   class TrackView final
   {
@@ -176,19 +164,15 @@ namespace rs::core
      * Construct a TrackView with raw bytes.
      *
      * @param id Track ID (LMDB key)
-     * @param hotData Hot track binary data (must be >= sizeof(TrackHotHeader))
-     * @param coldData Cold track binary data (optional, for eager loading)
-     * @param coldLoader Function to lazily load cold data (optional)
+     * @param hotData Hot track binary data (must be >= sizeof(TrackHotHeader)), can be empty span if not loaded
+     * @param coldData Cold track binary data (optional), if null accessing cold accessors crashes
      */
     TrackView(TrackId id,
               std::span<std::byte const> hotData,
-              std::optional<std::span<std::byte const>> coldData = std::nullopt,
-              std::function<std::optional<std::span<std::byte const>>(TrackId)> coldLoader = nullptr)
+              std::span<std::byte const> coldData)
       : _id(id)
       , _hotData(hotData)
       , _coldData(coldData)
-      , _coldLoaded(coldData.has_value())
-      , _coldLoader(std::move(coldLoader))
     {
     }
 
@@ -201,42 +185,23 @@ namespace rs::core
     // Track ID (LMDB key)
     TrackId id() const { return _id; }
 
-    // Validity checks
+    // Hot validity check
     bool isHotValid() const noexcept { return _hotData.data() != nullptr && _hotData.size() >= sizeof(TrackHotHeader); }
 
-    // Check if cold data is available (loaded or loader exists)
-    bool hasCold() const { return _coldData.has_value() || _coldLoader != nullptr; }
+    // Cold validity check
+    bool isColdValid() const noexcept { return _coldData.data() != nullptr && _coldData.size() >= sizeof(TrackColdHeader); }
 
-    // Check if cold data has been loaded
-    bool isColdLoaded() const { return _coldLoaded; }
-
-    // Accessors - hot always available, cold lazy-loaded
+    // Accessors
     MetadataProxy metadata() const { return MetadataProxy{*this}; }
     PropertyProxy property() const { return PropertyProxy{*this}; }
     TagProxy tags() const { return TagProxy{*this}; }
     CustomProxy custom() const { return CustomProxy{*this}; }
 
-    // Direct header access (hot always available)
+    // Direct header access
     TrackHotHeader const* hotHeader() const { return utility::as<TrackHotHeader>(_hotData); }
-
-    // Cold header access (triggers lazy load)
-    TrackColdHeader const* coldHeader() const
-    {
-      ensureColdLoaded();
-      if (!_coldData || _coldData->size() < sizeof(TrackColdHeader)) { return nullptr; }
-      return utility::as<TrackColdHeader>(*_coldData);
-    }
+    TrackColdHeader const* coldHeader() const { return utility::as<TrackColdHeader>(_coldData); }
 
   private:
-    void ensureColdLoaded() const
-    {
-      if (!_coldLoaded && _coldLoader)
-      {
-        _coldData = _coldLoader(_id);
-        _coldLoaded = true;
-      }
-    }
-
     std::string_view hotTitle() const;
     std::uint32_t hotTagId(std::uint8_t index) const;
     std::string_view hotGetString(std::uint16_t offset, std::uint16_t len) const;
@@ -247,9 +212,7 @@ namespace rs::core
 
     TrackId _id;
     std::span<std::byte const> _hotData;
-    mutable std::optional<std::span<std::byte const>> _coldData;
-    mutable bool _coldLoaded = false;
-    std::function<std::optional<std::span<std::byte const>>(TrackId)> _coldLoader;
+    std::span<std::byte const> _coldData;
   };
 
 } // namespace rs::core

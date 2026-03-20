@@ -53,8 +53,8 @@ TEST_CASE("Database::Reader - begin and end", "[lmdb][database][reader]")
 
     WriteTransaction wtxn(parentTxn);
     auto writer = db.writer(wtxn);
-    REQUIRE(!writer.create(1, makeBuffer(createStringData("one"))).empty());
-    REQUIRE(!writer.create(2, makeBuffer(createStringData("two"))).empty());
+    writer.create(1, makeBuffer(createStringData("one")));
+    writer.create(2, makeBuffer(createStringData("two")));
     wtxn.commit();
 
     parentTxn.commit();
@@ -103,7 +103,7 @@ TEST_CASE("Database::Reader - get", "[lmdb][database][reader]")
 
   WriteTransaction wtxn(parentTxn);
   auto writer = db.writer(wtxn);
-  REQUIRE(!writer.create(42, makeBuffer(createStringData("answer"))).empty());
+  writer.create(42, makeBuffer(createStringData("answer")));
   wtxn.commit();
 
   parentTxn.commit();
@@ -143,7 +143,7 @@ TEST_CASE("Database::Reader::Iterator - copy constructor", "[lmdb][database][rea
   dbTxn.commit();
 
   WriteTransaction wtxn(parentTxn);
-  REQUIRE(!db.writer(wtxn).create(1, makeBuffer(createStringData("data"))).empty());
+  db.writer(wtxn).create(1, makeBuffer(createStringData("data")));
   wtxn.commit();
 
   parentTxn.commit();
@@ -168,7 +168,7 @@ TEST_CASE("Database::Reader::Iterator - move constructor", "[lmdb][database][rea
   dbTxn.commit();
 
   WriteTransaction wtxn(parentTxn);
-  REQUIRE(!db.writer(wtxn).create(1, makeBuffer(createStringData("data"))).empty());
+  db.writer(wtxn).create(1, makeBuffer(createStringData("data")));
   wtxn.commit();
 
   parentTxn.commit();
@@ -193,7 +193,7 @@ TEST_CASE("Database::Reader::Iterator - dereference", "[lmdb][database][reader]"
 
   WriteTransaction wtxn(parentTxn);
   auto writer = db.writer(wtxn);
-  REQUIRE(!writer.create(100, makeBuffer(createStringData("value"))).empty());
+  writer.create(100, makeBuffer(createStringData("value")));
   wtxn.commit();
 
   parentTxn.commit();
@@ -221,9 +221,7 @@ TEST_CASE("Database::Writer - create with id and data", "[lmdb][database][writer
   Database db{wtxn, "test"};
   auto writer = db.writer(wtxn);
 
-  auto result = writer.create(1, makeBuffer(createStringData("hello")));
-  REQUIRE(!result.empty());
-  REQUIRE(result.size() == 5);
+  writer.create(1, makeBuffer(createStringData("hello")));
 
   wtxn.commit();
 
@@ -270,15 +268,11 @@ TEST_CASE("Database::Writer - append with data", "[lmdb][database][writer]")
   Database db{wtxn, "test"};
   auto writer = db.writer(wtxn);
 
-  auto [id1, result1] = writer.append(makeBuffer(createStringData("first")));
+  auto id1 = writer.append(makeBuffer(createStringData("first")));
   REQUIRE(id1 == 0);
-  REQUIRE(!result1.empty());
-  REQUIRE(result1.size() == 5);
 
-  auto [id2, result2] = writer.append(makeBuffer(createStringData("second")));
+  auto id2 = writer.append(makeBuffer(createStringData("second")));
   REQUIRE(id2 == 1);
-  REQUIRE(!result2.empty());
-  REQUIRE(result2.size() == 6);
 
   wtxn.commit();
 
@@ -334,8 +328,7 @@ TEST_CASE("Database::Writer - update existing record", "[lmdb][database][writer]
 
   // Create initial record
   {
-    auto result = writer.create(1, makeBuffer(createStringData("original")));
-    REQUIRE(!result.empty());
+    writer.create(1, makeBuffer(createStringData("original")));
   }
   wtxn.commit();
 
@@ -364,8 +357,7 @@ TEST_CASE("Database::Writer - delete record", "[lmdb][database][writer]")
   WriteTransaction wtxn(env);
   Database db{wtxn, "test"};
   auto writer = db.writer(wtxn);
-  auto result = writer.create(1, makeBuffer(createStringData("test")));
-  REQUIRE(!result.empty());
+  writer.create(1, makeBuffer(createStringData("test")));
   wtxn.commit();
 
   // Verify exists
@@ -406,8 +398,7 @@ TEST_CASE("Database::Writer - get within write transaction", "[lmdb][database][w
   Database db{wtxn, "test"};
   auto writer = db.writer(wtxn);
 
-  auto result = writer.create(42, makeBuffer(createStringData("answer")));
-  REQUIRE(!result.empty());
+  writer.create(42, makeBuffer(createStringData("answer")));
   auto data = writer.get(42);
   REQUIRE(data.has_value());
   REQUIRE(data->size() == 6);
@@ -422,12 +413,11 @@ TEST_CASE("Database::Writer - move constructor", "[lmdb][database][writer]")
   Database db{wtxn, "test"};
 
   auto writer1 = db.writer(wtxn);
-  auto result1 = writer1.create(1, makeBuffer(createStringData("test")));
+  writer1.create(1, makeBuffer(createStringData("test")));
 
   Database::Writer writer2{std::move(writer1)};
   // writer1 is now in moved-from state
   // writer2 should still be usable
-  (void)result1;
 
   wtxn.commit();
 }

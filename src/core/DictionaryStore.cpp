@@ -36,8 +36,8 @@ namespace rs::core
     // Not found in memory - append to database
     auto writer = _database.writer(txn);
     auto data = utility::asBytes(value);
-    auto [id, result] = writer.append(data);
-    std::string_view str = utility::asString(result);
+    auto id = writer.append(data);
+    std::string_view str = utility::asString(data);
     _idToStringStorage.emplace_back(str);
     _stringToId.emplace(_idToStringStorage.back(), DictionaryId{id});
     return DictionaryId{id};

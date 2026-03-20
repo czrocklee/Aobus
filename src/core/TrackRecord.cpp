@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/core/TrackRecord.h>
 #include <rs/core/TrackLayout.h>
+#include <rs/core/TrackRecord.h>
 #include <rs/utility/ByteView.h>
 
 #include <cstring>
@@ -52,19 +52,17 @@ namespace rs::core
     }
 
     // Copy remaining cold fields (uri already done above)
-    cold.uri = std::string{prop.uri()};
-    cold.fileSize = prop.fileSize();
-    cold.mtime = prop.mtime();
-    cold.coverArtId = meta.coverArtId();
-    cold.trackNumber = meta.trackNumber();
-    cold.totalTracks = meta.totalTracks();
-    cold.discNumber = meta.discNumber();
-    cold.totalDiscs = meta.totalDiscs();
+    metadata.uri = std::string{prop.uri()};
+    property.fileSize = prop.fileSize();
+    property.mtime = prop.mtime();
+    metadata.coverArtId = meta.coverArtId();
+    metadata.trackNumber = meta.trackNumber();
+    metadata.totalTracks = meta.totalTracks();
+    metadata.discNumber = meta.discNumber();
+    metadata.totalDiscs = meta.totalDiscs();
 
     // Load custom meta from cold view
-    for (auto const& [k, v] : view.custom()) {
-      customMeta.emplace_back(std::string{k}, std::string{v});
-    }
+    for (auto const& [k, v] : view.custom()) { customMeta.emplace_back(std::string{k}, std::string{v}); }
   }
 
   TrackHotHeader TrackRecord::hotHeader() const
@@ -91,8 +89,8 @@ namespace rs::core
 
   TrackColdHeader TrackRecord::coldHeader() const
   {
-    auto [fileSizeLo, fileSizeHi] = utility::splitInt64(cold.fileSize);
-    auto [mtimeLo, mtimeHi] = utility::splitInt64(cold.mtime);
+    auto [fileSizeLo, fileSizeHi] = utility::splitInt64(property.fileSize);
+    auto [mtimeLo, mtimeHi] = utility::splitInt64(property.mtime);
 
     return TrackColdHeader{
       .fileSizeLo = fileSizeLo,
@@ -101,12 +99,12 @@ namespace rs::core
       .mtimeHi = mtimeHi,
       .durationMs = property.durationMs,
       .sampleRate = property.sampleRate,
-      .coverArtId = cold.coverArtId,
+      .coverArtId = metadata.coverArtId,
       .bitrate = property.bitrate,
-      .trackNumber = cold.trackNumber,
-      .totalTracks = cold.totalTracks,
-      .discNumber = cold.discNumber,
-      .totalDiscs = cold.totalDiscs,
+      .trackNumber = metadata.trackNumber,
+      .totalTracks = metadata.totalTracks,
+      .discNumber = metadata.discNumber,
+      .totalDiscs = metadata.totalDiscs,
       .customLen = 0,
       .uriLen = 0,
       .channels = property.channels,
@@ -138,9 +136,7 @@ namespace rs::core
     data.push_back(static_cast<std::byte>('\0'));
 
     // Pad to 4-byte alignment
-    while (data.size() % 4 != 0) {
-      data.push_back(std::byte{0});
-    }
+    while (data.size() % 4 != 0) { data.push_back(std::byte{0}); }
 
     return data;
   }
@@ -157,7 +153,7 @@ namespace rs::core
       customMetaSize += static_cast<std::uint16_t>(key.size() + value.size());
     }
 
-    std::uint16_t uriLen = static_cast<std::uint16_t>(cold.uri.size());
+    std::uint16_t uriLen = static_cast<std::uint16_t>(metadata.uri.size());
 
     // Reserve space
     result.reserve(sizeof(TrackColdHeader) + customMetaSize + uriLen + 1);
@@ -191,10 +187,10 @@ namespace rs::core
     }
 
     // Write uri (null-terminated)
-    if (!cold.uri.empty())
+    if (!metadata.uri.empty())
     {
-      auto const* uriBytes = reinterpret_cast<std::byte const*>(cold.uri.data());
-      result.insert(result.end(), uriBytes, uriBytes + cold.uri.size());
+      auto const* uriBytes = reinterpret_cast<std::byte const*>(metadata.uri.data());
+      result.insert(result.end(), uriBytes, uriBytes + metadata.uri.size());
     }
     result.push_back(std::byte{'\0'});
 

@@ -80,9 +80,9 @@ namespace rs::lmdb
     Writer(Writer&&) noexcept;
     ~Writer();
 
-    std::span<std::byte const> create(std::uint32_t id, std::span<std::byte const> data);
+    void create(std::uint32_t id, std::span<std::byte const> data);
     std::span<std::byte> create(std::uint32_t id, std::size_t size);
-    std::pair<std::uint32_t, std::span<std::byte const>> append(std::span<std::byte const> data);
+    std::uint32_t append(std::span<std::byte const> data);
     std::pair<std::uint32_t, std::span<std::byte>> append(std::size_t size);
     std::span<std::byte const> update(std::uint32_t id, std::span<std::byte const> data);
     bool del(std::uint32_t id);

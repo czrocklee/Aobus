@@ -13,6 +13,7 @@
 #include <cstring>
 #include <vector>
 
+using rs::core::DictionaryId;
 using rs::core::TrackColdHeader;
 using rs::core::TrackHotHeader;
 using rs::core::TrackStore;
@@ -108,7 +109,7 @@ TEST_CASE("TrackStore - update", "[core][track]")
   std::memcpy(hotData2.data(), &hotHeader2, sizeof(TrackHotHeader));
 
   WriteTransaction wtxn3(env);
-  auto updated = store.writer(wtxn3).updateHot(id, hotData2);
+  [[maybe_unused]] auto updated = store.writer(wtxn3).updateHot(id, hotData2);
   wtxn3.commit();
 }
 
@@ -135,7 +136,7 @@ TEST_CASE("TrackStore - delete", "[core][track]")
 
   // Delete it
   WriteTransaction wtxn3(env);
-  auto deleted = store.writer(wtxn3).delHotCold(id);
+  auto deleted = store.writer(wtxn3).remove(id);
   REQUIRE(deleted);
   wtxn3.commit();
 
@@ -256,7 +257,7 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
   std::memcpy(hotData2.data(), &hotHeader2, sizeof(TrackHotHeader));
 
   WriteTransaction wtxn3(env);
-  auto updatedHot = store.writer(wtxn3).updateHot(id, hotData2);
+  [[maybe_unused]] auto updatedHot = store.writer(wtxn3).updateHot(id, hotData2);
   wtxn3.commit();
 
   // Update cold only
@@ -289,7 +290,7 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
   REQUIRE(trackOpt->metadata().trackNumber() == 2);
 }
 
-TEST_CASE("TrackStore - hot/cold delHotCold", "[core][track]")
+TEST_CASE("TrackStore - hot/cold remove", "[core][track]")
 {
   TempDir temp;
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -313,7 +314,7 @@ TEST_CASE("TrackStore - hot/cold delHotCold", "[core][track]")
 
   // Delete both
   WriteTransaction wtxn3(env);
-  auto deleted = store.writer(wtxn3).delHotCold(id);
+  auto deleted = store.writer(wtxn3).remove(id);
   REQUIRE(deleted);
   wtxn3.commit();
 
@@ -323,7 +324,7 @@ TEST_CASE("TrackStore - hot/cold delHotCold", "[core][track]")
   REQUIRE(!trackOpt.has_value());
 }
 
-TEST_CASE("TrackStore - hot/cold Writer getHot and getCold", "[core][track]")
+TEST_CASE("TrackStore - Writer get with LoadMode", "[core][track]")
 {
   TempDir temp;
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -351,14 +352,18 @@ TEST_CASE("TrackStore - hot/cold Writer getHot and getCold", "[core][track]")
   auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
   wtxn2.commit();
 
-  // Use Writer getHot/getCold (within same transaction context)
+  // Use Writer get with LoadMode (within same transaction context)
   WriteTransaction wtxn3(env);
   auto writer = store.writer(wtxn3);
-  auto hotOpt = writer.getHot(id);
+  auto hotOpt = writer.get(id, TrackStore::Reader::LoadMode::Hot);
   REQUIRE(hotOpt.has_value());
+  REQUIRE(hotOpt->isHotValid());
+  REQUIRE(!hotOpt->isColdValid());
 
-  auto coldOpt = writer.getCold(id);
+  auto coldOpt = writer.get(id, TrackStore::Reader::LoadMode::Cold);
   REQUIRE(coldOpt.has_value());
+  REQUIRE(!coldOpt->isHotValid());
+  REQUIRE(coldOpt->isColdValid());
   REQUIRE(coldOpt->property().fileSize() == 3000);
   REQUIRE(coldOpt->property().durationMs() == 240000);
   REQUIRE(coldOpt->metadata().coverArtId() == 42);
@@ -397,4 +402,189 @@ TEST_CASE("TrackStore - unified TrackView iteration", "[core][track]")
     ++count;
   }
   REQUIRE(count == 3);
+}
+
+TEST_CASE("TrackStore - LoadMode::Hot iteration", "[core][track]")
+{
+  TempDir temp;
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  WriteTransaction wtxn(env);
+  TrackStore store{wtxn, "tracks_hot", "tracks_cold"};
+  wtxn.commit();
+
+  // Create tracks with hot+cold
+  TrackHotHeader hotHeader{};
+  hotHeader.artistId = DictionaryId{1};
+  hotHeader.albumId = DictionaryId{2};
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  TrackColdHeader coldHeader{};
+  coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
+  coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
+  coldHeader.durationMs = 180000;
+  coldHeader.trackNumber = 5;
+  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
+
+  WriteTransaction wtxn2(env);
+  auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
+  wtxn2.commit();
+
+  // Iterate with Hot mode - should only load hot
+  ReadTransaction rtxn(env);
+  auto reader = store.reader(rtxn);
+  auto it = reader.begin(TrackStore::Reader::LoadMode::Hot);
+  REQUIRE(it != reader.end());
+  auto&& [trackId, trackView] = *it;
+  REQUIRE(trackId == id);
+  REQUIRE(trackView.isHotValid());
+  REQUIRE(!trackView.isColdValid());
+}
+
+TEST_CASE("TrackStore - LoadMode::Cold iteration", "[core][track]")
+{
+  TempDir temp;
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  WriteTransaction wtxn(env);
+  TrackStore store{wtxn, "tracks_hot", "tracks_cold"};
+  wtxn.commit();
+
+  // Create tracks with hot+cold
+  TrackHotHeader hotHeader{};
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  TrackColdHeader coldHeader{};
+  coldHeader.fileSizeLo = static_cast<std::uint32_t>(2000 & 0xFFFFFFFF);
+  coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(2000) >> 32);
+  coldHeader.durationMs = 240000;
+  coldHeader.trackNumber = 3;
+  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
+
+  WriteTransaction wtxn2(env);
+  auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
+  wtxn2.commit();
+
+  // Iterate with Cold mode
+  ReadTransaction rtxn(env);
+  auto reader = store.reader(rtxn);
+  auto it = reader.begin(TrackStore::Reader::LoadMode::Cold);
+  REQUIRE(it != reader.end());
+  auto&& [trackId, trackView] = *it;
+  REQUIRE(trackId == id);
+  REQUIRE(!trackView.isHotValid());
+  REQUIRE(trackView.isColdValid());
+}
+
+TEST_CASE("TrackStore - LoadMode::Both iteration", "[core][track]")
+{
+  TempDir temp;
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  WriteTransaction wtxn(env);
+  TrackStore store{wtxn, "tracks_hot", "tracks_cold"};
+  wtxn.commit();
+
+  // Create tracks with hot+cold
+  TrackHotHeader hotHeader{};
+  hotHeader.artistId = DictionaryId{1};
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  TrackColdHeader coldHeader{};
+  coldHeader.fileSizeLo = static_cast<std::uint32_t>(3000 & 0xFFFFFFFF);
+  coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(3000) >> 32);
+  coldHeader.durationMs = 300000;
+  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
+
+  WriteTransaction wtxn2(env);
+  auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
+  wtxn2.commit();
+
+  // Iterate with Both mode - should load both
+  ReadTransaction rtxn(env);
+  auto reader = store.reader(rtxn);
+  auto it = reader.begin(TrackStore::Reader::LoadMode::Both);
+  REQUIRE(it != reader.end());
+  auto&& [trackId, trackView] = *it;
+  REQUIRE(trackId == id);
+  REQUIRE(trackView.isHotValid());
+  REQUIRE(trackView.isColdValid());
+  REQUIRE(trackView.property().fileSize() == 3000);
+  REQUIRE(trackView.metadata().trackNumber() == 0); // default
+}
+
+TEST_CASE("TrackStore - LoadMode::Hot get by id", "[core][track]")
+{
+  TempDir temp;
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  WriteTransaction wtxn(env);
+  TrackStore store{wtxn, "tracks_hot", "tracks_cold"};
+  wtxn.commit();
+
+  // Create track
+  TrackHotHeader hotHeader{};
+  hotHeader.artistId = DictionaryId{42};
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  TrackColdHeader coldHeader{};
+  coldHeader.fileSizeLo = static_cast<std::uint32_t>(5000 & 0xFFFFFFFF);
+  coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(5000) >> 32);
+  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
+
+  WriteTransaction wtxn2(env);
+  auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
+  wtxn2.commit();
+
+  // Get with Hot mode
+  ReadTransaction rtxn(env);
+  auto optTrack = store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Hot);
+  REQUIRE(optTrack.has_value());
+  REQUIRE(optTrack->isHotValid());
+  REQUIRE(!optTrack->isColdValid());
+  REQUIRE(optTrack->metadata().artistId() == DictionaryId{42});
+}
+
+TEST_CASE("TrackStore - LoadMode::Cold get by id", "[core][track]")
+{
+  TempDir temp;
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  WriteTransaction wtxn(env);
+  TrackStore store{wtxn, "tracks_hot", "tracks_cold"};
+  wtxn.commit();
+
+  // Create track
+  TrackHotHeader hotHeader{};
+  hotHeader.artistId = DictionaryId{99};
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  TrackColdHeader coldHeader{};
+  coldHeader.fileSizeLo = static_cast<std::uint32_t>(6000 & 0xFFFFFFFF);
+  coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(6000) >> 32);
+  coldHeader.durationMs = 360000;
+  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
+
+  WriteTransaction wtxn2(env);
+  auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
+  wtxn2.commit();
+
+  // Get with Cold mode
+  ReadTransaction rtxn(env);
+  auto optTrack = store.reader(rtxn).get(id, TrackStore::Reader::LoadMode::Cold);
+  REQUIRE(optTrack.has_value());
+  REQUIRE(!optTrack->isHotValid());
+  REQUIRE(optTrack->isColdValid());
+  REQUIRE(optTrack->property().fileSize() == 6000);
+  REQUIRE(optTrack->property().durationMs() == 360000);
 }

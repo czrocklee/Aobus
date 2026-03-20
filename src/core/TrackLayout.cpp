@@ -63,8 +63,8 @@ namespace rs::core
 
   std::string_view TrackView::coldGetString(std::uint16_t offset, std::uint16_t len) const
   {
-    if (!_coldData || len == 0 || offset + len > _coldData->size()) { return {}; }
-    auto const* data = _coldData->data();
+    if (len == 0 || offset + len > _coldData.size()) { return {}; }
+    auto const* data = _coldData.data();
     return std::string_view{reinterpret_cast<char const*>(data + offset), len};
   }
 
@@ -90,20 +90,19 @@ namespace rs::core
 
   std::optional<std::pair<std::byte const*, std::byte const*>> TrackView::CustomProxy::customRange() const
   {
-    _track.ensureColdLoaded();
     auto* hdr = _track.coldHeader();
-    if (!_track._coldData || !hdr) { return std::nullopt; }
+    if (!_track._coldData.data() || !hdr) { return std::nullopt; }
 
     constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
-    auto const coldSize = _track._coldData->size();
+    auto const coldSize = _track._coldData.size();
     if (coldSize < kHeaderSize) { return std::nullopt; }
 
     auto const customLen = static_cast<std::size_t>(hdr->customLen);
     if (customLen > coldSize - kHeaderSize) { return std::nullopt; }
 
-    auto const* customStart = _track._coldData->data() + kHeaderSize;
+    auto const* customStart = _track._coldData.data() + kHeaderSize;
     auto const* customEnd = customStart + customLen;
-    return std::pair<std::byte const*, std::byte const*>{customStart, customEnd};
+    return std::make_pair(customStart, customEnd);
   }
 
   TrackView::CustomProxy::Iterator TrackView::CustomProxy::begin() const

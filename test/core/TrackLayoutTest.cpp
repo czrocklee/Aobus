@@ -96,15 +96,14 @@ namespace
   TEST_CASE("TrackView (Hot) - Empty View")
   {
     // Create an "empty" view by using empty hot data
-    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, std::nullopt, nullptr};
+    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, std::span<std::byte const>{}};
     CHECK(view.isHotValid() == false);
-    CHECK(view.hasCold() == false);
   }
 
   TEST_CASE("TrackView (Hot) - Construct from Hot Data")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
 
     CHECK(view.isHotValid() == true);
     CHECK(view.hotHeader() != nullptr);
@@ -113,7 +112,7 @@ namespace
   TEST_CASE("TrackView (Hot) - Fixed Field Accessors")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
 
     auto prop = view.property();
     auto meta = view.metadata();
@@ -132,7 +131,7 @@ namespace
   TEST_CASE("TrackView (Hot) - String Accessors")
   {
     auto data = createTrackWithStrings("Test Title");
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
 
     CHECK(view.isHotValid() == true);
     CHECK(view.metadata().title() == "Test Title");
@@ -141,7 +140,7 @@ namespace
   TEST_CASE("TrackView (Hot) - Empty String Handling")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
 
     // Empty strings should return empty string_view
     CHECK(view.metadata().title().empty());
@@ -151,17 +150,17 @@ namespace
   {
     // Null data (valid size but nullptr) - isHotValid is false
     std::span<std::byte const> nullSpan{static_cast<std::byte const*>(nullptr), 100};
-    rs::core::TrackView nullView{TrackId{0}, nullSpan, std::nullopt, nullptr};
+    rs::core::TrackView nullView{TrackId{0}, nullSpan, std::span<std::byte const>{}};
     CHECK(nullView.isHotValid() == false);
 
     // Too small - isHotValid is false (no exception thrown)
     char smallData[10] = {};
     std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
-    rs::core::TrackView smallView{TrackId{0}, smallSpan, std::nullopt, nullptr};
+    rs::core::TrackView smallView{TrackId{0}, smallSpan, std::span<std::byte const>{}};
     CHECK(smallView.isHotValid() == false);
 
     // Empty hot - isHotValid is false
-    rs::core::TrackView emptyView{TrackId{0}, std::span<std::byte const>{}, std::nullopt, nullptr};
+    rs::core::TrackView emptyView{TrackId{0}, std::span<std::byte const>{}, std::span<std::byte const>{}};
     CHECK(emptyView.isHotValid() == false);
   }
 
@@ -172,14 +171,14 @@ namespace
 
     auto data = serializeHeader(h);
 
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
     CHECK(view.tags().bloom() == 0xCAFE);
   }
 
   TEST_CASE("TrackView (Hot) - Tag Accessors - No Tags")
   {
     auto data = createTrackWithStrings("Test");
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
 
     CHECK(view.tags().count() == 0);
     CHECK(view.tags().id(0) == DictionaryId{0});
@@ -219,7 +218,7 @@ namespace
     // Add title + null (after tags)
     appendString(data, title);
 
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::nullopt, nullptr};
+    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
 
     CHECK(view.tags().count() == 2);
     CHECK(view.tags().id(0) == DictionaryId{10});
@@ -246,14 +245,14 @@ namespace
                                         std::string_view uri = "")
   {
     rs::core::TrackRecord record;
-    record.cold.uri = std::string{uri};
-    record.cold.fileSize = rs::utility::combineInt64(header.fileSizeLo, header.fileSizeHi);
-    record.cold.mtime = rs::utility::combineInt64(header.mtimeLo, header.mtimeHi);
-    record.cold.coverArtId = header.coverArtId;
-    record.cold.trackNumber = header.trackNumber;
-    record.cold.totalTracks = header.totalTracks;
-    record.cold.discNumber = header.discNumber;
-    record.cold.totalDiscs = header.totalDiscs;
+    record.metadata.uri = std::string{uri};
+    record.property.fileSize = rs::utility::combineInt64(header.fileSizeLo, header.fileSizeHi);
+    record.property.mtime = rs::utility::combineInt64(header.mtimeLo, header.mtimeHi);
+    record.metadata.coverArtId = header.coverArtId;
+    record.metadata.trackNumber = header.trackNumber;
+    record.metadata.totalTracks = header.totalTracks;
+    record.metadata.discNumber = header.discNumber;
+    record.metadata.totalDiscs = header.totalDiscs;
     record.property.durationMs = header.durationMs;
     record.property.sampleRate = header.sampleRate;
     record.property.bitrate = header.bitrate;
@@ -264,7 +263,7 @@ namespace
 
   rs::core::TrackView makeColdView(std::vector<std::byte> const& data)
   {
-    return rs::core::TrackView{TrackId{0}, std::span<std::byte const>{}, data, nullptr};
+    return rs::core::TrackView{TrackId{0}, std::span<std::byte const>{}, std::as_bytes(std::span{data})};
   }
 
   TEST_CASE("TrackColdHeader - Size and Alignment")
@@ -277,19 +276,15 @@ namespace
   {
     // Create a cold-only view (hot data is empty, but cold data is present)
     auto data = createColdData();
-    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, data, nullptr};
+    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, std::as_bytes(std::span{data})};
     CHECK(view.isHotValid() == false);
-    CHECK(view.hasCold() == true);
-    CHECK(view.isColdLoaded() == true);
   }
 
   TEST_CASE("TrackView (Cold) - Construct from Cold Data")
   {
     auto data = createColdData();
-    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, data, nullptr};
+    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, std::as_bytes(std::span{data})};
 
-    CHECK(view.hasCold() == true);
-    CHECK(view.isColdLoaded() == true);
     CHECK(view.coldHeader() != nullptr);
   }
 
@@ -298,8 +293,6 @@ namespace
     auto data = createColdData();
     auto view = makeColdView(data);
 
-    CHECK(view.hasCold() == true);
-    CHECK(view.isColdLoaded() == true);
     int count = 0;
     for (auto const& [k, v] : view.custom()) { (void)k; (void)v; ++count; }
     CHECK(count == 0);
@@ -530,7 +523,6 @@ namespace
     auto data = createColdData(header, {}, "/path/to/file.flac");
     auto view = makeColdView(data);
 
-    CHECK(view.isColdLoaded() == true);
     auto prop = view.property();
     auto meta = view.metadata();
     CHECK(prop.fileSize() == 12345678);

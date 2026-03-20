@@ -222,10 +222,9 @@ namespace rs::lmdb
     }
   }
 
-  std::span<std::byte const> Writer::create(std::uint32_t id, std::span<std::byte const> data)
+  void Writer::create(std::uint32_t id, std::span<std::byte const> data)
   {
     put(_cursor.get(), id, data, MDB_NOOVERWRITE, _lastData);
-    return _lastData;
   }
 
   std::span<std::byte> Writer::create(std::uint32_t id, std::size_t size)
@@ -234,11 +233,11 @@ namespace rs::lmdb
     return _lastData;
   }
 
-  std::pair<std::uint32_t, std::span<std::byte const>> Writer::append(std::span<std::byte const> data)
+  std::uint32_t Writer::append(std::span<std::byte const> data)
   {
     auto id = ++_lastId;
     put(_cursor.get(), id, data, MDB_NOOVERWRITE | MDB_APPEND, _lastData);
-    return {id, _lastData};
+    return id;
   }
 
   std::pair<std::uint32_t, std::span<std::byte>> Writer::append(std::size_t size)

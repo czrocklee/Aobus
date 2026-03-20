@@ -21,7 +21,7 @@ namespace
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
 
-    auto optTrackView = writer.getCold(trackId);
+    auto optTrackView = writer.get(trackId, core::TrackStore::Reader::LoadMode::Both);
     if (!optTrackView)
     {
       os << "error: track not found: " << trackId << std::endl;
@@ -67,7 +67,7 @@ namespace
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
 
-    auto optTrackView = writer.getCold(trackId);
+    auto optTrackView = writer.get(trackId, core::TrackStore::Reader::LoadMode::Both);
     if (!optTrackView)
     {
       os << "error: track not found: " << trackId << std::endl;
