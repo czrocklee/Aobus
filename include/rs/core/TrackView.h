@@ -118,8 +118,7 @@ namespace rs::core
       DictionaryId id(std::uint8_t index) const noexcept { return DictionaryId{_track.hotTagId(index)}; }
       DictionaryId const* begin() const noexcept { return reinterpret_cast<DictionaryId const*>(_track._hotData.data() + sizeof(TrackHotHeader)); }
       DictionaryId const* end() const noexcept { return begin() + count(); }
-      bool has(DictionaryId tagIdToCheck) const;
-      std::vector<DictionaryId> ids() const;
+      bool has(DictionaryId tagIdToCheck) const noexcept;
 
     private:
       TrackView const& _track;
@@ -139,9 +138,8 @@ namespace rs::core
        */
       class Iterator : public boost::iterator_facade<
           Iterator,
-          std::pair<std::string_view, std::string_view>,
-          boost::single_pass_traversal_tag,
-          std::pair<std::string_view, std::string_view>>
+          std::pair<std::string_view, std::string_view> const,
+          boost::forward_traversal_tag>
       {
       public:
         Iterator() : _currentPos(nullptr), _nextPos(nullptr), _end(nullptr) {}
@@ -150,7 +148,7 @@ namespace rs::core
       private:
         friend class boost::iterator_core_access;
 
-        std::pair<std::string_view, std::string_view> dereference() const;
+        std::pair<std::string_view, std::string_view> const& dereference() const;
         void increment();
         bool equal(Iterator const& other) const;
         bool loadCurrent();

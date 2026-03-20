@@ -69,19 +69,7 @@ namespace rs::core
   }
 
   // TrackView proxy implementations
-  std::vector<DictionaryId> TrackView::TagProxy::ids() const
-  {
-    std::vector<DictionaryId> result;
-    auto c = count();
-    for (std::uint8_t i = 0; i < c; ++i)
-    {
-      auto tagId = id(i);
-      if (tagId > 0) { result.push_back(tagId); }
-    }
-    return result;
-  }
-
-  bool TrackView::TagProxy::has(DictionaryId tagIdToCheck) const
+  bool TrackView::TagProxy::has(DictionaryId tagIdToCheck) const noexcept
   {
     auto c = count();
     for (std::uint8_t i = 0; i < c; ++i)
@@ -144,7 +132,7 @@ namespace rs::core
     }
   }
 
-  std::pair<std::string_view, std::string_view> TrackView::CustomProxy::Iterator::dereference() const
+  std::pair<std::string_view, std::string_view> const& TrackView::CustomProxy::Iterator::dereference() const
   {
     return _current;
   }

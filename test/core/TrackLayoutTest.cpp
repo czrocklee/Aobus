@@ -184,7 +184,7 @@ namespace
     CHECK(view.tags().count() == 0);
     CHECK(view.tags().id(0) == DictionaryId{0});
 
-    auto ids = view.tags().ids();
+    std::vector<DictionaryId> ids(view.tags().begin(), view.tags().end());
     CHECK(ids.empty());
     CHECK(view.tags().has(DictionaryId{1}) == false);
   }
@@ -226,7 +226,7 @@ namespace
     CHECK(view.tags().id(1) == DictionaryId{20});
     CHECK(view.tags().id(2) == DictionaryId{0}); // Out of bounds
 
-    auto ids = view.tags().ids();
+    std::vector<DictionaryId> ids(view.tags().begin(), view.tags().end());
     CHECK(ids.size() == 2);
     CHECK(ids[0] == DictionaryId{10});
     CHECK(ids[1] == DictionaryId{20});
