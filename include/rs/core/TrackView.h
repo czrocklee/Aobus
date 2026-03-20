@@ -115,9 +115,11 @@ namespace rs::core
 
       std::uint8_t count() const noexcept { return _track.hotHeader()->tagLen / sizeof(DictionaryId); }
       std::uint32_t bloom() const noexcept { return _track.hotHeader()->tagBloom; }
-      DictionaryId id(std::uint8_t index) const { return DictionaryId{_track.hotTagId(index)}; }
-      std::vector<DictionaryId> ids() const;
+      DictionaryId id(std::uint8_t index) const noexcept { return DictionaryId{_track.hotTagId(index)}; }
+      DictionaryId const* begin() const noexcept { return reinterpret_cast<DictionaryId const*>(_track._hotData.data() + sizeof(TrackHotHeader)); }
+      DictionaryId const* end() const noexcept { return begin() + count(); }
       bool has(DictionaryId tagIdToCheck) const;
+      std::vector<DictionaryId> ids() const;
 
     private:
       TrackView const& _track;
