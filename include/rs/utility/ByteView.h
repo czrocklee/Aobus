@@ -59,6 +59,12 @@ namespace rs::utility
     return {reinterpret_cast<char const*>(span.data()), span.size()};
   }
 
+  // Get string_view from byte pointer + offset + size
+  inline std::string_view asString(std::byte const* data, std::size_t offset, std::size_t size) noexcept
+  {
+    return {reinterpret_cast<char const*>(data) + offset, size};
+  }
+
   /**
    * Split a uint64_t into two uint32_t parts for storage.
    * Use when 8-byte alignment is not available.

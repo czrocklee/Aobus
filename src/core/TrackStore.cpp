@@ -52,7 +52,7 @@ namespace rs::core
       coldBuffer = *optColdBuffer;
     }
 
-    return TrackView{id, hotBuffer, coldBuffer};
+    return TrackView{hotBuffer, coldBuffer};
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::begin(LoadMode mode) const
@@ -107,7 +107,7 @@ namespace rs::core
       coldData = coldBuffer;
     }
 
-    return {trackId, TrackView{trackId, hotData, coldData}};
+    return {trackId, TrackView{hotData, coldData}};
   }
 
   // TrackStore::Writer implementation
@@ -128,7 +128,7 @@ namespace rs::core
 
     auto id = _hotWriter.append(hotData);
     [[maybe_unused]] auto coldId = _coldWriter.append(coldData);
-    return {TrackId{id}, TrackView{TrackId{id}, hotData, coldData}};
+    return {TrackId{id}, TrackView{hotData, coldData}};
   }
 
   TrackView TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
@@ -137,7 +137,7 @@ namespace rs::core
     assert((hotData.size() % 4 == 0) && "hotData size must be multiple of 4");
 
     [[maybe_unused]] auto buffer = _hotWriter.update(id.value(), hotData);
-    return TrackView{id, hotData, {}};
+    return TrackView{hotData, {}};
   }
 
   TrackView TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
@@ -146,7 +146,7 @@ namespace rs::core
     assert((coldData.size() % 4 == 0) && "coldData size must be multiple of 4");
 
     [[maybe_unused]] auto buffer = _coldWriter.update(id.value(), coldData);
-    return TrackView{id, {}, coldData};
+    return TrackView{{}, coldData};
   }
 
   bool TrackStore::Writer::remove(TrackId id)
@@ -175,7 +175,7 @@ namespace rs::core
       coldBuffer = *optColdBuffer;
     }
 
-    return TrackView{id, hotBuffer, coldBuffer};
+    return TrackView{hotBuffer, coldBuffer};
   }
 
 } // namespace rs::core

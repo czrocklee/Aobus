@@ -44,11 +44,9 @@ nix-shell --run "cmake --build --preset linux-debug --parallel"
 Or use direct commands:
 
 ```bash
-nix-shell --run "cmake -S . -B /tmp/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-nix-shell --run "cmake --build /tmp/build"
+nix-shell --run "cmake --build /tmp/build --parallel"
 ```
 
-**IMPORTANT**: Always use `cmake --build` (not `make` directly). Use `--parallel` (or `-- -j$(nproc)`) to enable parallel builds — `cmake --build` does not parallelize automatically with the Unix Makefiles generator.
 
 The project builds into `/tmp/build` (as configured in CMakePresets.json).
 
@@ -56,12 +54,8 @@ When changing core logic (`src/core`, `src/expr`, `src/tag`, `include/rs`), alwa
 
 ## Generated Code Notes
 
-This project generates code from FlatBuffers schemas.
-
-- Schemas: `fbs/*.fbs`
-- Generated output directory: `${build_dir}/gen`
-
-Do not hand-edit generated files in build output. Instead edit sources (`fbs/**` or generator sources in `src/gen/**`).
+<!-- FlatBuffers schema generation was removed - UI was disabled pending migration. -->
+<!-- If FlatBuffers is re-introduced, add schema generation cmake code here. -->
 
 ## Editing Guidance
 

@@ -72,7 +72,7 @@ This guide covers C++ coding conventions for RockStudio contributors.
 3.3.2. DON'T use [[nodiscard]]: Too verbose, rely on clang-tidy for check
 3.3.3. Use [[maybe_unused]]: Suppress unused warnings other than (void)
 3.3.4. Use noexcept: Mark functions that won't throw
-3.3.5. Use uniform initialization `{}` other than parentheses `()`
+3.3.5. Use uniform initialization `{}` other than parentheses `()` for constructors and member initializer lists
 
 ## 4. Best Practices
 

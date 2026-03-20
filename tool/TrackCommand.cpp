@@ -47,13 +47,13 @@ namespace
     auto reader = ml.tracks().reader(txn);
 
     // Collect matching tracks
-    std::vector<core::TrackView> matches;
+    std::vector<std::pair<core::TrackId, core::TrackView>> matches;
 
     if (filter.empty())
     {
       for (auto [id, view] : reader)
       {
-        matches.emplace_back(std::move(view));
+        matches.emplace_back(id, std::move(view));
       }
     }
     else
@@ -73,7 +73,7 @@ namespace
           {
             if (evaluator.matches(plan, view))
             {
-              matches.emplace_back(std::move(view));
+              matches.emplace_back(id, std::move(view));
             }
           }
           break;
@@ -99,8 +99,8 @@ namespace
       os << "[\n";
       for (std::size_t i = offset; i < end; ++i)
       {
-        auto const& view = matches[i];
-        os << "  {\"id\": " << view.id()
+        auto const& [id, view] = matches[i];
+        os << "  {\"id\": " << id
            << ", \"title\": \"" << view.metadata().title() << "\"";
         if (view.metadata().artistId() > 0)
         {
@@ -120,8 +120,8 @@ namespace
     {
       for (std::size_t i = offset; i < end; ++i)
       {
-        auto const& view = matches[i];
-        os << std::setw(5) << view.id() << " " << view.metadata().title() << std::endl;
+        auto const& [id, view] = matches[i];
+        os << std::setw(5) << id << " " << view.metadata().title() << std::endl;
       }
       if (limit > 0 && offset + limit < matches.size())
       {

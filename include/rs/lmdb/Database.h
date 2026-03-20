@@ -7,9 +7,9 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <rs/lmdb/Transaction.h>
 #include <span>
 #include <vector>
-#include <rs/lmdb/Transaction.h>
 
 namespace rs::lmdb
 {
@@ -89,16 +89,12 @@ namespace rs::lmdb
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
 
   private:
-    struct CursorDeleter
-    {
-      void operator()(MDB_cursor* cur) const { mdb_cursor_close(cur); }
-    };
     Writer(MDB_dbi dbi, WriteTransaction& txn);
 
     MDB_dbi _dbi;
     WriteTransaction& _txn;
-    std::unique_ptr<MDB_cursor, CursorDeleter> _cursor;
-    std::uint32_t _lastId = UINT32_MAX;
+    std::unique_ptr<MDB_cursor, decltype([](auto* cur) { mdb_cursor_close(cur); })> _cursor;
+    std::uint32_t _lastId = std::numeric_limits<std::uint32_t>::max();
     std::vector<std::byte> _lastData;
     friend class Database;
   };

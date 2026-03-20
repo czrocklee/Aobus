@@ -24,11 +24,7 @@ namespace rs::lmdb
     ReadTransaction() = default;
     explicit ReadTransaction(MDB_txn* handle) noexcept : _handle{handle} {}
 
-    struct TxnDeleter
-    {
-      void operator()(MDB_txn* txn) const { mdb_txn_abort(txn); }
-    };
-    std::unique_ptr<MDB_txn, TxnDeleter> _handle;
+    std::unique_ptr<MDB_txn, decltype([](auto* txn) { mdb_txn_abort(txn); })> _handle;
     friend class Database;
   };
 

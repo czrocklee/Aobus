@@ -4,6 +4,7 @@
 #include <rs/core/TrackView.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 
 namespace rs::core
@@ -12,111 +13,82 @@ namespace rs::core
   // TrackView member implementations
   std::string_view TrackView::hotTitle() const
   {
-    auto* hdr = hotHeader();
-    if (!hdr) { return {}; }
-    auto titleOffset = hdr->tagLen; // title comes after tags
-    return hotGetString(titleOffset, hdr->titleLen);
+    auto const& hdr = hotHeader();
+    auto titleOffset = hdr.tagLen; // title comes after tags
+    return hotGetString(titleOffset, hdr.titleLen);
   }
 
   std::uint32_t TrackView::hotTagId(std::uint8_t index) const
   {
-    auto* hdr = hotHeader();
-    if (!hdr) { return 0; }
-    auto tagCount = hdr->tagLen / sizeof(DictionaryId);
-    if (index >= tagCount) { return 0; }
-    auto offset = sizeof(TrackHotHeader) + index * sizeof(DictionaryId);
-    if (_hotData.size() < offset + sizeof(DictionaryId)) { return 0; }
-    std::uint32_t result;
-    std::memcpy(&result, utility::as<std::uint32_t>(hdr, offset), sizeof(std::uint32_t));
-    return result;
+    auto const& hdr = hotHeader();
+    assert(index < hdr.tagLen / sizeof(DictionaryId));
+    auto const* tagIds = reinterpret_cast<DictionaryId const*>(_hotData.data() + sizeof(TrackHotHeader));
+    return tagIds[index].value();
   }
 
   std::string_view TrackView::hotGetString(std::uint16_t offset, std::uint16_t len) const
   {
-    if (len == 0) { return {}; }
-    std::size_t const start = sizeof(TrackHotHeader) + offset;
-    if (start + len > _hotData.size()) { return {}; }
-    return {utility::as<char>(_hotData.data(), start), len};
+    auto const start = sizeof(TrackHotHeader) + offset;
+    assert(start + len <= _hotData.size());
+    return utility::asString(_hotData.data(), start, len);
   }
 
   std::string_view TrackView::coldUri() const
   {
-    auto* hdr = coldHeader();
-    if (!hdr) { return {}; }
-    auto uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + hdr->customLen);
-    return coldGetString(uriOffset, hdr->uriLen);
+    auto const& hdr = coldHeader();
+    auto uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + hdr.customLen);
+    return coldGetString(uriOffset, hdr.uriLen);
   }
 
   std::uint64_t TrackView::coldFileSize() const noexcept
   {
-    auto* hdr = coldHeader();
-    if (!hdr) { return 0; }
-    return utility::combineInt64(hdr->fileSizeLo, hdr->fileSizeHi);
+    auto const& hdr = coldHeader();
+    return utility::combineInt64(hdr.fileSizeLo, hdr.fileSizeHi);
   }
 
   std::uint64_t TrackView::coldMtime() const noexcept
   {
-    auto* hdr = coldHeader();
-    if (!hdr) { return 0; }
-    return utility::combineInt64(hdr->mtimeLo, hdr->mtimeHi);
+    auto const& hdr = coldHeader();
+    return utility::combineInt64(hdr.mtimeLo, hdr.mtimeHi);
   }
 
   std::string_view TrackView::coldGetString(std::uint16_t offset, std::uint16_t len) const
   {
-    if (len == 0 || offset + len > _coldData.size()) { return {}; }
-    auto const* data = _coldData.data();
-    return std::string_view{reinterpret_cast<char const*>(data + offset), len};
+    assert(offset + len <= _coldData.size());
+    return utility::asString(_coldData.data(), offset, len);
   }
 
   // TrackView proxy implementations
   bool TrackView::TagProxy::has(DictionaryId tagIdToCheck) const noexcept
   {
-    auto c = count();
-    for (std::uint8_t i = 0; i < c; ++i)
-    {
-      if (id(i) == tagIdToCheck) { return true; }
-    }
-    return false;
+    return std::ranges::find(begin(), end(), tagIdToCheck) != end();
   }
 
-  std::optional<std::string> TrackView::CustomProxy::get(std::string_view key) const
+  std::optional<std::string_view> TrackView::CustomProxy::get(std::string_view key) const
   {
     for (auto const& [k, v] : *this)
     {
-      if (k == key) { return std::string{v}; }
+      if (k == key) { return v; }
     }
+
     return std::nullopt;
-  }
-
-  std::optional<std::pair<std::byte const*, std::byte const*>> TrackView::CustomProxy::customRange() const
-  {
-    auto* hdr = _track.coldHeader();
-    if (!_track._coldData.data() || !hdr) { return std::nullopt; }
-
-    constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
-    auto const coldSize = _track._coldData.size();
-    if (coldSize < kHeaderSize) { return std::nullopt; }
-
-    auto const customLen = static_cast<std::size_t>(hdr->customLen);
-    if (customLen > coldSize - kHeaderSize) { return std::nullopt; }
-
-    auto const* customStart = _track._coldData.data() + kHeaderSize;
-    auto const* customEnd = customStart + customLen;
-    return std::make_pair(customStart, customEnd);
   }
 
   TrackView::CustomProxy::Iterator TrackView::CustomProxy::begin() const
   {
-    auto range = customRange();
-    if (!range) { return CustomProxy::Iterator{}; }
-    return CustomProxy::Iterator{range->first, range->second};
+    auto const& hdr = _track.coldHeader();
+    constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
+    auto const* customStart = _track._coldData.data() + kHeaderSize;
+    auto const* customEnd = customStart + hdr.customLen;
+    return CustomProxy::Iterator{customStart, customEnd};
   }
 
   TrackView::CustomProxy::Iterator TrackView::CustomProxy::end() const
   {
-    auto range = customRange();
-    if (!range) { return CustomProxy::Iterator{}; }
-    return CustomProxy::Iterator{range->second, range->second};
+    auto const& hdr = _track.coldHeader();
+    constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
+    auto const* customEnd = _track._coldData.data() + kHeaderSize + hdr.customLen;
+    return CustomProxy::Iterator{customEnd, customEnd};
   }
 
   TrackView::CustomProxy::Iterator::Iterator(std::byte const* data, std::byte const* end)
@@ -151,7 +123,7 @@ namespace rs::core
 
     constexpr std::size_t kLengthFieldsSize = sizeof(std::uint16_t) * 2;
 
-    if (auto const available = static_cast<std::size_t>(end - ptr); available < kLengthFieldsSize) { return false; }
+    if (static_cast<std::size_t>(end - ptr) < kLengthFieldsSize) { return false; }
 
     std::uint16_t keyLen = 0;
     std::uint16_t valueLen = 0;
@@ -162,12 +134,12 @@ namespace rs::core
 
     auto const payloadLen = static_cast<std::size_t>(keyLen) + static_cast<std::size_t>(valueLen);
     auto const payloadAvailable = static_cast<std::size_t>(end - ptr);
-    
+
     if (payloadLen > payloadAvailable) { return false; }
 
-    std::string_view key{reinterpret_cast<char const*>(ptr), static_cast<std::size_t>(keyLen)};
+    std::string_view key = utility::asString(std::span{ptr, static_cast<std::size_t>(keyLen)});
     ptr += keyLen;
-    std::string_view value{reinterpret_cast<char const*>(ptr), static_cast<std::size_t>(valueLen)};
+    std::string_view value = utility::asString(std::span{ptr, static_cast<std::size_t>(valueLen)});
     ptr += valueLen;
 
     out = {key, value};

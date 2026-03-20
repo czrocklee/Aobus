@@ -285,12 +285,12 @@ TEST_CASE("TrackRecord - serializeCold")
   record.property.mtime = 9876543210;
   record.metadata.trackNumber = 3;
   record.metadata.uri = "/path/to/file.flac";
-  record.customMeta = {{"key1", "value1"}, {"key2", "value2"}};
+  record.custom.pairs = {{"key1", "value1"}, {"key2", "value2"}};
 
   auto data = record.serializeCold();
 
   // Verify cold view can parse it
-  TrackView view{TrackId{0}, std::span<std::byte const>{}, std::as_bytes(std::span{data})};
+  TrackView view{std::span<std::byte const>{}, data};
   CHECK(view.property().fileSize() == 2000);
   CHECK(view.property().mtime() == 9876543210);
   CHECK(view.metadata().trackNumber() == 3);
@@ -307,14 +307,14 @@ TEST_CASE("TrackRecord - serializeCold")
   CHECK(result[1].second == "value2");
 }
 
-TEST_CASE("TrackRecord - customMeta field")
+TEST_CASE("TrackRecord - custom.pairs field")
 {
   TrackRecord record;
-  record.customMeta = {{"replaygain_track_gain_db", "-6.5"}, {"isrc", "USSM19999999"}};
+  record.custom.pairs = {{"replaygain_track_gain_db", "-6.5"}, {"isrc", "USSM19999999"}};
 
-  CHECK(record.customMeta.size() == 2);
-  CHECK(record.customMeta[0].first == "replaygain_track_gain_db");
-  CHECK(record.customMeta[0].second == "-6.5");
+  CHECK(record.custom.pairs.size() == 2);
+  CHECK(record.custom.pairs[0].first == "replaygain_track_gain_db");
+  CHECK(record.custom.pairs[0].second == "-6.5");
 }
 
 TEST_CASE("TrackRecord - Cold struct default values")

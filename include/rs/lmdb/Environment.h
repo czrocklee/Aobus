@@ -35,11 +35,7 @@ namespace rs::lmdb
     ~Environment() noexcept;
 
   private:
-    struct EnvDeleter
-    {
-      void operator()(MDB_env* env) const { mdb_env_close(env); }
-    };
-    std::unique_ptr<MDB_env, EnvDeleter> _handle;
+    std::unique_ptr<MDB_env, decltype([](auto* env) { mdb_env_close(env); })> _handle;
 
     friend class Database;
     friend class ReadTransaction;

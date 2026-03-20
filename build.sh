@@ -26,6 +26,7 @@ fi
 
 # Build directory
 BUILD_DIR="/tmp/build"
+SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Clean if requested
 if [[ "$CLEAN" == "clean" ]]; then
@@ -39,12 +40,19 @@ if ! command -v nix-shell &> /dev/null; then
     exit 1
 fi
 
-# Configure and build
-echo "Building RockStudio ($CMAKE_BUILD_TYPE)..."
-nix-shell --run "cmake -S . -B $BUILD_DIR -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-nix-shell --run "cmake --build $BUILD_DIR -j$(nproc)"
+# Configure
+echo "Configuring RockStudio ($CMAKE_BUILD_TYPE)..."
+nix-shell --run "cmake -S \"$SOURCE_DIR\" -B \"$BUILD_DIR\" -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+
+# Build
+echo "Building RockStudio..."
+nix-shell --run "cmake --build \"$BUILD_DIR\" --parallel"
+
+# Run tests
+echo "Running tests..."
+nix-shell --run "$BUILD_DIR/rs_test"
 
 echo ""
-echo "Build complete!"
+echo "All done!"
 echo "  Build type: $CMAKE_BUILD_TYPE"
-echo "  Build dir:   $BUILD_DIR"
+echo "  Build dir: $BUILD_DIR"

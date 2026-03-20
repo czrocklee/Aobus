@@ -77,12 +77,18 @@ namespace rs::core
       std::vector<DictionaryId> ids; // Tag IDs for serialization
     };
 
+    /**
+     * Custom - User-defined key-value pairs (stored in cold storage).
+     */
+    struct Custom
+    {
+      std::vector<std::pair<std::string, std::string>> pairs;
+    };
+
     Property property;
     Metadata metadata;
     Tags tags;
-
-    // Custom key-value pairs (stored in cold storage)
-    std::vector<std::pair<std::string, std::string>> customMeta;
+    Custom custom;
 
     // Dictionary IDs - resolved at creation time
     DictionaryId artistId;

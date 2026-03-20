@@ -96,23 +96,23 @@ namespace
   TEST_CASE("TrackView (Hot) - Empty View")
   {
     // Create an "empty" view by using empty hot data
-    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, std::span<std::byte const>{}};
+    rs::core::TrackView view{std::span<std::byte const>{}, std::span<std::byte const>{}};
     CHECK(view.isHotValid() == false);
   }
 
   TEST_CASE("TrackView (Hot) - Construct from Hot Data")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
+    rs::core::TrackView view{data, std::span<std::byte const>{}};
 
     CHECK(view.isHotValid() == true);
-    CHECK(view.hotHeader() != nullptr);
+    CHECK(view.isHotValid());
   }
 
   TEST_CASE("TrackView (Hot) - Fixed Field Accessors")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
+    rs::core::TrackView view{data, std::span<std::byte const>{}};
 
     auto prop = view.property();
     auto meta = view.metadata();
@@ -131,7 +131,7 @@ namespace
   TEST_CASE("TrackView (Hot) - String Accessors")
   {
     auto data = createTrackWithStrings("Test Title");
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
+    rs::core::TrackView view{data, std::span<std::byte const>{}};
 
     CHECK(view.isHotValid() == true);
     CHECK(view.metadata().title() == "Test Title");
@@ -140,7 +140,7 @@ namespace
   TEST_CASE("TrackView (Hot) - Empty String Handling")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
+    rs::core::TrackView view{data, std::span<std::byte const>{}};
 
     // Empty strings should return empty string_view
     CHECK(view.metadata().title().empty());
@@ -150,17 +150,17 @@ namespace
   {
     // Null data (valid size but nullptr) - isHotValid is false
     std::span<std::byte const> nullSpan{static_cast<std::byte const*>(nullptr), 100};
-    rs::core::TrackView nullView{TrackId{0}, nullSpan, std::span<std::byte const>{}};
+    rs::core::TrackView nullView{nullSpan, std::span<std::byte const>{}};
     CHECK(nullView.isHotValid() == false);
 
     // Too small - isHotValid is false (no exception thrown)
     char smallData[10] = {};
     std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
-    rs::core::TrackView smallView{TrackId{0}, smallSpan, std::span<std::byte const>{}};
+    rs::core::TrackView smallView{smallSpan, std::span<std::byte const>{}};
     CHECK(smallView.isHotValid() == false);
 
     // Empty hot - isHotValid is false
-    rs::core::TrackView emptyView{TrackId{0}, std::span<std::byte const>{}, std::span<std::byte const>{}};
+    rs::core::TrackView emptyView{std::span<std::byte const>{}, std::span<std::byte const>{}};
     CHECK(emptyView.isHotValid() == false);
   }
 
@@ -171,17 +171,16 @@ namespace
 
     auto data = serializeHeader(h);
 
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
+    rs::core::TrackView view{data, std::span<std::byte const>{}};
     CHECK(view.tags().bloom() == 0xCAFE);
   }
 
   TEST_CASE("TrackView (Hot) - Tag Accessors - No Tags")
   {
     auto data = createTrackWithStrings("Test");
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
+    rs::core::TrackView view{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().count() == 0);
-    CHECK(view.tags().id(0) == DictionaryId{0});
 
     std::vector<DictionaryId> ids(view.tags().begin(), view.tags().end());
     CHECK(ids.empty());
@@ -212,18 +211,17 @@ namespace
     // Add tag IDs first (at sizeof(TrackHotHeader))
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert(data.end(), reinterpret_cast<std::byte const*>(&tag1), reinterpret_cast<std::byte const*>(&tag1 + 1));
-    data.insert(data.end(), reinterpret_cast<std::byte const*>(&tag2), reinterpret_cast<std::byte const*>(&tag2 + 1));
+    data.insert_range(data.end(), rs::utility::asBytes(tag1));
+    data.insert_range(data.end(), rs::utility::asBytes(tag2));
 
     // Add title + null (after tags)
     appendString(data, title);
 
-    rs::core::TrackView view{TrackId{0}, std::as_bytes(std::span{data}), std::span<std::byte const>{}};
+    rs::core::TrackView view{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().count() == 2);
     CHECK(view.tags().id(0) == DictionaryId{10});
     CHECK(view.tags().id(1) == DictionaryId{20});
-    CHECK(view.tags().id(2) == DictionaryId{0}); // Out of bounds
 
     std::vector<DictionaryId> ids(view.tags().begin(), view.tags().end());
     CHECK(ids.size() == 2);
@@ -241,7 +239,7 @@ namespace
 
   // Helper to create a full cold data blob for testing using TrackRecord
   std::vector<std::byte> createColdData(TrackColdHeader const& header = {},
-                                        std::vector<std::pair<std::string, std::string>> const& customMeta = {},
+                                        std::vector<std::pair<std::string, std::string>> const& customPairs = {},
                                         std::string_view uri = "")
   {
     rs::core::TrackRecord record;
@@ -257,13 +255,13 @@ namespace
     record.property.sampleRate = header.sampleRate;
     record.property.bitrate = header.bitrate;
     record.property.channels = header.channels;
-    record.customMeta = customMeta;
+    record.custom.pairs = customPairs;
     return record.serializeCold();
   }
 
   rs::core::TrackView makeColdView(std::vector<std::byte> const& data)
   {
-    return rs::core::TrackView{TrackId{0}, std::span<std::byte const>{}, std::as_bytes(std::span{data})};
+    return rs::core::TrackView{std::span<std::byte const>{}, data};
   }
 
   TEST_CASE("TrackColdHeader - Size and Alignment")
@@ -276,16 +274,16 @@ namespace
   {
     // Create a cold-only view (hot data is empty, but cold data is present)
     auto data = createColdData();
-    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, std::as_bytes(std::span{data})};
+    rs::core::TrackView view{std::span<std::byte const>{}, data};
     CHECK(view.isHotValid() == false);
   }
 
   TEST_CASE("TrackView (Cold) - Construct from Cold Data")
   {
     auto data = createColdData();
-    rs::core::TrackView view{TrackId{0}, std::span<std::byte const>{}, std::as_bytes(std::span{data})};
+    rs::core::TrackView view{std::span<std::byte const>{}, data};
 
-    CHECK(view.coldHeader() != nullptr);
+    CHECK(view.isColdValid());
   }
 
   TEST_CASE("TrackView (Cold) - Roundtrip Empty")
@@ -489,12 +487,8 @@ namespace
 
     std::uint16_t keyLen = 3;
     std::uint16_t valueLen = 2;
-    data.insert(data.end(),
-                reinterpret_cast<std::byte const*>(&keyLen),
-                reinterpret_cast<std::byte const*>(&keyLen) + sizeof(keyLen));
-    data.insert(data.end(),
-                reinterpret_cast<std::byte const*>(&valueLen),
-                reinterpret_cast<std::byte const*>(&valueLen) + sizeof(valueLen));
+    data.insert_range(data.end(), rs::utility::asBytes(keyLen));
+    data.insert_range(data.end(), rs::utility::asBytes(valueLen));
     data.push_back(std::byte{'a'});
     data.push_back(std::byte{'b'});
 

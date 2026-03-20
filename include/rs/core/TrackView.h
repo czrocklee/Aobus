@@ -48,18 +48,18 @@ namespace rs::core
 
       // From hot
       std::string_view title() const { return _track.hotTitle(); }
-      DictionaryId artistId() const noexcept { return _track.hotHeader()->artistId; }
-      DictionaryId albumId() const noexcept { return _track.hotHeader()->albumId; }
-      DictionaryId genreId() const noexcept { return _track.hotHeader()->genreId; }
-      DictionaryId albumArtistId() const noexcept { return _track.hotHeader()->albumArtistId; }
-      std::uint16_t year() const noexcept { return _track.hotHeader()->year; }
+      DictionaryId artistId() const noexcept { return _track.hotHeader().artistId; }
+      DictionaryId albumId() const noexcept { return _track.hotHeader().albumId; }
+      DictionaryId genreId() const noexcept { return _track.hotHeader().genreId; }
+      DictionaryId albumArtistId() const noexcept { return _track.hotHeader().albumArtistId; }
+      std::uint16_t year() const noexcept { return _track.hotHeader().year; }
 
       // From cold
-      std::uint16_t trackNumber() const noexcept { return _track.coldHeader()->trackNumber; }
-      std::uint16_t totalTracks() const noexcept { return _track.coldHeader()->totalTracks; }
-      std::uint16_t discNumber() const noexcept { return _track.coldHeader()->discNumber; }
-      std::uint16_t totalDiscs() const noexcept { return _track.coldHeader()->totalDiscs; }
-      std::uint32_t coverArtId() const noexcept { return _track.coldHeader()->coverArtId; }
+      std::uint16_t trackNumber() const noexcept { return _track.coldHeader().trackNumber; }
+      std::uint16_t totalTracks() const noexcept { return _track.coldHeader().totalTracks; }
+      std::uint16_t discNumber() const noexcept { return _track.coldHeader().discNumber; }
+      std::uint16_t totalDiscs() const noexcept { return _track.coldHeader().totalDiscs; }
+      std::uint32_t coverArtId() const noexcept { return _track.coldHeader().coverArtId; }
 
     private:
       TrackView const& _track;
@@ -76,17 +76,17 @@ namespace rs::core
       explicit PropertyProxy(TrackView const& track) : _track(track) {}
 
       // Hot properties
-      std::uint16_t codecId() const noexcept { return _track.hotHeader()->codecId; }
-      std::uint8_t bitDepth() const noexcept { return _track.hotHeader()->bitDepth; }
-      std::uint8_t rating() const noexcept { return _track.hotHeader()->rating; }
+      std::uint16_t codecId() const noexcept { return _track.hotHeader().codecId; }
+      std::uint8_t bitDepth() const noexcept { return _track.hotHeader().bitDepth; }
+      std::uint8_t rating() const noexcept { return _track.hotHeader().rating; }
 
       // Cold properties
       std::uint64_t fileSize() const noexcept { return _track.coldFileSize(); }
       std::uint64_t mtime() const noexcept { return _track.coldMtime(); }
-      std::uint32_t durationMs() const noexcept { return _track.coldHeader()->durationMs; }
-      std::uint32_t sampleRate() const noexcept { return _track.coldHeader()->sampleRate; }
-      std::uint32_t bitrate() const noexcept { return _track.coldHeader()->bitrate; }
-      std::uint8_t channels() const noexcept { return _track.coldHeader()->channels; }
+      std::uint32_t durationMs() const noexcept { return _track.coldHeader().durationMs; }
+      std::uint32_t sampleRate() const noexcept { return _track.coldHeader().sampleRate; }
+      std::uint32_t bitrate() const noexcept { return _track.coldHeader().bitrate; }
+      std::uint8_t channels() const noexcept { return _track.coldHeader().channels; }
       std::string_view uri() const { return _track.coldUri(); }
 
     private:
@@ -101,10 +101,13 @@ namespace rs::core
     public:
       explicit TagProxy(TrackView const& track) : _track(track) {}
 
-      std::uint8_t count() const noexcept { return _track.hotHeader()->tagLen / sizeof(DictionaryId); }
-      std::uint32_t bloom() const noexcept { return _track.hotHeader()->tagBloom; }
+      std::uint8_t count() const noexcept { return _track.hotHeader().tagLen / sizeof(DictionaryId); }
+      std::uint32_t bloom() const noexcept { return _track.hotHeader().tagBloom; }
       DictionaryId id(std::uint8_t index) const noexcept { return DictionaryId{_track.hotTagId(index)}; }
-      DictionaryId const* begin() const noexcept { return reinterpret_cast<DictionaryId const*>(_track._hotData.data() + sizeof(TrackHotHeader)); }
+      DictionaryId const* begin() const noexcept
+      {
+        return utility::as<DictionaryId>(_track._hotData.subspan(sizeof(TrackHotHeader)));
+      }
       DictionaryId const* end() const noexcept { return begin() + count(); }
       bool has(DictionaryId tagIdToCheck) const noexcept;
 
@@ -124,36 +127,10 @@ namespace rs::core
        * Iterator - Input iterator over custom key-value pairs.
        * Yields std::pair<std::string_view, std::string_view> referencing the cold data buffer.
        */
-      class Iterator : public boost::iterator_facade<
-          Iterator,
-          std::pair<std::string_view, std::string_view> const,
-          boost::forward_traversal_tag>
-      {
-      public:
-        Iterator() : _currentPos(nullptr), _nextPos(nullptr), _end(nullptr) {}
-        Iterator(std::byte const* data, std::byte const* end);
-
-      private:
-        friend class boost::iterator_core_access;
-
-        std::pair<std::string_view, std::string_view> const& dereference() const;
-        void increment();
-        bool equal(Iterator const& other) const;
-        static bool decodeEntry(std::byte const* ptr,
-                                std::byte const* end,
-                                std::pair<std::string_view, std::string_view>& out,
-                                std::byte const*& next);
-
-        std::byte const* _currentPos;
-        std::byte const* _nextPos;
-        std::byte const* _end;
-        std::pair<std::string_view, std::string_view> _current;
-      };
-
-      std::optional<std::string> get(std::string_view key) const;
-
+      class Iterator;
       Iterator begin() const;
       Iterator end() const;
+      std::optional<std::string_view> get(std::string_view key) const;
 
     private:
       std::optional<std::pair<std::byte const*, std::byte const*>> customRange() const;
@@ -167,11 +144,8 @@ namespace rs::core
      * @param hotData Hot track binary data (must be >= sizeof(TrackHotHeader)), can be empty span if not loaded
      * @param coldData Cold track binary data (optional), if null accessing cold accessors crashes
      */
-    TrackView(TrackId id,
-              std::span<std::byte const> hotData,
-              std::span<std::byte const> coldData)
-      : _id(id)
-      , _hotData(hotData)
+    TrackView(std::span<std::byte const> hotData, std::span<std::byte const> coldData)
+      : _hotData(hotData)
       , _coldData(coldData)
     {
     }
@@ -182,14 +156,14 @@ namespace rs::core
     TrackView(TrackView const&) = delete;
     TrackView& operator=(TrackView const&) = delete;
 
-    // Track ID (LMDB key)
-    TrackId id() const { return _id; }
-
     // Hot validity check
     bool isHotValid() const noexcept { return _hotData.data() != nullptr && _hotData.size() >= sizeof(TrackHotHeader); }
 
     // Cold validity check
-    bool isColdValid() const noexcept { return _coldData.data() != nullptr && _coldData.size() >= sizeof(TrackColdHeader); }
+    bool isColdValid() const noexcept
+    {
+      return _coldData.data() != nullptr && _coldData.size() >= sizeof(TrackColdHeader);
+    }
 
     // Accessors
     MetadataProxy metadata() const { return MetadataProxy{*this}; }
@@ -198,8 +172,8 @@ namespace rs::core
     CustomProxy custom() const { return CustomProxy{*this}; }
 
     // Direct header access
-    TrackHotHeader const* hotHeader() const { return utility::as<TrackHotHeader>(_hotData); }
-    TrackColdHeader const* coldHeader() const { return utility::as<TrackColdHeader>(_coldData); }
+    TrackHotHeader const& hotHeader() const { return *utility::as<TrackHotHeader>(_hotData); }
+    TrackColdHeader const& coldHeader() const { return *utility::as<TrackColdHeader>(_coldData); }
 
   private:
     std::string_view hotTitle() const;
@@ -210,9 +184,34 @@ namespace rs::core
     std::uint64_t coldMtime() const noexcept;
     std::string_view coldGetString(std::uint16_t offset, std::uint16_t len) const;
 
-    TrackId _id;
     std::span<std::byte const> _hotData;
     std::span<std::byte const> _coldData;
+  };
+
+  class TrackView::CustomProxy::Iterator
+    : public boost::iterator_facade<TrackView::CustomProxy::Iterator,
+                                    std::pair<std::string_view, std::string_view> const,
+                                    boost::forward_traversal_tag>
+  {
+  public:
+    Iterator() : _currentPos(nullptr), _nextPos(nullptr), _end(nullptr) {}
+    Iterator(std::byte const* data, std::byte const* end);
+
+  private:
+    friend class boost::iterator_core_access;
+
+    std::pair<std::string_view, std::string_view> const& dereference() const;
+    void increment();
+    bool equal(Iterator const& other) const;
+    static bool decodeEntry(std::byte const* ptr,
+                            std::byte const* end,
+                            std::pair<std::string_view, std::string_view>& out,
+                            std::byte const*& next);
+
+    std::byte const* _currentPos;
+    std::byte const* _nextPos;
+    std::byte const* _end;
+    std::pair<std::string_view, std::string_view> _current;
   };
 
 } // namespace rs::core

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/core/TrackLayout.h>
 #include <rs/core/TrackRecord.h>
 #include <rs/utility/ByteView.h>
 
@@ -62,7 +61,7 @@ namespace rs::core
     metadata.totalDiscs = meta.totalDiscs();
 
     // Load custom meta from cold view
-    for (auto const& [k, v] : view.custom()) { customMeta.emplace_back(std::string{k}, std::string{v}); }
+    for (auto const& [k, v] : view.custom()) { custom.pairs.emplace_back(std::string{k}, std::string{v}); }
   }
 
   TrackHotHeader TrackRecord::hotHeader() const
@@ -121,18 +120,18 @@ namespace rs::core
 
     // Write header
     auto headerBytes = utility::asBytes(h);
-    data.insert(data.end(), headerBytes.begin(), headerBytes.end());
+    data.insert_range(data.end(), headerBytes);
 
     // Write tags first: 4-byte tag IDs (at offset sizeof(TrackHotHeader))
     for (auto tagId : tags.ids)
     {
       auto idBytes = utility::asBytes(tagId);
-      data.insert(data.end(), idBytes.begin(), idBytes.end());
+      data.insert_range(data.end(), idBytes);
     }
 
     // Write title (at offset sizeof(TrackHotHeader) + tagLen)
     auto titleBytes = utility::asBytes(metadata.title);
-    data.insert(data.end(), titleBytes.begin(), titleBytes.end());
+    data.insert_range(data.end(), titleBytes);
     data.push_back(static_cast<std::byte>('\0'));
 
     // Pad to 4-byte alignment
@@ -146,52 +145,41 @@ namespace rs::core
     std::vector<std::byte> result;
 
     // Calculate custom meta size
-    std::uint16_t customMetaSize = 0;
-    for (auto const& [key, value] : customMeta)
+    std::uint16_t customSize = 0;
+    for (auto const& [key, value] : custom.pairs)
     {
-      customMetaSize += sizeof(std::uint16_t) * 2; // keyLen + valueLen
-      customMetaSize += static_cast<std::uint16_t>(key.size() + value.size());
+      customSize += sizeof(std::uint16_t) * 2; // keyLen + valueLen
+      customSize += static_cast<std::uint16_t>(key.size() + value.size());
     }
 
     std::uint16_t uriLen = static_cast<std::uint16_t>(metadata.uri.size());
 
     // Reserve space
-    result.reserve(sizeof(TrackColdHeader) + customMetaSize + uriLen + 1);
+    result.reserve(sizeof(TrackColdHeader) + customSize + uriLen + 1);
 
     // Build header with correct offsets
     TrackColdHeader hdr = coldHeader();
-    hdr.customLen = customMetaSize;
+    hdr.customLen = customSize;
     hdr.uriLen = uriLen;
 
     // Write fixed header
-    auto const* headerBytes = reinterpret_cast<std::byte const*>(&hdr);
-    result.insert(result.end(), headerBytes, headerBytes + sizeof(TrackColdHeader));
+    result.insert_range(result.end(), utility::asBytes(hdr));
 
     // Write custom key-value pairs
-    std::byte buf[sizeof(std::uint16_t)];
-    for (auto const& [key, value] : customMeta)
+    for (auto const& [key, value] : custom.pairs)
     {
-      std::uint16_t keyLen = static_cast<std::uint16_t>(key.size());
-      std::memcpy(buf, &keyLen, sizeof(keyLen));
-      result.insert(result.end(), buf, buf + sizeof(keyLen));
+      auto keyLen = static_cast<std::uint16_t>(key.size());
+      result.insert_range(result.end(), utility::asBytes(keyLen));
 
-      std::uint16_t valueLen = static_cast<std::uint16_t>(value.size());
-      std::memcpy(buf, &valueLen, sizeof(valueLen));
-      result.insert(result.end(), buf, buf + sizeof(valueLen));
+      auto valueLen = static_cast<std::uint16_t>(value.size());
+      result.insert_range(result.end(), utility::asBytes(valueLen));
 
-      auto const* keyBytes = reinterpret_cast<std::byte const*>(key.data());
-      result.insert(result.end(), keyBytes, keyBytes + key.size());
-
-      auto const* valueBytes = reinterpret_cast<std::byte const*>(value.data());
-      result.insert(result.end(), valueBytes, valueBytes + value.size());
+      result.insert_range(result.end(), utility::asBytes(key));
+      result.insert_range(result.end(), utility::asBytes(value));
     }
 
     // Write uri (null-terminated)
-    if (!metadata.uri.empty())
-    {
-      auto const* uriBytes = reinterpret_cast<std::byte const*>(metadata.uri.data());
-      result.insert(result.end(), uriBytes, uriBytes + metadata.uri.size());
-    }
+    result.insert_range(result.end(), utility::asBytes(metadata.uri));
     result.push_back(std::byte{'\0'});
 
     // Pad to 4-byte alignment
