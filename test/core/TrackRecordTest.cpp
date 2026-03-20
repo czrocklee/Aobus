@@ -295,9 +295,9 @@ TEST_CASE("TrackRecord - serializeCold")
   // Verify cold view can parse it
   TrackView view{TrackId{0}, std::span<std::byte const>{}, data, nullptr};
   CHECK(view.isColdLoaded() == true);
-  CHECK(view.cold().fileSize() == 2000);
-  CHECK(view.cold().mtime() == 9876543210);
-  CHECK(view.cold().trackNumber() == 3);
+  CHECK(view.property().fileSize() == 2000);
+  CHECK(view.property().mtime() == 9876543210);
+  CHECK(view.metadata().trackNumber() == 3);
 
   // Verify custom meta
   auto meta = view.custom().all();

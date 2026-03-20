@@ -122,33 +122,6 @@ namespace rs::core
     };
 
     /**
-     * ColdProxy - Accessors for cold data (triggers lazy load on construction).
-     * Provides unified access to all cold properties.
-     */
-    class ColdProxy
-    {
-    public:
-      explicit ColdProxy(TrackView const& track) : _track(track) { _track.ensureColdLoaded(); }
-
-      // All cold properties
-      std::uint64_t fileSize() const noexcept { return _track.coldFileSize(); }
-      std::uint64_t mtime() const noexcept { return _track.coldMtime(); }
-      std::uint32_t durationMs() const noexcept { return _track.coldHeader()->durationMs; }
-      std::uint32_t sampleRate() const noexcept { return _track.coldHeader()->sampleRate; }
-      std::uint32_t coverArtId() const noexcept { return _track.coldHeader()->coverArtId; }
-      std::uint32_t bitrate() const noexcept { return _track.coldHeader()->bitrate; }
-      std::uint16_t trackNumber() const noexcept { return _track.coldHeader()->trackNumber; }
-      std::uint16_t totalTracks() const noexcept { return _track.coldHeader()->totalTracks; }
-      std::uint16_t discNumber() const noexcept { return _track.coldHeader()->discNumber; }
-      std::uint16_t totalDiscs() const noexcept { return _track.coldHeader()->totalDiscs; }
-      std::uint8_t channels() const noexcept { return _track.coldHeader()->channels; }
-      std::string_view uri() const { return _track.coldUri(); }
-
-    private:
-      TrackView const& _track;
-    };
-
-    /**
      * CustomProxy - Accessors for custom key-value metadata.
      */
     class CustomProxy
@@ -206,7 +179,6 @@ namespace rs::core
     MetadataProxy metadata() const { return MetadataProxy{*this}; }
     PropertyProxy property() const { return PropertyProxy{*this}; }
     TagProxy tags() const { return TagProxy{*this}; }
-    ColdProxy cold() const { return ColdProxy{*this}; }
     CustomProxy custom() const { return CustomProxy{*this}; }
 
     // Direct header access (hot always available)

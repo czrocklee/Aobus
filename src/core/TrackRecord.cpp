@@ -49,16 +49,15 @@ namespace rs::core
       tags.ids.push_back(tagId);
     }
 
-    // Copy cold fields via cold proxy
-    auto coldProxy = view.cold();
-    cold.uri = std::string{coldProxy.uri()};
-    cold.fileSize = coldProxy.fileSize();
-    cold.mtime = coldProxy.mtime();
-    cold.coverArtId = coldProxy.coverArtId();
-    cold.trackNumber = coldProxy.trackNumber();
-    cold.totalTracks = coldProxy.totalTracks();
-    cold.discNumber = coldProxy.discNumber();
-    cold.totalDiscs = coldProxy.totalDiscs();
+    // Copy remaining cold fields (uri already done above)
+    cold.uri = std::string{prop.uri()};
+    cold.fileSize = prop.fileSize();
+    cold.mtime = prop.mtime();
+    cold.coverArtId = meta.coverArtId();
+    cold.trackNumber = meta.trackNumber();
+    cold.totalTracks = meta.totalTracks();
+    cold.discNumber = meta.discNumber();
+    cold.totalDiscs = meta.totalDiscs();
 
     // Load custom meta from cold view
     customMeta = view.custom().all();
@@ -84,6 +83,7 @@ namespace rs::core
       .tagsOffset = 0,
       .rating = property.rating,
       .tagCount = static_cast<std::uint8_t>(tags.ids.size()),
+      .padding = 0,
     };
   }
 
@@ -108,6 +108,7 @@ namespace rs::core
       .uriOffset = 0,
       .uriLen = 0,
       .channels = property.channels,
+      .padding = 0,
     };
   }
 

@@ -38,7 +38,7 @@ All builds should be run from within `nix-shell`:
 
 ```bash
 nix-shell --run "cmake --preset linux-debug"
-nix-shell --run "cmake --build --preset linux-debug"
+nix-shell --run "cmake --build --preset linux-debug --parallel"
 ```
 
 Or use direct commands:
@@ -48,7 +48,7 @@ nix-shell --run "cmake -S . -B /tmp/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_VERBO
 nix-shell --run "cmake --build /tmp/build"
 ```
 
-**IMPORTANT**: Always use `cmake --build` (not `make` directly). CMake automatically uses all available CPU cores for parallel builds.
+**IMPORTANT**: Always use `cmake --build` (not `make` directly). Use `--parallel` (or `-- -j$(nproc)`) to enable parallel builds — `cmake --build` does not parallelize automatically with the Unix Makefiles generator.
 
 The project builds into `/tmp/build` (as configured in CMakePresets.json).
 

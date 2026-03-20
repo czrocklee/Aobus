@@ -296,7 +296,7 @@ namespace
     CHECK(view.hasCold() == true);
     CHECK(view.isColdLoaded() == true);
     CHECK(view.custom().all().empty());
-    CHECK(view.cold().uri().empty());
+    CHECK(view.property().uri().empty());
   }
 
   TEST_CASE("TrackView (Cold) - Roundtrip Single Pair")
@@ -309,7 +309,7 @@ namespace
     CHECK(meta.size() == 1);
     CHECK(meta[0].first == "key1");
     CHECK(meta[0].second == "value1");
-    CHECK(view.cold().uri() == "/path/to/file.flac");
+    CHECK(view.property().uri() == "/path/to/file.flac");
   }
 
   TEST_CASE("TrackView (Cold) - Roundtrip Multiple Pairs")
@@ -402,39 +402,16 @@ namespace
     auto view = makeColdView(data);
 
     CHECK(view.isColdLoaded() == true);
-    CHECK(view.cold().fileSize() == 12345678);
-    CHECK(view.cold().mtime() == 987654321);
-    CHECK(view.cold().coverArtId() == 42);
-    CHECK(view.cold().trackNumber() == 5);
-    CHECK(view.cold().totalTracks() == 10);
-    CHECK(view.cold().discNumber() == 1);
-    CHECK(view.cold().totalDiscs() == 2);
-    CHECK(view.cold().uri() == "/path/to/file.flac");
-  }
-
-  TEST_CASE("TrackView (Cold) - ColdProxy")
-  {
-    TrackColdHeader header{};
-    std::tie(header.fileSizeLo, header.fileSizeHi) = splitInt64(12345678);
-    std::tie(header.mtimeLo, header.mtimeHi) = splitInt64(987654321);
-    header.coverArtId = 42;
-    header.trackNumber = 5;
-    header.totalTracks = 10;
-    header.discNumber = 1;
-    header.totalDiscs = 2;
-
-    auto data = createColdData(header, {}, "/path/to/file.flac");
-    auto view = makeColdView(data);
-
-    auto cold = view.cold();
-    CHECK(cold.fileSize() == 12345678);
-    CHECK(cold.mtime() == 987654321);
-    CHECK(cold.coverArtId() == 42);
-    CHECK(cold.trackNumber() == 5);
-    CHECK(cold.totalTracks() == 10);
-    CHECK(cold.discNumber() == 1);
-    CHECK(cold.totalDiscs() == 2);
-    CHECK(cold.uri() == "/path/to/file.flac");
+    auto prop = view.property();
+    auto meta = view.metadata();
+    CHECK(prop.fileSize() == 12345678);
+    CHECK(prop.mtime() == 987654321);
+    CHECK(meta.coverArtId() == 42);
+    CHECK(meta.trackNumber() == 5);
+    CHECK(meta.totalTracks() == 10);
+    CHECK(meta.discNumber() == 1);
+    CHECK(meta.totalDiscs() == 2);
+    CHECK(prop.uri() == "/path/to/file.flac");
   }
 
   TEST_CASE("normalizeKey - Lowercase")
