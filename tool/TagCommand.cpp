@@ -56,7 +56,7 @@ namespace
     record.tags.ids.push_back(tagId);
 
     auto hotData = record.serializeHot();
-    (void)writer.updateHot(trackId, hotData);
+    writer.updateHot(trackId, hotData);
     txn.commit();
 
     os << "added tag: " << tagName << " to track " << trackId << std::endl;
@@ -93,7 +93,7 @@ namespace
     tags.erase(it, tags.end());
 
     auto hotData = record.serializeHot();
-    (void)writer.updateHot(trackId, hotData);
+    writer.updateHot(trackId, hotData);
     txn.commit();
 
     os << "removed tag: " << tagName << " from track " << trackId << std::endl;

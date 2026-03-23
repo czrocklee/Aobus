@@ -2,7 +2,9 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "ThrowError.h"
+#include <rs/Exception.h>
 #include <rs/lmdb/Database.h>
+#include <rs/utility/ByteView.h>
 
 #include <cstring>
 #include <lmdb.h>
@@ -14,23 +16,28 @@ namespace rs::lmdb
   namespace
   {
     template<typename T>
-    MDB_val makeVal(T const& value)
+    MDB_val makeVal(T const& val)
     {
-      return {sizeof(T), const_cast<T*>(&value)};
+      return {.mv_size = sizeof(T), .mv_data = const_cast<T*>(&val)};
     }
 
-    inline MDB_val makeVal(void const* data, std::size_t size)
+    inline MDB_val makeVal(void const* data = nullptr, std::size_t size = 0)
     {
-      return {size, const_cast<void*>(data)};
+      return {.mv_size = size, .mv_data = const_cast<void*>(data)};
+    }
+
+    std::span<std::byte> asBytes(MDB_val const& val)
+    {
+      return {static_cast<std::byte*>(val.mv_data), val.mv_size};
     }
 
     template<typename T>
-    T read(std::string_view bytes)
+    T read(MDB_val val)
     {
-      if (bytes.size() != sizeof(T)) { throw std::runtime_error{"read: bad value size"}; }
+      if (val.mv_size != sizeof(T)) { RS_THROW(rs::Exception, "read: bad value size"); }
 
       T value;
-      std::memcpy(&value, bytes.data(), sizeof(T));
+      std::memcpy(&value, val.mv_data, sizeof(T));
       return value;
     }
   }
@@ -83,7 +90,7 @@ namespace rs::lmdb
     int const rc = mdb_get(_txn, _dbi, &key, &value);
     if (rc == MDB_NOTFOUND) { return std::nullopt; }
     throwOnError("mdb_get", rc);
-    return std::span<std::byte const>{static_cast<std::byte const*>(value.mv_data), value.mv_size};
+    return utility::asBytes(static_cast<std::byte const*>(value.mv_data), value.mv_size);
   }
 
   Reader::Iterator::Iterator() : _value{}
@@ -105,8 +112,8 @@ namespace rs::lmdb
       throwOnError("mdb_cursor_open",
                    mdb_cursor_open(mdb_cursor_txn(other._cursor.get()), mdb_cursor_dbi(other._cursor.get()), &cursor));
       _cursor.reset(cursor);
-      MDB_val keyValue{sizeof(std::uint32_t), const_cast<std::uint32_t*>(&_value.first)};
-      throwOnError("mdb_cursor_get", mdb_cursor_get(_cursor.get(), &keyValue, nullptr, MDB_SET));
+      auto key = makeVal(&_value.first, sizeof(std::uint32_t));
+      throwOnError("mdb_cursor_get", mdb_cursor_get(_cursor.get(), &key, nullptr, MDB_SET));
     }
   }
 
@@ -121,10 +128,10 @@ namespace rs::lmdb
 
   void Reader::Iterator::increment()
   {
-    MDB_val keyValue{0, nullptr};
-    MDB_val valueBuffer{0, nullptr};
+    auto key = makeVal();
+    auto val = makeVal();
 
-    if (int const rc = mdb_cursor_get(_cursor.get(), &keyValue, &valueBuffer, MDB_NEXT); rc == MDB_NOTFOUND)
+    if (int const rc = mdb_cursor_get(_cursor.get(), &key, &val, MDB_NEXT); rc == MDB_NOTFOUND)
     {
       _value = Value{};
       _cursor.reset();
@@ -132,10 +139,8 @@ namespace rs::lmdb
     else
     {
       throwOnError("mdb_cursor_get", rc);
-      std::string_view key{static_cast<char const*>(keyValue.mv_data), keyValue.mv_size};
-      std::string_view value{static_cast<char const*>(valueBuffer.mv_data), valueBuffer.mv_size};
       _value.first = read<std::uint32_t>(key);
-      _value.second = utility::asBytes(value);
+      _value.second = asBytes(val);
     }
   }
 
@@ -149,11 +154,10 @@ namespace rs::lmdb
     MDB_cursor* cursor = nullptr;
     throwOnError("mdb_cursor_open", mdb_cursor_open(txn._handle.get(), _dbi, &cursor));
     _cursor.reset(cursor);
-    MDB_val keyValue{0, nullptr};
+    MDB_val key{0, nullptr};
 
-    if (int const rc = mdb_cursor_get(_cursor.get(), &keyValue, nullptr, MDB_LAST); rc == MDB_SUCCESS)
+    if (int const rc = mdb_cursor_get(_cursor.get(), &key, nullptr, MDB_LAST); rc == MDB_SUCCESS)
     {
-      std::string_view key{static_cast<char const*>(keyValue.mv_data), keyValue.mv_size};
       _lastId = read<std::uint32_t>(key);
     }
     else if (rc != MDB_NOTFOUND) { throwOnError("mdb_cursor_get", rc); }
@@ -170,96 +174,62 @@ namespace rs::lmdb
   Writer::~Writer()
   {
     // When transaction is committed, LMDB automatically closes all cursors - release without closing
-    if (_txn.isCommitted())
-    {
-      _cursor.release();
-    }
+    if (_txn.isCommitted()) { _cursor.release(); }
   }
 
   namespace
   {
-    void put(MDB_cursor* cursor,
-             std::uint32_t id,
-             std::span<std::byte const> data,
-             unsigned int flags,
-             std::vector<std::byte>& out)
+    void put(MDB_cursor* cursor, std::uint32_t id, std::span<std::byte const> data, unsigned int flags)
     {
-      auto keyValue = makeVal(id);
-      auto valueBuffer = makeVal(data.data(), data.size());
-
-      int const rc = mdb_cursor_put(cursor, &keyValue, &valueBuffer, flags);
-
-      if (rc == MDB_KEYEXIST)
-      {
-        out.clear();
-        return;
-      }
-
+      auto key = makeVal(id);
+      auto val = makeVal(data.data(), data.size());
+      int const rc = mdb_cursor_put(cursor, &key, &val, flags);
       throwOnError("mdb_cursor_put", rc);
-
-      // Get the actual stored value
-      if (mdb_cursor_get(cursor, &keyValue, &valueBuffer, MDB_GET_CURRENT) != MDB_SUCCESS)
-      {
-        out.clear();
-        return;
-      }
-
-      out.assign(static_cast<std::byte const*>(valueBuffer.mv_data),
-                 static_cast<std::byte const*>(valueBuffer.mv_data) + valueBuffer.mv_size);
     }
 
-    void reserve(MDB_cursor* cursor,
-                 std::uint32_t id,
-                 std::size_t size,
-                 unsigned int flags,
-                 std::vector<std::byte>& out)
+    std::span<std::byte> reserve(MDB_cursor* cursor, std::uint32_t id, std::size_t size, unsigned int flags)
     {
-      auto keyValue = makeVal(id);
-      auto valueBuffer = makeVal(nullptr, size);
-      throwOnError("mdb_cursor_put", mdb_cursor_put(cursor, &keyValue, &valueBuffer, flags | MDB_RESERVE));
-      out.resize(size);
-      std::memcpy(out.data(), valueBuffer.mv_data, size);
+      auto key = makeVal(id);
+      auto val = makeVal(nullptr, size);
+      throwOnError("mdb_cursor_put", mdb_cursor_put(cursor, &key, &val, flags | MDB_RESERVE));
+      return asBytes(val);
     }
   }
 
   void Writer::create(std::uint32_t id, std::span<std::byte const> data)
   {
-    put(_cursor.get(), id, data, MDB_NOOVERWRITE, _lastData);
+    put(_cursor.get(), id, data, MDB_NOOVERWRITE);
   }
 
   std::span<std::byte> Writer::create(std::uint32_t id, std::size_t size)
   {
-    reserve(_cursor.get(), id, size, MDB_NOOVERWRITE, _lastData);
-    return _lastData;
+    return reserve(_cursor.get(), id, size, MDB_NOOVERWRITE);
   }
 
   std::uint32_t Writer::append(std::span<std::byte const> data)
   {
     auto id = ++_lastId;
-    put(_cursor.get(), id, data, MDB_NOOVERWRITE | MDB_APPEND, _lastData);
+    put(_cursor.get(), id, data, MDB_NOOVERWRITE | MDB_APPEND);
     return id;
   }
 
   std::pair<std::uint32_t, std::span<std::byte>> Writer::append(std::size_t size)
   {
     auto id = ++_lastId;
-    reserve(_cursor.get(), id, size, MDB_NOOVERWRITE | MDB_APPEND, _lastData);
-    return {id, _lastData};
+    auto data = reserve(_cursor.get(), id, size, MDB_NOOVERWRITE | MDB_APPEND);
+    return {id, data};
   }
 
-  std::span<std::byte const> Writer::update(std::uint32_t id, std::span<std::byte const> data)
+  void Writer::update(std::uint32_t id, std::span<std::byte const> data)
   {
-    put(_cursor.get(), id, data, 0, _lastData);
-    return _lastData;
+    put(_cursor.get(), id, data, 0);
   }
 
   bool Writer::del(std::uint32_t id)
   {
-    MDB_val key{sizeof(id), const_cast<std::uint32_t*>(&id)};
+    auto key = makeVal(&id, sizeof(id));
     int const rc = mdb_del(_txn._handle.get(), _dbi, &key, nullptr);
-
     if (rc == MDB_NOTFOUND) { return false; }
-
     throwOnError("mdb_del", rc);
     return true;
   }
@@ -267,10 +237,10 @@ namespace rs::lmdb
   std::optional<std::span<std::byte const>> Writer::get(std::uint32_t id) const
   {
     auto key = makeVal(id);
-    auto value = makeVal(nullptr, 0);
-    int const rc = mdb_get(_txn._handle.get(), _dbi, &key, &value);
+    auto val = makeVal();
+    int const rc = mdb_get(_txn._handle.get(), _dbi, &key, &val);
     if (rc == MDB_NOTFOUND) { return std::nullopt; }
     throwOnError("mdb_get", rc);
-    return std::span<std::byte const>{static_cast<std::byte const*>(value.mv_data), value.mv_size};
+    return asBytes(val);
   }
 }

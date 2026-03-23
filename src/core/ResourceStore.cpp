@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
+#include <rs/Exception.h>
 #include <rs/core/ResourceStore.h>
 
 #include <cstdint>
 #include <cstring>
+#include <rs/Exception.h>
 #include <span>
 
 namespace rs::core
@@ -50,14 +52,10 @@ namespace rs::core
         return ResourceId{key};
       }
 
-      auto& value = *optValue;
-      if (value.size() == buffer.size() && std::memcmp(value.data(), buffer.data(), buffer.size()) == 0)
-      {
-        return ResourceId{key};
-      }
+      if (std::ranges::equal(*optValue, buffer)) [[likely]] { return ResourceId{key}; }
 
       // Prevent infinite loop (though extremely unlikely with 32-bit hash space)
-      if (key == std::numeric_limits<std::uint32_t>::max()) { throw std::runtime_error("Hash table full"); }
+      if (key == std::numeric_limits<std::uint32_t>::max()) { RS_THROW(Exception, "Hash table full"); }
     }
   }
 }

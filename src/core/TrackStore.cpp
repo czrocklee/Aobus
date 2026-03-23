@@ -131,22 +131,20 @@ namespace rs::core
     return {TrackId{id}, TrackView{hotData, coldData}};
   }
 
-  TrackView TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
+  void TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
   {
     // Ensure size is multiple of 4 for LMDB
     assert((hotData.size() % 4 == 0) && "hotData size must be multiple of 4");
 
-    [[maybe_unused]] auto buffer = _hotWriter.update(id.value(), hotData);
-    return TrackView{hotData, {}};
+    _hotWriter.update(id.value(), hotData);
   }
 
-  TrackView TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
+  void TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
   {
     // Ensure size is multiple of 4 for LMDB
     assert((coldData.size() % 4 == 0) && "coldData size must be multiple of 4");
 
-    [[maybe_unused]] auto buffer = _coldWriter.update(id.value(), coldData);
-    return TrackView{{}, coldData};
+    _coldWriter.update(id.value(), coldData);
   }
 
   bool TrackStore::Writer::remove(TrackId id)
@@ -158,24 +156,27 @@ namespace rs::core
 
   std::optional<TrackView> TrackStore::Writer::get(TrackId id, Reader::LoadMode mode) const
   {
-    std::span<std::byte const> hotBuffer;
-    std::span<std::byte const> coldBuffer;
-
-    if (mode == Reader::LoadMode::Hot || mode == Reader::LoadMode::Both)
+    if (mode == Reader::LoadMode::Hot)
     {
-      auto optBuffer = _hotWriter.get(id.value());
-      if (!optBuffer || optBuffer->empty()) { return std::nullopt; }
-      hotBuffer = *optBuffer;
+      return _hotWriter.get(id.value()).transform([](auto const& buffer) {
+        return TrackView{buffer, {}};
+      });
     }
 
-    if (mode == Reader::LoadMode::Cold || mode == Reader::LoadMode::Both)
+    if (mode == Reader::LoadMode::Cold)
     {
-      auto optColdBuffer = _coldWriter.get(id.value());
-      if (!optColdBuffer || optColdBuffer->empty()) { return std::nullopt; }
-      coldBuffer = *optColdBuffer;
+      return _coldWriter.get(id.value()).transform([](auto const& buffer) {
+        return TrackView{{}, buffer};
+      });
     }
 
-    return TrackView{hotBuffer, coldBuffer};
+    // Both
+    return _hotWriter.get(id.value())
+        .and_then([this, id](auto const& hotBuffer) {
+          return _coldWriter.get(id.value()).transform([&hotBuffer](auto const& coldBuffer) {
+            return TrackView{hotBuffer, coldBuffer};
+          });
+        });
   }
 
 } // namespace rs::core

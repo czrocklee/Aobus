@@ -7,7 +7,7 @@
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
-#include <test/lmdb/LmdbTestUtils.h>
+#include <test/lmdb/TestUtils.h>
 
 using rs::core::ResourceStore;
 using rs::lmdb::Database;
@@ -26,7 +26,7 @@ TEST_CASE("ResourceStore - create and read", "[core][resource]")
 
   // Create a resource
   auto data = createStringData("hello");
-  auto buffer = makeBuffer(data);
+  auto buffer = data;
 
   WriteTransaction wtxn2(env);
   auto id = store.writer(wtxn2).create(buffer);
@@ -52,7 +52,7 @@ TEST_CASE("ResourceStore - delete", "[core][resource]")
 
   // Create a resource
   auto data = createStringData("test");
-  auto buffer = makeBuffer(data);
+  auto buffer = data;
 
   WriteTransaction wtxn2(env);
   auto id = store.writer(wtxn2).create(buffer);
@@ -82,7 +82,7 @@ TEST_CASE("ResourceStore - deduplication", "[core][resource]")
 
   // Create first resource
   auto data = ::createStringData("samedata");
-  auto buffer = makeBuffer(data);
+  auto buffer = data;
 
   WriteTransaction wtxn2(env);
   auto id1 = store.writer(wtxn2).create(buffer);

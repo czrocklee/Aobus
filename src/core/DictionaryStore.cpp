@@ -3,6 +3,7 @@
 
 #include <rs/core/DictionaryStore.h>
 
+#include <rs/Exception.h>
 #include <rs/utility/ByteView.h>
 #include <span>
 #include <string_view>
@@ -28,10 +29,7 @@ namespace rs::core
   DictionaryId DictionaryStore::put(lmdb::WriteTransaction& txn, std::string_view value)
   {
     // Check in-memory index first
-    if (auto it = _stringToId.find(value); it != _stringToId.end())
-    {
-      return it->second;
-    }
+    if (auto it = _stringToId.find(value); it != _stringToId.end()) { return it->second; }
 
     // Not found in memory - append to database
     auto writer = _database.writer(txn);
@@ -46,22 +44,17 @@ namespace rs::core
   std::string_view DictionaryStore::get(DictionaryId id) const
   {
     auto idx = id.value();
-    if (idx >= _idToStringStorage.size())
-    {
-      throw std::runtime_error{"Invalid dictionary ID"};
-    }
+
+    if (idx >= _idToStringStorage.size()) { RS_THROW(rs::Exception, "Invalid dictionary ID"); }
 
     return _idToStringStorage[idx];
   }
 
   DictionaryId DictionaryStore::getId(std::string_view str) const
   {
-    if (auto it = _stringToId.find(str); it != _stringToId.end())
-    {
-      return it->second;
-    }
+    if (auto it = _stringToId.find(str); it != _stringToId.end()) { return it->second; }
 
-    throw std::runtime_error{"String not found in dictionary"};
+    RS_THROW(rs::Exception, "String not found in dictionary");
   }
 
   bool DictionaryStore::contains(std::string_view str) const

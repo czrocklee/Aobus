@@ -63,12 +63,11 @@ namespace rs::core
     return std::ranges::find(begin(), end(), tagIdToCheck) != end();
   }
 
-  std::optional<std::string_view> TrackView::CustomProxy::get(std::string_view key) const
+  std::optional<std::string_view> TrackView::CustomProxy::get([[maybe_unused]] std::string_view key) const
   {
     // With indexed format, keys are stored as DictionaryIds, not strings.
     // Callers should use get(DictionaryId) after resolving the string to a dictId.
     // This method is kept for API compatibility but requires dictionary resolution by caller.
-    (void)key;
     return std::nullopt;
   }
 
@@ -105,7 +104,7 @@ namespace rs::core
   {
     constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
     auto entries = utility::asArray<Entry>(_track._coldData.subspan(kHeaderSize));
-    return CustomProxy::Iterator{entries.data(), _track._coldData.data()};
+    return {entries.data(), _track._coldData.data()};
   }
 
   TrackView::CustomProxy::Iterator TrackView::CustomProxy::end() const
@@ -113,7 +112,7 @@ namespace rs::core
     auto const& hdr = _track.coldHeader();
     constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
     auto entries = utility::asArray<Entry>(_track._coldData.subspan(kHeaderSize));
-    return CustomProxy::Iterator{entries.data() + hdr.customCount, _track._coldData.data()};
+    return {entries.data() + hdr.customCount, _track._coldData.data()};
   }
 
   TrackView::CustomProxy::Iterator::Iterator(Entry const* pos, std::byte const* coldDataBase)

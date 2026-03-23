@@ -167,8 +167,7 @@ namespace
 
 InitCommand::InitCommand(rs::core::MusicLibrary& ml)
 {
-  setExecutor([&ml](auto const& vm, auto& os) {
-    (void)vm;
+  setExecutor([&ml]([[maybe_unused]] auto const& vm, auto& os) {
     scanAndImport(ml, os);
     return "";
   });

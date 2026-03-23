@@ -15,7 +15,7 @@
 #include <rs/lmdb/Transaction.h>
 #include <rs/utility/ByteView.h>
 #include <span>
-#include <test/lmdb/LmdbTestUtils.h>
+#include <test/lmdb/TestUtils.h>
 
 #include <vector>
 

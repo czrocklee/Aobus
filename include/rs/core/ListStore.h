@@ -85,7 +85,7 @@ namespace rs::core
     Writer() = default;
 
     std::pair<ListId, ListView> create(std::span<std::byte const> data);
-    ListView update(ListId id, std::span<std::byte const> data);
+    void update(ListId id, std::span<std::byte const> data);
     bool del(ListId id);
 
     std::optional<ListView> get(ListId id) const;

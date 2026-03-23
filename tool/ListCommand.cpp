@@ -60,8 +60,7 @@ namespace
 
 ListCommand::ListCommand(core::MusicLibrary& ml) : _ml{ml}
 {
-  addCommand<BasicCommand>("show").setExecutor([this](auto const& vm, auto& os) {
-    (void)vm;
+  addCommand<BasicCommand>("show").setExecutor([this]([[maybe_unused]] auto const& vm, auto& os) {
     return show(_ml, os);
   });
 

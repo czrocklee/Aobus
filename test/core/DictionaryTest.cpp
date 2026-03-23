@@ -7,7 +7,7 @@
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
-#include <test/lmdb/LmdbTestUtils.h>
+#include <test/lmdb/TestUtils.h>
 
 #include <string_view>
 

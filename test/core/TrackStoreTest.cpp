@@ -8,7 +8,7 @@
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
-#include <test/lmdb/LmdbTestUtils.h>
+#include <test/lmdb/TestUtils.h>
 
 #include <cstring>
 #include <vector>
@@ -109,7 +109,7 @@ TEST_CASE("TrackStore - update", "[core][track]")
   std::memcpy(hotData2.data(), &hotHeader2, sizeof(TrackHotHeader));
 
   WriteTransaction wtxn3(env);
-  [[maybe_unused]] auto updated = store.writer(wtxn3).updateHot(id, hotData2);
+  store.writer(wtxn3).updateHot(id, hotData2);
   wtxn3.commit();
 }
 
@@ -257,7 +257,7 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
   std::memcpy(hotData2.data(), &hotHeader2, sizeof(TrackHotHeader));
 
   WriteTransaction wtxn3(env);
-  [[maybe_unused]] auto updatedHot = store.writer(wtxn3).updateHot(id, hotData2);
+  store.writer(wtxn3).updateHot(id, hotData2);
   wtxn3.commit();
 
   // Update cold only
@@ -273,11 +273,7 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
   std::memcpy(coldData2.data(), &coldHeader2, sizeof(TrackColdHeader));
 
   WriteTransaction wtxn4(env);
-  auto updatedCold = store.writer(wtxn4).updateCold(id, coldData2);
-  REQUIRE(updatedCold.property().fileSize() == 2000);
-  REQUIRE(updatedCold.property().mtime() == 9876543210);
-  REQUIRE(updatedCold.property().durationMs() == 200000);
-  REQUIRE(updatedCold.metadata().trackNumber() == 2);
+  store.writer(wtxn4).updateCold(id, coldData2);
   wtxn4.commit();
 
   // Verify both persisted

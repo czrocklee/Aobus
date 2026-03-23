@@ -84,7 +84,7 @@ namespace rs::lmdb
     std::span<std::byte> create(std::uint32_t id, std::size_t size);
     std::uint32_t append(std::span<std::byte const> data);
     std::pair<std::uint32_t, std::span<std::byte>> append(std::size_t size);
-    std::span<std::byte const> update(std::uint32_t id, std::span<std::byte const> data);
+    void update(std::uint32_t id, std::span<std::byte const> data);
     bool del(std::uint32_t id);
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
 
@@ -95,7 +95,6 @@ namespace rs::lmdb
     WriteTransaction& _txn;
     std::unique_ptr<MDB_cursor, decltype([](auto* cur) { mdb_cursor_close(cur); })> _cursor;
     std::uint32_t _lastId = std::numeric_limits<std::uint32_t>::max();
-    std::vector<std::byte> _lastData;
     friend class Database;
   };
 

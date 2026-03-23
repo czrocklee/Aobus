@@ -211,5 +211,4 @@ namespace rs::core
 
     return result;
   }
-
 } // namespace rs::core

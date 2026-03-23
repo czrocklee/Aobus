@@ -122,12 +122,12 @@ namespace rs::core
     /**
      * Update hot track data.
      */
-    TrackView updateHot(TrackId id, std::span<std::byte const> hotData);
+    void updateHot(TrackId id, std::span<std::byte const> hotData);
 
     /**
      * Update cold track data.
      */
-    TrackView updateCold(TrackId id, std::span<std::byte const> coldData);
+    void updateCold(TrackId id, std::span<std::byte const> coldData);
 
     /**
      * Delete both hot and cold track data.

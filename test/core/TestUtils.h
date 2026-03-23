@@ -11,7 +11,6 @@
 
 namespace test
 {
-
   /**
    * Serialize a POD struct to a byte vector.
    */

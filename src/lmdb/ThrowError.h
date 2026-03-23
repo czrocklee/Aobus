@@ -4,6 +4,7 @@
 #pragma once
 
 #include <lmdb.h>
+#include <rs/Exception.h>
 #include <stdexcept>
 #include <string>
 
@@ -13,7 +14,7 @@ namespace rs::lmdb
   {
     if (code != MDB_SUCCESS)
     {
-      throw std::runtime_error{std::string{origin} + ": " + mdb_strerror(code)};
+      RS_THROW(rs::Exception, std::string{origin} + ": " + mdb_strerror(code));
     }
   }
 }

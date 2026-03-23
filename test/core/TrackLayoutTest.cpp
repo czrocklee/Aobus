@@ -421,10 +421,8 @@ namespace
     auto view = makeColdView(data);
 
     int count = 0;
-    for (auto const& [k, v] : view.custom())
+    for ([[maybe_unused]] auto const& [k, v] : view.custom())
     {
-      (void)k;
-      (void)v;
       ++count;
     }
     CHECK(count == 0);
@@ -480,10 +478,8 @@ namespace
     auto view = makeColdView(data);
 
     int count = 0;
-    for (auto [key, value] : view.custom())
+    for ([[maybe_unused]] auto [key, value] : view.custom())
     {
-      (void)key;
-      (void)value;
       ++count;
     }
     CHECK(count == 0);
