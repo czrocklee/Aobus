@@ -15,7 +15,7 @@
 
 int main(int argc, char const* argv[])
 {
-  rs::core::MusicLibrary ml{"."};
+  auto ml = rs::core::MusicLibrary{"."};
 
   ComboCommand root;
 

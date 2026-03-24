@@ -19,11 +19,11 @@ using namespace rs::lmdb;
 
 TEST_CASE("Environment - create", "[lmdb][environment]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Verify by starting a transaction
-  WriteTransaction txn(env);
+  auto txn = WriteTransaction{env};
 }
 
 TEST_CASE("Environment - move constructor", "[lmdb][environment]")
@@ -33,7 +33,7 @@ TEST_CASE("Environment - move constructor", "[lmdb][environment]")
 
   auto env1 = Environment{path.string(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  Environment env2{std::move(env1)};
+  auto env2 = Environment{std::move(env1)};
   // env1 is now in moved-from state
   // env2 should own the environment
 
@@ -55,10 +55,10 @@ TEST_CASE("Environment - move assignment", "[lmdb][environment]")
 
 TEST_CASE("Environment - constructor with path", "[lmdb][environment]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Verify we can create a transaction
-  ReadTransaction txn(env);
-  WriteTransaction wtxn(env);
+  auto txn = ReadTransaction{env};
+  auto wtxn = WriteTransaction{env};
 }

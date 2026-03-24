@@ -59,7 +59,7 @@ namespace
     else
     {
       auto expr = rs::expr::parse(filter);
-      rs::expr::QueryCompiler compiler{&ml.dictionary()};
+      auto compiler = rs::expr::QueryCompiler{&ml.dictionary()};
       auto plan = compiler.compile(expr);
       rs::expr::PlanEvaluator evaluator;
 

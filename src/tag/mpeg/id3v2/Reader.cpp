@@ -85,7 +85,7 @@ namespace rs::tag::mpeg::id3v2
 
   namespace
   {
-    Metadata loadV24(void const* [[maybe_unused]] data, std::size_t [[maybe_unused]] size)
+    Metadata loadV24(void const* data [[maybe_unused]], std::size_t size [[maybe_unused]])
     {
       return {};
     }

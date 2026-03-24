@@ -31,7 +31,7 @@ namespace
     void operator()(std::unique_ptr<BinaryExpression> const& binary)
     {
       if (!binary) return;
-      ParenthesisGuard guard{oss, (counter++ > 0) && binary->operation};
+      auto guard = ParenthesisGuard{oss, (counter++ > 0) && binary->operation};
       std::visit(*this, binary->operand);
 
       if (binary->operation)
@@ -127,7 +127,7 @@ namespace rs::expr
 {
   std::string serialize(Expression const& expr)
   {
-    Serializer serializer{};
+    auto serializer = Serializer{};
     std::visit(serializer, expr);
     return serializer.oss.str();
   }

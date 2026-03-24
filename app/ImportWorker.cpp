@@ -79,7 +79,7 @@ void ImportWorker::run()
           auto albumArtistOffset = buildString(fbb, metadata.get(rs::tag::MetaField::AlbumArtist));
           auto genreOffset = buildString(fbb, metadata.get(rs::tag::MetaField::Genre));
 
-          rs::fbs::MetadataBuilder builder{fbb};
+          auto builder = rs::fbs::MetadataBuilder{fbb};
           builder.add_title(titleOffset);
           builder.add_album(albumOffset);
           builder.add_artist(artistOffset);
@@ -110,7 +110,7 @@ void ImportWorker::run()
           auto const& blob = std::get<rs::tag::Blob>(albumArt);
           std::uint64_t id = resourceWriter.create(boost::asio::buffer(blob.data(), blob.size()));
           std::cout << "id " << id << std::endl;
-          rs::fbs::ResourceBuilder builder{fbb};
+          auto builder = rs::fbs::ResourceBuilder{fbb};
           builder.add_type(rs::fbs::ResourceType::AlbumArt);
           builder.add_id(id);
           rsrc.push_back(builder.Finish());
@@ -125,7 +125,7 @@ void ImportWorker::run()
         entries.push_back(rs::fbs::CreateCustomEntry(fbb, fbb.CreateString("classic")));
         auto custom = fbb.CreateVectorOfSortedTables(&entries);
 
-        rs::fbs::TrackBuilder builder{fbb};
+        auto builder = rs::fbs::TrackBuilder{fbb};
         builder.add_meta(metaOffset);
         builder.add_prop(propOffset);
         builder.add_rsrc(rsrcOffset);

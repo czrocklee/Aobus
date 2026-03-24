@@ -21,54 +21,54 @@ using namespace rs::lmdb;
 
 TEST_CASE("ReadTransaction - constructor starts transaction", "[lmdb][transaction]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // First create database with write transaction
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   wtxn.commit();
 
   // Then use read transaction
-  ReadTransaction txn(env);
+  auto txn = ReadTransaction{env};
   auto reader = db.reader(txn);
   REQUIRE(reader.begin() == reader.end()); // Empty DB
 }
 
 TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][transaction]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Create database with write transaction
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   wtxn.commit();
 
   // Read transaction - destructor should abort
   {
-    ReadTransaction txn(env);
+    auto txn = ReadTransaction{env};
     (void)db;
     // Destructor should abort
   }
   // Should be able to start new transaction
-  ReadTransaction txn2(env);
+  auto txn2 = ReadTransaction{env};
   auto reader = db.reader(txn2);
   REQUIRE(reader.begin() == reader.end());
 }
 
 TEST_CASE("ReadTransaction - move", "[lmdb][transaction]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Create database first with write transaction
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   wtxn.commit();
 
-  ReadTransaction txn1(env);
-  ReadTransaction txn2{std::move(txn1)};
+  auto txn1 = ReadTransaction{env};
+  auto txn2 = ReadTransaction{std::move(txn1)};
   // Verify moved transaction is valid by using it
   auto reader = db.reader(txn2);
   REQUIRE(reader.begin() == reader.end());
@@ -80,30 +80,30 @@ TEST_CASE("ReadTransaction - move", "[lmdb][transaction]")
 
 TEST_CASE("WriteTransaction - constructor starts transaction", "[lmdb][transaction]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction txn(env);
+  auto txn = WriteTransaction{env};
   // Verify transaction is valid by using it to create a database
-  Database db{txn, "test"};
+  auto db = Database{txn, "test"};
   auto writer = db.writer(txn);
   (void)writer;
 }
 
 TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Create database, write data, commit
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
   writer.create(1, createStringData("test data"));
   wtxn.commit();
 
   // Start a new transaction - should work now
-  WriteTransaction wtxn2(env);
+  auto wtxn2 = WriteTransaction{env};
   auto reader = db.reader(wtxn2);
   auto it = reader.begin();
   REQUIRE(it != reader.end());
@@ -112,24 +112,24 @@ TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")
 
 TEST_CASE("WriteTransaction - destructor without commit aborts", "[lmdb][transaction]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Create database
-  WriteTransaction dbTxn(env);
-  Database db{dbTxn, "test"};
+  auto dbTxn = WriteTransaction{env};
+  auto db = Database{dbTxn, "test"};
   dbTxn.commit();
 
   // Write data without committing - transaction should abort on destruction
   {
-    WriteTransaction txn(env);
+    auto txn = WriteTransaction{env};
     auto writer = db.writer(txn);
     writer.create(1, createStringData("uncommitted"));
     // Without commit, transaction aborts on destruction
   }
 
   // Data should not be visible
-  ReadTransaction txn(env);
+  auto txn = ReadTransaction{env};
   auto reader = db.reader(txn);
   auto data = reader.get(1);
   REQUIRE(data == std::nullopt);
@@ -137,17 +137,17 @@ TEST_CASE("WriteTransaction - destructor without commit aborts", "[lmdb][transac
 
 TEST_CASE("WriteTransaction - move", "[lmdb][transaction]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // First create the database
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   wtxn.commit();
 
   // Now test move
-  WriteTransaction txn1(env);
-  WriteTransaction txn2{std::move(txn1)};
+  auto txn1 = WriteTransaction{env};
+  auto txn2 = WriteTransaction{std::move(txn1)};
   // Verify moved transaction is valid by using it
   [[maybe_unused]] auto writer = db.writer(txn2);
   txn2.commit();
@@ -159,15 +159,15 @@ TEST_CASE("WriteTransaction - move", "[lmdb][transaction]")
 
 TEST_CASE("NestedTransaction - child commit merges to parent", "[lmdb][nested]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Create parent write transaction and open database
-  WriteTransaction parentTxn(env);
-  Database db{parentTxn, "test"};
+  auto parentTxn = WriteTransaction{env};
+  auto db = Database{parentTxn, "test"};
 
   // Create nested write transaction
-  WriteTransaction childTxn(parentTxn);
+  auto childTxn = WriteTransaction{parentTxn};
   auto writer = db.writer(childTxn);
   writer.create(1, createStringData("nested data"));
 
@@ -177,7 +177,7 @@ TEST_CASE("NestedTransaction - child commit merges to parent", "[lmdb][nested]")
   parentTxn.commit();
 
   // Verify data is visible
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   auto it = reader.begin();
   REQUIRE(it != reader.end());
@@ -186,16 +186,16 @@ TEST_CASE("NestedTransaction - child commit merges to parent", "[lmdb][nested]")
 
 TEST_CASE("NestedTransaction - child abort does not affect parent", "[lmdb][nested]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   // Create parent transaction and open database
-  WriteTransaction parentTxn(env);
-  Database db{parentTxn, "test"};
+  auto parentTxn = WriteTransaction{env};
+  auto db = Database{parentTxn, "test"};
 
   // Create child transaction and write data
   {
-    WriteTransaction childTxn(parentTxn);
+    auto childTxn = WriteTransaction{parentTxn};
     auto writer = db.writer(childTxn);
     writer.create(1, createStringData("child data"));
     // Child transaction aborts on destruction without commit
@@ -205,7 +205,7 @@ TEST_CASE("NestedTransaction - child abort does not affect parent", "[lmdb][nest
   parentTxn.commit();
 
   // Verify data is NOT visible
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   auto data = reader.get(1);
   REQUIRE(data == std::nullopt);

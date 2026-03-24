@@ -66,13 +66,14 @@ This guide covers C++ coding conventions for RockStudio contributors.
 3.2.5. Use structured bindings: `auto [key, value] : map`
 3.2.6. Use init statement: `if (auto var = get(); condition)`
 
-### 3.3 C++11 Features (Preferred)
+### 3.3 C++11 Features
 
 3.3.1. Use RAII: dopts `std::unique_ptr` for owned resources, use custom deleter if needed
 3.3.2. DON'T use [[nodiscard]]: Too verbose, rely on clang-tidy for check
 3.3.3. Use [[maybe_unused]]: Suppress unused warnings other than (void)
 3.3.4. Use noexcept: Mark functions that won't throw
 3.3.5. Use uniform initialization `{}` other than parentheses `()` for constructors and member initializer lists
+3.3.6. Prefer `auto x = T{a, b};` over `T x{a, b};` for object construction
 
 ## 4. Best Practices
 

@@ -20,15 +20,15 @@ using rs::lmdb::WriteTransaction;
 
 TEST_CASE("Dictionary - store and get", "[core][dictionary]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  DictionaryStore dict{wtxn, "dict"};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{wtxn, "dict"};
   wtxn.commit();
 
   // Store a value
-  WriteTransaction wtxn2(env);
+  auto wtxn2 = WriteTransaction{env};
   auto id = dict.put(wtxn2, "test value");
   // If put() failed, it would throw
   wtxn2.commit();
@@ -40,11 +40,11 @@ TEST_CASE("Dictionary - store and get", "[core][dictionary]")
 
 TEST_CASE("Dictionary - getId", "[core][dictionary]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  DictionaryStore dict{wtxn, "dict"};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{wtxn, "dict"};
   dict.put(wtxn, "artist1");
   wtxn.commit();
 
@@ -55,11 +55,11 @@ TEST_CASE("Dictionary - getId", "[core][dictionary]")
 
 TEST_CASE("Dictionary - contains by string", "[core][dictionary]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  DictionaryStore dict{wtxn, "dict"};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{wtxn, "dict"};
   dict.put(wtxn, "exists");
   wtxn.commit();
 
@@ -69,21 +69,21 @@ TEST_CASE("Dictionary - contains by string", "[core][dictionary]")
 
 TEST_CASE("Dictionary - put duplicate string returns existing ID", "[core][dictionary]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  DictionaryStore dict{wtxn, "dict"};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{wtxn, "dict"};
   wtxn.commit();
 
   // Store a value
-  WriteTransaction wtxn2(env);
+  auto wtxn2 = WriteTransaction{env};
   auto id1 = dict.put(wtxn2, "first");
   // If put() failed, it would throw
   wtxn2.commit();
 
   // Try to store same string again - returns existing ID
-  WriteTransaction wtxn3(env);
+  auto wtxn3 = WriteTransaction{env};
   auto id2 = dict.put(wtxn3, "first");
   REQUIRE(id2 == id1);
 
@@ -94,11 +94,11 @@ TEST_CASE("Dictionary - put duplicate string returns existing ID", "[core][dicti
 
 TEST_CASE("Dictionary - get throws on invalid ID", "[core][dictionary]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  DictionaryStore dict{wtxn, "dict"};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{wtxn, "dict"};
   dict.put(wtxn, "first");
   wtxn.commit();
 
@@ -108,11 +108,11 @@ TEST_CASE("Dictionary - get throws on invalid ID", "[core][dictionary]")
 
 TEST_CASE("Dictionary - getId throws on non-existent string", "[core][dictionary]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  DictionaryStore dict{wtxn, "dict"};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{wtxn, "dict"};
   dict.put(wtxn, "exists");
   wtxn.commit();
 
@@ -122,11 +122,11 @@ TEST_CASE("Dictionary - getId throws on non-existent string", "[core][dictionary
 
 TEST_CASE("Dictionary - get with first valid ID (0)", "[core][dictionary]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  DictionaryStore dict{wtxn, "dict"};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{wtxn, "dict"};
   auto id = dict.put(wtxn, "first");
   wtxn.commit();
 
@@ -137,11 +137,11 @@ TEST_CASE("Dictionary - get with first valid ID (0)", "[core][dictionary]")
 
 TEST_CASE("Dictionary - get throws on out-of-bounds ID", "[core][dictionary]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  DictionaryStore dict{wtxn, "dict"};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{wtxn, "dict"};
   dict.put(wtxn, "only one");
   wtxn.commit();
 

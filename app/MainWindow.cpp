@@ -45,7 +45,7 @@ MainWindow::MainWindow()
         openMusicLibrary(dir.toStdString());
       }
 
-      QSettings settings{"settings.ini"};
+      auto settings = QSettings{"settings.ini"};
       settings.setValue("session.lastMusicLibaryOpened", dir);
       updateWindowTitle(dir);
     }
@@ -105,7 +105,7 @@ void MainWindow::importMusicLibrary(std::string const& root)
 {
   _ml = std::make_unique<MusicLibrary>(root);
 
-  FileFilter filter{root, {".flac", ".m4a"}};
+  auto filter = FileFilter{root, {".flac", ".m4a"}};
   std::vector<std::filesystem::path> files{filter.begin(), filter.end()};
 
   auto* dialog = new ImportProgressDialog{static_cast<int>(files.size()), this};

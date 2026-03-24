@@ -426,7 +426,7 @@ void MainWindow::createList(rs::fbs::ListT const& list)
     auto nameOffset = fbb.CreateString(list.name);
     auto descOffset = fbb.CreateString(list.desc);
     auto exprOffset = fbb.CreateString(list.expr);
-    rs::fbs::ListBuilder builder{fbb};
+    auto builder = rs::fbs::ListBuilder{fbb};
     builder.add_name(nameOffset);
     builder.add_desc(descOffset);
     builder.add_expr(exprOffset);

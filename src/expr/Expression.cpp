@@ -55,7 +55,7 @@ namespace rs::expr
 
   void normalize(Expression& expr)
   {
-    Normalizer normalizer{expr};
+    auto normalizer = Normalizer{expr};
     std::visit(normalizer, expr);
   }
 }

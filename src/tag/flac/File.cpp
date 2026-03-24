@@ -116,7 +116,7 @@ namespace rs::tag::flac
 
         case MetadataBlockType::Picture:
         {
-          PictureBlockView block{iter->data()};
+          auto block = PictureBlockView{iter->data()};
           auto blob = block.blob();
           metadata.set(MetaField::AlbumArt, BlobDecoder::decode(blob.data(), blob.size()));
           break;

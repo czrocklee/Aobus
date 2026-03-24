@@ -111,15 +111,15 @@ using namespace rs::expr;
 TEST_CASE("PlanEvaluator - Simple Equal Match")
 {
   auto expr = parse("$year = 2020");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2019);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2019};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -127,15 +127,15 @@ TEST_CASE("PlanEvaluator - Simple Equal Match")
 TEST_CASE("PlanEvaluator - Greater Than")
 {
   auto expr = parse("@duration > 179000");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5, 180000);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2020, 5, 170000);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 170000};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -143,19 +143,19 @@ TEST_CASE("PlanEvaluator - Greater Than")
 TEST_CASE("PlanEvaluator - NotEqual")
 {
   auto expr = parse("$year != 2020");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5, 180000);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == false);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2021, 5, 180000);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2021, 5, 180000};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == true);
 
-  TestTrack track3("Test", "Artist", "Album", "/path", 2019, 5, 180000);
+  auto track3 = TestTrack{"Test", "Artist", "Album", "/path", 2019, 5, 180000};
   result = evaluator.evaluateFull(plan, track3.view());
   CHECK(result == true);
 }
@@ -163,15 +163,15 @@ TEST_CASE("PlanEvaluator - NotEqual")
 TEST_CASE("PlanEvaluator - Greater Than Or Equal")
 {
   auto expr = parse("@duration >= 180000");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5, 180000);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2020, 5, 179999);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 179999};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -179,15 +179,15 @@ TEST_CASE("PlanEvaluator - Greater Than Or Equal")
 TEST_CASE("PlanEvaluator - Less Than")
 {
   auto expr = parse("$year < 2021");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2021);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2021};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -195,15 +195,15 @@ TEST_CASE("PlanEvaluator - Less Than")
 TEST_CASE("PlanEvaluator - Like Match")
 {
   auto expr = parse("$title ~ Test");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test Title");
+  auto track1 = TestTrack{"Test Title"};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Another Title");
+  auto track2 = TestTrack{"Another Title"};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -211,19 +211,19 @@ TEST_CASE("PlanEvaluator - Like Match")
 TEST_CASE("PlanEvaluator - Title String Equal")
 {
   auto expr = parse("$title = 'Hello World'");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Hello World");
+  auto track1 = TestTrack{"Hello World"};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("hello world"); // case-sensitive
+  auto track2 = TestTrack{"hello world"}; // case-sensitive
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 
-  TestTrack track3("Hello");
+  auto track3 = TestTrack{"Hello"};
   result = evaluator.evaluateFull(plan, track3.view());
   CHECK(result == false);
 }
@@ -231,15 +231,15 @@ TEST_CASE("PlanEvaluator - Title String Equal")
 TEST_CASE("PlanEvaluator - Title String Not Equal")
 {
   auto expr = parse("$title != 'Hello'");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Hello World");
+  auto track1 = TestTrack{"Hello World"};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Hello");
+  auto track2 = TestTrack{"Hello"};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -247,19 +247,19 @@ TEST_CASE("PlanEvaluator - Title String Not Equal")
 TEST_CASE("PlanEvaluator - Title String Less Than")
 {
   auto expr = parse("$title < 'zoo'");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("apple");
+  auto track1 = TestTrack{"apple"};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("zoo");
+  auto track2 = TestTrack{"zoo"};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 
-  TestTrack track3("zooExtra");
+  auto track3 = TestTrack{"zooExtra"};
   result = evaluator.evaluateFull(plan, track3.view());
   CHECK(result == false);
 }
@@ -267,19 +267,19 @@ TEST_CASE("PlanEvaluator - Title String Less Than")
 TEST_CASE("PlanEvaluator - Title String Greater Than")
 {
   auto expr = parse("$title > 'apple'");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("banana");
+  auto track1 = TestTrack{"banana"};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("apple");
+  auto track2 = TestTrack{"apple"};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 
-  TestTrack track3("Apple"); // case-sensitive
+  auto track3 = TestTrack{"Apple"}; // case-sensitive
   result = evaluator.evaluateFull(plan, track3.view());
   CHECK(result == false);
 }
@@ -287,19 +287,19 @@ TEST_CASE("PlanEvaluator - Title String Greater Than")
 TEST_CASE("PlanEvaluator - Logical And")
 {
   auto expr = parse("$year = 2020 && @duration > 100000");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5, 180000);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2019, 5, 180000);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2019, 5, 180000};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 
-  TestTrack track3("Test", "Artist", "Album", "/path", 2020, 5, 50000);
+  auto track3 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 50000};
   result = evaluator.evaluateFull(plan, track3.view());
   CHECK(result == false);
 }
@@ -307,19 +307,19 @@ TEST_CASE("PlanEvaluator - Logical And")
 TEST_CASE("PlanEvaluator - Logical Or")
 {
   auto expr = parse("$year = 2020 || $year = 2019");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2019);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2019};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == true);
 
-  TestTrack track3("Test", "Artist", "Album", "/path", 2018);
+  auto track3 = TestTrack{"Test", "Artist", "Album", "/path", 2018};
   result = evaluator.evaluateFull(plan, track3.view());
   CHECK(result == false);
 }
@@ -328,15 +328,15 @@ TEST_CASE("PlanEvaluator - Logical Not")
 {
   // Use "not(" for explicit grouping, or check if parser handles precedence
   auto expr = parse("!($year = 2020)");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == false);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2019);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2019};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == true);
 }
@@ -345,15 +345,15 @@ TEST_CASE("PlanEvaluator - Complex Expression")
 {
   // Note: genre comparison requires dictionary resolution, so we use numeric genreId
   auto expr = parse("@duration > 180000 && $year >= 2020");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5, 200000, 320000, 44100, 2, 16, 1, 2, 1);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 200000, 320000, 44100, 2, 16, 1, 2, 1};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2019, 5, 200000, 320000, 44100, 2, 16, 1, 2, 1);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2019, 5, 200000, 320000, 44100, 2, 16, 1, 2, 1};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -361,17 +361,17 @@ TEST_CASE("PlanEvaluator - Complex Expression")
 TEST_CASE("PlanEvaluator - Matches All")
 {
   auto expr = parse("true");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
   CHECK(plan.matchesAll == true);
 
-  TestTrack track1;
+  auto track1 = TestTrack{};
   auto result = evaluator.matches(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 1900);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 1900};
   result = evaluator.matches(plan, track2.view());
   CHECK(result == true);
 }
@@ -379,9 +379,9 @@ TEST_CASE("PlanEvaluator - Matches All")
 TEST_CASE("PlanEvaluator - Invalid Track View")
 {
   auto expr = parse("$year = 2020");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
   // Empty hot data creates an invalid TrackView
   rs::core::TrackView emptyView{std::span<std::byte const>{}, std::span<std::byte const>{}};
@@ -392,15 +392,15 @@ TEST_CASE("PlanEvaluator - Invalid Track View")
 TEST_CASE("PlanEvaluator - Bitrate Comparison")
 {
   auto expr = parse("@bitrate >= 320000");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2020, 5, 180000, 256000);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 256000};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -408,15 +408,15 @@ TEST_CASE("PlanEvaluator - Bitrate Comparison")
 TEST_CASE("PlanEvaluator - SampleRate Comparison")
 {
   auto expr = parse("@sampleRate >= 48000");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 48000);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 48000};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -425,15 +425,15 @@ TEST_CASE("PlanEvaluator - Year Comparison")
 {
   // Note: $trackNumber is a cold field, so we use $year instead which is hot
   auto expr = parse("$year = 2020");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5);
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
-  TestTrack track2("Test", "Artist", "Album", "/path", 2019, 5);
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2019, 5};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -442,12 +442,12 @@ TEST_CASE("PlanEvaluator - Tag Query - No Tags")
 {
   // Query for tag - with dictionary resolving "rock" -> ID 10
   auto expr = parse("#rock");
-  QueryCompiler compiler; // No dictionary - tag resolution disabled
+  auto compiler = QueryCompiler{}; // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
   // Track with no tags - bloom filter rejects
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {});
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}};
   auto result = evaluator.matches(plan, track1.view());
   CHECK(result == false);
 }
@@ -455,11 +455,11 @@ TEST_CASE("PlanEvaluator - Tag Query - No Tags")
 TEST_CASE("PlanEvaluator - Tag Query - With Matching Tag")
 {
   // Set up DictionaryStore with tag
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  DictionaryStore dict{wtxn, "dict"};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{wtxn, "dict"};
   dict.put(wtxn, "rock"); // Will get ID 0 (LMDB starts from 0 now)
   wtxn.commit();
 
@@ -467,10 +467,10 @@ TEST_CASE("PlanEvaluator - Tag Query - With Matching Tag")
   auto expr = parse("#rock");
   QueryCompiler compiler{&dict}; // Pass dictionary for tag resolution
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
   // Track with tag ID 0 (matches "rock" = 0)
-  TestTrack trackWithTag("Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {0});
+  auto trackWithTag = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {0}};
   auto result = evaluator.matches(plan, trackWithTag.view());
   CHECK(result == true);
 }
@@ -479,12 +479,12 @@ TEST_CASE("PlanEvaluator - Tag Query - With Non-Matching Tag")
 {
   // Dictionary: "rock" -> ID 10, but track has tag ID 20
   auto expr = parse("#rock");
-  QueryCompiler compiler; // No dictionary - tag resolution disabled
+  auto compiler = QueryCompiler{}; // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
   // Track with tag ID 20 (doesn't match "rock" = 10)
-  TestTrack trackWithTag("Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {20});
+  auto trackWithTag = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {20}};
   auto result = evaluator.matches(plan, trackWithTag.view());
   CHECK(result == false);
 }
@@ -493,7 +493,7 @@ TEST_CASE("PlanEvaluator - Tag Field Compilation")
 {
   // Test that tag field compiles to Field::Tag
   auto expr = parse("#tagname");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   // Check that instructions contain LoadField with Field::Tag (16)
@@ -504,17 +504,17 @@ TEST_CASE("PlanEvaluator - Tag Field Compilation")
 TEST_CASE("PlanEvaluator - TagCount Field")
 {
   auto expr = parse("@tagCount > 0");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
   // Track with 2 tags
-  TestTrack track1("Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {10, 20});
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {10, 20}};
   auto result = evaluator.evaluateFull(plan, track1.view());
   CHECK(result == true);
 
   // Track with no tags
-  TestTrack track2("Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {});
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
 }
@@ -523,7 +523,7 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Without Dictionary")
 {
   // Without a dictionary, tag bloom mask cannot be set (no way to resolve tag name to ID)
   auto expr = parse("#mytag");
-  QueryCompiler compiler; // No dictionary provided
+  auto compiler = QueryCompiler{}; // No dictionary provided
   auto plan = compiler.compile(expr);
 
   // Without dictionary, tagBloomMask stays 0
@@ -534,7 +534,7 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Dictionary Miss")
 {
   // Dictionary has "rock" -> ID 10, but query is for "jazz" which is not in dict
   auto expr = parse("#jazz");
-  QueryCompiler compiler; // No dictionary - tag resolution disabled
+  auto compiler = QueryCompiler{}; // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
 
   // "jazz" not in dictionary, tagBloomMask stays 0
@@ -545,7 +545,7 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Dictionary Hit")
 {
   // Dictionary has "rock" -> ID 10 (10 & 31 = 10)
   auto expr = parse("#rock");
-  QueryCompiler compiler; // No dictionary - tag resolution disabled
+  auto compiler = QueryCompiler{}; // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
 
   // Without dictionary, tag resolution doesn't happen, bloom mask stays 0
@@ -556,7 +556,7 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Multiple Tags Hit")
 {
   // Dictionary: "rock" -> ID 10, "jazz" -> ID 20
   auto expr = parse("#rock && #jazz");
-  QueryCompiler compiler; // No dictionary - tag resolution disabled
+  auto compiler = QueryCompiler{}; // No dictionary - tag resolution disabled
   auto plan = compiler.compile(expr);
 
   // Without dictionary, tag resolution doesn't happen, bloom mask stays 0
@@ -593,9 +593,9 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Track Computation")
 TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
 {
   auto expr = parse("#mytag");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
   // Create a track with tag bloom bit 0 set (simulating tag ID 32)
   rs::core::TrackHotHeader h{};
@@ -617,9 +617,9 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
 TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
 {
   auto expr = parse("#mytag");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  PlanEvaluator evaluator;
+  auto evaluator = PlanEvaluator{};
 
   // Create a track with tag bloom that has some bits set
   // (without dictionary, mask is 0, so this won't actually test fast path)

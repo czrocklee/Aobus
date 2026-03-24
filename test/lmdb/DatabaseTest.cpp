@@ -24,14 +24,14 @@ using namespace rs::lmdb;
 
 TEST_CASE("Database - constructor opens database", "[lmdb][database]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "newdb"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "newdb"};
   wtxn.commit();
 
-  ReadTransaction txn(env);
+  auto txn = ReadTransaction{env};
   auto reader = db.reader(txn);
   REQUIRE(reader.begin() == reader.end());
 }
@@ -42,18 +42,18 @@ TEST_CASE("Database - constructor opens database", "[lmdb][database]")
 
 TEST_CASE("Database::Reader - begin and end", "[lmdb][database][reader]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
   writer.create(1, createStringData("one"));
   writer.create(2, createStringData("two"));
   wtxn.commit();
 
   // Test reader iterator
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
 
   auto it = reader.begin();
@@ -70,30 +70,30 @@ TEST_CASE("Database::Reader - begin and end", "[lmdb][database][reader]")
 
 TEST_CASE("Database::Reader - empty database", "[lmdb][database][reader]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   wtxn.commit();
 
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   REQUIRE(reader.begin() == reader.end());
 }
 
 TEST_CASE("Database::Reader - get", "[lmdb][database][reader]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
   writer.create(42, createStringData("answer"));
   wtxn.commit();
 
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
 
   SECTION("Existing key returns data")
@@ -118,15 +118,15 @@ TEST_CASE("Database::Reader::Iterator - default constructor", "[lmdb][database][
 
 TEST_CASE("Database::Reader::Iterator - copy constructor", "[lmdb][database][reader]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   db.writer(wtxn).create(1, createStringData("data"));
   wtxn.commit();
 
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
 
   auto it1 = reader.begin();
@@ -137,15 +137,15 @@ TEST_CASE("Database::Reader::Iterator - copy constructor", "[lmdb][database][rea
 
 TEST_CASE("Database::Reader::Iterator - move constructor", "[lmdb][database][reader]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   db.writer(wtxn).create(1, createStringData("data"));
   wtxn.commit();
 
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
 
   auto it1 = reader.begin();
@@ -155,16 +155,16 @@ TEST_CASE("Database::Reader::Iterator - move constructor", "[lmdb][database][rea
 
 TEST_CASE("Database::Reader::Iterator - dereference", "[lmdb][database][reader]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
   writer.create(100, createStringData("value"));
   wtxn.commit();
 
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   auto it = reader.begin();
   REQUIRE(rs::utility::asString(it->second) == "value");
@@ -176,17 +176,17 @@ TEST_CASE("Database::Reader::Iterator - dereference", "[lmdb][database][reader]"
 
 TEST_CASE("Database::Writer - create with id and data", "[lmdb][database][writer]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
   writer.create(1, createStringData("hello"));
   wtxn.commit();
 
   // Verify via reader
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   auto data = reader.get(1);
   REQUIRE(data.has_value());
@@ -195,11 +195,11 @@ TEST_CASE("Database::Writer - create with id and data", "[lmdb][database][writer
 
 TEST_CASE("Database::Writer - create with id and size", "[lmdb][database][writer]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
   auto result = writer.create(1, 10);
   REQUIRE(!result.empty());
@@ -211,7 +211,7 @@ TEST_CASE("Database::Writer - create with id and size", "[lmdb][database][writer
   wtxn.commit();
 
   // Verify via reader
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   auto data = reader.get(1);
   REQUIRE(data.has_value());
@@ -221,11 +221,11 @@ TEST_CASE("Database::Writer - create with id and size", "[lmdb][database][writer
 
 TEST_CASE("Database::Writer - append with data", "[lmdb][database][writer]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
 
   auto id1 = writer.append(createStringData("first"));
@@ -237,7 +237,7 @@ TEST_CASE("Database::Writer - append with data", "[lmdb][database][writer]")
   wtxn.commit();
 
   // Verify via reader
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   auto data1 = reader.get(0);
   auto data2 = reader.get(1);
@@ -249,11 +249,11 @@ TEST_CASE("Database::Writer - append with data", "[lmdb][database][writer]")
 
 TEST_CASE("Database::Writer - append with size", "[lmdb][database][writer]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
 
   auto [id1, result1] = writer.append(8);
@@ -271,7 +271,7 @@ TEST_CASE("Database::Writer - append with size", "[lmdb][database][writer]")
   wtxn.commit();
 
   // Verify via reader
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   auto data1 = reader.get(0);
   auto data2 = reader.get(1);
@@ -283,11 +283,11 @@ TEST_CASE("Database::Writer - append with size", "[lmdb][database][writer]")
 
 TEST_CASE("Database::Writer - update existing record", "[lmdb][database][writer]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
 
   // Create initial record
@@ -295,13 +295,13 @@ TEST_CASE("Database::Writer - update existing record", "[lmdb][database][writer]
   wtxn.commit();
 
   // Update the record
-  WriteTransaction wtxn2(env);
+  auto wtxn2 = WriteTransaction{env};
   auto writer2 = db.writer(wtxn2);
   writer2.update(1, createStringData("updated"));
   wtxn2.commit();
 
   // Verify via reader
-  ReadTransaction rtxn(env);
+  auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   auto data = reader.get(1);
   REQUIRE(data.has_value());
@@ -311,18 +311,18 @@ TEST_CASE("Database::Writer - update existing record", "[lmdb][database][writer]
 
 TEST_CASE("Database::Writer - delete record", "[lmdb][database][writer]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
   writer.create(1, createStringData("test"));
   wtxn.commit();
 
   // Verify exists
   {
-    ReadTransaction rtxn(env);
+    auto rtxn = ReadTransaction{env};
     auto reader = db.reader(rtxn);
     auto data1 = reader.get(1);
     REQUIRE(data1.has_value());
@@ -330,7 +330,7 @@ TEST_CASE("Database::Writer - delete record", "[lmdb][database][writer]")
 
   // Delete
   {
-    WriteTransaction wtxn(env);
+    auto wtxn = WriteTransaction{env};
     auto writer = db.writer(wtxn);
     bool deleted = writer.del(1);
     REQUIRE(deleted);
@@ -339,7 +339,7 @@ TEST_CASE("Database::Writer - delete record", "[lmdb][database][writer]")
 
   // Verify deleted
   {
-    ReadTransaction rtxn(env);
+    auto rtxn = ReadTransaction{env};
     auto reader = db.reader(rtxn);
     auto data2 = reader.get(1);
     REQUIRE(!data2.has_value());
@@ -348,11 +348,11 @@ TEST_CASE("Database::Writer - delete record", "[lmdb][database][writer]")
 
 TEST_CASE("Database::Writer - get within write transaction", "[lmdb][database][writer]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
 
   writer.create(42, createStringData("answer"));
@@ -364,16 +364,16 @@ TEST_CASE("Database::Writer - get within write transaction", "[lmdb][database][w
 
 TEST_CASE("Database::Writer - move constructor", "[lmdb][database][writer]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
 
   auto writer1 = db.writer(wtxn);
   writer1.create(1, createStringData("test"));
 
-  Database::Writer writer2{std::move(writer1)};
+  auto writer2 = Database::Writer{std::move(writer1)};
   // writer1 is now in moved-from state
   // writer2 should still be usable
 
@@ -382,11 +382,11 @@ TEST_CASE("Database::Writer - move constructor", "[lmdb][database][writer]")
 
 TEST_CASE("Database::Writer - create throws on duplicate id with data", "[lmdb][database][writer]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
 
   writer.create(1, createStringData("first"));
@@ -397,11 +397,11 @@ TEST_CASE("Database::Writer - create throws on duplicate id with data", "[lmdb][
 
 TEST_CASE("Database::Writer - create throws on duplicate id with size", "[lmdb][database][writer]")
 {
-  TempDir temp;
+  auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  WriteTransaction wtxn(env);
-  Database db{wtxn, "test"};
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
   auto writer = db.writer(wtxn);
 
   writer.create(1, 10);

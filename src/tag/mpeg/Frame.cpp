@@ -105,7 +105,7 @@ namespace rs::tag::mpeg
     for (std::uint8_t const* frameCandidate = findFrameSync(begin, end); frameCandidate != nullptr;
          frameCandidate = findFrameSync(frameCandidate + FrameSyncSkipSize, end))
     {
-      if (FrameView view{frameCandidate, static_cast<std::size_t>(end - frameCandidate)}; view.isValid())
+      if (auto view = FrameView{frameCandidate, static_cast<std::size_t>(end - frameCandidate)}; view.isValid())
       {
         return view;
       }

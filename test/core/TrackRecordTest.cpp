@@ -17,7 +17,7 @@ using rs::core::TrackView;
 
 TEST_CASE("TrackRecord - Default Constructor")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
 
   CHECK(record.metadata.title.empty());
   CHECK(record.metadata.uri.empty());
@@ -45,7 +45,7 @@ TEST_CASE("TrackRecord - Default Constructor")
 
 TEST_CASE("TrackRecord - Field Assignment")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.metadata.title = "Test Title";
   record.metadata.uri = "/path/to/track.flac";
   record.metadata.artist = "Test Artist";
@@ -93,7 +93,7 @@ TEST_CASE("TrackRecord - Field Assignment")
 
 TEST_CASE("TrackRecord - Serialize Empty Record")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   auto data = record.serializeHot();
 
   CHECK(data.size() >= sizeof(TrackHotHeader));
@@ -102,7 +102,7 @@ TEST_CASE("TrackRecord - Serialize Empty Record")
 
 TEST_CASE("TrackRecord - Serialize With Strings")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.metadata.title = "Hello World";
   record.metadata.uri = "/music/test.flac";
   record.metadata.year = 2021;
@@ -125,7 +125,7 @@ TEST_CASE("TrackRecord - Serialize With Strings")
 
 TEST_CASE("TrackRecord - hotHeader Method")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.metadata.year = 1999;
   record.property.bitDepth = 24;
   record.property.rating = 5;
@@ -139,7 +139,7 @@ TEST_CASE("TrackRecord - hotHeader Method")
 
 TEST_CASE("TrackRecord - Serialize With Special Characters")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.metadata.title = "Test: \"Quotes\" & 'Apostrophes'";
 
   auto data = record.serializeHot();
@@ -150,7 +150,7 @@ TEST_CASE("TrackRecord - Serialize With Special Characters")
 
 TEST_CASE("TrackRecord - Serialize Preserves Data")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.metadata.title = "Test";
   record.metadata.uri = "/test";
   record.property.fileSize = 12345;
@@ -166,7 +166,7 @@ TEST_CASE("TrackRecord - Serialize Preserves Data")
 
 TEST_CASE("TrackRecord - Tag Serialization - Empty Tags")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.metadata.title = "Test";
   record.metadata.uri = "/test";
 
@@ -179,7 +179,7 @@ TEST_CASE("TrackRecord - Tag Serialization - Empty Tags")
 
 TEST_CASE("TrackRecord - Tag Serialization - With Tags")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.metadata.title = "Test";
   record.metadata.uri = "/test";
   record.tags.ids = {DictionaryId{10}, DictionaryId{20}, DictionaryId{30}};
@@ -199,7 +199,7 @@ TEST_CASE("TrackRecord - Tag Serialization - With Tags")
 
 TEST_CASE("TrackRecord - Tag Serialization - Single Tag")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.metadata.title = "Test";
   record.metadata.uri = "/test";
   record.tags.ids = {DictionaryId{42}};
@@ -215,7 +215,7 @@ TEST_CASE("TrackRecord - Tag Serialization - Single Tag")
 
 TEST_CASE("TrackRecord - hotHeader Method With Tags")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.metadata.title = "Test";
   record.metadata.uri = "/test";
   record.tags.ids = {DictionaryId{1}, DictionaryId{2}, DictionaryId{3}, DictionaryId{4}, DictionaryId{5}};
@@ -228,7 +228,7 @@ TEST_CASE("TrackRecord - hotHeader Method With Tags")
 
 TEST_CASE("TrackRecord - hotHeader")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.tags.ids = {DictionaryId{1}, DictionaryId{2}};
 
   auto header = record.hotHeader();
@@ -239,7 +239,7 @@ TEST_CASE("TrackRecord - hotHeader")
 
 TEST_CASE("TrackRecord - coldHeader")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.property.fileSize = 2000;
   record.property.mtime = 1234567890;
   record.metadata.trackNumber = 5;
@@ -262,7 +262,7 @@ TEST_CASE("TrackRecord - coldHeader")
 
 TEST_CASE("TrackRecord - serializeHot")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.property.fileSize = 1000;
   record.metadata.title = "Test Title";
   record.metadata.uri = "/path/to/file.flac";
@@ -280,7 +280,7 @@ TEST_CASE("TrackRecord - serializeHot")
 
 TEST_CASE("TrackRecord - serializeCold")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.property.fileSize = 2000;
   record.property.mtime = 9876543210;
   record.metadata.trackNumber = 3;
@@ -296,7 +296,7 @@ TEST_CASE("TrackRecord - serializeCold")
   auto data = record.serializeCold(resolver);
 
   // Verify cold view can parse it
-  TrackView view{std::span<std::byte const>{}, data};
+  auto view = TrackView{std::span<std::byte const>{}, data};
   CHECK(view.property().fileSize() == 2000);
   CHECK(view.property().mtime() == 9876543210);
   CHECK(view.metadata().trackNumber() == 3);
@@ -309,7 +309,7 @@ TEST_CASE("TrackRecord - serializeCold")
 
 TEST_CASE("TrackRecord - custom.pairs field")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
   record.custom.pairs = {{"replaygain_track_gain_db", "-6.5"}, {"isrc", "USSM19999999"}};
 
   CHECK(record.custom.pairs.size() == 2);
@@ -319,7 +319,7 @@ TEST_CASE("TrackRecord - custom.pairs field")
 
 TEST_CASE("TrackRecord - Cold struct default values")
 {
-  TrackRecord record;
+  auto record = TrackRecord{};
 
   CHECK(record.property.fileSize == 0);
   CHECK(record.property.mtime == 0);
@@ -328,4 +328,41 @@ TEST_CASE("TrackRecord - Cold struct default values")
   CHECK(record.metadata.discNumber == 0);
   CHECK(record.metadata.totalDiscs == 0);
   CHECK(record.metadata.uri.empty());
+}
+
+TEST_CASE("TrackRecord - Constructor validates both hot and cold", "[core][track]")
+{
+  // Verify that isHotValid and isColdValid work correctly
+  TrackHotHeader hotHeader{};
+  hotHeader.titleLen = 0;
+  hotHeader.tagLen = 0;
+  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
+
+  TrackColdHeader coldHeader{};
+  coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
+  coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
+  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
+
+  // Hot-only view
+  {
+    auto view = TrackView{hotData, {}};
+    CHECK(view.isHotValid());
+    CHECK(!view.isColdValid());
+  }
+
+  // Cold-only view
+  {
+    auto view = TrackView{{}, coldData};
+    CHECK(!view.isHotValid());
+    CHECK(view.isColdValid());
+  }
+
+  // Both-valid view
+  {
+    auto view = TrackView{hotData, coldData};
+    CHECK(view.isHotValid());
+    CHECK(view.isColdValid());
+  }
 }

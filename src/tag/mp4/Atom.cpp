@@ -22,7 +22,7 @@ namespace rs::tag::mp4
       {
         auto const* layout = reinterpret_cast<AtomLayout const*>(data);
         auto length = layout->length.value();
-        std::string_view type{layout->type.data(), 4};
+        auto type = std::string_view{layout->type.data(), 4};
 
         if (auto iter = ContainerAtomIterested.find(type); iter != ContainerAtomIterested.end())
         {

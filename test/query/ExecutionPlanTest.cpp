@@ -11,7 +11,7 @@ using namespace rs::expr;
 TEST_CASE("ExecutionPlan - Compile Simple Expression")
 {
   auto expr = parse("$artist = Bach");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK_FALSE(plan.instructions.empty());
@@ -23,7 +23,7 @@ TEST_CASE("ExecutionPlan - Compile Empty Expression")
   // Note: matchesAll is not automatically set - it's a hint for optimization
   // The plan should still compile a constant true expression
   auto expr = parse("true");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   // The plan should have at least one instruction (LoadConstant)
@@ -33,7 +33,7 @@ TEST_CASE("ExecutionPlan - Compile Empty Expression")
 TEST_CASE("ExecutionPlan - Compile Metadata Field")
 {
   auto expr = parse("$title = 'Test'");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK(plan.instructions.size() >= 2);
@@ -54,7 +54,7 @@ TEST_CASE("ExecutionPlan - Compile Metadata Field")
 TEST_CASE("ExecutionPlan - Compile Property Field")
 {
   auto expr = parse("@duration > 180000");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK(plan.instructions.size() >= 2);
@@ -76,7 +76,7 @@ TEST_CASE("ExecutionPlan - Compile Logical And")
 {
   // Use && for logical and to ensure it's parsed correctly
   auto expr = parse("$artist = Bach && $genre = Classical");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   bool hasAnd = false;
@@ -95,7 +95,7 @@ TEST_CASE("ExecutionPlan - Compile Logical Or")
 {
   // Use || for logical or to ensure it's parsed correctly
   auto expr = parse("$artist = Bach || $artist = Mozart");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   bool hasOr = false;
@@ -113,7 +113,7 @@ TEST_CASE("ExecutionPlan - Compile Logical Or")
 TEST_CASE("ExecutionPlan - Compile Logical Not")
 {
   auto expr = parse("not $artist");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   bool hasNot = false;
@@ -131,7 +131,7 @@ TEST_CASE("ExecutionPlan - Compile Logical Not")
 TEST_CASE("ExecutionPlan - Compile Relational Operators")
 {
   auto expr = parse("$year < 2000");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   bool hasLt = false;
@@ -164,7 +164,7 @@ TEST_CASE("ExecutionPlan - Compile Relational Operators")
 TEST_CASE("ExecutionPlan - Compile Like")
 {
   auto expr = parse("$title ~ Love");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   bool hasLike = false;
@@ -182,7 +182,7 @@ TEST_CASE("ExecutionPlan - Compile Like")
 TEST_CASE("ExecutionPlan - Compile String Constant")
 {
   auto expr = parse("$title = 'Hello World'");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK_FALSE(plan.stringConstants.empty());
@@ -226,7 +226,7 @@ TEST_CASE("ExecutionPlan - AccessProfile HotOnly")
 {
   // Metadata variable -> HotOnly
   auto expr = parse("$artist = Bach");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK(plan.accessProfile == AccessProfile::HotOnly);
@@ -236,7 +236,7 @@ TEST_CASE("ExecutionPlan - AccessProfile ColdOnly")
 {
   // Custom variable -> ColdOnly
   auto expr = parse("%customkey = value");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK(plan.accessProfile == AccessProfile::ColdOnly);
@@ -246,7 +246,7 @@ TEST_CASE("ExecutionPlan - AccessProfile HotAndCold")
 {
   // Mix of hot and cold -> HotAndCold
   auto expr = parse("$artist = Bach && %customkey = value");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK(plan.accessProfile == AccessProfile::HotAndCold);
@@ -256,7 +256,7 @@ TEST_CASE("ExecutionPlan - AccessProfile Property Field")
 {
   // Property variable -> HotOnly
   auto expr = parse("@duration > 180000");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK(plan.accessProfile == AccessProfile::HotOnly);
@@ -266,7 +266,7 @@ TEST_CASE("ExecutionPlan - AccessProfile Tag Field")
 {
   // Tag variable -> HotOnly
   auto expr = parse("#rock");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK(plan.accessProfile == AccessProfile::HotOnly);
@@ -276,7 +276,7 @@ TEST_CASE("ExecutionPlan - AccessProfile Cold Field")
 {
   // TrackNumber field is in cold storage -> ColdOnly
   auto expr = parse("$trackNumber > 5");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK(plan.accessProfile == AccessProfile::ColdOnly);
@@ -286,7 +286,7 @@ TEST_CASE("ExecutionPlan - AccessProfile Mixed HotAndCold")
 {
   // Mix of hot ($year) and cold ($trackNumber) -> HotAndCold
   auto expr = parse("$year > 2020 && $trackNumber > 5");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK(plan.accessProfile == AccessProfile::HotAndCold);
@@ -296,7 +296,7 @@ TEST_CASE("ExecutionPlan - AccessProfile Custom Field")
 {
   // Custom variable -> ColdOnly
   auto expr = parse("%customkey = value");
-  QueryCompiler compiler;
+  auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
   CHECK(plan.accessProfile == AccessProfile::ColdOnly);
