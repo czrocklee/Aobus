@@ -27,7 +27,9 @@ namespace rs::tag::mpeg
       return {};
     }
 
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     return id3v2::loadFrames(*id3v2Header, id3v2Header + 1, size);
+    // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
   }
 
   void File::saveMetadata(Metadata const&) {}

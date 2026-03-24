@@ -103,7 +103,7 @@ namespace rs::core
 
       std::uint8_t count() const noexcept { return _track.hotHeader().tagLen / sizeof(DictionaryId); }
       std::uint32_t bloom() const noexcept { return _track.hotHeader().tagBloom; }
-      DictionaryId id(std::uint8_t index) const noexcept { return DictionaryId{_track.hotTagId(index)}; }
+      DictionaryId id(std::uint8_t index) const noexcept { return _track.hotTagId(index); }
       DictionaryId const* begin() const noexcept
       {
         return utility::as<DictionaryId>(_track._hotData.subspan(sizeof(TrackHotHeader)));
@@ -185,7 +185,7 @@ namespace rs::core
 
   private:
     std::string_view hotTitle() const;
-    std::uint32_t hotTagId(std::uint8_t index) const;
+    DictionaryId hotTagId(std::uint8_t index) const;
     std::string_view hotGetString(std::uint16_t offset, std::uint16_t len) const;
     std::string_view coldUri() const;
     std::uint64_t coldFileSize() const noexcept;

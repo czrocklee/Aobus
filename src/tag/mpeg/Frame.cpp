@@ -72,6 +72,7 @@ namespace rs::tag::mpeg
 
     std::uint8_t const* findFrameSync(std::uint8_t const* begin, std::uint8_t const* end)
     {
+      // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
       for (auto size = static_cast<std::size_t>(end - begin); size >= sizeof(FrameLayout);)
       {
         if (begin = static_cast<std::uint8_t const*>(std::memchr(begin, FrameSyncByte1, size)); begin == nullptr)
@@ -92,6 +93,7 @@ namespace rs::tag::mpeg
           begin += FrameSyncSkipSize;
         }
       }
+      // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 
       return nullptr;
     }
@@ -100,6 +102,7 @@ namespace rs::tag::mpeg
   std::optional<FrameView> locate(void const* buffer, std::size_t size)
   {
     auto begin = static_cast<std::uint8_t const*>(buffer);
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     auto end = begin + size;
 
     for (std::uint8_t const* frameCandidate = findFrameSync(begin, end); frameCandidate != nullptr;
@@ -110,6 +113,7 @@ namespace rs::tag::mpeg
         return view;
       }
     }
+    // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 
     return {};
   }

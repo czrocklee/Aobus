@@ -34,7 +34,7 @@ namespace rs::tag::mp4
   class AtomView : public Atom
   {
   public:
-    AtomView(void const* data, std::size_t size, Atom& parent) : _data{data}, _size{size}, _parent{parent} {}
+    AtomView(void const* data, std::size_t /*size*/, Atom& parent) : _data{data}, _parent{parent} {}
 
     std::uint32_t length() const override { return layout<AtomLayout>().length.value(); }
 
@@ -59,7 +59,7 @@ namespace rs::tag::mp4
 
   private:
     void const* _data;
-    std::size_t _size;
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers)
     Atom& _parent;
   };
 

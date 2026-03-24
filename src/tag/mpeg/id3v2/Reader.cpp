@@ -83,14 +83,6 @@ namespace rs::tag::mpeg::id3v2
     }
   }
 
-  namespace
-  {
-    Metadata loadV24(void const* data [[maybe_unused]], std::size_t size [[maybe_unused]])
-    {
-      return {};
-    }
-  }
-
   Metadata loadFrames(HeaderLayout const& header, void const* buffer, std::size_t size)
   {
     switch (header.majorVersion)

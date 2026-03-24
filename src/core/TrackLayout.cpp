@@ -19,12 +19,12 @@ namespace rs::core
     return hotGetString(titleOffset, hdr.titleLen);
   }
 
-  std::uint32_t TrackView::hotTagId(std::uint8_t index) const
+  DictionaryId TrackView::hotTagId(std::uint8_t index) const
   {
     auto const& hdr = hotHeader();
     gsl_Expects(index < hdr.tagLen / sizeof(DictionaryId));
-    auto const* tagIds = reinterpret_cast<DictionaryId const*>(_hotData.data() + sizeof(TrackHotHeader));
-    return tagIds[index].value();
+    auto tagIds = utility::asArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader)));
+    return tagIds[index];
   }
 
   std::string_view TrackView::hotGetString(std::uint16_t offset, std::uint16_t len) const
@@ -113,7 +113,7 @@ namespace rs::core
     auto const& hdr = _track.coldHeader();
     constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
     auto entries = utility::asArray<Entry>(_track._coldData.subspan(kHeaderSize));
-    return {entries.data() + hdr.customCount, _track._coldData.data()};
+    return {entries.subspan(hdr.customCount).data(), _track._coldData.data()};
   }
 
   TrackView::CustomProxy::Iterator::Iterator(Entry const* pos, std::byte const* coldDataBase)
@@ -138,7 +138,9 @@ namespace rs::core
 
   void TrackView::CustomProxy::Iterator::increment()
   {
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     ++_pos;
+    // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
   }
 
 } // namespace rs::core

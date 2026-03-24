@@ -57,6 +57,40 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
+# clang-tidy setup (must be before rs target to enable CMAKE_CXX_CLANG_TIDY)
+find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
+if(CLANG_TIDY_EXECUTABLE)
+  # Set up GCC include paths for clang-tidy (required for GCC)
+  set(CLANG_TIDY_EXTRA_ARGS)
+  execute_process(
+    COMMAND ${CMAKE_CXX_COMPILER} -E -x c++ - -v
+    INPUT_FILE /dev/null
+    OUTPUT_QUIET
+    ERROR_VARIABLE CXX_INCLUDE_OUTPUT
+    ERROR_STRIP_TRAILING_WHITESPACE
+  )
+  string(REGEX MATCHALL "[\n\r][ ]+/[^\n\r]+" CXX_INCLUDE_DIRS "\n${CXX_INCLUDE_OUTPUT}")
+  foreach(CXX_INCLUDE_DIR IN LISTS CXX_INCLUDE_DIRS)
+    string(STRIP "${CXX_INCLUDE_DIR}" CXX_INCLUDE_DIR)
+    if(IS_DIRECTORY "${CXX_INCLUDE_DIR}")
+      list(APPEND CLANG_TIDY_EXTRA_ARGS --extra-arg-before=-isystem${CXX_INCLUDE_DIR})
+    endif()
+  endforeach()
+
+  # Use CMake's native clang-tidy integration for incremental + parallel linting
+  set(CMAKE_CXX_CLANG_TIDY
+    "${CLANG_TIDY_EXECUTABLE}"
+    "-header-filter='.*'"
+    ${CLANG_TIDY_EXTRA_ARGS}
+    CACHE STRING "clang-tidy command"
+  )
+
+  message(STATUS "clang-tidy found: ${CLANG_TIDY_EXECUTABLE}")
+  message(STATUS "clang-tidy will run automatically during build (incremental + parallel)")
+else()
+  message(STATUS "clang-tidy not found - install it for linting")
+endif()
+
 add_library(rs OBJECT
     src/lmdb/Environment.cpp
     src/lmdb/Transaction.cpp
@@ -128,51 +162,3 @@ add_test(NAME rs_test COMMAND rs_test)
 #     app/gtkmm4/main.cpp
 #     ...
 # )
-
-# Lint target for clang-tidy (cppgen enforcement)
-# Checks are defined in .clang-tidy
-find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
-if(CLANG_TIDY_EXECUTABLE)
-  find_program(CMAKE_CXX_EXECUTABLE NAMES ${CMAKE_CXX_COMPILER})
-  # Get source files for rs library
-  get_target_property(RS_SOURCES rs SOURCES)
-  set(RS_SOURCES_ABSOLUTE)
-  foreach(RS_SOURCE IN LISTS RS_SOURCES)
-    if(IS_ABSOLUTE "${RS_SOURCE}")
-      list(APPEND RS_SOURCES_ABSOLUTE "${RS_SOURCE}")
-    else()
-      list(APPEND RS_SOURCES_ABSOLUTE "${CMAKE_SOURCE_DIR}/${RS_SOURCE}")
-    endif()
-  endforeach()
-
-  set(CLANG_TIDY_EXTRA_ARGS)
-  execute_process(
-    COMMAND ${CMAKE_CXX_COMPILER} -E -x c++ - -v
-    INPUT_FILE /dev/null
-    OUTPUT_QUIET
-    ERROR_VARIABLE CXX_INCLUDE_OUTPUT
-    ERROR_STRIP_TRAILING_WHITESPACE
-  )
-  string(REGEX MATCHALL "[\n\r][ ]+/[^\n\r]+" CXX_INCLUDE_DIRS "\n${CXX_INCLUDE_OUTPUT}")
-  foreach(CXX_INCLUDE_DIR IN LISTS CXX_INCLUDE_DIRS)
-    string(STRIP "${CXX_INCLUDE_DIR}" CXX_INCLUDE_DIR)
-    if(IS_DIRECTORY "${CXX_INCLUDE_DIR}")
-      list(APPEND CLANG_TIDY_EXTRA_ARGS --extra-arg-before=-isystem${CXX_INCLUDE_DIR})
-    endif()
-  endforeach()
-
-  add_custom_target(clang-tidy
-    COMMAND ${CLANG_TIDY_EXECUTABLE}
-      -header-filter='.*'
-      -p=${CMAKE_BINARY_DIR}
-      ${CLANG_TIDY_EXTRA_ARGS}
-      ${RS_SOURCES_ABSOLUTE}
-    COMMENT "Running clang-tidy on rs library..."
-    VERBATIM
-  )
-
-  message(STATUS "clang-tidy found: ${CLANG_TIDY_EXECUTABLE}")
-  message(STATUS "Run 'cmake --build . --target clang-tidy' to lint")
-else()
-  message(STATUS "clang-tidy not found - install it for linting")
-endif()

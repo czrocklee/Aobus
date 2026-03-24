@@ -17,7 +17,7 @@ namespace rs::core
 
   TrackStore::Reader TrackStore::reader(lmdb::ReadTransaction& txn) const
   {
-    return Reader{_hotDb.reader(txn), _coldDb.reader(txn), Reader::LoadMode::Both};
+    return Reader{_hotDb.reader(txn), _coldDb.reader(txn)};
   }
 
   TrackStore::Writer TrackStore::writer(lmdb::WriteTransaction& txn)
@@ -26,10 +26,9 @@ namespace rs::core
   }
 
   // TrackStore::Reader implementation
-  TrackStore::Reader::Reader(lmdb::Database::Reader&& hotReader, lmdb::Database::Reader&& coldReader, LoadMode mode)
+  TrackStore::Reader::Reader(lmdb::Database::Reader&& hotReader, lmdb::Database::Reader&& coldReader)
     : _hotReader{std::move(hotReader)}
     , _coldReader{std::move(coldReader)}
-    , _mode{mode}
   {
   }
 

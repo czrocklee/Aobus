@@ -17,7 +17,7 @@ namespace rs::tag::mpeg
   class FrameView
   {
   public:
-    FrameView(void const* data, std::size_t size) : _data{data}, _size{size} {}
+    FrameView(void const* data, std::size_t /*size*/) : _data{data} {}
 
     std::size_t length() const;
 
@@ -27,7 +27,6 @@ namespace rs::tag::mpeg
 
   private:
     void const* _data;
-    std::size_t _size;
   };
 
   std::optional<FrameView> locate(void const* buffer, std::size_t size);

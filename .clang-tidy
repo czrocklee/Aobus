@@ -1,7 +1,7 @@
 # Clang-tidy configuration for RockStudio
 # Single source of truth for checks
 
-Checks: '-*,readability-include-declaration,modernize-use-nullptr,modernize-use-std-arrays,modernize-raw-string-literal,modernize-use-std-numbers,modernize-loop-convert,modernize-use-emplace,modernize-use-nodiscard,modernize-use-requires,modernize-use-final,cppcoreguidelines-avoid-goto,cppcoreguidelines-init-variables,performance-move-const-arg,performance-unnecessary-copy,performance-unnecessary-value-param,performance-noexcept,performance-type-promotion,bugprone-assert-side-effect,bugprone-branch-clone,bugprone-unused-local-non-trivial-type,bugprone-reserved-identifier,hicpp-vararg,readability-const-return-type,readability-redundant-string-init,readability-function-size,readability-magic-numbers'
+Checks: '-*,bugprone-*,performance-*,cppcoreguidelines-*,modernize-!-trailing-return,readability-*,portability-*'
 
 # Check options
 CheckOptions:
@@ -28,3 +28,9 @@ CheckOptions:
     value: '1'
   - key: readability-magic-numbers.IgnoredNumbers
     value: '5'
+
+  # Allow 2-char variable names (id, it, db are standard abbreviations)
+  - key: readability-identifier-length.MinimumVariableNameLength
+    value: '2'
+  - key: readability-identifier-length.MinimumParameterNameLength
+    value: '2'

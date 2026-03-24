@@ -68,11 +68,10 @@ namespace rs::core
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
   private:
-    Reader(lmdb::Database::Reader&& hotReader, lmdb::Database::Reader&& coldReader, LoadMode mode);
+    Reader(lmdb::Database::Reader&& hotReader, lmdb::Database::Reader&& coldReader);
 
     lmdb::Database::Reader _hotReader;
     lmdb::Database::Reader _coldReader;
-    LoadMode _mode;
     friend class TrackStore;
   };
 
@@ -108,7 +107,6 @@ namespace rs::core
   class TrackStore::Writer
   {
   public:
-    Writer() = default;
 
     /**
      * Create a new track with hot and cold data.

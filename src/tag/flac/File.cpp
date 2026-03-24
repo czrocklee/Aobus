@@ -83,8 +83,10 @@ namespace rs::tag::flac
     }
 
     Metadata metadata;
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     MetadataBlockViewIterator iter{
       static_cast<char const*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};
+    // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     MetadataBlockViewIterator end{};
 
     for (; iter != end; ++iter)

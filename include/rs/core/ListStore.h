@@ -82,7 +82,6 @@ namespace rs::core
   class ListStore::Writer
   {
   public:
-    Writer() = default;
 
     std::pair<ListId, ListView> create(std::span<std::byte const> data);
     void update(ListId id, std::span<std::byte const> data);

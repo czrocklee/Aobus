@@ -35,7 +35,9 @@ namespace rs::tag::mp4
       void operator()(Metadata& meta, Atom const& atom)
       {
         auto const& layout = static_cast<AtomView const&>(atom).layout<DataAtomLayout>();
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         auto const* buffer = reinterpret_cast<char const*>(&layout + 1);
+        // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         std::size_t size = layout.common.length.value() - sizeof(DataAtomLayout);
         meta.set(Field, Decoder::decode(buffer, size));
       }
@@ -77,8 +79,10 @@ namespace rs::tag::mp4
       else
       {
         auto const& data = static_cast<AtomView const&>(atom).layout<DataAtomLayout>();
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         std::string value{
           reinterpret_cast<char const*>(&data + 1), data.common.length.value() - sizeof(DataAtomLayout)};
+        // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         metadata.setCustom(atom.type(), std::move(value));
       }
 
