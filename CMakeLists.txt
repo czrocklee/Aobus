@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.30)
 project(rockstudio)
 set (CMAKE_CXX_STANDARD 23)
 
+# Enable testing
+enable_testing()
+
 # Precompiled Headers support
 set(CMAKE_CXX_PRECOMPILE_HEADERS ON)
 
@@ -11,6 +14,13 @@ if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
   add_compile_options(-Wall -Wextra -Wpedantic)
 else()
   add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+endif()
+
+# GSL-lite configuration: Debug throws exceptions, Release terminates
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_THROWS=1)
+else()
+  add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_TERMINATES=1)
 endif()
 
 find_package(PkgConfig REQUIRED)
@@ -105,6 +115,9 @@ target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(rs_test PRIVATE rs Catch2)
 target_compile_options(rs_test PRIVATE -Wno-array-bounds)
 
+# Register rs_test with CTest
+add_test(NAME rs_test COMMAND rs_test)
+
 # UI disabled - requires FlatBuffers migration
 # add_executable(RockStudio
 #     app/ImportProgressDialog.cpp
@@ -120,14 +133,40 @@ target_compile_options(rs_test PRIVATE -Wno-array-bounds)
 # Checks are defined in .clang-tidy
 find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
 if(CLANG_TIDY_EXECUTABLE)
+  find_program(CMAKE_CXX_EXECUTABLE NAMES ${CMAKE_CXX_COMPILER})
   # Get source files for rs library
   get_target_property(RS_SOURCES rs SOURCES)
+  set(RS_SOURCES_ABSOLUTE)
+  foreach(RS_SOURCE IN LISTS RS_SOURCES)
+    if(IS_ABSOLUTE "${RS_SOURCE}")
+      list(APPEND RS_SOURCES_ABSOLUTE "${RS_SOURCE}")
+    else()
+      list(APPEND RS_SOURCES_ABSOLUTE "${CMAKE_SOURCE_DIR}/${RS_SOURCE}")
+    endif()
+  endforeach()
+
+  set(CLANG_TIDY_EXTRA_ARGS)
+  execute_process(
+    COMMAND ${CMAKE_CXX_COMPILER} -E -x c++ - -v
+    INPUT_FILE /dev/null
+    OUTPUT_QUIET
+    ERROR_VARIABLE CXX_INCLUDE_OUTPUT
+    ERROR_STRIP_TRAILING_WHITESPACE
+  )
+  string(REGEX MATCHALL "[\n\r][ ]+/[^\n\r]+" CXX_INCLUDE_DIRS "\n${CXX_INCLUDE_OUTPUT}")
+  foreach(CXX_INCLUDE_DIR IN LISTS CXX_INCLUDE_DIRS)
+    string(STRIP "${CXX_INCLUDE_DIR}" CXX_INCLUDE_DIR)
+    if(IS_DIRECTORY "${CXX_INCLUDE_DIR}")
+      list(APPEND CLANG_TIDY_EXTRA_ARGS --extra-arg-before=-isystem${CXX_INCLUDE_DIR})
+    endif()
+  endforeach()
 
   add_custom_target(clang-tidy
     COMMAND ${CLANG_TIDY_EXECUTABLE}
       -header-filter='.*'
-      -p=${CMAKE_SOURCE_DIR}/compile_commands.json
-      ${RS_SOURCES}
+      -p=${CMAKE_BINARY_DIR}
+      ${CLANG_TIDY_EXTRA_ARGS}
+      ${RS_SOURCES_ABSOLUTE}
     COMMENT "Running clang-tidy on rs library..."
     VERBATIM
   )

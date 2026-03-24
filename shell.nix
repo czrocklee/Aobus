@@ -35,6 +35,7 @@ pkgs.mkShell {
     flatbuffers
     mimalloc
     catch2
+    gsl-lite
 
     (gtk4.overrideAttrs (old: {
       dontStrip = true;
@@ -53,7 +54,7 @@ pkgs.mkShell {
     # Include gtk4 schemas - need both desktop schemas and gtk4 schemas
     export GSETTINGS_SCHEMA_DIR="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.version}/glib-2.0/schemas:${pkgs.gtk4}/share/gsettings-schemas/gtk4-${pkgs.gtk4.version}/glib-2.0/schemas:$GSETTINGS_SCHEMA_DIR"
     # Set Lexy include path
-    export CPLUS_INCLUDE_PATH="${lexy}/include:$CPLUS_INCLUDE_PATH"
+    export CPLUS_INCLUDE_PATH="${lexy}/include:${pkgs.gsl-lite}/include:$CPLUS_INCLUDE_PATH"
     echo "Using nixpkgs pinned to nixos-unstable"
     echo "Using GCC by default"
   '';

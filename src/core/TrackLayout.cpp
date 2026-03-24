@@ -3,8 +3,9 @@
 
 #include <rs/core/TrackView.h>
 
+#include <gsl/gsl-lite.hpp>
+
 #include <algorithm>
-#include <cassert>
 #include <cstring>
 
 namespace rs::core
@@ -21,7 +22,7 @@ namespace rs::core
   std::uint32_t TrackView::hotTagId(std::uint8_t index) const
   {
     auto const& hdr = hotHeader();
-    assert(index < hdr.tagLen / sizeof(DictionaryId));
+    gsl_Expects(index < hdr.tagLen / sizeof(DictionaryId));
     auto const* tagIds = reinterpret_cast<DictionaryId const*>(_hotData.data() + sizeof(TrackHotHeader));
     return tagIds[index].value();
   }
@@ -29,7 +30,7 @@ namespace rs::core
   std::string_view TrackView::hotGetString(std::uint16_t offset, std::uint16_t len) const
   {
     auto const start = sizeof(TrackHotHeader) + offset;
-    assert(start + len <= _hotData.size());
+    gsl_Expects(start + len <= _hotData.size());
     return utility::asString(_hotData.data(), start, len);
   }
 
@@ -53,7 +54,7 @@ namespace rs::core
 
   std::string_view TrackView::coldGetString(std::uint16_t offset, std::uint16_t len) const
   {
-    assert(offset + len <= _coldData.size());
+    gsl_Expects(offset + len <= _coldData.size());
     return utility::asString(_coldData.data(), offset, len);
   }
 
@@ -82,7 +83,7 @@ namespace rs::core
     {
       if (auto it = std::ranges::find(entries, dictId, &Entry::dictId); it != entries.end())
       {
-        assert(it->offset + it->len <= _track._coldData.size());
+        gsl_Expects(it->offset + it->len <= _track._coldData.size());
         return utility::asString(_track._coldData.data(), it->offset, it->len);
       }
 
@@ -93,7 +94,7 @@ namespace rs::core
     if (auto it = std::ranges::lower_bound(entries, dictId, {}, &Entry::dictId);
         it != entries.end() && it->dictId == dictId)
     {
-      assert(it->offset + it->len <= _track._coldData.size());
+      gsl_Expects(it->offset + it->len <= _track._coldData.size());
       return utility::asString(_track._coldData.data(), it->offset, it->len);
     }
 

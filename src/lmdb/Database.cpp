@@ -52,7 +52,7 @@ namespace rs::lmdb
 
   Database::Database(ReadTransaction& txn, std::string const& db)
   {
-    throwOnError("mdb_dbi_open", mdb_dbi_open(txn._handle.get(), db.c_str(), MDB_CREATE | MDB_INTEGERKEY, &_dbi));
+    throwOnError("mdb_dbi_open", mdb_dbi_open(txn._handle.get(), db.c_str(), MDB_INTEGERKEY, &_dbi));
   }
 
   Database::~Database() = default;
@@ -154,7 +154,7 @@ namespace rs::lmdb
     MDB_cursor* cursor = nullptr;
     throwOnError("mdb_cursor_open", mdb_cursor_open(txn._handle.get(), _dbi, &cursor));
     _cursor.reset(cursor);
-    MDB_val key{0, nullptr};
+    auto key = MDB_val{0, nullptr};
 
     if (int const rc = mdb_cursor_get(_cursor.get(), &key, nullptr, MDB_LAST); rc == MDB_SUCCESS)
     {

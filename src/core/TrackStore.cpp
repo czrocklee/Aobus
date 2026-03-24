@@ -60,9 +60,9 @@ namespace rs::core
     return Iterator{_hotReader.begin(), _coldReader.begin(), mode};
   }
 
-  TrackStore::Reader::Iterator TrackStore::Reader::end() const
+  TrackStore::Reader::Iterator TrackStore::Reader::end(LoadMode mode) const
   {
-    return Iterator{_hotReader.end(), _coldReader.end(), _mode};
+    return Iterator{_hotReader.end(), _coldReader.end(), mode};
   }
 
   // TrackStore::Reader::Iterator implementation
@@ -71,12 +71,24 @@ namespace rs::core
                                          Reader::LoadMode mode)
     : _hotIter{mode != LoadMode::Cold ? std::make_optional(std::move(hotIter)) : std::nullopt}
     , _coldIter{mode != LoadMode::Hot ? std::make_optional(std::move(coldIter)) : std::nullopt}
+    , _mode{mode}
   {
   }
 
   bool TrackStore::Reader::Iterator::operator==(Iterator const& other) const
   {
-    return _hotIter == other._hotIter;
+    if (_mode != other._mode) { return false; }
+
+    switch (_mode)
+    {
+    case LoadMode::Cold:
+      return _coldIter == other._coldIter;
+    case LoadMode::Hot:
+      return _hotIter == other._hotIter;
+    case LoadMode::Both:
+      return _hotIter == other._hotIter;
+    }
+    return false;
   }
 
   TrackStore::Reader::Iterator& TrackStore::Reader::Iterator::operator++()
@@ -103,7 +115,14 @@ namespace rs::core
     if (_coldIter)
     {
       auto&& [coldId, coldBuffer] = **_coldIter;
-      assert(coldId == trackId.value() && "cold and hot must have same track ID");
+      if (!_hotIter)
+      {
+        trackId = TrackId{coldId};
+      }
+      else
+      {
+        assert(coldId == trackId.value() && "cold and hot must have same track ID");
+      }
       coldData = coldBuffer;
     }
 

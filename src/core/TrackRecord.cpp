@@ -15,7 +15,14 @@ namespace rs::core
 
   TrackRecord::TrackRecord(TrackView const& view, DictionaryStore const& dict)
   {
-    if (!view.isHotValid()) { return; }
+    if (!view.isHotValid())
+    {
+      RS_THROW(rs::Exception, "TrackRecord constructor requires hot data to be valid");
+    }
+    if (!view.isColdValid())
+    {
+      RS_THROW(rs::Exception, "TrackRecord constructor requires cold data to be valid");
+    }
 
     // Copy property fields from unified proxy
     auto prop = view.property();

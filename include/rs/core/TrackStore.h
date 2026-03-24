@@ -59,7 +59,7 @@ namespace rs::core
     };
 
     Iterator begin(LoadMode mode = LoadMode::Both) const;
-    Iterator end() const;
+    Iterator end(LoadMode mode = LoadMode::Both) const;
 
     /**
      * Get a track by ID.
@@ -98,6 +98,7 @@ namespace rs::core
 
     std::optional<lmdb::Database::Reader::Iterator> _hotIter;
     std::optional<lmdb::Database::Reader::Iterator> _coldIter;
+    Reader::LoadMode _mode = Reader::LoadMode::Both;
     friend class Reader;
   };
 

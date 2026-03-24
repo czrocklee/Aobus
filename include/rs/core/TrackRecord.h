@@ -29,8 +29,9 @@ namespace rs::core
     /**
      * Construct from unified TrackView by resolving dictionary IDs.
      *
-     * @param view The unified track view (hot required, cold may be lazy-loaded)
+     * @param view The unified track view (both hot and cold must be valid)
      * @param dict DictionaryStore to resolve artist/album/genre IDs
+     * @throws rs::Exception if view.isHotValid() or view.isColdValid() is false
      */
     TrackRecord(TrackView const& view, DictionaryStore const& dict);
 
