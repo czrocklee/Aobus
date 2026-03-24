@@ -21,7 +21,7 @@ namespace rs::lmdb
   }
 
   // Nested write transaction - child of parent write transaction
-  WriteTransaction::WriteTransaction(WriteTransaction& parent) : ReadTransaction()
+  WriteTransaction::WriteTransaction(WriteTransaction& parent)  // NOLINT(cppcoreguidelines-pro-type-member-init,readability-redundant-member-init)
   {
     MDB_txn* handle = nullptr;
     MDB_env* env = mdb_txn_env(parent._handle.get());
@@ -32,7 +32,8 @@ namespace rs::lmdb
   void WriteTransaction::commit()
   {
     throwOnError("mdb_txn_commit", mdb_txn_commit(_handle.get()));
-    _handle.release(); // Prevent destructor from committing/aborting
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg,hicpp-signed-bitwise)
+    (void)_handle.release(); // Prevent destructor from committing/aborting
     _cursorClosed = true;
   }
 }

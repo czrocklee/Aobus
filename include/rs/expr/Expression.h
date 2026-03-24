@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <regex>
 #include <string>
 #include <variant>
 #include <vector>

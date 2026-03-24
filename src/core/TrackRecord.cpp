@@ -130,10 +130,10 @@ namespace rs::core
     std::vector<std::byte> data;
 
     // Build header (titleOffset and tagsOffset are now computed, not stored)
-    auto h = hotHeader();
+    auto hdr = hotHeader();
 
     // Write header
-    auto headerBytes = utility::asBytes(h);
+    auto headerBytes = utility::asBytes(hdr);
     data.insert_range(data.end(), headerBytes);
 
     // Write tags first: 4-byte tag IDs (at offset sizeof(TrackHotHeader))
@@ -171,7 +171,7 @@ namespace rs::core
     }
 
     // Sort by dictId for binary search
-    std::ranges::sort(resolvedPairs, [](auto const& a, auto const& b) { return a.first < b.first; });
+    std::ranges::sort(resolvedPairs, [](auto const& lhs, auto const& rhs) { return lhs.first < rhs.first; });
 
     constexpr std::size_t kEntrySize = 8; // dictId(4) + offset(2) + len(2)
     std::size_t entryCount = resolvedPairs.size();
@@ -181,17 +181,17 @@ namespace rs::core
     std::uint16_t uriLen = static_cast<std::uint16_t>(metadata.uri.size());
 
     std::vector<std::byte> result;
-    result.reserve(sizeof(TrackColdHeader) + entryCount * kEntrySize + totalValueSize + uriLen + 4);
+    result.reserve(sizeof(TrackColdHeader) + (entryCount * kEntrySize) + totalValueSize + uriLen + 4);
 
     // Build header
     TrackColdHeader hdr = coldHeader();
     hdr.customCount = static_cast<std::uint16_t>(entryCount);
-    hdr.uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + entryCount * kEntrySize + totalValueSize);
+    hdr.uriOffset = static_cast<std::uint16_t>((sizeof(TrackColdHeader) + entryCount * kEntrySize) + totalValueSize);
     hdr.uriLen = uriLen;
     result.insert_range(result.end(), utility::asBytes(hdr));
 
     // Value data starts after header + entries
-    std::size_t valueOffset = sizeof(TrackColdHeader) + entryCount * kEntrySize;
+    std::size_t valueOffset = (entryCount * kEntrySize) + sizeof(TrackColdHeader);
 
     // Write entries with calculated offsets
     for (auto const& [dictId, value] : resolvedPairs)

@@ -152,7 +152,9 @@ namespace rs::core
      * @param hotData Hot track binary data (must be >= sizeof(TrackHotHeader)), can be empty span if not loaded
      * @param coldData Cold track binary data (optional), if null accessing cold accessors crashes
      */
+    // NOLINTBEGIN(bugprone-easily-swappable-parameters)
     TrackView(std::span<std::byte const> hotData, std::span<std::byte const> coldData)
+    // NOLINTEND(bugprone-easily-swappable-parameters)
       : _hotData(hotData)
       , _coldData(coldData)
     {
@@ -163,6 +165,7 @@ namespace rs::core
     TrackView& operator=(TrackView&&) = default;
     TrackView(TrackView const&) = delete;
     TrackView& operator=(TrackView const&) = delete;
+    ~TrackView() = default;
 
     // Hot validity check
     bool isHotValid() const noexcept { return _hotData.data() != nullptr && _hotData.size() >= sizeof(TrackHotHeader); }

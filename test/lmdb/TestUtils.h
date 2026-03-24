@@ -3,12 +3,7 @@
 
 #pragma once
 
-#include <span>
-
-#include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/uuid/uuid_io.hpp>
-
+#include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -26,10 +21,12 @@ class TempDir
 public:
   TempDir()
   {
-    boost::uuids::uuid const id = _uuidGen();
-    auto base = std::filesystem::temp_directory_path() / ("rs_lmdb_test_" + boost::uuids::to_string(id));
-    _path = base;
-    std::filesystem::create_directory(_path);
+    std::string tmpl = (std::filesystem::temp_directory_path() / "rs_lmdb_test_XXXXXX").string();
+    char* result = mkdtemp(tmpl.data());
+    if (result == nullptr) {
+      throw std::runtime_error("mkdtemp failed");
+    }
+    _path = result;
   }
 
   ~TempDir()
@@ -49,7 +46,6 @@ public:
 
 private:
   std::filesystem::path _path;
-  inline static boost::uuids::random_generator _uuidGen{};
 };
 
 /**

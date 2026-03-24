@@ -6,7 +6,6 @@
 
 #include <cstdint>
 #include <cstring>
-#include <rs/Exception.h>
 #include <span>
 
 namespace rs::core
@@ -30,9 +29,9 @@ namespace rs::core
 
       std::uint32_t hash = kFnvOffsetBasis;
 
-      for (std::byte b : data)
+      for (std::byte byte : data)
       {
-        hash ^= static_cast<std::uint8_t>(b);
+        hash ^= static_cast<std::uint8_t>(byte);
         hash *= kFnvPrime;
       }
 
@@ -40,19 +39,19 @@ namespace rs::core
     }
   }
 
-  ResourceId Writer::create(std::span<std::byte const> buffer)
+  ResourceId Writer::create(std::span<std::byte const> data)
   {
-    for (std::uint32_t key = fnv1a(buffer);; ++key)
+    for (std::uint32_t key = fnv1a(data);; ++key)
     {
       auto optValue = _writer.get(key);
 
       if (!optValue)
       {
-        _writer.create(key, buffer);
+        _writer.create(key, data);
         return ResourceId{key};
       }
 
-      if (std::ranges::equal(*optValue, buffer)) [[likely]] { return ResourceId{key}; }
+      if (std::ranges::equal(*optValue, data)) [[likely]] { return ResourceId{key}; }
 
       // Prevent infinite loop (though extremely unlikely with 32-bit hash space)
       if (key == std::numeric_limits<std::uint32_t>::max()) { RS_THROW(Exception, "Hash table full"); }

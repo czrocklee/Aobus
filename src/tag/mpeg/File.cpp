@@ -32,5 +32,5 @@ namespace rs::tag::mpeg
     // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
   }
 
-  void File::saveMetadata(Metadata const&) {}
+  void File::saveMetadata(Metadata const& /*metadata*/) {}  // NOLINT(readability-named-parameter)
 }

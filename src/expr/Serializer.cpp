@@ -10,15 +10,19 @@ namespace
 {
   using namespace rs::expr;
 
-  struct ParenthesisGuard
+  struct ParenthesisGuard  // NOLINT(cppcoreguidelines-special-member-functions)
   {
     ParenthesisGuard(std::ostringstream& oss, bool apply) : oss{oss}, apply{apply}
     {
-      if (apply) oss << "(";
+      if (apply) {
+        oss << "(";
+      }
     }
     ~ParenthesisGuard()
     {
-      if (apply) oss << ")";
+      if (apply) {
+        oss << ")";
+      }
     }
     std::ostringstream& oss;
     bool apply;
@@ -30,7 +34,9 @@ namespace
 
     void operator()(std::unique_ptr<BinaryExpression> const& binary)
     {
-      if (!binary) return;
+      if (!binary) {
+        return;
+      }
       auto guard = ParenthesisGuard{oss, (counter++ > 0) && binary->operation};
       std::visit(*this, binary->operand);
 
@@ -42,7 +48,9 @@ namespace
 
     void operator()(std::unique_ptr<UnaryExpression> const& unary)
     {
-      if (!unary) return;
+      if (!unary) {
+        return;
+      }
       oss << "not ";
       std::visit(*this, unary->operand);
     }

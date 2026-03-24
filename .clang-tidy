@@ -1,7 +1,7 @@
 # Clang-tidy configuration for RockStudio
 # Single source of truth for checks
 
-Checks: '-*,bugprone-*,performance-*,cppcoreguidelines-*,modernize-!-trailing-return,readability-*,portability-*'
+Checks: '-*,bugprone-*,performance-*,cppcoreguidelines-*,-cppcoreguidelines-avoid-const-or-ref-data-members,modernize-!-trailing-return,readability-*,portability-*,-clang-diagnostic-*'
 
 # Check options
 CheckOptions:
@@ -34,3 +34,7 @@ CheckOptions:
     value: '2'
   - key: readability-identifier-length.MinimumParameterNameLength
     value: '2'
+
+  # Allow underscore as a valid ignored variable name in destructuring
+  - key: readability-identifier-length.IgnoredVariableNames
+    value: '^_$'

@@ -40,7 +40,7 @@ namespace
   struct variable : lexy::token_production {
       static constexpr auto rule = dsl::symbol<var_types> >> dsl::identifier(dsl::ascii::alpha_underscore, dsl::ascii::alpha_digit_underscore);
       static constexpr auto value = lexy::callback<VariableExpression>(
-          [](VariableType t, auto lexeme) { return VariableExpression{t, std::string{lexeme.begin(), lexeme.end()}}; }
+          [](VariableType type, auto lexeme) { return VariableExpression{type, std::string{lexeme.begin(), lexeme.end()}}; }  // NOLINT(readability-named-parameter)
       );
   };
 
@@ -56,19 +56,19 @@ namespace
           | dsl::identifier(dsl::ascii::alpha_digit_underscore);
 
       static constexpr auto value = lexy::callback<std::string>(
-          [](auto lexeme) {
-              std::string s(lexeme.begin(), lexeme.end());
-              if (!s.empty() && (s.back() == '\'' || s.back() == '"')) {
-                  s.pop_back();
+          [](auto lexeme) {  // NOLINT(readability-named-parameter)
+              std::string str(lexeme.begin(), lexeme.end());
+              if (!str.empty() && (str.back() == '\'' || str.back() == '"')) {
+                  str.pop_back();
               }
-              return s;
+              return str;
           }
       );
   };
 
   struct negative_integer : lexy::token_production {
       static constexpr auto rule = dsl::lit_c<'-'> >> dsl::integer<std::int64_t>;
-      static constexpr auto value = lexy::callback<std::int64_t>([](std::int64_t v) { return -v; });
+      static constexpr auto value = lexy::callback<std::int64_t>([](std::int64_t val) { return -val; });  // NOLINT(readability-named-parameter)
   };
 
   struct positive_integer : lexy::token_production {
@@ -178,9 +178,8 @@ namespace rs::expr
         Expression root = std::move(result).value();
         normalize(root);
         return root;
-    } else {
-        RS_THROW_FORMAT(rs::Exception, "parsing {} error", expr);
     }
+    RS_THROW_FORMAT(rs::Exception, "parsing {} error", expr);
   }
 }
 

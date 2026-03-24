@@ -27,11 +27,11 @@ namespace rs::core
     return tagIds[index];
   }
 
-  std::string_view TrackView::hotGetString(std::uint16_t offset, std::uint16_t len) const
+  std::string_view TrackView::hotGetString(std::uint16_t offset, std::uint16_t length) const  // NOLINT(bugprone-easily-swappable-parameters)
   {
     auto const start = sizeof(TrackHotHeader) + offset;
-    gsl_Expects(start + len <= _hotData.size());
-    return utility::asString(_hotData.data(), start, len);
+    gsl_Expects(start + length <= _hotData.size());
+    return utility::asString(_hotData.data(), start, length);
   }
 
   std::string_view TrackView::coldUri() const
@@ -64,7 +64,7 @@ namespace rs::core
     return std::ranges::find(begin(), end(), tagIdToCheck) != end();
   }
 
-  std::optional<std::string_view> TrackView::CustomProxy::get([[maybe_unused]] std::string_view key) const
+  std::optional<std::string_view> TrackView::CustomProxy::get([[maybe_unused]] std::string_view key) const  // NOLINT(readability-convert-member-functions-to-static)
   {
     // With indexed format, keys are stored as DictionaryIds, not strings.
     // Callers should use get(DictionaryId) after resolving the string to a dictId.
@@ -76,10 +76,14 @@ namespace rs::core
   {
     auto const& hdr = _track.coldHeader();
     constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
+
+    // Threshold for switching between linear and binary search
+    constexpr std::size_t kSearchThreshold = 64;
+
     auto entries = utility::asArray<Entry>(_track._coldData.subspan(kHeaderSize)).first(hdr.customCount);
 
     // Small N: linear search via ranges::find_if (cache-friendly, no divisions)
-    if (hdr.customCount < 64)
+    if (hdr.customCount < kSearchThreshold)
     {
       if (auto it = std::ranges::find(entries, dictId, &Entry::dictId); it != entries.end())
       {

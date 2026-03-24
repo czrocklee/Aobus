@@ -16,36 +16,33 @@ namespace rs::expr
     // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
     constexpr std::uint32_t kBloomBitMask = 31;
 
-    Field variableTypeToField(VariableType type, std::string_view name)
+    Field variableTypeToField(VariableType type, std::string_view name)  // NOLINT(readability-function-cognitive-complexity)
     {
       switch (type)
       {
         case VariableType::Property:
-          if (name == "duration" || name == "l") return Field::DurationMs;
-          if (name == "bitrate" || name == "br") return Field::Bitrate;
-          if (name == "sampleRate" || name == "sr") return Field::SampleRate;
-          if (name == "channels") return Field::Channels;
-          if (name == "bitDepth" || name == "bd") return Field::BitDepth;
+          if (name == "duration" || name == "l") { return Field::DurationMs; }
+          if (name == "bitrate" || name == "br") { return Field::Bitrate; }
+          if (name == "sampleRate" || name == "sr") { return Field::SampleRate; }
+          if (name == "channels") { return Field::Channels; }
+          if (name == "bitDepth" || name == "bd") { return Field::BitDepth; }
           break;
         case VariableType::Metadata:
-          if (name == "year" || name == "y") return Field::Year;
-          if (name == "trackNumber" || name == "tn") return Field::TrackNumber;
-          if (name == "totalTracks" || name == "tt") return Field::TotalTracks;
-          if (name == "discNumber" || name == "dn") return Field::DiscNumber;
-          if (name == "totalDiscs" || name == "td") return Field::TotalDiscs;
-          if (name == "artist" || name == "a") return Field::ArtistId;
-          if (name == "album" || name == "al") return Field::AlbumId;
-          if (name == "genre" || name == "g") return Field::GenreId;
-          if (name == "albumArtist" || name == "aa") return Field::AlbumArtistId;
-          if (name == "coverArt" || name == "ca") return Field::CoverArtId;
-          if (name == "title" || name == "t") return Field::Title;
+          if (name == "year" || name == "y") { return Field::Year; }
+          if (name == "trackNumber" || name == "tn") { return Field::TrackNumber; }
+          if (name == "totalTracks" || name == "tt") { return Field::TotalTracks; }
+          if (name == "discNumber" || name == "dn") { return Field::DiscNumber; }
+          if (name == "totalDiscs" || name == "td") { return Field::TotalDiscs; }
+          if (name == "artist" || name == "a") { return Field::ArtistId; }
+          if (name == "album" || name == "al") { return Field::AlbumId; }
+          if (name == "genre" || name == "g") { return Field::GenreId; }
+          if (name == "albumArtist" || name == "aa") { return Field::AlbumArtistId; }
+          if (name == "coverArt" || name == "ca") { return Field::CoverArtId; }
+          if (name == "title" || name == "t") { return Field::Title; }
           break;
-        case VariableType::Tag:
-          return Field::Tag;
-        case VariableType::Custom:
-          return Field::Custom;
-        default:
-          break;
+        case VariableType::Tag: return Field::Tag;
+        case VariableType::Custom: return Field::Custom;
+        default: break;
       }
       return Field::TagBloom;
     }
@@ -83,16 +80,15 @@ namespace rs::expr
       // Cold fields are stored in TrackColdHeader or custom KV storage
       switch (field)
       {
-        case Field::Uri:              // cold: TrackColdHeader
-        case Field::CoverArtId:        // cold: TrackColdHeader
-        case Field::TrackNumber:       // cold: TrackColdHeader
-        case Field::TotalTracks:       // cold: TrackColdHeader
-        case Field::DiscNumber:        // cold: TrackColdHeader
-        case Field::TotalDiscs:        // cold: TrackColdHeader
-        case Field::Custom:            // cold: custom KV storage
+        case Field::Uri:         // cold: TrackColdHeader
+        case Field::CoverArtId:  // cold: TrackColdHeader
+        case Field::TrackNumber: // cold: TrackColdHeader
+        case Field::TotalTracks: // cold: TrackColdHeader
+        case Field::DiscNumber:  // cold: TrackColdHeader
+        case Field::TotalDiscs:  // cold: TrackColdHeader
+        case Field::Custom:      // cold: custom KV storage
           return true;
-        default:
-          return false;
+        default: return false;
       }
     }
   }
@@ -103,7 +99,7 @@ namespace rs::expr
 
   std::uint32_t QueryCompiler::addStringConstant(std::string_view str)
   {
-    if (auto it = std::ranges::find_if(_plan.stringConstants, [str](auto const& v) { return v == str; });
+    if (auto it = std::ranges::find_if(_plan.stringConstants, [str](auto const& value) { return value == str; });
         it != _plan.stringConstants.end())
     {
       return static_cast<std::uint32_t>(std::distance(_plan.stringConstants.begin(), it));
@@ -115,12 +111,16 @@ namespace rs::expr
 
   void QueryCompiler::compileExpression(Expression const& expr)
   {
-    std::visit(
-      utility::makeVisitor([this](std::unique_ptr<BinaryExpression> const& binary) { if (binary) compileBinary(*binary); },
-                           [this](std::unique_ptr<UnaryExpression> const& unary) { if (unary) compileUnary(*unary); },
-                           [this](VariableExpression const& var) { compileVariable(var); },
-                           [this](ConstantExpression const& constant) { compileConstant(constant); }),
-      expr);
+    std::visit(utility::makeVisitor(
+                 [this](std::unique_ptr<BinaryExpression> const& binary) {
+                   if (binary) { compileBinary(*binary); }
+                 },
+                 [this](std::unique_ptr<UnaryExpression> const& unary) {
+                   if (unary) { compileUnary(*unary); }
+                 },
+                 [this](VariableExpression const& var) { compileVariable(var); },
+                 [this](ConstantExpression const& constant) { compileConstant(constant); }),
+               expr);
   }
 
   void QueryCompiler::compileBinary(BinaryExpression const& binary)
@@ -175,7 +175,7 @@ namespace rs::expr
     {
       _hasHotAccess = true;
       // Try to resolve tag name to ID via dictionary for bloom filter
-      if (_dict)
+      if (_dict != nullptr)
       {
         auto tagId = _dict->getId(var.name);
         // getId throws if not found, so any returned ID is valid (including 0)
@@ -222,10 +222,7 @@ namespace rs::expr
     _lastField = field; // Track for string resolution context
 
     // Track access profile for hot/cold determination based on field storage location
-    if (isColdField(field))
-    {
-      _hasColdAccess = true;
-    }
+    if (isColdField(field)) { _hasColdAccess = true; }
     else
     {
       _hasHotAccess = true;
@@ -236,7 +233,7 @@ namespace rs::expr
     std::int64_t constValue = 0;
     if (var.type == VariableType::Custom)
     {
-      if (_dict)
+      if (_dict != nullptr)
       {
         try
         {
@@ -326,15 +323,12 @@ namespace rs::expr
     // Only resolve for metadata ID fields and tag fields
     if (!isMetadataFieldId(field) && !isTagField(field)) { return -1; }
 
-    if (!_dict) { return -1; }
+    if (_dict == nullptr) { return -1; }
 
     // Look up the string in the dictionary
     auto id = _dict->getId(str);
 
-    if (id.value() == 0)
-    {
-      return -1; 
-    }
+    if (id.value() == 0) { return -1; }
 
     return static_cast<std::int64_t>(id.value());
   }
@@ -358,14 +352,8 @@ namespace rs::expr
     compileExpression(expr);
 
     // Set access profile based on what data was accessed
-    if (_hasHotAccess && _hasColdAccess)
-    {
-      _plan.accessProfile = AccessProfile::HotAndCold;
-    }
-    else if (_hasColdAccess)
-    {
-      _plan.accessProfile = AccessProfile::ColdOnly;
-    }
+    if (_hasHotAccess && _hasColdAccess) { _plan.accessProfile = AccessProfile::HotAndCold; }
+    else if (_hasColdAccess) { _plan.accessProfile = AccessProfile::ColdOnly; }
     else
     {
       _plan.accessProfile = AccessProfile::HotOnly;

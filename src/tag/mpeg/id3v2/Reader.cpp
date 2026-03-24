@@ -52,7 +52,7 @@ namespace rs::tag::mpeg::id3v2
 
   namespace
   {
-    std::map<std::string, std::function<void(Metadata&, V23FrameView)>, std::less<>> MetadataSetters = {
+    std::map<std::string, std::function<void(Metadata&, V23FrameView)>, std::less<>> const MetadataSetters = {
       /*  {, [](auto& meta, const auto& atom) {
           const auto& trkn = static_cast<const AtomView&>(atom).layout<TrknAtomLayout>();
           meta.set(MetaField::TrackNumber, static_cast<std::uint64_t>(trkn.trackNumber.value()));

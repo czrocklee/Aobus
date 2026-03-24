@@ -32,6 +32,7 @@ namespace rs::tag
 
     void set(MetaField field, ValueType value) { _fields[static_cast<std::size_t>(field)] = std::move(value); }
 
+    // NOLINTBEGIN(readability-convert-member-functions-to-static)
     ValueType const& getCustom(std::string_view field) const
     {
       if (auto iter = _customFields.find(field); iter != _customFields.end())
@@ -42,8 +43,11 @@ namespace rs::tag
       static ValueType const empty{};
       return empty;
     }
+    // NOLINTEND(readability-convert-member-functions-to-static)
 
+    // NOLINTBEGIN(bugprone-easily-swappable-parameters)
     void setCustom(std::string_view field, ValueType value)
+    // NOLINTEND(bugprone-easily-swappable-parameters)
     {
       _customFields.insert_or_assign(std::string{field}, std::move(value));
     }

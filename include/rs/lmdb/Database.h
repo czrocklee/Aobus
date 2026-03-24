@@ -13,6 +13,7 @@
 
 namespace rs::lmdb
 {
+  // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
   class Database
   {
   public:
@@ -22,14 +23,15 @@ namespace rs::lmdb
     Database() = default;
     Database(WriteTransaction& txn, std::string const& db);
     Database(ReadTransaction& txn, std::string const& db);
-    ~Database();
+    ~Database() = default;
 
     Reader reader(ReadTransaction& txn) const;
-    Writer writer(WriteTransaction& txn);
+    Writer writer(WriteTransaction& txn) const;
 
   private:
     MDB_dbi _dbi = (std::numeric_limits<MDB_dbi>::max)();
   };
+  // NOLINTEND(cppcoreguidelines-special-member-functions)
 
   class Database::Reader
   {
@@ -58,6 +60,8 @@ namespace rs::lmdb
     Iterator(Iterator const& other);
     Iterator(Iterator&& other) noexcept;
     ~Iterator();
+    Iterator& operator=(Iterator const&) = default;
+    Iterator& operator=(Iterator&&) = default;
     bool equal(Iterator const& other) const;
     void increment();
     Value const& dereference() const;
@@ -74,10 +78,11 @@ namespace rs::lmdb
     friend class Reader;
   };
 
+  // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
   class Database::Writer
   {
   public:
-    Writer(Writer&&) noexcept;
+    Writer(Writer&& other) noexcept;
     ~Writer();
 
     void create(std::uint32_t id, std::span<std::byte const> data);
@@ -97,5 +102,6 @@ namespace rs::lmdb
     std::uint32_t _lastId = std::numeric_limits<std::uint32_t>::max();
     friend class Database;
   };
+  // NOLINTEND(cppcoreguidelines-special-member-functions)
 
 }

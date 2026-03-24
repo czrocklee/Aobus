@@ -37,7 +37,7 @@ namespace rs::tag::flac
       {
         auto str = utility::asString(buffer);
 
-        if (auto iter = std::ranges::find(str, '/'); iter != str.end())
+        if (auto iter = std::ranges::find(str, '/'); iter != str.end())  // NOLINT(readability-qualified-auto)
         {
           auto dist = std::distance(str.begin(), iter);
           meta.set(PrimaryField, Decoder::decode(str.data(), dist));
@@ -61,7 +61,7 @@ namespace rs::tag::flac
     };
 
     std::map<std::string, std::function<void(Metadata&, std::span<std::byte const>)>, CaseInsensitiveComparator>
-      MetadataSetters = {
+      const MetadataSetters = {
         {"TITLE", FieldSetter<MetaField::Title, StringDecoder>{}},
         {"ARTIST", FieldSetter<MetaField::Artist, StringDecoder>{}},
         {"ALBUM", FieldSetter<MetaField::Album, StringDecoder>{}},
@@ -132,5 +132,5 @@ namespace rs::tag::flac
     return metadata;
   }
 
-  void File::saveMetadata(Metadata const&) {}
+  void File::saveMetadata(Metadata const& /*metadata*/) {}  // NOLINT(readability-named-parameter)
 }

@@ -47,7 +47,7 @@ namespace rs::core
     std::optional<ListView> get(ListId id) const;
 
   private:
-    Reader(lmdb::Database::Reader&& reader);
+    Reader(lmdb::Database::Reader reader);
 
     lmdb::Database::Reader _reader;
     friend class ListStore;
@@ -63,6 +63,12 @@ namespace rs::core
 
     Iterator() = default;
     Iterator(Iterator const& other) = default;
+    // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
+    ~Iterator() = default;
+    Iterator& operator=(Iterator const&) = default;
+    Iterator(Iterator&&) = default;
+    Iterator& operator=(Iterator&&) = default;
+    // NOLINTEND(cppcoreguidelines-special-member-functions)
 
     bool operator==(Iterator const& other) const;
     Iterator& operator++();

@@ -12,7 +12,7 @@ namespace rs::tag::mp4
 {
   namespace
   {
-    std::map<std::string, std::size_t, std::less<>> ContainerAtomIterested = {{"moov", 0},
+    std::map<std::string, std::size_t, std::less<>> const ContainerAtomIterested = {{"moov", 0},
                                                                               {"udta", 0},
                                                                               {"meta", 4},
                                                                               {"ilst", 0}};
@@ -22,14 +22,17 @@ namespace rs::tag::mp4
     {
       while (!data.empty())
       {
-        auto const* layout = reinterpret_cast<AtomLayout const*>(data.data());
+        auto const* layout = reinterpret_cast<AtomLayout const*>(data.data());  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
         auto length = layout->length.value();
         auto type = std::string_view{layout->type.data(), 4};
 
         if (auto iter = ContainerAtomIterested.find(type); iter != ContainerAtomIterested.end())
         {
+          // Atom header is 8 bytes (4 for size + 4 for type)
+          constexpr std::size_t kAtomHeaderSize = 8;
+
           auto child = std::make_unique<ContainerAtomView>(data.data(), length, parent);
-          parseAtoms(*child, data.subspan(8 + iter->second, length - 8 - iter->second));
+          parseAtoms(*child, data.subspan(kAtomHeaderSize + iter->second, length - kAtomHeaderSize - iter->second));
           parent.add(std::move(child));
         }
         else

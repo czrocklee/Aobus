@@ -3,23 +3,37 @@
 
 #include "Frame.h"
 #include <array>
+#include <cstdint>
 #include <cstring>
 
 namespace rs::tag::mpeg
 {
   namespace
   {
+    // Sampling rates in Hz
+    constexpr std::uint32_t kSamplingRateV25 = 44100;
+    constexpr std::uint32_t kSamplingRateV2 = 22050;
+    constexpr std::uint32_t kSamplingRateV1 = 11025;
+    constexpr std::uint32_t kSamplingRate48000 = 48000;
+    constexpr std::uint32_t kSamplingRate24000 = 24000;
+    constexpr std::uint32_t kSamplingRate12000 = 12000;
+    constexpr std::uint32_t kSamplingRate32000 = 32000;
+    constexpr std::uint32_t kSamplingRate16000 = 16000;
+    constexpr std::uint32_t kSamplingRate8000 = 8000;
+
     using SamplingRateArray = std::array<std::uint32_t, 4>;
     using VersionSamplingRateArray = std::array<SamplingRateArray, 4>;
 
-    [[maybe_unused]] VersionSamplingRateArray VersionSamplingRateTable = {{
-      {44100, 48000, 32000, 0}, // V2.5
+    [[maybe_unused]] constexpr VersionSamplingRateArray VersionSamplingRateTable = {{
+      {kSamplingRateV25, kSamplingRate48000, kSamplingRate32000, 0}, // V2.5
       {0, 0, 0, 0},             // Reserved
-      {22050, 24000, 16000, 0}, // V2
-      {11025, 12000, 8000, 0}   // V1
+      {kSamplingRateV2, kSamplingRate24000, kSamplingRate16000, 0}, // V2
+      {kSamplingRateV1, kSamplingRate12000, kSamplingRate8000, 0}   // V1
     }};
 
-    using BitrateArray = std::array<std::uint16_t, 16>;
+    // Number of possible bitrate index values in MPEG audio
+    constexpr std::size_t kBitrateCount = 16;
+    using BitrateArray = std::array<std::uint16_t, kBitrateCount>;
 
     constexpr BitrateArray BitrateTableV1L1 = {0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 353, 384, 416, 448, 0};
     constexpr BitrateArray BitrateTableV1L2 = {0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0};
@@ -31,7 +45,7 @@ namespace rs::tag::mpeg
     using LayerBitrateArray = std::array<BitrateArray, 4>;
     using VersionLayerBitrateArray = std::array<LayerBitrateArray, 4>;
 
-    [[maybe_unused]] VersionLayerBitrateArray VersionLayerBitrateTable = {{
+    [[maybe_unused]] constexpr VersionLayerBitrateArray VersionLayerBitrateTable = {{
       {BitrateTableReserved, BitrateTableV2L23, BitrateTableV2L23, BitrateTableV2L1},           // V2.5
       {BitrateTableReserved, BitrateTableReserved, BitrateTableReserved, BitrateTableReserved}, // Reserved,
       {BitrateTableReserved, BitrateTableV2L23, BitrateTableV2L23, BitrateTableV2L1},           // V2
@@ -62,7 +76,7 @@ namespace rs::tag::mpeg
     } */
   }
 
-  bool FrameView::isValid() const { return false; }
+  bool FrameView::isValid() const { return false; }  // NOLINT(readability-convert-member-functions-to-static)
 
   namespace
   {
@@ -84,14 +98,11 @@ namespace rs::tag::mpeg
         {
           return nullptr;
         }
-        else if ((*(begin + 1) & FrameSyncByte2Mask) == FrameSyncByte2Mask)
+        if ((*(begin + 1) & FrameSyncByte2Mask) == FrameSyncByte2Mask)
         {
           return begin;
         }
-        else
-        {
-          begin += FrameSyncSkipSize;
-        }
+        begin += FrameSyncSkipSize;
       }
       // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 
@@ -101,9 +112,9 @@ namespace rs::tag::mpeg
 
   std::optional<FrameView> locate(void const* buffer, std::size_t size)
   {
-    auto begin = static_cast<std::uint8_t const*>(buffer);
+    std::uint8_t const* const begin = static_cast<std::uint8_t const*>(buffer);
     // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-    auto end = begin + size;
+    std::uint8_t const* const end = begin + size;
 
     for (std::uint8_t const* frameCandidate = findFrameSync(begin, end); frameCandidate != nullptr;
          frameCandidate = findFrameSync(frameCandidate + FrameSyncSkipSize, end))

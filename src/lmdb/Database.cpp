@@ -8,7 +8,6 @@
 
 #include <cstring>
 #include <lmdb.h>
-#include <rs/utility/ByteView.h>
 #include <vector>
 
 namespace rs::lmdb
@@ -23,7 +22,7 @@ namespace rs::lmdb
 
     inline MDB_val makeVal(void const* data = nullptr, std::size_t size = 0)
     {
-      return {.mv_size = size, .mv_data = const_cast<void*>(data)};
+      return {.mv_size = size, .mv_data = const_cast<void*>(data)};  // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
     std::span<std::byte> asBytes(MDB_val const& val)
@@ -55,14 +54,12 @@ namespace rs::lmdb
     throwOnError("mdb_dbi_open", mdb_dbi_open(txn._handle.get(), db.c_str(), MDB_INTEGERKEY, &_dbi));
   }
 
-  Database::~Database() = default;
-
   Reader Database::reader(ReadTransaction& txn) const
   {
     return Reader{_dbi, txn._handle.get()};
   }
 
-  Writer Database::writer(WriteTransaction& txn)
+  Writer Database::writer(WriteTransaction& txn) const
   {
     return Writer{_dbi, txn};
   }
@@ -78,7 +75,7 @@ namespace rs::lmdb
     return Iterator{cursor};
   }
 
-  Reader::Iterator Reader::end() const
+  Reader::Iterator Reader::end() const  // NOLINT(readability-convert-member-functions-to-static)
   {
     return Iterator{};
   }
@@ -93,7 +90,7 @@ namespace rs::lmdb
     return utility::asBytes(static_cast<std::byte const*>(value.mv_data), value.mv_size);
   }
 
-  Reader::Iterator::Iterator() : _value{}
+  Reader::Iterator::Iterator()  // NOLINT(readability-redundant-member-init)
   {
   }
 
@@ -174,7 +171,8 @@ namespace rs::lmdb
   Writer::~Writer()
   {
     // When transaction is committed, LMDB automatically closes all cursors - release without closing
-    if (_txn.isCommitted()) { _cursor.release(); }
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg,hicpp-signed-bitwise)
+    if (_txn.isCommitted()) { (void)_cursor.release(); }
   }
 
   namespace
@@ -187,7 +185,7 @@ namespace rs::lmdb
       throwOnError("mdb_cursor_put", rc);
     }
 
-    std::span<std::byte> reserve(MDB_cursor* cursor, std::uint32_t id, std::size_t size, unsigned int flags)
+    std::span<std::byte> reserve(MDB_cursor* cursor, std::uint32_t id, std::size_t size, unsigned int flags)  // NOLINT(bugprone-easily-swappable-parameters)
     {
       auto key = makeVal(id);
       auto val = makeVal(nullptr, size);

@@ -13,6 +13,7 @@ namespace rs::lmdb
   class WriteTransaction; // Forward declaration
 
   // Read-only transaction
+  // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
   class ReadTransaction
   {
   public:
@@ -27,6 +28,7 @@ namespace rs::lmdb
     std::unique_ptr<MDB_txn, decltype([](auto* txn) { mdb_txn_abort(txn); })> _handle;
     friend class Database;
   };
+  // NOLINTEND(cppcoreguidelines-special-member-functions)
 
   // Read-write transaction (inherits from ReadTransaction for read capabilities)
   class WriteTransaction : public ReadTransaction
@@ -40,6 +42,7 @@ namespace rs::lmdb
     WriteTransaction& operator=(WriteTransaction const&) = delete;
     WriteTransaction(WriteTransaction&&) = default;
     WriteTransaction& operator=(WriteTransaction&&) = default;
+    ~WriteTransaction() = default;
 
     void commit();
 

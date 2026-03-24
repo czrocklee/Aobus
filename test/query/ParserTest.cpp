@@ -1,111 +1,88 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
-
 #include <rs/expr/Parser.h>
 #include <rs/utility/VariantVisitor.h>
 
+#include <sstream>
+#include <string>
+
 using namespace rs::expr;
-using rs::utility::makeVisitor;
 
-namespace
+char const* toString(Operator op)
 {
-  char const* toString(Operator op)
+  switch (op)
   {
-    switch (op)
-    {
-      case Operator::And:
-        return "and";
-      case Operator::Or:
-        return "or";
-      case Operator::Not:
-        return "not";
-      case Operator::Equal:
-        return "eq";
-      case Operator::NotEqual:
-        return "ne";
-      case Operator::Like:
-        return "like";
-      case Operator::Less:
-        return "lt";
-      case Operator::LessEqual:
-        return "le";
-      case Operator::Greater:
-        return "gt";
-      case Operator::GreaterEqual:
-        return "ge";
-      case Operator::Add:
-        return "add";
-      default:
-        return "unknown";
-    }
+    case Operator::And: return "and";
+    case Operator::Or: return "or";
+    case Operator::Not: return "not";
+    case Operator::Equal: return "eq";
+    case Operator::NotEqual: return "ne";
+    case Operator::Like: return "like";
+    case Operator::Less: return "lt";
+    case Operator::LessEqual: return "le";
+    case Operator::Greater: return "gt";
+    case Operator::GreaterEqual: return "ge";
+    case Operator::Add: return "add";
+    default: return "unknown";
+  }
+}
+
+struct Canonicalizer
+{
+  void operator()(std::unique_ptr<BinaryExpression> const& binary)
+  {
+    if (!binary) return;
+    oss << "[b{" << toString(binary->operation->op) << "}";
+    std::visit(*this, binary->operand);
+    oss << ",";
+    std::visit(*this, binary->operation->operand);
+    oss << "]";
   }
 
-  struct Canonicalizer
+  void operator()(std::unique_ptr<UnaryExpression> const& unary)
   {
-    void operator()(std::unique_ptr<BinaryExpression> const& binary)
-    {
-      if (!binary) return;
-      oss << "[b{" << toString(binary->operation->op) << "}";
-      std::visit(*this, binary->operand);
-      oss << ",";
-      std::visit(*this, binary->operation->operand);
-      oss << "]";
-    }
-
-    void operator()(std::unique_ptr<UnaryExpression> const& unary)
-    {
-      if (!unary) return;
-      oss << "[u{!}";
-      std::visit(*this, unary->operand);
-      oss << "]";
-    }
-
-    void operator()(VariableExpression const& variable)
-    {
-      oss << "[v{";
-
-      switch (variable.type)
-      {
-        case VariableType::Metadata:
-          oss << 'm';
-          break;
-        case VariableType::Property:
-          oss << 'p';
-          break;
-        case VariableType::Tag:
-          oss << 't';
-          break;
-        case VariableType::Custom:
-          oss << 'c';
-          break;
-      }
-
-      oss << "}" << variable.name << "]";
-    }
-
-    void operator()(ConstantExpression const& constant)
-    {
-      oss << "[c{";
-      std::visit(rs::utility::makeVisitor([this](std::monostate) { oss << "n}"; },
-                                          [this](bool val) { oss << "b}" << (val ? "true" : "false"); },
-                                          [this](std::int64_t val) { oss << "i}" << val; },
-                                          [this](std::string_view val) { oss << "s}" << val; }),
-                 constant);
-      oss << "]";
-    }
-
-    std::ostringstream oss;
-  };
-
-  std::string canonicalize(Expression const& expr)
-  {
-    Canonicalizer canonicalizer{};
-    std::visit(canonicalizer, expr);
-    return canonicalizer.oss.str();
+    if (!unary) return;
+    oss << "[u{!}";
+    std::visit(*this, unary->operand);
+    oss << "]";
   }
+
+  void operator()(VariableExpression const& variable)
+  {
+    oss << "[v{";
+
+    switch (variable.type)
+    {
+      case VariableType::Metadata: oss << 'm'; break;
+      case VariableType::Property: oss << 'p'; break;
+      case VariableType::Tag: oss << 't'; break;
+      case VariableType::Custom: oss << 'c'; break;
+    }
+
+    oss << "}" << variable.name << "]";
+  }
+
+  void operator()(ConstantExpression const& constant)
+  {
+    oss << "[c{";
+    std::visit(rs::utility::makeVisitor([this](std::monostate) { oss << "n}"; },
+                                        [this](bool val) { oss << "b}" << (val ? "true" : "false"); },
+                                        [this](std::int64_t val) { oss << "i}" << val; },
+                                        [this](std::string_view val) { oss << "s}" << val; }),
+               constant);
+    oss << "]";
+  }
+
+  std::ostringstream oss;
+};
+
+std::string canonicalize(Expression const& expr)
+{
+  Canonicalizer canonicalizer{};
+  std::visit(canonicalizer, expr);
+  return canonicalizer.oss.str();
 }
 
 TEST_CASE("Parser - String Literal")
@@ -175,9 +152,6 @@ TEST_CASE("Parser - Like")
 
 TEST_CASE("Parser - Logical Operators")
 {
-  // Note: Parser parses left-to-right, so "and/or" have lower precedence than "="
-  // Use && and || for logical operators (not "and"/"or" keywords)
-  // $artist=Bach && true -> and(eq($artist, Bach), true)
   CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach && true")));
   CHECK("[b{or}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach || true")));
   CHECK("[u{!}[v{m}artist]]" == canonicalize(parse("not $artist")));

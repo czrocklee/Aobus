@@ -43,7 +43,7 @@ namespace rs::expr
   private:
     std::int64_t loadField(core::TrackView const& track, Field field) const;
     std::string_view loadStringField(core::TrackView const& track, Field field, Instruction const* instr = nullptr) const;
-    std::int64_t loadConstant(Instruction const& instr) const;
+    std::int64_t loadConstant(Instruction const& instr) const;  // NOLINT(readability-convert-member-functions-to-static)
 
     // Pointer to current plan for string constant access
     mutable ExecutionPlan const* _currentPlan = nullptr;

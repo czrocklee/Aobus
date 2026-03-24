@@ -9,7 +9,7 @@ namespace rs::core
 {
 
   // TrackStore implementation
-  TrackStore::TrackStore(lmdb::WriteTransaction& txn, std::string const& hotDb, std::string const& coldDb)
+  TrackStore::TrackStore(lmdb::WriteTransaction& txn, std::string const& hotDb, std::string const& coldDb)  // NOLINT(bugprone-easily-swappable-parameters)
     : _hotDb{txn, hotDb}
     , _coldDb{txn, coldDb}
   {
@@ -26,9 +26,9 @@ namespace rs::core
   }
 
   // TrackStore::Reader implementation
-  TrackStore::Reader::Reader(lmdb::Database::Reader&& hotReader, lmdb::Database::Reader&& coldReader)
-    : _hotReader{std::move(hotReader)}
-    , _coldReader{std::move(coldReader)}
+  TrackStore::Reader::Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader)  // NOLINT(bugprone-easily-swappable-parameters)
+    : _hotReader{hotReader}
+    , _coldReader{coldReader}
   {
   }
 
@@ -83,7 +83,6 @@ namespace rs::core
     case LoadMode::Cold:
       return _coldIter == other._coldIter;
     case LoadMode::Hot:
-      return _hotIter == other._hotIter;
     case LoadMode::Both:
       return _hotIter == other._hotIter;
     }

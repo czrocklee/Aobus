@@ -47,8 +47,8 @@ namespace rs::utility
 
     friend auto operator<=>(TaggedInteger const&, TaggedInteger const&) = default;
     friend bool operator==(TaggedInteger const&, TaggedInteger const&) = default;
-    friend auto operator<=>(TaggedInteger const& a, T const& b) { return a._value <=> b; }
-    friend bool operator==(TaggedInteger const& a, T const& b) { return a._value == b; }
+    friend auto operator<=>(TaggedInteger const& lhs, T const& rhs) { return lhs._value <=> rhs; }
+    friend bool operator==(TaggedInteger const& lhs, T const& rhs) { return lhs._value == rhs; }
 
     // Stream output
     friend std::ostream& operator<<(std::ostream& os, TaggedInteger val) { return os << val._value; }

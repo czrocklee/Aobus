@@ -10,6 +10,7 @@
 
 namespace rs::tag
 {
+  // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
   class File
   {
   public:
@@ -23,6 +24,12 @@ namespace rs::tag
 
     virtual ~File() = default;
 
+    // Abstract base class - disable copy/move
+    File(File const&) = delete;
+    File& operator=(File const&) = delete;
+    File(File&&) = delete;
+    File& operator=(File&&) = delete;
+
     virtual Metadata loadMetadata() const = 0;
 
     virtual void saveMetadata(Metadata const& metadata) = 0;
@@ -31,4 +38,5 @@ namespace rs::tag
     boost::interprocess::file_mapping _fileMapping;
     boost::interprocess::mapped_region _mappedRegion;
   };
+  // NOLINTEND(cppcoreguidelines-special-member-functions)
 }

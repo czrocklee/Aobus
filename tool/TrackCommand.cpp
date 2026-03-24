@@ -111,7 +111,7 @@ namespace
           os << ", \"album\": \"" << ml.dictionary().get(view.metadata().albumId()) << "\"";
         }
         os << "}";
-        if (i < end - 1) os << ",";
+        if (i < end - 1) { os << ","; }
         os << "\n";
       }
       os << "]\n";
@@ -121,7 +121,7 @@ namespace
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& [id, view] = matches[i];
-        os << std::setw(5) << id << " " << view.metadata().title() << std::endl;
+        os << std::setw(5) << id << " " << view.metadata().title() << '\n';  // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
       }
       if (limit > 0 && offset + limit < matches.size())
       {
@@ -142,7 +142,7 @@ namespace
     }
     catch (std::exception const& e)
     {
-      os << "failed to parse metadata for " << path.filename() << ": " << e.what() << std::endl;
+      os << "failed to parse metadata for " << path.filename() << ": " << e.what() << '\n';
       return;
     }
 
@@ -212,7 +212,7 @@ namespace
     auto [id, trackView] = trackWriter.createHotCold(hotData, coldData);
     txn.commit();
 
-    os << "add track: " << id << " " << record.metadata.title << std::endl;
+    os << "add track: " << id << " " << record.metadata.title << '\n';
   }
 }
 
