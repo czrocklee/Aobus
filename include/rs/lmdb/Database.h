@@ -13,16 +13,23 @@
 
 namespace rs::lmdb
 {
-  // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
   class Database
   {
   public:
     class Reader;
     class Writer;
 
-    Database() = default;
     Database(WriteTransaction& txn, std::string const& db);
     Database(ReadTransaction& txn, std::string const& db);
+
+    // movable
+    Database(Database&&) = default;
+    Database& operator=(Database&&) = default;
+
+    // not copyable
+    Database(Database const&) = delete;
+    Database& operator=(Database const&) = delete;
+
     ~Database() = default;
 
     Reader reader(ReadTransaction& txn) const;
@@ -31,7 +38,6 @@ namespace rs::lmdb
   private:
     MDB_dbi _dbi = (std::numeric_limits<MDB_dbi>::max)();
   };
-  // NOLINTEND(cppcoreguidelines-special-member-functions)
 
   class Database::Reader
   {
@@ -42,6 +48,16 @@ namespace rs::lmdb
     Iterator begin() const;
     Iterator end() const;
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
+
+    ~Reader() = default;
+
+    // movable
+    Reader(Reader&&) = default;
+    Reader& operator=(Reader&&) = default;
+
+    // not copyable
+    Reader(Reader const&) = delete;
+    Reader& operator=(Reader const&) = delete;
 
   protected:
     Reader(MDB_dbi dbi, MDB_txn* txn);
@@ -67,23 +83,32 @@ namespace rs::lmdb
     Value const& dereference() const;
 
   private:
-    struct CursorDeleter
+    struct MdbCursorDeleter
     {
-      void operator()(MDB_cursor* cur) const { mdb_cursor_close(cur); }
+      void operator()(MDB_cursor* cur) const noexcept { mdb_cursor_close(cur); }
     };
-    Iterator(MDB_cursor* cursor);
 
-    std::unique_ptr<MDB_cursor, CursorDeleter> _cursor;
+    explicit Iterator(std::unique_ptr<MDB_cursor, MdbCursorDeleter> cursor);
+    static auto create(MDB_txn* txn, MDB_dbi dbi);
+
+    std::unique_ptr<MDB_cursor, MdbCursorDeleter> _cursor;
     Value _value;
     friend class Reader;
+    friend class Writer;
   };
 
-  // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
   class Database::Writer
   {
   public:
-    Writer(Writer&& other) noexcept;
     ~Writer();
+
+    // movable
+    Writer(Writer&& other) noexcept = default;
+    Writer& operator=(Writer&&) noexcept = default;
+
+    // not copyable
+    Writer(Writer const&) = delete;
+    Writer& operator=(Writer const&) = delete;
 
     void create(std::uint32_t id, std::span<std::byte const> data);
     std::span<std::byte> create(std::uint32_t id, std::size_t size);
@@ -97,11 +122,10 @@ namespace rs::lmdb
     Writer(MDB_dbi dbi, WriteTransaction& txn);
 
     MDB_dbi _dbi;
-    WriteTransaction& _txn;
-    std::unique_ptr<MDB_cursor, decltype([](auto* cur) { mdb_cursor_close(cur); })> _cursor;
+    WriteTransaction* _txn;
+    std::unique_ptr<MDB_cursor, Reader::Iterator::MdbCursorDeleter> _cursor;
     std::uint32_t _lastId = std::numeric_limits<std::uint32_t>::max();
     friend class Database;
   };
-  // NOLINTEND(cppcoreguidelines-special-member-functions)
 
 }

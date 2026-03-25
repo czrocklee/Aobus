@@ -6,7 +6,7 @@
 namespace rs::core
 {
 
-  std::string_view ListView::getString(std::uint16_t offset, std::uint16_t length) const  // NOLINT(bugprone-easily-swappable-parameters)
+  std::string_view ListView::getString(std::uint16_t offset, std::uint16_t length) const
   {
     if (length == 0) {
       return {};

@@ -1,39 +1,38 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/lmdb/Transaction.h>
 #include "ThrowError.h"
+#include <rs/lmdb/Transaction.h>
 
 namespace rs::lmdb
 {
-  ReadTransaction::ReadTransaction(Environment const& env)
+  auto ReadTransaction::create(MDB_env* env, MDB_txn* parent, unsigned int flags)
   {
     MDB_txn* handle = nullptr;
-    throwOnError("mdb_txn_begin", mdb_txn_begin(env._handle.get(), nullptr, MDB_RDONLY, &handle));
-    _handle.reset(handle);
+    throwOnError("mdb_txn_begin", mdb_txn_begin(env, parent, flags, &handle));
+    return std::unique_ptr<MDB_txn, ReadTransaction::MdbTxnDeleter>{handle};
+  }
+
+  ReadTransaction::ReadTransaction(Environment const& env)
+    : ReadTransaction{create(env._handle.get(), nullptr, MDB_RDONLY)}
+  {
   }
 
   WriteTransaction::WriteTransaction(Environment& env)
+    : ReadTransaction{ReadTransaction::create(env._handle.get(), nullptr, 0)}
   {
-    MDB_txn* handle = nullptr;
-    throwOnError("mdb_txn_begin", mdb_txn_begin(env._handle.get(), nullptr, 0, &handle));
-    _handle.reset(handle);
   }
 
   // Nested write transaction - child of parent write transaction
-  WriteTransaction::WriteTransaction(WriteTransaction& parent)  // NOLINT(cppcoreguidelines-pro-type-member-init,readability-redundant-member-init)
+  WriteTransaction::WriteTransaction(WriteTransaction& parent)
+    : ReadTransaction{ReadTransaction::create(mdb_txn_env(parent._handle.get()), parent._handle.get(), 0)}
   {
-    MDB_txn* handle = nullptr;
-    MDB_env* env = mdb_txn_env(parent._handle.get());
-    throwOnError("mdb_txn_begin", mdb_txn_begin(env, parent._handle.get(), 0, &handle));
-    _handle.reset(handle);
   }
 
   void WriteTransaction::commit()
   {
     throwOnError("mdb_txn_commit", mdb_txn_commit(_handle.get()));
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg,hicpp-signed-bitwise)
-    (void)_handle.release(); // Prevent destructor from committing/aborting
+    std::ignore = _handle.release(); // Prevent destructor from committing/aborting
     _cursorClosed = true;
   }
 }

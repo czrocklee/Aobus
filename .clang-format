@@ -204,7 +204,7 @@ ObjCBreakBeforeNestedBlockParam: true
 ObjCSpaceAfterProperty: true
 ObjCSpaceBeforeProtocolList: false
 OneLineFormatOffRegex: ''
-PackConstructorInitializers: CurrentLine
+PackConstructorInitializers: NextLineOnly 
 PenaltyBreakAssignment: 2
 PenaltyBreakBeforeFirstCallParameter: 0
 PenaltyBreakBeforeMemberAccess: 150

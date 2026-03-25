@@ -1,7 +1,7 @@
 # Clang-tidy configuration for RockStudio
 # Single source of truth for checks
 
-Checks: '-*,bugprone-*,performance-*,cppcoreguidelines-*,-cppcoreguidelines-avoid-const-or-ref-data-members,modernize-!-trailing-return,readability-*,portability-*,-clang-diagnostic-*'
+Checks: '-*,bugprone-*,performance-*,cppcoreguidelines-*,-cppcoreguidelines-avoid-const-or-ref-data-members,modernize-!-trailing-return,readability-*,portability-*,-clang-diagnostic-*,-bugprone-easily-swappable-parameters,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-readability-convert-member-functions-to-static,-readability-static-definition-in-anonymous-namespace'
 
 # Check options
 CheckOptions:

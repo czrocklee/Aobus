@@ -35,9 +35,7 @@ namespace rs::tag::mp4
       void operator()(Metadata& meta, Atom const& atom)
       {
         auto const& layout = static_cast<AtomView const&>(atom).layout<DataAtomLayout>();  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         auto const* buffer = reinterpret_cast<char const*>(&layout + 1);  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-        // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         std::size_t size = layout.common.length.value() - sizeof(DataAtomLayout);
         meta.set(Field, Decoder::decode(buffer, size));
       }
@@ -79,10 +77,8 @@ namespace rs::tag::mp4
       else
       {
         auto const& data = static_cast<AtomView const&>(atom).layout<DataAtomLayout>();  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         std::string value{
           reinterpret_cast<char const*>(&data + 1), data.common.length.value() - sizeof(DataAtomLayout)};  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-        // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         metadata.setCustom(atom.type(), std::move(value));
       }
 
@@ -92,5 +88,5 @@ namespace rs::tag::mp4
     return metadata;
   }
 
-  void File::saveMetadata(Metadata const& /*metadata*/) {}  // NOLINT(readability-named-parameter)
+  void File::saveMetadata([[maybe_unused]] Metadata const& metadata) {}
 }

@@ -1,0 +1,272 @@
+Configuring RockStudio (Debug)...
+Using nixpkgs pinned to nixos-unstable
+Using GCC by default
+-- The C compiler identification is GNU 15.2.0
+-- The CXX compiler identification is GNU 15.2.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /nix/store/hb2bs5fg5wkm04x565737qd5nh2hy5nk-gcc-wrapper-15.2.0/bin/gcc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /nix/store/hb2bs5fg5wkm04x565737qd5nh2hy5nk-gcc-wrapper-15.2.0/bin/g++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found PkgConfig: /nix/store/d0immrndpxnhx32vcfbxngmnf7hmqyc3-pkg-config-wrapper-0.29.2/bin/pkg-config (found version "0.29.2")
+-- Checking for modules ''
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+Must specify package names on the command line
+-- Checking for one of the modules 'mimalloc'
+-- Checking for module 'gtk4'
+--   Found gtk4, version 4.20.3
+Package sysprof-capture-4 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `sysprof-capture-4.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'sysprof-capture-4', required by 'glib-2.0', not found
+Package sysprof-capture-4 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `sysprof-capture-4.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'sysprof-capture-4', required by 'glib-2.0', not found
+Package sysprof-capture-4 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `sysprof-capture-4.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'sysprof-capture-4', required by 'glib-2.0', not found
+Package sysprof-capture-4 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `sysprof-capture-4.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'sysprof-capture-4', required by 'glib-2.0', not found
+-- Checking for module 'gtkmm-4.0'
+--   Found gtkmm-4.0, version 4.20.0
+Package sysprof-capture-4 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `sysprof-capture-4.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'sysprof-capture-4', required by 'glib-2.0', not found
+Package sysprof-capture-4 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `sysprof-capture-4.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'sysprof-capture-4', required by 'glib-2.0', not found
+Package sysprof-capture-4 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `sysprof-capture-4.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'sysprof-capture-4', required by 'glib-2.0', not found
+Package sysprof-capture-4 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `sysprof-capture-4.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'sysprof-capture-4', required by 'glib-2.0', not found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Checking for module 'catch2'
+--   Found catch2, version 2.13.10
+-- Performing Test HAVE_STDATOMIC
+-- Performing Test HAVE_STDATOMIC - Success
+-- Found WrapAtomic: TRUE
+-- Found OpenGL: /nix/store/1fy4004v7q0xi6c5jrr7ld2dinh22vy7-libglvnd-1.7.0/lib/libOpenGL.so
+-- Found WrapOpenGL: TRUE
+-- Found WrapVulkanHeaders: /nix/store/axr5s1q5jmjsw3f2754xdm6q6rmyy12w-vulkan-headers-1.4.341.0/include
+-- clang-tidy found: /nix/store/zb8py6p8qq01nygnnf8jrnkps9nna189-clang-21.1.8/bin/clang-tidy
+-- clang-tidy strict checks for src/tool, relaxed for test/
+-- Configuring done (4.3s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/build
+Building RockStudio...
+Using nixpkgs pinned to nixos-unstable
+Using GCC by default
+[  0%] Built target rs_autogen_timestamp_deps
+[  1%] Automatic MOC and UIC for target rs
+[  1%] Built target rs_autogen
+[  3%] Building CXX object CMakeFiles/rs.dir/rs_autogen/mocs_compilation.cpp.o
+[  5%] Building CXX object CMakeFiles/rs.dir/src/lmdb/Environment.cpp.o
+[  7%] Building CXX object CMakeFiles/rs.dir/src/lmdb/Transaction.cpp.o
+[ 11%] Building CXX object CMakeFiles/rs.dir/src/core/ResourceStore.cpp.o
+[ 11%] Building CXX object CMakeFiles/rs.dir/src/lmdb/Database.cpp.o
+[ 13%] Building CXX object CMakeFiles/rs.dir/src/core/MusicLibrary.cpp.o
+[ 15%] Building CXX object CMakeFiles/rs.dir/src/core/TrackStore.cpp.o
+[ 17%] Building CXX object CMakeFiles/rs.dir/src/core/DictionaryStore.cpp.o
+[ 19%] Building CXX object CMakeFiles/rs.dir/src/core/TrackLayout.cpp.o
+[ 21%] Building CXX object CMakeFiles/rs.dir/src/core/ListLayout.cpp.o
+[ 23%] Building CXX object CMakeFiles/rs.dir/src/core/ListStore.cpp.o
+[ 25%] Building CXX object CMakeFiles/rs.dir/src/expr/PlanEvaluator.cpp.o
+[ 27%] Building CXX object CMakeFiles/rs.dir/src/core/TrackRecord.cpp.o
+[ 29%] Building CXX object CMakeFiles/rs.dir/src/expr/ExecutionPlan.cpp.o
+[ 31%] Building CXX object CMakeFiles/rs.dir/src/expr/Expression.cpp.o
+[ 35%] Building CXX object CMakeFiles/rs.dir/src/expr/Parser.cpp.o
+[ 35%] Building CXX object CMakeFiles/rs.dir/src/expr/Serializer.cpp.o
+[ 37%] Building CXX object CMakeFiles/rs.dir/src/tag/flac/File.cpp.o
+[ 39%] Building CXX object CMakeFiles/rs.dir/src/tag/File.cpp.o
+[ 41%] Building CXX object CMakeFiles/rs.dir/src/tag/flac/MetadataBlock.cpp.o
+[ 43%] Building CXX object CMakeFiles/rs.dir/src/tag/mp4/File.cpp.o
+[ 45%] Building CXX object CMakeFiles/rs.dir/src/tag/mp4/Atom.cpp.o
+[ 47%] Building CXX object CMakeFiles/rs.dir/src/tag/mpeg/File.cpp.o
+[ 49%] Building CXX object CMakeFiles/rs.dir/src/tag/mpeg/id3v2/Reader.cpp.o
+[ 50%] Building CXX object CMakeFiles/rs.dir/src/tag/mpeg/Frame.cpp.o
+[ 50%] Built target rs
+[ 50%] Built target rs_test_autogen_timestamp_deps
+[ 50%] Built target rsc_autogen_timestamp_deps
+[ 52%] Automatic MOC and UIC for target rsc
+[ 54%] Automatic MOC and UIC for target rs_test
+[ 54%] Built target rsc_autogen
+[ 54%] Built target rs_test_autogen
+[ 56%] Building CXX object CMakeFiles/rsc.dir/rsc_autogen/mocs_compilation.cpp.o
+[ 58%] Building CXX object CMakeFiles/rsc.dir/tool/main.cpp.o
+[ 60%] Building CXX object CMakeFiles/rsc.dir/tool/InitCommand.cpp.o
+[ 62%] Building CXX object CMakeFiles/rsc.dir/tool/ListCommand.cpp.o
+[ 66%] Building CXX object CMakeFiles/rsc.dir/tool/TrackCommand.cpp.o
+[ 66%] Building CXX object CMakeFiles/rsc.dir/tool/TagCommand.cpp.o
+[ 68%] Building CXX object CMakeFiles/rs_test.dir/rs_test_autogen/mocs_compilation.cpp.o
+[ 70%] Building CXX object CMakeFiles/rs_test.dir/test/main.cpp.o
+[ 72%] Building CXX object CMakeFiles/rs_test.dir/test/query/ParserTest.cpp.o
+[ 74%] Building CXX object CMakeFiles/rs_test.dir/test/core/TrackLayoutTest.cpp.o
+[ 78%] Building CXX object CMakeFiles/rs_test.dir/test/query/PlanEvaluatorTest.cpp.o
+[ 78%] Building CXX object CMakeFiles/rs_test.dir/test/core/TrackRecordTest.cpp.o
+[ 80%] Building CXX object CMakeFiles/rs_test.dir/test/query/ExecutionPlanTest.cpp.o
+[ 82%] Building CXX object CMakeFiles/rs_test.dir/test/core/ListLayoutTest.cpp.o
+[ 84%] Building CXX object CMakeFiles/rs_test.dir/test/core/ListStoreTest.cpp.o
+[ 86%] Building CXX object CMakeFiles/rs_test.dir/test/core/DictionaryTest.cpp.o
+[ 88%] Building CXX object CMakeFiles/rs_test.dir/test/core/ResourceStoreTest.cpp.o
+[ 90%] Building CXX object CMakeFiles/rs_test.dir/test/lmdb/DatabaseTest.cpp.o
+[ 92%] Building CXX object CMakeFiles/rs_test.dir/test/core/TrackStoreTest.cpp.o
+[ 94%] Building CXX object CMakeFiles/rs_test.dir/test/lmdb/EnvironmentTest.cpp.o
+[ 96%] Building CXX object CMakeFiles/rs_test.dir/test/lmdb/TransactionTest.cpp.o
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:42:8: warning: function 'scanAndImport' has cognitive complexity of 36 (threshold 25) [readability-function-cognitive-complexity]
+   42 |   void scanAndImport(core::MusicLibrary& ml, std::ostream& os)
+      |        ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:49:5: note: +1, including nesting penalty of 0, nesting level increased to 1
+   49 |     for (std::filesystem::path const& path : finder)
+      |     ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:59:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+   59 |       catch (std::exception const& e)
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:73:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+   73 |       if (!rs::tag::isNull(titleVal))
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:82:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+   82 |       if (!rs::tag::isNull(artistVal))
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:89:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+   89 |       if (!rs::tag::isNull(albumVal))
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:96:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+   96 |       if (!rs::tag::isNull(genreVal))
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:103:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  103 |       if (!rs::tag::isNull(year))
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:109:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  109 |       if (!rs::tag::isNull(trackNum))
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:115:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  115 |       if (!rs::tag::isNull(totalTracks))
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:121:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  121 |       if (!rs::tag::isNull(discNum))
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:127:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  127 |       if (!rs::tag::isNull(totalDiscs))
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:133:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  133 |       if (!artistStr.empty())
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:136:9: note: +3, including nesting penalty of 2, nesting level increased to 3
+  136 |         if (record.artistId.value() == 0)
+      |         ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:141:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  141 |       if (!albumStr.empty())
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:144:9: note: +3, including nesting penalty of 2, nesting level increased to 3
+  144 |         if (record.albumId.value() == 0)
+      |         ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:149:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  149 |       if (!genreStr.empty())
+      |       ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:152:9: note: +3, including nesting penalty of 2, nesting level increased to 3
+  152 |         if (record.genreId.value() == 0)
+      |         ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:42:8: warning: function 'scanAndImport' exceeds recommended size/complexity thresholds [readability-function-size]
+   42 |   void scanAndImport(core::MusicLibrary& ml, std::ostream& os)
+      |        ^
+/home/rocklee/dev/RockStudio/tool/InitCommand.cpp:42:8: note: 83 statements (threshold 60)
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:44:8: warning: function 'show' has cognitive complexity of 35 (threshold 25) [readability-function-cognitive-complexity]
+   44 |   void show(core::MusicLibrary& ml, std::string const& filter, bool json, std::size_t limit, std::size_t offset, std::ostream& os)
+      |        ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:52:5: note: +1, including nesting penalty of 0, nesting level increased to 1
+   52 |     if (filter.empty())
+      |     ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:54:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+   54 |       for (auto [id, view] : reader)
+      |       ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:59:5: note: +1, nesting level increased to 1
+   59 |     else
+      |     ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:66:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+   66 |       switch (plan.accessProfile)
+      |       ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:72:11: note: +3, including nesting penalty of 2, nesting level increased to 3
+   72 |           for (auto [id, view] : reader)
+      |           ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:74:13: note: +4, including nesting penalty of 3, nesting level increased to 4
+   74 |             if (evaluator.matches(plan, view))
+      |             ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:85:5: note: +1, including nesting penalty of 0, nesting level increased to 1
+   85 |     if (offset >= matches.size())
+      |     ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:87:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+   87 |       if (json)
+      |       ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:95:36: note: +1, including nesting penalty of 0, nesting level increased to 1
+   95 |     std::size_t end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
+      |                                    ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:97:5: note: +1, including nesting penalty of 0, nesting level increased to 1
+   97 |     if (json)
+      |     ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:100:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  100 |       for (std::size_t i = offset; i < end; ++i)
+      |       ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:105:9: note: +3, including nesting penalty of 2, nesting level increased to 3
+  105 |         if (view.metadata().artistId() > 0)
+      |         ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:109:9: note: +3, including nesting penalty of 2, nesting level increased to 3
+  109 |         if (view.metadata().albumId() > 0)
+      |         ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:114:9: note: +3, including nesting penalty of 2, nesting level increased to 3
+  114 |         if (i < end - 1) { os << ","; }
+      |         ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:119:5: note: +1, nesting level increased to 1
+  119 |     else
+      |     ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:121:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  121 |       for (std::size_t i = offset; i < end; ++i)
+      |       ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:126:7: note: +2, including nesting penalty of 1, nesting level increased to 2
+  126 |       if (limit > 0 && offset + limit < matches.size())
+      |       ^
+/home/rocklee/dev/RockStudio/tool/TrackCommand.cpp:126:21: note: +1
+  126 |       if (limit > 0 && offset + limit < matches.size())
+      |                     ^
+[ 98%] Linking CXX executable rsc
+[ 98%] Built target rsc
+[100%] Linking CXX executable rs_test
+[100%] Built target rs_test
+Running tests...
+Using nixpkgs pinned to nixos-unstable
+Using GCC by default
+===============================================================================
+All tests passed (540 assertions in 198 test cases)
+
+
+All done!
+  Build type: Debug
+  Build dir: /tmp/build

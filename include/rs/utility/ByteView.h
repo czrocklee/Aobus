@@ -28,13 +28,13 @@ namespace rs::utility
   }
 
   // Cast typed pointer with offset (e.g., uint8_t* + offset -> T const*)
-  // NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
+  // Binary deserialization utility - offset-based pointer arithmetic is unavoidable here
   template<typename T, typename Base>
   constexpr T const* as(Base const* base, std::size_t offset) noexcept
   {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     return reinterpret_cast<T const*>(reinterpret_cast<std::uint8_t const*>(base) + offset);
   }
-  // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
 
   // Cast pointer to span<byte> (for serialization)
   template<typename T>
@@ -69,9 +69,7 @@ namespace rs::utility
   }
 
   // Get string_view from byte pointer + offset + size
-  // NOLINTBEGIN(bugprone-easily-swappable-parameters)
   inline std::string_view asString(std::byte const* data, std::size_t offset, std::size_t size) noexcept
-  // NOLINTEND(bugprone-easily-swappable-parameters)
   {
     return {reinterpret_cast<char const*>(data) + offset, size};
   }
@@ -89,9 +87,7 @@ namespace rs::utility
   /**
    * Combine two uint32_t parts back into a uint64_t.
    */
-  // NOLINTBEGIN(bugprone-easily-swappable-parameters)
   constexpr std::uint64_t combineInt64(std::uint32_t lo, std::uint32_t hi) noexcept
-  // NOLINTEND(bugprone-easily-swappable-parameters)
   {
     return (static_cast<std::uint64_t>(hi) << 32) | lo;
   }

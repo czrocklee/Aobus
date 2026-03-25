@@ -34,7 +34,7 @@ namespace rs::core
 
   private:
     explicit Writer(lmdb::Database::Reader&& reader, lmdb::Database::Writer&& writer)
-      : _reader{reader}
+      : _reader{std::move(reader)}
       , _writer{std::move(writer)}
     {
     }

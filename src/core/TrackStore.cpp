@@ -9,7 +9,7 @@ namespace rs::core
 {
 
   // TrackStore implementation
-  TrackStore::TrackStore(lmdb::WriteTransaction& txn, std::string const& hotDb, std::string const& coldDb)  // NOLINT(bugprone-easily-swappable-parameters)
+  TrackStore::TrackStore(lmdb::WriteTransaction& txn, std::string const& hotDb, std::string const& coldDb)
     : _hotDb{txn, hotDb}
     , _coldDb{txn, coldDb}
   {
@@ -26,9 +26,9 @@ namespace rs::core
   }
 
   // TrackStore::Reader implementation
-  TrackStore::Reader::Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader)  // NOLINT(bugprone-easily-swappable-parameters)
-    : _hotReader{hotReader}
-    , _coldReader{coldReader}
+  TrackStore::Reader::Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader)
+    : _hotReader{std::move(hotReader)}
+    , _coldReader{std::move(coldReader)}
   {
   }
 
@@ -80,11 +80,9 @@ namespace rs::core
 
     switch (_mode)
     {
-    case LoadMode::Cold:
-      return _coldIter == other._coldIter;
-    case LoadMode::Hot:
-    case LoadMode::Both:
-      return _hotIter == other._hotIter;
+      case LoadMode::Cold: return _coldIter == other._coldIter;
+      case LoadMode::Hot:
+      case LoadMode::Both: return _hotIter == other._hotIter;
     }
     return false;
   }
@@ -113,10 +111,7 @@ namespace rs::core
     if (_coldIter)
     {
       auto&& [coldId, coldBuffer] = **_coldIter;
-      if (!_hotIter)
-      {
-        trackId = TrackId{coldId};
-      }
+      if (!_hotIter) { trackId = TrackId{coldId}; }
       else
       {
         assert(coldId == trackId.value() && "cold and hot must have same track ID");
@@ -135,9 +130,8 @@ namespace rs::core
   }
 
   // Hot/Cold split methods
-  std::pair<TrackId, TrackView> TrackStore::Writer::createHotCold(
-      std::span<std::byte const> hotData,
-      std::span<std::byte const> coldData)
+  std::pair<TrackId, TrackView> TrackStore::Writer::createHotCold(std::span<std::byte const> hotData,
+                                                                  std::span<std::byte const> coldData)
   {
     // Ensure size is multiple of 4 for LMDB
     assert((hotData.size() % 4 == 0) && "hotData size must be multiple of 4");
@@ -175,25 +169,20 @@ namespace rs::core
   {
     if (mode == Reader::LoadMode::Hot)
     {
-      return _hotWriter.get(id.value()).transform([](auto const& buffer) {
-        return TrackView{buffer, {}};
-      });
+      return _hotWriter.get(id.value()).transform([](auto const& buffer) { return TrackView{buffer, {}}; });
     }
 
     if (mode == Reader::LoadMode::Cold)
     {
-      return _coldWriter.get(id.value()).transform([](auto const& buffer) {
-        return TrackView{{}, buffer};
-      });
+      return _coldWriter.get(id.value()).transform([](auto const& buffer) { return TrackView{{}, buffer}; });
     }
 
     // Both
-    return _hotWriter.get(id.value())
-        .and_then([this, id](auto const& hotBuffer) {
-          return _coldWriter.get(id.value()).transform([&hotBuffer](auto const& coldBuffer) {
-            return TrackView{hotBuffer, coldBuffer};
-          });
-        });
+    return _hotWriter.get(id.value()).and_then([this, id](auto const& hotBuffer) {
+      return _coldWriter.get(id.value()).transform([&hotBuffer](auto const& coldBuffer) {
+        return TrackView{hotBuffer, coldBuffer};
+      });
+    });
   }
 
 } // namespace rs::core

@@ -37,7 +37,7 @@ namespace
 
   std::string getString(rs::tag::ValueType const& val)
   {
-    if (rs::tag::isNull(val)) return {};
+    if (rs::tag::isNull(val)) { return {}; }
     return std::get<std::string>(val);
   }
 
@@ -248,12 +248,12 @@ TrackCommand::TrackCommand(core::MusicLibrary& ml) : _ml{ml}
       auto writer = _ml.tracks().writer(txn);
       if (writer.remove(id))
       {
-        os << "deleted track: " << id << std::endl;
+        os << "deleted track: " << id << '\n';
         txn.commit();
       }
       else
       {
-        os << "track not found: " << id << std::endl;
+        os << "track not found: " << id << '\n';
       }
       return "";
     });

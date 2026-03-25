@@ -68,7 +68,7 @@ namespace rs::core
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
   private:
-    Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader);  // NOLINT(bugprone-easily-swappable-parameters)
+    Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader);
 
     lmdb::Database::Reader _hotReader;
     lmdb::Database::Reader _coldReader;
@@ -85,12 +85,11 @@ namespace rs::core
 
     Iterator() = default;
     Iterator(Iterator const& other) = default;
-    // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
+    // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
     ~Iterator() = default;
     Iterator& operator=(Iterator const&) = default;
     Iterator(Iterator&&) = default;
     Iterator& operator=(Iterator&&) = default;
-    // NOLINTEND(cppcoreguidelines-special-member-functions)
 
     bool operator==(Iterator const& other) const;
     Iterator& operator++();

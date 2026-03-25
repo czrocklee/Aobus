@@ -35,7 +35,7 @@ namespace
 
   std::string getString(rs::tag::ValueType const& val)
   {
-    if (rs::tag::isNull(val)) return {};
+    if (rs::tag::isNull(val)) { return {}; }
     return std::get<std::string>(val);
   }
 
@@ -58,7 +58,7 @@ namespace
       }
       catch (std::exception const& e)
       {
-        std::cerr << "failed to parse metadata for " << path.filename() << ": " << e.what() << std::endl;
+        std::cerr << "failed to parse metadata for " << path.filename() << ": " << e.what() << '\n';
         continue;
       }
 
@@ -75,7 +75,9 @@ namespace
         record.metadata.title = getString(titleVal);
       }
 
-      std::string artistStr, albumStr, genreStr;
+      std::string artistStr;
+      std::string albumStr;
+      std::string genreStr;
       auto artistVal = metadata.get(rs::tag::MetaField::Artist);
       if (!rs::tag::isNull(artistVal))
       {
@@ -158,7 +160,7 @@ namespace
       auto coldData = record.serializeCold(dictionary);
       auto [id, trackView] = trackWriter.createHotCold(hotData, coldData);
 
-      os << "add track: " << id << " " << record.metadata.title << std::endl;
+      os << "add track: " << id << " " << record.metadata.title << '\n';
     }
 
     txn.commit();

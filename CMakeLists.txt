@@ -54,7 +54,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-# clang-tidy setup (must be before rs target to enable CMAKE_CXX_CLANG_TIDY)
+# clang-tidy setup (manual application to targets)
 find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
 if(CLANG_TIDY_EXECUTABLE)
   # Set up GCC include paths for clang-tidy (required for GCC)
@@ -74,17 +74,22 @@ if(CLANG_TIDY_EXECUTABLE)
     endif()
   endforeach()
 
-  # clang-tidy configuration: only analyze project source files
-  # Use --header-filter to limit to files under the project directory
-  set(CMAKE_CXX_CLANG_TIDY
-    "${CLANG_TIDY_EXECUTABLE}"
-    "-header-filter='/home/rocklee/dev/RockStudio/.*'"
-    ${CLANG_TIDY_EXTRA_ARGS}
-    CACHE STRING "clang-tidy command"
+  # clang-tidy checks for strict targets (src, tool)
+  set(CLANG_TIDY_STRICT_CHECKS
+    "-checks=-*,bugprone-*,performance-*,cppcoreguidelines-*,-cppcoreguidelines-avoid-const-or-ref-data-members,modernize-!-trailing-return,readability-*,portability-*,-clang-diagnostic-*,-bugprone-easily-swappable-parameters,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-readability-convert-member-functions-to-static,-readability-static-definition-in-anonymous-namespace"
   )
 
+  # clang-tidy checks for relaxed test targets (minimal checks)
+  set(CLANG_TIDY_RELAXED_CHECKS
+    "-checks=-*,performance-avoid-endl"
+  )
+
+  # Strict header filter (exclude test/)
+  set(CLANG_TIDY_STRICT_FILTER "'/home/rocklee/dev/RockStudio/(src|include|app|tool)/.*'")
+  set(CLANG_TIDY_RELAXED_FILTER "'/home/rocklee/dev/RockStudio/test/.*'")
+
   message(STATUS "clang-tidy found: ${CLANG_TIDY_EXECUTABLE}")
-  message(STATUS "clang-tidy will run automatically during build (incremental + parallel)")
+  message(STATUS "clang-tidy strict checks for src/tool, relaxed for test/")
 else()
   message(STATUS "clang-tidy not found - install it for linting")
 endif()
@@ -117,6 +122,11 @@ add_library(rs OBJECT
 )
 target_include_directories(rs PUBLIC include)
 target_link_libraries(rs lmdb Boost::locale)
+if(CLANG_TIDY_EXECUTABLE)
+  set_target_properties(rs PROPERTIES
+    CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_STRICT_CHECKS};-header-filter=${CLANG_TIDY_STRICT_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
+  )
+endif()
 
 add_executable(rsc
     tool/main.cpp
@@ -126,6 +136,11 @@ add_executable(rsc
     tool/TrackCommand.cpp
 )
 target_link_libraries(rsc PRIVATE rs Qt6::Core Boost::program_options)
+if(CLANG_TIDY_EXECUTABLE)
+  set_target_properties(rsc PROPERTIES
+    CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_STRICT_CHECKS};-header-filter=${CLANG_TIDY_STRICT_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
+  )
+endif()
 
 add_executable(rs_test
     test/main.cpp
@@ -149,6 +164,13 @@ target_compile_options(rs_test PRIVATE -Wno-array-bounds)
 
 # Register rs_test with CTest
 add_test(NAME rs_test COMMAND rs_test)
+
+# Relaxed clang-tidy for test: allow magic numbers, chained comparisons
+if(CLANG_TIDY_EXECUTABLE)
+  set_target_properties(rs_test PROPERTIES
+    CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_RELAXED_CHECKS};-header-filter=${CLANG_TIDY_RELAXED_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
+  )
+endif()
 
 # UI disabled - requires FlatBuffers migration
 # add_executable(RockStudio

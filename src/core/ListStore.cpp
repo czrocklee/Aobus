@@ -21,7 +21,7 @@ namespace rs::core
   }
 
   // Reader implementation
-  ListStore::Reader::Reader(lmdb::Database::Reader reader) : _reader{reader}
+  ListStore::Reader::Reader(lmdb::Database::Reader reader) : _reader{std::move(reader)}
   {
   }
 

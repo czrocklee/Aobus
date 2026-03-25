@@ -24,7 +24,7 @@ namespace
     auto optTrackView = writer.get(trackId, core::TrackStore::Reader::LoadMode::Both);
     if (!optTrackView)
     {
-      os << "error: track not found: " << trackId << std::endl;
+      os << "error: track not found: " << trackId << '\n';
       return;
     }
 
@@ -43,7 +43,7 @@ namespace
 
     if (tagExists)
     {
-      os << "tag already exists: " << tagName << std::endl;
+      os << "tag already exists: " << tagName << '\n';
       txn.commit();
       return;
     }
@@ -59,7 +59,7 @@ namespace
     writer.updateHot(trackId, hotData);
     txn.commit();
 
-    os << "added tag: " << tagName << " to track " << trackId << std::endl;
+    os << "added tag: " << tagName << " to track " << trackId << '\n';
   }
 
   void removeTag(core::MusicLibrary& ml, core::TrackId trackId, std::string const& tagName, std::ostream& os)
@@ -70,7 +70,7 @@ namespace
     auto optTrackView = writer.get(trackId, core::TrackStore::Reader::LoadMode::Both);
     if (!optTrackView)
     {
-      os << "error: track not found: " << trackId << std::endl;
+      os << "error: track not found: " << trackId << '\n';
       return;
     }
 
@@ -79,7 +79,7 @@ namespace
     auto tagId = ml.dictionary().getId(tagName);
     if (tagId.value() == 0)
     {
-      os << "tag not found: " << tagName << std::endl;
+      os << "tag not found: " << tagName << '\n';
       return;
     }
 
@@ -87,7 +87,7 @@ namespace
     auto it = std::remove(tags.begin(), tags.end(), tagId);
     if (it == tags.end())
     {
-      os << "tag not found on track: " << tagName << std::endl;
+      os << "tag not found on track: " << tagName << '\n';
       return;
     }
     tags.erase(it, tags.end());
@@ -96,7 +96,7 @@ namespace
     writer.updateHot(trackId, hotData);
     txn.commit();
 
-    os << "removed tag: " << tagName << " from track " << trackId << std::endl;
+    os << "removed tag: " << tagName << " from track " << trackId << '\n';
   }
 
   void showTags(core::MusicLibrary& ml, core::TrackId trackId, std::ostream& os)
@@ -107,7 +107,7 @@ namespace
     auto optTrackView = reader.get(trackId);
     if (!optTrackView)
     {
-      os << "error: track not found: " << trackId << std::endl;
+      os << "error: track not found: " << trackId << '\n';
       return;
     }
 
@@ -115,7 +115,7 @@ namespace
 
     if (record.tags.ids.empty())
     {
-      os << "no tags" << std::endl;
+      os << "no tags" << '\n';
       return;
     }
 
@@ -123,11 +123,11 @@ namespace
     bool first = true;
     for (auto tagId : record.tags.ids)
     {
-      if (!first) os << ", ";
+      if (!first) { os << ", "; }
       os << ml.dictionary().get(core::DictionaryId{tagId});
       first = false;
     }
-    os << std::endl;
+    os << '\n';
   }
 }
 

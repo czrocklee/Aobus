@@ -15,14 +15,8 @@ namespace rs::core
 
   TrackRecord::TrackRecord(TrackView const& view, DictionaryStore const& dict)
   {
-    if (!view.isHotValid())
-    {
-      RS_THROW(rs::Exception, "TrackRecord constructor requires hot data to be valid");
-    }
-    if (!view.isColdValid())
-    {
-      RS_THROW(rs::Exception, "TrackRecord constructor requires cold data to be valid");
-    }
+    if (!view.isHotValid()) { RS_THROW(rs::Exception, "TrackRecord constructor requires hot data to be valid"); }
+    if (!view.isColdValid()) { RS_THROW(rs::Exception, "TrackRecord constructor requires cold data to be valid"); }
 
     // Copy property fields from unified proxy
     auto prop = view.property();
@@ -159,11 +153,13 @@ namespace rs::core
     return serializeCold([&dict](std::string_view key) { return dict.getId(key); });
   }
 
-  std::vector<std::byte> TrackRecord::serializeCold(std::function<DictionaryId(std::string_view)> resolveKey) const
+  std::vector<std::byte> TrackRecord::serializeCold(
+    std::function<DictionaryId(std::string_view)> const& resolveKey) const
   {
     // Resolve keys to DictionaryIds
-    std::vector<std::pair<DictionaryId, std::string>> resolvedPairs;
+    auto resolvedPairs = std::vector<std::pair<DictionaryId, std::string>>{};
     resolvedPairs.reserve(custom.pairs.size());
+
     for (auto const& [key, value] : custom.pairs)
     {
       auto dictId = resolveKey(key);
@@ -179,8 +175,7 @@ namespace rs::core
     for (auto const& [_, value] : resolvedPairs) { totalValueSize += value.size(); }
 
     std::uint16_t uriLen = static_cast<std::uint16_t>(metadata.uri.size());
-
-    std::vector<std::byte> result;
+    auto result = std::vector<std::byte>{};
     result.reserve(sizeof(TrackColdHeader) + (entryCount * kEntrySize) + totalValueSize + uriLen + 4);
 
     // Build header
@@ -204,10 +199,7 @@ namespace rs::core
     }
 
     // Write all values contiguously
-    for (auto const& [_, value] : resolvedPairs)
-    {
-      result.insert_range(result.end(), utility::asBytes(value));
-    }
+    for (auto const& [_, value] : resolvedPairs) { result.insert_range(result.end(), utility::asBytes(value)); }
 
     // Write uri (null-terminated)
     result.insert_range(result.end(), utility::asBytes(metadata.uri));

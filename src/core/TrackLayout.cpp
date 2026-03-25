@@ -3,7 +3,7 @@
 
 #include <rs/core/TrackView.h>
 
-#include <gsl/gsl-lite.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstring>
@@ -27,7 +27,7 @@ namespace rs::core
     return tagIds[index];
   }
 
-  std::string_view TrackView::hotGetString(std::uint16_t offset, std::uint16_t length) const  // NOLINT(bugprone-easily-swappable-parameters)
+  std::string_view TrackView::hotGetString(std::uint16_t offset, std::uint16_t length) const
   {
     auto const start = sizeof(TrackHotHeader) + offset;
     gsl_Expects(start + length <= _hotData.size());
@@ -64,7 +64,7 @@ namespace rs::core
     return std::ranges::find(begin(), end(), tagIdToCheck) != end();
   }
 
-  std::optional<std::string_view> TrackView::CustomProxy::get([[maybe_unused]] std::string_view key) const  // NOLINT(readability-convert-member-functions-to-static)
+  std::optional<std::string_view> TrackView::CustomProxy::get([[maybe_unused]] std::string_view key) const
   {
     // With indexed format, keys are stored as DictionaryIds, not strings.
     // Callers should use get(DictionaryId) after resolving the string to a dictId.
@@ -142,9 +142,7 @@ namespace rs::core
 
   void TrackView::CustomProxy::Iterator::increment()
   {
-    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     ++_pos;
-    // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
   }
 
 } // namespace rs::core

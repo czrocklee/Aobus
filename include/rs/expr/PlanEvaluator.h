@@ -41,13 +41,6 @@ namespace rs::expr
     bool evaluateFull(ExecutionPlan const& plan, core::TrackView const& track) const;
 
   private:
-    std::int64_t loadField(core::TrackView const& track, Field field) const;
-    std::string_view loadStringField(core::TrackView const& track, Field field, Instruction const* instr = nullptr) const;
-    std::int64_t loadConstant(Instruction const& instr) const;  // NOLINT(readability-convert-member-functions-to-static)
-
-    // Pointer to current plan for string constant access
-    mutable ExecutionPlan const* _currentPlan = nullptr;
-
     // Register stack for evaluation
     mutable std::vector<std::int64_t> _registers;
   };

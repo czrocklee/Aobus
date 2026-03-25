@@ -37,7 +37,7 @@ namespace rs::tag::flac
       {
         auto str = utility::asString(buffer);
 
-        if (auto iter = std::ranges::find(str, '/'); iter != str.end())  // NOLINT(readability-qualified-auto)
+        if (auto const& iter = std::ranges::find(str, '/'); iter != str.end())
         {
           auto dist = std::distance(str.begin(), iter);
           meta.set(PrimaryField, Decoder::decode(str.data(), dist));
@@ -83,10 +83,8 @@ namespace rs::tag::flac
     }
 
     Metadata metadata;
-    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     MetadataBlockViewIterator iter{
       static_cast<char const*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};
-    // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     MetadataBlockViewIterator end{};
 
     for (; iter != end; ++iter)
@@ -132,5 +130,5 @@ namespace rs::tag::flac
     return metadata;
   }
 
-  void File::saveMetadata(Metadata const& /*metadata*/) {}  // NOLINT(readability-named-parameter)
+  void File::saveMetadata([[maybe_unused]] Metadata const& metadata) {}
 }

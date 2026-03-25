@@ -21,7 +21,7 @@ namespace rs::tag::mpeg::id3v2
       template<typename FrameViewT>
       void operator()(Metadata& meta, FrameViewT view)
       {
-        std::cout << TextFrameViewT{view.data(), view.size()}.text() << std::endl;
+        std::cout << TextFrameViewT{view.data(), view.size()}.text() << "\n";
         meta.set(Field, TextFrameViewT{view.data(), view.size()}.text());
       }
     };
@@ -71,7 +71,7 @@ namespace rs::tag::mpeg::id3v2
 
       for (; frameIter != frameEnd; ++frameIter)
       {
-        std::cout << frameIter->id() << '/' << frameIter->size() << std::endl;
+        std::cout << frameIter->id() << '/' << frameIter->size() << '\n';
 
         if (auto setterIter = MetadataSetters.find(frameIter->id()); setterIter != MetadataSetters.end())
         {

@@ -122,7 +122,7 @@ namespace rs::core
      * @param resolveKey Function that maps string key to DictionaryId
      * @return Vector of bytes suitable for TrackStore::Writer::createHotCold
      */
-    std::vector<std::byte> serializeCold(std::function<DictionaryId(std::string_view)> resolveKey) const;
+    std::vector<std::byte> serializeCold(std::function<DictionaryId(std::string_view)> const& resolveKey) const;
 
     /**
      * Get the hot header with current field values.
