@@ -3,54 +3,39 @@
 
 #include "TagCommand.h"
 #include "BasicCommand.h"
-#include <rs/core/TrackRecord.h>
-#include <rs/core/TrackLayout.h>
-#include <rs/core/TrackStore.h>
 #include <rs/core/DictionaryStore.h>
+#include <rs/core/TrackLayout.h>
+#include <rs/core/TrackRecord.h>
+#include <rs/core/TrackStore.h>
 
 #include <algorithm>
+#include <ranges>
 #include <sstream>
 
 namespace
 {
   namespace bpo = boost::program_options;
-  using namespace rs;
+  using namespace rs::core;
 
-  void addTag(core::MusicLibrary& ml, core::TrackId trackId, std::string const& tagName, std::ostream& os)
+  void addTag(MusicLibrary& ml, TrackId trackId, std::string const& tagName, std::ostream& os)
   {
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
+    auto optTrackView = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
 
-    auto optTrackView = writer.get(trackId, core::TrackStore::Reader::LoadMode::Both);
     if (!optTrackView)
     {
       os << "error: track not found: " << trackId << '\n';
       return;
     }
 
-    core::TrackRecord record(*optTrackView, ml.dictionary());
+    auto record = TrackRecord{*optTrackView, ml.dictionary()};
+    auto tagId = ml.dictionary().put(txn, tagName);
 
-    auto tagId = ml.dictionary().getId(tagName);
-    bool tagExists = false;
-    for (auto existingTagId : record.tags.ids)
-    {
-      if (existingTagId == tagId)
-      {
-        tagExists = true;
-        break;
-      }
-    }
-
-    if (tagExists)
+    if (std::ranges::any_of(record.tags.ids, [tagId](auto tag) { return tag == tagId; }))
     {
       os << "tag already exists: " << tagName << '\n';
-      txn.commit();
       return;
-    }
-
-    if (tagId.value() == 0)
-    {
-      tagId = ml.dictionary().put(txn, tagName);
     }
 
     record.tags.ids.push_back(tagId);
@@ -62,35 +47,26 @@ namespace
     os << "added tag: " << tagName << " to track " << trackId << '\n';
   }
 
-  void removeTag(core::MusicLibrary& ml, core::TrackId trackId, std::string const& tagName, std::ostream& os)
+  void removeTag(MusicLibrary& ml, TrackId trackId, std::string const& tagName, std::ostream& os)
   {
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
+    auto optTrackView = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
 
-    auto optTrackView = writer.get(trackId, core::TrackStore::Reader::LoadMode::Both);
     if (!optTrackView)
     {
       os << "error: track not found: " << trackId << '\n';
       return;
     }
 
-    core::TrackRecord record(*optTrackView, ml.dictionary());
-
+    auto record = TrackRecord{*optTrackView, ml.dictionary()};
     auto tagId = ml.dictionary().getId(tagName);
-    if (tagId.value() == 0)
-    {
-      os << "tag not found: " << tagName << '\n';
-      return;
-    }
 
-    auto& tags = record.tags.ids;
-    auto it = std::remove(tags.begin(), tags.end(), tagId);
-    if (it == tags.end())
+    if (auto erased = std::erase(record.tags.ids, tagId); erased == 0)
     {
       os << "tag not found on track: " << tagName << '\n';
       return;
     }
-    tags.erase(it, tags.end());
 
     auto hotData = record.serializeHot();
     writer.updateHot(trackId, hotData);
@@ -99,19 +75,19 @@ namespace
     os << "removed tag: " << tagName << " from track " << trackId << '\n';
   }
 
-  void showTags(core::MusicLibrary& ml, core::TrackId trackId, std::ostream& os)
+  void showTags(MusicLibrary& ml, TrackId trackId, std::ostream& os)
   {
     auto txn = ml.readTransaction();
     auto reader = ml.tracks().reader(txn);
+    auto optTrackView = reader.get(trackId, TrackStore::Reader::LoadMode::Hot);
 
-    auto optTrackView = reader.get(trackId);
     if (!optTrackView)
     {
       os << "error: track not found: " << trackId << '\n';
       return;
     }
 
-    core::TrackRecord record(*optTrackView, ml.dictionary());
+    auto record = TrackRecord{*optTrackView, ml.dictionary()};
 
     if (record.tags.ids.empty())
     {
@@ -120,44 +96,36 @@ namespace
     }
 
     os << "tags: ";
-    bool first = true;
-    for (auto tagId : record.tags.ids)
-    {
-      if (!first) { os << ", "; }
-      os << ml.dictionary().get(core::DictionaryId{tagId});
-      first = false;
-    }
-    os << '\n';
+    auto tags = record.tags.ids | std::ranges::views::transform([&](auto id) { return ml.dictionary().get(id); });
+    os << std::format("{}\n", tags);
   }
 }
 
-TagCommand::TagCommand(rs::core::MusicLibrary& ml) : _ml{ml}
+TagCommand::TagCommand(MusicLibrary& ml)
+  : _ml{ml}
 {
   addCommand<BasicCommand>("add")
-    .addOption("id", bpo::value<std::uint64_t>()->required(), "track id", 1)
+    .addOption("id", bpo::value<std::uint32_t>()->required(), "track id", 1)
     .addOption("tag", bpo::value<std::string>()->required(), "tag name", 1)
     .setExecutor([this](auto const& vm, auto& os) {
-      auto id = rs::core::TrackId{vm["id"].template as<std::uint32_t>()};
+      auto id = TrackId{vm["id"].template as<std::uint32_t>()};
       auto tag = vm["tag"].template as<std::string>();
       addTag(_ml, id, tag, os);
-      return "";
     });
 
   addCommand<BasicCommand>("remove")
-    .addOption("id", bpo::value<std::uint64_t>()->required(), "track id", 1)
+    .addOption("id", bpo::value<std::uint32_t>()->required(), "track id", 1)
     .addOption("tag", bpo::value<std::string>()->required(), "tag name", 1)
     .setExecutor([this](auto const& vm, auto& os) {
-      auto id = rs::core::TrackId{vm["id"].template as<std::uint32_t>()};
+      auto id = TrackId{vm["id"].template as<std::uint32_t>()};
       auto tag = vm["tag"].template as<std::string>();
       removeTag(_ml, id, tag, os);
-      return "";
     });
 
   addCommand<BasicCommand>("show")
-    .addOption("id", bpo::value<std::uint64_t>()->required(), "track id", 1)
+    .addOption("id", bpo::value<std::uint32_t>()->required(), "track id", 1)
     .setExecutor([this](auto const& vm, auto& os) {
-      auto id = rs::core::TrackId{vm["id"].template as<std::uint32_t>()};
+      auto id = TrackId{vm["id"].template as<std::uint32_t>()};
       showTags(_ml, id, os);
-      return "";
     });
 }

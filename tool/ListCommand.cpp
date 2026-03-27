@@ -50,7 +50,7 @@ namespace
     header.flags = filter.empty() ? 0 : 1; // 0 = manual, 1 = smart (has filter)
 
     // Serialize header
-    std::vector<std::byte> data(sizeof(core::ListHeader));
+    auto data = std::vector<std::byte>(sizeof(core::ListHeader));
     std::memcpy(data.data(), &header, sizeof(core::ListHeader));
 
     auto [id, view] = ml.lists().writer(txn).create(data);

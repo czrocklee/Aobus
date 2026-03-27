@@ -73,8 +73,11 @@ This guide covers C++ coding conventions for RockStudio contributors.
 3.3.3. Use [[maybe_unused]]: Suppress unused warnings other than (void)
 3.3.4. Use noexcept: Mark functions that won't throw
 3.3.5. Use uniform initialization `{}` other than parentheses `()` for constructors and member initializer lists
-3.3.6. Prefer `auto x = T{a, b};` over `T x{a, b};` for object construction
-
+3.3.6. Prefer uniform initialization
+  - `auto x = T{a, b};` > `T x{a, b};`
+  - `auto x = T{};` > `T x;`
+  - ': _mem{a}' > `: _mem(a)`
+  
 ## 4. Best Practices
 
 ### 4.1 Getters and Accessors

@@ -48,8 +48,8 @@ namespace
 
     for (std::filesystem::path const& path : finder)
     {
-      std::unique_ptr<rs::tag::File> file;
-      rs::tag::Metadata metadata;
+      auto file = std::unique_ptr<rs::tag::File>{};
+      auto metadata = rs::tag::Metadata{};
 
       try
       {
@@ -63,7 +63,7 @@ namespace
       }
 
       // Build track record
-      core::TrackRecord record;
+      auto record = core::TrackRecord{};
       record.metadata.uri = path.string();
       record.property.fileSize = std::filesystem::file_size(path);
       record.property.mtime = std::filesystem::last_write_time(path).time_since_epoch().count();
@@ -75,9 +75,9 @@ namespace
         record.metadata.title = getString(titleVal);
       }
 
-      std::string artistStr;
-      std::string albumStr;
-      std::string genreStr;
+      auto artistStr = std::string{};
+      auto albumStr = std::string{};
+      auto genreStr = std::string{};
       auto artistVal = metadata.get(rs::tag::MetaField::Artist);
       if (!rs::tag::isNull(artistVal))
       {
@@ -132,27 +132,15 @@ namespace
       // Add to dictionary and get IDs for header
       if (!artistStr.empty())
       {
-        record.artistId = dictionary.getId(artistStr);
-        if (record.artistId.value() == 0)
-        {
-          record.artistId = dictionary.put(txn, artistStr);
-        }
+        record.artistId = dictionary.put(txn, artistStr);
       }
       if (!albumStr.empty())
       {
-        record.albumId = dictionary.getId(albumStr);
-        if (record.albumId.value() == 0)
-        {
-          record.albumId = dictionary.put(txn, albumStr);
-        }
+        record.albumId = dictionary.put(txn, albumStr);
       }
       if (!genreStr.empty())
       {
-        record.genreId = dictionary.getId(genreStr);
-        if (record.genreId.value() == 0)
-        {
-          record.genreId = dictionary.put(txn, genreStr);
-        }
+        record.genreId = dictionary.put(txn, genreStr);
       }
 
       // Serialize and store

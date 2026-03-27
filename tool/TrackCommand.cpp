@@ -12,8 +12,8 @@
 #include <rs/tag/mp4/File.h>
 #include <rs/tag/mpeg/File.h>
 
-#include <iomanip>
 #include <filesystem>
+#include <iomanip>
 
 namespace
 {
@@ -41,7 +41,12 @@ namespace
     return std::get<std::string>(val);
   }
 
-  void show(core::MusicLibrary& ml, std::string const& filter, bool json, std::size_t limit, std::size_t offset, std::ostream& os)
+  void show(core::MusicLibrary& ml,
+            std::string const& filter,
+            bool json,
+            std::size_t limit,
+            std::size_t offset,
+            std::ostream& os)
   {
     auto txn = ml.readTransaction();
     auto reader = ml.tracks().reader(txn);
@@ -51,10 +56,7 @@ namespace
 
     if (filter.empty())
     {
-      for (auto [id, view] : reader)
-      {
-        matches.emplace_back(id, std::move(view));
-      }
+      for (auto [id, view] : reader) { matches.emplace_back(id, std::move(view)); }
     }
     else
     {
@@ -71,10 +73,7 @@ namespace
         {
           for (auto [id, view] : reader)
           {
-            if (evaluator.matches(plan, view))
-            {
-              matches.emplace_back(id, std::move(view));
-            }
+            if (evaluator.matches(plan, view)) { matches.emplace_back(id, std::move(view)); }
           }
           break;
         }
@@ -84,10 +83,7 @@ namespace
     // Apply offset
     if (offset >= matches.size())
     {
-      if (json)
-      {
-        os << "[]\n";
-      }
+      if (json) { os << "[]\n"; }
       return;
     }
 
@@ -100,8 +96,7 @@ namespace
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& [id, view] = matches[i];
-        os << "  {\"id\": " << id
-           << ", \"title\": \"" << view.metadata().title() << "\"";
+        os << "  {\"id\": " << id << ", \"title\": \"" << view.metadata().title() << "\"";
         if (view.metadata().artistId() > 0)
         {
           os << ", \"artist\": \"" << ml.dictionary().get(view.metadata().artistId()) << "\"";
@@ -121,7 +116,8 @@ namespace
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& [id, view] = matches[i];
-        os << std::setw(5) << id << " " << view.metadata().title() << '\n';  // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+        os << std::setw(5) << id << " " << view.metadata().title()
+           << '\n'; // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
       }
       if (limit > 0 && offset + limit < matches.size())
       {
@@ -132,8 +128,8 @@ namespace
 
   void createTrack(core::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
   {
-    std::unique_ptr<rs::tag::File> file;
-    rs::tag::Metadata metadata;
+    auto file = std::unique_ptr<rs::tag::File>{};
+    auto metadata = rs::tag::Metadata{};
 
     try
     {
@@ -146,40 +142,25 @@ namespace
       return;
     }
 
-    core::TrackRecord record;
+    auto record = core::TrackRecord{};
     record.metadata.uri = path.string();
     record.property.fileSize = std::filesystem::file_size(path);
     record.property.mtime = std::filesystem::last_write_time(path).time_since_epoch().count();
 
     auto titleVal = metadata.get(rs::tag::MetaField::Title);
-    if (!rs::tag::isNull(titleVal))
-    {
-      record.metadata.title = getString(titleVal);
-    }
+    if (!rs::tag::isNull(titleVal)) { record.metadata.title = getString(titleVal); }
 
     auto artistVal = metadata.get(rs::tag::MetaField::Artist);
-    if (!rs::tag::isNull(artistVal))
-    {
-      record.metadata.artist = getString(artistVal);
-    }
+    if (!rs::tag::isNull(artistVal)) { record.metadata.artist = getString(artistVal); }
 
     auto albumVal = metadata.get(rs::tag::MetaField::Album);
-    if (!rs::tag::isNull(albumVal))
-    {
-      record.metadata.album = getString(albumVal);
-    }
+    if (!rs::tag::isNull(albumVal)) { record.metadata.album = getString(albumVal); }
 
     auto genreVal = metadata.get(rs::tag::MetaField::Genre);
-    if (!rs::tag::isNull(genreVal))
-    {
-      record.metadata.genre = getString(genreVal);
-    }
+    if (!rs::tag::isNull(genreVal)) { record.metadata.genre = getString(genreVal); }
 
     auto year = metadata.get(rs::tag::MetaField::Year);
-    if (!rs::tag::isNull(year))
-    {
-      record.metadata.year = static_cast<std::uint16_t>(std::get<std::int64_t>(year));
-    }
+    if (!rs::tag::isNull(year)) { record.metadata.year = static_cast<std::uint16_t>(std::get<std::int64_t>(year)); }
 
     auto trackNum = metadata.get(rs::tag::MetaField::TrackNumber);
     if (!rs::tag::isNull(trackNum))
@@ -216,7 +197,8 @@ namespace
   }
 }
 
-TrackCommand::TrackCommand(core::MusicLibrary& ml) : _ml{ml}
+TrackCommand::TrackCommand(core::MusicLibrary& ml)
+  : _ml{ml}
 {
   addCommand<BasicCommand>("show")
     .addOption("filter,f", bpo::value<std::string>()->default_value(""), "track filter expression", 1)
@@ -241,7 +223,7 @@ TrackCommand::TrackCommand(core::MusicLibrary& ml) : _ml{ml}
     });
 
   addCommand<BasicCommand>("delete")
-    .addOption("id", bpo::value<std::uint64_t>()->required(), "track id", 1)
+    .addOption("id", bpo::value<std::uint32_t>()->required(), "track id", 1)
     .setExecutor([this](auto const& vm, auto& os) {
       auto id = core::TrackId{vm["id"].template as<std::uint32_t>()};
       auto txn = _ml.writeTransaction();

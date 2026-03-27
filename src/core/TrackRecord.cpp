@@ -15,59 +15,61 @@ namespace rs::core
 
   TrackRecord::TrackRecord(TrackView const& view, DictionaryStore const& dict)
   {
-    if (!view.isHotValid()) { RS_THROW(rs::Exception, "TrackRecord constructor requires hot data to be valid"); }
-    if (!view.isColdValid()) { RS_THROW(rs::Exception, "TrackRecord constructor requires cold data to be valid"); }
-
-    // Copy property fields from unified proxy
-    auto prop = view.property();
-    property.codecId = prop.codecId();
-    property.bitDepth = prop.bitDepth();
-    property.rating = prop.rating();
-    property.fileSize = prop.fileSize();
-    property.mtime = prop.mtime();
-    property.durationMs = prop.durationMs();
-    property.sampleRate = prop.sampleRate();
-    property.bitrate = prop.bitrate();
-    property.channels = prop.channels();
-
-    // Get metadata from unified proxy
-    auto meta = view.metadata();
-    metadata.title = std::string{meta.title()};
-    metadata.year = meta.year();
-
-    // Get uri from property proxy
-    metadata.uri = std::string{view.property().uri()};
-
-    // Resolve dictionary IDs to strings
-    if (meta.artistId() > 0) { metadata.artist = std::string{dict.get(meta.artistId())}; }
-    if (meta.albumId() > 0) { metadata.album = std::string{dict.get(meta.albumId())}; }
-    if (meta.albumArtistId() > 0) { metadata.albumArtist = std::string{dict.get(meta.albumArtistId())}; }
-    if (meta.genreId() > 0) { metadata.genre = std::string{dict.get(meta.genreId())}; }
-
-    // Get tag IDs from hot payload
-    auto tagProxy = view.tags();
-    auto tagCount = tagProxy.count();
-    for (std::uint8_t i = 0; i < tagCount; ++i)
+    if (!view.isHotValid() && !view.isColdValid())
     {
-      auto tagId = tagProxy.id(i);
-      tags.ids.push_back(tagId);
+      RS_THROW(rs::Exception, "TrackRecord constructor requires at least one of hot or cold data to be valid");
     }
 
-    // Copy remaining cold fields (uri already done above)
-    metadata.uri = std::string{prop.uri()};
-    property.fileSize = prop.fileSize();
-    property.mtime = prop.mtime();
-    metadata.coverArtId = meta.coverArtId();
-    metadata.trackNumber = meta.trackNumber();
-    metadata.totalTracks = meta.totalTracks();
-    metadata.discNumber = meta.discNumber();
-    metadata.totalDiscs = meta.totalDiscs();
-
-    // Load custom meta from cold view (keys are DictionaryIds, need to resolve to string via dict)
-    for (auto const& [dictId, value] : view.custom())
+    // Copy hot property fields
+    if (view.isHotValid())
     {
-      auto key = dict.get(dictId);
-      custom.pairs.emplace_back(std::string{key}, std::string{value});
+      auto prop = view.property();
+      property.codecId = prop.codecId();
+      property.bitDepth = prop.bitDepth();
+      property.rating = prop.rating();
+
+      auto meta = view.metadata();
+      metadata.title = std::string{meta.title()};
+      metadata.year = meta.year();
+
+      if (meta.artistId() > 0) { metadata.artist = std::string{dict.get(meta.artistId())}; }
+      if (meta.albumId() > 0) { metadata.album = std::string{dict.get(meta.albumId())}; }
+      if (meta.albumArtistId() > 0) { metadata.albumArtist = std::string{dict.get(meta.albumArtistId())}; }
+      if (meta.genreId() > 0) { metadata.genre = std::string{dict.get(meta.genreId())}; }
+
+      auto tagProxy = view.tags();
+      auto tagCount = tagProxy.count();
+      for (std::uint8_t i = 0; i < tagCount; ++i)
+      {
+        auto tagId = tagProxy.id(i);
+        tags.ids.push_back(tagId);
+      }
+    }
+
+    // Copy cold property and metadata fields
+    if (view.isColdValid())
+    {
+      auto prop = view.property();
+      metadata.uri = std::string{prop.uri()};
+      property.fileSize = prop.fileSize();
+      property.mtime = prop.mtime();
+      property.durationMs = prop.durationMs();
+      property.sampleRate = prop.sampleRate();
+      property.bitrate = prop.bitrate();
+      property.channels = prop.channels();
+
+      auto meta = view.metadata();
+      metadata.coverArtId = meta.coverArtId();
+      metadata.trackNumber = meta.trackNumber();
+      metadata.totalTracks = meta.totalTracks();
+      metadata.discNumber = meta.discNumber();
+      metadata.totalDiscs = meta.totalDiscs();
+
+      for (auto const& [dictId, value] : view.custom())
+      {
+        auto key = dict.get(dictId);
+        custom.pairs.emplace_back(std::string{key}, std::string{value});
+      }
     }
   }
 

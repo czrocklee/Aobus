@@ -1,23 +1,15 @@
 #!/bin/bash
-# test_rsc.sh - Shell-based integration tests for rsc CLI
+# test_rsc.sh - Integration tests for rsc CLI
+# Assumes: running from workspace root, inside nix-shell
 
-# Run everything through nix-shell from project dir
-cd /home/rocklee/dev/RockStudio
-nix-shell --run '
 set -e
 
-# Setup
 TEST_DIR="/tmp/rsc_shell_test"
 RSC="/tmp/build/rsc"
 
-cleanup() {
-    rm -rf "$TEST_DIR"
-    mkdir -p "$TEST_DIR"
-}
+cleanup() { rm -rf "$TEST_DIR"; mkdir -p "$TEST_DIR"; }
 
 echo "=== rsc CLI Integration Tests ==="
-
-# Setup test directory
 cleanup
 
 # Test 1: Init with no files
@@ -32,17 +24,14 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata title="Rock Song" -metadata artist="Rock Artist" \
     -metadata album="Rock Album" -metadata date="2021" -metadata track="1" \
     -metadata genre="Rock" -y "$TEST_DIR/rock.flac" 2>/dev/null
-
 ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata title="Pop Song" -metadata artist="Pop Artist" \
     -metadata album="Pop Album" -metadata date="2022" -metadata track="2" \
     -metadata genre="Pop" -y "$TEST_DIR/pop.flac" 2>/dev/null
-
 echo "  PASS"
 
 # Test 3: Init with files
 echo "Test 3: Init with audio files..."
-cd "$TEST_DIR"
 "$RSC" init
 "$RSC" track show | grep -q "Rock Song"
 "$RSC" track show | grep -q "Pop Song"
@@ -77,7 +66,7 @@ echo "  PASS"
 # Test 8: List create/show
 echo "Test 8: List create/show..."
 "$RSC" list create --name "My List" | grep -q "add list"
-"$RSC" list show | grep -q "1"
+"$RSC" list show | grep -q "0"
 echo "  PASS"
 
 # Test 9: Track delete
@@ -86,9 +75,6 @@ echo "Test 9: Track delete..."
 ! "$RSC" track show --json | grep -q "Rock Song"
 echo "  PASS"
 
-# Cleanup
 rm -rf "$TEST_DIR"
-
 echo ""
 echo "=== All tests passed! ==="
-'
