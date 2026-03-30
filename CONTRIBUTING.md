@@ -32,6 +32,18 @@ This guide covers C++ coding conventions for RockStudio contributors.
   - Third-party
   - Standard library
 
+2.4.2. Class member declaration order (both .h and .ccp files):
+
+  Access sections must be ordered: `public` → `protected` → `private`
+
+  Within each access section, members must be ordered:
+  1. typedef/using declarations
+  2. member functions (non-static)
+  3. static functions
+  4. member variables (non-static)
+  5. static member variables
+  6. friend declarations
+
 ### 2.5 Namespaces
 
 2.5.1. Use nested namespace definition: `namespace rs::core { ... }`

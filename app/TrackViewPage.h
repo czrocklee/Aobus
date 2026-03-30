@@ -31,6 +31,12 @@ public:
   void clearStatusMessage();
 
 private:
+  // Setup methods
+  void setupColumns();
+  void setupStatusBar();
+  void onFilterChanged();
+  void onSelectionChanged(std::uint32_t position, std::uint32_t nItems);
+
   // Child widgets
   Gtk::Entry _filterEntry;
   Gtk::Label _statusLabel;
@@ -43,10 +49,4 @@ private:
 
   // Signal
   SelectionChangedSignal _selectionChanged;
-
-  // Setup methods
-  void setupColumns();
-  void setupStatusBar();
-  void onFilterChanged();
-  void onSelectionChanged(std::uint32_t position, std::uint32_t nItems);
 };

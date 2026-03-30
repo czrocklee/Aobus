@@ -86,17 +86,6 @@ namespace rs::core
       std::vector<std::pair<std::string, std::string>> pairs;
     };
 
-    Property property;
-    Metadata metadata;
-    Tags tags;
-    Custom custom;
-
-    // Dictionary IDs - resolved at creation time
-    DictionaryId artistId;
-    DictionaryId albumId;
-    DictionaryId genreId;
-    DictionaryId albumArtistId;
-
     /**
      * Serialize hot fields to binary format for tracks_hot DB.
      *
@@ -133,6 +122,18 @@ namespace rs::core
      * Get the cold header with current field values.
      */
     TrackColdHeader coldHeader() const;
+
+    // Member variables
+    Property property;
+    Metadata metadata;
+    Tags tags;
+    Custom custom;
+
+    // Dictionary IDs - resolved at creation time
+    DictionaryId artistId;
+    DictionaryId albumId;
+    DictionaryId genreId;
+    DictionaryId albumArtistId;
   };
 
 } // namespace rs::core

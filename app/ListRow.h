@@ -25,7 +25,7 @@ public:
 protected:
   explicit ListRow();
 
-public:
+private:
   ListId _listId;
   Glib::ustring _name;
 };

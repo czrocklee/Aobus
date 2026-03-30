@@ -150,8 +150,8 @@ namespace rs::expr
     ExecutionPlan compile(Expression const& expr);
 
   private:
+    // Compile helper functions
     std::uint32_t addStringConstant(std::string_view str);
-
     void compileExpression(Expression const& expr);
     void compileBinary(BinaryExpression const& binary);
     void compileUnary(UnaryExpression const& unary);
@@ -161,6 +161,7 @@ namespace rs::expr
     // Resolve string to ID using dictionary (if available)
     std::int64_t resolveStringConstant(std::string const& str, Field field) const;
 
+    // Member variables
     ExecutionPlan _plan;
     std::uint32_t _nextReg = 0;
     core::DictionaryStore const* _dict = nullptr;

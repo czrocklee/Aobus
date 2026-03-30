@@ -49,42 +49,6 @@ public:
   ~MainWindow() override;
 
 private:
-  // Music library instance
-  std::unique_ptr<rs::core::MusicLibrary> _musicLibrary;
-
-  // Shared row data provider (owned)
-  std::shared_ptr<app::model::TrackRowDataProvider> _rowDataProvider;
-
-  // All tracks TrackId list (owned)
-  std::unique_ptr<app::model::AllTrackIdsList> _allTrackIds;
-
-  // Layout: Horizontal paned with left box and right stack
-  Gtk::Paned _paned;
-
-  // Left side: vertical box with list + cover art
-  Gtk::Box _leftBox;
-  Gtk::ListView _listView;
-  Gtk::ScrolledWindow _listScrolledWindow;
-  std::unique_ptr<CoverArtWidget> _coverArtWidget;
-  std::unique_ptr<ImportProgressDialog> _importDialog;
-
-  // Import worker - owned and joined on window destruction
-  std::unique_ptr<ImportWorker> _importWorker;
-  std::jthread _importThread;
-
-  // Right side: stack for pages
-  Gtk::Stack _stack;
-
-  // Menu (placeholder)
-  Gtk::PopoverMenuBar _menuBar;
-
-  // List model for sidebar
-  Glib::RefPtr<Gio::ListStore<ListRow>> _listStore;
-  Glib::RefPtr<Gtk::SingleSelection> _listSelectionModel;
-
-  // Track pages map
-  std::map<rs::core::ListId, TrackPageContext> _trackPages;
-
   // List selection callback
   void onListSelectionChanged(std::uint32_t position, std::uint32_t nItems);
   void updateCoverArt(std::vector<rs::core::TrackId> const& selectedIds);
@@ -124,4 +88,40 @@ private:
 
   void saveSession();
   void loadSession();
+
+  // Music library instance
+  std::unique_ptr<rs::core::MusicLibrary> _musicLibrary;
+
+  // Shared row data provider (owned)
+  std::shared_ptr<app::model::TrackRowDataProvider> _rowDataProvider;
+
+  // All tracks TrackId list (owned)
+  std::unique_ptr<app::model::AllTrackIdsList> _allTrackIds;
+
+  // Layout: Horizontal paned with left box and right stack
+  Gtk::Paned _paned;
+
+  // Left side: vertical box with list + cover art
+  Gtk::Box _leftBox;
+  Gtk::ListView _listView;
+  Gtk::ScrolledWindow _listScrolledWindow;
+  std::unique_ptr<CoverArtWidget> _coverArtWidget;
+  std::unique_ptr<ImportProgressDialog> _importDialog;
+
+  // Import worker - owned and joined on window destruction
+  std::unique_ptr<ImportWorker> _importWorker;
+  std::jthread _importThread;
+
+  // Right side: stack for pages
+  Gtk::Stack _stack;
+
+  // Menu (placeholder)
+  Gtk::PopoverMenuBar _menuBar;
+
+  // List model for sidebar
+  Glib::RefPtr<Gio::ListStore<ListRow>> _listStore;
+  Glib::RefPtr<Gtk::SingleSelection> _listSelectionModel;
+
+  // Track pages map
+  std::map<rs::core::ListId, TrackPageContext> _trackPages;
 };
