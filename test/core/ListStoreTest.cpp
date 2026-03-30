@@ -75,7 +75,7 @@ TEST_CASE("ListStore - read by id", "[core][list]")
   auto optFound = store.reader(rtxn).get(id);
   REQUIRE(optFound.has_value());
   auto& found = *optFound;
-  REQUIRE(found.header()->trackIdsCount == 10);
+  REQUIRE(found.trackIdsCount() == 10);
 }
 
 TEST_CASE("ListStore - delete", "[core][list]")

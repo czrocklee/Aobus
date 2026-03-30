@@ -12,7 +12,7 @@
 class ListRow : public Glib::Object
 {
 public:
-  using ListId = rs::core::MusicLibrary::ListId;
+  using ListId = rs::core::ListId;
 
   ListId getListId() const { return _listId; }
   void setListId(ListId id) { _listId = id; }

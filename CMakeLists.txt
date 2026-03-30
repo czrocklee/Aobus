@@ -106,6 +106,7 @@ add_library(rs OBJECT
     src/core/TrackLayout.cpp
     src/core/ListLayout.cpp
     src/core/ListStore.cpp
+    src/core/ListPayloadBuilder.cpp
     src/expr/ExecutionPlan.cpp
     src/expr/PlanEvaluator.cpp
     src/expr/Expression.cpp
@@ -155,6 +156,7 @@ add_executable(rs_test
     test/core/ResourceStoreTest.cpp
     test/core/TrackStoreTest.cpp
     test/core/ListStoreTest.cpp
+    test/core/ListPayloadBuilderTest.cpp
     test/lmdb/EnvironmentTest.cpp
     test/lmdb/TransactionTest.cpp
     test/lmdb/DatabaseTest.cpp
@@ -178,8 +180,35 @@ endif()
 #     app/ImportProgressDialog.cpp
 #     ...
 # )
-#
-# add_executable(RockStudioGTKmm4
-#     app/gtkmm4/main.cpp
-#     ...
-# )
+
+# GTKmm4 UI (requires core API migration complete - milestones 3-7)
+# Exclude from ALL build until Milestone 13 when migration is complete
+add_executable(RockStudioGTKmm4
+    app/gtkmm4/main.cpp
+    app/gtkmm4/MainWindow.cpp
+    app/gtkmm4/TrackViewPage.cpp
+    app/gtkmm4/TrackListAdapter.cpp
+    app/gtkmm4/TrackRow.cpp
+    app/gtkmm4/ListRow.cpp
+    app/gtkmm4/ImportWorker.cpp
+    app/gtkmm4/PlaylistExporter.cpp
+    app/gtkmm4/NewListDialog.cpp
+    app/gtkmm4/TagPromptDialog.cpp
+    app/gtkmm4/ImportProgressDialog.cpp
+    # Milestone 3: TrackId Reactive Primitives
+    app/gtkmm4/model/TrackIdList.cpp
+    app/gtkmm4/model/AllTrackIdsList.cpp
+    app/gtkmm4/model/FilteredTrackIdList.cpp
+    app/gtkmm4/model/ManualTrackIdList.cpp
+    # Milestone 4: Lazy Row Data Provider
+    app/gtkmm4/model/TrackRowDataProvider.cpp
+)
+target_link_libraries(RockStudioGTKmm4 PRIVATE rs GTKMM)
+target_include_directories(RockStudioGTKmm4 PRIVATE ${CMAKE_SOURCE_DIR}/app/gtkmm4)
+# Note: clang-tidy disabled for RockStudioGTKmm4 because GTK headers pull in GCC's SSE
+# intrinsics (mmintrin.h) which clang cannot parse. Building with clang would enable tidy.
+# if(CLANG_TIDY_EXECUTABLE)
+#   set_target_properties(RockStudioGTKmm4 PROPERTIES
+#     CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_STRICT_CHECKS};-header-filter=${CLANG_TIDY_STRICT_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
+#   )
+# endif()

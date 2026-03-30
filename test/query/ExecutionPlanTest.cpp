@@ -254,12 +254,12 @@ TEST_CASE("ExecutionPlan - AccessProfile HotAndCold")
 
 TEST_CASE("ExecutionPlan - AccessProfile Property Field")
 {
-  // Property variable -> HotOnly
+  // Property variable -> ColdOnly (stored in TrackColdHeader)
   auto expr = parse("@duration > 180000");
   auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
-  CHECK(plan.accessProfile == AccessProfile::HotOnly);
+  CHECK(plan.accessProfile == AccessProfile::ColdOnly);
 }
 
 TEST_CASE("ExecutionPlan - AccessProfile Tag Field")
@@ -279,6 +279,38 @@ TEST_CASE("ExecutionPlan - AccessProfile Cold Field")
   auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
+  CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile DurationMs is ColdOnly")
+{
+  auto expr = parse("@duration > 180000");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile Bitrate is ColdOnly")
+{
+  auto expr = parse("@bitrate > 320");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile SampleRate is ColdOnly")
+{
+  auto expr = parse("@sampleRate = 44100");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile Channels is ColdOnly")
+{
+  auto expr = parse("@channels = 2");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
   CHECK(plan.accessProfile == AccessProfile::ColdOnly);
 }
 

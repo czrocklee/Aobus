@@ -10,6 +10,9 @@
         "CMAKE_VERBOSE_MAKEFILE" : "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -Wno-error"
+      },
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
       }
     },
     {

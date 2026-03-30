@@ -87,6 +87,10 @@ namespace rs::expr
         case Field::DiscNumber:  // cold: TrackColdHeader
         case Field::TotalDiscs:  // cold: TrackColdHeader
         case Field::Custom:      // cold: custom KV storage
+        case Field::DurationMs:  // cold: TrackColdHeader
+        case Field::Bitrate:     // cold: TrackColdHeader
+        case Field::SampleRate:  // cold: TrackColdHeader
+        case Field::Channels:    // cold: TrackColdHeader
           return true;
         default: return false;
       }

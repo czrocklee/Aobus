@@ -3,24 +3,53 @@
 
 #include "PlaylistExporter.h"
 
+#include "model/TrackIdList.h"
+#include "model/TrackRowDataProvider.h"
+
 #include <fstream>
 #include <glibmm.h>
 #include <iostream>
 
-PlaylistExporter::PlaylistExporter(AbstractTrackList& list, std::filesystem::path root, std::filesystem::path path)
+PlaylistExporter::PlaylistExporter(app::gtkmm4::model::TrackIdList& list,
+                                 app::gtkmm4::model::TrackRowDataProvider& provider,
+                                 std::filesystem::path root,
+                                 std::filesystem::path path)
   : _list{list}
+  , _provider{provider}
   , _root{std::move(root)}
   , _path{std::move(path)}
 {
+  _list.attach(this);
   scheduleForWrite();
 }
 
 PlaylistExporter::~PlaylistExporter()
 {
+  _list.detach(this);
   if (_timeoutConnection)
   {
     _timeoutConnection->disconnect();
   }
+}
+
+void PlaylistExporter::onReset()
+{
+  scheduleForWrite();
+}
+
+void PlaylistExporter::onInserted(TrackId /*id*/, std::size_t /*index*/)
+{
+  scheduleForWrite();
+}
+
+void PlaylistExporter::onUpdated(TrackId /*id*/, std::size_t /*index*/)
+{
+  scheduleForWrite();
+}
+
+void PlaylistExporter::onRemoved(TrackId /*id*/, std::size_t /*index*/)
+{
+  scheduleForWrite();
 }
 
 void PlaylistExporter::scheduleForWrite()
@@ -31,13 +60,13 @@ void PlaylistExporter::scheduleForWrite()
     _timeoutConnection->disconnect();
   }
 
-  // Schedule write after 1 second delay (Glib::signal_timeout uses milliseconds)
+  // Schedule write after 3 second delay (Glib::signal_timeout uses milliseconds)
   _timeoutConnection = std::make_unique<sigc::connection>(Glib::signal_timeout().connect(
     [this]() {
       writeFile();
       return false;
     },
-    1000));
+    3000));
 }
 
 void PlaylistExporter::writeFile()
@@ -53,11 +82,24 @@ void PlaylistExporter::writeFile()
     return;
   }
 
-  for (auto i = 0u; i < _list.size(); ++i)
+  // Export playlist from TrackId membership
+  for (std::size_t i = 0; i < _list.size(); ++i)
   {
-    auto const& [_, track] = _list.at(AbstractTrackList::Index{i});
-    auto relativePath = std::filesystem::relative(_root / track.prop->filepath, _path.parent_path());
-    ofs << relativePath.string() << std::endl;
+    auto id = _list.trackIdAt(i);
+
+    // Try to get the URI path for this track
+    auto optUri = _provider.getUriPath(id);
+    if (optUri)
+    {
+      // Write path relative to playlist location
+      auto relativePath = std::filesystem::relative(*optUri, _path.parent_path());
+      ofs << relativePath.string() << std::endl;
+    }
+    else
+    {
+      // Fallback: write track ID as comment
+      ofs << "# track://" << id.value() << " (URI not found)" << std::endl;
+    }
   }
 }
 

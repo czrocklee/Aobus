@@ -21,6 +21,9 @@ TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
   _filterEntry.set_placeholder_text("Filter tracks...");
   _filterEntry.signal_changed().connect(sigc::mem_fun(*this, &TrackViewPage::onFilterChanged));
 
+  // Set up status bar (hidden by default)
+  setupStatusBar();
+
   // Set up column view
   _columnView.set_model(_selectionModel);
 
@@ -38,12 +41,43 @@ TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
   _scrolledWindow.set_vexpand(true);
   _scrolledWindow.set_hexpand(true);
 
-  // Add to box
+  // Add to box (order: filter, status, scroll)
   append(_filterEntry);
+  append(_statusLabel);
   append(_scrolledWindow);
 }
 
 TrackViewPage::~TrackViewPage() = default;
+
+void TrackViewPage::setupStatusBar()
+{
+  _statusLabel.set_visible(false);
+  _statusLabel.set_halign(Gtk::Align::START);
+  _statusLabel.set_valign(Gtk::Align::CENTER);
+  _statusLabel.set_margin_start(4);
+  _statusLabel.set_margin_end(4);
+  _statusLabel.set_margin_top(2);
+  _statusLabel.set_margin_bottom(2);
+  // Style for error/info messages
+  auto context = _statusLabel.get_style_context();
+  context->add_class("dim-label");
+}
+
+void TrackViewPage::setStatusMessage(std::string const& message)
+{
+  if (message.empty()) {
+    clearStatusMessage();
+    return;
+  }
+  _statusLabel.set_text(message);
+  _statusLabel.set_visible(true);
+}
+
+void TrackViewPage::clearStatusMessage()
+{
+  _statusLabel.set_text("");
+  _statusLabel.set_visible(false);
+}
 
 void TrackViewPage::setupColumns()
 {

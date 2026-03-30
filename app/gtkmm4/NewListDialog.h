@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/fbs/List_generated.h>
+#include "model/ListDraft.h"
 
 #include <gtkmm.h>
 
@@ -15,7 +15,8 @@ public:
   NewListDialog(Gtk::Window& parent);
   virtual ~NewListDialog() = default;
 
-  rs::fbs::ListT list() const;
+  // Returns a ListDraft populated from the dialog fields
+  app::gtkmm4::model::ListDraft draft() const;
 
 private:
   void setupUi();

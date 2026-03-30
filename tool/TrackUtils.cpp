@@ -34,8 +34,12 @@ namespace
     record.property.mtime = std::filesystem::last_write_time(path).time_since_epoch().count();
   }
 
-  void populateMetadataFields(core::TrackRecord::Metadata& meta, tag::Metadata const& metadata)
+  void populateMetadataFields(core::TrackRecord& record,
+                              tag::Metadata const& metadata,
+                              core::ResourceStore::Writer& resourceWriter)
   {
+    auto& meta = record.metadata;
+
     if (auto const& titleVal = metadata.get(tag::MetaField::Title); !tag::isNull(titleVal))
     {
       meta.title = getString(titleVal);
@@ -80,16 +84,28 @@ namespace
     {
       meta.totalDiscs = static_cast<std::uint16_t>(std::get<std::int64_t>(totalDiscs));
     }
+
+    // Cover art - store in ResourceStore and get ID
+    if (auto albumArt = metadata.get(tag::MetaField::AlbumArt); !tag::isNull(albumArt))
+    {
+      auto const& blob = std::get<tag::Blob>(albumArt);
+      std::vector<std::byte> artBytes(blob.size());
+      std::transform(blob.begin(), blob.end(), artBytes.begin(),
+                    [](char c) { return static_cast<std::byte>(c); });
+      auto resourceId = resourceWriter.create(artBytes);
+      meta.coverArtId = resourceId.value();
+    }
   }
 
   void populateMetadata(core::TrackRecord& record,
                         tag::Metadata const& metadata,
                         std::filesystem::path const& path,
                         core::DictionaryStore& dictionary,
+                        core::ResourceStore::Writer& resourceWriter,
                         lmdb::WriteTransaction& txn)
   {
     record.metadata.uri = path.string();
-    populateMetadataFields(record.metadata, metadata);
+    populateMetadataFields(record, metadata, resourceWriter);
 
     if (!record.metadata.artist.empty()) { record.artistId = dictionary.put(txn, record.metadata.artist); }
     if (!record.metadata.album.empty()) { record.albumId = dictionary.put(txn, record.metadata.album); }
@@ -99,12 +115,13 @@ namespace
 
 core::TrackRecord loadTrackRecord(std::filesystem::path const& path,
                                   core::DictionaryStore& dictionary,
+                                  core::ResourceStore::Writer& resourceWriter,
                                   lmdb::WriteTransaction& txn)
 {
   auto const file = createTagFileByExtension(path);
   auto const metadata = file->loadMetadata();
   auto record = core::TrackRecord{};
   populateProperty(record, path);
-  populateMetadata(record, metadata, path, dictionary, txn);
+  populateMetadata(record, metadata, path, dictionary, resourceWriter, txn);
   return record;
 }

@@ -18,13 +18,14 @@ namespace
     utility::Finder finder{".", {".flac", ".m4a", ".mp3"}};
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
+    auto resourceWriter = ml.resources().writer(txn);
     auto& dict = ml.dictionary();
 
     for (std::filesystem::path const& path : finder)
     {
       try
       {
-        auto record = loadTrackRecord(path, dict, txn);
+        auto record = loadTrackRecord(path, dict, resourceWriter, txn);
         auto hotData = record.serializeHot();
         auto coldData = record.serializeCold(dict);
         auto [id, trackView] = writer.createHotCold(hotData, coldData);

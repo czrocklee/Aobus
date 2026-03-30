@@ -64,14 +64,6 @@ namespace rs::core
     return std::ranges::find(begin(), end(), tagIdToCheck) != end();
   }
 
-  std::optional<std::string_view> TrackView::CustomProxy::get([[maybe_unused]] std::string_view key) const
-  {
-    // With indexed format, keys are stored as DictionaryIds, not strings.
-    // Callers should use get(DictionaryId) after resolving the string to a dictId.
-    // This method is kept for API compatibility but requires dictionary resolution by caller.
-    return std::nullopt;
-  }
-
   std::optional<std::string_view> TrackView::CustomProxy::get(DictionaryId dictId) const
   {
     auto const& hdr = _track.coldHeader();
@@ -121,8 +113,7 @@ namespace rs::core
   }
 
   TrackView::CustomProxy::Iterator::Iterator(Entry const* pos, std::byte const* coldDataBase)
-    : _pos(pos)
-    , _coldDataBase(coldDataBase)
+    : _pos(pos), _coldDataBase(coldDataBase)
   {
   }
 

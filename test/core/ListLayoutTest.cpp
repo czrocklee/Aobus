@@ -5,6 +5,8 @@
 
 #include <cstddef>
 #include <rs/core/ListLayout.h>
+#include <rs/core/ListPayloadBuilder.h>
+#include <rs/core/Type.h>
 #include <span>
 #include <test/core/TestUtils.h>
 
@@ -16,65 +18,21 @@ namespace
   using rs::core::ListHeader;
   using rs::core::ListView;
 
-  // Helper to create a ListView for testing
-  std::vector<std::byte> createListData(std::uint64_t trackIdsCount = 0,
-                                        std::uint32_t nameId = 0,
-                                        std::uint32_t descId = 0,
-                                        std::uint32_t filterId = 0,
-                                        std::uint8_t flags = 0,
-                                        std::string_view name = "",
-                                        std::string_view desc = "")
-  {
-    ListHeader h{};
-    h.trackIdsOffset = 0;
-    h.trackIdsCount = trackIdsCount;
-    h.nameId = nameId;
-    h.descId = descId;
-    h.filterId = filterId;
-    h.flags = flags;
-
-    // Name and description are stored after the header
-    h.nameOffset = 0;
-    h.nameLen = static_cast<std::uint16_t>(name.size());
-    h.descOffset = static_cast<std::uint16_t>(name.size() + 1); // after name + null
-    h.descLen = static_cast<std::uint16_t>(desc.size());
-
-    auto data = serializeHeader(h);
-
-    // Add name + null
-    if (!name.empty()) { appendString(data, name); }
-
-    // Add description + null
-    if (!desc.empty()) { appendString(data, desc); }
-
-    return data;
-  }
-
   TEST_CASE("ListHeader - Size and Alignment")
   {
-    CHECK(sizeof(ListHeader) == 48);
-    CHECK(alignof(ListHeader) == 8);
+    CHECK(sizeof(ListHeader) == 16);
+    CHECK(alignof(ListHeader) == 4);
   }
 
   TEST_CASE("ListHeader - Field Offsets")
   {
-    // Check 8-byte section
-    CHECK(offsetof(ListHeader, trackIdsOffset) == 0);
-    CHECK(offsetof(ListHeader, trackIdsCount) == 8);
-
-    // Check 4-byte section
-    CHECK(offsetof(ListHeader, nameId) == 16);
-    CHECK(offsetof(ListHeader, descId) == 20);
-    CHECK(offsetof(ListHeader, filterId) == 24);
-
-    // Check 2-byte section
-    CHECK(offsetof(ListHeader, nameOffset) == 28);
-    CHECK(offsetof(ListHeader, nameLen) == 30);
-    CHECK(offsetof(ListHeader, descOffset) == 32);
-    CHECK(offsetof(ListHeader, descLen) == 34);
-
-    // Check 1-byte section
-    CHECK(offsetof(ListHeader, flags) == 36);
+    CHECK(offsetof(ListHeader, trackIdsCount) == 0);
+    CHECK(offsetof(ListHeader, nameOffset) == 4);
+    CHECK(offsetof(ListHeader, nameLen) == 6);
+    CHECK(offsetof(ListHeader, descOffset) == 8);
+    CHECK(offsetof(ListHeader, descLen) == 10);
+    CHECK(offsetof(ListHeader, filterOffset) == 12);
+    CHECK(offsetof(ListHeader, filterLen) == 14);
   }
 
   TEST_CASE("ListView - Default Constructor")
@@ -85,78 +43,95 @@ namespace
 
   TEST_CASE("ListView - Construct from Data")
   {
-    auto data = createListData();
-    auto view = ListView{std::as_bytes(std::span{data})};
+    auto payload = rs::core::ListPayloadBuilder::buildManualList("", "", {});
+    auto view = ListView{std::as_bytes(std::span{payload})};
 
     CHECK(view.isValid() == true);
-    CHECK(view.header() != nullptr);
+    CHECK(view.trackIdsCount() == 0);
   }
 
   TEST_CASE("ListView - Field Accessors")
   {
-    auto data = createListData(42, 1, 2, 3, 5);
-    auto view = ListView{std::as_bytes(std::span{data})};
+    auto payload = rs::core::ListPayloadBuilder::buildManualList("Test", "Desc", {});
+    auto view = ListView{std::as_bytes(std::span{payload})};
 
-    CHECK(view.trackIdsCount() == 42);
-    CHECK(view.nameId() == 1);
-    CHECK(view.descId() == 2);
-    CHECK(view.filterId() == 3);
-    CHECK(view.flags() == 5);
+    CHECK(view.trackIdsCount() == 0);
+    CHECK(view.name() == "Test");
+    CHECK(view.description() == "Desc");
+    CHECK(view.filter().empty());
+    CHECK(view.isSmart() == false);
   }
 
-  TEST_CASE("ListView - Name Accessor")
+  TEST_CASE("ListView - Manual List with TrackIds")
   {
-    auto data = createListData(5, 0, 0, 0, 0, "My Playlist");
-    auto view = ListView{std::as_bytes(std::span{data})};
+    std::array<rs::core::TrackId, 3> const trackIds = {
+      rs::core::TrackId{100},
+      rs::core::TrackId{200},
+      rs::core::TrackId{300}
+    };
+    auto payload = rs::core::ListPayloadBuilder::buildManualList("My List", "Description", trackIds);
+    auto view = ListView{std::as_bytes(std::span{payload})};
 
-    CHECK(view.name() == "My Playlist");
+    CHECK(view.trackIdsCount() == 3);
+    CHECK(view.name() == "My List");
+    CHECK(view.description() == "Description");
+    CHECK(view.isSmart() == false);
+    CHECK(view.trackIds()[0] == rs::core::TrackId{100});
+    CHECK(view.trackIds()[1] == rs::core::TrackId{200});
+    CHECK(view.trackIds()[2] == rs::core::TrackId{300});
   }
 
-  TEST_CASE("ListView - Empty Name")
+  TEST_CASE("ListView - Smart List with Filter")
   {
-    auto data = createListData(0, 0, 0, 0, 0, "");
-    auto view = ListView{std::as_bytes(std::span{data})};
+    auto payload = rs::core::ListPayloadBuilder::buildSmartList(
+        "Smart List", "A smart list", "@year > 2020");
+    auto view = ListView{std::as_bytes(std::span{payload})};
+
+    CHECK(view.trackIdsCount() == 0);
+    CHECK(view.name() == "Smart List");
+    CHECK(view.description() == "A smart list");
+    CHECK(view.filter() == "@year > 2020");
+    CHECK(view.isSmart() == true);
+  }
+
+  TEST_CASE("ListView - Empty Strings")
+  {
+    auto payload = rs::core::ListPayloadBuilder::buildManualList("", "", {});
+    auto view = ListView{std::as_bytes(std::span{payload})};
 
     CHECK(view.name().empty());
+    CHECK(view.description().empty());
+    CHECK(view.filter().empty());
   }
 
   TEST_CASE("ListView - Invalid Data")
   {
-    // Null data
     std::span<std::byte const> nullSpan{static_cast<std::byte const*>(nullptr), 100};
     auto nullView = ListView{nullSpan};
     CHECK(nullView.isValid() == false);
 
-    // Too small
     char smallData[10] = {};
     std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
     auto smallView = ListView{smallSpan};
     CHECK(smallView.isValid() == false);
   }
 
-  TEST_CASE("ListView - Zero Values")
+  TEST_CASE("ListView - isSmart")
   {
-    auto data = createListData(0, 0, 0, 0, 0);
-    auto view = ListView{std::as_bytes(std::span{data})};
+    auto manualPayload = rs::core::ListPayloadBuilder::buildManualList("Manual", "", {});
+    auto manualView = ListView{std::as_bytes(std::span{manualPayload})};
+    CHECK(manualView.isSmart() == false);
 
-    CHECK(view.trackIdsCount() == 0);
-    CHECK(view.nameId() == 0);
-    CHECK(view.descId() == 0);
-    CHECK(view.filterId() == 0);
-    CHECK(view.flags() == 0);
-    CHECK(view.name().empty());
+    auto smartPayload = rs::core::ListPayloadBuilder::buildSmartList("Smart", "", "@year > 2020");
+    auto smartView = ListView{std::as_bytes(std::span{smartPayload})};
+    CHECK(smartView.isSmart() == true);
   }
 
-  TEST_CASE("ListView - Large Values")
+  TEST_CASE("ListView - Large trackIds Count")
   {
-    auto data = createListData(0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF);
-    auto view = ListView{std::as_bytes(std::span{data})};
-
-    CHECK(view.trackIdsCount() == 0xFFFFFFFFFFFFFFFFULL);
-    CHECK(view.nameId() == 0xFFFFFFFF);
-    CHECK(view.descId() == 0xFFFFFFFF);
-    CHECK(view.filterId() == 0xFFFFFFFF);
-    CHECK(view.flags() == 0xFF);
+    auto payload = rs::core::ListPayloadBuilder::buildManualList("Test", "", {});
+    auto view = ListView{std::as_bytes(std::span{payload})};
+    CHECK(view.trackIds().empty());
   }
 
 } // anonymous namespace

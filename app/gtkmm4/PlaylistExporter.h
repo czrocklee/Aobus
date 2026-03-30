@@ -3,31 +3,40 @@
 
 #pragma once
 
+#include "model/TrackIdList.h"
+#include "model/TrackRowDataProvider.h"
+
 #include <rs/core/MusicLibrary.h>
-#include <rs/fbs/Track_generated.h>
-#include <rs/reactive/ItemList.h>
 
 #include <filesystem>
 #include <memory>
 #include <sigc++/sigc++.h>
 
-class PlaylistExporter
+class PlaylistExporter : public app::gtkmm4::model::TrackIdListObserver
 {
 public:
-  using TrackId = rs::core::MusicLibrary::TrackId;
-  using AbstractTrackList = rs::reactive::ItemList<TrackId, rs::fbs::TrackT>;
+  using TrackId = rs::core::TrackId;
 
-  PlaylistExporter(AbstractTrackList& list, std::filesystem::path root, std::filesystem::path path);
-  ~PlaylistExporter();
+  PlaylistExporter(app::gtkmm4::model::TrackIdList& list,
+                  app::gtkmm4::model::TrackRowDataProvider& provider,
+                  std::filesystem::path root,
+                  std::filesystem::path path);
+  ~PlaylistExporter() override;
 
-  // Methods to trigger write (to be called from outside)
   void triggerWrite();
+
+  // TrackIdListObserver interface
+  void onReset() override;
+  void onInserted(TrackId id, std::size_t index) override;
+  void onUpdated(TrackId id, std::size_t index) override;
+  void onRemoved(TrackId id, std::size_t index) override;
 
 private:
   void writeFile();
   void scheduleForWrite();
 
-  AbstractTrackList& _list;
+  app::gtkmm4::model::TrackIdList& _list;
+  app::gtkmm4::model::TrackRowDataProvider& _provider;
   std::filesystem::path const _root;
   std::filesystem::path const _path;
   std::unique_ptr<sigc::connection> _timeoutConnection;

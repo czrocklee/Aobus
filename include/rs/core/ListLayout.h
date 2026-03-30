@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <rs/core/Type.h>
 #include <rs/utility/ByteView.h>
 #include <span>
 #include <string_view>
@@ -13,73 +14,86 @@ namespace rs::core
 
   /**
    * ListHeader - POD struct for binary list storage.
-   * Total size: 32 bytes with 8-byte alignment.
+   * Layout follows TrackLayout pattern with 4-byte alignment.
+   * trackIds array starts immediately after header at sizeof(ListHeader).
+   * Smart vs manual is determined by filter: if filter is empty -> manual, else -> smart.
+   *
+   * Layout:
+   *   ┌─────────────────────────────────────┐  ← header begin
+   *   │        ListHeader (16B)             │
+   *   │  trackIdsCount (4B)                 │
+   *   │  nameOffset, nameLen (4B)           │
+   *   │  descOffset, descLen (4B)           │
+   *   │  filterOffset, filterLen (4B)       │
+   *   ├─────────────────────────────────────┤  ← trackIds begin = sizeof(ListHeader)
+   *   │  track ID 1 (4B)                    │
+   *   │  track ID 2 (4B)                    │
+   *   │  ...                                │
+   *   ├─────────────────────────────────────┤  ← name = sizeof(ListHeader) + nameOffset
+   *   │  name string...                      │
+   *   ├─────────────────────────────────────┤  ← desc = sizeof(ListHeader) + descOffset
+   *   │  description string...               │
+   *   ├─────────────────────────────────────┤  ← filter = sizeof(ListHeader) + filterOffset
+   *   │  filter expression string...          │
+   *   └─────────────────────────────────────┘
    */
   struct ListHeader final
   {
-    // 8-byte section
-    std::uint64_t trackIdsOffset; // Offset to track IDs array in payload
-    std::uint64_t trackIdsCount;  // Number of track IDs
-
     // 4-byte section
-    std::uint32_t nameId;   // Dictionary ID for list name
-    std::uint32_t descId;   // Dictionary ID for list description
-    std::uint32_t filterId; // Dictionary ID for filter expression
+    std::uint32_t trackIdsCount;  // Number of track IDs (trackIds always start at sizeof(header))
 
     // 2-byte section
-    std::uint16_t nameOffset; // Offset to name string in payload
-    std::uint16_t nameLen;    // Length of name string
-    std::uint16_t descOffset; // Offset to description string in payload
-    std::uint16_t descLen;    // Length of description string
-
-    // 1-byte section
-    std::uint8_t flags; // List flags (0 = manual, 1 = smart)
-
-    // Padding
-    // NOLINTNEXTLINE(readability-magic-numbers) - Required padding for binary layout
-    std::uint8_t reserved[5];
+    std::uint16_t nameOffset;     // Byte offset from END of trackIds to name string
+    std::uint16_t nameLen;        // Length of name string
+    std::uint16_t descOffset;     // Byte offset from END of trackIds to description string
+    std::uint16_t descLen;        // Length of description string
+    std::uint16_t filterOffset;   // Byte offset from END of trackIds to filter expression
+    std::uint16_t filterLen;      // Length of filter expression string
   };
 
   // Binary layout constants
-  constexpr std::size_t kListHeaderSize = 48;
-  constexpr std::size_t kListHeaderAlignment = 8;
+  constexpr std::size_t kListHeaderSize = 16;
+  constexpr std::size_t kListHeaderAlignment = 4;
 
-  static_assert(sizeof(ListHeader) == kListHeaderSize, "ListHeader must be exactly 48 bytes");
-  static_assert(alignof(ListHeader) == kListHeaderAlignment, "ListHeader must have 8-byte alignment");
+  static_assert(sizeof(ListHeader) == kListHeaderSize, "ListHeader must be exactly 16 bytes");
+  static_assert(alignof(ListHeader) == kListHeaderAlignment, "ListHeader must have 4-byte alignment");
 
   /**
    * ListView - Safe accessor for list data stored in binary format.
+   * Reads fields directly from payload without storing header.
    */
   class ListView final
   {
   public:
-    ListView() noexcept : _header(nullptr), _size(0) {}
+    ListView() noexcept : _payload{}, _size(0) {}
 
     explicit ListView(std::span<std::byte const> data) noexcept
-      : _header(utility::as<ListHeader>(data))
+      : _payload(data)
       , _size(data.size())
     {
     }
 
-    bool isValid() const noexcept { return _header != nullptr && _size >= sizeof(ListHeader); }
+    bool isValid() const noexcept { return _payload.data() != nullptr && _size >= kListHeaderSize; }
 
-    ListHeader const* header() const noexcept { return _header; }
+    std::uint32_t trackIdsCount() const noexcept
+    {
+      if (!isValid()) return 0;
+      return header()->trackIdsCount;
+    }
 
-    std::uint64_t trackIdsCount() const noexcept { return _header->trackIdsCount; }
-    std::uint32_t nameId() const noexcept { return _header->nameId; }
-    std::uint32_t descId() const noexcept { return _header->descId; }
-    std::uint32_t filterId() const noexcept { return _header->filterId; }
-    std::uint8_t flags() const noexcept { return _header->flags; }
+    std::string_view name() const;
+    std::string_view description() const;
+    std::string_view filter() const;
 
-    std::string_view name() const { return getString(_header->nameOffset, _header->nameLen); }
-
-    std::string_view description() const { return getString(_header->descOffset, _header->descLen); }
+    std::span<TrackId const> trackIds() const;
+    bool isSmart() const noexcept { return !filter().empty(); }
 
   private:
-    ListHeader const* _header;
-    std::size_t _size;
+    ListHeader const* header() const { return reinterpret_cast<ListHeader const*>(_payload.data()); }
+    std::string_view getString(std::uint16_t offset, std::uint16_t length) const;
 
-    std::string_view getString(std::uint16_t offset, std::uint16_t len) const;
+    std::span<std::byte const> _payload;
+    std::size_t _size;
   };
 
 } // namespace rs::core

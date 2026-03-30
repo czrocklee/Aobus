@@ -26,9 +26,14 @@ public:
   using SelectionChangedSignal = sigc::signal<void()>;
   SelectionChangedSignal& signalSelectionChanged();
 
+  // Status banner API
+  void setStatusMessage(std::string const& message);
+  void clearStatusMessage();
+
 private:
   // Child widgets
   Gtk::Entry _filterEntry;
+  Gtk::Label _statusLabel;
   Gtk::ScrolledWindow _scrolledWindow;
   Gtk::ColumnView _columnView;
 
@@ -41,6 +46,7 @@ private:
 
   // Setup methods
   void setupColumns();
+  void setupStatusBar();
   void onFilterChanged();
   void onSelectionChanged(std::uint32_t position, std::uint32_t nItems);
 };

@@ -61,11 +61,13 @@ void NewListDialog::setupUi()
   set_child(box);
 }
 
-rs::fbs::ListT NewListDialog::list() const
+app::gtkmm4::model::ListDraft NewListDialog::draft() const
 {
-  rs::fbs::ListT l;
-  l.name = _nameEntry.get_text();
-  l.desc = _descEntry.get_text();
-  l.expr = _exprEntry.get_text();
-  return l;
+  app::gtkmm4::model::ListDraft d;
+  d.kind = app::gtkmm4::model::ListKind::Smart;
+  d.name = _nameEntry.get_text();
+  d.description = _descEntry.get_text();
+  d.expression = _exprEntry.get_text();
+  // trackIds remain empty for smart lists
+  return d;
 }

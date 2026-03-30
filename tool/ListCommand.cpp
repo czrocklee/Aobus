@@ -2,13 +2,11 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "ListCommand.h"
-#include <rs/core/DictionaryStore.h>
-#include <rs/core/ListLayout.h>
+#include <rs/core/ListPayloadBuilder.h>
 #include <rs/core/ListStore.h>
 
 #include "BasicCommand.h"
 
-#include <cstring>
 #include <iomanip>
 #include <span>
 #include <vector>
@@ -34,24 +32,11 @@ namespace
                   std::ostream& os)
   {
     auto txn = ml.writeTransaction();
-    auto& dict = ml.dictionary();
 
-    // Store strings in dictionary and get IDs
-    auto nameId = dict.put(txn, name);
-    auto filterId = dict.put(txn, filter);
-    auto descId = dict.put(txn, desc);
-
-    // Build list header
-    auto header= core::ListHeader{};
-    header.nameId = nameId.value();
-    header.filterId = filterId.value();
-    header.descId = descId.value();
-    header.trackIdsCount = 0;
-    header.flags = filter.empty() ? 0 : 1; // 0 = manual, 1 = smart (has filter)
-
-    // Serialize header
-    auto data = std::vector<std::byte>(sizeof(core::ListHeader));
-    std::memcpy(data.data(), &header, sizeof(core::ListHeader));
+    // Build list payload using ListPayloadBuilder
+    auto data = filter.empty()
+      ? core::ListPayloadBuilder::buildManualList(name, desc, {})
+      : core::ListPayloadBuilder::buildSmartList(name, desc, filter);
 
     auto [id, view] = ml.lists().writer(txn).create(data);
     txn.commit();

@@ -137,7 +137,6 @@ namespace rs::core
       class Iterator;
       Iterator begin() const;
       Iterator end() const;
-      std::optional<std::string_view> get(std::string_view key) const;
       std::optional<std::string_view> get(DictionaryId dictId) const;
 
     private:

@@ -3,6 +3,9 @@
 
 #include "TrackListAdapter.h"
 
+#include "TrackRow.h"
+#include "model/TrackRowDataProvider.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
@@ -21,177 +24,140 @@ namespace
     return it != haystack.end();
   }
 
-  bool matchesFilter(rs::fbs::TrackT const& track, Glib::ustring const& filter)
+  bool matchesFilter(std::string const& artist, std::string const& album, std::string const& title,
+                    std::string const& tags, Glib::ustring const& filter)
   {
     if (filter.empty()) return true;
 
     auto filterStr = filter.lowercase();
 
-    // Check artist
-    if (track.meta && containsCi(track.meta->artist, filterStr)) return true;
-
-    // Check album
-    if (track.meta && containsCi(track.meta->album, filterStr)) return true;
-
-    // Check title
-    if (track.meta && containsCi(track.meta->title, filterStr)) return true;
-
-    // Check tags
-    for (auto const& tag : track.custom)
-    {
-      if (containsCi(tag->key, filterStr)) return true;
-    }
+    if (containsCi(artist, filterStr)) return true;
+    if (containsCi(album, filterStr)) return true;
+    if (containsCi(title, filterStr)) return true;
+    if (containsCi(tags, filterStr)) return true;
 
     return false;
   }
 }
 
-TrackListAdapter::TrackListAdapter(AbstractTrackList& tracks)
-  : _tracks{tracks}
-  , _listModel{Gio::ListStore<TrackRow>::create()}
+TrackListAdapter::TrackListAdapter(app::gtkmm4::model::TrackIdList& source, std::shared_ptr<app::gtkmm4::model::TrackRowDataProvider> provider)
+  : _source(&source)
+  , _provider(std::move(provider))
+  , _listModel(Gio::ListStore<TrackRow>::create())
 {
-  // Attach as observer
-  _tracks.attach(*this);
+  _source->attach(this);
 }
 
-TrackListAdapter::~TrackListAdapter() { _tracks.detach(*this); }
+TrackListAdapter::~TrackListAdapter()
+{
+  _source->detach(this);
+}
 
 void TrackListAdapter::setFilter(Glib::ustring const& filterText)
 {
   _filterText = filterText;
-  refreshFilteredView();
+  rebuildView();
 }
 
-void TrackListAdapter::setExprFilter(std::string const& exprString)
+void TrackListAdapter::createRowForTrack(TrackId id)
 {
-  if (exprString.empty())
-  {
-    _exprFilter.reset();
+  // Load row data for filtering (quick filter needs artist/album/title/tags)
+  auto const optRow = _provider->getRow(id);
+
+  if (!optRow) {
+    return; // Track not found or missing
   }
-  else
-  {
-    _exprFilter = rs::expr::parse(exprString);
+
+  auto const& rowData = *optRow;
+
+  // Apply quick filter if set
+  if (!matchesFilter(rowData.artist, rowData.album, rowData.title, rowData.tags, _filterText)) {
+    return;
   }
-  refreshFilteredView();
+
+  // Create lazy TrackRow - data loaded on demand via provider
+  auto row = TrackRow::create(id, _provider);
+  _listModel->append(row);
 }
 
-void TrackListAdapter::refreshFilteredView()
+void TrackListAdapter::rebuildView()
 {
-  // Store current filter
-  auto filter = _filterText;
-
-  // Clear and repopulate with filtered items
   _listModel->remove_all();
 
-  for (std::size_t i = 0; i < _tracks.size(); ++i)
-  {
-    auto const& [id, track] = _tracks.at(AbstractTrackList::Index{i});
-
-    // Check quick filter
-    if (!matchesFilter(track, filter)) continue;
-
-    // Check expression filter if set
-    if (_exprFilter.has_value())
-    {
-      try
-      {
-        auto result = rs::expr::evaluate(*_exprFilter, track);
-        if (!rs::expr::toBool(result)) continue;
-      }
-      catch (...)
-      {
-        // Expression evaluation failed, skip this track
-        continue;
-      }
-    }
-
-    auto row = TrackRow::create(id, track);
-    _listModel->append(row);
+  for (std::size_t i = 0; i < _source->size(); ++i) {
+    auto const id = _source->trackIdAt(i);
+    createRowForTrack(id);
   }
 }
 
-void TrackListAdapter::onAttached()
+void TrackListAdapter::onReset()
 {
-  // Initial population - iterate all tracks
-  for (std::size_t i = 0; i < _tracks.size(); ++i)
-  {
-    auto const& [id, track] = _tracks.at(AbstractTrackList::Index{i});
-    auto row = TrackRow::create(id, track);
-    _listModel->append(row);
-  }
+  rebuildView();
 }
 
-void TrackListAdapter::onBeginInsert(TrackId, AbstractTrackList::Index)
+void TrackListAdapter::onInserted(TrackId id, std::size_t index)
 {
-  // No action needed before insert
-}
-
-void TrackListAdapter::onEndInsert(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index)
-{
-  // If filter is active, refresh the entire view to recalculate filtered positions
-  if (!_filterText.empty() || _exprFilter.has_value())
-  {
-    refreshFilteredView();
+  // If filter is active, rebuild to recalculate positions
+  if (!_filterText.empty()) {
+    rebuildView();
     return;
   }
 
-  auto row = TrackRow::create(id, track);
-  _listModel->insert(static_cast<std::uint32_t>(index), row);
-}
+  // Load and insert at position
+  auto const optRow = _provider->getRow(id);
 
-void TrackListAdapter::onBeginUpdate(TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index)
-{
-  // No action needed before update
-}
-
-void TrackListAdapter::onEndUpdate(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index)
-{
-  // If filter is active, refresh the entire view to recalculate filtered positions
-  if (!_filterText.empty() || _exprFilter.has_value())
-  {
-    refreshFilteredView();
+  if (!optRow) {
     return;
   }
 
-  // Update by removing old and inserting new
-  auto row = TrackRow::create(id, track);
-  auto uintIdx = static_cast<std::uint32_t>(index);
-  if (uintIdx < _listModel->get_n_items())
-  {
-    _listModel->remove(uintIdx);
+  auto const& rowData = *optRow;
+  auto row = TrackRow::create(id, _provider);
+
+  auto const uintIdx = static_cast<std::uint32_t>(index);
+  if (uintIdx <= _listModel->get_n_items()) {
     _listModel->insert(uintIdx, row);
   }
 }
 
-void TrackListAdapter::onBeginRemove(TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index)
+void TrackListAdapter::onUpdated(TrackId id, std::size_t index)
 {
-  // No action needed before remove
-}
-
-void TrackListAdapter::onEndRemove(TrackId id, AbstractTrackList::Index index)
-{
-  // If filter is active, refresh the entire view to recalculate filtered positions
-  if (!_filterText.empty() || _exprFilter.has_value())
-  {
-    refreshFilteredView();
+  // If filter is active, rebuild
+  if (!_filterText.empty()) {
+    rebuildView();
     return;
   }
 
-  _listModel->remove(static_cast<std::uint32_t>(index));
+  // Update the row at position
+  auto const optRow = _provider->getRow(id);
+
+  auto const uintIdx = static_cast<std::uint32_t>(index);
+  if (uintIdx >= _listModel->get_n_items()) {
+    return;
+  }
+
+  if (!optRow) {
+    // Track was deleted or missing - remove it
+    _listModel->remove(uintIdx);
+    return;
+  }
+
+  auto const& rowData = *optRow;
+  auto row = TrackRow::create(id, _provider);
+
+  _listModel->remove(uintIdx);
+  _listModel->insert(uintIdx, row);
 }
 
-void TrackListAdapter::onBeginClear()
+void TrackListAdapter::onRemoved(TrackId id, std::size_t index)
 {
-  // Clear all items
-  _listModel->remove_all();
-}
+  // If filter is active, rebuild
+  if (!_filterText.empty()) {
+    rebuildView();
+    return;
+  }
 
-void TrackListAdapter::onEndClear()
-{
-  // Nothing to do after clear
-}
-
-void TrackListAdapter::onDetached()
-{
-  // Nothing to do
+  auto const uintIdx = static_cast<std::uint32_t>(index);
+  if (uintIdx < _listModel->get_n_items()) {
+    _listModel->remove(uintIdx);
+  }
 }

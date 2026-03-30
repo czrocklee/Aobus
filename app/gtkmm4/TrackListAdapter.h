@@ -4,26 +4,25 @@
 #pragma once
 
 #include <rs/core/MusicLibrary.h>
-#include <rs/expr/Evaluator.h>
+#include <rs/expr/PlanEvaluator.h>
 #include <rs/expr/Parser.h>
-#include <rs/fbs/Track_generated.h>
-#include <rs/reactive/AbstractItemList.h>
 
 #include <giomm/liststore.h>
 
+#include <memory>
 #include <optional>
 #include <string>
 
+#include "model/TrackIdList.h"
+#include "model/TrackRowDataProvider.h"
 #include "TrackRow.h"
 
-class TrackListAdapter
-  : public rs::reactive::AbstractItemList<rs::core::MusicLibrary::TrackId, rs::fbs::TrackT>::Observer
+class TrackListAdapter : public app::gtkmm4::model::TrackIdListObserver
 {
 public:
-  using TrackId = rs::core::MusicLibrary::TrackId;
-  using AbstractTrackList = rs::reactive::AbstractItemList<TrackId, rs::fbs::TrackT>;
+  using TrackId = rs::core::TrackId;
 
-  explicit TrackListAdapter(AbstractTrackList& tracks);
+  explicit TrackListAdapter(app::gtkmm4::model::TrackIdList& source, std::shared_ptr<app::gtkmm4::model::TrackRowDataProvider> provider);
   ~TrackListAdapter() override;
 
   Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
@@ -31,26 +30,18 @@ public:
   // Set filter text - filters by artist, album, or title containing the text
   void setFilter(Glib::ustring const& filterText);
 
-  // Set expression filter - filters based on expression
-  void setExprFilter(std::string const& exprString);
-
   // Observer overrides
-  void onAttached() override;
-  void onBeginInsert(TrackId id, AbstractTrackList::Index index) override;
-  void onEndInsert(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index) override;
-  void onBeginUpdate(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index) override;
-  void onEndUpdate(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index) override;
-  void onBeginRemove(TrackId id, rs::fbs::TrackT const& track, AbstractTrackList::Index index) override;
-  void onEndRemove(TrackId id, AbstractTrackList::Index index) override;
-  void onBeginClear() override;
-  void onEndClear() override;
-  void onDetached() override;
+  void onReset() override;
+  void onInserted(TrackId id, std::size_t index) override;
+  void onUpdated(TrackId id, std::size_t index) override;
+  void onRemoved(TrackId id, std::size_t index) override;
 
 private:
-  void refreshFilteredView();
+  void rebuildView();
+  void createRowForTrack(TrackId id);
 
-  AbstractTrackList& _tracks;
+  app::gtkmm4::model::TrackIdList* _source;
+  std::shared_ptr<app::gtkmm4::model::TrackRowDataProvider> _provider;
   Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;
   Glib::ustring _filterText;
-  std::optional<rs::expr::Expression> _exprFilter;
 };
