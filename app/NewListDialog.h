@@ -3,17 +3,27 @@
 
 #pragma once
 
-#include "app/ui_NewListDialog.h"
-#include <rs/fbs/List_generated.h>
+#include "model/ListDraft.h"
 
-class NewListDialog
-  : public QDialog
-  , public Ui::NewListDialog
+#include <gtkmm.h>
+
+#include <string>
+
+class NewListDialog final : public Gtk::Dialog
 {
-  Q_OBJECT
-
 public:
-  NewListDialog(QWidget* parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
+  NewListDialog(Gtk::Window& parent);
+  virtual ~NewListDialog() = default;
 
-  rs::fbs::ListT list() const;
+  // Returns a ListDraft populated from the dialog fields
+  app::model::ListDraft draft() const;
+
+private:
+  void setupUi();
+
+  Gtk::Entry _nameEntry;
+  Gtk::Entry _descEntry;
+  Gtk::Entry _exprEntry;
+  Gtk::Button _okButton;
+  Gtk::Button _cancelButton;
 };

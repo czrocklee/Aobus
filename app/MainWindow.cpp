@@ -2,285 +2,799 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "MainWindow.h"
-#include "AddTrackDialog.h"
+
+#include <rs/core/ListPayloadBuilder.h>
+#include <rs/core/MusicLibrary.h>
+#include <rs/core/ResourceStore.h>
+
+#include "CoverArtWidget.h"
 #include "ImportProgressDialog.h"
 #include "ImportWorker.h"
+#include "ListRow.h"
 #include "NewListDialog.h"
 #include "PlaylistExporter.h"
-#include "TableModel.h"
-#include "TrackSortFilterProxyModel.h"
+#include "TagPromptDialog.h"
+#include "TrackListAdapter.h"
+#include "TrackViewPage.h"
+#include "model/AllTrackIdsList.h"
+#include "model/FilteredTrackIdList.h"
+#include "model/ListDraft.h"
+#include "model/ManualTrackIdList.h"
+#include "model/TrackIdList.h"
+#include "model/TrackRowDataProvider.h"
 
-#include <rs/expr/Evaluator.h>
-#include <rs/expr/Parser.h>
-#include <rs/reactive/ItemList.h>
+#include <glibmm/keyfile.h>
+#include <gtkmm/filedialog.h>
 
-#include <QtCore/QDebug>
-#include <QtCore/QSettings>
-#include <QtCore/QStandardPaths>
-#include <QtWidgets/QFileDialog>
-#include <QtWidgets/QInputDialog>
-#include <QtWidgets/QMessageBox>
-#include <boost/iterator/filter_iterator.hpp>
-
-#include <filesystem>
-#include <set>
+#include <algorithm>
+#include <cctype>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <thread>
+#include <unordered_set>
+#include <vector>
 
 MainWindow::MainWindow()
+  : _musicLibrary{nullptr}
+  , _rowDataProvider{nullptr}
+  , _allTrackIds{nullptr}
+  , _coverArtWidget{nullptr}
+  , _importDialog{nullptr}
+  , _importWorker{nullptr}
+  , _listStore{nullptr}
+  , _listSelectionModel{nullptr}
+  , _trackPages{}
 {
-  _ui.setupUi(this);
+  set_title("RockStudio");
 
-  auto const updateWindowTitle = [this](auto const& dir) { setWindowTitle(QString("RockStudio [%1]").arg(dir)); };
+  // Set default window size
+  constexpr int DefaultWindowWidth = 989;
+  constexpr int DefaultWindowHeight = 801;
+  set_default_size(DefaultWindowWidth, DefaultWindowHeight);
 
-  connect(_ui.actionOpen, &QAction::triggered, [this, updateWindowTitle] {
-    if (QString dir = QFileDialog::getExistingDirectory(
-          this, tr("Open"), QDir::homePath(), QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
-        !dir.isNull())
+  // Initialize cover art widget
+  _coverArtWidget = std::make_unique<CoverArtWidget>();
+
+  setupMenu();
+  setupLayout();
+
+  // Try to restore previous session
+  loadSession();
+}
+
+MainWindow::~MainWindow()
+{
+  // std::jthread auto-joins on destruction, no explicit join needed
+}
+
+void MainWindow::openLibrary()
+{
+  auto dialog = Gtk::FileDialog::create();
+  dialog->set_title("Open Music Library");
+
+  // Show the dialog
+  dialog->select_folder(*this, [this, dialog](Glib::RefPtr<Gio::AsyncResult>& result) {
+    try
     {
-      if (!dir.contains("data.mdb"))
+      auto folder = dialog->select_folder_finish(result);
+
+      if (folder)
       {
-        importMusicLibrary(dir.toStdString());
-      }
-      else
-      {
-        openMusicLibrary(dir.toStdString());
-      }
+        std::filesystem::path path(folder->get_path());
+        std::cout << "Selected folder: " << path << std::endl;
 
-      auto settings = QSettings{"settings.ini"};
-      settings.setValue("session.lastMusicLibaryOpened", dir);
-      updateWindowTitle(dir);
-    }
-  });
+        // Check if it's an existing library (contains data.mdb) or a new import
+        auto libPath = path / "data.mdb";
+        std::cout << "DEBUG: libPath = " << libPath << std::endl;
+        std::cout << "DEBUG: exists = " << std::filesystem::exists(libPath) << std::endl;
 
-  if (auto lastSession = QSettings{"settings.ini"}.value("session.lastMusicLibaryOpened");
-      !lastSession.isNull() && std::filesystem::exists({lastSession.toString().toStdString()}))
-  {
-    auto dir = lastSession.toString();
-    openMusicLibrary(dir.toStdString());
-    updateWindowTitle(dir);
-  }
-}
-
-void MainWindow::openMusicLibrary(std::string const& root)
-{
-  _ml = std::make_unique<MusicLibrary>(root);
-
-  auto txn = _ml->readTransaction();
-  loadTracks(txn);
-  loadLists(txn);
-}
-
-namespace
-{
-  class FileFilter
-  {
-  public:
-    FileFilter(std::string const& rootPath, std::vector<std::string> const& extensions)
-      : _rootPath{rootPath}
-      , _extensions{extensions.begin(), extensions.end()}
-    {
-      _filter = [this](std::filesystem::path const& path) {
-        return _extensions.find(path.extension().string()) != _extensions.end();
-      };
-    }
-
-    auto begin() const { return boost::make_filter_iterator(_filter, Iterator{_rootPath}); }
-
-    auto end() const { return boost::make_filter_iterator(_filter, Iterator{}); }
-
-  private:
-    using Iterator = std::filesystem::recursive_directory_iterator;
-
-    std::string _rootPath;
-    std::set<std::string> _extensions;
-    std::function<bool(std::filesystem::path const&)> _filter;
-  };
-
-}
-/*   constexpr auto buildString = [](auto& fbb, const auto& value) {
-    return rs::tag::isNull(value) ? ::flatbuffers::Offset<::flatbuffers::String>{}
-                                  : fbb.CreateString(std::get<std::string>(value));
-  }; */
-
-void MainWindow::importMusicLibrary(std::string const& root)
-{
-  _ml = std::make_unique<MusicLibrary>(root);
-
-  auto filter = FileFilter{root, {".flac", ".m4a"}};
-  std::vector<std::filesystem::path> files{filter.begin(), filter.end()};
-
-  auto* dialog = new ImportProgressDialog{static_cast<int>(files.size()), this};
-  dialog->setAttribute(Qt::WA_DeleteOnClose);
-  auto* worker = new ImportWorker{*_ml, files, this};
-
-  connect(worker, &ImportWorker::progressUpdated, dialog, &ImportProgressDialog::onNewTrack, Qt::QueuedConnection);
-  connect(worker, &ImportWorker::workFinished, dialog, &ImportProgressDialog::ready, Qt::QueuedConnection);
-
-  worker->start();
-
-  if (dialog->exec() == QDialog::Accepted)
-  {
-    worker->commit();
-    worker->deleteLater();
-    _allTracks.clear();
-    auto txn = _ml->readTransaction();
-    loadTracks(txn);
-  }
-}
-
-void MainWindow::loadTracks(ReadTransaction& txn)
-{
-  for (auto [id, track] : _ml->tracks().reader(txn))
-  {
-    rs::fbs::TrackT tt;
-    track->UnPackTo(&tt);
-    _allTracks.insert(id, std::move(tt));
-  }
-}
-
-TrackView* MainWindow::createTrackView(std::string_view name, TableModel::AbstractTrackList& list)
-{
-  auto* trackView = new TrackView{list, _ui.stackedWidget};
-  _ui.stackedWidget->addWidget(trackView);
-  trackView->setContextMenuPolicy(Qt::CustomContextMenu);
-
-  auto playlistDir = _ml->rootPath() / "playlist";
-
-  if (!std::filesystem::exists(playlistDir))
-  {
-    std::filesystem::create_directories(playlistDir);
-  }
-
-  new PlaylistExporter{list, _ml->rootPath(), playlistDir / std::format("{}.m3u", name), trackView};
-
-  connect(trackView->tableView, &QAbstractItemView::clicked, [this](QModelIndex const& index) {
-    this->onTrackClicked(index);
-  });
-
-  connect(trackView, &QTableView::customContextMenuRequested, [trackView, this](QPoint pos) {
-    // Handle global position
-    QPoint globalPos = trackView->mapToGlobal(pos);
-
-    // Create menu and insert some actions
-    QMenu myMenu;
-    myMenu.addAction("Tag", [trackView, this] {
-      bool isOk;
-      QString text = QInputDialog::getText(this, tr("New Tag"), tr("Tag:"), QLineEdit::Normal, "", &isOk);
-
-      if (isOk)
-      {
-        QItemSelectionModel* select = trackView->tableView->selectionModel();
-        auto txn = _ml->writeTransaction();
-        auto writer = _ml->tracks().writer(txn);
-        for (QModelIndex const& index : select->selectedRows())
+        if (std::filesystem::exists(libPath)) { openMusicLibrary(path); }
+        else
         {
-          using IdTrackPair = std::pair<rs::core::MusicLibrary::TrackId, rs::fbs::TrackT>;
-          QModelIndex sourceIndex =
-            static_cast<QAbstractProxyModel*>(trackView->tableView->model())->mapToSource(index);
-          rs::core::MusicLibrary::TrackId id = static_cast<IdTrackPair*>(sourceIndex.internalPointer())->first;
-          _allTracks.update(id, [id, &writer, &text](auto& track) {
-            track.tags.push_back(text.toStdString());
-            writer.updateT(id, track);
+          // Import new library
+          importFilesFromPath(path);
+        }
+      }
+    }
+    catch (Glib::Error const& e)
+    {
+      std::cerr << "Error selecting folder: " << e.what() << std::endl;
+    }
+  });
+}
+
+void MainWindow::openMusicLibrary(std::filesystem::path const& path)
+{
+  std::cout << "DEBUG: openMusicLibrary called with path: " << path << std::endl;
+
+  // Clear existing track pages first (adapters hold pointers to old _allTrackIds)
+  clearTrackPages();
+
+  // Create new music library at the path
+  _musicLibrary = std::make_unique<rs::core::MusicLibrary>(path.string());
+  std::cout << "DEBUG: MusicLibrary created" << std::endl;
+
+  // Initialize row data provider with library stores
+  _rowDataProvider = std::make_shared<app::model::TrackRowDataProvider>(*_musicLibrary);
+
+  // Initialize AllTrackIdsList
+  _allTrackIds = std::make_unique<app::model::AllTrackIdsList>(_musicLibrary->tracks());
+
+  // Load all track IDs
+  auto txn = _musicLibrary->readTransaction();
+  _allTrackIds->reloadFromStore(txn);
+
+  // Load existing lists
+  rebuildListPages(txn);
+
+  // Show the "All Tracks" page
+  _stack.set_visible_child("0");
+
+  // Update window title
+  set_title("RockStudio [" + path.string() + "]");
+
+  // Save session
+  saveSession();
+}
+
+void MainWindow::scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files)
+{
+  static std::unordered_set<std::string> const supportedExtensions = {".mp3", ".m4a", ".flac"};
+
+  try
+  {
+    for (auto const& entry : std::filesystem::recursive_directory_iterator(dir))
+    {
+      if (entry.is_regular_file())
+      {
+        auto ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+        if (supportedExtensions.count(ext) > 0) { files.push_back(entry.path()); }
+      }
+    }
+  }
+  catch (std::exception const& e)
+  {
+    std::cerr << "Error scanning directory: " << e.what() << std::endl;
+  }
+}
+
+void MainWindow::importFiles()
+{
+  auto dialog = Gtk::FileDialog::create();
+  dialog->set_title("Import Music Files");
+
+  dialog->select_folder(*this, [this, dialog](Glib::RefPtr<Gio::AsyncResult>& result) {
+    try
+    {
+      auto folder = dialog->select_folder_finish(result);
+
+      if (!folder) { return; }
+
+      std::string pathStr = folder->get_path();
+      std::filesystem::path path(pathStr);
+      std::cout << "Importing from: " << pathStr << std::endl;
+
+      // If no library exists, create one at the import path
+
+      if (!_musicLibrary)
+      {
+        _musicLibrary = std::make_unique<rs::core::MusicLibrary>(pathStr);
+        set_title("RockStudio [" + pathStr + "]");
+      }
+
+      // Scan for music files
+      std::vector<std::filesystem::path> files;
+      scanDirectory(path, files);
+
+      if (files.empty())
+      {
+        std::cerr << "No music files found" << std::endl;
+        return;
+      }
+
+      // Create progress dialog owned by MainWindow (stored as member)
+      _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), *this);
+      auto* dialogPtr = _importDialog.get();
+
+      // Create worker - owned by MainWindow
+      _importWorker = std::make_unique<ImportWorker>(
+        *_musicLibrary,
+        files,
+        [dialogPtr](std::filesystem::path const& path, int index) {
+          // Progress callback - marshal to main thread
+          Glib::MainContext::get_default()->invoke([dialogPtr, path, index]() {
+            if (dialogPtr) { dialogPtr->onNewTrack(path.string(), index); }
+
+            return false;
           });
-        }
+        },
+        [this, dialogPtr]() {
+          // Finished callback - marshal to main thread
+          Glib::MainContext::get_default()->invoke([this, dialogPtr]() {
+            if (dialogPtr) { dialogPtr->ready(); }
 
-        txn.commit();
-      }
-    });
+            return false;
+          });
+        });
 
-    // Show context menu at handling position
-    myMenu.exec(globalPos);
+      // Run in background thread - owned and joined on window destruction
+      auto* workerPtr = _importWorker.get();
+      if (_importThread.joinable()) { _importThread.join(); }
+      _importThread = std::jthread([this, workerPtr](std::stop_token stoken) {
+        workerPtr->run();
+        // After import completes, notify observers incrementally
+        Glib::MainContext::get_default()->invoke([this, workerPtr]() {
+          auto const& result = workerPtr->result();
+          for (auto const trackId : result.insertedIds)
+          {
+            _rowDataProvider->invalidateFull(trackId);
+            _allTrackIds->notifyInserted(trackId);
+          }
+          return false;
+        });
+      });
+
+      _importDialog->show();
+    }
+    catch (Glib::Error const& e)
+    {
+      std::cerr << "Error selecting folder: " << e.what() << std::endl;
+    }
   });
-  return trackView;
 }
 
-namespace
+void MainWindow::importFilesFromPath(std::filesystem::path const& path)
 {
-  struct ListItem : public QListWidgetItem
+  // Clear existing track pages first (adapters hold pointers to old _allTrackIds)
+  clearTrackPages();
+
+  // Create new music library at the path
+  _musicLibrary = std::make_unique<rs::core::MusicLibrary>(path.string());
+
+  // Initialize row data provider
+  _rowDataProvider = std::make_shared<app::model::TrackRowDataProvider>(*_musicLibrary);
+
+  // Initialize AllTrackIdsList
+  _allTrackIds = std::make_unique<app::model::AllTrackIdsList>(_musicLibrary->tracks());
+
+  // Scan for music files
+  std::vector<std::filesystem::path> files;
+  scanDirectory(path, files);
+
+  if (files.empty())
   {
-    using TrackFilterList = rs::reactive::ItemFilterList<rs::core::MusicLibrary::TrackId, rs::fbs::TrackT>;
-    using QListWidgetItem::QListWidgetItem;
-
-    rs::core::MusicLibrary::ListId id;
-    rs::fbs::ListT list;
-    TrackView* trackView;
-    std::unique_ptr<TrackFilterList> tracks;
-  };
-}
-
-void MainWindow::loadLists(ReadTransaction& txn)
-{
-  auto* all = new ListItem{"all", _ui.listWidget};
-  all->trackView = createTrackView("all", _allTracks);
-
-  for (auto const [id, list] : _ml->lists().reader(txn))
-  {
-    addListItem(id, list);
+    std::cerr << "No music files found" << std::endl;
+    return;
   }
 
-  connect(_ui.listWidget, &QListWidget::currentItemChanged, [this](auto* curr, auto*) {
-    _ui.stackedWidget->setCurrentWidget(dynamic_cast<ListItem*>(curr)->trackView);
+  // Show progress dialog
+  _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), *this);
+  auto* dialogPtr = _importDialog.get();
+
+  // Create worker - owned by MainWindow
+  _importWorker = std::make_unique<ImportWorker>(
+    *_musicLibrary,
+    files,
+    [dialogPtr](std::filesystem::path const& path, int index) {
+      Glib::MainContext::get_default()->invoke([dialogPtr, path, index]() {
+        dialogPtr->onNewTrack(path.string(), index);
+        return false;
+      });
+    },
+    [dialogPtr]() {
+      Glib::MainContext::get_default()->invoke([dialogPtr]() {
+        dialogPtr->ready();
+        return false;
+      });
+    });
+
+  // Run in background thread - owned and joined on window destruction
+  auto* workerPtr = _importWorker.get();
+  if (_importThread.joinable()) { _importThread.join(); }
+  _importThread = std::jthread([this, workerPtr](std::stop_token stoken) {
+    workerPtr->run();
+    // After import completes, notify observers incrementally
+    Glib::MainContext::get_default()->invoke([this, workerPtr]() {
+      auto const& result = workerPtr->result();
+      for (auto const trackId : result.insertedIds)
+      {
+        _rowDataProvider->invalidateFull(trackId);
+        _allTrackIds->notifyInserted(trackId);
+      }
+      return false;
+    });
   });
 
-  _ui.listWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-  connect(_ui.listWidget, &QListWidget::customContextMenuRequested, [this](QPoint pos) {
-    QMenu myMenu;
-    myMenu.addAction("New", [this] {
-      if (auto* dialog = new NewListDialog{this}; dialog->exec())
-      {
-        auto txn = _ml->writeTransaction();
-        auto writer = _ml->lists().writer(txn);
-        auto [id, list] = writer.createT(dialog->list());
+  _importDialog->show();
+}
 
-        try
-        {
-          addListItem(id, list);
-          txn.commit();
-        }
-        catch (std::exception const& ex)
-        {
-          QMessageBox::critical(this, "Failed to create list", ex.what());
-        }
+void MainWindow::setupMenu()
+{
+  // Create menu model
+  auto menuModel = Gio::Menu::create();
+
+  // File menu
+  auto fileMenu = Gio::Menu::create();
+  fileMenu->append("Open Library", "win.open-library");
+  fileMenu->append("Import Files", "win.import-files");
+  auto section = Gio::Menu::create();
+  section->append("New List", "win.new-list");
+  fileMenu->append_section(section);
+  fileMenu->append("Quit", "app.quit");
+  menuModel->append_submenu("File", fileMenu);
+
+  // Help menu (placeholder)
+  auto helpMenu = Gio::Menu::create();
+  helpMenu->append("About", "app.about");
+  menuModel->append_submenu("Help", helpMenu);
+
+  // Set up menu bar
+  _menuBar.set_menu_model(menuModel);
+
+  // Create actions
+  auto openAction = Gio::SimpleAction::create("open-library");
+  openAction->signal_activate().connect(
+    [this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { openLibrary(); });
+  add_action(openAction);
+
+  auto importAction = Gio::SimpleAction::create("import-files");
+  importAction->signal_activate().connect(
+    [this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { importFiles(); });
+  add_action(importAction);
+
+  auto newListAction = Gio::SimpleAction::create("new-list");
+  newListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) {
+    // Create dialog - GTK4 will manage its lifetime when closed
+    auto* dialog = Gtk::make_managed<NewListDialog>(*this);
+
+    dialog->signal_response().connect([this, dialog](int responseId) {
+      if (responseId == Gtk::ResponseType::OK)
+      {
+        auto draft = dialog->draft();
+        createList(draft);
       }
     });
 
-    myMenu.addAction("Delete", this, [this] {
-      auto* item = static_cast<ListItem*>(_ui.listWidget->takeItem(_ui.listWidget->currentRow()));
-      auto txn = _ml->writeTransaction();
-      auto writer = _ml->lists().writer(txn);
-      writer.del(item->id);
-      txn.commit();
-    });
-
-    QPoint globalPos = _ui.listWidget->mapToGlobal(pos);
-    myMenu.exec(globalPos);
+    dialog->present();
   });
+  add_action(newListAction);
 }
 
-void MainWindow::onTrackClicked(QModelIndex const& index)
+void MainWindow::setupLayout()
 {
-  if (QVariant resourceId = index.model()->data(index, Qt::UserRole); resourceId.isValid())
-  {
-    auto txn = _ml->readTransaction();
-    auto data = _ml->resources().reader(txn)[resourceId.toULongLong()];
+  // Set up horizontal paned (split view)
+  _paned.set_orientation(Gtk::Orientation::HORIZONTAL);
 
-    if (QPixmap pix; pix.loadFromData(static_cast<uchar const*>(data.data()), static_cast<uint>(data.size())))
-    {
-      _ui.coverArtLabel->setPixmap(pix);
-    }
+  // Left side: vertical box (like Qt's verticalLayout)
+  _leftBox.set_orientation(Gtk::Orientation::VERTICAL);
+  _leftBox.set_hexpand(true);
+  _leftBox.set_vexpand(true);
+  _leftBox.set_homogeneous(false);
+
+  // Create list store for sidebar
+  _listStore = Gio::ListStore<ListRow>::create();
+
+  // Create selection model
+  _listSelectionModel = Gtk::SingleSelection::create(_listStore);
+  _listSelectionModel->signal_selection_changed().connect(sigc::mem_fun(*this, &MainWindow::onListSelectionChanged));
+
+  // List view for the sidebar
+  auto factory = Gtk::SignalListItemFactory::create();
+  factory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+    auto* label = Gtk::make_managed<Gtk::Label>("");
+    label->set_halign(Gtk::Align::START);
+    listItem->set_child(*label);
+  });
+  factory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+    auto item = listItem->get_item();
+    auto row = std::dynamic_pointer_cast<ListRow>(item);
+    auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+    if (row && label) { label->set_text(row->getName()); }
+  });
+
+  _listView.set_factory(factory);
+  _listView.set_model(_listSelectionModel);
+  _listView.set_halign(Gtk::Align::FILL);
+  _listView.set_valign(Gtk::Align::FILL);
+  _listView.set_hexpand(true);
+  _listView.set_vexpand(true);
+
+  // Note: Context menus in GTK4 are handled via gesture events
+  // For now, we'll skip the popover implementation and rely on menu actions
+
+  // Scrolled window for list
+  _listScrolledWindow.set_child(_listView);
+  _listScrolledWindow.set_vexpand(true);
+
+  // Cover art widget - matches Qt's CoverArtLabel (vsizetype=Maximum, min 50x50)
+  _coverArtWidget->set_valign(Gtk::Align::END);
+  _coverArtWidget->set_size_request(50, 50);
+  _coverArtWidget->set_vexpand(false);
+
+  // Add widgets to left box
+  _leftBox.append(_listScrolledWindow);
+  _leftBox.append(*_coverArtWidget);
+
+  // Right side: stack for pages
+  _stack.set_hexpand(true);
+  _stack.set_vexpand(true);
+
+  // Add placeholder page
+  auto* placeholderLabel = Gtk::make_managed<Gtk::Label>("Select a library or import tracks");
+  placeholderLabel->set_halign(Gtk::Align::CENTER);
+  placeholderLabel->set_valign(Gtk::Align::CENTER);
+  _stack.add(*placeholderLabel, "welcome", "Welcome");
+
+  // Add to paned
+  _paned.set_start_child(_leftBox);
+  _paned.set_end_child(_stack);
+
+  // Set paned behavior to match Qt's 1:2 stretch ratio
+  // Left side (list) can resize but not shrink, right side gets more space
+  _paned.set_resize_start_child(true);
+  _paned.set_shrink_start_child(false);
+  _paned.set_resize_end_child(true);
+  _paned.set_shrink_end_child(false);
+
+  // Set initial position to give 1/3 to left, 2/3 to right
+  constexpr int PanedInitialPosition = 330;
+  _paned.set_position(PanedInitialPosition);
+
+  // Set up the main layout
+  auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
+  mainBox->append(_menuBar);
+  mainBox->append(_paned);
+
+  // Set as window child
+  set_child(*mainBox);
+}
+
+void MainWindow::createList(app::model::ListDraft const& draft)
+{
+  if (!_musicLibrary)
+  {
+    std::cerr << "No music library open" << std::endl;
+    return;
+  }
+
+  auto txn = _musicLibrary->writeTransaction();
+
+  // Build the list payload
+  auto payload = std::vector<std::byte>{};
+  if (draft.kind == app::model::ListKind::Smart)
+  {
+    payload = rs::core::ListPayloadBuilder::buildSmartList(draft.name, draft.description, draft.expression);
   }
   else
   {
-    Q_INIT_RESOURCE(resources);
-    _ui.coverArtLabel->setPixmap(QPixmap{":/images/nocoverart.jpg"});
+    payload = rs::core::ListPayloadBuilder::buildManualList(draft.name, draft.description, draft.trackIds);
+  }
+
+  // Create the list in the store
+  auto [listId, view] = _musicLibrary->lists().writer(txn).create(payload);
+
+  txn.commit();
+
+  // Refresh the lists
+  auto readTxn = _musicLibrary->readTransaction();
+  rebuildListPages(readTxn);
+}
+
+void MainWindow::onDeleteList()
+{
+  if (!_musicLibrary) { return; }
+
+  auto position = _listSelectionModel->get_selected();
+
+  if (position == GTK_INVALID_LIST_POSITION) { return; }
+
+  // Don't allow deleting "All Tracks" (position 0)
+  if (position == 0) { return; }
+
+  auto item = _listStore->get_item(position);
+
+  if (!item) { return; }
+
+  auto listId = item->getListId();
+
+  // Delete the list from the library
+  auto txn = _musicLibrary->writeTransaction();
+  _musicLibrary->lists().writer(txn).del(listId);
+  txn.commit();
+
+  // Refresh lists
+  auto readTxn = _musicLibrary->readTransaction();
+  rebuildListPages(readTxn);
+}
+
+void MainWindow::clearTrackPages()
+{
+  // Remove stack children before clearing maps
+  for (auto& [id, ctx] : _trackPages)
+  {
+    (void)id;
+    if (ctx.page) { _stack.remove(*ctx.page); }
+  }
+  _trackPages.clear();
+}
+
+void MainWindow::rebuildListPages(rs::lmdb::ReadTransaction& txn)
+{
+  std::cout << "DEBUG: rebuildListPages called" << std::endl;
+  // Clear existing list store and track pages
+  _listStore->remove_all();
+  clearTrackPages();
+
+  using ListId = rs::core::ListId;
+
+  // Build "All Tracks" page
+  buildPageForAllTracks();
+
+  // Add "All Tracks" entry
+  auto allRow = ListRow::create(ListId(0), "All Tracks");
+  _listStore->append(allRow);
+
+  // Load existing lists from library
+  for (auto const& [id, listView] : _musicLibrary->lists().reader(txn))
+  {
+    auto listRow = ListRow::create(id, std::string(listView.name()));
+    _listStore->append(listRow);
+
+    // Create track view page for this list
+    buildPageForStoredList(id, listView, txn);
+  }
+
+  // Set up track context menu for all track pages
+  setupTrackContextMenu();
+}
+
+void MainWindow::buildPageForAllTracks()
+{
+  using ListId = rs::core::ListId;
+
+  // Create adapter using the shared _allTrackIds (not a page-local copy)
+  // _allTrackIds is the authoritative source that import/tag notifies update
+  auto adapter = std::make_shared<TrackListAdapter>(*_allTrackIds, _rowDataProvider);
+  // Manually trigger rebuild since notifyReset was called before adapter was attached
+  adapter->onReset();
+  auto trackPage = std::make_unique<TrackViewPage>(adapter);
+
+  auto pageId = std::to_string(static_cast<unsigned long>((ListId(0)).value()));
+  _stack.add(*trackPage, pageId, "All Tracks");
+
+  // Connect selection to cover art update
+  trackPage->signalSelectionChanged().connect([this, trackPagePtr = trackPage.get()]() {
+    auto ids = trackPagePtr->getSelectedTrackIds();
+    updateCoverArt(ids);
+  });
+
+  TrackPageContext ctx;
+  ctx.membershipList = nullptr; // All-tracks page observes shared _allTrackIds, no ownership
+  ctx.adapter = std::move(adapter);
+  ctx.page = std::move(trackPage);
+  _trackPages[ListId(0)] = std::move(ctx);
+}
+
+void MainWindow::buildPageForStoredList(rs::core::ListId listId,
+                                        rs::core::ListView const& view,
+                                        rs::lmdb::ReadTransaction& txn)
+{
+  // Get display name from payload
+  std::string listName;
+  auto const name = view.name();
+  if (!name.empty()) { listName = std::string(name); }
+  else
+  {
+    listName = "<Unnamed List>";
+  }
+
+  // Create appropriate membership list based on smart vs manual
+  std::unique_ptr<app::model::TrackIdList> membershipList;
+
+  if (view.isSmart())
+  {
+    // Smart list - use FilteredTrackIdList
+    auto filtered = std::make_unique<app::model::FilteredTrackIdList>(*_allTrackIds, *_musicLibrary);
+
+    // Set expression from filter stored in payload
+    auto expr = view.filter();
+    if (!expr.empty()) { filtered->setExpression(std::string(expr)); }
+    filtered->reload();
+    membershipList = std::move(filtered);
+  }
+  else
+  {
+    // Manual list - use ManualTrackIdList, observes _allTrackIds for updates/removes
+    auto manual = std::make_unique<app::model::ManualTrackIdList>(view, _allTrackIds.get());
+    membershipList = std::move(manual);
+  }
+
+  // Create adapter
+  auto adapter = std::make_shared<TrackListAdapter>(*membershipList, _rowDataProvider);
+
+  // Create track page
+  auto trackPage = std::make_unique<TrackViewPage>(adapter);
+
+  auto pageId = std::to_string(static_cast<unsigned long>(listId.value()));
+  _stack.add(*trackPage, pageId, listName);
+
+  // Connect selection to cover art update
+  trackPage->signalSelectionChanged().connect([this, trackPagePtr = trackPage.get()]() {
+    auto ids = trackPagePtr->getSelectedTrackIds();
+    updateCoverArt(ids);
+  });
+
+  // Create playlist exporter for this list
+  auto playlistDir = _musicLibrary->rootPath() / "playlist";
+  if (!std::filesystem::exists(playlistDir)) { std::filesystem::create_directories(playlistDir); }
+  auto playlistPath = playlistDir / (listName + ".m3u");
+  auto exporter =
+    std::make_unique<PlaylistExporter>(*membershipList, *_rowDataProvider, _musicLibrary->rootPath(), playlistPath);
+
+  TrackPageContext ctx;
+  ctx.membershipList = std::move(membershipList);
+  ctx.adapter = std::move(adapter);
+  ctx.page = std::move(trackPage);
+  ctx.exporter = std::move(exporter);
+  _trackPages[listId] = std::move(ctx);
+}
+
+void MainWindow::setupTrackContextMenu()
+{
+  // Create track tag action
+  auto tagTrackAction = Gio::SimpleAction::create("tag-track");
+  tagTrackAction->signal_activate().connect(
+    [this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { onTagTrack(); });
+  add_action(tagTrackAction);
+}
+
+void MainWindow::onTagTrack()
+{
+  // Get current visible track page
+  Glib::ustring pageName = _stack.get_visible_child_name();
+  if (pageName.empty()) { return; }
+
+  auto pageId = std::stoi(pageName);
+  auto it = _trackPages.find(rs::core::ListId(pageId));
+  if (it == _trackPages.end()) { return; }
+
+  auto& ctx = it->second;
+  auto selectedIds = ctx.page->getSelectedTrackIds();
+
+  if (selectedIds.empty()) { return; }
+
+  // Show tag prompt dialog
+  auto* dialog = Gtk::make_managed<TagPromptDialog>(*this);
+  auto idsCopy = selectedIds; // Copy for lambda
+
+  dialog->signal_response().connect([this, dialog, idsCopy](int responseId) mutable {
+    if (responseId == Gtk::ResponseType::OK)
+    {
+      std::string tag = dialog->tag();
+      if (!tag.empty())
+      {
+        // Open write transaction
+        auto txn = _musicLibrary->writeTransaction();
+        auto writer = _musicLibrary->tracks().writer(txn);
+        auto& dict = _musicLibrary->dictionary();
+
+        // Resolve tag string to DictionaryId
+        auto tagId = dict.put(txn, tag);
+
+        // Update each selected track
+        for (auto trackId : idsCopy)
+        {
+          // Get current track data
+          auto optView = writer.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot);
+          if (!optView) { continue; }
+
+          // Build TrackRecord from current view
+          rs::core::TrackRecord record(*optView, dict);
+
+          // Add new tag ID
+          record.tags.ids.push_back(tagId);
+
+          // Serialize and update hot data
+          auto hotData = record.serializeHot();
+          writer.updateHot(trackId, hotData);
+        }
+
+        // Commit transaction
+        txn.commit();
+
+        // After commit: invalidate cache and notify observers incrementally
+        for (auto trackId : idsCopy)
+        {
+          _rowDataProvider->invalidateHot(trackId);
+          _allTrackIds->notifyUpdated(trackId);
+        }
+      }
+    }
+  });
+  dialog->present();
+}
+
+void MainWindow::onListSelectionChanged(std::uint32_t position, [[maybe_unused]] std::uint32_t nItems)
+{
+  if (position == GTK_INVALID_LIST_POSITION) { return; }
+
+  auto item = _listStore->get_item(position);
+
+  if (!item) { return; }
+
+  auto listId = item->getListId();
+
+  // Switch to the corresponding stack page
+  auto pageId = std::to_string(static_cast<unsigned long>(listId.value()));
+  _stack.set_visible_child(pageId);
+}
+
+void MainWindow::updateCoverArt(std::vector<rs::core::TrackId> const& selectedIds)
+{
+  if (!_musicLibrary || selectedIds.empty())
+  {
+    // Clear cover art - use default
+    _coverArtWidget->clearCover();
+    return;
+  }
+
+  // Get the first selected track
+  auto trackId = selectedIds.front();
+
+  // Look up cover art ID via provider
+  auto coverArtId = _rowDataProvider->getCoverArtId(trackId);
+  if (!coverArtId)
+  {
+    _coverArtWidget->clearCover();
+    return;
+  }
+
+  // Load cover art from ResourceStore and display
+  rs::lmdb::ReadTransaction txn(_musicLibrary->readTransaction());
+  auto resourceReader = _musicLibrary->resources().reader(txn);
+  auto optBytes = resourceReader.get(*coverArtId);
+  if (optBytes)
+  {
+    auto artBytes = std::vector<std::byte>{optBytes->begin(), optBytes->end()};
+    _coverArtWidget->setCoverFromBytes(artBytes);
+  }
+  else
+  {
+    _coverArtWidget->clearCover();
   }
 }
 
-void MainWindow::addListItem(rs::core::MusicLibrary::ListId id, rs::fbs::List const* list)
+void MainWindow::notifyTracksInserted(std::vector<rs::core::TrackId> const& ids)
 {
-  auto expr = rs::expr::parse(list->expr()->string_view());
-  auto* listItem = new ListItem{QString::fromUtf8(list->name()->c_str()), _ui.listWidget};
-  listItem->id = id;
-  listItem->tracks = std::make_unique<ListItem::TrackFilterList>(
-    _allTracks, [expr](auto const& tt) { return rs::expr::toBool(rs::expr::evaluate(expr, tt)); });
-  listItem->trackView = createTrackView(list->name()->string_view(), *listItem->tracks);
+  for (auto id : ids) { _allTrackIds->notifyInserted(id); }
+}
+
+void MainWindow::notifyTracksUpdated(std::vector<rs::core::TrackId> const& ids)
+{
+  for (auto id : ids)
+  {
+    _allTrackIds->notifyUpdated(id);
+    _rowDataProvider->invalidateHot(id);
+  }
+}
+
+void MainWindow::notifyTracksRemoved(std::vector<rs::core::TrackId> const& ids)
+{
+  for (auto id : ids)
+  {
+    _allTrackIds->notifyRemoved(id);
+    _rowDataProvider->remove(id);
+  }
+}
+
+void MainWindow::saveSession()
+{
+  // Placeholder - session saving would restore library path
+}
+
+void MainWindow::loadSession()
+{
+  // Placeholder - would restore previous library
 }

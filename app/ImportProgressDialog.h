@@ -3,20 +3,22 @@
 
 #pragma once
 
-#include "app/ui_ImportProgressDialog.h"
-#include <rs/fbs/Track_generated.h>
+#include <gtkmm.h>
 
-class ImportProgressDialog
-  : public QDialog
-  , public Ui::ImportProgressDialog
+class ImportProgressDialog final : public Gtk::Dialog
 {
-  Q_OBJECT
-
 public:
-  ImportProgressDialog(int maxItems, QWidget* parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
+  ImportProgressDialog(int maxItems, Gtk::Window& parent);
+  virtual ~ImportProgressDialog();
 
-public slots:
-  void onNewTrack(QString path, int itemIndex);
-
+  void onNewTrack(std::string const& path, int itemIndex);
   void ready();
+
+private:
+  void setupUi(int maxItems);
+
+  Gtk::Label _progressLabel;
+  Gtk::ProgressBar _progressBar;
+  Gtk::Button _okButton;
+  int _maxItems;
 };

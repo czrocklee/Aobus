@@ -2,43 +2,47 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "MainWindow.h"
-#include <QtWidgets/QApplication>
 
-/*#ifndef _WIN32
-#include <QtPlugin>
-Q_IMPORT_PLUGIN(QXcbIntegrationPlugin)
-#endif*/
+#include <gtkmm.h>
+#include <gtkmm/aboutdialog.h>
 
 int main(int argc, char* argv[])
 {
-  QCoreApplication::setOrganizationName("RockStudio");
-  QCoreApplication::setApplicationName("RockStudio");
-  QCoreApplication::setOrganizationDomain("rs.com");
+  Glib::set_application_name("RockStudio");
 
-#ifdef _WIN32
-  QApplication::setStyle("fusion");
-#elif defined(__linux__)
-  const auto platformTheme = qgetenv("QT_QPA_PLATFORMTHEME").toLower();
-  auto const styleOverride = qgetenv("QT_STYLE_OVERRIDE").toLower();
+  auto app = Gtk::Application::create("com.rockstudio.app");
 
-  if (platformTheme.contains("qt5ct") || platformTheme.contains("qt6ct"))
-  {
-    qunsetenv("QT_QPA_PLATFORMTHEME");
-  }
+  // Add about action to application
+  auto aboutAction = Gio::SimpleAction::create("about");
+  aboutAction->signal_activate().connect([&app]([[maybe_unused]] Glib::VariantBase const& v) {
+    Gtk::AboutDialog dialog;
+    dialog.set_program_name("RockStudio");
+    dialog.set_version("1.0");
+    dialog.set_copyright("Copyright 2024 RockStudio");
+    dialog.set_license_type(Gtk::License::LGPL_3_0);
 
-  if (styleOverride.contains("qt6ct") || styleOverride.contains("kvantum"))
-  {
-    qunsetenv("QT_STYLE_OVERRIDE");
-    QApplication::setStyle("fusion");
-  }
-  else if (!styleOverride.isEmpty())
-  {
-    QApplication::setStyle(styleOverride);
-  }
-#endif
+    // Get active window to set as transient parent
+    auto windows = app->get_windows();
+    if (!windows.empty()) { dialog.set_transient_for(*windows[0]); }
 
-  QApplication app(argc, argv);
-  MainWindow mw;
-  mw.show();
-  return app.exec();
+    dialog.present();
+  });
+  app->add_action(aboutAction);
+
+  // Add quit action
+  auto quitAction = Gio::SimpleAction::create("quit");
+  quitAction->signal_activate().connect([&app]([[maybe_unused]] Glib::VariantBase const& v) { app->quit(); });
+  app->add_action(quitAction);
+
+  // Keep window alive - use shared_ptr
+  Glib::RefPtr<MainWindow> mainWindow;
+
+  // Connect to activate signal to create window after startup
+  app->signal_activate().connect([&app, &mainWindow]() {
+    mainWindow = Glib::make_refptr_for_instance<MainWindow>(new MainWindow());
+    app->add_window(*mainWindow);
+    mainWindow->present();
+  });
+
+  return app->run(argc, argv);
 }

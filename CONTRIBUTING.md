@@ -68,12 +68,11 @@ This guide covers C++ coding conventions for RockStudio contributors.
 
 ### 3.3 C++11 Features
 
-3.3.1. Use RAII: dopts `std::unique_ptr` for owned resources, use custom deleter if needed
+3.3.1. Use RAII: adopts `std::unique_ptr` for owned resources, use custom deleter if needed
 3.3.2. DON'T use [[nodiscard]]: Too verbose, rely on clang-tidy for check
 3.3.3. Use [[maybe_unused]]: Suppress unused warnings other than (void)
 3.3.4. Use noexcept: Mark functions that won't throw
-3.3.5. Use uniform initialization `{}` other than parentheses `()` for constructors and member initializer lists
-3.3.6. Prefer uniform initialization
+3.3.5. Prefer uniform initialization
   - `auto x = T{a, b};` > `T x{a, b};`
   - `auto x = T{};` > `T x;`
   - ': _mem{a}' > `: _mem(a)`

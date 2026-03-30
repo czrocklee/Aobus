@@ -46,14 +46,6 @@ add_library(Catch2 INTERFACE)
 target_include_directories(Catch2 INTERFACE ${CATCH2_CFLAGS})
 target_link_libraries(Catch2 INTERFACE ${CATCH2_LDFLAGS})
 
-find_package(Qt6 COMPONENTS Core Widgets REQUIRED)
-
-set(GEN ${CMAKE_CURRENT_BINARY_DIR}/gen)
-
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)
-
 # clang-tidy setup (manual application to targets)
 find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
 if(CLANG_TIDY_EXECUTABLE)
@@ -137,7 +129,7 @@ add_executable(rsc
     tool/TrackCommand.cpp
     tool/TrackUtils.cpp
 )
-target_link_libraries(rsc PRIVATE rs Qt6::Core Boost::program_options)
+target_link_libraries(rsc PRIVATE rs Boost::program_options)
 if(CLANG_TIDY_EXECUTABLE)
   set_target_properties(rsc PROPERTIES
     CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_STRICT_CHECKS};-header-filter=${CLANG_TIDY_STRICT_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
@@ -175,40 +167,25 @@ if(CLANG_TIDY_EXECUTABLE)
   )
 endif()
 
-# UI disabled - requires FlatBuffers migration
-# add_executable(RockStudio
-#     app/ImportProgressDialog.cpp
-#     ...
-# )
-
-# GTKmm4 UI (requires core API migration complete - milestones 3-7)
-# Exclude from ALL build until Milestone 13 when migration is complete
-add_executable(RockStudioGTKmm4
-    app/gtkmm4/main.cpp
-    app/gtkmm4/MainWindow.cpp
-    app/gtkmm4/TrackViewPage.cpp
-    app/gtkmm4/TrackListAdapter.cpp
-    app/gtkmm4/TrackRow.cpp
-    app/gtkmm4/ListRow.cpp
-    app/gtkmm4/ImportWorker.cpp
-    app/gtkmm4/PlaylistExporter.cpp
-    app/gtkmm4/NewListDialog.cpp
-    app/gtkmm4/TagPromptDialog.cpp
-    app/gtkmm4/ImportProgressDialog.cpp
-    # Milestone 3: TrackId Reactive Primitives
-    app/gtkmm4/model/TrackIdList.cpp
-    app/gtkmm4/model/AllTrackIdsList.cpp
-    app/gtkmm4/model/FilteredTrackIdList.cpp
-    app/gtkmm4/model/ManualTrackIdList.cpp
-    # Milestone 4: Lazy Row Data Provider
-    app/gtkmm4/model/TrackRowDataProvider.cpp
+add_executable(RockStudio
+    app/main.cpp
+    app/MainWindow.cpp
+    app/TrackViewPage.cpp
+    app/TrackListAdapter.cpp
+    app/TrackRow.cpp
+    app/ListRow.cpp
+    app/ImportWorker.cpp
+    app/PlaylistExporter.cpp
+    app/NewListDialog.cpp
+    app/TagPromptDialog.cpp
+    app/ImportProgressDialog.cpp
+    app/model/TrackIdList.cpp
+    app/model/AllTrackIdsList.cpp
+    app/model/FilteredTrackIdList.cpp
+    app/model/ManualTrackIdList.cpp
+    app/model/TrackRowDataProvider.cpp
 )
-target_link_libraries(RockStudioGTKmm4 PRIVATE rs GTKMM)
-target_include_directories(RockStudioGTKmm4 PRIVATE ${CMAKE_SOURCE_DIR}/app/gtkmm4)
-# Note: clang-tidy disabled for RockStudioGTKmm4 because GTK headers pull in GCC's SSE
+target_link_libraries(RockStudio PRIVATE rs GTKMM)
+target_include_directories(RockStudio PRIVATE ${CMAKE_SOURCE_DIR}/app)
+# Note: clang-tidy disabled for RockStudio because GTK headers pull in GCC's SSE
 # intrinsics (mmintrin.h) which clang cannot parse. Building with clang would enable tidy.
-# if(CLANG_TIDY_EXECUTABLE)
-#   set_target_properties(RockStudioGTKmm4 PROPERTIES
-#     CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_STRICT_CHECKS};-header-filter=${CLANG_TIDY_STRICT_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
-#   )
-# endif()

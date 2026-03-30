@@ -1,14 +1,15 @@
 {
-  pkgs ?
-    import (builtins.fetchTarball {
-      url = "https://github.com/NixOS/nixpkgs/archive/refs/heads/nixos-unstable.tar.gz";
-    }) {},
+  pkgs ? import (builtins.fetchTarball {
+    url = "https://github.com/NixOS/nixpkgs/archive/refs/heads/nixos-unstable.tar.gz";
+  }) { },
 }:
 let
-  lexy-src = (builtins.fetchTarball {
-    url = "https://github.com/foonathan/lexy/archive/refs/tags/v2025.05.0.tar.gz";
-    sha256 = "14j2z7x2l65q95j5br5nw7awgd87p9m2xw7mma4qspiricd0rniq";
-  });
+  lexy-src = (
+    builtins.fetchTarball {
+      url = "https://github.com/foonathan/lexy/archive/refs/tags/v2025.05.0.tar.gz";
+      sha256 = "14j2z7x2l65q95j5br5nw7awgd87p9m2xw7mma4qspiricd0rniq";
+    }
+  );
   lexy = pkgs.stdenv.mkDerivation {
     name = "lexy";
     src = lexy-src;
@@ -20,35 +21,36 @@ let
 in
 pkgs.mkShell {
   name = "cpp-dev-env";
-  buildInputs = with pkgs; [
-    cmake
-    ripgrep
-    pkg-config
-    ninja
-    clang
-    gcc
-    gdb
-    clang-tools
-    boost.dev
-    lmdb
-    lmdb.dev
-    flatbuffers
-    mimalloc
-    catch2
-    gsl-lite
+  buildInputs =
+    with pkgs;
+    [
+      cmake
+      ripgrep
+      pkg-config
+      ninja
+      clang
+      gcc
+      gdb
+      clang-tools
+      boost.dev
+      lmdb
+      lmdb.dev
+      mimalloc
+      catch2
+      gsl-lite
 
-    (gtk4.overrideAttrs (old: {
-      dontStrip = true;
-    }))
-    gtkmm4
-    glib.dev
-    gobject-introspection
-    adwaita-icon-theme
-    gsettings-desktop-schemas
+      (gtk4.overrideAttrs (old: {
+        dontStrip = true;
+      }))
+      gtkmm4
+      glib.dev
+      gobject-introspection
+      adwaita-icon-theme
+      gsettings-desktop-schemas
 
-    kdePackages.qtbase
-    ffmpeg
-  ] ++ [ lexy ];
+      ffmpeg
+    ]
+    ++ [ lexy ];
   shellHook = ''
     export PATH="$PATH:/run/current-system/sw/bin"
     # Include gtk4 schemas - need both desktop schemas and gtk4 schemas

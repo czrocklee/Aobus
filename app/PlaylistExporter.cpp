@@ -2,38 +2,100 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "PlaylistExporter.h"
-#include <fstream>
 
-PlaylistExporter::PlaylistExporter(AbstractTrackList& list,
+#include "model/TrackIdList.h"
+#include "model/TrackRowDataProvider.h"
+
+#include <glibmm.h>
+
+#include <fstream>
+#include <iostream>
+
+PlaylistExporter::PlaylistExporter(app::model::TrackIdList& list,
+                                   app::model::TrackRowDataProvider& provider,
                                    std::filesystem::path root,
-                                   std::filesystem::path path,
-                                   QObject* parent)
-  : QObject{parent}
-  , _list{list}
-  , _root{std::move(root)}
-  , _path{std::move(path)}
-  , _timer{new QTimer{this}}
+                                   std::filesystem::path path)
+  : _list{list}, _provider{provider}, _root{std::move(root)}, _path{std::move(path)}
 {
-  connect(_timer, &QTimer::timeout, this, &PlaylistExporter::writeFile);
+  _list.attach(this);
   scheduleForWrite();
 }
 
-void PlaylistExporter::scheduleForWrite() { _timer->start(std::chrono::seconds{1}); }
+PlaylistExporter::~PlaylistExporter()
+{
+  _list.detach(this);
+  if (_timeoutConnection) { _timeoutConnection->disconnect(); }
+}
+
+void PlaylistExporter::onReset()
+{
+  scheduleForWrite();
+}
+
+void PlaylistExporter::onInserted(TrackId /*id*/, std::size_t /*index*/)
+{
+  scheduleForWrite();
+}
+
+void PlaylistExporter::onUpdated(TrackId /*id*/, std::size_t /*index*/)
+{
+  scheduleForWrite();
+}
+
+void PlaylistExporter::onRemoved(TrackId /*id*/, std::size_t /*index*/)
+{
+  scheduleForWrite();
+}
+
+void PlaylistExporter::scheduleForWrite()
+{
+  // Cancel any existing timeout
+  if (_timeoutConnection) { _timeoutConnection->disconnect(); }
+
+  // Schedule write after 3 second delay (Glib::signal_timeout uses milliseconds)
+  _timeoutConnection = std::make_unique<sigc::connection>(Glib::signal_timeout().connect(
+    [this]() {
+      writeFile();
+      return false;
+    },
+    3000));
+}
 
 void PlaylistExporter::writeFile()
 {
+  _timeoutConnection->disconnect();
+  _timeoutConnection.reset();
+
   auto ofs = std::ofstream{_path};
 
-  // Check if file opened successfully
   if (!ofs)
   {
-    // std::cerr << "Failed to open file: " << filePath << '\n';
+    std::cerr << "Failed to open playlist file: " << _path << std::endl;
     return;
   }
 
-  for (auto i = 0u; i < _list.size(); ++i)
+  // Export playlist from TrackId membership
+  for (std::size_t i = 0; i < _list.size(); ++i)
   {
-    auto const& [_, t] = _list.at(AbstractTrackList::Index{i});
-    ofs << std::filesystem::relative(_root / t.prop->filepath, _path.parent_path()).c_str() << std::endl;
+    auto id = _list.trackIdAt(i);
+
+    // Try to get the URI path for this track
+    auto optUri = _provider.getUriPath(id);
+    if (optUri)
+    {
+      // Write path relative to playlist location
+      auto relativePath = std::filesystem::relative(*optUri, _path.parent_path());
+      ofs << relativePath.string() << std::endl;
+    }
+    else
+    {
+      // Fallback: write track ID as comment
+      ofs << "# track://" << id.value() << " (URI not found)" << std::endl;
+    }
   }
+}
+
+void PlaylistExporter::triggerWrite()
+{
+  scheduleForWrite();
 }

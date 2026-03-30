@@ -3,38 +3,42 @@
 
 #pragma once
 
-#include "Common.h"
-#include <QtCore/QTimer>
+#include <rs/core/MusicLibrary.h>
+
+#include "model/TrackIdList.h"
+#include "model/TrackRowDataProvider.h"
+
+#include <sigc++/sigc++.h>
 
 #include <filesystem>
-#include <optional>
+#include <memory>
 
-class PlaylistExporter
-  : public QObject
-  , public TrackObserver
+class PlaylistExporter final : public app::model::TrackIdListObserver
 {
-  Q_OBJECT;
-
 public:
-  PlaylistExporter(AbstractTrackList& list, std::filesystem::path root, std::filesystem::path path, QObject* parent);
+  using TrackId = rs::core::TrackId;
 
-private slots:
-  void writeFile();
+  PlaylistExporter(app::model::TrackIdList& list,
+                   app::model::TrackRowDataProvider& provider,
+                   std::filesystem::path root,
+                   std::filesystem::path path);
+  ~PlaylistExporter() override;
+
+  void triggerWrite();
+
+  // TrackIdListObserver interface
+  void onReset() override;
+  void onInserted(TrackId id, std::size_t index) override;
+  void onUpdated(TrackId id, std::size_t index) override;
+  void onRemoved(TrackId id, std::size_t index) override;
 
 private:
+  void writeFile();
   void scheduleForWrite();
 
-  void onEndInsert(TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index) override { scheduleForWrite(); }
-
-  void onEndUpdate(TrackId, rs::fbs::TrackT const&, AbstractTrackList::Index) override { scheduleForWrite(); }
-
-  void onEndRemove(TrackId, AbstractTrackList::Index) override { scheduleForWrite(); }
-
-  void onEndClear() override { scheduleForWrite(); }
-
-  AbstractTrackList& _list;
+  app::model::TrackIdList& _list;
+  app::model::TrackRowDataProvider& _provider;
   std::filesystem::path const _root;
   std::filesystem::path const _path;
-  std::string const _name;
-  QTimer* _timer;
+  std::unique_ptr<sigc::connection> _timeoutConnection;
 };

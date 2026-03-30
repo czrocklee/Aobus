@@ -2,37 +2,18 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "ImportWorker.h"
+
 #include <rs/tag/flac/File.h>
 #include <rs/tag/mp4/File.h>
 #include <rs/tag/mpeg/File.h>
 
 #include <iostream>
-
-ImportWorker::ImportWorker(rs::core::MusicLibrary& ml, std::vector<std::filesystem::path> const& files, QObject* parent)
-  : QThread{parent}
-  , _ml{ml}
-  , _txn{_ml.writeTransaction()}
-  , _files{files}
-{
-}
-
-void ImportWorker::commit()
-{
-  _txn.value().commit();
-  _txn.reset();
-}
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
 
 namespace
 {
-  QString fromPath(std::filesystem::path const& filePath)
-  {
-#ifdef _WIN32
-    return QString::fromStdWString(filePath.generic_wstring());
-#else
-    return QString::fromStdString(filePath.native());
-#endif
-  }
-
   std::unique_ptr<rs::tag::File> createTagFileByExtension(std::filesystem::path const& path)
   {
     using namespace rs::tag;
@@ -42,103 +23,180 @@ namespace
         {".m4a", [](auto const& path) { return std::make_unique<mp4::File>(path, File::Mode::ReadOnly); }},
         {".flac", [](auto const& path) { return std::make_unique<flac::File>(path, File::Mode::ReadOnly); }}};
 
-    return std::invoke(CreatorMap.at(path.extension().string()), path);
+    auto ext = path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+    if (auto it = CreatorMap.find(ext); it != CreatorMap.end()) { return it->second(path); }
+    return nullptr;
   }
+} // namespace
 
-  ::flatbuffers::Offset<::flatbuffers::String> buildString(::flatbuffers::FlatBufferBuilder& fbb,
-                                                           rs::tag::ValueType const& value)
-  {
-    return rs::tag::isNull(value) ? ::flatbuffers::Offset<::flatbuffers::String>{}
-                                  : fbb.CreateString(std::get<std::string>(value));
-  }
+ImportWorker::ImportWorker(rs::core::MusicLibrary& ml,
+                           std::vector<std::filesystem::path> const& files,
+                           ProgressCallback progressCallback,
+                           FinishedCallback finishedCallback)
+  : _ml{ml}
+  , _files{files}
+  , _progressCallback{progressCallback}
+  , _finishedCallback{finishedCallback}
+  , _rootPathStr{ml.rootPath().string()}
+{
 }
+
+ImportWorker::~ImportWorker() = default;
 
 void ImportWorker::run()
 {
-  auto trackWriter = _ml.tracks().writer(_txn.value());
-  auto resourceWriter = _ml.resources().writer(_txn.value());
+  auto txn = _ml.writeTransaction();
+  auto trackWriter = _ml.tracks().writer(txn);
+  auto resourceWriter = _ml.resources().writer(txn);
+  auto& dict = _ml.dictionary();
 
   for (auto i = 0u; i < _files.size(); ++i)
   {
     try
     {
       auto const& path = _files[i];
-      emit progressUpdated(fromPath(path), i);
 
-      auto const file = createTagFileByExtension(path);
+      // Report progress
+      if (_progressCallback) { _progressCallback(path, static_cast<std::int32_t>(i)); }
+
+      // Process the file
+      auto tagFile = createTagFileByExtension(path);
+      if (!tagFile)
+      {
+        ++_result.skippedCount;
+        continue;
+      }
+
       rs::tag::Metadata metadata;
-      metadata = file->loadMetadata();
+      metadata = tagFile->loadMetadata();
 
-      auto [id, track] = trackWriter.create([&](::flatbuffers::FlatBufferBuilder& fbb) {
-        ::flatbuffers::Offset<rs::fbs::Metadata> metaOffset;
+      // Populate TrackRecord from metadata
+      auto record = populateRecord(metadata, path, dict, resourceWriter);
 
-        {
-          auto titleOffset = buildString(fbb, metadata.get(rs::tag::MetaField::Title));
-          auto albumOffset = buildString(fbb, metadata.get(rs::tag::MetaField::Album));
-          auto artistOffset = buildString(fbb, metadata.get(rs::tag::MetaField::Artist));
-          auto albumArtistOffset = buildString(fbb, metadata.get(rs::tag::MetaField::AlbumArtist));
-          auto genreOffset = buildString(fbb, metadata.get(rs::tag::MetaField::Genre));
+      // Serialize hot and cold data
+      auto hotData = record.serializeHot();
+      auto coldData = record.serializeCold(dict);
 
-          auto builder = rs::fbs::MetadataBuilder{fbb};
-          builder.add_title(titleOffset);
-          builder.add_album(albumOffset);
-          builder.add_artist(artistOffset);
-          builder.add_albumArtist(albumArtistOffset);
-          builder.add_genre(genreOffset);
-          metaOffset = builder.Finish();
-        }
-
-        ::flatbuffers::Offset<rs::fbs::Properties> propOffset;
-
-        {
-          auto filepathOffset = fbb.CreateString(std::filesystem::relative(path, _ml.rootPath()).string());
-          auto lastWriteTime =
-            std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(path));
-          auto epochInNanos =
-            std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count();
-
-          auto builder = rs::fbs::PropertiesBuilder{fbb};
-          builder.add_filepath(filepathOffset);
-          builder.add_lastModified(epochInNanos);
-          propOffset = builder.Finish();
-        }
-
-        std::vector<::flatbuffers::Offset<rs::fbs::Resource>> rsrc;
-
-        if (auto albumArt = metadata.get(rs::tag::MetaField::AlbumArt); !rs::tag::isNull(albumArt))
-        {
-          auto const& blob = std::get<rs::tag::Blob>(albumArt);
-          std::uint64_t id = resourceWriter.create(boost::asio::buffer(blob.data(), blob.size()));
-          std::cout << "id " << id << std::endl;
-          auto builder = rs::fbs::ResourceBuilder{fbb};
-          builder.add_type(rs::fbs::ResourceType::AlbumArt);
-          builder.add_id(id);
-          rsrc.push_back(builder.Finish());
-        }
-
-        auto rsrcOffset = fbb.CreateVector(rsrc);
-
-        std::vector<std::string> t{"tag", "tag1", "tag2"};
-        auto tags = fbb.CreateVectorOfStrings(t);
-        std::vector<flatbuffers::Offset<rs::fbs::CustomEntry>> entries;
-        entries.push_back(rs::fbs::CreateCustomEntry(fbb, fbb.CreateString("pop")));
-        entries.push_back(rs::fbs::CreateCustomEntry(fbb, fbb.CreateString("classic")));
-        auto custom = fbb.CreateVectorOfSortedTables(&entries);
-
-        auto builder = rs::fbs::TrackBuilder{fbb};
-        builder.add_meta(metaOffset);
-        builder.add_prop(propOffset);
-        builder.add_rsrc(rsrcOffset);
-        builder.add_custom(custom);
-        return builder.Finish();
-      });
+      // Create the track
+      auto [trackId, view] = trackWriter.createHotCold(hotData, coldData);
+      _result.insertedIds.push_back(trackId);
     }
-    catch (std::exception const& e)
+    catch ([[maybe_unused]] std::exception const& e)
     {
-      // std::cerr << "failed to parse metadata " << e.what() << std::endl;
+      ++_result.failureCount;
       continue;
     }
   }
 
-  emit workFinished();
+  // Commit the transaction
+  txn.commit();
+
+  // Call finished callback
+  if (_finishedCallback) { _finishedCallback(); }
+}
+
+void ImportWorker::join()
+{
+  if (_workerThread.joinable()) { _workerThread.join(); }
+}
+
+rs::core::TrackRecord ImportWorker::populateRecord(rs::tag::Metadata const& metadata,
+                                                   std::filesystem::path const& path,
+                                                   rs::core::DictionaryStore& dict,
+                                                   rs::core::ResourceStore::Writer& resourceWriter)
+{
+  rs::core::TrackRecord record;
+
+  // Populate metadata
+  auto& meta = record.metadata;
+
+  // Title
+  if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::Title)))
+  {
+    meta.title = std::get<std::string>(metadata.get(rs::tag::MetaField::Title));
+  }
+
+  // URI - store relative to library root
+  auto relativePath = std::filesystem::relative(path, _ml.rootPath());
+  meta.uri = relativePath.string();
+
+  // Artist
+  if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::Artist)))
+  {
+    meta.artist = std::get<std::string>(metadata.get(rs::tag::MetaField::Artist));
+  }
+
+  // Album
+  if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::Album)))
+  {
+    meta.album = std::get<std::string>(metadata.get(rs::tag::MetaField::Album));
+  }
+
+  // Album Artist
+  if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::AlbumArtist)))
+  {
+    meta.albumArtist = std::get<std::string>(metadata.get(rs::tag::MetaField::AlbumArtist));
+  }
+
+  // Genre
+  if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::Genre)))
+  {
+    meta.genre = std::get<std::string>(metadata.get(rs::tag::MetaField::Genre));
+  }
+
+  // Year
+  if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::Year)))
+  {
+    meta.year = static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::Year)));
+  }
+
+  // Track number
+  if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::TrackNumber)))
+  {
+    meta.trackNumber =
+      static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::TrackNumber)));
+  }
+
+  // Total tracks
+  if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::TotalTracks)))
+  {
+    meta.totalTracks =
+      static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::TotalTracks)));
+  }
+
+  // Disc number
+  if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::DiscNumber)))
+  {
+    meta.discNumber = static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::DiscNumber)));
+  }
+
+  // Total discs
+  if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::TotalDiscs)))
+  {
+    meta.totalDiscs = static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::TotalDiscs)));
+  }
+
+  // Cover art - store in ResourceStore and get ID
+  if (auto albumArt = metadata.get(rs::tag::MetaField::AlbumArt); !rs::tag::isNull(albumArt))
+  {
+    auto const& blob = std::get<rs::tag::Blob>(albumArt);
+    auto artBytes = std::vector<std::byte>(blob.size());
+    std::transform(blob.begin(), blob.end(), artBytes.begin(), [](char c) { return static_cast<std::byte>(c); });
+    auto resourceId = resourceWriter.create(artBytes);
+    meta.coverArtId = resourceId.value();
+  }
+
+  // File properties
+  auto& prop = record.property;
+
+  // File size
+  if (std::filesystem::exists(path)) { prop.fileSize = std::filesystem::file_size(path); }
+
+  // Modification time
+  auto ftime = std::filesystem::last_write_time(path);
+  auto epochInNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(ftime.time_since_epoch()).count();
+  prop.mtime = static_cast<std::uint64_t>(epochInNanos);
+
+  return record;
 }

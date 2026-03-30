@@ -112,8 +112,8 @@ namespace rs::core
     return {entries.subspan(hdr.customCount).data(), _track._coldData.data()};
   }
 
-  TrackView::CustomProxy::Iterator::Iterator(Entry const* pos, std::byte const* coldDataBase)
-    : _pos(pos), _coldDataBase(coldDataBase)
+TrackView::CustomProxy::Iterator::Iterator(Entry const* pos, std::byte const* coldDataBase)
+  : _pos{pos}, _coldDataBase{coldDataBase}
   {
   }
 
