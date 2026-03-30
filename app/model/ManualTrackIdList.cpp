@@ -11,17 +11,15 @@ namespace app::model
   ManualTrackIdList::ManualTrackIdList(rs::core::ListView const& view, TrackIdList* source)
     : _source{source}
   {
-    if (_source) _source->attach(this);
+    if (_source != nullptr) { _source->attach(this); }
     reload(view);
   }
 
-  ManualTrackIdList::ManualTrackIdList()
-  {
-  }
+  ManualTrackIdList::ManualTrackIdList() = default;
 
   ManualTrackIdList::~ManualTrackIdList()
   {
-    if (_source) _source->detach(this);
+    if (_source != nullptr) { _source->detach(this); }
   }
 
   void ManualTrackIdList::reload(rs::core::ListView const& view)
@@ -44,7 +42,7 @@ namespace app::model
     TrackIdList::notifyReset();
   }
 
-  void ManualTrackIdList::onInserted(TrackId id, std::size_t index)
+  void ManualTrackIdList::onInserted(TrackId id, std::size_t /*index*/)
   {
     // Manual list doesn't add new tracks from source insert notifications
     // Just forward update notification if this track is in our list

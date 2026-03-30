@@ -6,7 +6,6 @@
 #include <string>
 
 TagPromptDialog::TagPromptDialog(Gtk::Window& parent)
-  : Gtk::Dialog()
 {
   set_title("Add Tag");
   set_transient_for(parent);
@@ -16,10 +15,16 @@ TagPromptDialog::TagPromptDialog(Gtk::Window& parent)
 
 void TagPromptDialog::setupUi()
 {
-  set_default_size(300, 120);
+  constexpr int kDialogWidth = 300;
+  constexpr int kDialogHeight = 120;
+  constexpr int kBoxSpacing = 8;
+  constexpr int kBoxMargin = 12;
+  constexpr int kButtonBoxSpacing = 6;
 
-  auto box = Gtk::Box(Gtk::Orientation::VERTICAL, 8);
-  box.set_margin(12);
+  set_default_size(kDialogWidth, kDialogHeight);
+
+  auto box = Gtk::Box(Gtk::Orientation::VERTICAL, kBoxSpacing);
+  box.set_margin(kBoxMargin);
 
   // Tag input
   auto tagLabel = Gtk::Label("Tag:");
@@ -29,7 +34,7 @@ void TagPromptDialog::setupUi()
   box.append(_tagEntry);
 
   // Buttons
-  auto buttonBox = Gtk::Box(Gtk::Orientation::HORIZONTAL, 6);
+  auto buttonBox = Gtk::Box(Gtk::Orientation::HORIZONTAL, kButtonBoxSpacing);
   buttonBox.set_halign(Gtk::Align::END);
 
   _cancelButton.set_label("Cancel");
@@ -49,7 +54,7 @@ void TagPromptDialog::setupUi()
 
   buttonBox.append(_cancelButton);
   buttonBox.append(_okButton);
-  buttonBox.set_margin(12);
+  buttonBox.set_margin(kBoxMargin);
   box.append(buttonBox);
 
   set_child(box);

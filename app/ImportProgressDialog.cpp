@@ -4,7 +4,7 @@
 #include "ImportProgressDialog.h"
 
 ImportProgressDialog::ImportProgressDialog(int maxItems, Gtk::Window& parent)
-  : Gtk::Dialog(), _maxItems(maxItems)
+  : _maxItems{maxItems}
 {
   set_title("Importing Music");
   set_transient_for(parent);
@@ -16,10 +16,16 @@ ImportProgressDialog::~ImportProgressDialog() = default;
 
 void ImportProgressDialog::setupUi([[maybe_unused]] int maxItems)
 {
-  set_default_size(400, 150);
+  constexpr int kDialogWidth = 400;
+  constexpr int kDialogHeight = 150;
+  constexpr int kBoxSpacing = 8;
+  constexpr int kBoxMargin = 12;
+  constexpr int kActionAreaSpacing = 6;
 
-  auto box = Gtk::Box(Gtk::Orientation::VERTICAL, 8);
-  box.set_margin(12);
+  set_default_size(kDialogWidth, kDialogHeight);
+
+  auto box = Gtk::Box(Gtk::Orientation::VERTICAL, kBoxSpacing);
+  box.set_margin(kBoxMargin);
 
   _progressLabel.set_text("Preparing to import...");
   _progressLabel.set_halign(Gtk::Align::START);
@@ -34,10 +40,10 @@ void ImportProgressDialog::setupUi([[maybe_unused]] int maxItems)
   box.append(_okButton);
 
   // Add action area for the button
-  auto actionArea = Gtk::Box(Gtk::Orientation::HORIZONTAL, 6);
+  auto actionArea = Gtk::Box(Gtk::Orientation::HORIZONTAL, kActionAreaSpacing);
   actionArea.set_halign(Gtk::Align::END);
   actionArea.append(_okButton);
-  actionArea.set_margin(12);
+  actionArea.set_margin(kBoxMargin);
   box.append(actionArea);
 
   set_child(box);

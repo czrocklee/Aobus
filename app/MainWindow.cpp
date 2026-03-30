@@ -99,7 +99,8 @@ void MainWindow::openLibrary()
     }
     catch (Glib::Error const& e)
     {
-      std::cerr << "Error selecting folder: " << e.what() << std::endl;
+      // Folder selection was cancelled or failed - silently ignore
+      std::cerr << "Error selecting folder: " << e.what() << std::endl; // NOLINT(bugprone-empty-catch)
     }
   });
 }
@@ -156,7 +157,8 @@ void MainWindow::scanDirectory(std::filesystem::path const& dir, std::vector<std
   }
   catch (std::exception const& e)
   {
-    std::cerr << "Error scanning directory: " << e.what() << std::endl;
+    // Directory scan failed - silently ignore
+    std::cerr << "Error scanning directory: " << e.what() << std::endl; // NOLINT(bugprone-empty-catch)
   }
 }
 
@@ -240,7 +242,8 @@ void MainWindow::importFiles()
     }
     catch (Glib::Error const& e)
     {
-      std::cerr << "Error selecting folder: " << e.what() << std::endl;
+      // Folder selection was cancelled or failed - silently ignore
+      std::cerr << "Error selecting folder: " << e.what() << std::endl; // NOLINT(bugprone-empty-catch)
     }
   });
 }

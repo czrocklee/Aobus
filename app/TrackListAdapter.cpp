@@ -16,7 +16,7 @@ namespace
   // Case-insensitive substring search
   bool containsCi(std::string const& haystack, std::string const& needle)
   {
-    if (needle.empty()) return true;
+    if (needle.empty()) { return true; }
 
     auto it = std::search(
       haystack.begin(), haystack.end(), needle.begin(), needle.end(), [](unsigned char c1, unsigned char c2) {
@@ -31,14 +31,14 @@ namespace
                      std::string const& tags,
                      Glib::ustring const& filter)
   {
-    if (filter.empty()) return true;
+    if (filter.empty()) { return true; }
 
     auto filterStr = filter.lowercase();
 
-    if (containsCi(artist, filterStr)) return true;
-    if (containsCi(album, filterStr)) return true;
-    if (containsCi(title, filterStr)) return true;
-    if (containsCi(tags, filterStr)) return true;
+    if (containsCi(artist, filterStr)) { return true; }
+    if (containsCi(album, filterStr)) { return true; }
+    if (containsCi(title, filterStr)) { return true; }
+    if (containsCi(tags, filterStr)) { return true; }
 
     return false;
   }

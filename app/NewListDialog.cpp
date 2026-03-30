@@ -4,7 +4,6 @@
 #include "NewListDialog.h"
 
 NewListDialog::NewListDialog(Gtk::Window& parent)
-  : Gtk::Dialog()
 {
   set_title("New List");
   set_transient_for(parent);
@@ -14,10 +13,16 @@ NewListDialog::NewListDialog(Gtk::Window& parent)
 
 void NewListDialog::setupUi()
 {
-  set_default_size(400, 200);
+  constexpr int kDialogWidth = 400;
+  constexpr int kDialogHeight = 200;
+  constexpr int kBoxSpacing = 8;
+  constexpr int kBoxMargin = 12;
+  constexpr int kButtonBoxSpacing = 6;
 
-  auto box = Gtk::Box(Gtk::Orientation::VERTICAL, 8);
-  box.set_margin(12);
+  set_default_size(kDialogWidth, kDialogHeight);
+
+  auto box = Gtk::Box(Gtk::Orientation::VERTICAL, kBoxSpacing);
+  box.set_margin(kBoxMargin);
 
   // Name field
   auto nameLabel = Gtk::Label("Name:");
@@ -41,7 +46,7 @@ void NewListDialog::setupUi()
   box.append(_exprEntry);
 
   // Buttons
-  auto buttonBox = Gtk::Box(Gtk::Orientation::HORIZONTAL, 6);
+  auto buttonBox = Gtk::Box(Gtk::Orientation::HORIZONTAL, kButtonBoxSpacing);
   buttonBox.set_halign(Gtk::Align::END);
 
   _cancelButton.set_label("Cancel");
@@ -56,7 +61,7 @@ void NewListDialog::setupUi()
 
   buttonBox.append(_cancelButton);
   buttonBox.append(_okButton);
-  buttonBox.set_margin(12);
+  buttonBox.set_margin(kBoxMargin);
   box.append(buttonBox);
 
   set_child(box);
@@ -64,11 +69,11 @@ void NewListDialog::setupUi()
 
 app::model::ListDraft NewListDialog::draft() const
 {
-  app::model::ListDraft d;
-  d.kind = app::model::ListKind::Smart;
-  d.name = _nameEntry.get_text();
-  d.description = _descEntry.get_text();
-  d.expression = _exprEntry.get_text();
+  app::model::ListDraft draftData;
+  draftData.kind = app::model::ListKind::Smart;
+  draftData.name = _nameEntry.get_text();
+  draftData.description = _descEntry.get_text();
+  draftData.expression = _exprEntry.get_text();
   // trackIds remain empty for smart lists
-  return d;
+  return draftData;
 }

@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
 
   // Add about action to application
   auto aboutAction = Gio::SimpleAction::create("about");
-  aboutAction->signal_activate().connect([&app]([[maybe_unused]] Glib::VariantBase const& v) {
+  aboutAction->signal_activate().connect([&app]([[maybe_unused]] Glib::VariantBase const& /*variant*/) {
     Gtk::AboutDialog dialog;
     dialog.set_program_name("RockStudio");
     dialog.set_version("1.0");
@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
 
   // Add quit action
   auto quitAction = Gio::SimpleAction::create("quit");
-  quitAction->signal_activate().connect([&app]([[maybe_unused]] Glib::VariantBase const& v) { app->quit(); });
+  quitAction->signal_activate().connect([&app]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { app->quit(); });
   app->add_action(quitAction);
 
   // Keep window alive - use shared_ptr
