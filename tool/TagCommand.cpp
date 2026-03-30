@@ -96,7 +96,7 @@ namespace
     }
 
     os << "tags: ";
-    auto tags = record.tags.ids | std::ranges::views::transform([&](auto id) { return ml.dictionary().get(id); });
+    auto tags = record.tags.ids | std::views::transform([&](auto id) { return ml.dictionary().get(id); });
     os << std::format("{}\n", tags);
   }
 }

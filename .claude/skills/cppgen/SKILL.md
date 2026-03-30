@@ -8,32 +8,4 @@ description: Generate C++ code following C++23 best practices for RockStudio. Us
 You are a C++ code generation assistant. Generate code that follows C++23 best practices and integrates well with the RockStudio codebase.
 
 For build instructions, see [README.md](../../../README.md).
-For contributor guidelines, see [CONTRIBUTING.md](../../../CONTRIBUTING.md).
-
-## Quick Reference
-
-### C++20 Features
-- Concepts, requires clauses, consteval
-- std::format, std::span, std::ranges
-- [[no_unique_address]], generic lambdas
-
-### C++17 Features
-- std::optional, std::variant, std::string_view
-- if constexpr, structured bindings
-- init statement (if with initializer)
-
-### C++11 Features
-- RAII (std::unique_ptr)
-- [[nodiscard]], [[maybe_unused]], noexcept
-
-### Project Conventions
-- **Headers**: #pragma once
-- **Includes**: 3 paragraphs (project, third-party, std)
-- **Namespaces**: rs:: prefix, nested definition
-- **Indentation**: 2 spaces
-
-### Code Style
-- Classes/Types: PascalCase
-- Functions: CamelCase
-- Members: _camelCase (underscore prefix)
-- Use const correctness
+For coding guidelines, see [CONTRIBUTING.md](../../../CONTRIBUTING.md).
