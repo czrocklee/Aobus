@@ -13,18 +13,27 @@
 class TrackViewPage final : public Gtk::Box
 {
 public:
+  using TrackId = TrackListAdapter::TrackId;
+  using SelectionChangedSignal = sigc::signal<void()>;
+  using TrackActivatedSignal = sigc::signal<void(TrackId)>;
+
   explicit TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter);
   ~TrackViewPage() override;
 
   // Get the selected track IDs
-  std::vector<TrackListAdapter::TrackId> getSelectedTrackIds() const;
+  std::vector<TrackId> getSelectedTrackIds() const;
+
+  // Get the primary (first) selected track ID
+  std::optional<TrackId> getPrimarySelectedTrackId() const;
 
   // Get the column view for context menu setup
   Gtk::ColumnView& getColumnView() { return _columnView; }
 
   // Signal for selection changes
-  using SelectionChangedSignal = sigc::signal<void()>;
   SelectionChangedSignal& signalSelectionChanged();
+
+  // Signal for track activation (double-click or Enter)
+  TrackActivatedSignal& signalTrackActivated();
 
   // Status banner API
   void setStatusMessage(std::string const& message);
@@ -34,8 +43,10 @@ private:
   // Setup methods
   void setupColumns();
   void setupStatusBar();
+  void setupActivation();
   void onFilterChanged();
   void onSelectionChanged(std::uint32_t position, std::uint32_t nItems);
+  void onActivateCurrentSelection();
 
   // Child widgets
   Gtk::Entry _filterEntry;
@@ -47,6 +58,7 @@ private:
   Glib::RefPtr<TrackListAdapter> _adapter;
   Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
 
-  // Signal
+  // Signals
   SelectionChangedSignal _selectionChanged;
+  TrackActivatedSignal _trackActivated;
 };

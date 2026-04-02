@@ -14,6 +14,11 @@
 #include <string>
 #include <unordered_map>
 
+namespace app::playback
+{
+  struct TrackPlaybackDescriptor;
+}
+
 namespace app::model
 {
 
@@ -72,6 +77,13 @@ namespace app::model
      * @return URI path if track exists, std::nullopt otherwise
      */
     std::optional<std::filesystem::path> getUriPath(TrackId id);
+
+    /**
+     * Get playback descriptor for a track.
+     * Creates internal transaction.
+     * @return TrackPlaybackDescriptor if track exists, std::nullopt otherwise
+     */
+    std::optional<app::playback::TrackPlaybackDescriptor> getPlaybackDescriptor(TrackId id);
 
     /**
      * Invalidate hot data cache for a track (after tag updates).

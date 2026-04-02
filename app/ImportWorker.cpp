@@ -3,9 +3,12 @@
 
 #include "ImportWorker.h"
 
+#include <rs/core/TrackBuilder.h>
 #include <rs/tag/flac/File.h>
 #include <rs/tag/mp4/File.h>
 #include <rs/tag/mpeg/File.h>
+
+#include <algorithm>
 
 #include <iostream>
 #include <stdexcept>
@@ -71,12 +74,11 @@ void ImportWorker::run()
       rs::tag::Metadata metadata;
       metadata = tagFile->loadMetadata();
 
-      // Populate TrackRecord from metadata
-      auto record = populateRecord(metadata, path, dict, resourceWriter);
+      // Build track from metadata
+      auto builder = populateRecord(metadata, path, dict, resourceWriter);
 
       // Serialize hot and cold data
-      auto hotData = record.serializeHot();
-      auto coldData = record.serializeCold(dict);
+      auto [hotData, coldData] = builder.serialize(dict, txn);
 
       // Create the track
       auto [trackId, view] = trackWriter.createHotCold(hotData, coldData);
@@ -101,80 +103,80 @@ void ImportWorker::join()
   if (_workerThread.joinable()) { _workerThread.join(); }
 }
 
-rs::core::TrackRecord ImportWorker::populateRecord(rs::tag::Metadata const& metadata,
-                                                   std::filesystem::path const& path,
-                                                   rs::core::DictionaryStore& dict,
-                                                   rs::core::ResourceStore::Writer& resourceWriter)
+rs::core::TrackBuilder ImportWorker::populateRecord(rs::tag::Metadata const& metadata,
+                                                    std::filesystem::path const& path,
+                                                    rs::core::DictionaryStore& dict,
+                                                    rs::core::ResourceStore::Writer& resourceWriter)
 {
-  rs::core::TrackRecord record;
+  auto builder = rs::core::TrackBuilder::createNew();
 
   // Populate metadata
-  auto& meta = record.metadata;
+  auto metaBuilder = builder.metadata();
 
   // Title
   if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::Title)))
   {
-    meta.title = std::get<std::string>(metadata.get(rs::tag::MetaField::Title));
+    metaBuilder.title(std::get<std::string>(metadata.get(rs::tag::MetaField::Title)));
   }
 
   // URI - store relative to library root
   auto relativePath = std::filesystem::relative(path, _ml.rootPath());
-  meta.uri = relativePath.string();
+  metaBuilder.uri(relativePath.string());
 
   // Artist
   if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::Artist)))
   {
-    meta.artist = std::get<std::string>(metadata.get(rs::tag::MetaField::Artist));
+    metaBuilder.artist(std::get<std::string>(metadata.get(rs::tag::MetaField::Artist)));
   }
 
   // Album
   if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::Album)))
   {
-    meta.album = std::get<std::string>(metadata.get(rs::tag::MetaField::Album));
+    metaBuilder.album(std::get<std::string>(metadata.get(rs::tag::MetaField::Album)));
   }
 
   // Album Artist
   if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::AlbumArtist)))
   {
-    meta.albumArtist = std::get<std::string>(metadata.get(rs::tag::MetaField::AlbumArtist));
+    metaBuilder.albumArtist(std::get<std::string>(metadata.get(rs::tag::MetaField::AlbumArtist)));
   }
 
   // Genre
   if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::Genre)))
   {
-    meta.genre = std::get<std::string>(metadata.get(rs::tag::MetaField::Genre));
+    metaBuilder.genre(std::get<std::string>(metadata.get(rs::tag::MetaField::Genre)));
   }
 
   // Year
   if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::Year)))
   {
-    meta.year = static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::Year)));
+    metaBuilder.year(static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::Year))));
   }
 
   // Track number
   if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::TrackNumber)))
   {
-    meta.trackNumber =
-      static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::TrackNumber)));
+    metaBuilder.trackNumber(
+      static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::TrackNumber))));
   }
 
   // Total tracks
   if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::TotalTracks)))
   {
-    meta.totalTracks =
-      static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::TotalTracks)));
+    metaBuilder.totalTracks(
+      static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::TotalTracks))));
   }
 
   // Disc number
   if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::DiscNumber)))
   {
-    meta.discNumber = static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::DiscNumber)));
+    metaBuilder.discNumber(static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::DiscNumber))));
   }
 
   // Total discs
   if (!rs::tag::isNull(metadata.get(rs::tag::MetaField::TotalDiscs)))
   {
-    meta.totalDiscs = static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::TotalDiscs)));
+    metaBuilder.totalDiscs(static_cast<std::uint16_t>(std::get<std::int64_t>(metadata.get(rs::tag::MetaField::TotalDiscs))));
   }
 
   // Cover art - store in ResourceStore and get ID
@@ -184,19 +186,19 @@ rs::core::TrackRecord ImportWorker::populateRecord(rs::tag::Metadata const& meta
     auto artBytes = std::vector<std::byte>(blob.size());
     std::transform(blob.begin(), blob.end(), artBytes.begin(), [](char c) { return static_cast<std::byte>(c); });
     auto resourceId = resourceWriter.create(artBytes);
-    meta.coverArtId = resourceId.value();
+    metaBuilder.coverArtId(resourceId.value());
   }
 
   // File properties
-  auto& prop = record.property;
+  auto propBuilder = builder.property();
 
   // File size
-  if (std::filesystem::exists(path)) { prop.fileSize = std::filesystem::file_size(path); }
+  if (std::filesystem::exists(path)) { propBuilder.fileSize(std::filesystem::file_size(path)); }
 
   // Modification time
   auto ftime = std::filesystem::last_write_time(path);
   auto epochInNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(ftime.time_since_epoch()).count();
-  prop.mtime = static_cast<std::uint64_t>(epochInNanos);
+  propBuilder.mtime(static_cast<std::uint64_t>(epochInNanos));
 
-  return record;
+  return builder;
 }

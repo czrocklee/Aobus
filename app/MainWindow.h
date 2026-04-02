@@ -15,6 +15,8 @@
 #include <thread>
 #include <vector>
 
+#include "playback/PlaybackTypes.h"
+
 namespace app::model
 {
   class ListDraft;
@@ -32,6 +34,12 @@ class ImportWorker;
 class CoverArtWidget;
 class PlaylistExporter;
 class ImportProgressDialog;
+class PlaybackBar;
+
+namespace app::playback
+{
+  class PlaybackController;
+}
 
 // Page context structure
 struct TrackPageContext final
@@ -89,6 +97,22 @@ private:
   void saveSession();
   void loadSession();
 
+  // Playback support
+  void setupPlayback();
+  void refreshPlaybackBar();
+  void onPlayRequested();
+  void onPauseRequested();
+  void onStopRequested();
+  void onSeekRequested(std::uint32_t positionMs);
+  void playCurrentSelection();
+  void pausePlayback();
+  void stopPlayback();
+  void seekPlayback(std::uint32_t positionMs);
+  void bindTrackPagePlayback(TrackViewPage& page);
+  TrackPageContext* currentVisibleTrackPageContext();
+  TrackPageContext const* currentVisibleTrackPageContext() const;
+  std::optional<app::playback::TrackPlaybackDescriptor> currentSelectionPlaybackDescriptor() const;
+
   // Music library instance
   std::unique_ptr<rs::core::MusicLibrary> _musicLibrary;
 
@@ -124,4 +148,9 @@ private:
 
   // Track pages map
   std::map<rs::core::ListId, TrackPageContext> _trackPages;
+
+  // Playback support
+  std::unique_ptr<PlaybackBar> _playbackBar;
+  std::unique_ptr<app::playback::PlaybackController> _playbackController;
+  std::uint32_t _playbackTimer = 0;
 };

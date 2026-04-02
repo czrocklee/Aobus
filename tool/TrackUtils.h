@@ -5,12 +5,12 @@
 
 #include <rs/core/DictionaryStore.h>
 #include <rs/core/ResourceStore.h>
-#include <rs/core/TrackRecord.h>
+#include <rs/core/TrackBuilder.h>
 #include <rs/lmdb/Transaction.h>
 
 #include <filesystem>
 
-rs::core::TrackRecord loadTrackRecord(std::filesystem::path const& path,
+rs::core::TrackBuilder loadTrackRecord(std::filesystem::path const& path,
                                       rs::core::DictionaryStore& dictionary,
                                       rs::core::ResourceStore::Writer& resourceWriter,
                                       rs::lmdb::WriteTransaction& txn);

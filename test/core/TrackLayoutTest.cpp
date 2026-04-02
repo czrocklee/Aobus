@@ -4,11 +4,15 @@
 #include <catch2/catch.hpp>
 
 #include <cstddef>
+#include <rs/core/TrackBuilder.h>
 #include <rs/core/TrackRecord.h>
 #include <rs/core/TrackView.h>
+#include <rs/lmdb/Environment.h>
+#include <rs/lmdb/Transaction.h>
 #include <rs/utility/ByteView.h>
 #include <span>
 #include <test/core/TestUtils.h>
+#include <test/lmdb/TestUtils.h>
 
 #include <vector>
 
@@ -23,7 +27,7 @@ namespace
   // Helper to create a minimal valid hot TrackView for testing
   std::vector<std::byte> createMinimalHotData()
   {
-    TrackHotHeader h{};
+    auto h = TrackHotHeader{};
     h.tagBloom = 0;
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
@@ -41,7 +45,7 @@ namespace
 
   std::vector<std::byte> createTrackWithStrings(std::string_view title)
   {
-    TrackHotHeader h{};
+    auto h = TrackHotHeader{};
     h.tagBloom = 0;
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
@@ -95,21 +99,21 @@ namespace
   TEST_CASE("Metadata - Hot Title")
   {
     auto data = createTrackWithStrings("Test Title");
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().title() == "Test Title");
   }
 
   TEST_CASE("Metadata - Hot Title Empty")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().title().empty());
   }
 
   TEST_CASE("Metadata - Hot Dictionary IDs")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.metadata().artistId() == DictionaryId{1});
     CHECK(view.metadata().albumId() == DictionaryId{2});
@@ -120,7 +124,7 @@ namespace
   TEST_CASE("Metadata - Hot Year")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().year() == 2020);
   }
 
@@ -130,21 +134,28 @@ namespace
                                         std::vector<std::pair<std::string, std::string>> const& customPairs = {},
                                         std::string_view uri = "")
   {
-    rs::core::TrackRecord record;
-    record.metadata.uri = std::string{uri};
-    record.property.fileSize = rs::utility::combineInt64(header.fileSizeLo, header.fileSizeHi);
-    record.property.mtime = rs::utility::combineInt64(header.mtimeLo, header.mtimeHi);
-    record.metadata.coverArtId = header.coverArtId;
-    record.metadata.trackNumber = header.trackNumber;
-    record.metadata.totalTracks = header.totalTracks;
-    record.metadata.discNumber = header.discNumber;
-    record.metadata.totalDiscs = header.totalDiscs;
-    record.property.durationMs = header.durationMs;
-    record.property.sampleRate = header.sampleRate;
-    record.property.bitrate = header.bitrate;
-    record.property.channels = header.channels;
-    record.custom.pairs = customPairs;
-    return record.serializeCold([counter = 1u](auto) mutable { return rs::core::DictionaryId{counter++}; });
+    auto builder = rs::core::TrackBuilder::createNew();
+    builder.metadata().uri(std::string{uri});
+    builder.property().fileSize(rs::utility::combineInt64(header.fileSizeLo, header.fileSizeHi));
+    builder.property().mtime(rs::utility::combineInt64(header.mtimeLo, header.mtimeHi));
+    builder.metadata().coverArtId(header.coverArtId);
+    builder.metadata().trackNumber(header.trackNumber);
+    builder.metadata().totalTracks(header.totalTracks);
+    builder.metadata().discNumber(header.discNumber);
+    builder.metadata().totalDiscs(header.totalDiscs);
+    builder.property().durationMs(header.durationMs);
+    builder.property().sampleRate(header.sampleRate);
+    builder.property().bitrate(header.bitrate);
+    builder.property().channels(header.channels);
+    for (auto const& [key, value] : customPairs) {
+      builder.custom().add(key, value);
+    }
+
+    auto temp = TempDir{};
+    auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto wtxn = rs::lmdb::WriteTransaction{env};
+    auto dict = rs::core::DictionaryStore{wtxn, "dict"};
+    return builder.serializeCold(dict, wtxn);
   }
 
   rs::core::TrackView makeColdView(std::vector<std::byte> const& data)
@@ -160,7 +171,7 @@ namespace
 
   TEST_CASE("Metadata - Cold Track Info")
   {
-    TrackColdHeader header{};
+    auto header = TrackColdHeader{};
     header.trackNumber = 5;
     header.totalTracks = 10;
     header.discNumber = 1;
@@ -177,7 +188,7 @@ namespace
 
   TEST_CASE("Metadata - Cold Cover Art")
   {
-    TrackColdHeader header{};
+    auto header = TrackColdHeader{};
     header.coverArtId = 42;
 
     auto data = createColdData(header, {}, "");
@@ -207,12 +218,12 @@ namespace
 
   TEST_CASE("Property - Hot Codec and BitDepth")
   {
-    TrackHotHeader h{};
+    auto h = TrackHotHeader{};
     h.codecId = 3; // FLAC
     h.bitDepth = 24;
     h.rating = 0;
     auto data = serializeHeader(h);
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.property().codecId() == 3);
     CHECK(view.property().bitDepth() == 24);
@@ -221,14 +232,14 @@ namespace
   TEST_CASE("Property - Hot Rating")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.property().rating() == 3);
   }
 
   TEST_CASE("Property - Hot Rating Boundary")
   {
-    TrackHotHeader h{};
+    auto h = TrackHotHeader{};
     h.rating = 0;
     auto data = serializeHeader(h);
     CHECK(rs::core::TrackView{data, std::span<std::byte const>{}}.property().rating() == 0);
@@ -240,7 +251,7 @@ namespace
 
   TEST_CASE("Property - Cold File Size and Mtime")
   {
-    TrackColdHeader header{};
+    auto header = TrackColdHeader{};
     std::tie(header.fileSizeLo, header.fileSizeHi) = splitInt64(12345678);
     std::tie(header.mtimeLo, header.mtimeHi) = splitInt64(987654321);
 
@@ -253,7 +264,7 @@ namespace
 
   TEST_CASE("Property - Cold Audio Format")
   {
-    TrackColdHeader header{};
+    auto header = TrackColdHeader{};
     header.durationMs = 180000;
     header.sampleRate = 44100;
     header.bitrate = 320000;
@@ -272,18 +283,18 @@ namespace
 
   TEST_CASE("Tag - Bloom Filter")
   {
-    TrackHotHeader h{};
+    auto h = TrackHotHeader{};
     h.tagBloom = 0xCAFE;
 
     auto data = serializeHeader(h);
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.tags().bloom() == 0xCAFE);
   }
 
   TEST_CASE("Tag - Count Zero")
   {
     auto data = createTrackWithStrings("Test");
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().count() == 0);
   }
@@ -291,14 +302,14 @@ namespace
   TEST_CASE("Tag - Iterator Empty")
   {
     auto data = createTrackWithStrings("Test");
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().begin() == view.tags().end());
   }
 
   TEST_CASE("Tag - Count With Tags")
   {
-    TrackHotHeader h{};
+    auto h = TrackHotHeader{};
     h.tagBloom = 0;
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
@@ -322,13 +333,13 @@ namespace
 
     appendString(data, title);
 
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.tags().count() == 2);
   }
 
   TEST_CASE("Tag - Iterator")
   {
-    TrackHotHeader h{};
+    auto h = TrackHotHeader{};
     h.tagBloom = 0;
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
@@ -352,7 +363,7 @@ namespace
 
     appendString(data, title);
 
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
     std::vector<DictionaryId> ids(view.tags().begin(), view.tags().end());
     CHECK(ids.size() == 2);
@@ -362,7 +373,7 @@ namespace
 
   TEST_CASE("Tag - Has")
   {
-    TrackHotHeader h{};
+    auto h = TrackHotHeader{};
     h.tagBloom = 0;
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
@@ -380,7 +391,7 @@ namespace
     data.insert_range(data.end(), rs::utility::asBytes(tag1));
     data.insert_range(data.end(), rs::utility::asBytes(tag2));
 
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().has(DictionaryId{10}) == true);
     CHECK(view.tags().has(DictionaryId{20}) == true);
@@ -389,7 +400,7 @@ namespace
 
   TEST_CASE("Tag - Id Accessor")
   {
-    TrackHotHeader h{};
+    auto h = TrackHotHeader{};
     h.tagBloom = 0;
     h.artistId = DictionaryId{1};
     h.albumId = DictionaryId{2};
@@ -407,7 +418,7 @@ namespace
     data.insert_range(data.end(), rs::utility::asBytes(tag1));
     data.insert_range(data.end(), rs::utility::asBytes(tag2));
 
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().id(0) == DictionaryId{10});
     CHECK(view.tags().id(1) == DictionaryId{20});
@@ -437,7 +448,7 @@ namespace
     int count = 0;
     for (auto const& [k, v] : view.custom())
     {
-      CHECK(k == DictionaryId{1});
+      CHECK(k == DictionaryId{0});
       CHECK(v == "value1");
       ++count;
     }
@@ -456,19 +467,19 @@ namespace
     auto data = createColdData({}, pairs, "/path/to/file.flac");
     auto view = makeColdView(data);
 
-    // testResolver assigns sequential IDs: key1->1, key2->2, key3->3
+    // DictionaryStore assigns sequential IDs: key1->0, key2->1, key3->2
+    auto id0 = DictionaryId{0};
     auto id1 = DictionaryId{1};
     auto id2 = DictionaryId{2};
-    auto id3 = DictionaryId{3};
 
-    std::vector<std::pair<DictionaryId, std::string_view>> result;
+    auto result = std::vector<std::pair<DictionaryId, std::string_view>>{};
     for (auto const& [k, v] : view.custom()) { result.emplace_back(k, v); }
     CHECK(result.size() == 3);
-    CHECK(result[0].first == id1);
+    CHECK(result[0].first == id0);
     CHECK(result[0].second == "-6.5");
-    CHECK(result[1].first == id2);
+    CHECK(result[1].first == id1);
     CHECK(result[1].second == "USSM19999999");
-    CHECK(result[2].first == id3);
+    CHECK(result[2].first == id2);
     CHECK(result[2].second == "remaster");
   }
 
@@ -495,7 +506,7 @@ namespace
     int count = 0;
     for (auto [key, value] : view.custom())
     {
-      CHECK(key == DictionaryId{1});
+      CHECK(key == DictionaryId{0});
       CHECK(value == "value1");
       ++count;
     }
@@ -511,7 +522,7 @@ namespace
 
     for (auto [key, value] : view.custom())
     {
-      CHECK(key == DictionaryId{1});
+      CHECK(key == DictionaryId{0});
       CHECK(value == "Hello, World! 你好");
     }
   }
@@ -527,14 +538,14 @@ namespace
     auto data = createColdData({}, pairs, "");
     auto view = makeColdView(data);
 
-    std::vector<std::pair<DictionaryId, std::string_view>> result;
+    auto result = std::vector<std::pair<DictionaryId, std::string_view>>{};
     for (auto [key, value] : view.custom()) { result.emplace_back(key, value); }
     CHECK(result.size() == 3);
-    CHECK(result[0].first == DictionaryId{1});
+    CHECK(result[0].first == DictionaryId{0});
     CHECK(result[0].second == "-6.5");
-    CHECK(result[1].first == DictionaryId{2});
+    CHECK(result[1].first == DictionaryId{1});
     CHECK(result[1].second == "USSM19999999");
-    CHECK(result[2].first == DictionaryId{3});
+    CHECK(result[2].first == DictionaryId{2});
     CHECK(result[2].second == "remaster");
   }
 
@@ -546,8 +557,8 @@ namespace
     auto data = createColdData({}, pairs, "");
     auto view = makeColdView(data);
 
-    // testResolver assigns: replaygain->1, isrc->2
-    auto value = view.custom().get(DictionaryId{2});
+    // DictionaryStore assigns: replaygain->0, isrc->1
+    auto value = view.custom().get(DictionaryId{1});
     CHECK(value.has_value() == true);
     CHECK(*value == "USSM19999999");
   }
@@ -571,8 +582,8 @@ namespace
     auto data = createColdData({}, pairs, "");
     auto view = makeColdView(data);
 
-    // createColdData assigned "ISRC" to ID 1, but we're looking for "isrc" which would be ID 2
-    auto value = view.custom().get(DictionaryId{2});
+    // createColdData assigned "ISRC" to ID 0, but we're looking for "isrc" which would be ID 1
+    auto value = view.custom().get(DictionaryId{1});
     CHECK(value.has_value() == false);
   }
 
@@ -589,16 +600,16 @@ namespace
     auto data = createColdData({}, pairs, "");
     auto view = makeColdView(data);
 
-    // First entry (dictId=1)
-    CHECK(view.custom().get(DictionaryId{1}).value() == "value0");
-    // Middle entry (dictId=50)
-    CHECK(view.custom().get(DictionaryId{50}).value() == "value49");
-    // Last entry (dictId=100)
-    CHECK(view.custom().get(DictionaryId{100}).value() == "value99");
+    // First entry (dictId=0)
+    CHECK(view.custom().get(DictionaryId{0}).value() == "value0");
+    // Middle entry (dictId=49)
+    CHECK(view.custom().get(DictionaryId{49}).value() == "value49");
+    // Last entry (dictId=99)
+    CHECK(view.custom().get(DictionaryId{99}).value() == "value99");
     // Not found
-    CHECK(view.custom().get(DictionaryId{200}).has_value() == false);
+    CHECK(view.custom().get(DictionaryId{199}).has_value() == false);
     // Before first
-    CHECK(view.custom().get(DictionaryId{0}).has_value() == false);
+    CHECK(view.custom().get(DictionaryId{0}).has_value() == true); // 0 is the first entry
   }
 
   TEST_CASE("Custom - Empty Key And Value")
@@ -611,7 +622,7 @@ namespace
     int count = 0;
     for (auto const& [k, v] : view.custom())
     {
-      CHECK(k == DictionaryId{1});
+      CHECK(k == DictionaryId{0});
       CHECK(v.size() == 0);
       ++count;
     }
@@ -627,7 +638,7 @@ namespace
 
     for (auto const& [k, v] : view.custom())
     {
-      CHECK(k == DictionaryId{1});
+      CHECK(k == DictionaryId{0});
       CHECK(v == "Hello, World! 你好");
     }
   }
@@ -637,13 +648,13 @@ namespace
   TEST_CASE("View - Hot Valid")
   {
     auto data = createMinimalHotData();
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.isHotValid() == true);
   }
 
   TEST_CASE("View - Hot Invalid Null Data")
   {
-    std::span<std::byte const> nullSpan{static_cast<std::byte const*>(nullptr), 100};
+    auto nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
     rs::core::TrackView nullView{nullSpan, std::span<std::byte const>{}};
     CHECK(nullView.isHotValid() == false);
   }
@@ -651,7 +662,7 @@ namespace
   TEST_CASE("View - Hot Invalid Too Small")
   {
     char smallData[10] = {};
-    std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
+    auto smallSpan = std::span<std::byte const>{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
     rs::core::TrackView smallView{smallSpan, std::span<std::byte const>{}};
     CHECK(smallView.isHotValid() == false);
   }
@@ -665,7 +676,7 @@ namespace
 
   TEST_CASE("View - Cold Invalid Null Data")
   {
-    std::span<std::byte const> nullSpan{static_cast<std::byte const*>(nullptr), 100};
+    auto nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
     rs::core::TrackView nullView{std::span<std::byte const>{}, nullSpan};
     CHECK(nullView.isColdValid() == false);
   }
@@ -673,7 +684,7 @@ namespace
   TEST_CASE("View - Cold Invalid Too Small")
   {
     char smallData[10] = {};
-    std::span<std::byte const> smallSpan{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
+    auto smallSpan = std::span<std::byte const>{reinterpret_cast<std::byte const*>(smallData), sizeof(smallData)};
     rs::core::TrackView smallView{std::span<std::byte const>{}, smallSpan};
     CHECK(smallView.isColdValid() == false);
   }

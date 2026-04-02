@@ -60,10 +60,10 @@ This guide covers C++ coding conventions for RockStudio contributors.
     - 3.3.2. DON'T use `[[nodiscard]]`: Too verbose, rely on clang-tidy for check
     - 3.3.3. Use `[[maybe_unused]]`: Suppress unused warnings other than (void)
     - 3.3.4. Use `noexcept`: Mark functions that won't throw
-    - 3.3.5. Prefer uniform initialization:
-      - `auto x = T{a, b};` > `T x{a, b};`
-      - `auto x = T{};` > `T x;`
-      - `: _mem{a}` > `: _mem(a)`
+    - 3.3.5. Use auto + uniform initialization for non-primtive object declaration:
+      - Prefer `auto x = T{a, b};` over `T x{a, b};`
+      - Prefer `auto x = T{};` over `T x;`
+      - Prefer `T() : _mem{a}` over `T() : _mem(a)`
 - 4. Best Practices
   - 4.1. Getters and Accessors
     - 4.1.1. Keep simple one-liner getters/setters inline in headers

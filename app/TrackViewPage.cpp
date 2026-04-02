@@ -3,12 +3,32 @@
 
 #include "TrackViewPage.h"
 
+#include <gdk/gdk.h>
+
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/listitem.h>
 #include <gtkmm/signallistitemfactory.h>
 
 #include <cstdint>
 #include <vector>
+
+namespace
+{
+  std::optional<TrackListAdapter::TrackId> trackIdAtPosition(
+    Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
+    std::uint32_t position)
+  {
+    if (!selectionModel) { return std::nullopt; }
+
+    auto item = selectionModel->get_object(position);
+    if (!item) { return std::nullopt; }
+
+    auto row = std::dynamic_pointer_cast<TrackRow>(item);
+    if (!row) { return std::nullopt; }
+
+    return row->getTrackId();
+  }
+}
 
 TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
   : Gtk::Box(Gtk::Orientation::VERTICAL), _adapter(adapter)
@@ -34,6 +54,9 @@ TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
 
   // Set up columns
   setupColumns();
+
+  // Set up activation (double-click, Enter key)
+  setupActivation();
 
   // Set up scrolled window
   _scrolledWindow.set_child(_columnView);
@@ -198,4 +221,83 @@ std::vector<TrackListAdapter::TrackId> TrackViewPage::getSelectedTrackIds() cons
 sigc::signal<void()>& TrackViewPage::signalSelectionChanged()
 {
   return _selectionChanged;
+}
+
+sigc::signal<void(TrackViewPage::TrackId)>& TrackViewPage::signalTrackActivated()
+{
+  return _trackActivated;
+}
+
+void TrackViewPage::setupActivation()
+{
+  _columnView.set_focusable(true);
+  _columnView.set_focus_on_click(true);
+
+  // Built-in activation carries the exact row position that GTK activated.
+  _columnView.signal_activate().connect([this](std::uint32_t position) {
+    if (auto trackId = trackIdAtPosition(_selectionModel, position))
+    {
+      _trackActivated.emit(*trackId);
+      return;
+    }
+
+    onActivateCurrentSelection();
+  });
+
+  // Keep an explicit Enter handler so activation still works when GTK focus is
+  // on the view but no activate action is emitted automatically.
+  auto keyController = Gtk::EventControllerKey::create();
+  keyController->signal_key_pressed().connect([this](guint keyval, guint, Gdk::ModifierType) {
+    if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter)
+    {
+      onActivateCurrentSelection();
+      return true;
+    }
+    return false;
+  }, false);
+  _columnView.add_controller(keyController);
+
+  // Use release rather than press so GTK has already updated selection when we
+  // inspect the currently selected row.
+  auto clickController = Gtk::GestureClick::create();
+  clickController->set_button(GDK_BUTTON_PRIMARY);
+  clickController->signal_released().connect([this](int nPress, double, double) {
+    if (nPress == 2)
+    {
+      onActivateCurrentSelection();
+    }
+  });
+  _columnView.add_controller(clickController);
+}
+
+void TrackViewPage::onActivateCurrentSelection()
+{
+  auto trackId = getPrimarySelectedTrackId();
+  if (trackId) { _trackActivated.emit(*trackId); }
+}
+
+std::optional<TrackViewPage::TrackId> TrackViewPage::getPrimarySelectedTrackId() const
+{
+  auto model = _selectionModel->get_model();
+
+  if (!model) { return std::nullopt; }
+
+  // Find first selected item
+  auto nItems = model->get_n_items();
+  for (std::uint32_t i = 0; i < nItems; ++i)
+  {
+    if (_selectionModel->is_selected(i))
+    {
+      auto item = model->get_object(i);
+      if (item)
+      {
+        auto row = std::dynamic_pointer_cast<TrackRow>(item);
+        if (row) { return row->getTrackId(); }
+      }
+      // Found first selected, no need to continue
+      break;
+    }
+  }
+
+  return std::nullopt;
 }

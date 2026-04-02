@@ -4,8 +4,8 @@
 #include "TagCommand.h"
 #include "BasicCommand.h"
 #include <rs/core/DictionaryStore.h>
+#include <rs/core/TrackBuilder.h>
 #include <rs/core/TrackLayout.h>
-#include <rs/core/TrackRecord.h>
 #include <rs/core/TrackStore.h>
 
 #include <algorithm>
@@ -29,18 +29,19 @@ namespace
       return;
     }
 
-    auto record = TrackRecord{*optTrackView, ml.dictionary()};
-    auto tagId = ml.dictionary().put(txn, tagName);
+    auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
 
-    if (std::ranges::any_of(record.tags.ids, [tagId](auto tag) { return tag == tagId; }))
+    // Check if tag already exists by iterating tag names
+    auto tagNames = builder.tags().names();
+    if (std::ranges::any_of(tagNames, [&tagName](auto const& n) { return n == tagName; }))
     {
       os << "tag already exists: " << tagName << '\n';
       return;
     }
 
-    record.tags.ids.push_back(tagId);
+    builder.tags().add(tagName);
 
-    auto hotData = record.serializeHot();
+    auto hotData = builder.serializeHot(ml.dictionary(), txn);
     writer.updateHot(trackId, hotData);
     txn.commit();
 
@@ -59,16 +60,18 @@ namespace
       return;
     }
 
-    auto record = TrackRecord{*optTrackView, ml.dictionary()};
-    auto tagId = ml.dictionary().getId(tagName);
+    auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
+    auto tagNames = builder.tags().names();
 
-    if (auto erased = std::erase(record.tags.ids, tagId); erased == 0)
+    if (!std::ranges::any_of(tagNames, [&tagName](auto const& n) { return n == tagName; }))
     {
       os << "tag not found on track: " << tagName << '\n';
       return;
     }
 
-    auto hotData = record.serializeHot();
+    builder.tags().remove(tagName);
+
+    auto hotData = builder.serializeHot(ml.dictionary(), txn);
     writer.updateHot(trackId, hotData);
     txn.commit();
 
@@ -87,17 +90,21 @@ namespace
       return;
     }
 
-    auto record = TrackRecord{*optTrackView, ml.dictionary()};
+    auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
+    auto const& tagNames = builder.tags().names();
 
-    if (record.tags.ids.empty())
+    if (tagNames.empty())
     {
       os << "no tags" << '\n';
       return;
     }
 
     os << "tags: ";
-    auto tags = record.tags.ids | std::views::transform([&](auto id) { return ml.dictionary().get(id); });
-    os << std::format("{}\n", tags);
+    for (auto const& name : tagNames)
+    {
+      os << name << " ";
+    }
+    os << '\n';
   }
 }
 

@@ -4,6 +4,7 @@
 #include <catch2/catch.hpp>
 
 #include <rs/core/DictionaryStore.h>
+#include <rs/core/TrackBuilder.h>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/TrackRecord.h>
 #include <rs/core/TrackStore.h>
@@ -14,7 +15,9 @@
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
 #include <rs/utility/ByteView.h>
+#include <optional>
 #include <span>
+#include <test/core/TestUtils.h>
 #include <test/lmdb/TestUtils.h>
 
 #include <vector>
@@ -45,27 +48,33 @@ namespace
               std::uint32_t genreId = 3,
               std::vector<std::uint32_t> tagIds = {})
     {
-      _record.metadata.title = std::move(title);
-      _record.metadata.artist = std::move(artist);
-      _record.metadata.album = std::move(album);
-      _record.metadata.uri = std::move(uri);
-      _record.metadata.year = year;
-      _record.metadata.trackNumber = trackNumber;
-      _record.property.durationMs = durationMs;
-      _record.property.bitrate = bitrate;
-      _record.property.sampleRate = sampleRate;
-      _record.property.channels = channels;
-      _record.property.bitDepth = bitDepth;
-      // Convert uint32_t tagIds to DictionaryId
-      for (auto id : tagIds) { _record.tags.ids.push_back(DictionaryId{id}); }
+      _builder.metadata().title(std::move(title));
+      _builder.metadata().artist(std::move(artist));
+      _builder.metadata().album(std::move(album));
+      _builder.metadata().uri(std::move(uri));
+      _builder.metadata().year(year);
+      _builder.metadata().trackNumber(trackNumber);
+      _builder.property().durationMs(durationMs);
+      _builder.property().bitrate(bitrate);
+      _builder.property().sampleRate(sampleRate);
+      _builder.property().channels(channels);
+      _builder.property().bitDepth(bitDepth);
+      // Add tags using string names (will be resolved to IDs via dict.put during serialize)
+      for (auto id : tagIds) {
+        _builder.tags().add("tag" + std::to_string(id));
+      }
 
-      // Serialize hot data to get proper binary layout
-      _hotData = _record.serializeHot();
+      // Build hot and cold data with a dictionary
+      auto temp = TempDir{};
+      rs::lmdb::Environment::Options envOpts{.flags = MDB_CREATE, .maxDatabases = 20};
+      _env.emplace(temp.path(), envOpts);
+      auto wtxn = rs::lmdb::WriteTransaction{*_env};
+      _dict.emplace(wtxn, "dict");
 
-      // Serialize cold data (no custom pairs in tests, use dummy resolver)
-      _coldData = _record.serializeCold([](std::string_view) { return rs::core::DictionaryId{0}; });
+      _hotData = _builder.serializeHot(*_dict, wtxn);
+      _coldData = _builder.serializeCold(*_dict, wtxn);
 
-      // Fix up the header with IDs and other fields
+      // Fix up the header with specific IDs
       // Note: we serialize then modify, so const_cast is safe
       auto* header = const_cast<rs::core::TrackHotHeader*>(rs::utility::as<rs::core::TrackHotHeader>(_hotData));
       header->artistId = DictionaryId{artistId};
@@ -93,7 +102,9 @@ namespace
     }
 
   private:
-    rs::core::TrackRecord _record;
+    rs::core::TrackBuilder _builder = rs::core::TrackBuilder::createNew();
+    std::optional<rs::lmdb::Environment> _env;
+    std::optional<rs::core::DictionaryStore> _dict;
     std::vector<std::byte> _hotData;
     std::vector<std::byte> _coldData;
   };
@@ -566,28 +577,37 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Multiple Tags Hit")
 TEST_CASE("PlanEvaluator - Tag Bloom Filter - Track Computation")
 {
   // Test that track bloom is computed correctly: tagId & 31
-  rs::core::TrackRecord record;
-  record.metadata.title = "Test";
-  record.metadata.uri = "/test";
-
+  // Using manual header construction since TrackRecord no longer has serializeHot
   // Tag ID 10 -> bit 10 (10 & 31 = 10)
-  record.tags.ids = {DictionaryId{10}};
-  auto data = record.serializeHot();
-  auto* header = rs::utility::as<rs::core::TrackHotHeader const>(data);
-  CHECK((header->tagBloom & (1U << 10)) != 0); // Bit 10 should be set
+  {
+    rs::core::TrackHotHeader h{};
+    h.tagBloom = (1U << (10 & 31)); // bit 10
+    auto data = test::serializeHeader(h);
+    data.push_back(static_cast<std::byte>('\0')); // empty title
+    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    CHECK(view.tags().bloom() == (1U << 10));
+  }
 
   // Tag ID 32 -> bit 0 (32 & 31 = 0)
-  record.tags.ids = {DictionaryId{32}};
-  data = record.serializeHot();
-  header = rs::utility::as<rs::core::TrackHotHeader const>(data);
-  CHECK((header->tagBloom & 1U) != 0); // Bit 0 should be set
+  {
+    rs::core::TrackHotHeader h{};
+    h.tagBloom = (1U << (32 & 31)); // bit 0
+    auto data = test::serializeHeader(h);
+    data.push_back(static_cast<std::byte>('\0')); // empty title
+    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    CHECK(view.tags().bloom() == 1U);
+  }
 
   // Multiple tags: ID 5 and ID 20
-  record.tags.ids = {DictionaryId{5}, DictionaryId{20}};
-  data = record.serializeHot();
-  header = rs::utility::as<rs::core::TrackHotHeader const>(data);
-  CHECK((header->tagBloom & (1U << 5)) != 0);  // Bit 5 should be set
-  CHECK((header->tagBloom & (1U << 20)) != 0); // Bit 20 should be set
+  {
+    rs::core::TrackHotHeader h{};
+    h.tagBloom = (1U << (5 & 31)) | (1U << (20 & 31)); // bits 5 and 20
+    auto data = test::serializeHeader(h);
+    data.push_back(static_cast<std::byte>('\0')); // empty title
+    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    CHECK((view.tags().bloom() & (1U << 5)) != 0);  // Bit 5 should be set
+    CHECK((view.tags().bloom() & (1U << 20)) != 0); // Bit 20 should be set
+  }
 }
 
 TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")

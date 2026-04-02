@@ -56,7 +56,7 @@ namespace rs::tag::flac
 
       bool operator()(std::string_view const& lhs, std::string_view const& rhs) const
       {
-        return std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(), boost::is_iless{});
+        return std::ranges::lexicographical_compare(lhs, rhs, boost::is_iless{});
       }
     };
 

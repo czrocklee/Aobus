@@ -16,7 +16,8 @@ namespace rs::expr
     // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
     constexpr std::uint32_t kBloomBitMask = 31;
 
-    Field variableTypeToField(VariableType type, std::string_view name)  // NOLINT(readability-function-cognitive-complexity)
+    Field variableTypeToField(VariableType type,
+                              std::string_view name) // NOLINT(readability-function-cognitive-complexity)
     {
       switch (type)
       {
@@ -97,13 +98,14 @@ namespace rs::expr
     }
   }
 
-  QueryCompiler::QueryCompiler(core::DictionaryStore const* dict) : _dict{dict}
+  QueryCompiler::QueryCompiler(core::DictionaryStore const* dict)
+    : _dict{dict}
   {
   }
 
   std::uint32_t QueryCompiler::addStringConstant(std::string_view str)
   {
-    if (auto it = std::ranges::find_if(_plan.stringConstants, [str](auto const& value) { return value == str; });
+    if (auto it = std::ranges::find(_plan.stringConstants, str);
         it != _plan.stringConstants.end())
     {
       return static_cast<std::uint32_t>(std::distance(_plan.stringConstants.begin(), it));

@@ -49,6 +49,8 @@ pkgs.mkShell {
       gsettings-desktop-schemas
 
       ffmpeg
+      pipewire
+      alsa-lib
     ]
     ++ [ lexy ];
   shellHook = ''

@@ -6,13 +6,16 @@
 #include <rs/core/ListPayloadBuilder.h>
 #include <rs/core/MusicLibrary.h>
 #include <rs/core/ResourceStore.h>
+#include <rs/core/TrackBuilder.h>
 
 #include "CoverArtWidget.h"
 #include "ImportProgressDialog.h"
 #include "ImportWorker.h"
 #include "ListRow.h"
 #include "NewListDialog.h"
+#include "PlaybackBar.h"
 #include "PlaylistExporter.h"
+#include "playback/PlaybackController.h"
 #include "TagPromptDialog.h"
 #include "TrackListAdapter.h"
 #include "TrackViewPage.h"
@@ -30,10 +33,26 @@
 #include <cctype>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <thread>
 #include <unordered_set>
 #include <vector>
+
+namespace
+{
+  auto allTracksListId() -> rs::core::ListId
+  {
+    return rs::core::ListId{std::numeric_limits<std::uint32_t>::max()};
+  }
+
+  auto pageNameForListId(rs::core::ListId listId) -> std::string
+  {
+    if (listId == allTracksListId()) { return "all-tracks"; }
+
+    return "list-" + std::to_string(static_cast<unsigned long>(listId.value()));
+  }
+}
 
 MainWindow::MainWindow()
   : _musicLibrary{nullptr}
@@ -45,6 +64,8 @@ MainWindow::MainWindow()
   , _listStore{nullptr}
   , _listSelectionModel{nullptr}
   , _trackPages{}
+  , _playbackBar{nullptr}
+  , _playbackController{nullptr}
 {
   set_title("RockStudio");
 
@@ -56,6 +77,7 @@ MainWindow::MainWindow()
   // Initialize cover art widget
   _coverArtWidget = std::make_unique<CoverArtWidget>();
 
+  setupPlayback();
   setupMenu();
   setupLayout();
 
@@ -65,6 +87,12 @@ MainWindow::MainWindow()
 
 MainWindow::~MainWindow()
 {
+  if (_playbackTimer != 0)
+  {
+    g_source_remove(_playbackTimer);
+    _playbackTimer = 0;
+  }
+
   // std::jthread auto-joins on destruction, no explicit join needed
 }
 
@@ -130,7 +158,7 @@ void MainWindow::openMusicLibrary(std::filesystem::path const& path)
   rebuildListPages(txn);
 
   // Show the "All Tracks" page
-  _stack.set_visible_child("0");
+  _stack.set_visible_child(pageNameForListId(allTracksListId()));
 
   // Update window title
   set_title("RockStudio [" + path.string() + "]");
@@ -141,7 +169,7 @@ void MainWindow::openMusicLibrary(std::filesystem::path const& path)
 
 void MainWindow::scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files)
 {
-  static std::unordered_set<std::string> const supportedExtensions = {".mp3", ".m4a", ".flac"};
+  static constexpr auto kSupportedExtensions = std::array{".mp3", ".m4a", ".flac"};
 
   try
   {
@@ -151,7 +179,10 @@ void MainWindow::scanDirectory(std::filesystem::path const& dir, std::vector<std
       {
         auto ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
-        if (supportedExtensions.count(ext) > 0) { files.push_back(entry.path()); }
+        if (std::ranges::find(kSupportedExtensions, ext) != kSupportedExtensions.end())
+        {
+          files.push_back(entry.path());
+        }
       }
     }
   }
@@ -448,6 +479,7 @@ void MainWindow::setupLayout()
   // Set up the main layout
   auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
   mainBox->append(_menuBar);
+  if (_playbackBar) { mainBox->append(*_playbackBar); }
   mainBox->append(_paned);
 
   // Set as window child
@@ -530,13 +562,11 @@ void MainWindow::rebuildListPages(rs::lmdb::ReadTransaction& txn)
   _listStore->remove_all();
   clearTrackPages();
 
-  using ListId = rs::core::ListId;
-
   // Build "All Tracks" page
   buildPageForAllTracks();
 
   // Add "All Tracks" entry
-  auto allRow = ListRow::create(ListId(0), "All Tracks");
+  auto allRow = ListRow::create(allTracksListId(), "All Tracks");
   _listStore->append(allRow);
 
   // Load existing lists from library
@@ -555,8 +585,6 @@ void MainWindow::rebuildListPages(rs::lmdb::ReadTransaction& txn)
 
 void MainWindow::buildPageForAllTracks()
 {
-  using ListId = rs::core::ListId;
-
   // Create adapter using the shared _allTrackIds (not a page-local copy)
   // _allTrackIds is the authoritative source that import/tag notifies update
   auto adapter = std::make_shared<TrackListAdapter>(*_allTrackIds, _rowDataProvider);
@@ -564,7 +592,7 @@ void MainWindow::buildPageForAllTracks()
   adapter->onReset();
   auto trackPage = std::make_unique<TrackViewPage>(adapter);
 
-  auto pageId = std::to_string(static_cast<unsigned long>((ListId(0)).value()));
+  auto pageId = pageNameForListId(allTracksListId());
   _stack.add(*trackPage, pageId, "All Tracks");
 
   // Connect selection to cover art update
@@ -573,11 +601,14 @@ void MainWindow::buildPageForAllTracks()
     updateCoverArt(ids);
   });
 
+  // Connect track activation to playback
+  bindTrackPagePlayback(*trackPage);
+
   TrackPageContext ctx;
   ctx.membershipList = nullptr; // All-tracks page observes shared _allTrackIds, no ownership
   ctx.adapter = std::move(adapter);
   ctx.page = std::move(trackPage);
-  _trackPages[ListId(0)] = std::move(ctx);
+  _trackPages[allTracksListId()] = std::move(ctx);
 }
 
 void MainWindow::buildPageForStoredList(rs::core::ListId listId,
@@ -620,7 +651,7 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId,
   // Create track page
   auto trackPage = std::make_unique<TrackViewPage>(adapter);
 
-  auto pageId = std::to_string(static_cast<unsigned long>(listId.value()));
+  auto pageId = pageNameForListId(listId);
   _stack.add(*trackPage, pageId, listName);
 
   // Connect selection to cover art update
@@ -628,6 +659,9 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId,
     auto ids = trackPagePtr->getSelectedTrackIds();
     updateCoverArt(ids);
   });
+
+  // Connect track activation to playback
+  bindTrackPagePlayback(*trackPage);
 
   // Create playlist exporter for this list
   auto playlistDir = _musicLibrary->rootPath() / "playlist";
@@ -655,16 +689,10 @@ void MainWindow::setupTrackContextMenu()
 
 void MainWindow::onTagTrack()
 {
-  // Get current visible track page
-  Glib::ustring pageName = _stack.get_visible_child_name();
-  if (pageName.empty()) { return; }
+  auto* ctx = currentVisibleTrackPageContext();
+  if (!ctx) { return; }
 
-  auto pageId = std::stoi(pageName);
-  auto it = _trackPages.find(rs::core::ListId(pageId));
-  if (it == _trackPages.end()) { return; }
-
-  auto& ctx = it->second;
-  auto selectedIds = ctx.page->getSelectedTrackIds();
+  auto selectedIds = ctx->page->getSelectedTrackIds();
 
   if (selectedIds.empty()) { return; }
 
@@ -693,14 +721,14 @@ void MainWindow::onTagTrack()
           auto optView = writer.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot);
           if (!optView) { continue; }
 
-          // Build TrackRecord from current view
-          rs::core::TrackRecord record(*optView, dict);
+          // Build TrackBuilder from current view
+          auto builder = rs::core::TrackBuilder::fromView(*optView, dict);
 
-          // Add new tag ID
-          record.tags.ids.push_back(tagId);
+          // Add new tag by resolving ID to name
+          builder.tags().add(std::string{dict.get(tagId)});
 
           // Serialize and update hot data
-          auto hotData = record.serializeHot();
+          auto hotData = builder.serializeHot(dict, txn);
           writer.updateHot(trackId, hotData);
         }
 
@@ -730,8 +758,7 @@ void MainWindow::onListSelectionChanged(std::uint32_t position, [[maybe_unused]]
   auto listId = item->getListId();
 
   // Switch to the corresponding stack page
-  auto pageId = std::to_string(static_cast<unsigned long>(listId.value()));
-  _stack.set_visible_child(pageId);
+  _stack.set_visible_child(pageNameForListId(listId));
 }
 
 void MainWindow::updateCoverArt(std::vector<rs::core::TrackId> const& selectedIds)
@@ -800,4 +827,128 @@ void MainWindow::saveSession()
 void MainWindow::loadSession()
 {
   // Placeholder - would restore previous library
+}
+
+void MainWindow::setupPlayback()
+{
+  _playbackBar = std::make_unique<PlaybackBar>();
+  _playbackController = std::make_unique<app::playback::PlaybackController>();
+
+  _playbackBar->signalPlayRequested().connect(sigc::mem_fun(*this, &MainWindow::onPlayRequested));
+  _playbackBar->signalPauseRequested().connect(sigc::mem_fun(*this, &MainWindow::onPauseRequested));
+  _playbackBar->signalStopRequested().connect(sigc::mem_fun(*this, &MainWindow::onStopRequested));
+  _playbackBar->signalSeekRequested().connect(sigc::mem_fun(*this, &MainWindow::onSeekRequested));
+
+  // Start GTK timer to poll playback snapshot
+  _playbackTimer = g_timeout_add(100, [](gpointer data) -> gboolean {
+    static_cast<MainWindow*>(data)->refreshPlaybackBar();
+    return G_SOURCE_CONTINUE;
+  }, this);
+}
+
+void MainWindow::refreshPlaybackBar()
+{
+  if (!_playbackBar || !_playbackController) { return; }
+
+  auto snapshot = _playbackController->snapshot();
+  _playbackBar->setSnapshot(snapshot);
+}
+
+void MainWindow::onPlayRequested()
+{
+  if (_playbackController)
+  {
+    auto descriptor = currentSelectionPlaybackDescriptor();
+    if (descriptor) { _playbackController->play(*descriptor); }
+  }
+}
+
+void MainWindow::onPauseRequested()
+{
+  if (_playbackController) { _playbackController->pause(); }
+}
+
+void MainWindow::onStopRequested()
+{
+  if (_playbackController) { _playbackController->stop(); }
+}
+
+void MainWindow::onSeekRequested(std::uint32_t positionMs)
+{
+  if (_playbackController) { _playbackController->seek(positionMs); }
+}
+
+void MainWindow::playCurrentSelection()
+{
+  if (_playbackController)
+  {
+    auto descriptor = currentSelectionPlaybackDescriptor();
+    if (descriptor) { _playbackController->play(*descriptor); }
+  }
+}
+
+void MainWindow::pausePlayback()
+{
+  if (_playbackController) { _playbackController->pause(); }
+}
+
+void MainWindow::stopPlayback()
+{
+  if (_playbackController) { _playbackController->stop(); }
+}
+
+void MainWindow::seekPlayback(std::uint32_t positionMs)
+{
+  if (_playbackController) { _playbackController->seek(positionMs); }
+}
+
+std::optional<app::playback::TrackPlaybackDescriptor> MainWindow::currentSelectionPlaybackDescriptor() const
+{
+  auto const* ctx = currentVisibleTrackPageContext();
+  if (!ctx || !ctx->page) { return std::nullopt; }
+
+  // Get primary selected track
+  auto trackId = ctx->page->getPrimarySelectedTrackId();
+  if (!trackId) { return std::nullopt; }
+
+  // Get playback descriptor
+  return _rowDataProvider->getPlaybackDescriptor(*trackId);
+}
+
+void MainWindow::bindTrackPagePlayback(TrackViewPage& page)
+{
+  page.signalTrackActivated().connect([this](TrackListAdapter::TrackId trackId) {
+    if (auto descriptor = _rowDataProvider->getPlaybackDescriptor(trackId))
+    {
+      _playbackController->play(*descriptor);
+    }
+  });
+}
+
+TrackPageContext* MainWindow::currentVisibleTrackPageContext()
+{
+  auto* visibleChild = _stack.get_visible_child();
+  if (!visibleChild) { return nullptr; }
+
+  for (auto& [id, ctx] : _trackPages)
+  {
+    (void)id;
+    if (ctx.page.get() == visibleChild) { return &ctx; }
+  }
+
+  return nullptr;
+}
+
+TrackPageContext const* MainWindow::currentVisibleTrackPageContext() const
+{
+  auto const* visibleChild = _stack.get_visible_child();
+  if (!visibleChild) { return nullptr; }
+
+  for (auto const& [id, ctx] : _trackPages)
+  {
+    (void)id;
+    if (ctx.page.get() == visibleChild) { return &ctx; }
+  }
+
+  return nullptr;
 }

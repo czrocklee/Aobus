@@ -4,7 +4,7 @@
 #pragma once
 
 #include <rs/core/MusicLibrary.h>
-#include <rs/core/TrackRecord.h>
+#include <rs/core/TrackBuilder.h>
 #include <rs/tag/Metadata.h>
 
 #include <filesystem>
@@ -51,11 +51,11 @@ private:
   // Process a single file and return the TrackId if successful
   std::optional<rs::core::TrackId> processFile(std::filesystem::path const& path, std::size_t index);
 
-  // Populate TrackRecord from tag metadata
-  rs::core::TrackRecord populateRecord(rs::tag::Metadata const& metadata,
-                                       std::filesystem::path const& path,
-                                       rs::core::DictionaryStore& dict,
-                                       rs::core::ResourceStore::Writer& resourceWriter);
+  // Populate TrackBuilder from tag metadata
+  rs::core::TrackBuilder populateRecord(rs::tag::Metadata const& metadata,
+                                        std::filesystem::path const& path,
+                                        rs::core::DictionaryStore& dict,
+                                        rs::core::ResourceStore::Writer& resourceWriter);
 
   rs::core::MusicLibrary& _ml;
   std::vector<std::filesystem::path> const& _files;

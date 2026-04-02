@@ -46,6 +46,52 @@ add_library(Catch2 INTERFACE)
 target_include_directories(Catch2 INTERFACE ${CATCH2_CFLAGS})
 target_link_libraries(Catch2 INTERFACE ${CATCH2_LDFLAGS})
 
+# FFmpeg via pkg-config (optional - playback feature)
+# Try both naming conventions: ffmpeg uses "libavformat" style in nixpkgs
+pkg_check_modules(AVFORMAT libavformat)
+pkg_check_modules(AVCODEC libavcodec)
+pkg_check_modules(AVUTIL libavutil)
+pkg_check_modules(SWRESAMPLE libswresample)
+if(NOT AVFORMAT_FOUND)
+  # Fallback to ffmpeg naming
+  pkg_check_modules(AVFORMAT avformat)
+  pkg_check_modules(AVCODEC avcodec)
+  pkg_check_modules(AVUTIL avutil)
+  pkg_check_modules(SWRESAMPLE swresample)
+endif()
+if(AVFORMAT_FOUND AND AVCODEC_FOUND AND AVUTIL_FOUND AND SWRESAMPLE_FOUND)
+  set(FFmpeg_FOUND TRUE)
+  add_library(FFmpeg INTERFACE)
+  target_include_directories(FFmpeg INTERFACE ${AVFORMAT_INCLUDE_DIRS} ${AVCODEC_INCLUDE_DIRS} ${AVUTIL_INCLUDE_DIRS} ${SWRESAMPLE_INCLUDE_DIRS})
+  target_link_libraries(FFmpeg INTERFACE ${AVFORMAT_LIBRARIES} ${AVCODEC_LIBRARIES} ${AVUTIL_LIBRARIES} ${SWRESAMPLE_LIBRARIES})
+  message(STATUS "FFmpeg found: playback support enabled")
+else()
+  set(FFmpeg_FOUND FALSE)
+  message(STATUS "FFmpeg not found: playback support disabled")
+endif()
+
+# PipeWire via pkg-config (optional - audio backend)
+pkg_check_modules(PIPEWIRE libpipewire-0.3)
+if(PIPEWIRE_FOUND)
+  add_library(PipeWire INTERFACE)
+  target_include_directories(PipeWire INTERFACE ${PIPEWIRE_INCLUDE_DIRS})
+  target_link_libraries(PipeWire INTERFACE ${PIPEWIRE_LIBRARIES})
+  message(STATUS "PipeWire found: audio backend enabled")
+else()
+  message(STATUS "PipeWire not found: audio backend disabled")
+endif()
+
+# ALSA via pkg-config (optional - audio backend)
+pkg_check_modules(ALSA alsa)
+if(ALSA_FOUND)
+  add_library(ALSA INTERFACE)
+  target_include_directories(ALSA INTERFACE ${ALSA_INCLUDE_DIRS})
+  target_link_libraries(ALSA INTERFACE ${ALSA_LIBRARIES})
+  message(STATUS "ALSA found: ALSA exclusive backend enabled")
+else()
+  message(STATUS "ALSA not found: ALSA exclusive backend disabled")
+endif()
+
 # clang-tidy setup (manual application to targets)
 find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
 if(CLANG_TIDY_EXECUTABLE)
@@ -95,6 +141,7 @@ add_library(rs OBJECT
     src/core/DictionaryStore.cpp
     src/core/TrackStore.cpp
     src/core/TrackRecord.cpp
+    src/core/TrackBuilder.cpp
     src/core/TrackLayout.cpp
     src/core/ListLayout.cpp
     src/core/ListStore.cpp
@@ -143,6 +190,7 @@ add_executable(rs_test
     test/query/PlanEvaluatorTest.cpp
     test/core/TrackLayoutTest.cpp
     test/core/TrackRecordTest.cpp
+    test/core/TrackBuilderTest.cpp
     test/core/ListLayoutTest.cpp
     test/core/DictionaryTest.cpp
     test/core/ResourceStoreTest.cpp
@@ -155,6 +203,15 @@ add_executable(rs_test
 )
 target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(rs_test PRIVATE rs Catch2)
+if(FFmpeg_FOUND)
+  target_sources(rs_test PRIVATE
+    test/playback/FfmpegDecoderSessionTest.cpp
+    app/playback/FfmpegDecoderSession.cpp
+    app/playback/PcmRingBuffer.cpp
+  )
+  target_link_libraries(rs_test PRIVATE FFmpeg)
+  target_compile_definitions(rs_test PRIVATE FFmpeg_FOUND)
+endif()
 target_compile_options(rs_test PRIVATE -Wno-array-bounds)
 
 # Register rs_test with CTest
@@ -184,8 +241,32 @@ add_executable(RockStudio
     app/model/FilteredTrackIdList.cpp
     app/model/ManualTrackIdList.cpp
     app/model/TrackRowDataProvider.cpp
+    app/PlaybackBar.cpp
+    app/playback/PlaybackController.cpp
+    app/playback/PlaybackEngine.cpp
+    app/playback/PcmRingBuffer.cpp
+    app/playback/FormatNegotiator.cpp
 )
+if(FFmpeg_FOUND)
+  target_compile_definitions(RockStudio PRIVATE FFmpeg_FOUND)
+  target_sources(RockStudio PRIVATE app/playback/FfmpegDecoderSession.cpp)
+  target_link_libraries(RockStudio PRIVATE FFmpeg)
+endif()
+if(PIPEWIRE_FOUND)
+  target_compile_definitions(RockStudio PRIVATE PIPEWIRE_FOUND)
+  target_sources(RockStudio PRIVATE app/playback/PipeWireBackend.cpp)
+  target_link_libraries(RockStudio PRIVATE PipeWire)
+endif()
+if(ALSA_FOUND)
+  target_compile_definitions(RockStudio PRIVATE ALSA_FOUND)
+  target_sources(RockStudio PRIVATE app/playback/AlsaExclusiveBackend.cpp)
+  target_link_libraries(RockStudio PRIVATE ALSA)
+endif()
 target_link_libraries(RockStudio PRIVATE rs GTKMM)
 target_include_directories(RockStudio PRIVATE ${CMAKE_SOURCE_DIR}/app)
+# Disable ASan leak detection for third-party libraries (fontconfig, pango, etc.)
+if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
+  set_target_properties(RockStudio PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+endif()
 # Note: clang-tidy disabled for RockStudio because GTK headers pull in GCC's SSE
 # intrinsics (mmintrin.h) which clang cannot parse. Building with clang would enable tidy.

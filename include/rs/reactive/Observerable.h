@@ -22,7 +22,7 @@ namespace rs::reactive
 
     void detach(ObserverT& observer)
     {
-      _observers.erase(std::find(_observers.begin(), _observers.end(), &observer));
+      std::erase(_observers, &observer);
       observer.onDetached();
     }
 

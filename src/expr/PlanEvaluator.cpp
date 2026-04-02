@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <ranges>
 
 namespace rs::expr
 {
@@ -17,17 +18,14 @@ namespace rs::expr
     // Helper to find the previous LoadField instruction
     Instruction const* findPrevLoadField(std::vector<Instruction> const& instructions, Instruction const* current)
     {
-      for (size_t i = 0; i < instructions.size(); ++i)
+      auto const it = std::ranges::find_if(instructions, [current](auto const& instr) { return &instr == current; });
+      if (it == instructions.end()) { return nullptr; }
+
+      auto const revRange = std::ranges::subrange(instructions.begin(), it) | std::views::reverse;
+      if (auto const found = std::ranges::find(revRange, OpCode::LoadField, &Instruction::op);
+          found != revRange.end())
       {
-        if (&instructions[i] == current)
-        {
-          // Search backwards for a LoadField
-          for (size_t j = i; j > 0; --j)
-          {
-            if (instructions[j - 1].op == OpCode::LoadField) { return &instructions[j - 1]; }
-          }
-          break;
-        }
+        return &(*found);
       }
       return nullptr;
     }

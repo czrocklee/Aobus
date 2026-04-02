@@ -3,6 +3,22 @@
 
 #include "TrackRowDataProvider.h"
 
+#include "playback/PlaybackTypes.h"
+
+namespace
+{
+  auto resolveLibraryPath(std::filesystem::path const& libraryRoot, std::string_view uri)
+    -> std::optional<std::filesystem::path>
+  {
+    if (uri.empty()) { return std::nullopt; }
+
+    auto path = std::filesystem::path{uri};
+    if (path.is_absolute()) { return path.lexically_normal(); }
+
+    return (libraryRoot / path).lexically_normal();
+  }
+}
+
 namespace app::model
 {
 
@@ -79,10 +95,55 @@ namespace app::model
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
     if (!optView) { return std::nullopt; }
 
-    auto const uri = optView->property().uri();
-    if (uri.empty()) { return std::nullopt; }
+    return resolveLibraryPath(_ml->rootPath(), optView->property().uri());
+  }
 
-    return std::filesystem::path{uri};
+  std::optional<app::playback::TrackPlaybackDescriptor> TrackRowDataProvider::getPlaybackDescriptor(TrackId id)
+  {
+    // Need cold data for URI and property info
+    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
+    auto reader = _store->reader(txn);
+
+    auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
+    if (!optView) { return std::nullopt; }
+
+    auto const& view = *optView;
+    auto const& metadata = view.metadata();
+    auto const& property = view.property();
+
+    app::playback::TrackPlaybackDescriptor desc;
+    desc.trackId = id;
+
+    // File path
+    if (auto const filePath = resolveLibraryPath(_ml->rootPath(), property.uri()))
+    {
+      desc.filePath = *filePath;
+    }
+
+    // Title
+    desc.title = std::string(metadata.title());
+
+    // Artist
+    auto const artistId = metadata.artistId();
+    if (artistId != rs::core::DictionaryId{0}) { desc.artist = resolveDictionaryString(artistId); }
+
+    // Album
+    auto const albumId = metadata.albumId();
+    if (albumId != rs::core::DictionaryId{0}) { desc.album = resolveDictionaryString(albumId); }
+
+    // Cover art
+    auto const coverArtId = metadata.coverArtId();
+    if (coverArtId != 0) { desc.coverArtId = rs::core::ResourceId{coverArtId}; }
+
+    // Duration
+    desc.durationMs = property.durationMs();
+
+    // Technical properties (hints for decoder)
+    desc.sampleRateHint = property.sampleRate();
+    desc.channelsHint = property.channels();
+    desc.bitDepthHint = property.bitDepth();
+
+    return desc;
   }
 
   void TrackRowDataProvider::invalidateHot(TrackId id)

@@ -123,9 +123,8 @@ namespace
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
     auto resourceWriter = ml.resources().writer(txn);
-    auto record = loadTrackRecord(path, ml.dictionary(), resourceWriter, txn);
-    auto hotData = record.serializeHot();
-    auto coldData = record.serializeCold(ml.dictionary());
+    auto builder = loadTrackRecord(path, ml.dictionary(), resourceWriter, txn);
+    auto [hotData, coldData] = builder.serialize(ml.dictionary(), txn);
     auto [id, trackView] = writer.createHotCold(hotData, coldData);
     txn.commit();
 

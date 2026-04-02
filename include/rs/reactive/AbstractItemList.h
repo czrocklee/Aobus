@@ -5,6 +5,7 @@
 
 #include <rs/utility/TaggedInteger.h>
 
+#include <algorithm>
 #include <vector>
 
 namespace rs::reactive
@@ -79,7 +80,7 @@ namespace rs::reactive
 
     void detach(Observer& observer)
     {
-      _observers.erase(std::find(_observers.begin(), _observers.end(), &observer));
+      std::erase(_observers, &observer);
       observer.onDetached();
     }
 

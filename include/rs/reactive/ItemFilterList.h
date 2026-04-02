@@ -7,6 +7,7 @@
 
 #include <boost/container/flat_map.hpp>
 #include <functional>
+#include <ranges>
 
 namespace rs::reactive
 {
@@ -23,13 +24,13 @@ namespace rs::reactive
 
     ItemFilterList(AbstractItemList<Id, T>& source, Filter const& filter) : _source{source}, _filter{filter}
     {
-      for (auto i = 0u; i < _source.size(); ++i)
+      for (auto const idx : std::views::iota(0u, _source.size()))
       {
-        auto const& [id, t] = source.at(Index{i});
+        auto const& [id, t] = _source.at(Index{idx});
 
         if (!_filter || _filter(t))
         {
-          _items.emplace_hint(_items.end(), id, Index{i});
+          _items.emplace_hint(_items.end(), id, Index{idx});
         }
       }
 
