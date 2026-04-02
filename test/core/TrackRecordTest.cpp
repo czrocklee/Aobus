@@ -3,15 +3,15 @@
 
 #include <catch2/catch.hpp>
 
-#include <rs/core/TrackLayout.h>
 #include <rs/core/TrackRecord.h>
+#include <rs/core/TrackLayout.h>
+#include <rs/core/TrackView.h>
 
 #include <cstring>
+#include <vector>
 
-using rs::core::DictionaryId;
 using rs::core::TrackColdHeader;
 using rs::core::TrackHotHeader;
-using rs::core::TrackId;
 using rs::core::TrackRecord;
 using rs::core::TrackView;
 
@@ -40,7 +40,7 @@ TEST_CASE("TrackRecord - Default Constructor")
   CHECK(record.property.channels == 0);
   CHECK(record.property.bitDepth == 0);
   CHECK(record.property.rating == 0);
-  CHECK(record.tags.ids.empty());
+  CHECK(record.tags.names.empty());
 }
 
 TEST_CASE("TrackRecord - Field Assignment")
@@ -91,222 +91,6 @@ TEST_CASE("TrackRecord - Field Assignment")
   CHECK(record.property.rating == 4);
 }
 
-TEST_CASE("TrackRecord - Serialize Empty Record")
-{
-  auto record = TrackRecord{};
-  auto data = record.serializeHot();
-
-  CHECK(data.size() >= sizeof(TrackHotHeader));
-  CHECK(!data.empty());
-}
-
-TEST_CASE("TrackRecord - Serialize With Strings")
-{
-  auto record = TrackRecord{};
-  record.metadata.title = "Hello World";
-  record.metadata.uri = "/music/test.flac";
-  record.metadata.year = 2021;
-
-  auto data = record.serializeHot();
-
-  // Verify header size
-  CHECK(data.size() >= sizeof(TrackHotHeader));
-
-  // Parse the serialized data back
-  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-
-  CHECK(header->titleLen == 11); // "Hello World"
-  CHECK(header->year == 2021);
-
-  // Verify strings are in the payload
-  auto payloadStart = reinterpret_cast<char const*>(data.data()) + sizeof(TrackHotHeader);
-  CHECK(std::strncmp(payloadStart, "Hello World", 11) == 0);
-}
-
-TEST_CASE("TrackRecord - hotHeader Method")
-{
-  auto record = TrackRecord{};
-  record.metadata.year = 1999;
-  record.property.bitDepth = 24;
-  record.property.rating = 5;
-
-  auto header = record.hotHeader();
-
-  CHECK(header.year == 1999);
-  CHECK(header.bitDepth == 24);
-  CHECK(header.rating == 5);
-}
-
-TEST_CASE("TrackRecord - Serialize With Special Characters")
-{
-  auto record = TrackRecord{};
-  record.metadata.title = "Test: \"Quotes\" & 'Apostrophes'";
-
-  auto data = record.serializeHot();
-
-  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->titleLen == record.metadata.title.size());
-}
-
-TEST_CASE("TrackRecord - Serialize Preserves Data")
-{
-  auto record = TrackRecord{};
-  record.metadata.title = "Test";
-  record.metadata.uri = "/test";
-  record.property.fileSize = 12345;
-  record.property.mtime = 9876543210;
-
-  auto data = record.serializeHot();
-  auto data2 = record.serializeHot();
-
-  // Multiple serializations should produce same size and content
-  CHECK(data.size() == data2.size());
-  CHECK(data == data2);
-}
-
-TEST_CASE("TrackRecord - Tag Serialization - Empty Tags")
-{
-  auto record = TrackRecord{};
-  record.metadata.title = "Test";
-  record.metadata.uri = "/test";
-
-  auto data = record.serializeHot();
-
-  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->tagLen == 0);
-  CHECK(header->tagBloom == 0);
-}
-
-TEST_CASE("TrackRecord - Tag Serialization - With Tags")
-{
-  auto record = TrackRecord{};
-  record.metadata.title = "Test";
-  record.metadata.uri = "/test";
-  record.tags.ids = {DictionaryId{10}, DictionaryId{20}, DictionaryId{30}};
-
-  auto data = record.serializeHot();
-
-  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->tagLen == 12);  // 3 tags * 4 bytes each
-  CHECK(header->tagBloom != 0); // Bloom should be computed from tag IDs
-
-  // Verify tag IDs are in the payload (at sizeof(TrackHotHeader))
-  auto const* tagIdsPtr = reinterpret_cast<std::uint32_t const*>(data.data() + sizeof(TrackHotHeader));
-  CHECK(tagIdsPtr[0] == 10);
-  CHECK(tagIdsPtr[1] == 20);
-  CHECK(tagIdsPtr[2] == 30);
-}
-
-TEST_CASE("TrackRecord - Tag Serialization - Single Tag")
-{
-  auto record = TrackRecord{};
-  record.metadata.title = "Test";
-  record.metadata.uri = "/test";
-  record.tags.ids = {DictionaryId{42}};
-
-  auto data = record.serializeHot();
-
-  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->tagLen == 4);  // 1 tag * 4 bytes
-
-  auto const* tagIdPtr = reinterpret_cast<std::uint32_t const*>(data.data() + sizeof(TrackHotHeader));
-  CHECK(*tagIdPtr == 42);
-}
-
-TEST_CASE("TrackRecord - hotHeader Method With Tags")
-{
-  auto record = TrackRecord{};
-  record.metadata.title = "Test";
-  record.metadata.uri = "/test";
-  record.tags.ids = {DictionaryId{1}, DictionaryId{2}, DictionaryId{3}, DictionaryId{4}, DictionaryId{5}};
-
-  auto header = record.hotHeader();
-
-  CHECK(header.tagLen == 20);  // 5 tags * 4 bytes each
-  CHECK(header.tagBloom != 0);
-}
-
-TEST_CASE("TrackRecord - hotHeader")
-{
-  auto record = TrackRecord{};
-  record.tags.ids = {DictionaryId{1}, DictionaryId{2}};
-
-  auto header = record.hotHeader();
-
-  CHECK(header.tagLen == 8);  // 2 tags * 4 bytes each
-  CHECK(header.tagBloom != 0);
-}
-
-TEST_CASE("TrackRecord - coldHeader")
-{
-  auto record = TrackRecord{};
-  record.property.fileSize = 2000;
-  record.property.mtime = 1234567890;
-  record.metadata.trackNumber = 5;
-  record.metadata.totalTracks = 10;
-  record.metadata.discNumber = 1;
-  record.metadata.totalDiscs = 2;
-  record.metadata.uri = "/path/to/file.flac";
-
-  auto header = record.coldHeader();
-
-  CHECK(header.fileSizeLo == static_cast<std::uint32_t>(2000 & 0xFFFFFFFF));
-  CHECK(header.fileSizeHi == static_cast<std::uint32_t>(static_cast<std::uint64_t>(2000) >> 32));
-  CHECK(header.mtimeLo == static_cast<std::uint32_t>(1234567890 & 0xFFFFFFFF));
-  CHECK(header.mtimeHi == static_cast<std::uint32_t>(static_cast<std::uint64_t>(1234567890) >> 32));
-  CHECK(header.trackNumber == 5);
-  CHECK(header.totalTracks == 10);
-  CHECK(header.discNumber == 1);
-  CHECK(header.totalDiscs == 2);
-}
-
-TEST_CASE("TrackRecord - serializeHot")
-{
-  auto record = TrackRecord{};
-  record.property.fileSize = 1000;
-  record.metadata.title = "Test Title";
-  record.metadata.uri = "/path/to/file.flac";
-  record.tags.ids = {DictionaryId{10}, DictionaryId{20}};
-
-  auto data = record.serializeHot();
-
-  // Verify hot header
-  auto const* header = reinterpret_cast<TrackHotHeader const*>(data.data());
-  CHECK(header->tagLen == 8);  // 2 tags * 4 bytes
-
-  // Verify bloom is computed
-  CHECK(header->tagBloom != 0);
-}
-
-TEST_CASE("TrackRecord - serializeCold")
-{
-  auto record = TrackRecord{};
-  record.property.fileSize = 2000;
-  record.property.mtime = 9876543210;
-  record.metadata.trackNumber = 3;
-  record.metadata.uri = "/path/to/file.flac";
-  record.custom.pairs = {{"key1", "value1"}, {"key2", "value2"}};
-
-  // Simple test resolver: map specific keys to specific IDs
-  auto resolver = [](std::string_view key) -> rs::core::DictionaryId {
-    if (key == "key1") return rs::core::DictionaryId{10};
-    if (key == "key2") return rs::core::DictionaryId{20};
-    return rs::core::DictionaryId{0};
-  };
-  auto data = record.serializeCold(resolver);
-
-  // Verify cold view can parse it
-  auto view = TrackView{std::span<std::byte const>{}, data};
-  CHECK(view.property().fileSize() == 2000);
-  CHECK(view.property().mtime() == 9876543210);
-  CHECK(view.metadata().trackNumber() == 3);
-
-  // Verify custom meta using get(DictionaryId)
-  CHECK(view.custom().get(rs::core::DictionaryId{10}) == "value1");
-  CHECK(view.custom().get(rs::core::DictionaryId{20}) == "value2");
-  CHECK(view.custom().get(rs::core::DictionaryId{30}) == std::nullopt);
-}
-
 TEST_CASE("TrackRecord - custom.pairs field")
 {
   auto record = TrackRecord{};
@@ -333,16 +117,16 @@ TEST_CASE("TrackRecord - Cold struct default values")
 TEST_CASE("TrackRecord - Constructor validates both hot and cold", "[core][track]")
 {
   // Verify that isHotValid and isColdValid work correctly
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
   hotHeader.titleLen = 0;
   hotHeader.tagLen = 0;
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>(sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  TrackColdHeader coldHeader{};
+  auto coldHeader = TrackColdHeader{};
   coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
   coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldData = std::vector<std::byte>(sizeof(TrackColdHeader));
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   // Hot-only view
