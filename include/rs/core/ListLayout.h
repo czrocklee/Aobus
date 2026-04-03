@@ -3,9 +3,11 @@
 
 #pragma once
 
-#include <cstdint>
+#include <rs/Exception.h>
 #include <rs/core/Type.h>
 #include <rs/utility/ByteView.h>
+
+#include <cstdint>
 #include <span>
 #include <string_view>
 
@@ -40,15 +42,15 @@ namespace rs::core
   struct ListHeader final
   {
     // 4-byte section
-    std::uint32_t trackIdsCount;  // Number of track IDs (trackIds always start at sizeof(header))
+    std::uint32_t trackIdsCount; // Number of track IDs (trackIds always start at sizeof(header))
 
     // 2-byte section
-    std::uint16_t nameOffset;     // Byte offset from END of trackIds to name string
-    std::uint16_t nameLen;        // Length of name string
-    std::uint16_t descOffset;     // Byte offset from END of trackIds to description string
-    std::uint16_t descLen;        // Length of description string
-    std::uint16_t filterOffset;   // Byte offset from END of trackIds to filter expression
-    std::uint16_t filterLen;      // Length of filter expression string
+    std::uint16_t nameOffset;   // Byte offset from END of trackIds to name string
+    std::uint16_t nameLen;      // Length of name string
+    std::uint16_t descOffset;   // Byte offset from END of trackIds to description string
+    std::uint16_t descLen;      // Length of description string
+    std::uint16_t filterOffset; // Byte offset from END of trackIds to filter expression
+    std::uint16_t filterLen;    // Length of filter expression string
   };
 
   // Binary layout constants
@@ -65,35 +67,40 @@ namespace rs::core
   class ListView final
   {
   public:
-    ListView() noexcept : _payload{}, _size(0) {}
-
-    explicit ListView(std::span<std::byte const> data) noexcept
-      : _payload(data)
-      , _size(data.size())
-    {
-    }
-
-    bool isValid() const noexcept { return _payload.data() != nullptr && _size >= kListHeaderSize; }
-
-    std::uint32_t trackIdsCount() const noexcept
-    {
-      if (!isValid()) return 0;
-      return header()->trackIdsCount;
-    }
+    explicit ListView(std::span<std::byte const> data);
 
     std::string_view name() const;
     std::string_view description() const;
     std::string_view filter() const;
 
-    std::span<TrackId const> trackIds() const;
     bool isSmart() const noexcept { return !filter().empty(); }
 
+    /**
+     * TrackProxy - Iterator and index access to track IDs in the list.
+     */
+    class TrackProxy
+    {
+    public:
+      TrackProxy(std::span<TrackId const> trackIds);
+
+      TrackId at(std::size_t index) const;
+      TrackId operator[](std::size_t index) const { return at(index); }
+
+      TrackId const* begin() const { return _trackIds.data(); }
+      TrackId const* end() const { return _trackIds.data() + _trackIds.size(); }
+      std::size_t size() const { return _trackIds.size(); }
+
+    private:
+      std::span<TrackId const> _trackIds;
+    };
+
+    TrackProxy tracks() const;
+
   private:
-    ListHeader const* header() const { return reinterpret_cast<ListHeader const*>(_payload.data()); }
+    ListHeader const* header() const { return utility::as<ListHeader>(_payload); }
     std::string_view getString(std::uint16_t offset, std::uint16_t length) const;
 
     std::span<std::byte const> _payload;
-    std::size_t _size;
   };
 
 } // namespace rs::core

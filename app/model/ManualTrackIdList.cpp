@@ -24,7 +24,7 @@ namespace app::model
 
   void ManualTrackIdList::reload(rs::core::ListView const& view)
   {
-    auto const trackIds = view.trackIds();
+    auto const trackIds = view.tracks();
     _trackIds.assign(trackIds.begin(), trackIds.end());
     TrackIdList::notifyReset();
   }

@@ -6,54 +6,60 @@
 namespace rs::core
 {
 
+  ListView::ListView(std::span<std::byte const> data)
+    : _payload{data}
+  {
+    if (_payload.data() == nullptr || _payload.size() < kListHeaderSize)
+    {
+      RS_THROW(Exception, "Invalid data for ListView");
+    }
+  }
+
   std::string_view ListView::getString(std::uint16_t offset, std::uint16_t length) const
   {
-    if (length == 0) {
-      return {};
-    }
+    if (length == 0) { return {}; }
 
     auto const start = kListHeaderSize + offset;
-    if (start + length > _size)
-    {
-      return {};
-    }
 
-    return {reinterpret_cast<char const*>(_payload.data()) + start, length};
+    if (start + length > _payload.size()) { RS_THROW(Exception, "Invalid string field"); }
+
+    return utility::asString(_payload.data(), start, length);
   }
 
   std::string_view ListView::name() const
   {
-    if (!isValid()) return {};
     return getString(header()->nameOffset, header()->nameLen);
   }
 
   std::string_view ListView::description() const
   {
-    if (!isValid()) return {};
     return getString(header()->descOffset, header()->descLen);
   }
 
   std::string_view ListView::filter() const
   {
-    if (!isValid()) return {};
     return getString(header()->filterOffset, header()->filterLen);
   }
 
-  std::span<TrackId const> ListView::trackIds() const
+  ListView::TrackProxy ListView::tracks() const
   {
-    if (!isValid()) {
-      return {};
-    }
-
     auto const offset = kListHeaderSize;
     auto const count = static_cast<std::size_t>(header()->trackIdsCount);
 
-    if (offset + count * sizeof(TrackId) > _size) {
-      return {};
-    }
+    if (offset + (count * sizeof(TrackId)) > _payload.size()) { RS_THROW(Exception, "Invalid trackIds field"); }
 
-    auto const* ptr = reinterpret_cast<TrackId const*>(_payload.data() + offset);
-    return {ptr, count};
+    return TrackProxy{{utility::as<TrackId>(_payload.data(), offset), count}};
+  }
+
+  ListView::TrackProxy::TrackProxy(std::span<TrackId const> trackIds)
+    : _trackIds{trackIds}
+  {
+  }
+
+  TrackId ListView::TrackProxy::at(std::size_t index) const
+  {
+    if (index >= _trackIds.size()) { RS_THROW(Exception, "Index out of range"); }
+    return _trackIds[index];
   }
 
 } // namespace rs::core

@@ -31,10 +31,10 @@ TEST_CASE("ListStore - create and read", "[core][list]")
   wtxn.commit();
 
   // Create a list
-  ListHeader header{};
+  auto header = ListHeader{};
   header.trackIdsCount = 5;
 
-  std::vector<std::byte> data(sizeof(ListHeader));
+  auto data = std::vector<std::byte>(sizeof(ListHeader));
   std::memcpy(data.data(), &header, sizeof(ListHeader));
 
   auto wtxn2 = WriteTransaction{env};
@@ -60,10 +60,11 @@ TEST_CASE("ListStore - read by id", "[core][list]")
   wtxn.commit();
 
   // Create a list
-  ListHeader header{};
+  auto header = ListHeader{};
   header.trackIdsCount = 10;
 
-  std::vector<std::byte> data(sizeof(ListHeader));
+  auto const trackIdsSize = static_cast<std::size_t>(header.trackIdsCount) * sizeof(rs::core::TrackId);
+  auto data = std::vector<std::byte>(sizeof(ListHeader) + trackIdsSize);
   std::memcpy(data.data(), &header, sizeof(ListHeader));
 
   auto wtxn2 = WriteTransaction{env};
@@ -75,7 +76,7 @@ TEST_CASE("ListStore - read by id", "[core][list]")
   auto optFound = store.reader(rtxn).get(id);
   REQUIRE(optFound.has_value());
   auto& found = *optFound;
-  REQUIRE(found.trackIdsCount() == 10);
+  REQUIRE(found.tracks().size() == 10);
 }
 
 TEST_CASE("ListStore - delete", "[core][list]")
@@ -88,9 +89,9 @@ TEST_CASE("ListStore - delete", "[core][list]")
   wtxn.commit();
 
   // Create a list
-  ListHeader header{};
+  auto header = ListHeader{};
 
-  std::vector<std::byte> data(sizeof(ListHeader));
+  auto data = std::vector<std::byte>(sizeof(ListHeader));
   std::memcpy(data.data(), &header, sizeof(ListHeader));
 
   auto wtxn2 = WriteTransaction{env};
