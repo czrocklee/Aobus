@@ -22,11 +22,13 @@ namespace rs::expr
       if (it == instructions.end()) { return nullptr; }
 
       auto const revRange = std::ranges::subrange(instructions.begin(), it) | std::views::reverse;
+
       if (auto const found = std::ranges::find(revRange, OpCode::LoadField, &Instruction::op);
           found != revRange.end())
       {
         return &(*found);
       }
+      
       return nullptr;
     }
 
@@ -169,6 +171,23 @@ namespace rs::expr
         }
       }
     }
+
+    // Execute LIKE comparison (substring matching for string fields)
+    void executeLike(std::vector<std::int64_t>& registers,
+                    core::TrackView const& track,
+                    ExecutionPlan const* plan,
+                    Instruction const& instr,
+                    std::vector<Instruction> const& /*instructions*/)
+    {
+      // instr.field contains the left field from the LoadField instruction
+      auto field = static_cast<Field>(instr.field);
+      auto rhs = registers[instr.operand];
+
+      std::string_view fieldStr = loadStringFieldValue(track, field, nullptr);
+      std::string_view constantStr = getStringConstant(plan, rhs);
+      auto found = fieldStr.find(constantStr) != std::string_view::npos;
+      registers[instr.operand - 1] = found ? 1 : 0;
+    }
   }
 
   bool PlanEvaluator::matches(ExecutionPlan const& plan, core::TrackView const& track) const
@@ -254,20 +273,8 @@ namespace rs::expr
         }
 
         case OpCode::Like:
-        {
-          auto stringIdx = _registers[instr.operand];
-          Instruction const* prevLoadField = findPrevLoadField(plan.instructions, &instr);
-          std::string_view fieldStr;
-          if (prevLoadField != nullptr)
-          {
-            auto field = static_cast<Field>(prevLoadField->field);
-            fieldStr = loadStringFieldValue(track, field, prevLoadField);
-          }
-          std::string_view constantStr = getStringConstant(&plan, stringIdx);
-          auto found = fieldStr.find(constantStr) != std::string_view::npos;
-          _registers[instr.operand - 1] = found ? 1 : 0;
+          executeLike(_registers, track, &plan, instr, plan.instructions);
           break;
-        }
 
         case OpCode::Nop:
         default: break;

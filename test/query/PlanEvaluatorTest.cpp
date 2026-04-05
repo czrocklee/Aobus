@@ -659,3 +659,118 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
   // No tags in track, so should be false
   CHECK(result == false);
 }
+
+TEST_CASE("PlanEvaluator - Title LIKE with quoted string evaluates correctly")
+{
+  // Simple title LIKE test with quoted string
+  auto expr = parse(R"($title ~ "Bach")");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  // Track with title containing "Bach"
+  auto track1 = TestTrack{"Bach Greatest Hits"};
+  auto result = evaluator.evaluateFull(plan, track1.view());
+  CHECK(result == true);
+
+  // Track with title not containing "Bach"
+  auto track2 = TestTrack{"Mozart Symphony"};
+  result = evaluator.evaluateFull(plan, track2.view());
+  CHECK(result == false);
+
+  // Track with exact match
+  auto track3 = TestTrack{"Bach"};
+  result = evaluator.evaluateFull(plan, track3.view());
+  CHECK(result == true);
+}
+
+TEST_CASE("PlanEvaluator - Title LIKE with multi-arg Track")
+{
+  // Test LIKE with a Track that has multiple fields set
+  auto expr = parse(R"($title ~ "Bach")");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  auto track = TestTrack{"Bach Greatest Hits", "Artist", "Album", "/path", 2021};
+  auto result = evaluator.evaluateFull(plan, track.view());
+  CHECK(result == true);
+}
+
+TEST_CASE("PlanEvaluator - OR expression with LIKE evaluates correctly")
+{
+  // Test that $title ~ "Bach" or $year > 2021 evaluates correctly
+  auto expr = parse(R"($title ~ "Bach" or $year > 2021)");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  // Track with title containing "Bach"
+  auto track1 = TestTrack{"Bach Greatest Hits", "Artist", "Album", "/path", 2021};
+  auto result = evaluator.evaluateFull(plan, track1.view());
+  CHECK(result == true);  // matches title ~ "Bach"
+
+  // Track with year > 2021 but title doesn't contain "Bach"
+  auto track2 = TestTrack{"Classical Music", "Artist", "Album", "/path", 2022};
+  result = evaluator.evaluateFull(plan, track2.view());
+  CHECK(result == true);  // matches year > 2021
+
+  // Track with neither matching
+  auto track3 = TestTrack{"Classical Music", "Artist", "Album", "/path", 2021};
+  result = evaluator.evaluateFull(plan, track3.view());
+  CHECK(result == false);
+}
+
+TEST_CASE("PlanEvaluator - OR with simple expressions")
+{
+  // Test $year > 2000 or $year > 1990 to verify OR works with two numeric comparisons
+  auto expr = parse("$year > 2000 or $year > 1990");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  // year 2021: 2021 > 2000 is true, so OR should be true
+  auto track1 = TestTrack{"Title", "Artist", "Album", "/path", 2021};
+  auto result = evaluator.evaluateFull(plan, track1.view());
+  CHECK(result == true);
+
+  // year 1995: 1995 > 2000 is false, but 1995 > 1990 is true, so OR should be true
+  auto track2 = TestTrack{"Title", "Artist", "Album", "/path", 1995};
+  result = evaluator.evaluateFull(plan, track2.view());
+  CHECK(result == true);
+
+  // year 1980: both are false, so OR should be false
+  auto track3 = TestTrack{"Title", "Artist", "Album", "/path", 1980};
+  result = evaluator.evaluateFull(plan, track3.view());
+  CHECK(result == false);
+}
+
+TEST_CASE("PlanEvaluator - Greater alone for year 1980")
+{
+  // Verify $year > 2000 returns false for year 1980
+  auto expr = parse("$year > 2000");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  auto track = TestTrack{"Title", "Artist", "Album", "/path", 1980};
+  auto result = evaluator.evaluateFull(plan, track.view());
+  CHECK(result == false);
+}
+
+TEST_CASE("PlanEvaluator - Year Greater Alone Works")
+{
+  // Simple year > test to verify year comparison works
+  auto expr = parse("$year > 2000");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  auto track1 = TestTrack{"Title", "Artist", "Album", "/path", 2021};
+  auto result = evaluator.evaluateFull(plan, track1.view());
+  CHECK(result == true);
+
+  auto track2 = TestTrack{"Title", "Artist", "Album", "/path", 1990};
+  result = evaluator.evaluateFull(plan, track2.view());
+  CHECK(result == false);
+}

@@ -333,3 +333,110 @@ TEST_CASE("ExecutionPlan - AccessProfile Custom Field")
 
   CHECK(plan.accessProfile == AccessProfile::ColdOnly);
 }
+
+TEST_CASE("ExecutionPlan - LIKE operator not supported for ArtistId")
+{
+  auto expr = parse(R"($artist ~ "Bach")");
+  auto compiler = QueryCompiler{};
+  REQUIRE_THROWS(compiler.compile(expr));
+}
+
+TEST_CASE("ExecutionPlan - LIKE operator not supported for AlbumId")
+{
+  auto expr = parse(R"($album ~ "Greatest Hits")");
+  auto compiler = QueryCompiler{};
+  REQUIRE_THROWS(compiler.compile(expr));
+}
+
+TEST_CASE("ExecutionPlan - LIKE operator not supported for GenreId")
+{
+  auto expr = parse(R"($genre ~ "Rock")");
+  auto compiler = QueryCompiler{};
+  REQUIRE_THROWS(compiler.compile(expr));
+}
+
+TEST_CASE("ExecutionPlan - LIKE operator not supported for AlbumArtistId")
+{
+  auto expr = parse(R"($albumArtist ~ "Bach")");
+  auto compiler = QueryCompiler{};
+  REQUIRE_THROWS(compiler.compile(expr));
+}
+
+TEST_CASE("ExecutionPlan - LIKE operator not supported for CoverArtId")
+{
+  auto expr = parse(R"($coverArt ~ "front")");
+  auto compiler = QueryCompiler{};
+  REQUIRE_THROWS(compiler.compile(expr));
+}
+
+TEST_CASE("ExecutionPlan - LIKE operator not supported for Tags")
+{
+  auto expr = parse(R"(#rock ~ "progressive")");
+  auto compiler = QueryCompiler{};
+  REQUIRE_THROWS(compiler.compile(expr));
+}
+
+TEST_CASE("ExecutionPlan - LIKE operator works for Title")
+{
+  auto expr = parse(R"($title ~ "Bach")");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  CHECK_FALSE(plan.instructions.empty());
+  CHECK_FALSE(plan.matchesAll);
+}
+
+TEST_CASE("ExecutionPlan - LIKE operator works for Uri")
+{
+  auto expr = parse(R"($uri ~ "/music/")");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  CHECK_FALSE(plan.instructions.empty());
+  CHECK_FALSE(plan.matchesAll);
+}
+
+TEST_CASE("ExecutionPlan - Mixed LIKE and EQUAL in OR expression")
+{
+  // This tests that leftField is correctly saved before compiling right operand
+  // $title ~ "Bach" should NOT check if ArtistId is used with LIKE
+  auto expr = parse(R"($title ~ "Bach" or $artist = "Bach")");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  CHECK_FALSE(plan.instructions.empty());
+  CHECK_FALSE(plan.matchesAll);
+}
+
+TEST_CASE("ExecutionPlan - Parenthesized LIKE and EQUAL in OR expression")
+{
+  // Explicit grouping with parentheses should also work
+  auto expr = parse(R"(($title ~ "Bach") or ($artist = "Bach"))");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  CHECK_FALSE(plan.instructions.empty());
+  CHECK_FALSE(plan.matchesAll);
+}
+
+TEST_CASE("ExecutionPlan - Multiple OR with ID field equality")
+{
+  // Multiple ID field equalities in OR should compile without throwing
+  auto expr = parse(R"($artist = "Bach" or $artist = "Mozart" or $album = "交响乐")");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  CHECK_FALSE(plan.instructions.empty());
+  CHECK_FALSE(plan.matchesAll);
+}
+
+TEST_CASE("ExecutionPlan - Title LIKE chained with AND")
+{
+  // Title LIKE should work with AND
+  auto expr = parse(R"($title ~ "Bach" and $year > 2000)");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  CHECK_FALSE(plan.instructions.empty());
+  CHECK_FALSE(plan.matchesAll);
+}

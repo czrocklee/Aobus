@@ -3,7 +3,7 @@
 
 #include "MainWindow.h"
 
-#include <rs/core/ListPayloadBuilder.h>
+#include <rs/core/ListBuilder.h>
 #include <rs/core/MusicLibrary.h>
 #include <rs/core/ResourceStore.h>
 #include <rs/core/TrackBuilder.h>
@@ -230,6 +230,7 @@ void MainWindow::importFiles()
       // Create progress dialog owned by MainWindow (stored as member)
       _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), *this);
       auto* dialogPtr = _importDialog.get();
+      _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
 
       // Create worker - owned by MainWindow
       _importWorker = std::make_unique<ImportWorker>(
@@ -306,6 +307,7 @@ void MainWindow::importFilesFromPath(std::filesystem::path const& path)
   // Show progress dialog
   _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), *this);
   auto* dialogPtr = _importDialog.get();
+  _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
 
   // Create worker - owned by MainWindow
   _importWorker = std::make_unique<ImportWorker>(
@@ -353,9 +355,6 @@ void MainWindow::setupMenu()
   auto fileMenu = Gio::Menu::create();
   fileMenu->append("Open Library", "win.open-library");
   fileMenu->append("Import Files", "win.import-files");
-  auto section = Gio::Menu::create();
-  section->append("New List", "win.new-list");
-  fileMenu->append_section(section);
   fileMenu->append("Quit", "app.quit");
   menuModel->append_submenu("File", fileMenu);
 
@@ -378,10 +377,10 @@ void MainWindow::setupMenu()
     [this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { importFiles(); });
   add_action(importAction);
 
-  auto newListAction = Gio::SimpleAction::create("new-list");
-  newListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) {
+  _newListAction = Gio::SimpleAction::create("new-list");
+  _newListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) {
     // Create dialog - GTK4 will manage its lifetime when closed
-    auto* dialog = Gtk::make_managed<NewListDialog>(*this);
+    auto* dialog = Gtk::make_managed<NewListDialog>(*this, *_musicLibrary, *_allTrackIds, _rowDataProvider);
 
     dialog->signal_response().connect([this, dialog](int responseId) {
       if (responseId == Gtk::ResponseType::OK)
@@ -389,11 +388,20 @@ void MainWindow::setupMenu()
         auto draft = dialog->draft();
         createList(draft);
       }
+
+      dialog->close();
     });
 
     dialog->present();
   });
-  add_action(newListAction);
+  _newListAction->set_enabled(false);
+  add_action(_newListAction);
+
+  _deleteListAction = Gio::SimpleAction::create("delete-list");
+  _deleteListAction->signal_activate().connect(
+    [this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { onDeleteList(); });
+  _deleteListAction->set_enabled(false);
+  add_action(_deleteListAction);
 }
 
 void MainWindow::setupLayout()
@@ -416,15 +424,41 @@ void MainWindow::setupLayout()
 
   // List view for the sidebar
   auto factory = Gtk::SignalListItemFactory::create();
-  factory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  factory->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+    auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    rowBox->set_halign(Gtk::Align::FILL);
+    rowBox->set_hexpand(true);
+    rowBox->set_margin_start(6);
+    rowBox->set_margin_end(6);
+    rowBox->set_margin_top(3);
+    rowBox->set_margin_bottom(3);
+
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
-    listItem->set_child(*label);
+    label->set_hexpand(true);
+    rowBox->append(*label);
+
+    auto clickController = Gtk::GestureClick::create();
+    clickController->set_button(GDK_BUTTON_SECONDARY);
+    clickController->signal_pressed().connect([this, listItem, rowBox](int /*nPress*/, double x, double y) {
+      auto const position = listItem->get_position();
+      if (position != GTK_INVALID_LIST_POSITION) { _listSelectionModel->set_selected(position); }
+
+      auto point = rowBox->compute_point(_listView, Gdk::Graphene::Point(static_cast<float>(x), static_cast<float>(y)));
+      if (!point) { return; }
+
+      auto rect = Gdk::Rectangle(static_cast<int>(point->get_x()), static_cast<int>(point->get_y()), 1, 1);
+      showListContextMenu(_listView, rect);
+    });
+    rowBox->add_controller(clickController);
+
+    listItem->set_child(*rowBox);
   });
   factory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<ListRow>(item);
-    auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+    auto box = dynamic_cast<Gtk::Box*>(listItem->get_child());
+    auto label = box ? dynamic_cast<Gtk::Label*>(box->get_first_child()) : nullptr;
     if (row && label) { label->set_text(row->getName()); }
   });
 
@@ -435,8 +469,12 @@ void MainWindow::setupLayout()
   _listView.set_hexpand(true);
   _listView.set_vexpand(true);
 
-  // Note: Context menus in GTK4 are handled via gesture events
-  // For now, we'll skip the popover implementation and rely on menu actions
+  auto listContextMenuModel = Gio::Menu::create();
+  listContextMenuModel->append("New List", "win.new-list");
+  listContextMenuModel->append("Delete List", "win.delete-list");
+  _listContextMenu.set_menu_model(listContextMenuModel);
+  _listContextMenu.set_has_arrow(false);
+  _listContextMenu.set_parent(_listView);
 
   // Scrolled window for list
   _listScrolledWindow.set_child(_listView);
@@ -486,6 +524,21 @@ void MainWindow::setupLayout()
   set_child(*mainBox);
 }
 
+void MainWindow::showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle const& rect)
+{
+  (void)listView;
+
+  auto const selected = _listSelectionModel ? _listSelectionModel->get_selected() : GTK_INVALID_LIST_POSITION;
+  auto const hasLibrary = static_cast<bool>(_musicLibrary);
+  auto const canDelete = hasLibrary && selected != GTK_INVALID_LIST_POSITION && selected != 0;
+
+  if (_newListAction) { _newListAction->set_enabled(hasLibrary); }
+  if (_deleteListAction) { _deleteListAction->set_enabled(canDelete); }
+
+  _listContextMenu.set_pointing_to(rect);
+  _listContextMenu.popup();
+}
+
 void MainWindow::createList(app::model::ListDraft const& draft)
 {
   if (!_musicLibrary)
@@ -497,15 +550,20 @@ void MainWindow::createList(app::model::ListDraft const& draft)
   auto txn = _musicLibrary->writeTransaction();
 
   // Build the list payload
-  auto payload = std::vector<std::byte>{};
+  auto builder = rs::core::ListBuilder::createNew()
+    .name(draft.name)
+    .description(draft.description);
   if (draft.kind == app::model::ListKind::Smart)
   {
-    payload = rs::core::ListPayloadBuilder::buildSmartList(draft.name, draft.description, draft.expression);
+    builder.filter(draft.expression);
   }
   else
   {
-    payload = rs::core::ListPayloadBuilder::buildManualList(draft.name, draft.description, draft.trackIds);
+    for (auto id : draft.trackIds) {
+      builder.tracks().add(id);
+    }
   }
+  auto payload = builder.serialize();
 
   // Create the list in the store
   auto [listId, view] = _musicLibrary->lists().writer(txn).create(payload);
@@ -515,6 +573,17 @@ void MainWindow::createList(app::model::ListDraft const& draft)
   // Refresh the lists
   auto readTxn = _musicLibrary->readTransaction();
   rebuildListPages(readTxn);
+
+  auto const itemCount = _listStore->get_n_items();
+  for (guint index = 0; index < itemCount; ++index)
+  {
+    auto row = _listStore->get_item(index);
+    if (row && row->getListId() == listId)
+    {
+      _listSelectionModel->set_selected(index);
+      break;
+    }
+  }
 }
 
 void MainWindow::onDeleteList()
@@ -542,6 +611,7 @@ void MainWindow::onDeleteList()
   // Refresh lists
   auto readTxn = _musicLibrary->readTransaction();
   rebuildListPages(readTxn);
+  _listSelectionModel->set_selected(0);
 }
 
 void MainWindow::clearTrackPages()
@@ -647,6 +717,9 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId,
 
   // Create adapter
   auto adapter = std::make_shared<TrackListAdapter>(*membershipList, _rowDataProvider);
+  // Prime the model with the membership list contents because the list was populated
+  // before the adapter attached as an observer.
+  adapter->onReset();
 
   // Create track page
   auto trackPage = std::make_unique<TrackViewPage>(adapter);
@@ -743,15 +816,19 @@ void MainWindow::onTagTrack()
         }
       }
     }
+
+    dialog->close();
   });
   dialog->present();
 }
 
-void MainWindow::onListSelectionChanged(std::uint32_t position, [[maybe_unused]] std::uint32_t nItems)
+void MainWindow::onListSelectionChanged([[maybe_unused]] std::uint32_t position,
+                                        [[maybe_unused]] std::uint32_t nItems)
 {
-  if (position == GTK_INVALID_LIST_POSITION) { return; }
+  auto const selected = _listSelectionModel ? _listSelectionModel->get_selected() : GTK_INVALID_LIST_POSITION;
+  if (selected == GTK_INVALID_LIST_POSITION) { return; }
 
-  auto item = _listStore->get_item(position);
+  auto item = _listStore->get_item(selected);
 
   if (!item) { return; }
 

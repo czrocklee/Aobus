@@ -28,10 +28,22 @@ namespace app::model
   {
     _expression = std::move(expr);
 
+    // Empty expression matches all tracks
+    if (_expression.empty())
+    {
+      rs::expr::QueryCompiler compiler{&_ml->dictionary()};
+      auto parsedExpr = rs::expr::parse("true");
+      _plan = std::make_unique<rs::expr::ExecutionPlan>(compiler.compile(parsedExpr));
+      _evaluator = std::make_unique<rs::expr::PlanEvaluator>();
+      _hasError = false;
+      _errorMessage.clear();
+      return;
+    }
+
     try
     {
       auto parsedExpr = rs::expr::parse(_expression);
-      rs::expr::QueryCompiler compiler;
+      rs::expr::QueryCompiler compiler{&_ml->dictionary()};
       _plan = std::make_unique<rs::expr::ExecutionPlan>(compiler.compile(parsedExpr));
       _evaluator = std::make_unique<rs::expr::PlanEvaluator>();
       _hasError = false;

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <rs/expr/ExecutionPlan.h>
+#include <rs/Exception.h>
 #include <rs/utility/VariantVisitor.h>
 
 #include <algorithm>
@@ -76,6 +77,20 @@ namespace rs::expr
       return field == Field::Tag;
     }
 
+    bool isIdField(Field field)
+    {
+      switch (field)
+      {
+        case Field::ArtistId:
+        case Field::AlbumId:
+        case Field::GenreId:
+        case Field::AlbumArtistId:
+        case Field::CoverArtId:
+        case Field::Tag: return true;
+        default: return false;
+      }
+    }
+
     bool isColdField(Field field)
     {
       // Cold fields are stored in TrackColdHeader or custom KV storage
@@ -98,7 +113,7 @@ namespace rs::expr
     }
   }
 
-  QueryCompiler::QueryCompiler(core::DictionaryStore const* dict)
+  QueryCompiler::QueryCompiler(core::DictionaryStore* dict)
     : _dict{dict}
   {
   }
@@ -134,6 +149,9 @@ namespace rs::expr
     // Compile left operand
     compileExpression(binary.operand);
 
+    // Save left field before compiling right operand (which will overwrite _lastField)
+    auto const leftField = _lastField;
+
     if (binary.operation)
     {
       // Compile right operand
@@ -144,9 +162,20 @@ namespace rs::expr
       auto rightReg = _nextReg - 1;
 
       auto opcode = toOpCode(binary.operation->op);
+
+      // ID fields (artist, album, genre, albumArtist, coverArt) and tags don't support LIKE
+      if (opcode == OpCode::Like && isIdField(leftField))
+      {
+        RS_THROW(rs::Exception,
+                 "LIKE operator not supported for ID fields (artist, album, genre, albumArtist, coverArt) or tags");
+      }
+
+      // Store leftField in field for LIKE instructions so executeLike can use it directly
+      auto instrField = (opcode == OpCode::Like) ? static_cast<std::uint8_t>(leftField) : std::uint8_t{0};
+
       _plan.instructions.push_back(Instruction{
         .op = opcode,
-        .field = 0,
+        .field = instrField,
         .operand = static_cast<std::int32_t>(rightReg),
         .constValue = 0,
         .strLen = 0,
@@ -324,18 +353,15 @@ namespace rs::expr
                constant);
   }
 
-  std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field) const
+  std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field)
   {
     // Only resolve for metadata ID fields and tag fields
     if (!isMetadataFieldId(field) && !isTagField(field)) { return -1; }
 
     if (_dict == nullptr) { return -1; }
 
-    // Look up the string in the dictionary
-    auto id = _dict->getId(str);
-
-    if (id.value() == 0) { return -1; }
-
+    // Reserve in memory - if already exists, returns existing ID; if not, adds to memory only
+    auto id = _dict->reserve(str);
     return static_cast<std::int64_t>(id.value());
   }
 

@@ -10,20 +10,19 @@ namespace
 {
   using namespace rs::expr;
 
-  struct ParenthesisGuard  // NOLINT(cppcoreguidelines-special-member-functions)
+  struct ParenthesisGuard // NOLINT(cppcoreguidelines-special-member-functions)
   {
-    ParenthesisGuard(std::ostringstream& oss, bool apply) : oss{oss}, apply{apply}
+    ParenthesisGuard(std::ostringstream& oss, bool apply)
+      : oss{oss}, apply{apply}
     {
-      if (apply) {
-        oss << "(";
-      }
+      if (apply) { oss << "("; }
     }
+
     ~ParenthesisGuard()
     {
-      if (apply) {
-        oss << ")";
-      }
+      if (apply) { oss << ")"; }
     }
+    
     std::ostringstream& oss;
     bool apply;
   };
@@ -34,23 +33,16 @@ namespace
 
     void operator()(std::unique_ptr<BinaryExpression> const& binary)
     {
-      if (!binary) {
-        return;
-      }
+      if (!binary) { return; }
       auto guard = ParenthesisGuard{oss, (counter++ > 0) && binary->operation};
       std::visit(*this, binary->operand);
 
-      if (binary->operation)
-      {
-        serializeBinary(binary->operation->op, binary->operation->operand);
-      }
+      if (binary->operation) { serializeBinary(binary->operation->op, binary->operation->operand); }
     }
 
     void operator()(std::unique_ptr<UnaryExpression> const& unary)
     {
-      if (!unary) {
-        return;
-      }
+      if (!unary) { return; }
       oss << "not ";
       std::visit(*this, unary->operand);
     }
@@ -59,18 +51,10 @@ namespace
     {
       switch (variable.type)
       {
-        case VariableType::Metadata:
-          oss << '$';
-          break;
-        case VariableType::Property:
-          oss << '@';
-          break;
-        case VariableType::Tag:
-          oss << '#';
-          break;
-        case VariableType::Custom:
-          oss << '%';
-          break;
+        case VariableType::Metadata: oss << '$'; break;
+        case VariableType::Property: oss << '@'; break;
+        case VariableType::Tag: oss << '#'; break;
+        case VariableType::Custom: oss << '%'; break;
       }
 
       oss << variable.name;
@@ -89,38 +73,17 @@ namespace
     {
       switch (op)
       {
-        case Operator::And:
-          oss << " and ";
-          break;
-        case Operator::Or:
-          oss << " or ";
-          break;
-        case Operator::Less:
-          oss << " < ";
-          break;
-        case Operator::LessEqual:
-          oss << " <= ";
-          break;
-        case Operator::Greater:
-          oss << " > ";
-          break;
-        case Operator::GreaterEqual:
-          oss << " >= ";
-          break;
-        case Operator::Equal:
-          oss << " = ";
-          break;
-        case Operator::NotEqual:
-          oss << " != ";
-          break;
-        case Operator::Like:
-          oss << " ~ ";
-          break;
-        case Operator::Add:
-          oss << " + ";
-          break;
-        default:
-          break;
+        case Operator::And: oss << " and "; break;
+        case Operator::Or: oss << " or "; break;
+        case Operator::Less: oss << " < "; break;
+        case Operator::LessEqual: oss << " <= "; break;
+        case Operator::Greater: oss << " > "; break;
+        case Operator::GreaterEqual: oss << " >= "; break;
+        case Operator::Equal: oss << " = "; break;
+        case Operator::NotEqual: oss << " != "; break;
+        case Operator::Like: oss << " ~ "; break;
+        case Operator::Add: oss << " + "; break;
+        default: break;
       }
 
       std::visit(*this, rhs);

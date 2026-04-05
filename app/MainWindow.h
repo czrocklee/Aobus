@@ -141,10 +141,13 @@ private:
 
   // Menu (placeholder)
   Gtk::PopoverMenuBar _menuBar;
+  Gtk::PopoverMenu _listContextMenu;
 
   // List model for sidebar
   Glib::RefPtr<Gio::ListStore<ListRow>> _listStore;
   Glib::RefPtr<Gtk::SingleSelection> _listSelectionModel;
+  Glib::RefPtr<Gio::SimpleAction> _newListAction;
+  Glib::RefPtr<Gio::SimpleAction> _deleteListAction;
 
   // Track pages map
   std::map<rs::core::ListId, TrackPageContext> _trackPages;

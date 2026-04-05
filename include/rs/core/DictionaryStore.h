@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace rs::core
@@ -63,6 +64,16 @@ namespace rs::core
      */
     bool contains(std::string_view str) const;
 
+    /**
+     * Reserve a string in memory without persisting to database.
+     * If the string already exists, returns its existing ID.
+     * If not, adds to in-memory storage only (not persisted).
+     * When put() is later called with the same string, the reserved ID will be reused.
+     * @param str The string to reserve
+     * @return The reserved ID
+     */
+    DictionaryId reserve(std::string_view str);
+
   private:
     lmdb::Database _database;
 
@@ -71,6 +82,9 @@ namespace rs::core
 
     // In-memory index: id → string (owner of all strings)
     std::vector<std::string> _idToStringStorage;
+
+    // Track strings that were reserved but not yet persisted to DB
+    std::unordered_set<std::string_view> _reservedStrings;
   };
 
 } // namespace rs::core

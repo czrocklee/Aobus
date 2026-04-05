@@ -28,8 +28,17 @@ namespace rs::core
 
   DictionaryId DictionaryStore::put(lmdb::WriteTransaction& txn, std::string_view value)
   {
-    // Check in-memory index first
-    if (auto it = _stringToId.find(value); it != _stringToId.end()) { return it->second; }
+    // Check in-memory index first (includes entries from reserve)
+    if (auto it = _stringToId.find(value); it != _stringToId.end()) {
+      // If this string was reserved, we need to persist it now
+      if (_reservedStrings.contains(value)) {
+        auto writer = _database.writer(txn);
+        auto data = utility::asBytes(value);
+        writer.create(it->second.value(), data);
+        _reservedStrings.erase(value);
+      }
+      return it->second;
+    }
 
     // Not found in memory - append to database
     auto writer = _database.writer(txn);
@@ -60,6 +69,21 @@ namespace rs::core
   bool DictionaryStore::contains(std::string_view str) const
   {
     return _stringToId.contains(str);
+  }
+
+  DictionaryId DictionaryStore::reserve(std::string_view str)
+  {
+    // Check if already exists
+    if (auto it = _stringToId.find(str); it != _stringToId.end()) {
+      return it->second;
+    }
+
+    // Add to in-memory storage - ID is the current size (next available index)
+    _idToStringStorage.emplace_back(str);
+    auto id = DictionaryId{static_cast<std::uint32_t>(_idToStringStorage.size() - 1)};
+    _stringToId.emplace(_idToStringStorage.back(), id);
+    _reservedStrings.emplace(_idToStringStorage.back());
+    return id;
   }
 
 } // namespace rs::core

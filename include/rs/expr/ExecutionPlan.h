@@ -139,7 +139,7 @@ namespace rs::expr
      *
      * @param dict Pointer to DictionaryStore for resolving string constants to IDs, can be nullptr
      */
-    explicit QueryCompiler(core::DictionaryStore const* dict);
+    explicit QueryCompiler(core::DictionaryStore* dict);
 
     /**
      * Compile an expression AST into an execution plan.
@@ -159,12 +159,12 @@ namespace rs::expr
     void compileConstant(ConstantExpression const& constant);
 
     // Resolve string to ID using dictionary (if available)
-    std::int64_t resolveStringConstant(std::string const& str, Field field) const;
+    std::int64_t resolveStringConstant(std::string const& str, Field field);
 
     // Member variables
     ExecutionPlan _plan;
     std::uint32_t _nextReg = 0;
-    core::DictionaryStore const* _dict = nullptr;
+    core::DictionaryStore* _dict = nullptr;
     Field _lastField = Field::TagBloom; // Track last field for context
     bool _hasHotAccess = false;  // Track if expression uses hot (metadata/property/tag) variables
     bool _hasColdAccess = false; // Track if expression uses cold (custom) variables

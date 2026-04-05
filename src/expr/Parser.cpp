@@ -37,6 +37,13 @@ namespace
     .map<LEXY_SYMBOL("true")>(true)
     .map<LEXY_SYMBOL("false")>(false);
 
+  constexpr auto bareword_identifier = [] {
+    auto id = dsl::identifier(dsl::ascii::alpha_digit_underscore);
+    return id.reserve(LEXY_KEYWORD("and", id),
+                      LEXY_KEYWORD("or", id),
+                      LEXY_KEYWORD("not", id));
+  }();
+
   struct variable : lexy::token_production {
       static constexpr auto rule = dsl::symbol<var_types> >> dsl::identifier(dsl::ascii::alpha_underscore, dsl::ascii::alpha_digit_underscore);
       static constexpr auto value = lexy::callback<VariableExpression>(
@@ -53,7 +60,7 @@ namespace
       static constexpr auto rule = 
             (dsl::lit_c<'\''> >> dsl::capture(dsl::until(dsl::lit_c<'\''>)))
           | (dsl::lit_c<'"'>  >> dsl::capture(dsl::until(dsl::lit_c<'"'>)))
-          | dsl::identifier(dsl::ascii::alpha_digit_underscore);
+          | bareword_identifier;
 
       static constexpr auto value = lexy::callback<std::string>(
           [](auto lexeme) {  // NOLINT(readability-named-parameter)

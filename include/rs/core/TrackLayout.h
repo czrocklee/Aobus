@@ -24,7 +24,7 @@ namespace rs::core
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← hot data begin
-   *   │        TrackHotHeader (32B)         │
+   *   │        TrackHotHeader (32B)         |
    *   │  tagBloom, artistId, albumId,       │
    *   │  genreId, albumArtistId             │
    *   │  year, codecId, bitDepth            │

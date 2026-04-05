@@ -153,7 +153,9 @@ TEST_CASE("Parser - Like")
 TEST_CASE("Parser - Logical Operators")
 {
   CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach && true")));
+  CHECK("[b{and}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach and true")));
   CHECK("[b{or}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach || true")));
+  CHECK("[b{or}[b{eq}[v{m}artist],[c{s}Bach]],[c{b}true]]" == canonicalize(parse("$artist=Bach or true")));
   CHECK("[u{!}[v{m}artist]]" == canonicalize(parse("not $artist")));
   CHECK("[u{!}[v{m}artist]]" == canonicalize(parse("!$artist")));
 }

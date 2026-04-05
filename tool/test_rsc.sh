@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # test_rsc.sh - Integration tests for rsc CLI
 # Assumes: running from workspace root, inside nix-shell
 

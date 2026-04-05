@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "ListCommand.h"
-#include <rs/core/ListPayloadBuilder.h>
+#include <rs/core/ListBuilder.h>
 #include <rs/core/ListStore.h>
 
 #include "BasicCommand.h"
@@ -22,7 +22,17 @@ namespace
     auto reader = ml.lists().reader(txn);
 
     constexpr int idWidth = 5;
-    for (auto [id, view] : reader) { os << std::setw(idWidth) << id << " " << view.name() << "\n"; }
+    for (auto [id, view] : reader) {
+      os << std::setw(idWidth) << id << " " << view.name() << "\n";
+      if (view.isSmart()) {
+        os << std::string(idWidth, ' ') << "  [smart] filter: \"" << view.filter() << "\"\n";
+      } else {
+        os << std::string(idWidth, ' ') << "  [manual] " << view.tracks().size() << " tracks\n";
+      }
+      if (!view.description().empty()) {
+        os << std::string(idWidth, ' ') << "  desc: \"" << view.description() << "\"\n";
+      }
+    }
   }
 
   void createList(core::MusicLibrary& ml,
@@ -33,10 +43,14 @@ namespace
   {
     auto txn = ml.writeTransaction();
 
-    // Build list payload using ListPayloadBuilder
-    auto data = filter.empty()
-      ? core::ListPayloadBuilder::buildManualList(name, desc, {})
-      : core::ListPayloadBuilder::buildSmartList(name, desc, filter);
+    // Build list payload using ListBuilder
+    auto builder = core::ListBuilder::createNew()
+      .name(name)
+      .description(desc);
+    if (!filter.empty()) {
+      builder.filter(filter);
+    }
+    auto data = builder.serialize();
 
     auto [id, view] = ml.lists().writer(txn).create(data);
     txn.commit();

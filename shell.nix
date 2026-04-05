@@ -25,6 +25,7 @@ pkgs.mkShell {
     with pkgs;
     [
       cmake
+      gperf
       ripgrep
       pkg-config
       ninja

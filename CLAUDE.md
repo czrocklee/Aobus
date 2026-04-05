@@ -38,10 +38,10 @@ All builds should be run from within `nix-shell`:
 
 ```bash
 nix-shell --run "cmake --preset linux-debug"
-nix-shell --run "cmake --build --preset linux-debug --parallel"
+nix-shell --run "cmake --build /tmp/build --parallel"
 ```
 
-Or use direct commands:
+Or, after configuring once, build directly with:
 
 ```bash
 nix-shell --run "cmake --build /tmp/build --parallel"

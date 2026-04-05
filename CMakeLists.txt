@@ -145,7 +145,12 @@ add_gperf_header(
   "${CMAKE_CURRENT_SOURCE_DIR}/src/tag/mp4/AtomDispatch.gperf"
   "tag/mp4/AtomDispatch.h"
 )
-add_custom_target(tag_dispatch_headers DEPENDS "${FLAC_VORBIS_DISPATCH_HEADER}" "${MP4_ATOM_DISPATCH_HEADER}")
+add_gperf_header(
+  MPEG_FRAME_DISPATCH_HEADER
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/tag/mpeg/id3v2/FrameDispatch.gperf"
+  "tag/mpeg/id3v2/FrameDispatch.h"
+)
+add_custom_target(tag_dispatch_headers DEPENDS "${FLAC_VORBIS_DISPATCH_HEADER}" "${MP4_ATOM_DISPATCH_HEADER}" "${MPEG_FRAME_DISPATCH_HEADER}")
 
 add_library(rs OBJECT
     src/lmdb/Environment.cpp

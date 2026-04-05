@@ -2,70 +2,14 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "MetadataBlock.h"
-#include <boost/endian/conversion.hpp>
-#include <rs/Exception.h>
 #include <rs/utility/ByteView.h>
-#include <string_view>
 
 namespace rs::tag::flac
 {
-  namespace
-  {
-    template<typename LengthType, boost::endian::order Order = boost::endian::order::big>
-    LengthType parseLength(char const*& ptr, char const* end)
-    {
-      if (ptr + sizeof(LengthType) > end)
-      {
-        RS_THROW_FORMAT(
-          rs::Exception, "invalid flac block, expect length field size {} >= {}", end - ptr, sizeof(LengthType));
-      }
-
-      LengthType length;
-      std::memcpy(&length, ptr, sizeof(LengthType));
-      boost::endian::conditional_reverse_inplace<Order, boost::endian::order::native>(length);
-      ptr += sizeof(LengthType);
-      return length;
-    }
-
-    template<typename LengthType, boost::endian::order Order = boost::endian::order::big>
-    std::string_view parseString(char const*& ptr, char const* end)
-    {
-      LengthType length = parseLength<LengthType, Order>(ptr, end);
-
-      if (ptr + length > end)
-      {
-        RS_THROW_FORMAT(
-          rs::Exception, "invalid flac block, expect available field length {} >= {}", end - ptr, length);
-      }
-
-      char const* start = ptr;
-      ptr += length;
-      return {start, length};
-    }
-  }
-
   std::vector<std::string_view> VorbisCommentBlockView::comments() const
   {
-    char const* ptr = static_cast<char const*>(data()) + sizeof(MetadataBlockLayout);
-    char const* end = ptr + size() - sizeof(MetadataBlockLayout);
-    parseString<std::uint32_t, boost::endian::order::little>(ptr, end); // vendor string
-
-    std::uint32_t count = parseLength<std::uint32_t, boost::endian::order::little>(ptr, end);
     std::vector<std::string_view> comments;
-    comments.reserve(count);
-
-    for (std::uint32_t i = 0; i < count; ++i)
-    {
-      comments.push_back(parseString<std::uint32_t, boost::endian::order::little>(ptr, end));
-    }
-
-    if (auto sizeLeft = static_cast<std::size_t>(end - ptr); sizeLeft > 0)
-    {
-      RS_THROW_FORMAT(rs::Exception,
-                      "invalid flac vorbis_comment block, unexpected content \"{}\"",
-                      std::string_view{ptr, sizeLeft});
-    }
-
+    visitComments([&comments](std::string_view comment) { comments.push_back(comment); });
     return comments;
   }
 
@@ -77,10 +21,10 @@ namespace rs::tag::flac
     char const* ptr = static_cast<char const*>(data()) + sizeof(MetadataBlockLayout);
     char const* end = ptr + size() - sizeof(MetadataBlockLayout);
     ptr += 4;                             // picture type
-    parseString<std::uint32_t>(ptr, end); // MIME type
-    parseString<std::uint32_t>(ptr, end); // description
+    detail::parseString<std::uint32_t>(ptr, end); // MIME type
+    detail::parseString<std::uint32_t>(ptr, end); // description
     ptr += kPictureMetaFieldCount * sizeof(std::uint32_t); // width/height/color depth/color count
-    std::string_view blob = parseString<std::uint32_t>(ptr, end);
+    std::string_view blob = detail::parseString<std::uint32_t>(ptr, end);
     return utility::asBytes(blob);
   }
 

@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include <rs/tag/Metadata.h>
+#include <rs/tag/ParsedTrack.h>
 
 namespace rs::tag::mpeg::id3v2
 {
   struct HeaderLayout;
 
-  Metadata loadFrames(HeaderLayout const& header, void const* buffer, std::size_t size);
+  ParsedTrack loadFrames(HeaderLayout const& header, void const* buffer, std::size_t size);
 }

@@ -1,39 +1,32 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/tag/ValueType.h>
+#pragma once
 
+#include <cstdint>
 #include <charconv>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
 
 namespace rs::tag
 {
-  struct StringDecoder
+  inline std::string decodeString(std::span<std::byte const> buf)
   {
-    static ValueType decode(void const* buffer, std::size_t size)
-    {
-      return std::string{static_cast<char const*>(buffer), size};
-    }
-  };
+    return std::string{reinterpret_cast<char const*>(buf.data()), buf.size()};
+  }
 
-  struct IntDecoder
+  inline std::optional<std::uint16_t> decodeUint16(std::span<std::byte const> buf)
   {
-    static ValueType decode(void const* buffer, std::size_t size)
-    {
-      char const* data = static_cast<char const*>(buffer);
-      std::int64_t result;
-      auto [_, ec] = std::from_chars(data, data + size, result);
-      return ec == std::errc() ? ValueType{result} : ValueType{};
-    }
-  };
+    char const* data = reinterpret_cast<char const*>(buf.data());
+    std::uint16_t result;
+    auto [_, ec] = std::from_chars(data, data + buf.size(), result);
+    return ec == std::errc() ? std::optional{result} : std::nullopt;
+  }
 
-  struct BlobDecoder
+  inline std::span<std::byte const> viewBytes(std::span<std::byte const> buf)
   {
-    static ValueType decode(void const* buffer, std::size_t size)
-    {
-      char const* data = static_cast<char const*>(buffer);
-      std::vector<char> blob;
-      blob.assign(data, data + size);
-      return {std::move(blob)};
-    }
-  };
-}
+    return buf;
+  }
+} // namespace rs::tag
