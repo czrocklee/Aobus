@@ -17,8 +17,8 @@
 #include <rs/utility/ByteView.h>
 #include <optional>
 #include <span>
-#include <test/core/TestUtils.h>
-#include <test/lmdb/TestUtils.h>
+#include <test/unit/core/TestUtils.h>
+#include <test/unit/lmdb/TestUtils.h>
 
 #include <vector>
 

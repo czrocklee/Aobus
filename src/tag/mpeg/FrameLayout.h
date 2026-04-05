@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <type_traits>
 
@@ -40,20 +41,22 @@ namespace rs::tag::mpeg
 
   struct FrameLayout
   {
-    std::uint8_t sync1 : 8;
-    std::uint8_t sync2 : 3;
-    VersionID versionId : 2;
-    LayerDescription layer : 2;
-    Protection protectionBit : 1;
-    std::uint8_t bitrateIndex : 4;
-    std::uint8_t samplingRateIndex : 2;
-    std::uint8_t paddingBit : 1;
-    std::uint8_t privateBit : 1;
-    ChannelMode channelMode : 2;
-    std::uint8_t modeExtension : 2;
-    std::uint8_t copyrightBit : 1;
-    std::uint8_t originalBit : 1;
-    std::uint8_t emphasis : 2;
+    std::array<std::uint8_t, 4> data;
+
+    std::uint8_t sync1() const { return data[0]; }
+    std::uint8_t sync2() const { return (data[1] >> 5) & 0x07; }
+    VersionID versionId() const { return static_cast<VersionID>((data[1] >> 3) & 0x03); }
+    LayerDescription layer() const { return static_cast<LayerDescription>((data[1] >> 1) & 0x03); }
+    Protection protectionBit() const { return static_cast<Protection>(data[1] & 0x01); }
+    std::uint8_t bitrateIndex() const { return (data[2] >> 4) & 0x0F; }
+    std::uint8_t samplingRateIndex() const { return (data[2] >> 2) & 0x03; }
+    std::uint8_t paddingBit() const { return (data[2] >> 1) & 0x01; }
+    std::uint8_t privateBit() const { return data[2] & 0x01; }
+    ChannelMode channelMode() const { return static_cast<ChannelMode>((data[3] >> 6) & 0x03); }
+    std::uint8_t modeExtension() const { return (data[3] >> 4) & 0x03; }
+    std::uint8_t copyrightBit() const { return (data[3] >> 3) & 0x01; }
+    std::uint8_t originalBit() const { return (data[3] >> 2) & 0x01; }
+    std::uint8_t emphasis() const { return data[3] & 0x03; }
   };
 
   static_assert(sizeof(FrameLayout) == 4);

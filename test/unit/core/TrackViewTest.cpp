@@ -9,8 +9,8 @@
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
 #include <rs/utility/ByteView.h>
-#include <test/core/TestUtils.h>
-#include <test/lmdb/TestUtils.h>
+#include <test/unit/core/TestUtils.h>
+#include <test/unit/lmdb/TestUtils.h>
 
 #include <array>
 #include <span>

@@ -20,7 +20,7 @@ rs::core::TrackBuilder loadTrackRecord(std::filesystem::path const& path,
   parsed.record.property.mtime = std::filesystem::last_write_time(path).time_since_epoch().count();
 
   // Store cover art
-  if (parsed.embeddedCoverArt.empty())
+  if (!parsed.embeddedCoverArt.empty())
   {
     parsed.record.metadata.coverArtId = resourceWriter.create(parsed.embeddedCoverArt).value();
   }

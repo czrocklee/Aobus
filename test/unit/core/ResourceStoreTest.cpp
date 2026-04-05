@@ -7,7 +7,7 @@
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
-#include <test/lmdb/TestUtils.h>
+#include <test/unit/lmdb/TestUtils.h>
 
 using rs::core::ResourceStore;
 using rs::lmdb::Database;

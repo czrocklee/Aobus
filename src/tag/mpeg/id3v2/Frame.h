@@ -73,7 +73,10 @@ namespace rs::tag::mpeg::id3v2
       auto begin = static_cast<char const*>(Base::data()) + sizeof(FrameViewLayout);
       auto end = static_cast<char const*>(Base::data()) + Base::size();
       auto encoding = Base::template layout<FrameViewLayout>().encoding;
-      return boost::locale::conv::to_utf<char>(begin, end, encoding == Encoding::Latin_1 ? "Latin1" : "UCS-2");
+      std::string result =
+        boost::locale::conv::to_utf<char>(begin, end, encoding == Encoding::Latin_1 ? "Latin1" : "UCS-2");
+      while (!result.empty() && result.back() == '\0') { result.pop_back(); }
+      return result;
     }
   };
 
@@ -98,16 +101,29 @@ namespace rs::tag::mpeg::id3v2
         return;
       }
 
-      _sizeLeft -= _view.size();
-
-      if (_sizeLeft == 0)
+      auto const lastSize = _view.size();
+      if (_sizeLeft <= lastSize)
       {
+        _sizeLeft = 0;
         _view = ViewT{nullptr, 0};
+        return;
       }
 
-      char const* nextFrame = static_cast<char const*>(_view.data()) + _view.size();
-      bool isPadding = (*nextFrame == 0 && std::memcmp(nextFrame, nextFrame + 1, _sizeLeft - 1) == 0);
+      _sizeLeft -= lastSize;
+      char const* nextFrame = static_cast<char const*>(_view.data()) + lastSize;
+
+      // Check for padding (zeros at the end of the tag)
+      bool isPadding = (*nextFrame == 0);
+      if (isPadding && _sizeLeft > 1)
+      {
+        isPadding = (std::memcmp(nextFrame, nextFrame + 1, _sizeLeft - 1) == 0);
+      }
+
       _view = isPadding ? ViewT{nullptr, 0} : ViewT{nextFrame, _sizeLeft};
+      if (isPadding)
+      {
+        _sizeLeft = 0;
+      }
     }
 
     bool equal(FrameViewIterator const& other) const { return _view.data() == other._view.data(); }

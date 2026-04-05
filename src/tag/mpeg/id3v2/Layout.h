@@ -12,14 +12,7 @@ namespace rs::tag::mpeg::id3v2
 {
   struct EncodedSize
   {
-    std::uint8_t padding3 : 1;
-    std::uint8_t size3 : 7;
-    std::uint8_t padding2 : 1;
-    std::uint8_t size2 : 7;
-    std::uint8_t padding1 : 1;
-    std::uint8_t size1 : 7;
-    std::uint8_t padding0 : 1;
-    std::uint8_t size0 : 7;
+    std::array<std::uint8_t, 4> data;
   };
 
   static_assert(sizeof(EncodedSize) == 4);
@@ -28,7 +21,10 @@ namespace rs::tag::mpeg::id3v2
 
   inline std::size_t decodeSize(EncodedSize size)
   {
-    return size.size0 + size.size1 * (2 << 7) + size.size2 * (2 << 14) + size.size3 * (2 << 21);
+    return (static_cast<std::size_t>(size.data[0] & 0x7F) << 21) |
+           (static_cast<std::size_t>(size.data[1] & 0x7F) << 14) |
+           (static_cast<std::size_t>(size.data[2] & 0x7F) << 7) |
+           (static_cast<std::size_t>(size.data[3] & 0x7F));
   }
 
   struct HeaderLayout

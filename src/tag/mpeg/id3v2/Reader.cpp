@@ -85,18 +85,18 @@ namespace rs::tag::mpeg::id3v2
       //   description (null-terminated, encoding depends on encoding byte)
       //   image data (remainder)
       char const* frameData = static_cast<char const*>(data);
-      char const* ptr = frameData;
+      char const* ptr = frameData + sizeof(V23CommonFrameLayout);
 
       // Skip encoding byte
       ++ptr;
       // Skip MIME type
       while (*ptr != '\0') { ++ptr; }
-      ++ptr;  // skip null terminator
+      ++ptr; // skip null terminator
       // Skip picture type
       ++ptr;
       // Skip description (null-terminated)
       while (*ptr != '\0') { ++ptr; }
-      ++ptr;  // skip null terminator
+      ++ptr; // skip null terminator
 
       std::size_t const imageSize = size - (ptr - frameData);
       parsed.embeddedCoverArt = viewBytes(std::span{reinterpret_cast<std::byte const*>(ptr), imageSize});

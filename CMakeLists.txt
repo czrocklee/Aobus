@@ -209,34 +209,35 @@ endif()
 
 add_executable(rs_test
     test/main.cpp
-    test/query/ParserTest.cpp
-    test/query/ExecutionPlanTest.cpp
-    test/query/PlanEvaluatorTest.cpp
-    test/core/TrackLayoutTest.cpp
-    test/core/TrackViewTest.cpp
-    test/core/TrackRecordTest.cpp
-    test/core/TrackBuilderTest.cpp
-    test/core/ListLayoutTest.cpp
-    test/core/ListViewTest.cpp
-    test/core/DictionaryTest.cpp
-    test/core/ResourceStoreTest.cpp
-    test/core/TrackStoreTest.cpp
-    test/core/ListStoreTest.cpp
-    test/core/ListBuilderTest.cpp
-    test/lmdb/EnvironmentTest.cpp
-    test/lmdb/TransactionTest.cpp
-    test/lmdb/DatabaseTest.cpp
+    test/unit/query/ParserTest.cpp
+    test/unit/query/ExecutionPlanTest.cpp
+    test/unit/query/PlanEvaluatorTest.cpp
+    test/unit/core/TrackLayoutTest.cpp
+    test/unit/core/TrackViewTest.cpp
+    test/unit/core/TrackRecordTest.cpp
+    test/unit/core/TrackBuilderTest.cpp
+    test/unit/core/ListLayoutTest.cpp
+    test/unit/core/ListViewTest.cpp
+    test/unit/core/DictionaryTest.cpp
+    test/unit/core/ResourceStoreTest.cpp
+    test/unit/core/TrackStoreTest.cpp
+    test/unit/core/ListStoreTest.cpp
+    test/unit/core/ListBuilderTest.cpp
+    test/unit/lmdb/EnvironmentTest.cpp
+    test/unit/lmdb/TransactionTest.cpp
+    test/unit/lmdb/DatabaseTest.cpp
 )
 target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(rs_test PRIVATE rs Catch2)
 if(FFmpeg_FOUND)
   target_sources(rs_test PRIVATE
-    test/playback/FfmpegDecoderSessionTest.cpp
+    test/integration/playback/FfmpegDecoderSessionTest.cpp
+    test/integration/tag/TagTest.cpp
     app/playback/FfmpegDecoderSession.cpp
     app/playback/PcmRingBuffer.cpp
   )
   target_link_libraries(rs_test PRIVATE FFmpeg)
-  target_compile_definitions(rs_test PRIVATE FFmpeg_FOUND)
+  target_compile_definitions(rs_test PRIVATE FFmpeg_FOUND TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
 endif()
 target_compile_options(rs_test PRIVATE -Wno-array-bounds)
 

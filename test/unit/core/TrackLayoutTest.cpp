@@ -7,7 +7,7 @@
 #include <rs/core/TrackLayout.h>
 #include <rs/core/Type.h>
 
-#include <test/core/TestUtils.h>
+#include <test/unit/core/TestUtils.h>
 
 namespace
 {

@@ -9,7 +9,7 @@
 #include <rs/core/Type.h>
 
 #include <span>
-#include <test/core/TestUtils.h>
+#include <test/unit/core/TestUtils.h>
 #include <vector>
 
 namespace

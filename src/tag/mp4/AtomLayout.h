@@ -87,7 +87,7 @@ namespace rs::tag::mp4
   // bytes 24-27: duration (in timescale units)
   struct MdhdAtomLayout
   {
-    using FixedSize = std::true_type;
+    using FixedSize = std::false_type;
 
     AtomLayout common;
     boost::endian::big_uint32_buf_t versionAndFlags;
@@ -117,18 +117,20 @@ namespace rs::tag::mp4
   {
     using FixedSize = std::true_type;
 
-    std::array<char, 4> reserved1;
+    AtomLayout common;
+    std::array<char, 6> reserved1;
     boost::endian::big_uint16_buf_t dataReferenceIndex;
-    std::array<char, 2> reserved2;
+    std::array<boost::endian::big_uint16_buf_t, 4> reserved2;
     boost::endian::big_uint16_buf_t channelCount;
     boost::endian::big_uint16_buf_t sampleSize;
-    std::array<char, 4> reserved3;
+    boost::endian::big_uint16_buf_t preDefined;
+    boost::endian::big_uint16_buf_t reserved3;
     boost::endian::big_uint32_buf_t sampleRate;
 
-    static constexpr char const* Type = "mp4a"; // or "ac3" etc
+    static constexpr char const* Type = "mp4a";
   };
 
-  static_assert(sizeof(AudioSampleEntryLayout) == 20);
+  static_assert(sizeof(AudioSampleEntryLayout) == 36);
   static_assert(alignof(AudioSampleEntryLayout) == 1);
   static_assert(std::is_trivial_v<AudioSampleEntryLayout>);
 }

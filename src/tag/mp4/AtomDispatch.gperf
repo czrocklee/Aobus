@@ -17,6 +17,6 @@ disk, &assignDiscNumbers
 "\251ART", &assignTextField<&::rs::core::TrackRecord::Metadata::artist>
 "\251alb", &assignTextField<&::rs::core::TrackRecord::Metadata::album>
 aART, &assignTextField<&::rs::core::TrackRecord::Metadata::albumArtist>
-grne, &assignTextField<&::rs::core::TrackRecord::Metadata::genre>
+"\251gen", &assignTextField<&::rs::core::TrackRecord::Metadata::genre>
 "\251day", &assignNumberField<&::rs::core::TrackRecord::Metadata::year>
 covr, &assignCoverArt

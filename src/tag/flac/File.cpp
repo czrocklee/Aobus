@@ -83,6 +83,11 @@ namespace rs::tag::flac
           if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
           {
             parsed.record.property.durationMs = (totalSamples * 1000) / view.sampleRate();
+            if (parsed.record.property.durationMs > 0)
+            {
+              parsed.record.property.bitrate =
+                static_cast<std::uint32_t>((_mappedRegion.get_size() * 8000) / parsed.record.property.durationMs);
+            }
           }
 
           break;

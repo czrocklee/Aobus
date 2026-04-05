@@ -1,6 +1,6 @@
 %language=C++
 %readonly-tables
-%compare-strncmp
+%ignore-case
 %compare-lengths
 %struct-type
 %define class-name FlacVorbisDispatchTable
@@ -23,3 +23,4 @@ DISCNUMBER, &::rs::tag::flac::assignSlashField<&::rs::core::TrackRecord::Metadat
 DISCTOTAL, &::rs::tag::flac::assignNumberField<&::rs::core::TrackRecord::Metadata::totalDiscs>
 TOTALDISCS, &::rs::tag::flac::assignNumberField<&::rs::core::TrackRecord::Metadata::totalDiscs>
 GENRE, &::rs::tag::flac::assignTextField<&::rs::core::TrackRecord::Metadata::genre>
+DATE, &::rs::tag::flac::assignNumberField<&::rs::core::TrackRecord::Metadata::year>

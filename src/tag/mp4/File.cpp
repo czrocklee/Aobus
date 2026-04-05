@@ -121,7 +121,7 @@ namespace rs::tag::mp4
     }
 
     // Helper to extract audio properties from mdhd and stsd
-    void extractAudioProperties(ParsedTrack& parsed, RootAtom const& root)
+    void extractAudioProperties(ParsedTrack& parsed, RootAtom const& root, std::size_t fileSize)
     {
       // Get mdhd for sample rate and duration
       if (auto const* mdhdNode = findMdhdNode(root); mdhdNode != nullptr)
@@ -135,7 +135,15 @@ namespace rs::tag::mp4
         {
           parsed.record.property.sampleRate = timescale;
 
-          if (duration > 0) { parsed.record.property.durationMs = (duration * 1000) / timescale; }
+          if (duration > 0)
+          {
+            parsed.record.property.durationMs = static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000) / timescale);
+            if (parsed.record.property.durationMs > 0)
+            {
+              parsed.record.property.bitrate =
+                static_cast<std::uint32_t>((fileSize * 8000) / parsed.record.property.durationMs);
+            }
+          }
         }
       }
 
@@ -145,20 +153,22 @@ namespace rs::tag::mp4
         auto const& view = static_cast<AtomView const&>(*stsdNode);
         auto const& stsdLayout = view.layout<AtomLayout>();
 
-        // stsd contains a count and then sample entries
-        // Skip 8 bytes of stsd header (length + "stsd" + version/flags)
-        auto const* data = reinterpret_cast<std::uint8_t const*>(&stsdLayout) + sizeof(AtomLayout) + 4;
-        // Skip count (4 bytes)
-        data += 4;
+        // stsd contains a version byte (1), flags (3), and then entry count (4)
+        // Entries start after 8 bytes of stsd content
+        auto const* data = reinterpret_cast<std::uint8_t const*>(&stsdLayout) + sizeof(AtomLayout) + 8;
 
-        // Now data points to the first sample entry (AudioSampleEntry for audio)
+        // Now data points to the first sample entry (includes length + type)
         auto const& audioLayout = *reinterpret_cast<AudioSampleEntryLayout const*>(data);
         parsed.record.property.channels = audioLayout.channelCount.value();
         parsed.record.property.bitDepth = audioLayout.sampleSize.value();
 
         // Sample rate is a 16.16 fixed point, extract integer part
+        // Only use if non-zero (ALAC may have 0 here, mdhd has correct rate)
         auto const sampleRateFixed = audioLayout.sampleRate.value();
-        parsed.record.property.sampleRate = sampleRateFixed >> 16;
+        if (sampleRateFixed >> 16 > 0)
+        {
+          parsed.record.property.sampleRate = sampleRateFixed >> 16;
+        }
       }
     }
   } // namespace
@@ -170,22 +180,25 @@ namespace rs::tag::mp4
 
     ParsedTrack parsed;
 
-    ilstNode->visitChildren([&](Atom const& atom) {
-      auto const& view = static_cast<AtomView const&>(atom);
-      std::string_view type = atom.type();
+    if (ilstNode != nullptr)
+    {
+      ilstNode->visitChildren([&](Atom const& atom) {
+        auto const& view = static_cast<AtomView const&>(atom);
+        std::string_view type = atom.type();
 
-      if (auto const* entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size()); entry != nullptr)
-      {
-        entry->handler(parsed, view);
+        if (auto const* entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size()); entry != nullptr)
+        {
+          entry->handler(parsed, view);
+          return true;
+        }
+
+        parsed.record.custom.pairs.emplace_back(std::string{type}, decodeString(atomData(view)));
         return true;
-      }
-
-      parsed.record.custom.pairs.emplace_back(std::string{type}, decodeString(atomData(view)));
-      return true;
-    });
+      });
+    }
 
     // Extract audio properties from mdhd and stsd
-    extractAudioProperties(parsed, root);
+    extractAudioProperties(parsed, root, _mappedRegion.get_size());
 
     return parsed;
   }

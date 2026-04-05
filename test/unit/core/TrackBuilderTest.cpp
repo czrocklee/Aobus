@@ -11,7 +11,7 @@
 #include <rs/lmdb/Transaction.h>
 
 #include <cstring>
-#include <test/lmdb/TestUtils.h>
+#include <test/unit/lmdb/TestUtils.h>
 
 using rs::core::DictionaryId;
 using rs::core::TrackBuilder;
