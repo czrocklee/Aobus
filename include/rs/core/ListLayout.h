@@ -3,13 +3,9 @@
 
 #pragma once
 
-#include <rs/Exception.h>
 #include <rs/core/Type.h>
-#include <rs/utility/ByteView.h>
 
 #include <cstdint>
-#include <span>
-#include <string_view>
 
 namespace rs::core
 {
@@ -59,48 +55,5 @@ namespace rs::core
 
   static_assert(sizeof(ListHeader) == kListHeaderSize, "ListHeader must be exactly 16 bytes");
   static_assert(alignof(ListHeader) == kListHeaderAlignment, "ListHeader must have 4-byte alignment");
-
-  /**
-   * ListView - Safe accessor for list data stored in binary format.
-   * Reads fields directly from payload without storing header.
-   */
-  class ListView final
-  {
-  public:
-    explicit ListView(std::span<std::byte const> data);
-
-    std::string_view name() const;
-    std::string_view description() const;
-    std::string_view filter() const;
-
-    bool isSmart() const noexcept { return !filter().empty(); }
-
-    /**
-     * TrackProxy - Iterator and index access to track IDs in the list.
-     */
-    class TrackProxy
-    {
-    public:
-      TrackProxy(std::span<TrackId const> trackIds);
-
-      TrackId at(std::size_t index) const;
-      TrackId operator[](std::size_t index) const { return at(index); }
-
-      TrackId const* begin() const { return _trackIds.data(); }
-      TrackId const* end() const { return _trackIds.data() + _trackIds.size(); }
-      std::size_t size() const { return _trackIds.size(); }
-
-    private:
-      std::span<TrackId const> _trackIds;
-    };
-
-    TrackProxy tracks() const;
-
-  private:
-    ListHeader const* header() const { return utility::as<ListHeader>(_payload); }
-    std::string_view getString(std::uint16_t offset, std::uint16_t length) const;
-
-    std::span<std::byte const> _payload;
-  };
 
 } // namespace rs::core

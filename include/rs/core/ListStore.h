@@ -4,6 +4,7 @@
 #pragma once
 
 #include <rs/core/ListLayout.h>
+#include <rs/core/ListView.h>
 #include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
 
@@ -77,7 +78,6 @@ namespace rs::core
     Iterator(lmdb::Database::Reader::Iterator&& iter);
 
     lmdb::Database::Reader::Iterator _iter;
-    ListView _view;
     friend class Reader;
   };
 
@@ -87,7 +87,6 @@ namespace rs::core
   class ListStore::Writer
   {
   public:
-
     std::pair<ListId, ListView> create(std::span<std::byte const> data);
     void update(ListId id, std::span<std::byte const> data);
     bool del(ListId id);

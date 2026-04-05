@@ -27,6 +27,29 @@ pkg_check_modules(GTK4 REQUIRED gtk4)
 pkg_check_modules(GTKMM REQUIRED gtkmm-4.0)
 
 find_program(GLIB_COMPILE_RESOURCES_EXECUTABLE glib-compile-resources REQUIRED)
+find_program(GPERF_EXECUTABLE gperf REQUIRED)
+
+function(add_gperf_header out_var input relative_output)
+  set(output "${CMAKE_CURRENT_BINARY_DIR}/generated/${relative_output}")
+  get_filename_component(output_dir "${output}" DIRECTORY)
+
+  add_custom_command(
+    OUTPUT "${output}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${output_dir}"
+    COMMAND
+      "${CMAKE_COMMAND}"
+      -DGPERF_EXECUTABLE=${GPERF_EXECUTABLE}
+      -DINPUT=${input}
+      -DOUTPUT=${output}
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunGperf.cmake"
+    DEPENDS
+      "${input}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunGperf.cmake"
+    VERBATIM
+  )
+
+  set(${out_var} "${output}" PARENT_SCOPE)
+endfunction()
 
 add_library(GTK4 INTERFACE)
 target_include_directories(GTK4 INTERFACE ${GTK4_INCLUDE_DIRS})
@@ -132,6 +155,18 @@ else()
   message(STATUS "clang-tidy not found - install it for linting")
 endif()
 
+add_gperf_header(
+  FLAC_VORBIS_DISPATCH_HEADER
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/tag/flac/VorbisCommentDispatch.gperf"
+  "tag/flac/VorbisCommentDispatch.h"
+)
+add_gperf_header(
+  MP4_ATOM_DISPATCH_HEADER
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/tag/mp4/AtomDispatch.gperf"
+  "tag/mp4/AtomDispatch.h"
+)
+add_custom_target(tag_dispatch_headers DEPENDS "${FLAC_VORBIS_DISPATCH_HEADER}" "${MP4_ATOM_DISPATCH_HEADER}")
+
 add_library(rs OBJECT
     src/lmdb/Environment.cpp
     src/lmdb/Transaction.cpp
@@ -140,18 +175,18 @@ add_library(rs OBJECT
     src/core/ResourceStore.cpp
     src/core/DictionaryStore.cpp
     src/core/TrackStore.cpp
-    src/core/TrackRecord.cpp
     src/core/TrackBuilder.cpp
     src/core/TrackLayout.cpp
-    src/core/ListLayout.cpp
+    src/core/ListView.cpp
     src/core/ListStore.cpp
-    src/core/ListPayloadBuilder.cpp
+    src/core/ListBuilder.cpp
     src/expr/ExecutionPlan.cpp
     src/expr/PlanEvaluator.cpp
     src/expr/Expression.cpp
     src/expr/Parser.cpp
     src/expr/Serializer.cpp
     src/tag/File.cpp
+    src/tag/Open.cpp
     src/tag/flac/File.cpp
     src/tag/flac/MetadataBlock.cpp
     src/tag/mp4/File.cpp
@@ -159,9 +194,13 @@ add_library(rs OBJECT
     src/tag/mpeg/File.cpp
     src/tag/mpeg/Frame.cpp
     src/tag/mpeg/id3v2/Reader.cpp
+    "${FLAC_VORBIS_DISPATCH_HEADER}"
+    "${MP4_ATOM_DISPATCH_HEADER}"
 )
 target_include_directories(rs PUBLIC include)
+target_include_directories(rs PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(rs lmdb Boost::locale)
+add_dependencies(rs tag_dispatch_headers)
 if(CLANG_TIDY_EXECUTABLE)
   set_target_properties(rs PROPERTIES
     CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_STRICT_CHECKS};-header-filter=${CLANG_TIDY_STRICT_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
@@ -189,14 +228,16 @@ add_executable(rs_test
     test/query/ExecutionPlanTest.cpp
     test/query/PlanEvaluatorTest.cpp
     test/core/TrackLayoutTest.cpp
+    test/core/TrackViewTest.cpp
     test/core/TrackRecordTest.cpp
     test/core/TrackBuilderTest.cpp
     test/core/ListLayoutTest.cpp
+    test/core/ListViewTest.cpp
     test/core/DictionaryTest.cpp
     test/core/ResourceStoreTest.cpp
     test/core/TrackStoreTest.cpp
     test/core/ListStoreTest.cpp
-    test/core/ListPayloadBuilderTest.cpp
+    test/core/ListBuilderTest.cpp
     test/lmdb/EnvironmentTest.cpp
     test/lmdb/TransactionTest.cpp
     test/lmdb/DatabaseTest.cpp

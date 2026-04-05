@@ -5,6 +5,7 @@
 
 #include <rs/core/ListLayout.h>
 #include <rs/core/ListRecord.h>
+#include <rs/core/ListView.h>
 #include <rs/core/Type.h>
 
 #include <string>
