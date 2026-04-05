@@ -29,27 +29,7 @@ pkg_check_modules(GTKMM REQUIRED gtkmm-4.0)
 find_program(GLIB_COMPILE_RESOURCES_EXECUTABLE glib-compile-resources REQUIRED)
 find_program(GPERF_EXECUTABLE gperf REQUIRED)
 
-function(add_gperf_header out_var input relative_output)
-  set(output "${CMAKE_CURRENT_BINARY_DIR}/generated/${relative_output}")
-  get_filename_component(output_dir "${output}" DIRECTORY)
-
-  add_custom_command(
-    OUTPUT "${output}"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${output_dir}"
-    COMMAND
-      "${CMAKE_COMMAND}"
-      -DGPERF_EXECUTABLE=${GPERF_EXECUTABLE}
-      -DINPUT=${input}
-      -DOUTPUT=${output}
-      -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunGperf.cmake"
-    DEPENDS
-      "${input}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunGperf.cmake"
-    VERBATIM
-  )
-
-  set(${out_var} "${output}" PARENT_SCOPE)
-endfunction()
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Gperf.cmake)
 
 add_library(GTK4 INTERFACE)
 target_include_directories(GTK4 INTERFACE ${GTK4_INCLUDE_DIRS})
