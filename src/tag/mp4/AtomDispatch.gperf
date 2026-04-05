@@ -1,0 +1,22 @@
+%language=C++
+%readonly-tables
+%compare-strncmp
+%compare-lengths
+%struct-type
+%define class-name Mp4AtomDispatchTable
+%define lookup-function-name lookupAtomField
+struct Mp4AtomDispatchEntry
+{
+  char const* name;
+  AtomHandler handler;
+};
+%%
+trkn, &assignTrackNumbers
+disk, &assignDiscNumbers
+"\251nam", &assignTextField<&::rs::core::TrackRecord::Metadata::title>
+"\251ART", &assignTextField<&::rs::core::TrackRecord::Metadata::artist>
+"\251alb", &assignTextField<&::rs::core::TrackRecord::Metadata::album>
+aART, &assignTextField<&::rs::core::TrackRecord::Metadata::albumArtist>
+grne, &assignTextField<&::rs::core::TrackRecord::Metadata::genre>
+"\251day", &assignNumberField<&::rs::core::TrackRecord::Metadata::year>
+covr, &assignCoverArt

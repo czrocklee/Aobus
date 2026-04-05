@@ -12,8 +12,6 @@ namespace rs::tag::flac
   public:
     using rs::tag::File::File;
 
-    Metadata loadMetadata() const override;
-
-    void saveMetadata(Metadata const& metadata) override;
+    ParsedTrack loadTrack() const override;
   };
 }

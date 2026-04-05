@@ -17,16 +17,19 @@ namespace rs::tag::mpeg
   class FrameView
   {
   public:
-    FrameView(void const* data, std::size_t /*size*/) : _data{data} {}
+    FrameView(void const* data, std::size_t /*size*/) : _data{} {}
 
     std::size_t length() const;
-
     bool isValid() const;
 
     FrameLayout const& layout() const { return *static_cast<FrameLayout const*>(_data); }
 
+    std::uint32_t sampleRate() const;
+    std::uint32_t bitrate() const;
+    std::uint8_t channels() const;
+
   private:
-    void const* _data;
+    void const* _data = nullptr;
   };
 
   std::optional<FrameView> locate(void const* buffer, std::size_t size);

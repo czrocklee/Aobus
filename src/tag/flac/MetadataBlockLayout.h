@@ -35,4 +35,20 @@ namespace rs::tag::flac
   static_assert(alignof(MetadataBlockLayout) == 1);
   static_assert(std::is_trivial_v<MetadataBlockLayout>);
 
+  struct StreamInfoLayout
+  {
+    using FixedSize = std::true_type;
+    boost::endian::big_uint16_buf_t minBlockSize;
+    boost::endian::big_uint16_buf_t maxBlockSize;
+    boost::endian::big_uint24_buf_t minFrameSize;
+    boost::endian::big_uint24_buf_t maxFrameSize;
+    // 64 bits: sampleRate(20) + channels-1(3) + bits-1(5) + totalSamples(36)
+    boost::endian::big_uint64_buf_t packedFields;
+    std::array<std::uint8_t, 16> md5;
+  } __atrtibute__(packed);
+
+  static_assert(sizeof(StreamInfoLayout) == 34, "StreamInfoDataLayout should be 34 bytes");
+  static_assert(alignof(StreamInfoLayout) == 1);
+  static_assert(std::is_trivial_v<StreamInfoLayout>);
+
 }

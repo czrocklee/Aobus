@@ -4,14 +4,51 @@
 #pragma once
 
 #include "MetadataBlockLayout.h"
+#include <boost/endian/conversion.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 #include <cassert>
+#include <cstring>
+#include <rs/Exception.h>
 #include <span>
 #include <string_view>
 #include <vector>
 
 namespace rs::tag::flac
 {
+  namespace detail
+  {
+    template<typename LengthType, boost::endian::order Order = boost::endian::order::big>
+    LengthType parseLength(char const*& ptr, char const* end)
+    {
+      if (ptr + sizeof(LengthType) > end)
+      {
+        RS_THROW_FORMAT(
+          rs::Exception, "invalid flac block, expect length field size {} >= {}", end - ptr, sizeof(LengthType));
+      }
+
+      LengthType length;
+      std::memcpy(&length, ptr, sizeof(LengthType));
+      boost::endian::conditional_reverse_inplace<Order, boost::endian::order::native>(length);
+      ptr += sizeof(LengthType);
+      return length;
+    }
+
+    template<typename LengthType, boost::endian::order Order = boost::endian::order::big>
+    std::string_view parseString(char const*& ptr, char const* end)
+    {
+      LengthType length = parseLength<LengthType, Order>(ptr, end);
+
+      if (ptr + length > end)
+      {
+        RS_THROW_FORMAT(rs::Exception, "invalid flac block, expect available field length {} >= {}", end - ptr, length);
+      }
+
+      char const* start = ptr;
+      ptr += length;
+      return {start, length};
+    }
+  } // namespace detail
+
   class MetadataBlock
   {
   public:
@@ -25,7 +62,10 @@ namespace rs::tag::flac
   class MetadataBlockView : public MetadataBlock
   {
   public:
-    MetadataBlockView(void const* data) : _data{data} {}
+    MetadataBlockView(void const* data)
+      : _data{data}
+    {
+    }
 
     void const* data() const { return _data; }
 
@@ -61,6 +101,28 @@ namespace rs::tag::flac
   public:
     using MetadataBlockView::MetadataBlockView;
 
+    template<typename Visitor>
+    void visitComments(Visitor&& visitor) const
+    {
+      auto&& handleComment = visitor;
+      char const* ptr = static_cast<char const*>(data()) + sizeof(MetadataBlockLayout);
+      char const* end = ptr + size() - sizeof(MetadataBlockLayout);
+      detail::parseString<std::uint32_t, boost::endian::order::little>(ptr, end); // vendor string
+
+      std::uint32_t const count = detail::parseLength<std::uint32_t, boost::endian::order::little>(ptr, end);
+      for (std::uint32_t i = 0; i < count; ++i)
+      {
+        handleComment(detail::parseString<std::uint32_t, boost::endian::order::little>(ptr, end));
+      }
+
+      if (auto sizeLeft = static_cast<std::size_t>(end - ptr); sizeLeft > 0)
+      {
+        RS_THROW_FORMAT(rs::Exception,
+                        "invalid flac vorbis_comment block, unexpected content \"{}\"",
+                        std::string_view{ptr, sizeLeft});
+      }
+    }
+
     std::vector<std::string_view> comments() const;
   };
 
@@ -72,13 +134,37 @@ namespace rs::tag::flac
     std::span<std::byte const> blob() const;
   };
 
+  class StreamInfoBlockView : public MetadataBlockView
+  {
+  public:
+    using MetadataBlockView::MetadataBlockView;
+
+    StreamInfoLayout const& layout() const
+    {
+      auto const* ptr = static_cast<std::uint8_t const*>(data()) + sizeof(MetadataBlockLayout);
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+      return *reinterpret_cast<StreamInfoLayout const*>(ptr);
+    }
+
+    std::uint32_t sampleRate() const { return (layout().packedFields.value() >> 44) & 0xFFFFF; }
+
+    std::uint8_t channels() const { return ((layout().packedFields.value() >> 41) & 0x07) + 1; }
+
+    std::uint8_t bitDepth() const { return ((layout().packedFields.value() >> 36) & 0x1F) + 1; }
+
+    std::uint64_t totalSamples() const { return layout().packedFields.value() & 0xFFFFFFFFF; }
+  };
+
   class MetadataBlockViewIterator
     : public boost::iterator_facade<MetadataBlockViewIterator, MetadataBlockView const, boost::forward_traversal_tag>
   {
   public:
     static constexpr std::size_t StreamInfoBlockSize = 38;
 
-    MetadataBlockViewIterator() : _view{nullptr}, _sizeLeft{0} {}
+    MetadataBlockViewIterator()
+      : _view{nullptr}, _sizeLeft{0}
+    {
+    }
 
     MetadataBlockViewIterator(void const* data, std::size_t size);
 

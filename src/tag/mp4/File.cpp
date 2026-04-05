@@ -5,88 +5,188 @@
 #include "Atom.h"
 #include <rs/tag/mp4/File.h>
 
-#include <charconv>
-#include <map>
+#include <array>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace rs::tag::mp4
 {
   namespace
   {
-    Atom const* findNode(Atom const& node, std::vector<std::string> const& path, std::size_t startPos)
+    std::span<std::byte const> atomData(AtomView const& view)
     {
-      if (startPos >= path.size() || path[startPos] != node.type())
-      {
-        return nullptr;
-      }
+      auto const& layout = view.layout<DataAtomLayout>();
+      auto const* data = reinterpret_cast<std::byte const*>(&layout + 1);
+      auto const size = layout.common.length.value() - sizeof(DataAtomLayout);
+      return {data, size};
+    }
 
-      if (startPos == path.size() - 1)
-      {
-        return &node;
-      }
+    void setText(std::string& field, AtomView const& view)
+    {
+      field = decodeString(atomData(view));
+    }
+
+    void assignTrackNumbers(rs::tag::ParsedTrack& parsed, AtomView const& view)
+    {
+      auto const& layout = view.layout<TrknAtomLayout>();
+      auto& meta = parsed.record.metadata;
+      meta.trackNumber = layout.trackNumber.value();
+      meta.totalTracks = layout.totalTracks.value();
+    }
+
+    void assignDiscNumbers(rs::tag::ParsedTrack& parsed, AtomView const& view)
+    {
+      auto const& layout = view.layout<DiskAtomLayout>();
+      auto& meta = parsed.record.metadata;
+      meta.discNumber = layout.discNumber.value();
+      meta.totalDiscs = layout.totalDiscs.value();
+    }
+
+    template<auto Member>
+    void assignTextField(rs::tag::ParsedTrack& parsed, AtomView const& view)
+    {
+      setText(parsed.record.metadata.*Member, view);
+    }
+
+    template<auto Member>
+    void assignNumberField(rs::tag::ParsedTrack& parsed, AtomView const& view)
+    {
+      if (auto year = decodeUint16(atomData(view)); year) { parsed.record.metadata.*Member = *year; }
+    }
+
+    void assignCoverArt(rs::tag::ParsedTrack& parsed, AtomView const& view)
+    {
+      parsed.embeddedCoverArt = atomData(view);
+    }
+
+    using AtomHandler = void (*)(rs::tag::ParsedTrack&, AtomView const&);
+
+#include "tag/mp4/AtomDispatch.h"
+
+    constexpr std::array kIlstPath = {
+      std::string_view{"root"},
+      std::string_view{"moov"},
+      std::string_view{"udta"},
+      std::string_view{"meta"},
+      std::string_view{"ilst"},
+    };
+
+    // Path to mdhd: moov > trak > mdia > mdhd
+    constexpr std::array kMdhdPath = {
+      std::string_view{"root"},
+      std::string_view{"moov"},
+      std::string_view{"trak"},
+      std::string_view{"mdia"},
+      std::string_view{"mdhd"},
+    };
+
+    // Path to stsd: moov > trak > mdia > minf > stbl > stsd
+    constexpr std::array kStsdPath = {
+      std::string_view{"root"},
+      std::string_view{"moov"},
+      std::string_view{"trak"},
+      std::string_view{"mdia"},
+      std::string_view{"minf"},
+      std::string_view{"stbl"},
+      std::string_view{"stsd"},
+    };
+
+    template<std::size_t Extent>
+    Atom const* findNode(Atom const& node, std::span<std::string_view const, Extent> path, std::size_t startPos)
+    {
+      if (startPos >= path.size() || path[startPos] != node.type()) { return nullptr; }
+
+      if (startPos == path.size() - 1) { return &node; }
 
       Atom const* found = nullptr;
       node.visitChildren([&](auto const& child) { return ((found = findNode(child, path, startPos + 1)) == nullptr); });
       return found;
     }
 
-    template<MetaField Field, typename Decoder>
-    struct FieldSetter
+    Atom const* findIlstNode(RootAtom const& root)
     {
-      void operator()(Metadata& meta, Atom const& atom)
+      return findNode(root, std::span<std::string_view const, kIlstPath.size()>{kIlstPath}, 0);
+    }
+
+    Atom const* findMdhdNode(RootAtom const& root)
+    {
+      return findNode(root, std::span<std::string_view const, kMdhdPath.size()>{kMdhdPath}, 0);
+    }
+
+    Atom const* findStsdNode(RootAtom const& root)
+    {
+      return findNode(root, std::span<std::string_view const, kStsdPath.size()>{kStsdPath}, 0);
+    }
+
+    // Helper to extract audio properties from mdhd and stsd
+    void extractAudioProperties(ParsedTrack& parsed, RootAtom const& root)
+    {
+      // Get mdhd for sample rate and duration
+      if (auto const* mdhdNode = findMdhdNode(root); mdhdNode != nullptr)
       {
-        auto const& layout = static_cast<AtomView const&>(atom).layout<DataAtomLayout>();  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        auto const* buffer = reinterpret_cast<char const*>(&layout + 1);  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-        std::size_t size = layout.common.length.value() - sizeof(DataAtomLayout);
-        meta.set(Field, Decoder::decode(buffer, size));
+        auto const& view = static_cast<AtomView const&>(*mdhdNode);
+        auto const& layout = view.layout<MdhdAtomLayout>();
+        auto const timescale = layout.timescale.value();
+        auto const duration = layout.duration.value();
+
+        if (timescale > 0)
+        {
+          parsed.record.property.sampleRate = timescale;
+
+          if (duration > 0) { parsed.record.property.durationMs = (duration * 1000) / timescale; }
+        }
       }
-    };
 
-    std::map<std::string, std::function<void(Metadata&, Atom const&)>, std::less<>> const MetadataSetters = {
-      {TrknAtomLayout::Type,
-       [](auto& meta, auto const& atom) {
-         auto const& trkn = static_cast<AtomView const&>(atom).layout<TrknAtomLayout>();
-         meta.set(MetaField::TrackNumber, static_cast<std::int64_t>(trkn.trackNumber.value()));
-         meta.set(MetaField::TotalTracks, static_cast<std::int64_t>(trkn.totalTracks.value()));
-       }},
-      {DiskAtomLayout::Type,
-       [](auto& meta, auto const& atom) {
-         auto const& disk = static_cast<AtomView const&>(atom).layout<DiskAtomLayout>();
-         meta.set(MetaField::DiscNumber, static_cast<std::int64_t>(disk.discNumber.value()));
-         meta.set(MetaField::TotalDiscs, static_cast<std::int64_t>(disk.totalDiscs.value()));
-       }},
+      // Get stsd for channels and bit depth
+      if (auto const* stsdNode = findStsdNode(root); stsdNode != nullptr)
+      {
+        auto const& view = static_cast<AtomView const&>(*stsdNode);
+        auto const& stsdLayout = view.layout<AtomLayout>();
 
-      {"\251nam", FieldSetter<MetaField::Title, StringDecoder>{}},
-      {"\251ART", FieldSetter<MetaField::Artist, StringDecoder>{}},
-      {"\251alb", FieldSetter<MetaField::Album, StringDecoder>{}},
-      {"aART", FieldSetter<MetaField::AlbumArtist, StringDecoder>{}},
-      {"covr", FieldSetter<MetaField::AlbumArt, BlobDecoder>{}},
-      {"grne", FieldSetter<MetaField::Genre, StringDecoder>{}},
-      {"\251day", FieldSetter<MetaField::Year, IntDecoder>{}}};
-  }
+        // stsd contains a count and then sample entries
+        // Skip 8 bytes of stsd header (length + "stsd" + version/flags)
+        auto const* data = reinterpret_cast<std::uint8_t const*>(&stsdLayout) + sizeof(AtomLayout) + 4;
+        // Skip count (4 bytes)
+        data += 4;
 
-  Metadata File::loadMetadata() const
+        // Now data points to the first sample entry (AudioSampleEntry for audio)
+        auto const& audioLayout = *reinterpret_cast<AudioSampleEntryLayout const*>(data);
+        parsed.record.property.channels = audioLayout.channelCount.value();
+        parsed.record.property.bitDepth = audioLayout.sampleSize.value();
+
+        // Sample rate is a 16.16 fixed point, extract integer part
+        auto const sampleRateFixed = audioLayout.sampleRate.value();
+        parsed.record.property.sampleRate = sampleRateFixed >> 16;
+      }
+    }
+  } // namespace
+
+  ParsedTrack File::loadTrack() const
   {
     RootAtom root = rs::tag::mp4::fromBuffer(_mappedRegion.get_address(), _mappedRegion.get_size());
-    Atom const* ilstNode = findNode(root, {"root", "moov", "udta", "meta", "ilst"}, 0);
-    Metadata metadata;
-    ilstNode->visitChildren([&metadata](Atom const& atom) {
-      if (auto iter = MetadataSetters.find(atom.type()); iter != MetadataSetters.end())
+    Atom const* ilstNode = findIlstNode(root);
+
+    ParsedTrack parsed;
+
+    ilstNode->visitChildren([&](Atom const& atom) {
+      auto const& view = static_cast<AtomView const&>(atom);
+      std::string_view type = atom.type();
+
+      if (auto const* entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size()); entry != nullptr)
       {
-        std::invoke(iter->second, metadata, atom);
-      }
-      else
-      {
-        auto const& data = static_cast<AtomView const&>(atom).layout<DataAtomLayout>();  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        std::string value{
-          reinterpret_cast<char const*>(&data + 1), data.common.length.value() - sizeof(DataAtomLayout)};  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-        metadata.setCustom(atom.type(), std::move(value));
+        entry->handler(parsed, view);
+        return true;
       }
 
+      parsed.record.custom.pairs.emplace_back(std::string{type}, decodeString(atomData(view)));
       return true;
     });
 
-    return metadata;
-  }
+    // Extract audio properties from mdhd and stsd
+    extractAudioProperties(parsed, root);
 
-  void File::saveMetadata([[maybe_unused]] Metadata const& metadata) {}
-}
+    return parsed;
+  }
+} // namespace rs::tag::mp4

@@ -7,128 +7,119 @@
 #include <rs/tag/flac/File.h>
 #include <rs/utility/ByteView.h>
 
-#include <boost/algorithm/string/compare.hpp>
-
-#include <algorithm>
-#include <ranges>
-#include <span>
-#include <functional>
-#include <iostream>
-#include <map>
+#include <cstring>
+#include <string>
 #include <string_view>
 
 namespace rs::tag::flac
 {
   namespace
   {
-    template<MetaField Field, typename Decoder>
-    struct FieldSetter
+    using Metadata = rs::core::TrackRecord::Metadata;
+
+    void setText(std::string& field, std::string_view value)
     {
-      void operator()(Metadata& meta, std::span<std::byte const> buffer)
-      {
-        meta.set(Field, Decoder::decode(buffer.data(), buffer.size()));
-      }
-    };
+      field.assign(value);
+    }
 
-    template<MetaField PrimaryField, MetaField SecondaryField, typename Decoder>
-    struct SlashFieldsSetter
+    void setNumber(std::uint16_t& field, std::string_view value)
     {
-      void operator()(Metadata& meta, std::span<std::byte const> buffer)
-      {
-        auto str = utility::asString(buffer);
+      if (auto parsed = decodeUint16(utility::asBytes(value)); parsed) { field = *parsed; }
+    }
 
-        if (auto const& iter = std::ranges::find(str, '/'); iter != str.end())
-        {
-          auto dist = std::distance(str.begin(), iter);
-          meta.set(PrimaryField, Decoder::decode(str.data(), dist));
-          meta.set(SecondaryField, Decoder::decode(iter, std::distance(iter, str.end()) - 1));
-        }
-        else
-        {
-          meta.set(PrimaryField, Decoder::decode(str.data(), str.size()));
-        }
-      }
-    };
-
-    struct CaseInsensitiveComparator
+    void setSlashNumber(std::uint16_t& primary, std::uint16_t& secondary, std::string_view value)
     {
-      using is_transparent = void;
+      auto const separator = value.find('/');
+      setNumber(primary, value.substr(0, separator));
 
-      bool operator()(std::string_view const& lhs, std::string_view const& rhs) const
-      {
-        return std::ranges::lexicographical_compare(lhs, rhs, boost::is_iless{});
-      }
-    };
+      if (separator != std::string_view::npos) { setNumber(secondary, value.substr(separator + 1)); }
+    }
 
-    std::map<std::string, std::function<void(Metadata&, std::span<std::byte const>)>, CaseInsensitiveComparator>
-      const MetadataSetters = {
-        {"TITLE", FieldSetter<MetaField::Title, StringDecoder>{}},
-        {"ARTIST", FieldSetter<MetaField::Artist, StringDecoder>{}},
-        {"ALBUM", FieldSetter<MetaField::Album, StringDecoder>{}},
-        {"ALBUMARTIST", FieldSetter<MetaField::AlbumArtist, StringDecoder>{}},
-        {"TRACKNUMBER", SlashFieldsSetter<MetaField::TrackNumber, MetaField::TotalTracks, IntDecoder>{}},
-        {"TRACKTOTAL", FieldSetter<MetaField::TotalTracks, IntDecoder>{}},
-        {"TOTALTRACKS", FieldSetter<MetaField::TotalTracks, IntDecoder>{}},
-        {"DISCNUMBER", SlashFieldsSetter<MetaField::DiscNumber, MetaField::TotalDiscs, IntDecoder>{}},
-        {"DISCTOTAL", FieldSetter<MetaField::TotalDiscs, IntDecoder>{}},
-        {"TOTALDISCS", FieldSetter<MetaField::TotalDiscs, IntDecoder>{}},
-        {"GENRE", FieldSetter<MetaField::Genre, StringDecoder>{}}};
-  }
+    template<auto Member>
+    void assignTextField(Metadata& meta, std::string_view value)
+    {
+      setText(meta.*Member, value);
+    }
 
-  Metadata File::loadMetadata() const
+    template<auto Member>
+    void assignNumberField(Metadata& meta, std::string_view value)
+    {
+      setNumber(meta.*Member, value);
+    }
+
+    template<auto Primary, auto Secondary>
+    void assignSlashField(Metadata& meta, std::string_view value)
+    {
+      setSlashNumber(meta.*Primary, meta.*Secondary, value);
+    }
+
+#include "tag/flac/VorbisCommentDispatch.h"
+
+  } // namespace
+
+  ParsedTrack File::loadTrack() const
   {
     if (_mappedRegion.get_size() < 4 || std::memcmp(_mappedRegion.get_address(), "fLaC", 4) != 0)
     {
       RS_THROW(rs::Exception, "unrecognized flac file content");
     }
 
-    Metadata metadata;
-    MetadataBlockViewIterator iter{
+    auto parsed = ParsedTrack{};
+    auto iter = MetadataBlockViewIterator{
       static_cast<char const*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};
-    MetadataBlockViewIterator end{};
+    auto end = MetadataBlockViewIterator{};
 
     for (; iter != end; ++iter)
     {
       switch (iter->type())
       {
+        case MetadataBlockType::StreamInfo:
+        {
+          auto view = StreamInfoBlockView{iter->data()};
+          parsed.record.property.sampleRate = view.sampleRate();
+          parsed.record.property.channels = view.channels();
+          parsed.record.property.bitDepth = view.bitDepth();
+
+          if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
+          {
+            parsed.record.property.durationMs = (totalSamples * 1000) / view.sampleRate();
+          }
+
+          break;
+        }
+
         case MetadataBlockType::VorbisComment:
         {
-          for (VorbisCommentBlockView block{iter->data()}; auto metaLine : block.comments())
-          {
-            if (auto pos = metaLine.find('='); pos != std::string_view::npos)
-            {
-              std::string_view key = metaLine.substr(0, pos);
-              std::string_view value = metaLine.substr(pos + 1);
+          VorbisCommentBlockView{iter->data()}.visitComments([&](std::string_view comment) {
+            auto const pos = comment.find('=');
+            if (pos == std::string_view::npos) { return; }
 
-              if (auto iter = MetadataSetters.find(key); iter != MetadataSetters.end())
-              {
-                std::invoke(iter->second, metadata, utility::asBytes(value));
-              }
-              else
-              {
-                metadata.setCustom(key, std::string{value});
-              }
+            std::string_view key = comment.substr(0, pos);
+            std::string_view value = comment.substr(pos + 1);
+
+            if (auto const* entry = FlacVorbisDispatchTable::lookupVorbisField(key.data(), key.size()))
+            {
+              entry->handler(parsed.record.metadata, value);
             }
-          }
+            else
+            {
+              parsed.record.custom.pairs.emplace_back(key, value);
+            }
+          });
 
           break;
         }
 
         case MetadataBlockType::Picture:
         {
-          auto block = PictureBlockView{iter->data()};
-          auto blob = block.blob();
-          metadata.set(MetaField::AlbumArt, BlobDecoder::decode(blob.data(), blob.size()));
+          parsed.embeddedCoverArt = PictureBlockView{iter->data()}.blob();
           break;
         }
 
-        default:
-          break;
+        default: break;
       }
     }
 
-    return metadata;
+    return parsed;
   }
-
-  void File::saveMetadata([[maybe_unused]] Metadata const& metadata) {}
-}
+} // namespace rs::tag::flac
