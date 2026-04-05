@@ -23,7 +23,8 @@ namespace app::playback
 
   struct PcmBlock final
   {
-    std::vector<std::int16_t> samples;
+    std::vector<std::byte> bytes;
+    std::uint8_t bitDepth = 16;
     std::uint32_t frames = 0;
     std::uint64_t firstFrameIndex = 0;
     bool endOfStream = false;

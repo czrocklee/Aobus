@@ -3,6 +3,8 @@
 
 #include "PcmRingBuffer.h"
 
+#include <cstring>
+
 namespace app::playback
 {
 
@@ -11,22 +13,28 @@ namespace app::playback
   {
   }
 
-  std::size_t PcmRingBuffer::write(std::span<std::int16_t const> input) noexcept
+  std::size_t PcmRingBuffer::write(std::span<std::byte const> input) noexcept
   {
     if (input.empty()) { return 0; }
 
+    auto const* data = reinterpret_cast<std::uint8_t const*>(input.data());
+    auto const size = input.size();
+
     std::lock_guard<std::mutex> lock(_mutex);
-    auto const written = _queue.push(input.data(), input.size());
+    auto const written = _queue.push(data, size);
     _writeCount.fetch_add(written, std::memory_order_release);
     return written;
   }
 
-  std::size_t PcmRingBuffer::read(std::span<std::int16_t> output) noexcept
+  std::size_t PcmRingBuffer::read(std::span<std::byte> output) noexcept
   {
     if (output.empty()) { return 0; }
 
+    auto* data = reinterpret_cast<std::uint8_t*>(output.data());
+    auto const size = output.size();
+
     std::lock_guard<std::mutex> lock(_mutex);
-    auto const read = _queue.pop(output.data(), output.size());
+    auto const read = _queue.pop(data, size);
     _readCount.fetch_add(read, std::memory_order_release);
     return read;
   }
@@ -34,7 +42,7 @@ namespace app::playback
   void PcmRingBuffer::clear() noexcept
   {
     std::lock_guard<std::mutex> lock(_mutex);
-    std::int16_t dummy{};
+    std::uint8_t dummy{};
     while (_queue.pop(dummy)) { }
     _writeCount.store(0, std::memory_order_relaxed);
     _readCount.store(0, std::memory_order_relaxed);

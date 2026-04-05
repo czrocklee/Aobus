@@ -14,20 +14,20 @@
 namespace app::playback
 {
 
-  // Capacity in samples (interleaved). 524288 ≈ 0.5s at 192kHz stereo
-  constexpr std::size_t kRingBufferCapacity = 524288;
+  // Capacity in bytes. 2097152 ≈ 0.5s at 192kHz stereo 24-bit (about 1.15MB)
+  constexpr std::size_t kRingBufferCapacity = 2097152;
 
-  // Store S16 samples directly (16-bit interleaved PCM)
+  // Store raw bytes (supports any bitdepth: 16/24/32-bit)
   class PcmRingBuffer final
   {
   public:
     PcmRingBuffer();
 
-    // Write samples. Returns number of samples actually written.
-    std::size_t write(std::span<std::int16_t const> input) noexcept;
+    // Write bytes. Returns number of bytes actually written.
+    std::size_t write(std::span<std::byte const> input) noexcept;
 
-    // Read samples into output. Returns samples actually read.
-    std::size_t read(std::span<std::int16_t> output) noexcept;
+    // Read bytes into output. Returns bytes actually read.
+    std::size_t read(std::span<std::byte> output) noexcept;
 
     void clear() noexcept;
 
@@ -35,7 +35,7 @@ namespace app::playback
     std::size_t capacity() const noexcept { return kRingBufferCapacity; }
 
   private:
-    boost::lockfree::spsc_queue<std::int16_t, boost::lockfree::capacity<kRingBufferCapacity>> _queue;
+    boost::lockfree::spsc_queue<std::uint8_t, boost::lockfree::capacity<kRingBufferCapacity>> _queue;
     mutable std::mutex _mutex;
     std::atomic<std::size_t> _writeCount{0};
     std::atomic<std::size_t> _readCount{0};

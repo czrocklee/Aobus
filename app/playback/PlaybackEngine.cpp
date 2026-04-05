@@ -168,14 +168,14 @@ namespace app::playback
         break;
       }
 
-      // Write all samples to ring buffer using loop+sleep approach
-      std::span<std::int16_t const> samples(block->samples.data(), block->samples.size());
-      auto toWrite = samples.size();
-      auto* current = samples.data();
+      // Write all bytes to ring buffer using loop+sleep approach
+      std::span<std::byte const> bytes(block->bytes.data(), block->bytes.size());
+      auto toWrite = bytes.size();
+      auto* current = bytes.data();
 
       while (toWrite > 0 && !stopToken.stop_requested())
       {
-        auto pushed = _ringBuffer.write(std::span<const std::int16_t>(current, toWrite));
+        auto pushed = _ringBuffer.write(std::span<std::byte const>(current, toWrite));
         toWrite -= pushed;
         current += pushed;
 
@@ -191,10 +191,7 @@ namespace app::playback
   std::size_t PlaybackEngine::onReadPcm(void* userData, std::span<std::byte> output) noexcept
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
-    // Convert byte span to int16_t span
-    auto const sampleCount = output.size() / sizeof(std::int16_t);
-    std::span<std::int16_t> outSamples(reinterpret_cast<std::int16_t*>(output.data()), sampleCount);
-    return self->_ringBuffer.read(outSamples) * sizeof(std::int16_t);
+    return self->_ringBuffer.read(output);
   }
 
   void PlaybackEngine::onUnderrun(void* userData) noexcept

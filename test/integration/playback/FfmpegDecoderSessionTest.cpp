@@ -127,7 +127,8 @@ namespace app::playback
     CHECK(block.frames == 0);
     CHECK(block.firstFrameIndex == 0);
     CHECK(block.endOfStream == false);
-    CHECK(block.samples.empty());
+    CHECK(block.bytes.empty());
+    CHECK(block.bitDepth == 16); // default
   }
 
   TEST_CASE("DecodedStreamInfo structure", "[playback][decodedstreaminfo]")

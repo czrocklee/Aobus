@@ -222,18 +222,22 @@ namespace app::playback
 
     auto* data = static_cast<std::byte*>(buffer->buffer->datas[0].data);
     auto const size = buffer->buffer->datas[0].maxsize;
+    auto const bytesPerSample = (_format.bitDepth == 24) ? 3u :
+                                (_format.bitDepth == 32) ? 4u :
+                                2u;
+    auto const frameBytes = static_cast<std::size_t>(_format.channels) * bytesPerSample;
+    auto const requestSize = frameBytes > 0 ? size - (size % frameBytes) : 0;
 
-    if (data && size > 0)
+    if (data && requestSize > 0)
     {
-      std::span<std::byte> output(data, size);
+      std::span<std::byte> output(data, requestSize);
       auto const read = _callbacks.readPcm(_callbacks.userData, output);
-      std::cerr << "[DEBUG] PW process: requested=" << size << " read=" << read << std::endl;
+      auto const alignedRead = read - (read % frameBytes);
+      std::cerr << "[DEBUG] PW process: requested=" << requestSize << " read=" << alignedRead << std::endl;
 
       buffer->buffer->datas[0].chunk->offset = 0;
-      buffer->buffer->datas[0].chunk->size = read;
-      // stride = bytes per sample * channels
-      auto const bytesPerSample = _format.bitDepth / 8;
-      buffer->buffer->datas[0].chunk->stride = _format.channels * bytesPerSample;
+      buffer->buffer->datas[0].chunk->size = static_cast<uint32_t>(alignedRead);
+      buffer->buffer->datas[0].chunk->stride = static_cast<int32_t>(frameBytes);
     }
 
     pw_stream_queue_buffer(_stream, buffer);

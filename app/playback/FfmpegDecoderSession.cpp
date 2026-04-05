@@ -166,9 +166,13 @@ namespace app::playback
     _frame.reset(av_frame_alloc());
 
     // Store source format info
+    int rawBitDepth = stream->codecpar->bits_per_raw_sample;
+    if (rawBitDepth <= 0) { rawBitDepth = _codecContext->bits_per_raw_sample; }
+    if (rawBitDepth <= 0) { rawBitDepth = av_get_bytes_per_sample(_codecContext->sample_fmt) * 8; }
+
     _streamInfo.sourceFormat.sampleRate = _codecContext->sample_rate;
     _streamInfo.sourceFormat.channels = static_cast<std::uint8_t>(_codecContext->ch_layout.nb_channels);
-    _streamInfo.sourceFormat.bitDepth = static_cast<std::uint8_t>(av_get_bytes_per_sample(_codecContext->sample_fmt) * 8);
+    _streamInfo.sourceFormat.bitDepth = static_cast<std::uint8_t>(rawBitDepth);
     _streamInfo.sourceFormat.isFloat = av_sample_fmt_is_planar(_codecContext->sample_fmt) != 0;
     _streamInfo.sourceFormat.isInterleaved = !av_sample_fmt_is_planar(_codecContext->sample_fmt);
 
@@ -183,8 +187,17 @@ namespace app::playback
   {
     if (!_codecContext) { return; }
 
-    // Determine output sample format (always interleaved, S16 for spsc_queue)
-    auto const outSampleFormat = AVSampleFormat::AV_SAMPLE_FMT_S16;
+    // Determine output sample format based on bitdepth
+    // For hi-res (24/32-bit), use S32 as swr doesn't directly support S24
+    AVSampleFormat outSampleFormat;
+    if (_streamInfo.outputFormat.bitDepth > 16)
+    {
+      outSampleFormat = AVSampleFormat::AV_SAMPLE_FMT_S32;
+    }
+    else
+    {
+      outSampleFormat = AVSampleFormat::AV_SAMPLE_FMT_S16;
+    }
 
     auto inChannelLayout = AVChannelLayout{};
     if (_codecContext->ch_layout.nb_channels > 0 && av_channel_layout_check(&_codecContext->ch_layout) != 0)
@@ -379,6 +392,7 @@ namespace app::playback
     if (!_frame || !_swrContext) { return std::nullopt; }
 
     auto const outChannels = _streamInfo.outputFormat.channels;
+    auto const outBitDepth = _streamInfo.outputFormat.bitDepth;
 
     // Calculate output buffer size in samples
     auto const outSamples = av_rescale_rnd(
@@ -389,24 +403,77 @@ namespace app::playback
 
     if (outSamples <= 0) { return std::nullopt; }
 
-    std::vector<std::int16_t> outBuffer(outSamples * outChannels);
-
-    // Convert
-    auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
-    int const convertedSamples = swr_convert(
-      _swrContext.get(),
-      &outPtr,
-      static_cast<int>(outSamples),
-      const_cast<std::uint8_t const**>(_frame->data),
-      _frame->nb_samples);
-
-    if (convertedSamples <= 0) { return std::nullopt; }
-
     PcmBlock block;
-    block.samples = std::move(outBuffer);
-    block.frames = static_cast<std::uint32_t>(convertedSamples);
+    block.bitDepth = outBitDepth;
     block.firstFrameIndex = _decodedFrameCursor;
     block.endOfStream = false;
+
+    int convertedSamples = 0;
+
+    if (outBitDepth == 32)
+    {
+      // 32-bit output stays in the native S32 container from swr.
+      std::vector<std::int32_t> outBuffer(outSamples * outChannels);
+      auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
+      convertedSamples = swr_convert(
+        _swrContext.get(),
+        &outPtr,
+        static_cast<int>(outSamples),
+        const_cast<std::uint8_t const**>(_frame->data),
+        _frame->nb_samples);
+
+      if (convertedSamples <= 0) { return std::nullopt; }
+
+      block.frames = static_cast<std::uint32_t>(convertedSamples);
+      auto const byteCount = static_cast<std::size_t>(convertedSamples) * outChannels * sizeof(std::int32_t);
+      block.bytes.resize(byteCount);
+      std::memcpy(block.bytes.data(), outBuffer.data(), byteCount);
+    }
+    else if (outBitDepth == 24)
+    {
+      // swr emits hi-res integer PCM as S32; pack it down to little-endian S24.
+      std::vector<std::int32_t> outBuffer(outSamples * outChannels);
+      auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
+      convertedSamples = swr_convert(
+        _swrContext.get(),
+        &outPtr,
+        static_cast<int>(outSamples),
+        const_cast<std::uint8_t const**>(_frame->data),
+        _frame->nb_samples);
+
+      if (convertedSamples <= 0) { return std::nullopt; }
+
+      block.frames = static_cast<std::uint32_t>(convertedSamples);
+      auto const sampleCount = static_cast<std::size_t>(convertedSamples) * outChannels;
+      block.bytes.resize(sampleCount * 3);
+      for (std::size_t i = 0; i < sampleCount; ++i)
+      {
+        auto const sample = static_cast<std::uint32_t>(outBuffer[i]);
+        block.bytes[i * 3] = static_cast<std::byte>((sample >> 8) & 0xFFu);
+        block.bytes[i * 3 + 1] = static_cast<std::byte>((sample >> 16) & 0xFFu);
+        block.bytes[i * 3 + 2] = static_cast<std::byte>((sample >> 24) & 0xFFu);
+      }
+    }
+    else
+    {
+      // 16-bit: output as S16 from swr
+      std::vector<std::int16_t> outBuffer(outSamples * outChannels);
+      auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
+      convertedSamples = swr_convert(
+        _swrContext.get(),
+        &outPtr,
+        static_cast<int>(outSamples),
+        const_cast<std::uint8_t const**>(_frame->data),
+        _frame->nb_samples);
+
+      if (convertedSamples <= 0) { return std::nullopt; }
+
+      block.frames = static_cast<std::uint32_t>(convertedSamples);
+      // Convert to bytes
+      auto const byteCount = convertedSamples * outChannels * sizeof(std::int16_t);
+      block.bytes.resize(byteCount);
+      std::memcpy(block.bytes.data(), outBuffer.data(), byteCount);
+    }
 
     // Update cursor (estimate based on sample rate ratio)
     auto const durationRatio = static_cast<double>(_streamInfo.outputFormat.sampleRate) / _frame->sample_rate;
