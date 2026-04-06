@@ -121,6 +121,7 @@ namespace rs::lmdb
     std::uint32_t append(std::span<std::byte const> data);
     std::pair<std::uint32_t, std::span<std::byte>> append(std::size_t size);
     void update(std::uint32_t id, std::span<std::byte const> data);
+    std::span<std::byte> update(std::uint32_t id, std::size_t size);
     bool del(std::uint32_t id);
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
 

@@ -5,6 +5,8 @@
 #include <rs/utility/ByteView.h>
 
 #include <algorithm>
+#include <cassert>
+#include <cstring>
 
 namespace rs::core
 {
@@ -100,7 +102,7 @@ namespace rs::core
       }
 
       builder._tagsBuilder._tagNames.reserve(view.tags().count());
-      
+
       for (auto tagId : view.tags())
       {
         builder._tagsBuilder._tagNames.push_back(dict.get(tagId));
@@ -179,6 +181,7 @@ namespace rs::core
     record.metadata.discNumber = meta._discNumber;
     record.metadata.totalDiscs = meta._totalDiscs;
     record.metadata.coverArtId = meta._coverArtId;
+    record.metadata.rating = meta._rating;
 
     record.property.uri = std::string{prop._uri};
     record.property.fileSize = prop._fileSize;
@@ -189,7 +192,6 @@ namespace rs::core
     record.property.codecId = prop._codecId;
     record.property.channels = prop._channels;
     record.property.bitDepth = prop._bitDepth;
-    record.metadata.rating = meta._rating;
 
     for (auto const& name : _tagsBuilder._tagNames)
     {
@@ -403,184 +405,21 @@ namespace rs::core
     return bloom;
   }
 
-  TrackHotHeader TrackBuilder::buildHotHeader(DictionaryStore& dict,
-                                              lmdb::WriteTransaction& txn,
-                                              std::span<DictionaryId const> tagIds) const
+  std::vector<std::byte> TrackBuilder::serializeHot(lmdb::WriteTransaction& txn, DictionaryStore& dict)
   {
-    auto const& meta = _metadataBuilder;
-    auto const& prop = _propertyBuilder;
-
-    auto artistId = dict.put(txn, meta._artist);
-    auto albumId = dict.put(txn, meta._album);
-    auto genreId = dict.put(txn, meta._genre);
-    auto albumArtistId = dict.put(txn, meta._albumArtist);
-
-    return TrackHotHeader{
-      .tagBloom = computeBloomFilter(tagIds),
-      .artistId = artistId,
-      .albumId = albumId,
-      .genreId = genreId,
-      .albumArtistId = albumArtistId,
-      .year = meta._year,
-      .codecId = prop._codecId,
-      .bitDepth = prop._bitDepth,
-      .titleLen = static_cast<std::uint16_t>(meta._title.size()),
-      .tagLen = static_cast<std::uint16_t>(tagIds.size() * sizeof(DictionaryId)),
-      .rating = meta._rating,
-      .padding = std::byte{0},
-    };
-  }
-
-  TrackColdHeader TrackBuilder::buildColdHeader(std::size_t customCount,
-                                                std::uint16_t uriOffset,
-                                                std::uint16_t uriLen) const
-  {
-    auto const& meta = _metadataBuilder;
-    auto const& prop = _propertyBuilder;
-
-    auto [fileSizeLo, fileSizeHi] = utility::splitInt64(prop._fileSize);
-    auto [mtimeLo, mtimeHi] = utility::splitInt64(prop._mtime);
-
-    return TrackColdHeader{
-      .fileSizeLo = fileSizeLo,
-      .fileSizeHi = fileSizeHi,
-      .mtimeLo = mtimeLo,
-      .mtimeHi = mtimeHi,
-      .durationMs = prop._durationMs,
-      .sampleRate = prop._sampleRate,
-      .coverArtId = meta._coverArtId,
-      .bitrate = prop._bitrate,
-      .trackNumber = meta._trackNumber,
-      .totalTracks = meta._totalTracks,
-      .discNumber = meta._discNumber,
-      .totalDiscs = meta._totalDiscs,
-      .customCount = static_cast<std::uint16_t>(customCount),
-      .uriOffset = uriOffset,
-      .uriLen = uriLen,
-      .channels = prop._channels,
-      .padding = std::byte{0},
-    };
-  }
-
-  void TrackBuilder::commitEmbeddedCoverArt(lmdb::WriteTransaction& txn, ResourceStore& resources)
-  {
-    if (!_metadataBuilder._embeddedCoverArt.empty())
-    {
-      auto writer = resources.writer(txn);
-      auto resourceId = writer.create(_metadataBuilder._embeddedCoverArt);
-      _metadataBuilder._coverArtId = resourceId.value();
-      _metadataBuilder._embeddedCoverArt = {};
-    }
-  }
-
-  std::vector<std::byte> TrackBuilder::serializeHot(lmdb::WriteTransaction& txn,
-                                                    DictionaryStore& dict)
-  {
-    // Resolve tag names to DictionaryIds
-    auto tagIds = std::vector<DictionaryId>{};
-    tagIds.reserve(_tagsBuilder._tagNames.size());
-
-    for (auto const& name : _tagsBuilder._tagNames)
-    {
-      tagIds.push_back(dict.put(txn, name));
-    }
-
-    auto data = std::vector<std::byte>{};
-
-    // Build header with resolved dictionary IDs
-    auto hdr = buildHotHeader(dict, txn, tagIds);
-
-    // Write header
-    auto headerBytes = utility::asBytes(hdr);
-    data.insert_range(data.end(), headerBytes);
-
-    // Write tags: 4-byte tag IDs
-    for (auto tagId : tagIds)
-    {
-      auto idBytes = utility::asBytes(tagId);
-      data.insert_range(data.end(), idBytes);
-    }
-
-    // Write title (null-terminated)
-    auto titleBytes = utility::asBytes(_metadataBuilder._title);
-    data.insert_range(data.end(), titleBytes);
-    data.push_back(static_cast<std::byte>('\0'));
-
-    // Pad to 4-byte alignment
-    while (data.size() % 4 != 0)
-    {
-      data.push_back(std::byte{0});
-    }
-
-    return data;
+    auto prepared = PreparedHot{this, txn, dict};
+    auto result = std::vector<std::byte>(prepared.size());
+    prepared.writeTo(result);
+    return result;
   }
 
   std::vector<std::byte> TrackBuilder::serializeCold(lmdb::WriteTransaction& txn,
                                                      DictionaryStore& dict,
                                                      ResourceStore& resources)
   {
-    commitEmbeddedCoverArt(txn, resources);
-
-    // Resolve custom keys to DictionaryIds
-    auto resolvedPairs = std::vector<std::pair<DictionaryId, std::string>>{};
-    resolvedPairs.reserve(_customBuilder._customPairs.size());
-
-    for (auto const& [key, value] : _customBuilder._customPairs)
-    {
-      auto dictId = dict.put(txn, key);
-      resolvedPairs.emplace_back(dictId, std::string{value});
-    }
-
-    // Sort by dictId for binary search
-    std::ranges::sort(resolvedPairs, {}, &std::pair<DictionaryId, std::string>::first);
-
-    constexpr std::size_t kEntrySize = 8; // dictId(4) + offset(2) + len(2)
-    std::size_t entryCount = resolvedPairs.size();
-    std::size_t totalValueSize = 0;
-
-    for (auto const& [_, value] : resolvedPairs)
-    {
-      totalValueSize += value.size();
-    }
-
-    auto uriLen = static_cast<std::uint16_t>(_propertyBuilder._uri.size());
-    auto result = std::vector<std::byte>{};
-    result.reserve(sizeof(TrackColdHeader) + (entryCount * kEntrySize) + totalValueSize + uriLen + 4);
-
-    // Build header
-    auto uriOffset = static_cast<std::uint16_t>((sizeof(TrackColdHeader) + entryCount * kEntrySize) + totalValueSize);
-    auto hdr = buildColdHeader(entryCount, uriOffset, uriLen);
-    result.insert_range(result.end(), utility::asBytes(hdr));
-
-    // Value data starts after header + entries
-    std::size_t valueOffset = (entryCount * kEntrySize) + sizeof(TrackColdHeader);
-
-    // Write entries with calculated offsets
-    for (auto const& [dictId, value] : resolvedPairs)
-    {
-      auto valueLen = static_cast<std::uint16_t>(value.size());
-      result.insert_range(result.end(), utility::asBytes(dictId.value()));
-      result.insert_range(result.end(), utility::asBytes(static_cast<std::uint16_t>(valueOffset)));
-      result.insert_range(result.end(), utility::asBytes(valueLen));
-      valueOffset += valueLen;
-    }
-
-    // Write all values contiguously
-    for (auto const& [_, value] : resolvedPairs)
-    {
-      result.insert_range(result.end(), utility::asBytes(value));
-    }
-
-    // Write uri (null-terminated)
-    result.insert_range(result.end(), utility::asBytes(_propertyBuilder._uri));
-    result.push_back(std::byte{'\0'});
-
-    // Pad to 4-byte alignment
-    while (result.size() % 4 != 0)
-    {
-      result.push_back(std::byte{0});
-    }
-
+    auto prepared = PreparedCold{this, txn, dict, resources};
+    auto result = std::vector<std::byte>(prepared.size());
+    prepared.writeTo(result);
     return result;
   }
 
@@ -589,6 +428,259 @@ namespace rs::core
                                                                                     ResourceStore& resources)
   {
     return {serializeHot(txn, dict), serializeCold(txn, dict, resources)};
+  }
+
+  //=============================================================================
+  // Prepared structures for zero-copy serialization
+  //=============================================================================
+
+  TrackBuilder::PreparedHot::PreparedHot(TrackBuilder const* builder,
+                                         lmdb::WriteTransaction& txn,
+                                         DictionaryStore& dict)
+    : _builder{builder}
+  {
+    // Resolve tag names to DictionaryIds
+    _tagIds.reserve(builder->_tagsBuilder._tagNames.size());
+
+    for (auto const& name : builder->_tagsBuilder._tagNames)
+    {
+      _tagIds.push_back(dict.put(txn, name));
+    }
+
+    // Resolve metadata strings to DictionaryIds for header
+    if (!builder->_metadataBuilder._artist.empty())
+    {
+      _artistId = dict.put(txn, builder->_metadataBuilder._artist);
+    }
+
+    if (!builder->_metadataBuilder._album.empty())
+    {
+      _albumId = dict.put(txn, builder->_metadataBuilder._album);
+    }
+
+    if (!builder->_metadataBuilder._genre.empty())
+    {
+      _genreId = dict.put(txn, builder->_metadataBuilder._genre);
+    }
+
+    if (!builder->_metadataBuilder._albumArtist.empty())
+    {
+      _albumArtistId = dict.put(txn, builder->_metadataBuilder._albumArtist);
+    }
+
+    _bloomFilter = computeBloomFilter(_tagIds);
+
+    // Compute total hot size: Header(32) + tags + title
+    _size = sizeof(TrackHotHeader);
+    _size += _tagIds.size() * sizeof(DictionaryId);
+    _size += builder->_metadataBuilder._title.size();
+    _size = (_size + 3) & ~3; // pad to 4 bytes
+  }
+
+  TrackBuilder::PreparedCold::PreparedCold(TrackBuilder const* builder,
+                                           lmdb::WriteTransaction& txn,
+                                           DictionaryStore& dict,
+                                           ResourceStore& resources)
+    : _builder{builder}
+  {
+    // Handle embedded cover art - store resolved ID in PreparedCold
+    if (!_builder->_metadataBuilder._embeddedCoverArt.empty())
+    {
+      auto writer = resources.writer(txn);
+      _coverArtId = writer.create(_builder->_metadataBuilder._embeddedCoverArt).value();
+    }
+    else
+    {
+      _coverArtId = _builder->_metadataBuilder._coverArtId;
+    }
+
+    // Resolve custom keys to DictionaryIds
+    _resolvedPairs.reserve(_builder->_customBuilder._customPairs.size());
+
+    for (auto const& [key, value] : _builder->_customBuilder._customPairs)
+    {
+      auto dictId = dict.put(txn, key);
+      _resolvedPairs.emplace_back(dictId, value);
+    }
+
+    // Sort by dictId for binary search
+    std::ranges::sort(_resolvedPairs, {}, &std::pair<DictionaryId, std::string_view>::first);
+
+    // Compute sizes
+    std::size_t entryCount = _resolvedPairs.size();
+    std::size_t totalValueSize = 0;
+
+    for (auto const& [_, value] : _resolvedPairs)
+    {
+      totalValueSize += value.size();
+    }
+
+    _uriLen = static_cast<std::uint16_t>(_builder->_propertyBuilder._uri.size());
+
+    // Cold layout: header(48) + entries(N*8) + values + uri
+    std::size_t size = sizeof(TrackColdHeader);
+    size += entryCount * 8; // 8 bytes per entry
+    size += totalValueSize;
+    size += _uriLen;
+    size = (size + 3) & ~3; // pad to 4 bytes
+
+    _uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + entryCount * 8 + totalValueSize);
+    _size = size;
+  }
+
+  std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold> TrackBuilder::prepare(lmdb::WriteTransaction& txn,
+                                                                                         DictionaryStore& dict,
+                                                                                         ResourceStore& resources)
+  {
+    return {PreparedHot{this, txn, dict}, PreparedCold{this, txn, dict, resources}};
+  }
+
+  TrackBuilder::PreparedHot TrackBuilder::prepareHot(lmdb::WriteTransaction& txn, DictionaryStore& dict) const
+  {
+    return PreparedHot{this, txn, dict};
+  }
+
+  TrackBuilder::PreparedCold TrackBuilder::prepareCold(lmdb::WriteTransaction& txn,
+                                                       DictionaryStore& dict,
+                                                       ResourceStore& resources) const
+  {
+    return PreparedCold{this, txn, dict, resources};
+  }
+
+  void TrackBuilder::PreparedHot::writeTo(std::span<std::byte> out) const
+  {
+    auto& builder = *_builder;
+
+    // Exact size validation and alignment check
+    assert(out.size() == _size && "PreparedHot::writeTo: size mismatch");
+    assert(reinterpret_cast<std::uintptr_t>(out.data()) % 4 == 0 && "out must be 4-byte aligned");
+
+    auto pos = std::size_t{0};
+
+    // Write header (4-byte aligned)
+    *(reinterpret_cast<TrackHotHeader*>(out.data())) = TrackHotHeader{
+      .tagBloom = _bloomFilter,
+      .artistId = _artistId,
+      .albumId = _albumId,
+      .genreId = _genreId,
+      .albumArtistId = _albumArtistId,
+      .year = builder._metadataBuilder._year,
+      .codecId = builder._propertyBuilder._codecId,
+      .bitDepth = builder._propertyBuilder._bitDepth,
+      .titleLen = static_cast<std::uint16_t>(builder._metadataBuilder._title.size()),
+      .tagLen = static_cast<std::uint16_t>(_tagIds.size() * sizeof(DictionaryId)),
+      .rating = builder._metadataBuilder._rating,
+      .padding = std::byte{0},
+    };
+
+    pos += sizeof(TrackHotHeader);
+
+    // Write tags: 4-byte tag IDs (aligned)
+    std::memcpy(out.data() + pos, _tagIds.data(), _tagIds.size() * sizeof(DictionaryId));
+    pos += _tagIds.size() * sizeof(DictionaryId);
+
+    // Write title
+    if (!builder._metadataBuilder._title.empty())
+    {
+      std::memcpy(out.data() + pos, builder._metadataBuilder._title.data(), builder._metadataBuilder._title.size());
+    }
+
+    pos += builder._metadataBuilder._title.size();
+
+    // Pad to 4 bytes
+    while (pos % 4 != 0)
+    {
+      out[pos++] = std::byte{0};
+    }
+  }
+
+  void TrackBuilder::PreparedCold::writeTo(std::span<std::byte> out) const
+  {
+    auto const& meta = _builder->_metadataBuilder;
+    auto const& prop = _builder->_propertyBuilder;
+
+    // Exact size validation and alignment check
+    assert(out.size() == _size && "PreparedCold::writeTo: size mismatch");
+    assert(reinterpret_cast<std::uintptr_t>(out.data()) % 4 == 0 && "out must be 4-byte aligned");
+
+    auto pos = std::size_t{0};
+
+    // Write header directly (4-byte aligned)
+    auto* hdrOut = reinterpret_cast<TrackColdHeader*>(out.data());
+    {
+      auto [fileSizeLo, fileSizeHi] = utility::splitInt64(prop._fileSize);
+      auto [mtimeLo, mtimeHi] = utility::splitInt64(prop._mtime);
+
+      *hdrOut = TrackColdHeader{
+        .fileSizeLo = fileSizeLo,
+        .fileSizeHi = fileSizeHi,
+        .mtimeLo = mtimeLo,
+        .mtimeHi = mtimeHi,
+        .durationMs = prop._durationMs,
+        .sampleRate = prop._sampleRate,
+        .coverArtId = _coverArtId,
+        .bitrate = prop._bitrate,
+        .trackNumber = meta._trackNumber,
+        .totalTracks = meta._totalTracks,
+        .discNumber = meta._discNumber,
+        .totalDiscs = meta._totalDiscs,
+        .customCount = static_cast<std::uint16_t>(_resolvedPairs.size()),
+        .uriOffset = _uriOffset,
+        .uriLen = _uriLen,
+        .channels = prop._channels,
+        .padding = std::byte{0},
+      };
+    }
+    pos += sizeof(TrackColdHeader);
+
+    // Compute value data offset
+    std::size_t valueOffset = sizeof(TrackColdHeader) + _resolvedPairs.size() * 8;
+
+    // Write entries: dictId(4) + offset(2) + len(2) each, all 4-byte aligned
+    for (auto const& [dictId, value] : _resolvedPairs)
+    {
+      auto valueLen = static_cast<std::uint16_t>(value.size());
+
+      // dictId at pos (4-byte aligned)
+      auto* dictIdOut = reinterpret_cast<DictionaryId*>(out.data() + pos);
+      *dictIdOut = dictId;
+      pos += sizeof(DictionaryId);
+
+      // offset at pos (4-byte aligned)
+      auto* offsetOut = reinterpret_cast<std::uint16_t*>(out.data() + pos);
+      *offsetOut = static_cast<std::uint16_t>(valueOffset);
+      pos += sizeof(std::uint16_t);
+
+      // len at pos (4-byte aligned)
+      auto* lenOut = reinterpret_cast<std::uint16_t*>(out.data() + pos);
+      *lenOut = valueLen;
+      pos += sizeof(std::uint16_t);
+
+      valueOffset += valueLen;
+    }
+
+    // Write all values contiguously
+    for (auto const& [_, value] : _resolvedPairs)
+    {
+      if (!value.empty())
+      {
+        std::memcpy(out.data() + pos, value.data(), value.size());
+      }
+      pos += value.size();
+    }
+
+    // Write uri
+    if (_uriLen > 0)
+    {
+      std::memcpy(out.data() + pos, _builder->_propertyBuilder._uri.data(), _uriLen);
+    }
+    pos += _uriLen;
+
+    // Pad to 4 bytes
+    while (pos % 4 != 0)
+    {
+      out[pos++] = std::byte{0};
+    }
   }
 
 } // namespace rs::core

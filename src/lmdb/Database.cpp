@@ -246,6 +246,11 @@ namespace rs::lmdb
     put(_cursor.get(), id, data, 0);
   }
 
+  std::span<std::byte> Writer::update(std::uint32_t id, std::size_t size)
+  {
+    return reserve(_cursor.get(), id, size, 0);
+  }
+
   bool Writer::del(std::uint32_t id)
   {
     auto key = makeVal(&id, sizeof(id));

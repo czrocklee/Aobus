@@ -51,9 +51,15 @@ void ImportWorker::run()
         .mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(std::filesystem::last_write_time(path).time_since_epoch()).count());
       if (std::filesystem::exists(path)) { builder.property().fileSize(std::filesystem::file_size(path)); }
 
-      auto [hotData, coldData] = builder.serialize(txn, dict, _ml.resources());
+      auto [preparedHot, preparedCold] = builder.prepare(txn, dict, _ml.resources());
 
-      auto [trackId, view] = trackWriter.createHotCold(hotData, coldData);
+      auto [trackId, view] = trackWriter.createHotCold(
+          preparedHot.size(),
+          preparedCold.size(),
+          [&preparedHot, &preparedCold](rs::core::TrackId id, std::span<std::byte> hot, std::span<std::byte> cold) {
+              preparedHot.writeTo(hot);
+              preparedCold.writeTo(cold);
+          });
       _result.insertedIds.push_back(trackId);
     }
     catch ([[maybe_unused]] std::exception const& e)

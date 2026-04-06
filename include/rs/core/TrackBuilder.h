@@ -80,6 +80,13 @@ namespace rs::core
       std::string_view album() const { return _album; }
       std::string_view albumArtist() const { return _albumArtist; }
       std::string_view genre() const { return _genre; }
+      std::uint16_t year() const { return _year; }
+      std::uint16_t trackNumber() const { return _trackNumber; }
+      std::uint16_t totalTracks() const { return _totalTracks; }
+      std::uint16_t discNumber() const { return _discNumber; }
+      std::uint16_t totalDiscs() const { return _totalDiscs; }
+      std::uint32_t coverArtId() const { return _coverArtId; }
+      std::uint8_t rating() const { return _rating; }
 
     private:
       friend class TrackBuilder;
@@ -117,6 +124,14 @@ namespace rs::core
 
       // Accessors
       std::string_view uri() const { return _uri; }
+      std::uint64_t fileSize() const { return _fileSize; }
+      std::uint64_t mtime() const { return _mtime; }
+      std::uint32_t durationMs() const { return _durationMs; }
+      std::uint32_t bitrate() const { return _bitrate; }
+      std::uint32_t sampleRate() const { return _sampleRate; }
+      std::uint16_t codecId() const { return _codecId; }
+      std::uint8_t channels() const { return _channels; }
+      std::uint8_t bitDepth() const { return _bitDepth; }
 
     private:
       friend class TrackBuilder;
@@ -179,20 +194,76 @@ namespace rs::core
                                                                         ResourceStore& resources);
 
     // Partial serialization for hot-only or cold-only updates
-    std::vector<std::byte> serializeHot(lmdb::WriteTransaction& txn,
-                                       DictionaryStore& dict);
-    std::vector<std::byte> serializeCold(lmdb::WriteTransaction& txn,
-                                         DictionaryStore& dict,
-                                         ResourceStore& resources);
+    std::vector<std::byte> serializeHot(lmdb::WriteTransaction& txn, DictionaryStore& dict);
+    std::vector<std::byte> serializeCold(lmdb::WriteTransaction& txn, DictionaryStore& dict, ResourceStore& resources);
+
+    //=============================================================================
+    // Prepared structures for zero-copy serialization
+    //=============================================================================
+
+    /**
+     * PreparedHot - prepared hot data for zero-copy write.
+     * Created by constructor (resolves tag names and metadata strings to DictionaryIds).
+     */
+    class PreparedHot
+    {
+    public:
+      std::size_t size() const noexcept { return _size; }
+      void writeTo(std::span<std::byte> out) const;
+
+    private:
+      PreparedHot(TrackBuilder const* builder, lmdb::WriteTransaction& txn, DictionaryStore& dict);
+
+      TrackBuilder const* _builder;
+      std::vector<DictionaryId> _tagIds;
+      DictionaryId _artistId = DictionaryId{0};
+      DictionaryId _albumId = DictionaryId{0};
+      DictionaryId _genreId = DictionaryId{0};
+      DictionaryId _albumArtistId = DictionaryId{0};
+      std::uint32_t _bloomFilter = 0;
+      std::size_t _size = 0;
+
+      friend class TrackBuilder;
+    };
+
+    /**
+     * PreparedCold - prepared cold data for zero-copy write.
+     * Created by constructor (handles embedded cover art, resolves custom keys).
+     */
+    class PreparedCold
+    {
+    public:
+      std::size_t size() const noexcept { return _size; }
+      void writeTo(std::span<std::byte> out) const;
+
+    private:
+      PreparedCold(TrackBuilder const* builder,
+                   lmdb::WriteTransaction& txn,
+                   DictionaryStore& dict,
+                   ResourceStore& resources);
+
+      TrackBuilder const* _builder;
+      std::vector<std::pair<DictionaryId, std::string_view>> _resolvedPairs;
+      std::uint16_t _uriOffset = 0;
+      std::uint16_t _uriLen = 0;
+      std::uint32_t _coverArtId = 0;
+      std::size_t _size = 0;
+
+      friend class TrackBuilder;
+    };
+
+    // Prepare methods - resolve dictionary IDs and compute sizes
+    std::pair<PreparedHot, PreparedCold> prepare(lmdb::WriteTransaction& txn,
+                                                 DictionaryStore& dict,
+                                                 ResourceStore& resources);
+
+    PreparedHot prepareHot(lmdb::WriteTransaction& txn, DictionaryStore& dict) const;
+    
+    PreparedCold prepareCold(lmdb::WriteTransaction& txn, DictionaryStore& dict, ResourceStore& resources) const;
 
   private:
     // Private helper methods for serialization
     static std::uint32_t computeBloomFilter(std::span<DictionaryId const> tagIds);
-    TrackHotHeader buildHotHeader(DictionaryStore& dict,
-                                  lmdb::WriteTransaction& txn,
-                                  std::span<DictionaryId const> tagIds) const;
-    TrackColdHeader buildColdHeader(std::size_t customCount, std::uint16_t uriOffset, std::uint16_t uriLen) const;
-    void commitEmbeddedCoverArt(lmdb::WriteTransaction& txn, ResourceStore& resources);
 
     // Sub-builders stored as members
     MetadataBuilder _metadataBuilder{};

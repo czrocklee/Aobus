@@ -798,11 +798,13 @@ void MainWindow::onTagTrack()
           auto builder = rs::core::TrackBuilder::fromView(*optView, dict);
 
           // Add new tag by resolving ID to name
-          builder.tags().add(std::string{dict.get(tagId)});
+          builder.tags().add(dict.get(tagId));
 
-          // Serialize and update hot data
-          auto hotData = builder.serializeHot(txn, dict);
-          writer.updateHot(trackId, hotData);
+          // Zero-copy update hot data
+          auto prepared = builder.prepareHot(txn, dict);
+          writer.updateHot(trackId, prepared.size(), [&prepared](std::span<std::byte> hot) {
+            prepared.writeTo(hot);
+          });
         }
 
         // Commit transaction

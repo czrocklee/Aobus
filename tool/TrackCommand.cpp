@@ -135,8 +135,14 @@ namespace
       .fileSize(std::filesystem::file_size(path))
       .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
 
-    auto [hotData, coldData] = builder.serialize(txn, ml.dictionary(), ml.resources());
-    auto [id, trackView] = writer.createHotCold(hotData, coldData);
+    auto [preparedHot, preparedCold] = builder.prepare(txn, ml.dictionary(), ml.resources());
+    auto [id, trackView] = writer.createHotCold(
+        preparedHot.size(),
+        preparedCold.size(),
+        [&preparedHot, &preparedCold](core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
+            preparedHot.writeTo(hot);
+            preparedCold.writeTo(cold);
+        });
     txn.commit();
 
     os << "add track: " << id << " " << trackView.metadata().title() << '\n';

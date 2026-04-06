@@ -41,8 +41,10 @@ namespace
 
     builder.tags().add(tagName);
 
-    auto hotData = builder.serializeHot(txn, ml.dictionary());
-    writer.updateHot(trackId, hotData);
+    auto preparedHot = builder.prepareHot(txn, ml.dictionary());
+    writer.updateHot(trackId, preparedHot.size(), [&preparedHot](std::span<std::byte> hot) {
+        preparedHot.writeTo(hot);
+    });
     txn.commit();
 
     os << "added tag: " << tagName << " to track " << trackId << '\n';
@@ -71,8 +73,10 @@ namespace
 
     builder.tags().remove(tagName);
 
-    auto hotData = builder.serializeHot(txn, ml.dictionary());
-    writer.updateHot(trackId, hotData);
+    auto preparedHot = builder.prepareHot(txn, ml.dictionary());
+    writer.updateHot(trackId, preparedHot.size(), [&preparedHot](std::span<std::byte> hot) {
+        preparedHot.writeTo(hot);
+    });
     txn.commit();
 
     os << "removed tag: " << tagName << " from track " << trackId << '\n';

@@ -7,6 +7,7 @@
 #include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
 
+#include <cassert>
 #include <functional>
 #include <optional>
 #include <span>
@@ -123,14 +124,45 @@ namespace rs::core
         std::span<std::byte const> coldData);
 
     /**
+     * Zero-copy create: reserves space and calls fill callback to populate spans.
+     * @param hotSize Size of hot data (must be multiple of 4)
+     * @param coldSize Size of cold data (must be multiple of 4)
+     * @param fill Callback: fill(TrackId id, span<byte> hot, span<byte> cold) -> void
+     * @return Pair of (track ID, TrackView)
+     */
+    template<class F>
+    std::pair<TrackId, TrackView> createHotCold(
+        std::size_t hotSize,
+        std::size_t coldSize,
+        F&& fill);
+
+    /**
      * Update hot track data.
      */
     void updateHot(TrackId id, std::span<std::byte const> hotData);
 
     /**
+     * Zero-copy updateHot: reserves space and calls fill callback to populate span.
+     * @param id Track ID to update
+     * @param size Size of hot data (must be multiple of 4)
+     * @param fill Callback: fill(span<byte> hot) -> void
+     */
+    template<class F>
+    void updateHot(TrackId id, std::size_t size, F&& fill);
+
+    /**
      * Update cold track data.
      */
     void updateCold(TrackId id, std::span<std::byte const> coldData);
+
+    /**
+     * Zero-copy updateCold: reserves space and calls fill callback to populate span.
+     * @param id Track ID to update
+     * @param size Size of cold data (must be multiple of 4)
+     * @param fill Callback: fill(span<byte> cold) -> void
+     */
+    template<class F>
+    void updateCold(TrackId id, std::size_t size, F&& fill);
 
     /**
      * Delete both hot and cold track data.
@@ -149,5 +181,46 @@ namespace rs::core
     lmdb::Database::Writer _coldWriter;
     friend class TrackStore;
   };
+
+  // Template implementations
+
+  template<class F>
+  std::pair<TrackId, TrackView> TrackStore::Writer::createHotCold(
+      std::size_t hotSize,
+      std::size_t coldSize,
+      F&& fill)
+  {
+    assert((hotSize % 4 == 0) && "hotSize must be multiple of 4");
+    assert((coldSize % 4 == 0) && "coldSize must be multiple of 4");
+
+    // Reserve hot span and get auto-increment ID
+    auto [id, hotSpan] = _hotWriter.append(hotSize);
+
+    // Reserve cold at the SAME explicit ID (not append)
+    auto coldSpan = _coldWriter.create(id, coldSize);
+
+    // Populate both spans via callback
+    fill(TrackId{id}, hotSpan, coldSpan);
+
+    return {TrackId{id}, TrackView{hotSpan, coldSpan}};
+  }
+
+  template<class F>
+  void TrackStore::Writer::updateHot(TrackId id, std::size_t size, F&& fill)
+  {
+    assert((size % 4 == 0) && "size must be multiple of 4");
+
+    auto span = _hotWriter.update(id.value(), size);
+    fill(span);
+  }
+
+  template<class F>
+  void TrackStore::Writer::updateCold(TrackId id, std::size_t size, F&& fill)
+  {
+    assert((size % 4 == 0) && "size must be multiple of 4");
+
+    auto span = _coldWriter.update(id.value(), size);
+    fill(span);
+  }
 
 } // namespace rs::core
