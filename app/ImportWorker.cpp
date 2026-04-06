@@ -60,7 +60,7 @@ void ImportWorker::run()
       }
 
       auto builder = rs::core::TrackBuilder::fromRecord(std::move(parsed.record));
-      auto [hotData, coldData] = builder.serialize(dict, txn);
+      auto [hotData, coldData] = builder.serialize(txn, dict, _ml.resources());
 
       auto [trackId, view] = trackWriter.createHotCold(hotData, coldData);
       _result.insertedIds.push_back(trackId);

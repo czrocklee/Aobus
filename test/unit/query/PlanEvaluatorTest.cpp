@@ -5,6 +5,7 @@
 
 #include <optional>
 #include <rs/core/DictionaryStore.h>
+#include <rs/core/ResourceStore.h>
 #include <rs/core/TrackBuilder.h>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/TrackRecord.h>
@@ -48,22 +49,27 @@ namespace
               std::uint32_t albumId = 2,
               std::uint32_t genreId = 3,
               std::vector<std::uint32_t> tagIds = {})
+      : _title{std::move(title)}, _artist{std::move(artist)}, _album{std::move(album)}, _uri{std::move(uri)}
     {
-      _builder.metadata().title(std::move(title));
-      _builder.metadata().artist(std::move(artist));
-      _builder.metadata().album(std::move(album));
-      _builder.property().uri(std::move(uri));
+      _builder.metadata().title(_title);
+      _builder.metadata().artist(_artist);
+      _builder.metadata().album(_album);
       _builder.metadata().year(year);
       _builder.metadata().trackNumber(trackNumber);
+      _builder.property().uri(_uri);
       _builder.property().durationMs(durationMs);
       _builder.property().bitrate(bitrate);
       _builder.property().sampleRate(sampleRate);
       _builder.property().channels(channels);
       _builder.property().bitDepth(bitDepth);
       // Add tags using string names (will be resolved to IDs via dict.put during serialize)
+      // Store tag strings as members to keep string_view pointers valid
+      _tagStrings.reserve(tagIds.size());
+
       for (auto id : tagIds)
       {
-        _builder.tags().add("tag" + std::to_string(id));
+        auto const& str = _tagStrings.emplace_back("tag" + std::to_string(id));
+        _builder.tags().add(str);
       }
 
       // Build hot and cold data with a dictionary
@@ -72,9 +78,10 @@ namespace
       _env.emplace(temp.path(), envOpts);
       auto wtxn = rs::lmdb::WriteTransaction{*_env};
       _dict.emplace(Database{wtxn, "dict"}, wtxn);
+      _resources.emplace(Database{wtxn, "resources"});
 
-      _hotData = _builder.serializeHot(*_dict, wtxn);
-      _coldData = _builder.serializeCold(*_dict, wtxn);
+      _hotData = _builder.serializeHot(wtxn, *_dict);
+      _coldData = _builder.serializeCold(wtxn, *_dict, *_resources);
 
       // Fix up the header with specific IDs
       // Note: we serialize then modify, so const_cast is safe
@@ -97,8 +104,15 @@ namespace
     rs::core::TrackBuilder _builder = rs::core::TrackBuilder::createNew();
     std::optional<rs::lmdb::Environment> _env;
     std::optional<rs::core::DictionaryStore> _dict;
+    std::optional<rs::core::ResourceStore> _resources;
     std::vector<std::byte> _hotData;
     std::vector<std::byte> _coldData;
+    // Store strings as members so string_view pointers remain valid
+    std::string _title;
+    std::string _artist;
+    std::string _album;
+    std::string _uri;
+    std::vector<std::string> _tagStrings; // Keep tag strings alive for string_view
   };
 
 } // namespace

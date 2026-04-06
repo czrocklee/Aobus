@@ -4,6 +4,7 @@
 #pragma once
 
 #include <rs/core/DictionaryStore.h>
+#include <rs/core/ResourceStore.h>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/TrackRecord.h>
 #include <rs/core/TrackView.h>
@@ -27,7 +28,7 @@ namespace rs::core
    *   // Pattern A: from existing record, modify hot only
    *   auto builder = TrackBuilder::fromRecord(existingRecord);
    *   builder.tags().add("rock").remove("jazz");
-   *   auto hotData = builder.serializeHot(dict, txn);
+   *   auto hotData = builder.serializeHot(txn, dict);
    *   writer.updateHot(trackId, hotData);
    *
    *   // Pattern B: create new track
@@ -36,7 +37,7 @@ namespace rs::core
    *   builder.property().fileSize(fs).bitDepth(16);
    *   builder.tags().add("rock");
    *   builder.custom().add("key", "value");
-   *   auto [hot, cold] = builder.serialize(dict, txn);
+   *   auto [hot, cold] = builder.serialize(txn, dict, resources);
    *   writer.createHotCold(hot, cold);
    */
   class TrackBuilder
@@ -70,6 +71,7 @@ namespace rs::core
       MetadataBuilder& discNumber(std::uint16_t v);
       MetadataBuilder& totalDiscs(std::uint16_t v);
       MetadataBuilder& coverArtId(std::uint32_t v);
+      MetadataBuilder& coverArtData(std::span<std::byte const> v);
       MetadataBuilder& rating(std::uint8_t v);
 
       // Accessors
@@ -97,6 +99,7 @@ namespace rs::core
       std::uint16_t _totalDiscs = 0;
       std::uint32_t _coverArtId = 0;
       std::uint8_t _rating = 0;
+      mutable std::span<std::byte const> _embeddedCoverArt;
     };
 
     class PropertyBuilder
@@ -171,12 +174,16 @@ namespace rs::core
     CustomBuilder& custom();
 
     // Full serialization - resolves all strings to DictionaryIds
-    std::pair<std::vector<std::byte>, std::vector<std::byte>> serialize(DictionaryStore& dict,
-                                                                        lmdb::WriteTransaction& txn) const;
+    std::pair<std::vector<std::byte>, std::vector<std::byte>> serialize(lmdb::WriteTransaction& txn,
+                                                                        DictionaryStore& dict,
+                                                                        ResourceStore& resources);
 
     // Partial serialization for hot-only or cold-only updates
-    std::vector<std::byte> serializeHot(DictionaryStore& dict, lmdb::WriteTransaction& txn) const;
-    std::vector<std::byte> serializeCold(DictionaryStore& dict, lmdb::WriteTransaction& txn) const;
+    std::vector<std::byte> serializeHot(lmdb::WriteTransaction& txn,
+                                       DictionaryStore& dict);
+    std::vector<std::byte> serializeCold(lmdb::WriteTransaction& txn,
+                                         DictionaryStore& dict,
+                                         ResourceStore& resources);
 
   private:
     // Private helper methods for serialization
@@ -185,6 +192,7 @@ namespace rs::core
                                   lmdb::WriteTransaction& txn,
                                   std::span<DictionaryId const> tagIds) const;
     TrackColdHeader buildColdHeader(std::size_t customCount, std::uint16_t uriOffset, std::uint16_t uriLen) const;
+    void commitEmbeddedCoverArt(lmdb::WriteTransaction& txn, ResourceStore& resources);
 
     // Sub-builders stored as members
     MetadataBuilder _metadataBuilder{};

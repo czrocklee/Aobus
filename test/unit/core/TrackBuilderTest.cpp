@@ -32,8 +32,9 @@ std::pair<std::vector<std::byte>, std::vector<std::byte>> serializeTestTrack(Tra
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
   auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
   auto builder = TrackBuilder::fromRecord(record);
-  return builder.serialize(dict, wtxn);
+  return builder.serialize(wtxn, dict, resources);
 }
 
 } // namespace
@@ -214,8 +215,9 @@ TEST_CASE("TrackBuilder - buildHotHeader Method")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
   auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
 
-  auto [hotData, coldData] = builder.serialize(dict, wtxn);
+  auto [hotData, coldData] = builder.serialize(wtxn, dict, resources);
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
 
   CHECK(header->year == 1999);
@@ -274,7 +276,8 @@ TEST_CASE("TrackBuilder - Tag Serialization - With Tags")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
   auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-  auto [hotData, coldData] = builder.serialize(dict, wtxn);
+  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
+  auto [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
   CHECK(header->tagLen == 12);  // 3 tags * 4 bytes each
@@ -292,7 +295,8 @@ TEST_CASE("TrackBuilder - Tag Serialization - Single Tag")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
   auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-  auto [hotData, coldData] = builder.serialize(dict, wtxn);
+  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
+  auto [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
   CHECK(header->tagLen == 4);  // 1 tag * 4 bytes
@@ -309,7 +313,8 @@ TEST_CASE("TrackBuilder - Tag Bloom Filter With Tags")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
   auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-  auto [hotData, coldData] = builder.serialize(dict, wtxn);
+  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
+  auto [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
   CHECK(header->tagLen == 20);  // 5 tags * 4 bytes each
@@ -326,7 +331,8 @@ TEST_CASE("TrackBuilder - buildColdHeader")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
   auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-  auto [hotData, coldData] = builder.serialize(dict, wtxn);
+  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
+  auto [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
   auto const* header = reinterpret_cast<TrackColdHeader const*>(coldData.data());
   CHECK(header->fileSizeLo == static_cast<std::uint32_t>(2000 & 0xFFFFFFFF));
@@ -350,7 +356,8 @@ TEST_CASE("TrackBuilder - serializeHot")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
   auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-  auto hotData = builder.serializeHot(dict, wtxn);
+  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
+  auto hotData = builder.serializeHot(wtxn, dict);
 
   // Verify hot header
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
@@ -371,7 +378,8 @@ TEST_CASE("TrackBuilder - serializeCold")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
   auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-  auto coldData = builder.serializeCold(dict, wtxn);
+  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
+  auto coldData = builder.serializeCold(wtxn, dict, resources);
 
   // Verify cold view can parse it
   auto view = TrackView{std::span<std::byte const>{}, coldData};

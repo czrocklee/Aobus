@@ -41,7 +41,7 @@ namespace
 
     builder.tags().add(tagName);
 
-    auto hotData = builder.serializeHot(ml.dictionary(), txn);
+    auto hotData = builder.serializeHot(txn, ml.dictionary());
     writer.updateHot(trackId, hotData);
     txn.commit();
 
@@ -71,7 +71,7 @@ namespace
 
     builder.tags().remove(tagName);
 
-    auto hotData = builder.serializeHot(ml.dictionary(), txn);
+    auto hotData = builder.serializeHot(txn, ml.dictionary());
     writer.updateHot(trackId, hotData);
     txn.commit();
 

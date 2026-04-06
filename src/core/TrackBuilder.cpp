@@ -271,6 +271,13 @@ namespace rs::core
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtId(std::uint32_t v)
   {
     _coverArtId = v;
+    _embeddedCoverArt = {};
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtData(std::span<std::byte const> v)
+  {
+    _embeddedCoverArt = v;
     return *this;
   }
 
@@ -455,7 +462,19 @@ namespace rs::core
     };
   }
 
-  std::vector<std::byte> TrackBuilder::serializeHot(DictionaryStore& dict, lmdb::WriteTransaction& txn) const
+  void TrackBuilder::commitEmbeddedCoverArt(lmdb::WriteTransaction& txn, ResourceStore& resources)
+  {
+    if (!_metadataBuilder._embeddedCoverArt.empty())
+    {
+      auto writer = resources.writer(txn);
+      auto resourceId = writer.create(_metadataBuilder._embeddedCoverArt);
+      _metadataBuilder._coverArtId = resourceId.value();
+      _metadataBuilder._embeddedCoverArt = {};
+    }
+  }
+
+  std::vector<std::byte> TrackBuilder::serializeHot(lmdb::WriteTransaction& txn,
+                                                    DictionaryStore& dict)
   {
     // Resolve tag names to DictionaryIds
     auto tagIds = std::vector<DictionaryId>{};
@@ -496,8 +515,12 @@ namespace rs::core
     return data;
   }
 
-  std::vector<std::byte> TrackBuilder::serializeCold(DictionaryStore& dict, lmdb::WriteTransaction& txn) const
+  std::vector<std::byte> TrackBuilder::serializeCold(lmdb::WriteTransaction& txn,
+                                                     DictionaryStore& dict,
+                                                     ResourceStore& resources)
   {
+    commitEmbeddedCoverArt(txn, resources);
+
     // Resolve custom keys to DictionaryIds
     auto resolvedPairs = std::vector<std::pair<DictionaryId, std::string>>{};
     resolvedPairs.reserve(_customBuilder._customPairs.size());
@@ -561,10 +584,11 @@ namespace rs::core
     return result;
   }
 
-  std::pair<std::vector<std::byte>, std::vector<std::byte>> TrackBuilder::serialize(DictionaryStore& dict,
-                                                                                    lmdb::WriteTransaction& txn) const
+  std::pair<std::vector<std::byte>, std::vector<std::byte>> TrackBuilder::serialize(lmdb::WriteTransaction& txn,
+                                                                                    DictionaryStore& dict,
+                                                                                    ResourceStore& resources)
   {
-    return {serializeHot(dict, txn), serializeCold(dict, txn)};
+    return {serializeHot(txn, dict), serializeCold(txn, dict, resources)};
   }
 
 } // namespace rs::core

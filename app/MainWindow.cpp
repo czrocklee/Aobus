@@ -801,7 +801,7 @@ void MainWindow::onTagTrack()
           builder.tags().add(std::string{dict.get(tagId)});
 
           // Serialize and update hot data
-          auto hotData = builder.serializeHot(dict, txn);
+          auto hotData = builder.serializeHot(txn, dict);
           writer.updateHot(trackId, hotData);
         }
 

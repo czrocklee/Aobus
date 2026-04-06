@@ -26,7 +26,7 @@ namespace
       try
       {
         auto builder = loadTrackRecord(path, dict, resourceWriter, txn);
-        auto [hotData, coldData] = builder.serialize(dict, txn);
+        auto [hotData, coldData] = builder.serialize(txn, dict, ml.resources());
         auto [id, trackView] = writer.createHotCold(hotData, coldData);
         os << "add track: " << id << " " << trackView.metadata().title() << '\n';
       }

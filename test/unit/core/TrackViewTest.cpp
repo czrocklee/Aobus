@@ -3,6 +3,7 @@
 
 #include <catch2/catch.hpp>
 
+#include <rs/core/ResourceStore.h>
 #include <rs/core/TrackBuilder.h>
 #include <rs/core/TrackRecord.h>
 #include <rs/core/TrackView.h>
@@ -94,7 +95,8 @@ namespace
     auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
     auto wtxn = rs::lmdb::WriteTransaction{env};
     auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-    return builder.serializeCold(dict, wtxn);
+    auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
+    return builder.serializeCold(wtxn, dict, resources);
   }
 
   rs::core::TrackView makeColdView(std::vector<std::byte> const& data)
