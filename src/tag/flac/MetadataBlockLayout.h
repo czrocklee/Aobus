@@ -45,7 +45,7 @@ namespace rs::tag::flac
     // 64 bits: sampleRate(20) + channels-1(3) + bits-1(5) + totalSamples(36)
     boost::endian::big_uint64_buf_t packedFields;
     std::array<std::uint8_t, 16> md5;
-  } __attribute__((packed));
+  };
 
   static_assert(sizeof(StreamInfoLayout) == 34, "StreamInfoDataLayout should be 34 bytes");
   static_assert(alignof(StreamInfoLayout) == 1);

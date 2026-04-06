@@ -33,13 +33,6 @@ private:
   void setupSignals();
   void updateTransportButtons(app::playback::TransportState state);
 
-  // Cover art
-  Gtk::Image _coverArt;
-
-  // Track info
-  Gtk::Label _titleLabel;
-  Gtk::Label _artistLabel;
-
   // Transport controls
   Gtk::Button _playButton;
   Gtk::Button _pauseButton;

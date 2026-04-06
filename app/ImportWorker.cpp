@@ -47,7 +47,7 @@ void ImportWorker::run()
       auto parsed = tagFile->loadTrack();
 
       // Fill in library context
-      parsed.record.metadata.uri = std::filesystem::relative(path, _ml.rootPath()).string();
+      parsed.record.property.uri = std::filesystem::relative(path, _ml.rootPath()).string();
       if (std::filesystem::exists(path)) { parsed.record.property.fileSize = std::filesystem::file_size(path); }
       auto ftime = std::filesystem::last_write_time(path);
       parsed.record.property.mtime =

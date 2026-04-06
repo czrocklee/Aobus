@@ -13,7 +13,7 @@
 
 namespace rs::lmdb
 {
-  class Database
+  class Database final
   {
   public:
     class Reader;
@@ -36,10 +36,10 @@ namespace rs::lmdb
     Writer writer(WriteTransaction& txn) const;
 
   private:
-    MDB_dbi _dbi = (std::numeric_limits<MDB_dbi>::max)();
+    MDB_dbi _dbi = std::numeric_limits<MDB_dbi>::max();
   };
 
-  class Database::Reader
+  class Database::Reader final
   {
   public:
     using Value = std::pair<std::uint32_t, std::span<std::byte const>>;
@@ -48,6 +48,7 @@ namespace rs::lmdb
     Iterator begin() const;
     Iterator end() const;
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
+    std::uint32_t maxKey() const;
 
     ~Reader() = default;
 
@@ -62,12 +63,23 @@ namespace rs::lmdb
   protected:
     Reader(MDB_dbi dbi, MDB_txn* txn);
 
+    struct MdbCursorDeleter
+    {
+      void operator()(MDB_cursor* cur) const noexcept { mdb_cursor_close(cur); }
+    };
+
+    using CursorPtr = std::unique_ptr<MDB_cursor, MdbCursorDeleter>;
+    static CursorPtr create(MDB_txn* txn, MDB_dbi dbi);
+
     MDB_dbi _dbi;
     MDB_txn* _txn;
+
     friend class Database;
+    friend class Writer;
   };
 
-  class Database::Reader::Iterator : public boost::iterator_facade<Iterator, Value const, boost::forward_traversal_tag>
+  class Database::Reader::Iterator final
+    : public boost::iterator_facade<Iterator, Value const, boost::forward_traversal_tag>
   {
   public:
     friend class boost::iterator_core_access;
@@ -83,21 +95,15 @@ namespace rs::lmdb
     Value const& dereference() const;
 
   private:
-    struct MdbCursorDeleter
-    {
-      void operator()(MDB_cursor* cur) const noexcept { mdb_cursor_close(cur); }
-    };
+    explicit Iterator(CursorPtr cursor);
 
-    explicit Iterator(std::unique_ptr<MDB_cursor, MdbCursorDeleter> cursor);
-    static auto create(MDB_txn* txn, MDB_dbi dbi);
-
-    std::unique_ptr<MDB_cursor, MdbCursorDeleter> _cursor;
+    CursorPtr _cursor;
     Value _value;
+
     friend class Reader;
-    friend class Writer;
   };
 
-  class Database::Writer
+  class Database::Writer final
   {
   public:
     ~Writer();
@@ -123,8 +129,9 @@ namespace rs::lmdb
 
     MDB_dbi _dbi;
     WriteTransaction* _txn;
-    std::unique_ptr<MDB_cursor, Reader::Iterator::MdbCursorDeleter> _cursor;
-    std::uint32_t _lastId = std::numeric_limits<std::uint32_t>::max();
+    Reader::CursorPtr _cursor;
+    std::uint32_t _lastId = 0; // Start from 1 (0 = null, so first append returns 1)
+
     friend class Database;
   };
 

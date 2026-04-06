@@ -31,7 +31,7 @@ std::pair<std::vector<std::byte>, std::vector<std::byte>> serializeTestTrack(Tra
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{wtxn, "dict"};
+  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
   auto builder = TrackBuilder::fromRecord(record);
   return builder.serialize(dict, wtxn);
 }
@@ -43,11 +43,11 @@ TEST_CASE("TrackBuilder - Default Constructor via createNew")
   auto builder = TrackBuilder::createNew();
 
   CHECK(builder.record().metadata.title.empty());
-  CHECK(builder.record().metadata.uri.empty());
   CHECK(builder.record().metadata.artist.empty());
   CHECK(builder.record().metadata.album.empty());
   CHECK(builder.record().metadata.albumArtist.empty());
   CHECK(builder.record().metadata.genre.empty());
+  CHECK(builder.record().property.uri.empty());
   CHECK(builder.record().property.fileSize == 0);
   CHECK(builder.record().property.bitDepth == 0);
   CHECK(builder.record().tags.names.empty());
@@ -59,7 +59,6 @@ TEST_CASE("TrackBuilder - MetadataBuilder fluent setters")
   auto builder = TrackBuilder::createNew();
   builder.metadata()
     .title("Test Title")
-    .uri("/path/to/track.flac")
     .artist("Test Artist")
     .album("Test Album")
     .albumArtist("Test Album Artist")
@@ -69,10 +68,10 @@ TEST_CASE("TrackBuilder - MetadataBuilder fluent setters")
     .totalTracks(10)
     .discNumber(2)
     .totalDiscs(3)
-    .coverArtId(42);
+    .coverArtId(42)
+    .rating(4);
 
   CHECK(builder.record().metadata.title == "Test Title");
-  CHECK(builder.record().metadata.uri == "/path/to/track.flac");
   CHECK(builder.record().metadata.artist == "Test Artist");
   CHECK(builder.record().metadata.album == "Test Album");
   CHECK(builder.record().metadata.albumArtist == "Test Album Artist");
@@ -83,6 +82,7 @@ TEST_CASE("TrackBuilder - MetadataBuilder fluent setters")
   CHECK(builder.record().metadata.discNumber == 2);
   CHECK(builder.record().metadata.totalDiscs == 3);
   CHECK(builder.record().metadata.coverArtId == 42);
+  CHECK(builder.record().metadata.rating == 4);
 }
 
 TEST_CASE("TrackBuilder - PropertyBuilder fluent setters")
@@ -97,7 +97,7 @@ TEST_CASE("TrackBuilder - PropertyBuilder fluent setters")
     .codecId(7)
     .channels(2)
     .bitDepth(16)
-    .rating(4);
+    .uri("/path/to/track.flac");
 
   CHECK(builder.record().property.fileSize == 10000000);
   CHECK(builder.record().property.mtime == 1234567890);
@@ -107,9 +107,8 @@ TEST_CASE("TrackBuilder - PropertyBuilder fluent setters")
   CHECK(builder.record().property.codecId == 7);
   CHECK(builder.record().property.channels == 2);
   CHECK(builder.record().property.bitDepth == 16);
-  CHECK(builder.record().property.rating == 4);
+  CHECK(builder.record().property.uri == "/path/to/track.flac");
 }
-
 TEST_CASE("TrackBuilder - TagsBuilder add/remove/clear")
 {
   auto builder = TrackBuilder::createNew();
@@ -186,8 +185,8 @@ TEST_CASE("TrackBuilder - Serialize With Strings")
 {
   auto record = TrackRecord{};
   record.metadata.title = "Hello World";
-  record.metadata.uri = "/music/test.flac";
   record.metadata.year = 2021;
+  record.property.uri = "/music/test.flac";
 
   auto [hotData, coldData] = serializeTestTrack(record);
 
@@ -208,13 +207,13 @@ TEST_CASE("TrackBuilder - Serialize With Strings")
 TEST_CASE("TrackBuilder - buildHotHeader Method")
 {
   auto builder = TrackBuilder::createNew();
-  builder.metadata().year(1999);
-  builder.property().bitDepth(24).rating(5);
+  builder.metadata().year(1999).rating(5);
+  builder.property().bitDepth(24);
 
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{wtxn, "dict"};
+  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
 
   auto [hotData, coldData] = builder.serialize(dict, wtxn);
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
@@ -239,7 +238,7 @@ TEST_CASE("TrackBuilder - Serialize Preserves Data")
 {
   auto record = TrackRecord{};
   record.metadata.title = "Test";
-  record.metadata.uri = "/test";
+  record.property.uri = "/test";
   record.property.fileSize = 12345;
   record.property.mtime = 9876543210;
 
@@ -255,7 +254,7 @@ TEST_CASE("TrackBuilder - Tag Serialization - Empty Tags")
 {
   auto record = TrackRecord{};
   record.metadata.title = "Test";
-  record.metadata.uri = "/test";
+  record.property.uri = "/test";
 
   auto [hotData, coldData] = serializeTestTrack(record);
 
@@ -267,13 +266,14 @@ TEST_CASE("TrackBuilder - Tag Serialization - Empty Tags")
 TEST_CASE("TrackBuilder - Tag Serialization - With Tags")
 {
   auto builder = TrackBuilder::createNew();
-  builder.metadata().title("Test").uri("/test");
+  builder.metadata().title("Test");
+  builder.property().uri("/test");
   builder.tags().add("tag1").add("tag2").add("tag3");
 
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{wtxn, "dict"};
+  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
   auto [hotData, coldData] = builder.serialize(dict, wtxn);
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
@@ -284,13 +284,14 @@ TEST_CASE("TrackBuilder - Tag Serialization - With Tags")
 TEST_CASE("TrackBuilder - Tag Serialization - Single Tag")
 {
   auto builder = TrackBuilder::createNew();
-  builder.metadata().title("Test").uri("/test");
+  builder.metadata().title("Test");
+  builder.property().uri("/test");
   builder.tags().add("tag42");
 
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{wtxn, "dict"};
+  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
   auto [hotData, coldData] = builder.serialize(dict, wtxn);
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
@@ -300,13 +301,14 @@ TEST_CASE("TrackBuilder - Tag Serialization - Single Tag")
 TEST_CASE("TrackBuilder - Tag Bloom Filter With Tags")
 {
   auto builder = TrackBuilder::createNew();
-  builder.metadata().title("Test").uri("/test");
+  builder.metadata().title("Test");
+  builder.property().uri("/test");
   builder.tags().add("tag1").add("tag2").add("tag3").add("tag4").add("tag5");
 
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{wtxn, "dict"};
+  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
   auto [hotData, coldData] = builder.serialize(dict, wtxn);
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
@@ -317,13 +319,13 @@ TEST_CASE("TrackBuilder - Tag Bloom Filter With Tags")
 TEST_CASE("TrackBuilder - buildColdHeader")
 {
   auto builder = TrackBuilder::createNew();
-  builder.metadata().uri("/path/to/file.flac").trackNumber(5).totalTracks(10).discNumber(1).totalDiscs(2);
-  builder.property().fileSize(2000).mtime(1234567890);
+  builder.metadata().trackNumber(5).totalTracks(10).discNumber(1).totalDiscs(2);
+  builder.property().uri("/path/to/file.flac").fileSize(2000).mtime(1234567890);
 
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{wtxn, "dict"};
+  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
   auto [hotData, coldData] = builder.serialize(dict, wtxn);
 
   auto const* header = reinterpret_cast<TrackColdHeader const*>(coldData.data());
@@ -340,14 +342,14 @@ TEST_CASE("TrackBuilder - buildColdHeader")
 TEST_CASE("TrackBuilder - serializeHot")
 {
   auto builder = TrackBuilder::createNew();
-  builder.metadata().title("Test Title").uri("/path/to/file.flac");
-  builder.property().fileSize(1000);
+  builder.metadata().title("Test Title");
+  builder.property().uri("/path/to/file.flac").fileSize(1000);
   builder.tags().add("tag10").add("tag20");
 
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{wtxn, "dict"};
+  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
   auto hotData = builder.serializeHot(dict, wtxn);
 
   // Verify hot header
@@ -361,14 +363,14 @@ TEST_CASE("TrackBuilder - serializeHot")
 TEST_CASE("TrackBuilder - serializeCold")
 {
   auto builder = TrackBuilder::createNew();
-  builder.metadata().uri("/path/to/file.flac").trackNumber(3);
-  builder.property().fileSize(2000).mtime(9876543210);
+  builder.metadata().trackNumber(3);
+  builder.property().uri("/path/to/file.flac").fileSize(2000).mtime(9876543210);
   builder.custom().add("key1", "value1").add("key2", "value2");
 
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{wtxn, "dict"};
+  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
   auto coldData = builder.serializeCold(dict, wtxn);
 
   // Verify cold view can parse it

@@ -112,16 +112,21 @@ namespace rs::core
     return {entries.subspan(hdr.customCount).data(), _track._coldData.data()};
   }
 
-TrackView::CustomProxy::Iterator::Iterator(Entry const* pos, std::byte const* coldDataBase)
-  : _pos{pos}, _coldDataBase{coldDataBase}
+  TrackView::CustomProxy::Iterator::Iterator(Entry const* pos, std::byte const* coldDataBase)
+    : _pos{pos}, _coldDataBase{coldDataBase}
   {
   }
 
   std::pair<DictionaryId, std::string_view> const& TrackView::CustomProxy::Iterator::dereference() const
   {
     auto const& entry = *_pos;
-    std::string_view value;
-    if (entry.len > 0) { value = utility::asString(_coldDataBase, entry.offset, entry.len); }
+    auto value = std::string_view{};
+
+    if (entry.len > 0)
+    {
+      value = utility::asString(_coldDataBase, entry.offset, entry.len);
+    }
+
     _currentValue = {entry.dictId, value};
     return _currentValue;
   }

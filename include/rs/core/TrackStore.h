@@ -7,7 +7,6 @@
 #include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
 
-#include <boost/iterator/transform_iterator.hpp>
 #include <functional>
 #include <optional>
 #include <span>
@@ -30,7 +29,7 @@ namespace rs::core
     class Reader;
     class Writer;
 
-    TrackStore(lmdb::WriteTransaction& txn, std::string const& hotDb, std::string const& coldDb);
+    explicit TrackStore(lmdb::Database hotDb, lmdb::Database coldDb);
 
     Reader reader(lmdb::ReadTransaction& txn) const;
     Writer writer(lmdb::WriteTransaction& txn);

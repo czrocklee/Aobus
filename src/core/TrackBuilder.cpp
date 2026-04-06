@@ -12,185 +12,271 @@ namespace rs::core
   constexpr std::uint32_t kBloomBitMask = 31;
 
   //=============================================================================
-  // TrackBuilder - factory methods and proxy accessors
+  // TrackBuilder - factory methods
   //=============================================================================
 
   TrackBuilder TrackBuilder::createNew()
   {
-    return TrackBuilder{TrackRecord{}};
+    return TrackBuilder{};
   }
 
-  TrackBuilder TrackBuilder::fromRecord(TrackRecord record)
+  TrackBuilder TrackBuilder::fromRecord(TrackRecord const& record)
   {
-    return TrackBuilder{std::move(record)};
+    auto builder = TrackBuilder{};
+
+    // Extract string_view from record's owned strings
+    auto& meta = builder._metadataBuilder;
+    meta._title = record.metadata.title;
+    meta._artist = record.metadata.artist;
+    meta._album = record.metadata.album;
+    meta._albumArtist = record.metadata.albumArtist;
+    meta._genre = record.metadata.genre;
+    meta._year = record.metadata.year;
+    meta._trackNumber = record.metadata.trackNumber;
+    meta._totalTracks = record.metadata.totalTracks;
+    meta._discNumber = record.metadata.discNumber;
+    meta._totalDiscs = record.metadata.totalDiscs;
+    meta._coverArtId = record.metadata.coverArtId;
+    meta._rating = record.metadata.rating;
+
+    auto& prop = builder._propertyBuilder;
+    prop._uri = record.property.uri;
+    prop._fileSize = record.property.fileSize;
+    prop._mtime = record.property.mtime;
+    prop._durationMs = record.property.durationMs;
+    prop._bitrate = record.property.bitrate;
+    prop._sampleRate = record.property.sampleRate;
+    prop._codecId = record.property.codecId;
+    prop._channels = record.property.channels;
+    prop._bitDepth = record.property.bitDepth;
+
+    auto& tags = builder._tagsBuilder;
+    tags._tagNames.reserve(record.tags.names.size());
+
+    for (auto const& name : record.tags.names)
+    {
+      tags._tagNames.push_back(name);
+    }
+
+    auto& custom = builder._customBuilder;
+    custom._customPairs.reserve(record.custom.pairs.size());
+
+    for (auto const& [key, value] : record.custom.pairs)
+    {
+      custom._customPairs.emplace_back(key, value);
+    }
+
+    return builder;
   }
 
   TrackBuilder TrackBuilder::fromView(TrackView const& view, DictionaryStore& dict)
   {
-    auto record = TrackRecord{};
+    auto builder = TrackBuilder{};
 
     if (view.isHotValid())
     {
       auto meta = view.metadata();
-      record.metadata.title = std::string{meta.title()};
-      record.metadata.year = meta.year();
+      builder._metadataBuilder._title = meta.title();
+      builder._metadataBuilder._year = meta.year();
 
       if (auto artistId = meta.artistId(); artistId.value() > 0)
       {
-        record.metadata.artist = std::string{dict.get(artistId)};
-      }
-      if (auto albumId = meta.albumId(); albumId.value() > 0)
-      {
-        record.metadata.album = std::string{dict.get(albumId)};
-      }
-      if (auto albumArtistId = meta.albumArtistId(); albumArtistId.value() > 0)
-      {
-        record.metadata.albumArtist = std::string{dict.get(albumArtistId)};
-      }
-      if (auto genreId = meta.genreId(); genreId.value() > 0)
-      {
-        record.metadata.genre = std::string{dict.get(genreId)};
+        builder._metadataBuilder._artist = dict.get(artistId);
       }
 
-      // Copy tags
-      auto tagProxy = view.tags();
-      auto tagCount = tagProxy.count();
-      record.tags.names.reserve(tagCount);
-      for (std::uint8_t i = 0; i < tagCount; ++i)
+      if (auto albumId = meta.albumId(); albumId.value() > 0)
       {
-        auto tagId = tagProxy.id(i);
-        auto tagName = dict.get(tagId);
-        record.tags.names.push_back(std::string{tagName});
+        builder._metadataBuilder._album = dict.get(albumId);
+      }
+
+      if (auto albumArtistId = meta.albumArtistId(); albumArtistId.value() > 0)
+      {
+        builder._metadataBuilder._albumArtist = dict.get(albumArtistId);
+      }
+
+      if (auto genreId = meta.genreId(); genreId.value() > 0)
+      {
+        builder._metadataBuilder._genre = dict.get(genreId);
+      }
+
+      builder._tagsBuilder._tagNames.reserve(view.tags().count());
+      
+      for (auto tagId : view.tags())
+      {
+        builder._tagsBuilder._tagNames.push_back(dict.get(tagId));
       }
     }
 
     if (view.isColdValid())
     {
       auto prop = view.property();
-      record.metadata.uri = std::string{prop.uri()};
-      record.property.fileSize = prop.fileSize();
-      record.property.mtime = prop.mtime();
-      record.property.durationMs = prop.durationMs();
-      record.property.sampleRate = prop.sampleRate();
-      record.property.bitrate = prop.bitrate();
-      record.property.channels = prop.channels();
+      builder._propertyBuilder._uri = prop.uri();
+      builder._propertyBuilder._fileSize = prop.fileSize();
+      builder._propertyBuilder._mtime = prop.mtime();
+      builder._propertyBuilder._durationMs = prop.durationMs();
+      builder._propertyBuilder._sampleRate = prop.sampleRate();
+      builder._propertyBuilder._bitrate = prop.bitrate();
+      builder._propertyBuilder._channels = prop.channels();
 
       auto meta = view.metadata();
-      record.metadata.coverArtId = meta.coverArtId();
-      record.metadata.trackNumber = meta.trackNumber();
-      record.metadata.totalTracks = meta.totalTracks();
-      record.metadata.discNumber = meta.discNumber();
-      record.metadata.totalDiscs = meta.totalDiscs();
+      builder._metadataBuilder._coverArtId = meta.coverArtId();
+      builder._metadataBuilder._trackNumber = meta.trackNumber();
+      builder._metadataBuilder._totalTracks = meta.totalTracks();
+      builder._metadataBuilder._discNumber = meta.discNumber();
+      builder._metadataBuilder._totalDiscs = meta.totalDiscs();
 
       // Copy custom pairs
       for (auto const& [dictId, value] : view.custom())
       {
         auto key = dict.get(dictId);
-        record.custom.pairs.emplace_back(std::string{key}, std::string{value});
+        builder._customBuilder._customPairs.emplace_back(key, value);
       }
     }
 
-    return TrackBuilder{std::move(record)};
+    return builder;
   }
 
-  TrackBuilder::TrackBuilder(TrackRecord record)
-    : _record{std::move(record)}
+  TrackBuilder::MetadataBuilder& TrackBuilder::metadata()
   {
+    return _metadataBuilder;
   }
 
-  TrackBuilder::MetadataBuilder TrackBuilder::metadata()
+  TrackBuilder::PropertyBuilder& TrackBuilder::property()
   {
-    return MetadataBuilder{*this};
+    return _propertyBuilder;
   }
 
-  TrackBuilder::PropertyBuilder TrackBuilder::property()
+  TrackBuilder::TagsBuilder& TrackBuilder::tags()
   {
-    return PropertyBuilder{*this};
+    return _tagsBuilder;
   }
 
-  TrackBuilder::TagsBuilder TrackBuilder::tags()
+  TrackBuilder::CustomBuilder& TrackBuilder::custom()
   {
-    return TagsBuilder{*this};
+    return _customBuilder;
   }
 
-  TrackBuilder::CustomBuilder TrackBuilder::custom()
+  //=============================================================================
+  // TrackBuilder::record() - constructs TrackRecord on-the-fly
+  //=============================================================================
+
+  TrackRecord TrackBuilder::record() const
   {
-    return CustomBuilder{*this};
+    auto record = TrackRecord{};
+    auto const& meta = _metadataBuilder;
+    auto const& prop = _propertyBuilder;
+
+    // Copy string_view data into owned strings in record
+    record.metadata.title = std::string{meta._title};
+    record.metadata.artist = std::string{meta._artist};
+    record.metadata.album = std::string{meta._album};
+    record.metadata.albumArtist = std::string{meta._albumArtist};
+    record.metadata.genre = std::string{meta._genre};
+
+    record.metadata.year = meta._year;
+    record.metadata.trackNumber = meta._trackNumber;
+    record.metadata.totalTracks = meta._totalTracks;
+    record.metadata.discNumber = meta._discNumber;
+    record.metadata.totalDiscs = meta._totalDiscs;
+    record.metadata.coverArtId = meta._coverArtId;
+
+    record.property.uri = std::string{prop._uri};
+    record.property.fileSize = prop._fileSize;
+    record.property.mtime = prop._mtime;
+    record.property.durationMs = prop._durationMs;
+    record.property.bitrate = prop._bitrate;
+    record.property.sampleRate = prop._sampleRate;
+    record.property.codecId = prop._codecId;
+    record.property.channels = prop._channels;
+    record.property.bitDepth = prop._bitDepth;
+    record.metadata.rating = meta._rating;
+
+    for (auto const& name : _tagsBuilder._tagNames)
+    {
+      record.tags.names.push_back(std::string{name});
+    }
+
+    for (auto const& [key, value] : _customBuilder._customPairs)
+    {
+      record.custom.pairs.emplace_back(std::string{key}, std::string{value});
+    }
+
+    return record;
   }
 
   //=============================================================================
   // MetadataBuilder
   //=============================================================================
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::title(std::string v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::title(std::string_view v)
   {
-    _builder._record.metadata.title = std::move(v);
+    _title = v;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::uri(std::string v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::artist(std::string_view v)
   {
-    _builder._record.metadata.uri = std::move(v);
+    _artist = v;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::artist(std::string v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::album(std::string_view v)
   {
-    _builder._record.metadata.artist = std::move(v);
+    _album = v;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::album(std::string v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::albumArtist(std::string_view v)
   {
-    _builder._record.metadata.album = std::move(v);
+    _albumArtist = v;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::albumArtist(std::string v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::genre(std::string_view v)
   {
-    _builder._record.metadata.albumArtist = std::move(v);
-    return *this;
-  }
-
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::genre(std::string v)
-  {
-    _builder._record.metadata.genre = std::move(v);
+    _genre = v;
     return *this;
   }
 
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::year(std::uint16_t v)
   {
-    _builder._record.metadata.year = v;
+    _year = v;
     return *this;
   }
 
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::trackNumber(std::uint16_t v)
   {
-    _builder._record.metadata.trackNumber = v;
+    _trackNumber = v;
     return *this;
   }
 
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalTracks(std::uint16_t v)
   {
-    _builder._record.metadata.totalTracks = v;
+    _totalTracks = v;
     return *this;
   }
 
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::discNumber(std::uint16_t v)
   {
-    _builder._record.metadata.discNumber = v;
+    _discNumber = v;
     return *this;
   }
 
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalDiscs(std::uint16_t v)
   {
-    _builder._record.metadata.totalDiscs = v;
+    _totalDiscs = v;
     return *this;
   }
 
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtId(std::uint32_t v)
   {
-    _builder._record.metadata.coverArtId = v;
+    _coverArtId = v;
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::rating(std::uint8_t v)
+  {
+    _rating = v;
     return *this;
   }
 
@@ -200,55 +286,55 @@ namespace rs::core
 
   TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::fileSize(std::uint64_t v)
   {
-    _builder._record.property.fileSize = v;
+    _fileSize = v;
     return *this;
   }
 
   TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::mtime(std::uint64_t v)
   {
-    _builder._record.property.mtime = v;
+    _mtime = v;
     return *this;
   }
 
   TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::durationMs(std::uint32_t v)
   {
-    _builder._record.property.durationMs = v;
+    _durationMs = v;
     return *this;
   }
 
   TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitrate(std::uint32_t v)
   {
-    _builder._record.property.bitrate = v;
+    _bitrate = v;
     return *this;
   }
 
   TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::sampleRate(std::uint32_t v)
   {
-    _builder._record.property.sampleRate = v;
+    _sampleRate = v;
     return *this;
   }
 
   TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::codecId(std::uint16_t v)
   {
-    _builder._record.property.codecId = v;
+    _codecId = v;
     return *this;
   }
 
   TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::channels(std::uint8_t v)
   {
-    _builder._record.property.channels = v;
+    _channels = v;
     return *this;
   }
 
   TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitDepth(std::uint8_t v)
   {
-    _builder._record.property.bitDepth = v;
+    _bitDepth = v;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::rating(std::uint8_t v)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::uri(std::string_view v)
   {
-    _builder._record.property.rating = v;
+    _uri = v;
     return *this;
   }
 
@@ -256,54 +342,44 @@ namespace rs::core
   // TagsBuilder
   //=============================================================================
 
-  TrackBuilder::TagsBuilder& TrackBuilder::TagsBuilder::add(std::string tagName)
+  TrackBuilder::TagsBuilder& TrackBuilder::TagsBuilder::add(std::string_view tagName)
   {
-    _builder._record.tags.names.push_back(std::move(tagName));
+    _tagNames.push_back(tagName);
     return *this;
   }
 
-  TrackBuilder::TagsBuilder& TrackBuilder::TagsBuilder::remove(std::string tagName)
+  TrackBuilder::TagsBuilder& TrackBuilder::TagsBuilder::remove(std::string_view tagName)
   {
-    std::erase(_builder._record.tags.names, tagName);
+    std::erase(_tagNames, tagName);
     return *this;
   }
 
   TrackBuilder::TagsBuilder& TrackBuilder::TagsBuilder::clear()
   {
-    _builder._record.tags.names.clear();
+    _tagNames.clear();
     return *this;
-  }
-
-  std::vector<std::string> const& TrackBuilder::TagsBuilder::names() const
-  {
-    return _builder._record.tags.names;
   }
 
   //=============================================================================
   // CustomBuilder
   //=============================================================================
 
-  TrackBuilder::CustomBuilder& TrackBuilder::CustomBuilder::add(std::string key, std::string value)
+  TrackBuilder::CustomBuilder& TrackBuilder::CustomBuilder::add(std::string_view key, std::string_view value)
   {
-    _builder._record.custom.pairs.emplace_back(std::move(key), std::move(value));
+    _customPairs.emplace_back(key, value);
     return *this;
   }
 
-  TrackBuilder::CustomBuilder& TrackBuilder::CustomBuilder::remove(std::string key)
+  TrackBuilder::CustomBuilder& TrackBuilder::CustomBuilder::remove(std::string_view key)
   {
-    std::erase_if(_builder._record.custom.pairs, [&key](auto const& pair) { return pair.first == key; });
+    std::erase_if(_customPairs, [&key](auto const& pair) { return pair.first == key; });
     return *this;
   }
 
   TrackBuilder::CustomBuilder& TrackBuilder::CustomBuilder::clear()
   {
-    _builder._record.custom.pairs.clear();
+    _customPairs.clear();
     return *this;
-  }
-
-  std::vector<std::pair<std::string, std::string>> const& TrackBuilder::CustomBuilder::pairs() const
-  {
-    return _builder._record.custom.pairs;
   }
 
   //=============================================================================
@@ -313,7 +389,10 @@ namespace rs::core
   std::uint32_t TrackBuilder::computeBloomFilter(std::span<DictionaryId const> tagIds)
   {
     std::uint32_t bloom = 0;
-    for (auto tagId : tagIds) { bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask)); }
+    for (auto tagId : tagIds)
+    {
+      bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask));
+    }
     return bloom;
   }
 
@@ -321,10 +400,13 @@ namespace rs::core
                                               lmdb::WriteTransaction& txn,
                                               std::span<DictionaryId const> tagIds) const
   {
-    auto artistId = dict.put(txn, _record.metadata.artist);
-    auto albumId = dict.put(txn, _record.metadata.album);
-    auto genreId = dict.put(txn, _record.metadata.genre);
-    auto albumArtistId = dict.put(txn, _record.metadata.albumArtist);
+    auto const& meta = _metadataBuilder;
+    auto const& prop = _propertyBuilder;
+
+    auto artistId = dict.put(txn, meta._artist);
+    auto albumId = dict.put(txn, meta._album);
+    auto genreId = dict.put(txn, meta._genre);
+    auto albumArtistId = dict.put(txn, meta._albumArtist);
 
     return TrackHotHeader{
       .tagBloom = computeBloomFilter(tagIds),
@@ -332,12 +414,12 @@ namespace rs::core
       .albumId = albumId,
       .genreId = genreId,
       .albumArtistId = albumArtistId,
-      .year = _record.metadata.year,
-      .codecId = _record.property.codecId,
-      .bitDepth = _record.property.bitDepth,
-      .titleLen = static_cast<std::uint16_t>(_record.metadata.title.size()),
+      .year = meta._year,
+      .codecId = prop._codecId,
+      .bitDepth = prop._bitDepth,
+      .titleLen = static_cast<std::uint16_t>(meta._title.size()),
       .tagLen = static_cast<std::uint16_t>(tagIds.size() * sizeof(DictionaryId)),
-      .rating = _record.property.rating,
+      .rating = meta._rating,
       .padding = std::byte{0},
     };
   }
@@ -346,26 +428,29 @@ namespace rs::core
                                                 std::uint16_t uriOffset,
                                                 std::uint16_t uriLen) const
   {
-    auto [fileSizeLo, fileSizeHi] = utility::splitInt64(_record.property.fileSize);
-    auto [mtimeLo, mtimeHi] = utility::splitInt64(_record.property.mtime);
+    auto const& meta = _metadataBuilder;
+    auto const& prop = _propertyBuilder;
+
+    auto [fileSizeLo, fileSizeHi] = utility::splitInt64(prop._fileSize);
+    auto [mtimeLo, mtimeHi] = utility::splitInt64(prop._mtime);
 
     return TrackColdHeader{
       .fileSizeLo = fileSizeLo,
       .fileSizeHi = fileSizeHi,
       .mtimeLo = mtimeLo,
       .mtimeHi = mtimeHi,
-      .durationMs = _record.property.durationMs,
-      .sampleRate = _record.property.sampleRate,
-      .coverArtId = _record.metadata.coverArtId,
-      .bitrate = _record.property.bitrate,
-      .trackNumber = _record.metadata.trackNumber,
-      .totalTracks = _record.metadata.totalTracks,
-      .discNumber = _record.metadata.discNumber,
-      .totalDiscs = _record.metadata.totalDiscs,
+      .durationMs = prop._durationMs,
+      .sampleRate = prop._sampleRate,
+      .coverArtId = meta._coverArtId,
+      .bitrate = prop._bitrate,
+      .trackNumber = meta._trackNumber,
+      .totalTracks = meta._totalTracks,
+      .discNumber = meta._discNumber,
+      .totalDiscs = meta._totalDiscs,
       .customCount = static_cast<std::uint16_t>(customCount),
       .uriOffset = uriOffset,
       .uriLen = uriLen,
-      .channels = _record.property.channels,
+      .channels = prop._channels,
       .padding = std::byte{0},
     };
   }
@@ -374,10 +459,14 @@ namespace rs::core
   {
     // Resolve tag names to DictionaryIds
     auto tagIds = std::vector<DictionaryId>{};
-    tagIds.reserve(_record.tags.names.size());
-    for (auto const& name : _record.tags.names) { tagIds.push_back(dict.put(txn, name)); }
+    tagIds.reserve(_tagsBuilder._tagNames.size());
 
-    std::vector<std::byte> data;
+    for (auto const& name : _tagsBuilder._tagNames)
+    {
+      tagIds.push_back(dict.put(txn, name));
+    }
+
+    auto data = std::vector<std::byte>{};
 
     // Build header with resolved dictionary IDs
     auto hdr = buildHotHeader(dict, txn, tagIds);
@@ -394,12 +483,15 @@ namespace rs::core
     }
 
     // Write title (null-terminated)
-    auto titleBytes = utility::asBytes(_record.metadata.title);
+    auto titleBytes = utility::asBytes(_metadataBuilder._title);
     data.insert_range(data.end(), titleBytes);
     data.push_back(static_cast<std::byte>('\0'));
 
     // Pad to 4-byte alignment
-    while (data.size() % 4 != 0) { data.push_back(std::byte{0}); }
+    while (data.size() % 4 != 0)
+    {
+      data.push_back(std::byte{0});
+    }
 
     return data;
   }
@@ -408,12 +500,12 @@ namespace rs::core
   {
     // Resolve custom keys to DictionaryIds
     auto resolvedPairs = std::vector<std::pair<DictionaryId, std::string>>{};
-    resolvedPairs.reserve(_record.custom.pairs.size());
+    resolvedPairs.reserve(_customBuilder._customPairs.size());
 
-    for (auto const& [key, value] : _record.custom.pairs)
+    for (auto const& [key, value] : _customBuilder._customPairs)
     {
       auto dictId = dict.put(txn, key);
-      resolvedPairs.emplace_back(dictId, value);
+      resolvedPairs.emplace_back(dictId, std::string{value});
     }
 
     // Sort by dictId for binary search
@@ -422,15 +514,18 @@ namespace rs::core
     constexpr std::size_t kEntrySize = 8; // dictId(4) + offset(2) + len(2)
     std::size_t entryCount = resolvedPairs.size();
     std::size_t totalValueSize = 0;
-    for (auto const& [_, value] : resolvedPairs) { totalValueSize += value.size(); }
 
-    std::uint16_t uriLen = static_cast<std::uint16_t>(_record.metadata.uri.size());
+    for (auto const& [_, value] : resolvedPairs)
+    {
+      totalValueSize += value.size();
+    }
+
+    auto uriLen = static_cast<std::uint16_t>(_propertyBuilder._uri.size());
     auto result = std::vector<std::byte>{};
     result.reserve(sizeof(TrackColdHeader) + (entryCount * kEntrySize) + totalValueSize + uriLen + 4);
 
     // Build header
-    std::uint16_t uriOffset =
-      static_cast<std::uint16_t>((sizeof(TrackColdHeader) + entryCount * kEntrySize) + totalValueSize);
+    auto uriOffset = static_cast<std::uint16_t>((sizeof(TrackColdHeader) + entryCount * kEntrySize) + totalValueSize);
     auto hdr = buildColdHeader(entryCount, uriOffset, uriLen);
     result.insert_range(result.end(), utility::asBytes(hdr));
 
@@ -448,14 +543,20 @@ namespace rs::core
     }
 
     // Write all values contiguously
-    for (auto const& [_, value] : resolvedPairs) { result.insert_range(result.end(), utility::asBytes(value)); }
+    for (auto const& [_, value] : resolvedPairs)
+    {
+      result.insert_range(result.end(), utility::asBytes(value));
+    }
 
     // Write uri (null-terminated)
-    result.insert_range(result.end(), utility::asBytes(_record.metadata.uri));
+    result.insert_range(result.end(), utility::asBytes(_propertyBuilder._uri));
     result.push_back(std::byte{'\0'});
 
     // Pad to 4-byte alignment
-    while (result.size() % 4 != 0) { result.push_back(std::byte{0}); }
+    while (result.size() % 4 != 0)
+    {
+      result.push_back(std::byte{0});
+    }
 
     return result;
   }

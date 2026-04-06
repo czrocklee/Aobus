@@ -33,7 +33,10 @@ namespace rs::lmdb
     template<typename T>
     T read(MDB_val val)
     {
-      if (val.mv_size != sizeof(T)) { RS_THROW(rs::Exception, "read: bad value size"); }
+      if (val.mv_size != sizeof(T))
+      {
+        RS_THROW(rs::Exception, "read: bad value size");
+      }
 
       T value;
       std::memcpy(&value, val.mv_data, sizeof(T));
@@ -74,21 +77,42 @@ namespace rs::lmdb
     auto key = makeVal(id);
     auto value = makeVal(nullptr, 0);
     int const rc = mdb_get(_txn, _dbi, &key, &value);
-    if (rc == MDB_NOTFOUND) { return std::nullopt; }
+
+    if (rc == MDB_NOTFOUND)
+    {
+      return std::nullopt;
+    }
+
     throwOnError("mdb_get", rc);
     return utility::asBytes(static_cast<std::byte const*>(value.mv_data), value.mv_size);
   }
 
-  auto Reader::Iterator::create(MDB_txn* txn, MDB_dbi dbi)
+  std::uint32_t Reader::maxKey() const
+  {
+    auto cursor = create(_txn, _dbi);
+    auto key = MDB_val{0, nullptr};
+    auto val = makeVal(nullptr, 0);
+    int const rc = mdb_cursor_get(cursor.get(), &key, &val, MDB_LAST);
+
+    if (rc == MDB_NOTFOUND)
+    {
+      return 0;
+    }
+
+    throwOnError("mdb_cursor_get", rc);
+    return read<std::uint32_t>(key);
+  }
+
+  Reader::CursorPtr Reader::create(MDB_txn* txn, MDB_dbi dbi)
   {
     MDB_cursor* cursor = nullptr;
     throwOnError("mdb_cursor_open", mdb_cursor_open(txn, dbi, &cursor));
-    return std::unique_ptr<MDB_cursor, MdbCursorDeleter>{cursor};
+    return CursorPtr{cursor};
   }
 
   Reader::Iterator Reader::begin() const
   {
-    return Iterator{Iterator::create(_txn, _dbi)};
+    return Iterator{Reader::create(_txn, _dbi)};
   }
 
   Reader::Iterator Reader::end() const
@@ -98,7 +122,7 @@ namespace rs::lmdb
 
   Reader::Iterator::Iterator() = default;
 
-  Reader::Iterator::Iterator(std::unique_ptr<MDB_cursor, MdbCursorDeleter> cursor)
+  Reader::Iterator::Iterator(CursorPtr cursor)
     : _cursor{std::move(cursor)}
   {
     increment();
@@ -111,7 +135,7 @@ namespace rs::lmdb
   {
     if (other._cursor)
     {
-      _cursor = Iterator::create(mdb_cursor_txn(other._cursor.get()), mdb_cursor_dbi(other._cursor.get()));
+      _cursor = Reader::create(mdb_cursor_txn(other._cursor.get()), mdb_cursor_dbi(other._cursor.get()));
       auto key = makeVal(&_value.first, sizeof(std::uint32_t));
       throwOnError("mdb_cursor_get", mdb_cursor_get(_cursor.get(), &key, nullptr, MDB_SET));
     }
@@ -151,7 +175,7 @@ namespace rs::lmdb
   }
 
   Writer::Writer(MDB_dbi dbi, WriteTransaction& txn)
-    : _dbi{dbi}, _txn{&txn}, _cursor{Reader::Iterator::create(txn._handle.get(), _dbi)}
+    : _dbi{dbi}, _txn{&txn}, _cursor{Reader::create(txn._handle.get(), _dbi)}
   {
     auto key = MDB_val{0, nullptr};
 
@@ -159,13 +183,19 @@ namespace rs::lmdb
     {
       _lastId = read<std::uint32_t>(key);
     }
-    else if (rc != MDB_NOTFOUND) { throwOnError("mdb_cursor_get", rc); }
+    else if (rc != MDB_NOTFOUND)
+    {
+      throwOnError("mdb_cursor_get", rc);
+    }
   }
 
   Writer::~Writer()
   {
     // When transaction is committed, LMDB automatically closes all cursors - release without closing
-    if (_txn->isCommitted()) { std::ignore = _cursor.release(); }
+    if (_txn->isCommitted())
+    {
+      std::ignore = _cursor.release();
+    }
   }
 
   namespace
@@ -220,7 +250,12 @@ namespace rs::lmdb
   {
     auto key = makeVal(&id, sizeof(id));
     int const rc = mdb_del(_txn->_handle.get(), _dbi, &key, nullptr);
-    if (rc == MDB_NOTFOUND) { return false; }
+
+    if (rc == MDB_NOTFOUND)
+    {
+      return false;
+    }
+
     throwOnError("mdb_del", rc);
     return true;
   }
@@ -230,7 +265,12 @@ namespace rs::lmdb
     auto key = makeVal(id);
     auto val = makeVal();
     int const rc = mdb_get(_txn->_handle.get(), _dbi, &key, &val);
-    if (rc == MDB_NOTFOUND) { return std::nullopt; }
+
+    if (rc == MDB_NOTFOUND)
+    {
+      return std::nullopt;
+    }
+
     throwOnError("mdb_get", rc);
     return asBytes(val);
   }

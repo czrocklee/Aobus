@@ -39,7 +39,7 @@ namespace rs::core
   public:
     /**
      * MetadataProxy - Accessors for track metadata ($ prefix).
-     * Includes: title, artist, album, genre, year, track info, disc info, uri, cover art.
+     * Includes: title, artist, album, genre, year, rating, track info, disc info, uri, cover art.
      */
     class MetadataProxy
     {
@@ -53,6 +53,7 @@ namespace rs::core
       DictionaryId genreId() const noexcept { return _track.hotHeader().genreId; }
       DictionaryId albumArtistId() const noexcept { return _track.hotHeader().albumArtistId; }
       std::uint16_t year() const noexcept { return _track.hotHeader().year; }
+      std::uint8_t rating() const noexcept { return _track.hotHeader().rating; }
 
       // From cold
       std::uint16_t trackNumber() const noexcept { return _track.coldHeader().trackNumber; }
@@ -67,7 +68,7 @@ namespace rs::core
 
     /**
      * PropertyProxy - Accessors for track properties (@ prefix).
-     * Technical audio characteristics: codec, bitDepth, rating, duration, bitrate,
+     * Technical audio characteristics: codec, bitDepth, duration, bitrate,
      * sampleRate, channels, fileSize, mtime, uri.
      */
     class PropertyProxy
@@ -78,7 +79,6 @@ namespace rs::core
       // Hot properties
       std::uint16_t codecId() const noexcept { return _track.hotHeader().codecId; }
       std::uint8_t bitDepth() const noexcept { return _track.hotHeader().bitDepth; }
-      std::uint8_t rating() const noexcept { return _track.hotHeader().rating; }
 
       // Cold properties
       std::uint64_t fileSize() const noexcept { return _track.coldFileSize(); }

@@ -75,7 +75,7 @@ namespace
                                         std::string_view uri = "")
   {
     auto builder = rs::core::TrackBuilder::createNew();
-    builder.metadata().uri(std::string{uri});
+    builder.property().uri(uri);
     builder.property().fileSize(rs::utility::combineInt64(header.fileSizeLo, header.fileSizeHi));
     builder.property().mtime(rs::utility::combineInt64(header.mtimeLo, header.mtimeHi));
     builder.metadata().coverArtId(header.coverArtId);
@@ -87,12 +87,13 @@ namespace
     builder.property().sampleRate(header.sampleRate);
     builder.property().bitrate(header.bitrate);
     builder.property().channels(header.channels);
+    
     for (auto const& [key, value] : customPairs) { builder.custom().add(key, value); }
 
     auto temp = TempDir{};
     auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
     auto wtxn = rs::lmdb::WriteTransaction{env};
-    auto dict = rs::core::DictionaryStore{wtxn, "dict"};
+    auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
     return builder.serializeCold(dict, wtxn);
   }
 
@@ -200,7 +201,7 @@ namespace
     auto data = createMinimalHotData();
     auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
-    CHECK(view.property().rating() == 3);
+    CHECK(view.metadata().rating() == 3);
   }
 
   TEST_CASE("TrackView - Hot Rating Boundary")
@@ -208,11 +209,11 @@ namespace
     auto h = TrackHotHeader{};
     h.rating = 0;
     auto data = serializeHeader(h);
-    CHECK(rs::core::TrackView{data, std::span<std::byte const>{}}.property().rating() == 0);
+    CHECK(rs::core::TrackView{data, std::span<std::byte const>{}}.metadata().rating() == 0);
 
     h.rating = 255;
     data = serializeHeader(h);
-    CHECK(rs::core::TrackView{data, std::span<std::byte const>{}}.property().rating() == 255);
+    CHECK(rs::core::TrackView{data, std::span<std::byte const>{}}.metadata().rating() == 255);
   }
 
   TEST_CASE("TrackView - Cold File Size and Mtime")
@@ -411,7 +412,7 @@ namespace
     int count = 0;
     for (auto const& [k, v] : view.custom())
     {
-      CHECK(k == DictionaryId{0});
+      CHECK(k == DictionaryId{1});
       CHECK(v == "value1");
       ++count;
     }
@@ -430,10 +431,10 @@ namespace
     auto data = createColdData({}, pairs, "/path/to/file.flac");
     auto view = makeColdView(data);
 
-    // DictionaryStore assigns sequential IDs: key1->0, key2->1, key3->2
-    auto id0 = DictionaryId{0};
-    auto id1 = DictionaryId{1};
-    auto id2 = DictionaryId{2};
+    // DictionaryStore assigns sequential IDs: key1->1, key2->2, key3->3
+    auto id0 = DictionaryId{1};
+    auto id1 = DictionaryId{2};
+    auto id2 = DictionaryId{3};
 
     auto result = std::vector<std::pair<DictionaryId, std::string_view>>{};
     for (auto const& [k, v] : view.custom()) { result.emplace_back(k, v); }
@@ -466,7 +467,7 @@ namespace
     int count = 0;
     for (auto [key, value] : view.custom())
     {
-      CHECK(key == DictionaryId{0});
+      CHECK(key == DictionaryId{1});
       CHECK(value == "value1");
       ++count;
     }
@@ -482,7 +483,7 @@ namespace
 
     for (auto [key, value] : view.custom())
     {
-      CHECK(key == DictionaryId{0});
+      CHECK(key == DictionaryId{1});
       CHECK(value == "Hello, World! 你好");
     }
   }
@@ -501,11 +502,11 @@ namespace
     auto result = std::vector<std::pair<DictionaryId, std::string_view>>{};
     for (auto [key, value] : view.custom()) { result.emplace_back(key, value); }
     CHECK(result.size() == 3);
-    CHECK(result[0].first == DictionaryId{0});
+    CHECK(result[0].first == DictionaryId{1});
     CHECK(result[0].second == "-6.5");
-    CHECK(result[1].first == DictionaryId{1});
+    CHECK(result[1].first == DictionaryId{2});
     CHECK(result[1].second == "USSM19999999");
-    CHECK(result[2].first == DictionaryId{2});
+    CHECK(result[2].first == DictionaryId{3});
     CHECK(result[2].second == "remaster");
   }
 
@@ -517,8 +518,8 @@ namespace
     auto data = createColdData({}, pairs, "");
     auto view = makeColdView(data);
 
-    // DictionaryStore assigns: replaygain->0, isrc->1
-    auto value = view.custom().get(DictionaryId{1});
+    // DictionaryStore assigns: replaygain->1, isrc->2
+    auto value = view.custom().get(DictionaryId{2});
     CHECK(value.has_value() == true);
     CHECK(*value == "USSM19999999");
   }
@@ -542,9 +543,10 @@ namespace
     auto data = createColdData({}, pairs, "");
     auto view = makeColdView(data);
 
-    // createColdData assigned "ISRC" to ID 0, but we're looking for "isrc" which would be ID 1
+    // "ISRC" is stored at ID 1, looking up by ID 1 returns the value
     auto value = view.custom().get(DictionaryId{1});
-    CHECK(value.has_value() == false);
+    CHECK(value.has_value() == true);
+    CHECK(*value == "USSM19999999");
   }
 
   TEST_CASE("TrackView - Custom Get Binary Search Path (64+ entries)")
@@ -560,16 +562,16 @@ namespace
     auto data = createColdData({}, pairs, "");
     auto view = makeColdView(data);
 
-    // First entry (dictId=0)
-    CHECK(view.custom().get(DictionaryId{0}).value() == "value0");
-    // Middle entry (dictId=49)
-    CHECK(view.custom().get(DictionaryId{49}).value() == "value49");
-    // Last entry (dictId=99)
-    CHECK(view.custom().get(DictionaryId{99}).value() == "value99");
+    // First entry (dictId=1)
+    CHECK(view.custom().get(DictionaryId{1}).value() == "value0");
+    // Middle entry (dictId=50)
+    CHECK(view.custom().get(DictionaryId{50}).value() == "value49");
+    // Last entry (dictId=100)
+    CHECK(view.custom().get(DictionaryId{100}).value() == "value99");
     // Not found
     CHECK(view.custom().get(DictionaryId{199}).has_value() == false);
-    // Before first
-    CHECK(view.custom().get(DictionaryId{0}).has_value() == true); // 0 is the first entry
+    // Before first (0 = null, should throw)
+    CHECK(view.custom().get(DictionaryId{0}).has_value() == false);
   }
 
   TEST_CASE("TrackView - Custom Empty Key And Value")
@@ -582,7 +584,7 @@ namespace
     int count = 0;
     for (auto const& [k, v] : view.custom())
     {
-      CHECK(k == DictionaryId{0});
+      CHECK(k == DictionaryId{1});
       CHECK(v.size() == 0);
       ++count;
     }
@@ -598,7 +600,7 @@ namespace
 
     for (auto const& [k, v] : view.custom())
     {
-      CHECK(k == DictionaryId{0});
+      CHECK(k == DictionaryId{1});
       CHECK(v == "Hello, World! 你好");
     }
   }

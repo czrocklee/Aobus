@@ -8,7 +8,7 @@
 #include <rs/core/ListView.h>
 #include <rs/core/Type.h>
 
-#include <string>
+#include <string_view>
 #include <vector>
 
 namespace rs::core
@@ -17,9 +17,7 @@ namespace rs::core
   /**
    * ListBuilder - Fluent builder for constructing list binary data.
    *
-   * Separates concerns:
-   *   - ListRecord: pure domain model (strings only)
-   *   - ListBuilder: fluent API for population and serialization
+   * Stores strings as string_view pointing to external data.
    *
    * Usage:
    *   // Create a manual list
@@ -38,55 +36,63 @@ namespace rs::core
   public:
     // Factory methods
     static ListBuilder createNew();
-    static ListBuilder fromRecord(ListRecord record);
+    static ListBuilder fromRecord(ListRecord const& record);
     static ListBuilder fromView(ListView const& view);
 
-    // Direct record access
-    ListRecord& record() { return _record; }
-    ListRecord const& record() const { return _record; }
+    // Record access - constructs ListRecord on-the-fly
+    ListRecord record() const;
 
     //=============================================================================
-    // TracksBuilder - fluent TrackId add/remove (nested class)
+    // TracksBuilder - nested class for track management
     //=============================================================================
-    class TracksBuilder;
+    class TracksBuilder
+    {
+    public:
+      explicit TracksBuilder(ListBuilder& builder)
+        : _builder{builder}
+      {
+      }
+
+      TracksBuilder& add(TrackId id);
+      TracksBuilder& remove(TrackId id);
+      TracksBuilder& clear();
+      TracksBuilder& isSmart(bool v);
+
+      std::vector<TrackId> const& ids() const { return _trackIds; }
+      bool isSmart() const { return _isSmart; }
+
+    private:
+      friend class ListBuilder;
+
+      ListBuilder& _builder;
+      std::vector<TrackId> _trackIds;
+      bool _isSmart = false;
+    };
 
     // Sub-builder accessor
-    TracksBuilder tracks();
+    TracksBuilder& tracks();
 
     // Direct setters
-    ListBuilder& name(std::string v);
-    ListBuilder& description(std::string v);
-    ListBuilder& filter(std::string v);
+    ListBuilder& name(std::string_view v);
+    ListBuilder& description(std::string_view v);
+    ListBuilder& filter(std::string_view v);
 
     // Serialization - returns binary payload for ListStore
     std::vector<std::byte> serialize() const;
 
   private:
-    explicit ListBuilder(ListRecord record);
+    explicit ListBuilder() = default;
 
-    ListRecord _record{};
-  };
+    // Data storage - string_view pointing to external data
+    std::string_view _name;
+    std::string_view _description;
+    std::string_view _filter;
 
-  class ListBuilder::TracksBuilder
-  {
-  public:
-    explicit TracksBuilder(ListBuilder& builder)
-      : _builder{builder}
-    {
-    }
+    // TracksBuilder needs access to modify ListBuilder's isSmart flag
+    friend class TracksBuilder;
 
-    TracksBuilder& add(TrackId id);
-    TracksBuilder& remove(TrackId id);
-    TracksBuilder& clear()
-    {
-      _builder._record.trackIds.clear();
-      return *this;
-    }
-
-    std::vector<TrackId> const& ids() const { return _builder._record.trackIds; }
-
-  private:
-    ListBuilder& _builder;
+    // Sub-builder stored as member
+    TracksBuilder _tracksBuilder{*this};
   };
 
 } // namespace rs::core

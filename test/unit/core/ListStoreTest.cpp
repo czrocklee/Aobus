@@ -27,7 +27,7 @@ TEST_CASE("ListStore - create and read", "[core][list]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = ListStore{wtxn, "lists"};
+  auto store = ListStore{Database{wtxn, "lists"}};
   wtxn.commit();
 
   // Create a list
@@ -56,7 +56,7 @@ TEST_CASE("ListStore - read by id", "[core][list]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = ListStore{wtxn, "lists"};
+  auto store = ListStore{Database{wtxn, "lists"}};
   wtxn.commit();
 
   // Create a list
@@ -85,7 +85,7 @@ TEST_CASE("ListStore - delete", "[core][list]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = ListStore{wtxn, "lists"};
+  auto store = ListStore{Database{wtxn, "lists"}};
   wtxn.commit();
 
   // Create a list

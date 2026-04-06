@@ -27,6 +27,7 @@ namespace rs::core
      */
     struct Property
     {
+      std::string uri;
       std::uint64_t fileSize = 0;
       std::uint64_t mtime = 0;
       std::uint32_t durationMs = 0;
@@ -35,7 +36,6 @@ namespace rs::core
       std::uint16_t codecId = 0;
       std::uint8_t channels = 0;
       std::uint8_t bitDepth = 0;
-      std::uint8_t rating = 0;
     };
 
     /**
@@ -44,7 +44,6 @@ namespace rs::core
     struct Metadata
     {
       std::string title;
-      std::string uri;
       std::string artist;
       std::string album;
       std::string albumArtist;
@@ -55,6 +54,7 @@ namespace rs::core
       std::uint16_t discNumber = 0;
       std::uint16_t totalDiscs = 0;
       std::uint32_t coverArtId = 0; // ResourceStore ID for cover art
+      std::uint8_t rating = 0;       // User rating (0-5)
     };
 
     /**

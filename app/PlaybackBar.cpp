@@ -23,33 +23,6 @@ void PlaybackBar::setupLayout()
   set_margin_top(4);
   set_margin_bottom(4);
 
-  // Cover art - fixed size square
-  _coverArt.set_size_request(40, 40);
-  _coverArt.set_from_icon_name("audio-x-generic-symbolic");
-  _coverArt.set_halign(Gtk::Align::CENTER);
-  _coverArt.set_valign(Gtk::Align::CENTER);
-
-  // Track info box (vertical: title on top, artist below)
-  auto* infoBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
-  infoBox->set_spacing(2);
-  infoBox->set_halign(Gtk::Align::START);
-  infoBox->set_valign(Gtk::Align::CENTER);
-
-  _titleLabel.set_text("No track selected");
-  _titleLabel.set_halign(Gtk::Align::START);
-  _titleLabel.set_valign(Gtk::Align::END);
-  _titleLabel.set_ellipsize(Pango::EllipsizeMode::END);
-  _titleLabel.set_max_width_chars(20);
-
-  _artistLabel.set_text("");
-  _artistLabel.set_halign(Gtk::Align::START);
-  _artistLabel.set_valign(Gtk::Align::START);
-  _artistLabel.set_ellipsize(Pango::EllipsizeMode::END);
-  _artistLabel.set_max_width_chars(20);
-
-  infoBox->append(_titleLabel);
-  infoBox->append(_artistLabel);
-
   // Transport controls box
   auto* transportBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
   transportBox->set_spacing(4);
@@ -95,8 +68,6 @@ void PlaybackBar::setupLayout()
   seekBox->append(_timeLabel);
 
   // Add all to main horizontal box
-  append(_coverArt);
-  append(*infoBox);
   append(*transportBox);
   append(*seekBox);
 }
@@ -123,10 +94,6 @@ void PlaybackBar::setupSignals()
 
 void PlaybackBar::setSnapshot(app::playback::PlaybackSnapshot const& snapshot)
 {
-  // Update track info
-  _titleLabel.set_text(snapshot.trackTitle.empty() ? "No track selected" : snapshot.trackTitle);
-  _artistLabel.set_text(snapshot.trackArtist);
-
   // Update time
   auto durationSec = snapshot.durationMs / 1000;
   auto positionSec = snapshot.positionMs / 1000;

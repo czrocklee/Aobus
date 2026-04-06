@@ -229,18 +229,18 @@ TEST_CASE("Database::Writer - append with data", "[lmdb][database][writer]")
   auto writer = db.writer(wtxn);
 
   auto id1 = writer.append(createStringData("first"));
-  REQUIRE(id1 == 0);
+  REQUIRE(id1 == 1);
 
   auto id2 = writer.append(createStringData("second"));
-  REQUIRE(id2 == 1);
+  REQUIRE(id2 == 2);
 
   wtxn.commit();
 
   // Verify via reader
   auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
-  auto data1 = reader.get(0);
-  auto data2 = reader.get(1);
+  auto data1 = reader.get(1);
+  auto data2 = reader.get(2);
   REQUIRE(data1.has_value());
   REQUIRE(data2.has_value());
   REQUIRE(rs::utility::asString(*data1) == "first");
@@ -257,13 +257,13 @@ TEST_CASE("Database::Writer - append with size", "[lmdb][database][writer]")
   auto writer = db.writer(wtxn);
 
   auto [id1, result1] = writer.append(8);
-  REQUIRE(id1 == 0);
+  REQUIRE(id1 == 1);
   REQUIRE(!result1.empty());
   REQUIRE(result1.size() == 8);
   std::memset(result1.data(), 'a', 8);
 
   auto [id2, result2] = writer.append(12);
-  REQUIRE(id2 == 1);
+  REQUIRE(id2 == 2);
   REQUIRE(!result2.empty());
   REQUIRE(result2.size() == 12);
   std::memset(result2.data(), 'b', 12);
@@ -273,8 +273,8 @@ TEST_CASE("Database::Writer - append with size", "[lmdb][database][writer]")
   // Verify via reader
   auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
-  auto data1 = reader.get(0);
-  auto data2 = reader.get(1);
+  auto data1 = reader.get(1);
+  auto data2 = reader.get(2);
   REQUIRE(data1.has_value());
   REQUIRE(data2.has_value());
   REQUIRE(rs::utility::asString(*data1) == std::string(8, 'a'));
@@ -408,4 +408,110 @@ TEST_CASE("Database::Writer - create throws on duplicate id with size", "[lmdb][
 
   REQUIRE_THROWS_AS(writer.create(1, 5), rs::Exception);
   wtxn.commit();
+}
+
+TEST_CASE("Database::Reader - maxKey on empty database", "[lmdb][database][reader]")
+{
+  auto temp = TempDir{};
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
+  wtxn.commit();
+
+  auto rtxn = ReadTransaction{env};
+  auto reader = db.reader(rtxn);
+  REQUIRE(reader.maxKey() == 0);
+}
+
+TEST_CASE("Database::Reader - maxKey after append", "[lmdb][database][reader]")
+{
+  auto temp = TempDir{};
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
+  auto writer = db.writer(wtxn);
+
+  writer.append(createStringData("first"));
+  auto id2 = writer.append(createStringData("second"));
+  wtxn.commit();
+
+  auto rtxn = ReadTransaction{env};
+  auto reader = db.reader(rtxn);
+  REQUIRE(reader.maxKey() == id2);
+}
+
+TEST_CASE("Database::Reader - maxKey after create", "[lmdb][database][reader]")
+{
+  auto temp = TempDir{};
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
+  auto writer = db.writer(wtxn);
+
+  writer.create(5, createStringData("five"));
+  writer.create(10, createStringData("ten"));
+  writer.create(3, createStringData("three"));
+  wtxn.commit();
+
+  auto rtxn = ReadTransaction{env};
+  auto reader = db.reader(rtxn);
+  REQUIRE(reader.maxKey() == 10);
+}
+
+TEST_CASE("Database::Reader - maxKey after delete", "[lmdb][database][reader]")
+{
+  auto temp = TempDir{};
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
+  auto writer = db.writer(wtxn);
+
+  writer.create(1, createStringData("one"));
+  writer.create(2, createStringData("two"));
+  writer.create(3, createStringData("three"));
+  wtxn.commit();
+
+  // Delete the max key
+  {
+    auto wtxn2 = WriteTransaction{env};
+    auto writer2 = db.writer(wtxn2);
+    writer2.del(3);
+    wtxn2.commit();
+  }
+
+  auto rtxn = ReadTransaction{env};
+  auto reader = db.reader(rtxn);
+  REQUIRE(reader.maxKey() == 2);
+}
+
+TEST_CASE("Database::Reader - maxKey after deleting middle element", "[lmdb][database][reader]")
+{
+  auto temp = TempDir{};
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  auto wtxn = WriteTransaction{env};
+  auto db = Database{wtxn, "test"};
+  auto writer = db.writer(wtxn);
+
+  writer.create(1, createStringData("one"));
+  writer.create(2, createStringData("two"));
+  writer.create(3, createStringData("three"));
+  wtxn.commit();
+
+  // Delete the middle element
+  {
+    auto wtxn2 = WriteTransaction{env};
+    auto writer2 = db.writer(wtxn2);
+    writer2.del(2);
+    wtxn2.commit();
+  }
+
+  auto rtxn = ReadTransaction{env};
+  auto reader = db.reader(rtxn);
+  // maxKey should still be 3 (the max wasn't deleted)
+  REQUIRE(reader.maxKey() == 3);
 }

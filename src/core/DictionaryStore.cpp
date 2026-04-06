@@ -10,33 +10,36 @@
 
 namespace rs::core
 {
-  // Initial capacity for dictionary entries (suitable for most music libraries)
-  constexpr std::uint32_t kInitialCapacity = 4096;
+  // Extra capacity for dictionary entries
+  constexpr std::uint32_t kExtraCapacity = 4096;
 
-  DictionaryStore::DictionaryStore(lmdb::WriteTransaction& txn, std::string const& db) : _database{txn, db}
+  DictionaryStore::DictionaryStore(lmdb::Database db, lmdb::ReadTransaction& txn)
+    : _database{std::move(db)}
   {
-    // Reserve initial capacity to avoid frequent resizes
-    _idToStringStorage.reserve(kInitialCapacity);
+    auto const reader = _database.reader(txn);
+    _idToStringStorage.reserve(reader.maxKey() + kExtraCapacity);
 
-    for (auto [id, buf] : _database.reader(txn))
+    for (auto [id, buf] : reader)
     {
-      std::string_view str = utility::asString(buf);
-      _idToStringStorage.emplace_back(str);
-      _stringToId.emplace(_idToStringStorage.back(), DictionaryId{id});
+      auto const& str = _idToStringStorage.emplace_back(utility::asString(buf));
+      _stringToId.emplace(str, DictionaryId{id});
     }
   }
 
   DictionaryId DictionaryStore::put(lmdb::WriteTransaction& txn, std::string_view value)
   {
     // Check in-memory index first (includes entries from reserve)
-    if (auto it = _stringToId.find(value); it != _stringToId.end()) {
+    if (auto it = _stringToId.find(value); it != _stringToId.end())
+    {
       // If this string was reserved, we need to persist it now
-      if (_reservedStrings.contains(value)) {
+      if (_reservedStrings.contains(value))
+      {
         auto writer = _database.writer(txn);
         auto data = utility::asBytes(value);
         writer.create(it->second.value(), data);
         _reservedStrings.erase(value);
       }
+
       return it->second;
     }
 
@@ -44,9 +47,8 @@ namespace rs::core
     auto writer = _database.writer(txn);
     auto data = utility::asBytes(value);
     auto id = writer.append(data);
-    std::string_view str = utility::asString(data);
-    _idToStringStorage.emplace_back(str);
-    _stringToId.emplace(_idToStringStorage.back(), DictionaryId{id});
+    auto const& str = _idToStringStorage.emplace_back(utility::asString(data));
+    _stringToId.emplace(str, DictionaryId{id});
     return DictionaryId{id};
   }
 
@@ -54,14 +56,26 @@ namespace rs::core
   {
     auto idx = id.value();
 
-    if (idx >= _idToStringStorage.size()) { RS_THROW(rs::Exception, "Invalid dictionary ID"); }
+    // 0 is null/invalid
+    if (idx == 0)
+    {
+      RS_THROW(rs::Exception, "Invalid dictionary ID");
+    }
 
-    return _idToStringStorage[idx];
+    if (idx - 1 >= _idToStringStorage.size())
+    {
+      RS_THROW(rs::Exception, "Invalid dictionary ID");
+    }
+
+    return _idToStringStorage[idx - 1];
   }
 
   DictionaryId DictionaryStore::getId(std::string_view str) const
   {
-    if (auto it = _stringToId.find(str); it != _stringToId.end()) { return it->second; }
+    if (auto it = _stringToId.find(str); it != _stringToId.end())
+    {
+      return it->second;
+    }
 
     RS_THROW(rs::Exception, "String not found in dictionary");
   }
@@ -74,13 +88,14 @@ namespace rs::core
   DictionaryId DictionaryStore::reserve(std::string_view str)
   {
     // Check if already exists
-    if (auto it = _stringToId.find(str); it != _stringToId.end()) {
+    if (auto it = _stringToId.find(str); it != _stringToId.end())
+    {
       return it->second;
     }
 
-    // Add to in-memory storage - ID is the current size (next available index)
+    // Add to in-memory storage - ID is 1-indexed (0 = null)
     _idToStringStorage.emplace_back(str);
-    auto id = DictionaryId{static_cast<std::uint32_t>(_idToStringStorage.size() - 1)};
+    auto id = DictionaryId{static_cast<std::uint32_t>(_idToStringStorage.size())};
     _stringToId.emplace(_idToStringStorage.back(), id);
     _reservedStrings.emplace(_idToStringStorage.back());
     return id;

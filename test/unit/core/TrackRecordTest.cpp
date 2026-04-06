@@ -20,7 +20,6 @@ TEST_CASE("TrackRecord - Default Constructor")
   auto record = TrackRecord{};
 
   CHECK(record.metadata.title.empty());
-  CHECK(record.metadata.uri.empty());
   CHECK(record.metadata.artist.empty());
   CHECK(record.metadata.album.empty());
   CHECK(record.metadata.albumArtist.empty());
@@ -31,6 +30,7 @@ TEST_CASE("TrackRecord - Default Constructor")
   CHECK(record.metadata.discNumber == 0);
   CHECK(record.metadata.totalDiscs == 0);
   CHECK(record.metadata.coverArtId == 0);
+  CHECK(record.property.uri.empty());
   CHECK(record.property.fileSize == 0);
   CHECK(record.property.mtime == 0);
   CHECK(record.property.durationMs == 0);
@@ -39,7 +39,7 @@ TEST_CASE("TrackRecord - Default Constructor")
   CHECK(record.property.codecId == 0);
   CHECK(record.property.channels == 0);
   CHECK(record.property.bitDepth == 0);
-  CHECK(record.property.rating == 0);
+  CHECK(record.metadata.rating == 0);
   CHECK(record.tags.names.empty());
 }
 
@@ -47,7 +47,7 @@ TEST_CASE("TrackRecord - Field Assignment")
 {
   auto record = TrackRecord{};
   record.metadata.title = "Test Title";
-  record.metadata.uri = "/path/to/track.flac";
+  record.property.uri = "/path/to/track.flac";
   record.metadata.artist = "Test Artist";
   record.metadata.album = "Test Album";
   record.metadata.albumArtist = "";
@@ -66,10 +66,10 @@ TEST_CASE("TrackRecord - Field Assignment")
   record.property.codecId = 7;
   record.property.channels = 2;
   record.property.bitDepth = 16;
-  record.property.rating = 4;
+  record.metadata.rating = 4;
 
   CHECK(record.metadata.title == "Test Title");
-  CHECK(record.metadata.uri == "/path/to/track.flac");
+  CHECK(record.property.uri == "/path/to/track.flac");
   CHECK(record.metadata.artist == "Test Artist");
   CHECK(record.metadata.album == "Test Album");
   CHECK(record.metadata.albumArtist == "");
@@ -88,7 +88,7 @@ TEST_CASE("TrackRecord - Field Assignment")
   CHECK(record.property.codecId == 7);
   CHECK(record.property.channels == 2);
   CHECK(record.property.bitDepth == 16);
-  CHECK(record.property.rating == 4);
+  CHECK(record.metadata.rating == 4);
 }
 
 TEST_CASE("TrackRecord - custom.pairs field")
@@ -111,7 +111,7 @@ TEST_CASE("TrackRecord - Cold struct default values")
   CHECK(record.metadata.totalTracks == 0);
   CHECK(record.metadata.discNumber == 0);
   CHECK(record.metadata.totalDiscs == 0);
-  CHECK(record.metadata.uri.empty());
+  CHECK(record.property.uri.empty());
 }
 
 TEST_CASE("TrackRecord - Constructor validates both hot and cold", "[core][track]")

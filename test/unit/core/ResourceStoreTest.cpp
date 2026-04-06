@@ -21,7 +21,7 @@ TEST_CASE("ResourceStore - create and read", "[core][resource]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = ResourceStore{wtxn, "resources"};
+  auto store = ResourceStore{Database{wtxn, "resources"}};
   wtxn.commit();
 
   // Create a resource
@@ -47,7 +47,7 @@ TEST_CASE("ResourceStore - delete", "[core][resource]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = ResourceStore{wtxn, "resources"};
+  auto store = ResourceStore{Database{wtxn, "resources"}};
   wtxn.commit();
 
   // Create a resource
@@ -77,7 +77,7 @@ TEST_CASE("ResourceStore - deduplication", "[core][resource]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = ResourceStore{wtxn, "resources"};
+  auto store = ResourceStore{Database{wtxn, "resources"}};
   wtxn.commit();
 
   // Create first resource

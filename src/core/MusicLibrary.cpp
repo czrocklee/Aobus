@@ -21,10 +21,10 @@ namespace rs::core
                                       .maxDatabases = kLmdbMaxDatabases,
                                       .mapSize = kLmdbMapSize}}
     , _txn{_env}
-    , _tracks{_txn, "tracks_hot", "tracks_cold"}
-    , _lists{_txn, "lists"}
-    , _resources{_txn, "resources"}
-    , _dictionary{_txn, "dictionary"}
+    , _tracks{lmdb::Database{_txn, "tracks_hot"}, lmdb::Database{_txn, "tracks_cold"}}
+    , _lists{lmdb::Database{_txn, "lists"}}
+    , _resources{lmdb::Database{_txn, "resources"}}
+    , _dictionary{lmdb::Database{_txn, "dictionary"}, _txn}
   {
     // Load dictionary entries before first commit
     _txn.commit();

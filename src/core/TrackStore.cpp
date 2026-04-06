@@ -9,9 +9,8 @@ namespace rs::core
 {
 
   // TrackStore implementation
-  TrackStore::TrackStore(lmdb::WriteTransaction& txn, std::string const& hotDb, std::string const& coldDb)
-    : _hotDb{txn, hotDb}
-    , _coldDb{txn, coldDb}
+  TrackStore::TrackStore(lmdb::Database hotDb, lmdb::Database coldDb)
+    : _hotDb{std::move(hotDb)}, _coldDb{std::move(coldDb)}
   {
   }
 
@@ -27,27 +26,36 @@ namespace rs::core
 
   // TrackStore::Reader implementation
   TrackStore::Reader::Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader)
-    : _hotReader{std::move(hotReader)}
-    , _coldReader{std::move(coldReader)}
+    : _hotReader{std::move(hotReader)}, _coldReader{std::move(coldReader)}
   {
   }
 
   std::optional<TrackView> TrackStore::Reader::get(TrackId id, LoadMode mode) const
   {
-    std::span<std::byte const> hotBuffer;
-    std::span<std::byte const> coldBuffer;
+    auto hotBuffer = std::span<std::byte const>{};
+    auto coldBuffer = std::span<std::byte const>{};
 
     if (mode == LoadMode::Hot || mode == LoadMode::Both)
     {
       auto optHotBuffer = _hotReader.get(id.value());
-      if (!optHotBuffer || optHotBuffer->empty()) { return std::nullopt; }
+
+      if (!optHotBuffer)
+      {
+        return std::nullopt;
+      }
+
       hotBuffer = *optHotBuffer;
     }
 
     if (mode == Reader::LoadMode::Cold || mode == Reader::LoadMode::Both)
     {
       auto optColdBuffer = _coldReader.get(id.value());
-      if (!optColdBuffer || optColdBuffer->empty()) { return std::nullopt; }
+
+      if (!optColdBuffer)
+      {
+        return std::nullopt;
+      }
+
       coldBuffer = *optColdBuffer;
     }
 
@@ -76,7 +84,10 @@ namespace rs::core
 
   bool TrackStore::Reader::Iterator::operator==(Iterator const& other) const
   {
-    if (_mode != other._mode) { return false; }
+    if (_mode != other._mode)
+    {
+      return false;
+    }
 
     switch (_mode)
     {
@@ -84,13 +95,22 @@ namespace rs::core
       case LoadMode::Hot:
       case LoadMode::Both: return _hotIter == other._hotIter;
     }
+
     return false;
   }
 
   TrackStore::Reader::Iterator& TrackStore::Reader::Iterator::operator++()
   {
-    if (_hotIter) { ++(*_hotIter); }
-    if (_coldIter) { ++(*_coldIter); }
+    if (_hotIter)
+    {
+      ++(*_hotIter);
+    }
+
+    if (_coldIter)
+    {
+      ++(*_coldIter);
+    }
+
     return *this;
   }
 
@@ -111,11 +131,16 @@ namespace rs::core
     if (_coldIter)
     {
       auto&& [coldId, coldBuffer] = **_coldIter;
-      if (!_hotIter) { trackId = TrackId{coldId}; }
+
+      if (!_hotIter)
+      {
+        trackId = TrackId{coldId};
+      }
       else
       {
         assert(coldId == trackId.value() && "cold and hot must have same track ID");
       }
+
       coldData = coldBuffer;
     }
 
@@ -124,8 +149,7 @@ namespace rs::core
 
   // TrackStore::Writer implementation
   TrackStore::Writer::Writer(lmdb::Database::Writer&& hotWriter, lmdb::Database::Writer&& coldWriter)
-    : _hotWriter{std::move(hotWriter)}
-    , _coldWriter{std::move(coldWriter)}
+    : _hotWriter{std::move(hotWriter)}, _coldWriter{std::move(coldWriter)}
   {
   }
 
@@ -138,7 +162,7 @@ namespace rs::core
     assert((coldData.size() % 4 == 0) && "coldData size must be multiple of 4");
 
     auto id = _hotWriter.append(hotData);
-    [[maybe_unused]] auto coldId = _coldWriter.append(coldData);
+    auto coldId = _coldWriter.append(coldData);
     return {TrackId{id}, TrackView{hotData, coldData}};
   }
 

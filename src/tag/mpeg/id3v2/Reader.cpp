@@ -120,7 +120,7 @@ namespace rs::tag::mpeg::id3v2
 
         if (key == "rating")
         {
-          parsed.record.property.rating = static_cast<std::uint8_t>(std::atoi(value.data()));
+          parsed.record.metadata.rating = static_cast<std::uint8_t>(std::atoi(value.data()));
         }
         else
         {

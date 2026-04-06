@@ -30,17 +30,17 @@ TEST_CASE("TrackStore - create and read", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create a track with hot+cold
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
 
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
   // Empty cold data (padded to 4-byte alignment)
-  std::vector<std::byte> coldData(4, std::byte{0});
+  auto coldData = std::vector<std::byte>{4, std::byte{0}};
 
   auto wtxn2 = WriteTransaction{env};
   auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -61,16 +61,16 @@ TEST_CASE("TrackStore - read by id", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create a track with hot+cold
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
 
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  std::vector<std::byte> coldData(4, std::byte{0});
+  auto coldData = std::vector<std::byte>{4, std::byte{0}};
 
   auto wtxn2 = WriteTransaction{env};
   auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -88,16 +88,16 @@ TEST_CASE("TrackStore - update", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create a track
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
 
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  std::vector<std::byte> coldData(4, std::byte{0});
+  auto coldData = std::vector<std::byte>{4, std::byte{0}};
 
   auto wtxn2 = WriteTransaction{env};
   auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -106,7 +106,7 @@ TEST_CASE("TrackStore - update", "[core][track]")
   // Update the track
   TrackHotHeader hotHeader2{};
 
-  std::vector<std::byte> hotData2(sizeof(TrackHotHeader));
+  auto hotData2 = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData2.data(), &hotHeader2, sizeof(TrackHotHeader));
 
   auto wtxn3 = WriteTransaction{env};
@@ -120,16 +120,16 @@ TEST_CASE("TrackStore - delete", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create a track
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
 
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  std::vector<std::byte> coldData(4, std::byte{0});
+  auto coldData = std::vector<std::byte>{4, std::byte{0}};
 
   auto wtxn2 = WriteTransaction{env};
   auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -154,16 +154,16 @@ TEST_CASE("TrackStore - create multiple tracks unique IDs", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create multiple tracks - each should get unique ID
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
 
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  std::vector<std::byte> coldData(4, std::byte{0});
+  auto coldData = std::vector<std::byte>{4, std::byte{0}};
 
   auto wtxn2 = WriteTransaction{env};
   auto [id1, view1] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -183,17 +183,17 @@ TEST_CASE("TrackStore - hot/cold createHotCold", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create hot header
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
 
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
   // Create cold header
-  TrackColdHeader coldHeader{};
+  auto coldHeader = TrackColdHeader{};
   coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
   coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
   coldHeader.mtimeLo = static_cast<std::uint32_t>(1234567890 & 0xFFFFFFFF);
@@ -202,13 +202,13 @@ TEST_CASE("TrackStore - hot/cold createHotCold", "[core][track]")
   coldHeader.trackNumber = 1;
   coldHeader.totalTracks = 10;
 
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   // Create with hot+cold
   auto wtxn2 = WriteTransaction{env};
   auto [id, hotView] = store.writer(wtxn2).createHotCold(hotData, coldData);
-// REQUIRE(id.value() >= 0);
+  // REQUIRE(id.value() >= 0);
   wtxn2.commit();
 
   // Verify hot and cold data
@@ -228,23 +228,22 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create initial hot+cold
-  TrackHotHeader hotHeader{};
-
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotHeader = TrackHotHeader{};
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  TrackColdHeader coldHeader{};
+  auto coldHeader = TrackColdHeader{};
   coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
   coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
   coldHeader.mtimeLo = static_cast<std::uint32_t>(1234567890 & 0xFFFFFFFF);
   coldHeader.mtimeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1234567890) >> 32);
   coldHeader.durationMs = 180000;
 
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   auto wtxn2 = WriteTransaction{env};
@@ -252,9 +251,9 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
   wtxn2.commit();
 
   // Update hot only
-  TrackHotHeader hotHeader2{};
+  auto hotHeader2 = TrackHotHeader{};
 
-  std::vector<std::byte> hotData2(sizeof(TrackHotHeader));
+  auto hotData2 = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData2.data(), &hotHeader2, sizeof(TrackHotHeader));
 
   auto wtxn3 = WriteTransaction{env};
@@ -270,7 +269,7 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
   coldHeader2.durationMs = 200000;
   coldHeader2.trackNumber = 2;
 
-  std::vector<std::byte> coldData2(sizeof(TrackColdHeader));
+  auto coldData2 = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData2.data(), &coldHeader2, sizeof(TrackColdHeader));
 
   auto wtxn4 = WriteTransaction{env};
@@ -293,16 +292,16 @@ TEST_CASE("TrackStore - hot/cold remove", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create hot+cold
-  TrackHotHeader hotHeader{};
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotHeader = TrackHotHeader{};
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  TrackColdHeader coldHeader{};
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldHeader = TrackColdHeader{};
+  auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   auto wtxn2 = WriteTransaction{env};
@@ -327,22 +326,21 @@ TEST_CASE("TrackStore - Writer get with LoadMode", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create hot+cold
-  TrackHotHeader hotHeader{};
-
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotHeader = TrackHotHeader{};
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  TrackColdHeader coldHeader{};
+  auto coldHeader = TrackColdHeader{};
   coldHeader.fileSizeLo = static_cast<std::uint32_t>(3000 & 0xFFFFFFFF);
   coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(3000) >> 32);
   coldHeader.durationMs = 240000;
   coldHeader.coverArtId = 42;
 
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   auto wtxn2 = WriteTransaction{env};
@@ -372,18 +370,19 @@ TEST_CASE("TrackStore - unified TrackView iteration", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create multiple tracks
-  for (int i = 0; i < 3; ++i) {
-    TrackHotHeader hotHeader{};
-    std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  for (int i = 0; i < 3; ++i)
+  {
+    auto hotHeader = TrackHotHeader{};
+    auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-    TrackColdHeader coldHeader{};
+    auto coldHeader = TrackColdHeader{};
     coldHeader.trackNumber = i + 1;
-    std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+    auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
     auto wtxn2 = WriteTransaction{env};
@@ -395,9 +394,12 @@ TEST_CASE("TrackStore - unified TrackView iteration", "[core][track]")
   auto rtxn = ReadTransaction{env};
   auto reader = store.reader(rtxn);
   int count = 0;
-  for (auto it = reader.begin(); it != reader.end(); ++it) {
+
+  for (auto it = reader.begin(); it != reader.end(); ++it)
+  {
     ++count;
   }
+  
   REQUIRE(count == 3);
 }
 
@@ -407,22 +409,22 @@ TEST_CASE("TrackStore - LoadMode::Hot iteration", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create tracks with hot+cold
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
   hotHeader.artistId = DictionaryId{1};
   hotHeader.albumId = DictionaryId{2};
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  TrackColdHeader coldHeader{};
+  auto coldHeader = TrackColdHeader{};
   coldHeader.fileSizeLo = static_cast<std::uint32_t>(1000 & 0xFFFFFFFF);
   coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000) >> 32);
   coldHeader.durationMs = 180000;
   coldHeader.trackNumber = 5;
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   auto wtxn2 = WriteTransaction{env};
@@ -446,20 +448,20 @@ TEST_CASE("TrackStore - LoadMode::Cold iteration", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create tracks with hot+cold
-  TrackHotHeader hotHeader{};
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotHeader = TrackHotHeader{};
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  TrackColdHeader coldHeader{};
+  auto coldHeader = TrackColdHeader{};
   coldHeader.fileSizeLo = static_cast<std::uint32_t>(2000 & 0xFFFFFFFF);
   coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(2000) >> 32);
   coldHeader.durationMs = 240000;
   coldHeader.trackNumber = 3;
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   auto wtxn2 = WriteTransaction{env};
@@ -483,20 +485,20 @@ TEST_CASE("TrackStore - LoadMode::Both iteration", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create tracks with hot+cold
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
   hotHeader.artistId = DictionaryId{1};
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  TrackColdHeader coldHeader{};
+  auto coldHeader = TrackColdHeader{};
   coldHeader.fileSizeLo = static_cast<std::uint32_t>(3000 & 0xFFFFFFFF);
   coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(3000) >> 32);
   coldHeader.durationMs = 300000;
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   auto wtxn2 = WriteTransaction{env};
@@ -522,19 +524,19 @@ TEST_CASE("TrackStore - LoadMode::Hot get by id", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create track
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
   hotHeader.artistId = DictionaryId{42};
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  TrackColdHeader coldHeader{};
+  auto coldHeader = TrackColdHeader{};
   coldHeader.fileSizeLo = static_cast<std::uint32_t>(5000 & 0xFFFFFFFF);
   coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(5000) >> 32);
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   auto wtxn2 = WriteTransaction{env};
@@ -556,20 +558,20 @@ TEST_CASE("TrackStore - LoadMode::Cold get by id", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create track
-  TrackHotHeader hotHeader{};
+  auto hotHeader = TrackHotHeader{};
   hotHeader.artistId = DictionaryId{99};
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  TrackColdHeader coldHeader{};
+  auto coldHeader = TrackColdHeader{};
   coldHeader.fileSizeLo = static_cast<std::uint32_t>(6000 & 0xFFFFFFFF);
   coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(6000) >> 32);
   coldHeader.durationMs = 360000;
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   auto wtxn2 = WriteTransaction{env};
@@ -592,24 +594,24 @@ TEST_CASE("TrackStore - LoadMode::Cold multi-record iteration", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create multiple tracks
   std::vector<TrackId> ids;
   for (int i = 0; i < 5; ++i)
   {
-    TrackHotHeader hotHeader{};
+    auto hotHeader = TrackHotHeader{};
     hotHeader.artistId = DictionaryId{static_cast<std::uint32_t>(i)};
-    std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+    auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-    TrackColdHeader coldHeader{};
+    auto coldHeader = TrackColdHeader{};
     coldHeader.fileSizeLo = static_cast<std::uint32_t>((1000 + i) & 0xFFFFFFFF);
     coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000 + i) >> 32);
     coldHeader.durationMs = static_cast<std::uint32_t>(180000 + i * 10000);
     coldHeader.trackNumber = i + 1;
-    std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+    auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
     auto wtxn2 = WriteTransaction{env};
@@ -652,7 +654,7 @@ TEST_CASE("TrackStore - LoadMode::Cold empty iteration", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Iterate with Cold mode on empty store
@@ -670,16 +672,16 @@ TEST_CASE("TrackStore - iterator equality across modes", "[core][track]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = TrackStore{wtxn, "tracks_hot", "tracks_cold"};
+  auto store = TrackStore{Database{wtxn, "tracks_hot"}, Database{wtxn, "tracks_cold"}};
   wtxn.commit();
 
   // Create a track
-  TrackHotHeader hotHeader{};
-  std::vector<std::byte> hotData(sizeof(TrackHotHeader));
+  auto hotHeader = TrackHotHeader{};
+  auto hotData = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-  TrackColdHeader coldHeader{};
-  std::vector<std::byte> coldData(sizeof(TrackColdHeader));
+  auto coldHeader = TrackColdHeader{};
+  auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
   std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));
 
   auto wtxn2 = WriteTransaction{env};

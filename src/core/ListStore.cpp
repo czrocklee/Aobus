@@ -6,7 +6,8 @@
 namespace rs::core
 {
 
-  ListStore::ListStore(lmdb::WriteTransaction& txn, std::string const& db) : _database{txn, db}
+  ListStore::ListStore(lmdb::Database db)
+    : _database{std::move(db)}
   {
   }
 

@@ -3,6 +3,7 @@
 
 #include <catch2/catch.hpp>
 
+#include <optional>
 #include <rs/core/DictionaryStore.h>
 #include <rs/core/TrackBuilder.h>
 #include <rs/core/TrackLayout.h>
@@ -15,7 +16,6 @@
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
 #include <rs/utility/ByteView.h>
-#include <optional>
 #include <span>
 #include <test/unit/core/TestUtils.h>
 #include <test/unit/lmdb/TestUtils.h>
@@ -26,6 +26,7 @@ namespace
 {
 
   using rs::core::DictionaryId;
+  using rs::lmdb::Database;
 
   // Helper class to hold both the serialized data and create TrackView
   // This ensures the data stays valid while the view is in use
@@ -51,7 +52,7 @@ namespace
       _builder.metadata().title(std::move(title));
       _builder.metadata().artist(std::move(artist));
       _builder.metadata().album(std::move(album));
-      _builder.metadata().uri(std::move(uri));
+      _builder.property().uri(std::move(uri));
       _builder.metadata().year(year);
       _builder.metadata().trackNumber(trackNumber);
       _builder.property().durationMs(durationMs);
@@ -60,16 +61,17 @@ namespace
       _builder.property().channels(channels);
       _builder.property().bitDepth(bitDepth);
       // Add tags using string names (will be resolved to IDs via dict.put during serialize)
-      for (auto id : tagIds) {
+      for (auto id : tagIds)
+      {
         _builder.tags().add("tag" + std::to_string(id));
       }
 
       // Build hot and cold data with a dictionary
       auto temp = TempDir{};
-      rs::lmdb::Environment::Options envOpts{.flags = MDB_CREATE, .maxDatabases = 20};
+      auto envOpts = rs::lmdb::Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
       _env.emplace(temp.path(), envOpts);
       auto wtxn = rs::lmdb::WriteTransaction{*_env};
-      _dict.emplace(wtxn, "dict");
+      _dict.emplace(Database{wtxn, "dict"}, wtxn);
 
       _hotData = _builder.serializeHot(*_dict, wtxn);
       _coldData = _builder.serializeCold(*_dict, wtxn);
@@ -86,20 +88,10 @@ namespace
     }
 
     // Returns TrackView with both hot and cold data
-    rs::core::TrackView view() const {
-      return rs::core::TrackView{
-        _hotData,
-        _coldData
-      };
-    }
+    rs::core::TrackView view() const { return rs::core::TrackView{_hotData, _coldData}; }
 
     // Returns TrackView with hot data only (for invalid cold tests)
-    rs::core::TrackView hotOnlyView() const {
-      return rs::core::TrackView{
-        _hotData,
-        std::span<std::byte const>{}
-      };
-    }
+    rs::core::TrackView hotOnlyView() const { return rs::core::TrackView{_hotData, std::span<std::byte const>{}}; }
 
   private:
     rs::core::TrackBuilder _builder = rs::core::TrackBuilder::createNew();
@@ -111,8 +103,8 @@ namespace
 
 } // namespace
 
-using rs::core::DictionaryStore;
 using rs::core::DictionaryId;
+using rs::core::DictionaryStore;
 using rs::lmdb::Database;
 using rs::lmdb::Environment;
 using rs::lmdb::ReadTransaction;
@@ -395,7 +387,7 @@ TEST_CASE("PlanEvaluator - Invalid Track View")
   auto evaluator = PlanEvaluator{};
 
   // Empty hot data creates an invalid TrackView
-  rs::core::TrackView emptyView{std::span<std::byte const>{}, std::span<std::byte const>{}};
+  auto emptyView = rs::core::TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
   auto result = evaluator.evaluateFull(plan, emptyView);
   CHECK(result == false);
 }
@@ -470,8 +462,8 @@ TEST_CASE("PlanEvaluator - Tag Query - With Matching Tag")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
-  dict.put(wtxn, "rock"); // Will get ID 0 (LMDB starts from 0 now)
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+  dict.put(wtxn, "rock"); // Will get ID 1 (DictionaryId starts from 1)
   wtxn.commit();
 
   // Query for #rock
@@ -481,7 +473,8 @@ TEST_CASE("PlanEvaluator - Tag Query - With Matching Tag")
   auto evaluator = PlanEvaluator{};
 
   // Track with tag ID 0 (matches "rock" = 0)
-  auto trackWithTag = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {0}};
+  auto trackWithTag =
+    TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {0}};
   auto result = evaluator.matches(plan, trackWithTag.view());
   CHECK(result == true);
 }
@@ -495,7 +488,8 @@ TEST_CASE("PlanEvaluator - Tag Query - With Non-Matching Tag")
   auto evaluator = PlanEvaluator{};
 
   // Track with tag ID 20 (doesn't match "rock" = 10)
-  auto trackWithTag = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {20}};
+  auto trackWithTag =
+    TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {20}};
   auto result = evaluator.matches(plan, trackWithTag.view());
   CHECK(result == false);
 }
@@ -580,31 +574,31 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Track Computation")
   // Using manual header construction since TrackRecord no longer has serializeHot
   // Tag ID 10 -> bit 10 (10 & 31 = 10)
   {
-    rs::core::TrackHotHeader h{};
+    auto h = rs::core::TrackHotHeader{};
     h.tagBloom = (1U << (10 & 31)); // bit 10
     auto data = test::serializeHeader(h);
     data.push_back(static_cast<std::byte>('\0')); // empty title
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.tags().bloom() == (1U << 10));
   }
 
   // Tag ID 32 -> bit 0 (32 & 31 = 0)
   {
-    rs::core::TrackHotHeader h{};
+    auto h = rs::core::TrackHotHeader{};
     h.tagBloom = (1U << (32 & 31)); // bit 0
     auto data = test::serializeHeader(h);
     data.push_back(static_cast<std::byte>('\0')); // empty title
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.tags().bloom() == 1U);
   }
 
   // Multiple tags: ID 5 and ID 20
   {
-    rs::core::TrackHotHeader h{};
+    auto h = rs::core::TrackHotHeader{};
     h.tagBloom = (1U << (5 & 31)) | (1U << (20 & 31)); // bits 5 and 20
     auto data = test::serializeHeader(h);
     data.push_back(static_cast<std::byte>('\0')); // empty title
-    rs::core::TrackView view{data, std::span<std::byte const>{}};
+    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
     CHECK((view.tags().bloom() & (1U << 5)) != 0);  // Bit 5 should be set
     CHECK((view.tags().bloom() & (1U << 20)) != 0); // Bit 20 should be set
   }
@@ -618,16 +612,16 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   auto evaluator = PlanEvaluator{};
 
   // Create a track with tag bloom bit 0 set (simulating tag ID 32)
-  rs::core::TrackHotHeader h{};
+  auto h = rs::core::TrackHotHeader{};
   h.tagBloom = 0x00000001U; // Only bit 0 set
 
-  std::vector<std::byte> data;
+  auto data = std::vector<std::byte>{};
   data.insert_range(data.end(), rs::utility::asBytes(h));
 
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  rs::core::TrackView view(data, std::span<std::byte const>{});
+  auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
   // Bloom filter rejects because query mask doesn't match track bloom
   auto result = evaluator.matches(plan, view);
@@ -643,16 +637,16 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
 
   // Create a track with tag bloom that has some bits set
   // (without dictionary, mask is 0, so this won't actually test fast path)
-  rs::core::TrackHotHeader h{};
+  auto h = rs::core::TrackHotHeader{};
   h.tagBloom = 0xFFFFFFFFU; // All bits set
 
-  std::vector<std::byte> data;
+  auto data = std::vector<std::byte>{};
   data.insert_range(data.end(), rs::utility::asBytes(h));
 
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  rs::core::TrackView view(data, std::span<std::byte const>{});
+  auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
   // With mask 0, bloom check passes (no filtering), falls through to full eval
   auto result = evaluator.matches(plan, view);
@@ -708,12 +702,12 @@ TEST_CASE("PlanEvaluator - OR expression with LIKE evaluates correctly")
   // Track with title containing "Bach"
   auto track1 = TestTrack{"Bach Greatest Hits", "Artist", "Album", "/path", 2021};
   auto result = evaluator.evaluateFull(plan, track1.view());
-  CHECK(result == true);  // matches title ~ "Bach"
+  CHECK(result == true); // matches title ~ "Bach"
 
   // Track with year > 2021 but title doesn't contain "Bach"
   auto track2 = TestTrack{"Classical Music", "Artist", "Album", "/path", 2022};
   result = evaluator.evaluateFull(plan, track2.view());
-  CHECK(result == true);  // matches year > 2021
+  CHECK(result == true); // matches year > 2021
 
   // Track with neither matching
   auto track3 = TestTrack{"Classical Music", "Artist", "Album", "/path", 2021};

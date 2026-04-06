@@ -31,7 +31,7 @@ namespace rs::core
      * @param txn Write transaction for loading existing entries (must remain alive)
      * @param db Database name
      */
-    explicit DictionaryStore(lmdb::WriteTransaction& txn, std::string const& db);
+    DictionaryStore(lmdb::Database db, lmdb::ReadTransaction& txn);
 
     /**
      * Store a string and auto-generate a unique ID.

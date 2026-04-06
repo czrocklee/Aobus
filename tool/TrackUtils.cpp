@@ -15,7 +15,7 @@ rs::core::TrackBuilder loadTrackRecord(std::filesystem::path const& path,
   auto parsed = tagFile->loadTrack();
 
   // Fill in library context
-  parsed.record.metadata.uri = path.string();
+  parsed.record.property.uri = path.string();
   parsed.record.property.fileSize = std::filesystem::file_size(path);
   parsed.record.property.mtime = std::filesystem::last_write_time(path).time_since_epoch().count();
 

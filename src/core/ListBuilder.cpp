@@ -19,53 +19,75 @@ namespace rs::core
 
   ListBuilder ListBuilder::createNew()
   {
-    return ListBuilder{ListRecord{}};
+    return ListBuilder{};
   }
 
-  ListBuilder ListBuilder::fromRecord(ListRecord record)
+  ListBuilder ListBuilder::fromRecord(ListRecord const& record)
   {
-    return ListBuilder{std::move(record)};
+    auto builder = ListBuilder{};
+    builder._name = record.name;
+    builder._description = record.description;
+    builder._filter = record.filter;
+    builder._tracksBuilder._trackIds = record.trackIds;
+    builder._tracksBuilder._isSmart = !record.filter.empty();
+    return builder;
   }
 
   ListBuilder ListBuilder::fromView(ListView const& view)
   {
-    auto record = ListRecord{};
-    record.name = std::string{view.name()};
-    record.description = std::string{view.description()};
-    record.filter = std::string{view.filter()};
+    auto builder = ListBuilder{};
+    builder._name = view.name();
+    builder._description = view.description();
+    builder._filter = view.filter();
+    builder._tracksBuilder._isSmart = view.isSmart();
 
     auto tracks = view.tracks();
-    record.trackIds.reserve(tracks.size());
-    for (auto const& id : tracks) { record.trackIds.push_back(id); }
-
-    return ListBuilder{std::move(record)};
+    builder._tracksBuilder._trackIds.reserve(tracks.size());
+    for (auto const& id : tracks)
+    {
+      builder._tracksBuilder._trackIds.push_back(id);
+    }
+    return builder;
   }
 
-  ListBuilder::ListBuilder(ListRecord record)
-    : _record{std::move(record)}
+  ListBuilder::TracksBuilder& ListBuilder::tracks()
   {
+    return _tracksBuilder;
   }
 
-  ListBuilder::TracksBuilder ListBuilder::tracks()
+  //=============================================================================
+  // ListBuilder::record() - constructs ListRecord on-the-fly
+  //=============================================================================
+
+  ListRecord ListBuilder::record() const
   {
-    return TracksBuilder{*this};
+    auto record = ListRecord{};
+    record.name = std::string{_name};
+    record.description = std::string{_description};
+    record.filter = std::string{_filter};
+    record.trackIds = _tracksBuilder._trackIds;
+    return record;
   }
 
-  ListBuilder& ListBuilder::name(std::string v)
+  //=============================================================================
+  // Direct setters
+  //=============================================================================
+
+  ListBuilder& ListBuilder::name(std::string_view v)
   {
-    _record.name = std::move(v);
+    _name = v;
     return *this;
   }
 
-  ListBuilder& ListBuilder::description(std::string v)
+  ListBuilder& ListBuilder::description(std::string_view v)
   {
-    _record.description = std::move(v);
+    _description = v;
     return *this;
   }
 
-  ListBuilder& ListBuilder::filter(std::string v)
+  ListBuilder& ListBuilder::filter(std::string_view v)
   {
-    _record.filter = std::move(v);
+    _filter = v;
     return *this;
   }
 
@@ -75,13 +97,25 @@ namespace rs::core
 
   ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::add(TrackId id)
   {
-    _builder._record.trackIds.push_back(id);
+    _trackIds.push_back(id);
     return *this;
   }
 
   ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::remove(TrackId id)
   {
-    std::erase(_builder._record.trackIds, id);
+    std::erase(_trackIds, id);
+    return *this;
+  }
+
+  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::clear()
+  {
+    _trackIds.clear();
+    return *this;
+  }
+
+  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::isSmart(bool v)
+  {
+    _isSmart = v;
     return *this;
   }
 
@@ -91,10 +125,10 @@ namespace rs::core
 
   std::vector<std::byte> ListBuilder::serialize() const
   {
-    auto const& name = _record.name;
-    auto const& description = _record.description;
-    auto const& expression = _record.filter;
-    auto const& trackIds = _record.trackIds;
+    auto const& name = _name;
+    auto const& description = _description;
+    auto const& expression = _filter;
+    auto const& trackIds = _tracksBuilder._trackIds;
 
     auto const nameLen = name.size();
     auto const descLen = description.size();
@@ -127,7 +161,10 @@ namespace rs::core
     result.insert_range(result.end(), utility::asBytes(header));
 
     // Copy trackIds
-    if (!trackIds.empty()) { result.insert_range(result.end(), utility::asBytes(trackIds.data(), trackIds.size())); }
+    if (!trackIds.empty())
+    {
+      result.insert_range(result.end(), utility::asBytes(trackIds.data(), trackIds.size()));
+    }
 
     // Copy strings
     result.insert_range(result.end(), utility::asBytes(name));
@@ -135,7 +172,10 @@ namespace rs::core
     result.insert_range(result.end(), utility::asBytes(expression));
 
     // Pad to 4-byte alignment
-    while (result.size() % 4 != 0) { result.push_back(std::byte{0}); }
+    while (result.size() % 4 != 0)
+    {
+      result.push_back(std::byte{0});
+    }
 
     return result;
   }

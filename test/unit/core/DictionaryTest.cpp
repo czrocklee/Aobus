@@ -24,7 +24,7 @@ TEST_CASE("Dictionary - store and get", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   wtxn.commit();
 
   // Store a value
@@ -44,7 +44,7 @@ TEST_CASE("Dictionary - getId", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   dict.put(wtxn, "artist1");
   wtxn.commit();
 
@@ -59,7 +59,7 @@ TEST_CASE("Dictionary - contains by string", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   dict.put(wtxn, "exists");
   wtxn.commit();
 
@@ -73,7 +73,7 @@ TEST_CASE("Dictionary - put duplicate string returns existing ID", "[core][dicti
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   wtxn.commit();
 
   // Store a value
@@ -98,7 +98,7 @@ TEST_CASE("Dictionary - get throws on invalid ID", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   dict.put(wtxn, "first");
   wtxn.commit();
 
@@ -112,7 +112,7 @@ TEST_CASE("Dictionary - getId throws on non-existent string", "[core][dictionary
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   dict.put(wtxn, "exists");
   wtxn.commit();
 
@@ -126,11 +126,11 @@ TEST_CASE("Dictionary - get with first valid ID (0)", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   auto id = dict.put(wtxn, "first");
   wtxn.commit();
 
-  REQUIRE(id.value() == 0);
+  REQUIRE(id.value() == 1);
   auto result = dict.get(id);
   REQUIRE(result == "first");
 }
@@ -141,12 +141,12 @@ TEST_CASE("Dictionary - get throws on out-of-bounds ID", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   dict.put(wtxn, "only one");
   wtxn.commit();
 
-  // ID 1 is out of bounds (only 0 is valid)
-  CHECK_THROWS(dict.get(DictionaryId{1}));
+  // ID 2 is out of bounds (only 1 is valid)
+  CHECK_THROWS(dict.get(DictionaryId{2}));
 }
 
 TEST_CASE("Dictionary - reserve returns new ID for non-existent string", "[core][dictionary]")
@@ -155,12 +155,12 @@ TEST_CASE("Dictionary - reserve returns new ID for non-existent string", "[core]
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   wtxn.commit();
 
   // Reserve a non-existent string
   auto id = dict.reserve("new artist");
-  REQUIRE(id.value() == 0);  // First reserved ID is 0 (same as put)
+  REQUIRE(id.value() == 1);  // First reserved ID is 0 (same as put)
 
   // contains should now return true (in-memory)
   REQUIRE(dict.contains("new artist"));
@@ -172,13 +172,13 @@ TEST_CASE("Dictionary - reserve returns existing ID for existent string", "[core
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   dict.put(wtxn, "existing");
   wtxn.commit();
 
   // Reserve an existing string - should return the existing ID
   auto id = dict.reserve("existing");
-  REQUIRE(id.value() == 0);  // First put uses ID 0
+  REQUIRE(id.value() == 1);  // First put uses ID 0
 
   REQUIRE(dict.contains("existing"));
 }
@@ -189,7 +189,7 @@ TEST_CASE("Dictionary - reserve then put returns same ID", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   wtxn.commit();
 
   // Reserve a string (not persisted)
@@ -207,7 +207,7 @@ TEST_CASE("Dictionary - reserve multiple strings", "[core][dictionary]")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto dict = DictionaryStore{wtxn, "dict"};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   wtxn.commit();
 
   auto id1 = dict.reserve("artist1");

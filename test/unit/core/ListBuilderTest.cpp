@@ -17,6 +17,7 @@
 using rs::core::ListBuilder;
 using rs::core::ListStore;
 using rs::core::ListView;
+using rs::lmdb::Database;
 using rs::lmdb::Environment;
 using rs::lmdb::ReadTransaction;
 using rs::lmdb::WriteTransaction;
@@ -72,7 +73,7 @@ TEST_CASE("ListBuilder - manual list round-trip through ListStore")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = ListStore{wtxn, "lists"};
+  auto store = ListStore{Database{wtxn, "lists"}};
   wtxn.commit();
 
   auto builder = ListBuilder::createNew()
@@ -104,7 +105,7 @@ TEST_CASE("ListBuilder - smart list round-trip through ListStore")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
   auto wtxn = WriteTransaction{env};
-  auto store = ListStore{wtxn, "lists"};
+  auto store = ListStore{Database{wtxn, "lists"}};
   wtxn.commit();
 
   auto payload = ListBuilder::createNew()

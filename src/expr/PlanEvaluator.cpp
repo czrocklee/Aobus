@@ -83,7 +83,7 @@ namespace rs::expr
         case Field::Channels: return static_cast<std::int64_t>(track.property().channels());
         case Field::BitDepth: return static_cast<std::int64_t>(track.property().bitDepth());
         case Field::CodecId: return static_cast<std::int64_t>(track.property().codecId());
-        case Field::Rating: return static_cast<std::int64_t>(track.property().rating());
+        case Field::Rating: return static_cast<std::int64_t>(track.metadata().rating());
 
         // Metadata ID fields
         case Field::ArtistId: return static_cast<std::int64_t>(track.metadata().artistId().value());

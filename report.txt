@@ -68,77 +68,77 @@ make[2]: Leaving directory '/tmp/build'
 /nix/store/1fvcxyhg3i5fvw0j4l8wmyml10dnvm7q-gnumake-4.4.1/bin/make  -f CMakeFiles/rs_test.dir/build.make CMakeFiles/rs_test.dir/depend
 /nix/store/1fvcxyhg3i5fvw0j4l8wmyml10dnvm7q-gnumake-4.4.1/bin/make  -f CMakeFiles/RockStudio.dir/build.make CMakeFiles/RockStudio.dir/depend
 make[2]: Entering directory '/tmp/build'
-cd /tmp/build && /nix/store/q800b7nrqa8csf2gcds2i83w1icsda5w-cmake-4.1.2/bin/cmake -E cmake_depends "Unix Makefiles" /home/rocklee/dev/RockStudio /home/rocklee/dev/RockStudio /tmp/build /tmp/build /tmp/build/CMakeFiles/rsc.dir/DependInfo.cmake "--color="
-make[2]: Entering directory '/tmp/build'
 cd /tmp/build && /nix/store/q800b7nrqa8csf2gcds2i83w1icsda5w-cmake-4.1.2/bin/cmake -E cmake_depends "Unix Makefiles" /home/rocklee/dev/RockStudio /home/rocklee/dev/RockStudio /tmp/build /tmp/build /tmp/build/CMakeFiles/rs_test.dir/DependInfo.cmake "--color="
 make[2]: Entering directory '/tmp/build'
+cd /tmp/build && /nix/store/q800b7nrqa8csf2gcds2i83w1icsda5w-cmake-4.1.2/bin/cmake -E cmake_depends "Unix Makefiles" /home/rocklee/dev/RockStudio /home/rocklee/dev/RockStudio /tmp/build /tmp/build /tmp/build/CMakeFiles/rsc.dir/DependInfo.cmake "--color="
+make[2]: Entering directory '/tmp/build'
 cd /tmp/build && /nix/store/q800b7nrqa8csf2gcds2i83w1icsda5w-cmake-4.1.2/bin/cmake -E cmake_depends "Unix Makefiles" /home/rocklee/dev/RockStudio /home/rocklee/dev/RockStudio /tmp/build /tmp/build /tmp/build/CMakeFiles/RockStudio.dir/DependInfo.cmake "--color="
-Dependencies file "CMakeFiles/rsc.dir/tool/InitCommand.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/ImportProgressDialog.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/rsc.dir/tool/ListCommand.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/rsc.dir/tool/TagCommand.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/app/playback/FfmpegDecoderSession.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/RockStudio.dir/app/ImportWorker.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/rsc.dir/tool/InitCommand.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/app/playback/PcmRingBuffer.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/rsc.dir/tool/TrackCommand.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/RockStudio.dir/app/ListRow.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/rsc.dir/tool/ListCommand.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/integration/playback/FfmpegDecoderSessionTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/rsc.dir/tool/TrackUtils.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/RockStudio.dir/app/ImportWorker.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/integration/tag/TagTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/rsc.dir/tool/main.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/rsc.dir/tool/TagCommand.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/RockStudio.dir/app/ListRow.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/main.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/RockStudio.dir/app/MainWindow.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/DictionaryTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/rsc.dir/link.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
-Consolidate compiler generated dependencies of target rsc
+Dependencies file "CMakeFiles/rsc.dir/tool/TrackCommand.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/ListBuilderTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/ListLayoutTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/rsc.dir/tool/TrackUtils.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/ListStoreTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/RockStudio.dir/app/MainWindow.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/rsc.dir/tool/main.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/ListViewTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/RockStudio.dir/app/NewListDialog.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/ResourceStoreTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/rsc.dir/link.d" is newer than depends file "/tmp/build/CMakeFiles/rsc.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/TrackBuilderTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
+Consolidate compiler generated dependencies of target rsc
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/TrackLayoutTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/TrackRecordTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/RockStudio.dir/app/NewListDialog.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/TrackStoreTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/RockStudio.dir/app/PlaybackBar.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/core/TrackViewTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/lmdb/DatabaseTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/lmdb/EnvironmentTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/lmdb/TransactionTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/RockStudio.dir/app/PlaylistExporter.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/RockStudio.dir/app/PlaybackBar.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/query/ExecutionPlanTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/query/ParserTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/RockStudio.dir/app/TagPromptDialog.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/test/unit/query/PlanEvaluatorTest.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/rs_test.dir/link.d" is newer than depends file "/tmp/build/CMakeFiles/rs_test.dir/compiler_depend.internal".
 Consolidate compiler generated dependencies of target rs_test
+Dependencies file "CMakeFiles/RockStudio.dir/app/PlaylistExporter.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
+Dependencies file "CMakeFiles/RockStudio.dir/app/TagPromptDialog.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 make[2]: Leaving directory '/tmp/build'
 /nix/store/1fvcxyhg3i5fvw0j4l8wmyml10dnvm7q-gnumake-4.4.1/bin/make  -f CMakeFiles/rsc.dir/build.make CMakeFiles/rsc.dir/build
 Dependencies file "CMakeFiles/RockStudio.dir/app/TrackListAdapter.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/TrackRow.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/TrackViewPage.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/main.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
+make[2]: Entering directory '/tmp/build'
+make[2]: Nothing to be done for 'CMakeFiles/rsc.dir/build'.
+make[2]: Leaving directory '/tmp/build'
 Dependencies file "CMakeFiles/RockStudio.dir/app/model/AllTrackIdsList.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/model/FilteredTrackIdList.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/model/ManualTrackIdList.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/model/TrackIdList.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/RockStudio.dir/app/model/TrackRowDataProvider.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
-Dependencies file "CMakeFiles/RockStudio.dir/app/playback/AlsaExclusiveBackend.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
-make[2]: Entering directory '/tmp/build'
-make[2]: Nothing to be done for 'CMakeFiles/rsc.dir/build'.
 make[2]: Leaving directory '/tmp/build'
+Dependencies file "CMakeFiles/RockStudio.dir/app/model/TrackRowDataProvider.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
+/nix/store/1fvcxyhg3i5fvw0j4l8wmyml10dnvm7q-gnumake-4.4.1/bin/make  -f CMakeFiles/rs_test.dir/build.make CMakeFiles/rs_test.dir/build
+Dependencies file "CMakeFiles/RockStudio.dir/app/playback/AlsaExclusiveBackend.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/playback/FfmpegDecoderSession.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/playback/FormatNegotiator.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/playback/PcmRingBuffer.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
-make[2]: Leaving directory '/tmp/build'
-/nix/store/1fvcxyhg3i5fvw0j4l8wmyml10dnvm7q-gnumake-4.4.1/bin/make  -f CMakeFiles/rs_test.dir/build.make CMakeFiles/rs_test.dir/build
 Dependencies file "CMakeFiles/RockStudio.dir/app/playback/PipeWireBackend.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/playback/PlaybackController.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Dependencies file "CMakeFiles/RockStudio.dir/app/playback/PlaybackEngine.cpp.o.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
+[ 42%] Built target rsc
 Dependencies file "CMakeFiles/RockStudio.dir/link.d" is newer than depends file "/tmp/build/CMakeFiles/RockStudio.dir/compiler_depend.internal".
 Consolidate compiler generated dependencies of target RockStudio
-[ 42%] Built target rsc
 make[2]: Entering directory '/tmp/build'
 make[2]: Nothing to be done for 'CMakeFiles/rs_test.dir/build'.
 make[2]: Leaving directory '/tmp/build'

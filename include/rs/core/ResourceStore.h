@@ -17,7 +17,7 @@ namespace rs::core
     using Reader = lmdb::Database::Reader;
     class Writer;
 
-    ResourceStore(lmdb::WriteTransaction& txn, std::string const& db) : _database{txn, db} {}
+    explicit ResourceStore(lmdb::Database db) : _database{std::move(db)} {}
 
     Reader reader(lmdb::ReadTransaction& txn) const { return _database.reader(txn); };
     Writer writer(lmdb::WriteTransaction& txn);
