@@ -24,7 +24,6 @@ void ImportWorker::run()
 {
   auto txn = _ml.writeTransaction();
   auto trackWriter = _ml.tracks().writer(txn);
-  auto resourceWriter = _ml.resources().writer(txn);
   auto& dict = _ml.dictionary();
 
   for (auto i = 0u; i < _files.size(); ++i)
@@ -44,22 +43,14 @@ void ImportWorker::run()
         continue;
       }
 
-      auto parsed = tagFile->loadTrack();
+      auto builder = tagFile->loadTrack();
 
       // Fill in library context
-      parsed.record.property.uri = std::filesystem::relative(path, _ml.rootPath()).string();
-      if (std::filesystem::exists(path)) { parsed.record.property.fileSize = std::filesystem::file_size(path); }
-      auto ftime = std::filesystem::last_write_time(path);
-      parsed.record.property.mtime =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(ftime.time_since_epoch()).count();
+      builder.property()
+        .uri(std::filesystem::relative(path, _ml.rootPath()).string())
+        .mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(std::filesystem::last_write_time(path).time_since_epoch()).count());
+      if (std::filesystem::exists(path)) { builder.property().fileSize(std::filesystem::file_size(path)); }
 
-      // Store cover art
-      if (!parsed.embeddedCoverArt.empty())
-      {
-        parsed.record.metadata.coverArtId = resourceWriter.create(parsed.embeddedCoverArt).value();
-      }
-
-      auto builder = rs::core::TrackBuilder::fromRecord(std::move(parsed.record));
       auto [hotData, coldData] = builder.serialize(txn, dict, _ml.resources());
 
       auto [trackId, view] = trackWriter.createHotCold(hotData, coldData);

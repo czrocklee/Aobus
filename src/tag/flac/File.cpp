@@ -15,56 +15,46 @@ namespace rs::tag::flac
 {
   namespace
   {
-    using Metadata = rs::core::TrackRecord::Metadata;
+    using TextSetter = rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
+    using NumberSetter = rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
-    void setText(std::string& field, std::string_view value)
+    template<TextSetter Setter>
+    void handleText(rs::core::TrackBuilder& builder, std::string_view value)
     {
-      field.assign(value);
+      (builder.metadata().*Setter)(value);
     }
 
-    void setNumber(std::uint16_t& field, std::string_view value)
+    template<NumberSetter Setter>
+    void handleNumber(rs::core::TrackBuilder& builder, std::string_view value)
     {
-      if (auto parsed = decodeUint16(utility::asBytes(value)); parsed) { field = *parsed; }
+      if (auto parsed = decodeUint16(utility::asBytes(value)); parsed) { (builder.metadata().*Setter)(*parsed); }
     }
 
-    void setSlashNumber(std::uint16_t& primary, std::uint16_t& secondary, std::string_view value)
+    template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
+    void handleSlashNumber(rs::core::TrackBuilder& builder, std::string_view value)
     {
       auto const separator = value.find('/');
-      setNumber(primary, value.substr(0, separator));
-
-      if (separator != std::string_view::npos) { setNumber(secondary, value.substr(separator + 1)); }
-    }
-
-    template<auto Member>
-    void assignTextField(Metadata& meta, std::string_view value)
-    {
-      setText(meta.*Member, value);
-    }
-
-    template<auto Member>
-    void assignNumberField(Metadata& meta, std::string_view value)
-    {
-      setNumber(meta.*Member, value);
-    }
-
-    template<auto Primary, auto Secondary>
-    void assignSlashField(Metadata& meta, std::string_view value)
-    {
-      setSlashNumber(meta.*Primary, meta.*Secondary, value);
+      handleNumber<PrimarySetter>(builder, value.substr(0, separator));
+      if (separator != std::string_view::npos)
+      {
+        handleNumber<SecondarySetter>(builder, value.substr(separator + 1));
+      }
     }
 
 #include "tag/flac/VorbisCommentDispatch.h"
 
   } // namespace
 
-  ParsedTrack File::loadTrack() const
+  rs::core::TrackBuilder File::loadTrack() const
   {
     if (_mappedRegion.get_size() < 4 || std::memcmp(_mappedRegion.get_address(), "fLaC", 4) != 0)
     {
       RS_THROW(rs::Exception, "unrecognized flac file content");
     }
 
-    auto parsed = ParsedTrack{};
+    clearOwnedStrings();
+    auto builder = rs::core::TrackBuilder::createNew();
+
     auto iter = MetadataBlockViewIterator{
       static_cast<char const*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};
     auto end = MetadataBlockViewIterator{};
@@ -76,17 +66,18 @@ namespace rs::tag::flac
         case MetadataBlockType::StreamInfo:
         {
           auto view = StreamInfoBlockView{iter->data()};
-          parsed.record.property.sampleRate = view.sampleRate();
-          parsed.record.property.channels = view.channels();
-          parsed.record.property.bitDepth = view.bitDepth();
+          builder.property()
+            .sampleRate(view.sampleRate())
+            .channels(view.channels())
+            .bitDepth(view.bitDepth());
 
           if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
           {
-            parsed.record.property.durationMs = (totalSamples * 1000) / view.sampleRate();
-            if (parsed.record.property.durationMs > 0)
+            auto const durationMs = static_cast<std::uint32_t>((totalSamples * 1000) / view.sampleRate());
+            if (durationMs > 0)
             {
-              parsed.record.property.bitrate =
-                static_cast<std::uint32_t>((_mappedRegion.get_size() * 8000) / parsed.record.property.durationMs);
+              builder.property().durationMs(durationMs).bitrate(
+                static_cast<std::uint32_t>((_mappedRegion.get_size() * 8000) / durationMs));
             }
           }
 
@@ -104,11 +95,11 @@ namespace rs::tag::flac
 
             if (auto const* entry = FlacVorbisDispatchTable::lookupVorbisField(key.data(), key.size()))
             {
-              entry->handler(parsed.record.metadata, value);
+              entry->handler(builder, value);
             }
             else
             {
-              parsed.record.custom.pairs.emplace_back(key, value);
+              builder.custom().add(key, value);
             }
           });
 
@@ -117,7 +108,7 @@ namespace rs::tag::flac
 
         case MetadataBlockType::Picture:
         {
-          parsed.embeddedCoverArt = PictureBlockView{iter->data()}.blob();
+          builder.metadata().coverArtData(PictureBlockView{iter->data()}.blob());
           break;
         }
 
@@ -125,6 +116,6 @@ namespace rs::tag::flac
       }
     }
 
-    return parsed;
+    return builder;
   }
 } // namespace rs::tag::flac

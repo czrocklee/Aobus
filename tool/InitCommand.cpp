@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "InitCommand.h"
-#include "TrackUtils.h"
 #include <rs/core/MusicLibrary.h>
+#include <rs/tag/File.h>
 #include <rs/utility/Finder.h>
 
 #include <iostream>
@@ -18,14 +18,21 @@ namespace
     utility::Finder finder{".", {".flac", ".m4a", ".mp3"}};
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
-    auto resourceWriter = ml.resources().writer(txn);
     auto& dict = ml.dictionary();
 
     for (std::filesystem::path const& path : finder)
     {
       try
       {
-        auto builder = loadTrackRecord(path, dict, resourceWriter, txn);
+        auto tagFile = tag::File::open(path);
+        if (!tagFile) { continue; }
+
+        auto builder = tagFile->loadTrack();
+        builder.property()
+          .uri(path.string())
+          .fileSize(std::filesystem::file_size(path))
+          .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
+
         auto [hotData, coldData] = builder.serialize(txn, dict, ml.resources());
         auto [id, trackView] = writer.createHotCold(hotData, coldData);
         os << "add track: " << id << " " << trackView.metadata().title() << '\n';

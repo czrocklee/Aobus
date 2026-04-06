@@ -1,82 +1,67 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "../../Decoder.h"
+#include "Reader.h"
 #include "Frame.h"
 #include "Layout.h"
-#include <rs/tag/ParsedTrack.h>
+#include <rs/tag/mpeg/File.h>
 
 #include <cstring>
-#include <span>
 
 namespace rs::tag::mpeg::id3v2
 {
   namespace
   {
-    using Metadata = rs::core::TrackRecord::Metadata;
-    using FrameHandler = void (*)(ParsedTrack&, void const*, std::size_t);
+    using TextSetter =
+      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
+    using NumberSetter =
+      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
-    template<auto Member>
-    void handleText(ParsedTrack& parsed, void const* data, std::size_t size);
+    void handlePicture(rs::core::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size);
+    void handleTxxx(rs::core::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size);
 
-    void handleYear(ParsedTrack& parsed, void const* data, std::size_t size);
-    void handleTrackNumber(ParsedTrack& parsed, void const* data, std::size_t size);
-    void handleDiscNumber(ParsedTrack& parsed, void const* data, std::size_t size);
-    void handlePicture(ParsedTrack& parsed, void const* data, std::size_t size);
-    void handleTxxx(ParsedTrack& parsed, void const* data, std::size_t size);
-
-#include "tag/mpeg/id3v2/FrameDispatch.h"
-
-    template<auto Member>
-    void handleText(ParsedTrack& parsed, void const* data, std::size_t size)
+    template<TextSetter Setter>
+    void handleText(rs::core::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size)
     {
-      V23TextFrameView view{data, size};
-      parsed.record.metadata.*Member = view.text();
+      auto view = V23TextFrameView{data, size};
+      (builder.metadata().*Setter)(rs::tag::detail::stashOwnedString(owner, view.text()));
     }
 
-    void handleYear(ParsedTrack& parsed, void const* data, std::size_t size)
+    template<NumberSetter Setter>
+    void handleNumber(rs::core::TrackBuilder& builder,
+                      [[maybe_unused]] rs::tag::File const& owner,
+                      void const* data,
+                      std::size_t size)
     {
-      V23TextFrameView view{data, size};
-      auto text = view.text();
-      if (!text.empty())
+      auto view = V23TextFrameView{data, size};
+
+      if (auto text = view.text(); !text.empty())
       {
-        parsed.record.metadata.year = static_cast<std::uint16_t>(std::atoi(text.data()));
+        (builder.metadata().*Setter)(static_cast<std::uint16_t>(std::atoi(text.data())));
       }
     }
 
-    void handleTrackNumber(ParsedTrack& parsed, void const* data, std::size_t size)
+    template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
+    void handleSlashNumber(rs::core::TrackBuilder& builder,
+                           [[maybe_unused]] rs::tag::File const& owner,
+                           void const* data,
+                           std::size_t size)
     {
-      V23TextFrameView view{data, size};
-      auto text = view.text();
-      auto slashPos = text.find('/');
-      if (slashPos == std::string_view::npos)
-      {
-        parsed.record.metadata.trackNumber = static_cast<std::uint16_t>(std::atoi(text.data()));
-      }
-      else
-      {
-        parsed.record.metadata.trackNumber = static_cast<std::uint16_t>(std::atoi(text.data()));
-        parsed.record.metadata.totalTracks = static_cast<std::uint16_t>(std::atoi(text.data() + slashPos + 1));
-      }
-    }
-
-    void handleDiscNumber(ParsedTrack& parsed, void const* data, std::size_t size)
-    {
-      V23TextFrameView view{data, size};
+      auto view = V23TextFrameView{data, size};
       auto text = view.text();
       auto slashPos = text.find('/');
-      if (slashPos == std::string_view::npos)
+      (builder.metadata().*PrimarySetter)(static_cast<std::uint16_t>(std::atoi(text.data())));
+
+      if (slashPos != std::string_view::npos)
       {
-        parsed.record.metadata.discNumber = static_cast<std::uint16_t>(std::atoi(text.data()));
-      }
-      else
-      {
-        parsed.record.metadata.discNumber = static_cast<std::uint16_t>(std::atoi(text.data()));
-        parsed.record.metadata.totalDiscs = static_cast<std::uint16_t>(std::atoi(text.data() + slashPos + 1));
+        (builder.metadata().*SecondarySetter)(static_cast<std::uint16_t>(std::atoi(text.data() + slashPos + 1)));
       }
     }
 
-    void handlePicture(ParsedTrack& parsed, void const* data, std::size_t size)
+    void handlePicture(rs::core::TrackBuilder& builder,
+                       [[maybe_unused]] rs::tag::File const& owner,
+                       void const* data,
+                       std::size_t size)
     {
       // APIC frame layout (after V23CommonFrameLayout header):
       //   encoding byte (1)
@@ -90,83 +75,87 @@ namespace rs::tag::mpeg::id3v2
       // Skip encoding byte
       ++ptr;
       // Skip MIME type
-      while (*ptr != '\0') { ++ptr; }
+      while (*ptr != '\0')
+      {
+        ++ptr;
+      }
       ++ptr; // skip null terminator
       // Skip picture type
       ++ptr;
       // Skip description (null-terminated)
-      while (*ptr != '\0') { ++ptr; }
+      while (*ptr != '\0')
+      {
+        ++ptr;
+      }
       ++ptr; // skip null terminator
 
       std::size_t const imageSize = size - (ptr - frameData);
-      parsed.embeddedCoverArt = viewBytes(std::span{reinterpret_cast<std::byte const*>(ptr), imageSize});
+      builder.metadata().coverArtData(std::span{reinterpret_cast<std::byte const*>(ptr), imageSize});
     }
 
-    void handleTxxx(ParsedTrack& parsed, void const* data, std::size_t size)
+    void handleTxxx(rs::core::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size)
     {
       // TXXX frame layout:
       //   encoding byte (1)
       //   description (null-terminated)
       //   value
-      V23TextFrameView view{data, size};
+      auto view = V23TextFrameView{data, size};
       auto text = view.text();
 
       // TXXX format is "description\0value"
-      auto nullPos = text.find('\0');
-      if (nullPos != std::string_view::npos)
+
+      if (auto nullPos = text.find('\0'); nullPos != std::string_view::npos)
       {
         auto key = text.substr(0, nullPos);
         auto value = text.substr(nullPos + 1);
 
         if (key == "rating")
         {
-          parsed.record.metadata.rating = static_cast<std::uint8_t>(std::atoi(value.data()));
+          builder.metadata().rating(static_cast<std::uint8_t>(std::atoi(value.data())));
         }
         else
         {
-          // Store as custom pair
-          parsed.record.custom.pairs.emplace_back(std::string{key}, std::string{value});
+          // Store as custom pair - stash both strings
+          auto const stashedKey = rs::tag::detail::stashOwnedString(owner, std::string{key});
+          auto const stashedValue = rs::tag::detail::stashOwnedString(owner, std::string{value});
+          builder.custom().add(stashedKey, stashedValue);
         }
       }
     }
 
-    FrameHandler lookupFrameHandler(std::string_view id)
-    {
-      if (auto const* entry = Id3v2FrameDispatchTable::lookupFrame(id.data(), id.size()))
-      {
-        return entry->handler;
-      }
-      return nullptr;
-    }
+#include "tag/mpeg/id3v2/FrameDispatch.h"
+
   } // namespace
 
-  ParsedTrack loadFrames(HeaderLayout const& header, void const* buffer, std::size_t size)
+  rs::core::TrackBuilder loadFrames(rs::tag::File const& owner,
+                                    HeaderLayout const& header,
+                                    void const* buffer,
+                                    std::size_t size)
   {
     switch (header.majorVersion)
     {
-      case 2:
-        return {};
+      case 2: return rs::core::TrackBuilder::createNew();
       case 3:
       case 4:
       {
-        ParsedTrack parsed;
-        FrameViewIterator<V23FrameView> frameIter{buffer, size};
-        FrameViewIterator<V23FrameView> frameEnd{};
+        auto builder = rs::core::TrackBuilder::createNew();
+        auto frameIter = FrameViewIterator<V23FrameView>{buffer, size};
+        auto frameEnd = FrameViewIterator<V23FrameView>{};
 
         for (; frameIter != frameEnd; ++frameIter)
         {
           std::string_view frameId = frameIter->id();
 
-          if (auto const handler = lookupFrameHandler(frameId))
+          if (auto const* entry = Id3v2FrameDispatchTable::lookupFrame(frameId.data(), frameId.size());
+              entry != nullptr)
           {
-            handler(parsed, frameIter->data(), frameIter->size());
+            entry->handler(builder, owner, frameIter->data(), frameIter->size());
           }
         }
 
-        return parsed;
+        return builder;
       }
-      default:
-        return {};
+      default: return rs::core::TrackBuilder::createNew();
     }
   }
 } // namespace rs::tag::mpeg::id3v2

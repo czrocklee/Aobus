@@ -7,20 +7,20 @@
 %define lookup-function-name lookupVorbisField
 struct FlacVorbisDispatchEntry
 {
-  using VorbisHandler = void (*)(rs::core::TrackRecord::Metadata&, std::string_view);
+  using VorbisHandler = void (*)(rs::core::TrackBuilder&, std::string_view);
   char const* name;
   VorbisHandler handler;
 };
 %%
-TITLE, &::rs::tag::flac::assignTextField<&::rs::core::TrackRecord::Metadata::title>
-ARTIST, &::rs::tag::flac::assignTextField<&::rs::core::TrackRecord::Metadata::artist>
-ALBUM, &::rs::tag::flac::assignTextField<&::rs::core::TrackRecord::Metadata::album>
-ALBUMARTIST, &::rs::tag::flac::assignTextField<&::rs::core::TrackRecord::Metadata::albumArtist>
-TRACKNUMBER, &::rs::tag::flac::assignSlashField<&::rs::core::TrackRecord::Metadata::trackNumber, &::rs::core::TrackRecord::Metadata::totalTracks>
-TRACKTOTAL, &::rs::tag::flac::assignNumberField<&::rs::core::TrackRecord::Metadata::totalTracks>
-TOTALTRACKS, &::rs::tag::flac::assignNumberField<&::rs::core::TrackRecord::Metadata::totalTracks>
-DISCNUMBER, &::rs::tag::flac::assignSlashField<&::rs::core::TrackRecord::Metadata::discNumber, &::rs::core::TrackRecord::Metadata::totalDiscs>
-DISCTOTAL, &::rs::tag::flac::assignNumberField<&::rs::core::TrackRecord::Metadata::totalDiscs>
-TOTALDISCS, &::rs::tag::flac::assignNumberField<&::rs::core::TrackRecord::Metadata::totalDiscs>
-GENRE, &::rs::tag::flac::assignTextField<&::rs::core::TrackRecord::Metadata::genre>
-DATE, &::rs::tag::flac::assignNumberField<&::rs::core::TrackRecord::Metadata::year>
+TITLE, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::title>
+ARTIST, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::artist>
+ALBUM, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::album>
+ALBUMARTIST, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::albumArtist>
+TRACKNUMBER, &::rs::tag::flac::handleSlashNumber<&::rs::core::TrackBuilder::MetadataBuilder::trackNumber, &::rs::core::TrackBuilder::MetadataBuilder::totalTracks>
+TRACKTOTAL, &::rs::tag::flac::handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::totalTracks>
+TOTALTRACKS, &::rs::tag::flac::handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::totalTracks>
+DISCNUMBER, &::rs::tag::flac::handleSlashNumber<&::rs::core::TrackBuilder::MetadataBuilder::discNumber, &::rs::core::TrackBuilder::MetadataBuilder::totalDiscs>
+DISCTOTAL, &::rs::tag::flac::handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::totalDiscs>
+TOTALDISCS, &::rs::tag::flac::handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::totalDiscs>
+GENRE, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::genre>
+DATE, &::rs::tag::flac::handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::year>

@@ -7,18 +7,19 @@
 %define lookup-function-name lookupFrame
 struct Id3v2FrameDispatchEntry
 {
+  using FrameHandler = void (*)(rs::core::TrackBuilder&, rs::tag::File const&, void const*, std::size_t);
   char const* name;
-  rs::tag::mpeg::id3v2::FrameHandler handler;
+  FrameHandler handler;
 };
 %%
-TIT2, &::rs::tag::mpeg::id3v2::handleText<&::rs::core::TrackRecord::Metadata::title>
-TPE1, &::rs::tag::mpeg::id3v2::handleText<&::rs::core::TrackRecord::Metadata::artist>
-TPE2, &::rs::tag::mpeg::id3v2::handleText<&::rs::core::TrackRecord::Metadata::albumArtist>
-TALB, &::rs::tag::mpeg::id3v2::handleText<&::rs::core::TrackRecord::Metadata::album>
-TYER, &::rs::tag::mpeg::id3v2::handleYear
-TDRC, &::rs::tag::mpeg::id3v2::handleYear
-TRCK, &::rs::tag::mpeg::id3v2::handleTrackNumber
-TPOS, &::rs::tag::mpeg::id3v2::handleDiscNumber
-TCON, &::rs::tag::mpeg::id3v2::handleText<&::rs::core::TrackRecord::Metadata::genre>
-APIC, &::rs::tag::mpeg::id3v2::handlePicture
-TXXX, &::rs::tag::mpeg::id3v2::handleTxxx
+TIT2, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::title>
+TPE1, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::artist>
+TPE2, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::albumArtist>
+TALB, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::album>
+TYER, &handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::year>
+TDRC, &handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::year>
+TRCK, &handleSlashNumber<&::rs::core::TrackBuilder::MetadataBuilder::trackNumber, &::rs::core::TrackBuilder::MetadataBuilder::totalTracks>
+TPOS, &handleSlashNumber<&::rs::core::TrackBuilder::MetadataBuilder::discNumber, &::rs::core::TrackBuilder::MetadataBuilder::totalDiscs>
+TCON, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::genre>
+APIC, &handlePicture
+TXXX, &handleTxxx

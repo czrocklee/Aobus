@@ -12,6 +12,6 @@ namespace rs::tag::mpeg
   public:
     using rs::tag::File::File;
 
-    ParsedTrack loadTrack() const override;
+    rs::core::TrackBuilder loadTrack() const override;
   };
 }

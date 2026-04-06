@@ -15,6 +15,9 @@ namespace rs::tag::mp4
 {
   namespace
   {
+    using TextSetter = rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
+    using NumberSetter = rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+
     std::span<std::byte const> atomData(AtomView const& view)
     {
       auto const& layout = view.layout<DataAtomLayout>();
@@ -23,45 +26,42 @@ namespace rs::tag::mp4
       return {data, size};
     }
 
-    void setText(std::string& field, AtomView const& view)
+    std::string_view atomTextView(AtomView const& view)
     {
-      field = decodeString(atomData(view));
+      auto data = atomData(view);
+      return {reinterpret_cast<char const*>(data.data()), data.size()};
     }
 
-    void assignTrackNumbers(rs::tag::ParsedTrack& parsed, AtomView const& view)
+    void handleTrackNumbers(rs::core::TrackBuilder& builder, AtomView const& view)
     {
       auto const& layout = view.layout<TrknAtomLayout>();
-      auto& meta = parsed.record.metadata;
-      meta.trackNumber = layout.trackNumber.value();
-      meta.totalTracks = layout.totalTracks.value();
+      builder.metadata().trackNumber(layout.trackNumber.value()).totalTracks(layout.totalTracks.value());
     }
 
-    void assignDiscNumbers(rs::tag::ParsedTrack& parsed, AtomView const& view)
+    void handleDiscNumbers(rs::core::TrackBuilder& builder, AtomView const& view)
     {
       auto const& layout = view.layout<DiskAtomLayout>();
-      auto& meta = parsed.record.metadata;
-      meta.discNumber = layout.discNumber.value();
-      meta.totalDiscs = layout.totalDiscs.value();
+      builder.metadata().discNumber(layout.discNumber.value()).totalDiscs(layout.totalDiscs.value());
     }
 
-    template<auto Member>
-    void assignTextField(rs::tag::ParsedTrack& parsed, AtomView const& view)
+    template<TextSetter Setter>
+    void handleText(rs::core::TrackBuilder& builder, AtomView const& view)
     {
-      setText(parsed.record.metadata.*Member, view);
+      (builder.metadata().*Setter)(atomTextView(view));
     }
 
-    template<auto Member>
-    void assignNumberField(rs::tag::ParsedTrack& parsed, AtomView const& view)
+    template<NumberSetter Setter>
+    void handleNumber(rs::core::TrackBuilder& builder, AtomView const& view)
     {
-      if (auto year = decodeUint16(atomData(view)); year) { parsed.record.metadata.*Member = *year; }
+      if (auto year = decodeUint16(atomData(view)); year) { (builder.metadata().*Setter)(*year); }
     }
 
-    void assignCoverArt(rs::tag::ParsedTrack& parsed, AtomView const& view)
+    void handleCoverArt(rs::core::TrackBuilder& builder, AtomView const& view)
     {
-      parsed.embeddedCoverArt = atomData(view);
+      builder.metadata().coverArtData(atomData(view));
     }
 
-    using AtomHandler = void (*)(rs::tag::ParsedTrack&, AtomView const&);
+    using AtomHandler = void (*)(rs::core::TrackBuilder&, AtomView const&);
 
 #include "tag/mp4/AtomDispatch.h"
 
@@ -121,7 +121,7 @@ namespace rs::tag::mp4
     }
 
     // Helper to extract audio properties from mdhd and stsd
-    void extractAudioProperties(ParsedTrack& parsed, RootAtom const& root, std::size_t fileSize)
+    void extractAudioProperties(rs::core::TrackBuilder& builder, RootAtom const& root, std::size_t fileSize)
     {
       // Get mdhd for sample rate and duration
       if (auto const* mdhdNode = findMdhdNode(root); mdhdNode != nullptr)
@@ -133,15 +133,15 @@ namespace rs::tag::mp4
 
         if (timescale > 0)
         {
-          parsed.record.property.sampleRate = timescale;
+          builder.property().sampleRate(timescale);
 
           if (duration > 0)
           {
-            parsed.record.property.durationMs = static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000) / timescale);
-            if (parsed.record.property.durationMs > 0)
+            auto const durationMs = static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000) / timescale);
+            if (durationMs > 0)
             {
-              parsed.record.property.bitrate =
-                static_cast<std::uint32_t>((fileSize * 8000) / parsed.record.property.durationMs);
+              builder.property().durationMs(durationMs).bitrate(
+                static_cast<std::uint32_t>((fileSize * 8000) / durationMs));
             }
           }
         }
@@ -159,26 +159,26 @@ namespace rs::tag::mp4
 
         // Now data points to the first sample entry (includes length + type)
         auto const& audioLayout = *reinterpret_cast<AudioSampleEntryLayout const*>(data);
-        parsed.record.property.channels = audioLayout.channelCount.value();
-        parsed.record.property.bitDepth = audioLayout.sampleSize.value();
+        builder.property().channels(audioLayout.channelCount.value()).bitDepth(audioLayout.sampleSize.value());
 
         // Sample rate is a 16.16 fixed point, extract integer part
         // Only use if non-zero (ALAC may have 0 here, mdhd has correct rate)
         auto const sampleRateFixed = audioLayout.sampleRate.value();
         if (sampleRateFixed >> 16 > 0)
         {
-          parsed.record.property.sampleRate = sampleRateFixed >> 16;
+          builder.property().sampleRate(sampleRateFixed >> 16);
         }
       }
     }
   } // namespace
 
-  ParsedTrack File::loadTrack() const
+  rs::core::TrackBuilder File::loadTrack() const
   {
     RootAtom root = rs::tag::mp4::fromBuffer(_mappedRegion.get_address(), _mappedRegion.get_size());
     Atom const* ilstNode = findIlstNode(root);
 
-    ParsedTrack parsed;
+    clearOwnedStrings();
+    auto builder = rs::core::TrackBuilder::createNew();
 
     if (ilstNode != nullptr)
     {
@@ -188,18 +188,18 @@ namespace rs::tag::mp4
 
         if (auto const* entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size()); entry != nullptr)
         {
-          entry->handler(parsed, view);
+          entry->handler(builder, view);
           return true;
         }
 
-        parsed.record.custom.pairs.emplace_back(std::string{type}, decodeString(atomData(view)));
+        builder.custom().add(type, atomTextView(view));
         return true;
       });
     }
 
     // Extract audio properties from mdhd and stsd
-    extractAudioProperties(parsed, root, _mappedRegion.get_size());
+    extractAudioProperties(builder, root, _mappedRegion.get_size());
 
-    return parsed;
+    return builder;
   }
 } // namespace rs::tag::mp4

@@ -198,7 +198,6 @@ add_executable(rsc
     tool/ListCommand.cpp
     tool/TagCommand.cpp
     tool/TrackCommand.cpp
-    tool/TrackUtils.cpp
 )
 target_link_libraries(rsc PRIVATE rs Boost::program_options)
 if(CLANG_TIDY_EXECUTABLE)

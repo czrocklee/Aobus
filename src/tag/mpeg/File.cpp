@@ -10,9 +10,11 @@
 
 namespace rs::tag::mpeg
 {
-  ParsedTrack File::loadTrack() const
+  rs::core::TrackBuilder File::loadTrack() const
   {
-    ParsedTrack parsed;
+    clearOwnedStrings();
+    auto builder = rs::core::TrackBuilder::createNew();
+
     void const* audioStart = _mappedRegion.get_address();
     std::size_t audioSize = _mappedRegion.get_size();
 
@@ -29,7 +31,7 @@ namespace rs::tag::mpeg
 
       if (id3v2TotalSize <= _mappedRegion.get_size())
       {
-        parsed = id3v2::loadFrames(*id3v2Header, id3v2Header + 1, id3v2BodySize);
+        builder = id3v2::loadFrames(*this, *id3v2Header, id3v2Header + 1, id3v2BodySize);
         audioStart = static_cast<std::uint8_t const*>(audioStart) + id3v2TotalSize;
         audioSize -= id3v2TotalSize;
       }
@@ -50,11 +52,15 @@ namespace rs::tag::mpeg
     // 3. Locate first valid MPEG frame and extract audio properties
     if (auto frameView = locate(audioStart, audioSize))
     {
-      parsed.record.property.sampleRate = frameView->sampleRate();
-      parsed.record.property.bitrate = frameView->bitrate();
-      parsed.record.property.channels = frameView->channels();
-      parsed.record.property.bitDepth = 16;  // MPEG audio is 16-bit
-      parsed.record.property.codecId = 0x55; // MP3
+      auto bitrate = frameView->bitrate();
+      auto durationMs = std::uint32_t{0};
+
+      builder.property()
+        .sampleRate(frameView->sampleRate())
+        .bitrate(bitrate)
+        .channels(frameView->channels())
+        .bitDepth(16) // MPEG audio is 16-bit
+        .codecId(0x55); // MP3
 
       // 4. Calculate duration
       // Prefer Xing/Info header if present for accurate duration (especially VBR)
@@ -62,21 +68,22 @@ namespace rs::tag::mpeg
       {
         if (xing->frames > 0 && frameView->sampleRate() > 0)
         {
-          parsed.record.property.durationMs = static_cast<std::uint32_t>(
+          durationMs = static_cast<std::uint32_t>(
             (static_cast<std::uint64_t>(xing->frames) * frameView->samplesPerFrame() * 1000) /
             frameView->sampleRate());
+          builder.property().durationMs(durationMs);
 
           // If Xing/Info provides total bytes, we can refine the bitrate
-          if (xing->bytes > 0 && parsed.record.property.durationMs > 0)
+          if (xing->bytes > 0 && durationMs > 0)
           {
-            parsed.record.property.bitrate = static_cast<std::uint32_t>(
-              (static_cast<std::uint64_t>(xing->bytes) * 8000) / parsed.record.property.durationMs);
+            bitrate = static_cast<std::uint32_t>((static_cast<std::uint64_t>(xing->bytes) * 8000) / durationMs);
+            builder.property().bitrate(bitrate);
           }
         }
       }
 
       // Fallback to estimation from file size if Xing/Info not present or failed
-      if (parsed.record.property.durationMs == 0 && parsed.record.property.bitrate > 0)
+      if (durationMs == 0 && bitrate > 0)
       {
         auto const* firstFramePtr = static_cast<std::uint8_t const*>(frameView->data());
         auto const* lastBytePtr = static_cast<std::uint8_t const*>(_mappedRegion.get_address()) + _mappedRegion.get_size();
@@ -85,12 +92,11 @@ namespace rs::tag::mpeg
         if (lastBytePtr > firstFramePtr)
         {
           std::uint64_t const actualAudioBytes = lastBytePtr - firstFramePtr;
-          parsed.record.property.durationMs = static_cast<std::uint32_t>(
-            (actualAudioBytes * 8000) / parsed.record.property.bitrate);
+          builder.property().durationMs(static_cast<std::uint32_t>((actualAudioBytes * 8000) / bitrate));
         }
       }
     }
 
-    return parsed;
+    return builder;
   }
 } // namespace rs::tag::mpeg

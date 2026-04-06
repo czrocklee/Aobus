@@ -3,11 +3,15 @@
 
 #pragma once
 
-#include <rs/tag/ParsedTrack.h>
+#include <rs/core/TrackBuilder.h>
+#include <rs/tag/File.h>
 
 namespace rs::tag::mpeg::id3v2
 {
   struct HeaderLayout;
 
-  ParsedTrack loadFrames(HeaderLayout const& header, void const* buffer, std::size_t size);
+  rs::core::TrackBuilder loadFrames(rs::tag::File const& owner,
+                                    HeaderLayout const& header,
+                                    void const* buffer,
+                                    std::size_t size);
 }

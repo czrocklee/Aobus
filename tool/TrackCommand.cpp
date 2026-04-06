@@ -3,11 +3,11 @@
 
 #include "TrackCommand.h"
 #include "BasicCommand.h"
-#include "TrackUtils.h"
 #include <rs/core/TrackLayout.h>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
 #include <rs/expr/PlanEvaluator.h>
+#include <rs/tag/File.h>
 
 #include <filesystem>
 #include <iomanip>
@@ -120,10 +120,21 @@ namespace
 
   void createTrack(core::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
   {
+    auto tagFile = tag::File::open(path);
+    if (!tagFile)
+    {
+      os << "unsupported file format: " << path << '\n';
+      return;
+    }
+
     auto txn = ml.writeTransaction();
     auto writer = ml.tracks().writer(txn);
-    auto resourceWriter = ml.resources().writer(txn);
-    auto builder = loadTrackRecord(path, ml.dictionary(), resourceWriter, txn);
+    auto builder = tagFile->loadTrack();
+    builder.property()
+      .uri(path.string())
+      .fileSize(std::filesystem::file_size(path))
+      .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
+
     auto [hotData, coldData] = builder.serialize(txn, ml.dictionary(), ml.resources());
     auto [id, trackView] = writer.createHotCold(hotData, coldData);
     txn.commit();
