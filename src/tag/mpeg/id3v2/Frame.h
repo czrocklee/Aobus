@@ -4,9 +4,9 @@
 #pragma once
 
 #include "Layout.h"
-#include <boost/iterator/iterator_facade.hpp>
 #include <boost/locale/encoding.hpp>
 #include <rs/Exception.h>
+#include <cstring>
 #include <string_view>
 
 namespace rs::tag::mpeg::id3v2
@@ -84,16 +84,42 @@ namespace rs::tag::mpeg::id3v2
 
   template<typename ViewT>
   class FrameViewIterator
-    : public boost::iterator_facade<FrameViewIterator<ViewT>, ViewT const, boost::forward_traversal_tag>
   {
   public:
+    // Standard iterator traits
+    using difference_type = std::ptrdiff_t;
+    using value_type = ViewT const;
+    using pointer = ViewT const*;
+    using reference = ViewT const&;
+    using iterator_category = std::forward_iterator_tag;
+
     FrameViewIterator() : _view{nullptr, 0}, _sizeLeft{0} {}
 
     FrameViewIterator(void const* data, std::size_t size) : _view{size > 0 ? data : nullptr, size}, _sizeLeft{size} {}
 
-  private:
-    friend class boost::iterator_core_access;
+    // Forward iterator operations
+    reference operator*() const { return _view; }
 
+    pointer operator->() const { return &_view; }
+
+    FrameViewIterator& operator++()
+    {
+      increment();
+      return *this;
+    }
+
+    FrameViewIterator operator++(int)
+    {
+      auto tmp = *this;
+      increment();
+      return tmp;
+    }
+
+    bool operator==(FrameViewIterator const& other) const { return _view.data() == other._view.data(); }
+
+    bool operator!=(FrameViewIterator const& other) const { return !(*this == other); }
+
+  private:
     void increment()
     {
       if (_sizeLeft == 0)
@@ -125,10 +151,6 @@ namespace rs::tag::mpeg::id3v2
         _sizeLeft = 0;
       }
     }
-
-    bool equal(FrameViewIterator const& other) const { return _view.data() == other._view.data(); }
-
-    ViewT const& dereference() const { return _view; }
 
     ViewT _view;
     std::size_t _sizeLeft;

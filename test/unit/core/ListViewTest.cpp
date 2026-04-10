@@ -8,12 +8,17 @@
 #include <rs/Exception.h>
 #include <rs/core/Type.h>
 
+#include <ranges>
 #include <span>
 #include <test/unit/core/TestUtils.h>
 #include <vector>
 
 namespace
 {
+#if defined(__GNUC__) && !defined(__clang__)
+  static_assert(std::ranges::view<rs::core::ListView::TrackProxy>);
+#endif
+
   using namespace test;
   using rs::core::ListView;
 

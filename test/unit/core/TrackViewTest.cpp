@@ -14,16 +14,22 @@
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <array>
+#include <ranges>
 #include <span>
 #include <vector>
 
 namespace
 {
+#if defined(__GNUC__) && !defined(__clang__)
+  static_assert(std::ranges::view<rs::core::TrackView::TagProxy>);
+  static_assert(std::ranges::view<rs::core::TrackView::CustomProxy>);
+#endif
+
   using namespace test;
   using rs::core::DictionaryId;
   using rs::core::TrackHotHeader;
   using rs::core::TrackId;
-  using rs::utility::splitInt64;
+  using rs::utility::uint64Parts::split;
 
   // Helper to create a minimal valid hot TrackView for testing
   std::vector<std::byte> createMinimalHotData()
@@ -77,8 +83,8 @@ namespace
   {
     auto builder = rs::core::TrackBuilder::createNew();
     builder.property().uri(uri);
-    builder.property().fileSize(rs::utility::combineInt64(header.fileSizeLo, header.fileSizeHi));
-    builder.property().mtime(rs::utility::combineInt64(header.mtimeLo, header.mtimeHi));
+    builder.property().fileSize(rs::utility::uint64Parts::combine(header.fileSizeLo, header.fileSizeHi));
+    builder.property().mtime(rs::utility::uint64Parts::combine(header.mtimeLo, header.mtimeHi));
     builder.metadata().coverArtId(header.coverArtId);
     builder.metadata().trackNumber(header.trackNumber);
     builder.metadata().totalTracks(header.totalTracks);
@@ -221,8 +227,8 @@ namespace
   TEST_CASE("TrackView - Cold File Size and Mtime")
   {
     auto header = TrackColdHeader{};
-    std::tie(header.fileSizeLo, header.fileSizeHi) = splitInt64(12345678);
-    std::tie(header.mtimeLo, header.mtimeHi) = splitInt64(987654321);
+    std::tie(header.fileSizeLo, header.fileSizeHi) = split(12345678);
+    std::tie(header.mtimeLo, header.mtimeHi) = split(987654321);
 
     auto data = createColdData(header, {}, "");
     auto view = makeColdView(data);
@@ -297,8 +303,8 @@ namespace
 
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert_range(data.end(), rs::utility::asBytes(tag1));
-    data.insert_range(data.end(), rs::utility::asBytes(tag2));
+    data.insert_range(data.end(), rs::utility::bytes::view(tag1));
+    data.insert_range(data.end(), rs::utility::bytes::view(tag2));
 
     appendString(data, title);
 
@@ -327,8 +333,8 @@ namespace
 
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert_range(data.end(), rs::utility::asBytes(tag1));
-    data.insert_range(data.end(), rs::utility::asBytes(tag2));
+    data.insert_range(data.end(), rs::utility::bytes::view(tag1));
+    data.insert_range(data.end(), rs::utility::bytes::view(tag2));
 
     appendString(data, title);
 
@@ -357,8 +363,8 @@ namespace
     auto data = serializeHeader(h);
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert_range(data.end(), rs::utility::asBytes(tag1));
-    data.insert_range(data.end(), rs::utility::asBytes(tag2));
+    data.insert_range(data.end(), rs::utility::bytes::view(tag1));
+    data.insert_range(data.end(), rs::utility::bytes::view(tag2));
 
     auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
@@ -384,8 +390,8 @@ namespace
     auto data = serializeHeader(h);
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert_range(data.end(), rs::utility::asBytes(tag1));
-    data.insert_range(data.end(), rs::utility::asBytes(tag2));
+    data.insert_range(data.end(), rs::utility::bytes::view(tag1));
+    data.insert_range(data.end(), rs::utility::bytes::view(tag2));
 
     auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
 
@@ -626,7 +632,7 @@ namespace
   TEST_CASE("TrackView - Hot Invalid Too Small")
   {
     auto smallData = std::array<char, 10>{};
-    auto smallView = rs::core::TrackView{rs::utility::asBytes(smallData), std::span<std::byte const>{}};
+    auto smallView = rs::core::TrackView{rs::utility::bytes::view(smallData), std::span<std::byte const>{}};
     CHECK(smallView.isHotValid() == false);
   }
 
@@ -647,7 +653,7 @@ namespace
   TEST_CASE("TrackView - Cold Invalid Too Small")
   {
     auto smallData = std::array<char, 10>{};
-    auto smallView = rs::core::TrackView{std::span<std::byte const>{}, rs::utility::asBytes(smallData)};
+    auto smallView = rs::core::TrackView{std::span<std::byte const>{}, rs::utility::bytes::view(smallData)};
     CHECK(smallView.isColdValid() == false);
   }
 

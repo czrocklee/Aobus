@@ -18,17 +18,20 @@ namespace rs::expr
     // Helper to find the previous LoadField instruction
     Instruction const* findPrevLoadField(std::vector<Instruction> const& instructions, Instruction const* current)
     {
-      auto const it = std::ranges::find_if(instructions, [current](auto const& instr) { return &instr == current; });
-      if (it == instructions.end()) { return nullptr; }
+      auto const it = std::ranges::find(instructions, current, [](auto const& instr) { return &instr; });
 
-      auto const revRange = std::ranges::subrange(instructions.begin(), it) | std::views::reverse;
-
-      if (auto const found = std::ranges::find(revRange, OpCode::LoadField, &Instruction::op);
-          found != revRange.end())
+      if (it == instructions.end())
       {
-        return &(*found);
+        return nullptr;
       }
-      
+
+      if (auto const found = std::ranges::find_last(
+            std::ranges::subrange(instructions.begin(), it), OpCode::LoadField, &Instruction::op);
+          !found.empty())
+      {
+        return &found.front();
+      }
+
       return nullptr;
     }
 
@@ -47,9 +50,18 @@ namespace rs::expr
     // Get string constant from plan's string constants table
     std::string_view getStringConstant(ExecutionPlan const* plan, std::int64_t stringIdx)
     {
-      if (plan == nullptr || stringIdx < 0) { return {}; }
+      if (plan == nullptr || stringIdx < 0)
+      {
+        return {};
+      }
+
       auto idx = static_cast<size_t>(stringIdx);
-      if (idx >= plan->stringConstants.size()) { return {}; }
+
+      if (idx >= plan->stringConstants.size())
+      {
+        return {};
+      }
+
       return plan->stringConstants[idx];
     }
 
@@ -155,8 +167,8 @@ namespace rs::expr
       }
       else
       {
-        auto stringIdx = registers[instr.operand];
-        if (prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
+        if (auto stringIdx = registers[instr.operand];
+            prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
         {
           auto field = static_cast<Field>(prevLoadField->field);
           std::string_view fieldStr = loadStringFieldValue(track, field, prevLoadField);
@@ -174,10 +186,10 @@ namespace rs::expr
 
     // Execute LIKE comparison (substring matching for string fields)
     void executeLike(std::vector<std::int64_t>& registers,
-                    core::TrackView const& track,
-                    ExecutionPlan const* plan,
-                    Instruction const& instr,
-                    std::vector<Instruction> const& /*instructions*/)
+                     core::TrackView const& track,
+                     ExecutionPlan const* plan,
+                     Instruction const& instr,
+                     std::vector<Instruction> const& /*instructions*/)
     {
       // instr.field contains the left field from the LoadField instruction
       auto field = static_cast<Field>(instr.field);
@@ -185,7 +197,7 @@ namespace rs::expr
 
       std::string_view fieldStr = loadStringFieldValue(track, field, nullptr);
       std::string_view constantStr = getStringConstant(plan, rhs);
-      auto found = fieldStr.find(constantStr) != std::string_view::npos;
+      auto found = fieldStr.contains(constantStr);
       registers[instr.operand - 1] = found ? 1 : 0;
     }
   }
@@ -193,13 +205,19 @@ namespace rs::expr
   bool PlanEvaluator::matches(ExecutionPlan const& plan, core::TrackView const& track) const
   {
     // Fast path: empty query matches all
-    if (plan.matchesAll) { return true; }
+    if (plan.matchesAll)
+    {
+      return true;
+    }
 
     // Bloom filter fast-path rejection for tag queries
     if (plan.tagBloomMask != 0)
     {
       auto trackBloom = track.tags().bloom();
-      if ((trackBloom & plan.tagBloomMask) != plan.tagBloomMask) { return false; }
+      if ((trackBloom & plan.tagBloomMask) != plan.tagBloomMask)
+      {
+        return false;
+      }
     }
 
     // Full evaluation
@@ -209,10 +227,16 @@ namespace rs::expr
   // NOLINTNEXTLINE(readability-function-size,readability-function-cognitive-complexity)
   bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, core::TrackView const& track) const
   {
-    if (plan.matchesAll) { return true; }
+    if (plan.matchesAll)
+    {
+      return true;
+    }
 
     // Return false for invalid/empty track views
-    if (!track.isHotValid()) { return false; }
+    if (!track.isHotValid())
+    {
+      return false;
+    }
 
     _registers.clear();
     _registers.resize(plan.instructions.size() + kReservedRegisters, 0);
@@ -272,9 +296,7 @@ namespace rs::expr
           break;
         }
 
-        case OpCode::Like:
-          executeLike(_registers, track, &plan, instr, plan.instructions);
-          break;
+        case OpCode::Like: executeLike(_registers, track, &plan, instr, plan.instructions); break;
 
         case OpCode::Nop:
         default: break;

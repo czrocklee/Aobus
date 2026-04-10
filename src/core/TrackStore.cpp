@@ -3,7 +3,7 @@
 
 #include <rs/core/TrackStore.h>
 
-#include <cassert>
+#include <gsl-lite/gsl-lite.hpp>
 
 namespace rs::core
 {
@@ -138,7 +138,7 @@ namespace rs::core
       }
       else
       {
-        assert(coldId == trackId.value() && "cold and hot must have same track ID");
+        gsl_Expects(coldId == trackId.value());
       }
 
       coldData = coldBuffer;
@@ -157,27 +157,25 @@ namespace rs::core
   std::pair<TrackId, TrackView> TrackStore::Writer::createHotCold(std::span<std::byte const> hotData,
                                                                   std::span<std::byte const> coldData)
   {
-    // Ensure size is multiple of 4 for LMDB
-    assert((hotData.size() % 4 == 0) && "hotData size must be multiple of 4");
-    assert((coldData.size() % 4 == 0) && "coldData size must be multiple of 4");
+    gsl_Expects((hotData.size() % 4) == 0);
+    gsl_Expects((coldData.size() % 4) == 0);
 
     auto id = _hotWriter.append(hotData);
     auto coldId = _coldWriter.append(coldData);
+    gsl_Ensures(id == coldId);
     return {TrackId{id}, TrackView{hotData, coldData}};
   }
 
   void TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
   {
-    // Ensure size is multiple of 4 for LMDB
-    assert((hotData.size() % 4 == 0) && "hotData size must be multiple of 4");
+    gsl_Expects((hotData.size() % 4) == 0);
 
     _hotWriter.update(id.value(), hotData);
   }
 
   void TrackStore::Writer::updateCold(TrackId id, std::span<std::byte const> coldData)
   {
-    // Ensure size is multiple of 4 for LMDB
-    assert((coldData.size() % 4 == 0) && "coldData size must be multiple of 4");
+    gsl_Expects((coldData.size() % 4) == 0);
 
     _coldWriter.update(id.value(), coldData);
   }

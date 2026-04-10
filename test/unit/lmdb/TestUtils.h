@@ -63,6 +63,6 @@ inline std::vector<std::byte> createTestData(std::size_t size)
  */
 inline std::vector<std::byte> createStringData(std::string_view str)
 {
-  auto bytes = rs::utility::asBytes(str);
+  auto bytes = rs::utility::bytes::view(str);
   return {bytes.begin(), bytes.end()};
 }

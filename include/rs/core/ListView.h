@@ -7,6 +7,7 @@
 #include <rs/utility/ByteView.h>
 
 #include <cstdint>
+#include <ranges>
 #include <span>
 #include <string_view>
 
@@ -30,7 +31,7 @@ namespace rs::core
     /**
      * TrackProxy - Iterator and index access to track IDs in the list.
      */
-    class TrackProxy
+    class TrackProxy : public std::ranges::view_interface<TrackProxy>
     {
     public:
       TrackProxy(std::span<TrackId const> trackIds);
@@ -49,7 +50,7 @@ namespace rs::core
     TrackProxy tracks() const;
 
   private:
-    ListHeader const* header() const { return utility::as<ListHeader>(_payload); }
+    ListHeader const* header() const { return utility::layout::view<ListHeader>(_payload); }
     std::string_view getString(std::uint16_t offset, std::uint16_t length) const;
 
     std::span<std::byte const> _payload;

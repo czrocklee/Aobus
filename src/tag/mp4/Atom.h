@@ -4,10 +4,10 @@
 #pragma once
 
 #include "AtomLayout.h"
+#include <algorithm>
 #include <cassert>
 #include <functional>
 #include <memory>
-#include <numeric>
 #include <string_view>
 #include <vector>
 
@@ -104,7 +104,7 @@ namespace rs::tag::mp4
   public:
     std::uint32_t length() const override
     {
-      return std::accumulate(_children.begin(), _children.end(), 0u, [](auto size, auto& ptr) { return size + ptr->length(); });
+      return std::ranges::fold_left(_children, 0u, [](auto size, auto const& ptr) { return size + ptr->length(); });
     }
 
     std::string_view type() const override { return "root"; }

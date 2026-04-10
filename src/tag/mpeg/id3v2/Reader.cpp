@@ -6,7 +6,10 @@
 #include "Layout.h"
 #include <rs/tag/mpeg/File.h>
 
+#include <charconv>
 #include <cstring>
+#include <limits>
+#include <optional>
 
 namespace rs::tag::mpeg::id3v2
 {
@@ -16,6 +19,22 @@ namespace rs::tag::mpeg::id3v2
       rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter =
       rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+
+    template<typename T>
+    std::optional<T> parseUnsigned(std::string_view text)
+    {
+      std::uint32_t value = 0;
+      auto const* begin = text.data();
+      auto const* end = begin + text.size();
+
+      if (auto const [ptr, ec] = std::from_chars(begin, end, value);
+          ec == std::errc{} && ptr != begin && value <= std::numeric_limits<T>::max())
+      {
+        return static_cast<T>(value);
+      }
+
+      return std::nullopt;
+    }
 
     void handlePicture(rs::core::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size);
     void handleTxxx(rs::core::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size);
@@ -37,7 +56,10 @@ namespace rs::tag::mpeg::id3v2
 
       if (auto text = view.text(); !text.empty())
       {
-        (builder.metadata().*Setter)(static_cast<std::uint16_t>(std::atoi(text.data())));
+        if (auto value = parseUnsigned<std::uint16_t>(text))
+        {
+          (builder.metadata().*Setter)(*value);
+        }
       }
     }
 
@@ -50,11 +72,18 @@ namespace rs::tag::mpeg::id3v2
       auto view = V23TextFrameView{data, size};
       auto text = view.text();
       auto slashPos = text.find('/');
-      (builder.metadata().*PrimarySetter)(static_cast<std::uint16_t>(std::atoi(text.data())));
+
+      if (auto value = parseUnsigned<std::uint16_t>(text.substr(0, slashPos)))
+      {
+        (builder.metadata().*PrimarySetter)(*value);
+      }
 
       if (slashPos != std::string_view::npos)
       {
-        (builder.metadata().*SecondarySetter)(static_cast<std::uint16_t>(std::atoi(text.data() + slashPos + 1)));
+        if (auto value = parseUnsigned<std::uint16_t>(text.substr(slashPos + 1)))
+        {
+          (builder.metadata().*SecondarySetter)(*value);
+        }
       }
     }
 
@@ -111,7 +140,10 @@ namespace rs::tag::mpeg::id3v2
 
         if (key == "rating")
         {
-          builder.metadata().rating(static_cast<std::uint8_t>(std::atoi(value.data())));
+          if (auto rating = parseUnsigned<std::uint8_t>(value))
+          {
+            builder.metadata().rating(*rating);
+          }
         }
         else
         {

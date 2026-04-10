@@ -25,7 +25,7 @@ namespace rs::tag::flac
     detail::parseString<std::uint32_t>(ptr, end); // description
     ptr += kPictureMetaFieldCount * sizeof(std::uint32_t); // width/height/color depth/color count
     std::string_view blob = detail::parseString<std::uint32_t>(ptr, end);
-    return utility::asBytes(blob);
+    return utility::bytes::view(blob);
   }
 
   MetadataBlockViewIterator::MetadataBlockViewIterator(void const* data, std::size_t size)

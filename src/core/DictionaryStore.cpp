@@ -21,7 +21,7 @@ namespace rs::core
 
     for (auto [id, buf] : reader)
     {
-      auto const& str = _idToStringStorage.emplace_back(utility::asString(buf));
+      auto const& str = _idToStringStorage.emplace_back(utility::bytes::stringView(buf));
       _stringToId.emplace(str, DictionaryId{id});
     }
   }
@@ -35,7 +35,7 @@ namespace rs::core
       if (_reservedStrings.contains(value))
       {
         auto writer = _database.writer(txn);
-        auto data = utility::asBytes(value);
+        auto data = utility::bytes::view(value);
         writer.create(it->second.value(), data);
         _reservedStrings.erase(value);
       }
@@ -45,9 +45,9 @@ namespace rs::core
 
     // Not found in memory - append to database
     auto writer = _database.writer(txn);
-    auto data = utility::asBytes(value);
+    auto data = utility::bytes::view(value);
     auto id = writer.append(data);
-    auto const& str = _idToStringStorage.emplace_back(utility::asString(data));
+    auto const& str = _idToStringStorage.emplace_back(utility::bytes::stringView(data));
     _stringToId.emplace(str, DictionaryId{id});
     return DictionaryId{id};
   }

@@ -7,7 +7,7 @@
 #include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
 
-#include <cassert>
+#include <gsl-lite/gsl-lite.hpp>
 #include <functional>
 #include <optional>
 #include <span>
@@ -190,8 +190,8 @@ namespace rs::core
       std::size_t coldSize,
       F&& fill)
   {
-    assert((hotSize % 4 == 0) && "hotSize must be multiple of 4");
-    assert((coldSize % 4 == 0) && "coldSize must be multiple of 4");
+    gsl_Expects((hotSize % 4) == 0);
+    gsl_Expects((coldSize % 4) == 0);
 
     // Reserve hot span and get auto-increment ID
     auto [id, hotSpan] = _hotWriter.append(hotSize);
@@ -208,7 +208,7 @@ namespace rs::core
   template<class F>
   void TrackStore::Writer::updateHot(TrackId id, std::size_t size, F&& fill)
   {
-    assert((size % 4 == 0) && "size must be multiple of 4");
+    gsl_Expects((size % 4) == 0);
 
     auto span = _hotWriter.update(id.value(), size);
     fill(span);
@@ -217,7 +217,7 @@ namespace rs::core
   template<class F>
   void TrackStore::Writer::updateCold(TrackId id, std::size_t size, F&& fill)
   {
-    assert((size % 4 == 0) && "size must be multiple of 4");
+    gsl_Expects((size % 4) == 0);
 
     auto span = _coldWriter.update(id.value(), size);
     fill(span);

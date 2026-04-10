@@ -20,7 +20,7 @@ namespace test
     static_assert(std::is_trivially_copyable_v<T>, "Header must be trivially copyable");
 
     std::vector<std::byte> data;
-    data.insert_range(data.end(), rs::utility::asBytes(header));
+    data.insert_range(data.end(), rs::utility::bytes::view(header));
     return data;
   }
 
@@ -29,7 +29,7 @@ namespace test
    */
   inline void appendString(std::vector<std::byte>& payload, std::string_view str)
   {
-    payload.insert_range(payload.end(), rs::utility::asBytes(str));
+    payload.insert_range(payload.end(), rs::utility::bytes::view(str));
     payload.push_back(std::byte{'\0'});
   }
 

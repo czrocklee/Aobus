@@ -24,7 +24,7 @@ namespace rs::core
 
     if (start + length > _payload.size()) { RS_THROW(Exception, "Invalid string field"); }
 
-    return utility::asString(_payload.data(), start, length);
+    return utility::bytes::stringView(_payload.subspan(start, length));
   }
 
   std::string_view ListView::name() const
@@ -49,7 +49,7 @@ namespace rs::core
 
     if (offset + (count * sizeof(TrackId)) > _payload.size()) { RS_THROW(Exception, "Invalid trackIds field"); }
 
-    return TrackProxy{{utility::as<TrackId>(_payload.data(), offset), count}};
+    return TrackProxy{utility::layout::viewArray<TrackId>(_payload.subspan(offset, count * sizeof(TrackId)))};
   }
 
   ListView::TrackProxy::TrackProxy(std::span<TrackId const> trackIds)

@@ -23,7 +23,7 @@ namespace rs::core
   {
     auto const& hdr = hotHeader();
     gsl_Expects(index < hdr.tagLen / sizeof(DictionaryId));
-    auto tagIds = utility::asArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader)));
+    auto tagIds = utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), hdr.tagLen));
     return tagIds[index];
   }
 
@@ -31,7 +31,7 @@ namespace rs::core
   {
     auto const start = sizeof(TrackHotHeader) + offset;
     gsl_Expects(start + length <= _hotData.size());
-    return utility::asString(_hotData.data(), start, length);
+    return utility::bytes::stringView(_hotData.subspan(start, length));
   }
 
   std::string_view TrackView::coldUri() const
@@ -43,55 +43,52 @@ namespace rs::core
   std::uint64_t TrackView::coldFileSize() const noexcept
   {
     auto const& hdr = coldHeader();
-    return utility::combineInt64(hdr.fileSizeLo, hdr.fileSizeHi);
+    return utility::uint64Parts::combine(hdr.fileSizeLo, hdr.fileSizeHi);
   }
 
   std::uint64_t TrackView::coldMtime() const noexcept
   {
     auto const& hdr = coldHeader();
-    return utility::combineInt64(hdr.mtimeLo, hdr.mtimeHi);
+    return utility::uint64Parts::combine(hdr.mtimeLo, hdr.mtimeHi);
   }
 
   std::string_view TrackView::coldGetString(std::uint16_t offset, std::uint16_t len) const
   {
     gsl_Expects(offset + len <= _coldData.size());
-    return utility::asString(_coldData.data(), offset, len);
+    return utility::bytes::stringView(_coldData.subspan(offset, len));
   }
 
   // TrackView proxy implementations
   bool TrackView::TagProxy::has(DictionaryId tagIdToCheck) const noexcept
   {
-    return std::ranges::find(begin(), end(), tagIdToCheck) != end();
+    return std::ranges::contains(begin(), end(), tagIdToCheck);
   }
 
   std::optional<std::string_view> TrackView::CustomProxy::get(DictionaryId dictId) const
   {
-    auto const& hdr = _track.coldHeader();
-    constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
-
     // Threshold for switching between linear and binary search
     constexpr std::size_t kSearchThreshold = 64;
 
-    auto entries = utility::asArray<Entry>(_track._coldData.subspan(kHeaderSize)).first(hdr.customCount);
+    auto customEntries = entries();
 
     // Small N: linear search via ranges::find_if (cache-friendly, no divisions)
-    if (hdr.customCount < kSearchThreshold)
+    if (customEntries.size() < kSearchThreshold)
     {
-      if (auto it = std::ranges::find(entries, dictId, &Entry::dictId); it != entries.end())
+      if (auto it = std::ranges::find(customEntries, dictId, &Entry::dictId); it != customEntries.end())
       {
-        gsl_Expects(it->offset + it->len <= _track._coldData.size());
-        return utility::asString(_track._coldData.data(), it->offset, it->len);
+        gsl_Expects(it->offset + it->len <= _coldData.size());
+        return utility::bytes::stringView(_coldData.subspan(it->offset, it->len));
       }
 
       return std::nullopt;
     }
 
     // Large N: binary search via ranges::lower_bound
-    if (auto it = std::ranges::lower_bound(entries, dictId, {}, &Entry::dictId);
-        it != entries.end() && it->dictId == dictId)
+    if (auto it = std::ranges::lower_bound(customEntries, dictId, {}, &Entry::dictId);
+        it != customEntries.end() && it->dictId == dictId)
     {
-      gsl_Expects(it->offset + it->len <= _track._coldData.size());
-      return utility::asString(_track._coldData.data(), it->offset, it->len);
+      gsl_Expects(it->offset + it->len <= _coldData.size());
+      return utility::bytes::stringView(_coldData.subspan(it->offset, it->len));
     }
 
     return std::nullopt;
@@ -99,17 +96,14 @@ namespace rs::core
 
   TrackView::CustomProxy::Iterator TrackView::CustomProxy::begin() const
   {
-    constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
-    auto entries = utility::asArray<Entry>(_track._coldData.subspan(kHeaderSize));
-    return {entries.data(), _track._coldData.data()};
+    auto customEntries = entries();
+    return {customEntries.data(), _coldData.data()};
   }
 
   TrackView::CustomProxy::Iterator TrackView::CustomProxy::end() const
   {
-    auto const& hdr = _track.coldHeader();
-    constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
-    auto entries = utility::asArray<Entry>(_track._coldData.subspan(kHeaderSize));
-    return {entries.subspan(hdr.customCount).data(), _track._coldData.data()};
+    auto customEntries = entries();
+    return {customEntries.data() + customEntries.size(), _coldData.data()};
   }
 
   TrackView::CustomProxy::Iterator::Iterator(Entry const* pos, std::byte const* coldDataBase)
@@ -117,28 +111,30 @@ namespace rs::core
   {
   }
 
-  std::pair<DictionaryId, std::string_view> const& TrackView::CustomProxy::Iterator::dereference() const
+  TrackView::CustomProxy::Iterator::value_type TrackView::CustomProxy::Iterator::operator*() const
   {
     auto const& entry = *_pos;
     auto value = std::string_view{};
 
     if (entry.len > 0)
     {
-      value = utility::asString(_coldDataBase, entry.offset, entry.len);
+      value = utility::bytes::stringView(utility::bytes::view(_coldDataBase + entry.offset, entry.len));
     }
 
-    _currentValue = {entry.dictId, value};
-    return _currentValue;
+    return {entry.dictId, value};
   }
 
-  bool TrackView::CustomProxy::Iterator::equal(Iterator const& other) const
-  {
-    return _pos == other._pos;
-  }
-
-  void TrackView::CustomProxy::Iterator::increment()
+  TrackView::CustomProxy::Iterator& TrackView::CustomProxy::Iterator::operator++()
   {
     ++_pos;
+    return *this;
+  }
+
+  TrackView::CustomProxy::Iterator TrackView::CustomProxy::Iterator::operator++(int)
+  {
+    auto tmp = *this;
+    ++_pos;
+    return tmp;
   }
 
 } // namespace rs::core

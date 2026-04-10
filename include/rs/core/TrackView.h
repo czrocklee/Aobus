@@ -5,13 +5,14 @@
 
 #include <rs/Exception.h>
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <rs/core/TrackLayout.h>
 #include <rs/core/Type.h>
 
 #include <cstdint>
 #include <functional>
+#include <gsl-lite/gsl-lite.hpp>
 #include <optional>
+#include <ranges>
 #include <rs/utility/ByteView.h>
 #include <span>
 #include <string_view>
@@ -44,7 +45,10 @@ namespace rs::core
     class MetadataProxy
     {
     public:
-      explicit MetadataProxy(TrackView const& track) : _track(track) {}
+      explicit MetadataProxy(TrackView const& track)
+        : _track{track}
+      {
+      }
 
       // From hot
       std::string_view title() const { return _track.hotTitle(); }
@@ -74,7 +78,10 @@ namespace rs::core
     class PropertyProxy
     {
     public:
-      explicit PropertyProxy(TrackView const& track) : _track(track) {}
+      explicit PropertyProxy(TrackView const& track)
+        : _track{track}
+      {
+      }
 
       // Hot properties
       std::uint16_t codecId() const noexcept { return _track.hotHeader().codecId; }
@@ -96,32 +103,52 @@ namespace rs::core
     /**
      * TagProxy - Accessors for tag data (bloom filter, tag IDs).
      */
-    class TagProxy
+    class TagProxy : public std::ranges::view_interface<TagProxy>
     {
     public:
-      explicit TagProxy(TrackView const& track) : _track(track) {}
+      explicit TagProxy(std::span<std::byte const> hotData)
+        : _hotData{hotData}
+      {
+      }
 
-      std::uint8_t count() const noexcept { return _track.hotHeader().tagLen / sizeof(DictionaryId); }
-      std::uint32_t bloom() const noexcept { return _track.hotHeader().tagBloom; }
-      DictionaryId id(std::uint8_t index) const noexcept { return _track.hotTagId(index); }
+      std::uint8_t count() const noexcept { return hotHeader().tagLen / sizeof(DictionaryId); }
+      std::uint32_t bloom() const noexcept { return hotHeader().tagBloom; }
+
+      DictionaryId id(std::uint8_t index) const noexcept
+      {
+        gsl_Expects(index < count());
+        return begin()[index];
+      }
+
       DictionaryId const* begin() const noexcept
       {
-        return utility::as<DictionaryId>(_track._hotData.subspan(sizeof(TrackHotHeader)));
+        gsl_Expects(_hotData.size() >= sizeof(TrackHotHeader));
+        return utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), hotHeader().tagLen)).data();
       }
+
       DictionaryId const* end() const noexcept { return begin() + count(); }
       bool has(DictionaryId tagIdToCheck) const noexcept;
 
     private:
-      TrackView const& _track;
+      TrackHotHeader const& hotHeader() const
+      {
+        gsl_Expects(_hotData.size() >= sizeof(TrackHotHeader));
+        return *utility::layout::view<TrackHotHeader>(_hotData);
+      }
+
+      std::span<std::byte const> _hotData;
     };
 
     /**
      * CustomProxy - Accessors for custom key-value metadata.
      */
-    class CustomProxy
+    class CustomProxy : public std::ranges::view_interface<CustomProxy>
     {
     public:
-      explicit CustomProxy(TrackView const& track) : _track(track) {}
+      explicit CustomProxy(std::span<std::byte const> coldData)
+        : _coldData{coldData}
+      {
+      }
 
       /**
        * Entry - Fixed-size entry in the custom metadata index.
@@ -140,8 +167,22 @@ namespace rs::core
       std::optional<std::string_view> get(DictionaryId dictId) const;
 
     private:
-      std::optional<std::pair<std::byte const*, std::byte const*>> customRange() const;
-      TrackView const& _track;
+      TrackColdHeader const& coldHeader() const
+      {
+        gsl_Expects(_coldData.size() >= sizeof(TrackColdHeader));
+        return *utility::layout::view<TrackColdHeader>(_coldData);
+      }
+
+      std::span<Entry const> entries() const
+      {
+        constexpr std::size_t kHeaderSize = sizeof(TrackColdHeader);
+        gsl_Expects(_coldData.size() >= kHeaderSize);
+        auto const entryBytes = static_cast<std::size_t>(coldHeader().customCount) * sizeof(Entry);
+        gsl_Expects(kHeaderSize + entryBytes <= _coldData.size());
+        return utility::layout::viewArray<Entry>(_coldData.subspan(kHeaderSize, entryBytes));
+      }
+
+      std::span<std::byte const> _coldData;
     };
 
     /**
@@ -152,8 +193,7 @@ namespace rs::core
      * @param coldData Cold track binary data (optional), if null accessing cold accessors crashes
      */
     TrackView(std::span<std::byte const> hotData, std::span<std::byte const> coldData)
-      : _hotData(hotData)
-      , _coldData(coldData)
+      : _hotData{hotData}, _coldData{coldData}
     {
     }
 
@@ -176,12 +216,21 @@ namespace rs::core
     // Accessors
     MetadataProxy metadata() const { return MetadataProxy{*this}; }
     PropertyProxy property() const { return PropertyProxy{*this}; }
-    TagProxy tags() const { return TagProxy{*this}; }
-    CustomProxy custom() const { return CustomProxy{*this}; }
+    TagProxy tags() const { return TagProxy{_hotData}; }
+    CustomProxy custom() const { return CustomProxy{_coldData}; }
 
     // Direct header access
-    TrackHotHeader const& hotHeader() const { return *utility::as<TrackHotHeader>(_hotData); }
-    TrackColdHeader const& coldHeader() const { return *utility::as<TrackColdHeader>(_coldData); }
+    TrackHotHeader const& hotHeader() const
+    {
+      gsl_Expects(isHotValid());
+      return *utility::layout::view<TrackHotHeader>(_hotData);
+    }
+
+    TrackColdHeader const& coldHeader() const
+    {
+      gsl_Expects(isColdValid());
+      return *utility::layout::view<TrackColdHeader>(_coldData);
+    }
 
   private:
     std::string_view hotTitle() const;
@@ -196,24 +245,38 @@ namespace rs::core
     std::span<std::byte const> _coldData;
   };
 
-
   class TrackView::CustomProxy::Iterator
-    : public boost::iterator_facade<Iterator, std::pair<DictionaryId, std::string_view> const, boost::forward_traversal_tag>
   {
   public:
-    Iterator() : _pos(nullptr), _coldDataBase(nullptr) {}
+    // Standard iterator traits
+    using difference_type = std::ptrdiff_t;
+    using value_type = std::pair<DictionaryId const, std::string_view>;
+    using reference = value_type;
+    using pointer = void;
+    using iterator_category = std::forward_iterator_tag;
+
+    Iterator() = default;
+
     Iterator(CustomProxy::Entry const* pos, std::byte const* coldDataBase);
 
+    value_type operator*() const;
+
+    struct ArrowProxy
+    {
+      value_type v;
+      value_type const* operator->() const { return &v; }
+    };
+
+    ArrowProxy operator->() const { return ArrowProxy{**this}; }
+
+    Iterator& operator++();
+    Iterator operator++(int);
+
+    bool operator==(Iterator const& other) const { return _pos == other._pos; }
+
   private:
-    friend class boost::iterator_core_access;
-
-    std::pair<DictionaryId, std::string_view> const& dereference() const;
-    void increment();
-    bool equal(Iterator const& other) const;
-
-    CustomProxy::Entry const* _pos;
-    std::byte const* _coldDataBase;
-    mutable std::pair<DictionaryId, std::string_view> _currentValue;
+    CustomProxy::Entry const* _pos = nullptr;
+    std::byte const* _coldDataBase = nullptr;
   };
 
 } // namespace rs::core

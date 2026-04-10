@@ -5,7 +5,6 @@
 
 #include "MetadataBlockLayout.h"
 #include <boost/endian/conversion.hpp>
-#include <boost/iterator/iterator_facade.hpp>
 #include <cassert>
 #include <cstring>
 #include <rs/Exception.h>
@@ -156,9 +155,15 @@ namespace rs::tag::flac
   };
 
   class MetadataBlockViewIterator
-    : public boost::iterator_facade<MetadataBlockViewIterator, MetadataBlockView const, boost::forward_traversal_tag>
   {
   public:
+    // Standard iterator traits
+    using difference_type = std::ptrdiff_t;
+    using value_type = MetadataBlockView const;
+    using pointer = MetadataBlockView const*;
+    using reference = MetadataBlockView const&;
+    using iterator_category = std::forward_iterator_tag;
+
     static constexpr std::size_t StreamInfoBlockSize = 38;
 
     MetadataBlockViewIterator()
@@ -168,14 +173,30 @@ namespace rs::tag::flac
 
     MetadataBlockViewIterator(void const* data, std::size_t size);
 
+    // Forward iterator operations
+    reference operator*() const { return _view; }
+
+    pointer operator->() const { return &_view; }
+
+    MetadataBlockViewIterator& operator++()
+    {
+      increment();
+      return *this;
+    }
+
+    MetadataBlockViewIterator operator++(int)
+    {
+      auto tmp = *this;
+      increment();
+      return tmp;
+    }
+
+    bool operator==(MetadataBlockViewIterator const& other) const { return _view._data == other._view._data; }
+
+    bool operator!=(MetadataBlockViewIterator const& other) const { return !(*this == other); }
+
   private:
-    friend class boost::iterator_core_access;
-
     void increment();
-
-    bool equal(MetadataBlockViewIterator const& other) const { return _view._data == other._view._data; }
-
-    MetadataBlockView const& dereference() const { return _view; }
 
     MetadataBlockView _view;
     std::size_t _sizeLeft;

@@ -7,23 +7,41 @@
 #include <rs/tag/mpeg/File.h>
 
 #include <algorithm>
-#include <functional>
-#include <unordered_map>
+#include <array>
+#include <string_view>
+#include <utility>
 
 namespace rs::tag
 {
   // static
   std::unique_ptr<File> File::open(std::filesystem::path const& path, File::Mode mode)
   {
-    static std::unordered_map<std::string, std::function<std::unique_ptr<File>(std::filesystem::path const, File::Mode)>> const
-      CreatorMap = {
-        {".mp3", [](auto const& p, File::Mode m) { return std::make_unique<mpeg::File>(p, m); }},
-        {".m4a", [](auto const& p, File::Mode m) { return std::make_unique<mp4::File>(p, m); }},
-        {".flac", [](auto const& p, File::Mode m) { return std::make_unique<flac::File>(p, m); }}};
+    using Creator = std::unique_ptr<File> (*)(std::filesystem::path const&, File::Mode);
+
+    static constexpr auto CreatorMap = std::array{
+      std::pair{std::string_view{".mp3"},
+                +[](std::filesystem::path const& filePath, File::Mode fileMode) -> std::unique_ptr<File> {
+                  return std::make_unique<mpeg::File>(filePath, fileMode);
+                }},
+      std::pair{std::string_view{".m4a"},
+                +[](std::filesystem::path const& filePath, File::Mode fileMode) -> std::unique_ptr<File> {
+                  return std::make_unique<mp4::File>(filePath, fileMode);
+                }},
+      std::pair{std::string_view{".flac"},
+                +[](std::filesystem::path const& filePath, File::Mode fileMode) -> std::unique_ptr<File> {
+                  return std::make_unique<flac::File>(filePath, fileMode);
+                }},
+    };
 
     auto ext = path.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
-    if (auto it = CreatorMap.find(ext); it != CreatorMap.end()) { return it->second(path, mode); }
+
+    if (auto it = std::ranges::find(CreatorMap, std::string_view{ext}, &std::pair<std::string_view, Creator>::first);
+        it != CreatorMap.end())
+    {
+      return it->second(path, mode);
+    }
+
     return nullptr;
   }
 } // namespace rs::tag

@@ -27,7 +27,7 @@ namespace rs::tag::flac
     template<NumberSetter Setter>
     void handleNumber(rs::core::TrackBuilder& builder, std::string_view value)
     {
-      if (auto parsed = decodeUint16(utility::asBytes(value)); parsed) { (builder.metadata().*Setter)(*parsed); }
+      if (auto parsed = decodeUint16(value); parsed) { (builder.metadata().*Setter)(*parsed); }
     }
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>

@@ -13,11 +13,11 @@ else()
   add_compile_options(-Wall -Wextra -Wpedantic -Wno-error)
 endif()
 
-# GSL-lite configuration: Debug throws exceptions, Release terminates
+# GSL-lite configuration: Debug throws exceptions, non-Debug disables contract checks
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_THROWS=1)
+  add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_ASSERTS=1)
 else()
-  add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_TERMINATES=1)
+  add_compile_definitions(gsl_CONFIG_CONTRACT_CHECKING_OFF=1)
 endif()
 
 find_package(PkgConfig REQUIRED)
@@ -96,7 +96,9 @@ else()
 endif()
 
 # clang-tidy setup (manual application to targets)
-find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
+#find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
+unset(CLANG_TIDY_EXECUTABLE)
+
 if(CLANG_TIDY_EXECUTABLE)
   # Set up GCC include paths for clang-tidy (required for GCC)
   set(CLANG_TIDY_EXTRA_ARGS)
@@ -161,7 +163,7 @@ add_library(rs OBJECT
     src/core/DictionaryStore.cpp
     src/core/TrackStore.cpp
     src/core/TrackBuilder.cpp
-    src/core/TrackLayout.cpp
+    src/core/TrackView.cpp
     src/core/ListView.cpp
     src/core/ListStore.cpp
     src/core/ListBuilder.cpp

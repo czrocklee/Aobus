@@ -3,8 +3,11 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -13,82 +16,122 @@
 
 namespace rs::utility
 {
-  // Cast span<byte> to pointer of type T (for deserialization)
-  template<typename T>
-  constexpr T const* as(std::span<std::byte const> span) noexcept
+  namespace detail
   {
-    return reinterpret_cast<T const*>(span.data());
+    template<typename T>
+    constexpr void requireTrivialLayout() noexcept
+    {
+      static_assert(std::is_trivially_copyable_v<T>, "ByteView helpers require trivially copyable types");
+      static_assert(std::is_standard_layout_v<T>, "ByteView helpers require standard-layout types");
+    }
+
+    inline bool isAligned(void const* ptr, std::size_t alignment) noexcept
+    {
+      return ptr == nullptr || reinterpret_cast<std::uintptr_t>(ptr) % alignment == 0;
+    }
   }
 
-  // Cast span<byte> to span<T> (array of T)
-  template<typename T>
-  constexpr std::span<T const> asArray(std::span<std::byte const> span) noexcept
+  namespace bytes
   {
-    return {reinterpret_cast<T const*>(span.data()), span.size() / sizeof(T)};
+    inline std::span<std::byte const> view(void const* data, std::size_t size) noexcept
+    {
+      return {static_cast<std::byte const*>(data), size};
+    }
+
+    inline std::span<std::byte> view(void* data, std::size_t size) noexcept
+    {
+      return {static_cast<std::byte*>(data), size};
+    }
+
+    template<typename T>
+    inline std::span<std::byte const> view(T const* ptr, std::size_t count = 1) noexcept
+    {
+      detail::requireTrivialLayout<T>();
+      return {reinterpret_cast<std::byte const*>(ptr), count * sizeof(T)};
+    }
+
+    template<typename T, std::size_t Extent>
+    inline std::span<std::byte const> view(std::span<T, Extent> values) noexcept
+    {
+      detail::requireTrivialLayout<std::remove_const_t<T>>();
+      return {reinterpret_cast<std::byte const*>(values.data()), values.size_bytes()};
+    }
+
+    template<typename T>
+    inline std::span<std::byte const> view(T const& value) noexcept
+    {
+      detail::requireTrivialLayout<T>();
+      return view(std::addressof(value));
+    }
+
+    inline std::span<std::byte const> view(std::string_view str) noexcept
+    {
+      return view(str.data(), str.size());
+    }
+
+    inline std::span<std::byte const> view(std::string const& str) noexcept
+    {
+      return view(str.data(), str.size());
+    }
+
+    inline std::string_view stringView(std::span<std::byte const> span) noexcept
+    {
+      if (span.empty())
+      {
+        return {};
+      }
+
+      return {reinterpret_cast<char const*>(span.data()), span.size()};
+    }
   }
 
-  // Cast typed pointer with offset (e.g., uint8_t* + offset -> T const*)
-  // Binary deserialization utility - offset-based pointer arithmetic is unavoidable here
-  template<typename T, typename Base>
-  constexpr T const* as(Base const* base, std::size_t offset) noexcept
+  namespace layout
   {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    return reinterpret_cast<T const*>(reinterpret_cast<std::uint8_t const*>(base) + offset);
-  }
+    template<typename T>
+    inline T const* view(std::span<std::byte const> span) noexcept
+    {
+      detail::requireTrivialLayout<T>();
+      assert(span.size() >= sizeof(T));
+      assert(detail::isAligned(span.data(), alignof(T)));
+      return reinterpret_cast<T const*>(span.data());
+    }
 
-  // Cast pointer to span<byte> (for serialization)
-  template<typename T>
-  constexpr std::span<std::byte const> asBytes(T const* ptr, std::size_t count = 1) noexcept
-  {
-    return {reinterpret_cast<std::byte const*>(ptr), count * sizeof(T)};
-  }
+    template<typename T>
+    inline std::span<T const> viewArray(std::span<std::byte const> span) noexcept
+    {
+      detail::requireTrivialLayout<T>();
+      assert(span.size() % sizeof(T) == 0);
+      assert(detail::isAligned(span.data(), alignof(T)));
+      return {reinterpret_cast<T const*>(span.data()), span.size() / sizeof(T)};
+    }
 
-  // Get bytes span from a single object
-  template<typename T>
-  constexpr std::span<std::byte const> asBytes(T const& obj) noexcept
-  {
-    return asBytes(std::addressof(obj));
-  }
-
-  // Get bytes span from string_view
-  inline std::span<std::byte const> asBytes(std::string_view str) noexcept
-  {
-    return asBytes(str.data(), str.size());
-  }
-
-  // Get bytes span from std::string
-  inline std::span<std::byte const> asBytes(std::string const& str) noexcept
-  {
-    return asBytes(str.data(), str.size());
-  }
-
-  // Get string_view from span<byte>
-  inline std::string_view asString(std::span<std::byte const> span) noexcept
-  {
-    return {reinterpret_cast<char const*>(span.data()), span.size()};
-  }
-
-  // Get string_view from byte pointer + offset + size
-  inline std::string_view asString(std::byte const* data, std::size_t offset, std::size_t size) noexcept
-  {
-    return {reinterpret_cast<char const*>(data) + offset, size};
+    template<typename T, typename Base>
+    inline T const* viewAt(Base const* base, std::size_t offset) noexcept
+    {
+      detail::requireTrivialLayout<T>();
+      auto const* data = reinterpret_cast<std::byte const*>(base) + offset;
+      assert(detail::isAligned(data, alignof(T)));
+      return reinterpret_cast<T const*>(data);
+    }
   }
 
   /**
    * Split a uint64_t into two uint32_t parts for storage.
    * Use when 8-byte alignment is not available.
    */
-  constexpr std::pair<std::uint32_t, std::uint32_t> splitInt64(std::uint64_t value) noexcept
+  namespace uint64Parts
   {
-    return {static_cast<std::uint32_t>(value & 0xFFFFFFFF),
-            static_cast<std::uint32_t>(value >> 32)};
-  }
+    constexpr std::pair<std::uint32_t, std::uint32_t> split(std::uint64_t value) noexcept
+    {
+      return {static_cast<std::uint32_t>(value & 0xFFFFFFFF), static_cast<std::uint32_t>(value >> 32)};
+    }
 
-  /**
-   * Combine two uint32_t parts back into a uint64_t.
-   */
-  constexpr std::uint64_t combineInt64(std::uint32_t lo, std::uint32_t hi) noexcept
-  {
-    return (static_cast<std::uint64_t>(hi) << 32) | lo;
+    /**
+     * Combine two uint32_t parts back into a uint64_t.
+     */
+    constexpr std::uint64_t combine(std::uint32_t lo, std::uint32_t hi) noexcept
+    {
+      return (static_cast<std::uint64_t>(hi) << 32) | lo;
+    }
   }
 }

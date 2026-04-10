@@ -52,21 +52,8 @@ namespace rs::core
     prop._channels = record.property.channels;
     prop._bitDepth = record.property.bitDepth;
 
-    auto& tags = builder._tagsBuilder;
-    tags._tagNames.reserve(record.tags.names.size());
-
-    for (auto const& name : record.tags.names)
-    {
-      tags._tagNames.push_back(name);
-    }
-
-    auto& custom = builder._customBuilder;
-    custom._customPairs.reserve(record.custom.pairs.size());
-
-    for (auto const& [key, value] : record.custom.pairs)
-    {
-      custom._customPairs.emplace_back(key, value);
-    }
+    builder._tagsBuilder._tagNames.append_range(record.tags.names);
+    builder._customBuilder._customPairs.append_range(record.custom.pairs);
 
     return builder;
   }
@@ -483,8 +470,7 @@ namespace rs::core
     assert(reinterpret_cast<std::uintptr_t>(out.data()) % 4 == 0 && "out must be 4-byte aligned");
 
     auto& builder = *_builder;
-    // Write header (4-byte aligned)
-    *(reinterpret_cast<TrackHotHeader*>(out.data())) = TrackHotHeader{
+    new (out.data()) TrackHotHeader{
       .tagBloom = _bloomFilter,
       .artistId = _artistId,
       .albumId = _albumId,
@@ -503,10 +489,9 @@ namespace rs::core
 
     if (!_tagIds.empty())
     {
-      // Write tags: 4-byte tag IDs (aligned)
-      auto tagIdSize = _tagIds.size() * sizeof(DictionaryId);
-      std::memcpy(out.data() + pos, _tagIds.data(), tagIdSize);
-      pos += tagIdSize;
+      auto const tagBytes = utility::bytes::view(std::span<DictionaryId const>{_tagIds});
+      std::memcpy(out.data() + pos, tagBytes.data(), tagBytes.size());
+      pos += tagBytes.size();
     }
 
     // Write title
@@ -584,10 +569,9 @@ namespace rs::core
     auto const& prop = _builder->_propertyBuilder;
 
     {
-      auto [fileSizeLo, fileSizeHi] = utility::splitInt64(prop._fileSize);
-      auto [mtimeLo, mtimeHi] = utility::splitInt64(prop._mtime);
-      // Write header directly (4-byte aligned)
-      *(reinterpret_cast<TrackColdHeader*>(out.data())) = TrackColdHeader{
+      auto [fileSizeLo, fileSizeHi] = utility::uint64Parts::split(prop._fileSize);
+      auto [mtimeLo, mtimeHi] = utility::uint64Parts::split(prop._mtime);
+      new (out.data()) TrackColdHeader{
         .fileSizeLo = fileSizeLo,
         .fileSizeHi = fileSizeHi,
         .mtimeLo = mtimeLo,
@@ -622,8 +606,8 @@ namespace rs::core
     for (auto const& [dictId, value] : _resolvedPairs)
     {
       auto valueLen = static_cast<std::uint16_t>(value.size());
-      auto* outEntry = reinterpret_cast<Entry*>(out.data() + pos);
-      *outEntry = Entry{dictId, static_cast<std::uint16_t>(valueOffset), valueLen};
+      auto entry = Entry{dictId, static_cast<std::uint16_t>(valueOffset), valueLen};
+      utility::layout::write(out.subspan(pos, sizeof(Entry)), entry);
       pos += sizeof(Entry);
       valueOffset += valueLen;
     }

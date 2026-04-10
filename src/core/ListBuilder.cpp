@@ -41,12 +41,7 @@ namespace rs::core
     builder._filter = view.filter();
     builder._tracksBuilder._isSmart = view.isSmart();
 
-    auto tracks = view.tracks();
-    builder._tracksBuilder._trackIds.reserve(tracks.size());
-    for (auto const& id : tracks)
-    {
-      builder._tracksBuilder._trackIds.push_back(id);
-    }
+    builder._tracksBuilder._trackIds.append_range(view.tracks());
     return builder;
   }
 
@@ -158,18 +153,18 @@ namespace rs::core
     header.filterLen = static_cast<std::uint16_t>(filterLen);
 
     // Copy header
-    result.insert_range(result.end(), utility::asBytes(header));
+    result.insert_range(result.end(), utility::bytes::view(header));
 
     // Copy trackIds
     if (!trackIds.empty())
     {
-      result.insert_range(result.end(), utility::asBytes(trackIds.data(), trackIds.size()));
+      result.insert_range(result.end(), utility::bytes::view(std::span<TrackId const>{trackIds}));
     }
 
     // Copy strings
-    result.insert_range(result.end(), utility::asBytes(name));
-    result.insert_range(result.end(), utility::asBytes(description));
-    result.insert_range(result.end(), utility::asBytes(expression));
+    result.insert_range(result.end(), utility::bytes::view(name));
+    result.insert_range(result.end(), utility::bytes::view(description));
+    result.insert_range(result.end(), utility::bytes::view(expression));
 
     // Pad to 4-byte alignment
     while (result.size() % 4 != 0)

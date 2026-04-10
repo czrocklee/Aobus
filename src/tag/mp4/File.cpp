@@ -4,6 +4,7 @@
 #include "../Decoder.h"
 #include "Atom.h"
 #include <rs/tag/mp4/File.h>
+#include <rs/utility/ByteView.h>
 
 #include <array>
 #include <span>
@@ -23,13 +24,12 @@ namespace rs::tag::mp4
       auto const& layout = view.layout<DataAtomLayout>();
       auto const* data = reinterpret_cast<std::byte const*>(&layout + 1);
       auto const size = layout.common.length.value() - sizeof(DataAtomLayout);
-      return {data, size};
+      return utility::bytes::view(data, size);
     }
 
     std::string_view atomTextView(AtomView const& view)
     {
-      auto data = atomData(view);
-      return {reinterpret_cast<char const*>(data.data()), data.size()};
+      return utility::bytes::stringView(atomData(view));
     }
 
     void handleTrackNumbers(rs::core::TrackBuilder& builder, AtomView const& view)
@@ -53,7 +53,7 @@ namespace rs::tag::mp4
     template<NumberSetter Setter>
     void handleNumber(rs::core::TrackBuilder& builder, AtomView const& view)
     {
-      if (auto year = decodeUint16(atomData(view)); year) { (builder.metadata().*Setter)(*year); }
+      if (auto year = decodeUint16(atomTextView(view)); year) { (builder.metadata().*Setter)(*year); }
     }
 
     void handleCoverArt(rs::core::TrackBuilder& builder, AtomView const& view)

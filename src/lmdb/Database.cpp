@@ -6,6 +6,8 @@
 #include <rs/lmdb/Database.h>
 #include <rs/utility/ByteView.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <cstring>
 #include <lmdb.h>
 #include <vector>
@@ -23,11 +25,6 @@ namespace rs::lmdb
     inline MDB_val makeVal(void const* data = nullptr, std::size_t size = 0)
     {
       return {.mv_size = size, .mv_data = const_cast<void*>(data)}; // NOLINT(cppcoreguidelines-pro-type-const-cast)
-    }
-
-    std::span<std::byte> asBytes(MDB_val const& val)
-    {
-      return {static_cast<std::byte*>(val.mv_data), val.mv_size};
     }
 
     template<typename T>
@@ -84,7 +81,7 @@ namespace rs::lmdb
     }
 
     throwOnError("mdb_get", rc);
-    return utility::asBytes(static_cast<std::byte const*>(value.mv_data), value.mv_size);
+    return utility::bytes::view(static_cast<void const*>(value.mv_data), value.mv_size);
   }
 
   std::uint32_t Reader::maxKey() const
@@ -125,6 +122,7 @@ namespace rs::lmdb
   Reader::Iterator::Iterator(CursorPtr cursor)
     : _cursor{std::move(cursor)}
   {
+    gsl_Expects(_cursor != nullptr);
     increment();
   }
 
@@ -146,13 +144,12 @@ namespace rs::lmdb
   {
   }
 
-  bool Reader::Iterator::equal(Iterator const& other) const
-  {
-    return (_cursor != nullptr) == (other._cursor != nullptr) && _value.first == other._value.first;
-  }
+
 
   void Reader::Iterator::increment()
   {
+    gsl_Expects(_cursor != nullptr);
+
     auto key = makeVal();
     auto val = makeVal();
 
@@ -165,12 +162,13 @@ namespace rs::lmdb
     {
       throwOnError("mdb_cursor_get", rc);
       _value.first = read<std::uint32_t>(key);
-      _value.second = asBytes(val);
+      _value.second = utility::bytes::view(static_cast<void const*>(val.mv_data), val.mv_size);
     }
   }
 
   Reader::Value const& Reader::Iterator::dereference() const
   {
+    gsl_Expects(_cursor != nullptr);
     return _value;
   }
 
@@ -202,6 +200,8 @@ namespace rs::lmdb
   {
     void put(MDB_cursor* cursor, std::uint32_t id, std::span<std::byte const> data, unsigned int flags)
     {
+      gsl_Expects(cursor != nullptr);
+
       auto key = makeVal(id);
       auto val = makeVal(data.data(), data.size());
       int const rc = mdb_cursor_put(cursor, &key, &val, flags);
@@ -210,10 +210,12 @@ namespace rs::lmdb
 
     std::span<std::byte> reserve(MDB_cursor* cursor, std::uint32_t id, std::size_t size, unsigned int flags)
     {
+      gsl_Expects(cursor != nullptr);
+
       auto key = makeVal(id);
       auto val = makeVal(nullptr, size);
       throwOnError("mdb_cursor_put", mdb_cursor_put(cursor, &key, &val, flags | MDB_RESERVE));
-      return asBytes(val);
+      return utility::bytes::view(val.mv_data, val.mv_size);
     }
   }
 
@@ -277,6 +279,6 @@ namespace rs::lmdb
     }
 
     throwOnError("mdb_get", rc);
-    return asBytes(val);
+    return utility::bytes::view(static_cast<void const*>(val.mv_data), val.mv_size);
   }
 }

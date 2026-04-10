@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -79,10 +78,14 @@ namespace rs::lmdb
   };
 
   class Database::Reader::Iterator final
-    : public boost::iterator_facade<Iterator, Value const, boost::forward_traversal_tag>
   {
   public:
-    friend class boost::iterator_core_access;
+    // Standard iterator traits
+    using difference_type = std::ptrdiff_t;
+    using value_type = Value const;
+    using pointer = Value const*;
+    using reference = Value const&;
+    using iterator_category = std::forward_iterator_tag;
 
     Iterator();
     Iterator(Iterator const& other);
@@ -90,7 +93,33 @@ namespace rs::lmdb
     ~Iterator();
     Iterator& operator=(Iterator const&) = default;
     Iterator& operator=(Iterator&&) = default;
-    bool equal(Iterator const& other) const;
+
+    // Forward iterator operations
+    reference operator*() const { return dereference(); }
+
+    pointer operator->() const { return &dereference(); }
+
+    Iterator& operator++()
+    {
+      increment();
+      return *this;
+    }
+
+    Iterator operator++(int)
+    {
+      auto tmp = *this;
+      increment();
+      return tmp;
+    }
+
+    bool operator==(Iterator const& other) const
+    {
+      return (_cursor != nullptr) == (other._cursor != nullptr) && _value.first == other._value.first;
+    }
+
+    bool operator!=(Iterator const& other) const { return !(*this == other); }
+
+    private:
     void increment();
     Value const& dereference() const;
 

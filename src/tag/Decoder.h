@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <rs/utility/ByteView.h>
+
 #include <cstdint>
 #include <charconv>
 #include <optional>
@@ -14,19 +16,14 @@ namespace rs::tag
 {
   inline std::string decodeString(std::span<std::byte const> buf)
   {
-    return std::string{reinterpret_cast<char const*>(buf.data()), buf.size()};
+    return std::string{rs::utility::bytes::stringView(buf)};
   }
 
-  inline std::optional<std::uint16_t> decodeUint16(std::span<std::byte const> buf)
+  inline std::optional<std::uint16_t> decodeUint16(std::string_view text)
   {
-    char const* data = reinterpret_cast<char const*>(buf.data());
     std::uint16_t result;
-    auto [_, ec] = std::from_chars(data, data + buf.size(), result);
+    auto const* data = text.data();
+    auto [_, ec] = std::from_chars(data, data + text.size(), result);
     return ec == std::errc() ? std::optional{result} : std::nullopt;
-  }
-
-  inline std::span<std::byte const> viewBytes(std::span<std::byte const> buf)
-  {
-    return buf;
   }
 } // namespace rs::tag

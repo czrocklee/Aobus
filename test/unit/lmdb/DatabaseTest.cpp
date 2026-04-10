@@ -100,7 +100,7 @@ TEST_CASE("Database::Reader - get", "[lmdb][database][reader]")
   {
     auto data = reader.get(42);
     REQUIRE(data.has_value());
-    REQUIRE(rs::utility::asString(*data) == "answer");
+    REQUIRE(rs::utility::bytes::stringView(*data) == "answer");
   }
 
   SECTION("Missing key returns nullopt")
@@ -167,7 +167,7 @@ TEST_CASE("Database::Reader::Iterator - dereference", "[lmdb][database][reader]"
   auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   auto it = reader.begin();
-  REQUIRE(rs::utility::asString(it->second) == "value");
+  REQUIRE(rs::utility::bytes::stringView(it->second) == "value");
 }
 
 // ============================================================================
@@ -190,7 +190,7 @@ TEST_CASE("Database::Writer - create with id and data", "[lmdb][database][writer
   auto reader = db.reader(rtxn);
   auto data = reader.get(1);
   REQUIRE(data.has_value());
-  REQUIRE(rs::utility::asString(*data) == "hello");
+  REQUIRE(rs::utility::bytes::stringView(*data) == "hello");
 }
 
 TEST_CASE("Database::Writer - create with id and size", "[lmdb][database][writer]")
@@ -216,7 +216,7 @@ TEST_CASE("Database::Writer - create with id and size", "[lmdb][database][writer
   auto data = reader.get(1);
   REQUIRE(data.has_value());
   REQUIRE(data->size() == 10);
-  REQUIRE(rs::utility::asString(*data) == std::string(10, 'x'));
+  REQUIRE(rs::utility::bytes::stringView(*data) == std::string(10, 'x'));
 }
 
 TEST_CASE("Database::Writer - append with data", "[lmdb][database][writer]")
@@ -243,8 +243,8 @@ TEST_CASE("Database::Writer - append with data", "[lmdb][database][writer]")
   auto data2 = reader.get(2);
   REQUIRE(data1.has_value());
   REQUIRE(data2.has_value());
-  REQUIRE(rs::utility::asString(*data1) == "first");
-  REQUIRE(rs::utility::asString(*data2) == "second");
+  REQUIRE(rs::utility::bytes::stringView(*data1) == "first");
+  REQUIRE(rs::utility::bytes::stringView(*data2) == "second");
 }
 
 TEST_CASE("Database::Writer - append with size", "[lmdb][database][writer]")
@@ -277,8 +277,8 @@ TEST_CASE("Database::Writer - append with size", "[lmdb][database][writer]")
   auto data2 = reader.get(2);
   REQUIRE(data1.has_value());
   REQUIRE(data2.has_value());
-  REQUIRE(rs::utility::asString(*data1) == std::string(8, 'a'));
-  REQUIRE(rs::utility::asString(*data2) == std::string(12, 'b'));
+  REQUIRE(rs::utility::bytes::stringView(*data1) == std::string(8, 'a'));
+  REQUIRE(rs::utility::bytes::stringView(*data2) == std::string(12, 'b'));
 }
 
 TEST_CASE("Database::Writer - update existing record", "[lmdb][database][writer]")
@@ -306,7 +306,7 @@ TEST_CASE("Database::Writer - update existing record", "[lmdb][database][writer]
   auto data = reader.get(1);
   REQUIRE(data.has_value());
   REQUIRE(data->size() == 7);
-  REQUIRE(rs::utility::asString(*data) == "updated");
+  REQUIRE(rs::utility::bytes::stringView(*data) == "updated");
 }
 
 TEST_CASE("Database::Writer - delete record", "[lmdb][database][writer]")
@@ -359,7 +359,7 @@ TEST_CASE("Database::Writer - get within write transaction", "[lmdb][database][w
   auto data = writer.get(42);
   REQUIRE(data.has_value());
   REQUIRE(data->size() == 6);
-  REQUIRE(rs::utility::asString(*data) == "answer");
+  REQUIRE(rs::utility::bytes::stringView(*data) == "answer");
 }
 
 TEST_CASE("Database::Writer - move constructor", "[lmdb][database][writer]")

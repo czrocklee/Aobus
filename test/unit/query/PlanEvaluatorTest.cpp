@@ -85,7 +85,7 @@ namespace
 
       // Fix up the header with specific IDs
       // Note: we serialize then modify, so const_cast is safe
-      auto* header = const_cast<rs::core::TrackHotHeader*>(rs::utility::as<rs::core::TrackHotHeader>(_hotData));
+      auto* header = const_cast<rs::core::TrackHotHeader*>(rs::utility::layout::view<rs::core::TrackHotHeader>(_hotData));
       header->artistId = DictionaryId{artistId};
       header->albumId = DictionaryId{albumId};
       header->genreId = DictionaryId{genreId};
@@ -630,7 +630,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   h.tagBloom = 0x00000001U; // Only bit 0 set
 
   auto data = std::vector<std::byte>{};
-  data.insert_range(data.end(), rs::utility::asBytes(h));
+  data.insert_range(data.end(), rs::utility::bytes::view(h));
 
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
@@ -655,7 +655,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
   h.tagBloom = 0xFFFFFFFFU; // All bits set
 
   auto data = std::vector<std::byte>{};
-  data.insert_range(data.end(), rs::utility::asBytes(h));
+  data.insert_range(data.end(), rs::utility::bytes::view(h));
 
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
