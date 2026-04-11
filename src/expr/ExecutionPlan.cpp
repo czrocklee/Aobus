@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cstring>
 #include <exception>
 #include <limits>
 #include <ranges>
@@ -15,85 +16,39 @@
 
 namespace rs::expr
 {
-
   namespace
   {
     // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
     constexpr std::uint32_t kBloomBitMask = 31;
 
-    Field variableTypeToField(VariableType type,
-                              std::string_view name) // NOLINT(readability-function-cognitive-complexity)
+#include "expr/MetadataDispatch.h"
+#include "expr/PropertyDispatch.h"
+#include "expr/UnitDispatch.h"
+
+    Field variableTypeToField(VariableType type, std::string_view name)
     {
       switch (type)
       {
         case VariableType::Property:
-          if (name == "duration" || name == "l")
+        {
+          if (auto const* entry = property_dispatch::Table::lookupPropertyField(name.data(), name.size());
+              entry != nullptr)
           {
-            return Field::DurationMs;
+            return entry->field;
           }
-          if (name == "bitrate" || name == "br")
-          {
-            return Field::Bitrate;
-          }
-          if (name == "sampleRate" || name == "sr")
-          {
-            return Field::SampleRate;
-          }
-          if (name == "channels")
-          {
-            return Field::Channels;
-          }
-          if (name == "bitDepth" || name == "bd")
-          {
-            return Field::BitDepth;
-          }
+
           break;
+        }
         case VariableType::Metadata:
-          if (name == "year" || name == "y")
+        {
+          if (auto const* entry = metadata_dispatch::Table::lookupMetadataField(name.data(), name.size());
+              entry != nullptr)
           {
-            return Field::Year;
+            return entry->field;
           }
-          if (name == "trackNumber" || name == "tn")
-          {
-            return Field::TrackNumber;
-          }
-          if (name == "totalTracks" || name == "tt")
-          {
-            return Field::TotalTracks;
-          }
-          if (name == "discNumber" || name == "dn")
-          {
-            return Field::DiscNumber;
-          }
-          if (name == "totalDiscs" || name == "td")
-          {
-            return Field::TotalDiscs;
-          }
-          if (name == "artist" || name == "a")
-          {
-            return Field::ArtistId;
-          }
-          if (name == "album" || name == "al")
-          {
-            return Field::AlbumId;
-          }
-          if (name == "genre" || name == "g")
-          {
-            return Field::GenreId;
-          }
-          if (name == "albumArtist" || name == "aa")
-          {
-            return Field::AlbumArtistId;
-          }
-          if (name == "coverArt" || name == "ca")
-          {
-            return Field::CoverArtId;
-          }
-          if (name == "title" || name == "t")
-          {
-            return Field::Title;
-          }
+
           break;
+        }
         case VariableType::Tag: return Field::Tag;
         case VariableType::Custom: return Field::Custom;
         default: break;
@@ -166,11 +121,8 @@ namespace rs::expr
 
     std::string toLower(std::string_view value)
     {
-      auto lower = std::string{};
-      lower.reserve(value.size());
-      std::ranges::transform(
-        value, std::back_inserter(lower), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-      return lower;
+      return value | std::views::transform([](unsigned char ch) { return static_cast<char>(std::tolower(ch)); }) |
+             std::ranges::to<std::string>();
     }
 
     char const* fieldName(Field field)
@@ -193,12 +145,14 @@ namespace rs::expr
 
     std::optional<std::uint64_t> parseUnsigned(std::string_view value)
     {
-      auto parsed = std::uint64_t{0};
-      auto const [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsed);
-      if (ec != std::errc{} || ptr != value.data() + value.size())
+      std::uint64_t parsed = 0;
+
+      if (auto const [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsed);
+          ec != std::errc{} || ptr != value.data() + value.size())
       {
         return std::nullopt;
       }
+
       return parsed;
     }
 
@@ -206,12 +160,14 @@ namespace rs::expr
     {
       if (lhs == 0 || rhs == 0)
       {
-        return std::uint64_t{0};
+        return 0;
       }
+
       if (lhs > std::numeric_limits<std::uint64_t>::max() / rhs)
       {
         return std::nullopt;
       }
+
       return lhs * rhs;
     }
 
@@ -221,21 +177,26 @@ namespace rs::expr
       {
         return std::nullopt;
       }
+
       return lhs + rhs;
     }
 
     std::optional<std::uint64_t> pow10(std::size_t exponent)
     {
-      auto value = std::uint64_t{1};
+      std::uint64_t value = 1;
+
       for (std::size_t i = 0; i < exponent; ++i)
       {
         auto const next = checkedMul(value, 10);
+
         if (!next)
         {
           return std::nullopt;
         }
+
         value = *next;
       }
+
       return value;
     }
 
@@ -246,34 +207,26 @@ namespace rs::expr
       switch (field)
       {
         case Field::DurationMs:
-          if (normalized == "ms")
+        {
+          if (auto const* entry = unit_dispatch::Table::lookupUnit(normalized.data(), normalized.size());
+              entry != nullptr && entry->durationMultiplier != 0)
           {
-            return 1;
+            return entry->durationMultiplier;
           }
-          if (normalized == "s")
-          {
-            return 1000;
-          }
-          if (normalized == "m")
-          {
-            return 60 * 1000;
-          }
-          if (normalized == "h")
-          {
-            return 60 * 60 * 1000;
-          }
+
           break;
+        }
         case Field::Bitrate:
         case Field::SampleRate:
-          if (normalized == "k")
+        {
+          if (auto const* entry = unit_dispatch::Table::lookupUnit(normalized.data(), normalized.size());
+              entry != nullptr && entry->scaledMultiplier != 0)
           {
-            return 1000;
+            return entry->scaledMultiplier;
           }
-          if (normalized == "m")
-          {
-            return 1000 * 1000;
-          }
+
           break;
+        }
         default: break;
       }
 
@@ -289,12 +242,14 @@ namespace rs::expr
 
       auto lexeme = std::string_view{constant.lexeme};
       auto const negative = !lexeme.empty() && lexeme.front() == '-';
+
       if (negative)
       {
         lexeme.remove_prefix(1);
       }
 
       auto const suffixStart = std::ranges::find_if(lexeme, [](unsigned char ch) { return std::isalpha(ch) != 0; });
+
       if (suffixStart == lexeme.end())
       {
         RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
@@ -303,12 +258,14 @@ namespace rs::expr
       auto const suffixOffset = static_cast<std::size_t>(std::distance(lexeme.begin(), suffixStart));
       auto const numberPart = lexeme.substr(0, suffixOffset);
       auto const suffixPart = lexeme.substr(suffixOffset);
+
       if (numberPart.empty() || suffixPart.empty())
       {
         RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const dotPos = numberPart.find('.');
+
       if (dotPos != std::string_view::npos && numberPart.find('.', dotPos + 1) != std::string_view::npos)
       {
         RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
@@ -316,6 +273,7 @@ namespace rs::expr
 
       auto const wholePart = numberPart.substr(0, dotPos);
       auto const fractionPart = dotPos == std::string_view::npos ? std::string_view{} : numberPart.substr(dotPos + 1);
+
       if (wholePart.empty() || (dotPos != std::string_view::npos && fractionPart.empty()))
       {
         RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
@@ -325,6 +283,7 @@ namespace rs::expr
       auto const fraction =
         fractionPart.empty() ? std::optional<std::uint64_t>{std::uint64_t{0}} : parseUnsigned(fractionPart);
       auto const denominator = pow10(fractionPart.size());
+
       if (!whole || !fraction || !denominator)
       {
         RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
@@ -334,6 +293,7 @@ namespace rs::expr
       auto const numerator = scaledWhole ? checkedAdd(*scaledWhole, *fraction) : std::nullopt;
       auto const multiplier = unitMultiplier(field, suffixPart);
       auto const scaledNumerator = numerator ? checkedMul(*numerator, multiplier) : std::nullopt;
+
       if (!scaledNumerator)
       {
         RS_THROW_FORMAT(rs::Exception, "unit literal '{}' is out of range", constant.lexeme);
@@ -348,24 +308,29 @@ namespace rs::expr
       }
 
       auto const magnitude = *scaledNumerator / *denominator;
+
       if (!negative)
       {
         if (magnitude > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         {
           RS_THROW_FORMAT(rs::Exception, "unit literal '{}' is out of range", constant.lexeme);
         }
+
         return static_cast<std::int64_t>(magnitude);
       }
 
       auto const negativeLimit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) + 1;
+
       if (magnitude > negativeLimit)
       {
         RS_THROW_FORMAT(rs::Exception, "unit literal '{}' is out of range", constant.lexeme);
       }
+
       if (magnitude == negativeLimit)
       {
         return std::numeric_limits<std::int64_t>::min();
       }
+
       return -static_cast<std::int64_t>(magnitude);
     }
   }
@@ -388,23 +353,10 @@ namespace rs::expr
 
   void QueryCompiler::compileExpression(Expression const& expr)
   {
-    std::visit(utility::makeVisitor(
-                 [this](std::unique_ptr<BinaryExpression> const& binary)
-    {
-      if (binary)
-      {
-        compileBinary(*binary);
-      }
-    },
-                 [this](std::unique_ptr<UnaryExpression> const& unary)
-    {
-      if (unary)
-      {
-        compileUnary(*unary);
-      }
-    },
-                 [this](VariableExpression const& var) { compileVariable(var); },
-                 [this](ConstantExpression const& constant) { compileConstant(constant); }),
+    std::visit(utility::makeVisitor([this](std::unique_ptr<BinaryExpression> const& binary) { compileBinary(*binary); },
+                                    [this](std::unique_ptr<UnaryExpression> const& unary) { compileUnary(*unary); },
+                                    [this](VariableExpression const& var) { compileVariable(var); },
+                                    [this](ConstantExpression const& constant) { compileConstant(constant); }),
                expr);
   }
 

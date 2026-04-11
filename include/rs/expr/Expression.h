@@ -36,8 +36,6 @@ namespace rs::expr
 
   using ConstantExpression = std::variant<bool, std::int64_t, UnitConstantExpression, std::string>;
 
-  // Expression uses std::unique_ptr for recursive types to avoid the memory leak issue
-  // that occurs with boost::spirit x3's forward_ast in recursive variants.
   using Expression = std::variant<VariableExpression,
                                   ConstantExpression,
                                   std::unique_ptr<BinaryExpression>,

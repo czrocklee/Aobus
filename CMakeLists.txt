@@ -152,7 +152,31 @@ add_gperf_header(
   "${CMAKE_CURRENT_SOURCE_DIR}/src/tag/mpeg/id3v2/FrameDispatch.gperf"
   "tag/mpeg/id3v2/FrameDispatch.h"
 )
-add_custom_target(tag_dispatch_headers DEPENDS "${FLAC_VORBIS_DISPATCH_HEADER}" "${MP4_ATOM_DISPATCH_HEADER}" "${MPEG_FRAME_DISPATCH_HEADER}")
+add_gperf_header(
+  EXPR_property_dispatch_HEADER
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/expr/PropertyDispatch.gperf"
+  "expr/PropertyDispatch.h"
+)
+add_gperf_header(
+  EXPR_metadata_dispatch_HEADER
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/expr/MetadataDispatch.gperf"
+  "expr/MetadataDispatch.h"
+)
+add_gperf_header(
+  EXPR_UNIT_DISPATCH_HEADER
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/expr/UnitDispatch.gperf"
+  "expr/UnitDispatch.h"
+)
+add_custom_target(
+  tag_dispatch_headers
+  DEPENDS
+    "${FLAC_VORBIS_DISPATCH_HEADER}"
+    "${MP4_ATOM_DISPATCH_HEADER}"
+    "${MPEG_FRAME_DISPATCH_HEADER}"
+    "${EXPR_property_dispatch_HEADER}"
+    "${EXPR_metadata_dispatch_HEADER}"
+    "${EXPR_UNIT_DISPATCH_HEADER}"
+)
 
 add_library(rs OBJECT
     src/lmdb/Environment.cpp
@@ -183,6 +207,9 @@ add_library(rs OBJECT
     src/tag/mpeg/id3v2/Reader.cpp
     "${FLAC_VORBIS_DISPATCH_HEADER}"
     "${MP4_ATOM_DISPATCH_HEADER}"
+    "${EXPR_property_dispatch_HEADER}"
+    "${EXPR_metadata_dispatch_HEADER}"
+    "${EXPR_UNIT_DISPATCH_HEADER}"
 )
 target_include_directories(rs PUBLIC include)
 target_include_directories(rs PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")

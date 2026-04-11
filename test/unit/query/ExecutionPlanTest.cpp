@@ -72,6 +72,28 @@ TEST_CASE("ExecutionPlan - Compile Property Field")
   CHECK(hasGt == true);
 }
 
+TEST_CASE("ExecutionPlan - Property Alias Maps To Bitrate Field")
+{
+  auto expr = parse("@br >= 320k");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  REQUIRE_FALSE(plan.instructions.empty());
+  CHECK(plan.instructions[0].op == OpCode::LoadField);
+  CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::Bitrate));
+}
+
+TEST_CASE("ExecutionPlan - Metadata Alias Maps To AlbumArtist Field")
+{
+  auto expr = parse("$aa = Bach");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  REQUIRE_FALSE(plan.instructions.empty());
+  CHECK(plan.instructions[0].op == OpCode::LoadField);
+  CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::AlbumArtistId));
+}
+
 TEST_CASE("ExecutionPlan - Duration Unit Constant")
 {
   auto expr = parse("@duration >= 3m");
