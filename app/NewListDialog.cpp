@@ -8,6 +8,7 @@
 
 #include "model/AllTrackIdsList.h"
 #include "model/FilteredTrackIdList.h"
+#include "model/SmartListEngine.h"
 #include "model/TrackRowDataProvider.h"
 
 #include <rs/core/MusicLibrary.h>
@@ -144,8 +145,11 @@ void NewListDialog::setupUi()
 
 void NewListDialog::setupPreview()
 {
+  // Create preview engine for expression evaluation
+  _previewEngine = std::make_unique<app::model::SmartListEngine>(*_musicLibrary);
+
   // Create FilteredTrackIdList for expression evaluation
-  _previewFilteredList = std::make_unique<app::model::FilteredTrackIdList>(*_allTrackIds, *_musicLibrary);
+  _previewFilteredList = std::make_unique<app::model::FilteredTrackIdList>(*_allTrackIds, *_musicLibrary, *_previewEngine);
 
   // Create TrackListAdapter to bridge to GTK
   _previewAdapter = std::make_shared<TrackListAdapter>(*_previewFilteredList, _rowDataProvider);

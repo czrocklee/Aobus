@@ -254,6 +254,10 @@ add_executable(rs_test
     test/unit/lmdb/EnvironmentTest.cpp
     test/unit/lmdb/TransactionTest.cpp
     test/unit/lmdb/DatabaseTest.cpp
+    test/unit/app/SmartListEngineTest.cpp
+    app/model/FilteredTrackIdList.cpp
+    app/model/SmartListEngine.cpp
+    app/model/TrackIdList.cpp
 )
 target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(rs_test PRIVATE rs Catch2)
@@ -295,6 +299,7 @@ add_executable(RockStudio
     app/model/TrackIdList.cpp
     app/model/AllTrackIdsList.cpp
     app/model/FilteredTrackIdList.cpp
+    app/model/SmartListEngine.cpp
     app/model/ManualTrackIdList.cpp
     app/model/TrackRowDataProvider.cpp
     app/PlaybackBar.cpp

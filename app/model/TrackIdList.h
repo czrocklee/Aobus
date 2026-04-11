@@ -14,6 +14,9 @@ namespace app::model
 
   using TrackId = rs::core::TrackId;
 
+  // Forward declaration
+  class SmartListEngine;
+
   /**
    * TrackIdListObserver - Observer interface for TrackIdList changes.
    * All notifications are emitted AFTER internal state is updated.
@@ -55,6 +58,8 @@ namespace app::model
 
   private:
     std::vector<TrackIdListObserver*> _observers;
+
+    friend class SmartListEngine;
   };
 
 } // namespace app::model

@@ -5,9 +5,7 @@
 
 #include "TrackIdList.h"
 
-#include <rs/core/DictionaryStore.h>
 #include <rs/core/MusicLibrary.h>
-#include <rs/core/TrackStore.h>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/PlanEvaluator.h>
 
@@ -17,23 +15,24 @@
 namespace app::model
 {
 
-  class TrackIdList; // Forward declaration
+  // Forward declaration - include SmartListEngine.h to get full type
+  class SmartListEngine;
 
   /**
-   * FilteredTrackIdList - Reactive smart-list membership derived from a source list.
-   * Evaluates track membership using a compiled ExecutionPlan.
+   * FilteredTrackIdList - Facade for smart list membership backed by SmartListEngine.
    *
-   * Compile-once evaluation: recompiles only when expression changes,
-   * re-evaluates incrementally when source tracks are updated.
+   * Acts as a TrackIdList adapter that forwards requests to SmartListEngine
+   * and relays notifications to observers.
    *
-   * Uses multiple inheritance: TrackIdList (to be a list) + TrackIdListObserver (to observe source).
+   * This class no longer directly evaluates expressions or reads tracks -
+   * that is handled by SmartListEngine for optimal batching.
    */
-  class FilteredTrackIdList final
-    : public TrackIdList
-    , public TrackIdListObserver
+  class FilteredTrackIdList final : public TrackIdList
   {
   public:
-    explicit FilteredTrackIdList(TrackIdList& source, rs::core::MusicLibrary& ml);
+    FilteredTrackIdList(TrackIdList& source,
+                        rs::core::MusicLibrary& ml,
+                        SmartListEngine& engine);
     ~FilteredTrackIdList() override;
 
     void setExpression(std::string expr);
@@ -44,31 +43,20 @@ namespace app::model
     [[nodiscard]] TrackId trackIdAt(std::size_t index) const override;
     [[nodiscard]] std::optional<std::size_t> indexOf(TrackId id) const override;
 
-    bool hasError() const { return _hasError; }
-    std::string const& errorMessage() const { return _errorMessage; }
+    bool hasError() const;
+    std::string const& errorMessage() const;
 
   private:
-    // TrackIdListObserver interface (inherited)
-    void onReset() override;
-    void onInserted(TrackId id, std::size_t index) override;
-    void onUpdated(TrackId id, std::size_t index) override;
-    void onRemoved(TrackId id, std::size_t index) override;
+    friend class SmartListEngine;
 
-    void rebuild();
-    bool evaluate(TrackId id) const;
+    // Methods called by SmartListEngine to notify this facade
+    void notifyEngineReset();
+    void notifyEngineInserted(TrackId id, std::size_t index);
+    void notifyEngineUpdated(TrackId id, std::size_t index);
+    void notifyEngineRemoved(TrackId id, std::size_t index);
 
-    TrackIdList& _source;
-    rs::core::MusicLibrary* _ml;
-    std::vector<TrackId> _filteredIds;
-
-    // Expression state
-    std::string _expression;
-    bool _hasError = false;
-    std::string _errorMessage;
-
-    // Compiled plan (rebuilt on expression change)
-    std::unique_ptr<rs::expr::ExecutionPlan> _plan;
-    std::unique_ptr<rs::expr::PlanEvaluator> _evaluator;
+    SmartListEngine* _engine = nullptr;
+    std::uint64_t _registrationId = 0;  // Use std::uint64_t directly instead of RegistrationId
   };
 
 } // namespace app::model

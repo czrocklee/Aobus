@@ -20,6 +20,7 @@ namespace app::model
 {
   class AllTrackIdsList;
   class FilteredTrackIdList;
+  class SmartListEngine;
   class TrackRowDataProvider;
 }
 
@@ -60,6 +61,7 @@ private:
   rs::core::MusicLibrary* _musicLibrary;
   app::model::AllTrackIdsList* _allTrackIds;
   std::shared_ptr<app::model::TrackRowDataProvider> _rowDataProvider;
+  std::unique_ptr<app::model::SmartListEngine> _previewEngine;
   std::unique_ptr<app::model::FilteredTrackIdList> _previewFilteredList;
   std::shared_ptr<TrackListAdapter> _previewAdapter;
 };

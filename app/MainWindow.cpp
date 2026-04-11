@@ -158,6 +158,9 @@ void MainWindow::openMusicLibrary(std::filesystem::path const& path)
   // Initialize AllTrackIdsList
   _allTrackIds = std::make_unique<app::model::AllTrackIdsList>(_musicLibrary->tracks());
 
+  // Initialize SmartListEngine for smart lists
+  _smartListEngine = std::make_unique<app::model::SmartListEngine>(*_musicLibrary);
+
   // Load all track IDs
   auto txn = _musicLibrary->readTransaction();
   _allTrackIds->reloadFromStore(txn);
@@ -320,6 +323,9 @@ void MainWindow::importFilesFromPath(std::filesystem::path const& path)
 
   // Initialize AllTrackIdsList
   _allTrackIds = std::make_unique<app::model::AllTrackIdsList>(_musicLibrary->tracks());
+
+  // Initialize SmartListEngine for smart lists
+  _smartListEngine = std::make_unique<app::model::SmartListEngine>(*_musicLibrary);
 
   // Scan for music files
   std::vector<std::filesystem::path> files;
@@ -776,14 +782,11 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId,
   if (view.isSmart())
   {
     // Smart list - use FilteredTrackIdList
-    auto filtered = std::make_unique<app::model::FilteredTrackIdList>(*_allTrackIds, *_musicLibrary);
+    auto filtered = std::make_unique<app::model::FilteredTrackIdList>(*_allTrackIds, *_musicLibrary, *_smartListEngine);
 
     // Set expression from filter stored in payload
     auto expr = view.filter();
-    if (!expr.empty())
-    {
-      filtered->setExpression(std::string(expr));
-    }
+    filtered->setExpression(std::string(expr));
     filtered->reload();
     membershipList = std::move(filtered);
   }

@@ -15,6 +15,8 @@
 #include <thread>
 #include <vector>
 
+#include "model/SmartListEngine.h"
+
 #include "playback/PlaybackTypes.h"
 
 namespace app::model
@@ -121,6 +123,9 @@ private:
 
   // All tracks TrackId list (owned)
   std::unique_ptr<app::model::AllTrackIdsList> _allTrackIds;
+
+  // Smart list engine for shared evaluation
+  std::unique_ptr<app::model::SmartListEngine> _smartListEngine;
 
   // Layout: Horizontal paned with left box and right stack
   Gtk::Paned _paned;
