@@ -34,7 +34,10 @@ namespace rs::tag::mp4
   class AtomView : public Atom
   {
   public:
-    AtomView(void const* data, std::size_t /*size*/, Atom& parent) : _data{data}, _parent{parent} {}
+    AtomView(void const* data, std::size_t /*size*/, Atom& parent)
+      : _data{data}, _parent{parent}
+    {
+    }
 
     std::uint32_t length() const override { return layout<AtomLayout>().length.value(); }
 

@@ -5,8 +5,8 @@
 
 #include <rs/utility/ByteView.h>
 
-#include <cstdint>
 #include <charconv>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>

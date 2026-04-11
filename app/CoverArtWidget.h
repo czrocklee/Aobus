@@ -54,7 +54,10 @@ inline void CoverArtWidget::setCoverFromBytes(std::vector<std::byte> const& byte
 
 inline void CoverArtWidget::setCoverPixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
 {
-  if (pixbuf) { set_pixbuf(pixbuf); }
+  if (pixbuf)
+  {
+    set_pixbuf(pixbuf);
+  }
   else
   {
     clearCover();

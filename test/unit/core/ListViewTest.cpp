@@ -3,9 +3,9 @@
 
 #include <catch2/catch.hpp>
 
-#include <rs/core/ListView.h>
-#include <rs/core/ListBuilder.h>
 #include <rs/Exception.h>
+#include <rs/core/ListBuilder.h>
+#include <rs/core/ListView.h>
 #include <rs/core/Type.h>
 
 #include <ranges>
@@ -43,9 +43,7 @@ namespace
 
   TEST_CASE("ListView - Manual List with TrackIds")
   {
-    auto builder = rs::core::ListBuilder::createNew()
-      .name("My List")
-      .description("Description");
+    auto builder = rs::core::ListBuilder::createNew().name("My List").description("Description");
     builder.tracks().add(rs::core::TrackId{100});
     builder.tracks().add(rs::core::TrackId{200});
     builder.tracks().add(rs::core::TrackId{300});
@@ -64,10 +62,10 @@ namespace
   TEST_CASE("ListView - Smart List with Filter")
   {
     auto payload = rs::core::ListBuilder::createNew()
-      .name("Smart List")
-      .description("A smart list")
-      .filter("@year > 2020")
-      .serialize();
+                     .name("Smart List")
+                     .description("A smart list")
+                     .filter("@year > 2020")
+                     .serialize();
     auto view = ListView{payload};
 
     CHECK(view.tracks().size() == 0);

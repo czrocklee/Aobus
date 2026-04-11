@@ -3,8 +3,8 @@
 
 #include <catch2/catch.hpp>
 
-#include <rs/core/TrackRecord.h>
 #include <rs/core/TrackLayout.h>
+#include <rs/core/TrackRecord.h>
 #include <rs/core/TrackView.h>
 
 #include <cstring>

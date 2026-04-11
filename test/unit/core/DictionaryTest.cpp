@@ -11,8 +11,8 @@
 
 #include <string_view>
 
-using rs::core::DictionaryStore;
 using rs::core::DictionaryId;
+using rs::core::DictionaryStore;
 using rs::lmdb::Database;
 using rs::lmdb::Environment;
 using rs::lmdb::ReadTransaction;
@@ -160,7 +160,7 @@ TEST_CASE("Dictionary - reserve returns new ID for non-existent string", "[core]
 
   // Reserve a non-existent string
   auto id = dict.reserve("new artist");
-  REQUIRE(id.value() == 1);  // First reserved ID is 0 (same as put)
+  REQUIRE(id.value() == 1); // First reserved ID is 0 (same as put)
 
   // contains should now return true (in-memory)
   REQUIRE(dict.contains("new artist"));
@@ -178,7 +178,7 @@ TEST_CASE("Dictionary - reserve returns existing ID for existent string", "[core
 
   // Reserve an existing string - should return the existing ID
   auto id = dict.reserve("existing");
-  REQUIRE(id.value() == 1);  // First put uses ID 0
+  REQUIRE(id.value() == 1); // First put uses ID 0
 
   REQUIRE(dict.contains("existing"));
 }

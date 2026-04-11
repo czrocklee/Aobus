@@ -23,9 +23,15 @@ Glib::RefPtr<TrackRow> TrackRow::create(TrackId id, std::shared_ptr<app::model::
 
 void TrackRow::ensureLoaded() const
 {
-  if (_loaded) { return; }
+  if (_loaded)
+  {
+    return;
+  }
 
-  if (!_provider) { return; }
+  if (!_provider)
+  {
+    return;
+  }
 
   auto optRow = _provider->getRow(_id);
   if (optRow)

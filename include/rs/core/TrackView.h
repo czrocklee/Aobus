@@ -123,7 +123,8 @@ namespace rs::core
       DictionaryId const* begin() const noexcept
       {
         gsl_Expects(_hotData.size() >= sizeof(TrackHotHeader));
-        return utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), hotHeader().tagLen)).data();
+        return utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), hotHeader().tagLen))
+          .data();
       }
 
       DictionaryId const* end() const noexcept { return begin() + count(); }

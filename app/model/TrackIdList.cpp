@@ -18,22 +18,34 @@ namespace app::model
 
   void TrackIdList::notifyReset()
   {
-    for (auto* obs : _observers) { obs->onReset(); }
+    for (auto* obs : _observers)
+    {
+      obs->onReset();
+    }
   }
 
   void TrackIdList::notifyInserted(TrackId id, std::size_t index)
   {
-    for (auto* obs : _observers) { obs->onInserted(id, index); }
+    for (auto* obs : _observers)
+    {
+      obs->onInserted(id, index);
+    }
   }
 
   void TrackIdList::notifyUpdated(TrackId id, std::size_t index)
   {
-    for (auto* obs : _observers) { obs->onUpdated(id, index); }
+    for (auto* obs : _observers)
+    {
+      obs->onUpdated(id, index);
+    }
   }
 
   void TrackIdList::notifyRemoved(TrackId id, std::size_t index)
   {
-    for (auto* obs : _observers) { obs->onRemoved(id, index); }
+    for (auto* obs : _observers)
+    {
+      obs->onRemoved(id, index);
+    }
   }
 
 } // namespace app::model

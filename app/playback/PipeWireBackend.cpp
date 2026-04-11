@@ -88,17 +88,9 @@ namespace app::playback
 
     // Stream properties
     pw_properties* props = pw_properties_new(
-      PW_KEY_MEDIA_TYPE, "Audio",
-      PW_KEY_MEDIA_CATEGORY, "Playback",
-      PW_KEY_APP_NAME, "RockStudio",
-      nullptr);
+      PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_APP_NAME, "RockStudio", nullptr);
 
-    _stream = pw_stream_new_simple(
-      pw_thread_loop_get_loop(_threadLoop),
-      "playback",
-      props,
-      &streamEvents,
-      this);
+    _stream = pw_stream_new_simple(pw_thread_loop_get_loop(_threadLoop), "playback", props, &streamEvents, this);
 
     if (!_stream)
     {
@@ -112,7 +104,10 @@ namespace app::playback
 
   void PipeWireBackend::start()
   {
-    if (!_stream || !_threadLoop) { return; }
+    if (!_stream || !_threadLoop)
+    {
+      return;
+    }
 
     pw_thread_loop_lock(_threadLoop);
 
@@ -127,8 +122,7 @@ namespace app::playback
 
     // Push object start
     struct spa_pod_frame frame;
-    spa_pod_builder_push_object(&builder, &frame,
-        SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
+    spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
 
     // Determine SPA audio format based on bit depth
     int spaFormat = SPA_AUDIO_FORMAT_S16_LE;
@@ -143,12 +137,17 @@ namespace app::playback
 
     // Add properties
     spa_pod_builder_add(&builder,
-        SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-        SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-        SPA_FORMAT_AUDIO_format, SPA_POD_Id(spaFormat),
-        SPA_FORMAT_AUDIO_rate, SPA_POD_Int(_format.sampleRate),
-        SPA_FORMAT_AUDIO_channels, SPA_POD_Int(_format.channels),
-        0);
+                        SPA_FORMAT_mediaType,
+                        SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                        SPA_FORMAT_mediaSubtype,
+                        SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                        SPA_FORMAT_AUDIO_format,
+                        SPA_POD_Id(spaFormat),
+                        SPA_FORMAT_AUDIO_rate,
+                        SPA_POD_Int(_format.sampleRate),
+                        SPA_FORMAT_AUDIO_channels,
+                        SPA_POD_Int(_format.channels),
+                        0);
 
     spa_pod_builder_pop(&builder, &frame);
 
@@ -157,13 +156,12 @@ namespace app::playback
     const struct spa_pod* constParams = param;
 
     // Connect stream to remote (default target)
-    int ret = pw_stream_connect(
-      _stream,
-      PW_DIRECTION_OUTPUT,
-      PW_ID_ANY,
-      static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
-      &constParams,
-      1);
+    int ret = pw_stream_connect(_stream,
+                                PW_DIRECTION_OUTPUT,
+                                PW_ID_ANY,
+                                static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
+                                &constParams,
+                                1);
 
     if (ret < 0)
     {
@@ -175,7 +173,10 @@ namespace app::playback
 
   void PipeWireBackend::pause()
   {
-    if (!_stream || !_threadLoop) { return; }
+    if (!_stream || !_threadLoop)
+    {
+      return;
+    }
 
     pw_thread_loop_lock(_threadLoop);
     pw_stream_set_active(_stream, false);
@@ -184,7 +185,10 @@ namespace app::playback
 
   void PipeWireBackend::resume()
   {
-    if (!_stream || !_threadLoop) { return; }
+    if (!_stream || !_threadLoop)
+    {
+      return;
+    }
 
     pw_thread_loop_lock(_threadLoop);
     pw_stream_set_active(_stream, true);
@@ -198,7 +202,10 @@ namespace app::playback
 
   void PipeWireBackend::stop()
   {
-    if (!_stream || !_threadLoop) { return; }
+    if (!_stream || !_threadLoop)
+    {
+      return;
+    }
 
     pw_thread_loop_lock(_threadLoop);
     pw_stream_set_active(_stream, false);
@@ -207,7 +214,10 @@ namespace app::playback
 
   void PipeWireBackend::process()
   {
-    if (!_callbacks.readPcm) { return; }
+    if (!_callbacks.readPcm)
+    {
+      return;
+    }
 
     // Get buffer from PipeWire
     struct pw_buffer* buffer = pw_stream_dequeue_buffer(_stream);
@@ -222,9 +232,7 @@ namespace app::playback
 
     auto* data = static_cast<std::byte*>(buffer->buffer->datas[0].data);
     auto const size = buffer->buffer->datas[0].maxsize;
-    auto const bytesPerSample = (_format.bitDepth == 24) ? 3u :
-                                (_format.bitDepth == 32) ? 4u :
-                                2u;
+    auto const bytesPerSample = (_format.bitDepth == 24) ? 3u : (_format.bitDepth == 32) ? 4u : 2u;
     auto const frameBytes = static_cast<std::size_t>(_format.channels) * bytesPerSample;
     auto const requestSize = frameBytes > 0 ? size - (size % frameBytes) : 0;
 

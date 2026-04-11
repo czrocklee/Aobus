@@ -16,12 +16,15 @@ namespace
   // Case-insensitive substring search
   bool containsCi(std::string const& haystack, std::string const& needle)
   {
-    if (needle.empty()) { return true; }
+    if (needle.empty())
+    {
+      return true;
+    }
 
     auto it = std::search(
       haystack.begin(), haystack.end(), needle.begin(), needle.end(), [](unsigned char c1, unsigned char c2) {
-        return std::tolower(c1) == std::tolower(c2);
-      });
+      return std::tolower(c1) == std::tolower(c2);
+    });
     return it != haystack.end();
   }
 
@@ -31,14 +34,29 @@ namespace
                      std::string const& tags,
                      Glib::ustring const& filter)
   {
-    if (filter.empty()) { return true; }
+    if (filter.empty())
+    {
+      return true;
+    }
 
     auto filterStr = filter.lowercase();
 
-    if (containsCi(artist, filterStr)) { return true; }
-    if (containsCi(album, filterStr)) { return true; }
-    if (containsCi(title, filterStr)) { return true; }
-    if (containsCi(tags, filterStr)) { return true; }
+    if (containsCi(artist, filterStr))
+    {
+      return true;
+    }
+    if (containsCi(album, filterStr))
+    {
+      return true;
+    }
+    if (containsCi(title, filterStr))
+    {
+      return true;
+    }
+    if (containsCi(tags, filterStr))
+    {
+      return true;
+    }
 
     return false;
   }
@@ -75,7 +93,10 @@ void TrackListAdapter::createRowForTrack(TrackId id)
   auto const& rowData = *optRow;
 
   // Apply quick filter if set
-  if (!matchesFilter(rowData.artist, rowData.album, rowData.title, rowData.tags, _filterText)) { return; }
+  if (!matchesFilter(rowData.artist, rowData.album, rowData.title, rowData.tags, _filterText))
+  {
+    return;
+  }
 
   // Create lazy TrackRow - data loaded on demand via provider
   auto row = TrackRow::create(id, _provider);
@@ -110,13 +131,19 @@ void TrackListAdapter::onInserted(TrackId id, std::size_t index)
   // Load and insert at position
   auto const optRow = _provider->getRow(id);
 
-  if (!optRow) { return; }
+  if (!optRow)
+  {
+    return;
+  }
 
   auto const& rowData = *optRow;
   auto row = TrackRow::create(id, _provider);
 
   auto const uintIdx = static_cast<std::uint32_t>(index);
-  if (uintIdx <= _listModel->get_n_items()) { _listModel->insert(uintIdx, row); }
+  if (uintIdx <= _listModel->get_n_items())
+  {
+    _listModel->insert(uintIdx, row);
+  }
 }
 
 void TrackListAdapter::onUpdated(TrackId id, std::size_t index)
@@ -132,7 +159,10 @@ void TrackListAdapter::onUpdated(TrackId id, std::size_t index)
   auto const optRow = _provider->getRow(id);
 
   auto const uintIdx = static_cast<std::uint32_t>(index);
-  if (uintIdx >= _listModel->get_n_items()) { return; }
+  if (uintIdx >= _listModel->get_n_items())
+  {
+    return;
+  }
 
   if (!optRow)
   {
@@ -158,5 +188,8 @@ void TrackListAdapter::onRemoved(TrackId id, std::size_t index)
   }
 
   auto const uintIdx = static_cast<std::uint32_t>(index);
-  if (uintIdx < _listModel->get_n_items()) { _listModel->remove(uintIdx); }
+  if (uintIdx < _listModel->get_n_items())
+  {
+    _listModel->remove(uintIdx);
+  }
 }

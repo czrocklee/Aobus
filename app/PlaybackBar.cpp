@@ -74,19 +74,14 @@ void PlaybackBar::setupLayout()
 
 void PlaybackBar::setupSignals()
 {
-  _playButton.signal_clicked().connect([this]() {
-    _playRequested.emit();
-  });
+  _playButton.signal_clicked().connect([this]() { _playRequested.emit(); });
 
-  _pauseButton.signal_clicked().connect([this]() {
-    _pauseRequested.emit();
-  });
+  _pauseButton.signal_clicked().connect([this]() { _pauseRequested.emit(); });
 
-  _stopButton.signal_clicked().connect([this]() {
-    _stopRequested.emit();
-  });
+  _stopButton.signal_clicked().connect([this]() { _stopRequested.emit(); });
 
-  _seekScale.signal_value_changed().connect([this]() {
+  _seekScale.signal_value_changed().connect([this]()
+  {
     auto position = static_cast<std::uint32_t>(_seekScale.get_value());
     _seekRequested.emit(position);
   });
@@ -101,7 +96,8 @@ void PlaybackBar::setSnapshot(app::playback::PlaybackSnapshot const& snapshot)
   auto durationRemSec = durationSec % 60;
   auto positionMin = positionSec / 60;
   auto positionRemSec = positionSec % 60;
-  _timeLabel.set_text(std::format("{:d}:{:02d} / {:d}:{:02d}", positionMin, positionRemSec, durationMin, durationRemSec));
+  _timeLabel.set_text(
+    std::format("{:d}:{:02d} / {:d}:{:02d}", positionMin, positionRemSec, durationMin, durationRemSec));
 
   // Update seek scale
   if (snapshot.durationMs > 0)

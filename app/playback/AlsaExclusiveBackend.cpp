@@ -102,31 +102,46 @@ namespace app::playback
 
   void AlsaExclusiveBackend::start()
   {
-    if (!_pcm) { return; }
+    if (!_pcm)
+    {
+      return;
+    }
     snd_pcm_start(_pcm);
   }
 
   void AlsaExclusiveBackend::pause()
   {
-    if (!_pcm) { return; }
+    if (!_pcm)
+    {
+      return;
+    }
     snd_pcm_pause(_pcm, 1);
   }
 
   void AlsaExclusiveBackend::resume()
   {
-    if (!_pcm) { return; }
+    if (!_pcm)
+    {
+      return;
+    }
     snd_pcm_pause(_pcm, 0);
   }
 
   void AlsaExclusiveBackend::flush()
   {
-    if (!_pcm) { return; }
+    if (!_pcm)
+    {
+      return;
+    }
     snd_pcm_drop(_pcm);
   }
 
   void AlsaExclusiveBackend::stop()
   {
-    if (!_pcm) { return; }
+    if (!_pcm)
+    {
+      return;
+    }
     snd_pcm_drop(_pcm);
     snd_pcm_prepare(_pcm);
   }
@@ -135,7 +150,10 @@ namespace app::playback
   {
     DeviceCapabilities caps;
 
-    if (!_pcm) { return caps; }
+    if (!_pcm)
+    {
+      return caps;
+    }
 
     // Query available sample rates
     std::uint32_t rate = 0;
@@ -150,9 +168,9 @@ namespace app::playback
     // Query available bit depths
     for (auto const depth : {16, 24, 32})
     {
-      snd_pcm_format_t fmt = (depth == 16) ? SND_PCM_FORMAT_S16 :
-                             (depth == 24) ? SND_PCM_FORMAT_S24 :
-                             SND_PCM_FORMAT_S32;
+      snd_pcm_format_t fmt = (depth == 16)   ? SND_PCM_FORMAT_S16
+                             : (depth == 24) ? SND_PCM_FORMAT_S24
+                                             : SND_PCM_FORMAT_S32;
       if (snd_pcm_hw_params_test_format(_pcm, nullptr, fmt) == 0)
       {
         caps.bitDepths.push_back(static_cast<std::uint8_t>(depth));

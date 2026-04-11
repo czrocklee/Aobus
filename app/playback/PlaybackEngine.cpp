@@ -10,8 +10,7 @@ namespace app::playback
 {
 
   PlaybackEngine::PlaybackEngine(std::unique_ptr<IAudioBackend> backend)
-    : _backend(std::move(backend))
-    , _ringBuffer()
+    : _backend(std::move(backend)), _ringBuffer()
   {
   }
 
@@ -46,9 +45,7 @@ namespace app::playback
     }
 
     // Start decoding thread
-    _decodeThread = std::jthread([this](std::stop_token token) {
-      decodeLoop(token);
-    });
+    _decodeThread = std::jthread([this](std::stop_token token) { decodeLoop(token); });
 
     _state = TransportState::Playing;
     _snapshot.state = TransportState::Playing;
@@ -65,7 +62,10 @@ namespace app::playback
     {
       _state = TransportState::Paused;
       _snapshot.state = TransportState::Paused;
-      if (_backend) { _backend->pause(); }
+      if (_backend)
+      {
+        _backend->pause();
+      }
     }
   }
 
@@ -76,7 +76,10 @@ namespace app::playback
     {
       _state = TransportState::Playing;
       _snapshot.state = TransportState::Playing;
-      if (_backend) { _backend->resume(); }
+      if (_backend)
+      {
+        _backend->resume();
+      }
     }
   }
 
@@ -90,7 +93,10 @@ namespace app::playback
     _state = TransportState::Idle;
     _snapshot = {};
     _snapshot.state = TransportState::Idle;
-    if (_backend) { _backend->stop(); }
+    if (_backend)
+    {
+      _backend->stop();
+    }
   }
 
   void PlaybackEngine::seek(std::uint32_t positionMs)

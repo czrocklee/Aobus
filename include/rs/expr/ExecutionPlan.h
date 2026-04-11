@@ -166,8 +166,8 @@ namespace rs::expr
     std::uint32_t _nextReg = 0;
     core::DictionaryStore* _dict = nullptr;
     Field _lastField = Field::TagBloom; // Track last field for context
-    bool _hasHotAccess = false;  // Track if expression uses hot (metadata/property/tag) variables
-    bool _hasColdAccess = false; // Track if expression uses cold (custom) variables
+    bool _hasHotAccess = false;         // Track if expression uses hot (metadata/property/tag) variables
+    bool _hasColdAccess = false;        // Track if expression uses cold (custom) variables
   };
 
 } // namespace rs::expr

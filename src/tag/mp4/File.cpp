@@ -16,8 +16,10 @@ namespace rs::tag::mp4
 {
   namespace
   {
-    using TextSetter = rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
-    using NumberSetter = rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+    using TextSetter =
+      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
+    using NumberSetter =
+      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
     std::span<std::byte const> atomData(AtomView const& view)
     {
@@ -53,7 +55,10 @@ namespace rs::tag::mp4
     template<NumberSetter Setter>
     void handleNumber(rs::core::TrackBuilder& builder, AtomView const& view)
     {
-      if (auto year = decodeUint16(atomTextView(view)); year) { (builder.metadata().*Setter)(*year); }
+      if (auto year = decodeUint16(atomTextView(view)); year)
+      {
+        (builder.metadata().*Setter)(*year);
+      }
     }
 
     void handleCoverArt(rs::core::TrackBuilder& builder, AtomView const& view)
@@ -96,9 +101,15 @@ namespace rs::tag::mp4
     template<std::size_t Extent>
     Atom const* findNode(Atom const& node, std::span<std::string_view const, Extent> path, std::size_t startPos)
     {
-      if (startPos >= path.size() || path[startPos] != node.type()) { return nullptr; }
+      if (startPos >= path.size() || path[startPos] != node.type())
+      {
+        return nullptr;
+      }
 
-      if (startPos == path.size() - 1) { return &node; }
+      if (startPos == path.size() - 1)
+      {
+        return &node;
+      }
 
       Atom const* found = nullptr;
       node.visitChildren([&](auto const& child) { return ((found = findNode(child, path, startPos + 1)) == nullptr); });
@@ -137,11 +148,13 @@ namespace rs::tag::mp4
 
           if (duration > 0)
           {
-            auto const durationMs = static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000) / timescale);
+            auto const durationMs =
+              static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000) / timescale);
             if (durationMs > 0)
             {
-              builder.property().durationMs(durationMs).bitrate(
-                static_cast<std::uint32_t>((fileSize * 8000) / durationMs));
+              builder.property()
+                .durationMs(durationMs)
+                .bitrate(static_cast<std::uint32_t>((fileSize * 8000) / durationMs));
             }
           }
         }
@@ -182,7 +195,8 @@ namespace rs::tag::mp4
 
     if (ilstNode != nullptr)
     {
-      ilstNode->visitChildren([&](Atom const& atom) {
+      ilstNode->visitChildren([&](Atom const& atom)
+      {
         auto const& view = static_cast<AtomView const&>(atom);
         std::string_view type = atom.type();
 

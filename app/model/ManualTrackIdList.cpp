@@ -11,7 +11,10 @@ namespace app::model
   ManualTrackIdList::ManualTrackIdList(rs::core::ListView const& view, TrackIdList* source)
     : _source{source}
   {
-    if (_source != nullptr) { _source->attach(this); }
+    if (_source != nullptr)
+    {
+      _source->attach(this);
+    }
     reload(view);
   }
 
@@ -19,7 +22,10 @@ namespace app::model
 
   ManualTrackIdList::~ManualTrackIdList()
   {
-    if (_source != nullptr) { _source->detach(this); }
+    if (_source != nullptr)
+    {
+      _source->detach(this);
+    }
   }
 
   void ManualTrackIdList::reload(rs::core::ListView const& view)
@@ -48,7 +54,10 @@ namespace app::model
     // Just forward update notification if this track is in our list
     if (contains(id))
     {
-      if (auto idx = indexOf(id)) { TrackIdList::notifyUpdated(id, *idx); }
+      if (auto idx = indexOf(id))
+      {
+        TrackIdList::notifyUpdated(id, *idx);
+      }
     }
   }
 
@@ -57,7 +66,10 @@ namespace app::model
     // Forward update if this track is in our list
     if (contains(id))
     {
-      if (auto idx = indexOf(id)) { TrackIdList::notifyUpdated(id, *idx); }
+      if (auto idx = indexOf(id))
+      {
+        TrackIdList::notifyUpdated(id, *idx);
+      }
     }
   }
 
@@ -76,7 +88,10 @@ namespace app::model
   std::optional<std::size_t> ManualTrackIdList::indexOf(TrackId id) const
   {
     auto const it = std::find(_trackIds.begin(), _trackIds.end(), id);
-    if (it == _trackIds.end()) { return std::nullopt; }
+    if (it == _trackIds.end())
+    {
+      return std::nullopt;
+    }
     return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
   }
 

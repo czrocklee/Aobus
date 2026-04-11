@@ -22,13 +22,17 @@ namespace rs::core
   }
 
   // Reader implementation
-  ListStore::Reader::Reader(lmdb::Database::Reader reader) : _reader{std::move(reader)}
+  ListStore::Reader::Reader(lmdb::Database::Reader reader)
+    : _reader{std::move(reader)}
   {
   }
 
   ListStore::Reader::Iterator ListStore::Reader::begin() const
   {
-    if (auto iter = _reader.begin(); iter != _reader.end()) { return Iterator{std::move(iter)}; }
+    if (auto iter = _reader.begin(); iter != _reader.end())
+    {
+      return Iterator{std::move(iter)};
+    }
     return end();
   }
 
@@ -43,7 +47,8 @@ namespace rs::core
   }
 
   // Iterator implementation
-  ListStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& iter) : _iter{std::move(iter)}
+  ListStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& iter)
+    : _iter{std::move(iter)}
   {
   }
 
@@ -65,7 +70,8 @@ namespace rs::core
   }
 
   // Writer implementation
-  ListStore::Writer::Writer(lmdb::Database::Writer&& writer) : _writer{std::move(writer)}
+  ListStore::Writer::Writer(lmdb::Database::Writer&& writer)
+    : _writer{std::move(writer)}
   {
   }
 

@@ -23,8 +23,7 @@ namespace rs::tag::mpeg::id3v2
   {
     return (static_cast<std::size_t>(size.data[0] & 0x7F) << 21) |
            (static_cast<std::size_t>(size.data[1] & 0x7F) << 14) |
-           (static_cast<std::size_t>(size.data[2] & 0x7F) << 7) |
-           (static_cast<std::size_t>(size.data[3] & 0x7F));
+           (static_cast<std::size_t>(size.data[2] & 0x7F) << 7) | (static_cast<std::size_t>(size.data[3] & 0x7F));
   }
 
   struct HeaderLayout
@@ -118,7 +117,10 @@ namespace rs::tag::mpeg::id3v2
   static_assert(alignof(V22PictureFrameLayout) == 1);
   static_assert(std::is_trivial_v<V22PictureFrameLayout>);
 
-  inline std::size_t frameSize(V22CommonFrameLayout const& layout) { return layout.size.value(); }
+  inline std::size_t frameSize(V22CommonFrameLayout const& layout)
+  {
+    return layout.size.value();
+  }
 
   struct V23CommonFrameLayout
   {
@@ -143,7 +145,10 @@ namespace rs::tag::mpeg::id3v2
   static_assert(alignof(V23TextFrameLayout) == 1);
   static_assert(std::is_trivial_v<V23TextFrameLayout>);
 
-  inline std::size_t frameSize(V23CommonFrameLayout const& layout) { return layout.size.value(); }
+  inline std::size_t frameSize(V23CommonFrameLayout const& layout)
+  {
+    return layout.size.value();
+  }
 
   struct V24CommonFrameLayout
   {
@@ -157,5 +162,8 @@ namespace rs::tag::mpeg::id3v2
   static_assert(alignof(V24CommonFrameLayout) == 1);
   static_assert(std::is_trivial_v<V24CommonFrameLayout>);
 
-  inline std::size_t frameSize(V24CommonFrameLayout const& layout) { return decodeSize(layout.size); }
+  inline std::size_t frameSize(V24CommonFrameLayout const& layout)
+  {
+    return decodeSize(layout.size);
+  }
 }

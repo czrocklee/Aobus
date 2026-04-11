@@ -258,7 +258,7 @@ namespace rs::core
                                                  ResourceStore& resources);
 
     PreparedHot prepareHot(lmdb::WriteTransaction& txn, DictionaryStore& dict) const;
-    
+
     PreparedCold prepareCold(lmdb::WriteTransaction& txn, DictionaryStore& dict, ResourceStore& resources) const;
 
   private:

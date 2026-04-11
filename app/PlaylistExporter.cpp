@@ -24,7 +24,10 @@ PlaylistExporter::PlaylistExporter(app::model::TrackIdList& list,
 PlaylistExporter::~PlaylistExporter()
 {
   _list.detach(this);
-  if (_timeoutConnection) { _timeoutConnection->disconnect(); }
+  if (_timeoutConnection)
+  {
+    _timeoutConnection->disconnect();
+  }
 }
 
 void PlaylistExporter::onReset()
@@ -50,14 +53,18 @@ void PlaylistExporter::onRemoved(TrackId /*id*/, std::size_t /*index*/)
 void PlaylistExporter::scheduleForWrite()
 {
   // Cancel any existing timeout
-  if (_timeoutConnection) { _timeoutConnection->disconnect(); }
+  if (_timeoutConnection)
+  {
+    _timeoutConnection->disconnect();
+  }
 
   // Schedule write after 3 second delay (Glib::signal_timeout uses milliseconds)
   _timeoutConnection = std::make_unique<sigc::connection>(Glib::signal_timeout().connect(
-    [this]() {
-      writeFile();
-      return false;
-    },
+    [this]()
+  {
+    writeFile();
+    return false;
+  },
     3000));
 }
 

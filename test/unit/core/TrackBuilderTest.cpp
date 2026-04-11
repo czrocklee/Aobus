@@ -26,16 +26,16 @@ using rs::lmdb::WriteTransaction;
 namespace
 {
 
-std::pair<std::vector<std::byte>, std::vector<std::byte>> serializeTestTrack(TrackRecord const& record)
-{
-  auto temp = TempDir{};
-  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-  auto wtxn = WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
-  auto builder = TrackBuilder::fromRecord(record);
-  return builder.serialize(wtxn, dict, resources);
-}
+  std::pair<std::vector<std::byte>, std::vector<std::byte>> serializeTestTrack(TrackRecord const& record)
+  {
+    auto temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto wtxn = WriteTransaction{env};
+    auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+    auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
+    auto builder = TrackBuilder::fromRecord(record);
+    return builder.serialize(wtxn, dict, resources);
+  }
 
 } // namespace
 
@@ -126,8 +126,10 @@ TEST_CASE("TrackBuilder - TagsBuilder add/remove/clear")
   CHECK(builder.record().tags.names.size() == 2);
 
   // Check remaining tags
-  CHECK(std::find(builder.record().tags.names.begin(), builder.record().tags.names.end(), "rock") != builder.record().tags.names.end());
-  CHECK(std::find(builder.record().tags.names.begin(), builder.record().tags.names.end(), "blues") != builder.record().tags.names.end());
+  CHECK(std::find(builder.record().tags.names.begin(), builder.record().tags.names.end(), "rock") !=
+        builder.record().tags.names.end());
+  CHECK(std::find(builder.record().tags.names.begin(), builder.record().tags.names.end(), "blues") !=
+        builder.record().tags.names.end());
 
   // Clear
   builder.tags().clear();
@@ -299,7 +301,7 @@ TEST_CASE("TrackBuilder - Tag Serialization - Single Tag")
   auto [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-  CHECK(header->tagLen == 4);  // 1 tag * 4 bytes
+  CHECK(header->tagLen == 4); // 1 tag * 4 bytes
 }
 
 TEST_CASE("TrackBuilder - Tag Bloom Filter With Tags")
@@ -317,7 +319,7 @@ TEST_CASE("TrackBuilder - Tag Bloom Filter With Tags")
   auto [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-  CHECK(header->tagLen == 20);  // 5 tags * 4 bytes each
+  CHECK(header->tagLen == 20); // 5 tags * 4 bytes each
   CHECK(header->tagBloom != 0);
 }
 
@@ -361,7 +363,7 @@ TEST_CASE("TrackBuilder - serializeHot")
 
   // Verify hot header
   auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
-  CHECK(header->tagLen == 8);  // 2 tags * 4 bytes
+  CHECK(header->tagLen == 8); // 2 tags * 4 bytes
 
   // Verify bloom is computed
   CHECK(header->tagBloom != 0);

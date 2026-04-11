@@ -71,15 +71,17 @@ void NewListDialog::setupUi()
   auto exprLabel = Gtk::Label("Expression:");
   exprLabel.set_halign(Gtk::Align::START);
   _exprBox.entry().set_placeholder_text("Query expression (type $, @, #, or %)");
-  _exprBox.entry().signal_changed().connect([this]() {
+  _exprBox.entry().signal_changed().connect([this]()
+  {
     // Cancel any pending update
     _exprTimeoutConnection.disconnect();
     // Debounce: update preview after 100ms of inactivity
     _exprTimeoutConnection = Glib::signal_timeout().connect(
-      [this]() {
-        updatePreview();
-        return false; // one-shot
-      },
+      [this]()
+    {
+      updatePreview();
+      return false; // one-shot
+    },
       100);
   });
   _leftPanel.append(exprLabel);
@@ -159,36 +161,47 @@ void NewListDialog::setupPreviewColumns()
 {
   // Single column factory that formats "Title - Artist (Album)"
   auto factory = Gtk::SignalListItemFactory::create();
-  factory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  factory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     label->set_ellipsize(Pango::EllipsizeMode::END);
     listItem->set_child(*label);
   });
-  factory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  factory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-    if (row && label) {
+    if (row && label)
+    {
       row->ensureLoaded();
       auto const& title = row->getTitle();
       auto const& artist = row->getArtist();
       auto const& album = row->getAlbum();
       std::string formatted;
-      if (!title.empty()) {
+      if (!title.empty())
+      {
         formatted = title;
-        if (!artist.empty()) {
+        if (!artist.empty())
+        {
           formatted += " - " + artist;
         }
-        if (!album.empty()) {
+        if (!album.empty())
+        {
           formatted += " (" + album + ")";
         }
-      } else if (!artist.empty()) {
+      }
+      else if (!artist.empty())
+      {
         formatted = artist;
-        if (!album.empty()) {
+        if (!album.empty())
+        {
           formatted += " (" + album + ")";
         }
-      } else {
+      }
+      else
+      {
         formatted = "(untitled)";
       }
       label->set_text(formatted);
@@ -205,16 +218,20 @@ void NewListDialog::updatePreview()
 {
   auto const& expr = _exprBox.entry().get_text();
 
-  if (expr.empty()) {
+  if (expr.empty())
+  {
     _exprBox.entry().remove_css_class("error");
     _errorLabel.set_visible(false);
     _previewScrolledWindow.set_visible(true);
     _previewFilteredList->setExpression("");
     _previewFilteredList->reload();
     auto const total = _previewFilteredList->size();
-    if (total == 0) {
+    if (total == 0)
+    {
       _matchCountLabel.set_markup("<i>No tracks in library</i>");
-    } else {
+    }
+    else
+    {
       _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing all ", total, " tracks</i>"));
     }
     return;
@@ -223,14 +240,17 @@ void NewListDialog::updatePreview()
   _previewFilteredList->setExpression(expr);
   _previewFilteredList->reload();
 
-  if (_previewFilteredList->hasError()) {
+  if (_previewFilteredList->hasError())
+  {
     // Show error state
     _exprBox.entry().add_css_class("error");
     _errorLabel.set_visible(true);
     _errorLabel.set_text("Expression error: " + _previewFilteredList->errorMessage());
     _previewScrolledWindow.set_visible(false);
     _matchCountLabel.set_markup("<i>Invalid expression</i>");
-  } else {
+  }
+  else
+  {
     // Show valid state
     _exprBox.entry().remove_css_class("error");
     _errorLabel.set_visible(false);
@@ -240,11 +260,16 @@ void NewListDialog::updatePreview()
     constexpr std::size_t kMaxPreview = 10;
     auto const shown = std::min(total, kMaxPreview);
 
-    if (total == 0) {
+    if (total == 0)
+    {
       _matchCountLabel.set_markup("<i>No matches</i>");
-    } else if (total <= kMaxPreview) {
+    }
+    else if (total <= kMaxPreview)
+    {
       _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing all ", total, " matches</i>"));
-    } else {
+    }
+    else
+    {
       _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing ", shown, " of ", total, " matches</i>"));
     }
   }

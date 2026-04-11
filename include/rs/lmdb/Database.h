@@ -119,7 +119,7 @@ namespace rs::lmdb
 
     bool operator!=(Iterator const& other) const { return !(*this == other); }
 
-    private:
+  private:
     void increment();
     Value const& dereference() const;
 

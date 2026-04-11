@@ -44,7 +44,10 @@ namespace app::model
   void AllTrackIdsList::notifyUpdated(TrackId id)
   {
     auto const optIndex = indexOf(id);
-    if (optIndex.has_value()) { TrackIdList::notifyUpdated(id, *optIndex); }
+    if (optIndex.has_value())
+    {
+      TrackIdList::notifyUpdated(id, *optIndex);
+    }
   }
 
   void AllTrackIdsList::notifyRemoved(TrackId id)
@@ -67,7 +70,10 @@ namespace app::model
   std::optional<std::size_t> AllTrackIdsList::indexOf(TrackId id) const
   {
     auto const it = std::find(_trackIds.begin(), _trackIds.end(), id);
-    if (it == _trackIds.end()) { return std::nullopt; }
+    if (it == _trackIds.end())
+    {
+      return std::nullopt;
+    }
     return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
   }
 

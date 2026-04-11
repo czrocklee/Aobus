@@ -399,7 +399,7 @@ TEST_CASE("TrackStore - unified TrackView iteration", "[core][track]")
   {
     ++count;
   }
-  
+
   REQUIRE(count == 3);
 }
 

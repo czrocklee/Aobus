@@ -13,14 +13,14 @@
 
 namespace rs::core
 {
-class MusicLibrary;
+  class MusicLibrary;
 }
 
 namespace app::model
 {
-class AllTrackIdsList;
-class FilteredTrackIdList;
-class TrackRowDataProvider;
+  class AllTrackIdsList;
+  class FilteredTrackIdList;
+  class TrackRowDataProvider;
 }
 
 class TrackListAdapter;

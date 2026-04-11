@@ -7,16 +7,16 @@
 #pragma once
 
 // Stable headers with high include counts
-#include <rs/utility/ByteView.h>
 #include <rs/core/Type.h>
+#include <rs/utility/ByteView.h>
 
 // Common std headers used everywhere
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
-#include <array>
-#include <optional>
-#include <functional>
-#include <memory>

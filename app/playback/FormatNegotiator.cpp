@@ -17,49 +17,53 @@ namespace app::playback
     plan.deviceFormat = sourceFormat;
 
     // Check if device supports the source sample rate
-    auto const sampleRateSupported = std::find(
-      caps.sampleRates.begin(), caps.sampleRates.end(), sourceFormat.sampleRate) != caps.sampleRates.end();
+    auto const sampleRateSupported =
+      std::find(caps.sampleRates.begin(), caps.sampleRates.end(), sourceFormat.sampleRate) != caps.sampleRates.end();
 
     if (!sampleRateSupported && !caps.sampleRates.empty())
     {
       // Use the highest supported sample rate close to the source
-      auto const bestRate = *std::max_element(
-        caps.sampleRates.begin(), caps.sampleRates.end(),
-        [sourceRate = sourceFormat.sampleRate](std::uint32_t a, std::uint32_t b) {
-          // Prefer rates that are multiples of source rate or close to it
-          auto const aDiv = (a > sourceRate) ? a : sourceRate;
-          auto const bDiv = (b > sourceRate) ? b : sourceRate;
-          auto const aMod = aDiv % sourceRate;
-          auto const bMod = bDiv % sourceRate;
-          return (aMod > bMod);
-        });
+      auto const bestRate = *std::max_element(caps.sampleRates.begin(),
+                                              caps.sampleRates.end(),
+                                              [sourceRate = sourceFormat.sampleRate](std::uint32_t a, std::uint32_t b)
+      {
+        // Prefer rates that are multiples of source rate or close to it
+        auto const aDiv = (a > sourceRate) ? a : sourceRate;
+        auto const bDiv = (b > sourceRate) ? b : sourceRate;
+        auto const aMod = aDiv % sourceRate;
+        auto const bMod = bDiv % sourceRate;
+        return (aMod > bMod);
+      });
       plan.deviceFormat.sampleRate = bestRate;
       plan.requiresResample = true;
       plan.reason = "Sample rate not supported, resampling required";
     }
 
     // Check bit depth support
-    auto const bitDepthSupported = std::find(
-      caps.bitDepths.begin(), caps.bitDepths.end(), sourceFormat.bitDepth) != caps.bitDepths.end();
+    auto const bitDepthSupported =
+      std::find(caps.bitDepths.begin(), caps.bitDepths.end(), sourceFormat.bitDepth) != caps.bitDepths.end();
 
     if (!bitDepthSupported && !caps.bitDepths.empty())
     {
       // Use highest supported bit depth
       plan.deviceFormat.bitDepth = *std::max_element(caps.bitDepths.begin(), caps.bitDepths.end());
       plan.requiresBitDepthConversion = true;
-      plan.reason = plan.reason.empty() ? "Bit depth not supported, conversion required" : plan.reason + "; bit depth conversion required";
+      plan.reason = plan.reason.empty() ? "Bit depth not supported, conversion required"
+                                        : plan.reason + "; bit depth conversion required";
     }
 
     // Check channel count support
-    auto const channelsSupported = std::find(
-      caps.channelCounts.begin(), caps.channelCounts.end(), sourceFormat.channels) != caps.channelCounts.end();
+    auto const channelsSupported =
+      std::find(caps.channelCounts.begin(), caps.channelCounts.end(), sourceFormat.channels) !=
+      caps.channelCounts.end();
 
     if (!channelsSupported && !caps.channelCounts.empty())
     {
       // Use first supported channel count (usually stereo 2)
       plan.deviceFormat.channels = caps.channelCounts.front();
       plan.requiresChannelRemap = true;
-      plan.reason = plan.reason.empty() ? "Channel count not supported, remapping required" : plan.reason + "; channel remapping required";
+      plan.reason = plan.reason.empty() ? "Channel count not supported, remapping required"
+                                        : plan.reason + "; channel remapping required";
     }
 
     // Decoder output format is always S16 interleaved for now

@@ -15,8 +15,14 @@ namespace rs::utility
   class TaggedInteger
   {
   public:
-    TaggedInteger() : _value{Default} {}
-    explicit TaggedInteger(T value) : _value(value) {}
+    TaggedInteger()
+      : _value{Default}
+    {
+    }
+    explicit TaggedInteger(T value)
+      : _value(value)
+    {
+    }
     T value() const { return _value; }
     explicit operator T() const { return _value; }
     static TaggedInteger invalid() { return {}; }

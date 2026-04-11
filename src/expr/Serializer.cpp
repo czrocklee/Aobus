@@ -15,14 +15,20 @@ namespace
     ParenthesisGuard(std::ostringstream& oss, bool apply)
       : oss{oss}, apply{apply}
     {
-      if (apply) { oss << "("; }
+      if (apply)
+      {
+        oss << "(";
+      }
     }
 
     ~ParenthesisGuard()
     {
-      if (apply) { oss << ")"; }
+      if (apply)
+      {
+        oss << ")";
+      }
     }
-    
+
     std::ostringstream& oss;
     bool apply;
   };
@@ -33,16 +39,25 @@ namespace
 
     void operator()(std::unique_ptr<BinaryExpression> const& binary)
     {
-      if (!binary) { return; }
+      if (!binary)
+      {
+        return;
+      }
       auto guard = ParenthesisGuard{oss, (counter++ > 0) && binary->operation};
       std::visit(*this, binary->operand);
 
-      if (binary->operation) { serializeBinary(binary->operation->op, binary->operation->operand); }
+      if (binary->operation)
+      {
+        serializeBinary(binary->operation->op, binary->operation->operand);
+      }
     }
 
     void operator()(std::unique_ptr<UnaryExpression> const& unary)
     {
-      if (!unary) { return; }
+      if (!unary)
+      {
+        return;
+      }
       oss << "not ";
       std::visit(*this, unary->operand);
     }

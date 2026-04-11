@@ -76,7 +76,10 @@ namespace app::model
   std::optional<std::size_t> FilteredTrackIdList::indexOf(TrackId id) const
   {
     auto const it = std::find(_filteredIds.begin(), _filteredIds.end(), id);
-    if (it != _filteredIds.end()) { return static_cast<std::size_t>(std::distance(_filteredIds.begin(), it)); }
+    if (it != _filteredIds.end())
+    {
+      return static_cast<std::size_t>(std::distance(_filteredIds.begin(), it));
+    }
     return std::nullopt;
   }
 
@@ -93,14 +96,20 @@ namespace app::model
     for (std::size_t i = 0; i < _source.size(); ++i)
     {
       auto const id = _source.trackIdAt(i);
-      if (evaluate(id)) { _filteredIds.push_back(id); }
+      if (evaluate(id))
+      {
+        _filteredIds.push_back(id);
+      }
     }
     TrackIdList::notifyReset();
   }
 
   bool FilteredTrackIdList::evaluate(TrackId id) const
   {
-    if (!_plan || !_evaluator) { return false; }
+    if (!_plan || !_evaluator)
+    {
+      return false;
+    }
 
     // Determine load mode based on access profile
     auto const loadMode = (_plan->accessProfile == rs::expr::AccessProfile::HotOnly)
@@ -127,7 +136,10 @@ namespace app::model
 
   void FilteredTrackIdList::onInserted(TrackId id, std::size_t /*index*/)
   {
-    if (_hasError) { return; }
+    if (_hasError)
+    {
+      return;
+    }
 
     // Check if this track matches the filter
     bool const matches = evaluate(id);
@@ -142,7 +154,10 @@ namespace app::model
 
   void FilteredTrackIdList::onUpdated(TrackId id, std::size_t /*index*/)
   {
-    if (_hasError) { return; }
+    if (_hasError)
+    {
+      return;
+    }
 
     // Re-evaluate the track
     bool const nowMatches = evaluate(id);

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/core/ListView.h>
 #include <rs/Exception.h>
+#include <rs/core/ListView.h>
 
 namespace rs::core
 {
@@ -18,11 +18,17 @@ namespace rs::core
 
   std::string_view ListView::getString(std::uint16_t offset, std::uint16_t length) const
   {
-    if (length == 0) { return {}; }
+    if (length == 0)
+    {
+      return {};
+    }
 
     auto const start = kListHeaderSize + offset;
 
-    if (start + length > _payload.size()) { RS_THROW(Exception, "Invalid string field"); }
+    if (start + length > _payload.size())
+    {
+      RS_THROW(Exception, "Invalid string field");
+    }
 
     return utility::bytes::stringView(_payload.subspan(start, length));
   }
@@ -47,7 +53,10 @@ namespace rs::core
     auto const offset = kListHeaderSize;
     auto const count = static_cast<std::size_t>(header()->trackIdsCount);
 
-    if (offset + (count * sizeof(TrackId)) > _payload.size()) { RS_THROW(Exception, "Invalid trackIds field"); }
+    if (offset + (count * sizeof(TrackId)) > _payload.size())
+    {
+      RS_THROW(Exception, "Invalid trackIds field");
+    }
 
     return TrackProxy{utility::layout::viewArray<TrackId>(_payload.subspan(offset, count * sizeof(TrackId)))};
   }
@@ -59,7 +68,10 @@ namespace rs::core
 
   TrackId ListView::TrackProxy::at(std::size_t index) const
   {
-    if (index >= _trackIds.size()) { RS_THROW(Exception, "Index out of range"); }
+    if (index >= _trackIds.size())
+    {
+      RS_THROW(Exception, "Index out of range");
+    }
     return _trackIds[index];
   }
 

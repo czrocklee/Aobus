@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "IAudioBackend.h"
 #include "FormatNegotiator.h"
+#include "IAudioBackend.h"
 
 extern "C"
 {

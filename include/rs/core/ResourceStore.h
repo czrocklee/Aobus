@@ -17,7 +17,10 @@ namespace rs::core
     using Reader = lmdb::Database::Reader;
     class Writer;
 
-    explicit ResourceStore(lmdb::Database db) : _database{std::move(db)} {}
+    explicit ResourceStore(lmdb::Database db)
+      : _database{std::move(db)}
+    {
+    }
 
     Reader reader(lmdb::ReadTransaction& txn) const { return _database.reader(txn); };
     Writer writer(lmdb::WriteTransaction& txn);
@@ -34,8 +37,7 @@ namespace rs::core
 
   private:
     explicit Writer(lmdb::Database::Reader&& reader, lmdb::Database::Writer&& writer)
-      : _reader{std::move(reader)}
-      , _writer{std::move(writer)}
+      : _reader{std::move(reader)}, _writer{std::move(writer)}
     {
     }
 

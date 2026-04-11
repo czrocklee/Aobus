@@ -20,17 +20,16 @@ namespace rs::tag::flac
 
     char const* ptr = static_cast<char const*>(data()) + sizeof(MetadataBlockLayout);
     char const* end = ptr + size() - sizeof(MetadataBlockLayout);
-    ptr += 4;                             // picture type
-    detail::parseString<std::uint32_t>(ptr, end); // MIME type
-    detail::parseString<std::uint32_t>(ptr, end); // description
+    ptr += 4;                                              // picture type
+    detail::parseString<std::uint32_t>(ptr, end);          // MIME type
+    detail::parseString<std::uint32_t>(ptr, end);          // description
     ptr += kPictureMetaFieldCount * sizeof(std::uint32_t); // width/height/color depth/color count
     std::string_view blob = detail::parseString<std::uint32_t>(ptr, end);
     return utility::bytes::view(blob);
   }
 
   MetadataBlockViewIterator::MetadataBlockViewIterator(void const* data, std::size_t size)
-    : _view{data}
-    , _sizeLeft{size}
+    : _view{data}, _sizeLeft{size}
   {
     if (size < StreamInfoBlockSize || _view.type() != MetadataBlockType::StreamInfo)
     {

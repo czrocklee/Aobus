@@ -15,7 +15,10 @@ namespace app::playback
 
   std::size_t PcmRingBuffer::write(std::span<std::byte const> input) noexcept
   {
-    if (input.empty()) { return 0; }
+    if (input.empty())
+    {
+      return 0;
+    }
 
     auto const* data = reinterpret_cast<std::uint8_t const*>(input.data());
     auto const size = input.size();
@@ -28,7 +31,10 @@ namespace app::playback
 
   std::size_t PcmRingBuffer::read(std::span<std::byte> output) noexcept
   {
-    if (output.empty()) { return 0; }
+    if (output.empty())
+    {
+      return 0;
+    }
 
     auto* data = reinterpret_cast<std::uint8_t*>(output.data());
     auto const size = output.size();
@@ -43,7 +49,9 @@ namespace app::playback
   {
     std::lock_guard<std::mutex> lock(_mutex);
     std::uint8_t dummy{};
-    while (_queue.pop(dummy)) { }
+    while (_queue.pop(dummy))
+    {
+    }
     _writeCount.store(0, std::memory_order_relaxed);
     _readCount.store(0, std::memory_order_relaxed);
   }

@@ -7,8 +7,8 @@
 #include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <functional>
+#include <gsl-lite/gsl-lite.hpp>
 #include <optional>
 #include <span>
 #include <vector>
@@ -112,16 +112,14 @@ namespace rs::core
   class TrackStore::Writer
   {
   public:
-
     /**
      * Create a new track with hot and cold data.
      * @param hotData TrackHotHeader + payload
      * @param coldData TrackColdHeader + custom KV + uri
      * @return Pair of (track ID, TrackView)
      */
-    std::pair<TrackId, TrackView> createHotCold(
-        std::span<std::byte const> hotData,
-        std::span<std::byte const> coldData);
+    std::pair<TrackId, TrackView> createHotCold(std::span<std::byte const> hotData,
+                                                std::span<std::byte const> coldData);
 
     /**
      * Zero-copy create: reserves space and calls fill callback to populate spans.
@@ -131,10 +129,7 @@ namespace rs::core
      * @return Pair of (track ID, TrackView)
      */
     template<class F>
-    std::pair<TrackId, TrackView> createHotCold(
-        std::size_t hotSize,
-        std::size_t coldSize,
-        F&& fill);
+    std::pair<TrackId, TrackView> createHotCold(std::size_t hotSize, std::size_t coldSize, F&& fill);
 
     /**
      * Update hot track data.
@@ -185,10 +180,7 @@ namespace rs::core
   // Template implementations
 
   template<class F>
-  std::pair<TrackId, TrackView> TrackStore::Writer::createHotCold(
-      std::size_t hotSize,
-      std::size_t coldSize,
-      F&& fill)
+  std::pair<TrackId, TrackView> TrackStore::Writer::createHotCold(std::size_t hotSize, std::size_t coldSize, F&& fill)
   {
     gsl_Expects((hotSize % 4) == 0);
     gsl_Expects((coldSize % 4) == 0);

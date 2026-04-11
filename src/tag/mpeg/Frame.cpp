@@ -26,8 +26,8 @@ namespace rs::tag::mpeg
     using VersionSamplingRateArray = std::array<SamplingRateArray, 4>;
 
     constexpr VersionSamplingRateArray VersionSamplingRateTable = {{
-      {kSamplingRate11025, kSamplingRate12000, kSamplingRate8000, 0}, // V2.5 (00)
-      {0, 0, 0, 0},                                                  // Reserved (01)
+      {kSamplingRate11025, kSamplingRate12000, kSamplingRate8000, 0},  // V2.5 (00)
+      {0, 0, 0, 0},                                                    // Reserved (01)
       {kSamplingRate22050, kSamplingRate24000, kSamplingRate16000, 0}, // V2 (10)
       {kSamplingRate44100, kSamplingRate48000, kSamplingRate32000, 0}  // V1 (11)
     }};
@@ -50,7 +50,7 @@ namespace rs::tag::mpeg
       {BitrateTableReserved, BitrateTableV2L23, BitrateTableV2L23, BitrateTableV2L1},           // V2.5
       {BitrateTableReserved, BitrateTableReserved, BitrateTableReserved, BitrateTableReserved}, // Reserved
       {BitrateTableReserved, BitrateTableV2L23, BitrateTableV2L23, BitrateTableV2L1},           // V2
-      {BitrateTableReserved, BitrateTableV1L3, BitrateTableV1L2, BitrateTableV1L1}            // V1
+      {BitrateTableReserved, BitrateTableV1L3, BitrateTableV1L2, BitrateTableV1L1}              // V1
     }};
 
     constexpr std::uint8_t FrameSyncByte1 = 0xFF;
@@ -89,22 +89,40 @@ namespace rs::tag::mpeg
     auto const& header = layout();
 
     // sync1 must be 0xFF
-    if (header.sync1() != 0xFF) { return false; }
+    if (header.sync1() != 0xFF)
+    {
+      return false;
+    }
 
     // sync2 bits (top 3 bits of second byte) must be 0b111
-    if (header.sync2() != 0x07) { return false; }
+    if (header.sync2() != 0x07)
+    {
+      return false;
+    }
 
     // versionId cannot be Reserved (0b01)
-    if (header.versionId() == VersionID::Reserved) { return false; }
+    if (header.versionId() == VersionID::Reserved)
+    {
+      return false;
+    }
 
     // layer cannot be Reserved (0b00)
-    if (header.layer() == LayerDescription::Reserved) { return false; }
+    if (header.layer() == LayerDescription::Reserved)
+    {
+      return false;
+    }
 
     // bitrateIndex cannot be 0 (free) or 15 (reserved)
-    if (header.bitrateIndex() == 0 || header.bitrateIndex() == 15) { return false; }
+    if (header.bitrateIndex() == 0 || header.bitrateIndex() == 15)
+    {
+      return false;
+    }
 
     // samplingRateIndex cannot be 3 (reserved)
-    if (header.samplingRateIndex() == 3) { return false; }
+    if (header.samplingRateIndex() == 3)
+    {
+      return false;
+    }
 
     return true;
   }
@@ -120,7 +138,10 @@ namespace rs::tag::mpeg
     auto const bitrate = VersionLayerBitrateTable[versionId][layer][bitrateIndex];
     auto const samplingRate = VersionSamplingRateTable[versionId][samplingRateIndex];
 
-    if (bitrate == 0 || samplingRate == 0) { return 0; }
+    if (bitrate == 0 || samplingRate == 0)
+    {
+      return 0;
+    }
 
     if (fl.layer() == LayerDescription::LayerI)
     {
@@ -154,16 +175,16 @@ namespace rs::tag::mpeg
   {
     auto const& fl = layout();
     return VersionSamplingRateTable[static_cast<std::size_t>(fl.versionId())]
-                                  [static_cast<std::size_t>(fl.samplingRateIndex())];
+                                   [static_cast<std::size_t>(fl.samplingRateIndex())];
   }
 
   std::uint32_t FrameView::bitrate() const
   {
     auto const& fl = layout();
     // Table values are in kbps, convert to bps
-    return VersionLayerBitrateTable[static_cast<std::size_t>(fl.versionId())]
-                                  [static_cast<std::size_t>(fl.layer())]
-                                  [static_cast<std::size_t>(fl.bitrateIndex())] * 1000;
+    return VersionLayerBitrateTable[static_cast<std::size_t>(fl.versionId())][static_cast<std::size_t>(fl.layer())]
+                                   [static_cast<std::size_t>(fl.bitrateIndex())] *
+           1000;
   }
 
   std::uint8_t FrameView::channels() const
@@ -179,16 +200,28 @@ namespace rs::tag::mpeg
     auto const version = fl.versionId();
     auto const layer = fl.layer();
 
-    if (layer == LayerDescription::LayerI) { return 384; }
-    if (layer == LayerDescription::LayerII) { return 1152; }
-    if (layer == LayerDescription::LayerIII) { return (version == VersionID::Ver1) ? 1152 : 576; }
+    if (layer == LayerDescription::LayerI)
+    {
+      return 384;
+    }
+    if (layer == LayerDescription::LayerII)
+    {
+      return 1152;
+    }
+    if (layer == LayerDescription::LayerIII)
+    {
+      return (version == VersionID::Ver1) ? 1152 : 576;
+    }
     return 0;
   }
 
   std::optional<FrameView::XingInfo> FrameView::xingInfo() const
   {
     auto const& fl = layout();
-    if (fl.layer() != LayerDescription::LayerIII) { return {}; }
+    if (fl.layer() != LayerDescription::LayerIII)
+    {
+      return {};
+    }
 
     // Offset of "Xing" or "Info" relative to frame start (excluding 4-byte header)
     std::size_t offset = 0;
@@ -205,7 +238,10 @@ namespace rs::tag::mpeg
     offset += 4;
 
     auto const* ptr = static_cast<std::uint8_t const*>(_data) + offset;
-    if (std::memcmp(ptr, "Xing", 4) != 0 && std::memcmp(ptr, "Info", 4) != 0) { return {}; }
+    if (std::memcmp(ptr, "Xing", 4) != 0 && std::memcmp(ptr, "Info", 4) != 0)
+    {
+      return {};
+    }
 
     XingInfo info;
     std::uint32_t flags = 0;

@@ -12,8 +12,8 @@
 namespace
 {
   using namespace test;
-  using rs::core::TrackHotHeader;
   using rs::core::TrackColdHeader;
+  using rs::core::TrackHotHeader;
 
   TEST_CASE("TrackHotHeader - Size and Alignment")
   {

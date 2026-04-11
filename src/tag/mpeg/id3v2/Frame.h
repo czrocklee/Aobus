@@ -5,8 +5,8 @@
 
 #include "Layout.h"
 #include <boost/locale/encoding.hpp>
-#include <rs/Exception.h>
 #include <cstring>
+#include <rs/Exception.h>
 #include <string_view>
 
 namespace rs::tag::mpeg::id3v2
@@ -16,7 +16,8 @@ namespace rs::tag::mpeg::id3v2
   class FrameView
   {
   public:
-    FrameView(void const* data, std::size_t availableSize) : _data{data}
+    FrameView(void const* data, std::size_t availableSize)
+      : _data{data}
     {
       if (availableSize > 0 && (availableSize < sizeof(CommonFrameLayout) || availableSize < size()))
       {
@@ -75,7 +76,10 @@ namespace rs::tag::mpeg::id3v2
       auto encoding = Base::template layout<FrameViewLayout>().encoding;
       std::string result =
         boost::locale::conv::to_utf<char>(begin, end, encoding == Encoding::Latin_1 ? "Latin1" : "UCS-2");
-      while (!result.empty() && result.back() == '\0') { result.pop_back(); }
+      while (!result.empty() && result.back() == '\0')
+      {
+        result.pop_back();
+      }
       return result;
     }
   };
@@ -93,9 +97,15 @@ namespace rs::tag::mpeg::id3v2
     using reference = ViewT const&;
     using iterator_category = std::forward_iterator_tag;
 
-    FrameViewIterator() : _view{nullptr, 0}, _sizeLeft{0} {}
+    FrameViewIterator()
+      : _view{nullptr, 0}, _sizeLeft{0}
+    {
+    }
 
-    FrameViewIterator(void const* data, std::size_t size) : _view{size > 0 ? data : nullptr, size}, _sizeLeft{size} {}
+    FrameViewIterator(void const* data, std::size_t size)
+      : _view{size > 0 ? data : nullptr, size}, _sizeLeft{size}
+    {
+    }
 
     // Forward iterator operations
     reference operator*() const { return _view; }

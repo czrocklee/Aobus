@@ -5,8 +5,8 @@
 
 extern "C"
 {
-#include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/error.h>
 #include <libavutil/opt.h>
@@ -24,27 +24,42 @@ namespace app::playback
   // Deleter implementations
   void FfmpegDecoderSession::FormatContextDeleter::operator()(AVFormatContext* ptr) const noexcept
   {
-    if (ptr) { avformat_close_input(&ptr); }
+    if (ptr)
+    {
+      avformat_close_input(&ptr);
+    }
   }
 
   void FfmpegDecoderSession::CodecContextDeleter::operator()(AVCodecContext* ptr) const noexcept
   {
-    if (ptr) { avcodec_free_context(&ptr); }
+    if (ptr)
+    {
+      avcodec_free_context(&ptr);
+    }
   }
 
   void FfmpegDecoderSession::PacketDeleter::operator()(AVPacket* ptr) const noexcept
   {
-    if (ptr) { av_packet_free(&ptr); }
+    if (ptr)
+    {
+      av_packet_free(&ptr);
+    }
   }
 
   void FfmpegDecoderSession::FrameDeleter::operator()(AVFrame* ptr) const noexcept
   {
-    if (ptr) { av_frame_free(&ptr); }
+    if (ptr)
+    {
+      av_frame_free(&ptr);
+    }
   }
 
   void FfmpegDecoderSession::SwrContextDeleter::operator()(SwrContext* ptr) const noexcept
   {
-    if (ptr) { swr_free(&ptr); }
+    if (ptr)
+    {
+      swr_free(&ptr);
+    }
   }
 
   FfmpegDecoderSession::FfmpegDecoderSession(StreamFormat outputFormat)
@@ -70,8 +85,7 @@ namespace app::playback
     // Get duration
     if (_formatContext && _formatContext->duration != AV_NOPTS_VALUE)
     {
-      _streamInfo.durationMs = static_cast<std::uint32_t>(
-        _formatContext->duration / (AV_TIME_BASE / 1000));
+      _streamInfo.durationMs = static_cast<std::uint32_t>(_formatContext->duration / (AV_TIME_BASE / 1000));
     }
   }
 
@@ -115,7 +129,10 @@ namespace app::playback
 
   void FfmpegDecoderSession::openAudioStream()
   {
-    if (!_formatContext) { return; }
+    if (!_formatContext)
+    {
+      return;
+    }
 
     // Find audio stream
     _audioStreamIndex = av_find_best_stream(_formatContext.get(), AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
@@ -167,8 +184,14 @@ namespace app::playback
 
     // Store source format info
     int rawBitDepth = stream->codecpar->bits_per_raw_sample;
-    if (rawBitDepth <= 0) { rawBitDepth = _codecContext->bits_per_raw_sample; }
-    if (rawBitDepth <= 0) { rawBitDepth = av_get_bytes_per_sample(_codecContext->sample_fmt) * 8; }
+    if (rawBitDepth <= 0)
+    {
+      rawBitDepth = _codecContext->bits_per_raw_sample;
+    }
+    if (rawBitDepth <= 0)
+    {
+      rawBitDepth = av_get_bytes_per_sample(_codecContext->sample_fmt) * 8;
+    }
 
     _streamInfo.sourceFormat.sampleRate = _codecContext->sample_rate;
     _streamInfo.sourceFormat.channels = static_cast<std::uint8_t>(_codecContext->ch_layout.nb_channels);
@@ -178,14 +201,26 @@ namespace app::playback
 
     // Output format - use hint if provided, otherwise match source (resampler handles conversion)
     _streamInfo.outputFormat = _outputFormat;
-    if (_outputFormat.sampleRate == 0 || _outputFormat.sampleRate == 44100) { _streamInfo.outputFormat.sampleRate = _streamInfo.sourceFormat.sampleRate; }
-    if (_outputFormat.channels == 0) { _streamInfo.outputFormat.channels = _streamInfo.sourceFormat.channels; }
-    if (_outputFormat.bitDepth == 0 || _outputFormat.bitDepth == 16) { _streamInfo.outputFormat.bitDepth = _streamInfo.sourceFormat.bitDepth; }
+    if (_outputFormat.sampleRate == 0 || _outputFormat.sampleRate == 44100)
+    {
+      _streamInfo.outputFormat.sampleRate = _streamInfo.sourceFormat.sampleRate;
+    }
+    if (_outputFormat.channels == 0)
+    {
+      _streamInfo.outputFormat.channels = _streamInfo.sourceFormat.channels;
+    }
+    if (_outputFormat.bitDepth == 0 || _outputFormat.bitDepth == 16)
+    {
+      _streamInfo.outputFormat.bitDepth = _streamInfo.sourceFormat.bitDepth;
+    }
   }
 
   void FfmpegDecoderSession::configureResampler()
   {
-    if (!_codecContext) { return; }
+    if (!_codecContext)
+    {
+      return;
+    }
 
     // Determine output sample format based on bitdepth
     // For hi-res (24/32-bit), use S32 as swr doesn't directly support S24
@@ -246,7 +281,10 @@ namespace app::playback
 
   void FfmpegDecoderSession::seek(std::uint32_t positionMs)
   {
-    if (!_formatContext || _audioStreamIndex < 0) { return; }
+    if (!_formatContext || _audioStreamIndex < 0)
+    {
+      return;
+    }
 
     auto const* stream = _formatContext->streams[_audioStreamIndex];
     auto const timestamp = av_rescale_q(static_cast<std::int64_t>(positionMs), {1, 1000}, stream->time_base);
@@ -278,13 +316,22 @@ namespace app::playback
 
   std::uint32_t FfmpegDecoderSession::getCurrentPositionMs() const
   {
-    if (!_formatContext || !_codecContext || !_frame) { return 0; }
+    if (!_formatContext || !_codecContext || !_frame)
+    {
+      return 0;
+    }
     auto const stream = _formatContext->streams[_audioStreamIndex];
-    if (!stream) { return 0; }
+    if (!stream)
+    {
+      return 0;
+    }
 
     auto const base = stream->time_base;
     auto const pts = _frame->pts;
-    if (pts == AV_NOPTS_VALUE) { return 0; }
+    if (pts == AV_NOPTS_VALUE)
+    {
+      return 0;
+    }
 
     return static_cast<std::uint32_t>(av_rescale_q(pts, base, {1, 1000}));
   }
@@ -389,19 +436,24 @@ namespace app::playback
 
   std::optional<PcmBlock> FfmpegDecoderSession::convertFrameToInterleavedPcm()
   {
-    if (!_frame || !_swrContext) { return std::nullopt; }
+    if (!_frame || !_swrContext)
+    {
+      return std::nullopt;
+    }
 
     auto const outChannels = _streamInfo.outputFormat.channels;
     auto const outBitDepth = _streamInfo.outputFormat.bitDepth;
 
     // Calculate output buffer size in samples
-    auto const outSamples = av_rescale_rnd(
-      swr_get_delay(_swrContext.get(), _frame->sample_rate) + _frame->nb_samples,
-      _streamInfo.outputFormat.sampleRate,
-      _frame->sample_rate,
-      AVRounding::AV_ROUND_UP);
+    auto const outSamples = av_rescale_rnd(swr_get_delay(_swrContext.get(), _frame->sample_rate) + _frame->nb_samples,
+                                           _streamInfo.outputFormat.sampleRate,
+                                           _frame->sample_rate,
+                                           AVRounding::AV_ROUND_UP);
 
-    if (outSamples <= 0) { return std::nullopt; }
+    if (outSamples <= 0)
+    {
+      return std::nullopt;
+    }
 
     PcmBlock block;
     block.bitDepth = outBitDepth;
@@ -415,14 +467,16 @@ namespace app::playback
       // 32-bit output stays in the native S32 container from swr.
       std::vector<std::int32_t> outBuffer(outSamples * outChannels);
       auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
-      convertedSamples = swr_convert(
-        _swrContext.get(),
-        &outPtr,
-        static_cast<int>(outSamples),
-        const_cast<std::uint8_t const**>(_frame->data),
-        _frame->nb_samples);
+      convertedSamples = swr_convert(_swrContext.get(),
+                                     &outPtr,
+                                     static_cast<int>(outSamples),
+                                     const_cast<std::uint8_t const**>(_frame->data),
+                                     _frame->nb_samples);
 
-      if (convertedSamples <= 0) { return std::nullopt; }
+      if (convertedSamples <= 0)
+      {
+        return std::nullopt;
+      }
 
       block.frames = static_cast<std::uint32_t>(convertedSamples);
       auto const byteCount = static_cast<std::size_t>(convertedSamples) * outChannels * sizeof(std::int32_t);
@@ -434,14 +488,16 @@ namespace app::playback
       // swr emits hi-res integer PCM as S32; pack it down to little-endian S24.
       std::vector<std::int32_t> outBuffer(outSamples * outChannels);
       auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
-      convertedSamples = swr_convert(
-        _swrContext.get(),
-        &outPtr,
-        static_cast<int>(outSamples),
-        const_cast<std::uint8_t const**>(_frame->data),
-        _frame->nb_samples);
+      convertedSamples = swr_convert(_swrContext.get(),
+                                     &outPtr,
+                                     static_cast<int>(outSamples),
+                                     const_cast<std::uint8_t const**>(_frame->data),
+                                     _frame->nb_samples);
 
-      if (convertedSamples <= 0) { return std::nullopt; }
+      if (convertedSamples <= 0)
+      {
+        return std::nullopt;
+      }
 
       block.frames = static_cast<std::uint32_t>(convertedSamples);
       auto const sampleCount = static_cast<std::size_t>(convertedSamples) * outChannels;
@@ -459,14 +515,16 @@ namespace app::playback
       // 16-bit: output as S16 from swr
       std::vector<std::int16_t> outBuffer(outSamples * outChannels);
       auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
-      convertedSamples = swr_convert(
-        _swrContext.get(),
-        &outPtr,
-        static_cast<int>(outSamples),
-        const_cast<std::uint8_t const**>(_frame->data),
-        _frame->nb_samples);
+      convertedSamples = swr_convert(_swrContext.get(),
+                                     &outPtr,
+                                     static_cast<int>(outSamples),
+                                     const_cast<std::uint8_t const**>(_frame->data),
+                                     _frame->nb_samples);
 
-      if (convertedSamples <= 0) { return std::nullopt; }
+      if (convertedSamples <= 0)
+      {
+        return std::nullopt;
+      }
 
       block.frames = static_cast<std::uint32_t>(convertedSamples);
       // Convert to bytes

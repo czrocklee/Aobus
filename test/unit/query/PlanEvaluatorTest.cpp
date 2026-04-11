@@ -85,7 +85,8 @@ namespace
 
       // Fix up the header with specific IDs
       // Note: we serialize then modify, so const_cast is safe
-      auto* header = const_cast<rs::core::TrackHotHeader*>(rs::utility::layout::view<rs::core::TrackHotHeader>(_hotData));
+      auto* header =
+        const_cast<rs::core::TrackHotHeader*>(rs::utility::layout::view<rs::core::TrackHotHeader>(_hotData));
       header->artistId = DictionaryId{artistId};
       header->albumId = DictionaryId{albumId};
       header->genreId = DictionaryId{genreId};

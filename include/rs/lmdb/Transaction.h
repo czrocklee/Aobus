@@ -26,7 +26,10 @@ namespace rs::lmdb
       void operator()(MDB_txn* txn) const noexcept { mdb_txn_abort(txn); }
     };
 
-    ReadTransaction(std::unique_ptr<MDB_txn, MdbTxnDeleter> handle) : _handle{std::move(handle)} {}
+    ReadTransaction(std::unique_ptr<MDB_txn, MdbTxnDeleter> handle)
+      : _handle{std::move(handle)}
+    {
+    }
     static auto create(MDB_env* env, MDB_txn* parent, unsigned int flags);
 
     std::unique_ptr<MDB_txn, MdbTxnDeleter> _handle;

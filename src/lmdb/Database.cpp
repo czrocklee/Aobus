@@ -144,8 +144,6 @@ namespace rs::lmdb
   {
   }
 
-
-
   void Reader::Iterator::increment()
   {
     gsl_Expects(_cursor != nullptr);

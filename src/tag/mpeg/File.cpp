@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
+#include "Frame.h"
 #include "id3v2/Layout.h"
 #include "id3v2/Reader.h"
-#include "Frame.h"
 #include <rs/tag/mpeg/File.h>
 
 #include <cstring>
@@ -27,7 +27,10 @@ namespace rs::tag::mpeg
       std::size_t id3v2TotalSize = sizeof(id3v2::HeaderLayout) + id3v2BodySize;
 
       // Handle ID3v2.4 footer (10 bytes if flag 0x10 is set)
-      if (id3v2Header->majorVersion >= 4 && (id3v2Header->flags & 0x10)) { id3v2TotalSize += 10; }
+      if (id3v2Header->majorVersion >= 4 && (id3v2Header->flags & 0x10))
+      {
+        id3v2TotalSize += 10;
+      }
 
       if (id3v2TotalSize <= _mappedRegion.get_size())
       {
@@ -59,7 +62,7 @@ namespace rs::tag::mpeg
         .sampleRate(frameView->sampleRate())
         .bitrate(bitrate)
         .channels(frameView->channels())
-        .bitDepth(16) // MPEG audio is 16-bit
+        .bitDepth(16)   // MPEG audio is 16-bit
         .codecId(0x55); // MP3
 
       // 4. Calculate duration
@@ -69,8 +72,7 @@ namespace rs::tag::mpeg
         if (xing->frames > 0 && frameView->sampleRate() > 0)
         {
           durationMs = static_cast<std::uint32_t>(
-            (static_cast<std::uint64_t>(xing->frames) * frameView->samplesPerFrame() * 1000) /
-            frameView->sampleRate());
+            (static_cast<std::uint64_t>(xing->frames) * frameView->samplesPerFrame() * 1000) / frameView->sampleRate());
           builder.property().durationMs(durationMs);
 
           // If Xing/Info provides total bytes, we can refine the bitrate
@@ -86,8 +88,12 @@ namespace rs::tag::mpeg
       if (durationMs == 0 && bitrate > 0)
       {
         auto const* firstFramePtr = static_cast<std::uint8_t const*>(frameView->data());
-        auto const* lastBytePtr = static_cast<std::uint8_t const*>(_mappedRegion.get_address()) + _mappedRegion.get_size();
-        if (hasId3v1) { lastBytePtr -= 128; }
+        auto const* lastBytePtr =
+          static_cast<std::uint8_t const*>(_mappedRegion.get_address()) + _mappedRegion.get_size();
+        if (hasId3v1)
+        {
+          lastBytePtr -= 128;
+        }
 
         if (lastBytePtr > firstFramePtr)
         {

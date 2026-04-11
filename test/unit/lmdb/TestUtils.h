@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -23,7 +23,8 @@ public:
   {
     std::string tmpl = (std::filesystem::temp_directory_path() / "rs_lmdb_test_XXXXXX").string();
     char* result = mkdtemp(tmpl.data());
-    if (result == nullptr) {
+    if (result == nullptr)
+    {
       throw std::runtime_error("mkdtemp failed");
     }
     _path = result;
@@ -54,7 +55,10 @@ private:
 inline std::vector<std::byte> createTestData(std::size_t size)
 {
   std::vector<std::byte> data(size);
-  for (std::size_t i = 0; i < size; ++i) { data[i] = static_cast<std::byte>(i % 256); }
+  for (std::size_t i = 0; i < size; ++i)
+  {
+    data[i] = static_cast<std::byte>(i % 256);
+  }
   return data;
 }
 

@@ -22,7 +22,8 @@ namespace rs::reactive
     using Observer = AbstractItemList<Id, T>::Observer;
     using Filter = std::function<bool(T const&)>;
 
-    ItemFilterList(AbstractItemList<Id, T>& source, Filter const& filter) : _source{source}, _filter{filter}
+    ItemFilterList(AbstractItemList<Id, T>& source, Filter const& filter)
+      : _source{source}, _filter{filter}
     {
       for (auto const idx : std::views::iota(0u, _source.size()))
       {

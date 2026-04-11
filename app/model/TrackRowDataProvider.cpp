@@ -10,10 +10,16 @@ namespace
   auto resolveLibraryPath(std::filesystem::path const& libraryRoot, std::string_view uri)
     -> std::optional<std::filesystem::path>
   {
-    if (uri.empty()) { return std::nullopt; }
+    if (uri.empty())
+    {
+      return std::nullopt;
+    }
 
     auto path = std::filesystem::path{uri};
-    if (path.is_absolute()) { return path.lexically_normal(); }
+    if (path.is_absolute())
+    {
+      return path.lexically_normal();
+    }
 
     return (libraryRoot / path).lexically_normal();
   }
@@ -31,7 +37,10 @@ namespace app::model
   {
     // Check cache first
     auto const it = _rowCache.find(id);
-    if (it != _rowCache.end()) { return it->second; }
+    if (it != _rowCache.end())
+    {
+      return it->second;
+    }
 
     // Load from store using Hot mode (sufficient for row rendering)
     rs::lmdb::ReadTransaction txn(_ml->readTransaction());
@@ -57,10 +66,16 @@ namespace app::model
 
     // Resolve dictionary strings (artist, album) and cache them
     auto const artistId = metadata.artistId();
-    if (artistId != rs::core::DictionaryId{0}) { row.artist = resolveDictionaryString(artistId); }
+    if (artistId != rs::core::DictionaryId{0})
+    {
+      row.artist = resolveDictionaryString(artistId);
+    }
 
     auto const albumId = metadata.albumId();
-    if (albumId != rs::core::DictionaryId{0}) { row.album = resolveDictionaryString(albumId); }
+    if (albumId != rs::core::DictionaryId{0})
+    {
+      row.album = resolveDictionaryString(albumId);
+    }
 
     // Tags - would need to resolve tag IDs to strings (placeholder for now)
     // TODO: Implement tag ID to string resolution if needed for row display
@@ -79,10 +94,16 @@ namespace app::model
     auto reader = _store->reader(txn);
 
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
-    if (!optView) { return std::nullopt; }
+    if (!optView)
+    {
+      return std::nullopt;
+    }
 
     auto const coverArtId = optView->metadata().coverArtId();
-    if (coverArtId == 0) { return std::nullopt; }
+    if (coverArtId == 0)
+    {
+      return std::nullopt;
+    }
     return coverArtId;
   }
 
@@ -93,7 +114,10 @@ namespace app::model
     auto reader = _store->reader(txn);
 
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
-    if (!optView) { return std::nullopt; }
+    if (!optView)
+    {
+      return std::nullopt;
+    }
 
     return resolveLibraryPath(_ml->rootPath(), optView->property().uri());
   }
@@ -105,7 +129,10 @@ namespace app::model
     auto reader = _store->reader(txn);
 
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
-    if (!optView) { return std::nullopt; }
+    if (!optView)
+    {
+      return std::nullopt;
+    }
 
     auto const& view = *optView;
     auto const& metadata = view.metadata();
@@ -125,15 +152,24 @@ namespace app::model
 
     // Artist
     auto const artistId = metadata.artistId();
-    if (artistId != rs::core::DictionaryId{0}) { desc.artist = resolveDictionaryString(artistId); }
+    if (artistId != rs::core::DictionaryId{0})
+    {
+      desc.artist = resolveDictionaryString(artistId);
+    }
 
     // Album
     auto const albumId = metadata.albumId();
-    if (albumId != rs::core::DictionaryId{0}) { desc.album = resolveDictionaryString(albumId); }
+    if (albumId != rs::core::DictionaryId{0})
+    {
+      desc.album = resolveDictionaryString(albumId);
+    }
 
     // Cover art
     auto const coverArtId = metadata.coverArtId();
-    if (coverArtId != 0) { desc.coverArtId = rs::core::ResourceId{coverArtId}; }
+    if (coverArtId != 0)
+    {
+      desc.coverArtId = rs::core::ResourceId{coverArtId};
+    }
 
     // Duration
     desc.durationMs = property.durationMs();
@@ -166,7 +202,10 @@ namespace app::model
   {
     // Check cache first
     auto const it = _stringCache.find(id);
-    if (it != _stringCache.end()) { return it->second; }
+    if (it != _stringCache.end())
+    {
+      return it->second;
+    }
 
     // Resolve from dictionary and cache
     // DictionaryStore::get throws if not found, so we catch it

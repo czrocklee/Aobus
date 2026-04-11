@@ -15,8 +15,10 @@ namespace rs::tag::flac
 {
   namespace
   {
-    using TextSetter = rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
-    using NumberSetter = rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+    using TextSetter =
+      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
+    using NumberSetter =
+      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
     template<TextSetter Setter>
     void handleText(rs::core::TrackBuilder& builder, std::string_view value)
@@ -27,7 +29,10 @@ namespace rs::tag::flac
     template<NumberSetter Setter>
     void handleNumber(rs::core::TrackBuilder& builder, std::string_view value)
     {
-      if (auto parsed = decodeUint16(value); parsed) { (builder.metadata().*Setter)(*parsed); }
+      if (auto parsed = decodeUint16(value); parsed)
+      {
+        (builder.metadata().*Setter)(*parsed);
+      }
     }
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
@@ -66,18 +71,16 @@ namespace rs::tag::flac
         case MetadataBlockType::StreamInfo:
         {
           auto view = StreamInfoBlockView{iter->data()};
-          builder.property()
-            .sampleRate(view.sampleRate())
-            .channels(view.channels())
-            .bitDepth(view.bitDepth());
+          builder.property().sampleRate(view.sampleRate()).channels(view.channels()).bitDepth(view.bitDepth());
 
           if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
           {
             auto const durationMs = static_cast<std::uint32_t>((totalSamples * 1000) / view.sampleRate());
             if (durationMs > 0)
             {
-              builder.property().durationMs(durationMs).bitrate(
-                static_cast<std::uint32_t>((_mappedRegion.get_size() * 8000) / durationMs));
+              builder.property()
+                .durationMs(durationMs)
+                .bitrate(static_cast<std::uint32_t>((_mappedRegion.get_size() * 8000) / durationMs));
             }
           }
 
@@ -86,9 +89,13 @@ namespace rs::tag::flac
 
         case MetadataBlockType::VorbisComment:
         {
-          VorbisCommentBlockView{iter->data()}.visitComments([&](std::string_view comment) {
+          VorbisCommentBlockView{iter->data()}.visitComments([&](std::string_view comment)
+          {
             auto const pos = comment.find('=');
-            if (pos == std::string_view::npos) { return; }
+            if (pos == std::string_view::npos)
+            {
+              return;
+            }
 
             std::string_view key = comment.substr(0, pos);
             std::string_view value = comment.substr(pos + 1);

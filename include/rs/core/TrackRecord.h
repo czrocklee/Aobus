@@ -54,7 +54,7 @@ namespace rs::core
       std::uint16_t discNumber = 0;
       std::uint16_t totalDiscs = 0;
       std::uint32_t coverArtId = 0; // ResourceStore ID for cover art
-      std::uint8_t rating = 0;       // User rating (0-5)
+      std::uint8_t rating = 0;      // User rating (0-5)
     };
 
     /**

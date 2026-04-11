@@ -11,7 +11,8 @@ namespace rs::expr
     {
       void operator()(std::unique_ptr<BinaryExpression> const& binary)
       {
-        if (!binary) {
+        if (!binary)
+        {
           return;
         }
         normalize(binary->operand);
@@ -28,14 +29,15 @@ namespace rs::expr
 
       void operator()(std::unique_ptr<UnaryExpression> const& unary)
       {
-        if (!unary) {
+        if (!unary)
+        {
           return;
         }
         normalize(unary->operand);
       }
 
-      void operator()(VariableExpression&) {}  // NOLINT(readability-named-parameter)
-      void operator()(ConstantExpression&) {}  // NOLINT(readability-named-parameter)
+      void operator()(VariableExpression&) {} // NOLINT(readability-named-parameter)
+      void operator()(ConstantExpression&) {} // NOLINT(readability-named-parameter)
 
       void shiftAdd(BinaryExpression& binary)
       {

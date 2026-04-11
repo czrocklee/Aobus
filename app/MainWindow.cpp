@@ -15,7 +15,6 @@
 #include "NewListDialog.h"
 #include "PlaybackBar.h"
 #include "PlaylistExporter.h"
-#include "playback/PlaybackController.h"
 #include "TagPromptDialog.h"
 #include "TrackListAdapter.h"
 #include "TrackViewPage.h"
@@ -25,6 +24,7 @@
 #include "model/ManualTrackIdList.h"
 #include "model/TrackIdList.h"
 #include "model/TrackRowDataProvider.h"
+#include "playback/PlaybackController.h"
 
 #include <glibmm/keyfile.h>
 #include <gtkmm/filedialog.h>
@@ -48,7 +48,10 @@ namespace
 
   auto pageNameForListId(rs::core::ListId listId) -> std::string
   {
-    if (listId == allTracksListId()) { return "all-tracks"; }
+    if (listId == allTracksListId())
+    {
+      return "all-tracks";
+    }
 
     return "list-" + std::to_string(static_cast<unsigned long>(listId.value()));
   }
@@ -102,7 +105,9 @@ void MainWindow::openLibrary()
   dialog->set_title("Open Music Library");
 
   // Show the dialog
-  dialog->select_folder(*this, [this, dialog](Glib::RefPtr<Gio::AsyncResult>& result) {
+  dialog->select_folder(*this,
+                        [this, dialog](Glib::RefPtr<Gio::AsyncResult>& result)
+  {
     try
     {
       auto folder = dialog->select_folder_finish(result);
@@ -117,7 +122,10 @@ void MainWindow::openLibrary()
         std::cout << "DEBUG: libPath = " << libPath << std::endl;
         std::cout << "DEBUG: exists = " << std::filesystem::exists(libPath) << std::endl;
 
-        if (std::filesystem::exists(libPath)) { openMusicLibrary(path); }
+        if (std::filesystem::exists(libPath))
+        {
+          openMusicLibrary(path);
+        }
         else
         {
           // Import new library
@@ -198,12 +206,17 @@ void MainWindow::importFiles()
   auto dialog = Gtk::FileDialog::create();
   dialog->set_title("Import Music Files");
 
-  dialog->select_folder(*this, [this, dialog](Glib::RefPtr<Gio::AsyncResult>& result) {
+  dialog->select_folder(*this,
+                        [this, dialog](Glib::RefPtr<Gio::AsyncResult>& result)
+  {
     try
     {
       auto folder = dialog->select_folder_finish(result);
 
-      if (!folder) { return; }
+      if (!folder)
+      {
+        return;
+      }
 
       std::string pathStr = folder->get_path();
       std::filesystem::path path(pathStr);
@@ -233,33 +246,47 @@ void MainWindow::importFiles()
       _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
 
       // Create worker - owned by MainWindow
-      _importWorker = std::make_unique<ImportWorker>(
-        *_musicLibrary,
-        files,
-        [dialogPtr](std::filesystem::path const& path, int index) {
-          // Progress callback - marshal to main thread
-          Glib::MainContext::get_default()->invoke([dialogPtr, path, index]() {
-            if (dialogPtr) { dialogPtr->onNewTrack(path.string(), index); }
+      _importWorker = std::make_unique<ImportWorker>(*_musicLibrary,
+                                                     files,
+                                                     [dialogPtr](std::filesystem::path const& path, int index)
+      {
+        // Progress callback - marshal to main thread
+        Glib::MainContext::get_default()->invoke([dialogPtr, path, index]()
+        {
+          if (dialogPtr)
+          {
+            dialogPtr->onNewTrack(path.string(), index);
+          }
 
-            return false;
-          });
-        },
-        [this, dialogPtr]() {
-          // Finished callback - marshal to main thread
-          Glib::MainContext::get_default()->invoke([this, dialogPtr]() {
-            if (dialogPtr) { dialogPtr->ready(); }
-
-            return false;
-          });
+          return false;
         });
+      },
+                                                     [this, dialogPtr]()
+      {
+        // Finished callback - marshal to main thread
+        Glib::MainContext::get_default()->invoke([this, dialogPtr]()
+        {
+          if (dialogPtr)
+          {
+            dialogPtr->ready();
+          }
+
+          return false;
+        });
+      });
 
       // Run in background thread - owned and joined on window destruction
       auto* workerPtr = _importWorker.get();
-      if (_importThread.joinable()) { _importThread.join(); }
-      _importThread = std::jthread([this, workerPtr](std::stop_token stoken) {
+      if (_importThread.joinable())
+      {
+        _importThread.join();
+      }
+      _importThread = std::jthread([this, workerPtr](std::stop_token stoken)
+      {
         workerPtr->run();
         // After import completes, notify observers incrementally
-        Glib::MainContext::get_default()->invoke([this, workerPtr]() {
+        Glib::MainContext::get_default()->invoke([this, workerPtr]()
+        {
           auto const& result = workerPtr->result();
           for (auto const trackId : result.insertedIds)
           {
@@ -310,29 +337,37 @@ void MainWindow::importFilesFromPath(std::filesystem::path const& path)
   _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
 
   // Create worker - owned by MainWindow
-  _importWorker = std::make_unique<ImportWorker>(
-    *_musicLibrary,
-    files,
-    [dialogPtr](std::filesystem::path const& path, int index) {
-      Glib::MainContext::get_default()->invoke([dialogPtr, path, index]() {
-        dialogPtr->onNewTrack(path.string(), index);
-        return false;
-      });
-    },
-    [dialogPtr]() {
-      Glib::MainContext::get_default()->invoke([dialogPtr]() {
-        dialogPtr->ready();
-        return false;
-      });
+  _importWorker = std::make_unique<ImportWorker>(*_musicLibrary,
+                                                 files,
+                                                 [dialogPtr](std::filesystem::path const& path, int index)
+  {
+    Glib::MainContext::get_default()->invoke([dialogPtr, path, index]()
+    {
+      dialogPtr->onNewTrack(path.string(), index);
+      return false;
     });
+  },
+                                                 [dialogPtr]()
+  {
+    Glib::MainContext::get_default()->invoke([dialogPtr]()
+    {
+      dialogPtr->ready();
+      return false;
+    });
+  });
 
   // Run in background thread - owned and joined on window destruction
   auto* workerPtr = _importWorker.get();
-  if (_importThread.joinable()) { _importThread.join(); }
-  _importThread = std::jthread([this, workerPtr](std::stop_token stoken) {
+  if (_importThread.joinable())
+  {
+    _importThread.join();
+  }
+  _importThread = std::jthread([this, workerPtr](std::stop_token stoken)
+  {
     workerPtr->run();
     // After import completes, notify observers incrementally
-    Glib::MainContext::get_default()->invoke([this, workerPtr]() {
+    Glib::MainContext::get_default()->invoke([this, workerPtr]()
+    {
       auto const& result = workerPtr->result();
       for (auto const trackId : result.insertedIds)
       {
@@ -368,21 +403,23 @@ void MainWindow::setupMenu()
 
   // Create actions
   auto openAction = Gio::SimpleAction::create("open-library");
-  openAction->signal_activate().connect(
-    [this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { openLibrary(); });
+  openAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+  { openLibrary(); });
   add_action(openAction);
 
   auto importAction = Gio::SimpleAction::create("import-files");
-  importAction->signal_activate().connect(
-    [this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { importFiles(); });
+  importAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+  { importFiles(); });
   add_action(importAction);
 
   _newListAction = Gio::SimpleAction::create("new-list");
-  _newListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) {
+  _newListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+  {
     // Create dialog - GTK4 will manage its lifetime when closed
     auto* dialog = Gtk::make_managed<NewListDialog>(*this, *_musicLibrary, *_allTrackIds, _rowDataProvider);
 
-    dialog->signal_response().connect([this, dialog](int responseId) {
+    dialog->signal_response().connect([this, dialog](int responseId)
+    {
       if (responseId == Gtk::ResponseType::OK)
       {
         auto draft = dialog->draft();
@@ -398,8 +435,8 @@ void MainWindow::setupMenu()
   add_action(_newListAction);
 
   _deleteListAction = Gio::SimpleAction::create("delete-list");
-  _deleteListAction->signal_activate().connect(
-    [this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { onDeleteList(); });
+  _deleteListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+  { onDeleteList(); });
   _deleteListAction->set_enabled(false);
   add_action(_deleteListAction);
 }
@@ -424,7 +461,8 @@ void MainWindow::setupLayout()
 
   // List view for the sidebar
   auto factory = Gtk::SignalListItemFactory::create();
-  factory->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  factory->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
     rowBox->set_halign(Gtk::Align::FILL);
     rowBox->set_hexpand(true);
@@ -440,12 +478,19 @@ void MainWindow::setupLayout()
 
     auto clickController = Gtk::GestureClick::create();
     clickController->set_button(GDK_BUTTON_SECONDARY);
-    clickController->signal_pressed().connect([this, listItem, rowBox](int /*nPress*/, double x, double y) {
+    clickController->signal_pressed().connect([this, listItem, rowBox](int /*nPress*/, double x, double y)
+    {
       auto const position = listItem->get_position();
-      if (position != GTK_INVALID_LIST_POSITION) { _listSelectionModel->set_selected(position); }
+      if (position != GTK_INVALID_LIST_POSITION)
+      {
+        _listSelectionModel->set_selected(position);
+      }
 
       auto point = rowBox->compute_point(_listView, Gdk::Graphene::Point(static_cast<float>(x), static_cast<float>(y)));
-      if (!point) { return; }
+      if (!point)
+      {
+        return;
+      }
 
       auto rect = Gdk::Rectangle(static_cast<int>(point->get_x()), static_cast<int>(point->get_y()), 1, 1);
       showListContextMenu(_listView, rect);
@@ -454,12 +499,16 @@ void MainWindow::setupLayout()
 
     listItem->set_child(*rowBox);
   });
-  factory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  factory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<ListRow>(item);
     auto box = dynamic_cast<Gtk::Box*>(listItem->get_child());
     auto label = box ? dynamic_cast<Gtk::Label*>(box->get_first_child()) : nullptr;
-    if (row && label) { label->set_text(row->getName()); }
+    if (row && label)
+    {
+      label->set_text(row->getName());
+    }
   });
 
   _listView.set_factory(factory);
@@ -517,7 +566,10 @@ void MainWindow::setupLayout()
   // Set up the main layout
   auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
   mainBox->append(_menuBar);
-  if (_playbackBar) { mainBox->append(*_playbackBar); }
+  if (_playbackBar)
+  {
+    mainBox->append(*_playbackBar);
+  }
   mainBox->append(_paned);
 
   // Set as window child
@@ -532,8 +584,14 @@ void MainWindow::showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle con
   auto const hasLibrary = static_cast<bool>(_musicLibrary);
   auto const canDelete = hasLibrary && selected != GTK_INVALID_LIST_POSITION && selected != 0;
 
-  if (_newListAction) { _newListAction->set_enabled(hasLibrary); }
-  if (_deleteListAction) { _deleteListAction->set_enabled(canDelete); }
+  if (_newListAction)
+  {
+    _newListAction->set_enabled(hasLibrary);
+  }
+  if (_deleteListAction)
+  {
+    _deleteListAction->set_enabled(canDelete);
+  }
 
   _listContextMenu.set_pointing_to(rect);
   _listContextMenu.popup();
@@ -550,16 +608,15 @@ void MainWindow::createList(app::model::ListDraft const& draft)
   auto txn = _musicLibrary->writeTransaction();
 
   // Build the list payload
-  auto builder = rs::core::ListBuilder::createNew()
-    .name(draft.name)
-    .description(draft.description);
+  auto builder = rs::core::ListBuilder::createNew().name(draft.name).description(draft.description);
   if (draft.kind == app::model::ListKind::Smart)
   {
     builder.filter(draft.expression);
   }
   else
   {
-    for (auto id : draft.trackIds) {
+    for (auto id : draft.trackIds)
+    {
       builder.tracks().add(id);
     }
   }
@@ -588,18 +645,30 @@ void MainWindow::createList(app::model::ListDraft const& draft)
 
 void MainWindow::onDeleteList()
 {
-  if (!_musicLibrary) { return; }
+  if (!_musicLibrary)
+  {
+    return;
+  }
 
   auto position = _listSelectionModel->get_selected();
 
-  if (position == GTK_INVALID_LIST_POSITION) { return; }
+  if (position == GTK_INVALID_LIST_POSITION)
+  {
+    return;
+  }
 
   // Don't allow deleting "All Tracks" (position 0)
-  if (position == 0) { return; }
+  if (position == 0)
+  {
+    return;
+  }
 
   auto item = _listStore->get_item(position);
 
-  if (!item) { return; }
+  if (!item)
+  {
+    return;
+  }
 
   auto listId = item->getListId();
 
@@ -620,7 +689,10 @@ void MainWindow::clearTrackPages()
   for (auto& [id, ctx] : _trackPages)
   {
     (void)id;
-    if (ctx.page) { _stack.remove(*ctx.page); }
+    if (ctx.page)
+    {
+      _stack.remove(*ctx.page);
+    }
   }
   _trackPages.clear();
 }
@@ -666,7 +738,8 @@ void MainWindow::buildPageForAllTracks()
   _stack.add(*trackPage, pageId, "All Tracks");
 
   // Connect selection to cover art update
-  trackPage->signalSelectionChanged().connect([this, trackPagePtr = trackPage.get()]() {
+  trackPage->signalSelectionChanged().connect([this, trackPagePtr = trackPage.get()]()
+  {
     auto ids = trackPagePtr->getSelectedTrackIds();
     updateCoverArt(ids);
   });
@@ -688,7 +761,10 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId,
   // Get display name from payload
   std::string listName;
   auto const name = view.name();
-  if (!name.empty()) { listName = std::string(name); }
+  if (!name.empty())
+  {
+    listName = std::string(name);
+  }
   else
   {
     listName = "<Unnamed List>";
@@ -704,7 +780,10 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId,
 
     // Set expression from filter stored in payload
     auto expr = view.filter();
-    if (!expr.empty()) { filtered->setExpression(std::string(expr)); }
+    if (!expr.empty())
+    {
+      filtered->setExpression(std::string(expr));
+    }
     filtered->reload();
     membershipList = std::move(filtered);
   }
@@ -728,7 +807,8 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId,
   _stack.add(*trackPage, pageId, listName);
 
   // Connect selection to cover art update
-  trackPage->signalSelectionChanged().connect([this, trackPagePtr = trackPage.get()]() {
+  trackPage->signalSelectionChanged().connect([this, trackPagePtr = trackPage.get()]()
+  {
     auto ids = trackPagePtr->getSelectedTrackIds();
     updateCoverArt(ids);
   });
@@ -738,7 +818,10 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId,
 
   // Create playlist exporter for this list
   auto playlistDir = _musicLibrary->rootPath() / "playlist";
-  if (!std::filesystem::exists(playlistDir)) { std::filesystem::create_directories(playlistDir); }
+  if (!std::filesystem::exists(playlistDir))
+  {
+    std::filesystem::create_directories(playlistDir);
+  }
   auto playlistPath = playlistDir / (listName + ".m3u");
   auto exporter =
     std::make_unique<PlaylistExporter>(*membershipList, *_rowDataProvider, _musicLibrary->rootPath(), playlistPath);
@@ -755,25 +838,32 @@ void MainWindow::setupTrackContextMenu()
 {
   // Create track tag action
   auto tagTrackAction = Gio::SimpleAction::create("tag-track");
-  tagTrackAction->signal_activate().connect(
-    [this]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { onTagTrack(); });
+  tagTrackAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+  { onTagTrack(); });
   add_action(tagTrackAction);
 }
 
 void MainWindow::onTagTrack()
 {
   auto* ctx = currentVisibleTrackPageContext();
-  if (!ctx) { return; }
+  if (!ctx)
+  {
+    return;
+  }
 
   auto selectedIds = ctx->page->getSelectedTrackIds();
 
-  if (selectedIds.empty()) { return; }
+  if (selectedIds.empty())
+  {
+    return;
+  }
 
   // Show tag prompt dialog
   auto* dialog = Gtk::make_managed<TagPromptDialog>(*this);
   auto idsCopy = selectedIds; // Copy for lambda
 
-  dialog->signal_response().connect([this, dialog, idsCopy](int responseId) mutable {
+  dialog->signal_response().connect([this, dialog, idsCopy](int responseId) mutable
+  {
     if (responseId == Gtk::ResponseType::OK)
     {
       std::string tag = dialog->tag();
@@ -792,7 +882,10 @@ void MainWindow::onTagTrack()
         {
           // Get current track data
           auto optView = writer.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot);
-          if (!optView) { continue; }
+          if (!optView)
+          {
+            continue;
+          }
 
           // Build TrackBuilder from current view
           auto builder = rs::core::TrackBuilder::fromView(*optView, dict);
@@ -802,9 +895,7 @@ void MainWindow::onTagTrack()
 
           // Zero-copy update hot data
           auto prepared = builder.prepareHot(txn, dict);
-          writer.updateHot(trackId, prepared.size(), [&prepared](std::span<std::byte> hot) {
-            prepared.writeTo(hot);
-          });
+          writer.updateHot(trackId, prepared.size(), [&prepared](std::span<std::byte> hot) { prepared.writeTo(hot); });
         }
 
         // Commit transaction
@@ -824,15 +915,20 @@ void MainWindow::onTagTrack()
   dialog->present();
 }
 
-void MainWindow::onListSelectionChanged([[maybe_unused]] std::uint32_t position,
-                                        [[maybe_unused]] std::uint32_t nItems)
+void MainWindow::onListSelectionChanged([[maybe_unused]] std::uint32_t position, [[maybe_unused]] std::uint32_t nItems)
 {
   auto const selected = _listSelectionModel ? _listSelectionModel->get_selected() : GTK_INVALID_LIST_POSITION;
-  if (selected == GTK_INVALID_LIST_POSITION) { return; }
+  if (selected == GTK_INVALID_LIST_POSITION)
+  {
+    return;
+  }
 
   auto item = _listStore->get_item(selected);
 
-  if (!item) { return; }
+  if (!item)
+  {
+    return;
+  }
 
   auto listId = item->getListId();
 
@@ -877,7 +973,10 @@ void MainWindow::updateCoverArt(std::vector<rs::core::TrackId> const& selectedId
 
 void MainWindow::notifyTracksInserted(std::vector<rs::core::TrackId> const& ids)
 {
-  for (auto id : ids) { _allTrackIds->notifyInserted(id); }
+  for (auto id : ids)
+  {
+    _allTrackIds->notifyInserted(id);
+  }
 }
 
 void MainWindow::notifyTracksUpdated(std::vector<rs::core::TrackId> const& ids)
@@ -919,15 +1018,21 @@ void MainWindow::setupPlayback()
   _playbackBar->signalSeekRequested().connect(sigc::mem_fun(*this, &MainWindow::onSeekRequested));
 
   // Start GTK timer to poll playback snapshot
-  _playbackTimer = g_timeout_add(100, [](gpointer data) -> gboolean {
+  _playbackTimer = g_timeout_add(100,
+                                 [](gpointer data) -> gboolean
+  {
     static_cast<MainWindow*>(data)->refreshPlaybackBar();
     return G_SOURCE_CONTINUE;
-  }, this);
+  },
+                                 this);
 }
 
 void MainWindow::refreshPlaybackBar()
 {
-  if (!_playbackBar || !_playbackController) { return; }
+  if (!_playbackBar || !_playbackController)
+  {
+    return;
+  }
 
   auto snapshot = _playbackController->snapshot();
   _playbackBar->setSnapshot(snapshot);
@@ -938,23 +1043,35 @@ void MainWindow::onPlayRequested()
   if (_playbackController)
   {
     auto descriptor = currentSelectionPlaybackDescriptor();
-    if (descriptor) { _playbackController->play(*descriptor); }
+    if (descriptor)
+    {
+      _playbackController->play(*descriptor);
+    }
   }
 }
 
 void MainWindow::onPauseRequested()
 {
-  if (_playbackController) { _playbackController->pause(); }
+  if (_playbackController)
+  {
+    _playbackController->pause();
+  }
 }
 
 void MainWindow::onStopRequested()
 {
-  if (_playbackController) { _playbackController->stop(); }
+  if (_playbackController)
+  {
+    _playbackController->stop();
+  }
 }
 
 void MainWindow::onSeekRequested(std::uint32_t positionMs)
 {
-  if (_playbackController) { _playbackController->seek(positionMs); }
+  if (_playbackController)
+  {
+    _playbackController->seek(positionMs);
+  }
 }
 
 void MainWindow::playCurrentSelection()
@@ -962,33 +1079,51 @@ void MainWindow::playCurrentSelection()
   if (_playbackController)
   {
     auto descriptor = currentSelectionPlaybackDescriptor();
-    if (descriptor) { _playbackController->play(*descriptor); }
+    if (descriptor)
+    {
+      _playbackController->play(*descriptor);
+    }
   }
 }
 
 void MainWindow::pausePlayback()
 {
-  if (_playbackController) { _playbackController->pause(); }
+  if (_playbackController)
+  {
+    _playbackController->pause();
+  }
 }
 
 void MainWindow::stopPlayback()
 {
-  if (_playbackController) { _playbackController->stop(); }
+  if (_playbackController)
+  {
+    _playbackController->stop();
+  }
 }
 
 void MainWindow::seekPlayback(std::uint32_t positionMs)
 {
-  if (_playbackController) { _playbackController->seek(positionMs); }
+  if (_playbackController)
+  {
+    _playbackController->seek(positionMs);
+  }
 }
 
 std::optional<app::playback::TrackPlaybackDescriptor> MainWindow::currentSelectionPlaybackDescriptor() const
 {
   auto const* ctx = currentVisibleTrackPageContext();
-  if (!ctx || !ctx->page) { return std::nullopt; }
+  if (!ctx || !ctx->page)
+  {
+    return std::nullopt;
+  }
 
   // Get primary selected track
   auto trackId = ctx->page->getPrimarySelectedTrackId();
-  if (!trackId) { return std::nullopt; }
+  if (!trackId)
+  {
+    return std::nullopt;
+  }
 
   // Get playback descriptor
   return _rowDataProvider->getPlaybackDescriptor(*trackId);
@@ -996,7 +1131,8 @@ std::optional<app::playback::TrackPlaybackDescriptor> MainWindow::currentSelecti
 
 void MainWindow::bindTrackPagePlayback(TrackViewPage& page)
 {
-  page.signalTrackActivated().connect([this](TrackListAdapter::TrackId trackId) {
+  page.signalTrackActivated().connect([this](TrackListAdapter::TrackId trackId)
+  {
     if (auto descriptor = _rowDataProvider->getPlaybackDescriptor(trackId))
     {
       _playbackController->play(*descriptor);
@@ -1007,12 +1143,18 @@ void MainWindow::bindTrackPagePlayback(TrackViewPage& page)
 TrackPageContext* MainWindow::currentVisibleTrackPageContext()
 {
   auto* visibleChild = _stack.get_visible_child();
-  if (!visibleChild) { return nullptr; }
+  if (!visibleChild)
+  {
+    return nullptr;
+  }
 
   for (auto& [id, ctx] : _trackPages)
   {
     (void)id;
-    if (ctx.page.get() == visibleChild) { return &ctx; }
+    if (ctx.page.get() == visibleChild)
+    {
+      return &ctx;
+    }
   }
 
   return nullptr;
@@ -1021,12 +1163,18 @@ TrackPageContext* MainWindow::currentVisibleTrackPageContext()
 TrackPageContext const* MainWindow::currentVisibleTrackPageContext() const
 {
   auto const* visibleChild = _stack.get_visible_child();
-  if (!visibleChild) { return nullptr; }
+  if (!visibleChild)
+  {
+    return nullptr;
+  }
 
   for (auto const& [id, ctx] : _trackPages)
   {
     (void)id;
-    if (ctx.page.get() == visibleChild) { return &ctx; }
+    if (ctx.page.get() == visibleChild)
+    {
+      return &ctx;
+    }
   }
 
   return nullptr;

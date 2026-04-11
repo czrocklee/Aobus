@@ -14,12 +14,10 @@ namespace rs::utility
   {
   public:
     Finder(std::string const& rootPath, std::vector<std::string> const& extensions)
-      : _rootPath{rootPath}
-      , _extensions{extensions.begin(), extensions.end()}
+      : _rootPath{rootPath}, _extensions{extensions.begin(), extensions.end()}
     {
-      _filter = [this](std::filesystem::path const& path) {
-        return _extensions.find(path.extension().string()) != _extensions.end();
-      };
+      _filter = [this](std::filesystem::path const& path)
+      { return _extensions.find(path.extension().string()) != _extensions.end(); };
     }
 
     auto begin() const { return boost::make_filter_iterator(_filter, Iterator{_rootPath}); }

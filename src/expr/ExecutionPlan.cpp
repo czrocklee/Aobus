@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/expr/ExecutionPlan.h>
 #include <rs/Exception.h>
+#include <rs/expr/ExecutionPlan.h>
 #include <rs/utility/VariantVisitor.h>
 
 #include <algorithm>
-#include <charconv>
 #include <cctype>
+#include <charconv>
 #include <exception>
 #include <limits>
 #include <ranges>
@@ -27,24 +27,72 @@ namespace rs::expr
       switch (type)
       {
         case VariableType::Property:
-          if (name == "duration" || name == "l") { return Field::DurationMs; }
-          if (name == "bitrate" || name == "br") { return Field::Bitrate; }
-          if (name == "sampleRate" || name == "sr") { return Field::SampleRate; }
-          if (name == "channels") { return Field::Channels; }
-          if (name == "bitDepth" || name == "bd") { return Field::BitDepth; }
+          if (name == "duration" || name == "l")
+          {
+            return Field::DurationMs;
+          }
+          if (name == "bitrate" || name == "br")
+          {
+            return Field::Bitrate;
+          }
+          if (name == "sampleRate" || name == "sr")
+          {
+            return Field::SampleRate;
+          }
+          if (name == "channels")
+          {
+            return Field::Channels;
+          }
+          if (name == "bitDepth" || name == "bd")
+          {
+            return Field::BitDepth;
+          }
           break;
         case VariableType::Metadata:
-          if (name == "year" || name == "y") { return Field::Year; }
-          if (name == "trackNumber" || name == "tn") { return Field::TrackNumber; }
-          if (name == "totalTracks" || name == "tt") { return Field::TotalTracks; }
-          if (name == "discNumber" || name == "dn") { return Field::DiscNumber; }
-          if (name == "totalDiscs" || name == "td") { return Field::TotalDiscs; }
-          if (name == "artist" || name == "a") { return Field::ArtistId; }
-          if (name == "album" || name == "al") { return Field::AlbumId; }
-          if (name == "genre" || name == "g") { return Field::GenreId; }
-          if (name == "albumArtist" || name == "aa") { return Field::AlbumArtistId; }
-          if (name == "coverArt" || name == "ca") { return Field::CoverArtId; }
-          if (name == "title" || name == "t") { return Field::Title; }
+          if (name == "year" || name == "y")
+          {
+            return Field::Year;
+          }
+          if (name == "trackNumber" || name == "tn")
+          {
+            return Field::TrackNumber;
+          }
+          if (name == "totalTracks" || name == "tt")
+          {
+            return Field::TotalTracks;
+          }
+          if (name == "discNumber" || name == "dn")
+          {
+            return Field::DiscNumber;
+          }
+          if (name == "totalDiscs" || name == "td")
+          {
+            return Field::TotalDiscs;
+          }
+          if (name == "artist" || name == "a")
+          {
+            return Field::ArtistId;
+          }
+          if (name == "album" || name == "al")
+          {
+            return Field::AlbumId;
+          }
+          if (name == "genre" || name == "g")
+          {
+            return Field::GenreId;
+          }
+          if (name == "albumArtist" || name == "aa")
+          {
+            return Field::AlbumArtistId;
+          }
+          if (name == "coverArt" || name == "ca")
+          {
+            return Field::CoverArtId;
+          }
+          if (name == "title" || name == "t")
+          {
+            return Field::Title;
+          }
           break;
         case VariableType::Tag: return Field::Tag;
         case VariableType::Custom: return Field::Custom;
@@ -120,9 +168,8 @@ namespace rs::expr
     {
       auto lower = std::string{};
       lower.reserve(value.size());
-      std::ranges::transform(value, std::back_inserter(lower), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-      });
+      std::ranges::transform(
+        value, std::back_inserter(lower), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
       return lower;
     }
 
@@ -148,20 +195,32 @@ namespace rs::expr
     {
       auto parsed = std::uint64_t{0};
       auto const [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsed);
-      if (ec != std::errc{} || ptr != value.data() + value.size()) { return std::nullopt; }
+      if (ec != std::errc{} || ptr != value.data() + value.size())
+      {
+        return std::nullopt;
+      }
       return parsed;
     }
 
     std::optional<std::uint64_t> checkedMul(std::uint64_t lhs, std::uint64_t rhs)
     {
-      if (lhs == 0 || rhs == 0) { return std::uint64_t{0}; }
-      if (lhs > std::numeric_limits<std::uint64_t>::max() / rhs) { return std::nullopt; }
+      if (lhs == 0 || rhs == 0)
+      {
+        return std::uint64_t{0};
+      }
+      if (lhs > std::numeric_limits<std::uint64_t>::max() / rhs)
+      {
+        return std::nullopt;
+      }
       return lhs * rhs;
     }
 
     std::optional<std::uint64_t> checkedAdd(std::uint64_t lhs, std::uint64_t rhs)
     {
-      if (lhs > std::numeric_limits<std::uint64_t>::max() - rhs) { return std::nullopt; }
+      if (lhs > std::numeric_limits<std::uint64_t>::max() - rhs)
+      {
+        return std::nullopt;
+      }
       return lhs + rhs;
     }
 
@@ -171,7 +230,10 @@ namespace rs::expr
       for (std::size_t i = 0; i < exponent; ++i)
       {
         auto const next = checkedMul(value, 10);
-        if (!next) { return std::nullopt; }
+        if (!next)
+        {
+          return std::nullopt;
+        }
         value = *next;
       }
       return value;
@@ -184,41 +246,55 @@ namespace rs::expr
       switch (field)
       {
         case Field::DurationMs:
-          if (normalized == "ms") { return 1; }
-          if (normalized == "s") { return 1000; }
-          if (normalized == "m") { return 60 * 1000; }
-          if (normalized == "h") { return 60 * 60 * 1000; }
+          if (normalized == "ms")
+          {
+            return 1;
+          }
+          if (normalized == "s")
+          {
+            return 1000;
+          }
+          if (normalized == "m")
+          {
+            return 60 * 1000;
+          }
+          if (normalized == "h")
+          {
+            return 60 * 60 * 1000;
+          }
           break;
         case Field::Bitrate:
         case Field::SampleRate:
-          if (normalized == "k") { return 1000; }
-          if (normalized == "m") { return 1000 * 1000; }
+          if (normalized == "k")
+          {
+            return 1000;
+          }
+          if (normalized == "m")
+          {
+            return 1000 * 1000;
+          }
           break;
         default: break;
       }
 
-      RS_THROW_FORMAT(rs::Exception,
-                      "unit '{}' is not supported for {} constants",
-                      normalized,
-                      fieldName(field));
+      RS_THROW_FORMAT(rs::Exception, "unit '{}' is not supported for {} constants", normalized, fieldName(field));
     }
 
     std::int64_t scaleUnitConstant(UnitConstantExpression const& constant, Field field)
     {
       if (field == Field::TagBloom)
       {
-        RS_THROW_FORMAT(rs::Exception,
-                        "unit literal '{}' requires a numeric field context",
-                        constant.lexeme);
+        RS_THROW_FORMAT(rs::Exception, "unit literal '{}' requires a numeric field context", constant.lexeme);
       }
 
       auto lexeme = std::string_view{constant.lexeme};
       auto const negative = !lexeme.empty() && lexeme.front() == '-';
-      if (negative) { lexeme.remove_prefix(1); }
+      if (negative)
+      {
+        lexeme.remove_prefix(1);
+      }
 
-      auto const suffixStart = std::ranges::find_if(lexeme, [](unsigned char ch) {
-        return std::isalpha(ch) != 0;
-      });
+      auto const suffixStart = std::ranges::find_if(lexeme, [](unsigned char ch) { return std::isalpha(ch) != 0; });
       if (suffixStart == lexeme.end())
       {
         RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
@@ -246,7 +322,8 @@ namespace rs::expr
       }
 
       auto const whole = parseUnsigned(wholePart);
-      auto const fraction = fractionPart.empty() ? std::optional<std::uint64_t>{std::uint64_t{0}} : parseUnsigned(fractionPart);
+      auto const fraction =
+        fractionPart.empty() ? std::optional<std::uint64_t>{std::uint64_t{0}} : parseUnsigned(fractionPart);
       auto const denominator = pow10(fractionPart.size());
       if (!whole || !fraction || !denominator)
       {
@@ -285,7 +362,10 @@ namespace rs::expr
       {
         RS_THROW_FORMAT(rs::Exception, "unit literal '{}' is out of range", constant.lexeme);
       }
-      if (magnitude == negativeLimit) { return std::numeric_limits<std::int64_t>::min(); }
+      if (magnitude == negativeLimit)
+      {
+        return std::numeric_limits<std::int64_t>::min();
+      }
       return -static_cast<std::int64_t>(magnitude);
     }
   }
@@ -297,8 +377,7 @@ namespace rs::expr
 
   std::uint32_t QueryCompiler::addStringConstant(std::string_view str)
   {
-    if (auto it = std::ranges::find(_plan.stringConstants, str);
-        it != _plan.stringConstants.end())
+    if (auto it = std::ranges::find(_plan.stringConstants, str); it != _plan.stringConstants.end())
     {
       return static_cast<std::uint32_t>(std::distance(_plan.stringConstants.begin(), it));
     }
@@ -310,12 +389,20 @@ namespace rs::expr
   void QueryCompiler::compileExpression(Expression const& expr)
   {
     std::visit(utility::makeVisitor(
-                 [this](std::unique_ptr<BinaryExpression> const& binary) {
-                   if (binary) { compileBinary(*binary); }
-                 },
-                 [this](std::unique_ptr<UnaryExpression> const& unary) {
-                   if (unary) { compileUnary(*unary); }
-                 },
+                 [this](std::unique_ptr<BinaryExpression> const& binary)
+    {
+      if (binary)
+      {
+        compileBinary(*binary);
+      }
+    },
+                 [this](std::unique_ptr<UnaryExpression> const& unary)
+    {
+      if (unary)
+      {
+        compileUnary(*unary);
+      }
+    },
                  [this](VariableExpression const& var) { compileVariable(var); },
                  [this](ConstantExpression const& constant) { compileConstant(constant); }),
                expr);
@@ -434,7 +521,10 @@ namespace rs::expr
     _lastField = field; // Track for string resolution context
 
     // Track access profile for hot/cold determination based on field storage location
-    if (isColdField(field)) { _hasColdAccess = true; }
+    if (isColdField(field))
+    {
+      _hasColdAccess = true;
+    }
     else
     {
       _hasHotAccess = true;
@@ -476,77 +566,87 @@ namespace rs::expr
   void QueryCompiler::compileConstant(ConstantExpression const& constant)
   {
     std::visit(utility::makeVisitor(
-                 [this](bool val) {
-                   _plan.instructions.push_back(Instruction{
-                     .op = OpCode::LoadConstant,
-                     .field = 0,
-                     .operand = static_cast<std::int32_t>(_nextReg++),
-                     .constValue = val ? 1 : 0,
-                     .strLen = 0,
-                     .strData = nullptr,
-                   });
-                 },
-                 [this](std::int64_t val) {
-                   _plan.instructions.push_back(Instruction{
-                     .op = OpCode::LoadConstant,
-                     .field = 0,
-                     .operand = static_cast<std::int32_t>(_nextReg++),
-                     .constValue = val,
-                     .strLen = 0,
-                     .strData = nullptr,
-                   });
-                 },
-                 [this](UnitConstantExpression const& val) {
-                   auto const scaled = scaleUnitConstant(val, _lastField);
-                   _plan.instructions.push_back(Instruction{
-                     .op = OpCode::LoadConstant,
-                     .field = 0,
-                     .operand = static_cast<std::int32_t>(_nextReg++),
-                     .constValue = scaled,
-                     .strLen = 0,
-                     .strData = nullptr,
-                   });
-                 },
-                 [this](std::string const& val) {
-                   // Check if we should resolve this string via dictionary
-                   // For metadata ID fields (artist, album, genre), resolve to numeric ID
-                   auto resolvedId = resolveStringConstant(val, _lastField);
+                 [this](bool val)
+    {
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::LoadConstant,
+        .field = 0,
+        .operand = static_cast<std::int32_t>(_nextReg++),
+        .constValue = val ? 1 : 0,
+        .strLen = 0,
+        .strData = nullptr,
+      });
+    },
+                 [this](std::int64_t val)
+    {
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::LoadConstant,
+        .field = 0,
+        .operand = static_cast<std::int32_t>(_nextReg++),
+        .constValue = val,
+        .strLen = 0,
+        .strData = nullptr,
+      });
+    },
+                 [this](UnitConstantExpression const& val)
+    {
+      auto const scaled = scaleUnitConstant(val, _lastField);
+      _plan.instructions.push_back(Instruction{
+        .op = OpCode::LoadConstant,
+        .field = 0,
+        .operand = static_cast<std::int32_t>(_nextReg++),
+        .constValue = scaled,
+        .strLen = 0,
+        .strData = nullptr,
+      });
+    },
+                 [this](std::string const& val)
+    {
+      // Check if we should resolve this string via dictionary
+      // For metadata ID fields (artist, album, genre), resolve to numeric ID
+      auto resolvedId = resolveStringConstant(val, _lastField);
 
-                   if (resolvedId >= 0)
-                   {
-                     // Successfully resolved to ID - store as numeric constant
-                     _plan.instructions.push_back(Instruction{
-                       .op = OpCode::LoadConstant,
-                       .field = 0,
-                       .operand = static_cast<std::int32_t>(_nextReg++),
-                       .constValue = resolvedId,
-                       .strLen = 0,
-                       .strData = nullptr,
-                     });
-                   }
-                   else
-                   {
-                     // Not resolved (no dictionary or not a metadata ID field) - store as string constant
-                     auto idx = addStringConstant(val);
-                     _plan.instructions.push_back(Instruction{
-                       .op = OpCode::LoadConstant,
-                       .field = 0,
-                       .operand = static_cast<std::int32_t>(_nextReg++),
-                       .constValue = static_cast<std::int64_t>(idx),
-                       .strLen = static_cast<std::uint32_t>(val.size()),
-                       .strData = nullptr,
-                     });
-                   }
-                 }),
+      if (resolvedId >= 0)
+      {
+        // Successfully resolved to ID - store as numeric constant
+        _plan.instructions.push_back(Instruction{
+          .op = OpCode::LoadConstant,
+          .field = 0,
+          .operand = static_cast<std::int32_t>(_nextReg++),
+          .constValue = resolvedId,
+          .strLen = 0,
+          .strData = nullptr,
+        });
+      }
+      else
+      {
+        // Not resolved (no dictionary or not a metadata ID field) - store as string constant
+        auto idx = addStringConstant(val);
+        _plan.instructions.push_back(Instruction{
+          .op = OpCode::LoadConstant,
+          .field = 0,
+          .operand = static_cast<std::int32_t>(_nextReg++),
+          .constValue = static_cast<std::int64_t>(idx),
+          .strLen = static_cast<std::uint32_t>(val.size()),
+          .strData = nullptr,
+        });
+      }
+    }),
                constant);
   }
 
   std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field)
   {
     // Only resolve for metadata ID fields and tag fields
-    if (!isMetadataFieldId(field) && !isTagField(field)) { return -1; }
+    if (!isMetadataFieldId(field) && !isTagField(field))
+    {
+      return -1;
+    }
 
-    if (_dict == nullptr) { return -1; }
+    if (_dict == nullptr)
+    {
+      return -1;
+    }
 
     // Reserve in memory - if already exists, returns existing ID; if not, adds to memory only
     auto id = _dict->reserve(str);
@@ -565,15 +665,24 @@ namespace rs::expr
     {
       if (bool const* val = std::get_if<bool>(constant))
       {
-        if (*val) { _plan.matchesAll = true; }
+        if (*val)
+        {
+          _plan.matchesAll = true;
+        }
       }
     }
 
     compileExpression(expr);
 
     // Set access profile based on what data was accessed
-    if (_hasHotAccess && _hasColdAccess) { _plan.accessProfile = AccessProfile::HotAndCold; }
-    else if (_hasColdAccess) { _plan.accessProfile = AccessProfile::ColdOnly; }
+    if (_hasHotAccess && _hasColdAccess)
+    {
+      _plan.accessProfile = AccessProfile::HotAndCold;
+    }
+    else if (_hasColdAccess)
+    {
+      _plan.accessProfile = AccessProfile::ColdOnly;
+    }
     else
     {
       _plan.accessProfile = AccessProfile::HotOnly;

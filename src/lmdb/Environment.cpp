@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/lmdb/Environment.h>
 #include "ThrowError.h"
+#include <rs/lmdb/Environment.h>
 
 namespace rs::lmdb
 {
@@ -26,7 +26,7 @@ namespace rs::lmdb
     {
       throwOnError("mdb_env_set_maxdbs", mdb_env_set_maxdbs(_handle.get(), options.maxDatabases));
     }
-    
+
     if (options.maxReaders > 0)
     {
       throwOnError("mdb_env_set_maxreaders", mdb_env_set_maxreaders(_handle.get(), options.maxReaders));

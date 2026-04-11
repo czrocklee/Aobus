@@ -12,15 +12,16 @@ namespace rs::tag::mp4
 {
   namespace
   {
-    std::map<std::string, std::size_t, std::less<>> const ContainerAtomIterested = {
-      {"moov", 0}, {"udta", 0}, {"meta", 4}, {"ilst", 0}, {"trak", 0}, {"mdia", 0}, {"minf", 0}, {"stbl", 0}};
+    std::map<std::string, std::size_t, std::less<>> const ContainerAtomIterested =
+      {{"moov", 0}, {"udta", 0}, {"meta", 4}, {"ilst", 0}, {"trak", 0}, {"mdia", 0}, {"minf", 0}, {"stbl", 0}};
 
     template<typename ContainerAtom>
     void parseAtoms(ContainerAtom& parent, std::span<char const> data)
     {
       while (!data.empty())
       {
-        auto const* layout = reinterpret_cast<AtomLayout const*>(data.data());  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+        auto const* layout =
+          reinterpret_cast<AtomLayout const*>(data.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
         auto length = layout->length.value();
         auto type = std::string_view{layout->type.data(), 4};
 

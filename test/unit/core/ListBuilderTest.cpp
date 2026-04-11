@@ -24,11 +24,8 @@ using rs::lmdb::WriteTransaction;
 
 TEST_CASE("ListBuilder - smart list")
 {
-  auto payload = ListBuilder::createNew()
-    .name("My Smart List")
-    .description("A smart list")
-    .filter("@artist = 'Test'")
-    .serialize();
+  auto payload =
+    ListBuilder::createNew().name("My Smart List").description("A smart list").filter("@artist = 'Test'").serialize();
   auto view = ListView{payload};
 
   CHECK(view.isSmart() == true);
@@ -38,9 +35,7 @@ TEST_CASE("ListBuilder - smart list")
 
 TEST_CASE("ListBuilder - manual list")
 {
-  auto builder = ListBuilder::createNew()
-    .name("My Manual List")
-    .description("A manual list");
+  auto builder = ListBuilder::createNew().name("My Manual List").description("A manual list");
   builder.tracks().add(rs::core::TrackId{100});
   builder.tracks().add(rs::core::TrackId{200});
   builder.tracks().add(rs::core::TrackId{300});
@@ -57,10 +52,7 @@ TEST_CASE("ListBuilder - manual list")
 
 TEST_CASE("ListBuilder - manual list empty trackIds")
 {
-  auto payload = ListBuilder::createNew()
-    .name("Empty List")
-    .description("No tracks")
-    .serialize();
+  auto payload = ListBuilder::createNew().name("Empty List").description("No tracks").serialize();
   auto view = ListView{payload};
 
   CHECK(view.isSmart() == false);
@@ -76,9 +68,7 @@ TEST_CASE("ListBuilder - manual list round-trip through ListStore")
   auto store = ListStore{Database{wtxn, "lists"}};
   wtxn.commit();
 
-  auto builder = ListBuilder::createNew()
-    .name("RoundTrip Test")
-    .description("Testing round-trip");
+  auto builder = ListBuilder::createNew().name("RoundTrip Test").description("Testing round-trip");
   builder.tracks().add(rs::core::TrackId{42});
   builder.tracks().add(rs::core::TrackId{99});
   auto payload = builder.serialize();
@@ -109,10 +99,10 @@ TEST_CASE("ListBuilder - smart list round-trip through ListStore")
   wtxn.commit();
 
   auto payload = ListBuilder::createNew()
-    .name("Smart RoundTrip")
-    .description("Testing smart list round-trip")
-    .filter("@year > 2020")
-    .serialize();
+                   .name("Smart RoundTrip")
+                   .description("Testing smart list round-trip")
+                   .filter("@year > 2020")
+                   .serialize();
 
   auto wtxn2 = WriteTransaction{env};
   auto [id, createdView] = store.writer(wtxn2).create(payload);
@@ -131,10 +121,7 @@ TEST_CASE("ListBuilder - smart list round-trip through ListStore")
 
 TEST_CASE("ListBuilder - name and description offsets")
 {
-  auto payload = ListBuilder::createNew()
-    .name("Offset Test")
-    .description("Desc Here")
-    .serialize();
+  auto payload = ListBuilder::createNew().name("Offset Test").description("Desc Here").serialize();
   auto view = ListView{payload};
 
   CHECK(view.name() == "Offset Test");

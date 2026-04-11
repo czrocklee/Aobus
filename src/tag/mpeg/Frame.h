@@ -17,7 +17,10 @@ namespace rs::tag::mpeg
   class FrameView
   {
   public:
-    FrameView(void const* data, std::size_t /*size*/) : _data{data} {}
+    FrameView(void const* data, std::size_t /*size*/)
+      : _data{data}
+    {
+    }
 
     std::size_t length() const;
     bool isValid() const;

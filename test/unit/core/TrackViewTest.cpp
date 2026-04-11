@@ -94,8 +94,11 @@ namespace
     builder.property().sampleRate(header.sampleRate);
     builder.property().bitrate(header.bitrate);
     builder.property().channels(header.channels);
-    
-    for (auto const& [key, value] : customPairs) { builder.custom().add(key, value); }
+
+    for (auto const& [key, value] : customPairs)
+    {
+      builder.custom().add(key, value);
+    }
 
     auto temp = TempDir{};
     auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -407,7 +410,10 @@ namespace
     auto view = makeColdView(data);
 
     int count = 0;
-    for ([[maybe_unused]] auto const& [k, v] : view.custom()) { ++count; }
+    for ([[maybe_unused]] auto const& [k, v] : view.custom())
+    {
+      ++count;
+    }
     CHECK(count == 0);
   }
 
@@ -445,7 +451,10 @@ namespace
     auto id2 = DictionaryId{3};
 
     auto result = std::vector<std::pair<DictionaryId, std::string_view>>{};
-    for (auto const& [k, v] : view.custom()) { result.emplace_back(k, v); }
+    for (auto const& [k, v] : view.custom())
+    {
+      result.emplace_back(k, v);
+    }
     CHECK(result.size() == 3);
     CHECK(result[0].first == id0);
     CHECK(result[0].second == "-6.5");
@@ -461,7 +470,10 @@ namespace
     auto view = makeColdView(data);
 
     int count = 0;
-    for ([[maybe_unused]] auto [key, value] : view.custom()) { ++count; }
+    for ([[maybe_unused]] auto [key, value] : view.custom())
+    {
+      ++count;
+    }
     CHECK(count == 0);
   }
 
@@ -508,7 +520,10 @@ namespace
     auto view = makeColdView(data);
 
     auto result = std::vector<std::pair<DictionaryId, std::string_view>>{};
-    for (auto [key, value] : view.custom()) { result.emplace_back(key, value); }
+    for (auto [key, value] : view.custom())
+    {
+      result.emplace_back(key, value);
+    }
     CHECK(result.size() == 3);
     CHECK(result[0].first == DictionaryId{1});
     CHECK(result[0].second == "-6.5");

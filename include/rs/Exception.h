@@ -13,7 +13,8 @@ namespace rs
   class Exception : public std::exception
   {
   public:
-    Exception(std::string what, char const* file, std::int32_t line) : _what{std::move(what)}, _file{file}, _line{line}
+    Exception(std::string what, char const* file, std::int32_t line)
+      : _what{std::move(what)}, _file{file}, _line{line}
     {
     }
 

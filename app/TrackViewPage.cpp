@@ -14,17 +14,25 @@
 
 namespace
 {
-  std::optional<TrackListAdapter::TrackId> trackIdAtPosition(
-    Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
-    std::uint32_t position)
+  std::optional<TrackListAdapter::TrackId> trackIdAtPosition(Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
+                                                             std::uint32_t position)
   {
-    if (!selectionModel) { return std::nullopt; }
+    if (!selectionModel)
+    {
+      return std::nullopt;
+    }
 
     auto item = selectionModel->get_object(position);
-    if (!item) { return std::nullopt; }
+    if (!item)
+    {
+      return std::nullopt;
+    }
 
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
-    if (!row) { return std::nullopt; }
+    if (!row)
+    {
+      return std::nullopt;
+    }
 
     return row->getTrackId();
   }
@@ -106,16 +114,21 @@ void TrackViewPage::setupColumns()
 {
   // Artist column
   auto artistFactory = Gtk::SignalListItemFactory::create();
-  artistFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  artistFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     listItem->set_child(*label);
   });
-  artistFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  artistFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-    if (row && label) { label->set_text(row->getArtist()); }
+    if (row && label)
+    {
+      label->set_text(row->getArtist());
+    }
   });
 
   auto artistColumn = Gtk::ColumnViewColumn::create("Artist", artistFactory);
@@ -125,16 +138,21 @@ void TrackViewPage::setupColumns()
 
   // Album column
   auto albumFactory = Gtk::SignalListItemFactory::create();
-  albumFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  albumFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     listItem->set_child(*label);
   });
-  albumFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  albumFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-    if (row && label) { label->set_text(row->getAlbum()); }
+    if (row && label)
+    {
+      label->set_text(row->getAlbum());
+    }
   });
 
   auto albumColumn = Gtk::ColumnViewColumn::create("Album", albumFactory);
@@ -144,16 +162,21 @@ void TrackViewPage::setupColumns()
 
   // Title column
   auto titleFactory = Gtk::SignalListItemFactory::create();
-  titleFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  titleFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     listItem->set_child(*label);
   });
-  titleFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  titleFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-    if (row && label) { label->set_text(row->getTitle()); }
+    if (row && label)
+    {
+      label->set_text(row->getTitle());
+    }
   });
 
   auto titleColumn = Gtk::ColumnViewColumn::create("Title", titleFactory);
@@ -163,16 +186,21 @@ void TrackViewPage::setupColumns()
 
   // Tags column
   auto tagsFactory = Gtk::SignalListItemFactory::create();
-  tagsFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  tagsFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto* label = Gtk::make_managed<Gtk::Label>("");
     label->set_halign(Gtk::Align::START);
     listItem->set_child(*label);
   });
-  tagsFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem) {
+  tagsFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-    if (row && label) { label->set_text(row->getTags()); }
+    if (row && label)
+    {
+      label->set_text(row->getTags());
+    }
   });
 
   auto tagsColumn = Gtk::ColumnViewColumn::create("Tags", tagsFactory);
@@ -198,7 +226,10 @@ std::vector<TrackListAdapter::TrackId> TrackViewPage::getSelectedTrackIds() cons
 
   auto model = _selectionModel->get_model();
 
-  if (!model) { return result; }
+  if (!model)
+  {
+    return result;
+  }
 
   // Iterate through all items and check if selected
   auto nItems = model->get_n_items();
@@ -210,7 +241,10 @@ std::vector<TrackListAdapter::TrackId> TrackViewPage::getSelectedTrackIds() cons
       if (item)
       {
         auto row = std::dynamic_pointer_cast<TrackRow>(item);
-        if (row) { result.push_back(row->getTrackId()); }
+        if (row)
+        {
+          result.push_back(row->getTrackId());
+        }
       }
     }
   }
@@ -234,7 +268,8 @@ void TrackViewPage::setupActivation()
   _columnView.set_focus_on_click(true);
 
   // Built-in activation carries the exact row position that GTK activated.
-  _columnView.signal_activate().connect([this](std::uint32_t position) {
+  _columnView.signal_activate().connect([this](std::uint32_t position)
+  {
     if (auto trackId = trackIdAtPosition(_selectionModel, position))
     {
       _trackActivated.emit(*trackId);
@@ -247,21 +282,25 @@ void TrackViewPage::setupActivation()
   // Keep an explicit Enter handler so activation still works when GTK focus is
   // on the view but no activate action is emitted automatically.
   auto keyController = Gtk::EventControllerKey::create();
-  keyController->signal_key_pressed().connect([this](guint keyval, guint, Gdk::ModifierType) {
+  keyController->signal_key_pressed().connect(
+    [this](guint keyval, guint, Gdk::ModifierType)
+  {
     if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter)
     {
       onActivateCurrentSelection();
       return true;
     }
     return false;
-  }, false);
+  },
+    false);
   _columnView.add_controller(keyController);
 
   // Use release rather than press so GTK has already updated selection when we
   // inspect the currently selected row.
   auto clickController = Gtk::GestureClick::create();
   clickController->set_button(GDK_BUTTON_PRIMARY);
-  clickController->signal_released().connect([this](int nPress, double, double) {
+  clickController->signal_released().connect([this](int nPress, double, double)
+  {
     if (nPress == 2)
     {
       onActivateCurrentSelection();
@@ -273,14 +312,20 @@ void TrackViewPage::setupActivation()
 void TrackViewPage::onActivateCurrentSelection()
 {
   auto trackId = getPrimarySelectedTrackId();
-  if (trackId) { _trackActivated.emit(*trackId); }
+  if (trackId)
+  {
+    _trackActivated.emit(*trackId);
+  }
 }
 
 std::optional<TrackViewPage::TrackId> TrackViewPage::getPrimarySelectedTrackId() const
 {
   auto model = _selectionModel->get_model();
 
-  if (!model) { return std::nullopt; }
+  if (!model)
+  {
+    return std::nullopt;
+  }
 
   // Find first selected item
   auto nItems = model->get_n_items();
@@ -292,7 +337,10 @@ std::optional<TrackViewPage::TrackId> TrackViewPage::getPrimarySelectedTrackId()
       if (item)
       {
         auto row = std::dynamic_pointer_cast<TrackRow>(item);
-        if (row) { return row->getTrackId(); }
+        if (row)
+        {
+          return row->getTrackId();
+        }
       }
       // Found first selected, no need to continue
       break;
