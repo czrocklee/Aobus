@@ -438,6 +438,26 @@ TEST_CASE("PlanEvaluator - SampleRate Comparison")
   CHECK(result == false);
 }
 
+TEST_CASE("PlanEvaluator - Unit Constants")
+{
+  auto expr = parse("@duration >= 3m && @bitrate >= 256k && @sampleRate >= 44.1k");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100};
+  auto result = evaluator.evaluateFull(plan, track1.view());
+  CHECK(result == true);
+
+  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 192000, 44100};
+  result = evaluator.evaluateFull(plan, track2.view());
+  CHECK(result == false);
+
+  auto track3 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 32000};
+  result = evaluator.evaluateFull(plan, track3.view());
+  CHECK(result == false);
+}
+
 TEST_CASE("PlanEvaluator - Year Comparison")
 {
   // Note: $trackNumber is a cold field, so we use $year instead which is hot

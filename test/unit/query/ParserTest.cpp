@@ -70,6 +70,7 @@ struct Canonicalizer
     std::visit(rs::utility::makeVisitor([this](std::monostate) { oss << "n}"; },
                                         [this](bool val) { oss << "b}" << (val ? "true" : "false"); },
                                         [this](std::int64_t val) { oss << "i}" << val; },
+                                        [this](UnitConstantExpression const& val) { oss << "u}" << val.lexeme; },
                                         [this](std::string_view val) { oss << "s}" << val; }),
                constant);
     oss << "]";
@@ -178,6 +179,14 @@ TEST_CASE("Parser - Integer Constants")
   CHECK("[c{i}0]" == canonicalize(parse("0")));
   CHECK("[c{i}123]" == canonicalize(parse("123")));
   CHECK("[c{i}-456]" == canonicalize(parse("-456")));
+}
+
+TEST_CASE("Parser - Unit Constants")
+{
+  CHECK("[c{u}3m]" == canonicalize(parse("3m")));
+  CHECK("[b{ge}[v{p}duration],[c{u}120s]]" == canonicalize(parse("@duration>=120s")));
+  CHECK("[b{ge}[v{p}bitrate],[c{u}100k]]" == canonicalize(parse("@bitrate>=100k")));
+  CHECK("[b{eq}[v{p}sampleRate],[c{u}44.1k]]" == canonicalize(parse("@sampleRate=44.1k")));
 }
 
 TEST_CASE("Parser - Empty String")

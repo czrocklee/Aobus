@@ -6,8 +6,12 @@
 #include <rs/utility/VariantVisitor.h>
 
 #include <algorithm>
+#include <charconv>
+#include <cctype>
 #include <exception>
+#include <limits>
 #include <ranges>
+#include <string>
 
 namespace rs::expr
 {
@@ -110,6 +114,179 @@ namespace rs::expr
           return true;
         default: return false;
       }
+    }
+
+    std::string toLower(std::string_view value)
+    {
+      auto lower = std::string{};
+      lower.reserve(value.size());
+      std::ranges::transform(value, std::back_inserter(lower), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+      });
+      return lower;
+    }
+
+    char const* fieldName(Field field)
+    {
+      switch (field)
+      {
+        case Field::DurationMs: return "duration";
+        case Field::Bitrate: return "bitrate";
+        case Field::SampleRate: return "sampleRate";
+        case Field::Channels: return "channels";
+        case Field::BitDepth: return "bitDepth";
+        case Field::Year: return "year";
+        case Field::TrackNumber: return "trackNumber";
+        case Field::TotalTracks: return "totalTracks";
+        case Field::DiscNumber: return "discNumber";
+        case Field::TotalDiscs: return "totalDiscs";
+        default: return "field";
+      }
+    }
+
+    std::optional<std::uint64_t> parseUnsigned(std::string_view value)
+    {
+      auto parsed = std::uint64_t{0};
+      auto const [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsed);
+      if (ec != std::errc{} || ptr != value.data() + value.size()) { return std::nullopt; }
+      return parsed;
+    }
+
+    std::optional<std::uint64_t> checkedMul(std::uint64_t lhs, std::uint64_t rhs)
+    {
+      if (lhs == 0 || rhs == 0) { return std::uint64_t{0}; }
+      if (lhs > std::numeric_limits<std::uint64_t>::max() / rhs) { return std::nullopt; }
+      return lhs * rhs;
+    }
+
+    std::optional<std::uint64_t> checkedAdd(std::uint64_t lhs, std::uint64_t rhs)
+    {
+      if (lhs > std::numeric_limits<std::uint64_t>::max() - rhs) { return std::nullopt; }
+      return lhs + rhs;
+    }
+
+    std::optional<std::uint64_t> pow10(std::size_t exponent)
+    {
+      auto value = std::uint64_t{1};
+      for (std::size_t i = 0; i < exponent; ++i)
+      {
+        auto const next = checkedMul(value, 10);
+        if (!next) { return std::nullopt; }
+        value = *next;
+      }
+      return value;
+    }
+
+    std::uint64_t unitMultiplier(Field field, std::string_view unit)
+    {
+      auto const normalized = toLower(unit);
+
+      switch (field)
+      {
+        case Field::DurationMs:
+          if (normalized == "ms") { return 1; }
+          if (normalized == "s") { return 1000; }
+          if (normalized == "m") { return 60 * 1000; }
+          if (normalized == "h") { return 60 * 60 * 1000; }
+          break;
+        case Field::Bitrate:
+        case Field::SampleRate:
+          if (normalized == "k") { return 1000; }
+          if (normalized == "m") { return 1000 * 1000; }
+          break;
+        default: break;
+      }
+
+      RS_THROW_FORMAT(rs::Exception,
+                      "unit '{}' is not supported for {} constants",
+                      normalized,
+                      fieldName(field));
+    }
+
+    std::int64_t scaleUnitConstant(UnitConstantExpression const& constant, Field field)
+    {
+      if (field == Field::TagBloom)
+      {
+        RS_THROW_FORMAT(rs::Exception,
+                        "unit literal '{}' requires a numeric field context",
+                        constant.lexeme);
+      }
+
+      auto lexeme = std::string_view{constant.lexeme};
+      auto const negative = !lexeme.empty() && lexeme.front() == '-';
+      if (negative) { lexeme.remove_prefix(1); }
+
+      auto const suffixStart = std::ranges::find_if(lexeme, [](unsigned char ch) {
+        return std::isalpha(ch) != 0;
+      });
+      if (suffixStart == lexeme.end())
+      {
+        RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
+      }
+
+      auto const suffixOffset = static_cast<std::size_t>(std::distance(lexeme.begin(), suffixStart));
+      auto const numberPart = lexeme.substr(0, suffixOffset);
+      auto const suffixPart = lexeme.substr(suffixOffset);
+      if (numberPart.empty() || suffixPart.empty())
+      {
+        RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
+      }
+
+      auto const dotPos = numberPart.find('.');
+      if (dotPos != std::string_view::npos && numberPart.find('.', dotPos + 1) != std::string_view::npos)
+      {
+        RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
+      }
+
+      auto const wholePart = numberPart.substr(0, dotPos);
+      auto const fractionPart = dotPos == std::string_view::npos ? std::string_view{} : numberPart.substr(dotPos + 1);
+      if (wholePart.empty() || (dotPos != std::string_view::npos && fractionPart.empty()))
+      {
+        RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
+      }
+
+      auto const whole = parseUnsigned(wholePart);
+      auto const fraction = fractionPart.empty() ? std::optional<std::uint64_t>{std::uint64_t{0}} : parseUnsigned(fractionPart);
+      auto const denominator = pow10(fractionPart.size());
+      if (!whole || !fraction || !denominator)
+      {
+        RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
+      }
+
+      auto const scaledWhole = checkedMul(*whole, *denominator);
+      auto const numerator = scaledWhole ? checkedAdd(*scaledWhole, *fraction) : std::nullopt;
+      auto const multiplier = unitMultiplier(field, suffixPart);
+      auto const scaledNumerator = numerator ? checkedMul(*numerator, multiplier) : std::nullopt;
+      if (!scaledNumerator)
+      {
+        RS_THROW_FORMAT(rs::Exception, "unit literal '{}' is out of range", constant.lexeme);
+      }
+
+      if (*scaledNumerator % *denominator != 0)
+      {
+        RS_THROW_FORMAT(rs::Exception,
+                        "unit literal '{}' does not resolve to an integer {} value",
+                        constant.lexeme,
+                        fieldName(field));
+      }
+
+      auto const magnitude = *scaledNumerator / *denominator;
+      if (!negative)
+      {
+        if (magnitude > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        {
+          RS_THROW_FORMAT(rs::Exception, "unit literal '{}' is out of range", constant.lexeme);
+        }
+        return static_cast<std::int64_t>(magnitude);
+      }
+
+      auto const negativeLimit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) + 1;
+      if (magnitude > negativeLimit)
+      {
+        RS_THROW_FORMAT(rs::Exception, "unit literal '{}' is out of range", constant.lexeme);
+      }
+      if (magnitude == negativeLimit) { return std::numeric_limits<std::int64_t>::min(); }
+      return -static_cast<std::int64_t>(magnitude);
     }
   }
 
@@ -315,6 +492,17 @@ namespace rs::expr
                      .field = 0,
                      .operand = static_cast<std::int32_t>(_nextReg++),
                      .constValue = val,
+                     .strLen = 0,
+                     .strData = nullptr,
+                   });
+                 },
+                 [this](UnitConstantExpression const& val) {
+                   auto const scaled = scaleUnitConstant(val, _lastField);
+                   _plan.instructions.push_back(Instruction{
+                     .op = OpCode::LoadConstant,
+                     .field = 0,
+                     .operand = static_cast<std::int32_t>(_nextReg++),
+                     .constValue = scaled,
                      .strLen = 0,
                      .strData = nullptr,
                    });

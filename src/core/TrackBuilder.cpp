@@ -603,13 +603,14 @@ namespace rs::core
     };
 
     auto valueOffset = std::size_t{sizeof(TrackColdHeader) + _resolvedPairs.size() * 8};
+
     for (auto const& [dictId, value] : _resolvedPairs)
     {
-      auto valueLen = static_cast<std::uint16_t>(value.size());
-      auto entry = Entry{dictId, static_cast<std::uint16_t>(valueOffset), valueLen};
-      utility::layout::write(out.subspan(pos, sizeof(Entry)), entry);
+      new (out.data() + pos) Entry{.dictId = dictId,
+                                   .offset = static_cast<std::uint16_t>(valueOffset),
+                                   .len = static_cast<std::uint16_t>(value.size())};
       pos += sizeof(Entry);
-      valueOffset += valueLen;
+      valueOffset += value.size();
     }
 
     // Write all values contiguously

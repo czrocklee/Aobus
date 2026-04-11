@@ -72,6 +72,56 @@ TEST_CASE("ExecutionPlan - Compile Property Field")
   CHECK(hasGt == true);
 }
 
+TEST_CASE("ExecutionPlan - Duration Unit Constant")
+{
+  auto expr = parse("@duration >= 3m");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  auto const it = std::find_if(plan.instructions.begin(), plan.instructions.end(), [](Instruction const& instr) {
+    return instr.op == OpCode::LoadConstant;
+  });
+
+  REQUIRE(it != plan.instructions.end());
+  CHECK(it->constValue == 180000);
+}
+
+TEST_CASE("ExecutionPlan - Bitrate Unit Constant")
+{
+  auto expr = parse("@bitrate >= 2m");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  auto const it = std::find_if(plan.instructions.begin(), plan.instructions.end(), [](Instruction const& instr) {
+    return instr.op == OpCode::LoadConstant;
+  });
+
+  REQUIRE(it != plan.instructions.end());
+  CHECK(it->constValue == 2000000);
+}
+
+TEST_CASE("ExecutionPlan - SampleRate Unit Constant")
+{
+  auto expr = parse("@sampleRate = 44.1k");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+
+  auto const it = std::find_if(plan.instructions.begin(), plan.instructions.end(), [](Instruction const& instr) {
+    return instr.op == OpCode::LoadConstant;
+  });
+
+  REQUIRE(it != plan.instructions.end());
+  CHECK(it->constValue == 44100);
+}
+
+TEST_CASE("ExecutionPlan - Unit Constant Rejects Unsupported Field")
+{
+  auto expr = parse("$year >= 3m");
+  auto compiler = QueryCompiler{};
+
+  REQUIRE_THROWS(compiler.compile(expr));
+}
+
 TEST_CASE("ExecutionPlan - Compile Logical And")
 {
   // Use && for logical and to ensure it's parsed correctly

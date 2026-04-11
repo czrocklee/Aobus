@@ -38,18 +38,22 @@ void TagPromptDialog::setupUi()
   buttonBox.set_halign(Gtk::Align::END);
 
   _cancelButton.set_label("Cancel");
-  _cancelButton.signal_clicked().connect([this]() { response(Gtk::ResponseType::CANCEL); });
+  _cancelButton.signal_clicked().connect([this] { response(Gtk::ResponseType::CANCEL); });
 
   _okButton.set_label("Add");
   _okButton.set_sensitive(false);
-  _okButton.signal_clicked().connect([this]() { response(Gtk::ResponseType::OK); });
+  _okButton.signal_clicked().connect([this] { response(Gtk::ResponseType::OK); });
 
   // Enable OK button when tag is filled
-  _tagEntry.signal_changed().connect([this]() { _okButton.set_sensitive(!_tagEntry.get_text().empty()); });
+  _tagEntry.signal_changed().connect([this] { _okButton.set_sensitive(!_tagEntry.get_text().empty()); });
 
   // Also activate on Enter key
-  _tagEntry.signal_activate().connect([this]() {
-    if (!_tagEntry.get_text().empty()) { response(Gtk::ResponseType::OK); }
+  _tagEntry.signal_activate().connect([this]
+  {
+    if (!_tagEntry.get_text().empty())
+    {
+      response(Gtk::ResponseType::OK);
+    }
   });
 
   buttonBox.append(_cancelButton);

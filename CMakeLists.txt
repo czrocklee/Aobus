@@ -262,6 +262,7 @@ add_executable(RockStudio
     app/ImportWorker.cpp
     app/PlaylistExporter.cpp
     app/NewListDialog.cpp
+    app/QueryExpressionBox.cpp
     app/TagPromptDialog.cpp
     app/ImportProgressDialog.cpp
     app/model/TrackIdList.cpp

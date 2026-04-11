@@ -29,7 +29,12 @@ namespace rs::expr
     std::string name;
   };
 
-  using ConstantExpression = std::variant<bool, std::int64_t, std::string>;
+  struct UnitConstantExpression
+  {
+    std::string lexeme;
+  };
+
+  using ConstantExpression = std::variant<bool, std::int64_t, UnitConstantExpression, std::string>;
 
   // Expression uses std::unique_ptr for recursive types to avoid the memory leak issue
   // that occurs with boost::spirit x3's forward_ast in recursive variants.

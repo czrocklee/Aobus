@@ -12,11 +12,14 @@
 
 #include <rs/core/MusicLibrary.h>
 
+#include <algorithm>
+
 NewListDialog::NewListDialog(Gtk::Window& parent,
                              rs::core::MusicLibrary& musicLibrary,
                              app::model::AllTrackIdsList& allTrackIds,
                              std::shared_ptr<app::model::TrackRowDataProvider> rowDataProvider)
-  : _musicLibrary(&musicLibrary)
+  : _exprBox(musicLibrary)
+  , _musicLibrary(&musicLibrary)
   , _allTrackIds(&allTrackIds)
   , _rowDataProvider(std::move(rowDataProvider))
 {
@@ -67,8 +70,8 @@ void NewListDialog::setupUi()
   // Expression field
   auto exprLabel = Gtk::Label("Expression:");
   exprLabel.set_halign(Gtk::Align::START);
-  _exprEntry.set_placeholder_text("Query expression (e.g., $title ~ \"Bach\")");
-  _exprEntry.signal_changed().connect([this]() {
+  _exprBox.entry().set_placeholder_text("Query expression (type $, @, #, or %)");
+  _exprBox.entry().signal_changed().connect([this]() {
     // Cancel any pending update
     _exprTimeoutConnection.disconnect();
     // Debounce: update preview after 100ms of inactivity
@@ -80,7 +83,7 @@ void NewListDialog::setupUi()
       100);
   });
   _leftPanel.append(exprLabel);
-  _leftPanel.append(_exprEntry);
+  _leftPanel.append(_exprBox);
 
   // Error label (shown below expression when invalid)
   _errorLabel.set_visible(false);
@@ -200,10 +203,10 @@ void NewListDialog::setupPreviewColumns()
 
 void NewListDialog::updatePreview()
 {
-  auto const& expr = _exprEntry.get_text();
+  auto const& expr = _exprBox.entry().get_text();
 
   if (expr.empty()) {
-    _exprEntry.remove_css_class("error");
+    _exprBox.entry().remove_css_class("error");
     _errorLabel.set_visible(false);
     _previewScrolledWindow.set_visible(true);
     _previewFilteredList->setExpression("");
@@ -222,14 +225,14 @@ void NewListDialog::updatePreview()
 
   if (_previewFilteredList->hasError()) {
     // Show error state
-    _exprEntry.add_css_class("error");
+    _exprBox.entry().add_css_class("error");
     _errorLabel.set_visible(true);
     _errorLabel.set_text("Expression error: " + _previewFilteredList->errorMessage());
     _previewScrolledWindow.set_visible(false);
     _matchCountLabel.set_markup("<i>Invalid expression</i>");
   } else {
     // Show valid state
-    _exprEntry.remove_css_class("error");
+    _exprBox.entry().remove_css_class("error");
     _errorLabel.set_visible(false);
     _previewScrolledWindow.set_visible(true);
 
@@ -253,7 +256,7 @@ app::model::ListDraft NewListDialog::draft() const
   draftData.kind = app::model::ListKind::Smart;
   draftData.name = _nameEntry.get_text();
   draftData.description = _descEntry.get_text();
-  draftData.expression = _exprEntry.get_text();
+  draftData.expression = _exprBox.entry().get_text();
   // trackIds remain empty for smart lists
   return draftData;
 }

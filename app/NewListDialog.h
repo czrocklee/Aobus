@@ -3,11 +3,11 @@
 
 #pragma once
 
+#include "QueryExpressionBox.h"
 #include "model/ListDraft.h"
 
 #include <gtkmm.h>
 
-#include <functional>
 #include <memory>
 #include <string>
 
@@ -45,7 +45,7 @@ private:
 
   Gtk::Entry _nameEntry;
   Gtk::Entry _descEntry;
-  Gtk::Entry _exprEntry;
+  QueryExpressionBox _exprBox;
   Gtk::Button _okButton;
   Gtk::Button _cancelButton;
   Gtk::Box _leftPanel;

@@ -27,40 +27,40 @@ namespace
   namespace dsl = lexy::dsl;
   using namespace rs::expr;
 
-  constexpr auto var_types = lexy::symbol_table<VariableType>
+  constexpr auto kVarTypes = lexy::symbol_table<VariableType>
     .map<LEXY_SYMBOL("$")>(VariableType::Metadata)
     .map<LEXY_SYMBOL("@")>(VariableType::Property)
     .map<LEXY_SYMBOL("#")>(VariableType::Tag)
     .map<LEXY_SYMBOL("%")>(VariableType::Custom);
 
-  constexpr auto bool_table = lexy::symbol_table<bool>
+  constexpr auto kBoolTable = lexy::symbol_table<bool>
     .map<LEXY_SYMBOL("true")>(true)
     .map<LEXY_SYMBOL("false")>(false);
 
-  constexpr auto bareword_identifier = [] {
+  constexpr auto kBarewordIdentifier = [] {
     auto id = dsl::identifier(dsl::ascii::alpha_digit_underscore);
     return id.reserve(LEXY_KEYWORD("and", id),
                       LEXY_KEYWORD("or", id),
                       LEXY_KEYWORD("not", id));
   }();
 
-  struct variable : lexy::token_production {
-      static constexpr auto rule = dsl::symbol<var_types> >> dsl::identifier(dsl::ascii::alpha_underscore, dsl::ascii::alpha_digit_underscore);
+  struct Variable : lexy::token_production {
+      static constexpr auto rule = dsl::symbol<kVarTypes> >> dsl::identifier(dsl::ascii::alpha_underscore, dsl::ascii::alpha_digit_underscore);
       static constexpr auto value = lexy::callback<VariableExpression>(
           [](VariableType type, auto lexeme) { return VariableExpression{type, std::string{lexeme.begin(), lexeme.end()}}; }  // NOLINT(readability-named-parameter)
       );
   };
 
-  struct boolean_constant : lexy::token_production {
-      static constexpr auto rule = dsl::symbol<bool_table>(dsl::identifier(dsl::ascii::alpha));
+  struct BooleanConstant : lexy::token_production {
+      static constexpr auto rule = dsl::symbol<kBoolTable>(dsl::identifier(dsl::ascii::alpha));
       static constexpr auto value = lexy::forward<bool>;
   };
 
-  struct string_constant : lexy::token_production {
+  struct StringConstant : lexy::token_production {
       static constexpr auto rule = 
             (dsl::lit_c<'\''> >> dsl::capture(dsl::until(dsl::lit_c<'\''>)))
           | (dsl::lit_c<'"'>  >> dsl::capture(dsl::until(dsl::lit_c<'"'>)))
-          | bareword_identifier;
+          | kBarewordIdentifier;
 
       static constexpr auto value = lexy::callback<std::string>(
           [](auto lexeme) {  // NOLINT(readability-named-parameter)
@@ -73,31 +73,44 @@ namespace
       );
   };
 
-  struct negative_integer : lexy::token_production {
+  struct NegativeInteger : lexy::token_production {
       static constexpr auto rule = dsl::lit_c<'-'> >> dsl::integer<std::int64_t>;
       static constexpr auto value = lexy::callback<std::int64_t>([](std::int64_t val) { return -val; });  // NOLINT(readability-named-parameter)
   };
 
-  struct positive_integer : lexy::token_production {
+  struct PositiveInteger : lexy::token_production {
       static constexpr auto rule = dsl::integer<std::int64_t>;
       static constexpr auto value = lexy::forward<std::int64_t>;
   };
 
-  struct integer_constant {
-      static constexpr auto rule = dsl::p<negative_integer> | dsl::p<positive_integer>;
+  struct IntegerConstant {
+      static constexpr auto rule = dsl::p<NegativeInteger> | dsl::p<PositiveInteger>;
       static constexpr auto value = lexy::forward<std::int64_t>;
   };
 
-  struct constant {
-      static constexpr auto rule = dsl::p<boolean_constant> | dsl::p<integer_constant> | dsl::p<string_constant>;
+  struct UnitConstant : lexy::token_production {
+      static constexpr auto kUnitToken = dsl::token(dsl::minus_sign
+                                                 + dsl::digits<>
+                                                 + dsl::opt(dsl::lit_c<'.'> >> dsl::digits<>)
+                                                 + dsl::identifier(dsl::ascii::alpha).pattern());
+      static constexpr auto rule = dsl::peek(kUnitToken) >> dsl::capture(kUnitToken);
+      static constexpr auto value = lexy::callback<UnitConstantExpression>(
+          [](auto lexeme) {
+              return UnitConstantExpression{std::string{lexeme.begin(), lexeme.end()}};
+          }
+      );
+  };
+
+  struct Constant {
+      static constexpr auto rule = dsl::p<BooleanConstant> | dsl::p<UnitConstant> | dsl::p<IntegerConstant> | dsl::p<StringConstant>;
       static constexpr auto value = lexy::construct<ConstantExpression>;
   };
 
-  struct expr : lexy::expression_production {
-      struct expected_operand { static constexpr auto name = "expected operand"; };
+  struct Expr : lexy::expression_production {
+      struct ExpectedOperand { static constexpr auto name = "expected operand"; };
 
-      struct expr_atom {
-          static constexpr auto rule = dsl::list(dsl::parenthesized(dsl::p<expr>) | dsl::p<variable> | dsl::p<constant>);
+      struct ExprAtom {
+          static constexpr auto rule = dsl::list(dsl::parenthesized(dsl::p<Expr>) | dsl::p<Variable> | dsl::p<Constant>);
           static constexpr auto value = lexy::as_list<std::vector<Expression>> >> lexy::callback<Expression>(
               [](std::vector<Expression> list) {
                   Expression result = std::move(list.back());
@@ -112,20 +125,20 @@ namespace
           );
       };
 
-      static constexpr auto atom = dsl::p<expr_atom> | dsl::error<expected_operand>;
+      static constexpr auto atom = dsl::p<ExprAtom> | dsl::error<ExpectedOperand>;
 
-      struct math_not : dsl::prefix_op {
+      struct MathNot : dsl::prefix_op {
           static constexpr auto op = dsl::op<Operator::Not>(LEXY_KEYWORD("not", dsl::identifier(dsl::ascii::alpha)))
                                    / dsl::op<Operator::Not>(dsl::lit_c<'!'>);
           using operand = dsl::atom;
       };
 
-      struct math_add : dsl::infix_op_right {
+      struct MathAdd : dsl::infix_op_right {
           static constexpr auto op = dsl::op<Operator::Add>(dsl::lit_c<'+'>);
-          using operand = math_not;
+          using operand = MathNot;
       };
 
-      struct math_relational : dsl::infix_op_right {
+      struct MathRelational : dsl::infix_op_right {
           static constexpr auto op = dsl::op<Operator::Equal>(dsl::lit_c<'='>)
                                    / dsl::op<Operator::NotEqual>(LEXY_LIT("!="))
                                    / dsl::op<Operator::LessEqual>(LEXY_LIT("<="))
@@ -133,22 +146,22 @@ namespace
                                    / dsl::op<Operator::Like>(dsl::lit_c<'~'>)
                                    / dsl::op<Operator::Less>(dsl::lit_c<'<'>)
                                    / dsl::op<Operator::Greater>(dsl::lit_c<'>'>);
-          using operand = math_add;
+          using operand = MathAdd;
       };
 
-      struct math_and : dsl::infix_op_right {
+      struct MathAnd : dsl::infix_op_right {
           static constexpr auto op = dsl::op<Operator::And>(LEXY_KEYWORD("and", dsl::identifier(dsl::ascii::alpha)))
                                    / dsl::op<Operator::And>(LEXY_LIT("&&"));
-          using operand = math_relational;
+          using operand = MathRelational;
       };
 
-      struct math_or : dsl::infix_op_right {
+      struct MathOr : dsl::infix_op_right {
           static constexpr auto op = dsl::op<Operator::Or>(LEXY_KEYWORD("or", dsl::identifier(dsl::ascii::alpha)))
                                    / dsl::op<Operator::Or>(LEXY_LIT("||"));
-          using operand = math_and;
+          using operand = MathAnd;
       };
 
-      using operation = math_or;
+      using operation = MathOr;
 
       static constexpr auto value = lexy::callback<Expression>(
           [](Expression lhs) { return lhs; },
@@ -167,9 +180,9 @@ namespace
       );
   };
 
-  struct stmt {
+  struct Stmt {
       static constexpr auto whitespace = dsl::ascii::space;
-      static constexpr auto rule = dsl::p<expr> + dsl::eof;
+      static constexpr auto rule = dsl::p<Expr> + dsl::eof;
       static constexpr auto value = lexy::forward<Expression>;
   };
 }
@@ -179,7 +192,7 @@ namespace rs::expr
   Expression parse(std::string_view expr)
   {
     auto input = lexy::string_input<lexy::utf8_char_encoding>(expr);
-    auto result = lexy::parse<stmt>(input, lexy::noop);
+    auto result = lexy::parse<Stmt>(input, lexy::noop);
     
     if (result.has_value()) {
         Expression root = std::move(result).value();
