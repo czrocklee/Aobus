@@ -373,6 +373,61 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     filtered.detach(&spy);
   }
 
+  SECTION("child filtered lists track parent membership as their source")
+  {
+    auto testLibrary = TestMusicLibrary{};
+    auto legacy = testLibrary.addTrack(makeTrackSpec("legacy", 2020, 180000));
+    auto modern = testLibrary.addTrack(makeTrackSpec("modern", 2022, 250000));
+
+    auto source = MutableTrackIdList{};
+    source.addInitial(legacy);
+    source.addInitial(modern);
+
+    auto engine = SmartListEngine{testLibrary.library()};
+    auto parent = FilteredTrackIdList{source, testLibrary.library(), engine};
+    parent.setExpression("$year >= 2021");
+    parent.reload();
+
+    auto child = FilteredTrackIdList{parent, testLibrary.library(), engine};
+    child.setExpression("@duration >= 240000");
+    child.reload();
+
+    REQUIRE(parent.size() == 1);
+    CHECK(parent.trackIdAt(0) == modern);
+    REQUIRE(child.size() == 1);
+    CHECK(child.trackIdAt(0) == modern);
+
+    auto spy = ObserverSpy{};
+    child.attach(&spy);
+
+    auto fresh = testLibrary.addTrack(makeTrackSpec("fresh", 2023, 260000));
+    source.insert(fresh, 2);
+
+    REQUIRE(spy.events.size() == 1);
+    CHECK(spy.events[0].kind == ObserverSpy::EventKind::Inserted);
+    CHECK(spy.events[0].id == fresh);
+    CHECK(spy.events[0].index == 1);
+    REQUIRE(child.size() == 2);
+    CHECK(child.trackIdAt(1) == fresh);
+
+    spy.clear();
+
+    testLibrary.updateTrack(modern, [](TrackBuilder& builder)
+    {
+      builder.metadata().year(2019);
+    });
+    source.update(modern);
+
+    REQUIRE(spy.events.size() == 1);
+    CHECK(spy.events[0].kind == ObserverSpy::EventKind::Removed);
+    CHECK(spy.events[0].id == modern);
+    CHECK(spy.events[0].index == 0);
+    REQUIRE(child.size() == 1);
+    CHECK(child.trackIdAt(0) == fresh);
+
+    child.detach(&spy);
+  }
+
   SECTION("invalid expression is isolated from sibling lists")
   {
     auto testLibrary = TestMusicLibrary{};

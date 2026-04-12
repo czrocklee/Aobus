@@ -48,6 +48,16 @@ namespace rs::core
     return getString(header()->filterOffset, header()->filterLen);
   }
 
+  ListId ListView::sourceListId() const noexcept
+  {
+    return ListId{header()->sourceListId};
+  }
+
+  bool ListView::isRootSource() const noexcept
+  {
+    return sourceListId() == ListId{0};
+  }
+
   ListView::TrackProxy ListView::tracks() const
   {
     auto const offset = kListHeaderSize;

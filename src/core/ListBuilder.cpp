@@ -25,6 +25,7 @@ namespace rs::core
   ListBuilder ListBuilder::fromRecord(ListRecord const& record)
   {
     auto builder = ListBuilder{};
+    builder._sourceListId = record.sourceListId;
     builder._name = record.name;
     builder._description = record.description;
     builder._filter = record.filter;
@@ -36,6 +37,7 @@ namespace rs::core
   ListBuilder ListBuilder::fromView(ListView const& view)
   {
     auto builder = ListBuilder{};
+    builder._sourceListId = view.sourceListId();
     builder._name = view.name();
     builder._description = view.description();
     builder._filter = view.filter();
@@ -57,6 +59,7 @@ namespace rs::core
   ListRecord ListBuilder::record() const
   {
     auto record = ListRecord{};
+    record.sourceListId = _sourceListId;
     record.name = std::string{_name};
     record.description = std::string{_description};
     record.filter = std::string{_filter};
@@ -83,6 +86,12 @@ namespace rs::core
   ListBuilder& ListBuilder::filter(std::string_view v)
   {
     _filter = v;
+    return *this;
+  }
+
+  ListBuilder& ListBuilder::sourceListId(ListId v)
+  {
+    _sourceListId = v;
     return *this;
   }
 
@@ -151,6 +160,7 @@ namespace rs::core
     header.descLen = static_cast<std::uint16_t>(descLen);
     header.filterOffset = static_cast<std::uint16_t>(filterOffset);
     header.filterLen = static_cast<std::uint16_t>(filterLen);
+    header.sourceListId = _sourceListId.value();
 
     // Copy header
     result.insert_range(result.end(), utility::bytes::view(header));

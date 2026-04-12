@@ -77,6 +77,8 @@ private:
   void importFiles();
   void importFilesFromPath(std::filesystem::path const& path);
   void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files);
+  void openNewListDialog(rs::core::ListId defaultSourceListId);
+  bool listHasChildren(rs::core::ListId listId) const;
 
   // List management - using ListDraft
   void createList(app::model::ListDraft const& draft);
@@ -89,7 +91,7 @@ private:
   void clearTrackPages();
   void rebuildListPages(rs::lmdb::ReadTransaction& txn);
   void buildPageForAllTracks();
-  void buildPageForStoredList(rs::core::ListId listId, rs::core::ListView const& view, rs::lmdb::ReadTransaction& txn);
+  void buildPageForStoredList(rs::core::ListId listId, rs::core::ListView const& view);
 
   // Notification handlers from AllTrackIdsList
   void notifyTracksInserted(std::vector<rs::core::TrackId> const& ids);
@@ -152,6 +154,7 @@ private:
   Glib::RefPtr<Gio::ListStore<ListRow>> _listStore;
   Glib::RefPtr<Gtk::SingleSelection> _listSelectionModel;
   Glib::RefPtr<Gio::SimpleAction> _newListAction;
+  Glib::RefPtr<Gio::SimpleAction> _newChildListAction;
   Glib::RefPtr<Gio::SimpleAction> _deleteListAction;
 
   // Track pages map

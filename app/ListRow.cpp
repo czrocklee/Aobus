@@ -4,14 +4,21 @@
 #include "ListRow.h"
 
 ListRow::ListRow()
-  : _listId{ListId{0}}, _name{}
+  : _listId{ListId{0}}, _sourceListId{ListId{0}}, _depth{0}, _isSmart{false}, _name{}
 {
 }
 
-Glib::RefPtr<ListRow> ListRow::create(ListId id, Glib::ustring const& name)
+Glib::RefPtr<ListRow> ListRow::create(ListId id,
+                                      ListId sourceListId,
+                                      int depth,
+                                      bool smart,
+                                      Glib::ustring const& name)
 {
   auto obj = Glib::make_refptr_for_instance<ListRow>(new ListRow());
   obj->_listId = id;
+  obj->_sourceListId = sourceListId;
+  obj->_depth = depth;
+  obj->_isSmart = smart;
   obj->_name = name;
   return obj;
 }

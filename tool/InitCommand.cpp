@@ -28,8 +28,10 @@ namespace
         if (!tagFile) { continue; }
 
         auto builder = tagFile->loadTrack();
+        // NOTE: pathStr must outlive builder because PropertyBuilder stores string_view
+        auto const pathStr = path.string();
         builder.property()
-          .uri(path.string())
+          .uri(pathStr)
           .fileSize(std::filesystem::file_size(path))
           .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
 

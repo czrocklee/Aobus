@@ -9,26 +9,72 @@
 #include "model/AllTrackIdsList.h"
 #include "model/FilteredTrackIdList.h"
 #include "model/SmartListEngine.h"
+#include "model/TrackIdList.h"
 #include "model/TrackRowDataProvider.h"
 
 #include <rs/core/MusicLibrary.h>
 
 #include <algorithm>
 
+namespace
+{
+  auto composeEffectiveExpression(std::string_view parent, std::string_view local) -> std::string
+  {
+    if (parent.empty())
+    {
+      return std::string{local};
+    }
+    if (local.empty())
+    {
+      return std::string{parent};
+    }
+
+    return std::string{"("} + std::string{parent} + ") and (" + std::string{local} + ")";
+  }
+
+  auto displayExpression(std::string_view expression) -> std::string
+  {
+    if (expression.empty())
+    {
+      return "(none)";
+    }
+
+    return std::string{expression};
+  }
+}
+
 NewListDialog::NewListDialog(Gtk::Window& parent,
                              rs::core::MusicLibrary& musicLibrary,
                              app::model::AllTrackIdsList& allTrackIds,
-                             std::shared_ptr<app::model::TrackRowDataProvider> rowDataProvider)
+                             std::shared_ptr<app::model::TrackRowDataProvider> rowDataProvider,
+                             std::vector<SourceChoice> sourceChoices,
+                             rs::core::ListId defaultSourceListId)
   : _exprBox(musicLibrary)
   , _musicLibrary(&musicLibrary)
   , _allTrackIds(&allTrackIds)
   , _rowDataProvider(std::move(rowDataProvider))
+  , _sourceChoices(std::move(sourceChoices))
 {
   set_title("New List");
   set_transient_for(parent);
   set_modal(true);
   setupUi();
+
+  if (!_sourceChoices.empty())
+  {
+    auto const iter = std::find_if(_sourceChoices.begin(), _sourceChoices.end(), [defaultSourceListId](SourceChoice const& choice)
+    {
+      return choice.listId == defaultSourceListId;
+    });
+    if (iter != _sourceChoices.end())
+    {
+      auto const index = static_cast<guint>(std::distance(_sourceChoices.begin(), iter));
+      _sourceDropDown.set_selected(index);
+    }
+  }
+
   setupPreview();
+  updatePreview();
 }
 
 NewListDialog::~NewListDialog()
@@ -39,10 +85,11 @@ NewListDialog::~NewListDialog()
 void NewListDialog::setupUi()
 {
   constexpr int kDialogWidth = 800;
-  constexpr int kDialogHeight = 400;
+  constexpr int kDialogHeight = 500;
   constexpr int kBoxSpacing = 8;
   constexpr int kBoxMargin = 12;
   constexpr int kButtonBoxSpacing = 6;
+  constexpr int kLabelMinLines = 2;
 
   set_default_size(kDialogWidth, kDialogHeight);
 
@@ -68,8 +115,34 @@ void NewListDialog::setupUi()
   _leftPanel.append(descLabel);
   _leftPanel.append(_descEntry);
 
+  // Source selector
+  auto sourceLabel = Gtk::Label("Source:");
+  sourceLabel.set_halign(Gtk::Align::START);
+  _sourceItems = Gtk::StringList::create();
+  for (auto const& choice : _sourceChoices)
+  {
+    _sourceItems->append(choice.name);
+  }
+  _sourceDropDown.set_model(_sourceItems);
+  // Connect to selection changes using signal_changed()
+  _sourceDropDown.property_selected().signal_changed().connect([this]()
+  {
+    rebuildPreviewSource();
+    updatePreview();
+  });
+  _leftPanel.append(sourceLabel);
+  _leftPanel.append(_sourceDropDown);
+
+  auto inheritedLabel = Gtk::Label("Inherited Expression:");
+  inheritedLabel.set_halign(Gtk::Align::START);
+  _inheritedExprLabel.set_halign(Gtk::Align::START);
+  _inheritedExprLabel.set_wrap(true);
+  _inheritedExprLabel.set_lines(kLabelMinLines);
+  _leftPanel.append(inheritedLabel);
+  _leftPanel.append(_inheritedExprLabel);
+
   // Expression field
-  auto exprLabel = Gtk::Label("Expression:");
+  auto exprLabel = Gtk::Label("Local Expression:");
   exprLabel.set_halign(Gtk::Align::START);
   _exprBox.entry().set_placeholder_text("Query expression (type $, @, #, or %)");
   _exprBox.entry().signal_changed().connect([this]()
@@ -87,6 +160,14 @@ void NewListDialog::setupUi()
   });
   _leftPanel.append(exprLabel);
   _leftPanel.append(_exprBox);
+
+  auto effectiveLabel = Gtk::Label("Effective Expression:");
+  effectiveLabel.set_halign(Gtk::Align::START);
+  _effectiveExprLabel.set_halign(Gtk::Align::START);
+  _effectiveExprLabel.set_wrap(true);
+  _effectiveExprLabel.set_lines(kLabelMinLines);
+  _leftPanel.append(effectiveLabel);
+  _leftPanel.append(_effectiveExprLabel);
 
   // Error label (shown below expression when invalid)
   _errorLabel.set_visible(false);
@@ -106,8 +187,7 @@ void NewListDialog::setupUi()
   _okButton.set_sensitive(false);
   _okButton.signal_clicked().connect([this]() { response(Gtk::ResponseType::OK); });
 
-  // Enable OK button when name is filled
-  _nameEntry.signal_changed().connect([this]() { _okButton.set_sensitive(!_nameEntry.get_text().empty()); });
+  _nameEntry.signal_changed().connect([this]() { updateDialogState(); });
 
   buttonBox.append(_cancelButton);
   buttonBox.append(_okButton);
@@ -148,17 +228,8 @@ void NewListDialog::setupPreview()
   // Create preview engine for expression evaluation
   _previewEngine = std::make_unique<app::model::SmartListEngine>(*_musicLibrary);
 
-  // Create FilteredTrackIdList for expression evaluation
-  _previewFilteredList = std::make_unique<app::model::FilteredTrackIdList>(*_allTrackIds, *_musicLibrary, *_previewEngine);
-
-  // Create TrackListAdapter to bridge to GTK
-  _previewAdapter = std::make_shared<TrackListAdapter>(*_previewFilteredList, _rowDataProvider);
-
-  // Create single-selection model for ColumnView
-  auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
-  _previewColumnView.set_model(selectionModel);
-
   setupPreviewColumns();
+  rebuildPreviewSource();
 }
 
 void NewListDialog::setupPreviewColumns()
@@ -218,8 +289,69 @@ void NewListDialog::setupPreviewColumns()
   _previewColumnView.append_column(column);
 }
 
+void NewListDialog::rebuildPreviewSource()
+{
+  _previewFilteredList.reset();
+  _previewAdapter.reset();
+
+  auto const* choice = selectedSourceChoice();
+  if (choice == nullptr || choice->source == nullptr)
+  {
+    _sourceValid = false;
+    auto emptySelection = Glib::RefPtr<Gtk::SelectionModel>{};
+    _previewColumnView.set_model(emptySelection);
+    updateSourceLabels();
+    updateDialogState();
+    return;
+  }
+
+  _previewFilteredList = std::make_unique<app::model::FilteredTrackIdList>(*choice->source, *_musicLibrary, *_previewEngine);
+  _previewAdapter = std::make_shared<TrackListAdapter>(*_previewFilteredList, _rowDataProvider);
+
+  auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
+  _previewColumnView.set_model(selectionModel);
+  _sourceValid = true;
+  updateSourceLabels();
+  updateDialogState();
+}
+
+void NewListDialog::updateSourceLabels()
+{
+  auto const* choice = selectedSourceChoice();
+  if (choice == nullptr)
+  {
+    _inheritedExprLabel.set_text("(invalid source)");
+    _effectiveExprLabel.set_text("(invalid source)");
+    return;
+  }
+
+  _inheritedExprLabel.set_text(displayExpression(choice->inheritedExpression));
+
+  auto const localExpr = std::string(_exprBox.entry().get_text());
+  auto const effectiveExpression = composeEffectiveExpression(choice->inheritedExpression, localExpr);
+  _effectiveExprLabel.set_text(displayExpression(effectiveExpression));
+}
+
+void NewListDialog::updateDialogState()
+{
+  _okButton.set_sensitive(!_nameEntry.get_text().empty() && _sourceValid && _expressionValid);
+}
+
 void NewListDialog::updatePreview()
 {
+  updateSourceLabels();
+
+  if (!_previewFilteredList)
+  {
+    _expressionValid = false;
+    _errorLabel.set_visible(true);
+    _errorLabel.set_text("Source list is unavailable.");
+    _previewScrolledWindow.set_visible(false);
+    _matchCountLabel.set_markup("<i>Invalid source</i>");
+    updateDialogState();
+    return;
+  }
+
   auto const& expr = _exprBox.entry().get_text();
 
   if (expr.empty())
@@ -229,15 +361,17 @@ void NewListDialog::updatePreview()
     _previewScrolledWindow.set_visible(true);
     _previewFilteredList->setExpression("");
     _previewFilteredList->reload();
+    _expressionValid = true;
     auto const total = _previewFilteredList->size();
     if (total == 0)
     {
-      _matchCountLabel.set_markup("<i>No tracks in library</i>");
+      _matchCountLabel.set_markup("<i>No tracks in source</i>");
     }
     else
     {
-      _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing all ", total, " tracks</i>"));
+      _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing all ", total, " source tracks</i>"));
     }
+    updateDialogState();
     return;
   }
 
@@ -252,6 +386,7 @@ void NewListDialog::updatePreview()
     _errorLabel.set_text("Expression error: " + _previewFilteredList->errorMessage());
     _previewScrolledWindow.set_visible(false);
     _matchCountLabel.set_markup("<i>Invalid expression</i>");
+    _expressionValid = false;
   }
   else
   {
@@ -259,6 +394,7 @@ void NewListDialog::updatePreview()
     _exprBox.entry().remove_css_class("error");
     _errorLabel.set_visible(false);
     _previewScrolledWindow.set_visible(true);
+    _expressionValid = true;
 
     auto const total = _previewFilteredList->size();
     constexpr std::size_t kMaxPreview = 10;
@@ -277,12 +413,29 @@ void NewListDialog::updatePreview()
       _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing ", shown, " of ", total, " matches</i>"));
     }
   }
+
+  updateDialogState();
+}
+
+NewListDialog::SourceChoice const* NewListDialog::selectedSourceChoice() const
+{
+  auto const selected = _sourceDropDown.get_selected();
+  if (selected == GTK_INVALID_LIST_POSITION || selected >= _sourceChoices.size())
+  {
+    return nullptr;
+  }
+
+  return &_sourceChoices[selected];
 }
 
 app::model::ListDraft NewListDialog::draft() const
 {
   app::model::ListDraft draftData;
   draftData.kind = app::model::ListKind::Smart;
+  if (auto const* choice = selectedSourceChoice())
+  {
+    draftData.sourceListId = choice->listId;
+  }
   draftData.name = _nameEntry.get_text();
   draftData.description = _descEntry.get_text();
   draftData.expression = _exprBox.entry().get_text();

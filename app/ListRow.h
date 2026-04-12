@@ -17,15 +17,31 @@ public:
   ListId getListId() const { return _listId; }
   void setListId(ListId id) { _listId = id; }
 
+  ListId getSourceListId() const { return _sourceListId; }
+  void setSourceListId(ListId id) { _sourceListId = id; }
+
+  int getDepth() const { return _depth; }
+  void setDepth(int depth) { _depth = depth; }
+
+  bool isSmart() const { return _isSmart; }
+  void setSmart(bool smart) { _isSmart = smart; }
+
   Glib::ustring getName() const { return _name; }
   void setName(Glib::ustring const& name) { _name = name; }
 
-  static Glib::RefPtr<ListRow> create(ListId id, Glib::ustring const& name);
+  static Glib::RefPtr<ListRow> create(ListId id,
+                                      ListId sourceListId,
+                                      int depth,
+                                      bool smart,
+                                      Glib::ustring const& name);
 
 protected:
   explicit ListRow();
 
 private:
   ListId _listId;
+  ListId _sourceListId;
+  int _depth = 0;
+  bool _isSmart = false;
   Glib::ustring _name;
 };

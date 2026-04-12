@@ -31,7 +31,11 @@ namespace
 
   TEST_CASE("ListView - Field Accessors")
   {
-    auto payload = rs::core::ListBuilder::createNew().name("Test").description("Desc").serialize();
+    auto payload = rs::core::ListBuilder::createNew()
+                     .name("Test")
+                     .description("Desc")
+                     .sourceListId(rs::core::ListId{9})
+                     .serialize();
     auto view = ListView{payload};
 
     CHECK(view.tracks().size() == 0);
@@ -39,6 +43,8 @@ namespace
     CHECK(view.description() == "Desc");
     CHECK(view.filter().empty());
     CHECK(view.isSmart() == false);
+    CHECK(view.sourceListId() == rs::core::ListId{9});
+    CHECK(view.isRootSource() == false);
   }
 
   TEST_CASE("ListView - Manual List with TrackIds")
@@ -83,6 +89,7 @@ namespace
     CHECK(view.name().empty());
     CHECK(view.description().empty());
     CHECK(view.filter().empty());
+    CHECK(view.isRootSource() == true);
   }
 
   TEST_CASE("ListView - Invalid Data")

@@ -27,6 +27,7 @@ namespace app::model
   struct ListDraft
   {
     ListKind kind = ListKind::Smart;
+    rs::core::ListId sourceListId = rs::core::ListId{0};
     std::string name;
     std::string description;
     std::string expression;                  // Only used for Smart lists
