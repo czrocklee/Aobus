@@ -112,7 +112,7 @@ TEST_CASE("Database::Reader - get", "[lmdb][database][reader]")
 
 TEST_CASE("Database::Reader::Iterator - default constructor", "[lmdb][database][reader]")
 {
-  Database::Reader::Iterator it;
+  auto it = Database::Reader::Iterator{};
   // Default constructed iterator should equal end
 }
 

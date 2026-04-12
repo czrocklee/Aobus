@@ -81,7 +81,7 @@ struct Canonicalizer
 
 std::string canonicalize(Expression const& expr)
 {
-  Canonicalizer canonicalizer{};
+  auto canonicalizer = Canonicalizer{};
   std::visit(canonicalizer, expr);
   return canonicalizer.oss.str();
 }

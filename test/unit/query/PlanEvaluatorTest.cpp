@@ -503,7 +503,7 @@ TEST_CASE("PlanEvaluator - Tag Query - With Matching Tag")
 
   // Query for #rock
   auto expr = parse("#rock");
-  QueryCompiler compiler{&dict}; // Pass dictionary for tag resolution
+  auto compiler = QueryCompiler{&dict}; // Pass dictionary for tag resolution
   auto plan = compiler.compile(expr);
   auto evaluator = PlanEvaluator{};
 

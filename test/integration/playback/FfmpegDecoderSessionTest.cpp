@@ -20,24 +20,24 @@ namespace app::playback
 
   TEST_CASE("FfmpegDecoderSession construction", "[playback][ffmpeg]")
   {
-    StreamFormat outputFormat;
+    auto outputFormat = StreamFormat{};
     outputFormat.sampleRate = 44100;
     outputFormat.channels = 2;
     outputFormat.bitDepth = 16;
     outputFormat.isInterleaved = true;
 
-    FfmpegDecoderSession session(outputFormat);
+    auto session = FfmpegDecoderSession{outputFormat};
     // Construction should not throw
   }
 
   TEST_CASE("FfmpegDecoderSession streamInfo before open", "[playback][ffmpeg]")
   {
-    StreamFormat outputFormat;
+    auto outputFormat = StreamFormat{};
     outputFormat.sampleRate = 44100;
     outputFormat.channels = 2;
     outputFormat.bitDepth = 16;
 
-    FfmpegDecoderSession session(outputFormat);
+    auto session = FfmpegDecoderSession{outputFormat};
     auto info = session.streamInfo();
 
     // Before opening, duration should be 0
@@ -47,9 +47,9 @@ namespace app::playback
   TEST_CASE("FfmpegDecoderSession default output format", "[playback][ffmpeg]")
   {
     // When output format has zero values, should use source format
-    StreamFormat outputFormat; // All zeros
+    auto outputFormat = StreamFormat{}; // All zeros
 
-    FfmpegDecoderSession session(outputFormat);
+    auto session = FfmpegDecoderSession{outputFormat};
     auto info = session.streamInfo();
 
     // Source format should be stored even if no file opened
@@ -58,12 +58,12 @@ namespace app::playback
 
   TEST_CASE("FfmpegDecoderSession open valid file", "[playback][ffmpeg]")
   {
-    StreamFormat outputFormat;
+    auto outputFormat = StreamFormat{};
     outputFormat.sampleRate = 44100;
     outputFormat.channels = 2;
     outputFormat.bitDepth = 16;
 
-    FfmpegDecoderSession session(outputFormat);
+    auto session = FfmpegDecoderSession{outputFormat};
 
     // Create a minimal test fixture path
     auto testFile = std::filesystem::path(kTestFixtureDir) / "test.mp3";
@@ -86,12 +86,12 @@ namespace app::playback
 
   TEST_CASE("FfmpegDecoderSession close resets state", "[playback][ffmpeg]")
   {
-    StreamFormat outputFormat;
+    auto outputFormat = StreamFormat{};
     outputFormat.sampleRate = 44100;
     outputFormat.channels = 2;
     outputFormat.bitDepth = 16;
 
-    FfmpegDecoderSession session(outputFormat);
+    auto session = FfmpegDecoderSession{outputFormat};
 
     auto testFile = std::filesystem::path(kTestFixtureDir) / "test.mp3";
     if (std::filesystem::exists(testFile))
@@ -110,12 +110,12 @@ namespace app::playback
 
   TEST_CASE("FfmpegDecoderSession readNextBlock returns nullopt when not open", "[playback][ffmpeg]")
   {
-    StreamFormat outputFormat;
+    auto outputFormat = StreamFormat{};
     outputFormat.sampleRate = 44100;
     outputFormat.channels = 2;
     outputFormat.bitDepth = 16;
 
-    FfmpegDecoderSession session(outputFormat);
+    auto session = FfmpegDecoderSession{outputFormat};
 
     auto block = session.readNextBlock();
     CHECK(!block.has_value());
@@ -123,7 +123,7 @@ namespace app::playback
 
   TEST_CASE("PcmBlock structure", "[playback][pcmblock]")
   {
-    PcmBlock block;
+    auto block = PcmBlock{};
     CHECK(block.frames == 0);
     CHECK(block.firstFrameIndex == 0);
     CHECK(block.endOfStream == false);
@@ -133,7 +133,7 @@ namespace app::playback
 
   TEST_CASE("DecodedStreamInfo structure", "[playback][decodedstreaminfo]")
   {
-    DecodedStreamInfo info;
+    auto info = DecodedStreamInfo{};
     CHECK(info.durationMs == 0);
     CHECK(info.sourceFormat.sampleRate == 0);
     CHECK(info.outputFormat.sampleRate == 0);

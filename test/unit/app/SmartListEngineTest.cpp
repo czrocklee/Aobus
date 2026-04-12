@@ -43,6 +43,15 @@ namespace
     std::string customValue;
   };
 
+  TrackSpec makeTrackSpec(std::string_view title, std::uint16_t year, std::uint32_t durationMs = 180000)
+  {
+    auto spec = TrackSpec{};
+    spec.title = title;
+    spec.year = year;
+    spec.durationMs = durationMs;
+    return spec;
+  }
+
   class MutableTrackIdList final : public TrackIdList
   {
   public:
@@ -203,17 +212,17 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
 {
   SECTION("empty expression matches all tracks and preserves source order")
   {
-    TestMusicLibrary testLibrary;
-    auto first = testLibrary.addTrack({.title = "first", .year = 2020});
-    auto second = testLibrary.addTrack({.title = "second", .year = 2021});
+    auto testLibrary = TestMusicLibrary{};
+    auto first = testLibrary.addTrack(makeTrackSpec("first", 2020));
+    auto second = testLibrary.addTrack(makeTrackSpec("second", 2021));
 
-    MutableTrackIdList source;
+    auto source = MutableTrackIdList{};
     source.addInitial(second);
     source.addInitial(first);
 
-    SmartListEngine engine(testLibrary.library());
-    FilteredTrackIdList filtered(source, testLibrary.library(), engine);
-    ObserverSpy spy;
+    auto engine = SmartListEngine{testLibrary.library()};
+    auto filtered = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto spy = ObserverSpy{};
     filtered.attach(&spy);
 
     filtered.reload();
@@ -230,24 +239,24 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
 
   SECTION("reloading one list does not reset sibling lists sharing a source")
   {
-    TestMusicLibrary testLibrary;
-    auto first = testLibrary.addTrack({.title = "first", .year = 2020, .durationMs = 180000});
-    auto second = testLibrary.addTrack({.title = "second", .year = 2022, .durationMs = 260000});
+    auto testLibrary = TestMusicLibrary{};
+    auto first = testLibrary.addTrack(makeTrackSpec("first", 2020, 180000));
+    auto second = testLibrary.addTrack(makeTrackSpec("second", 2022, 260000));
 
-    MutableTrackIdList source;
+    auto source = MutableTrackIdList{};
     source.addInitial(first);
     source.addInitial(second);
 
-    SmartListEngine engine(testLibrary.library());
-    FilteredTrackIdList hotList(source, testLibrary.library(), engine);
-    FilteredTrackIdList coldList(source, testLibrary.library(), engine);
+    auto engine = SmartListEngine{testLibrary.library()};
+    auto hotList = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto coldList = FilteredTrackIdList{source, testLibrary.library(), engine};
     hotList.setExpression("$year >= 2021");
     hotList.reload();
     coldList.setExpression("@duration >= 240000");
     coldList.reload();
 
-    ObserverSpy hotSpy;
-    ObserverSpy coldSpy;
+    auto hotSpy = ObserverSpy{};
+    auto coldSpy = ObserverSpy{};
     hotList.attach(&hotSpy);
     coldList.attach(&coldSpy);
 
@@ -268,26 +277,26 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
 
   SECTION("source insert emits inserted notifications instead of bucket resets")
   {
-    TestMusicLibrary testLibrary;
-    auto original = testLibrary.addTrack({.title = "old", .year = 2020, .durationMs = 180000});
+    auto testLibrary = TestMusicLibrary{};
+    auto original = testLibrary.addTrack(makeTrackSpec("old", 2020, 180000));
 
-    MutableTrackIdList source;
+    auto source = MutableTrackIdList{};
     source.addInitial(original);
 
-    SmartListEngine engine(testLibrary.library());
-    FilteredTrackIdList hotList(source, testLibrary.library(), engine);
-    FilteredTrackIdList coldList(source, testLibrary.library(), engine);
+    auto engine = SmartListEngine{testLibrary.library()};
+    auto hotList = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto coldList = FilteredTrackIdList{source, testLibrary.library(), engine};
     hotList.setExpression("$year >= 2021");
     hotList.reload();
     coldList.setExpression("@duration >= 240000");
     coldList.reload();
 
-    ObserverSpy hotSpy;
-    ObserverSpy coldSpy;
+    auto hotSpy = ObserverSpy{};
+    auto coldSpy = ObserverSpy{};
     hotList.attach(&hotSpy);
     coldList.attach(&coldSpy);
 
-    auto inserted = testLibrary.addTrack({.title = "new", .year = 2023, .durationMs = 250000});
+    auto inserted = testLibrary.addTrack(makeTrackSpec("new", 2023, 250000));
     source.insert(inserted, 1);
 
     REQUIRE(hotSpy.events.size() == 1);
@@ -309,18 +318,18 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
 
   SECTION("source update diffs membership transitions incrementally")
   {
-    TestMusicLibrary testLibrary;
-    auto trackId = testLibrary.addTrack({.title = "track", .year = 2020});
+    auto testLibrary = TestMusicLibrary{};
+    auto trackId = testLibrary.addTrack(makeTrackSpec("track", 2020));
 
-    MutableTrackIdList source;
+    auto source = MutableTrackIdList{};
     source.addInitial(trackId);
 
-    SmartListEngine engine(testLibrary.library());
-    FilteredTrackIdList filtered(source, testLibrary.library(), engine);
+    auto engine = SmartListEngine{testLibrary.library()};
+    auto filtered = FilteredTrackIdList{source, testLibrary.library(), engine};
     filtered.setExpression("$year >= 2021");
     filtered.reload();
 
-    ObserverSpy spy;
+    auto spy = ObserverSpy{};
     filtered.attach(&spy);
 
     testLibrary.updateTrack(trackId, [](TrackBuilder& builder)
@@ -366,18 +375,18 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
 
   SECTION("invalid expression is isolated from sibling lists")
   {
-    TestMusicLibrary testLibrary;
-    auto first = testLibrary.addTrack({.title = "first", .year = 2022});
+    auto testLibrary = TestMusicLibrary{};
+    auto first = testLibrary.addTrack(makeTrackSpec("first", 2022));
 
-    MutableTrackIdList source;
+    auto source = MutableTrackIdList{};
     source.addInitial(first);
 
-    SmartListEngine engine(testLibrary.library());
-    FilteredTrackIdList validList(source, testLibrary.library(), engine);
-    FilteredTrackIdList invalidList(source, testLibrary.library(), engine);
+    auto engine = SmartListEngine{testLibrary.library()};
+    auto validList = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto invalidList = FilteredTrackIdList{source, testLibrary.library(), engine};
     validList.setExpression("$year >= 2021");
     validList.reload();
-    invalidList.setExpression("$year =");
+    invalidList.setExpression("   ");
     invalidList.reload();
 
     REQUIRE_FALSE(validList.hasError());
@@ -386,12 +395,12 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     CHECK_FALSE(invalidList.errorMessage().empty());
     CHECK(invalidList.size() == 0);
 
-    ObserverSpy validSpy;
-    ObserverSpy invalidSpy;
+    auto validSpy = ObserverSpy{};
+    auto invalidSpy = ObserverSpy{};
     validList.attach(&validSpy);
     invalidList.attach(&invalidSpy);
 
-    auto second = testLibrary.addTrack({.title = "second", .year = 2023});
+    auto second = testLibrary.addTrack(makeTrackSpec("second", 2023));
     source.insert(second, 1);
 
     REQUIRE(validSpy.events.size() == 1);

@@ -104,7 +104,7 @@ TEST_CASE("TrackStore - update", "[core][track]")
   wtxn2.commit();
 
   // Update the track
-  TrackHotHeader hotHeader2{};
+  auto hotHeader2 = TrackHotHeader{};
 
   auto hotData2 = std::vector<std::byte>{sizeof(TrackHotHeader)};
   std::memcpy(hotData2.data(), &hotHeader2, sizeof(TrackHotHeader));
@@ -261,7 +261,7 @@ TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
   wtxn3.commit();
 
   // Update cold only
-  TrackColdHeader coldHeader2{};
+  auto coldHeader2 = TrackColdHeader{};
   coldHeader2.fileSizeLo = static_cast<std::uint32_t>(2000 & 0xFFFFFFFF);
   coldHeader2.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(2000) >> 32);
   coldHeader2.mtimeLo = static_cast<std::uint32_t>(9876543210 & 0xFFFFFFFF);
