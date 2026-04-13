@@ -46,33 +46,18 @@ namespace
 NewListDialog::NewListDialog(Gtk::Window& parent,
                              rs::core::MusicLibrary& musicLibrary,
                              app::model::AllTrackIdsList& allTrackIds,
-                             std::shared_ptr<app::model::TrackRowDataProvider> rowDataProvider,
-                             std::vector<SourceChoice> sourceChoices,
-                             rs::core::ListId defaultSourceListId)
+                             app::model::TrackIdList& parentMembershipList,
+                             rs::core::ListId parentListId)
   : _exprBox(musicLibrary)
   , _musicLibrary(&musicLibrary)
   , _allTrackIds(&allTrackIds)
-  , _rowDataProvider(std::move(rowDataProvider))
-  , _sourceChoices(std::move(sourceChoices))
+  , _parentListId(parentListId)
+  , _parentMembershipList(&parentMembershipList)
 {
   set_title("New List");
   set_transient_for(parent);
   set_modal(true);
   setupUi();
-
-  if (!_sourceChoices.empty())
-  {
-    auto const iter = std::find_if(_sourceChoices.begin(), _sourceChoices.end(), [defaultSourceListId](SourceChoice const& choice)
-    {
-      return choice.listId == defaultSourceListId;
-    });
-    if (iter != _sourceChoices.end())
-    {
-      auto const index = static_cast<guint>(std::distance(_sourceChoices.begin(), iter));
-      _sourceDropDown.set_selected(index);
-    }
-  }
-
   setupPreview();
   updatePreview();
 }
@@ -114,24 +99,6 @@ void NewListDialog::setupUi()
   _descEntry.set_placeholder_text("Optional description");
   _leftPanel.append(descLabel);
   _leftPanel.append(_descEntry);
-
-  // Source selector
-  auto sourceLabel = Gtk::Label("Source:");
-  sourceLabel.set_halign(Gtk::Align::START);
-  _sourceItems = Gtk::StringList::create();
-  for (auto const& choice : _sourceChoices)
-  {
-    _sourceItems->append(choice.name);
-  }
-  _sourceDropDown.set_model(_sourceItems);
-  // Connect to selection changes using signal_changed()
-  _sourceDropDown.property_selected().signal_changed().connect([this]()
-  {
-    rebuildPreviewSource();
-    updatePreview();
-  });
-  _leftPanel.append(sourceLabel);
-  _leftPanel.append(_sourceDropDown);
 
   auto inheritedLabel = Gtk::Label("Inherited Expression:");
   inheritedLabel.set_halign(Gtk::Align::START);
@@ -291,56 +258,131 @@ void NewListDialog::setupPreviewColumns()
 
 void NewListDialog::rebuildPreviewSource()
 {
-  _previewFilteredList.reset();
-  _previewAdapter.reset();
-
-  auto const* choice = selectedSourceChoice();
-  if (choice == nullptr || choice->source == nullptr)
+  // Use deferred execution to avoid GTK accessing freed adapter during event processing
+  // Schedule model replacement to happen after current GTK event is processed
+  Glib::signal_idle().connect_once([this]()
   {
-    _sourceValid = false;
+    // First clear the GTK model to release any held references
     auto emptySelection = Glib::RefPtr<Gtk::SelectionModel>{};
     _previewColumnView.set_model(emptySelection);
+    
+    // Now safe to reset adapter and filtered list
+    _previewFilteredList.reset();
+    _previewAdapter.reset();
+    
+    // Build new preview components
+    std::string_view inheritedExpr;
+    
+    // Check if parent is not All Tracks (All Tracks has special ID and no ListView)
+    auto const parentListIdValue = _parentListId.value();
+    auto const isAllTracks = (parentListIdValue == 0);
+    
+    if (!isAllTracks)
+    {
+      auto readTxn = _musicLibrary->readTransaction();
+      auto reader = _musicLibrary->lists().reader(readTxn);
+      auto listView = reader.get(_parentListId);
+      if (!listView)
+      {
+        updateSourceLabels();
+        updateDialogState();
+        return;
+      }
+      inheritedExpr = listView->filter();
+    }
+    
+    // Use the parent's membership list as source - this already has the inherited filter applied
+    _rowDataProvider = std::make_shared<app::model::TrackRowDataProvider>(*_musicLibrary);
+    
+    // For All Tracks, we can't use FilteredTrackIdList with _parentMembershipList
+    // because _parentMembershipList points to AllTrackIdsList which doesn't need filtering
+    // and using _previewEngine (a dialog-local engine) causes lifecycle issues
+    if (isAllTracks)
+    {
+      // All Tracks: use AllTrackIdsList directly with TrackListAdapter
+      // Since All Tracks has no filter, we show all tracks directly
+      _previewAdapter = std::make_shared<TrackListAdapter>(*_allTrackIds, _rowDataProvider);
+      auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
+      _previewColumnView.set_model(selectionModel);
+    }
+    else
+    {
+      // Other lists: use FilteredTrackIdList for additional filtering
+      _previewFilteredList = std::make_unique<app::model::FilteredTrackIdList>(*_parentMembershipList, *_musicLibrary, *_previewEngine);
+      _previewAdapter = std::make_shared<TrackListAdapter>(*_previewFilteredList, _rowDataProvider);
+      auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
+      _previewColumnView.set_model(selectionModel);
+    }
+    
     updateSourceLabels();
     updateDialogState();
-    return;
-  }
-
-  _previewFilteredList = std::make_unique<app::model::FilteredTrackIdList>(*choice->source, *_musicLibrary, *_previewEngine);
-  _previewAdapter = std::make_shared<TrackListAdapter>(*_previewFilteredList, _rowDataProvider);
-
-  auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
-  _previewColumnView.set_model(selectionModel);
-  _sourceValid = true;
-  updateSourceLabels();
-  updateDialogState();
+  });
 }
 
 void NewListDialog::updateSourceLabels()
 {
-  auto const* choice = selectedSourceChoice();
-  if (choice == nullptr)
+  std::string_view inheritedExpr;
+  
+  // Check if parent is not All Tracks (All Tracks has special ID and no ListView)
+  auto const parentListIdValue = _parentListId.value();
+  auto const isAllTracks = (parentListIdValue == 0);
+  
+  if (!isAllTracks)
   {
-    _inheritedExprLabel.set_text("(invalid source)");
-    _effectiveExprLabel.set_text("(invalid source)");
-    return;
+    auto readTxn = _musicLibrary->readTransaction();
+    auto reader = _musicLibrary->lists().reader(readTxn);
+    auto listView = reader.get(_parentListId);
+    if (!listView)
+    {
+      _inheritedExprLabel.set_text("(invalid source)");
+      _effectiveExprLabel.set_text("(invalid source)");
+      return;
+    }
+    inheritedExpr = listView->filter();
   }
 
-  _inheritedExprLabel.set_text(displayExpression(choice->inheritedExpression));
+  _inheritedExprLabel.set_text(displayExpression(inheritedExpr));
 
   auto const localExpr = std::string(_exprBox.entry().get_text());
-  auto const effectiveExpression = composeEffectiveExpression(choice->inheritedExpression, localExpr);
+  auto const effectiveExpression = composeEffectiveExpression(inheritedExpr, localExpr);
   _effectiveExprLabel.set_text(displayExpression(effectiveExpression));
 }
 
 void NewListDialog::updateDialogState()
 {
-  _okButton.set_sensitive(!_nameEntry.get_text().empty() && _sourceValid && _expressionValid);
+  _okButton.set_sensitive(!_nameEntry.get_text().empty() && _expressionValid);
 }
 
 void NewListDialog::updatePreview()
 {
   updateSourceLabels();
 
+  // Check if parent is All Tracks (no FilteredTrackIdList for that case)
+  auto const parentListIdValue = _parentListId.value();
+  auto const isAllTracks = (parentListIdValue == 0);
+
+  if (isAllTracks)
+  {
+    // All Tracks: just show all tracks
+    _exprBox.entry().remove_css_class("error");
+    _errorLabel.set_visible(false);
+    _previewScrolledWindow.set_visible(true);
+    _expressionValid = true;
+    
+    auto const total = _parentMembershipList->size();
+    if (total == 0)
+    {
+      _matchCountLabel.set_markup("<i>No tracks in library</i>");
+    }
+    else
+    {
+      _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing all ", total, " tracks</i>"));
+    }
+    updateDialogState();
+    return;
+  }
+
+  // For other lists, use FilteredTrackIdList
   if (!_previewFilteredList)
   {
     _expressionValid = false;
@@ -417,25 +459,11 @@ void NewListDialog::updatePreview()
   updateDialogState();
 }
 
-NewListDialog::SourceChoice const* NewListDialog::selectedSourceChoice() const
-{
-  auto const selected = _sourceDropDown.get_selected();
-  if (selected == GTK_INVALID_LIST_POSITION || selected >= _sourceChoices.size())
-  {
-    return nullptr;
-  }
-
-  return &_sourceChoices[selected];
-}
-
 app::model::ListDraft NewListDialog::draft() const
 {
   app::model::ListDraft draftData;
   draftData.kind = app::model::ListKind::Smart;
-  if (auto const* choice = selectedSourceChoice())
-  {
-    draftData.sourceListId = choice->listId;
-  }
+  draftData.sourceListId = _parentListId;
   draftData.name = _nameEntry.get_text();
   draftData.description = _descEntry.get_text();
   draftData.expression = _exprBox.entry().get_text();

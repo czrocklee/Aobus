@@ -39,10 +39,14 @@ namespace app::model
     void onInserted(TrackId id, std::size_t index) override;
     void onUpdated(TrackId id, std::size_t index) override;
     void onRemoved(TrackId id, std::size_t index) override;
+    void onSourceDestroyed() override;
+
+    void invalidate() { _valid = false; }
 
   private:
     SmartListEngine& _engine;
     TrackIdList& _source;
+    bool _valid = true;  // Set to false when engine is being destroyed
   };
 
   class SmartListEngine final
@@ -59,6 +63,7 @@ namespace app::model
     SmartListEngine(SmartListEngine&&) = delete;
     SmartListEngine& operator=(SmartListEngine&&) = delete;
 
+    bool isAlive() const { return _alive; }
     RegistrationId registerList(TrackIdList& source, TrackIdList& facade);
     void unregisterList(RegistrationId id);
 
@@ -89,6 +94,7 @@ namespace app::model
     void handleSourceInserted(SourceBucket& bucket, TrackId id, std::size_t sourceIndex);
     void handleSourceUpdated(SourceBucket& bucket, TrackId id, std::size_t sourceIndex);
     void handleSourceRemoved(SourceBucket& bucket, TrackId id);
+    void handleSourceDestroyed(SourceBucket& bucket);
 
     static std::size_t insertionIndexForSourceOrder(SmartListState const& state,
                                                     std::size_t sourceIndex);
@@ -103,6 +109,7 @@ namespace app::model
     RegistrationId _nextRegistrationId = 1;
     std::map<RegistrationId, std::unique_ptr<SmartListState>> _states;
     std::map<TrackIdList*, std::unique_ptr<SourceBucket>> _buckets;
+    bool _alive = true;
 
     friend class SourceObserver;
   };

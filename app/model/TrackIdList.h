@@ -30,6 +30,12 @@ namespace app::model
     virtual void onInserted(TrackId id, std::size_t index) = 0;
     virtual void onUpdated(TrackId id, std::size_t index) = 0;
     virtual void onRemoved(TrackId id, std::size_t index) = 0;
+
+    /**
+     * Called when the source list is being destroyed.
+     * Observers MUST NOT call any methods on source after this call returns.
+     */
+    virtual void onSourceDestroyed() {}
   };
 
   /**
@@ -39,7 +45,7 @@ namespace app::model
   class TrackIdList
   {
   public:
-    virtual ~TrackIdList() = default;
+    virtual ~TrackIdList();
 
     [[nodiscard]] virtual std::size_t size() const = 0;
     [[nodiscard]] virtual TrackId trackIdAt(std::size_t index) const = 0;

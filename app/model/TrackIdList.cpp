@@ -6,6 +6,14 @@
 namespace app::model
 {
 
+  TrackIdList::~TrackIdList()
+  {
+    for (auto* obs : _observers)
+    {
+      obs->onSourceDestroyed();
+    }
+  }
+
   void TrackIdList::attach(TrackIdListObserver* observer)
   {
     _observers.push_back(observer);

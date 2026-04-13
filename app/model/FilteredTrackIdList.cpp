@@ -19,7 +19,9 @@ namespace app::model
 
   FilteredTrackIdList::~FilteredTrackIdList()
   {
-    if (_engine && _registrationId != 0)
+    // Only unregister if engine is still alive (not being destroyed)
+    // This prevents use-after-free when the engine is destroyed before the facade
+    if (_engine && _engine->isAlive() && _registrationId != 0)
     {
       _engine->unregisterList(_registrationId);
     }

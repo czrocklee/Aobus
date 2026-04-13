@@ -469,4 +469,27 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     validList.detach(&validSpy);
     invalidList.detach(&invalidSpy);
   }
+
+  SECTION("source destruction is handled gracefully")
+  {
+    auto testLibrary = TestMusicLibrary{};
+    auto engine = SmartListEngine{testLibrary.library()};
+
+    auto* source = new MutableTrackIdList();
+    auto filtered = std::make_unique<FilteredTrackIdList>(*source, testLibrary.library(), engine);
+
+    auto spy = ObserverSpy{};
+    filtered->attach(&spy);
+
+    // Destroy source while filtered list is still alive
+    delete source;
+
+    // Filtered list should be notified of reset (source is gone)
+    REQUIRE(spy.events.size() == 1);
+    CHECK(spy.events[0].kind == ObserverSpy::EventKind::Reset);
+
+    // Now destroy filtered list - this calls unregisterList
+    // This should not crash despite source being gone!
+    filtered.reset();
+  }
 }

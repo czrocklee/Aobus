@@ -78,6 +78,7 @@ private:
   void importFilesFromPath(std::filesystem::path const& path);
   void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files);
   void openNewListDialog(rs::core::ListId defaultSourceListId);
+  void openNewSmartListDialog();
   bool listHasChildren(rs::core::ListId listId) const;
 
   // List management - using ListDraft
@@ -154,7 +155,6 @@ private:
   Glib::RefPtr<Gio::ListStore<ListRow>> _listStore;
   Glib::RefPtr<Gtk::SingleSelection> _listSelectionModel;
   Glib::RefPtr<Gio::SimpleAction> _newListAction;
-  Glib::RefPtr<Gio::SimpleAction> _newChildListAction;
   Glib::RefPtr<Gio::SimpleAction> _deleteListAction;
 
   // Track pages map

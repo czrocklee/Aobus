@@ -62,25 +62,6 @@ namespace
     return "list-" + std::to_string(static_cast<unsigned long>(listId.value()));
   }
 
-  auto composeEffectiveExpression(std::string_view parent, std::string_view local) -> std::string
-  {
-    if (parent.empty())
-    {
-      return std::string{local};
-    }
-    if (local.empty())
-    {
-      return std::string{parent};
-    }
-
-    return std::string{"("} + std::string{parent} + ") and (" + std::string{local} + ")";
-  }
-
-  auto manualMembershipDescription() -> std::string
-  {
-    return "(manual list membership)";
-  }
-
   struct StoredListNode final
   {
     rs::core::ListId id = rs::core::ListId{0};
@@ -421,124 +402,36 @@ void MainWindow::importFilesFromPath(std::filesystem::path const& path)
   _importDialog->show();
 }
 
-void MainWindow::openNewListDialog(rs::core::ListId defaultSourceListId)
+void MainWindow::openNewListDialog(rs::core::ListId parentListId)
 {
-  if (!_musicLibrary || !_allTrackIds)
+  if (!_musicLibrary)
   {
     return;
   }
 
-  auto readTxn = _musicLibrary->readTransaction();
-  auto reader = _musicLibrary->lists().reader(readTxn);
-
-  auto storedLists = std::map<rs::core::ListId, StoredListNode>{};
-  for (auto const& [id, view] : reader)
+  // Determine the parent membership list
+  app::model::TrackIdList* parentMembershipList = nullptr;
+  if (parentListId == allTracksListId())
   {
-    storedLists.emplace(id,
-                        StoredListNode{
-                          .id = id,
-                          .sourceListId = view.sourceListId(),
-                          .name = std::string(view.name()),
-                          .isSmart = view.isSmart(),
-                          .localExpression = std::string(view.filter()),
-                        });
+    // Use All Tracks as source
+    parentMembershipList = _allTrackIds.get();
   }
-
-  auto effectiveDescriptions = std::map<rs::core::ListId, std::string>{};
-  auto active = std::unordered_set<rs::core::ListId>{};
-
-  std::function<std::string(rs::core::ListId)> describeList = [&](rs::core::ListId listId) -> std::string
+  else
   {
-    if (auto const it = effectiveDescriptions.find(listId); it != effectiveDescriptions.end())
+    // Find the parent's membership list from track pages
+    auto const it = _trackPages.find(parentListId);
+    if (it != _trackPages.end() && it->second.membershipList)
     {
-      return it->second;
-    }
-
-    auto const nodeIt = storedLists.find(listId);
-    if (nodeIt == storedLists.end())
-    {
-      return "(invalid source)";
-    }
-
-    if (!active.insert(listId).second)
-    {
-      return "(cycle)";
-    }
-
-    auto const& node = nodeIt->second;
-    std::string result;
-    if (!node.isSmart)
-    {
-      result = manualMembershipDescription();
-    }
-    else if (node.sourceListId == rootSourceListId())
-    {
-      result = node.localExpression;
+      parentMembershipList = it->second.membershipList.get();
     }
     else
     {
-      auto const parentDescription = describeList(node.sourceListId);
-      if (parentDescription == "(invalid source)" || parentDescription == "(cycle)")
-      {
-        result = parentDescription;
-      }
-      else
-      {
-        result = composeEffectiveExpression(parentDescription, node.localExpression);
-      }
+      // Fallback to All Tracks if parent not found
+      parentMembershipList = _allTrackIds.get();
     }
-
-    active.erase(listId);
-    effectiveDescriptions.emplace(listId, result);
-    return result;
-  };
-
-  auto sourceChoices = std::vector<NewListDialog::SourceChoice>{};
-  sourceChoices.push_back(NewListDialog::SourceChoice{
-    .listId = rootSourceListId(),
-    .name = "All Tracks",
-    .inheritedExpression = {},
-    .source = _allTrackIds.get(),
-  });
-
-  auto const itemCount = _listStore ? _listStore->get_n_items() : 0;
-  for (guint index = 1; index < itemCount; ++index)
-  {
-    auto row = _listStore->get_item(index);
-    if (!row)
-    {
-      continue;
-    }
-
-    auto const storedIt = storedLists.find(row->getListId());
-    if (storedIt == storedLists.end())
-    {
-      continue;
-    }
-
-    auto const pageIt = _trackPages.find(row->getListId());
-    if (pageIt == _trackPages.end() || !pageIt->second.membershipList)
-    {
-      continue;
-    }
-
-    auto indentedName = std::string(static_cast<std::size_t>(std::max(row->getDepth(), 0)) * 2, ' ');
-    indentedName += std::string(row->getName());
-
-    sourceChoices.push_back(NewListDialog::SourceChoice{
-      .listId = row->getListId(),
-      .name = std::move(indentedName),
-      .inheritedExpression = describeList(row->getListId()),
-      .source = pageIt->second.membershipList.get(),
-    });
   }
 
-  auto* dialog = Gtk::make_managed<NewListDialog>(*this,
-                                                  *_musicLibrary,
-                                                  *_allTrackIds,
-                                                  _rowDataProvider,
-                                                  std::move(sourceChoices),
-                                                  defaultSourceListId);
+  auto* dialog = Gtk::make_managed<NewListDialog>(*this, *_musicLibrary, *_allTrackIds, *parentMembershipList, parentListId);
 
   dialog->signal_response().connect([this, dialog](int responseId)
   {
@@ -551,6 +444,22 @@ void MainWindow::openNewListDialog(rs::core::ListId defaultSourceListId)
   });
 
   dialog->present();
+}
+
+void MainWindow::openNewSmartListDialog()
+{
+  // Smart selection: if a non-All-Tracks list is selected, use it as parent; otherwise use root
+  auto defaultSourceListId = rootSourceListId();
+  auto const selected = _listSelectionModel ? _listSelectionModel->get_selected() : GTK_INVALID_LIST_POSITION;
+  if (_listStore && selected != GTK_INVALID_LIST_POSITION && selected != 0)
+  {
+    if (auto row = _listStore->get_item(selected))
+    {
+      defaultSourceListId = row->getListId();
+    }
+  }
+
+  openNewListDialog(defaultSourceListId);
 }
 
 bool MainWindow::listHasChildren(rs::core::ListId listId) const
@@ -607,31 +516,10 @@ void MainWindow::setupMenu()
   _newListAction = Gio::SimpleAction::create("new-list");
   _newListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
   {
-    openNewListDialog(rootSourceListId());
+    openNewSmartListDialog();
   });
   _newListAction->set_enabled(false);
   add_action(_newListAction);
-
-  _newChildListAction = Gio::SimpleAction::create("new-child-list");
-  _newChildListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
-  {
-    auto defaultSourceListId = rootSourceListId();
-    auto const selected = _listSelectionModel ? _listSelectionModel->get_selected() : GTK_INVALID_LIST_POSITION;
-    if (_listStore && selected != GTK_INVALID_LIST_POSITION)
-    {
-      if (auto row = _listStore->get_item(selected))
-      {
-        if (row->getListId() != allTracksListId())
-        {
-          defaultSourceListId = row->getListId();
-        }
-      }
-    }
-
-    openNewListDialog(defaultSourceListId);
-  });
-  _newChildListAction->set_enabled(false);
-  add_action(_newChildListAction);
 
   _deleteListAction = Gio::SimpleAction::create("delete-list");
   _deleteListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
@@ -720,7 +608,6 @@ void MainWindow::setupLayout()
 
   auto listContextMenuModel = Gio::Menu::create();
   listContextMenuModel->append("New List", "win.new-list");
-  listContextMenuModel->append("New Child List", "win.new-child-list");
   listContextMenuModel->append("Delete List", "win.delete-list");
   _listContextMenu.set_menu_model(listContextMenuModel);
   _listContextMenu.set_has_arrow(false);
@@ -781,11 +668,10 @@ void MainWindow::showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle con
 {
   (void)listView;
 
-  auto const selected = _listSelectionModel ? _listSelectionModel->get_selected() : GTK_INVALID_LIST_POSITION;
   auto const hasLibrary = static_cast<bool>(_musicLibrary);
-  auto const canCreateChild = hasLibrary && selected != GTK_INVALID_LIST_POSITION;
 
   auto canDelete = false;
+  auto const selected = _listSelectionModel ? _listSelectionModel->get_selected() : GTK_INVALID_LIST_POSITION;
   if (hasLibrary && _listStore && selected != GTK_INVALID_LIST_POSITION && selected != 0)
   {
     if (auto row = _listStore->get_item(selected))
@@ -797,10 +683,6 @@ void MainWindow::showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle con
   if (_newListAction)
   {
     _newListAction->set_enabled(hasLibrary);
-  }
-  if (_newChildListAction)
-  {
-    _newChildListAction->set_enabled(canCreateChild);
   }
   if (_deleteListAction)
   {

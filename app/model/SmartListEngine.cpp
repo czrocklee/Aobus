@@ -45,6 +45,7 @@ namespace app::model
   struct SmartListEngine::SourceBucket
   {
     TrackIdList* source = nullptr;
+    bool sourceAlive = true;
     std::vector<RegistrationId> registrations;
     std::unique_ptr<TrackIdListObserver> observer;
   };
@@ -52,11 +53,15 @@ namespace app::model
   // SourceObserver implementation
 
   SourceObserver::SourceObserver(SmartListEngine& engine, TrackIdList& source)
-    : _engine{engine}, _source{source}
+    : _engine{engine}, _source{source}, _valid{true}
   {}
 
   void SourceObserver::onReset()
   {
+    if (!_valid)
+    {
+      return;
+    }
     auto it = _engine._buckets.find(&_source);
     if (it != _engine._buckets.end())
     {
@@ -66,6 +71,10 @@ namespace app::model
 
   void SourceObserver::onInserted(TrackId id, std::size_t index)
   {
+    if (!_valid)
+    {
+      return;
+    }
     auto it = _engine._buckets.find(&_source);
     if (it != _engine._buckets.end())
     {
@@ -75,6 +84,10 @@ namespace app::model
 
   void SourceObserver::onUpdated(TrackId id, std::size_t index)
   {
+    if (!_valid)
+    {
+      return;
+    }
     auto it = _engine._buckets.find(&_source);
     if (it != _engine._buckets.end())
     {
@@ -84,10 +97,27 @@ namespace app::model
 
   void SourceObserver::onRemoved(TrackId id, std::size_t /*index*/)
   {
+    if (!_valid)
+    {
+      return;
+    }
     auto it = _engine._buckets.find(&_source);
     if (it != _engine._buckets.end())
     {
       _engine.handleSourceRemoved(*it->second, id);
+    }
+  }
+
+  void SourceObserver::onSourceDestroyed()
+  {
+    if (!_valid)
+    {
+      return;
+    }
+    auto it = _engine._buckets.find(&_source);
+    if (it != _engine._buckets.end())
+    {
+      _engine.handleSourceDestroyed(*it->second);
     }
   }
 
@@ -99,10 +129,24 @@ namespace app::model
 
   SmartListEngine::~SmartListEngine()
   {
-    // Detach all observers before destroying buckets
+    // Mark engine as not alive first - this prevents new unregisterList calls from accessing buckets
+    _alive = false;
+
+    // Mark all observers as invalid to prevent any callbacks during destruction
     for (auto& [source, bucket] : _buckets)
     {
       if (bucket->observer)
+      {
+        // Cast to SourceObserver to access invalidate() method
+        auto* obs = static_cast<SourceObserver*>(bucket->observer.get());
+        obs->invalidate();
+      }
+    }
+
+    // Detach all observers before destroying buckets
+    for (auto& [source, bucket] : _buckets)
+    {
+      if (bucket->observer && bucket->sourceAlive)
       {
         source->detach(bucket->observer.get());
       }
@@ -151,12 +195,15 @@ namespace app::model
       return;
     }
 
-    auto* state = it->second.get();
+    // Capture source pointer BEFORE destroying state
+    auto* source = it->second->source;
+    auto* bucket = it->second->bucket;
+    auto* observer = bucket ? bucket->observer.get() : nullptr;
 
-    // Remove from bucket
-    if (state->bucket)
+    // Remove from bucket BEFORE erasing state
+    if (bucket)
     {
-      auto& regs = state->bucket->registrations;
+      auto& regs = bucket->registrations;
       auto regIt = std::find(regs.begin(), regs.end(), id);
       if (regIt != regs.end())
       {
@@ -164,10 +211,14 @@ namespace app::model
       }
 
       // If bucket is now empty, detach observer and remove bucket
-      if (state->bucket->registrations.empty())
+      if (bucket->registrations.empty())
       {
-        state->source->detach(state->bucket->observer.get());
-        _buckets.erase(state->source);
+        // ONLY call detach if the source pointer is still valid (sourceAlive is true)
+        if (source && bucket->sourceAlive)
+        {
+          source->detach(observer);
+        }
+        _buckets.erase(source);
       }
     }
 
@@ -700,6 +751,30 @@ namespace app::model
   void SmartListEngine::notifyFacadeRemoved(TrackIdList& facade, TrackId id, std::size_t index)
   {
     facade.notifyRemoved(id, index);
+  }
+
+  void SmartListEngine::handleSourceDestroyed(SourceBucket& bucket)
+  {
+    // Mark source as dead so unregisterList knows it's already detached
+    bucket.sourceAlive = false;
+
+    // Clear state members in all registrations belonging to this bucket
+    for (auto regId : bucket.registrations)
+    {
+      auto it = _states.find(regId);
+      if (it != _states.end())
+      {
+        it->second->members.clear();
+        if (it->second->facade)
+        {
+          notifyFacadeReset(*it->second->facade);
+        }
+      }
+    }
+    
+    // We don't erase the bucket or null out pointers here because unregisterList 
+    // might still be called for individual registrations later, and it needs 
+    // to find the bucket by the original source pointer (the key in _buckets).
   }
 
 } // namespace app::model
