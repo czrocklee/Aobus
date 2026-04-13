@@ -26,7 +26,7 @@ namespace
     CHECK(offsetof(ListHeader, descLen) == 10);
     CHECK(offsetof(ListHeader, filterOffset) == 12);
     CHECK(offsetof(ListHeader, filterLen) == 14);
-    CHECK(offsetof(ListHeader, sourceListId) == 16);
+    CHECK(offsetof(ListHeader, parentId) == 16);
   }
 
 } // anonymous namespace

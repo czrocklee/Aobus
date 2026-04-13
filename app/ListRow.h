@@ -17,8 +17,8 @@ public:
   ListId getListId() const { return _listId; }
   void setListId(ListId id) { _listId = id; }
 
-  ListId getSourceListId() const { return _sourceListId; }
-  void setSourceListId(ListId id) { _sourceListId = id; }
+  ListId getParentId() const { return _parentId; }
+  void setParentId(ListId id) { _parentId = id; }
 
   int getDepth() const { return _depth; }
   void setDepth(int depth) { _depth = depth; }
@@ -40,7 +40,7 @@ protected:
 
 private:
   ListId _listId;
-  ListId _sourceListId;
+  ListId _parentId;
   int _depth = 0;
   bool _isSmart = false;
   Glib::ustring _name;

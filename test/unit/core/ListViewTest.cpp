@@ -34,7 +34,7 @@ namespace
     auto payload = rs::core::ListBuilder::createNew()
                      .name("Test")
                      .description("Desc")
-                     .sourceListId(rs::core::ListId{9})
+                     .parentId(rs::core::ListId{9})
                      .serialize();
     auto view = ListView{payload};
 
@@ -43,8 +43,8 @@ namespace
     CHECK(view.description() == "Desc");
     CHECK(view.filter().empty());
     CHECK(view.isSmart() == false);
-    CHECK(view.sourceListId() == rs::core::ListId{9});
-    CHECK(view.isRootSource() == false);
+    CHECK(view.parentId() == rs::core::ListId{9});
+    CHECK(view.isRootParent() == false);
   }
 
   TEST_CASE("ListView - Manual List with TrackIds")
@@ -89,7 +89,7 @@ namespace
     CHECK(view.name().empty());
     CHECK(view.description().empty());
     CHECK(view.filter().empty());
-    CHECK(view.isRootSource() == true);
+    CHECK(view.isRootParent() == true);
   }
 
   TEST_CASE("ListView - Invalid Data")

@@ -24,6 +24,7 @@ namespace
     {
       return std::string{local};
     }
+
     if (local.empty())
     {
       return std::string{parent};
@@ -203,6 +204,7 @@ void NewListDialog::setupPreviewColumns()
 {
   // Single column factory that formats "Title - Artist (Album)"
   auto factory = Gtk::SignalListItemFactory::create();
+
   factory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
   {
     auto* label = Gtk::make_managed<Gtk::Label>("");
@@ -210,11 +212,13 @@ void NewListDialog::setupPreviewColumns()
     label->set_ellipsize(Pango::EllipsizeMode::END);
     listItem->set_child(*label);
   });
+
   factory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
   {
     auto item = listItem->get_item();
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
     auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+
     if (row && label)
     {
       row->ensureLoaded();
@@ -222,13 +226,16 @@ void NewListDialog::setupPreviewColumns()
       auto const& artist = row->getArtist();
       auto const& album = row->getAlbum();
       std::string formatted;
+
       if (!title.empty())
       {
         formatted = title;
+
         if (!artist.empty())
         {
           formatted += " - " + artist;
         }
+
         if (!album.empty())
         {
           formatted += " (" + album + ")";
@@ -237,6 +244,7 @@ void NewListDialog::setupPreviewColumns()
       else if (!artist.empty())
       {
         formatted = artist;
+
         if (!album.empty())
         {
           formatted += " (" + album + ")";
@@ -246,6 +254,7 @@ void NewListDialog::setupPreviewColumns()
       {
         formatted = "(untitled)";
       }
+      
       label->set_text(formatted);
     }
   });
@@ -276,24 +285,26 @@ void NewListDialog::rebuildPreviewSource()
     // Check if parent is not All Tracks (All Tracks has special ID and no ListView)
     auto const parentListIdValue = _parentListId.value();
     auto const isAllTracks = (parentListIdValue == 0);
-    
+
     if (!isAllTracks)
     {
       auto readTxn = _musicLibrary->readTransaction();
       auto reader = _musicLibrary->lists().reader(readTxn);
       auto listView = reader.get(_parentListId);
+
       if (!listView)
       {
         updateSourceLabels();
         updateDialogState();
         return;
       }
+
       inheritedExpr = listView->filter();
     }
-    
+
     // Use the parent's membership list as source - this already has the inherited filter applied
     _rowDataProvider = std::make_shared<app::model::TrackRowDataProvider>(*_musicLibrary);
-    
+
     // For All Tracks, we can't use FilteredTrackIdList with _parentMembershipList
     // because _parentMembershipList points to AllTrackIdsList which doesn't need filtering
     // and using _previewEngine (a dialog-local engine) causes lifecycle issues
@@ -326,18 +337,20 @@ void NewListDialog::updateSourceLabels()
   // Check if parent is not All Tracks (All Tracks has special ID and no ListView)
   auto const parentListIdValue = _parentListId.value();
   auto const isAllTracks = (parentListIdValue == 0);
-  
+
   if (!isAllTracks)
   {
     auto readTxn = _musicLibrary->readTransaction();
     auto reader = _musicLibrary->lists().reader(readTxn);
     auto listView = reader.get(_parentListId);
+
     if (!listView)
     {
       _inheritedExprLabel.set_text("(invalid source)");
       _effectiveExprLabel.set_text("(invalid source)");
       return;
     }
+
     inheritedExpr = listView->filter();
   }
 
@@ -370,6 +383,7 @@ void NewListDialog::updatePreview()
     _expressionValid = true;
     
     auto const total = _parentMembershipList->size();
+
     if (total == 0)
     {
       _matchCountLabel.set_markup("<i>No tracks in library</i>");
@@ -405,6 +419,7 @@ void NewListDialog::updatePreview()
     _previewFilteredList->reload();
     _expressionValid = true;
     auto const total = _previewFilteredList->size();
+
     if (total == 0)
     {
       _matchCountLabel.set_markup("<i>No tracks in source</i>");
@@ -463,7 +478,7 @@ app::model::ListDraft NewListDialog::draft() const
 {
   app::model::ListDraft draftData;
   draftData.kind = app::model::ListKind::Smart;
-  draftData.sourceListId = _parentListId;
+  draftData.parentId = _parentListId;
   draftData.name = _nameEntry.get_text();
   draftData.description = _descEntry.get_text();
   draftData.expression = _exprBox.entry().get_text();

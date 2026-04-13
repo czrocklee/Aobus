@@ -32,6 +32,7 @@ namespace app::model
 class TrackListAdapter;
 class TrackViewPage;
 class ListRow;
+class ListTreeNode;
 class ImportWorker;
 class CoverArtWidget;
 class PlaylistExporter;
@@ -77,7 +78,7 @@ private:
   void importFiles();
   void importFilesFromPath(std::filesystem::path const& path);
   void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files);
-  void openNewListDialog(rs::core::ListId defaultSourceListId);
+  void openNewListDialog(rs::core::ListId parentListId);
   void openNewSmartListDialog();
   bool listHasChildren(rs::core::ListId listId) const;
 
@@ -90,6 +91,7 @@ private:
 
   // Page management helpers
   void clearTrackPages();
+  void buildListTree(rs::lmdb::ReadTransaction& txn);
   void rebuildListPages(rs::lmdb::ReadTransaction& txn);
   void buildPageForAllTracks();
   void buildPageForStoredList(rs::core::ListId listId, rs::core::ListView const& view);
@@ -151,9 +153,11 @@ private:
   Gtk::PopoverMenuBar _menuBar;
   Gtk::PopoverMenu _listContextMenu;
 
-  // List model for sidebar
-  Glib::RefPtr<Gio::ListStore<ListRow>> _listStore;
+  // List model for sidebar - tree model
+  Glib::RefPtr<Gio::ListStore<ListTreeNode>> _listTreeStore;
+  Glib::RefPtr<Gtk::TreeListModel> _treeListModel;
   Glib::RefPtr<Gtk::SingleSelection> _listSelectionModel;
+  std::map<rs::core::ListId, Glib::RefPtr<ListTreeNode>> _nodesById;
   Glib::RefPtr<Gio::SimpleAction> _newListAction;
   Glib::RefPtr<Gio::SimpleAction> _deleteListAction;
 

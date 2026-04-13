@@ -290,6 +290,7 @@ add_executable(RockStudio
     app/TrackListAdapter.cpp
     app/TrackRow.cpp
     app/ListRow.cpp
+    app/ListTreeNode.cpp
     app/ImportWorker.cpp
     app/PlaylistExporter.cpp
     app/NewListDialog.cpp

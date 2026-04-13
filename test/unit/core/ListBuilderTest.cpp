@@ -28,14 +28,14 @@ TEST_CASE("ListBuilder - smart list")
                    .name("My Smart List")
                    .description("A smart list")
                    .filter("@artist = 'Test'")
-                   .sourceListId(rs::core::ListId{17})
+                   .parentId(rs::core::ListId{17})
                    .serialize();
   auto view = ListView{payload};
 
   CHECK(view.isSmart() == true);
   CHECK(view.name() == "My Smart List");
   CHECK(view.filter() == "@artist = 'Test'");
-  CHECK(view.sourceListId() == rs::core::ListId{17});
+  CHECK(view.parentId() == rs::core::ListId{17});
 }
 
 TEST_CASE("ListBuilder - manual list")
@@ -62,27 +62,27 @@ TEST_CASE("ListBuilder - manual list empty trackIds")
 
   CHECK(view.isSmart() == false);
   CHECK(view.tracks().size() == 0);
-  CHECK(view.sourceListId() == rs::core::ListId{0});
+  CHECK(view.parentId() == rs::core::ListId{0});
 }
 
-TEST_CASE("ListBuilder - sourceListId round-trip through record and view")
+TEST_CASE("ListBuilder - parentId round-trip through record and view")
 {
   auto builder = ListBuilder::createNew()
                    .name("Nested Smart List")
                    .description("Child list")
                    .filter("$year >= 2021")
-                   .sourceListId(rs::core::ListId{42});
+                   .parentId(rs::core::ListId{42});
 
   auto payload = builder.serialize();
   auto view = ListView{payload};
   auto record = ListBuilder::fromView(view).record();
 
-  CHECK(view.sourceListId() == rs::core::ListId{42});
-  CHECK(record.sourceListId == rs::core::ListId{42});
+  CHECK(view.parentId() == rs::core::ListId{42});
+  CHECK(record.parentId == rs::core::ListId{42});
 
   auto rebuilt = ListBuilder::fromRecord(record).serialize();
   auto rebuiltView = ListView{rebuilt};
-  CHECK(rebuiltView.sourceListId() == rs::core::ListId{42});
+  CHECK(rebuiltView.parentId() == rs::core::ListId{42});
 }
 
 TEST_CASE("ListBuilder - manual list round-trip through ListStore")

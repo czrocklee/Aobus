@@ -25,8 +25,8 @@ namespace rs::core
     std::string_view name() const;
     std::string_view description() const;
     std::string_view filter() const;
-    ListId sourceListId() const noexcept;
-    bool isRootSource() const noexcept;
+    ListId parentId() const noexcept;
+    bool isRootParent() const noexcept;
 
     bool isSmart() const noexcept { return !filter().empty(); }
 

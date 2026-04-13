@@ -22,20 +22,31 @@ namespace
     auto reader = ml.lists().reader(txn);
 
     constexpr int idWidth = 5;
-    for (auto [id, view] : reader) {
+    for (auto [id, view] : reader)
+    {
       os << std::setw(idWidth) << id << " " << view.name() << "\n";
-      os << std::string(idWidth, ' ') << "  [" << (view.isSmart() ? "smart" : "manual") << "] source: ";
-      if (view.isRootSource()) {
+      os << std::string(idWidth, ' ') << "  [" << (view.isSmart() ? "smart" : "manual") << "] parent: ";
+
+      if (view.isRootParent())
+      {
         os << "all-tracks\n";
-      } else {
-        os << view.sourceListId() << "\n";
       }
-      if (view.isSmart()) {
+      else
+      {
+        os << view.parentId() << "\n";
+      }
+
+      if (view.isSmart())
+      {
         os << std::string(idWidth, ' ') << "  [smart] filter: \"" << view.filter() << "\"\n";
-      } else {
+      }
+      else
+      {
         os << std::string(idWidth, ' ') << "  [manual] " << view.tracks().size() << " tracks\n";
       }
-      if (!view.description().empty()) {
+
+      if (!view.description().empty())
+      {
         os << std::string(idWidth, ' ') << "  desc: \"" << view.description() << "\"\n";
       }
     }
@@ -45,7 +56,7 @@ namespace
                   std::string const& name,
                   std::string const& filter,
                   std::string const& desc,
-                  core::ListId sourceListId,
+                  core::ListId parentListId,
                   std::ostream& os)
   {
     auto txn = ml.writeTransaction();
@@ -54,8 +65,10 @@ namespace
     auto builder = core::ListBuilder::createNew()
       .name(name)
       .description(desc)
-      .sourceListId(sourceListId);
-    if (!filter.empty()) {
+      .parentId(parentListId);
+
+    if (!filter.empty())
+    {
       builder.filter(filter);
     }
     auto data = builder.serialize();
@@ -76,13 +89,13 @@ ListCommand::ListCommand(core::MusicLibrary& ml) : _ml{ml}
     .addOption("name,n", bpo::value<std::string>()->required(), "list name", 1)
     .addOption("filter,f", bpo::value<std::string>()->default_value(""), "track filter expression", 1)
     .addOption("desc,d", bpo::value<std::string>()->default_value(""), "list description", 1)
-    .addOption("source,s", bpo::value<std::uint32_t>()->default_value(0), "source list id (0 = all-tracks)", 1)
+    .addOption("parent,p", bpo::value<std::uint32_t>()->default_value(0), "parent list id (0 = all-tracks)", 1)
     .setExecutor([this](auto const& vm, auto& os) {
       auto name = vm["name"].template as<std::string>();
       auto filter = vm["filter"].template as<std::string>();
       auto desc = vm["desc"].template as<std::string>();
-      auto sourceListId = core::ListId{vm["source"].template as<std::uint32_t>()};
-      createList(_ml, name, filter, desc, sourceListId, os);
+      auto parentListId = core::ListId{vm["parent"].template as<std::uint32_t>()};
+      createList(_ml, name, filter, desc, parentListId, os);
       return "";
     });
 

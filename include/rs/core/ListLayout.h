@@ -23,7 +23,7 @@ namespace rs::core
    *   │  nameOffset, nameLen (4B)           │
    *   │  descOffset, descLen (4B)           │
    *   │  filterOffset, filterLen (4B)       │
-   *   │  sourceListId (4B)                  │
+   *   │  parentId (4B)                      │
    *   ├─────────────────────────────────────┤  ← trackIds begin = sizeof(ListHeader)
    *   │  track ID 1 (4B)                    │
    *   │  track ID 2 (4B)                    │
@@ -48,7 +48,7 @@ namespace rs::core
     std::uint16_t descLen;      // Length of description string
     std::uint16_t filterOffset; // Byte offset from the track-id region start to the filter expression
     std::uint16_t filterLen;    // Length of filter expression string
-    std::uint32_t sourceListId; // Parent/source list id, 0 = All Tracks
+    std::uint32_t parentId; // Parent list id, 0 = All Tracks
   };
 
   // Binary layout constants

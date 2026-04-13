@@ -48,14 +48,14 @@ namespace rs::core
     return getString(header()->filterOffset, header()->filterLen);
   }
 
-  ListId ListView::sourceListId() const noexcept
+  ListId ListView::parentId() const noexcept
   {
-    return ListId{header()->sourceListId};
+    return ListId{header()->parentId};
   }
 
-  bool ListView::isRootSource() const noexcept
+  bool ListView::isRootParent() const noexcept
   {
-    return sourceListId() == ListId{0};
+    return parentId() == ListId{0};
   }
 
   ListView::TrackProxy ListView::tracks() const

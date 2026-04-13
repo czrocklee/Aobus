@@ -22,10 +22,10 @@ namespace rs::core
     ListRecord() = default;
 
     /**
-     * Parent/source list id.
-     * ListId{0} means the virtual root source (All Tracks).
+     * Parent list id.
+     * ListId{0} means the virtual root (All Tracks).
      */
-    ListId sourceListId = ListId{0};
+    ListId parentId = ListId{0};
 
     /**
      * List name.

@@ -7,7 +7,7 @@ This guide covers C++ coding conventions for RockStudio contributors.
 - 2. Code Style
   - 2.1. Indentation & Formatting
     - 2.1.1. Use `clang-format` for consistent style
-    - 2.1.2. Keep blank lines before and after logical blocks
+    - 2.1.2. Keep blank lines before and after control blocks and logical blocks
   - 2.2. Naming Conventions
     - 2.2.1. Classes/Types: PascalCase - `TrackStore`, `Metadata`
     - 2.2.2. Functions: CamelCase - `loadMetadata()`, `getString()`

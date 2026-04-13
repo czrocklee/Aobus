@@ -76,7 +76,7 @@ namespace rs::core
     ListBuilder& name(std::string_view v);
     ListBuilder& description(std::string_view v);
     ListBuilder& filter(std::string_view v);
-    ListBuilder& sourceListId(ListId v);
+    ListBuilder& parentId(ListId v);
 
     // Serialization - returns binary payload for ListStore
     std::vector<std::byte> serialize() const;
@@ -88,7 +88,7 @@ namespace rs::core
     std::string_view _name;
     std::string_view _description;
     std::string_view _filter;
-    ListId _sourceListId = ListId{0};
+    ListId _parentId = ListId{0};
 
     // TracksBuilder needs access to modify ListBuilder's isSmart flag
     friend class TracksBuilder;
