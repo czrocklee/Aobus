@@ -28,7 +28,7 @@ public:
 
   Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
 
-  // Set filter text - filters by artist, album, or title containing the text
+  // Set filter text - filters by common display metadata containing the text.
   void setFilter(Glib::ustring const& filterText);
 
   // Observer overrides

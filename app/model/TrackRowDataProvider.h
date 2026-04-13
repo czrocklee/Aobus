@@ -9,6 +9,7 @@
 #include <rs/core/MusicLibrary.h>
 #include <rs/core/TrackStore.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -31,8 +32,13 @@ namespace app::model
     TrackId id;
     std::string artist;
     std::string album;
+    std::string albumArtist;
+    std::string genre;
     std::string title;
     std::string tags;
+    std::uint16_t year = 0;
+    std::uint16_t discNumber = 0;
+    std::uint16_t trackNumber = 0;
     std::optional<std::uint32_t> coverArtId;
     bool missing = false;
   };

@@ -38,8 +38,13 @@ void TrackRow::ensureLoaded() const
   {
     _artist = std::move(optRow->artist);
     _album = std::move(optRow->album);
+    _albumArtist = std::move(optRow->albumArtist);
+    _genre = std::move(optRow->genre);
     _title = std::move(optRow->title);
     _tags = std::move(optRow->tags);
+    _year = optRow->year;
+    _discNumber = optRow->discNumber;
+    _trackNumber = optRow->trackNumber;
     _resourceId = optRow->coverArtId ? std::optional<std::uint64_t>{optRow->coverArtId.value()} : std::nullopt;
   }
   _loaded = true;
@@ -48,25 +53,42 @@ void TrackRow::ensureLoaded() const
 Glib::ustring TrackRow::getArtist() const
 {
   ensureLoaded();
-  return Glib::Markup::escape_text(_artist);
+  return _artist;
 }
 
 Glib::ustring TrackRow::getAlbum() const
 {
   ensureLoaded();
-  return Glib::Markup::escape_text(_album);
+  return _album;
 }
 
 Glib::ustring TrackRow::getTitle() const
 {
   ensureLoaded();
-  return Glib::Markup::escape_text(_title);
+  return _title;
 }
 
 Glib::ustring TrackRow::getTags() const
 {
   ensureLoaded();
-  return Glib::Markup::escape_text(_tags);
+  return _tags;
+}
+
+TrackPresentationKeysView TrackRow::getPresentationKeys() const
+{
+  ensureLoaded();
+
+  return TrackPresentationKeysView{
+    .artist = _artist,
+    .album = _album,
+    .albumArtist = _albumArtist,
+    .genre = _genre,
+    .title = _title,
+    .year = _year,
+    .discNumber = _discNumber,
+    .trackNumber = _trackNumber,
+    .trackId = _id,
+  };
 }
 
 std::uint64_t TrackRow::getResourceId() const

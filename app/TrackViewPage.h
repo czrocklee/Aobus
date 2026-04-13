@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "TrackPresentation.h"
 #include "TrackListAdapter.h"
 
 #include <gtkmm.h>
@@ -23,6 +24,9 @@ public:
   // Get the selected track IDs
   std::vector<TrackId> getSelectedTrackIds() const;
 
+  // Get the visible playback order for the current songs view.
+  std::vector<TrackId> getVisibleTrackIds() const;
+
   // Get the primary (first) selected track ID
   std::optional<TrackId> getPrimarySelectedTrackId() const;
 
@@ -42,21 +46,33 @@ public:
 private:
   // Setup methods
   void setupColumns();
+  void setupPresentationControls();
+  void setupHeaderFactory();
   void setupStatusBar();
   void setupActivation();
+  void applyPresentationSpec();
+  void onGroupByChanged();
   void onFilterChanged();
   void onSelectionChanged(std::uint32_t position, std::uint32_t nItems);
   void onActivateCurrentSelection();
+  std::optional<TrackId> trackIdAtPosition(std::uint32_t position) const;
 
   // Child widgets
+  Gtk::Box _controlsBar{Gtk::Orientation::HORIZONTAL};
   Gtk::Entry _filterEntry;
+  Gtk::Label _groupByLabel;
+  Gtk::DropDown _groupByDropdown;
   Gtk::Label _statusLabel;
   Gtk::ScrolledWindow _scrolledWindow;
   Gtk::ColumnView _columnView;
 
   // Models
   Glib::RefPtr<TrackListAdapter> _adapter;
+  Glib::RefPtr<Gtk::SortListModel> _sortModel;
   Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
+  Glib::RefPtr<Gtk::StringList> _groupByOptions;
+  Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
+  TrackPresentationSpec _presentationSpec;
 
   // Signals
   SelectionChangedSignal _selectionChanged;

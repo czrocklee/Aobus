@@ -39,14 +39,19 @@ namespace app::model
     auto const it = _rowCache.find(id);
     if (it != _rowCache.end())
     {
+      if (it->second.missing)
+      {
+        return std::nullopt;
+      }
+
       return it->second;
     }
 
-    // Load from store using Hot mode (sufficient for row rendering)
+    // Load both tiers so grouping and section sorting can use stable row-local keys.
     rs::lmdb::ReadTransaction txn(_ml->readTransaction());
     auto reader = _store->reader(txn);
 
-    auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Hot);
+    auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
     if (!optView)
     {
       // Track not found - cache a "missing" marker
@@ -77,11 +82,30 @@ namespace app::model
       row.album = resolveDictionaryString(albumId);
     }
 
+    auto const albumArtistId = metadata.albumArtistId();
+    if (albumArtistId != rs::core::DictionaryId{0})
+    {
+      row.albumArtist = resolveDictionaryString(albumArtistId);
+    }
+
+    auto const genreId = metadata.genreId();
+    if (genreId != rs::core::DictionaryId{0})
+    {
+      row.genre = resolveDictionaryString(genreId);
+    }
+
+    row.year = metadata.year();
+    row.discNumber = metadata.discNumber();
+    row.trackNumber = metadata.trackNumber();
+
+    auto const coverArtId = metadata.coverArtId();
+    if (coverArtId != 0)
+    {
+      row.coverArtId = coverArtId;
+    }
+
     // Tags - would need to resolve tag IDs to strings (placeholder for now)
     // TODO: Implement tag ID to string resolution if needed for row display
-
-    // Cold data may not be available in Hot-only load, but coverArtId is in cold header
-    // For row display, we don't need cover art - it's on the detail side
 
     auto const result = _rowCache.emplace(id, std::move(row));
     return result.first->second;

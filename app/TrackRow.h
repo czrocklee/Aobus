@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "TrackPresentation.h"
+
 #include <rs/core/MusicLibrary.h>
 
 #include <gtkmm.h>
@@ -30,6 +32,7 @@ public:
   Glib::ustring getAlbum() const;
   Glib::ustring getTitle() const;
   Glib::ustring getTags() const;
+  TrackPresentationKeysView getPresentationKeys() const;
   std::uint64_t getResourceId() const;
 
   void ensureLoaded() const;
@@ -43,7 +46,12 @@ private:
   mutable bool _loaded = false;
   mutable std::string _artist;
   mutable std::string _album;
+  mutable std::string _albumArtist;
+  mutable std::string _genre;
   mutable std::string _title;
   mutable std::string _tags;
+  mutable std::uint16_t _year = 0;
+  mutable std::uint16_t _discNumber = 0;
+  mutable std::uint16_t _trackNumber = 0;
   mutable std::optional<std::uint64_t> _resourceId;
 };

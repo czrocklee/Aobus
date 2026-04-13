@@ -28,10 +28,7 @@ namespace
     return it != haystack.end();
   }
 
-  bool matchesFilter(std::string const& artist,
-                     std::string const& album,
-                     std::string const& title,
-                     std::string const& tags,
+  bool matchesFilter(app::model::RowData const& rowData,
                      Glib::ustring const& filter)
   {
     if (filter.empty())
@@ -41,19 +38,31 @@ namespace
 
     auto filterStr = filter.lowercase();
 
-    if (containsCi(artist, filterStr))
+    if (containsCi(rowData.artist, filterStr))
     {
       return true;
     }
-    if (containsCi(album, filterStr))
+    if (containsCi(rowData.album, filterStr))
     {
       return true;
     }
-    if (containsCi(title, filterStr))
+    if (containsCi(rowData.albumArtist, filterStr))
     {
       return true;
     }
-    if (containsCi(tags, filterStr))
+    if (containsCi(rowData.genre, filterStr))
+    {
+      return true;
+    }
+    if (containsCi(rowData.title, filterStr))
+    {
+      return true;
+    }
+    if (containsCi(rowData.tags, filterStr))
+    {
+      return true;
+    }
+    if (rowData.year != 0 && containsCi(std::to_string(rowData.year), filterStr))
     {
       return true;
     }
@@ -93,7 +102,7 @@ void TrackListAdapter::createRowForTrack(TrackId id)
   auto const& rowData = *optRow;
 
   // Apply quick filter if set
-  if (!matchesFilter(rowData.artist, rowData.album, rowData.title, rowData.tags, _filterText))
+  if (!matchesFilter(rowData, _filterText))
   {
     return;
   }
@@ -136,7 +145,6 @@ void TrackListAdapter::onInserted(TrackId id, std::size_t index)
     return;
   }
 
-  auto const& rowData = *optRow;
   auto row = TrackRow::create(id, _provider);
 
   auto const uintIdx = static_cast<std::uint32_t>(index);
@@ -171,14 +179,13 @@ void TrackListAdapter::onUpdated(TrackId id, std::size_t index)
     return;
   }
 
-  auto const& rowData = *optRow;
   auto row = TrackRow::create(id, _provider);
 
   _listModel->remove(uintIdx);
   _listModel->insert(uintIdx, row);
 }
 
-void TrackListAdapter::onRemoved(TrackId id, std::size_t index)
+void TrackListAdapter::onRemoved([[maybe_unused]] TrackId id, std::size_t index)
 {
   // If filter is active, rebuild
   if (!_filterText.empty())

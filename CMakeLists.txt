@@ -254,7 +254,9 @@ add_executable(rs_test
     test/unit/lmdb/EnvironmentTest.cpp
     test/unit/lmdb/TransactionTest.cpp
     test/unit/lmdb/DatabaseTest.cpp
+    test/unit/app/TrackPresentationTest.cpp
     test/unit/app/SmartListEngineTest.cpp
+    app/TrackPresentation.cpp
     app/model/FilteredTrackIdList.cpp
     app/model/SmartListEngine.cpp
     app/model/TrackIdList.cpp
@@ -286,6 +288,7 @@ endif()
 add_executable(RockStudio
     app/main.cpp
     app/MainWindow.cpp
+    app/TrackPresentation.cpp
     app/TrackViewPage.cpp
     app/TrackListAdapter.cpp
     app/TrackRow.cpp

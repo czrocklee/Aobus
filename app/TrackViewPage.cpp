@@ -3,53 +3,127 @@
 
 #include "TrackViewPage.h"
 
+#include <glibmm/wrap.h>
+#include <gtk/gtk.h>
+
 #include <gdk/gdk.h>
 
+#include <gtkmm/label.h>
+#include <gtkmm/listheader.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/listitem.h>
 #include <gtkmm/signallistitemfactory.h>
 
 #include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
 #include <vector>
 
 namespace
 {
-  std::optional<TrackListAdapter::TrackId> trackIdAtPosition(Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
-                                                             std::uint32_t position)
-  {
-    if (!selectionModel)
-    {
-      return std::nullopt;
-    }
+  using RowCompareFn = std::function<int(TrackRow const&, TrackRow const&)>;
 
-    auto item = selectionModel->get_object(position);
+  auto trackRowFromItem(gconstpointer item) -> TrackRow const*
+  {
     if (!item)
     {
-      return std::nullopt;
+      return nullptr;
     }
 
-    auto row = std::dynamic_pointer_cast<TrackRow>(item);
-    if (!row)
+    auto* object = Glib::wrap_auto(reinterpret_cast<GObject*>(const_cast<void*>(item)), false);
+    return dynamic_cast<TrackRow const*>(object);
+  }
+
+  auto createRowSorter(RowCompareFn compare) -> Glib::RefPtr<Gtk::Sorter>
+  {
+    auto* comparePtr = new RowCompareFn{std::move(compare)};
+    auto* customSorter = gtk_custom_sorter_new(
+      [](gconstpointer lhs, gconstpointer rhs, gpointer userData) -> int
+      {
+        auto* compareFn = static_cast<RowCompareFn*>(userData);
+        auto const* leftRow = trackRowFromItem(lhs);
+        auto const* rightRow = trackRowFromItem(rhs);
+
+        if (!compareFn || !leftRow || !rightRow)
+        {
+          return 0;
+        }
+
+        return (*compareFn)(*leftRow, *rightRow);
+      },
+      comparePtr,
+      [](gpointer userData)
+      {
+        delete static_cast<RowCompareFn*>(userData);
+      });
+
+    return Glib::wrap(GTK_SORTER(customSorter), false);
+  }
+
+  auto dropdownPositionFor(TrackGroupBy groupBy) -> std::uint32_t
+  {
+    switch (groupBy)
     {
-      return std::nullopt;
+      case TrackGroupBy::None:
+        return 0;
+      case TrackGroupBy::Artist:
+        return 1;
+      case TrackGroupBy::Album:
+        return 2;
+      case TrackGroupBy::AlbumArtist:
+        return 3;
+      case TrackGroupBy::Genre:
+        return 4;
+      case TrackGroupBy::Year:
+        return 5;
     }
 
-    return row->getTrackId();
+    return 0;
+  }
+
+  auto groupByFromDropdownPosition(std::uint32_t position) -> TrackGroupBy
+  {
+    switch (position)
+    {
+      case 1:
+        return TrackGroupBy::Artist;
+      case 2:
+        return TrackGroupBy::Album;
+      case 3:
+        return TrackGroupBy::AlbumArtist;
+      case 4:
+        return TrackGroupBy::Genre;
+      case 5:
+        return TrackGroupBy::Year;
+      default:
+        return TrackGroupBy::None;
+    }
+  }
+
+  auto trackCountLabel(guint count) -> std::string
+  {
+    auto label = std::to_string(count);
+    label += count == 1 ? " track" : " tracks";
+    return label;
   }
 }
 
 TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
-  : Gtk::Box(Gtk::Orientation::VERTICAL), _adapter(adapter)
+  : Gtk::Box(Gtk::Orientation::VERTICAL)
+  , _adapter(adapter)
+  , _sortModel(Gtk::SortListModel::create(adapter->getModel(), Glib::RefPtr<Gtk::Sorter>{}))
+  , _presentationSpec(presentationSpecForGroup(TrackGroupBy::None))
 {
   // Create multi-selection model to allow bulk operations
-  _selectionModel = Gtk::MultiSelection::create(adapter->getModel());
+  _selectionModel = Gtk::MultiSelection::create(_sortModel);
 
-  // Set up filter entry
-  _filterEntry.set_placeholder_text("Filter tracks...");
-  _filterEntry.signal_changed().connect(sigc::mem_fun(*this, &TrackViewPage::onFilterChanged));
+  setupPresentationControls();
 
   // Set up status bar (hidden by default)
   setupStatusBar();
+
+  setupHeaderFactory();
 
   // Set up column view
   _columnView.set_model(_selectionModel);
@@ -71,13 +145,92 @@ TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
   _scrolledWindow.set_vexpand(true);
   _scrolledWindow.set_hexpand(true);
 
-  // Add to box (order: filter, status, scroll)
-  append(_filterEntry);
+  applyPresentationSpec();
+
+  // Add to box (order: controls, status, scroll)
+  append(_controlsBar);
   append(_statusLabel);
   append(_scrolledWindow);
 }
 
 TrackViewPage::~TrackViewPage() = default;
+
+void TrackViewPage::setupPresentationControls()
+{
+  _controlsBar.set_spacing(8);
+  _controlsBar.set_margin_start(4);
+  _controlsBar.set_margin_end(4);
+  _controlsBar.set_margin_top(4);
+  _controlsBar.set_margin_bottom(4);
+
+  _filterEntry.set_placeholder_text("Filter tracks...");
+  _filterEntry.set_hexpand(true);
+  _filterEntry.signal_changed().connect(sigc::mem_fun(*this, &TrackViewPage::onFilterChanged));
+
+  _groupByLabel.set_text("Group");
+  _groupByLabel.set_halign(Gtk::Align::START);
+  _groupByLabel.set_valign(Gtk::Align::CENTER);
+
+  _groupByOptions = Gtk::StringList::create({"None", "Artist", "Album", "Album Artist", "Genre", "Year"});
+  _groupByDropdown.set_model(_groupByOptions);
+  _groupByDropdown.set_selected(dropdownPositionFor(_presentationSpec.groupBy));
+  _groupByDropdown.property_selected().signal_changed().connect(sigc::mem_fun(*this, &TrackViewPage::onGroupByChanged));
+
+  _controlsBar.append(_filterEntry);
+  _controlsBar.append(_groupByLabel);
+  _controlsBar.append(_groupByDropdown);
+}
+
+void TrackViewPage::setupHeaderFactory()
+{
+  _sectionHeaderFactory = Gtk::SignalListItemFactory::create();
+
+  _sectionHeaderFactory->signal_setup_obj().connect([](Glib::RefPtr<Glib::Object> const& object)
+  {
+    auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+    if (!header)
+    {
+      return;
+    }
+
+    auto* label = Gtk::make_managed<Gtk::Label>("");
+    label->set_halign(Gtk::Align::START);
+    label->set_margin_start(8);
+    label->set_margin_end(8);
+    label->set_margin_top(8);
+    label->set_margin_bottom(4);
+    label->set_xalign(0.0F);
+    header->set_child(*label);
+  });
+
+  _sectionHeaderFactory->signal_bind_obj().connect([this](Glib::RefPtr<Glib::Object> const& object)
+  {
+    auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+    auto* label = header ? dynamic_cast<Gtk::Label*>(header->get_child()) : nullptr;
+
+    if (!header || !label)
+    {
+      return;
+    }
+
+    auto item = header->get_item();
+    auto row = std::dynamic_pointer_cast<TrackRow>(item);
+
+    if (!row)
+    {
+      label->set_text("");
+      return;
+    }
+
+    auto text = groupLabelFor(row->getPresentationKeys(), _presentationSpec.groupBy);
+    if (!text.empty())
+    {
+      text += " ";
+    }
+    text += "(" + trackCountLabel(header->get_n_items()) + ")";
+    label->set_text(text);
+  });
+}
 
 void TrackViewPage::setupStatusBar()
 {
@@ -91,6 +244,36 @@ void TrackViewPage::setupStatusBar()
   // Style for error/info messages
   auto context = _statusLabel.get_style_context();
   context->add_class("dim-label");
+}
+
+void TrackViewPage::applyPresentationSpec()
+{
+  if (_presentationSpec.sortBy.empty())
+  {
+    _sortModel->set_sorter(Glib::RefPtr<Gtk::Sorter>{});
+  }
+  else
+  {
+    _sortModel->set_sorter(createRowSorter(
+      [spec = _presentationSpec](TrackRow const& lhs, TrackRow const& rhs)
+      {
+        return compareForSort(lhs.getPresentationKeys(), rhs.getPresentationKeys(), spec.sortBy);
+      }));
+  }
+
+  if (_presentationSpec.groupBy == TrackGroupBy::None)
+  {
+    _sortModel->set_section_sorter(Glib::RefPtr<Gtk::Sorter>{});
+    _columnView.set_header_factory(Glib::RefPtr<Gtk::ListItemFactory>{});
+    return;
+  }
+
+  _sortModel->set_section_sorter(createRowSorter(
+    [groupBy = _presentationSpec.groupBy](TrackRow const& lhs, TrackRow const& rhs)
+    {
+      return compareForGrouping(lhs.getPresentationKeys(), rhs.getPresentationKeys(), groupBy);
+    }));
+  _columnView.set_header_factory(_sectionHeaderFactory);
 }
 
 void TrackViewPage::setStatusMessage(std::string const& message)
@@ -209,6 +392,12 @@ void TrackViewPage::setupColumns()
   _columnView.append_column(tagsColumn);
 }
 
+void TrackViewPage::onGroupByChanged()
+{
+  _presentationSpec = presentationSpecForGroup(groupByFromDropdownPosition(_groupByDropdown.get_selected()));
+  applyPresentationSpec();
+}
+
 void TrackViewPage::onFilterChanged()
 {
   auto filterText = _filterEntry.get_text();
@@ -218,6 +407,52 @@ void TrackViewPage::onFilterChanged()
 void TrackViewPage::onSelectionChanged([[maybe_unused]] std::uint32_t position, [[maybe_unused]] std::uint32_t nItems)
 {
   _selectionChanged.emit();
+}
+
+std::optional<TrackViewPage::TrackId> TrackViewPage::trackIdAtPosition(std::uint32_t position) const
+{
+  if (!_selectionModel)
+  {
+    return std::nullopt;
+  }
+
+  auto item = _selectionModel->get_object(position);
+  if (!item)
+  {
+    return std::nullopt;
+  }
+
+  auto row = std::dynamic_pointer_cast<TrackRow>(item);
+  if (!row)
+  {
+    return std::nullopt;
+  }
+
+  return row->getTrackId();
+}
+
+std::vector<TrackListAdapter::TrackId> TrackViewPage::getVisibleTrackIds() const
+{
+  auto result = std::vector<TrackListAdapter::TrackId>{};
+
+  auto model = _selectionModel->get_model();
+  if (!model)
+  {
+    return result;
+  }
+
+  auto const nItems = model->get_n_items();
+  result.reserve(nItems);
+
+  for (std::uint32_t i = 0; i < nItems; ++i)
+  {
+    if (auto trackId = trackIdAtPosition(i))
+    {
+      result.push_back(*trackId);
+    }
+  }
+
+  return result;
 }
 
 std::vector<TrackListAdapter::TrackId> TrackViewPage::getSelectedTrackIds() const
@@ -237,14 +472,9 @@ std::vector<TrackListAdapter::TrackId> TrackViewPage::getSelectedTrackIds() cons
   {
     if (_selectionModel->is_selected(i))
     {
-      auto item = model->get_object(i);
-      if (item)
+      if (auto trackId = trackIdAtPosition(i))
       {
-        auto row = std::dynamic_pointer_cast<TrackRow>(item);
-        if (row)
-        {
-          result.push_back(row->getTrackId());
-        }
+        result.push_back(*trackId);
       }
     }
   }
@@ -270,7 +500,7 @@ void TrackViewPage::setupActivation()
   // Built-in activation carries the exact row position that GTK activated.
   _columnView.signal_activate().connect([this](std::uint32_t position)
   {
-    if (auto trackId = trackIdAtPosition(_selectionModel, position))
+    if (auto trackId = trackIdAtPosition(position))
     {
       _trackActivated.emit(*trackId);
       return;
@@ -333,14 +563,9 @@ std::optional<TrackViewPage::TrackId> TrackViewPage::getPrimarySelectedTrackId()
   {
     if (_selectionModel->is_selected(i))
     {
-      auto item = model->get_object(i);
-      if (item)
+      if (auto trackId = trackIdAtPosition(i))
       {
-        auto row = std::dynamic_pointer_cast<TrackRow>(item);
-        if (row)
-        {
-          return row->getTrackId();
-        }
+        return trackId;
       }
       // Found first selected, no need to continue
       break;
