@@ -16,6 +16,13 @@ namespace rs::core
   /**
    * ListView - Safe accessor for list data stored in binary format.
    * Reads fields directly from payload without storing header.
+   *
+   * Smart List Inheritance:
+   * - Smart lists have a non-empty filter() and define membership as:
+   *   effective_membership = parent_membership AND filter()
+   * - For root lists (parentId == 0), parent_membership = all tracks
+   * - For nested lists, membership chains through ancestor filters
+   * - The local filter() is stored as-is (not combined with parent)
    */
   class ListView final
   {
@@ -24,14 +31,27 @@ namespace rs::core
 
     std::string_view name() const;
     std::string_view description() const;
+
+    /**
+     * Local filter expression for smart lists.
+     * For inherited filtering, effective filter is computed at runtime
+     * as parent_membership AND this filter.
+     */
     std::string_view filter() const;
+
+    /** Parent list ID (0 = All Tracks / root) */
     ListId parentId() const noexcept;
+
+    /** True if this list's parent is All Tracks (the root) */
     bool isRootParent() const noexcept;
 
+    /** True if this is a smart list (has a local filter) */
     bool isSmart() const noexcept { return !filter().empty(); }
 
     /**
      * TrackProxy - Iterator and index access to track IDs in the list.
+     * For smart lists, this returns the stored track IDs which should be ignored;
+     * use FilteredTrackIdList + SmartListEngine for dynamic membership instead.
      */
     class TrackProxy : public std::ranges::view_interface<TrackProxy>
     {

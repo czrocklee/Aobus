@@ -49,6 +49,22 @@ namespace app::model
     bool _valid = true;  // Set to false when engine is being destroyed
   };
 
+  /**
+   * SmartListEngine - Batching expression evaluator for smart list filtering.
+   *
+   * SmartListEngine batches evaluation of multiple smart lists that share
+   * the same source TrackIdList. When the source changes, all dependent
+   * lists are evaluated together for efficiency.
+   *
+   * Inherited Filtering Support:
+   * The engine supports inherited filtering through source chaining:
+   * - Each registered list has a source TrackIdList
+   * - The source may itself be a FilteredTrackIdList (from a parent)
+   * - When source changes, the engine evaluates all dependent lists
+   *
+   * This enables chains like: AllTracks → FilteredTrackIdList(Beatles) →
+   * FilteredTrackIdList(Late Beatles), where each level inherits from its parent.
+   */
   class SmartListEngine final
   {
   public:

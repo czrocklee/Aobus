@@ -14,7 +14,17 @@ namespace rs::core
    * ListHeader - POD struct for binary list storage.
    * Layout follows TrackLayout pattern with 4-byte alignment.
    * trackIds array starts immediately after header at sizeof(ListHeader).
-   * Smart vs manual is determined by filter: if filter is empty -> manual, else -> smart.
+   *
+   * Smart vs Manual List Determination:
+   * - A list is "smart" if filter() is non-empty, otherwise it's "manual"
+   * - Manual lists store explicit track IDs for membership
+   * - Smart lists ignore stored trackIds and compute membership dynamically
+   *
+   * Inherited Filtering Semantics:
+   * - Each smart list has a parentId (0 = All Tracks, the root)
+   * - A child smart list's effective membership = parent_membership AND local_filter
+   * - This creates a chain: grandparent AND parent_filter AND child_filter AND ...
+   * - The local filter is stored in filter() - it is NOT pre-combined with parent
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← header begin

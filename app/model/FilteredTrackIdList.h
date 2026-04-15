@@ -26,6 +26,19 @@ namespace app::model
    *
    * This class no longer directly evaluates expressions or reads tracks -
    * that is handled by SmartListEngine for optimal batching.
+   *
+   * Inherited Filtering:
+   * FilteredTrackIdList implements inherited smart-list semantics by:
+   * 1. Taking a source TrackIdList as its parent membership
+   * 2. Applying the local expression filter to that source
+   * 3. The effective membership becomes: source_tracks WHERE expression
+   *
+   * This enables chains like:
+   *   AllTracks → FilteredTrackIdList(parent=Rock Album, expr="artist='Beatles'")
+   *     → FilteredTrackIdList(parent=Beatles Tracks, expr="year > 1970")
+   *
+   * The chain is built by the caller (e.g., MainWindow::buildPageForStoredList)
+   * which passes the parent's membership list as the source for the child.
    */
   class FilteredTrackIdList final : public TrackIdList
   {
