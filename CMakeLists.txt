@@ -255,6 +255,8 @@ add_executable(rs_test
     test/unit/lmdb/TransactionTest.cpp
     test/unit/lmdb/DatabaseTest.cpp
     test/unit/app/TrackPresentationTest.cpp
+    test/unit/app/TrackRowDataProviderTest.cpp
+    test/unit/app/TrackListAdapterTest.cpp
     test/unit/app/SmartListEngineTest.cpp
     app/TrackPresentation.cpp
     app/model/FilteredTrackIdList.cpp
