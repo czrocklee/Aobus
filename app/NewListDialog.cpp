@@ -101,7 +101,7 @@ void NewListDialog::setupUi()
   _leftPanel.append(descLabel);
   _leftPanel.append(_descEntry);
 
-  auto inheritedLabel = Gtk::Label("Inherited Expression:");
+  auto inheritedLabel = Gtk::Label("Inherited Filter:");
   inheritedLabel.set_halign(Gtk::Align::START);
   _inheritedExprLabel.set_halign(Gtk::Align::START);
   _inheritedExprLabel.set_wrap(true);
@@ -109,10 +109,10 @@ void NewListDialog::setupUi()
   _leftPanel.append(inheritedLabel);
   _leftPanel.append(_inheritedExprLabel);
 
-  // Expression field
-  auto exprLabel = Gtk::Label("Local Expression:");
+  // Filter field
+  auto exprLabel = Gtk::Label("Local Filter:");
   exprLabel.set_halign(Gtk::Align::START);
-  _exprBox.entry().set_placeholder_text("Query expression (type $, @, #, or %)");
+  _exprBox.entry().set_placeholder_text("Filter expression (type $, @, #, or %)");
   _exprBox.entry().signal_changed().connect([this]()
   {
     // Cancel any pending update
@@ -129,7 +129,7 @@ void NewListDialog::setupUi()
   _leftPanel.append(exprLabel);
   _leftPanel.append(_exprBox);
 
-  auto effectiveLabel = Gtk::Label("Effective Expression:");
+  auto effectiveLabel = Gtk::Label("Effective Filter:");
   effectiveLabel.set_halign(Gtk::Align::START);
   _effectiveExprLabel.set_halign(Gtk::Align::START);
   _effectiveExprLabel.set_wrap(true);
@@ -440,9 +440,9 @@ void NewListDialog::updatePreview()
     // Show error state
     _exprBox.entry().add_css_class("error");
     _errorLabel.set_visible(true);
-    _errorLabel.set_text("Expression error: " + _previewFilteredList->errorMessage());
+    _errorLabel.set_text("Filter error: " + _previewFilteredList->errorMessage());
     _previewScrolledWindow.set_visible(false);
-    _matchCountLabel.set_markup("<i>Invalid expression</i>");
+    _matchCountLabel.set_markup("<i>Invalid filter</i>");
     _expressionValid = false;
   }
   else
