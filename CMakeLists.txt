@@ -225,6 +225,7 @@ endif()
 add_executable(rsc
     tool/main.cpp
     tool/InitCommand.cpp
+    tool/LibCommand.cpp
     tool/ListCommand.cpp
     tool/TagCommand.cpp
     tool/TrackCommand.cpp

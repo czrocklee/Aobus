@@ -7,6 +7,7 @@
 
 #include "ComboCommand.h"
 #include "InitCommand.h"
+#include "LibCommand.h"
 #include "ListCommand.h"
 #include "TagCommand.h"
 #include "TrackCommand.h"
@@ -23,6 +24,7 @@ int main(int argc, char const* argv[])
   root.addCommand<ListCommand>("list", ml);
   root.addCommand<InitCommand>("init", ml);
   root.addCommand<TagCommand>("tag", ml);
+  root.addCommand<LibCommand>("lib", ml);
 
   try
   {
