@@ -3,8 +3,14 @@
 
 #include <catch2/catch.hpp>
 
+#include <rs/core/DictionaryStore.h>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
+#include <rs/lmdb/Database.h>
+#include <rs/lmdb/Environment.h>
+#include <rs/lmdb/Transaction.h>
+
+#include <test/unit/lmdb/TestUtils.h>
 
 using namespace rs::expr;
 
@@ -406,32 +412,50 @@ TEST_CASE("ExecutionPlan - AccessProfile Custom Field")
   CHECK(plan.accessProfile == AccessProfile::ColdOnly);
 }
 
-TEST_CASE("ExecutionPlan - LIKE operator not supported for ArtistId")
+TEST_CASE("ExecutionPlan - LIKE operator works for ArtistId")
 {
+  auto temp = TempDir{};
+  auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  auto wtxn = rs::lmdb::WriteTransaction{env};
+  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+  dict.put(wtxn, "Johann Sebastian Bach");
+
   auto expr = parse(R"($artist ~ "Bach")");
-  auto compiler = QueryCompiler{};
-  REQUIRE_THROWS(compiler.compile(expr));
+  auto compiler = QueryCompiler{&dict};
+  auto plan = compiler.compile(expr);
+
+  REQUIRE(plan.dictionary == &dict);
+  REQUIRE(plan.stringConstants.size() == 1);
+  CHECK(plan.stringConstants.front() == "Bach");
+  CHECK(plan.instructions.back().op == OpCode::Like);
+  CHECK(plan.instructions.back().field == static_cast<std::uint8_t>(Field::ArtistId));
 }
 
-TEST_CASE("ExecutionPlan - LIKE operator not supported for AlbumId")
+TEST_CASE("ExecutionPlan - LIKE operator works for AlbumId")
 {
   auto expr = parse(R"($album ~ "Greatest Hits")");
   auto compiler = QueryCompiler{};
-  REQUIRE_THROWS(compiler.compile(expr));
+  auto plan = compiler.compile(expr);
+
+  CHECK_FALSE(plan.instructions.empty());
 }
 
-TEST_CASE("ExecutionPlan - LIKE operator not supported for GenreId")
+TEST_CASE("ExecutionPlan - LIKE operator works for GenreId")
 {
   auto expr = parse(R"($genre ~ "Rock")");
   auto compiler = QueryCompiler{};
-  REQUIRE_THROWS(compiler.compile(expr));
+  auto plan = compiler.compile(expr);
+
+  CHECK_FALSE(plan.instructions.empty());
 }
 
-TEST_CASE("ExecutionPlan - LIKE operator not supported for AlbumArtistId")
+TEST_CASE("ExecutionPlan - LIKE operator works for AlbumArtistId")
 {
   auto expr = parse(R"($albumArtist ~ "Bach")");
   auto compiler = QueryCompiler{};
-  REQUIRE_THROWS(compiler.compile(expr));
+  auto plan = compiler.compile(expr);
+
+  CHECK_FALSE(plan.instructions.empty());
 }
 
 TEST_CASE("ExecutionPlan - LIKE operator not supported for CoverArtId")

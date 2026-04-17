@@ -113,6 +113,9 @@ namespace rs::expr
     std::vector<Instruction> instructions;
     std::vector<std::string> stringConstants;
 
+    // Dictionary used to resolve DictionaryId-backed metadata during evaluation.
+    core::DictionaryStore const* dictionary = nullptr;
+
     // Bloom filter for tag fast-path rejection
     std::uint32_t tagBloomMask = 0;
 
@@ -168,6 +171,7 @@ namespace rs::expr
     Field _lastField = Field::TagBloom; // Track last field for context
     bool _hasHotAccess = false;         // Track if expression uses hot (metadata/property/tag) variables
     bool _hasColdAccess = false;        // Track if expression uses cold (custom) variables
+    bool _resolveStringConstantsToIds = true;
   };
 
 } // namespace rs::expr

@@ -74,9 +74,16 @@ namespace rs::expr
       }
     }
 
-    bool isMetadataFieldId(Field field)
+    bool isDictionaryField(Field field)
     {
-      return field == Field::ArtistId || field == Field::AlbumId || field == Field::GenreId;
+      switch (field)
+      {
+        case Field::ArtistId:
+        case Field::AlbumId:
+        case Field::GenreId:
+        case Field::AlbumArtistId: return true;
+        default: return false;
+      }
     }
 
     bool isTagField(Field field)
@@ -84,18 +91,9 @@ namespace rs::expr
       return field == Field::Tag;
     }
 
-    bool isIdField(Field field)
+    bool isUnsupportedLikeField(Field field)
     {
-      switch (field)
-      {
-        case Field::ArtistId:
-        case Field::AlbumId:
-        case Field::GenreId:
-        case Field::AlbumArtistId:
-        case Field::CoverArtId:
-        case Field::Tag: return true;
-        default: return false;
-      }
+      return field == Field::CoverArtId || field == Field::Tag;
     }
 
     bool isColdField(Field field)
@@ -370,21 +368,27 @@ namespace rs::expr
 
     if (binary.operation)
     {
+      auto opcode = toOpCode(binary.operation->op);
+
+      if (opcode == OpCode::Like && isUnsupportedLikeField(leftField))
+      {
+        RS_THROW(rs::Exception, "LIKE operator not supported for coverArt or tags");
+      }
+
+      auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
+
+      if (opcode == OpCode::Like && isDictionaryField(leftField))
+      {
+        _resolveStringConstantsToIds = false;
+      }
+
       // Compile right operand
       compileExpression(binary.operation->operand);
+      _resolveStringConstantsToIds = previousResolveStringConstantsToIds;
 
       // Right operand result is in _nextReg - 1
       // Binary op will store result in operand - 1 = (_nextReg - 1) - 1 = _nextReg - 2
       auto rightReg = _nextReg - 1;
-
-      auto opcode = toOpCode(binary.operation->op);
-
-      // ID fields (artist, album, genre, albumArtist, coverArt) and tags don't support LIKE
-      if (opcode == OpCode::Like && isIdField(leftField))
-      {
-        RS_THROW(rs::Exception,
-                 "LIKE operator not supported for ID fields (artist, album, genre, albumArtist, coverArt) or tags");
-      }
 
       // Store leftField in field for LIKE instructions so executeLike can use it directly
       auto instrField = (opcode == OpCode::Like) ? static_cast<std::uint8_t>(leftField) : std::uint8_t{0};
@@ -590,7 +594,7 @@ namespace rs::expr
   std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field)
   {
     // Only resolve for metadata ID fields and tag fields
-    if (!isMetadataFieldId(field) && !isTagField(field))
+    if (!_resolveStringConstantsToIds || (!isDictionaryField(field) && !isTagField(field)))
     {
       return -1;
     }
@@ -608,9 +612,11 @@ namespace rs::expr
   ExecutionPlan QueryCompiler::compile(Expression const& expr)
   {
     _plan = ExecutionPlan{};
+    _plan.dictionary = _dict;
     _nextReg = 0;
     _hasHotAccess = false;
     _hasColdAccess = false;
+    _resolveStringConstantsToIds = true;
 
     // Check if the expression is a constant "true"
     if (auto const* constant = std::get_if<ConstantExpression>(&expr))

@@ -116,6 +116,22 @@ namespace
     std::vector<std::string> _tagStrings; // Keep tag strings alive for string_view
   };
 
+  std::vector<std::byte> makeHotOnlyTrack(rs::core::DictionaryId artistId = rs::core::DictionaryId{0},
+                                         rs::core::DictionaryId albumId = rs::core::DictionaryId{0},
+                                         rs::core::DictionaryId genreId = rs::core::DictionaryId{0},
+                                         rs::core::DictionaryId albumArtistId = rs::core::DictionaryId{0})
+  {
+    auto header = rs::core::TrackHotHeader{};
+    header.artistId = artistId;
+    header.albumId = albumId;
+    header.genreId = genreId;
+    header.albumArtistId = albumArtistId;
+
+    auto data = test::serializeHeader(header);
+    test::appendString(data, "");
+    return data;
+  }
+
 } // namespace
 
 using rs::core::DictionaryId;
@@ -224,6 +240,33 @@ TEST_CASE("PlanEvaluator - Like Match")
   auto track2 = TestTrack{"Another Title"};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
+}
+
+TEST_CASE("PlanEvaluator - Artist LIKE resolves DictionaryId strings")
+{
+  auto temp = TempDir{};
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+  auto bachId = dict.put(wtxn, "Johann Sebastian Bach");
+  auto mozartId = dict.put(wtxn, "Wolfgang Amadeus Mozart");
+
+  auto expr = parse(R"($artist ~ "Bach")");
+  auto compiler = QueryCompiler{&dict};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  auto matchingHotData = makeHotOnlyTrack(bachId);
+  auto matchingTrack = rs::core::TrackView{matchingHotData, std::span<std::byte const>{}};
+  CHECK(evaluator.evaluateFull(plan, matchingTrack) == true);
+
+  auto nonMatchingHotData = makeHotOnlyTrack(mozartId);
+  auto nonMatchingTrack = rs::core::TrackView{nonMatchingHotData, std::span<std::byte const>{}};
+  CHECK(evaluator.evaluateFull(plan, nonMatchingTrack) == false);
+
+  auto missingArtistHotData = makeHotOnlyTrack();
+  auto missingArtistTrack = rs::core::TrackView{missingArtistHotData, std::span<std::byte const>{}};
+  CHECK(evaluator.evaluateFull(plan, missingArtistTrack) == false);
 }
 
 TEST_CASE("PlanEvaluator - Title String Equal")

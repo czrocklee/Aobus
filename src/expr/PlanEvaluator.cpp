@@ -47,6 +47,18 @@ namespace rs::expr
       }
     }
 
+    bool isDictionaryField(Field field)
+    {
+      switch (field)
+      {
+        case Field::ArtistId:
+        case Field::AlbumId:
+        case Field::GenreId:
+        case Field::AlbumArtistId: return true;
+        default: return false;
+      }
+    }
+
     // Get string constant from plan's string constants table
     std::string_view getStringConstant(ExecutionPlan const* plan, std::int64_t stringIdx)
     {
@@ -81,6 +93,32 @@ namespace rs::expr
           return {};
         default: return {};
       }
+    }
+
+    std::string_view loadDictionaryFieldValue(core::TrackView const& track, Field field, ExecutionPlan const* plan)
+    {
+      if (plan == nullptr || plan->dictionary == nullptr)
+      {
+        return {};
+      }
+
+      auto dictionaryId = core::DictionaryId{0};
+
+      switch (field)
+      {
+        case Field::ArtistId: dictionaryId = track.metadata().artistId(); break;
+        case Field::AlbumId: dictionaryId = track.metadata().albumId(); break;
+        case Field::GenreId: dictionaryId = track.metadata().genreId(); break;
+        case Field::AlbumArtistId: dictionaryId = track.metadata().albumArtistId(); break;
+        default: return {};
+      }
+
+      if (dictionaryId == core::DictionaryId{0})
+      {
+        return {};
+      }
+
+      return plan->dictionary->get(dictionaryId);
     }
 
     // Free function to load field value
@@ -189,13 +227,24 @@ namespace rs::expr
                      core::TrackView const& track,
                      ExecutionPlan const* plan,
                      Instruction const& instr,
-                     std::vector<Instruction> const& /*instructions*/)
+                     std::vector<Instruction> const& instructions)
     {
       // instr.field contains the left field from the LoadField instruction
       auto field = static_cast<Field>(instr.field);
       auto rhs = registers[instr.operand];
+      auto const* prevLoadField = findPrevLoadField(instructions, &instr);
 
-      std::string_view fieldStr = loadStringFieldValue(track, field, nullptr);
+      std::string_view fieldStr;
+
+      if (isStringField(field))
+      {
+        fieldStr = loadStringFieldValue(track, field, prevLoadField);
+      }
+      else if (isDictionaryField(field))
+      {
+        fieldStr = loadDictionaryFieldValue(track, field, plan);
+      }
+
       std::string_view constantStr = getStringConstant(plan, rhs);
       auto found = fieldStr.contains(constantStr);
       registers[instr.operand - 1] = found ? 1 : 0;
