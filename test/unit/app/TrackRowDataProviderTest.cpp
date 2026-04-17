@@ -184,8 +184,8 @@ namespace app::model
 namespace
 {
 
-  using app::model::TrackRowDataProvider;
   using app::model::RowData;
+  using app::model::TrackRowDataProvider;
   using rs::core::MusicLibrary;
   using rs::core::TrackBuilder;
   using rs::core::TrackId;
@@ -216,8 +216,7 @@ namespace
   {
   public:
     TestMusicLibrary()
-      : _tempDir{}
-      , _library{_tempDir.path()}
+      : _tempDir{}, _library{_tempDir.path()}
     {
     }
 

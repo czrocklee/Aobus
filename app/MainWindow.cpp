@@ -71,6 +71,13 @@ namespace
     bool isSmart = false;
     std::string localExpression;
   };
+
+  auto normalizeLibraryPath(std::filesystem::path const& path) -> std::string
+  {
+    auto ec = std::error_code{};
+    auto const canonicalPath = std::filesystem::weakly_canonical(path, ec);
+    return ec ? path.lexically_normal().string() : canonicalPath.string();
+  }
 }
 
 MainWindow::MainWindow()
@@ -90,9 +97,7 @@ MainWindow::MainWindow()
   set_title("RockStudio");
 
   // Set default window size
-  constexpr int DefaultWindowWidth = 989;
-  constexpr int DefaultWindowHeight = 801;
-  set_default_size(DefaultWindowWidth, DefaultWindowHeight);
+  set_default_size(app::kDefaultWindowWidth, app::kDefaultWindowHeight);
 
   // Initialize cover art widget
   _coverArtWidget = std::make_unique<CoverArtWidget>();
@@ -112,6 +117,8 @@ MainWindow::~MainWindow()
     g_source_remove(_playbackTimer);
     _playbackTimer = 0;
   }
+
+  saveSession();
 
   // std::jthread auto-joins on destruction, no explicit join needed
 }
@@ -163,37 +170,41 @@ void MainWindow::openMusicLibrary(std::filesystem::path const& path)
 {
   std::cout << "DEBUG: openMusicLibrary called with path: " << path << std::endl;
 
-  // Clear existing track pages first (adapters hold pointers to old _allTrackIds)
-  clearTrackPages();
+  try
+  {
+    auto musicLibrary = std::make_unique<rs::core::MusicLibrary>(path.string());
+    std::cout << "DEBUG: MusicLibrary created" << std::endl;
 
-  // Create new music library at the path
-  _musicLibrary = std::make_unique<rs::core::MusicLibrary>(path.string());
-  std::cout << "DEBUG: MusicLibrary created" << std::endl;
+    auto rowDataProvider = std::make_shared<app::model::TrackRowDataProvider>(*musicLibrary);
+    auto allTrackIds = std::make_unique<app::model::AllTrackIdsList>(musicLibrary->tracks());
+    auto smartListEngine = std::make_unique<app::model::SmartListEngine>(*musicLibrary);
 
-  // Initialize row data provider with library stores
-  _rowDataProvider = std::make_shared<app::model::TrackRowDataProvider>(*_musicLibrary);
+    auto txn = musicLibrary->readTransaction();
+    allTrackIds->reloadFromStore(txn);
 
-  // Initialize AllTrackIdsList
-  _allTrackIds = std::make_unique<app::model::AllTrackIdsList>(_musicLibrary->tracks());
+    // Replace the current page graph only after the new library is ready to use.
+    clearTrackPages();
 
-  // Initialize SmartListEngine for smart lists
-  _smartListEngine = std::make_unique<app::model::SmartListEngine>(*_musicLibrary);
+    _musicLibrary = std::move(musicLibrary);
+    _rowDataProvider = std::move(rowDataProvider);
+    _allTrackIds = std::move(allTrackIds);
+    _smartListEngine = std::move(smartListEngine);
 
-  // Load all track IDs
-  auto txn = _musicLibrary->readTransaction();
-  _allTrackIds->reloadFromStore(txn);
+    rebuildListPages(txn);
 
-  // Load existing lists
-  rebuildListPages(txn);
+    // Show the "All Tracks" page
+    _stack.set_visible_child(pageNameForListId(allTracksListId()));
 
-  // Show the "All Tracks" page
-  _stack.set_visible_child(pageNameForListId(allTracksListId()));
+    // Update window title
+    set_title("RockStudio [" + path.string() + "]");
 
-  // Update window title
-  set_title("RockStudio [" + path.string() + "]");
-
-  // Save session
-  saveSession();
+    // Save session
+    saveSession();
+  }
+  catch (std::exception const& e)
+  {
+    std::cerr << "Failed to open music library: " << e.what() << std::endl;
+  }
 }
 
 void MainWindow::scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files)
@@ -661,8 +672,10 @@ void MainWindow::setupLayout()
 
   // Cover art widget - matches Qt's CoverArtLabel (vsizetype=Maximum, min 50x50)
   _coverArtWidget->set_valign(Gtk::Align::END);
+  _coverArtWidget->set_halign(Gtk::Align::FILL);
   _coverArtWidget->set_size_request(50, 50);
   _coverArtWidget->set_vexpand(false);
+  _coverArtWidget->set_hexpand(false);
 
   // Add widgets to left box
   _leftBox.append(_listScrolledWindow);
@@ -998,6 +1011,8 @@ void MainWindow::buildListTree(rs::lmdb::ReadTransaction& txn)
 
                                  return node->getChildren();
                                });
+
+  _treeListModel->set_autoexpand(true);
 }
 
 void MainWindow::buildPageForAllTracks()
@@ -1177,8 +1192,8 @@ void MainWindow::onTagTrack()
         for (auto trackId : idsCopy)
         {
           // Get current track data
-          auto optView = writer.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot); 
-          
+          auto optView = writer.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot);
+
           if (!optView)
           {
             continue;
@@ -1312,12 +1327,74 @@ void MainWindow::notifyTracksRemoved(std::vector<rs::core::TrackId> const& ids)
 
 void MainWindow::saveSession()
 {
-  // Placeholder - session saving would restore library path
+  try
+  {
+    auto windowState = _appConfig.windowState();
+
+    if (auto const width = get_width(); width > 0)
+    {
+      windowState.width = width;
+    }
+
+    if (auto const height = get_height(); height > 0)
+    {
+      windowState.height = height;
+    }
+
+    if (auto const panedPosition = _paned.get_position(); panedPosition > 0)
+    {
+      windowState.panedPosition = panedPosition;
+    }
+
+    windowState.maximized = is_maximized();
+    _appConfig.setWindowState(windowState);
+
+    auto sessionState = _appConfig.sessionState();
+    sessionState.lastLibraryPath = _musicLibrary ? normalizeLibraryPath(_musicLibrary->rootPath()) : std::string{};
+    _appConfig.setSessionState(std::move(sessionState));
+    _appConfig.save();
+  }
+  catch (std::exception const& e)
+  {
+    std::cerr << "Failed to save app session: " << e.what() << std::endl;
+  }
 }
 
 void MainWindow::loadSession()
 {
-  // Placeholder - would restore previous library
+  try
+  {
+    _appConfig = app::AppConfig::load();
+
+    auto const& windowState = _appConfig.windowState();
+    set_default_size(windowState.width, windowState.height);
+
+    if (windowState.panedPosition > 0)
+    {
+      _paned.set_position(windowState.panedPosition);
+    }
+
+    if (windowState.maximized)
+    {
+      maximize();
+    }
+
+    auto const& sessionState = _appConfig.sessionState();
+    if (sessionState.lastLibraryPath.empty())
+    {
+      return;
+    }
+
+    auto const libraryPath = std::filesystem::path{sessionState.lastLibraryPath};
+    if (std::filesystem::exists(libraryPath / "data.mdb"))
+    {
+      openMusicLibrary(libraryPath);
+    }
+  }
+  catch (std::exception const& e)
+  {
+    std::cerr << "Failed to load app session: " << e.what() << std::endl;
+  }
 }
 
 void MainWindow::setupPlayback()

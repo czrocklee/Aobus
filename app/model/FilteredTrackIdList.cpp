@@ -9,9 +9,7 @@
 namespace app::model
 {
 
-  FilteredTrackIdList::FilteredTrackIdList(TrackIdList& source,
-                                           rs::core::MusicLibrary& /*ml*/,
-                                           SmartListEngine& engine)
+  FilteredTrackIdList::FilteredTrackIdList(TrackIdList& source, rs::core::MusicLibrary& /*ml*/, SmartListEngine& engine)
     : _engine{&engine}
   {
     _registrationId = _engine->registerList(source, *this);

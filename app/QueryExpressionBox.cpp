@@ -77,9 +77,12 @@ namespace
       return false;
     }
 
-    return std::equal(prefix.begin(), prefix.end(), candidate.begin(), [](char lhs, char rhs) {
-      return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
-    });
+    return std::equal(
+      prefix.begin(),
+      prefix.end(),
+      candidate.begin(),
+      [](char lhs, char rhs)
+      { return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs)); });
   }
 
   std::optional<CompletionQuery> completionQueryForCursor(std::string_view text, int cursor)
@@ -149,41 +152,44 @@ void QueryExpressionBox::setupCompletion()
   _completionSelection = Gtk::SingleSelection::create(_completionItems);
 
   auto factory = Gtk::SignalListItemFactory::create();
-  factory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto* label = Gtk::make_managed<Gtk::Label>("");
-    label->set_halign(Gtk::Align::START);
-    label->set_margin_start(8);
-    label->set_margin_end(8);
-    label->set_margin_top(4);
-    label->set_margin_bottom(4);
-    listItem->set_child(*label);
-  });
-
-  factory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto item = listItem->get_item();
-    auto stringObject = std::dynamic_pointer_cast<Gtk::StringObject>(item);
-
-    if (auto label = dynamic_cast<Gtk::Label*>(listItem->get_child()); label != nullptr)
+  factory->signal_setup().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
     {
-      label->set_text(stringObject ? stringObject->get_string() : "");
-    }
-  });
+      auto* label = Gtk::make_managed<Gtk::Label>("");
+      label->set_halign(Gtk::Align::START);
+      label->set_margin_start(8);
+      label->set_margin_end(8);
+      label->set_margin_top(4);
+      label->set_margin_bottom(4);
+      listItem->set_child(*label);
+    });
+
+  factory->signal_bind().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+    {
+      auto item = listItem->get_item();
+      auto stringObject = std::dynamic_pointer_cast<Gtk::StringObject>(item);
+
+      if (auto label = dynamic_cast<Gtk::Label*>(listItem->get_child()); label != nullptr)
+      {
+        label->set_text(stringObject ? stringObject->get_string() : "");
+      }
+    });
 
   _completionListView.set_factory(factory);
   _completionListView.set_model(_completionSelection);
   _completionListView.set_single_click_activate(true);
-  _completionListView.signal_activate().connect([this](guint position)
-  {
-    if (!_completionItems || position >= _completionItems->get_n_items())
+  _completionListView.signal_activate().connect(
+    [this](guint position)
     {
-      return;
-    }
+      if (!_completionItems || position >= _completionItems->get_n_items())
+      {
+        return;
+      }
 
-    _completionSelection->set_selected(position);
-    applySelectedCompletion();
-  });
+      _completionSelection->set_selected(position);
+      applySelectedCompletion();
+    });
 
   _completionScrolledWindow.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
   _completionScrolledWindow.set_min_content_width(kCompletionWidth);
@@ -196,47 +202,48 @@ void QueryExpressionBox::setupCompletion()
   _completionPopover.set_child(_completionScrolledWindow);
   _completionPopover.set_parent(_entry);
 
-  _entry.signal_changed().connect([this]
-  {
-    if (_suppressNextCompletionUpdate)
+  _entry.signal_changed().connect(
+    [this]
     {
-      _suppressNextCompletionUpdate = false;
-      return;
-    }
+      if (_suppressNextCompletionUpdate)
+      {
+        _suppressNextCompletionUpdate = false;
+        return;
+      }
 
-    updateCompletion();
-  });
+      updateCompletion();
+    });
 
   auto keyController = Gtk::EventControllerKey::create();
   keyController->signal_key_pressed().connect(
     [this](guint keyval, guint, Gdk::ModifierType)
-  {
-    if (!_completionPopover.get_visible())
     {
-      if (keyval == GDK_KEY_Left || keyval == GDK_KEY_Right || keyval == GDK_KEY_Home || keyval == GDK_KEY_End)
+      if (!_completionPopover.get_visible())
       {
-        hideCompletion();
+        if (keyval == GDK_KEY_Left || keyval == GDK_KEY_Right || keyval == GDK_KEY_Home || keyval == GDK_KEY_End)
+        {
+          hideCompletion();
+        }
+
+        return false;
       }
 
-      return false;
-    }
-
-    switch (keyval)
-    {
-      case GDK_KEY_Up: return moveCompletionSelection(-1);
-      case GDK_KEY_Down: return moveCompletionSelection(1);
-      case GDK_KEY_Tab:
-      case GDK_KEY_KP_Tab:
-      case GDK_KEY_Return:
-      case GDK_KEY_KP_Enter: applySelectedCompletion(); return true;
-      case GDK_KEY_Escape: hideCompletion(); return true;
-      case GDK_KEY_Left:
-      case GDK_KEY_Right:
-      case GDK_KEY_Home:
-      case GDK_KEY_End: hideCompletion(); return false;
-      default: return false;
-    }
-  },
+      switch (keyval)
+      {
+        case GDK_KEY_Up: return moveCompletionSelection(-1);
+        case GDK_KEY_Down: return moveCompletionSelection(1);
+        case GDK_KEY_Tab:
+        case GDK_KEY_KP_Tab:
+        case GDK_KEY_Return:
+        case GDK_KEY_KP_Enter: applySelectedCompletion(); return true;
+        case GDK_KEY_Escape: hideCompletion(); return true;
+        case GDK_KEY_Left:
+        case GDK_KEY_Right:
+        case GDK_KEY_Home:
+        case GDK_KEY_End: hideCompletion(); return false;
+        default: return false;
+      }
+    },
     false);
   _entry.add_controller(keyController);
 

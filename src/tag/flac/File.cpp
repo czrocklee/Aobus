@@ -89,26 +89,27 @@ namespace rs::tag::flac
 
         case MetadataBlockType::VorbisComment:
         {
-          VorbisCommentBlockView{iter->data()}.visitComments([&](std::string_view comment)
-          {
-            auto const pos = comment.find('=');
-            if (pos == std::string_view::npos)
+          VorbisCommentBlockView{iter->data()}.visitComments(
+            [&](std::string_view comment)
             {
-              return;
-            }
+              auto const pos = comment.find('=');
+              if (pos == std::string_view::npos)
+              {
+                return;
+              }
 
-            std::string_view key = comment.substr(0, pos);
-            std::string_view value = comment.substr(pos + 1);
+              std::string_view key = comment.substr(0, pos);
+              std::string_view value = comment.substr(pos + 1);
 
-            if (auto const* entry = FlacVorbisDispatchTable::lookupVorbisField(key.data(), key.size()))
-            {
-              entry->handler(builder, value);
-            }
-            else
-            {
-              builder.custom().add(key, value);
-            }
-          });
+              if (auto const* entry = FlacVorbisDispatchTable::lookupVorbisField(key.data(), key.size()))
+              {
+                entry->handler(builder, value);
+              }
+              else
+              {
+                builder.custom().add(key, value);
+              }
+            });
 
           break;
         }

@@ -187,8 +187,8 @@ namespace
 
   using app::model::TrackIdList;
   using app::model::TrackIdListObserver;
-  using app::model::test::TestTrackRowProvider;
   using app::model::test::RowData;
+  using app::model::test::TestTrackRowProvider;
   using rs::core::MusicLibrary;
   using rs::core::TrackBuilder;
   using rs::core::TrackId;
@@ -224,8 +224,7 @@ namespace
   {
   public:
     TestMusicLibrary()
-      : _tempDir{}
-      , _library{_tempDir.path()}
+      : _tempDir{}, _library{_tempDir.path()}
     {
     }
 
@@ -273,10 +272,7 @@ namespace
   class MutableTrackIdList final : public TrackIdList
   {
   public:
-    void addInitial(TrackId id)
-    {
-      _ids.push_back(id);
-    }
+    void addInitial(TrackId id) { _ids.push_back(id); }
 
     void insert(TrackId id, std::size_t index)
     {
@@ -291,10 +287,7 @@ namespace
       notifyUpdated(id, *index);
     }
 
-    void onReset()
-    {
-      notifyReset();
-    }
+    void onReset() { notifyReset(); }
 
     void remove(TrackId id)
     {
@@ -306,10 +299,7 @@ namespace
 
     std::size_t size() const override { return _ids.size(); }
 
-    TrackId trackIdAt(std::size_t index) const override
-    {
-      return _ids.at(index);
-    }
+    TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
 
     std::optional<std::size_t> indexOf(TrackId id) const override
     {
@@ -350,10 +340,7 @@ namespace
       std::size_t index = 0;
     };
 
-    void onReset() override
-    {
-      events.push_back({.kind = EventKind::Reset});
-    }
+    void onReset() override { events.push_back({.kind = EventKind::Reset}); }
 
     void onInserted(TrackId id, std::size_t index) override
     {
@@ -370,10 +357,7 @@ namespace
       events.push_back({.kind = EventKind::Removed, .id = id, .index = index});
     }
 
-    void clear()
-    {
-      events.clear();
-    }
+    void clear() { events.clear(); }
 
     std::vector<Event> events;
   };
@@ -391,7 +375,8 @@ namespace
     auto needle = filter;
     std::transform(needle.begin(), needle.end(), needle.begin(), ::tolower);
 
-    auto check = [&needle](std::string const& field) -> bool {
+    auto check = [&needle](std::string const& field) -> bool
+    {
       if (field.empty())
       {
         return false;
@@ -401,8 +386,8 @@ namespace
       return lower.find(needle) != std::string::npos;
     };
 
-    return check(rowData.artist) || check(rowData.album) || check(rowData.albumArtist) ||
-           check(rowData.genre) || check(rowData.title) || check(rowData.tags);
+    return check(rowData.artist) || check(rowData.album) || check(rowData.albumArtist) || check(rowData.genre) ||
+           check(rowData.title) || check(rowData.tags);
   }
 
 } // namespace

@@ -55,10 +55,7 @@ namespace
   class MutableTrackIdList final : public TrackIdList
   {
   public:
-    void addInitial(TrackId id)
-    {
-      _ids.push_back(id);
-    }
+    void addInitial(TrackId id) { _ids.push_back(id); }
 
     void insert(TrackId id, std::size_t index)
     {
@@ -83,10 +80,7 @@ namespace
 
     std::size_t size() const override { return _ids.size(); }
 
-    TrackId trackIdAt(std::size_t index) const override
-    {
-      return _ids.at(index);
-    }
+    TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
 
     std::optional<std::size_t> indexOf(TrackId id) const override
     {
@@ -123,10 +117,7 @@ namespace
       std::size_t index = 0;
     };
 
-    void onReset() override
-    {
-      events.push_back({.kind = EventKind::Reset});
-    }
+    void onReset() override { events.push_back({.kind = EventKind::Reset}); }
 
     void onInserted(TrackId id, std::size_t index) override
     {
@@ -143,10 +134,7 @@ namespace
       events.push_back({.kind = EventKind::Removed, .id = id, .index = index});
     }
 
-    void clear()
-    {
-      events.clear();
-    }
+    void clear() { events.clear(); }
 
     std::vector<Event> events;
   };
@@ -155,8 +143,7 @@ namespace
   {
   public:
     TestMusicLibrary()
-      : _tempDir{}
-      , _library{_tempDir.path()}
+      : _tempDir{}, _library{_tempDir.path()}
     {
     }
 
@@ -168,8 +155,19 @@ namespace
       auto writer = _library.tracks().writer(txn);
 
       auto builder = TrackBuilder::createNew();
-      builder.metadata().title(spec.title).artist(spec.artist).album("Album").year(spec.year).trackNumber(spec.trackNumber);
-      builder.property().uri("/tmp/test.flac").durationMs(spec.durationMs).bitrate(320000).sampleRate(44100).channels(2).bitDepth(16);
+      builder.metadata()
+        .title(spec.title)
+        .artist(spec.artist)
+        .album("Album")
+        .year(spec.year)
+        .trackNumber(spec.trackNumber);
+      builder.property()
+        .uri("/tmp/test.flac")
+        .durationMs(spec.durationMs)
+        .bitrate(320000)
+        .sampleRate(44100)
+        .channels(2)
+        .bitDepth(16);
 
       if (!spec.customKey.empty())
       {
@@ -332,10 +330,7 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     auto spy = ObserverSpy{};
     filtered.attach(&spy);
 
-    testLibrary.updateTrack(trackId, [](TrackBuilder& builder)
-    {
-      builder.metadata().year(2022);
-    });
+    testLibrary.updateTrack(trackId, [](TrackBuilder& builder) { builder.metadata().year(2022); });
     source.update(trackId);
 
     REQUIRE(spy.events.size() == 1);
@@ -345,10 +340,7 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
 
     spy.clear();
 
-    testLibrary.updateTrack(trackId, [](TrackBuilder& builder)
-    {
-      builder.metadata().title("renamed");
-    });
+    testLibrary.updateTrack(trackId, [](TrackBuilder& builder) { builder.metadata().title("renamed"); });
     source.update(trackId);
 
     REQUIRE(spy.events.size() == 1);
@@ -358,10 +350,7 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
 
     spy.clear();
 
-    testLibrary.updateTrack(trackId, [](TrackBuilder& builder)
-    {
-      builder.metadata().year(2019);
-    });
+    testLibrary.updateTrack(trackId, [](TrackBuilder& builder) { builder.metadata().year(2019); });
     source.update(trackId);
 
     REQUIRE(spy.events.size() == 1);
@@ -412,10 +401,7 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
 
     spy.clear();
 
-    testLibrary.updateTrack(modern, [](TrackBuilder& builder)
-    {
-      builder.metadata().year(2019);
-    });
+    testLibrary.updateTrack(modern, [](TrackBuilder& builder) { builder.metadata().year(2019); });
     source.update(modern);
 
     REQUIRE(spy.events.size() == 1);

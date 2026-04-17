@@ -519,71 +519,71 @@ namespace rs::expr
   {
     std::visit(utility::makeVisitor(
                  [this](bool val)
-    {
-      _plan.instructions.push_back(Instruction{
-        .op = OpCode::LoadConstant,
-        .field = 0,
-        .operand = static_cast<std::int32_t>(_nextReg++),
-        .constValue = val ? 1 : 0,
-        .strLen = 0,
-        .strData = nullptr,
-      });
-    },
+                 {
+                   _plan.instructions.push_back(Instruction{
+                     .op = OpCode::LoadConstant,
+                     .field = 0,
+                     .operand = static_cast<std::int32_t>(_nextReg++),
+                     .constValue = val ? 1 : 0,
+                     .strLen = 0,
+                     .strData = nullptr,
+                   });
+                 },
                  [this](std::int64_t val)
-    {
-      _plan.instructions.push_back(Instruction{
-        .op = OpCode::LoadConstant,
-        .field = 0,
-        .operand = static_cast<std::int32_t>(_nextReg++),
-        .constValue = val,
-        .strLen = 0,
-        .strData = nullptr,
-      });
-    },
+                 {
+                   _plan.instructions.push_back(Instruction{
+                     .op = OpCode::LoadConstant,
+                     .field = 0,
+                     .operand = static_cast<std::int32_t>(_nextReg++),
+                     .constValue = val,
+                     .strLen = 0,
+                     .strData = nullptr,
+                   });
+                 },
                  [this](UnitConstantExpression const& val)
-    {
-      auto const scaled = scaleUnitConstant(val, _lastField);
-      _plan.instructions.push_back(Instruction{
-        .op = OpCode::LoadConstant,
-        .field = 0,
-        .operand = static_cast<std::int32_t>(_nextReg++),
-        .constValue = scaled,
-        .strLen = 0,
-        .strData = nullptr,
-      });
-    },
+                 {
+                   auto const scaled = scaleUnitConstant(val, _lastField);
+                   _plan.instructions.push_back(Instruction{
+                     .op = OpCode::LoadConstant,
+                     .field = 0,
+                     .operand = static_cast<std::int32_t>(_nextReg++),
+                     .constValue = scaled,
+                     .strLen = 0,
+                     .strData = nullptr,
+                   });
+                 },
                  [this](std::string const& val)
-    {
-      // Check if we should resolve this string via dictionary
-      // For metadata ID fields (artist, album, genre), resolve to numeric ID
-      auto resolvedId = resolveStringConstant(val, _lastField);
+                 {
+                   // Check if we should resolve this string via dictionary
+                   // For metadata ID fields (artist, album, genre), resolve to numeric ID
+                   auto resolvedId = resolveStringConstant(val, _lastField);
 
-      if (resolvedId >= 0)
-      {
-        // Successfully resolved to ID - store as numeric constant
-        _plan.instructions.push_back(Instruction{
-          .op = OpCode::LoadConstant,
-          .field = 0,
-          .operand = static_cast<std::int32_t>(_nextReg++),
-          .constValue = resolvedId,
-          .strLen = 0,
-          .strData = nullptr,
-        });
-      }
-      else
-      {
-        // Not resolved (no dictionary or not a metadata ID field) - store as string constant
-        auto idx = addStringConstant(val);
-        _plan.instructions.push_back(Instruction{
-          .op = OpCode::LoadConstant,
-          .field = 0,
-          .operand = static_cast<std::int32_t>(_nextReg++),
-          .constValue = static_cast<std::int64_t>(idx),
-          .strLen = static_cast<std::uint32_t>(val.size()),
-          .strData = nullptr,
-        });
-      }
-    }),
+                   if (resolvedId >= 0)
+                   {
+                     // Successfully resolved to ID - store as numeric constant
+                     _plan.instructions.push_back(Instruction{
+                       .op = OpCode::LoadConstant,
+                       .field = 0,
+                       .operand = static_cast<std::int32_t>(_nextReg++),
+                       .constValue = resolvedId,
+                       .strLen = 0,
+                       .strData = nullptr,
+                     });
+                   }
+                   else
+                   {
+                     // Not resolved (no dictionary or not a metadata ID field) - store as string constant
+                     auto idx = addStringConstant(val);
+                     _plan.instructions.push_back(Instruction{
+                       .op = OpCode::LoadConstant,
+                       .field = 0,
+                       .operand = static_cast<std::int32_t>(_nextReg++),
+                       .constValue = static_cast<std::int64_t>(idx),
+                       .strLen = static_cast<std::uint32_t>(val.size()),
+                       .strData = nullptr,
+                     });
+                   }
+                 }),
                constant);
   }
 

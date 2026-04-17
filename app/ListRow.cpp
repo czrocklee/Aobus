@@ -8,11 +8,7 @@ ListRow::ListRow()
 {
 }
 
-Glib::RefPtr<ListRow> ListRow::create(ListId id,
-                                      ListId parentId,
-                                      int depth,
-                                      bool smart,
-                                      Glib::ustring const& name)
+Glib::RefPtr<ListRow> ListRow::create(ListId id, ListId parentId, int depth, bool smart, Glib::ustring const& name)
 {
   auto obj = Glib::make_refptr_for_instance<ListRow>(new ListRow());
   obj->_listId = id;

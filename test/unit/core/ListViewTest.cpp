@@ -31,11 +31,8 @@ namespace
 
   TEST_CASE("ListView - Field Accessors")
   {
-    auto payload = rs::core::ListBuilder::createNew()
-                     .name("Test")
-                     .description("Desc")
-                     .parentId(rs::core::ListId{9})
-                     .serialize();
+    auto payload =
+      rs::core::ListBuilder::createNew().name("Test").description("Desc").parentId(rs::core::ListId{9}).serialize();
     auto view = ListView{payload};
 
     CHECK(view.tracks().size() == 0);

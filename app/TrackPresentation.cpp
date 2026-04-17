@@ -103,28 +103,19 @@ namespace
     return 0;
   }
 
-  [[nodiscard]] auto compareByField(TrackPresentationKeysView lhs,
-                                    TrackPresentationKeysView rhs,
-                                    TrackSortField field) -> int
+  [[nodiscard]] auto compareByField(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackSortField field)
+    -> int
   {
     switch (field)
     {
-      case TrackSortField::Artist:
-        return compareTextField(lhs.artist, rhs.artist);
-      case TrackSortField::Album:
-        return compareTextField(lhs.album, rhs.album);
-      case TrackSortField::AlbumArtist:
-        return compareTextField(lhs.albumArtist, rhs.albumArtist);
-      case TrackSortField::Genre:
-        return compareTextField(lhs.genre, rhs.genre);
-      case TrackSortField::Year:
-        return compareNumberField(lhs.year, rhs.year);
-      case TrackSortField::DiscNumber:
-        return compareNumberField(lhs.discNumber, rhs.discNumber);
-      case TrackSortField::TrackNumber:
-        return compareNumberField(lhs.trackNumber, rhs.trackNumber);
-      case TrackSortField::Title:
-        return compareTextField(lhs.title, rhs.title);
+      case TrackSortField::Artist: return compareTextField(lhs.artist, rhs.artist);
+      case TrackSortField::Album: return compareTextField(lhs.album, rhs.album);
+      case TrackSortField::AlbumArtist: return compareTextField(lhs.albumArtist, rhs.albumArtist);
+      case TrackSortField::Genre: return compareTextField(lhs.genre, rhs.genre);
+      case TrackSortField::Year: return compareNumberField(lhs.year, rhs.year);
+      case TrackSortField::DiscNumber: return compareNumberField(lhs.discNumber, rhs.discNumber);
+      case TrackSortField::TrackNumber: return compareNumberField(lhs.trackNumber, rhs.trackNumber);
+      case TrackSortField::Title: return compareTextField(lhs.title, rhs.title);
     }
 
     return 0;
@@ -143,8 +134,7 @@ TrackPresentationSpec presentationSpecForGroup(TrackGroupBy groupBy)
 
   switch (groupBy)
   {
-    case TrackGroupBy::None:
-      return spec;
+    case TrackGroupBy::None: return spec;
     case TrackGroupBy::Artist:
       spec.sortBy = {
         {TrackSortField::Artist},
@@ -197,9 +187,7 @@ TrackPresentationSpec presentationSpecForGroup(TrackGroupBy groupBy)
   return spec;
 }
 
-int compareForSort(TrackPresentationKeysView lhs,
-                   TrackPresentationKeysView rhs,
-                   std::span<TrackSortTerm const> sortBy)
+int compareForSort(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, std::span<TrackSortTerm const> sortBy)
 {
   for (auto const& term : sortBy)
   {
@@ -212,28 +200,21 @@ int compareForSort(TrackPresentationKeysView lhs,
   return compareTrackId(lhs.trackId, rhs.trackId);
 }
 
-int compareForGrouping(TrackPresentationKeysView lhs,
-                       TrackPresentationKeysView rhs,
-                       TrackGroupBy groupBy)
+int compareForGrouping(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackGroupBy groupBy)
 {
   switch (groupBy)
   {
-    case TrackGroupBy::None:
-      return 0;
-    case TrackGroupBy::Artist:
-      return compareTextField(lhs.artist, rhs.artist);
+    case TrackGroupBy::None: return 0;
+    case TrackGroupBy::Artist: return compareTextField(lhs.artist, rhs.artist);
     case TrackGroupBy::Album:
       if (auto const albumArtistCmp = compareTextField(lhs.albumArtist, rhs.albumArtist); albumArtistCmp != 0)
       {
         return albumArtistCmp;
       }
       return compareTextField(lhs.album, rhs.album);
-    case TrackGroupBy::AlbumArtist:
-      return compareTextField(lhs.albumArtist, rhs.albumArtist);
-    case TrackGroupBy::Genre:
-      return compareTextField(lhs.genre, rhs.genre);
-    case TrackGroupBy::Year:
-      return compareNumberField(lhs.year, rhs.year);
+    case TrackGroupBy::AlbumArtist: return compareTextField(lhs.albumArtist, rhs.albumArtist);
+    case TrackGroupBy::Genre: return compareTextField(lhs.genre, rhs.genre);
+    case TrackGroupBy::Year: return compareNumberField(lhs.year, rhs.year);
   }
 
   return 0;
@@ -243,10 +224,8 @@ std::string groupLabelFor(TrackPresentationKeysView keys, TrackGroupBy groupBy)
 {
   switch (groupBy)
   {
-    case TrackGroupBy::None:
-      return {};
-    case TrackGroupBy::Artist:
-      return keys.artist.empty() ? unknownLabel("Artist") : std::string{keys.artist};
+    case TrackGroupBy::None: return {};
+    case TrackGroupBy::Artist: return keys.artist.empty() ? unknownLabel("Artist") : std::string{keys.artist};
     case TrackGroupBy::Album:
       if (keys.album.empty())
       {
@@ -261,10 +240,8 @@ std::string groupLabelFor(TrackPresentationKeysView keys, TrackGroupBy groupBy)
       return std::string{keys.album} + " - " + std::string{keys.albumArtist};
     case TrackGroupBy::AlbumArtist:
       return keys.albumArtist.empty() ? unknownLabel("Album Artist") : std::string{keys.albumArtist};
-    case TrackGroupBy::Genre:
-      return keys.genre.empty() ? unknownLabel("Genre") : std::string{keys.genre};
-    case TrackGroupBy::Year:
-      return keys.year == 0 ? unknownLabel("Year") : std::to_string(keys.year);
+    case TrackGroupBy::Genre: return keys.genre.empty() ? unknownLabel("Genre") : std::string{keys.genre};
+    case TrackGroupBy::Year: return keys.year == 0 ? unknownLabel("Year") : std::to_string(keys.year);
   }
 
   return {};

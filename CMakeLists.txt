@@ -182,6 +182,7 @@ add_library(rs OBJECT
     src/lmdb/Environment.cpp
     src/lmdb/Transaction.cpp
     src/lmdb/Database.cpp
+    src/core/LibraryMetaStore.cpp
     src/core/MusicLibrary.cpp
     src/core/ResourceStore.cpp
     src/core/DictionaryStore.cpp
@@ -251,6 +252,7 @@ add_executable(rs_test
     test/unit/core/TrackStoreTest.cpp
     test/unit/core/ListStoreTest.cpp
     test/unit/core/ListBuilderTest.cpp
+    test/unit/core/MusicLibraryTest.cpp
     test/unit/lmdb/EnvironmentTest.cpp
     test/unit/lmdb/TransactionTest.cpp
     test/unit/lmdb/DatabaseTest.cpp
@@ -289,6 +291,7 @@ endif()
 
 add_executable(RockStudio
     app/main.cpp
+    app/AppConfig.cpp
     app/MainWindow.cpp
     app/TrackPresentation.cpp
     app/TrackViewPage.cpp

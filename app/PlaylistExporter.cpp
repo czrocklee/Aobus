@@ -61,10 +61,10 @@ void PlaylistExporter::scheduleForWrite()
   // Schedule write after 3 second delay (Glib::signal_timeout uses milliseconds)
   _timeoutConnection = std::make_unique<sigc::connection>(Glib::signal_timeout().connect(
     [this]()
-  {
-    writeFile();
-    return false;
-  },
+    {
+      writeFile();
+      return false;
+    },
     3000));
 }
 

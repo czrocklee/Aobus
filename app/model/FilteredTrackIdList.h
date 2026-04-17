@@ -43,9 +43,7 @@ namespace app::model
   class FilteredTrackIdList final : public TrackIdList
   {
   public:
-    FilteredTrackIdList(TrackIdList& source,
-                        rs::core::MusicLibrary& ml,
-                        SmartListEngine& engine);
+    FilteredTrackIdList(TrackIdList& source, rs::core::MusicLibrary& ml, SmartListEngine& engine);
     ~FilteredTrackIdList() override;
 
     void setExpression(std::string expr);
@@ -69,7 +67,7 @@ namespace app::model
     void notifyEngineRemoved(TrackId id, std::size_t index);
 
     SmartListEngine* _engine = nullptr;
-    std::uint64_t _registrationId = 0;  // Use std::uint64_t directly instead of RegistrationId
+    std::uint64_t _registrationId = 0; // Use std::uint64_t directly instead of RegistrationId
   };
 
 } // namespace app::model

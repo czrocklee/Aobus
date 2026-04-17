@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "TrackPresentation.h"
 #include "TrackListAdapter.h"
+#include "TrackPresentation.h"
 
 #include <gtkmm.h>
 

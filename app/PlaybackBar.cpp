@@ -80,11 +80,12 @@ void PlaybackBar::setupSignals()
 
   _stopButton.signal_clicked().connect([this]() { _stopRequested.emit(); });
 
-  _seekScale.signal_value_changed().connect([this]()
-  {
-    auto position = static_cast<std::uint32_t>(_seekScale.get_value());
-    _seekRequested.emit(position);
-  });
+  _seekScale.signal_value_changed().connect(
+    [this]()
+    {
+      auto position = static_cast<std::uint32_t>(_seekScale.get_value());
+      _seekRequested.emit(position);
+    });
 }
 
 void PlaybackBar::setSnapshot(app::playback::PlaybackSnapshot const& snapshot)

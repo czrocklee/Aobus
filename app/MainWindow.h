@@ -15,6 +15,7 @@
 #include <thread>
 #include <vector>
 
+#include "AppConfig.h"
 #include "model/SmartListEngine.h"
 
 #include "playback/PlaybackTypes.h"
@@ -131,6 +132,7 @@ private:
 
   // Smart list engine for shared evaluation
   std::unique_ptr<app::model::SmartListEngine> _smartListEngine;
+  app::AppConfig _appConfig;
 
   // Layout: Horizontal paned with left box and right stack
   Gtk::Paned _paned;

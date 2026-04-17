@@ -100,9 +100,9 @@ TEST_CASE("ExecutionPlan - Duration Unit Constant")
   auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
-  auto const it = std::find_if(plan.instructions.begin(), plan.instructions.end(), [](Instruction const& instr) {
-    return instr.op == OpCode::LoadConstant;
-  });
+  auto const it = std::find_if(plan.instructions.begin(),
+                               plan.instructions.end(),
+                               [](Instruction const& instr) { return instr.op == OpCode::LoadConstant; });
 
   REQUIRE(it != plan.instructions.end());
   CHECK(it->constValue == 180000);
@@ -114,9 +114,9 @@ TEST_CASE("ExecutionPlan - Bitrate Unit Constant")
   auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
-  auto const it = std::find_if(plan.instructions.begin(), plan.instructions.end(), [](Instruction const& instr) {
-    return instr.op == OpCode::LoadConstant;
-  });
+  auto const it = std::find_if(plan.instructions.begin(),
+                               plan.instructions.end(),
+                               [](Instruction const& instr) { return instr.op == OpCode::LoadConstant; });
 
   REQUIRE(it != plan.instructions.end());
   CHECK(it->constValue == 2000000);
@@ -128,9 +128,9 @@ TEST_CASE("ExecutionPlan - SampleRate Unit Constant")
   auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
 
-  auto const it = std::find_if(plan.instructions.begin(), plan.instructions.end(), [](Instruction const& instr) {
-    return instr.op == OpCode::LoadConstant;
-  });
+  auto const it = std::find_if(plan.instructions.begin(),
+                               plan.instructions.end(),
+                               [](Instruction const& instr) { return instr.op == OpCode::LoadConstant; });
 
   REQUIRE(it != plan.instructions.end());
   CHECK(it->constValue == 44100);

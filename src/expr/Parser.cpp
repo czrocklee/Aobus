@@ -47,9 +47,9 @@ namespace
                                  dsl::identifier(dsl::ascii::alpha_underscore, dsl::ascii::alpha_digit_underscore);
     static constexpr auto value = lexy::callback<VariableExpression>(
       [](VariableType type, auto lexeme)
-    {
-      return VariableExpression{type, std::string{lexeme.begin(), lexeme.end()}};
-    } // NOLINT(readability-named-parameter)
+      {
+        return VariableExpression{type, std::string{lexeme.begin(), lexeme.end()}};
+      } // NOLINT(readability-named-parameter)
     );
   };
 
@@ -100,8 +100,8 @@ namespace
       dsl::token(dsl::minus_sign + dsl::digits<> + dsl::opt(dsl::lit_c<'.'> >> dsl::digits<>) +
                  dsl::identifier(dsl::ascii::alpha).pattern());
     static constexpr auto rule = dsl::peek(kUnitToken) >> dsl::capture(kUnitToken);
-    static constexpr auto value = lexy::callback<UnitConstantExpression>([](auto lexeme)
-    { return UnitConstantExpression{std::string{lexeme.begin(), lexeme.end()}}; });
+    static constexpr auto value = lexy::callback<UnitConstantExpression>(
+      [](auto lexeme) { return UnitConstantExpression{std::string{lexeme.begin(), lexeme.end()}}; });
   };
 
   struct Constant
@@ -122,18 +122,20 @@ namespace
     {
       static constexpr auto rule = dsl::list(dsl::parenthesized(dsl::p<Expr>) | dsl::p<Variable> | dsl::p<Constant>);
       static constexpr auto value = lexy::as_list<std::vector<Expression>> >>
-                                    lexy::callback<Expression>([](std::vector<Expression> list)
-      {
-        Expression result = std::move(list.back());
-        for (auto it = list.rbegin() + 1; it != list.rend(); ++it)
-        {
-          auto bin = std::make_unique<BinaryExpression>();
-          bin->operand = std::move(*it);
-          bin->operation = BinaryExpression::Operation{Operator::Add, std::move(result)};
-          result = Expression{std::move(bin)};
-        }
-        return result;
-      });
+                                    lexy::callback<Expression>(
+                                      [](std::vector<Expression> list)
+                                      {
+                                        Expression result = std::move(list.back());
+                                        for (auto it = list.rbegin() + 1; it != list.rend(); ++it)
+                                        {
+                                          auto bin = std::make_unique<BinaryExpression>();
+                                          bin->operand = std::move(*it);
+                                          bin->operation =
+                                            BinaryExpression::Operation{Operator::Add, std::move(result)};
+                                          result = Expression{std::move(bin)};
+                                        }
+                                        return result;
+                                      });
     };
 
     static constexpr auto atom = dsl::p<ExprAtom> | dsl::error<ExpectedOperand>;
@@ -179,19 +181,20 @@ namespace
 
     static constexpr auto value = lexy::callback<Expression>([](Expression lhs) { return lhs; },
                                                              [](Operator op, Expression expr)
-    {
-      auto un = std::make_unique<UnaryExpression>();
-      un->op = op;
-      un->operand = std::move(expr);
-      return Expression{std::move(un)};
-    },
+                                                             {
+                                                               auto un = std::make_unique<UnaryExpression>();
+                                                               un->op = op;
+                                                               un->operand = std::move(expr);
+                                                               return Expression{std::move(un)};
+                                                             },
                                                              [](Expression lhs, Operator op, Expression rhs)
-    {
-      auto bin = std::make_unique<BinaryExpression>();
-      bin->operand = std::move(lhs);
-      bin->operation = BinaryExpression::Operation{op, std::move(rhs)};
-      return Expression{std::move(bin)};
-    });
+                                                             {
+                                                               auto bin = std::make_unique<BinaryExpression>();
+                                                               bin->operand = std::move(lhs);
+                                                               bin->operation =
+                                                                 BinaryExpression::Operation{op, std::move(rhs)};
+                                                               return Expression{std::move(bin)};
+                                                             });
   };
 
   struct Stmt

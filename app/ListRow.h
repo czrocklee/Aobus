@@ -29,11 +29,7 @@ public:
   Glib::ustring getName() const { return _name; }
   void setName(Glib::ustring const& name) { _name = name; }
 
-  static Glib::RefPtr<ListRow> create(ListId id,
-                                      ListId sourceListId,
-                                      int depth,
-                                      bool smart,
-                                      Glib::ustring const& name);
+  static Glib::RefPtr<ListRow> create(ListId id, ListId sourceListId, int depth, bool smart, Glib::ustring const& name);
 
 protected:
   explicit ListRow();

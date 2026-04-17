@@ -8,9 +8,9 @@
 
 #include <gdk/gdk.h>
 
+#include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listheader.h>
-#include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/listitem.h>
 #include <gtkmm/signallistitemfactory.h>
 
@@ -53,10 +53,7 @@ namespace
         return (*compareFn)(*leftRow, *rightRow);
       },
       comparePtr,
-      [](gpointer userData)
-      {
-        delete static_cast<RowCompareFn*>(userData);
-      });
+      [](gpointer userData) { delete static_cast<RowCompareFn*>(userData); });
 
     return Glib::wrap(GTK_SORTER(customSorter), false);
   }
@@ -65,18 +62,12 @@ namespace
   {
     switch (groupBy)
     {
-      case TrackGroupBy::None:
-        return 0;
-      case TrackGroupBy::Artist:
-        return 1;
-      case TrackGroupBy::Album:
-        return 2;
-      case TrackGroupBy::AlbumArtist:
-        return 3;
-      case TrackGroupBy::Genre:
-        return 4;
-      case TrackGroupBy::Year:
-        return 5;
+      case TrackGroupBy::None: return 0;
+      case TrackGroupBy::Artist: return 1;
+      case TrackGroupBy::Album: return 2;
+      case TrackGroupBy::AlbumArtist: return 3;
+      case TrackGroupBy::Genre: return 4;
+      case TrackGroupBy::Year: return 5;
     }
 
     return 0;
@@ -86,18 +77,12 @@ namespace
   {
     switch (position)
     {
-      case 1:
-        return TrackGroupBy::Artist;
-      case 2:
-        return TrackGroupBy::Album;
-      case 3:
-        return TrackGroupBy::AlbumArtist;
-      case 4:
-        return TrackGroupBy::Genre;
-      case 5:
-        return TrackGroupBy::Year;
-      default:
-        return TrackGroupBy::None;
+      case 1: return TrackGroupBy::Artist;
+      case 2: return TrackGroupBy::Album;
+      case 3: return TrackGroupBy::AlbumArtist;
+      case 4: return TrackGroupBy::Genre;
+      case 5: return TrackGroupBy::Year;
+      default: return TrackGroupBy::None;
     }
   }
 
@@ -185,51 +170,53 @@ void TrackViewPage::setupHeaderFactory()
 {
   _sectionHeaderFactory = Gtk::SignalListItemFactory::create();
 
-  _sectionHeaderFactory->signal_setup_obj().connect([](Glib::RefPtr<Glib::Object> const& object)
-  {
-    auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
-    if (!header)
+  _sectionHeaderFactory->signal_setup_obj().connect(
+    [](Glib::RefPtr<Glib::Object> const& object)
     {
-      return;
-    }
+      auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+      if (!header)
+      {
+        return;
+      }
 
-    auto* label = Gtk::make_managed<Gtk::Label>("");
-    label->set_halign(Gtk::Align::START);
-    label->set_margin_start(8);
-    label->set_margin_end(8);
-    label->set_margin_top(8);
-    label->set_margin_bottom(4);
-    label->set_xalign(0.0F);
-    header->set_child(*label);
-  });
+      auto* label = Gtk::make_managed<Gtk::Label>("");
+      label->set_halign(Gtk::Align::START);
+      label->set_margin_start(8);
+      label->set_margin_end(8);
+      label->set_margin_top(8);
+      label->set_margin_bottom(4);
+      label->set_xalign(0.0F);
+      header->set_child(*label);
+    });
 
-  _sectionHeaderFactory->signal_bind_obj().connect([this](Glib::RefPtr<Glib::Object> const& object)
-  {
-    auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
-    auto* label = header ? dynamic_cast<Gtk::Label*>(header->get_child()) : nullptr;
-
-    if (!header || !label)
+  _sectionHeaderFactory->signal_bind_obj().connect(
+    [this](Glib::RefPtr<Glib::Object> const& object)
     {
-      return;
-    }
+      auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+      auto* label = header ? dynamic_cast<Gtk::Label*>(header->get_child()) : nullptr;
 
-    auto item = header->get_item();
-    auto row = std::dynamic_pointer_cast<TrackRow>(item);
+      if (!header || !label)
+      {
+        return;
+      }
 
-    if (!row)
-    {
-      label->set_text("");
-      return;
-    }
+      auto item = header->get_item();
+      auto row = std::dynamic_pointer_cast<TrackRow>(item);
 
-    auto text = groupLabelFor(row->getPresentationKeys(), _presentationSpec.groupBy);
-    if (!text.empty())
-    {
-      text += " ";
-    }
-    text += "(" + trackCountLabel(header->get_n_items()) + ")";
-    label->set_text(text);
-  });
+      if (!row)
+      {
+        label->set_text("");
+        return;
+      }
+
+      auto text = groupLabelFor(row->getPresentationKeys(), _presentationSpec.groupBy);
+      if (!text.empty())
+      {
+        text += " ";
+      }
+      text += "(" + trackCountLabel(header->get_n_items()) + ")";
+      label->set_text(text);
+    });
 }
 
 void TrackViewPage::setupStatusBar()
@@ -254,11 +241,9 @@ void TrackViewPage::applyPresentationSpec()
   }
   else
   {
-    _sortModel->set_sorter(createRowSorter(
-      [spec = _presentationSpec](TrackRow const& lhs, TrackRow const& rhs)
-      {
-        return compareForSort(lhs.getPresentationKeys(), rhs.getPresentationKeys(), spec.sortBy);
-      }));
+    _sortModel->set_sorter(
+      createRowSorter([spec = _presentationSpec](TrackRow const& lhs, TrackRow const& rhs)
+                      { return compareForSort(lhs.getPresentationKeys(), rhs.getPresentationKeys(), spec.sortBy); }));
   }
 
   if (_presentationSpec.groupBy == TrackGroupBy::None)
@@ -268,11 +253,9 @@ void TrackViewPage::applyPresentationSpec()
     return;
   }
 
-  _sortModel->set_section_sorter(createRowSorter(
-    [groupBy = _presentationSpec.groupBy](TrackRow const& lhs, TrackRow const& rhs)
-    {
-      return compareForGrouping(lhs.getPresentationKeys(), rhs.getPresentationKeys(), groupBy);
-    }));
+  _sortModel->set_section_sorter(
+    createRowSorter([groupBy = _presentationSpec.groupBy](TrackRow const& lhs, TrackRow const& rhs)
+                    { return compareForGrouping(lhs.getPresentationKeys(), rhs.getPresentationKeys(), groupBy); }));
   _columnView.set_header_factory(_sectionHeaderFactory);
 }
 
@@ -297,98 +280,116 @@ void TrackViewPage::setupColumns()
 {
   // Artist column
   auto artistFactory = Gtk::SignalListItemFactory::create();
-  artistFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto* label = Gtk::make_managed<Gtk::Label>("");
-    label->set_halign(Gtk::Align::START);
-    listItem->set_child(*label);
-  });
-  artistFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto item = listItem->get_item();
-    auto row = std::dynamic_pointer_cast<TrackRow>(item);
-    auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-    if (row && label)
+  artistFactory->signal_setup().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
     {
-      label->set_text(row->getArtist());
-    }
-  });
+      auto* label = Gtk::make_managed<Gtk::Label>("");
+      label->set_halign(Gtk::Align::START);
+      label->set_ellipsize(Pango::EllipsizeMode::END);
+      listItem->set_child(*label);
+    });
+  artistFactory->signal_bind().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+    {
+      auto item = listItem->get_item();
+      auto row = std::dynamic_pointer_cast<TrackRow>(item);
+      auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+      if (row && label)
+      {
+        label->set_text(row->getArtist());
+      }
+    });
 
   auto artistColumn = Gtk::ColumnViewColumn::create("Artist", artistFactory);
-  artistColumn->set_expand(true);
+  artistColumn->set_expand(false);
   artistColumn->set_resizable(true);
+  artistColumn->set_fixed_width(150);
   _columnView.append_column(artistColumn);
 
   // Album column
   auto albumFactory = Gtk::SignalListItemFactory::create();
-  albumFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto* label = Gtk::make_managed<Gtk::Label>("");
-    label->set_halign(Gtk::Align::START);
-    listItem->set_child(*label);
-  });
-  albumFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto item = listItem->get_item();
-    auto row = std::dynamic_pointer_cast<TrackRow>(item);
-    auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-    if (row && label)
+  albumFactory->signal_setup().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
     {
-      label->set_text(row->getAlbum());
-    }
-  });
+      auto* label = Gtk::make_managed<Gtk::Label>("");
+      label->set_halign(Gtk::Align::START);
+      label->set_ellipsize(Pango::EllipsizeMode::END);
+      listItem->set_child(*label);
+    });
+  albumFactory->signal_bind().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+    {
+      auto item = listItem->get_item();
+      auto row = std::dynamic_pointer_cast<TrackRow>(item);
+      auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+      if (row && label)
+      {
+        label->set_text(row->getAlbum());
+      }
+    });
 
   auto albumColumn = Gtk::ColumnViewColumn::create("Album", albumFactory);
-  albumColumn->set_expand(true);
+  albumColumn->set_expand(false);
   albumColumn->set_resizable(true);
+  albumColumn->set_fixed_width(200);
   _columnView.append_column(albumColumn);
 
   // Title column
   auto titleFactory = Gtk::SignalListItemFactory::create();
-  titleFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto* label = Gtk::make_managed<Gtk::Label>("");
-    label->set_halign(Gtk::Align::START);
-    listItem->set_child(*label);
-  });
-  titleFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto item = listItem->get_item();
-    auto row = std::dynamic_pointer_cast<TrackRow>(item);
-    auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-    if (row && label)
+  titleFactory->signal_setup().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
     {
-      label->set_text(row->getTitle());
-    }
-  });
+      auto* label = Gtk::make_managed<Gtk::Label>("");
+      label->set_halign(Gtk::Align::START);
+      label->set_ellipsize(Pango::EllipsizeMode::END);
+      listItem->set_child(*label);
+    });
+  titleFactory->signal_bind().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+    {
+      auto item = listItem->get_item();
+      auto row = std::dynamic_pointer_cast<TrackRow>(item);
+      auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+      if (row && label)
+      {
+        label->set_text(row->getTitle());
+      }
+    });
 
   auto titleColumn = Gtk::ColumnViewColumn::create("Title", titleFactory);
+  // Keep one flexible column so row selection does not cause GTK to rebalance
+  // spare width across every column.
   titleColumn->set_expand(true);
   titleColumn->set_resizable(true);
+  titleColumn->set_fixed_width(-1);
   _columnView.append_column(titleColumn);
 
   // Tags column
   auto tagsFactory = Gtk::SignalListItemFactory::create();
-  tagsFactory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto* label = Gtk::make_managed<Gtk::Label>("");
-    label->set_halign(Gtk::Align::START);
-    listItem->set_child(*label);
-  });
-  tagsFactory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto item = listItem->get_item();
-    auto row = std::dynamic_pointer_cast<TrackRow>(item);
-    auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-    if (row && label)
+  tagsFactory->signal_setup().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
     {
-      label->set_text(row->getTags());
-    }
-  });
+      auto* label = Gtk::make_managed<Gtk::Label>("");
+      label->set_halign(Gtk::Align::START);
+      label->set_ellipsize(Pango::EllipsizeMode::END);
+      listItem->set_child(*label);
+    });
+  tagsFactory->signal_bind().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+    {
+      auto item = listItem->get_item();
+      auto row = std::dynamic_pointer_cast<TrackRow>(item);
+      auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+      if (row && label)
+      {
+        label->set_text(row->getTags());
+      }
+    });
 
   auto tagsColumn = Gtk::ColumnViewColumn::create("Tags", tagsFactory);
-  tagsColumn->set_expand(true);
+  tagsColumn->set_expand(false);
   tagsColumn->set_resizable(true);
+  tagsColumn->set_fixed_width(100);
   _columnView.append_column(tagsColumn);
 }
 
@@ -498,30 +499,31 @@ void TrackViewPage::setupActivation()
   _columnView.set_focus_on_click(true);
 
   // Built-in activation carries the exact row position that GTK activated.
-  _columnView.signal_activate().connect([this](std::uint32_t position)
-  {
-    if (auto trackId = trackIdAtPosition(position))
+  _columnView.signal_activate().connect(
+    [this](std::uint32_t position)
     {
-      _trackActivated.emit(*trackId);
-      return;
-    }
+      if (auto trackId = trackIdAtPosition(position))
+      {
+        _trackActivated.emit(*trackId);
+        return;
+      }
 
-    onActivateCurrentSelection();
-  });
+      onActivateCurrentSelection();
+    });
 
   // Keep an explicit Enter handler so activation still works when GTK focus is
   // on the view but no activate action is emitted automatically.
   auto keyController = Gtk::EventControllerKey::create();
   keyController->signal_key_pressed().connect(
     [this](guint keyval, guint, Gdk::ModifierType)
-  {
-    if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter)
     {
-      onActivateCurrentSelection();
-      return true;
-    }
-    return false;
-  },
+      if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter)
+      {
+        onActivateCurrentSelection();
+        return true;
+      }
+      return false;
+    },
     false);
   _columnView.add_controller(keyController);
 
@@ -529,13 +531,14 @@ void TrackViewPage::setupActivation()
   // inspect the currently selected row.
   auto clickController = Gtk::GestureClick::create();
   clickController->set_button(GDK_BUTTON_PRIMARY);
-  clickController->signal_released().connect([this](int nPress, double, double)
-  {
-    if (nPress == 2)
+  clickController->signal_released().connect(
+    [this](int nPress, double, double)
     {
-      onActivateCurrentSelection();
-    }
-  });
+      if (nPress == 2)
+      {
+        onActivateCurrentSelection();
+      }
+    });
   _columnView.add_controller(clickController);
 }
 

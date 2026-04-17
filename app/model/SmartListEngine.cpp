@@ -10,8 +10,8 @@
 #include <rs/lmdb/Transaction.h>
 
 #include <algorithm>
-#include <utility>
 #include <stdexcept>
+#include <utility>
 
 namespace app::model
 {
@@ -20,7 +20,7 @@ namespace app::model
   {
     RegistrationId id = 0;
     TrackIdList* source = nullptr;
-    TrackIdList* facade = nullptr;  // The FilteredTrackIdList facade
+    TrackIdList* facade = nullptr; // The FilteredTrackIdList facade
 
     std::string expression;
     bool hasError = false;
@@ -54,7 +54,8 @@ namespace app::model
 
   SourceObserver::SourceObserver(SmartListEngine& engine, TrackIdList& source)
     : _engine{engine}, _source{source}, _valid{true}
-  {}
+  {
+  }
 
   void SourceObserver::onReset()
   {
@@ -125,7 +126,8 @@ namespace app::model
 
   SmartListEngine::SmartListEngine(rs::core::MusicLibrary& ml)
     : _ml{&ml}
-  {}
+  {
+  }
 
   SmartListEngine::~SmartListEngine()
   {
@@ -243,8 +245,7 @@ namespace app::model
 
     try
     {
-      auto parsed = state.stagedExpression.empty() ? rs::expr::parse("true")
-                                                   : rs::expr::parse(state.stagedExpression);
+      auto parsed = state.stagedExpression.empty() ? rs::expr::parse("true") : rs::expr::parse(state.stagedExpression);
       rs::expr::QueryCompiler compiler{&_ml->dictionary()};
       state.stagedPlan = std::make_unique<rs::expr::ExecutionPlan>(compiler.compile(parsed));
       state.stagedHasError = false;
@@ -431,13 +432,9 @@ namespace app::model
 
       switch (state->plan->accessProfile)
       {
-        case rs::expr::AccessProfile::HotOnly:
-          hotOnlyStates.push_back(state);
-          break;
+        case rs::expr::AccessProfile::HotOnly: hotOnlyStates.push_back(state); break;
         case rs::expr::AccessProfile::ColdOnly:
-        case rs::expr::AccessProfile::HotAndCold:
-          coldOrBothStates.push_back(state);
-          break;
+        case rs::expr::AccessProfile::HotAndCold: coldOrBothStates.push_back(state); break;
       }
     }
 
@@ -504,8 +501,7 @@ namespace app::model
     }
   }
 
-  std::size_t SmartListEngine::insertionIndexForSourceOrder(SmartListState const& state,
-                                                            std::size_t sourceIndex)
+  std::size_t SmartListEngine::insertionIndexForSourceOrder(SmartListState const& state, std::size_t sourceIndex)
   {
     for (std::size_t i = 0; i < state.members.size(); ++i)
     {
@@ -545,13 +541,9 @@ namespace app::model
 
       switch (state.plan->accessProfile)
       {
-        case rs::expr::AccessProfile::HotOnly:
-          hotOnlyStates.push_back(&state);
-          break;
+        case rs::expr::AccessProfile::HotOnly: hotOnlyStates.push_back(&state); break;
         case rs::expr::AccessProfile::ColdOnly:
-        case rs::expr::AccessProfile::HotAndCold:
-          coldOrBothStates.push_back(&state);
-          break;
+        case rs::expr::AccessProfile::HotAndCold: coldOrBothStates.push_back(&state); break;
       }
     }
 
@@ -633,13 +625,9 @@ namespace app::model
 
       switch (state.plan->accessProfile)
       {
-        case rs::expr::AccessProfile::HotOnly:
-          hotOnlyStates.push_back(&state);
-          break;
+        case rs::expr::AccessProfile::HotOnly: hotOnlyStates.push_back(&state); break;
         case rs::expr::AccessProfile::ColdOnly:
-        case rs::expr::AccessProfile::HotAndCold:
-          coldOrBothStates.push_back(&state);
-          break;
+        case rs::expr::AccessProfile::HotAndCold: coldOrBothStates.push_back(&state); break;
       }
     }
 
@@ -771,9 +759,9 @@ namespace app::model
         }
       }
     }
-    
-    // We don't erase the bucket or null out pointers here because unregisterList 
-    // might still be called for individual registrations later, and it needs 
+
+    // We don't erase the bucket or null out pointers here because unregisterList
+    // might still be called for individual registrations later, and it needs
     // to find the bucket by the original source pointer (the key in _buckets).
   }
 

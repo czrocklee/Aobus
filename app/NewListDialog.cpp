@@ -52,8 +52,8 @@ NewListDialog::NewListDialog(Gtk::Window& parent,
   : _exprBox(musicLibrary)
   , _musicLibrary(&musicLibrary)
   , _allTrackIds(&allTrackIds)
-  , _parentListId(parentListId)
   , _parentMembershipList(&parentMembershipList)
+  , _parentListId(parentListId)
 {
   set_title("New List");
   set_transient_for(parent);
@@ -113,19 +113,20 @@ void NewListDialog::setupUi()
   auto exprLabel = Gtk::Label("Local Filter:");
   exprLabel.set_halign(Gtk::Align::START);
   _exprBox.entry().set_placeholder_text("Filter expression (type $, @, #, or %)");
-  _exprBox.entry().signal_changed().connect([this]()
-  {
-    // Cancel any pending update
-    _exprTimeoutConnection.disconnect();
-    // Debounce: update preview after 100ms of inactivity
-    _exprTimeoutConnection = Glib::signal_timeout().connect(
-      [this]()
+  _exprBox.entry().signal_changed().connect(
+    [this]()
     {
-      updatePreview();
-      return false; // one-shot
-    },
-      100);
-  });
+      // Cancel any pending update
+      _exprTimeoutConnection.disconnect();
+      // Debounce: update preview after 100ms of inactivity
+      _exprTimeoutConnection = Glib::signal_timeout().connect(
+        [this]()
+        {
+          updatePreview();
+          return false; // one-shot
+        },
+        100);
+    });
   _leftPanel.append(exprLabel);
   _leftPanel.append(_exprBox);
 
@@ -205,59 +206,61 @@ void NewListDialog::setupPreviewColumns()
   // Single column factory that formats "Title - Artist (Album)"
   auto factory = Gtk::SignalListItemFactory::create();
 
-  factory->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto* label = Gtk::make_managed<Gtk::Label>("");
-    label->set_halign(Gtk::Align::START);
-    label->set_ellipsize(Pango::EllipsizeMode::END);
-    listItem->set_child(*label);
-  });
-
-  factory->signal_bind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItem)
-  {
-    auto item = listItem->get_item();
-    auto row = std::dynamic_pointer_cast<TrackRow>(item);
-    auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-
-    if (row && label)
+  factory->signal_setup().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
     {
-      row->ensureLoaded();
-      auto const& title = row->getTitle();
-      auto const& artist = row->getArtist();
-      auto const& album = row->getAlbum();
-      std::string formatted;
+      auto* label = Gtk::make_managed<Gtk::Label>("");
+      label->set_halign(Gtk::Align::START);
+      label->set_ellipsize(Pango::EllipsizeMode::END);
+      listItem->set_child(*label);
+    });
 
-      if (!title.empty())
+  factory->signal_bind().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+    {
+      auto item = listItem->get_item();
+      auto row = std::dynamic_pointer_cast<TrackRow>(item);
+      auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+
+      if (row && label)
       {
-        formatted = title;
+        row->ensureLoaded();
+        auto const& title = row->getTitle();
+        auto const& artist = row->getArtist();
+        auto const& album = row->getAlbum();
+        std::string formatted;
 
-        if (!artist.empty())
+        if (!title.empty())
         {
-          formatted += " - " + artist;
+          formatted = title;
+
+          if (!artist.empty())
+          {
+            formatted += " - " + artist;
+          }
+
+          if (!album.empty())
+          {
+            formatted += " (" + album + ")";
+          }
+        }
+        else if (!artist.empty())
+        {
+          formatted = artist;
+
+          if (!album.empty())
+          {
+            formatted += " (" + album + ")";
+          }
+        }
+        else
+        {
+          formatted = "(untitled)";
         }
 
-        if (!album.empty())
-        {
-          formatted += " (" + album + ")";
-        }
+        label->set_text(formatted);
       }
-      else if (!artist.empty())
-      {
-        formatted = artist;
-
-        if (!album.empty())
-        {
-          formatted += " (" + album + ")";
-        }
-      }
-      else
-      {
-        formatted = "(untitled)";
-      }
-      
-      label->set_text(formatted);
-    }
-  });
+    });
 
   auto column = Gtk::ColumnViewColumn::create("Track", factory);
   column->set_expand(true);
@@ -269,74 +272,58 @@ void NewListDialog::rebuildPreviewSource()
 {
   // Use deferred execution to avoid GTK accessing freed adapter during event processing
   // Schedule model replacement to happen after current GTK event is processed
-  Glib::signal_idle().connect_once([this]()
-  {
-    // First clear the GTK model to release any held references
-    auto emptySelection = Glib::RefPtr<Gtk::SelectionModel>{};
-    _previewColumnView.set_model(emptySelection);
-    
-    // Now safe to reset adapter and filtered list
-    _previewFilteredList.reset();
-    _previewAdapter.reset();
-    
-    // Build new preview components
-    std::string_view inheritedExpr;
-    
-    // Check if parent is not All Tracks (All Tracks has special ID and no ListView)
-    auto const parentListIdValue = _parentListId.value();
-    auto const isAllTracks = (parentListIdValue == 0);
-
-    if (!isAllTracks)
+  Glib::signal_idle().connect_once(
+    [this]()
     {
-      auto readTxn = _musicLibrary->readTransaction();
-      auto reader = _musicLibrary->lists().reader(readTxn);
-      auto listView = reader.get(_parentListId);
+      // First clear the GTK model to release any held references
+      auto emptySelection = Glib::RefPtr<Gtk::SelectionModel>{};
+      _previewColumnView.set_model(emptySelection);
 
-      if (!listView)
+      // Now safe to reset adapter and filtered list
+      _previewFilteredList.reset();
+      _previewAdapter.reset();
+
+      // Build new preview components
+      std::string_view inheritedExpr;
+
+      // Check if parent is All Tracks (passed from MainWindow as _allTrackIds)
+      auto const isAllTracks = (_parentMembershipList == _allTrackIds);
+
+      if (!isAllTracks)
       {
-        updateSourceLabels();
-        updateDialogState();
-        return;
+        auto readTxn = _musicLibrary->readTransaction();
+        auto reader = _musicLibrary->lists().reader(readTxn);
+        auto listView = reader.get(_parentListId);
+
+        if (listView)
+        {
+          inheritedExpr = listView->filter();
+        }
       }
 
-      inheritedExpr = listView->filter();
-    }
+      // Use the parent's membership list as source - this already has the inherited filter applied
+      _rowDataProvider = std::make_shared<app::model::TrackRowDataProvider>(*_musicLibrary);
 
-    // Use the parent's membership list as source - this already has the inherited filter applied
-    _rowDataProvider = std::make_shared<app::model::TrackRowDataProvider>(*_musicLibrary);
-
-    // For All Tracks, we can't use FilteredTrackIdList with _parentMembershipList
-    // because _parentMembershipList points to AllTrackIdsList which doesn't need filtering
-    // and using _previewEngine (a dialog-local engine) causes lifecycle issues
-    if (isAllTracks)
-    {
-      // All Tracks: use AllTrackIdsList directly with TrackListAdapter
-      // Since All Tracks has no filter, we show all tracks directly
-      _previewAdapter = std::make_shared<TrackListAdapter>(*_allTrackIds, _rowDataProvider);
-      auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
-      _previewColumnView.set_model(selectionModel);
-    }
-    else
-    {
-      // Other lists: use FilteredTrackIdList for additional filtering
-      _previewFilteredList = std::make_unique<app::model::FilteredTrackIdList>(*_parentMembershipList, *_musicLibrary, *_previewEngine);
+      // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
+      // Even for All Tracks, we want to preview the results of the local expression
+      _previewFilteredList =
+        std::make_unique<app::model::FilteredTrackIdList>(*_parentMembershipList, *_musicLibrary, *_previewEngine);
       _previewAdapter = std::make_shared<TrackListAdapter>(*_previewFilteredList, _rowDataProvider);
+
       auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
       _previewColumnView.set_model(selectionModel);
-    }
-    
-    updateSourceLabels();
-    updateDialogState();
-  });
+
+      updateSourceLabels();
+      updateDialogState();
+    });
 }
 
 void NewListDialog::updateSourceLabels()
 {
   std::string_view inheritedExpr;
-  
-  // Check if parent is not All Tracks (All Tracks has special ID and no ListView)
-  auto const parentListIdValue = _parentListId.value();
-  auto const isAllTracks = (parentListIdValue == 0);
+
+  // Check if parent is All Tracks
+  auto const isAllTracks = (_parentMembershipList == _allTrackIds);
 
   if (!isAllTracks)
   {
@@ -344,14 +331,16 @@ void NewListDialog::updateSourceLabels()
     auto reader = _musicLibrary->lists().reader(readTxn);
     auto listView = reader.get(_parentListId);
 
-    if (!listView)
+    if (listView)
+    {
+      inheritedExpr = listView->filter();
+    }
+    else
     {
       _inheritedExprLabel.set_text("(invalid source)");
       _effectiveExprLabel.set_text("(invalid source)");
       return;
     }
-
-    inheritedExpr = listView->filter();
   }
 
   _inheritedExprLabel.set_text(displayExpression(inheritedExpr));
@@ -370,45 +359,17 @@ void NewListDialog::updatePreview()
 {
   updateSourceLabels();
 
-  // Check if parent is All Tracks (no FilteredTrackIdList for that case)
-  auto const parentListIdValue = _parentListId.value();
-  auto const isAllTracks = (parentListIdValue == 0);
-
-  if (isAllTracks)
-  {
-    // All Tracks: just show all tracks
-    _exprBox.entry().remove_css_class("error");
-    _errorLabel.set_visible(false);
-    _previewScrolledWindow.set_visible(true);
-    _expressionValid = true;
-    
-    auto const total = _parentMembershipList->size();
-
-    if (total == 0)
-    {
-      _matchCountLabel.set_markup("<i>No tracks in library</i>");
-    }
-    else
-    {
-      _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing all ", total, " tracks</i>"));
-    }
-    updateDialogState();
-    return;
-  }
-
   // For other lists, use FilteredTrackIdList
   if (!_previewFilteredList)
   {
     _expressionValid = false;
-    _errorLabel.set_visible(true);
-    _errorLabel.set_text("Source list is unavailable.");
     _previewScrolledWindow.set_visible(false);
-    _matchCountLabel.set_markup("<i>Invalid source</i>");
     updateDialogState();
     return;
   }
 
   auto const& expr = _exprBox.entry().get_text();
+  auto const isAllTracks = (_parentMembershipList == _allTrackIds);
 
   if (expr.empty())
   {
@@ -422,11 +383,12 @@ void NewListDialog::updatePreview()
 
     if (total == 0)
     {
-      _matchCountLabel.set_markup("<i>No tracks in source</i>");
+      _matchCountLabel.set_markup(isAllTracks ? "<i>No tracks in library</i>" : "<i>No tracks in source</i>");
     }
     else
     {
-      _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing all ", total, " source tracks</i>"));
+      _matchCountLabel.set_markup(
+        Glib::ustring::format("<i>Showing all ", total, isAllTracks ? " tracks</i>" : " source tracks</i>"));
     }
     updateDialogState();
     return;

@@ -195,20 +195,21 @@ namespace rs::tag::mp4
 
     if (ilstNode != nullptr)
     {
-      ilstNode->visitChildren([&](Atom const& atom)
-      {
-        auto const& view = static_cast<AtomView const&>(atom);
-        std::string_view type = atom.type();
-
-        if (auto const* entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size()); entry != nullptr)
+      ilstNode->visitChildren(
+        [&](Atom const& atom)
         {
-          entry->handler(builder, view);
-          return true;
-        }
+          auto const& view = static_cast<AtomView const&>(atom);
+          std::string_view type = atom.type();
 
-        builder.custom().add(type, atomTextView(view));
-        return true;
-      });
+          if (auto const* entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size()); entry != nullptr)
+          {
+            entry->handler(builder, view);
+            return true;
+          }
+
+          builder.custom().add(type, atomTextView(view));
+          return true;
+        });
     }
 
     // Extract audio properties from mdhd and stsd

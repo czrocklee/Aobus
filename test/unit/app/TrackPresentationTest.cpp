@@ -59,11 +59,13 @@ TEST_CASE("TrackPresentation sorts grouped rows deterministically", "[app][prese
 
 TEST_CASE("TrackPresentation keeps album groups split by album artist", "[app][presentation]")
 {
-  auto const first = makeKeys(rs::core::TrackId{10}, "Artist A", "Greatest Hits", "Artist A", "Rock", "One", 2000, 1, 1);
-  auto const second = makeKeys(rs::core::TrackId{11}, "Artist B", "Greatest Hits", "Artist B", "Rock", "Two", 2001, 1, 1);
+  auto const first =
+    makeKeys(rs::core::TrackId{10}, "Artist A", "Greatest Hits", "Artist A", "Rock", "One", 2000, 1, 1);
+  auto const second =
+    makeKeys(rs::core::TrackId{11}, "Artist B", "Greatest Hits", "Artist B", "Rock", "Two", 2001, 1, 1);
 
   REQUIRE(compareForGrouping(first, second, TrackGroupBy::Album) < 0);
   REQUIRE(groupLabelFor(first, TrackGroupBy::Album) == "Greatest Hits - Artist A");
-  REQUIRE(groupLabelFor(makeKeys(rs::core::TrackId{12}, "", "", "", "", "", 0, 0, 0), TrackGroupBy::Year)
-          == "Unknown Year");
+  REQUIRE(groupLabelFor(makeKeys(rs::core::TrackId{12}, "", "", "", "", "", 0, 0, 0), TrackGroupBy::Year) ==
+          "Unknown Year");
 }

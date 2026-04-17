@@ -14,6 +14,7 @@
 
 namespace rs::core
 {
+  constexpr std::uint16_t kTrackLayoutVersion = 1;
 
   /**
    * TrackHotHeader - POD struct for hot track storage.

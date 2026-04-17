@@ -9,6 +9,7 @@
 
 namespace rs::core
 {
+  constexpr std::uint16_t kListLayoutVersion = 1;
 
   /**
    * ListHeader - POD struct for binary list storage.
@@ -58,7 +59,7 @@ namespace rs::core
     std::uint16_t descLen;      // Length of description string
     std::uint16_t filterOffset; // Byte offset from the track-id region start to the filter expression
     std::uint16_t filterLen;    // Length of filter expression string
-    std::uint32_t parentId; // Parent list id, 0 = All Tracks
+    std::uint32_t parentId;     // Parent list id, 0 = All Tracks
   };
 
   // Binary layout constants

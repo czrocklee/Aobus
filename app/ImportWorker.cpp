@@ -62,10 +62,10 @@ void ImportWorker::run()
         preparedHot.size(),
         preparedCold.size(),
         [&preparedHot, &preparedCold](rs::core::TrackId id, std::span<std::byte> hot, std::span<std::byte> cold)
-      {
-        preparedHot.writeTo(hot);
-        preparedCold.writeTo(cold);
-      });
+        {
+          preparedHot.writeTo(hot);
+          preparedCold.writeTo(cold);
+        });
       _result.insertedIds.push_back(trackId);
     }
     catch ([[maybe_unused]] std::exception const& e)

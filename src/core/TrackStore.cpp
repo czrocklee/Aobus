@@ -201,12 +201,12 @@ namespace rs::core
 
     // Both
     return _hotWriter.get(id.value())
-      .and_then([this, id](auto const& hotBuffer)
-    {
-      return _coldWriter.get(id.value()).transform([&hotBuffer](auto const& coldBuffer) {
-        return TrackView{hotBuffer, coldBuffer};
-      });
-    });
+      .and_then(
+        [this, id](auto const& hotBuffer)
+        {
+          return _coldWriter.get(id.value())
+            .transform([&hotBuffer](auto const& coldBuffer) { return TrackView{hotBuffer, coldBuffer}; });
+        });
   }
 
 } // namespace rs::core

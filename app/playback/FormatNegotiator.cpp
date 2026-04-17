@@ -26,14 +26,14 @@ namespace app::playback
       auto const bestRate = *std::max_element(caps.sampleRates.begin(),
                                               caps.sampleRates.end(),
                                               [sourceRate = sourceFormat.sampleRate](std::uint32_t a, std::uint32_t b)
-      {
-        // Prefer rates that are multiples of source rate or close to it
-        auto const aDiv = (a > sourceRate) ? a : sourceRate;
-        auto const bDiv = (b > sourceRate) ? b : sourceRate;
-        auto const aMod = aDiv % sourceRate;
-        auto const bMod = bDiv % sourceRate;
-        return (aMod > bMod);
-      });
+                                              {
+                                                // Prefer rates that are multiples of source rate or close to it
+                                                auto const aDiv = (a > sourceRate) ? a : sourceRate;
+                                                auto const bDiv = (b > sourceRate) ? b : sourceRate;
+                                                auto const aMod = aDiv % sourceRate;
+                                                auto const bMod = bDiv % sourceRate;
+                                                return (aMod > bMod);
+                                              });
       plan.deviceFormat.sampleRate = bestRate;
       plan.requiresResample = true;
       plan.reason = "Sample rate not supported, resampling required";

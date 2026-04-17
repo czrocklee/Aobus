@@ -48,13 +48,14 @@ void TagPromptDialog::setupUi()
   _tagEntry.signal_changed().connect([this] { _okButton.set_sensitive(!_tagEntry.get_text().empty()); });
 
   // Also activate on Enter key
-  _tagEntry.signal_activate().connect([this]
-  {
-    if (!_tagEntry.get_text().empty())
+  _tagEntry.signal_activate().connect(
+    [this]
     {
-      response(Gtk::ResponseType::OK);
-    }
-  });
+      if (!_tagEntry.get_text().empty())
+      {
+        response(Gtk::ResponseType::OK);
+      }
+    });
 
   buttonBox.append(_cancelButton);
   buttonBox.append(_okButton);

@@ -46,7 +46,7 @@ namespace app::model
   private:
     SmartListEngine& _engine;
     TrackIdList& _source;
-    bool _valid = true;  // Set to false when engine is being destroyed
+    bool _valid = true; // Set to false when engine is being destroyed
   };
 
   /**
@@ -112,8 +112,7 @@ namespace app::model
     void handleSourceRemoved(SourceBucket& bucket, TrackId id);
     void handleSourceDestroyed(SourceBucket& bucket);
 
-    static std::size_t insertionIndexForSourceOrder(SmartListState const& state,
-                                                    std::size_t sourceIndex);
+    static std::size_t insertionIndexForSourceOrder(SmartListState const& state, std::size_t sourceIndex);
 
     void notifyFacadeReset(TrackIdList& facade);
     void notifyFacadeInserted(TrackIdList& facade, TrackId id, std::size_t index);

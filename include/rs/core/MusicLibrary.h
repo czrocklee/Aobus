@@ -4,6 +4,8 @@
 #pragma once
 
 #include <rs/core/DictionaryStore.h>
+#include <rs/core/LibraryMeta.h>
+#include <rs/core/LibraryMetaStore.h>
 #include <rs/core/ListStore.h>
 #include <rs/core/ResourceStore.h>
 #include <rs/core/TrackStore.h>
@@ -35,12 +37,16 @@ namespace rs::core
     DictionaryStore& dictionary() { return _dictionary; }
     DictionaryStore const& dictionary() const { return _dictionary; }
 
+    LibraryMetaHeader const& metaHeader() const { return _metaHeader; }
+
     std::filesystem::path const& rootPath() const { return _root; }
 
   private:
     std::filesystem::path const _root;
     rs::lmdb::Environment _env;
     rs::lmdb::WriteTransaction _txn;
+    LibraryMetaStore _metaStore;
+    LibraryMetaHeader _metaHeader{};
     TrackStore _tracks;
     ListStore _lists;
     ResourceStore _resources;

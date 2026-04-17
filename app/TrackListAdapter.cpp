@@ -21,15 +21,15 @@ namespace
       return true;
     }
 
-    auto it = std::search(
-      haystack.begin(), haystack.end(), needle.begin(), needle.end(), [](unsigned char c1, unsigned char c2) {
-      return std::tolower(c1) == std::tolower(c2);
-    });
+    auto it = std::search(haystack.begin(),
+                          haystack.end(),
+                          needle.begin(),
+                          needle.end(),
+                          [](unsigned char c1, unsigned char c2) { return std::tolower(c1) == std::tolower(c2); });
     return it != haystack.end();
   }
 
-  bool matchesFilter(app::model::RowData const& rowData,
-                     Glib::ustring const& filter)
+  bool matchesFilter(app::model::RowData const& rowData, Glib::ustring const& filter)
   {
     if (filter.empty())
     {
