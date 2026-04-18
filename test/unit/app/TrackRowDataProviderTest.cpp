@@ -15,8 +15,8 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <utility>
+#include <unordered_map>
 #include <vector>
 
 namespace app::model
@@ -87,6 +87,31 @@ namespace app::model
 
     auto const insertResult = _stringCache.emplace(id, result);
     return insertResult.first->second;
+  }
+
+  auto joinResolvedTags(rs::core::TrackView::TagProxy tags, rs::core::DictionaryStore const& dictionary) -> std::string
+  {
+    auto text = std::string{};
+    auto first = true;
+
+    for (auto const tagId : tags)
+    {
+      auto const tag = dictionary.get(tagId);
+      if (tag.empty())
+      {
+        continue;
+      }
+
+      if (!first)
+      {
+        text += ", ";
+      }
+
+      text += tag;
+      first = false;
+    }
+
+    return text;
   }
 
   TrackRowDataProvider::TrackRowDataProvider(rs::core::MusicLibrary& ml)
@@ -160,6 +185,8 @@ namespace app::model
       row.coverArtId = coverArtId;
     }
 
+    row.tags = joinResolvedTags(view.tags(), *_dict);
+
     auto const result = _rowCache.emplace(id, std::move(row));
     return result.first->second;
   }
@@ -198,6 +225,7 @@ namespace
     std::string album = "Album";
     std::string albumArtist = "AlbumArtist";
     std::string genre = "Genre";
+    std::vector<std::string> tags;
     std::uint16_t year = 2020;
     std::uint16_t trackNumber = 1;
     std::uint16_t discNumber = 1;
@@ -237,6 +265,12 @@ namespace
         .year(spec.year)
         .trackNumber(spec.trackNumber)
         .discNumber(spec.discNumber);
+
+      for (auto const& tag : spec.tags)
+      {
+        builder.tags().add(tag);
+      }
+
       builder.property()
         .uri("/tmp/test.flac")
         .durationMs(spec.durationMs)
@@ -401,6 +435,21 @@ TEST_CASE("TrackRowDataProvider", "[app][rowprovider]")
     CHECK(row->year == 2023);
     CHECK(row->trackNumber == 5);
     CHECK(row->discNumber == 2);
+  }
+
+  SECTION("row data resolves track tags for display")
+  {
+    auto testLibrary = TestMusicLibrary{};
+    auto provider = TrackRowDataProvider{testLibrary.library()};
+    auto spec = TrackSpec{};
+    spec.title = "Tagged";
+    spec.tags = {"rock", "favorite"};
+    auto trackId = testLibrary.addTrack(spec);
+
+    auto const row = provider.getRow(trackId);
+
+    REQUIRE(row.has_value());
+    CHECK(row->tags == "rock, favorite");
   }
 
   SECTION("track with missing dictionary values returns empty strings")

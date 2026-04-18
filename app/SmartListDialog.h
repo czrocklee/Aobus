@@ -9,11 +9,13 @@
 #include <gtkmm.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace rs::core
 {
   class MusicLibrary;
+  class ListView;
 }
 
 namespace app::model
@@ -27,20 +29,26 @@ namespace app::model
 
 class TrackListAdapter;
 
-class NewListDialog final : public Gtk::Dialog
+class SmartListDialog final : public Gtk::Dialog
 {
-public:
-  NewListDialog(Gtk::Window& parent,
-                rs::core::MusicLibrary& musicLibrary,
-                app::model::AllTrackIdsList& allTrackIds,
-                app::model::TrackIdList& parentMembershipList,
-                rs::core::ListId parentListId);
-  virtual ~NewListDialog() override;
+	public:
+  SmartListDialog(Gtk::Window& parent,
+                  rs::core::MusicLibrary& musicLibrary,
+                  app::model::AllTrackIdsList& allTrackIds,
+                  app::model::TrackIdList& parentMembershipList,
+                  rs::core::ListId parentListId);
+  virtual ~SmartListDialog() override;
+
+  // Populate dialog fields from an existing list for editing
+  void populate(rs::core::ListId id, rs::core::ListView const& view);
+
+  // Returns the ListId for update (0 if creating a new list)
+  rs::core::ListId editListId() const;
 
   // Returns a ListDraft populated from the dialog fields
   app::model::ListDraft draft() const;
 
-private:
+	private:
   void setupUi();
   void setupPreview();
   void setupPreviewColumns();
@@ -74,4 +82,7 @@ private:
   std::unique_ptr<app::model::FilteredTrackIdList> _previewFilteredList;
   std::shared_ptr<TrackListAdapter> _previewAdapter;
   bool _expressionValid = true;
+
+  // Edit mode state
+  std::optional<rs::core::ListId> _editListId;
 };

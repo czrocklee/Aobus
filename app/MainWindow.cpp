@@ -13,10 +13,9 @@
 #include "ImportWorker.h"
 #include "ListRow.h"
 #include "ListTreeNode.h"
-#include "NewListDialog.h"
+#include "SmartListDialog.h"
 #include "PlaybackBar.h"
 #include "PlaylistExporter.h"
-#include "TagPromptDialog.h"
 #include "TrackListAdapter.h"
 #include "TrackViewPage.h"
 #include "model/AllTrackIdsList.h"
@@ -27,6 +26,7 @@
 #include "model/TrackRowDataProvider.h"
 #include "playback/PlaybackController.h"
 
+#include <glibmm/variant.h>
 #include <glibmm/keyfile.h>
 #include <gtkmm/filedialog.h>
 
@@ -36,6 +36,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <memory>
 #include <thread>
 #include <unordered_set>
@@ -77,6 +78,135 @@ namespace
     auto ec = std::error_code{};
     auto const canonicalPath = std::filesystem::weakly_canonical(path, ec);
     return ec ? path.lexically_normal().string() : canonicalPath.string();
+  }
+
+  struct TagMenuData final
+  {
+    std::map<std::string, std::size_t> selectedTagCounts;
+    std::vector<std::pair<std::string, std::size_t>> availableTagsByFrequency;
+  };
+
+  auto collectTagMenuData(rs::core::MusicLibrary& musicLibrary, std::vector<rs::core::TrackId> const& selectedIds) -> TagMenuData
+  {
+    auto data = TagMenuData{};
+    auto tagFrequency = std::map<std::string, std::size_t>{};
+    auto txn = musicLibrary.readTransaction();
+    auto reader = musicLibrary.tracks().reader(txn);
+    auto const& dictionary = musicLibrary.dictionary();
+
+    for (auto const trackId : selectedIds)
+    {
+      auto const view = reader.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot);
+      if (!view)
+      {
+        continue;
+      }
+
+      auto tagsOnTrack = std::set<std::string>{};
+      for (auto const tagId : view->tags())
+      {
+        auto const tag = std::string(dictionary.get(tagId));
+        if (!tag.empty())
+        {
+          tagsOnTrack.insert(tag);
+        }
+      }
+
+      for (auto const& tag : tagsOnTrack)
+      {
+        ++data.selectedTagCounts[tag];
+      }
+    }
+
+    for (auto it = reader.begin(rs::core::TrackStore::Reader::LoadMode::Hot),
+              end = reader.end(rs::core::TrackStore::Reader::LoadMode::Hot);
+         it != end;
+         ++it)
+    {
+      auto const& [_, view] = *it;
+      auto tagsOnTrack = std::set<std::string>{};
+
+      for (auto const tagId : view.tags())
+      {
+        auto const tag = std::string(dictionary.get(tagId));
+        if (!tag.empty())
+        {
+          tagsOnTrack.insert(tag);
+        }
+      }
+
+      for (auto const& tag : tagsOnTrack)
+      {
+        ++tagFrequency[tag];
+      }
+    }
+
+    data.availableTagsByFrequency.assign(tagFrequency.begin(), tagFrequency.end());
+    std::ranges::sort(
+      data.availableTagsByFrequency,
+      [](auto const& lhs, auto const& rhs)
+      {
+        if (lhs.second != rhs.second)
+        {
+          return lhs.second > rhs.second;
+        }
+
+        return lhs.first < rhs.first;
+      });
+
+    return data;
+  }
+
+  void appendTagMenuItem(Glib::RefPtr<Gio::Menu> const& menu,
+                         std::string const& label,
+                         std::string const& action,
+                         std::string const& tag)
+  {
+    auto item = Gio::MenuItem::create(label, "");
+    item->set_action_and_target(action, Glib::Variant<std::string>::create(tag));
+    menu->append_item(item);
+  }
+
+  auto selectedTagMenuLabel(std::string const& tag, std::size_t membershipCount, std::size_t selectionCount) -> std::string
+  {
+    return (membershipCount == selectionCount ? "[x] " : "[ ] ") + tag;
+  }
+
+  auto hasTagName(std::vector<std::string_view> const& tagNames, std::string_view tag) -> bool
+  {
+    return std::ranges::find(tagNames, tag) != tagNames.end();
+  }
+
+  auto tagChangeStatusMessage(std::size_t selectionCount, std::size_t addCount, std::size_t removeCount) -> std::string
+  {
+    auto message = std::to_string(selectionCount);
+    message += selectionCount == 1 ? " track updated" : " tracks updated";
+
+    if (addCount == 0 && removeCount == 0)
+    {
+      return message;
+    }
+
+    message += ": ";
+
+    if (addCount > 0)
+    {
+      message += std::to_string(addCount);
+      message += addCount == 1 ? " tag added" : " tags added";
+    }
+
+    if (removeCount > 0)
+    {
+      if (addCount > 0)
+      {
+        message += ", ";
+      }
+
+      message += std::to_string(removeCount);
+      message += removeCount == 1 ? " tag removed" : " tags removed";
+    }
+
+    return message;
   }
 }
 
@@ -461,14 +591,22 @@ void MainWindow::openNewListDialog(rs::core::ListId parentListId)
   }
 
   auto* dialog =
-    Gtk::make_managed<NewListDialog>(*this, *_musicLibrary, *_allTrackIds, *parentMembershipList, parentListId);
+    Gtk::make_managed<SmartListDialog>(*this, *_musicLibrary, *_allTrackIds, *parentMembershipList, parentListId);
 
   dialog->signal_response().connect(
     [this, dialog](int responseId)
     {
       if (responseId == Gtk::ResponseType::OK)
       {
-        createList(dialog->draft());
+        auto const draft = dialog->draft();
+        if (draft.listId != rs::core::ListId{0})
+        {
+          updateList(draft);
+        }
+        else
+        {
+          createList(draft);
+        }
       }
 
       dialog->close();
@@ -557,6 +695,12 @@ void MainWindow::setupMenu()
                                                { onDeleteList(); });
   _deleteListAction->set_enabled(false);
   add_action(_deleteListAction);
+
+  _editListAction = Gio::SimpleAction::create("edit-list");
+  _editListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+                                             { onEditList(); });
+  _editListAction->set_enabled(false);
+  add_action(_editListAction);
 }
 
 void MainWindow::setupLayout()
@@ -661,6 +805,7 @@ void MainWindow::setupLayout()
 
   auto listContextMenuModel = Gio::Menu::create();
   listContextMenuModel->append("New List", "win.new-list");
+  listContextMenuModel->append("Edit List", "win.edit-list");
   listContextMenuModel->append("Delete List", "win.delete-list");
   _listContextMenu.set_menu_model(listContextMenuModel);
   _listContextMenu.set_has_arrow(false);
@@ -728,6 +873,7 @@ void MainWindow::showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle con
   auto const hasLibrary = static_cast<bool>(_musicLibrary);
 
   auto canDelete = false;
+  auto canEdit = false;
   if (auto const selected = _listSelectionModel ? _listSelectionModel->get_selected() : GTK_INVALID_LIST_POSITION;
       hasLibrary && _treeListModel && selected != GTK_INVALID_LIST_POSITION && selected != 0)
   {
@@ -738,6 +884,7 @@ void MainWindow::showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle con
         if (auto node = std::dynamic_pointer_cast<ListTreeNode>(treeListRow->get_item()))
         {
           canDelete = !listHasChildren(node->getListId());
+          canEdit = true;
         }
       }
     }
@@ -751,6 +898,11 @@ void MainWindow::showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle con
   if (_deleteListAction)
   {
     _deleteListAction->set_enabled(canDelete);
+  }
+
+  if (_editListAction)
+  {
+    _editListAction->set_enabled(canEdit);
   }
 
   _listContextMenu.set_pointing_to(rect);
@@ -817,6 +969,148 @@ void MainWindow::createList(app::model::ListDraft const& draft)
       }
     }
   }
+}
+
+void MainWindow::updateList(app::model::ListDraft const& draft)
+{
+  if (!_musicLibrary)
+  {
+    std::cerr << "No music library open" << std::endl;
+    return;
+  }
+
+  auto txn = _musicLibrary->writeTransaction();
+
+  auto builder =
+    rs::core::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
+
+  if (draft.kind == app::model::ListKind::Smart)
+  {
+    builder.filter(draft.expression);
+  }
+  else
+  {
+    for (auto id : draft.trackIds)
+    {
+      builder.tracks().add(id);
+    }
+  }
+
+  auto payload = builder.serialize();
+
+  _musicLibrary->lists().writer(txn).update(draft.listId, payload);
+
+  txn.commit();
+
+  // Refresh the list page
+  auto readTxn = _musicLibrary->readTransaction();
+  auto reader = _musicLibrary->lists().reader(readTxn);
+  if (auto view = reader.get(draft.listId))
+  {
+    buildPageForStoredList(draft.listId, *view);
+  }
+}
+
+void MainWindow::onEditList()
+{
+  if (!_musicLibrary)
+  {
+    return;
+  }
+
+  auto const position = _listSelectionModel->get_selected();
+
+  if (position == GTK_INVALID_LIST_POSITION)
+  {
+    return;
+  }
+
+  // Don't allow editing "All Tracks" (position 0)
+  if (position == 0)
+  {
+    return;
+  }
+
+  auto item = _listSelectionModel->get_selected_item();
+
+  if (!item)
+  {
+    return;
+  }
+
+  auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(item);
+
+  if (!treeListRow)
+  {
+    return;
+  }
+
+  auto node = std::dynamic_pointer_cast<ListTreeNode>(treeListRow->get_item());
+
+  if (!node)
+  {
+    return;
+  }
+
+  openEditListDialog(node->getListId());
+}
+
+void MainWindow::openEditListDialog(rs::core::ListId listId)
+{
+  if (!_musicLibrary)
+  {
+    return;
+  }
+
+  auto readTxn = _musicLibrary->readTransaction();
+  auto reader = _musicLibrary->lists().reader(readTxn);
+  auto view = reader.get(listId);
+
+  if (!view)
+  {
+    return;
+  }
+
+  // Determine the parent membership list for the preview
+  app::model::TrackIdList* parentMembershipList = nullptr;
+  auto const parentId = view->parentId();
+  if (parentId == allTracksListId())
+  {
+    parentMembershipList = _allTrackIds.get();
+  }
+  else
+  {
+    if (auto const it = _trackPages.find(parentId); it != _trackPages.end() && it->second.membershipList)
+    {
+      parentMembershipList = it->second.membershipList.get();
+    }
+    else
+    {
+      parentMembershipList = _allTrackIds.get();
+    }
+  }
+
+  auto* dialog = Gtk::make_managed<SmartListDialog>(
+    *this, *_musicLibrary, *_allTrackIds, *parentMembershipList, view->parentId());
+
+  dialog->populate(listId, *view);
+
+  dialog->signal_response().connect(
+    [this, dialog](int responseId)
+    {
+      if (responseId == Gtk::ResponseType::OK)
+      {
+        auto const draft = dialog->draft();
+        if (draft.listId != rs::core::ListId{0})
+        {
+          updateList(draft);
+        }
+      }
+
+      dialog->close();
+    });
+
+  dialog->present();
 }
 
 void MainWindow::onDeleteList()
@@ -1010,9 +1304,9 @@ void MainWindow::buildListTree(rs::lmdb::ReadTransaction& txn)
                                  }
 
                                  return node->getChildren();
-                               });
-
-  _treeListModel->set_autoexpand(true);
+                               },
+                               false,
+                               true);
 }
 
 void MainWindow::buildPageForAllTracks()
@@ -1034,6 +1328,8 @@ void MainWindow::buildPageForAllTracks()
       auto ids = trackPagePtr->getSelectedTrackIds();
       updateCoverArt(ids);
     });
+  trackPage->signalContextMenuRequested().connect(
+    [this, trackPagePtr = trackPage.get()](double x, double y) { showTrackContextMenu(*trackPagePtr, x, y); });
 
   // Connect track activation to playback
   bindTrackPagePlayback(*trackPage);
@@ -1115,6 +1411,8 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId, rs::core::ListV
       auto ids = trackPagePtr->getSelectedTrackIds();
       updateCoverArt(ids);
     });
+  trackPage->signalContextMenuRequested().connect(
+    [this, trackPagePtr = trackPage.get()](double x, double y) { showTrackContextMenu(*trackPagePtr, x, y); });
 
   // Connect track activation to playback
   bindTrackPagePlayback(*trackPage);
@@ -1141,90 +1439,176 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId, rs::core::ListV
 
 void MainWindow::setupTrackContextMenu()
 {
-  // Create track tag action
-  auto tagTrackAction = Gio::SimpleAction::create("tag-track");
-  tagTrackAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
-                                            { onTagTrack(); });
-  add_action(tagTrackAction);
+  if (_trackTagAddAction && _trackTagRemoveAction)
+  {
+    return;
+  }
+
+  auto const stringType = Glib::VariantType("s");
+
+  _trackTagAddAction = Gio::SimpleAction::create("track-tag-add", stringType);
+  _trackTagAddAction->signal_activate().connect(
+    [this](Glib::VariantBase const& parameter)
+    {
+      addTagToCurrentSelection(Glib::VariantBase::cast_dynamic<Glib::Variant<std::string>>(parameter).get());
+    });
+  add_action(_trackTagAddAction);
+
+  _trackTagRemoveAction = Gio::SimpleAction::create("track-tag-remove", stringType);
+  _trackTagRemoveAction->signal_activate().connect(
+    [this](Glib::VariantBase const& parameter)
+    {
+      removeTagFromCurrentSelection(Glib::VariantBase::cast_dynamic<Glib::Variant<std::string>>(parameter).get());
+    });
+  add_action(_trackTagRemoveAction);
 }
 
-void MainWindow::onTagTrack()
+void MainWindow::showTrackContextMenu(TrackViewPage& page, double x, double y)
 {
-  auto* ctx = currentVisibleTrackPageContext();
+  if (!_musicLibrary)
+  {
+    return;
+  }
 
+  auto selectedIds = page.getSelectedTrackIds();
+  if (selectedIds.empty())
+  {
+    return;
+  }
+
+  auto tagMenuData = collectTagMenuData(*_musicLibrary, selectedIds);
+  auto selectedTags = std::vector<std::pair<std::string, std::size_t>>{
+    tagMenuData.selectedTagCounts.begin(), tagMenuData.selectedTagCounts.end()};
+  std::ranges::sort(
+    selectedTags,
+    [](auto const& lhs, auto const& rhs)
+    {
+      if (lhs.second != rhs.second)
+      {
+        return lhs.second > rhs.second;
+      }
+
+      return lhs.first < rhs.first;
+    });
+
+  auto rootMenu = Gio::Menu::create();
+  auto tagMenu = Gio::Menu::create();
+  auto addMenu = Gio::Menu::create();
+  auto selectedTagsSection = Gio::Menu::create();
+  auto const selectionCount = selectedIds.size();
+
+  // New Tag submenu (first section)
+  auto hasAddableTags = false;
+  for (auto const& [tag, frequency] : tagMenuData.availableTagsByFrequency)
+  {
+    (void)frequency;
+    if (auto const it = tagMenuData.selectedTagCounts.find(tag);
+        it != tagMenuData.selectedTagCounts.end() && it->second == selectionCount)
+    {
+      continue;
+    }
+
+    appendTagMenuItem(addMenu, tag, "win.track-tag-add", tag);
+    hasAddableTags = true;
+  }
+
+  if (!hasAddableTags)
+  {
+    addMenu->append("(No additional tags available)", "");
+  }
+
+  // Selected Tags items (second section)
+  if (selectedTags.empty())
+  {
+    selectedTagsSection->append("(No tags on selection)", "");
+  }
+  else
+  {
+    for (auto const& [tag, membershipCount] : selectedTags)
+    {
+      appendTagMenuItem(selectedTagsSection, selectedTagMenuLabel(tag, membershipCount, selectionCount), "win.track-tag-remove", tag);
+    }
+  }
+
+  // Append New Tag submenu, then separator, then Selected Tags items
+  tagMenu->append_submenu("New Tag", addMenu);
+  tagMenu->append_section(selectedTagsSection);
+
+  rootMenu->append_submenu("Tag", tagMenu);
+
+  page.popupContextMenu(rootMenu, x, y);
+}
+
+void MainWindow::addTagToCurrentSelection(std::string const& tag)
+{
+  applyTagChangeToCurrentSelection({tag}, {});
+}
+
+void MainWindow::removeTagFromCurrentSelection(std::string const& tag)
+{
+  applyTagChangeToCurrentSelection({}, {tag});
+}
+
+void MainWindow::applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
+                                                  std::vector<std::string> const& tagsToRemove)
+{
+  if (!_musicLibrary || !_rowDataProvider || !_allTrackIds)
+  {
+    return;
+  }
+
+  auto* ctx = currentVisibleTrackPageContext();
   if (!ctx)
   {
     return;
   }
 
   auto selectedIds = ctx->page->getSelectedTrackIds();
-
-  if (selectedIds.empty())
+  if (selectedIds.empty() || (tagsToAdd.empty() && tagsToRemove.empty()))
   {
     return;
   }
 
-  // Show tag prompt dialog
-  auto* dialog = Gtk::make_managed<TagPromptDialog>(*this);
-  auto idsCopy = selectedIds; // Copy for lambda
+  auto txn = _musicLibrary->writeTransaction();
+  auto writer = _musicLibrary->tracks().writer(txn);
+  auto& dict = _musicLibrary->dictionary();
 
-  dialog->signal_response().connect(
-    [this, dialog, idsCopy](int responseId) mutable
+  for (auto const trackId : selectedIds)
+  {
+    auto const optView = writer.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot);
+    if (!optView)
     {
-      if (responseId == Gtk::ResponseType::OK)
+      continue;
+    }
+
+    auto builder = rs::core::TrackBuilder::fromView(*optView, dict);
+
+    for (auto const& tag : tagsToRemove)
+    {
+      builder.tags().remove(tag);
+    }
+
+    for (auto const& tag : tagsToAdd)
+    {
+      if (!hasTagName(builder.tags().names(), tag))
       {
-        std::string tag = dialog->tag();
-
-        if (tag.empty())
-        {
-          return;
-        }
-
-        // Open write transaction
-        auto txn = _musicLibrary->writeTransaction();
-        auto writer = _musicLibrary->tracks().writer(txn);
-        auto& dict = _musicLibrary->dictionary();
-
-        // Resolve tag string to DictionaryId
-        auto tagId = dict.put(txn, tag);
-
-        // Update each selected track
-        for (auto trackId : idsCopy)
-        {
-          // Get current track data
-          auto optView = writer.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot);
-
-          if (!optView)
-          {
-            continue;
-          }
-
-          // Build TrackBuilder from current view
-          auto builder = rs::core::TrackBuilder::fromView(*optView, dict);
-
-          // Add new tag by resolving ID to name
-          builder.tags().add(dict.get(tagId));
-
-          // Zero-copy update hot data
-          auto prepared = builder.prepareHot(txn, dict);
-          writer.updateHot(trackId, prepared.size(), [&prepared](std::span<std::byte> hot) { prepared.writeTo(hot); });
-        }
-
-        // Commit transaction
-        txn.commit();
-
-        // After commit: invalidate cache and notify observers incrementally
-        for (auto trackId : idsCopy)
-        {
-          _rowDataProvider->invalidateHot(trackId);
-          _allTrackIds->notifyUpdated(trackId);
-        }
+        builder.tags().add(tag);
       }
+    }
 
-      dialog->close();
-    });
+    auto prepared = builder.prepareHot(txn, dict);
+    writer.updateHot(trackId, prepared.size(), [&prepared](std::span<std::byte> hot) { prepared.writeTo(hot); });
+  }
 
-  dialog->present();
+  txn.commit();
+
+  for (auto const trackId : selectedIds)
+  {
+    _rowDataProvider->invalidateHot(trackId);
+    _allTrackIds->notifyUpdated(trackId);
+  }
+
+  ctx->page->setStatusMessage(tagChangeStatusMessage(selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
 }
 
 void MainWindow::onListSelectionChanged([[maybe_unused]] std::uint32_t position, [[maybe_unused]] std::uint32_t nItems)

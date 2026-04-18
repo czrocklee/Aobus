@@ -70,7 +70,10 @@ private:
 
   // Track context menu (tagging)
   void showTrackContextMenu(TrackViewPage& page, double x, double y);
-  void tagSelectedTracks(TrackViewPage& page);
+  void addTagToCurrentSelection(std::string const& tag);
+  void removeTagFromCurrentSelection(std::string const& tag);
+  void applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
+                                        std::vector<std::string> const& tagsToRemove);
 
   void setupMenu();
   void setupLayout();
@@ -81,12 +84,14 @@ private:
   void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files);
   void openNewListDialog(rs::core::ListId parentListId);
   void openNewSmartListDialog();
+  void openEditListDialog(rs::core::ListId listId);
   bool listHasChildren(rs::core::ListId listId) const;
 
   // List management - using ListDraft
   void createList(app::model::ListDraft const& draft);
+  void updateList(app::model::ListDraft const& draft);
   void onDeleteList();
-  void onTagTrack();
+  void onEditList();
 
   void setupTrackContextMenu();
 
@@ -162,6 +167,9 @@ private:
   std::map<rs::core::ListId, Glib::RefPtr<ListTreeNode>> _nodesById;
   Glib::RefPtr<Gio::SimpleAction> _newListAction;
   Glib::RefPtr<Gio::SimpleAction> _deleteListAction;
+  Glib::RefPtr<Gio::SimpleAction> _editListAction;
+  Glib::RefPtr<Gio::SimpleAction> _trackTagAddAction;
+  Glib::RefPtr<Gio::SimpleAction> _trackTagRemoveAction;
 
   // Track pages map
   std::map<rs::core::ListId, TrackPageContext> _trackPages;

@@ -44,6 +44,19 @@ TEST_CASE("TrackPresentation presets match grouped songs mode", "[app][presentat
 
   auto const noneSpec = presentationSpecForGroup(TrackGroupBy::None);
   REQUIRE(noneSpec.sortBy.empty());
+
+  REQUIRE(shouldShowColumn(TrackGroupBy::None, TrackColumn::Artist));
+  REQUIRE(shouldShowColumn(TrackGroupBy::None, TrackColumn::Album));
+  REQUIRE(shouldShowColumn(TrackGroupBy::None, TrackColumn::DiscNumber));
+  REQUIRE(shouldShowColumn(TrackGroupBy::None, TrackColumn::TrackNumber));
+
+  REQUIRE_FALSE(shouldShowColumn(TrackGroupBy::Artist, TrackColumn::Artist));
+  REQUIRE(shouldShowColumn(TrackGroupBy::Artist, TrackColumn::Album));
+
+  REQUIRE_FALSE(shouldShowColumn(TrackGroupBy::Album, TrackColumn::Artist));
+  REQUIRE_FALSE(shouldShowColumn(TrackGroupBy::Album, TrackColumn::Album));
+  REQUIRE(shouldShowColumn(TrackGroupBy::Album, TrackColumn::DiscNumber));
+  REQUIRE(shouldShowColumn(TrackGroupBy::Album, TrackColumn::TrackNumber));
 }
 
 TEST_CASE("TrackPresentation sorts grouped rows deterministically", "[app][presentation]")

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "NewListDialog.h"
+#include "SmartListDialog.h"
 
 #include "TrackListAdapter.h"
 #include "TrackRow.h"
@@ -44,11 +44,11 @@ namespace
   }
 }
 
-NewListDialog::NewListDialog(Gtk::Window& parent,
-                             rs::core::MusicLibrary& musicLibrary,
-                             app::model::AllTrackIdsList& allTrackIds,
-                             app::model::TrackIdList& parentMembershipList,
-                             rs::core::ListId parentListId)
+SmartListDialog::SmartListDialog(Gtk::Window& parent,
+                                rs::core::MusicLibrary& musicLibrary,
+                                app::model::AllTrackIdsList& allTrackIds,
+                                app::model::TrackIdList& parentMembershipList,
+                                rs::core::ListId parentListId)
   : _exprBox(musicLibrary)
   , _musicLibrary(&musicLibrary)
   , _allTrackIds(&allTrackIds)
@@ -63,12 +63,28 @@ NewListDialog::NewListDialog(Gtk::Window& parent,
   updatePreview();
 }
 
-NewListDialog::~NewListDialog()
+SmartListDialog::~SmartListDialog()
 {
   _exprTimeoutConnection.disconnect();
 }
 
-void NewListDialog::setupUi()
+void SmartListDialog::populate(rs::core::ListId id, rs::core::ListView const& view)
+{
+  _editListId = id;
+  _nameEntry.set_text(std::string(view.name()));
+  _descEntry.set_text(std::string(view.description()));
+  _exprBox.entry().set_text(std::string(view.filter()));
+  set_title("Edit List");
+  _okButton.set_label("Save");
+  updateDialogState();
+}
+
+rs::core::ListId SmartListDialog::editListId() const
+{
+  return _editListId.value_or(rs::core::ListId{0});
+}
+
+void SmartListDialog::setupUi()
 {
   constexpr int kDialogWidth = 800;
   constexpr int kDialogHeight = 500;
@@ -192,7 +208,7 @@ void NewListDialog::setupUi()
   set_child(mainBox);
 }
 
-void NewListDialog::setupPreview()
+void SmartListDialog::setupPreview()
 {
   // Create preview engine for expression evaluation
   _previewEngine = std::make_unique<app::model::SmartListEngine>(*_musicLibrary);
@@ -201,7 +217,7 @@ void NewListDialog::setupPreview()
   rebuildPreviewSource();
 }
 
-void NewListDialog::setupPreviewColumns()
+void SmartListDialog::setupPreviewColumns()
 {
   // Single column factory that formats "Title - Artist (Album)"
   auto factory = Gtk::SignalListItemFactory::create();
@@ -268,7 +284,7 @@ void NewListDialog::setupPreviewColumns()
   _previewColumnView.append_column(column);
 }
 
-void NewListDialog::rebuildPreviewSource()
+void SmartListDialog::rebuildPreviewSource()
 {
   // Use deferred execution to avoid GTK accessing freed adapter during event processing
   // Schedule model replacement to happen after current GTK event is processed
@@ -318,7 +334,7 @@ void NewListDialog::rebuildPreviewSource()
     });
 }
 
-void NewListDialog::updateSourceLabels()
+void SmartListDialog::updateSourceLabels()
 {
   std::string_view inheritedExpr;
 
@@ -350,12 +366,12 @@ void NewListDialog::updateSourceLabels()
   _effectiveExprLabel.set_text(displayExpression(effectiveExpression));
 }
 
-void NewListDialog::updateDialogState()
+void SmartListDialog::updateDialogState()
 {
   _okButton.set_sensitive(!_nameEntry.get_text().empty() && _expressionValid);
 }
 
-void NewListDialog::updatePreview()
+void SmartListDialog::updatePreview()
 {
   updateSourceLabels();
 
@@ -436,11 +452,12 @@ void NewListDialog::updatePreview()
   updateDialogState();
 }
 
-app::model::ListDraft NewListDialog::draft() const
+app::model::ListDraft SmartListDialog::draft() const
 {
   app::model::ListDraft draftData;
   draftData.kind = app::model::ListKind::Smart;
   draftData.parentId = _parentListId;
+  draftData.listId = editListId();
   draftData.name = _nameEntry.get_text();
   draftData.description = _descEntry.get_text();
   draftData.expression = _exprBox.entry().get_text();

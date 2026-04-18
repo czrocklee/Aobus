@@ -302,7 +302,7 @@ add_executable(RockStudio
     app/ListTreeNode.cpp
     app/ImportWorker.cpp
     app/PlaylistExporter.cpp
-    app/NewListDialog.cpp
+    app/SmartListDialog.cpp
     app/QueryExpressionBox.cpp
     app/TagPromptDialog.cpp
     app/ImportProgressDialog.cpp

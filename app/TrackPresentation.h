@@ -33,6 +33,16 @@ enum class TrackSortField : std::uint8_t
   Title,
 };
 
+enum class TrackColumn : std::uint8_t
+{
+  Artist,
+  Album,
+  DiscNumber,
+  TrackNumber,
+  Title,
+  Tags,
+};
+
 struct TrackSortTerm
 {
   TrackSortField field;
@@ -68,5 +78,7 @@ struct TrackPresentationKeysView
 [[nodiscard]] int compareForGrouping(TrackPresentationKeysView lhs,
                                      TrackPresentationKeysView rhs,
                                      TrackGroupBy groupBy);
+
+[[nodiscard]] bool shouldShowColumn(TrackGroupBy groupBy, TrackColumn column);
 
 [[nodiscard]] std::string groupLabelFor(TrackPresentationKeysView keys, TrackGroupBy groupBy);

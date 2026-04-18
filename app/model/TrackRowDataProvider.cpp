@@ -5,6 +5,36 @@
 
 #include "playback/PlaybackTypes.h"
 
+#include <string_view>
+
+namespace
+{
+  auto joinResolvedTags(rs::core::TrackView::TagProxy tags, rs::core::DictionaryStore const& dictionary) -> std::string
+  {
+    auto text = std::string{};
+    auto first = true;
+
+    for (auto const tagId : tags)
+    {
+      auto const tag = dictionary.get(tagId);
+      if (tag.empty())
+      {
+        continue;
+      }
+
+      if (!first)
+      {
+        text += ", ";
+      }
+
+      text += tag;
+      first = false;
+    }
+
+    return text;
+  }
+}
+
 namespace
 {
   auto resolveLibraryPath(std::filesystem::path const& libraryRoot, std::string_view uri)
@@ -104,8 +134,7 @@ namespace app::model
       row.coverArtId = coverArtId;
     }
 
-    // Tags - would need to resolve tag IDs to strings (placeholder for now)
-    // TODO: Implement tag ID to string resolution if needed for row display
+    row.tags = joinResolvedTags(view.tags(), *_dict);
 
     auto const result = _rowCache.emplace(id, std::move(row));
     return result.first->second;

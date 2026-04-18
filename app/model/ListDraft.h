@@ -22,12 +22,13 @@ namespace app::model
 
   /**
    * ListDraft - Plain data transfer object for list creation.
-   * Populated by NewListDialog and consumed by MainWindow to create lists.
+   * Populated by SmartListDialog and consumed by MainWindow to create or update lists.
    */
   struct ListDraft
   {
     ListKind kind = ListKind::Smart;
     rs::core::ListId parentId = rs::core::ListId{0};
+    rs::core::ListId listId = rs::core::ListId{0}; // 0 = create, non-zero = update
     std::string name;
     std::string description;
     std::string expression;                  // Only used for Smart lists

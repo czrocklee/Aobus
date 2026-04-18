@@ -112,6 +112,9 @@ TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
 
   // Set up column view
   _columnView.set_model(_selectionModel);
+  _contextMenu.set_has_arrow(false);
+  _contextMenu.set_parent(_columnView);
+  _contextMenu.set_flags(Gtk::PopoverMenu::Flags::NESTED);
 
   // Show row separators (horizontal lines between rows)
   _columnView.set_show_row_separators(true);
@@ -235,6 +238,8 @@ void TrackViewPage::setupStatusBar()
 
 void TrackViewPage::applyPresentationSpec()
 {
+  updateColumnVisibility();
+
   if (_presentationSpec.sortBy.empty())
   {
     _sortModel->set_sorter(Glib::RefPtr<Gtk::Sorter>{});
@@ -300,11 +305,11 @@ void TrackViewPage::setupColumns()
       }
     });
 
-  auto artistColumn = Gtk::ColumnViewColumn::create("Artist", artistFactory);
-  artistColumn->set_expand(false);
-  artistColumn->set_resizable(true);
-  artistColumn->set_fixed_width(150);
-  _columnView.append_column(artistColumn);
+  _artistColumn = Gtk::ColumnViewColumn::create("Artist", artistFactory);
+  _artistColumn->set_expand(false);
+  _artistColumn->set_resizable(true);
+  _artistColumn->set_fixed_width(150);
+  _columnView.append_column(_artistColumn);
 
   // Album column
   auto albumFactory = Gtk::SignalListItemFactory::create();
@@ -328,11 +333,69 @@ void TrackViewPage::setupColumns()
       }
     });
 
-  auto albumColumn = Gtk::ColumnViewColumn::create("Album", albumFactory);
-  albumColumn->set_expand(false);
-  albumColumn->set_resizable(true);
-  albumColumn->set_fixed_width(200);
-  _columnView.append_column(albumColumn);
+  _albumColumn = Gtk::ColumnViewColumn::create("Album", albumFactory);
+  _albumColumn->set_expand(false);
+  _albumColumn->set_resizable(true);
+  _albumColumn->set_fixed_width(200);
+  _columnView.append_column(_albumColumn);
+
+  // Disc number column
+  auto discNumberFactory = Gtk::SignalListItemFactory::create();
+  discNumberFactory->signal_setup().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+    {
+      auto* label = Gtk::make_managed<Gtk::Label>("");
+      label->set_halign(Gtk::Align::END);
+      label->set_xalign(1.0F);
+      listItem->set_child(*label);
+    });
+  discNumberFactory->signal_bind().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+    {
+      auto item = listItem->get_item();
+      auto row = std::dynamic_pointer_cast<TrackRow>(item);
+      auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+      if (row && label)
+      {
+        auto const keys = row->getPresentationKeys();
+        label->set_text(keys.discNumber == 0 ? "" : std::to_string(keys.discNumber));
+      }
+    });
+
+  _discNumberColumn = Gtk::ColumnViewColumn::create("Disc", discNumberFactory);
+  _discNumberColumn->set_expand(false);
+  _discNumberColumn->set_resizable(true);
+  _discNumberColumn->set_fixed_width(64);
+  _columnView.append_column(_discNumberColumn);
+
+  // Track number column
+  auto trackNumberFactory = Gtk::SignalListItemFactory::create();
+  trackNumberFactory->signal_setup().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+    {
+      auto* label = Gtk::make_managed<Gtk::Label>("");
+      label->set_halign(Gtk::Align::END);
+      label->set_xalign(1.0F);
+      listItem->set_child(*label);
+    });
+  trackNumberFactory->signal_bind().connect(
+    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+    {
+      auto item = listItem->get_item();
+      auto row = std::dynamic_pointer_cast<TrackRow>(item);
+      auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+      if (row && label)
+      {
+        auto const keys = row->getPresentationKeys();
+        label->set_text(keys.trackNumber == 0 ? "" : std::to_string(keys.trackNumber));
+      }
+    });
+
+  _trackNumberColumn = Gtk::ColumnViewColumn::create("#", trackNumberFactory);
+  _trackNumberColumn->set_expand(false);
+  _trackNumberColumn->set_resizable(true);
+  _trackNumberColumn->set_fixed_width(64);
+  _columnView.append_column(_trackNumberColumn);
 
   // Title column
   auto titleFactory = Gtk::SignalListItemFactory::create();
@@ -356,13 +419,13 @@ void TrackViewPage::setupColumns()
       }
     });
 
-  auto titleColumn = Gtk::ColumnViewColumn::create("Title", titleFactory);
+  _titleColumn = Gtk::ColumnViewColumn::create("Title", titleFactory);
   // Keep one flexible column so row selection does not cause GTK to rebalance
   // spare width across every column.
-  titleColumn->set_expand(true);
-  titleColumn->set_resizable(true);
-  titleColumn->set_fixed_width(-1);
-  _columnView.append_column(titleColumn);
+  _titleColumn->set_expand(true);
+  _titleColumn->set_resizable(true);
+  _titleColumn->set_fixed_width(-1);
+  _columnView.append_column(_titleColumn);
 
   // Tags column
   auto tagsFactory = Gtk::SignalListItemFactory::create();
@@ -386,11 +449,44 @@ void TrackViewPage::setupColumns()
       }
     });
 
-  auto tagsColumn = Gtk::ColumnViewColumn::create("Tags", tagsFactory);
-  tagsColumn->set_expand(false);
-  tagsColumn->set_resizable(true);
-  tagsColumn->set_fixed_width(100);
-  _columnView.append_column(tagsColumn);
+  _tagsColumn = Gtk::ColumnViewColumn::create("Tags", tagsFactory);
+  _tagsColumn->set_expand(false);
+  _tagsColumn->set_resizable(true);
+  _tagsColumn->set_fixed_width(100);
+  _columnView.append_column(_tagsColumn);
+}
+
+void TrackViewPage::updateColumnVisibility()
+{
+  if (_artistColumn)
+  {
+    _artistColumn->set_visible(shouldShowColumn(_presentationSpec.groupBy, TrackColumn::Artist));
+  }
+
+  if (_albumColumn)
+  {
+    _albumColumn->set_visible(shouldShowColumn(_presentationSpec.groupBy, TrackColumn::Album));
+  }
+
+  if (_discNumberColumn)
+  {
+    _discNumberColumn->set_visible(shouldShowColumn(_presentationSpec.groupBy, TrackColumn::DiscNumber));
+  }
+
+  if (_trackNumberColumn)
+  {
+    _trackNumberColumn->set_visible(shouldShowColumn(_presentationSpec.groupBy, TrackColumn::TrackNumber));
+  }
+
+  if (_titleColumn)
+  {
+    _titleColumn->set_visible(shouldShowColumn(_presentationSpec.groupBy, TrackColumn::Title));
+  }
+
+  if (_tagsColumn)
+  {
+    _tagsColumn->set_visible(shouldShowColumn(_presentationSpec.groupBy, TrackColumn::Tags));
+  }
 }
 
 void TrackViewPage::onGroupByChanged()
@@ -408,6 +504,28 @@ void TrackViewPage::onFilterChanged()
 void TrackViewPage::onSelectionChanged([[maybe_unused]] std::uint32_t position, [[maybe_unused]] std::uint32_t nItems)
 {
   _selectionChanged.emit();
+}
+
+std::size_t TrackViewPage::selectedTrackCount() const
+{
+  auto count = std::size_t{0};
+  auto model = _selectionModel->get_model();
+
+  if (!model)
+  {
+    return count;
+  }
+
+  auto const nItems = model->get_n_items();
+  for (std::uint32_t i = 0; i < nItems; ++i)
+  {
+    if (_selectionModel->is_selected(i))
+    {
+      ++count;
+    }
+  }
+
+  return count;
 }
 
 std::optional<TrackViewPage::TrackId> TrackViewPage::trackIdAtPosition(std::uint32_t position) const
@@ -493,6 +611,20 @@ sigc::signal<void(TrackViewPage::TrackId)>& TrackViewPage::signalTrackActivated(
   return _trackActivated;
 }
 
+sigc::signal<void(double, double)>& TrackViewPage::signalContextMenuRequested()
+{
+  return _contextMenuRequested;
+}
+
+void TrackViewPage::popupContextMenu(Glib::RefPtr<Gio::MenuModel> const& model, double x, double y)
+{
+  auto rect = Gdk::Rectangle{static_cast<int>(x), static_cast<int>(y), 1, 1};
+  _contextMenu.popdown();
+  _contextMenu.set_menu_model(model);
+  _contextMenu.set_pointing_to(rect);
+  _contextMenu.popup();
+}
+
 void TrackViewPage::setupActivation()
 {
   _columnView.set_focusable(true);
@@ -540,6 +672,20 @@ void TrackViewPage::setupActivation()
       }
     });
   _columnView.add_controller(clickController);
+
+  auto secondaryClickController = Gtk::GestureClick::create();
+  secondaryClickController->set_button(GDK_BUTTON_SECONDARY);
+  secondaryClickController->signal_released().connect(
+    [this](int, double x, double y)
+    {
+      if (selectedTrackCount() == 0)
+      {
+        return;
+      }
+
+      _contextMenuRequested.emit(x, y);
+    });
+  _columnView.add_controller(secondaryClickController);
 }
 
 void TrackViewPage::onActivateCurrentSelection()

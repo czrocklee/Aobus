@@ -220,6 +220,24 @@ int compareForGrouping(TrackPresentationKeysView lhs, TrackPresentationKeysView 
   return 0;
 }
 
+bool shouldShowColumn(TrackGroupBy groupBy, TrackColumn column)
+{
+  switch (column)
+  {
+    case TrackColumn::Artist:
+      return groupBy != TrackGroupBy::Artist && groupBy != TrackGroupBy::Album;
+    case TrackColumn::Album:
+      return groupBy != TrackGroupBy::Album;
+    case TrackColumn::DiscNumber:
+    case TrackColumn::TrackNumber:
+    case TrackColumn::Title:
+    case TrackColumn::Tags:
+      return true;
+  }
+
+  return true;
+}
+
 std::string groupLabelFor(TrackPresentationKeysView keys, TrackGroupBy groupBy)
 {
   switch (groupBy)

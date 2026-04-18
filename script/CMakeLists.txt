@@ -55,8 +55,7 @@ add_executable(RockStudio
     app/main.cpp
     app/MainWindow.cpp
     app/MainWindow.ui
-    app/NewListDialog.cpp
-    app/NewListDialog.ui
+    app/SmartListDialog.cpp
     app/resources.qrc
     app/TableModel.cpp
     app/TagsDelegate.cpp
