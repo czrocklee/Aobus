@@ -112,9 +112,8 @@ TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
 
   // Set up column view
   _columnView.set_model(_selectionModel);
-  _contextMenu.set_has_arrow(false);
-  _contextMenu.set_parent(_columnView);
-  _contextMenu.set_flags(Gtk::PopoverMenu::Flags::NESTED);
+  _contextPopover.set_has_arrow(false);
+  _contextPopover.set_parent(_columnView);
 
   // Show row separators (horizontal lines between rows)
   _columnView.set_show_row_separators(true);
@@ -616,13 +615,12 @@ sigc::signal<void(double, double)>& TrackViewPage::signalContextMenuRequested()
   return _contextMenuRequested;
 }
 
-void TrackViewPage::popupContextMenu(Glib::RefPtr<Gio::MenuModel> const& model, double x, double y)
+void TrackViewPage::showTagPopover(TagPopover& popover, double x, double y)
 {
   auto rect = Gdk::Rectangle{static_cast<int>(x), static_cast<int>(y), 1, 1};
-  _contextMenu.popdown();
-  _contextMenu.set_menu_model(model);
-  _contextMenu.set_pointing_to(rect);
-  _contextMenu.popup();
+  popover.set_parent(_columnView);
+  popover.set_pointing_to(rect);
+  popover.popup();
 }
 
 void TrackViewPage::setupActivation()

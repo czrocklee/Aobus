@@ -5,6 +5,7 @@
 
 #include "TrackListAdapter.h"
 #include "TrackPresentation.h"
+#include "TagPopover.h"
 
 #include <gtkmm.h>
 
@@ -44,7 +45,7 @@ public:
   ContextMenuRequestedSignal& signalContextMenuRequested();
 
   // Show a context menu anchored to the current row coordinates.
-  void popupContextMenu(Glib::RefPtr<Gio::MenuModel> const& model, double x, double y);
+  void showTagPopover(TagPopover& popover, double x, double y);
 
   // Status banner API
   void setStatusMessage(std::string const& message);
@@ -74,7 +75,8 @@ private:
   Gtk::Label _statusLabel;
   Gtk::ScrolledWindow _scrolledWindow;
   Gtk::ColumnView _columnView;
-  Gtk::PopoverMenu _contextMenu;
+  Gtk::Popover _contextPopover;
+  TagPopover* _tagPopover = nullptr;
 
   // Models
   Glib::RefPtr<TrackListAdapter> _adapter;

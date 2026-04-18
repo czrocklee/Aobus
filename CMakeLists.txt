@@ -305,6 +305,7 @@ add_executable(RockStudio
     app/SmartListDialog.cpp
     app/QueryExpressionBox.cpp
     app/TagPromptDialog.cpp
+    app/TagPopover.cpp
     app/ImportProgressDialog.cpp
     app/model/TrackIdList.cpp
     app/model/AllTrackIdsList.cpp

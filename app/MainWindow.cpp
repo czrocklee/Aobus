@@ -18,6 +18,7 @@
 #include "PlaylistExporter.h"
 #include "TrackListAdapter.h"
 #include "TrackViewPage.h"
+#include "TagPopover.h"
 #include "model/AllTrackIdsList.h"
 #include "model/FilteredTrackIdList.h"
 #include "model/ListDraft.h"
@@ -78,98 +79,6 @@ namespace
     auto ec = std::error_code{};
     auto const canonicalPath = std::filesystem::weakly_canonical(path, ec);
     return ec ? path.lexically_normal().string() : canonicalPath.string();
-  }
-
-  struct TagMenuData final
-  {
-    std::map<std::string, std::size_t> selectedTagCounts;
-    std::vector<std::pair<std::string, std::size_t>> availableTagsByFrequency;
-  };
-
-  auto collectTagMenuData(rs::core::MusicLibrary& musicLibrary, std::vector<rs::core::TrackId> const& selectedIds) -> TagMenuData
-  {
-    auto data = TagMenuData{};
-    auto tagFrequency = std::map<std::string, std::size_t>{};
-    auto txn = musicLibrary.readTransaction();
-    auto reader = musicLibrary.tracks().reader(txn);
-    auto const& dictionary = musicLibrary.dictionary();
-
-    for (auto const trackId : selectedIds)
-    {
-      auto const view = reader.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot);
-      if (!view)
-      {
-        continue;
-      }
-
-      auto tagsOnTrack = std::set<std::string>{};
-      for (auto const tagId : view->tags())
-      {
-        auto const tag = std::string(dictionary.get(tagId));
-        if (!tag.empty())
-        {
-          tagsOnTrack.insert(tag);
-        }
-      }
-
-      for (auto const& tag : tagsOnTrack)
-      {
-        ++data.selectedTagCounts[tag];
-      }
-    }
-
-    for (auto it = reader.begin(rs::core::TrackStore::Reader::LoadMode::Hot),
-              end = reader.end(rs::core::TrackStore::Reader::LoadMode::Hot);
-         it != end;
-         ++it)
-    {
-      auto const& [_, view] = *it;
-      auto tagsOnTrack = std::set<std::string>{};
-
-      for (auto const tagId : view.tags())
-      {
-        auto const tag = std::string(dictionary.get(tagId));
-        if (!tag.empty())
-        {
-          tagsOnTrack.insert(tag);
-        }
-      }
-
-      for (auto const& tag : tagsOnTrack)
-      {
-        ++tagFrequency[tag];
-      }
-    }
-
-    data.availableTagsByFrequency.assign(tagFrequency.begin(), tagFrequency.end());
-    std::ranges::sort(
-      data.availableTagsByFrequency,
-      [](auto const& lhs, auto const& rhs)
-      {
-        if (lhs.second != rhs.second)
-        {
-          return lhs.second > rhs.second;
-        }
-
-        return lhs.first < rhs.first;
-      });
-
-    return data;
-  }
-
-  void appendTagMenuItem(Glib::RefPtr<Gio::Menu> const& menu,
-                         std::string const& label,
-                         std::string const& action,
-                         std::string const& tag)
-  {
-    auto item = Gio::MenuItem::create(label, "");
-    item->set_action_and_target(action, Glib::Variant<std::string>::create(tag));
-    menu->append_item(item);
-  }
-
-  auto selectedTagMenuLabel(std::string const& tag, std::size_t membershipCount, std::size_t selectionCount) -> std::string
-  {
-    return (membershipCount == selectionCount ? "[x] " : "[ ] ") + tag;
   }
 
   auto hasTagName(std::vector<std::string_view> const& tagNames, std::string_view tag) -> bool
@@ -1476,67 +1385,18 @@ void MainWindow::showTrackContextMenu(TrackViewPage& page, double x, double y)
     return;
   }
 
-  auto tagMenuData = collectTagMenuData(*_musicLibrary, selectedIds);
-  auto selectedTags = std::vector<std::pair<std::string, std::size_t>>{
-    tagMenuData.selectedTagCounts.begin(), tagMenuData.selectedTagCounts.end()};
-  std::ranges::sort(
-    selectedTags,
-    [](auto const& lhs, auto const& rhs)
-    {
-      if (lhs.second != rhs.second)
-      {
-        return lhs.second > rhs.second;
-      }
+  // Create TagPopover with the selected track IDs
+  auto* tagPopover = new TagPopover(*_musicLibrary, selectedIds);
 
-      return lhs.first < rhs.first;
+  // Connect signal to apply tag changes
+  tagPopover->signalTagsChanged().connect(
+    [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
+    {
+      applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove);
     });
 
-  auto rootMenu = Gio::Menu::create();
-  auto tagMenu = Gio::Menu::create();
-  auto addMenu = Gio::Menu::create();
-  auto selectedTagsSection = Gio::Menu::create();
-  auto const selectionCount = selectedIds.size();
-
-  // New Tag submenu (first section)
-  auto hasAddableTags = false;
-  for (auto const& [tag, frequency] : tagMenuData.availableTagsByFrequency)
-  {
-    (void)frequency;
-    if (auto const it = tagMenuData.selectedTagCounts.find(tag);
-        it != tagMenuData.selectedTagCounts.end() && it->second == selectionCount)
-    {
-      continue;
-    }
-
-    appendTagMenuItem(addMenu, tag, "win.track-tag-add", tag);
-    hasAddableTags = true;
-  }
-
-  if (!hasAddableTags)
-  {
-    addMenu->append("(No additional tags available)", "");
-  }
-
-  // Selected Tags items (second section)
-  if (selectedTags.empty())
-  {
-    selectedTagsSection->append("(No tags on selection)", "");
-  }
-  else
-  {
-    for (auto const& [tag, membershipCount] : selectedTags)
-    {
-      appendTagMenuItem(selectedTagsSection, selectedTagMenuLabel(tag, membershipCount, selectionCount), "win.track-tag-remove", tag);
-    }
-  }
-
-  // Append New Tag submenu, then separator, then Selected Tags items
-  tagMenu->append_submenu("New Tag", addMenu);
-  tagMenu->append_section(selectedTagsSection);
-
-  rootMenu->append_submenu("Tag", tagMenu);
-
-  page.popupContextMenu(rootMenu, x, y);
+  // Show the popover anchored to the right-click position
+  page.showTagPopover(*tagPopover, x, y);
 }
 
 void MainWindow::addTagToCurrentSelection(std::string const& tag)
@@ -1596,8 +1456,8 @@ void MainWindow::applyTagChangeToCurrentSelection(std::vector<std::string> const
       }
     }
 
-    auto prepared = builder.prepareHot(txn, dict);
-    writer.updateHot(trackId, prepared.size(), [&prepared](std::span<std::byte> hot) { prepared.writeTo(hot); });
+    auto hotData = builder.serializeHot(txn, dict);
+    writer.updateHot(trackId, hotData);
   }
 
   txn.commit();

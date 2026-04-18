@@ -170,6 +170,7 @@ private:
   Glib::RefPtr<Gio::SimpleAction> _editListAction;
   Glib::RefPtr<Gio::SimpleAction> _trackTagAddAction;
   Glib::RefPtr<Gio::SimpleAction> _trackTagRemoveAction;
+  Glib::RefPtr<Gio::SimpleAction> _trackTagToggleAction;
 
   // Track pages map
   std::map<rs::core::ListId, TrackPageContext> _trackPages;
