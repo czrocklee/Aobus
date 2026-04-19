@@ -348,35 +348,6 @@ void TrackViewPage::setupColumns()
   _albumColumn->set_fixed_width(200);
   _columnView.append_column(_albumColumn);
 
-  // Disc number column
-  auto discNumberFactory = Gtk::SignalListItemFactory::create();
-  discNumberFactory->signal_setup().connect(
-    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
-    {
-      auto* label = Gtk::make_managed<Gtk::Label>("");
-      label->set_halign(Gtk::Align::END);
-      label->set_xalign(1.0F);
-      listItem->set_child(*label);
-    });
-  discNumberFactory->signal_bind().connect(
-    [](Glib::RefPtr<Gtk::ListItem> const& listItem)
-    {
-      auto item = listItem->get_item();
-      auto row = std::dynamic_pointer_cast<TrackRow>(item);
-      auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-      if (row && label)
-      {
-        auto const keys = row->getPresentationKeys();
-        label->set_text(keys.discNumber == 0 ? "" : std::to_string(keys.discNumber));
-      }
-    });
-
-  _discNumberColumn = Gtk::ColumnViewColumn::create("Disc", discNumberFactory);
-  _discNumberColumn->set_expand(false);
-  _discNumberColumn->set_resizable(true);
-  _discNumberColumn->set_fixed_width(64);
-  _columnView.append_column(_discNumberColumn);
-
   // Track number column
   auto trackNumberFactory = Gtk::SignalListItemFactory::create();
   trackNumberFactory->signal_setup().connect(
@@ -395,15 +366,14 @@ void TrackViewPage::setupColumns()
       auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
       if (row && label)
       {
-        auto const keys = row->getPresentationKeys();
-        label->set_text(keys.trackNumber == 0 ? "" : std::to_string(keys.trackNumber));
+        label->set_text(row->getDisplayNumber());
       }
     });
 
-  _trackNumberColumn = Gtk::ColumnViewColumn::create("#", trackNumberFactory);
+  _trackNumberColumn = Gtk::ColumnViewColumn::create("No.", trackNumberFactory);
   _trackNumberColumn->set_expand(false);
   _trackNumberColumn->set_resizable(true);
-  _trackNumberColumn->set_fixed_width(64);
+  _trackNumberColumn->set_fixed_width(72);
   _columnView.append_column(_trackNumberColumn);
 
   // Title column
@@ -487,11 +457,6 @@ void TrackViewPage::updateColumnVisibility()
   if (_albumColumn)
   {
     _albumColumn->set_visible(shouldShowColumn(_presentationSpec.groupBy, TrackColumn::Album));
-  }
-
-  if (_discNumberColumn)
-  {
-    _discNumberColumn->set_visible(shouldShowColumn(_presentationSpec.groupBy, TrackColumn::DiscNumber));
   }
 
   if (_trackNumberColumn)

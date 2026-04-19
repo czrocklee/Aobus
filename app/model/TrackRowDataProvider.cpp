@@ -126,6 +126,7 @@ namespace app::model
 
     row.year = metadata.year();
     row.discNumber = metadata.discNumber();
+    row.totalDiscs = metadata.totalDiscs();
     row.trackNumber = metadata.trackNumber();
     row.duration = std::chrono::milliseconds{view.property().durationMs()};
 

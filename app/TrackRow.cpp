@@ -45,6 +45,7 @@ void TrackRow::ensureLoaded() const
     _duration = optRow->duration;
     _year = optRow->year;
     _discNumber = optRow->discNumber;
+    _totalDiscs = optRow->totalDiscs;
     _trackNumber = optRow->trackNumber;
     _resourceId = optRow->coverArtId ? std::optional<std::uint64_t>{optRow->coverArtId.value()} : std::nullopt;
   }
@@ -67,6 +68,23 @@ Glib::ustring TrackRow::getTitle() const
 {
   ensureLoaded();
   return _title;
+}
+
+Glib::ustring TrackRow::getDisplayNumber() const
+{
+  ensureLoaded();
+
+  if (_trackNumber == 0)
+  {
+    return {};
+  }
+
+  if (_totalDiscs > 1 && _discNumber != 0)
+  {
+    return Glib::ustring{std::to_string(_discNumber) + "-" + std::to_string(_trackNumber)};
+  }
+
+  return Glib::ustring{std::to_string(_trackNumber)};
 }
 
 Glib::ustring TrackRow::getTags() const

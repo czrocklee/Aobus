@@ -32,6 +32,7 @@ public:
   Glib::ustring getArtist() const;
   Glib::ustring getAlbum() const;
   Glib::ustring getTitle() const;
+  Glib::ustring getDisplayNumber() const;
   Glib::ustring getTags() const;
   std::chrono::milliseconds getDuration() const;
   TrackPresentationKeysView getPresentationKeys() const;
@@ -55,6 +56,7 @@ private:
   mutable std::chrono::milliseconds _duration{0};
   mutable std::uint16_t _year = 0;
   mutable std::uint16_t _discNumber = 0;
+  mutable std::uint16_t _totalDiscs = 0;
   mutable std::uint16_t _trackNumber = 0;
   mutable std::optional<std::uint64_t> _resourceId;
 };

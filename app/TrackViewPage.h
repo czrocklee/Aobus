@@ -94,7 +94,6 @@ private:
   Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
   Glib::RefPtr<Gtk::ColumnViewColumn> _artistColumn;
   Glib::RefPtr<Gtk::ColumnViewColumn> _albumColumn;
-  Glib::RefPtr<Gtk::ColumnViewColumn> _discNumberColumn;
   Glib::RefPtr<Gtk::ColumnViewColumn> _trackNumberColumn;
   Glib::RefPtr<Gtk::ColumnViewColumn> _titleColumn;
   Glib::RefPtr<Gtk::ColumnViewColumn> _tagsColumn;
