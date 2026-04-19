@@ -48,6 +48,14 @@ namespace app::model
     }
   }
 
+  void TrackIdList::notifyTrackDataChanged(TrackId id)
+  {
+    if (auto index = indexOf(id))
+    {
+      notifyUpdated(id, *index);
+    }
+  }
+
   void TrackIdList::notifyRemoved(TrackId id, std::size_t index)
   {
     for (auto* obs : _observers)

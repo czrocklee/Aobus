@@ -229,6 +229,11 @@ void MainWindow::openMusicLibrary(std::filesystem::path const& path)
     _allTrackIds = std::move(allTrackIds);
     _smartListEngine = std::move(smartListEngine);
 
+    if (_statusBar)
+    {
+      _statusBar->setTrackCount(_allTrackIds->size());
+    }
+
     rebuildListPages(txn);
 
     // Show the "All Tracks" page
@@ -322,16 +327,19 @@ void MainWindow::importFiles()
         _importWorker = std::make_unique<ImportWorker>(
           *_musicLibrary,
           files,
-          [dialogPtr](std::filesystem::path const& path, int index)
+          [this, dialogPtr](std::filesystem::path const& path, int index)
           {
             // Progress callback - marshal to main thread
             Glib::MainContext::get_default()->invoke(
-              [dialogPtr, path, index]()
+              [this, dialogPtr, path, index]()
               {
                 if (dialogPtr)
                 {
                   dialogPtr->onNewTrack(path.string(), index);
                 }
+
+                auto fraction = static_cast<double>(index) / static_cast<double>(_importWorker->fileCount());
+                updateImportProgress(fraction, "Importing: " + path.filename().string());
 
                 return false;
               });
@@ -346,6 +354,8 @@ void MainWindow::importFiles()
                 {
                   dialogPtr->ready();
                 }
+
+                updateImportProgress(1.0, "Import complete");
 
                 return false;
               });
@@ -423,21 +433,24 @@ void MainWindow::importFilesFromPath(std::filesystem::path const& path)
   _importWorker = std::make_unique<ImportWorker>(
     *_musicLibrary,
     files,
-    [dialogPtr](std::filesystem::path const& path, int index)
+    [this, dialogPtr](std::filesystem::path const& path, int index)
     {
       Glib::MainContext::get_default()->invoke(
-        [dialogPtr, path, index]
+        [this, dialogPtr, path, index]
         {
           dialogPtr->onNewTrack(path.string(), index);
+          auto fraction = static_cast<double>(index) / static_cast<double>(_importWorker->fileCount());
+          updateImportProgress(fraction, "Importing: " + path.filename().string());
           return false;
         });
     },
-    [dialogPtr]
+    [this, dialogPtr]
     {
       Glib::MainContext::get_default()->invoke(
-        [dialogPtr]
+        [this, dialogPtr]
         {
           dialogPtr->ready();
+          updateImportProgress(1.0, "Import complete");
           return false;
         });
     });
@@ -644,8 +657,15 @@ void MainWindow::setupLayout()
 
       auto* label = Gtk::make_managed<Gtk::Label>("");
       label->set_halign(Gtk::Align::START);
-      label->set_hexpand(true);
       rowBox->append(*label);
+
+      auto* filterLabel = Gtk::make_managed<Gtk::Label>("");
+      filterLabel->set_halign(Gtk::Align::START);
+      filterLabel->add_css_class("dim-label");
+      filterLabel->set_margin_start(6);
+      filterLabel->set_ellipsize(Pango::EllipsizeMode::END);
+      filterLabel->set_hexpand(true);
+      rowBox->append(*filterLabel);
 
       auto clickController = Gtk::GestureClick::create();
       clickController->set_button(GDK_BUTTON_SECONDARY);
@@ -693,6 +713,7 @@ void MainWindow::setupLayout()
       auto box = dynamic_cast<Gtk::Box*>(listItem->get_child());
       auto expander = box ? dynamic_cast<Gtk::TreeExpander*>(box->get_first_child()) : nullptr;
       auto label = expander ? dynamic_cast<Gtk::Label*>(expander->get_next_sibling()) : nullptr;
+      auto filterLabel = label ? dynamic_cast<Gtk::Label*>(label->get_next_sibling()) : nullptr;
 
       if (expander)
       {
@@ -703,6 +724,21 @@ void MainWindow::setupLayout()
       {
         // Gtk::TreeExpander handles indentation automatically
         label->set_text(row->getName());
+        
+        if (filterLabel)
+        {
+          auto const filter = row->getFilter();
+          if (!filter.empty())
+          {
+            filterLabel->set_text("[" + filter + "]");
+            filterLabel->set_visible(true);
+          }
+          else
+          {
+            filterLabel->set_text("");
+            filterLabel->set_visible(false);
+          }
+        }
       }
     });
 
@@ -770,6 +806,13 @@ void MainWindow::setupLayout()
   }
 
   mainBox->append(_paned);
+
+  // Status bar at bottom
+  _statusBar = std::make_unique<StatusBar>();
+  
+  auto* statusSeparator = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
+  mainBox->append(*statusSeparator);
+  mainBox->append(*_statusBar);
 
   // Set as window child
   set_child(*mainBox);
@@ -1167,7 +1210,7 @@ void MainWindow::buildListTree(rs::lmdb::ReadTransaction& txn)
   // Create tree nodes for all stored lists
   for (auto const& [id, node] : nodes)
   {
-    auto listRow = ListRow::create(id, node.parentId, 0, node.isSmart, node.name);
+    auto listRow = ListRow::create(id, node.parentId, 0, node.isSmart, node.name, node.localExpression);
     auto treeNode = ListTreeNode::create(listRow);
     _nodesById[id] = treeNode;
   }
@@ -1236,9 +1279,12 @@ void MainWindow::buildPageForAllTracks()
     {
       auto ids = trackPagePtr->getSelectedTrackIds();
       updateCoverArt(ids);
+      onTrackSelectionChanged();
     });
   trackPage->signalContextMenuRequested().connect(
     [this, trackPagePtr = trackPage.get()](double x, double y) { showTrackContextMenu(*trackPagePtr, x, y); });
+  trackPage->signalTagEditRequested().connect(
+    [this, trackPagePtr = trackPage.get()](std::vector<rs::core::TrackId> ids, double x, double y) { showTagEditor(*trackPagePtr, ids, x, y); });
 
   // Connect track activation to playback
   bindTrackPagePlayback(*trackPage);
@@ -1319,9 +1365,12 @@ void MainWindow::buildPageForStoredList(rs::core::ListId listId, rs::core::ListV
     {
       auto ids = trackPagePtr->getSelectedTrackIds();
       updateCoverArt(ids);
+      onTrackSelectionChanged();
     });
   trackPage->signalContextMenuRequested().connect(
     [this, trackPagePtr = trackPage.get()](double x, double y) { showTrackContextMenu(*trackPagePtr, x, y); });
+  trackPage->signalTagEditRequested().connect(
+    [this, trackPagePtr = trackPage.get()](std::vector<rs::core::TrackId> ids, double x, double y) { showTagEditor(*trackPagePtr, ids, x, y); });
 
   // Connect track activation to playback
   bindTrackPagePlayback(*trackPage);
@@ -1399,6 +1448,35 @@ void MainWindow::showTrackContextMenu(TrackViewPage& page, double x, double y)
   page.showTagPopover(*tagPopover, x, y);
 }
 
+void MainWindow::showTagEditor(TrackViewPage& page, std::vector<rs::core::TrackId> selectedIds, double x, double y)
+{
+  if (!_musicLibrary)
+  {
+    return;
+  }
+
+  if (selectedIds.empty())
+  {
+    return;
+  }
+
+  // Create TagPopover with the selected track IDs
+  auto* tagPopover = new TagPopover(*_musicLibrary, selectedIds);
+
+  // Connect signal to apply tag changes
+  tagPopover->signalTagsChanged().connect(
+    [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
+    {
+      applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove);
+    });
+
+  // Show popover at mouse position
+  tagPopover->set_parent(page.getColumnView());
+  Gdk::Rectangle rect{static_cast<int>(x), static_cast<int>(y), 1, 1};
+  tagPopover->set_pointing_to(rect);
+  tagPopover->popup();
+}
+
 void MainWindow::addTagToCurrentSelection(std::string const& tag)
 {
   applyTagChangeToCurrentSelection({tag}, {});
@@ -1465,10 +1543,26 @@ void MainWindow::applyTagChangeToCurrentSelection(std::vector<std::string> const
   for (auto const trackId : selectedIds)
   {
     _rowDataProvider->invalidateHot(trackId);
-    _allTrackIds->notifyUpdated(trackId);
+    if (ctx->membershipList)
+    {
+      ctx->membershipList->notifyTrackDataChanged(trackId);
+    }
+    else
+    {
+      // All Tracks page uses _allTrackIds directly
+      _allTrackIds->notifyTrackDataChanged(trackId);
+    }
   }
 
-  ctx->page->setStatusMessage(tagChangeStatusMessage(selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
+  showStatusMessage(tagChangeStatusMessage(selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
+}
+
+void MainWindow::showStatusMessage(std::string const& message)
+{
+  if (_statusBar)
+  {
+    _statusBar->showMessage(message);
+  }
 }
 
 void MainWindow::onListSelectionChanged([[maybe_unused]] std::uint32_t position, [[maybe_unused]] std::uint32_t nItems)
@@ -1566,6 +1660,43 @@ void MainWindow::notifyTracksRemoved(std::vector<rs::core::TrackId> const& ids)
   {
     _allTrackIds->notifyRemoved(id);
     _rowDataProvider->remove(id);
+  }
+}
+
+void MainWindow::onTrackSelectionChanged()
+{
+  auto* ctx = currentVisibleTrackPageContext();
+  if (!ctx || !ctx->page)
+  {
+    if (_statusBar)
+    {
+      _statusBar->setSelectionInfo(0);
+    }
+    return;
+  }
+
+  auto const count = ctx->page->getSelectedTrackIds().size();
+  auto const duration = ctx->page->getSelectedTracksDuration();
+  
+  if (_statusBar)
+  {
+    _statusBar->setSelectionInfo(count, duration);
+  }
+}
+
+void MainWindow::updateImportProgress(double fraction, std::string const& info)
+{
+  if (_statusBar)
+  {
+    if (fraction >= 1.0)
+    {
+      _statusBar->clearImportProgress();
+      _statusBar->setTrackCount(_allTrackIds->size());
+    }
+    else
+    {
+      _statusBar->setImportProgress(fraction, info);
+    }
   }
 }
 
@@ -1671,6 +1802,11 @@ void MainWindow::refreshPlaybackBar()
 
   auto snapshot = _playbackController->snapshot();
   _playbackBar->setSnapshot(snapshot);
+  
+  if (_statusBar)
+  {
+    _statusBar->setPlaybackDetails(snapshot);
+  }
 }
 
 void MainWindow::onPlayRequested()

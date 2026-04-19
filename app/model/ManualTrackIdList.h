@@ -24,16 +24,16 @@ namespace app::model
   public:
     explicit ManualTrackIdList(rs::core::ListView const& view, TrackIdList* source = nullptr);
     explicit ManualTrackIdList();
-
     ~ManualTrackIdList() override;
 
     void reload(rs::core::ListView const& view);
 
-  private:
-    std::size_t size() const override { return _trackIds.size(); }
-    TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
-    std::optional<std::size_t> indexOf(TrackId id) const override;
+    // TrackIdList interface
+    [[nodiscard]] std::size_t size() const override { return _trackIds.size(); }
+    [[nodiscard]] TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
+    [[nodiscard]] std::optional<std::size_t> indexOf(TrackId id) const override;
 
+  private:
     // TrackIdListObserver interface
     void onReset() override;
     void onInserted(TrackId id, std::size_t index) override;

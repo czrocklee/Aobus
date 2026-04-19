@@ -127,6 +127,7 @@ namespace app::model
     row.year = metadata.year();
     row.discNumber = metadata.discNumber();
     row.trackNumber = metadata.trackNumber();
+    row.duration = std::chrono::milliseconds{view.property().durationMs()};
 
     auto const coverArtId = metadata.coverArtId();
     if (coverArtId != 0)

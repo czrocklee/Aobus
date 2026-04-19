@@ -23,6 +23,7 @@
 namespace
 {
   using RowCompareFn = std::function<int(TrackRow const&, TrackRow const&)>;
+  constexpr auto kTagsCellWidgetName = "track-tags-cell";
 
   auto trackRowFromItem(gconstpointer item) -> TrackRow const*
   {
@@ -56,6 +57,19 @@ namespace
       [](gpointer userData) { delete static_cast<RowCompareFn*>(userData); });
 
     return Glib::wrap(GTK_SORTER(customSorter), false);
+  }
+
+  auto isTagsCellWidget(Gtk::Widget const* widget) -> bool
+  {
+    for (auto current = widget; current != nullptr; current = current->get_parent())
+    {
+      if (current->has_css_class(kTagsCellWidgetName))
+      {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   auto dropdownPositionFor(TrackGroupBy groupBy) -> std::uint32_t
@@ -105,9 +119,6 @@ TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
 
   setupPresentationControls();
 
-  // Set up status bar (hidden by default)
-  setupStatusBar();
-
   setupHeaderFactory();
 
   // Set up column view
@@ -134,9 +145,8 @@ TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter)
 
   applyPresentationSpec();
 
-  // Add to box (order: controls, status, scroll)
+  // Add to box (order: controls, scroll)
   append(_controlsBar);
-  append(_statusLabel);
   append(_scrolledWindow);
 }
 
@@ -431,20 +441,32 @@ void TrackViewPage::setupColumns()
   tagsFactory->signal_setup().connect(
     [](Glib::RefPtr<Gtk::ListItem> const& listItem)
     {
+      auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 0);
+      box->set_halign(Gtk::Align::FILL);
+      box->set_hexpand(true);
+      box->add_css_class(kTagsCellWidgetName);
+
       auto* label = Gtk::make_managed<Gtk::Label>("");
       label->set_halign(Gtk::Align::START);
       label->set_ellipsize(Pango::EllipsizeMode::END);
-      listItem->set_child(*label);
+      label->set_hexpand(true);
+
+      box->append(*label);
+      listItem->set_child(*box);
     });
   tagsFactory->signal_bind().connect(
     [](Glib::RefPtr<Gtk::ListItem> const& listItem)
     {
       auto item = listItem->get_item();
       auto row = std::dynamic_pointer_cast<TrackRow>(item);
-      auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-      if (row && label)
+      auto* box = dynamic_cast<Gtk::Box*>(listItem->get_child());
+      if (row && box)
       {
-        label->set_text(row->getTags());
+        auto* label = dynamic_cast<Gtk::Label*>(box->get_first_child());
+        if (label)
+        {
+          label->set_text(row->getTags());
+        }
       }
     });
 
@@ -600,6 +622,32 @@ std::vector<TrackListAdapter::TrackId> TrackViewPage::getSelectedTrackIds() cons
   return result;
 }
 
+std::chrono::milliseconds TrackViewPage::getSelectedTracksDuration() const
+{
+  std::chrono::milliseconds totalDuration{0};
+
+  auto model = _selectionModel->get_model();
+  if (!model)
+  {
+    return std::chrono::milliseconds{0};
+  }
+
+  auto nItems = model->get_n_items();
+  for (std::uint32_t i = 0; i < nItems; ++i)
+  {
+    if (_selectionModel->is_selected(i))
+    {
+      auto item = _selectionModel->get_object(i);
+      if (auto row = std::dynamic_pointer_cast<TrackRow>(item))
+      {
+        totalDuration += row->getDuration();
+      }
+    }
+  }
+
+  return totalDuration;
+}
+
 sigc::signal<void()>& TrackViewPage::signalSelectionChanged()
 {
   return _selectionChanged;
@@ -613,6 +661,11 @@ sigc::signal<void(TrackViewPage::TrackId)>& TrackViewPage::signalTrackActivated(
 sigc::signal<void(double, double)>& TrackViewPage::signalContextMenuRequested()
 {
   return _contextMenuRequested;
+}
+
+sigc::signal<void(std::vector<TrackViewPage::TrackId>, double, double)>& TrackViewPage::signalTagEditRequested()
+{
+  return _tagEditRequested;
 }
 
 void TrackViewPage::showTagPopover(TagPopover& popover, double x, double y)
@@ -632,6 +685,12 @@ void TrackViewPage::setupActivation()
   _columnView.signal_activate().connect(
     [this](std::uint32_t position)
     {
+      if (_suppressNextTrackActivation)
+      {
+        _suppressNextTrackActivation = false;
+        return;
+      }
+
       if (auto trackId = trackIdAtPosition(position))
       {
         _trackActivated.emit(*trackId);
@@ -645,31 +704,59 @@ void TrackViewPage::setupActivation()
   // on the view but no activate action is emitted automatically.
   auto keyController = Gtk::EventControllerKey::create();
   keyController->signal_key_pressed().connect(
-    [this](guint keyval, guint, Gdk::ModifierType)
+    [this](guint keyval, guint, Gdk::ModifierType modifiers)
     {
       if (keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter)
       {
         onActivateCurrentSelection();
         return true;
       }
+      // Ctrl+T opens tag edit popover
+      if (keyval == GDK_KEY_t || keyval == GDK_KEY_T)
+      {
+        if (bool(modifiers & Gdk::ModifierType::CONTROL_MASK))
+        {
+          auto selectedIds = getSelectedTrackIds();
+          if (!selectedIds.empty())
+          {
+            _tagEditRequested.emit(selectedIds, 0, 0);
+          }
+          return true;
+        }
+      }
       return false;
     },
     false);
   _columnView.add_controller(keyController);
 
-  // Use release rather than press so GTK has already updated selection when we
-  // inspect the currently selected row.
-  auto clickController = Gtk::GestureClick::create();
-  clickController->set_button(GDK_BUTTON_PRIMARY);
-  clickController->signal_released().connect(
-    [this](int nPress, double, double)
+  auto primaryClickController = Gtk::GestureClick::create();
+  primaryClickController->set_button(GDK_BUTTON_PRIMARY);
+  primaryClickController->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+  primaryClickController->signal_pressed().connect(
+    [this, primaryClickController](int nPress, double x, double y)
     {
-      if (nPress == 2)
+      if (nPress != 2)
       {
-        onActivateCurrentSelection();
+        return;
       }
+
+      auto* target = _columnView.pick(x, y, Gtk::PickFlags::NON_TARGETABLE);
+      if (!isTagsCellWidget(target))
+      {
+        return;
+      }
+
+      auto selectedIds = getSelectedTrackIds();
+      if (selectedIds.empty())
+      {
+        return;
+      }
+
+      primaryClickController->set_state(Gtk::EventSequenceState::CLAIMED);
+      _suppressNextTrackActivation = true;
+      _tagEditRequested.emit(selectedIds, x, y);
     });
-  _columnView.add_controller(clickController);
+  _columnView.add_controller(primaryClickController);
 
   auto secondaryClickController = Gtk::GestureClick::create();
   secondaryClickController->set_button(GDK_BUTTON_SECONDARY);
@@ -688,6 +775,12 @@ void TrackViewPage::setupActivation()
 
 void TrackViewPage::onActivateCurrentSelection()
 {
+  if (_suppressNextTrackActivation)
+  {
+    _suppressNextTrackActivation = false;
+    return;
+  }
+
   auto trackId = getPrimarySelectedTrackId();
   if (trackId)
   {

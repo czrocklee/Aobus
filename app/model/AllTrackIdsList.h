@@ -30,11 +30,12 @@ namespace app::model
     void notifyRemoved(TrackId id);
     void clear();
 
-  private:
+    // TrackIdList interface
     std::size_t size() const override { return _trackIds.size(); }
     TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
+  private:
     rs::core::TrackStore* _store;
     std::vector<TrackId> _trackIds;
   };

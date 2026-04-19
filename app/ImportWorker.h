@@ -44,6 +44,8 @@ public:
   // Join the worker thread (call from main thread after finished callback)
   void join();
 
+  std::size_t fileCount() const { return _files.size(); }
+
 private:
   rs::core::MusicLibrary& _ml;
   std::vector<std::filesystem::path> const& _files;

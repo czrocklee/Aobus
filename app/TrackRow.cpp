@@ -42,6 +42,7 @@ void TrackRow::ensureLoaded() const
     _genre = std::move(optRow->genre);
     _title = std::move(optRow->title);
     _tags = std::move(optRow->tags);
+    _duration = optRow->duration;
     _year = optRow->year;
     _discNumber = optRow->discNumber;
     _trackNumber = optRow->trackNumber;
@@ -72,6 +73,12 @@ Glib::ustring TrackRow::getTags() const
 {
   ensureLoaded();
   return _tags;
+}
+
+std::chrono::milliseconds TrackRow::getDuration() const
+{
+  ensureLoaded();
+  return _duration;
 }
 
 TrackPresentationKeysView TrackRow::getPresentationKeys() const

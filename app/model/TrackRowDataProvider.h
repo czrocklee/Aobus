@@ -9,6 +9,7 @@
 #include <rs/core/MusicLibrary.h>
 #include <rs/core/TrackStore.h>
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -39,6 +40,7 @@ namespace app::model
     std::uint16_t year = 0;
     std::uint16_t discNumber = 0;
     std::uint16_t trackNumber = 0;
+    std::chrono::milliseconds duration{0};
     std::optional<std::uint32_t> coverArtId;
     bool missing = false;
   };

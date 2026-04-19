@@ -9,6 +9,7 @@
 
 #include <gtkmm.h>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -32,6 +33,7 @@ public:
   Glib::ustring getAlbum() const;
   Glib::ustring getTitle() const;
   Glib::ustring getTags() const;
+  std::chrono::milliseconds getDuration() const;
   TrackPresentationKeysView getPresentationKeys() const;
   std::uint64_t getResourceId() const;
 
@@ -50,6 +52,7 @@ private:
   mutable std::string _genre;
   mutable std::string _title;
   mutable std::string _tags;
+  mutable std::chrono::milliseconds _duration{0};
   mutable std::uint16_t _year = 0;
   mutable std::uint16_t _discNumber = 0;
   mutable std::uint16_t _trackNumber = 0;

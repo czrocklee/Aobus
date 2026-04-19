@@ -357,6 +357,31 @@ namespace app::model
     return state.dirty ? state.stagedErrorMessage : state.errorMessage;
   }
 
+  void SmartListEngine::notifyTrackDataChanged(RegistrationId id, TrackId trackId)
+  {
+    auto it = _states.find(id);
+    if (it == _states.end())
+    {
+      return;
+    }
+
+    auto& state = *it->second;
+    if (!state.bucket || !state.bucket->source)
+    {
+      return;
+    }
+
+    // Get the source index for proper ordering
+    auto sourceIndexOpt = state.bucket->source->indexOf(trackId);
+    if (!sourceIndexOpt)
+    {
+      return;
+    }
+
+    // Re-evaluate whether the track still matches the filter
+    handleSourceUpdated(*state.bucket, trackId, *sourceIndexOpt);
+  }
+
   void SmartListEngine::rebuildActiveStates(SourceBucket& bucket)
   {
     if (bucket.registrations.empty())

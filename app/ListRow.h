@@ -29,7 +29,9 @@ public:
   Glib::ustring getName() const { return _name; }
   void setName(Glib::ustring const& name) { _name = name; }
 
-  static Glib::RefPtr<ListRow> create(ListId id, ListId sourceListId, int depth, bool smart, Glib::ustring const& name);
+  Glib::ustring getFilter() const { return _filter; }
+
+  static Glib::RefPtr<ListRow> create(ListId id, ListId sourceListId, int depth, bool smart, Glib::ustring const& name, Glib::ustring const& filter = "");
 
 protected:
   explicit ListRow();
@@ -40,4 +42,5 @@ private:
   int _depth = 0;
   bool _isSmart = false;
   Glib::ustring _name;
+  Glib::ustring _filter;
 };

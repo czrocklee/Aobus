@@ -54,6 +54,9 @@ namespace app::model
     void attach(TrackIdListObserver* observer);
     void detach(TrackIdListObserver* observer);
 
+    // Notify observers that a track's data changed (tags, etc.)
+    virtual void notifyTrackDataChanged(TrackId id);
+
   protected:
     TrackIdList() = default;
 

@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace
 {
@@ -180,9 +181,9 @@ void TrackListAdapter::onUpdated(TrackId id, std::size_t index)
   }
 
   auto row = TrackRow::create(id, _provider);
-
-  _listModel->remove(uintIdx);
-  _listModel->insert(uintIdx, row);
+  std::vector<Glib::RefPtr<TrackRow>> additions;
+  additions.push_back(row);
+  _listModel->splice(uintIdx, 1, additions);
 }
 
 void TrackListAdapter::onRemoved([[maybe_unused]] TrackId id, std::size_t index)

@@ -9,6 +9,7 @@
 
 #include <gtkmm.h>
 
+#include <chrono>
 #include <cstdint>
 #include <vector>
 
@@ -19,12 +20,16 @@ public:
   using SelectionChangedSignal = sigc::signal<void()>;
   using TrackActivatedSignal = sigc::signal<void(TrackId)>;
   using ContextMenuRequestedSignal = sigc::signal<void(double, double)>;
+  using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId>, double, double)>;
 
   explicit TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter);
   ~TrackViewPage() override;
 
   // Get the selected track IDs
   std::vector<TrackId> getSelectedTrackIds() const;
+
+  // Get total duration of selected tracks
+  std::chrono::milliseconds getSelectedTracksDuration() const;
 
   // Get the visible playback order for the current songs view.
   std::vector<TrackId> getVisibleTrackIds() const;
@@ -43,6 +48,9 @@ public:
 
   // Signal for secondary-click interactions on the current selection.
   ContextMenuRequestedSignal& signalContextMenuRequested();
+
+  // Signal for tag edit requests (Ctrl+T or double-click on tags)
+  TagEditRequestedSignal& signalTagEditRequested();
 
   // Show a context menu anchored to the current row coordinates.
   void showTagPopover(TagPopover& popover, double x, double y);
@@ -91,9 +99,11 @@ private:
   Glib::RefPtr<Gtk::ColumnViewColumn> _titleColumn;
   Glib::RefPtr<Gtk::ColumnViewColumn> _tagsColumn;
   TrackPresentationSpec _presentationSpec;
+  bool _suppressNextTrackActivation = false;
 
   // Signals
   SelectionChangedSignal _selectionChanged;
   TrackActivatedSignal _trackActivated;
   ContextMenuRequestedSignal _contextMenuRequested;
+  TagEditRequestedSignal _tagEditRequested;
 };

@@ -16,6 +16,8 @@
 #include <vector>
 
 #include "AppConfig.h"
+#include "StatusBar.h"
+#include "TrackViewPage.h"
 #include "model/SmartListEngine.h"
 
 #include "playback/PlaybackTypes.h"
@@ -70,10 +72,12 @@ private:
 
   // Track context menu (tagging)
   void showTrackContextMenu(TrackViewPage& page, double x, double y);
+  void showTagEditor(TrackViewPage& page, std::vector<rs::core::TrackId> selectedIds, double x, double y);
   void addTagToCurrentSelection(std::string const& tag);
   void removeTagFromCurrentSelection(std::string const& tag);
   void applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
                                         std::vector<std::string> const& tagsToRemove);
+  void showStatusMessage(std::string const& message);
 
   void setupMenu();
   void setupLayout();
@@ -106,6 +110,9 @@ private:
   void notifyTracksInserted(std::vector<rs::core::TrackId> const& ids);
   void notifyTracksUpdated(std::vector<rs::core::TrackId> const& ids);
   void notifyTracksRemoved(std::vector<rs::core::TrackId> const& ids);
+
+  void onTrackSelectionChanged();
+  void updateImportProgress(double fraction, std::string const& info);
 
   void saveSession();
   void loadSession();
@@ -179,4 +186,7 @@ private:
   std::unique_ptr<PlaybackBar> _playbackBar;
   std::unique_ptr<app::playback::PlaybackController> _playbackController;
   std::uint32_t _playbackTimer = 0;
+
+  // Status bar
+  std::unique_ptr<StatusBar> _statusBar;
 };

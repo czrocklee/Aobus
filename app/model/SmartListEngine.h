@@ -93,6 +93,9 @@ namespace app::model
     bool hasError(RegistrationId id) const;
     std::string const& errorMessage(RegistrationId id) const;
 
+    // Notify engine that a track's data changed so it can re-evaluate filter membership
+    void notifyTrackDataChanged(RegistrationId id, TrackId trackId);
+
   private:
     struct SmartListState;
     struct SourceBucket;

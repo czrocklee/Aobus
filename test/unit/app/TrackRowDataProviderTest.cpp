@@ -62,6 +62,7 @@ namespace app::model
     std::uint16_t year = 0;
     std::uint16_t discNumber = 0;
     std::uint16_t trackNumber = 0;
+    std::chrono::milliseconds duration{0};
     std::optional<std::uint32_t> coverArtId;
     bool missing = false;
   };
@@ -178,6 +179,7 @@ namespace app::model
     row.year = metadata.year();
     row.discNumber = metadata.discNumber();
     row.trackNumber = metadata.trackNumber();
+    row.duration = std::chrono::milliseconds{view.property().durationMs()};
 
     auto const coverArtId = metadata.coverArtId();
     if (coverArtId != 0)

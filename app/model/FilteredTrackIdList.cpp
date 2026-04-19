@@ -107,4 +107,15 @@ namespace app::model
     TrackIdList::notifyRemoved(id, index);
   }
 
+  void FilteredTrackIdList::notifyTrackDataChanged(TrackId id)
+  {
+    if (!_engine || _registrationId == 0)
+    {
+      return;
+    }
+
+    // Delegate to the engine to re-evaluate whether the track still matches the filter
+    _engine->notifyTrackDataChanged(_registrationId, id);
+  }
+
 } // namespace app::model

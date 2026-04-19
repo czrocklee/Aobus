@@ -307,6 +307,7 @@ add_executable(RockStudio
     app/TagPromptDialog.cpp
     app/TagPopover.cpp
     app/ImportProgressDialog.cpp
+    app/StatusBar.cpp
     app/model/TrackIdList.cpp
     app/model/AllTrackIdsList.cpp
     app/model/FilteredTrackIdList.cpp
