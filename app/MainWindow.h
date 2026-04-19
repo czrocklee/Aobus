@@ -56,6 +56,12 @@ struct TrackPageContext final
   std::unique_ptr<PlaylistExporter> exporter;
 };
 
+struct ActivePlaybackSequence final
+{
+  std::vector<rs::core::TrackId> trackIds;
+  std::size_t currentIndex = 0;
+};
+
 class MainWindow : public Gtk::ApplicationWindow
 {
 public:
@@ -128,6 +134,11 @@ private:
   void pausePlayback();
   void stopPlayback();
   void seekPlayback(std::uint32_t positionMs);
+  bool startPlaybackFromVisiblePage(TrackViewPage const& page, rs::core::TrackId trackId);
+  bool startPlaybackSequence(std::vector<rs::core::TrackId> trackIds, rs::core::TrackId startTrackId);
+  bool playTrackAtSequenceIndex(std::size_t index);
+  void clearActivePlaybackSequence();
+  void handlePlaybackFinished();
   void bindTrackPagePlayback(TrackViewPage& page);
   TrackPageContext* currentVisibleTrackPageContext();
   TrackPageContext const* currentVisibleTrackPageContext() const;
@@ -186,6 +197,8 @@ private:
   std::unique_ptr<PlaybackBar> _playbackBar;
   std::unique_ptr<app::playback::PlaybackController> _playbackController;
   std::uint32_t _playbackTimer = 0;
+  std::optional<ActivePlaybackSequence> _activePlaybackSequence;
+  app::playback::TransportState _lastPlaybackState = app::playback::TransportState::Idle;
 
   // Status bar
   std::unique_ptr<StatusBar> _statusBar;

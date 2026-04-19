@@ -21,10 +21,11 @@ namespace app::playback
 
   void PlaybackEngine::play(TrackPlaybackDescriptor descriptor)
   {
+    stopDecodeThread();
+
     std::lock_guard<std::mutex> lock(_stateMutex);
 
-    // Stop any existing playback
-    stopDecodeThread();
+    _ringBuffer.clear();
 
     // Open the track
     _currentTrack = descriptor;
@@ -85,8 +86,9 @@ namespace app::playback
 
   void PlaybackEngine::stop()
   {
-    std::lock_guard<std::mutex> lock(_stateMutex);
     stopDecodeThread();
+
+    std::lock_guard<std::mutex> lock(_stateMutex);
     _ringBuffer.clear();
     _decoder.reset();
     _currentTrack.reset();
@@ -171,6 +173,22 @@ namespace app::playback
 
       if (block->endOfStream)
       {
+        {
+          std::lock_guard<std::mutex> stateLock(_stateMutex);
+          std::lock_guard<std::mutex> decoderLock(_decoderMutex);
+          _ringBuffer.clear();
+          _decoder.reset();
+          _currentTrack.reset();
+          _state = TransportState::Idle;
+          _snapshot = {};
+          _snapshot.state = TransportState::Idle;
+        }
+
+        if (_backend)
+        {
+          _backend->stop();
+        }
+
         break;
       }
 
