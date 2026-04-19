@@ -10,6 +10,8 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 struct AVCodecContext;
@@ -43,13 +45,14 @@ namespace app::playback
     explicit FfmpegDecoderSession(StreamFormat outputFormat);
     ~FfmpegDecoderSession();
 
-    void open(std::filesystem::path const& filePath);
+    bool open(std::filesystem::path const& filePath);
     void close();
     void seek(std::uint32_t positionMs);
     void flush();
 
     std::optional<PcmBlock> readNextBlock();
     DecodedStreamInfo streamInfo() const;
+    std::string_view lastError() const noexcept;
 
   private:
     struct FormatContextDeleter
@@ -83,12 +86,12 @@ namespace app::playback
     using FramePtr = std::unique_ptr<AVFrame, FrameDeleter>;
     using SwrContextPtr = std::unique_ptr<SwrContext, SwrContextDeleter>;
 
-    void openInput(std::filesystem::path const& filePath);
-    void openAudioStream();
-    void configureResampler();
-    std::optional<PcmBlock> drainDecoder();
+    bool openInput(std::filesystem::path const& filePath);
+    bool openAudioStream();
+    bool configureResampler();
     std::optional<PcmBlock> convertFrameToInterleavedPcm();
     std::uint32_t getCurrentPositionMs() const;
+    void setError(std::string message);
 
     StreamFormat _outputFormat;
     DecodedStreamInfo _streamInfo;
@@ -100,7 +103,9 @@ namespace app::playback
     int _audioStreamIndex = -1;
     bool _inputEof = false;
     bool _decoderEof = false;
+    bool _flushPacketSent = false;
     std::uint64_t _decodedFrameCursor = 0;
+    std::string _lastError;
   };
 
 } // namespace app::playback

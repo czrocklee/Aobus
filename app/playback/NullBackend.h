@@ -5,6 +5,8 @@
 
 #include "IAudioBackend.h"
 
+#include <string_view>
+
 namespace app::playback
 {
 
@@ -15,13 +17,29 @@ namespace app::playback
     NullBackend() = default;
     ~NullBackend() override = default;
 
-    void open(StreamFormat const& /*format*/, AudioRenderCallbacks /*callbacks*/) override {}
+    bool open(StreamFormat const& /*format*/, AudioRenderCallbacks callbacks) override
+    {
+      _callbacks = callbacks;
+      return true;
+    }
     void start() override {}
     void pause() override {}
     void resume() override {}
     void flush() override {}
+    void drain() override
+    {
+      if (_callbacks.onDrainComplete)
+      {
+        _callbacks.onDrainComplete(_callbacks.userData);
+      }
+    }
     void stop() override {}
+    void close() override {}
     BackendKind kind() const noexcept override { return BackendKind::None; }
+    std::string_view lastError() const noexcept override { return {}; }
+
+  private:
+    AudioRenderCallbacks _callbacks{};
   };
 
 } // namespace app::playback

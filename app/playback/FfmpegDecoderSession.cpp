@@ -16,7 +16,30 @@ extern "C"
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
-#include <iostream>
+
+namespace
+{
+  std::string ffmpegErrorText(int errorCode)
+  {
+    char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
+    av_strerror(errorCode, buffer, sizeof(buffer));
+    return buffer;
+  }
+
+  bool isFloatSampleFormat(AVSampleFormat sampleFormat)
+  {
+    switch (sampleFormat)
+    {
+      case AV_SAMPLE_FMT_FLT:
+      case AV_SAMPLE_FMT_FLTP:
+      case AV_SAMPLE_FMT_DBL:
+      case AV_SAMPLE_FMT_DBLP:
+        return true;
+      default:
+        return false;
+    }
+  }
+} // namespace
 
 namespace app::playback
 {
@@ -69,24 +92,35 @@ namespace app::playback
 
   FfmpegDecoderSession::~FfmpegDecoderSession() = default;
 
-  void FfmpegDecoderSession::open(std::filesystem::path const& filePath)
+  bool FfmpegDecoderSession::open(std::filesystem::path const& filePath)
   {
     close();
 
     // Open input file
-    openInput(filePath);
+    if (!openInput(filePath))
+    {
+      return false;
+    }
 
     // Find and open audio stream
-    openAudioStream();
+    if (!openAudioStream())
+    {
+      return false;
+    }
 
     // Configure resampler for planar to interleaved conversion
-    configureResampler();
+    if (!configureResampler())
+    {
+      return false;
+    }
 
     // Get duration
     if (_formatContext && _formatContext->duration != AV_NOPTS_VALUE)
     {
       _streamInfo.durationMs = static_cast<std::uint32_t>(_formatContext->duration / (AV_TIME_BASE / 1000));
     }
+
+    return true;
   }
 
   void FfmpegDecoderSession::close()
@@ -99,20 +133,21 @@ namespace app::playback
     _audioStreamIndex = -1;
     _inputEof = false;
     _decoderEof = false;
+    _flushPacketSent = false;
     _decodedFrameCursor = 0;
+    _lastError.clear();
     _streamInfo = {};
   }
 
-  void FfmpegDecoderSession::openInput(std::filesystem::path const& filePath)
+  bool FfmpegDecoderSession::openInput(std::filesystem::path const& filePath)
   {
     AVFormatContext* ctx = nullptr;
 
     int ret = avformat_open_input(&ctx, filePath.string().c_str(), nullptr, nullptr);
     if (ret < 0)
     {
-      std::cerr << "Failed to open input: " << filePath << std::endl;
-      std::cerr << "FFmpeg error: " << av_err2str(ret) << " (code=" << ret << ")" << std::endl;
-      return;
+      setError("Failed to open input '" + filePath.string() + "': " + ffmpegErrorText(ret));
+      return false;
     }
 
     _formatContext.reset(ctx);
@@ -120,26 +155,27 @@ namespace app::playback
     ret = avformat_find_stream_info(ctx, nullptr);
     if (ret < 0)
     {
-      std::cerr << "Failed to find stream info" << std::endl;
-      return;
+      setError("Failed to read stream info: " + ffmpegErrorText(ret));
+      return false;
     }
 
-    av_dump_format(ctx, 0, filePath.string().c_str(), 0);
+    return true;
   }
 
-  void FfmpegDecoderSession::openAudioStream()
+  bool FfmpegDecoderSession::openAudioStream()
   {
     if (!_formatContext)
     {
-      return;
+      setError("Input was not opened before opening the audio stream");
+      return false;
     }
 
     // Find audio stream
     _audioStreamIndex = av_find_best_stream(_formatContext.get(), AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
     if (_audioStreamIndex < 0)
     {
-      std::cerr << "Failed to find audio stream" << std::endl;
-      return;
+      setError("Failed to find audio stream: " + ffmpegErrorText(_audioStreamIndex));
+      return false;
     }
 
     auto* stream = _formatContext->streams[_audioStreamIndex];
@@ -148,16 +184,16 @@ namespace app::playback
     auto const* codec = avcodec_find_decoder(stream->codecpar->codec_id);
     if (!codec)
     {
-      std::cerr << "Failed to find codec" << std::endl;
-      return;
+      setError("Failed to find decoder for the audio stream");
+      return false;
     }
 
     // Create codec context
     AVCodecContext* codecCtx = avcodec_alloc_context3(codec);
     if (!codecCtx)
     {
-      std::cerr << "Failed to allocate codec context" << std::endl;
-      return;
+      setError("Failed to allocate codec context");
+      return false;
     }
 
     _codecContext.reset(codecCtx);
@@ -166,16 +202,16 @@ namespace app::playback
     int ret = avcodec_parameters_to_context(_codecContext.get(), stream->codecpar);
     if (ret < 0)
     {
-      std::cerr << "Failed to copy codec parameters" << std::endl;
-      return;
+      setError("Failed to copy codec parameters: " + ffmpegErrorText(ret));
+      return false;
     }
 
     // Open codec
     ret = avcodec_open2(_codecContext.get(), codec, nullptr);
     if (ret < 0)
     {
-      std::cerr << "Failed to open codec" << std::endl;
-      return;
+      setError("Failed to open codec: " + ffmpegErrorText(ret));
+      return false;
     }
 
     // Allocate packet and frame
@@ -196,12 +232,12 @@ namespace app::playback
     _streamInfo.sourceFormat.sampleRate = _codecContext->sample_rate;
     _streamInfo.sourceFormat.channels = static_cast<std::uint8_t>(_codecContext->ch_layout.nb_channels);
     _streamInfo.sourceFormat.bitDepth = static_cast<std::uint8_t>(rawBitDepth);
-    _streamInfo.sourceFormat.isFloat = av_sample_fmt_is_planar(_codecContext->sample_fmt) != 0;
+    _streamInfo.sourceFormat.isFloat = isFloatSampleFormat(_codecContext->sample_fmt);
     _streamInfo.sourceFormat.isInterleaved = !av_sample_fmt_is_planar(_codecContext->sample_fmt);
 
     // Output format - use hint if provided, otherwise match source (resampler handles conversion)
     _streamInfo.outputFormat = _outputFormat;
-    if (_outputFormat.sampleRate == 0 || _outputFormat.sampleRate == 44100)
+    if (_outputFormat.sampleRate == 0)
     {
       _streamInfo.outputFormat.sampleRate = _streamInfo.sourceFormat.sampleRate;
     }
@@ -209,17 +245,20 @@ namespace app::playback
     {
       _streamInfo.outputFormat.channels = _streamInfo.sourceFormat.channels;
     }
-    if (_outputFormat.bitDepth == 0 || _outputFormat.bitDepth == 16)
+    if (_outputFormat.bitDepth == 0)
     {
       _streamInfo.outputFormat.bitDepth = _streamInfo.sourceFormat.bitDepth;
     }
+
+    return true;
   }
 
-  void FfmpegDecoderSession::configureResampler()
+  bool FfmpegDecoderSession::configureResampler()
   {
     if (!_codecContext)
     {
-      return;
+      setError("Codec context was not initialized before configuring the resampler");
+      return false;
     }
 
     // Determine output sample format based on bitdepth
@@ -241,7 +280,7 @@ namespace app::playback
     }
     else
     {
-      av_channel_layout_default(&inChannelLayout, _streamInfo.outputFormat.channels);
+      av_channel_layout_default(&inChannelLayout, _streamInfo.sourceFormat.channels);
     }
 
     auto outChannelLayout = AVChannelLayout{};
@@ -253,8 +292,8 @@ namespace app::playback
     {
       av_channel_layout_uninit(&inChannelLayout);
       av_channel_layout_uninit(&outChannelLayout);
-      std::cerr << "Failed to allocate resampler" << std::endl;
-      return;
+      setError("Failed to allocate resampler");
+      return false;
     }
 
     // Set options
@@ -271,12 +310,13 @@ namespace app::playback
     av_channel_layout_uninit(&outChannelLayout);
     if (ret < 0)
     {
-      std::cerr << "Failed to initialize resampler: " << av_err2str(ret) << std::endl;
+      setError("Failed to initialize resampler: " + ffmpegErrorText(ret));
       swr_free(&swrCtx);
-      return;
+      return false;
     }
 
     _swrContext.reset(swrCtx);
+    return true;
   }
 
   void FfmpegDecoderSession::seek(std::uint32_t positionMs)
@@ -293,15 +333,18 @@ namespace app::playback
     int ret = av_seek_frame(_formatContext.get(), _audioStreamIndex, timestamp, seekFlags);
     if (ret < 0)
     {
-      std::cerr << "Seek failed (ret=" << ret << ", pos=" << positionMs << "ms)" << std::endl;
+      setError("Seek failed at " + std::to_string(positionMs) + " ms: " + ffmpegErrorText(ret));
       return;
     }
 
     // Flush decoder
     flush();
 
-    // Reset frame cursor
-    _decodedFrameCursor = 0;
+    if (_streamInfo.outputFormat.sampleRate > 0)
+    {
+      _decodedFrameCursor =
+        (static_cast<std::uint64_t>(positionMs) * _streamInfo.outputFormat.sampleRate) / 1000;
+    }
   }
 
   void FfmpegDecoderSession::flush()
@@ -310,8 +353,16 @@ namespace app::playback
     {
       avcodec_flush_buffers(_codecContext.get());
     }
+
+    if (_swrContext)
+    {
+      swr_close(_swrContext.get());
+      swr_init(_swrContext.get());
+    }
+
     _decoderEof = false;
     _inputEof = false;
+    _flushPacketSent = false;
   }
 
   std::uint32_t FfmpegDecoderSession::getCurrentPositionMs() const
@@ -351,85 +402,81 @@ namespace app::playback
       return block;
     }
 
-    // Read packets until we have decoded frames
     while (true)
     {
-      // If decoder needs more input
-      if (!_inputEof)
+      av_frame_unref(_frame.get());
+      int ret = avcodec_receive_frame(_codecContext.get(), _frame.get());
+      if (ret == 0)
       {
-        int ret = av_read_frame(_formatContext.get(), _packet.get());
-        if (ret == AVERROR_EOF)
-        {
-          _inputEof = true;
-          // Send null packet to flush decoder
-          _packet->data = nullptr;
-          _packet->size = 0;
-        }
-        else if (ret < 0)
-        {
-          std::cerr << "Error reading frame" << std::endl;
-          _inputEof = true;
-          return std::nullopt;
-        }
-        else if (_packet->stream_index != _audioStreamIndex)
-        {
-          // Not our stream, continue
-          continue;
-        }
-
-        // Send packet to decoder
-        ret = avcodec_send_packet(_codecContext.get(), _packet.get());
-        if (ret < 0)
-        {
-          std::cerr << "Error sending packet to decoder" << std::endl;
-          return std::nullopt;
-        }
-
-        // Don't free packet here, decoder references it
-      }
-      else
-      {
-        // Send null packet to flush decoder
-        _packet->data = nullptr;
-        _packet->size = 0;
-        int ret = avcodec_send_packet(_codecContext.get(), _packet.get());
-        if (ret < 0)
-        {
-          _decoderEof = true;
-          PcmBlock block;
-          block.endOfStream = true;
-          return block;
-        }
-      }
-
-      // Receive frames from decoder
-      while (true)
-      {
-        int ret = avcodec_receive_frame(_codecContext.get(), _frame.get());
-        if (ret == AVERROR_EOF)
-        {
-          _decoderEof = true;
-          PcmBlock block;
-          block.endOfStream = true;
-          return block;
-        }
-        else if (ret == AVERROR(EAGAIN))
-        {
-          // Need more input
-          break;
-        }
-        else if (ret < 0)
-        {
-          std::cerr << "Error receiving frame from decoder" << std::endl;
-          return std::nullopt;
-        }
-
-        // Convert frame to interleaved PCM
         auto block = convertFrameToInterleavedPcm();
         if (block && block->frames > 0)
         {
           return block;
         }
+        continue;
+      }
+
+      if (ret == AVERROR_EOF)
+      {
+        _decoderEof = true;
+        PcmBlock block;
+        block.endOfStream = true;
+        return block;
+      }
+
+      if (ret != AVERROR(EAGAIN))
+      {
+        setError("Error receiving decoded audio frame: " + ffmpegErrorText(ret));
+        return std::nullopt;
+      }
+
+      if (_inputEof)
+      {
+        if (_flushPacketSent)
+        {
+          _decoderEof = true;
+          PcmBlock block;
+          block.endOfStream = true;
+          return block;
+        }
+
+        ret = avcodec_send_packet(_codecContext.get(), nullptr);
+        if (ret < 0 && ret != AVERROR(EAGAIN))
+        {
+          setError("Error flushing decoder at end of stream: " + ffmpegErrorText(ret));
+          return std::nullopt;
+        }
+
+        _flushPacketSent = true;
+        continue;
+      }
+
+      av_packet_unref(_packet.get());
+      ret = av_read_frame(_formatContext.get(), _packet.get());
+      if (ret == AVERROR_EOF)
+      {
+        _inputEof = true;
+        continue;
+      }
+
+      if (ret < 0)
+      {
+        setError("Error reading compressed audio packet: " + ffmpegErrorText(ret));
+        return std::nullopt;
+      }
+
+      if (_packet->stream_index != _audioStreamIndex)
+      {
+        av_packet_unref(_packet.get());
+        continue;
+      }
+
+      ret = avcodec_send_packet(_codecContext.get(), _packet.get());
+      av_packet_unref(_packet.get());
+      if (ret < 0 && ret != AVERROR(EAGAIN))
+      {
+        setError("Error sending compressed audio packet to decoder: " + ffmpegErrorText(ret));
+        return std::nullopt;
       }
     }
   }
@@ -543,6 +590,16 @@ namespace app::playback
   DecodedStreamInfo FfmpegDecoderSession::streamInfo() const
   {
     return _streamInfo;
+  }
+
+  std::string_view FfmpegDecoderSession::lastError() const noexcept
+  {
+    return _lastError;
+  }
+
+  void FfmpegDecoderSession::setError(std::string message)
+  {
+    _lastError = std::move(message);
   }
 
 } // namespace app::playback

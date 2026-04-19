@@ -1801,11 +1801,19 @@ void MainWindow::refreshPlaybackBar()
   }
 
   auto snapshot = _playbackController->snapshot();
+  auto const previousState = _lastPlaybackState;
+  _lastPlaybackState = snapshot.state;
+
   _playbackBar->setSnapshot(snapshot);
   
   if (_statusBar)
   {
     _statusBar->setPlaybackDetails(snapshot);
+  }
+
+  if (previousState == app::playback::TransportState::Playing && snapshot.state == app::playback::TransportState::Idle)
+  {
+    handlePlaybackFinished();
   }
 }
 
@@ -1813,11 +1821,21 @@ void MainWindow::onPlayRequested()
 {
   if (_playbackController)
   {
-    auto descriptor = currentSelectionPlaybackDescriptor();
+    auto const snapshot = _playbackController->snapshot();
 
-    if (descriptor)
+    if (snapshot.state == app::playback::TransportState::Paused)
     {
-      _playbackController->play(*descriptor);
+      _playbackController->resume();
+      return;
+    }
+
+    auto const* ctx = currentVisibleTrackPageContext();
+    if (ctx && ctx->page)
+    {
+      if (auto const trackId = ctx->page->getPrimarySelectedTrackId(); trackId)
+      {
+        startPlaybackFromVisiblePage(*ctx->page, *trackId);
+      }
     }
   }
 }
@@ -1834,6 +1852,8 @@ void MainWindow::onStopRequested()
 {
   if (_playbackController)
   {
+    clearActivePlaybackSequence();
+    _lastPlaybackState = app::playback::TransportState::Idle;
     _playbackController->stop();
   }
 }
@@ -1850,9 +1870,21 @@ void MainWindow::playCurrentSelection()
 {
   if (_playbackController)
   {
-    if (auto optDescriptor = currentSelectionPlaybackDescriptor(); optDescriptor)
+    auto const snapshot = _playbackController->snapshot();
+
+    if (snapshot.state == app::playback::TransportState::Paused)
     {
-      _playbackController->play(*optDescriptor);
+      _playbackController->resume();
+      return;
+    }
+
+    auto const* ctx = currentVisibleTrackPageContext();
+    if (ctx && ctx->page)
+    {
+      if (auto const trackId = ctx->page->getPrimarySelectedTrackId(); trackId)
+      {
+        startPlaybackFromVisiblePage(*ctx->page, *trackId);
+      }
     }
   }
 }
@@ -1869,6 +1901,8 @@ void MainWindow::stopPlayback()
 {
   if (_playbackController)
   {
+    clearActivePlaybackSequence();
+    _lastPlaybackState = app::playback::TransportState::Idle;
     _playbackController->stop();
   }
 }
@@ -1878,6 +1912,93 @@ void MainWindow::seekPlayback(std::uint32_t positionMs)
   if (_playbackController)
   {
     _playbackController->seek(positionMs);
+  }
+}
+
+bool MainWindow::startPlaybackFromVisiblePage(TrackViewPage const& page, rs::core::TrackId trackId)
+{
+  return startPlaybackSequence(page.getVisibleTrackIds(), trackId);
+}
+
+bool MainWindow::startPlaybackSequence(std::vector<rs::core::TrackId> trackIds, rs::core::TrackId startTrackId)
+{
+  if (!_playbackController || !_rowDataProvider)
+  {
+    return false;
+  }
+
+  auto const it = std::ranges::find(trackIds, startTrackId);
+  auto startIndex = std::size_t{0};
+
+  if (it == trackIds.end())
+  {
+    trackIds = {startTrackId};
+  }
+  else
+  {
+    startIndex = static_cast<std::size_t>(std::distance(trackIds.begin(), it));
+  }
+
+  ActivePlaybackSequence sequence;
+  sequence.trackIds = std::move(trackIds);
+  sequence.currentIndex = startIndex;
+  _activePlaybackSequence = std::move(sequence);
+
+  if (playTrackAtSequenceIndex(startIndex))
+  {
+    return true;
+  }
+
+  clearActivePlaybackSequence();
+  return false;
+}
+
+bool MainWindow::playTrackAtSequenceIndex(std::size_t index)
+{
+  if (!_playbackController || !_rowDataProvider || !_activePlaybackSequence)
+  {
+    return false;
+  }
+
+  auto& sequence = *_activePlaybackSequence;
+
+  for (auto i = index; i < sequence.trackIds.size(); ++i)
+  {
+    if (auto descriptor = _rowDataProvider->getPlaybackDescriptor(sequence.trackIds[i]))
+    {
+      sequence.currentIndex = i;
+      _playbackController->play(*descriptor);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void MainWindow::clearActivePlaybackSequence()
+{
+  _activePlaybackSequence.reset();
+}
+
+void MainWindow::handlePlaybackFinished()
+{
+  if (!_activePlaybackSequence)
+  {
+    return;
+  }
+
+  auto const nextIndex = _activePlaybackSequence->currentIndex + 1;
+  if (playTrackAtSequenceIndex(nextIndex))
+  {
+    return;
+  }
+
+  clearActivePlaybackSequence();
+
+  if (_playbackController)
+  {
+    _lastPlaybackState = app::playback::TransportState::Idle;
+    _playbackController->stop();
   }
 }
 
@@ -1905,12 +2026,9 @@ std::optional<app::playback::TrackPlaybackDescriptor> MainWindow::currentSelecti
 void MainWindow::bindTrackPagePlayback(TrackViewPage& page)
 {
   page.signalTrackActivated().connect(
-    [this](TrackListAdapter::TrackId trackId)
+    [this, pagePtr = &page](TrackListAdapter::TrackId trackId)
     {
-      if (auto descriptor = _rowDataProvider->getPlaybackDescriptor(trackId))
-      {
-        _playbackController->play(*descriptor);
-      }
+      startPlaybackFromVisiblePage(*pagePtr, trackId);
     });
 }
 

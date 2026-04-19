@@ -46,4 +46,5 @@ private:
   PauseSignal _pauseRequested;
   StopSignal _stopRequested;
   SeekSignal _seekRequested;
+  bool _updatingSeekScale = false;
 };

@@ -401,7 +401,7 @@ void TrackViewPage::setupColumns()
   _titleColumn = Gtk::ColumnViewColumn::create("Title", titleFactory);
   // Keep one flexible column so row selection does not cause GTK to rebalance
   // spare width across every column.
-  _titleColumn->set_expand(true);
+  _titleColumn->set_expand(false);
   _titleColumn->set_resizable(true);
   _titleColumn->set_fixed_width(-1);
   _columnView.append_column(_titleColumn);
@@ -441,9 +441,9 @@ void TrackViewPage::setupColumns()
     });
 
   _tagsColumn = Gtk::ColumnViewColumn::create("Tags", tagsFactory);
-  _tagsColumn->set_expand(false);
+  _tagsColumn->set_expand(true);
   _tagsColumn->set_resizable(true);
-  _tagsColumn->set_fixed_width(100);
+  _tagsColumn->set_fixed_width(-1);
   _columnView.append_column(_tagsColumn);
 }
 
