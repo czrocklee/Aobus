@@ -12,8 +12,7 @@ extern "C"
 #include <spa/utils/type.h>
 }
 
-#include <cstring>
-#include <iostream>
+#include <cerrno>
 
 namespace app::playback
 {
@@ -24,9 +23,16 @@ namespace app::playback
     self->process();
   }
 
+  static void onStreamDrained(void* data)
+  {
+    auto* self = static_cast<PipeWireBackend*>(data);
+    self->handleDrained();
+  }
+
   static const struct pw_stream_events streamEvents = {
     .version = PW_VERSION_STREAM_EVENTS,
     .process = onStreamProcess,
+    .drained = onStreamDrained,
   };
 
   PipeWireBackend::PipeWireBackend()
@@ -37,11 +43,13 @@ namespace app::playback
   PipeWireBackend::~PipeWireBackend()
   {
     stop();
-    destroyResources();
+    close();
   }
 
   void PipeWireBackend::destroyResources() noexcept
   {
+    _drainPending = false;
+
     if (_threadLoop)
     {
       pw_thread_loop_lock(_threadLoop);
@@ -67,34 +75,42 @@ namespace app::playback
     }
   }
 
-  void PipeWireBackend::open(StreamFormat const& format, AudioRenderCallbacks callbacks)
+  void PipeWireBackend::setError(std::string message)
   {
-    destroyResources();
+    _lastError = std::move(message);
+  }
+
+  bool PipeWireBackend::open(StreamFormat const& format, AudioRenderCallbacks callbacks)
+  {
+    close();
 
     _callbacks = callbacks;
     _format = format;
+    _lastError.clear();
 
     // Create thread loop
     _threadLoop = pw_thread_loop_new("rockstudio-pw", nullptr);
     if (!_threadLoop)
     {
-      std::cerr << "Failed to create PipeWire thread loop" << std::endl;
-      return;
+      setError("Failed to create PipeWire thread loop");
+      return false;
     }
 
     // Create context
     _context = pw_context_new(pw_thread_loop_get_loop(_threadLoop), nullptr, 0);
     if (!_context)
     {
-      std::cerr << "Failed to create PipeWire context" << std::endl;
-      return;
+      setError("Failed to create PipeWire context");
+      close();
+      return false;
     }
 
     // Start thread loop
     if (pw_thread_loop_start(_threadLoop) < 0)
     {
-      std::cerr << "Failed to start PipeWire thread loop" << std::endl;
-      return;
+      setError("Failed to start PipeWire thread loop");
+      close();
+      return false;
     }
 
     // Lock and create stream
@@ -108,22 +124,11 @@ namespace app::playback
 
     if (!_stream)
     {
-      std::cerr << "Failed to create PipeWire stream" << std::endl;
       pw_thread_loop_unlock(_threadLoop);
-      return;
+      setError("Failed to create PipeWire stream");
+      close();
+      return false;
     }
-
-    pw_thread_loop_unlock(_threadLoop);
-  }
-
-  void PipeWireBackend::start()
-  {
-    if (!_stream || !_threadLoop)
-    {
-      return;
-    }
-
-    pw_thread_loop_lock(_threadLoop);
 
     // Build format params manually
     uint8_t buffer[1024];
@@ -173,15 +178,34 @@ namespace app::playback
     int ret = pw_stream_connect(_stream,
                                 PW_DIRECTION_OUTPUT,
                                 PW_ID_ANY,
-                                static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
+                                static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
+                                                             PW_STREAM_FLAG_INACTIVE),
                                 &constParams,
                                 1);
 
+    pw_thread_loop_unlock(_threadLoop);
+
     if (ret < 0)
     {
-      std::cerr << "Failed to connect PipeWire stream: " << ret << std::endl;
+      setError("Failed to connect PipeWire stream: " + std::to_string(-ret));
+      close();
+      return false;
     }
 
+    return true;
+  }
+
+  void PipeWireBackend::start()
+  {
+    if (!_stream || !_threadLoop)
+    {
+      return;
+    }
+
+    _drainPending = false;
+
+    pw_thread_loop_lock(_threadLoop);
+    pw_stream_set_active(_stream, true);
     pw_thread_loop_unlock(_threadLoop);
   }
 
@@ -216,8 +240,23 @@ namespace app::playback
       return;
     }
 
+    _drainPending = false;
+
     pw_thread_loop_lock(_threadLoop);
     pw_stream_flush(_stream, false);
+    pw_thread_loop_unlock(_threadLoop);
+  }
+
+  void PipeWireBackend::drain()
+  {
+    if (!_stream || !_threadLoop || _drainPending)
+    {
+      return;
+    }
+
+    _drainPending = true;
+    pw_thread_loop_lock(_threadLoop);
+    pw_stream_flush(_stream, true);
     pw_thread_loop_unlock(_threadLoop);
   }
 
@@ -228,9 +267,16 @@ namespace app::playback
       return;
     }
 
+    _drainPending = false;
+
     pw_thread_loop_lock(_threadLoop);
     pw_stream_set_active(_stream, false);
     pw_thread_loop_unlock(_threadLoop);
+  }
+
+  void PipeWireBackend::close()
+  {
+    destroyResources();
   }
 
   void PipeWireBackend::process()
@@ -263,6 +309,13 @@ namespace app::playback
       auto const read = _callbacks.readPcm(_callbacks.userData, output);
       auto const alignedRead = read - (read % frameBytes);
 
+      if (alignedRead == 0 && _callbacks.isSourceDrained && _callbacks.isSourceDrained(_callbacks.userData))
+      {
+        pw_stream_return_buffer(_stream, buffer);
+        drain();
+        return;
+      }
+
       buffer->buffer->datas[0].chunk->offset = 0;
       buffer->buffer->datas[0].chunk->size = static_cast<uint32_t>(alignedRead);
       buffer->buffer->datas[0].chunk->stride = static_cast<int32_t>(frameBytes);
@@ -275,6 +328,15 @@ namespace app::playback
     }
 
     pw_stream_queue_buffer(_stream, buffer);
+  }
+
+  void PipeWireBackend::handleDrained() noexcept
+  {
+    _drainPending = false;
+    if (_callbacks.onDrainComplete)
+    {
+      _callbacks.onDrainComplete(_callbacks.userData);
+    }
   }
 
 } // namespace app::playback

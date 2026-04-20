@@ -11,6 +11,9 @@ extern "C"
 #include <alsa/pcm.h>
 }
 
+#include <string>
+#include <string_view>
+
 namespace app::playback
 {
 
@@ -20,13 +23,16 @@ namespace app::playback
     explicit AlsaExclusiveBackend(std::string deviceName = "default");
     ~AlsaExclusiveBackend() override;
 
-    void open(StreamFormat const& format, AudioRenderCallbacks callbacks) override;
+    bool open(StreamFormat const& format, AudioRenderCallbacks callbacks) override;
     void start() override;
     void pause() override;
     void resume() override;
     void flush() override;
+    void drain() override;
     void stop() override;
+    void close() override;
     BackendKind kind() const noexcept override { return BackendKind::AlsaExclusive; }
+    std::string_view lastError() const noexcept override { return _lastError; }
 
     DeviceCapabilities queryCapabilities() const;
 
@@ -35,6 +41,7 @@ namespace app::playback
     snd_pcm_t* _pcm = nullptr;
     AudioRenderCallbacks _callbacks;
     StreamFormat _format;
+    std::string _lastError;
   };
 
 } // namespace app::playback

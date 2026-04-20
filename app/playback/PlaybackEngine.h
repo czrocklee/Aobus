@@ -9,6 +9,7 @@
 #include "PlaybackTypes.h"
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -38,8 +39,10 @@ namespace app::playback
     void decodeLoop(std::stop_token stopToken);
 
     static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept;
+    static bool isSourceDrained(void* userData) noexcept;
     static void onUnderrun(void* userData) noexcept;
     static void onPositionAdvanced(void* userData, std::uint32_t frames) noexcept;
+    static void onDrainComplete(void* userData) noexcept;
 
     std::unique_ptr<IAudioBackend> _backend;
     std::optional<FfmpegDecoderSession> _decoder;
@@ -54,6 +57,10 @@ namespace app::playback
     std::atomic<TransportState> _state = TransportState::Idle;
     std::atomic<std::uint32_t> _bufferedMs = 0;
     std::atomic<std::uint32_t> _underrunCount = 0;
+    std::atomic<std::uint64_t> _bytesPerSecond = 0;
+    std::atomic<bool> _backendStarted = false;
+    std::atomic<bool> _decoderReachedEof = false;
+    std::atomic<bool> _playbackDrainPending = false;
   };
 
 } // namespace app::playback

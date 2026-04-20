@@ -22,17 +22,16 @@ namespace app::playback
   AlsaExclusiveBackend::~AlsaExclusiveBackend()
   {
     stop();
-    if (_pcm)
-    {
-      snd_pcm_close(_pcm);
-      _pcm = nullptr;
-    }
+    close();
   }
 
-  void AlsaExclusiveBackend::open(StreamFormat const& format, AudioRenderCallbacks callbacks)
+  bool AlsaExclusiveBackend::open(StreamFormat const& format, AudioRenderCallbacks callbacks)
   {
+    close();
+
     _format = format;
     _callbacks = callbacks;
+    _lastError.clear();
 
     int err;
     snd_pcm_t* pcm = nullptr;
@@ -41,8 +40,8 @@ namespace app::playback
     err = snd_pcm_open(&pcm, _deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
     if (err < 0)
     {
-      std::cerr << "Failed to open ALSA device: " << _deviceName << std::endl;
-      return;
+      _lastError = "Failed to open ALSA device: " + _deviceName;
+      return false;
     }
 
     _pcm = pcm;
@@ -54,16 +53,18 @@ namespace app::playback
     err = snd_pcm_hw_params_any(_pcm, params);
     if (err < 0)
     {
-      std::cerr << "Failed to initialize ALSA hardware parameters" << std::endl;
-      return;
+      _lastError = "Failed to initialize ALSA hardware parameters";
+      close();
+      return false;
     }
 
     // Set interleaved access
     err = snd_pcm_hw_params_set_access(_pcm, params, SND_PCM_ACCESS_RW_INTERLEAVED);
     if (err < 0)
     {
-      std::cerr << "Failed to set ALSA access mode" << std::endl;
-      return;
+      _lastError = "Failed to set ALSA access mode";
+      close();
+      return false;
     }
 
     // Set sample format (S16)
@@ -71,33 +72,39 @@ namespace app::playback
     err = snd_pcm_hw_params_set_format(_pcm, params, formatMask);
     if (err < 0)
     {
-      std::cerr << "Failed to set ALSA sample format" << std::endl;
-      return;
+      _lastError = "Failed to set ALSA sample format";
+      close();
+      return false;
     }
 
     // Set sample rate
     err = snd_pcm_hw_params_set_rate(_pcm, params, format.sampleRate, 0);
     if (err < 0)
     {
-      std::cerr << "Failed to set ALSA sample rate" << std::endl;
-      return;
+      _lastError = "Failed to set ALSA sample rate";
+      close();
+      return false;
     }
 
     // Set channel count
     err = snd_pcm_hw_params_set_channels(_pcm, params, format.channels);
     if (err < 0)
     {
-      std::cerr << "Failed to set ALSA channel count" << std::endl;
-      return;
+      _lastError = "Failed to set ALSA channel count";
+      close();
+      return false;
     }
 
     // Apply hardware parameters
     err = snd_pcm_hw_params(_pcm, params);
     if (err < 0)
     {
-      std::cerr << "Failed to apply ALSA hardware parameters" << std::endl;
-      return;
+      _lastError = "Failed to apply ALSA hardware parameters";
+      close();
+      return false;
     }
+
+    return true;
   }
 
   void AlsaExclusiveBackend::start()
@@ -136,6 +143,24 @@ namespace app::playback
     snd_pcm_drop(_pcm);
   }
 
+  void AlsaExclusiveBackend::drain()
+  {
+    if (!_pcm)
+    {
+      if (_callbacks.onDrainComplete)
+      {
+        _callbacks.onDrainComplete(_callbacks.userData);
+      }
+      return;
+    }
+
+    snd_pcm_drain(_pcm);
+    if (_callbacks.onDrainComplete)
+    {
+      _callbacks.onDrainComplete(_callbacks.userData);
+    }
+  }
+
   void AlsaExclusiveBackend::stop()
   {
     if (!_pcm)
@@ -144,6 +169,15 @@ namespace app::playback
     }
     snd_pcm_drop(_pcm);
     snd_pcm_prepare(_pcm);
+  }
+
+  void AlsaExclusiveBackend::close()
+  {
+    if (_pcm)
+    {
+      snd_pcm_close(_pcm);
+      _pcm = nullptr;
+    }
   }
 
   DeviceCapabilities AlsaExclusiveBackend::queryCapabilities() const
