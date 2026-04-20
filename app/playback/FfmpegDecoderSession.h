@@ -45,9 +45,14 @@ namespace app::playback
     explicit FfmpegDecoderSession(StreamFormat outputFormat);
     ~FfmpegDecoderSession();
 
+    FfmpegDecoderSession(FfmpegDecoderSession const&) = delete;
+    FfmpegDecoderSession& operator=(FfmpegDecoderSession const&) = delete;
+    FfmpegDecoderSession(FfmpegDecoderSession&&) noexcept = default;
+    FfmpegDecoderSession& operator=(FfmpegDecoderSession&&) noexcept = default;
+
     bool open(std::filesystem::path const& filePath);
     void close();
-    void seek(std::uint32_t positionMs);
+    bool seek(std::uint32_t positionMs);
     void flush();
 
     std::optional<PcmBlock> readNextBlock();

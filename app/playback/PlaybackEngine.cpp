@@ -3,12 +3,16 @@
 
 #include "PlaybackEngine.h"
 
-#include <chrono>
+#include "MemoryPcmSource.h"
+#include "StreamingPcmSource.h"
+
+#include <limits>
 
 namespace
 {
   constexpr std::uint32_t kPrerollTargetMs = 200;
   constexpr std::uint32_t kDecodeHighWatermarkMs = 750;
+  constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
 
   std::uint64_t bytesPerSecond(app::playback::StreamFormat const& format) noexcept
   {
@@ -21,14 +25,21 @@ namespace
     return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
   }
 
-  std::uint32_t bufferedDurationMs(std::size_t byteCount, std::uint64_t bytesPerSecondValue) noexcept
+  std::uint64_t estimatedDecodedBytes(app::playback::DecodedStreamInfo const& info) noexcept
   {
-    if (bytesPerSecondValue == 0)
+    auto const rate = bytesPerSecond(info.outputFormat);
+    if (rate == 0 || info.durationMs == 0)
     {
       return 0;
     }
 
-    return static_cast<std::uint32_t>((static_cast<std::uint64_t>(byteCount) * 1000U) / bytesPerSecondValue);
+    return (static_cast<std::uint64_t>(info.durationMs) * rate) / 1000U;
+  }
+
+  bool shouldUseMemoryPcmSource(app::playback::DecodedStreamInfo const& info) noexcept
+  {
+    auto const decodedBytes = estimatedDecodedBytes(info);
+    return decodedBytes > 0 && decodedBytes <= kMemoryPcmSourceBudgetBytes;
   }
 } // namespace
 
@@ -36,7 +47,7 @@ namespace app::playback
 {
 
   PlaybackEngine::PlaybackEngine(std::unique_ptr<IAudioBackend> backend)
-    : _backend(std::move(backend)), _ringBuffer()
+    : _backend(std::move(backend))
   {
     _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
   }
@@ -48,13 +59,13 @@ namespace app::playback
 
   void PlaybackEngine::play(TrackPlaybackDescriptor descriptor)
   {
-    stopDecodeThread();
-
     if (_backend)
     {
       _backend->stop();
       _backend->close();
     }
+
+    _source.store({}, std::memory_order_release);
 
     AudioRenderCallbacks callbacks;
     callbacks.userData = this;
@@ -64,17 +75,14 @@ namespace app::playback
     callbacks.onPositionAdvanced = &PlaybackEngine::onPositionAdvanced;
     callbacks.onDrainComplete = &PlaybackEngine::onDrainComplete;
 
+    std::shared_ptr<IPcmSource> source;
     StreamFormat backendFormat;
 
     {
       std::lock_guard<std::mutex> lock(_stateMutex);
 
-      _ringBuffer.clear();
-      _bufferedMs = 0;
       _underrunCount = 0;
-      _bytesPerSecond = 0;
       _backendStarted = false;
-      _decoderReachedEof = false;
       _playbackDrainPending = false;
 
       _snapshot = {};
@@ -84,24 +92,23 @@ namespace app::playback
       _snapshot.trackArtist = descriptor.artist;
 
       _currentTrack = descriptor;
-      if (!openTrack(descriptor))
+      if (!openTrack(descriptor, source, backendFormat))
       {
         _state = TransportState::Error;
         _snapshot.state = TransportState::Error;
         _currentTrack.reset();
         return;
       }
-
-      backendFormat = _decoder->streamInfo().outputFormat;
-      _bytesPerSecond = bytesPerSecond(backendFormat);
       _state = TransportState::Buffering;
       _snapshot.state = TransportState::Buffering;
     }
 
+    _source.store(source, std::memory_order_release);
+
     if (_backend && !_backend->open(backendFormat, callbacks))
     {
+      _source.store({}, std::memory_order_release);
       std::lock_guard<std::mutex> lock(_stateMutex);
-      _decoder.reset();
       _currentTrack.reset();
       _state = TransportState::Error;
       _snapshot.state = TransportState::Error;
@@ -109,7 +116,47 @@ namespace app::playback
       return;
     }
 
-    _decodeThread = std::jthread([this](std::stop_token token) { decodeLoop(token); });
+    auto const bufferedMs = source ? source->bufferedMs() : 0;
+    auto const drained = !source || source->isDrained();
+
+    if (drained && bufferedMs == 0)
+    {
+      if (_backend)
+      {
+        _backend->stop();
+        _backend->close();
+      }
+
+      _source.store({}, std::memory_order_release);
+
+      std::lock_guard<std::mutex> lock(_stateMutex);
+      _currentTrack.reset();
+      _backendStarted = false;
+      _playbackDrainPending = false;
+      _state = TransportState::Idle;
+      _snapshot = {};
+      _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
+      return;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(_stateMutex);
+      _state = TransportState::Playing;
+      _snapshot.state = TransportState::Playing;
+      _backendStarted = true;
+    }
+
+    if (_backend && _backend->kind() == BackendKind::None)
+    {
+      _playbackDrainPending = true;
+      _backend->drain();
+      return;
+    }
+
+    if (_backend)
+    {
+      _backend->start();
+    }
   }
 
   void PlaybackEngine::pause()
@@ -128,83 +175,174 @@ namespace app::playback
 
   void PlaybackEngine::resume()
   {
-    std::lock_guard<std::mutex> lock(_stateMutex);
-    if (_state == TransportState::Paused)
+    auto source = _source.load(std::memory_order_acquire);
+
+    std::unique_lock<std::mutex> lock(_stateMutex);
+    if (_state != TransportState::Paused)
     {
-      if (_backendStarted)
+      return;
+    }
+
+    if (_backendStarted)
+    {
+      _state = TransportState::Playing;
+      _snapshot.state = TransportState::Playing;
+      lock.unlock();
+      if (_backend)
       {
-        _state = TransportState::Playing;
-        _snapshot.state = TransportState::Playing;
         _backend->resume();
       }
-      else
-      {
-        _state = TransportState::Buffering;
-        _snapshot.state = TransportState::Buffering;
-      }
+      return;
+    }
+
+    auto const bufferedMs = source ? source->bufferedMs() : 0;
+    auto const drained = !source || source->isDrained();
+    if (drained && bufferedMs == 0)
+    {
+      _source.store({}, std::memory_order_release);
+      _currentTrack.reset();
+      _state = TransportState::Idle;
+      _snapshot = {};
+      _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
+      return;
+    }
+
+    _state = TransportState::Playing;
+    _snapshot.state = TransportState::Playing;
+    _backendStarted = true;
+    lock.unlock();
+
+    if (_backend && _backend->kind() == BackendKind::None)
+    {
+      _playbackDrainPending = true;
+      _backend->drain();
+      return;
+    }
+
+    if (_backend)
+    {
+      _backend->start();
     }
   }
 
   void PlaybackEngine::stop()
   {
-    stopDecodeThread();
-
-    std::lock_guard<std::mutex> lock(_stateMutex);
-    _ringBuffer.clear();
-    _decoder.reset();
-    _currentTrack.reset();
-    _bufferedMs = 0;
-    _bytesPerSecond = 0;
-    _backendStarted = false;
-    _decoderReachedEof = false;
-    _playbackDrainPending = false;
-    _state = TransportState::Idle;
-    _snapshot = {};
-    _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
     if (_backend)
     {
       _backend->stop();
       _backend->close();
     }
+
+    _source.store({}, std::memory_order_release);
+
+    std::lock_guard<std::mutex> lock(_stateMutex);
+    _currentTrack.reset();
+    _backendStarted = false;
+    _playbackDrainPending = false;
+    _state = TransportState::Idle;
+    _snapshot = {};
+    _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
   }
 
   void PlaybackEngine::seek(std::uint32_t positionMs)
   {
-    std::lock_guard<std::mutex> lock(_stateMutex);
-    std::lock_guard<std::mutex> decoderLock(_decoderMutex);
-    if (_decoder)
+    auto source = _source.load(std::memory_order_acquire);
+    if (!source)
     {
-      auto const wasPaused = (_state == TransportState::Paused);
+      return;
+    }
 
-      _decoder->seek(positionMs);
+    bool wasPaused = false;
+    {
+      std::lock_guard<std::mutex> lock(_stateMutex);
+      wasPaused = (_state == TransportState::Paused);
+      _state = TransportState::Buffering;
+      _snapshot.state = TransportState::Buffering;
+      _snapshot.positionMs = positionMs;
+      _snapshot.statusText.clear();
+    }
+
+    if (_backend)
+    {
+      _backend->stop();
+      _backend->flush();
+    }
+
+    _backendStarted = false;
+    _playbackDrainPending = false;
+
+    if (!source->seek(positionMs))
+    {
+      std::lock_guard<std::mutex> lock(_stateMutex);
+      _state = TransportState::Error;
+      _snapshot.state = TransportState::Error;
+      _snapshot.statusText = source->lastError();
+      return;
+    }
+
+    auto const bufferedMs = source->bufferedMs();
+    auto const drained = source->isDrained();
+
+    if (drained && bufferedMs == 0)
+    {
       if (_backend)
       {
         _backend->stop();
-        _backend->flush();
+        _backend->close();
       }
 
-      _backendStarted = false;
-      _decoderReachedEof = false;
-      _playbackDrainPending = false;
-      _ringBuffer.clear();
-      _bufferedMs = 0;
-      _state = wasPaused ? TransportState::Paused : TransportState::Buffering;
-      _snapshot.state = wasPaused ? TransportState::Paused : TransportState::Buffering;
-      _snapshot.positionMs = positionMs;
+      _source.store({}, std::memory_order_release);
+
+      std::lock_guard<std::mutex> lock(_stateMutex);
+      _currentTrack.reset();
+      _state = TransportState::Idle;
+      _snapshot = {};
+      _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
+      return;
+    }
+
+    if (wasPaused)
+    {
+      std::lock_guard<std::mutex> lock(_stateMutex);
+      _state = TransportState::Paused;
+      _snapshot.state = TransportState::Paused;
+      return;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(_stateMutex);
+      _state = TransportState::Playing;
+      _snapshot.state = TransportState::Playing;
+      _backendStarted = true;
+    }
+
+    if (_backend && _backend->kind() == BackendKind::None)
+    {
+      _playbackDrainPending = true;
+      _backend->drain();
+      return;
+    }
+
+    if (_backend)
+    {
+      _backend->start();
     }
   }
 
   PlaybackSnapshot PlaybackEngine::snapshot() const
   {
+    auto source = _source.load(std::memory_order_acquire);
     std::lock_guard<std::mutex> lock(_stateMutex);
     auto snap = _snapshot;
     snap.backend = _backend ? _backend->kind() : BackendKind::None;
-    snap.bufferedMs = bufferedDurationMs(_ringBuffer.size(), _bytesPerSecond.load(std::memory_order_relaxed));
+    snap.bufferedMs = source ? source->bufferedMs() : 0;
     snap.underrunCount = _underrunCount.load(std::memory_order_relaxed);
     return snap;
   }
 
-  bool PlaybackEngine::openTrack(TrackPlaybackDescriptor descriptor)
+  bool PlaybackEngine::openTrack(TrackPlaybackDescriptor descriptor,
+                                 std::shared_ptr<IPcmSource>& source,
+                                 StreamFormat& backendFormat)
   {
     StreamFormat outputFormat;
     outputFormat.sampleRate = descriptor.sampleRateHint;
@@ -213,193 +351,83 @@ namespace app::playback
     outputFormat.isFloat = false;
     outputFormat.isInterleaved = true;
 
-    _decoder.emplace(outputFormat);
-    if (!_decoder->open(descriptor.filePath))
+    auto decoder = FfmpegDecoderSession{outputFormat};
+    if (!decoder.open(descriptor.filePath))
     {
-      _snapshot.statusText = std::string(_decoder->lastError());
+      _snapshot.statusText = std::string(decoder.lastError());
       _snapshot.activeFormat.reset();
-      _decoder.reset();
       return false;
     }
 
-    auto info = _decoder->streamInfo();
+    auto const info = decoder.streamInfo();
     if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
     {
       _snapshot.statusText = "Decoder did not return a valid output format";
       _snapshot.activeFormat.reset();
-      _decoder.reset();
       return false;
+    }
+
+    if (shouldUseMemoryPcmSource(info))
+    {
+      auto memorySource = std::make_shared<MemoryPcmSource>(std::move(decoder), info);
+      if (!memorySource->initialize())
+      {
+        _snapshot.statusText = memorySource->lastError();
+        _snapshot.activeFormat.reset();
+        return false;
+      }
+      source = std::move(memorySource);
+    }
+    else
+    {
+      PcmSourceCallbacks sourceCallbacks;
+      sourceCallbacks.userData = this;
+      sourceCallbacks.onError = &PlaybackEngine::onSourceError;
+
+      auto streamingSource =
+        std::make_shared<StreamingPcmSource>(std::move(decoder),
+                                             info,
+                                             sourceCallbacks,
+                                             kPrerollTargetMs,
+                                             kDecodeHighWatermarkMs);
+      if (!streamingSource->initialize())
+      {
+        _snapshot.statusText = streamingSource->lastError();
+        _snapshot.activeFormat.reset();
+        return false;
+      }
+      source = std::move(streamingSource);
     }
 
     _snapshot.durationMs = info.durationMs;
     _snapshot.positionMs = 0;
     _snapshot.activeFormat = info.outputFormat;
+    backendFormat = info.outputFormat;
     return true;
-  }
-
-  void PlaybackEngine::stopDecodeThread()
-  {
-    if (_decodeThread.joinable())
-    {
-      _decodeThread.request_stop();
-      _decodeThread.join();
-    }
-  }
-
-  void PlaybackEngine::decodeLoop(std::stop_token stopToken)
-  {
-    while (!stopToken.stop_requested())
-    {
-      auto const state = _state.load(std::memory_order_relaxed);
-      if (state != TransportState::Playing && state != TransportState::Buffering)
-      {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        continue;
-      }
-
-      auto const bufferedMs = bufferedDurationMs(_ringBuffer.size(), _bytesPerSecond.load(std::memory_order_relaxed));
-      _bufferedMs.store(bufferedMs, std::memory_order_relaxed);
-
-      bool shouldStartBackend = false;
-      {
-        std::lock_guard<std::mutex> lock(_stateMutex);
-        if (_state == TransportState::Buffering && !_backendStarted && bufferedMs >= kPrerollTargetMs)
-        {
-          _state = TransportState::Playing;
-          _snapshot.state = TransportState::Playing;
-          _backendStarted = true;
-          shouldStartBackend = true;
-        }
-      }
-
-      if (shouldStartBackend && _backend)
-      {
-        _backend->start();
-        continue;
-      }
-
-      if (bufferedMs >= kDecodeHighWatermarkMs)
-      {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        continue;
-      }
-
-      std::optional<PcmBlock> block;
-      {
-        std::lock_guard<std::mutex> lock(_decoderMutex);
-        if (!_decoder)
-        {
-          break;
-        }
-        block = _decoder->readNextBlock();
-      }
-
-      if (!block)
-      {
-        {
-          std::lock_guard<std::mutex> lock(_stateMutex);
-          _state = TransportState::Error;
-          _snapshot.state = TransportState::Error;
-          if (_decoder)
-          {
-            _snapshot.statusText = std::string(_decoder->lastError());
-          }
-        }
-
-        if (_backend)
-        {
-          _backend->stop();
-        }
-
-        break;
-      }
-
-      if (block->endOfStream)
-      {
-        _decoderReachedEof = true;
-
-        auto const finalBufferedMs = bufferedDurationMs(_ringBuffer.size(), _bytesPerSecond.load(std::memory_order_relaxed));
-        _bufferedMs.store(finalBufferedMs, std::memory_order_relaxed);
-
-        bool shouldStartAtEof = false;
-        bool shouldCompleteImmediately = false;
-        {
-          std::lock_guard<std::mutex> stateLock(_stateMutex);
-          if (!_backendStarted && finalBufferedMs > 0 && _state == TransportState::Buffering)
-          {
-            _state = TransportState::Playing;
-            _snapshot.state = TransportState::Playing;
-            _backendStarted = true;
-            shouldStartAtEof = true;
-          }
-          else if (!_backendStarted && finalBufferedMs == 0)
-          {
-            _decoder.reset();
-            _currentTrack.reset();
-            _bytesPerSecond = 0;
-            _state = TransportState::Idle;
-            _snapshot = {};
-            _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
-            shouldCompleteImmediately = true;
-          }
-          else
-          {
-            _playbackDrainPending = true;
-          }
-        }
-
-        if (shouldStartAtEof && _backend)
-        {
-          _playbackDrainPending = true;
-          _backend->start();
-        }
-
-        if (shouldCompleteImmediately && _backend)
-        {
-          _backend->stop();
-          _backend->close();
-        }
-        else if (_backend && _backend->kind() == BackendKind::None && _playbackDrainPending)
-        {
-          _backend->drain();
-        }
-
-        break;
-      }
-
-      // Write all bytes to ring buffer using loop+sleep approach
-      std::span<std::byte const> bytes(block->bytes.data(), block->bytes.size());
-      auto toWrite = bytes.size();
-      auto* current = bytes.data();
-
-      while (toWrite > 0 && !stopToken.stop_requested())
-      {
-        auto pushed = _ringBuffer.write(std::span<std::byte const>(current, toWrite));
-        toWrite -= pushed;
-        current += pushed;
-
-        if (toWrite > 0)
-        {
-          // Queue full, sleep and retry
-          std::this_thread::sleep_for(std::chrono::milliseconds(2));
-        }
-      }
-
-      auto const postWriteBufferedMs = bufferedDurationMs(_ringBuffer.size(), _bytesPerSecond.load(std::memory_order_relaxed));
-      _bufferedMs.store(postWriteBufferedMs, std::memory_order_relaxed);
-    }
   }
 
   std::size_t PlaybackEngine::onReadPcm(void* userData, std::span<std::byte> output) noexcept
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
-    return self->_ringBuffer.read(output);
+    auto source = self->_source.load(std::memory_order_acquire);
+    return source ? source->read(output) : 0;
   }
 
   bool PlaybackEngine::isSourceDrained(void* userData) noexcept
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
-    return self->_decoderReachedEof.load(std::memory_order_relaxed) && self->_ringBuffer.size() == 0;
+    auto source = self->_source.load(std::memory_order_acquire);
+    if (!source)
+    {
+      return true;
+    }
+
+    auto const drained = source->isDrained();
+    if (drained)
+    {
+      self->_playbackDrainPending = true;
+    }
+    return drained;
   }
 
   void PlaybackEngine::onUnderrun(void* userData) noexcept
@@ -433,17 +461,40 @@ namespace app::playback
       return;
     }
 
+    self->_source.store({}, std::memory_order_release);
+
     std::lock_guard<std::mutex> lock(self->_stateMutex);
-    self->_ringBuffer.clear();
-    self->_decoder.reset();
     self->_currentTrack.reset();
-    self->_bufferedMs = 0;
-    self->_bytesPerSecond = 0;
     self->_backendStarted = false;
-    self->_decoderReachedEof = false;
     self->_state = TransportState::Idle;
     self->_snapshot = {};
     self->_snapshot.backend = self->_backend ? self->_backend->kind() : BackendKind::None;
+  }
+
+  void PlaybackEngine::onSourceError(void* userData) noexcept
+  {
+    auto* self = static_cast<PlaybackEngine*>(userData);
+    auto source = self->_source.load(std::memory_order_acquire);
+    auto const errorText = source ? source->lastError() : std::string{};
+
+    {
+      std::lock_guard<std::mutex> lock(self->_stateMutex);
+      if (self->_state == TransportState::Idle)
+      {
+        return;
+      }
+
+      self->_backendStarted = false;
+      self->_playbackDrainPending = false;
+      self->_state = TransportState::Error;
+      self->_snapshot.state = TransportState::Error;
+      self->_snapshot.statusText = errorText.empty() ? "PCM source failed" : errorText;
+    }
+
+    if (self->_backend)
+    {
+      self->_backend->stop();
+    }
   }
 
 } // namespace app::playback

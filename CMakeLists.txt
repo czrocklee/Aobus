@@ -273,7 +273,9 @@ if(FFmpeg_FOUND)
     test/integration/playback/FfmpegDecoderSessionTest.cpp
     test/integration/tag/TagTest.cpp
     app/playback/FfmpegDecoderSession.cpp
+    app/playback/MemoryPcmSource.cpp
     app/playback/PcmRingBuffer.cpp
+    app/playback/StreamingPcmSource.cpp
   )
   target_link_libraries(rs_test PRIVATE FFmpeg)
   target_compile_definitions(rs_test PRIVATE FFmpeg_FOUND TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
@@ -317,7 +319,9 @@ add_executable(RockStudio
     app/PlaybackBar.cpp
     app/playback/PlaybackController.cpp
     app/playback/PlaybackEngine.cpp
+    app/playback/MemoryPcmSource.cpp
     app/playback/PcmRingBuffer.cpp
+    app/playback/StreamingPcmSource.cpp
     app/playback/FormatNegotiator.cpp
 )
 if(FFmpeg_FOUND)
