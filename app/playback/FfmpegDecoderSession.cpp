@@ -319,11 +319,11 @@ namespace app::playback
     return true;
   }
 
-  void FfmpegDecoderSession::seek(std::uint32_t positionMs)
+  bool FfmpegDecoderSession::seek(std::uint32_t positionMs)
   {
     if (!_formatContext || _audioStreamIndex < 0)
     {
-      return;
+      return false;
     }
 
     auto const* stream = _formatContext->streams[_audioStreamIndex];
@@ -334,7 +334,7 @@ namespace app::playback
     if (ret < 0)
     {
       setError("Seek failed at " + std::to_string(positionMs) + " ms: " + ffmpegErrorText(ret));
-      return;
+      return false;
     }
 
     // Flush decoder
@@ -345,6 +345,8 @@ namespace app::playback
       _decodedFrameCursor =
         (static_cast<std::uint64_t>(positionMs) * _streamInfo.outputFormat.sampleRate) / 1000;
     }
+
+    return true;
   }
 
   void FfmpegDecoderSession::flush()

@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include "FfmpegDecoderSession.h"
 #include "IAudioBackend.h"
-#include "PcmRingBuffer.h"
+#include "IPcmSource.h"
 #include "PlaybackTypes.h"
 
 #include <atomic>
@@ -13,8 +12,6 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <stop_token>
-#include <thread>
 
 namespace app::playback
 {
@@ -34,32 +31,27 @@ namespace app::playback
     PlaybackSnapshot snapshot() const;
 
   private:
-    bool openTrack(TrackPlaybackDescriptor descriptor);
-    void stopDecodeThread();
-    void decodeLoop(std::stop_token stopToken);
+    bool openTrack(TrackPlaybackDescriptor descriptor,
+                   std::shared_ptr<IPcmSource>& source,
+                   StreamFormat& backendFormat);
 
     static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept;
     static bool isSourceDrained(void* userData) noexcept;
     static void onUnderrun(void* userData) noexcept;
     static void onPositionAdvanced(void* userData, std::uint32_t frames) noexcept;
     static void onDrainComplete(void* userData) noexcept;
+    static void onSourceError(void* userData) noexcept;
 
     std::unique_ptr<IAudioBackend> _backend;
-    std::optional<FfmpegDecoderSession> _decoder;
-    PcmRingBuffer _ringBuffer;
-    std::jthread _decodeThread;
+    std::atomic<std::shared_ptr<IPcmSource>> _source;
 
     mutable std::mutex _stateMutex;
-    mutable std::mutex _decoderMutex;
     PlaybackSnapshot _snapshot;
     std::optional<TrackPlaybackDescriptor> _currentTrack;
 
     std::atomic<TransportState> _state = TransportState::Idle;
-    std::atomic<std::uint32_t> _bufferedMs = 0;
     std::atomic<std::uint32_t> _underrunCount = 0;
-    std::atomic<std::uint64_t> _bytesPerSecond = 0;
     std::atomic<bool> _backendStarted = false;
-    std::atomic<bool> _decoderReachedEof = false;
     std::atomic<bool> _playbackDrainPending = false;
   };
 
