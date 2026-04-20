@@ -31,6 +31,8 @@ namespace app::playback
     void process();
 
   private:
+    void destroyResources() noexcept;
+
     AudioRenderCallbacks _callbacks;
     StreamFormat _format;
     pw_thread_loop* _threadLoop = nullptr;

@@ -83,6 +83,11 @@ void PlaybackBar::setupSignals()
   _seekScale.signal_value_changed().connect(
     [this]()
     {
+      if (_updatingSeekScale)
+      {
+        return;
+      }
+
       auto position = static_cast<std::uint32_t>(_seekScale.get_value());
       _seekRequested.emit(position);
     });
@@ -101,6 +106,7 @@ void PlaybackBar::setSnapshot(app::playback::PlaybackSnapshot const& snapshot)
     std::format("{:d}:{:02d} / {:d}:{:02d}", positionMin, positionRemSec, durationMin, durationRemSec));
 
   // Update seek scale
+  _updatingSeekScale = true;
   if (snapshot.durationMs > 0)
   {
     _seekScale.set_range(0, static_cast<double>(snapshot.durationMs));
@@ -111,6 +117,7 @@ void PlaybackBar::setSnapshot(app::playback::PlaybackSnapshot const& snapshot)
     _seekScale.set_range(0, 100);
     _seekScale.set_value(0);
   }
+  _updatingSeekScale = false;
 
   // Update transport buttons
   updateTransportButtons(snapshot.state);

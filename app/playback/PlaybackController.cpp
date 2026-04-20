@@ -3,8 +3,6 @@
 
 #include "PlaybackController.h"
 
-#include <iostream>
-
 #include "NullBackend.h"
 #include "PlaybackEngine.h"
 
@@ -28,8 +26,6 @@ namespace app::playback
 
   void PlaybackController::play(TrackPlaybackDescriptor descriptor)
   {
-    std::cerr << "[DEBUG] PlaybackController::play: title=" << descriptor.title << ", path=" << descriptor.filePath
-              << std::endl;
     _engine->play(descriptor);
   }
 

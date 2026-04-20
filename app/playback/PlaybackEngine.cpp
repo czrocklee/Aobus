@@ -4,7 +4,28 @@
 #include "PlaybackEngine.h"
 
 #include <chrono>
-#include <iostream>
+
+namespace
+{
+  std::uint32_t bufferedDurationMs(std::size_t byteCount,
+                                   std::optional<app::playback::StreamFormat> const& format) noexcept
+  {
+    if (!format || format->sampleRate == 0 || format->channels == 0 || format->bitDepth == 0)
+    {
+      return 0;
+    }
+
+    auto const bytesPerSample = (format->bitDepth == 24U) ? 3U : (format->bitDepth > 16U) ? 4U : 2U;
+    auto const bytesPerSecond =
+      static_cast<std::uint64_t>(format->sampleRate) * format->channels * bytesPerSample;
+    if (bytesPerSecond == 0)
+    {
+      return 0;
+    }
+
+    return static_cast<std::uint32_t>((static_cast<std::uint64_t>(byteCount) * 1000U) / bytesPerSecond);
+  }
+} // namespace
 
 namespace app::playback
 {
@@ -12,6 +33,7 @@ namespace app::playback
   PlaybackEngine::PlaybackEngine(std::unique_ptr<IAudioBackend> backend)
     : _backend(std::move(backend)), _ringBuffer()
   {
+    _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
   }
 
   PlaybackEngine::~PlaybackEngine()
@@ -23,37 +45,57 @@ namespace app::playback
   {
     stopDecodeThread();
 
-    std::lock_guard<std::mutex> lock(_stateMutex);
-
-    _ringBuffer.clear();
-
-    // Open the track
-    _currentTrack = descriptor;
-    openTrack(descriptor);
-
-    // Start backend
     if (_backend)
     {
-      AudioRenderCallbacks callbacks;
-      callbacks.userData = this;
-      callbacks.readPcm = &PlaybackEngine::onReadPcm;
-      callbacks.onUnderrun = &PlaybackEngine::onUnderrun;
-      callbacks.onPositionAdvanced = &PlaybackEngine::onPositionAdvanced;
-
-      auto info = _decoder->streamInfo();
-      _backend->open(info.outputFormat, callbacks);
-      _backend->start();
+      _backend->stop();
     }
 
-    // Start decoding thread
+    AudioRenderCallbacks callbacks;
+    callbacks.userData = this;
+    callbacks.readPcm = &PlaybackEngine::onReadPcm;
+    callbacks.onUnderrun = &PlaybackEngine::onUnderrun;
+    callbacks.onPositionAdvanced = &PlaybackEngine::onPositionAdvanced;
+
+    StreamFormat backendFormat;
+
+    {
+      std::lock_guard<std::mutex> lock(_stateMutex);
+
+      _ringBuffer.clear();
+      _bufferedMs = 0;
+      _underrunCount = 0;
+
+      _snapshot = {};
+      _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
+      _snapshot.state = TransportState::Opening;
+      _snapshot.trackTitle = descriptor.title;
+      _snapshot.trackArtist = descriptor.artist;
+
+      _currentTrack = descriptor;
+      if (!openTrack(descriptor))
+      {
+        _state = TransportState::Error;
+        _snapshot.state = TransportState::Error;
+        _currentTrack.reset();
+        return;
+      }
+
+      backendFormat = _decoder->streamInfo().outputFormat;
+      _state = TransportState::Playing;
+      _snapshot.state = TransportState::Playing;
+    }
+
+    if (_backend)
+    {
+      _backend->open(backendFormat, callbacks);
+    }
+
     _decodeThread = std::jthread([this](std::stop_token token) { decodeLoop(token); });
 
-    _state = TransportState::Playing;
-    _snapshot.state = TransportState::Playing;
-    _snapshot.trackTitle = descriptor.title;
-    _snapshot.trackArtist = descriptor.artist;
-    _snapshot.durationMs = descriptor.durationMs;
-    std::cerr << "[DEBUG] PlaybackEngine::play: done" << std::endl;
+    if (_backend)
+    {
+      _backend->start();
+    }
   }
 
   void PlaybackEngine::pause()
@@ -92,9 +134,10 @@ namespace app::playback
     _ringBuffer.clear();
     _decoder.reset();
     _currentTrack.reset();
+    _bufferedMs = 0;
     _state = TransportState::Idle;
     _snapshot = {};
-    _snapshot.state = TransportState::Idle;
+    _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
     if (_backend)
     {
       _backend->stop();
@@ -108,7 +151,12 @@ namespace app::playback
     if (_decoder)
     {
       _decoder->seek(positionMs);
+      if (_backend)
+      {
+        _backend->flush();
+      }
       _ringBuffer.clear();
+      _bufferedMs = 0;
       _snapshot.positionMs = positionMs;
     }
   }
@@ -117,24 +165,43 @@ namespace app::playback
   {
     std::lock_guard<std::mutex> lock(_stateMutex);
     auto snap = _snapshot;
+    snap.backend = _backend ? _backend->kind() : BackendKind::None;
+    snap.bufferedMs = bufferedDurationMs(_ringBuffer.size(), snap.activeFormat);
+    snap.underrunCount = _underrunCount.load(std::memory_order_relaxed);
     return snap;
   }
 
-  void PlaybackEngine::openTrack(TrackPlaybackDescriptor descriptor)
+  bool PlaybackEngine::openTrack(TrackPlaybackDescriptor descriptor)
   {
     StreamFormat outputFormat;
-    outputFormat.sampleRate = descriptor.sampleRateHint > 0 ? descriptor.sampleRateHint : 44100;
-    outputFormat.channels = descriptor.channelsHint > 0 ? descriptor.channelsHint : 2;
-    outputFormat.bitDepth = descriptor.bitDepthHint > 0 ? descriptor.bitDepthHint : 16;
+    outputFormat.sampleRate = descriptor.sampleRateHint;
+    outputFormat.channels = descriptor.channelsHint;
+    outputFormat.bitDepth = descriptor.bitDepthHint;
+    outputFormat.isFloat = false;
     outputFormat.isInterleaved = true;
 
     _decoder.emplace(outputFormat);
-    _decoder->open(descriptor.filePath);
+    if (!_decoder->open(descriptor.filePath))
+    {
+      _snapshot.statusText = std::string(_decoder->lastError());
+      _snapshot.activeFormat.reset();
+      _decoder.reset();
+      return false;
+    }
 
     auto info = _decoder->streamInfo();
+    if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
+    {
+      _snapshot.statusText = "Decoder did not return a valid output format";
+      _snapshot.activeFormat.reset();
+      _decoder.reset();
+      return false;
+    }
+
     _snapshot.durationMs = info.durationMs;
     _snapshot.positionMs = 0;
     _snapshot.activeFormat = info.outputFormat;
+    return true;
   }
 
   void PlaybackEngine::stopDecodeThread()
@@ -168,6 +235,21 @@ namespace app::playback
 
       if (!block)
       {
+        {
+          std::lock_guard<std::mutex> lock(_stateMutex);
+          _state = TransportState::Error;
+          _snapshot.state = TransportState::Error;
+          if (_decoder)
+          {
+            _snapshot.statusText = std::string(_decoder->lastError());
+          }
+        }
+
+        if (_backend)
+        {
+          _backend->stop();
+        }
+
         break;
       }
 
@@ -228,7 +310,12 @@ namespace app::playback
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
     // Estimate position based on frames consumed
-    std::lock_guard<std::mutex> lock(self->_stateMutex);
+    std::unique_lock<std::mutex> lock(self->_stateMutex, std::try_to_lock);
+    if (!lock.owns_lock())
+    {
+      return;
+    }
+
     if (self->_snapshot.activeFormat && self->_snapshot.activeFormat->sampleRate > 0)
     {
       auto const ms = (static_cast<std::uint64_t>(frames) * 1000) / self->_snapshot.activeFormat->sampleRate;

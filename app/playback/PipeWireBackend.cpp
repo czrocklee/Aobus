@@ -37,19 +37,31 @@ namespace app::playback
   PipeWireBackend::~PipeWireBackend()
   {
     stop();
-    if (_stream)
+    destroyResources();
+  }
+
+  void PipeWireBackend::destroyResources() noexcept
+  {
+    if (_threadLoop)
     {
-      pw_stream_destroy(_stream);
-      _stream = nullptr;
+      pw_thread_loop_lock(_threadLoop);
+      if (_stream)
+      {
+        pw_stream_destroy(_stream);
+        _stream = nullptr;
+      }
+      pw_thread_loop_unlock(_threadLoop);
+      pw_thread_loop_stop(_threadLoop);
     }
+
     if (_context)
     {
       pw_context_destroy(_context);
       _context = nullptr;
     }
+
     if (_threadLoop)
     {
-      pw_thread_loop_stop(_threadLoop);
       pw_thread_loop_destroy(_threadLoop);
       _threadLoop = nullptr;
     }
@@ -57,6 +69,8 @@ namespace app::playback
 
   void PipeWireBackend::open(StreamFormat const& format, AudioRenderCallbacks callbacks)
   {
+    destroyResources();
+
     _callbacks = callbacks;
     _format = format;
 
@@ -197,7 +211,14 @@ namespace app::playback
 
   void PipeWireBackend::flush()
   {
-    // Flush is handled via the ring buffer in the engine
+    if (!_stream || !_threadLoop)
+    {
+      return;
+    }
+
+    pw_thread_loop_lock(_threadLoop);
+    pw_stream_flush(_stream, false);
+    pw_thread_loop_unlock(_threadLoop);
   }
 
   void PipeWireBackend::stop()
@@ -241,11 +262,16 @@ namespace app::playback
       std::span<std::byte> output(data, requestSize);
       auto const read = _callbacks.readPcm(_callbacks.userData, output);
       auto const alignedRead = read - (read % frameBytes);
-      std::cerr << "[DEBUG] PW process: requested=" << requestSize << " read=" << alignedRead << std::endl;
 
       buffer->buffer->datas[0].chunk->offset = 0;
       buffer->buffer->datas[0].chunk->size = static_cast<uint32_t>(alignedRead);
       buffer->buffer->datas[0].chunk->stride = static_cast<int32_t>(frameBytes);
+
+      if (_callbacks.onPositionAdvanced && frameBytes > 0 && alignedRead > 0)
+      {
+        auto const frames = static_cast<std::uint32_t>(alignedRead / frameBytes);
+        _callbacks.onPositionAdvanced(_callbacks.userData, frames);
+      }
     }
 
     pw_stream_queue_buffer(_stream, buffer);

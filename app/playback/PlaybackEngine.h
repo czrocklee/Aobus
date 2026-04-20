@@ -33,7 +33,7 @@ namespace app::playback
     PlaybackSnapshot snapshot() const;
 
   private:
-    void openTrack(TrackPlaybackDescriptor descriptor);
+    bool openTrack(TrackPlaybackDescriptor descriptor);
     void stopDecodeThread();
     void decodeLoop(std::stop_token stopToken);
 
