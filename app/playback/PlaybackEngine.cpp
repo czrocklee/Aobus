@@ -14,6 +14,35 @@ namespace
   constexpr std::uint32_t kDecodeHighWatermarkMs = 750;
   constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
 
+  bool sameStreamFormat(app::playback::StreamFormat const& lhs, app::playback::StreamFormat const& rhs) noexcept
+  {
+    return lhs.sampleRate == rhs.sampleRate && lhs.channels == rhs.channels && lhs.bitDepth == rhs.bitDepth &&
+           lhs.isFloat == rhs.isFloat && lhs.isInterleaved == rhs.isInterleaved;
+  }
+
+  void appendTooltipLine(std::string& tooltip, std::string_view line)
+  {
+    if (line.empty())
+    {
+      return;
+    }
+
+    if (!tooltip.empty())
+    {
+      tooltip += '\n';
+    }
+    tooltip += line;
+  }
+
+  void raiseSinkStatus(app::playback::BackendFormatInfo::SinkStatus& current,
+                       app::playback::BackendFormatInfo::SinkStatus candidate) noexcept
+  {
+    if (static_cast<int>(candidate) > static_cast<int>(current))
+    {
+      current = candidate;
+    }
+  }
+
   std::uint64_t bytesPerSecond(app::playback::StreamFormat const& format) noexcept
   {
     if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
@@ -114,6 +143,19 @@ namespace app::playback
       _snapshot.state = TransportState::Error;
       _snapshot.statusText = std::string(_backend->lastError());
       return;
+    }
+
+    if (_backend)
+    {
+      auto const backendInfo = _backend->formatInfo();
+      std::lock_guard<std::mutex> lock(_stateMutex);
+      if (backendInfo.streamFormat)
+      {
+        _snapshot.activeFormat = backendInfo.streamFormat;
+      }
+      _snapshot.deviceFormat = backendInfo.deviceFormat;
+      _snapshot.exclusiveOutput = backendInfo.isExclusive;
+      _snapshot.conversionReason = backendInfo.conversionReason;
     }
 
     auto const bufferedMs = source ? source->bufferedMs() : 0;
@@ -332,11 +374,42 @@ namespace app::playback
   PlaybackSnapshot PlaybackEngine::snapshot() const
   {
     auto source = _source.load(std::memory_order_acquire);
+    auto const backendInfo = _backend ? _backend->formatInfo() : BackendFormatInfo{};
     std::lock_guard<std::mutex> lock(_stateMutex);
     auto snap = _snapshot;
     snap.backend = _backend ? _backend->kind() : BackendKind::None;
     snap.bufferedMs = source ? source->bufferedMs() : 0;
     snap.underrunCount = _underrunCount.load(std::memory_order_relaxed);
+    if (backendInfo.streamFormat)
+    {
+      snap.activeFormat = backendInfo.streamFormat;
+    }
+    snap.deviceFormat = backendInfo.deviceFormat;
+    snap.exclusiveOutput = backendInfo.isExclusive;
+    snap.conversionReason = backendInfo.conversionReason;
+    snap.sinkName = backendInfo.sinkName;
+    snap.sinkStatus = backendInfo.sinkStatus;
+    snap.sinkTooltip = backendInfo.sinkTooltip;
+
+    if (snap.sinkStatus != BackendFormatInfo::SinkStatus::None && snap.sourceFormat && snap.activeFormat &&
+        !sameStreamFormat(*snap.sourceFormat, *snap.activeFormat))
+    {
+      raiseSinkStatus(snap.sinkStatus, BackendFormatInfo::SinkStatus::Bad);
+      appendTooltipLine(snap.sinkTooltip, "Decoded source format does not match the PipeWire stream format.");
+    }
+
+    if (snap.sinkStatus != BackendFormatInfo::SinkStatus::None && snap.sourceFormat && snap.deviceFormat &&
+        !sameStreamFormat(*snap.sourceFormat, *snap.deviceFormat))
+    {
+      raiseSinkStatus(snap.sinkStatus, BackendFormatInfo::SinkStatus::Bad);
+      appendTooltipLine(snap.sinkTooltip, "Decoded source format does not match the active sink format.");
+    }
+
+    if (snap.sinkStatus != BackendFormatInfo::SinkStatus::None)
+    {
+      appendTooltipLine(snap.sinkTooltip,
+                        "This is a best-effort server/backend inspection and does not verify conversions after the sink node.");
+    }
     return snap;
   }
 
@@ -401,7 +474,14 @@ namespace app::playback
 
     _snapshot.durationMs = info.durationMs;
     _snapshot.positionMs = 0;
+    _snapshot.sourceFormat = info.sourceFormat;
     _snapshot.activeFormat = info.outputFormat;
+    _snapshot.deviceFormat.reset();
+    _snapshot.exclusiveOutput = false;
+    _snapshot.conversionReason.clear();
+    _snapshot.sinkName.clear();
+    _snapshot.sinkStatus = BackendFormatInfo::SinkStatus::None;
+    _snapshot.sinkTooltip.clear();
     backendFormat = info.outputFormat;
     return true;
   }

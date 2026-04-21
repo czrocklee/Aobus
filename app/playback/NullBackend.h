@@ -36,6 +36,7 @@ namespace app::playback
     void stop() override {}
     void close() override {}
     BackendKind kind() const noexcept override { return BackendKind::None; }
+    BackendFormatInfo formatInfo() const override { return {}; }
     std::string_view lastError() const noexcept override { return {}; }
 
   private:

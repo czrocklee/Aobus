@@ -32,6 +32,7 @@ namespace app::playback
     void stop() override;
     void close() override;
     BackendKind kind() const noexcept override { return BackendKind::AlsaExclusive; }
+    BackendFormatInfo formatInfo() const override { return _formatInfo; }
     std::string_view lastError() const noexcept override { return _lastError; }
 
     DeviceCapabilities queryCapabilities() const;
@@ -41,6 +42,7 @@ namespace app::playback
     snd_pcm_t* _pcm = nullptr;
     AudioRenderCallbacks _callbacks;
     StreamFormat _format;
+    BackendFormatInfo _formatInfo;
     std::string _lastError;
   };
 

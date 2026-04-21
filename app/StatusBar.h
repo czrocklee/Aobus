@@ -38,7 +38,10 @@ private:
   Gtk::Label _importLabel;
 
   // Right: Playback details
+  Gtk::Box _playbackDetailsBox{Gtk::Orientation::HORIZONTAL};
   Gtk::Label _playbackLabel;
+  Gtk::Label _sinkLabel;
+  Gtk::Image _sinkStatusIcon;
 
   // Far Right: Status message
   Gtk::Label _statusLabel;

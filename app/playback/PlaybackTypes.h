@@ -58,6 +58,24 @@ namespace app::playback
     std::uint8_t bitDepthHint = 0;
   };
 
+  struct BackendFormatInfo final
+  {
+    std::optional<StreamFormat> streamFormat;
+    std::optional<StreamFormat> deviceFormat;
+    bool isExclusive = false;
+    std::string conversionReason;
+    enum class SinkStatus
+    {
+      None,
+      Good,
+      Warning,
+      Bad,
+    };
+    std::string sinkName;
+    SinkStatus sinkStatus = SinkStatus::None;
+    std::string sinkTooltip;
+  };
+
   struct PlaybackSnapshot final
   {
     TransportState state = TransportState::Idle;
@@ -69,7 +87,14 @@ namespace app::playback
     std::uint32_t positionMs = 0;
     std::uint32_t bufferedMs = 0;
     std::uint32_t underrunCount = 0;
+    std::optional<StreamFormat> sourceFormat;
     std::optional<StreamFormat> activeFormat;
+    std::optional<StreamFormat> deviceFormat;
+    bool exclusiveOutput = false;
+    std::string conversionReason;
+    std::string sinkName;
+    BackendFormatInfo::SinkStatus sinkStatus = BackendFormatInfo::SinkStatus::None;
+    std::string sinkTooltip;
   };
 
 } // namespace app::playback
