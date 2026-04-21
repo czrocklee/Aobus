@@ -74,6 +74,39 @@ namespace
            lhs.isFloat == rhs.isFloat && lhs.isInterleaved == rhs.isInterleaved;
   }
 
+  // Lossless format change:
+  // - Sample rate, channel count, and memory layout must match exactly
+  // - Bit-depth expansion (int->int or int->float) is lossless; reduction is lossy
+  // - Int->float is lossless only when float has enough mantissa bits (F32 has 24 bits)
+  // - Float->int is always lossy (requires requantization and typically dither)
+  bool isLosslessFormatChange(app::playback::StreamFormat const& src, app::playback::StreamFormat const& dst) noexcept
+  {
+    if (src.sampleRate != dst.sampleRate || src.channels != dst.channels || src.isInterleaved != dst.isInterleaved)
+    {
+      return false;
+    }
+
+    if (src.isFloat == dst.isFloat)
+    {
+      return src.bitDepth <= dst.bitDepth;
+    }
+
+    if (!src.isFloat && dst.isFloat)
+    {
+      if (dst.bitDepth == 32)
+      {
+        return src.bitDepth <= 24;
+      }
+      if (dst.bitDepth == 64)
+      {
+        return src.bitDepth <= 32;
+      }
+      return false;
+    }
+
+    return false;
+  }
+
   void appendLine(std::string& text, std::string_view line)
   {
     if (line.empty())
@@ -1285,7 +1318,7 @@ namespace app::playback
         }
 
         if (_monitorState->negotiatedStreamFormat && _monitorState->sinkFormat &&
-            !sameStreamFormat(*_monitorState->negotiatedStreamFormat, *_monitorState->sinkFormat))
+            !isLosslessFormatChange(*_monitorState->negotiatedStreamFormat, *_monitorState->sinkFormat))
         {
           badIssues.emplace_back("The PipeWire stream format does not match the sink format.");
         }
