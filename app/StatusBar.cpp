@@ -2,6 +2,11 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "StatusBar.h"
+
+#include <gdkmm/display.h>
+#include <gtkmm/cssprovider.h>
+#include <gtkmm/stylecontext.h>
+
 #include <iomanip>
 #include <sstream>
 
@@ -26,11 +31,66 @@ namespace
     }
     return ss.str();
   }
+
+  std::string formatStream(app::playback::StreamFormat const& format)
+  {
+    std::stringstream ss;
+    ss << (format.sampleRate / 1000.0) << " kHz/" << static_cast<int>(format.bitDepth) << " bit/";
+    if (format.channels == 1)
+    {
+      ss << "Mono";
+    }
+    else if (format.channels == 2)
+    {
+      ss << "Stereo";
+    }
+    else
+    {
+      ss << static_cast<int>(format.channels) << " ch";
+    }
+    return ss.str();
+  }
+
+  bool sameStreamFormat(app::playback::StreamFormat const& lhs, app::playback::StreamFormat const& rhs) noexcept
+  {
+    return lhs.sampleRate == rhs.sampleRate && lhs.channels == rhs.channels && lhs.bitDepth == rhs.bitDepth &&
+           lhs.isFloat == rhs.isFloat && lhs.isInterleaved == rhs.isInterleaved;
+  }
+
+  void ensureStatusBarCss()
+  {
+    static auto provider = []
+    {
+      auto css = Gtk::CssProvider::create();
+      css->load_from_data(R"(
+        .sink-status-good { color: #34a853; }
+        .sink-status-warning { color: #fbbc04; }
+        .sink-status-bad { color: #ea4335; }
+      )");
+      auto display = Gdk::Display::get_default();
+      if (display)
+      {
+        Gtk::StyleContext::add_provider_for_display(display, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+      }
+      return css;
+    }();
+
+    (void)provider;
+  }
+
+  void clearSinkStatusClasses(Gtk::Image& image)
+  {
+    image.remove_css_class("sink-status-good");
+    image.remove_css_class("sink-status-warning");
+    image.remove_css_class("sink-status-bad");
+  }
 }
 
 StatusBar::StatusBar()
   : Gtk::Box{Gtk::Orientation::HORIZONTAL}
 {
+  ensureStatusBarCss();
+
   set_hexpand(true);
   set_valign(Gtk::Align::END);
   add_css_class("status-bar");
@@ -83,12 +143,21 @@ StatusBar::StatusBar()
   append(*spacer);
 
   // Playback details (Right)
-  _playbackLabel.set_margin_start(12);
-  _playbackLabel.set_margin_end(12);
-  _playbackLabel.set_margin_top(6);
-  _playbackLabel.set_margin_bottom(6);
+  _playbackDetailsBox.set_spacing(6);
+  _playbackDetailsBox.set_margin_start(12);
+  _playbackDetailsBox.set_margin_end(12);
+  _playbackDetailsBox.set_margin_top(6);
+  _playbackDetailsBox.set_margin_bottom(6);
   _playbackLabel.add_css_class("dim-label");
-  append(_playbackLabel);
+  _sinkLabel.add_css_class("dim-label");
+  _sinkLabel.set_visible(false);
+  _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
+  _sinkStatusIcon.set_pixel_size(12);
+  _sinkStatusIcon.set_visible(false);
+  _playbackDetailsBox.append(_playbackLabel);
+  _playbackDetailsBox.append(_sinkLabel);
+  _playbackDetailsBox.append(_sinkStatusIcon);
+  append(_playbackDetailsBox);
 
   // Status label (Far Right)
   _statusLabel.set_halign(Gtk::Align::END);
@@ -156,37 +225,105 @@ void StatusBar::setSelectionInfo(std::size_t count, std::optional<std::chrono::m
 
 void StatusBar::setPlaybackDetails(app::playback::PlaybackSnapshot const& snapshot)
 {
-  if (snapshot.state == app::playback::TransportState::Idle || !snapshot.activeFormat)
+  if (snapshot.state == app::playback::TransportState::Idle || (!snapshot.sourceFormat && !snapshot.activeFormat))
   {
     _playbackLabel.set_text("");
+    _sinkLabel.set_text("");
+    _sinkLabel.set_visible(false);
+    _sinkLabel.set_tooltip_text("");
+    _sinkStatusIcon.set_tooltip_text("");
+    _sinkStatusIcon.set_visible(false);
     return;
   }
 
-  auto const& fmt = *snapshot.activeFormat;
   std::stringstream ss;
-  
+  bool hasText = false;
+
   switch (snapshot.backend)
   {
-    case app::playback::BackendKind::PipeWire: ss << "PipeWire"; break;
-    case app::playback::BackendKind::AlsaExclusive: ss << "ALSA"; break;
+    case app::playback::BackendKind::PipeWire:
+      ss << "PipeWire";
+      hasText = true;
+      break;
+    case app::playback::BackendKind::AlsaExclusive:
+      ss << "ALSA";
+      hasText = true;
+      break;
     default: break;
   }
 
-  if (fmt.sampleRate > 0)
+  if (snapshot.backend != app::playback::BackendKind::None)
   {
-    ss << " | " << (fmt.sampleRate / 1000.0) << " kHz";
-    ss << " | " << static_cast<int>(fmt.bitDepth) << " bit";
-    if (fmt.channels == 1) ss << " | Mono";
-    else if (fmt.channels == 2) ss << " | Stereo";
-    else ss << " | " << static_cast<int>(fmt.channels) << " ch";
+    ss << (snapshot.exclusiveOutput ? " exclusive" : " shared");
+    hasText = true;
+  }
+
+  if (snapshot.sourceFormat)
+  {
+    ss << (hasText ? " | src " : "src ") << formatStream(*snapshot.sourceFormat);
+    hasText = true;
+  }
+
+  if (snapshot.activeFormat && (!snapshot.sourceFormat || !sameStreamFormat(*snapshot.sourceFormat, *snapshot.activeFormat)))
+  {
+    ss << (hasText ? " -> pw " : "pw ") << formatStream(*snapshot.activeFormat);
+    hasText = true;
+  }
+
+  if (snapshot.deviceFormat &&
+      ((!snapshot.activeFormat && (!snapshot.sourceFormat || !sameStreamFormat(*snapshot.sourceFormat, *snapshot.deviceFormat))) ||
+       (snapshot.activeFormat && !sameStreamFormat(*snapshot.activeFormat, *snapshot.deviceFormat))))
+  {
+    ss << (hasText ? " -> sink " : "sink ") << formatStream(*snapshot.deviceFormat);
+    hasText = true;
   }
 
   if (snapshot.underrunCount > 0)
   {
-    ss << " | " << snapshot.underrunCount << " errors";
+    ss << (hasText ? " | " : "") << snapshot.underrunCount << " underruns";
   }
 
   _playbackLabel.set_text(ss.str());
+
+  auto const hasSinkInspection = snapshot.sinkStatus != app::playback::BackendFormatInfo::SinkStatus::None ||
+                                 !snapshot.sinkTooltip.empty();
+  if (!hasSinkInspection && snapshot.sinkName.empty())
+  {
+    _sinkLabel.set_text("");
+    _sinkLabel.set_visible(false);
+    _sinkLabel.set_tooltip_text("");
+    _sinkStatusIcon.set_tooltip_text("");
+    _sinkStatusIcon.set_visible(false);
+    return;
+  }
+
+  auto sinkLabelText = snapshot.sinkName.empty() ? std::string{"Sink: detecting..."}
+                                                 : std::string{"Sink: "} + snapshot.sinkName;
+  _sinkLabel.set_text(sinkLabelText);
+  _sinkLabel.set_visible(true);
+  _sinkLabel.set_tooltip_text(snapshot.sinkTooltip);
+
+  clearSinkStatusClasses(_sinkStatusIcon);
+  switch (snapshot.sinkStatus)
+  {
+    case app::playback::BackendFormatInfo::SinkStatus::Good:
+      _sinkStatusIcon.add_css_class("sink-status-good");
+      _sinkStatusIcon.set_visible(true);
+      break;
+    case app::playback::BackendFormatInfo::SinkStatus::Warning:
+      _sinkStatusIcon.add_css_class("sink-status-warning");
+      _sinkStatusIcon.set_visible(true);
+      break;
+    case app::playback::BackendFormatInfo::SinkStatus::Bad:
+      _sinkStatusIcon.add_css_class("sink-status-bad");
+      _sinkStatusIcon.set_visible(true);
+      break;
+    case app::playback::BackendFormatInfo::SinkStatus::None:
+      _sinkStatusIcon.set_visible(false);
+      break;
+  }
+
+  _sinkStatusIcon.set_tooltip_text(snapshot.sinkTooltip);
 }
 
 void StatusBar::setImportProgress(double fraction, std::string const& info)

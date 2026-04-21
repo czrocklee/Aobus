@@ -37,6 +37,7 @@ namespace app::playback
     virtual void stop() = 0;
     virtual void close() = 0;
     virtual BackendKind kind() const noexcept = 0;
+    virtual BackendFormatInfo formatInfo() const = 0;
     virtual std::string_view lastError() const noexcept = 0;
   };
 

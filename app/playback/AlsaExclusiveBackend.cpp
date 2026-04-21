@@ -31,6 +31,7 @@ namespace app::playback
 
     _format = format;
     _callbacks = callbacks;
+    _formatInfo = {};
     _lastError.clear();
 
     int err;
@@ -104,6 +105,20 @@ namespace app::playback
       return false;
     }
 
+    _formatInfo.streamFormat = format;
+    _formatInfo.deviceFormat = format;
+    _formatInfo.isExclusive = _deviceName.rfind("hw:", 0) == 0;
+    _formatInfo.sinkName = _deviceName;
+    _formatInfo.sinkStatus = _formatInfo.isExclusive ? BackendFormatInfo::SinkStatus::Good
+                                                     : BackendFormatInfo::SinkStatus::Warning;
+    _formatInfo.sinkTooltip = _formatInfo.isExclusive
+                                ? "Direct ALSA hw device selected. This is outside PipeWire and is the strongest available path in the app today."
+                                : "ALSA playback is using a non-hw device name, so bit-perfect playback is not guaranteed.";
+    if (!_formatInfo.isExclusive)
+    {
+      _formatInfo.conversionReason = "ALSA output is using a non-hw device, so bit-perfect playback is not guaranteed";
+    }
+
     return true;
   }
 
@@ -173,6 +188,8 @@ namespace app::playback
 
   void AlsaExclusiveBackend::close()
   {
+    _formatInfo = {};
+
     if (_pcm)
     {
       snd_pcm_close(_pcm);
