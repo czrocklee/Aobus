@@ -8,7 +8,7 @@
 
 extern "C"
 {
-#include <alsa/pcm.h>
+#include <alsa/asoundlib.h>
 }
 
 #include <string>
