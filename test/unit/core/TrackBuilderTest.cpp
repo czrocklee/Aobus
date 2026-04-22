@@ -358,7 +358,6 @@ TEST_CASE("TrackBuilder - serializeHot")
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = WriteTransaction{env};
   auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
   auto hotData = builder.serializeHot(wtxn, dict);
 
   // Verify hot header
