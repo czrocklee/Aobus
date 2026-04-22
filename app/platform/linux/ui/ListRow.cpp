@@ -11,7 +11,7 @@ ListRow::ListRow()
 {
 }
 
-Glib::RefPtr<ListRow> ListRow::create(ListId id, ListId parentId, int depth, bool smart, Glib::ustring const& name, Glib::ustring const& filter)
+Glib::RefPtr<ListRow> ListRow::create(ListId id, ListId parentId, std::int32_t depth, bool smart, Glib::ustring const& name, Glib::ustring const& filter)
 {
   auto obj = Glib::make_refptr_for_instance<ListRow>(new ListRow());
   obj->_listId = id;

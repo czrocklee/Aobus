@@ -3,6 +3,12 @@
 
 #pragma once
 
+#include "core/AppConfig.h"
+#include "platform/linux/ui/StatusBar.h"
+#include "platform/linux/ui/TrackViewPage.h"
+#include "core/model/SmartListEngine.h"
+#include "core/playback/PlaybackTypes.h"
+
 #include <rs/core/MusicLibrary.h>
 
 #include <gtkmm.h>
@@ -14,13 +20,6 @@
 #include <optional>
 #include <thread>
 #include <vector>
-
-#include "core/AppConfig.h"
-#include "platform/linux/ui/StatusBar.h"
-#include "platform/linux/ui/TrackViewPage.h"
-#include "core/model/SmartListEngine.h"
-
-#include "core/playback/PlaybackTypes.h"
 
 namespace app::core::model
 {

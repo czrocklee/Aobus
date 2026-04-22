@@ -105,7 +105,7 @@ namespace app::core::playback
     PacketPtr _packet;
     FramePtr _frame;
     SwrContextPtr _swrContext;
-    int _audioStreamIndex = -1;
+    std::int32_t _audioStreamIndex = -1;
     bool _inputEof = false;
     bool _decoderEof = false;
     bool _flushPacketSent = false;

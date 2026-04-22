@@ -116,12 +116,12 @@ TagPromptDialog::TagPromptDialog(Gtk::Window& parent,
 
 void TagPromptDialog::setupUi()
 {
-  constexpr int kDialogWidth = 560;
-  constexpr int kDialogHeight = 480;
-  constexpr int kBoxSpacing = 8;
-  constexpr int kBoxMargin = 12;
-  constexpr int kButtonBoxSpacing = 6;
-  constexpr int kSectionSpacing = 6;
+  constexpr std::int32_t kDialogWidth = 560;
+  constexpr std::int32_t kDialogHeight = 480;
+  constexpr std::int32_t kBoxSpacing = 8;
+  constexpr std::int32_t kBoxMargin = 12;
+  constexpr std::int32_t kButtonBoxSpacing = 6;
+  constexpr std::int32_t kSectionSpacing = 6;
 
   set_default_size(kDialogWidth, kDialogHeight);
 

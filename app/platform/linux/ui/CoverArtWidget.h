@@ -7,7 +7,7 @@
 #include <gtkmm.h>
 
 #include <cstdint>
-#include <vector>
+#include <span>
 
 namespace app::ui
 {
@@ -19,7 +19,7 @@ public:
   ~CoverArtWidget() override;
 
   // Set cover art from raw image bytes
-  void setCoverFromBytes(std::vector<std::byte> const& bytes);
+  void setCoverFromBytes(std::span<std::byte const> bytes);
 
   void setCoverPixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
   void clearCover();
@@ -35,7 +35,7 @@ inline CoverArtWidget::CoverArtWidget()
 
 inline CoverArtWidget::~CoverArtWidget() = default;
 
-inline void CoverArtWidget::setCoverFromBytes(std::vector<std::byte> const& bytes)
+inline void CoverArtWidget::setCoverFromBytes(std::span<std::byte const> bytes)
 {
   if (bytes.empty())
   {

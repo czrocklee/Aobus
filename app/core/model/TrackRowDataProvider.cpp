@@ -85,7 +85,7 @@ namespace app::core::model
     if (!optView)
     {
       // Track not found - cache a "missing" marker
-      RowData row;
+      auto row = RowData{};
       row.id = id;
       row.missing = true;
       _rowCache.emplace(id, std::move(row));
@@ -95,7 +95,7 @@ namespace app::core::model
     auto const& view = *optView;
     auto const& metadata = view.metadata();
 
-    RowData row;
+    auto row = RowData{};
     row.id = id;
     row.title = std::string(metadata.title());
 

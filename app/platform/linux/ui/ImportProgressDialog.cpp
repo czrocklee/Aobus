@@ -6,7 +6,7 @@
 namespace app::ui
 {
 
-ImportProgressDialog::ImportProgressDialog(int maxItems, Gtk::Window& parent)
+ImportProgressDialog::ImportProgressDialog(std::int32_t maxItems, Gtk::Window& parent)
   : _maxItems{maxItems}
 {
   set_title("Importing Music");
@@ -17,13 +17,13 @@ ImportProgressDialog::ImportProgressDialog(int maxItems, Gtk::Window& parent)
 
 ImportProgressDialog::~ImportProgressDialog() = default;
 
-void ImportProgressDialog::setupUi([[maybe_unused]] int maxItems)
+void ImportProgressDialog::setupUi([[maybe_unused]] std::int32_t maxItems)
 {
-  constexpr int kDialogWidth = 400;
-  constexpr int kDialogHeight = 150;
-  constexpr int kBoxSpacing = 8;
-  constexpr int kBoxMargin = 12;
-  constexpr int kActionAreaSpacing = 6;
+  constexpr std::int32_t kDialogWidth = 400;
+  constexpr std::int32_t kDialogHeight = 150;
+  constexpr std::int32_t kBoxSpacing = 8;
+  constexpr std::int32_t kBoxMargin = 12;
+  constexpr std::int32_t kActionAreaSpacing = 6;
 
   set_default_size(kDialogWidth, kDialogHeight);
 
@@ -52,7 +52,7 @@ void ImportProgressDialog::setupUi([[maybe_unused]] int maxItems)
   set_child(box);
 }
 
-void ImportProgressDialog::onNewTrack(std::string const& path, int itemIndex)
+void ImportProgressDialog::onNewTrack(std::string const& path, std::int32_t itemIndex)
 {
   auto fraction = static_cast<double>(itemIndex) / _maxItems;
   _progressBar.set_fraction(fraction);

@@ -44,10 +44,10 @@ namespace app::playback
     // Called from PipeWire process callback
     void process();
     void handleDrained() noexcept;
-    void handleStreamStateChanged(int oldState, int newState, char const* errorMessage);
+    void handleStreamStateChanged(std::int32_t oldState, std::int32_t newState, std::string_view errorMessage);
 
     // Called from PipeWire core events
-    void handleCoreDone(std::uint32_t id, int seq);
+    void handleCoreDone(std::uint32_t id, std::int32_t seq);
 
     // Called from PipeWire registry/node callbacks.
     void handleStreamParamChanged(std::uint32_t id, spa_pod const* param);

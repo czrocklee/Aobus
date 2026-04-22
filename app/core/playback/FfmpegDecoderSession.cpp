@@ -19,10 +19,10 @@ extern "C"
 
 namespace
 {
-  std::string ffmpegErrorText(int errorCode)
+  std::string ffmpegErrorText(std::int32_t errorCode)
   {
     char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
-    av_strerror(errorCode, buffer, sizeof(buffer));
+    ::av_strerror(errorCode, buffer, sizeof(buffer));
     return buffer;
   }
 
@@ -49,7 +49,7 @@ namespace app::core::playback
   {
     if (ptr)
     {
-      avformat_close_input(&ptr);
+      ::avformat_close_input(&ptr);
     }
   }
 
@@ -57,7 +57,7 @@ namespace app::core::playback
   {
     if (ptr)
     {
-      avcodec_free_context(&ptr);
+      ::avcodec_free_context(&ptr);
     }
   }
 
@@ -65,7 +65,7 @@ namespace app::core::playback
   {
     if (ptr)
     {
-      av_packet_free(&ptr);
+      ::av_packet_free(&ptr);
     }
   }
 
@@ -73,7 +73,7 @@ namespace app::core::playback
   {
     if (ptr)
     {
-      av_frame_free(&ptr);
+      ::av_frame_free(&ptr);
     }
   }
 
@@ -81,7 +81,7 @@ namespace app::core::playback
   {
     if (ptr)
     {
-      swr_free(&ptr);
+      ::swr_free(&ptr);
     }
   }
 
@@ -143,7 +143,7 @@ namespace app::core::playback
   {
     AVFormatContext* ctx = nullptr;
 
-    int ret = avformat_open_input(&ctx, filePath.string().c_str(), nullptr, nullptr);
+    std::int32_t ret = ::avformat_open_input(&ctx, filePath.string().c_str(), nullptr, nullptr);
     if (ret < 0)
     {
       setError("Failed to open input '" + filePath.string() + "': " + ffmpegErrorText(ret));
@@ -152,7 +152,7 @@ namespace app::core::playback
 
     _formatContext.reset(ctx);
 
-    ret = avformat_find_stream_info(ctx, nullptr);
+    ret = ::avformat_find_stream_info(ctx, nullptr);
     if (ret < 0)
     {
       setError("Failed to read stream info: " + ffmpegErrorText(ret));
@@ -171,7 +171,7 @@ namespace app::core::playback
     }
 
     // Find audio stream
-    _audioStreamIndex = av_find_best_stream(_formatContext.get(), AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+    _audioStreamIndex = ::av_find_best_stream(_formatContext.get(), AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
     if (_audioStreamIndex < 0)
     {
       setError("Failed to find audio stream: " + ffmpegErrorText(_audioStreamIndex));
@@ -181,7 +181,7 @@ namespace app::core::playback
     auto* stream = _formatContext->streams[_audioStreamIndex];
 
     // Find decoder
-    auto const* codec = avcodec_find_decoder(stream->codecpar->codec_id);
+    auto const* codec = ::avcodec_find_decoder(stream->codecpar->codec_id);
     if (!codec)
     {
       setError("Failed to find decoder for the audio stream");
@@ -199,7 +199,7 @@ namespace app::core::playback
     _codecContext.reset(codecCtx);
 
     // Copy codec parameters to context
-    int ret = avcodec_parameters_to_context(_codecContext.get(), stream->codecpar);
+    std::int32_t ret = ::avcodec_parameters_to_context(_codecContext.get(), stream->codecpar);
     if (ret < 0)
     {
       setError("Failed to copy codec parameters: " + ffmpegErrorText(ret));
@@ -207,7 +207,7 @@ namespace app::core::playback
     }
 
     // Open codec
-    ret = avcodec_open2(_codecContext.get(), codec, nullptr);
+    ret = ::avcodec_open2(_codecContext.get(), codec, nullptr);
     if (ret < 0)
     {
       setError("Failed to open codec: " + ffmpegErrorText(ret));
@@ -215,25 +215,25 @@ namespace app::core::playback
     }
 
     // Allocate packet and frame
-    _packet.reset(av_packet_alloc());
-    _frame.reset(av_frame_alloc());
+    _packet.reset(::av_packet_alloc());
+    _frame.reset(::av_frame_alloc());
 
     // Store source format info
-    int rawBitDepth = stream->codecpar->bits_per_raw_sample;
+    std::int32_t rawBitDepth = stream->codecpar->bits_per_raw_sample;
     if (rawBitDepth <= 0)
     {
       rawBitDepth = _codecContext->bits_per_raw_sample;
     }
     if (rawBitDepth <= 0)
     {
-      rawBitDepth = av_get_bytes_per_sample(_codecContext->sample_fmt) * 8;
+      rawBitDepth = ::av_get_bytes_per_sample(_codecContext->sample_fmt) * 8;
     }
 
     _streamInfo.sourceFormat.sampleRate = _codecContext->sample_rate;
     _streamInfo.sourceFormat.channels = static_cast<std::uint8_t>(_codecContext->ch_layout.nb_channels);
     _streamInfo.sourceFormat.bitDepth = static_cast<std::uint8_t>(rawBitDepth);
     _streamInfo.sourceFormat.isFloat = isFloatSampleFormat(_codecContext->sample_fmt);
-    _streamInfo.sourceFormat.isInterleaved = !av_sample_fmt_is_planar(_codecContext->sample_fmt);
+    _streamInfo.sourceFormat.isInterleaved = !::av_sample_fmt_is_planar(_codecContext->sample_fmt);
 
     // Output format - use hint if provided, otherwise match source (resampler handles conversion)
     _streamInfo.outputFormat = _outputFormat;
@@ -274,44 +274,44 @@ namespace app::core::playback
     }
 
     auto inChannelLayout = AVChannelLayout{};
-    if (_codecContext->ch_layout.nb_channels > 0 && av_channel_layout_check(&_codecContext->ch_layout) != 0)
+    if (_codecContext->ch_layout.nb_channels > 0 && ::av_channel_layout_check(&_codecContext->ch_layout) != 0)
     {
-      av_channel_layout_copy(&inChannelLayout, &_codecContext->ch_layout);
+      ::av_channel_layout_copy(&inChannelLayout, &_codecContext->ch_layout);
     }
     else
     {
-      av_channel_layout_default(&inChannelLayout, _streamInfo.sourceFormat.channels);
+      ::av_channel_layout_default(&inChannelLayout, _streamInfo.sourceFormat.channels);
     }
 
     auto outChannelLayout = AVChannelLayout{};
-    av_channel_layout_default(&outChannelLayout, _streamInfo.outputFormat.channels);
+    ::av_channel_layout_default(&outChannelLayout, _streamInfo.outputFormat.channels);
 
     // Create resampler context
-    SwrContext* swrCtx = swr_alloc();
+    SwrContext* swrCtx = ::swr_alloc();
     if (!swrCtx)
     {
-      av_channel_layout_uninit(&inChannelLayout);
-      av_channel_layout_uninit(&outChannelLayout);
+      ::av_channel_layout_uninit(&inChannelLayout);
+      ::av_channel_layout_uninit(&outChannelLayout);
       setError("Failed to allocate resampler");
       return false;
     }
 
     // Set options
-    av_opt_set_chlayout(swrCtx, "in_chlayout", &inChannelLayout, 0);
-    av_opt_set_int(swrCtx, "in_sample_rate", _codecContext->sample_rate, 0);
-    av_opt_set_sample_fmt(swrCtx, "in_sample_fmt", _codecContext->sample_fmt, 0);
-    av_opt_set_chlayout(swrCtx, "out_chlayout", &outChannelLayout, 0);
-    av_opt_set_int(swrCtx, "out_sample_rate", _streamInfo.outputFormat.sampleRate, 0);
-    av_opt_set_sample_fmt(swrCtx, "out_sample_fmt", outSampleFormat, 0);
+    ::av_opt_set_chlayout(swrCtx, "in_chlayout", &inChannelLayout, 0);
+    ::av_opt_set_int(swrCtx, "in_sample_rate", _codecContext->sample_rate, 0);
+    ::av_opt_set_sample_fmt(swrCtx, "in_sample_fmt", _codecContext->sample_fmt, 0);
+    ::av_opt_set_chlayout(swrCtx, "out_chlayout", &outChannelLayout, 0);
+    ::av_opt_set_int(swrCtx, "out_sample_rate", _streamInfo.outputFormat.sampleRate, 0);
+    ::av_opt_set_sample_fmt(swrCtx, "out_sample_fmt", outSampleFormat, 0);
 
     // Initialize
-    int ret = swr_init(swrCtx);
-    av_channel_layout_uninit(&inChannelLayout);
-    av_channel_layout_uninit(&outChannelLayout);
+    std::int32_t ret = ::swr_init(swrCtx);
+    ::av_channel_layout_uninit(&inChannelLayout);
+    ::av_channel_layout_uninit(&outChannelLayout);
     if (ret < 0)
     {
       setError("Failed to initialize resampler: " + ffmpegErrorText(ret));
-      swr_free(&swrCtx);
+      ::swr_free(&swrCtx);
       return false;
     }
 
@@ -327,10 +327,10 @@ namespace app::core::playback
     }
 
     auto const* stream = _formatContext->streams[_audioStreamIndex];
-    auto const timestamp = av_rescale_q(static_cast<std::int64_t>(positionMs), {1, 1000}, stream->time_base);
+    auto const timestamp = ::av_rescale_q(static_cast<std::int64_t>(positionMs), {1, 1000}, stream->time_base);
     auto const seekFlags = positionMs > getCurrentPositionMs() ? 0 : AVSEEK_FLAG_BACKWARD;
 
-    int ret = av_seek_frame(_formatContext.get(), _audioStreamIndex, timestamp, seekFlags);
+    std::int32_t ret = ::av_seek_frame(_formatContext.get(), _audioStreamIndex, timestamp, seekFlags);
     if (ret < 0)
     {
       setError("Seek failed at " + std::to_string(positionMs) + " ms: " + ffmpegErrorText(ret));
@@ -353,13 +353,13 @@ namespace app::core::playback
   {
     if (_codecContext)
     {
-      avcodec_flush_buffers(_codecContext.get());
+      ::avcodec_flush_buffers(_codecContext.get());
     }
 
     if (_swrContext)
     {
-      swr_close(_swrContext.get());
-      swr_init(_swrContext.get());
+      ::swr_close(_swrContext.get());
+      ::swr_init(_swrContext.get());
     }
 
     _decoderEof = false;
@@ -386,7 +386,7 @@ namespace app::core::playback
       return 0;
     }
 
-    return static_cast<std::uint32_t>(av_rescale_q(pts, base, {1, 1000}));
+    return static_cast<std::uint32_t>(::av_rescale_q(pts, base, {1, 1000}));
   }
 
   std::optional<PcmBlock> FfmpegDecoderSession::readNextBlock()
@@ -399,15 +399,15 @@ namespace app::core::playback
     // Try to drain decoder first
     if (_decoderEof)
     {
-      PcmBlock block;
+      auto block = PcmBlock{};
       block.endOfStream = true;
       return block;
     }
 
     while (true)
     {
-      av_frame_unref(_frame.get());
-      int ret = avcodec_receive_frame(_codecContext.get(), _frame.get());
+      ::av_frame_unref(_frame.get());
+      std::int32_t ret = ::avcodec_receive_frame(_codecContext.get(), _frame.get());
       if (ret == 0)
       {
         auto block = convertFrameToInterleavedPcm();
@@ -421,7 +421,7 @@ namespace app::core::playback
       if (ret == AVERROR_EOF)
       {
         _decoderEof = true;
-        PcmBlock block;
+        auto block = PcmBlock{};
         block.endOfStream = true;
         return block;
       }
@@ -437,12 +437,12 @@ namespace app::core::playback
         if (_flushPacketSent)
         {
           _decoderEof = true;
-          PcmBlock block;
+          auto block = PcmBlock{};
           block.endOfStream = true;
           return block;
         }
 
-        ret = avcodec_send_packet(_codecContext.get(), nullptr);
+        ret = ::avcodec_send_packet(_codecContext.get(), nullptr);
         if (ret < 0 && ret != AVERROR(EAGAIN))
         {
           setError("Error flushing decoder at end of stream: " + ffmpegErrorText(ret));
@@ -453,8 +453,8 @@ namespace app::core::playback
         continue;
       }
 
-      av_packet_unref(_packet.get());
-      ret = av_read_frame(_formatContext.get(), _packet.get());
+      ::av_packet_unref(_packet.get());
+      ret = ::av_read_frame(_formatContext.get(), _packet.get());
       if (ret == AVERROR_EOF)
       {
         _inputEof = true;
@@ -469,12 +469,12 @@ namespace app::core::playback
 
       if (_packet->stream_index != _audioStreamIndex)
       {
-        av_packet_unref(_packet.get());
+        ::av_packet_unref(_packet.get());
         continue;
       }
 
-      ret = avcodec_send_packet(_codecContext.get(), _packet.get());
-      av_packet_unref(_packet.get());
+      ret = ::avcodec_send_packet(_codecContext.get(), _packet.get());
+      ::av_packet_unref(_packet.get());
       if (ret < 0 && ret != AVERROR(EAGAIN))
       {
         setError("Error sending compressed audio packet to decoder: " + ffmpegErrorText(ret));
@@ -494,29 +494,29 @@ namespace app::core::playback
     auto const outBitDepth = _streamInfo.outputFormat.bitDepth;
 
     // Calculate output buffer size in samples
-    auto const outSamples = av_rescale_rnd(swr_get_delay(_swrContext.get(), _frame->sample_rate) + _frame->nb_samples,
+    auto const outSamples = ::av_rescale_rnd(::swr_get_delay(_swrContext.get(), _frame->sample_rate) + _frame->nb_samples,
                                            _streamInfo.outputFormat.sampleRate,
                                            _frame->sample_rate,
-                                           AVRounding::AV_ROUND_UP);
+                                           ::AVRounding::AV_ROUND_UP);
 
     if (outSamples <= 0)
     {
       return std::nullopt;
     }
 
-    PcmBlock block;
+    auto block = PcmBlock{};
     block.bitDepth = outBitDepth;
     block.firstFrameIndex = _decodedFrameCursor;
     block.endOfStream = false;
 
-    int convertedSamples = 0;
+    std::int32_t convertedSamples = 0;
 
     if (outBitDepth == 32)
     {
       // 32-bit output stays in the native S32 container from swr.
       std::vector<std::int32_t> outBuffer(outSamples * outChannels);
       auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
-      convertedSamples = swr_convert(_swrContext.get(),
+      convertedSamples = ::swr_convert(_swrContext.get(),
                                      &outPtr,
                                      static_cast<int>(outSamples),
                                      const_cast<std::uint8_t const**>(_frame->data),
@@ -530,14 +530,14 @@ namespace app::core::playback
       block.frames = static_cast<std::uint32_t>(convertedSamples);
       auto const byteCount = static_cast<std::size_t>(convertedSamples) * outChannels * sizeof(std::int32_t);
       block.bytes.resize(byteCount);
-      std::memcpy(block.bytes.data(), outBuffer.data(), byteCount);
+      ::memcpy(block.bytes.data(), outBuffer.data(), byteCount);
     }
     else if (outBitDepth == 24)
     {
       // swr emits hi-res integer PCM as S32; pack it down to little-endian S24.
       std::vector<std::int32_t> outBuffer(outSamples * outChannels);
       auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
-      convertedSamples = swr_convert(_swrContext.get(),
+      convertedSamples = ::swr_convert(_swrContext.get(),
                                      &outPtr,
                                      static_cast<int>(outSamples),
                                      const_cast<std::uint8_t const**>(_frame->data),
@@ -564,7 +564,7 @@ namespace app::core::playback
       // 16-bit: output as S16 from swr
       std::vector<std::int16_t> outBuffer(outSamples * outChannels);
       auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
-      convertedSamples = swr_convert(_swrContext.get(),
+      convertedSamples = ::swr_convert(_swrContext.get(),
                                      &outPtr,
                                      static_cast<int>(outSamples),
                                      const_cast<std::uint8_t const**>(_frame->data),
@@ -579,7 +579,7 @@ namespace app::core::playback
       // Convert to bytes
       auto const byteCount = convertedSamples * outChannels * sizeof(std::int16_t);
       block.bytes.resize(byteCount);
-      std::memcpy(block.bytes.data(), outBuffer.data(), byteCount);
+      ::memcpy(block.bytes.data(), outBuffer.data(), byteCount);
     }
 
     // Update cursor (estimate based on sample rate ratio)

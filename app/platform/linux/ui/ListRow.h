@@ -5,6 +5,7 @@
 
 #include <rs/core/MusicLibrary.h>
 
+#include <cstdint>
 #include <gtkmm.h>
 
 #include <string>
@@ -23,8 +24,8 @@ public:
   ListId getParentId() const { return _parentId; }
   void setParentId(ListId id) { _parentId = id; }
 
-  int getDepth() const { return _depth; }
-  void setDepth(int depth) { _depth = depth; }
+  std::int32_t getDepth() const { return _depth; }
+  void setDepth(std::int32_t depth) { _depth = depth; }
 
   bool isSmart() const { return _isSmart; }
   void setSmart(bool smart) { _isSmart = smart; }
@@ -34,7 +35,7 @@ public:
 
   Glib::ustring getFilter() const { return _filter; }
 
-  static Glib::RefPtr<ListRow> create(ListId id, ListId sourceListId, int depth, bool smart, Glib::ustring const& name, Glib::ustring const& filter = "");
+  static Glib::RefPtr<ListRow> create(ListId id, ListId sourceListId, std::int32_t depth, bool smart, Glib::ustring const& name, Glib::ustring const& filter = "");
 
 protected:
   explicit ListRow();
@@ -42,7 +43,7 @@ protected:
 private:
   ListId _listId;
   ListId _parentId;
-  int _depth = 0;
+  std::int32_t _depth = 0;
   bool _isSmart = false;
   Glib::ustring _name;
   Glib::ustring _filter;

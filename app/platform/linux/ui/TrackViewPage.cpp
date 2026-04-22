@@ -189,7 +189,7 @@ void TrackViewPage::setupHeaderFactory()
     [](Glib::RefPtr<Glib::Object> const& object)
     {
       auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
-      if (!header)
+      if (auto h = header; !h)
       {
         return;
       }
