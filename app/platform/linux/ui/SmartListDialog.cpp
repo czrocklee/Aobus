@@ -21,7 +21,7 @@ namespace app::ui
 
   namespace
   {
-    auto composeEffectiveExpression(std::string_view parent, std::string_view local) -> std::string
+    std::string composeEffectiveExpression(std::string_view parent, std::string_view local)
     {
       if (parent.empty())
       {
@@ -36,7 +36,7 @@ namespace app::ui
       return std::string{"("} + std::string{parent} + ") and (" + std::string{local} + ")";
     }
 
-    auto displayExpression(std::string_view expression) -> std::string
+    std::string displayExpression(std::string_view expression)
     {
       if (expression.empty())
       {

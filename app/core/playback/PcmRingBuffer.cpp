@@ -15,32 +15,20 @@ namespace app::core::playback
 
   std::size_t PcmRingBuffer::write(std::span<std::byte const> input) noexcept
   {
-    if (input.empty())
-    {
-      return 0;
-    }
-
-    auto const* data = reinterpret_cast<std::uint8_t const*>(input.data());
-    auto const size = input.size();
+    if (input.empty()) return 0;
 
     std::lock_guard<std::mutex> lock(_mutex);
-    auto const written = _queue.push(data, size);
+    auto const written = _queue.push(reinterpret_cast<std::uint8_t const*>(input.data()), input.size());
     _writeCount.fetch_add(written, std::memory_order_release);
     return written;
   }
 
   std::size_t PcmRingBuffer::read(std::span<std::byte> output) noexcept
   {
-    if (output.empty())
-    {
-      return 0;
-    }
-
-    auto* data = reinterpret_cast<std::uint8_t*>(output.data());
-    auto const size = output.size();
+    if (output.empty()) return 0;
 
     std::lock_guard<std::mutex> lock(_mutex);
-    auto const read = _queue.pop(data, size);
+    auto const read = _queue.pop(reinterpret_cast<std::uint8_t*>(output.data()), output.size());
     _readCount.fetch_add(read, std::memory_order_release);
     return read;
   }
@@ -48,10 +36,8 @@ namespace app::core::playback
   void PcmRingBuffer::clear() noexcept
   {
     std::lock_guard<std::mutex> lock(_mutex);
-    std::uint8_t dummy{};
-    while (_queue.pop(dummy))
-    {
-    }
+    std::uint8_t dummy;
+    while (_queue.pop(dummy));
     _writeCount.store(0, std::memory_order_relaxed);
     _readCount.store(0, std::memory_order_relaxed);
   }

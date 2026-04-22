@@ -131,112 +131,124 @@ namespace app::core::model
 
   SmartListEngine::~SmartListEngine()
   {
-    // Mark engine as not alive first - this prevents new unregisterList calls from accessing buckets
     _alive = false;
-
-    // Mark all observers as invalid to prevent any callbacks during destruction
     for (auto& [source, bucket] : _buckets)
     {
       if (bucket->observer)
       {
-        // Cast to SourceObserver to access invalidate() method
-        auto* obs = static_cast<SourceObserver*>(bucket->observer.get());
-        obs->invalidate();
+        static_cast<SourceObserver*>(bucket->observer.get())->invalidate();
+        if (bucket->sourceAlive) source->detach(bucket->observer.get());
       }
     }
+  }
 
-    // Detach all observers before destroying buckets
-    for (auto& [source, bucket] : _buckets)
-    {
-      if (bucket->observer && bucket->sourceAlive)
-      {
-        source->detach(bucket->observer.get());
-      }
-    }
+  SmartListEngine::SmartListState* SmartListEngine::getState(RegistrationId id)
+  {
+    auto it = _states.find(id);
+    return (it != _states.end()) ? it->second.get() : nullptr;
+  }
+
+  SmartListEngine::SmartListState const* SmartListEngine::getState(RegistrationId id) const
+  {
+    auto it = _states.find(id);
+    return (it != _states.end()) ? it->second.get() : nullptr;
   }
 
   SmartListEngine::RegistrationId SmartListEngine::registerList(TrackIdList& source, TrackIdList& facade)
   {
     auto id = _nextRegistrationId++;
-
     auto state = std::make_unique<SmartListState>();
     state->id = id;
     state->source = &source;
     state->facade = &facade;
     stageExpression(*state, "");
 
-    // Find or create bucket for this source
-    SourceBucket* bucket = nullptr;
-    auto it = _buckets.find(&source);
-    if (it == _buckets.end())
+    auto& bucket = _buckets[&source];
+    if (!bucket)
     {
-      auto [bucketIt, inserted] = _buckets.emplace(&source, std::make_unique<SourceBucket>());
-      bucket = bucketIt->second.get();
+      bucket = std::make_unique<SourceBucket>();
       bucket->source = &source;
       bucket->observer = std::make_unique<SourceObserver>(*this, source);
       source.attach(bucket->observer.get());
     }
-    else
-    {
-      bucket = it->second.get();
-    }
 
-    state->bucket = bucket;
+    state->bucket = bucket.get();
     bucket->registrations.push_back(id);
-
     _states.emplace(id, std::move(state));
-
     return id;
   }
 
   void SmartListEngine::unregisterList(RegistrationId id)
   {
-    auto it = _states.find(id);
-    if (it == _states.end())
-    {
-      return;
-    }
+    auto* state = getState(id);
+    if (!state) return;
 
-    // Capture source pointer BEFORE destroying state
-    auto* source = it->second->source;
-    auto* bucket = it->second->bucket;
-    auto* observer = bucket ? bucket->observer.get() : nullptr;
+    auto* source = state->source;
+    auto* bucket = state->bucket;
 
-    // Remove from bucket BEFORE erasing state
     if (bucket)
     {
-      auto& regs = bucket->registrations;
-      auto regIt = std::find(regs.begin(), regs.end(), id);
-      if (regIt != regs.end())
-      {
-        regs.erase(regIt);
-      }
-
-      // If bucket is now empty, detach observer and remove bucket
+      std::erase(bucket->registrations, id);
       if (bucket->registrations.empty())
       {
-        // ONLY call detach if the source pointer is still valid (sourceAlive is true)
-        if (source && bucket->sourceAlive)
-        {
-          source->detach(observer);
-        }
+        if (source && bucket->sourceAlive) source->detach(bucket->observer.get());
         _buckets.erase(source);
       }
     }
 
-    _states.erase(it);
+    _states.erase(id);
   }
 
   void SmartListEngine::setExpression(RegistrationId id, std::string expr)
   {
-    auto it = _states.find(id);
-    if (it == _states.end())
-    {
-      throw std::invalid_argument("Invalid registration id");
-    }
+    auto* state = getState(id);
+    if (!state) throw std::invalid_argument("Invalid registration id");
+    stageExpression(*state, std::move(expr));
+  }
 
-    auto& state = *it->second;
-    stageExpression(state, std::move(expr));
+  void SmartListEngine::rebuild(RegistrationId id)
+  {
+    auto* state = getState(id);
+    if (!state || !state->bucket) return;
+
+    if (!state->dirty) stageExpression(*state, state->expression);
+    rebuildDirtyStates(*state->bucket);
+  }
+
+  std::size_t SmartListEngine::size(RegistrationId id) const
+  {
+    auto* state = getState(id);
+    return state ? state->members.size() : 0;
+  }
+
+  TrackId SmartListEngine::trackIdAt(RegistrationId id, std::size_t index) const
+  {
+    auto* state = getState(id);
+    if (!state) throw std::out_of_range("Invalid registration id");
+    return state->members.at(index);
+  }
+
+  std::optional<std::size_t> SmartListEngine::indexOf(RegistrationId id, TrackId trackId) const
+  {
+    auto* state = getState(id);
+    if (!state) return std::nullopt;
+
+    auto const it = std::find(state->members.begin(), state->members.end(), trackId);
+    if (it == state->members.end()) return std::nullopt;
+    return static_cast<std::size_t>(std::distance(state->members.begin(), it));
+  }
+
+  bool SmartListEngine::hasError(RegistrationId id) const
+  {
+    auto* state = getState(id);
+    return state ? (state->dirty ? state->stagedHasError : state->hasError) : true;
+  }
+
+  std::string const& SmartListEngine::errorMessage(RegistrationId id) const
+  {
+    static std::string const empty;
+    auto* state = getState(id);
+    return state ? (state->dirty ? state->stagedErrorMessage : state->errorMessage) : empty;
   }
 
   void SmartListEngine::stageExpression(SmartListState& state, std::string expr)
@@ -263,98 +275,13 @@ namespace app::core::model
 
   void SmartListEngine::applyStagedState(SmartListState& state)
   {
-    if (!state.dirty)
-    {
-      return;
-    }
+    if (!state.dirty) return;
 
     state.expression = state.stagedExpression;
     state.hasError = state.stagedHasError;
     state.errorMessage = state.stagedErrorMessage;
     state.plan = std::move(state.stagedPlan);
     state.dirty = false;
-  }
-
-  void SmartListEngine::rebuild(RegistrationId id)
-  {
-    auto it = _states.find(id);
-    if (it == _states.end())
-    {
-      return;
-    }
-
-    auto& state = *it->second;
-    if (!state.bucket)
-    {
-      return;
-    }
-
-    if (!state.dirty)
-    {
-      stageExpression(state, state.expression);
-    }
-
-    rebuildDirtyStates(*state.bucket);
-  }
-
-  std::size_t SmartListEngine::size(RegistrationId id) const
-  {
-    auto it = _states.find(id);
-    if (it == _states.end())
-    {
-      return 0;
-    }
-    return it->second->members.size();
-  }
-
-  TrackId SmartListEngine::trackIdAt(RegistrationId id, std::size_t index) const
-  {
-    auto it = _states.find(id);
-    if (it == _states.end())
-    {
-      throw std::out_of_range("Invalid registration id");
-    }
-    return it->second->members.at(index);
-  }
-
-  std::optional<std::size_t> SmartListEngine::indexOf(RegistrationId id, TrackId trackId) const
-  {
-    auto it = _states.find(id);
-    if (it == _states.end())
-    {
-      return std::nullopt;
-    }
-
-    auto const& members = it->second->members;
-    auto const found = std::find(members.begin(), members.end(), trackId);
-    if (found != members.end())
-    {
-      return static_cast<std::size_t>(std::distance(members.begin(), found));
-    }
-    return std::nullopt;
-  }
-
-  bool SmartListEngine::hasError(RegistrationId id) const
-  {
-    auto it = _states.find(id);
-    if (it == _states.end())
-    {
-      return true;
-    }
-    auto const& state = *it->second;
-    return state.dirty ? state.stagedHasError : state.hasError;
-  }
-
-  std::string const& SmartListEngine::errorMessage(RegistrationId id) const
-  {
-    static std::string const empty;
-    auto it = _states.find(id);
-    if (it == _states.end())
-    {
-      return empty;
-    }
-    auto const& state = *it->second;
-    return state.dirty ? state.stagedErrorMessage : state.errorMessage;
   }
 
   void SmartListEngine::notifyTrackDataChanged(RegistrationId id, TrackId trackId)

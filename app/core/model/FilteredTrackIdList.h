@@ -69,6 +69,8 @@ namespace app::core::model
     void notifyEngineUpdated(TrackId id, std::size_t index);
     void notifyEngineRemoved(TrackId id, std::size_t index);
 
+    SmartListEngine* engine() const;
+
     SmartListEngine* _engine = nullptr;
     std::uint64_t _registrationId = 0; // Use std::uint64_t directly instead of RegistrationId
   };

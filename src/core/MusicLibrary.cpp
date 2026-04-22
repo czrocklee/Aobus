@@ -18,13 +18,13 @@ namespace
   constexpr int kLmdbMaxDatabases = 8; // tracks_hot, tracks_cold, lists, resources, dictionary, meta (+ spare)
   constexpr int kLmdbFileMode = 0664;
 
-  auto nowUnixMs() -> std::uint64_t
+  std::uint64_t nowUnixMs()
   {
     auto const now = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
     return static_cast<std::uint64_t>(now.time_since_epoch().count());
   }
 
-  auto generateLibraryId() -> std::array<std::byte, 16>
+  std::array<std::byte, 16> generateLibraryId()
   {
     auto bytes = std::array<std::byte, 16>{};
     auto random = std::random_device{};
@@ -32,7 +32,7 @@ namespace
     return bytes;
   }
 
-  auto makeMetaHeader() -> rs::core::LibraryMetaHeader
+  rs::core::LibraryMetaHeader makeMetaHeader()
   {
     auto const timestamp = nowUnixMs();
     return rs::core::LibraryMetaHeader{.magic = rs::core::kLibraryMetaMagic,

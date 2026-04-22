@@ -9,7 +9,7 @@
 
 namespace
 {
-  auto joinResolvedTags(rs::core::TrackView::TagProxy tags, rs::core::DictionaryStore const& dictionary) -> std::string
+  std::string joinResolvedTags(rs::core::TrackView::TagProxy tags, rs::core::DictionaryStore const& dictionary)
   {
     auto text = std::string{};
     auto first = true;

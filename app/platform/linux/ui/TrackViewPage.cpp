@@ -28,7 +28,7 @@ namespace app::ui
     using RowCompareFn = std::function<int(TrackRow const&, TrackRow const&)>;
     constexpr auto kTagsCellWidgetName = "track-tags-cell";
 
-    auto trackRowFromItem(gconstpointer item) -> TrackRow const*
+    TrackRow const* trackRowFromItem(gconstpointer item)
     {
       if (!item)
       {
@@ -39,7 +39,7 @@ namespace app::ui
       return dynamic_cast<TrackRow const*>(object);
     }
 
-    auto createRowSorter(RowCompareFn compare) -> Glib::RefPtr<Gtk::Sorter>
+    Glib::RefPtr<Gtk::Sorter> createRowSorter(RowCompareFn compare)
     {
       auto* comparePtr = new RowCompareFn{std::move(compare)};
       auto* customSorter = gtk_custom_sorter_new(
@@ -62,7 +62,7 @@ namespace app::ui
       return Glib::wrap(GTK_SORTER(customSorter), false);
     }
 
-    auto isTagsCellWidget(Gtk::Widget const* widget) -> bool
+    bool isTagsCellWidget(Gtk::Widget const* widget)
     {
       for (auto current = widget; current != nullptr; current = current->get_parent())
       {
@@ -75,7 +75,7 @@ namespace app::ui
       return false;
     }
 
-    auto dropdownPositionFor(TrackGroupBy groupBy) -> std::uint32_t
+    std::uint32_t dropdownPositionFor(TrackGroupBy groupBy)
     {
       switch (groupBy)
       {
@@ -90,7 +90,7 @@ namespace app::ui
       return 0;
     }
 
-    auto groupByFromDropdownPosition(std::uint32_t position) -> TrackGroupBy
+    TrackGroupBy groupByFromDropdownPosition(std::uint32_t position)
     {
       switch (position)
       {
@@ -103,7 +103,7 @@ namespace app::ui
       }
     }
 
-    auto trackCountLabel(guint count) -> std::string
+    std::string trackCountLabel(guint count)
     {
       auto label = std::to_string(count);
       label += count == 1 ? " track" : " tracks";

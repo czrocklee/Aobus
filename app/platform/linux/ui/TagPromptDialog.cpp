@@ -16,7 +16,7 @@ namespace app::ui
 
   namespace
   {
-    auto trim(std::string_view value) -> std::string
+    std::string trim(std::string_view value)
     {
       auto const isSpace = [](unsigned char ch) { return std::isspace(ch) != 0; };
 
@@ -50,7 +50,7 @@ namespace app::ui
         { return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs)); });
     }
 
-    auto selectionSummary(std::size_t selectionCount) -> std::string
+    std::string selectionSummary(std::size_t selectionCount)
     {
       auto text = std::to_string(selectionCount);
       text += selectionCount == 1 ? " track selected." : " tracks selected.";
@@ -58,7 +58,7 @@ namespace app::ui
       return text;
     }
 
-    auto pendingSummary(std::size_t addCount, std::size_t removeCount) -> std::string
+    std::string pendingSummary(std::size_t addCount, std::size_t removeCount)
     {
       if (addCount == 0 && removeCount == 0)
       {

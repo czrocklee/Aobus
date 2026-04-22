@@ -100,6 +100,9 @@ namespace app::core::model
     struct SmartListState;
     struct SourceBucket;
 
+    SmartListState* getState(RegistrationId id);
+    SmartListState const* getState(RegistrationId id) const;
+
     void stageExpression(SmartListState& state, std::string expr);
     void applyStagedState(SmartListState& state);
     void rebuildActiveStates(SourceBucket& bucket);
