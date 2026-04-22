@@ -3,10 +3,10 @@
 
 #include <catch2/catch.hpp>
 
-// Standalone test for TrackListAdapter without GTKMM dependency.
+// Standalone test for app::ui::app::ui::TrackListAdapter without GTKMM dependency.
 // Tests adapter functionality with test doubles for GTK objects.
 
-#include <app/model/TrackIdList.h>
+#include <core/model/TrackIdList.h>
 #include <rs/core/MusicLibrary.h>
 #include <rs/core/TrackBuilder.h>
 #include <rs/core/TrackStore.h>
@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-namespace app::model::test
+namespace app::core::model::test
 {
   // Test-specific RowData definition
   struct RowData
@@ -43,7 +43,7 @@ namespace app::model::test
   using DictionaryId = rs::core::DictionaryId;
 
   /**
-   * TestTrackRowProvider - Standalone test double for TrackListAdapter tests.
+   * TestTrackRowProvider - Standalone test double for app::ui::app::ui::TrackListAdapter tests.
    * Named differently to avoid symbol collision when linking.
    */
   class TestTrackRowProvider final
@@ -180,15 +180,15 @@ namespace app::model::test
     _rowCache.erase(id);
   }
 
-} // namespace app::model::test
+} // namespace app::core::model::test
 
 namespace
 {
 
-  using app::model::TrackIdList;
-  using app::model::TrackIdListObserver;
-  using app::model::test::RowData;
-  using app::model::test::TestTrackRowProvider;
+  using app::core::model::TrackIdList;
+  using app::core::model::TrackIdListObserver;
+  using app::core::model::test::RowData;
+  using app::core::model::test::TestTrackRowProvider;
   using rs::core::MusicLibrary;
   using rs::core::TrackBuilder;
   using rs::core::TrackId;
@@ -363,7 +363,7 @@ namespace
   };
 
   /**
-   * Filter matcher - standalone version matching TrackListAdapter logic.
+   * Filter matcher - standalone version matching app::ui::app::ui::TrackListAdapter logic.
    */
   bool matchesFilter(RowData const& rowData, std::string const& filter)
   {
@@ -392,7 +392,7 @@ namespace
 
 } // namespace
 
-TEST_CASE("TrackListAdapter", "[app][adapter]")
+TEST_CASE("app::ui::app::ui::TrackListAdapter", "[app][adapter]")
 {
   SECTION("TestTrackRowProvider loads row data for filtering")
   {

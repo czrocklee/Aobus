@@ -261,21 +261,21 @@ add_executable(rs_test
     test/unit/app/TrackRowDataProviderTest.cpp
     test/unit/app/TrackListAdapterTest.cpp
     test/unit/app/SmartListEngineTest.cpp
-    app/TrackPresentation.cpp
-    app/model/FilteredTrackIdList.cpp
-    app/model/SmartListEngine.cpp
-    app/model/TrackIdList.cpp
+    app/platform/linux/ui/TrackPresentation.cpp
+    app/core/model/FilteredTrackIdList.cpp
+    app/core/model/SmartListEngine.cpp
+    app/core/model/TrackIdList.cpp
 )
-target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR})
+target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/app)
 target_link_libraries(rs_test PRIVATE rs Catch2)
 if(FFmpeg_FOUND)
   target_sources(rs_test PRIVATE
     test/integration/playback/FfmpegDecoderSessionTest.cpp
     test/integration/tag/TagTest.cpp
-    app/playback/FfmpegDecoderSession.cpp
-    app/playback/MemoryPcmSource.cpp
-    app/playback/PcmRingBuffer.cpp
-    app/playback/StreamingPcmSource.cpp
+    app/core/playback/FfmpegDecoderSession.cpp
+    app/core/playback/MemoryPcmSource.cpp
+    app/core/playback/PcmRingBuffer.cpp
+    app/core/playback/StreamingPcmSource.cpp
   )
   target_link_libraries(rs_test PRIVATE FFmpeg)
   target_compile_definitions(rs_test PRIVATE FFmpeg_FOUND TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
@@ -293,50 +293,50 @@ if(CLANG_TIDY_EXECUTABLE)
 endif()
 
 add_executable(RockStudio
-    app/main.cpp
-    app/AppConfig.cpp
-    app/MainWindow.cpp
-    app/TrackPresentation.cpp
-    app/TrackViewPage.cpp
-    app/TrackListAdapter.cpp
-    app/TrackRow.cpp
-    app/ListRow.cpp
-    app/ListTreeNode.cpp
-    app/ImportWorker.cpp
-    app/PlaylistExporter.cpp
-    app/SmartListDialog.cpp
-    app/QueryExpressionBox.cpp
-    app/TagPromptDialog.cpp
-    app/TagPopover.cpp
-    app/ImportProgressDialog.cpp
-    app/StatusBar.cpp
-    app/model/TrackIdList.cpp
-    app/model/AllTrackIdsList.cpp
-    app/model/FilteredTrackIdList.cpp
-    app/model/SmartListEngine.cpp
-    app/model/ManualTrackIdList.cpp
-    app/model/TrackRowDataProvider.cpp
-    app/PlaybackBar.cpp
-    app/playback/PlaybackController.cpp
-    app/playback/PlaybackEngine.cpp
-    app/playback/MemoryPcmSource.cpp
-    app/playback/PcmRingBuffer.cpp
-    app/playback/StreamingPcmSource.cpp
-    app/playback/FormatNegotiator.cpp
+    app/platform/linux/main.cpp
+    app/core/AppConfig.cpp
+    app/platform/linux/ui/MainWindow.cpp
+    app/platform/linux/ui/TrackPresentation.cpp
+    app/platform/linux/ui/TrackViewPage.cpp
+    app/platform/linux/ui/TrackListAdapter.cpp
+    app/platform/linux/ui/TrackRow.cpp
+    app/platform/linux/ui/ListRow.cpp
+    app/platform/linux/ui/ListTreeNode.cpp
+    app/core/ImportWorker.cpp
+    app/platform/linux/services/PlaylistExporter.cpp
+    app/platform/linux/ui/SmartListDialog.cpp
+    app/platform/linux/ui/QueryExpressionBox.cpp
+    app/platform/linux/ui/TagPromptDialog.cpp
+    app/platform/linux/ui/TagPopover.cpp
+    app/platform/linux/ui/ImportProgressDialog.cpp
+    app/platform/linux/ui/StatusBar.cpp
+    app/core/model/TrackIdList.cpp
+    app/core/model/AllTrackIdsList.cpp
+    app/core/model/FilteredTrackIdList.cpp
+    app/core/model/SmartListEngine.cpp
+    app/core/model/ManualTrackIdList.cpp
+    app/core/model/TrackRowDataProvider.cpp
+    app/platform/linux/ui/PlaybackBar.cpp
+    app/core/playback/PlaybackController.cpp
+    app/core/playback/PlaybackEngine.cpp
+    app/core/playback/MemoryPcmSource.cpp
+    app/core/playback/PcmRingBuffer.cpp
+    app/core/playback/StreamingPcmSource.cpp
+    app/core/playback/FormatNegotiator.cpp
 )
 if(FFmpeg_FOUND)
   target_compile_definitions(RockStudio PRIVATE FFmpeg_FOUND)
-  target_sources(RockStudio PRIVATE app/playback/FfmpegDecoderSession.cpp)
+  target_sources(RockStudio PRIVATE app/core/playback/FfmpegDecoderSession.cpp)
   target_link_libraries(RockStudio PRIVATE FFmpeg)
 endif()
 if(PIPEWIRE_FOUND)
   target_compile_definitions(RockStudio PRIVATE PIPEWIRE_FOUND)
-  target_sources(RockStudio PRIVATE app/playback/PipeWireBackend.cpp)
+  target_sources(RockStudio PRIVATE app/platform/linux/playback/PipeWireBackend.cpp)
   target_link_libraries(RockStudio PRIVATE PipeWire)
 endif()
 if(ALSA_FOUND)
   target_compile_definitions(RockStudio PRIVATE ALSA_FOUND)
-  target_sources(RockStudio PRIVATE app/playback/AlsaExclusiveBackend.cpp)
+  target_sources(RockStudio PRIVATE app/platform/linux/playback/AlsaExclusiveBackend.cpp)
   target_link_libraries(RockStudio PRIVATE ALSA)
 endif()
 target_link_libraries(RockStudio PRIVATE rs GTKMM)

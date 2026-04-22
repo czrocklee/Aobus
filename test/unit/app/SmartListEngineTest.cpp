@@ -3,9 +3,9 @@
 
 #include <catch2/catch.hpp>
 
-#include <app/model/FilteredTrackIdList.h>
-#include <app/model/SmartListEngine.h>
-#include <app/model/TrackIdList.h>
+#include <core/model/FilteredTrackIdList.h>
+#include <core/model/SmartListEngine.h>
+#include <core/model/TrackIdList.h>
 #include <rs/core/MusicLibrary.h>
 #include <rs/core/TrackBuilder.h>
 #include <rs/core/TrackStore.h>
@@ -23,10 +23,10 @@
 namespace
 {
 
-  using app::model::FilteredTrackIdList;
-  using app::model::SmartListEngine;
-  using app::model::TrackIdList;
-  using app::model::TrackIdListObserver;
+  using app::core::model::FilteredTrackIdList;
+  using app::core::model::SmartListEngine;
+  using app::core::model::TrackIdList;
+  using app::core::model::TrackIdListObserver;
   using rs::core::MusicLibrary;
   using rs::core::TrackBuilder;
   using rs::core::TrackId;

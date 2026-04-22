@@ -1,0 +1,51 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
+
+#pragma once
+
+#include <gtkmm.h>
+
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace rs::core
+{
+  class MusicLibrary;
+}
+
+namespace app::ui
+{
+
+class QueryExpressionBox final : public Gtk::Box
+{
+public:
+  explicit QueryExpressionBox(rs::core::MusicLibrary& musicLibrary);
+  ~QueryExpressionBox() override;
+
+  void refreshCompletionData();
+
+  Gtk::Entry& entry() { return _entry; }
+  Gtk::Entry const& entry() const { return _entry; }
+
+private:
+  void setupCompletion();
+  void updateCompletion();
+  void hideCompletion();
+  void applySelectedCompletion();
+  bool moveCompletionSelection(int delta);
+
+  Gtk::Entry _entry;
+  Gtk::Popover _completionPopover;
+  Gtk::ScrolledWindow _completionScrolledWindow;
+  Gtk::ListView _completionListView;
+  Glib::RefPtr<Gtk::StringList> _completionItems;
+  Glib::RefPtr<Gtk::SingleSelection> _completionSelection;
+  rs::core::MusicLibrary* _musicLibrary;
+  std::vector<std::string> _availableTags;
+  std::vector<std::string> _availableCustomKeys;
+  int _completionTokenStart = -1;
+  bool _suppressNextCompletionUpdate = false;
+};
+
+} // namespace app::ui
