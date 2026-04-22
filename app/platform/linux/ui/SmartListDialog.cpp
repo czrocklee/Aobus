@@ -89,12 +89,12 @@ rs::core::ListId SmartListDialog::editListId() const
 
 void SmartListDialog::setupUi()
 {
-  constexpr int kDialogWidth = 800;
-  constexpr int kDialogHeight = 500;
-  constexpr int kBoxSpacing = 8;
-  constexpr int kBoxMargin = 12;
-  constexpr int kButtonBoxSpacing = 6;
-  constexpr int kLabelMinLines = 2;
+  constexpr std::int32_t kDialogWidth = 800;
+  constexpr std::int32_t kDialogHeight = 500;
+  constexpr std::int32_t kBoxSpacing = 8;
+  constexpr std::int32_t kBoxMargin = 12;
+  constexpr std::int32_t kButtonBoxSpacing = 6;
+  constexpr std::int32_t kLabelMinLines = 2;
 
   set_default_size(kDialogWidth, kDialogHeight);
 
@@ -457,7 +457,7 @@ void SmartListDialog::updatePreview()
 
 app::core::model::ListDraft SmartListDialog::draft() const
 {
-  app::core::model::ListDraft draftData;
+  auto draftData = app::core::model::ListDraft{};
   draftData.kind = app::core::model::ListKind::Smart;
   draftData.parentId = _parentListId;
   draftData.listId = editListId();

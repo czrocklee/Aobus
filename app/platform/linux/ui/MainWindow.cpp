@@ -178,9 +178,9 @@ void MainWindow::openLibrary()
                           {
                             auto folder = dialog->select_folder_finish(result);
 
-                            if (folder)
+                            if (auto const folderPath = folder; folderPath)
                             {
-                              std::filesystem::path path(folder->get_path());
+                              std::filesystem::path path(folderPath->get_path());
                               std::cout << "Selected folder: " << path << std::endl;
 
                               // Check if it's an existing library (contains data.mdb) or a new import
@@ -293,7 +293,6 @@ void MainWindow::importFiles()
       try
       {
         auto folder = dialog->select_folder_finish(result);
-
         if (!folder)
         {
           return;
@@ -796,8 +795,8 @@ void MainWindow::setupLayout()
   _paned.set_shrink_end_child(false);
 
   // Set initial position to give 1/3 to left, 2/3 to right
-  constexpr int PanedInitialPosition = 330;
-  _paned.set_position(PanedInitialPosition);
+  constexpr std::int32_t kPanedInitialPosition = 330;
+  _paned.set_position(kPanedInitialPosition);
 
   // Set up the main layout
   auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);

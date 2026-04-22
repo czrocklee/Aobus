@@ -32,9 +32,10 @@ This guide covers C++ coding conventions for RockStudio contributors.
       6. friend declarations
   - 2.6. Namespaces
     - 2.6.1. Use nested namespace definition: `namespace rs::core { ... }`
-    - 2.6.2. Use `rs::` prefix for project code
-    - 2.6.3. Prefer anonymous namespace over static functions for internal linkage
-    - 2.6.4. Prefix `::` for C functions and types: `::memcpy()`, `::malloc()`
+    - 2.6.2. Use `rs::` prefix for library code
+    - 2.6.3. Use `app::` prefix for application code
+    - 2.6.4. Prefer anonymous namespace over static functions for internal linkage
+    - 2.6.5. Prefix `::` for C functions and types: `::mdb_cursor_open()`, `::pw_core_sync()` and `::snd_pcm_format_t`
   - 2.7. Types
     - 2.7.1. Use `std::` for integer types: `std::int32_t`, `std::uint64_t`, avoid `int`, `unsigned`
     - 2.7.2. Prefer `std::string` over `char*`
@@ -44,7 +45,11 @@ This guide covers C++ coding conventions for RockStudio contributors.
     - 3.1.1. Use Concepts: `template<typename T> requires std::integral<T>`
     - 3.1.2. Use `std::format`: Instead of printf/sprintf
     - 3.1.3. Use `std::span`: For container views and data buffer views
-    - 3.1.4. Use `std::ranges`: Prefer algorithms over iterator-based ones (std::find, std::sort, std::lower_bound) with explicit projections; chain views with pipe ops; std::span works directly with ranges algorithms; prefer std::views:: for brevity
+    - 3.1.4. Use `std::ranges`: 
+      - Prefer algorithms over iterator-based ones with explicit projections
+      - chain views with pipe ops; 
+      - std::span works directly with ranges algorithms
+      - prefer std::views:: for brevity
     - 3.1.5. Use `[[no_unique_address]]`: Empty member optimization
     - 3.1.6. Use `starts_with/ends_with`: String prefix/suffix checks
     - 3.1.7. Use designated initializers: For struct initialization

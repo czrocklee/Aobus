@@ -35,11 +35,11 @@ namespace app::playback
     _formatInfo = {};
     _lastError.clear();
 
-    int err;
+    std::int32_t err;
     snd_pcm_t* pcm = nullptr;
 
     // Open PCM device
-    err = snd_pcm_open(&pcm, _deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
+    err = ::snd_pcm_open(&pcm, _deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
     if (err < 0)
     {
       _lastError = "Failed to open ALSA device: " + _deviceName;
@@ -52,7 +52,7 @@ namespace app::playback
     snd_pcm_hw_params_t* params = nullptr;
     snd_pcm_hw_params_alloca(&params);
 
-    err = snd_pcm_hw_params_any(_pcm, params);
+    err = ::snd_pcm_hw_params_any(_pcm, params);
     if (err < 0)
     {
       _lastError = "Failed to initialize ALSA hardware parameters";
@@ -61,7 +61,7 @@ namespace app::playback
     }
 
     // Set interleaved access
-    err = snd_pcm_hw_params_set_access(_pcm, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+    err = ::snd_pcm_hw_params_set_access(_pcm, params, SND_PCM_ACCESS_RW_INTERLEAVED);
     if (err < 0)
     {
       _lastError = "Failed to set ALSA access mode";
@@ -71,7 +71,7 @@ namespace app::playback
 
     // Set sample format (S16)
     snd_pcm_format_t formatMask = SND_PCM_FORMAT_S16;
-    err = snd_pcm_hw_params_set_format(_pcm, params, formatMask);
+    err = ::snd_pcm_hw_params_set_format(_pcm, params, formatMask);
     if (err < 0)
     {
       _lastError = "Failed to set ALSA sample format";
@@ -80,7 +80,7 @@ namespace app::playback
     }
 
     // Set sample rate
-    err = snd_pcm_hw_params_set_rate(_pcm, params, format.sampleRate, 0);
+    err = ::snd_pcm_hw_params_set_rate(_pcm, params, format.sampleRate, 0);
     if (err < 0)
     {
       _lastError = "Failed to set ALSA sample rate";
@@ -89,7 +89,7 @@ namespace app::playback
     }
 
     // Set channel count
-    err = snd_pcm_hw_params_set_channels(_pcm, params, format.channels);
+    err = ::snd_pcm_hw_params_set_channels(_pcm, params, format.channels);
     if (err < 0)
     {
       _lastError = "Failed to set ALSA channel count";
@@ -98,7 +98,7 @@ namespace app::playback
     }
 
     // Apply hardware parameters
-    err = snd_pcm_hw_params(_pcm, params);
+    err = ::snd_pcm_hw_params(_pcm, params);
     if (err < 0)
     {
       _lastError = "Failed to apply ALSA hardware parameters";
@@ -129,7 +129,7 @@ namespace app::playback
     {
       return;
     }
-    snd_pcm_start(_pcm);
+    ::snd_pcm_start(_pcm);
   }
 
   void AlsaExclusiveBackend::pause()
@@ -138,7 +138,7 @@ namespace app::playback
     {
       return;
     }
-    snd_pcm_pause(_pcm, 1);
+    ::snd_pcm_pause(_pcm, 1);
   }
 
   void AlsaExclusiveBackend::resume()
@@ -147,7 +147,7 @@ namespace app::playback
     {
       return;
     }
-    snd_pcm_pause(_pcm, 0);
+    ::snd_pcm_pause(_pcm, 0);
   }
 
   void AlsaExclusiveBackend::flush()
@@ -156,7 +156,7 @@ namespace app::playback
     {
       return;
     }
-    snd_pcm_drop(_pcm);
+    ::snd_pcm_drop(_pcm);
   }
 
   void AlsaExclusiveBackend::drain()
@@ -170,7 +170,7 @@ namespace app::playback
       return;
     }
 
-    snd_pcm_drain(_pcm);
+    ::snd_pcm_drain(_pcm);
     if (_callbacks.onDrainComplete)
     {
       _callbacks.onDrainComplete(_callbacks.userData);
@@ -183,8 +183,8 @@ namespace app::playback
     {
       return;
     }
-    snd_pcm_drop(_pcm);
-    snd_pcm_prepare(_pcm);
+    ::snd_pcm_drop(_pcm);
+    ::snd_pcm_prepare(_pcm);
   }
 
   void AlsaExclusiveBackend::close()
@@ -193,7 +193,7 @@ namespace app::playback
 
     if (_pcm)
     {
-      snd_pcm_close(_pcm);
+      ::snd_pcm_close(_pcm);
       _pcm = nullptr;
     }
   }
@@ -211,7 +211,7 @@ namespace app::playback
     std::uint32_t rate = 0;
     for (auto const targetRate : {44100, 48000, 88200, 96000, 176400, 192000})
     {
-      if (snd_pcm_hw_params_test_rate(_pcm, nullptr, targetRate, 0) == 0)
+      if (::snd_pcm_hw_params_test_rate(_pcm, nullptr, targetRate, 0) == 0)
       {
         caps.sampleRates.push_back(targetRate);
       }
@@ -223,7 +223,7 @@ namespace app::playback
       snd_pcm_format_t fmt = (depth == 16)   ? SND_PCM_FORMAT_S16
                              : (depth == 24) ? SND_PCM_FORMAT_S24
                                              : SND_PCM_FORMAT_S32;
-      if (snd_pcm_hw_params_test_format(_pcm, nullptr, fmt) == 0)
+      if (::snd_pcm_hw_params_test_format(_pcm, nullptr, fmt) == 0)
       {
         caps.bitDepths.push_back(static_cast<std::uint8_t>(depth));
       }
@@ -232,7 +232,7 @@ namespace app::playback
     // Query available channel counts
     for (auto const channels : {1, 2, 4, 6, 8})
     {
-      if (snd_pcm_hw_params_test_channels(_pcm, nullptr, channels) == 0)
+      if (::snd_pcm_hw_params_test_channels(_pcm, nullptr, channels) == 0)
       {
         caps.channelCounts.push_back(static_cast<std::uint8_t>(channels));
       }

@@ -20,7 +20,7 @@ namespace
   constexpr auto kMaximizedKey = "maximized";
   constexpr auto kPanedPositionKey = "paned_position";
 
-  constexpr int kAppConfigVersion = 1;
+  constexpr std::int32_t kAppConfigVersion = 1;
 
   auto configPath() -> std::filesystem::path
   {

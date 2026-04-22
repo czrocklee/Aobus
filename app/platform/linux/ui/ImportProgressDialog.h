@@ -11,19 +11,19 @@ namespace app::ui
 class ImportProgressDialog final : public Gtk::Dialog
 {
 public:
-  ImportProgressDialog(int maxItems, Gtk::Window& parent);
+  ImportProgressDialog(std::int32_t maxItems, Gtk::Window& parent);
   virtual ~ImportProgressDialog();
 
-  void onNewTrack(std::string const& path, int itemIndex);
+  void onNewTrack(std::string const& path, std::int32_t itemIndex);
   void ready();
 
 private:
-  void setupUi(int maxItems);
+  void setupUi(std::int32_t maxItems);
 
   Gtk::Label _progressLabel;
   Gtk::ProgressBar _progressBar;
   Gtk::Button _okButton;
-  int _maxItems;
+  std::int32_t _maxItems;
 };
 
 } // namespace app::ui

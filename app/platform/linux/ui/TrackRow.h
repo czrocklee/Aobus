@@ -28,8 +28,6 @@ class TrackRow final : public Glib::Object
 public:
   using TrackId = rs::core::TrackId;
 
-  static Glib::RefPtr<TrackRow> create(TrackId id, std::shared_ptr<app::core::model::TrackRowDataProvider> provider);
-
   TrackId getTrackId() const { return _id; }
 
   Glib::ustring getArtist() const;
@@ -42,6 +40,8 @@ public:
   std::uint64_t getResourceId() const;
 
   void ensureLoaded() const;
+
+  static Glib::RefPtr<TrackRow> create(TrackId id, std::shared_ptr<app::core::model::TrackRowDataProvider> provider);
 
 protected:
   explicit TrackRow();

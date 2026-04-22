@@ -3,13 +3,13 @@
 
 #pragma once
 
+#include "platform/linux/ui/ListRow.h"
+
 #include <rs/core/MusicLibrary.h>
 
 #include <gtkmm.h>
 
 #include <memory>
-
-#include "platform/linux/ui/ListRow.h"
 
 namespace app::ui
 {
@@ -18,8 +18,6 @@ class ListTreeNode final : public Glib::Object
 {
 public:
   using ListId = rs::core::ListId;
-
-  static Glib::RefPtr<ListTreeNode> create(Glib::RefPtr<ListRow> const& row);
 
   Glib::RefPtr<ListRow> getRow() const { return _row; }
 
@@ -36,6 +34,8 @@ public:
   void setParent(ListTreeNode* parent) { _parent = parent; }
 
   ListTreeNode* getParent() const { return _parent; }
+
+  static Glib::RefPtr<ListTreeNode> create(Glib::RefPtr<ListRow> const& row);
 
 protected:
   explicit ListTreeNode();

@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include <gtkmm.h>
 #include "core/playback/PlaybackTypes.h"
+
+#include <gtkmm.h>
 
 #include <chrono>
 #include <string>
