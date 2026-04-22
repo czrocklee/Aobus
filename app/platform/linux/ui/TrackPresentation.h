@@ -14,76 +14,74 @@
 namespace app::ui
 {
 
-enum class TrackGroupBy : std::uint8_t
-{
-  None,
-  Artist,
-  Album,
-  AlbumArtist,
-  Genre,
-  Year,
-};
+  enum class TrackGroupBy : std::uint8_t
+  {
+    None,
+    Artist,
+    Album,
+    AlbumArtist,
+    Genre,
+    Year,
+  };
 
-enum class TrackSortField : std::uint8_t
-{
-  Artist,
-  Album,
-  AlbumArtist,
-  Genre,
-  Year,
-  DiscNumber,
-  TrackNumber,
-  Title,
-};
+  enum class TrackSortField : std::uint8_t
+  {
+    Artist,
+    Album,
+    AlbumArtist,
+    Genre,
+    Year,
+    DiscNumber,
+    TrackNumber,
+    Title,
+  };
 
-enum class TrackColumn : std::uint8_t
-{
-  Artist,
-  Album,
-  DiscNumber,
-  TrackNumber,
-  Title,
-  Tags,
-};
+  enum class TrackColumn : std::uint8_t
+  {
+    Artist,
+    Album,
+    DiscNumber,
+    TrackNumber,
+    Title,
+    Tags,
+  };
 
-struct TrackSortTerm
-{
-  TrackSortField field;
+  struct TrackSortTerm
+  {
+    TrackSortField field;
 
-  auto operator==(TrackSortTerm const&) const -> bool = default;
-};
+    auto operator==(TrackSortTerm const&) const -> bool = default;
+  };
 
-struct TrackPresentationSpec
-{
-  TrackGroupBy groupBy = TrackGroupBy::None;
-  std::vector<TrackSortTerm> sortBy;
-};
+  struct TrackPresentationSpec
+  {
+    TrackGroupBy groupBy = TrackGroupBy::None;
+    std::vector<TrackSortTerm> sortBy;
+  };
 
-struct TrackPresentationKeysView
-{
-  std::string_view artist;
-  std::string_view album;
-  std::string_view albumArtist;
-  std::string_view genre;
-  std::string_view title;
-  std::uint16_t year = 0;
-  std::uint16_t discNumber = 0;
-  std::uint16_t trackNumber = 0;
-  rs::core::TrackId trackId{};
-};
+  struct TrackPresentationKeysView
+  {
+    std::string_view artist;
+    std::string_view album;
+    std::string_view albumArtist;
+    std::string_view genre;
+    std::string_view title;
+    std::uint16_t year = 0;
+    std::uint16_t discNumber = 0;
+    std::uint16_t trackNumber = 0;
+    rs::core::TrackId trackId{};
+  };
 
-[[nodiscard]] TrackPresentationSpec presentationSpecForGroup(TrackGroupBy groupBy);
+  TrackPresentationSpec presentationSpecForGroup(TrackGroupBy groupBy);
 
-[[nodiscard]] int compareForSort(TrackPresentationKeysView lhs,
-                                 TrackPresentationKeysView rhs,
-                                 std::span<TrackSortTerm const> sortBy);
+  int compareForSort(TrackPresentationKeysView lhs,
+                     TrackPresentationKeysView rhs,
+                     std::span<TrackSortTerm const> sortBy);
 
-[[nodiscard]] int compareForGrouping(TrackPresentationKeysView lhs,
-                                     TrackPresentationKeysView rhs,
-                                     TrackGroupBy groupBy);
+  int compareForGrouping(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackGroupBy groupBy);
 
-[[nodiscard]] bool shouldShowColumn(TrackGroupBy groupBy, TrackColumn column);
+  bool shouldShowColumn(TrackGroupBy groupBy, TrackColumn column);
 
-[[nodiscard]] std::string groupLabelFor(TrackPresentationKeysView keys, TrackGroupBy groupBy);
+  std::string groupLabelFor(TrackPresentationKeysView keys, TrackGroupBy groupBy);
 
 } // namespace app::ui

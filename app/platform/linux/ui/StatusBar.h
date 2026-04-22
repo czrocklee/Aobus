@@ -13,46 +13,46 @@
 namespace app::ui
 {
 
-class StatusBar : public Gtk::Box
-{
-public:
-  StatusBar();
-  ~StatusBar() override;
+  class StatusBar : public Gtk::Box
+  {
+  public:
+    StatusBar();
+    ~StatusBar() override;
 
-  void showMessage(std::string const& message, std::chrono::seconds duration = std::chrono::seconds{5});
-  void clearMessage();
+    void showMessage(std::string const& message, std::chrono::seconds duration = std::chrono::seconds{5});
+    void clearMessage();
 
-  void setTrackCount(std::size_t count);
-  void setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
-  void setPlaybackDetails(app::core::playback::PlaybackSnapshot const& snapshot);
-  
-  void setImportProgress(double fraction, std::string const& info);
-  void clearImportProgress();
+    void setTrackCount(std::size_t count);
+    void setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
+    void setPlaybackDetails(app::core::playback::PlaybackSnapshot const& snapshot);
 
-private:
-  // Left: Library info
-  Gtk::Label _libraryLabel;
-  
-  // Middle-Left: Selection info
-  Gtk::Label _selectionLabel;
+    void setImportProgress(double fraction, std::string const& info);
+    void clearImportProgress();
 
-  // Middle-Right: Import progress (hidden by default)
-  Gtk::Box _importBox;
-  Gtk::ProgressBar _importProgressBar;
-  Gtk::Label _importLabel;
+  private:
+    // Left: Library info
+    Gtk::Label _libraryLabel;
 
-  // Right: Playback details
-  Gtk::Box _playbackDetailsBox{Gtk::Orientation::HORIZONTAL};
-  Gtk::Label _playbackLabel;
-  Gtk::Label _sinkLabel;
-  Gtk::Image _sinkStatusIcon;
+    // Middle-Left: Selection info
+    Gtk::Label _selectionLabel;
 
-  // Far Right: Status message
-  Gtk::Label _statusLabel;
-  
-  sigc::connection _timerConnection;
+    // Middle-Right: Import progress (hidden by default)
+    Gtk::Box _importBox;
+    Gtk::ProgressBar _importProgressBar;
+    Gtk::Label _importLabel;
 
-  void updateLayoutVisibility();
-};
+    // Right: Playback details
+    Gtk::Box _playbackDetailsBox{Gtk::Orientation::HORIZONTAL};
+    Gtk::Label _playbackLabel;
+    Gtk::Label _sinkLabel;
+    Gtk::Image _sinkStatusIcon;
+
+    // Far Right: Status message
+    Gtk::Label _statusLabel;
+
+    sigc::connection _timerConnection;
+
+    void updateLayoutVisibility();
+  };
 
 } // namespace app::ui

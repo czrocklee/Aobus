@@ -37,12 +37,12 @@ namespace app::core::playback
                                          PcmSourceCallbacks callbacks,
                                          std::uint32_t prerollTargetMs,
                                          std::uint32_t decodeHighWatermarkMs)
-    : _decoder(std::move(decoder)),
-      _streamInfo(streamInfo),
-      _callbacks(callbacks),
-      _bytesPerSecond(bytesPerSecond(streamInfo.outputFormat)),
-      _prerollTargetMs(prerollTargetMs),
-      _decodeHighWatermarkMs(decodeHighWatermarkMs)
+    : _decoder(std::move(decoder))
+    , _streamInfo(streamInfo)
+    , _callbacks(callbacks)
+    , _bytesPerSecond(bytesPerSecond(streamInfo.outputFormat))
+    , _prerollTargetMs(prerollTargetMs)
+    , _decodeHighWatermarkMs(decodeHighWatermarkMs)
   {
   }
 

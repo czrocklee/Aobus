@@ -47,9 +47,9 @@ namespace app::core::model
   public:
     virtual ~TrackIdList();
 
-    [[nodiscard]] virtual std::size_t size() const = 0;
-    [[nodiscard]] virtual TrackId trackIdAt(std::size_t index) const = 0;
-    [[nodiscard]] virtual std::optional<std::size_t> indexOf(TrackId id) const = 0;
+    virtual std::size_t size() const = 0;
+    virtual TrackId trackIdAt(std::size_t index) const = 0;
+    virtual std::optional<std::size_t> indexOf(TrackId id) const = 0;
 
     void attach(TrackIdListObserver* observer);
     void detach(TrackIdListObserver* observer);

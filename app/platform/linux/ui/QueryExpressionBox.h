@@ -17,35 +17,35 @@ namespace rs::core
 namespace app::ui
 {
 
-class QueryExpressionBox final : public Gtk::Box
-{
-public:
-  explicit QueryExpressionBox(rs::core::MusicLibrary& musicLibrary);
-  ~QueryExpressionBox() override;
+  class QueryExpressionBox final : public Gtk::Box
+  {
+  public:
+    explicit QueryExpressionBox(rs::core::MusicLibrary& musicLibrary);
+    ~QueryExpressionBox() override;
 
-  void refreshCompletionData();
+    void refreshCompletionData();
 
-  Gtk::Entry& entry() { return _entry; }
-  Gtk::Entry const& entry() const { return _entry; }
+    Gtk::Entry& entry() { return _entry; }
+    Gtk::Entry const& entry() const { return _entry; }
 
-private:
-  void setupCompletion();
-  void updateCompletion();
-  void hideCompletion();
-  void applySelectedCompletion();
-  bool moveCompletionSelection(int delta);
+  private:
+    void setupCompletion();
+    void updateCompletion();
+    void hideCompletion();
+    void applySelectedCompletion();
+    bool moveCompletionSelection(int delta);
 
-  Gtk::Entry _entry;
-  Gtk::Popover _completionPopover;
-  Gtk::ScrolledWindow _completionScrolledWindow;
-  Gtk::ListView _completionListView;
-  Glib::RefPtr<Gtk::StringList> _completionItems;
-  Glib::RefPtr<Gtk::SingleSelection> _completionSelection;
-  rs::core::MusicLibrary* _musicLibrary;
-  std::vector<std::string> _availableTags;
-  std::vector<std::string> _availableCustomKeys;
-  int _completionTokenStart = -1;
-  bool _suppressNextCompletionUpdate = false;
-};
+    Gtk::Entry _entry;
+    Gtk::Popover _completionPopover;
+    Gtk::ScrolledWindow _completionScrolledWindow;
+    Gtk::ListView _completionListView;
+    Glib::RefPtr<Gtk::StringList> _completionItems;
+    Glib::RefPtr<Gtk::SingleSelection> _completionSelection;
+    rs::core::MusicLibrary* _musicLibrary;
+    std::vector<std::string> _availableTags;
+    std::vector<std::string> _availableCustomKeys;
+    int _completionTokenStart = -1;
+    bool _suppressNextCompletionUpdate = false;
+  };
 
 } // namespace app::ui

@@ -33,10 +33,8 @@ namespace
       case AV_SAMPLE_FMT_FLT:
       case AV_SAMPLE_FMT_FLTP:
       case AV_SAMPLE_FMT_DBL:
-      case AV_SAMPLE_FMT_DBLP:
-        return true;
-      default:
-        return false;
+      case AV_SAMPLE_FMT_DBLP: return true;
+      default: return false;
     }
   }
 } // namespace
@@ -342,8 +340,7 @@ namespace app::core::playback
 
     if (_streamInfo.outputFormat.sampleRate > 0)
     {
-      _decodedFrameCursor =
-        (static_cast<std::uint64_t>(positionMs) * _streamInfo.outputFormat.sampleRate) / 1000;
+      _decodedFrameCursor = (static_cast<std::uint64_t>(positionMs) * _streamInfo.outputFormat.sampleRate) / 1000;
     }
 
     return true;
@@ -494,10 +491,11 @@ namespace app::core::playback
     auto const outBitDepth = _streamInfo.outputFormat.bitDepth;
 
     // Calculate output buffer size in samples
-    auto const outSamples = ::av_rescale_rnd(::swr_get_delay(_swrContext.get(), _frame->sample_rate) + _frame->nb_samples,
-                                           _streamInfo.outputFormat.sampleRate,
-                                           _frame->sample_rate,
-                                           ::AVRounding::AV_ROUND_UP);
+    auto const outSamples =
+      ::av_rescale_rnd(::swr_get_delay(_swrContext.get(), _frame->sample_rate) + _frame->nb_samples,
+                       _streamInfo.outputFormat.sampleRate,
+                       _frame->sample_rate,
+                       ::AVRounding::AV_ROUND_UP);
 
     if (outSamples <= 0)
     {
@@ -517,10 +515,10 @@ namespace app::core::playback
       std::vector<std::int32_t> outBuffer(outSamples * outChannels);
       auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
       convertedSamples = ::swr_convert(_swrContext.get(),
-                                     &outPtr,
-                                     static_cast<int>(outSamples),
-                                     const_cast<std::uint8_t const**>(_frame->data),
-                                     _frame->nb_samples);
+                                       &outPtr,
+                                       static_cast<int>(outSamples),
+                                       const_cast<std::uint8_t const**>(_frame->data),
+                                       _frame->nb_samples);
 
       if (convertedSamples <= 0)
       {
@@ -538,10 +536,10 @@ namespace app::core::playback
       std::vector<std::int32_t> outBuffer(outSamples * outChannels);
       auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
       convertedSamples = ::swr_convert(_swrContext.get(),
-                                     &outPtr,
-                                     static_cast<int>(outSamples),
-                                     const_cast<std::uint8_t const**>(_frame->data),
-                                     _frame->nb_samples);
+                                       &outPtr,
+                                       static_cast<int>(outSamples),
+                                       const_cast<std::uint8_t const**>(_frame->data),
+                                       _frame->nb_samples);
 
       if (convertedSamples <= 0)
       {
@@ -565,10 +563,10 @@ namespace app::core::playback
       std::vector<std::int16_t> outBuffer(outSamples * outChannels);
       auto* outPtr = reinterpret_cast<std::uint8_t*>(outBuffer.data());
       convertedSamples = ::swr_convert(_swrContext.get(),
-                                     &outPtr,
-                                     static_cast<int>(outSamples),
-                                     const_cast<std::uint8_t const**>(_frame->data),
-                                     _frame->nb_samples);
+                                       &outPtr,
+                                       static_cast<int>(outSamples),
+                                       const_cast<std::uint8_t const**>(_frame->data),
+                                       _frame->nb_samples);
 
       if (convertedSamples <= 0)
       {

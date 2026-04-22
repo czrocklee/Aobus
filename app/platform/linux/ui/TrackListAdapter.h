@@ -7,9 +7,9 @@
 #include <rs/expr/Parser.h>
 #include <rs/expr/PlanEvaluator.h>
 
-#include "platform/linux/ui/TrackRow.h"
 #include "core/model/TrackIdList.h"
 #include "core/model/TrackRowDataProvider.h"
+#include "platform/linux/ui/TrackRow.h"
 
 #include <giomm/liststore.h>
 
@@ -20,34 +20,34 @@
 namespace app::ui
 {
 
-class TrackListAdapter final : public ::app::core::model::TrackIdListObserver
-{
-public:
-  using TrackId = rs::core::TrackId;
+  class TrackListAdapter final : public ::app::core::model::TrackIdListObserver
+  {
+  public:
+    using TrackId = rs::core::TrackId;
 
-  explicit TrackListAdapter(::app::core::model::TrackIdList& source,
-                            std::shared_ptr<::app::core::model::TrackRowDataProvider> provider);
-  ~TrackListAdapter() override;
+    explicit TrackListAdapter(::app::core::model::TrackIdList& source,
+                              std::shared_ptr<::app::core::model::TrackRowDataProvider> provider);
+    ~TrackListAdapter() override;
 
-  Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
+    Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
 
-  // Set filter text - filters by common display metadata containing the text.
-  void setFilter(Glib::ustring const& filterText);
+    // Set filter text - filters by common display metadata containing the text.
+    void setFilter(Glib::ustring const& filterText);
 
-  // Observer overrides
-  void onReset() override;
-  void onInserted(TrackId id, std::size_t index) override;
-  void onUpdated(TrackId id, std::size_t index) override;
-  void onRemoved(TrackId id, std::size_t index) override;
+    // Observer overrides
+    void onReset() override;
+    void onInserted(TrackId id, std::size_t index) override;
+    void onUpdated(TrackId id, std::size_t index) override;
+    void onRemoved(TrackId id, std::size_t index) override;
 
-private:
-  void rebuildView();
-  void createRowForTrack(TrackId id);
+  private:
+    void rebuildView();
+    void createRowForTrack(TrackId id);
 
-  ::app::core::model::TrackIdList* _source;
-  std::shared_ptr<::app::core::model::TrackRowDataProvider> _provider;
-  Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;
-  Glib::ustring _filterText;
-};
+    ::app::core::model::TrackIdList* _source;
+    std::shared_ptr<::app::core::model::TrackRowDataProvider> _provider;
+    Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;
+    Glib::ustring _filterText;
+  };
 
 } // namespace app::ui

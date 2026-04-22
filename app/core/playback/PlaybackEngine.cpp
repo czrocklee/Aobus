@@ -14,7 +14,8 @@ namespace
   constexpr std::uint32_t kDecodeHighWatermarkMs = 750;
   constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
 
-  bool sameStreamFormat(app::core::playback::StreamFormat const& lhs, app::core::playback::StreamFormat const& rhs) noexcept
+  bool sameStreamFormat(app::core::playback::StreamFormat const& lhs,
+                        app::core::playback::StreamFormat const& rhs) noexcept
   {
     return lhs.sampleRate == rhs.sampleRate && lhs.channels == rhs.channels && lhs.bitDepth == rhs.bitDepth &&
            lhs.isFloat == rhs.isFloat && lhs.isInterleaved == rhs.isInterleaved;
@@ -407,8 +408,9 @@ namespace app::core::playback
 
     if (snap.sinkStatus != BackendFormatInfo::SinkStatus::None)
     {
-      appendTooltipLine(snap.sinkTooltip,
-                        "This is a best-effort server/backend inspection and does not verify conversions after the sink node.");
+      appendTooltipLine(
+        snap.sinkTooltip,
+        "This is a best-effort server/backend inspection and does not verify conversions after the sink node.");
     }
     return snap;
   }
@@ -457,12 +459,8 @@ namespace app::core::playback
       sourceCallbacks.userData = this;
       sourceCallbacks.onError = &PlaybackEngine::onSourceError;
 
-      auto streamingSource =
-        std::make_shared<StreamingPcmSource>(std::move(decoder),
-                                             info,
-                                             sourceCallbacks,
-                                             kPrerollTargetMs,
-                                             kDecodeHighWatermarkMs);
+      auto streamingSource = std::make_shared<StreamingPcmSource>(
+        std::move(decoder), info, sourceCallbacks, kPrerollTargetMs, kDecodeHighWatermarkMs);
       if (!streamingSource->initialize())
       {
         _snapshot.statusText = streamingSource->lastError();

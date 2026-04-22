@@ -110,11 +110,13 @@ namespace app::playback
     _formatInfo.deviceFormat = format;
     _formatInfo.isExclusive = _deviceName.rfind("hw:", 0) == 0;
     _formatInfo.sinkName = _deviceName;
-    _formatInfo.sinkStatus = _formatInfo.isExclusive ? BackendFormatInfo::SinkStatus::Good
-                                                     : BackendFormatInfo::SinkStatus::Warning;
-    _formatInfo.sinkTooltip = _formatInfo.isExclusive
-                                ? "Direct ALSA hw device selected. This is outside PipeWire and is the strongest available path in the app today."
-                                : "ALSA playback is using a non-hw device name, so bit-perfect playback is not guaranteed.";
+    _formatInfo.sinkStatus =
+      _formatInfo.isExclusive ? BackendFormatInfo::SinkStatus::Good : BackendFormatInfo::SinkStatus::Warning;
+    _formatInfo.sinkTooltip =
+      _formatInfo.isExclusive
+        ? "Direct ALSA hw device selected. This is outside PipeWire and is the strongest available path in the app "
+          "today."
+        : "ALSA playback is using a non-hw device name, so bit-perfect playback is not guaranteed.";
     if (!_formatInfo.isExclusive)
     {
       _formatInfo.conversionReason = "ALSA output is using a non-hw device, so bit-perfect playback is not guaranteed";
@@ -208,7 +210,6 @@ namespace app::playback
     }
 
     // Query available sample rates
-    std::uint32_t rate = 0;
     for (auto const targetRate : {44100, 48000, 88200, 96000, 176400, 192000})
     {
       if (::snd_pcm_hw_params_test_rate(_pcm, nullptr, targetRate, 0) == 0)
