@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <app/playback/FfmpegDecoderSession.h>
-#include <app/playback/PlaybackTypes.h>
+#include <core/playback/FfmpegDecoderSession.h>
+#include <core/playback/PlaybackTypes.h>
 
 #include <catch2/catch.hpp>
 
@@ -15,7 +15,7 @@ namespace
   constexpr auto kTestFixtureDir = "/tmp/rockstudio_test_fixtures";
 }
 
-namespace app::playback
+namespace app::core::playback
 {
 
   TEST_CASE("FfmpegDecoderSession construction", "[playback][ffmpeg]")
@@ -139,4 +139,4 @@ namespace app::playback
     CHECK(info.outputFormat.sampleRate == 0);
   }
 
-} // namespace app::playback
+} // namespace app::core::playback
