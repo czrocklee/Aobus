@@ -16,34 +16,34 @@
 namespace app::services
 {
 
-class PlaylistExporter final : public app::core::model::TrackIdListObserver
-{
-public:
-  using TrackId = rs::core::TrackId;
+  class PlaylistExporter final : public app::core::model::TrackIdListObserver
+  {
+  public:
+    using TrackId = rs::core::TrackId;
 
-  PlaylistExporter(app::core::model::TrackIdList& list,
-                   app::core::model::TrackRowDataProvider& provider,
-                   std::filesystem::path root,
-                   std::filesystem::path path);
-  ~PlaylistExporter() override;
+    PlaylistExporter(app::core::model::TrackIdList& list,
+                     app::core::model::TrackRowDataProvider& provider,
+                     std::filesystem::path root,
+                     std::filesystem::path path);
+    ~PlaylistExporter() override;
 
-  void triggerWrite();
+    void triggerWrite();
 
-  // TrackIdListObserver interface
-  void onReset() override;
-  void onInserted(TrackId id, std::size_t index) override;
-  void onUpdated(TrackId id, std::size_t index) override;
-  void onRemoved(TrackId id, std::size_t index) override;
+    // TrackIdListObserver interface
+    void onReset() override;
+    void onInserted(TrackId id, std::size_t index) override;
+    void onUpdated(TrackId id, std::size_t index) override;
+    void onRemoved(TrackId id, std::size_t index) override;
 
-private:
-  void writeFile();
-  void scheduleForWrite();
+  private:
+    void writeFile();
+    void scheduleForWrite();
 
-  app::core::model::TrackIdList& _list;
-  app::core::model::TrackRowDataProvider& _provider;
-  std::filesystem::path const _root;
-  std::filesystem::path const _path;
-  std::unique_ptr<sigc::connection> _timeoutConnection;
-};
+    app::core::model::TrackIdList& _list;
+    app::core::model::TrackRowDataProvider& _provider;
+    std::filesystem::path const _root;
+    std::filesystem::path const _path;
+    std::unique_ptr<sigc::connection> _timeoutConnection;
+  };
 
 } // namespace app::services

@@ -62,7 +62,7 @@ This guide covers C++ coding conventions for RockStudio contributors.
     - 3.2.6. Use init statement: `if (auto var = get(); condition)`
   - 3.3. C++11 Features
     - 3.3.1. Use RAII: adopts `std::unique_ptr` for owned resources, use custom deleter if needed
-    - 3.3.2. DON'T use `[[nodiscard]]`: Too verbose, rely on clang-tidy for check
+    - 3.3.2. DON'T use ``: Too verbose, rely on clang-tidy for check
     - 3.3.3. Use `[[maybe_unused]]`: Suppress unused warnings other than (void)
     - 3.3.4. Use `noexcept`: Mark functions that won't throw
     - 3.3.5. Use auto + uniform initialization for non-primtive object declaration:

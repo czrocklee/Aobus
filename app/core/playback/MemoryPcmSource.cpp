@@ -51,7 +51,8 @@ namespace app::core::playback
 
   bool MemoryPcmSource::initialize()
   {
-    auto const estimatedBytes = (static_cast<std::uint64_t>(_streamInfo.durationMs) * bytesPerSecond(_streamInfo.outputFormat)) / 1000U;
+    auto const estimatedBytes =
+      (static_cast<std::uint64_t>(_streamInfo.durationMs) * bytesPerSecond(_streamInfo.outputFormat)) / 1000U;
     if (estimatedBytes > 0 && estimatedBytes < static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
     {
       _pcmBytes.reserve(static_cast<std::size_t>(estimatedBytes));
@@ -125,8 +126,7 @@ namespace app::core::playback
       return 0;
     }
 
-    auto const frameIndex =
-      (static_cast<std::uint64_t>(positionMs) * _streamInfo.outputFormat.sampleRate) / 1000U;
+    auto const frameIndex = (static_cast<std::uint64_t>(positionMs) * _streamInfo.outputFormat.sampleRate) / 1000U;
     auto const byteOffset = frameIndex * frameByteCount;
     auto const clampedOffset = std::min<std::uint64_t>(byteOffset, _pcmBytes.size());
     return static_cast<std::size_t>(clampedOffset - (clampedOffset % frameByteCount));

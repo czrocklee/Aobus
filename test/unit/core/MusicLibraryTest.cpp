@@ -6,8 +6,8 @@
 #include <rs/Exception.h>
 #include <rs/core/LibraryMeta.h>
 #include <rs/core/LibraryMetaStore.h>
-#include <rs/core/MusicLibrary.h>
 #include <rs/core/ListLayout.h>
+#include <rs/core/MusicLibrary.h>
 #include <rs/core/TrackLayout.h>
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
@@ -39,15 +39,16 @@ TEST_CASE("MusicLibrary rejects unsupported metadata versions", "[core][library]
 
   auto txn = rs::lmdb::WriteTransaction{env};
   auto metaStore = rs::core::LibraryMetaStore{rs::lmdb::Database{txn, "meta"}};
-  auto header = rs::core::LibraryMetaHeader{.magic = rs::core::kLibraryMetaMagic,
-                                            .headerVersion = rs::core::kLibraryMetaHeaderVersion,
-                                            .librarySchemaVersion = static_cast<std::uint16_t>(rs::core::kLibrarySchemaVersion + 1),
-                                            .trackLayoutVersion = rs::core::kTrackLayoutVersion,
-                                            .listLayoutVersion = rs::core::kListLayoutVersion,
-                                            .flags = 0,
-                                            .createdAtUnixMs = 1,
-                                            .migratedAtUnixMs = 1,
-                                            .libraryId = {}};
+  auto header =
+    rs::core::LibraryMetaHeader{.magic = rs::core::kLibraryMetaMagic,
+                                .headerVersion = rs::core::kLibraryMetaHeaderVersion,
+                                .librarySchemaVersion = static_cast<std::uint16_t>(rs::core::kLibrarySchemaVersion + 1),
+                                .trackLayoutVersion = rs::core::kTrackLayoutVersion,
+                                .listLayoutVersion = rs::core::kListLayoutVersion,
+                                .flags = 0,
+                                .createdAtUnixMs = 1,
+                                .migratedAtUnixMs = 1,
+                                .libraryId = {}};
   metaStore.create(txn, header);
   txn.commit();
 

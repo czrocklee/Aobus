@@ -50,9 +50,9 @@ namespace app::core::model
     void reload();
 
     // TrackIdList interface
-    [[nodiscard]] std::size_t size() const override;
-    [[nodiscard]] TrackId trackIdAt(std::size_t index) const override;
-    [[nodiscard]] std::optional<std::size_t> indexOf(TrackId id) const override;
+    std::size_t size() const override;
+    TrackId trackIdAt(std::size_t index) const override;
+    std::optional<std::size_t> indexOf(TrackId id) const override;
 
     // Override to notify engine when track data changes (e.g., tag added/removed)
     void notifyTrackDataChanged(TrackId id) override;

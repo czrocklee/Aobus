@@ -23,7 +23,8 @@ namespace app::playback
     explicit AlsaExclusiveBackend(std::string deviceName = "default");
     ~AlsaExclusiveBackend() override;
 
-    bool open(app::core::playback::StreamFormat const& format, app::core::playback::AudioRenderCallbacks callbacks) override;
+    bool open(app::core::playback::StreamFormat const& format,
+              app::core::playback::AudioRenderCallbacks callbacks) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -31,7 +32,10 @@ namespace app::playback
     void drain() override;
     void stop() override;
     void close() override;
-    app::core::playback::BackendKind kind() const noexcept override { return app::core::playback::BackendKind::AlsaExclusive; }
+    app::core::playback::BackendKind kind() const noexcept override
+    {
+      return app::core::playback::BackendKind::AlsaExclusive;
+    }
     app::core::playback::BackendFormatInfo formatInfo() const override { return _formatInfo; }
     std::string_view lastError() const noexcept override { return _lastError; }
 
@@ -47,4 +51,3 @@ namespace app::playback
   };
 
 } // namespace app::playback
-

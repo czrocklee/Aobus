@@ -31,7 +31,7 @@ namespace rs::tag
     };
 
     auto ext = path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+    std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return std::tolower(c); });
 
     if (auto it = std::ranges::find(CreatorMap, std::string_view{ext}, &std::pair<std::string_view, Creator>::first);
         it != CreatorMap.end())

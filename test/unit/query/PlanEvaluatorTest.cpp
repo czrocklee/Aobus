@@ -117,9 +117,9 @@ namespace
   };
 
   std::vector<std::byte> makeHotOnlyTrack(rs::core::DictionaryId artistId = rs::core::DictionaryId{0},
-                                         rs::core::DictionaryId albumId = rs::core::DictionaryId{0},
-                                         rs::core::DictionaryId genreId = rs::core::DictionaryId{0},
-                                         rs::core::DictionaryId albumArtistId = rs::core::DictionaryId{0})
+                                          rs::core::DictionaryId albumId = rs::core::DictionaryId{0},
+                                          rs::core::DictionaryId genreId = rs::core::DictionaryId{0},
+                                          rs::core::DictionaryId albumArtistId = rs::core::DictionaryId{0})
   {
     auto header = rs::core::TrackHotHeader{};
     header.artistId = artistId;

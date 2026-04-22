@@ -29,7 +29,8 @@ namespace app::playback
     PipeWireBackend();
     ~PipeWireBackend() override;
 
-    bool open(app::core::playback::StreamFormat const& format, app::core::playback::AudioRenderCallbacks callbacks) override;
+    bool open(app::core::playback::StreamFormat const& format,
+              app::core::playback::AudioRenderCallbacks callbacks) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -37,7 +38,10 @@ namespace app::playback
     void drain() override;
     void stop() override;
     void close() override;
-    app::core::playback::BackendKind kind() const noexcept override { return app::core::playback::BackendKind::PipeWire; }
+    app::core::playback::BackendKind kind() const noexcept override
+    {
+      return app::core::playback::BackendKind::PipeWire;
+    }
     app::core::playback::BackendFormatInfo formatInfo() const override;
     std::string_view lastError() const noexcept override { return _lastError; }
 
@@ -51,10 +55,7 @@ namespace app::playback
 
     // Called from PipeWire registry/node callbacks.
     void handleStreamParamChanged(std::uint32_t id, spa_pod const* param);
-    void handleRegistryGlobal(std::uint32_t id,
-                              char const* type,
-                              std::uint32_t version,
-                              spa_dict const* props);
+    void handleRegistryGlobal(std::uint32_t id, char const* type, std::uint32_t version, spa_dict const* props);
     void handleRegistryGlobalRemove(std::uint32_t id);
     void handleLinkInfo(pw_link_info const* info);
     void handleSinkNodeInfo(pw_node_info const* info);
@@ -81,4 +82,3 @@ namespace app::playback
   };
 
 } // namespace app::playback
-

@@ -29,9 +29,9 @@ namespace app::core::model
     void reload(rs::core::ListView const& view);
 
     // TrackIdList interface
-    [[nodiscard]] std::size_t size() const override { return _trackIds.size(); }
-    [[nodiscard]] TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
-    [[nodiscard]] std::optional<std::size_t> indexOf(TrackId id) const override;
+    std::size_t size() const override { return _trackIds.size(); }
+    TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
+    std::optional<std::size_t> indexOf(TrackId id) const override;
 
   private:
     // TrackIdListObserver interface
