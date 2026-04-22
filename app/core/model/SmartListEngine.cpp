@@ -246,7 +246,7 @@ namespace app::core::model
     try
     {
       auto parsed = state.stagedExpression.empty() ? rs::expr::parse("true") : rs::expr::parse(state.stagedExpression);
-      rs::expr::QueryCompiler compiler{&_ml->dictionary()};
+      auto compiler = rs::expr::QueryCompiler{&_ml->dictionary()};
       state.stagedPlan = std::make_unique<rs::expr::ExecutionPlan>(compiler.compile(parsed));
       state.stagedHasError = false;
       state.stagedErrorMessage.clear();

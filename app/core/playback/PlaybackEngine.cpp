@@ -77,7 +77,7 @@ namespace app::core::playback
 {
 
   PlaybackEngine::PlaybackEngine(std::unique_ptr<IAudioBackend> backend)
-    : _backend(std::move(backend))
+    : _backend{std::move(backend)}
   {
     _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
   }

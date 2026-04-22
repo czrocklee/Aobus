@@ -52,11 +52,11 @@ namespace app::ui
                                    app::core::model::AllTrackIdsList& allTrackIds,
                                    app::core::model::TrackIdList& parentMembershipList,
                                    rs::core::ListId parentListId)
-    : _exprBox(musicLibrary)
-    , _musicLibrary(&musicLibrary)
-    , _allTrackIds(&allTrackIds)
-    , _parentMembershipList(&parentMembershipList)
-    , _parentListId(parentListId)
+    : _exprBox{musicLibrary}
+    , _musicLibrary{&musicLibrary}
+    , _allTrackIds{&allTrackIds}
+    , _parentMembershipList{&parentMembershipList}
+    , _parentListId{parentListId}
   {
     set_title("New List");
     set_transient_for(parent);
