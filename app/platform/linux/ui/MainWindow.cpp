@@ -48,17 +48,17 @@ namespace app::ui
 
   namespace
   {
-    auto rootParentId() -> rs::core::ListId
+    rs::core::ListId rootParentId()
     {
       return rs::core::ListId{0};
     }
 
-    auto allTracksListId() -> rs::core::ListId
+    rs::core::ListId allTracksListId()
     {
       return rs::core::ListId{std::numeric_limits<std::uint32_t>::max()};
     }
 
-    auto pageNameForListId(rs::core::ListId listId) -> std::string
+    std::string pageNameForListId(rs::core::ListId listId)
     {
       if (listId == allTracksListId())
       {
@@ -77,20 +77,19 @@ namespace app::ui
       std::string localExpression;
     };
 
-    auto normalizeLibraryPath(std::filesystem::path const& path) -> std::string
+    std::string normalizeLibraryPath(std::filesystem::path const& path)
     {
       auto ec = std::error_code{};
       auto const canonicalPath = std::filesystem::weakly_canonical(path, ec);
       return ec ? path.lexically_normal().string() : canonicalPath.string();
     }
 
-    auto hasTagName(std::vector<std::string_view> const& tagNames, std::string_view tag) -> bool
+    bool hasTagName(std::vector<std::string_view> const& tagNames, std::string_view tag)
     {
       return std::ranges::find(tagNames, tag) != tagNames.end();
     }
 
-    auto tagChangeStatusMessage(std::size_t selectionCount, std::size_t addCount, std::size_t removeCount)
-      -> std::string
+    std::string tagChangeStatusMessage(std::size_t selectionCount, std::size_t addCount, std::size_t removeCount)
     {
       auto message = std::to_string(selectionCount);
       message += selectionCount == 1 ? " track updated" : " tracks updated";

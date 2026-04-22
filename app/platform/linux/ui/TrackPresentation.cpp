@@ -12,7 +12,7 @@ namespace app::ui
 
   namespace
   {
-    auto compareCaseInsensitive(std::string_view lhs, std::string_view rhs) -> int
+    int compareCaseInsensitive(std::string_view lhs, std::string_view rhs)
     {
       auto const common = std::min(lhs.size(), rhs.size());
 
@@ -43,7 +43,7 @@ namespace app::ui
       return 0;
     }
 
-    auto compareTextField(std::string_view lhs, std::string_view rhs) -> int
+    int compareTextField(std::string_view lhs, std::string_view rhs)
     {
       auto const leftEmpty = lhs.empty();
       auto const rightEmpty = rhs.empty();
@@ -70,7 +70,7 @@ namespace app::ui
       return 0;
     }
 
-    auto compareNumberField(std::uint16_t lhs, std::uint16_t rhs) -> int
+    int compareNumberField(std::uint16_t lhs, std::uint16_t rhs)
     {
       auto const leftUnknown = lhs == 0;
       auto const rightUnknown = rhs == 0;
@@ -92,7 +92,7 @@ namespace app::ui
       return 0;
     }
 
-    auto compareTrackId(rs::core::TrackId lhs, rs::core::TrackId rhs) -> int
+    int compareTrackId(rs::core::TrackId lhs, rs::core::TrackId rhs)
     {
       if (lhs.value() < rhs.value())
       {
@@ -106,7 +106,7 @@ namespace app::ui
       return 0;
     }
 
-    auto compareByField(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackSortField field) -> int
+    int compareByField(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackSortField field)
     {
       switch (field)
       {
@@ -123,7 +123,7 @@ namespace app::ui
       return 0;
     }
 
-    auto unknownLabel(char const* label) -> std::string
+    std::string unknownLabel(char const* label)
     {
       return std::string{"Unknown "} + label;
     }

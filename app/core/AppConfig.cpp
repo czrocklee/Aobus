@@ -22,9 +22,24 @@ namespace
 
   constexpr std::int32_t kAppConfigVersion = 1;
 
-  auto configPath() -> std::filesystem::path
+  std::filesystem::path configPath()
   {
     return std::filesystem::path{Glib::get_user_config_dir()} / "rockstudio" / "config.ini";
+  }
+
+  std::string getString(Glib::RefPtr<Glib::KeyFile> const& kf, char const* group, char const* key)
+  {
+    return (kf->has_group(group) && kf->has_key(group, key)) ? static_cast<std::string>(kf->get_string(group, key)) : std::string{};
+  }
+
+  int getInt(Glib::RefPtr<Glib::KeyFile> const& kf, char const* group, char const* key, int def)
+  {
+    return (kf->has_group(group) && kf->has_key(group, key)) ? kf->get_integer(group, key) : def;
+  }
+
+  bool getBool(Glib::RefPtr<Glib::KeyFile> const& kf, char const* group, char const* key, bool def)
+  {
+    return (kf->has_group(group) && kf->has_key(group, key)) ? kf->get_boolean(group, key) : def;
   }
 }
 
@@ -34,39 +49,19 @@ namespace app::core
   {
     auto config = AppConfig{};
     auto const path = configPath();
-
-    if (!std::filesystem::exists(path))
-    {
-      return config;
-    }
+    if (!std::filesystem::exists(path)) return config;
 
     auto keyFile = Glib::KeyFile::create();
     keyFile->load_from_file(path.string());
 
-    if (keyFile->has_group(kAppGroup) && keyFile->has_key(kAppGroup, kLastLibraryKey))
-    {
-      config._sessionState.lastLibraryPath = keyFile->get_string(kAppGroup, kLastLibraryKey);
-    }
+    auto& ss = config._sessionState;
+    auto& ws = config._windowState;
 
-    if (keyFile->has_group(kWindowGroup) && keyFile->has_key(kWindowGroup, kWidthKey))
-    {
-      config._windowState.width = keyFile->get_integer(kWindowGroup, kWidthKey);
-    }
-
-    if (keyFile->has_group(kWindowGroup) && keyFile->has_key(kWindowGroup, kHeightKey))
-    {
-      config._windowState.height = keyFile->get_integer(kWindowGroup, kHeightKey);
-    }
-
-    if (keyFile->has_group(kWindowGroup) && keyFile->has_key(kWindowGroup, kMaximizedKey))
-    {
-      config._windowState.maximized = keyFile->get_boolean(kWindowGroup, kMaximizedKey);
-    }
-
-    if (keyFile->has_group(kWindowGroup) && keyFile->has_key(kWindowGroup, kPanedPositionKey))
-    {
-      config._windowState.panedPosition = keyFile->get_integer(kWindowGroup, kPanedPositionKey);
-    }
+    ss.lastLibraryPath = getString(keyFile, kAppGroup, kLastLibraryKey);
+    ws.width = getInt(keyFile, kWindowGroup, kWidthKey, kDefaultWindowWidth);
+    ws.height = getInt(keyFile, kWindowGroup, kHeightKey, kDefaultWindowHeight);
+    ws.maximized = getBool(keyFile, kWindowGroup, kMaximizedKey, false);
+    ws.panedPosition = getInt(keyFile, kWindowGroup, kPanedPositionKey, kDefaultPanedPosition);
 
     return config;
   }

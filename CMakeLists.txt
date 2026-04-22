@@ -341,9 +341,14 @@ if(ALSA_FOUND)
 endif()
 target_link_libraries(RockStudio PRIVATE rs GTKMM)
 target_include_directories(RockStudio PRIVATE ${CMAKE_SOURCE_DIR}/app)
-# Disable ASan leak detection for third-party libraries (fontconfig, pango, etc.)
+# Configure ASan leak detection to use suppression file for third-party libraries (RockStudio app only)
 if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
-  set_target_properties(RockStudio PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+  set(ASAN_SUPPRESSIONS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/.asan_suppressions")
+  # Use LSAN_OPTIONS to point to suppressions file
+  set(ASAN_ENV "LSAN_OPTIONS=suppressions=${ASAN_SUPPRESSIONS_FILE}")
+  
+  # Apply to RockStudio for use with running via IDEs/ctest
+  set_target_properties(RockStudio PROPERTIES ENVIRONMENT "${ASAN_ENV}")
 endif()
 # Note: clang-tidy disabled for RockStudio because GTK headers pull in GCC's SSE
 # intrinsics (mmintrin.h) which clang cannot parse. Building with clang would enable tidy.

@@ -15,76 +15,56 @@ namespace app::core::model
     _registrationId = _engine->registerList(source, *this);
   }
 
+  SmartListEngine* FilteredTrackIdList::engine() const
+  {
+    return (_engine && _engine->isAlive() && _registrationId != 0) ? _engine : nullptr;
+  }
+
   FilteredTrackIdList::~FilteredTrackIdList()
   {
-    // Only unregister if engine is still alive (not being destroyed)
-    // This prevents use-after-free when the engine is destroyed before the facade
-    if (_engine && _engine->isAlive() && _registrationId != 0)
-    {
-      _engine->unregisterList(_registrationId);
-    }
+    if (auto* e = engine()) e->unregisterList(_registrationId);
   }
 
   void FilteredTrackIdList::setExpression(std::string expr)
   {
-    if (_engine && _registrationId != 0)
-    {
-      _engine->setExpression(_registrationId, std::move(expr));
-    }
+    if (auto* e = engine()) e->setExpression(_registrationId, std::move(expr));
   }
 
   void FilteredTrackIdList::reload()
   {
-    if (_engine && _registrationId != 0)
-    {
-      _engine->rebuild(_registrationId);
-    }
+    if (auto* e = engine()) e->rebuild(_registrationId);
   }
 
   std::size_t FilteredTrackIdList::size() const
   {
-    if (!_engine || _registrationId == 0)
-    {
-      return 0;
-    }
-    return _engine->size(_registrationId);
+    auto* e = engine();
+    return e ? e->size(_registrationId) : 0;
   }
 
   TrackId FilteredTrackIdList::trackIdAt(std::size_t index) const
   {
-    if (!_engine || _registrationId == 0)
-    {
-      throw std::out_of_range("Invalid state");
-    }
-    return _engine->trackIdAt(_registrationId, index);
+    auto* e = engine();
+    if (!e) throw std::out_of_range("Invalid state");
+    return e->trackIdAt(_registrationId, index);
   }
 
   std::optional<std::size_t> FilteredTrackIdList::indexOf(TrackId id) const
   {
-    if (!_engine || _registrationId == 0)
-    {
-      return std::nullopt;
-    }
-    return _engine->indexOf(_registrationId, id);
+    auto* e = engine();
+    return e ? e->indexOf(_registrationId, id) : std::nullopt;
   }
 
   bool FilteredTrackIdList::hasError() const
   {
-    if (!_engine || _registrationId == 0)
-    {
-      return true;
-    }
-    return _engine->hasError(_registrationId);
+    auto* e = engine();
+    return e ? e->hasError(_registrationId) : true;
   }
 
   std::string const& FilteredTrackIdList::errorMessage() const
   {
     static std::string const empty;
-    if (!_engine || _registrationId == 0)
-    {
-      return empty;
-    }
-    return _engine->errorMessage(_registrationId);
+    auto* e = engine();
+    return e ? e->errorMessage(_registrationId) : empty;
   }
 
   void FilteredTrackIdList::notifyEngineReset()
@@ -109,13 +89,7 @@ namespace app::core::model
 
   void FilteredTrackIdList::notifyTrackDataChanged(TrackId id)
   {
-    if (!_engine || _registrationId == 0)
-    {
-      return;
-    }
-
-    // Delegate to the engine to re-evaluate whether the track still matches the filter
-    _engine->notifyTrackDataChanged(_registrationId, id);
+    if (auto* e = engine()) e->notifyTrackDataChanged(_registrationId, id);
   }
 
 } // namespace app::core::model

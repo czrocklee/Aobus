@@ -20,13 +20,13 @@ namespace app::core::playback
 
   struct RenderPlan final
   {
-    StreamFormat sourceFormat;
-    StreamFormat deviceFormat;
-    StreamFormat decoderOutputFormat;
+    StreamFormat sourceFormat = {};
+    StreamFormat deviceFormat = {};
+    StreamFormat decoderOutputFormat = {};
     bool requiresResample = false;
     bool requiresBitDepthConversion = false;
     bool requiresChannelRemap = false;
-    std::string reason;
+    std::string reason = {};
   };
 
   class FormatNegotiator final

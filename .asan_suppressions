@@ -1,0 +1,27 @@
+# Known leaks in third-party libraries (fontconfig, pango, gtk, etc.)
+# These are often one-time allocations or internal caches that are not explicitly freed on exit.
+
+# Fontconfig leaks
+leak:libfontconfig.so
+leak:libfontconfig
+leak:FcValueSave
+leak:FcPatternObjectAddWithBinding
+
+# Pango leaks
+leak:libpango-1.0.so
+leak:libpangocairo-1.0.so
+leak:libpangoft2-1.0.so
+leak:libpango
+leak:pango_font_map_load_fontset
+leak:pango_cairo_fc_font_map_fontset_key_substitute
+
+# GTK / GDK leaks
+leak:libgtk-4.so
+leak:libgdk-4.so
+leak:gtk_widget_realize
+leak:gtk_text_get_scroll_limits
+
+# GLib / GObject leaks
+leak:libglib-2.0.so
+leak:libgobject-2.0.so
+leak:g_signal_emit
