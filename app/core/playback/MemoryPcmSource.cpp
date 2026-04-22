@@ -45,7 +45,7 @@ namespace app::core::playback
 {
 
   MemoryPcmSource::MemoryPcmSource(FfmpegDecoderSession decoder, DecodedStreamInfo streamInfo)
-    : _decoder(std::move(decoder)), _streamInfo(streamInfo)
+    : _decoder{std::move(decoder)}, _streamInfo{streamInfo}
   {
   }
 

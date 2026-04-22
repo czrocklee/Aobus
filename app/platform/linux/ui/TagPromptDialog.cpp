@@ -96,7 +96,7 @@ namespace app::ui
                                    std::size_t selectionCount,
                                    std::map<std::string, std::size_t> selectedTagCounts,
                                    std::vector<std::string> availableTags)
-    : _selectionCount(selectionCount)
+    : _selectionCount{selectionCount}
   {
     for (auto& [tag, count] : selectedTagCounts)
     {

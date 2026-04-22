@@ -20,7 +20,7 @@ namespace rs::utility
     {
     }
     explicit TaggedInteger(T value)
-      : _value(value)
+      : _value{value}
     {
     }
     T value() const { return _value; }

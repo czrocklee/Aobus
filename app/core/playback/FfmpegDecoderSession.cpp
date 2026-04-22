@@ -84,7 +84,7 @@ namespace app::core::playback
   }
 
   FfmpegDecoderSession::FfmpegDecoderSession(StreamFormat outputFormat)
-    : _outputFormat(outputFormat)
+    : _outputFormat{outputFormat}
   {
   }
 

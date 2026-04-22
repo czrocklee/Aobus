@@ -16,7 +16,7 @@ namespace app::playback
   using namespace app::core::playback;
 
   AlsaExclusiveBackend::AlsaExclusiveBackend(std::string deviceName)
-    : _deviceName(std::move(deviceName))
+    : _deviceName{std::move(deviceName)}
   {
   }
 
