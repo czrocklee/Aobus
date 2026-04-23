@@ -416,9 +416,8 @@ namespace app::playback
                                              char const* errorMessage)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
-    self->handleStreamStateChanged(oldState,
-                                   newState,
-                                   errorMessage ? std::string_view{errorMessage} : std::string_view{});
+    self->handleStreamStateChanged(
+      oldState, newState, errorMessage ? std::string_view{errorMessage} : std::string_view{});
   }
 
   void PipeWireBackend::onStreamDrained(void* data)
@@ -491,7 +490,8 @@ namespace app::playback
   {
     pw_stream_events e{};
     e.version = PW_VERSION_STREAM_EVENTS;
-    e.state_changed = reinterpret_cast<void (*)(void*, pw_stream_state, pw_stream_state, const char*)>(PipeWireBackend::onStreamStateChanged);
+    e.state_changed = reinterpret_cast<void (*)(void*, pw_stream_state, pw_stream_state, char const*)>(
+      PipeWireBackend::onStreamStateChanged);
     e.param_changed = PipeWireBackend::onStreamParamChanged;
     e.process = PipeWireBackend::onStreamProcess;
     e.drained = PipeWireBackend::onStreamDrained;
@@ -1032,8 +1032,11 @@ namespace app::playback
       return;
     }
 
-    PLAYBACK_LOG_TRACE("PipeWire event: LinkInfo id={} state={} output_node={} input_node={}", 
-                       info->id, static_cast<int>(info->state), info->output_node_id, info->input_node_id);
+    PLAYBACK_LOG_TRACE("PipeWire event: LinkInfo id={} state={} output_node={} input_node={}",
+                       info->id,
+                       static_cast<int>(info->state),
+                       info->output_node_id,
+                       info->input_node_id);
     {
       std::lock_guard<std::mutex> lock(_infoMutex);
       if (!_monitorState)
@@ -1060,8 +1063,10 @@ namespace app::playback
       return;
     }
 
-    PLAYBACK_LOG_TRACE("PipeWire event: SinkNodeInfo id={} state={} props={}", 
-                       info->id, static_cast<int>(info->state), propsToString(info->props));
+    PLAYBACK_LOG_TRACE("PipeWire event: SinkNodeInfo id={} state={} props={}",
+                       info->id,
+                       static_cast<int>(info->state),
+                       propsToString(info->props));
     {
       std::lock_guard<std::mutex> lock(_infoMutex);
       if (!_monitorState)
@@ -1380,17 +1385,16 @@ namespace app::playback
         }
       }
 
-      LastLoggedState const currentState = {
-        .streamNodeId = _monitorState->streamNodeId,
-        .reachableCount = reachableNodes.size(),
-        .candidatesCount = sinkCandidates.size(),
-        .desiredSinkId = desiredSinkNodeId,
-        .sinkName = info.sinkName
-      };
+      LastLoggedState const currentState = {.streamNodeId = _monitorState->streamNodeId,
+                                            .reachableCount = reachableNodes.size(),
+                                            .candidatesCount = sinkCandidates.size(),
+                                            .desiredSinkId = desiredSinkNodeId,
+                                            .sinkName = info.sinkName};
 
       if (currentState != _lastLoggedState)
       {
-        PLAYBACK_LOG_DEBUG("PipeWire graph changed: streamNodeId={} reachable={} candidates={} desiredSink={} sinkName='{}'",
+        PLAYBACK_LOG_DEBUG(
+          "PipeWire graph changed: streamNodeId={} reachable={} candidates={} desiredSink={} sinkName='{}'",
           currentState.streamNodeId,
           currentState.reachableCount,
           currentState.candidatesCount,

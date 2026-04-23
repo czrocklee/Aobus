@@ -97,42 +97,32 @@ namespace app::ui
 
     set_hexpand(true);
     set_valign(Gtk::Align::END);
+    set_margin(6);
     add_css_class("status-bar");
 
     // Add a subtle top border via a separator if needed,
     // but for now we just use margins to increase height.
 
     // Library info (Left)
-    _libraryLabel.set_margin_start(12);
-    _libraryLabel.set_margin_end(12);
-    _libraryLabel.set_margin_top(6);
-    _libraryLabel.set_margin_bottom(6);
     _libraryLabel.add_css_class("dim-label");
     append(_libraryLabel);
 
     // Separator
     auto* sep1 = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
-    sep1->set_margin_top(4);
-    sep1->set_margin_bottom(4);
+    sep1->set_margin_start(6);
+    sep1->set_margin_end(6);
     append(*sep1);
 
     // Selection info
-    _selectionLabel.set_margin_start(12);
-    _selectionLabel.set_margin_end(12);
-    _selectionLabel.set_margin_top(6);
-    _selectionLabel.set_margin_bottom(6);
     _selectionLabel.add_css_class("dim-label");
     append(_selectionLabel);
 
     // Import box (Middle, hidden by default)
     _importBox.set_orientation(Gtk::Orientation::HORIZONTAL);
     _importBox.set_spacing(12);
-    _importBox.set_margin_start(16);
     _importBox.set_hexpand(true);
     _importBox.set_visible(false);
 
-    _importLabel.set_margin_top(6);
-    _importLabel.set_margin_bottom(6);
     _importLabel.add_css_class("dim-label");
     _importBox.append(_importLabel);
 
@@ -147,11 +137,9 @@ namespace app::ui
     append(*spacer);
 
     // Playback details (Right)
-    _playbackDetailsBox.set_spacing(6);
+    _playbackDetailsBox.set_spacing(8);
     _playbackDetailsBox.set_margin_start(12);
     _playbackDetailsBox.set_margin_end(12);
-    _playbackDetailsBox.set_margin_top(6);
-    _playbackDetailsBox.set_margin_bottom(6);
     _playbackLabel.add_css_class("dim-label");
     _sinkLabel.add_css_class("dim-label");
     _sinkLabel.set_visible(false);
@@ -165,10 +153,6 @@ namespace app::ui
 
     // Status label (Far Right)
     _statusLabel.set_halign(Gtk::Align::END);
-    _statusLabel.set_margin_start(12);
-    _statusLabel.set_margin_end(12);
-    _statusLabel.set_margin_top(6);
-    _statusLabel.set_margin_bottom(6);
     _statusLabel.add_css_class("status-message");
     _statusLabel.set_visible(false);
     append(_statusLabel);

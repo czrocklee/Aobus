@@ -33,6 +33,7 @@ namespace app::ui
     Glib::ustring getArtist() const;
     Glib::ustring getAlbum() const;
     Glib::ustring getTitle() const;
+    Glib::ustring getColumnText(TrackColumn column) const;
     Glib::ustring getDisplayNumber() const;
     Glib::ustring getTags() const;
     std::chrono::milliseconds getDuration() const;

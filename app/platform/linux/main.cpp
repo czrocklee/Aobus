@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "platform/linux/ui/MainWindow.h"
 #include "core/Log.h"
+#include "platform/linux/ui/MainWindow.h"
 
 #include <gtkmm.h>
 #include <gtkmm/aboutdialog.h>

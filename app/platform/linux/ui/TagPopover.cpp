@@ -24,8 +24,8 @@ namespace app::ui
 
   void TagPopover::setupUi()
   {
-    _mainBox.set_spacing(8);
-    _mainBox.set_margin(12);
+    _mainBox.set_spacing(6);
+    // Remove hardcoded margin to let theme handle it
     set_child(_mainBox);
 
     // Search entry
@@ -34,8 +34,9 @@ namespace app::ui
     _mainBox.append(_searchEntry);
 
     // Current Tags section label
-    _currentLabel.set_text("Current Tags");
+    _currentLabel.set_markup("<span size='small' weight='bold'>CURRENT TAGS</span>");
     _currentLabel.set_halign(Gtk::Align::START);
+    _currentLabel.set_margin_top(4);
     _currentLabel.add_css_class("dim-label");
     _mainBox.append(_currentLabel);
 
@@ -43,13 +44,15 @@ namespace app::ui
     _currentTagsBox.set_selection_mode(Gtk::SelectionMode::NONE);
     _currentTagsBox.set_halign(Gtk::Align::START);
     _currentTagsBox.set_valign(Gtk::Align::START);
+    _currentTagsBox.set_row_spacing(4);
+    _currentTagsBox.set_column_spacing(4);
     _mainBox.append(_currentTagsBox);
 
     // Separator
     _mainBox.append(_separator);
 
     // Available Tags section label
-    _availableLabel.set_text("Available Tags");
+    _availableLabel.set_markup("<span size='small' weight='bold'>AVAILABLE TAGS</span>");
     _availableLabel.set_halign(Gtk::Align::START);
     _availableLabel.add_css_class("dim-label");
     _mainBox.append(_availableLabel);
@@ -58,6 +61,8 @@ namespace app::ui
     _availableTagsBox.set_selection_mode(Gtk::SelectionMode::NONE);
     _availableTagsBox.set_halign(Gtk::Align::START);
     _availableTagsBox.set_valign(Gtk::Align::START);
+    _availableTagsBox.set_row_spacing(4);
+    _availableTagsBox.set_column_spacing(4);
 
     // Set up filter function for search
     _availableTagsBox.set_filter_func(

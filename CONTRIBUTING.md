@@ -8,6 +8,7 @@ This guide covers C++ coding conventions for RockStudio contributors.
   - 2.1. Indentation & Formatting
     - 2.1.1. Use `clang-format` for consistent style
     - 2.1.2. Keep blank lines before and after control blocks and logical blocks
+      - auto title = view.getTitle(); \n \n if (title) \n
   - 2.2. Naming Conventions
     - 2.2.1. Classes/Types: PascalCase - `TrackStore`, `Metadata`
     - 2.2.2. Functions: CamelCase - `loadMetadata()`, `getString()`

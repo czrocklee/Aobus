@@ -48,11 +48,21 @@ namespace app::playback
 
     static void onRefreshEvent(void* data, std::uint64_t count);
     static void onCoreDone(void* data, std::uint32_t id, int seq);
-    static void onRegistryGlobal(void* data, std::uint32_t id, std::uint32_t permissions, char const* type, std::uint32_t version, spa_dict const* props);
+    static void onRegistryGlobal(void* data,
+                                 std::uint32_t id,
+                                 std::uint32_t permissions,
+                                 char const* type,
+                                 std::uint32_t version,
+                                 spa_dict const* props);
     static void onRegistryGlobalRemove(void* data, std::uint32_t id);
     static void onLinkInfo(void* data, pw_link_info const* info);
     static void onNodeInfo(void* data, pw_node_info const* info);
-    static void onSinkNodeParam(void* data, int seq, std::uint32_t id, std::uint32_t index, std::uint32_t next, spa_pod const* param);
+    static void onSinkNodeParam(void* data,
+                                int seq,
+                                std::uint32_t id,
+                                std::uint32_t index,
+                                std::uint32_t next,
+                                spa_pod const* param);
     static void onStreamParamChanged(void* data, std::uint32_t id, spa_pod const* param);
     static void onStreamStateChanged(void* data, std::int32_t old_state, std::int32_t state, char const* error);
     static void onStreamProcess(void* data);
