@@ -68,6 +68,7 @@ namespace app::ui
         {
           auto item = listItem->get_item();
           auto row = std::dynamic_pointer_cast<TrackRow>(item);
+
           if (!row)
           {
             return;
@@ -316,6 +317,7 @@ namespace app::ui
       [](Glib::RefPtr<Glib::Object> const& object)
       {
         auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+
         if (auto h = header; !h)
         {
           return;
@@ -352,6 +354,7 @@ namespace app::ui
         }
 
         auto text = groupLabelFor(row->getPresentationKeys(), _presentationSpec.groupBy);
+
         if (!text.empty())
         {
           text += " ";
@@ -504,6 +507,7 @@ namespace app::ui
       {
         auto object = _columnModel->get_object(static_cast<guint>(index));
         auto currentColumn = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
+
         if (currentColumn && currentColumn->get_id() == binding->column->get_id())
         {
           needsInsertion = false;
@@ -609,6 +613,7 @@ namespace app::ui
     {
       auto object = _columnModel->get_object(i);
       auto column = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
+
       if (!column)
       {
         continue;
@@ -692,12 +697,14 @@ namespace app::ui
     }
 
     auto item = _selectionModel->get_object(position);
+
     if (!item)
     {
       return std::nullopt;
     }
 
     auto row = std::dynamic_pointer_cast<TrackRow>(item);
+
     if (!row)
     {
       return std::nullopt;
@@ -711,6 +718,7 @@ namespace app::ui
     auto result = std::vector<TrackListAdapter::TrackId>{};
 
     auto model = _selectionModel->get_model();
+
     if (!model)
     {
       return result;
@@ -762,6 +770,7 @@ namespace app::ui
     std::chrono::milliseconds totalDuration{0};
 
     auto model = _selectionModel->get_model();
+
     if (!model)
     {
       return std::chrono::milliseconds{0};
@@ -773,6 +782,7 @@ namespace app::ui
       if (_selectionModel->is_selected(i))
       {
         auto item = _selectionModel->get_object(i);
+
         if (auto row = std::dynamic_pointer_cast<TrackRow>(item))
         {
           totalDuration += row->getDuration();
@@ -851,8 +861,7 @@ namespace app::ui
         {
           if (bool(modifiers & Gdk::ModifierType::CONTROL_MASK))
           {
-            auto selectedIds = getSelectedTrackIds();
-            if (!selectedIds.empty())
+            if (auto selectedIds = getSelectedTrackIds(); !selectedIds.empty())
             {
               _tagEditRequested.emit(selectedIds, 0, 0);
             }
@@ -882,6 +891,7 @@ namespace app::ui
         }
 
         auto selectedIds = getSelectedTrackIds();
+
         if (selectedIds.empty())
         {
           return;
@@ -917,6 +927,7 @@ namespace app::ui
     }
 
     auto trackId = getPrimarySelectedTrackId();
+
     if (trackId)
     {
       _trackActivated.emit(*trackId);

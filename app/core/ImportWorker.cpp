@@ -42,6 +42,7 @@ namespace app::core
 
         // Open tag file
         auto tagFile = rs::tag::File::open(path);
+
         if (!tagFile)
         {
           APP_LOG_WARN("Skipping unsupported file: {}", path.string());

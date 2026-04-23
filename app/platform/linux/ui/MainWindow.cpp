@@ -395,6 +395,7 @@ namespace app::ui
         try
         {
           auto folder = dialog->select_folder_finish(result);
+
           if (!folder)
           {
             return;
@@ -930,6 +931,7 @@ namespace app::ui
 
     auto canDelete = false;
     auto canEdit = false;
+
     if (auto const selected = _listSelectionModel ? _listSelectionModel->get_selected() : GTK_INVALID_LIST_POSITION;
         hasLibrary && _treeListModel && selected != GTK_INVALID_LIST_POSITION && selected != 0)
     {
@@ -1061,6 +1063,7 @@ namespace app::ui
     // Refresh the list page
     auto readTxn = _musicLibrary->readTransaction();
     auto reader = _musicLibrary->lists().reader(readTxn);
+
     if (auto view = reader.get(draft.listId))
     {
       buildPageForStoredList(draft.listId, *view);
@@ -1533,6 +1536,7 @@ namespace app::ui
     }
 
     auto selectedIds = page.getSelectedTrackIds();
+
     if (selectedIds.empty())
     {
       return;
@@ -1602,6 +1606,7 @@ namespace app::ui
     }
 
     auto selectedIds = ctx->page->getSelectedTrackIds();
+
     if (selectedIds.empty() || (tagsToAdd.empty() && tagsToRemove.empty()))
     {
       return;

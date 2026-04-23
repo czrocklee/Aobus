@@ -389,6 +389,7 @@ namespace app::ui
   void TrackColumnLayoutModel::setLayout(TrackColumnLayout layout)
   {
     auto normalized = normalizeTrackColumnLayout(std::move(layout));
+
     if (_layout == normalized)
     {
       return;

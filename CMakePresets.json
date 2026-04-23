@@ -21,6 +21,41 @@
         "CMAKE_VERBOSE_MAKEFILE" : "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
+    },
+    {
+      "name": "linux-pgo-profile",
+      "generator": "Unix Makefiles",
+      "binaryDir": "/tmp/pgo-build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_VERBOSE_MAKEFILE" : "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CXX_FLAGS": "-fprofile-generate -fprofile-arcs -O2 -g -fno-omit-frame-pointer -Wno-error",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-arcs"
+      }
+    },
+    {
+      "name": "linux-pgo-optimize",
+      "generator": "Unix Makefiles",
+      "binaryDir": "/tmp/pgo-build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_VERBOSE_MAKEFILE" : "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CXX_FLAGS": "-fprofile-use -fprofile-correction -O3 -g -fno-omit-frame-pointer -Wno-error",
+        "CMAKE_EXE_LINKER_FLAGS": "-fprofile-use"
+      }
+    },
+    {
+      "name": "profile",
+      "generator": "Unix Makefiles",
+      "binaryDir": "/tmp/profile",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS": "-fno-omit-frame-pointer",
+        "CMAKE_VERBOSE_MAKEFILE": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
     }
   ]
 }

@@ -61,6 +61,7 @@ namespace app::core::playback
     while (true)
     {
       auto block = _decoder.readNextBlock();
+
       if (!block)
       {
         _lastError = std::string(_decoder.lastError());

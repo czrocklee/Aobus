@@ -72,6 +72,7 @@ namespace app::ui
         .sink-status-bad { color: #ea4335; }
       )");
         auto display = Gdk::Display::get_default();
+
         if (display)
         {
           Gtk::StyleContext::add_provider_for_display(display, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);

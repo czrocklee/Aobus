@@ -17,6 +17,7 @@ namespace
     for (auto const tagId : tags)
     {
       auto const tag = dictionary.get(tagId);
+
       if (tag.empty())
       {
         continue;
@@ -37,8 +38,8 @@ namespace
 
 namespace
 {
-  auto resolveLibraryPath(std::filesystem::path const& libraryRoot, std::string_view uri)
-    -> std::optional<std::filesystem::path>
+  std::optional<std::filesystem::path> resolveLibraryPath(std::filesystem::path const& libraryRoot,
+                                                          std::string_view uri)
   {
     if (uri.empty())
     {
@@ -46,6 +47,7 @@ namespace
     }
 
     auto path = std::filesystem::path{uri};
+
     if (path.is_absolute())
     {
       return path.lexically_normal();

@@ -77,6 +77,7 @@ namespace app::core::model
   {
     // If removed track is in our list, remove it and notify
     auto it = std::find(_trackIds.begin(), _trackIds.end(), id);
+
     if (it != _trackIds.end())
     {
       auto removeIdx = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));

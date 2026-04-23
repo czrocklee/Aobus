@@ -360,6 +360,7 @@ namespace app::ui
       row->append(*nameLabel);
 
       auto statusText = std::string{};
+
       if (state.pending == PendingTagChange::AddToAll)
       {
         if (state.membershipCount == 0)

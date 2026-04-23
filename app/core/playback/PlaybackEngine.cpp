@@ -296,6 +296,7 @@ namespace app::core::playback
   {
     PLAYBACK_LOG_INFO("Seek requested: {} ms", positionMs);
     auto source = _source.load(std::memory_order_acquire);
+
     if (!source)
     {
       return;
@@ -433,6 +434,7 @@ namespace app::core::playback
     outputFormat.isInterleaved = true;
 
     auto decoder = FfmpegDecoderSession{outputFormat};
+
     if (!decoder.open(descriptor.filePath))
     {
       _snapshot.statusText = std::string(decoder.lastError());
@@ -451,6 +453,7 @@ namespace app::core::playback
     if (shouldUseMemoryPcmSource(info))
     {
       auto memorySource = std::make_shared<MemoryPcmSource>(std::move(decoder), info);
+
       if (!memorySource->initialize())
       {
         _snapshot.statusText = memorySource->lastError();
@@ -467,6 +470,7 @@ namespace app::core::playback
 
       auto streamingSource = std::make_shared<StreamingPcmSource>(
         std::move(decoder), info, sourceCallbacks, kPrerollTargetMs, kDecodeHighWatermarkMs);
+
       if (!streamingSource->initialize())
       {
         _snapshot.statusText = streamingSource->lastError();
@@ -501,6 +505,7 @@ namespace app::core::playback
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
     auto source = self->_source.load(std::memory_order_acquire);
+
     if (!source)
     {
       return true;
