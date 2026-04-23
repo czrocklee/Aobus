@@ -121,6 +121,108 @@ namespace app::ui
 
       return message;
     }
+
+    app::ui::TrackColumnLayout trackColumnLayoutFromState(app::core::TrackViewState const& state)
+    {
+      auto layout = app::ui::defaultTrackColumnLayout();
+      auto ordered = std::vector<app::ui::TrackColumnState>{};
+      ordered.reserve(layout.columns.size());
+
+      auto takeColumn = [&layout](app::ui::TrackColumn column) -> std::optional<app::ui::TrackColumnState>
+      {
+        auto const it =
+          std::find_if(layout.columns.begin(),
+                       layout.columns.end(),
+                       [column](app::ui::TrackColumnState const& entry) { return entry.column == column; });
+        if (it == layout.columns.end())
+        {
+          return std::nullopt;
+        }
+
+        return *it;
+      };
+
+      for (auto const& id : state.columnOrder)
+      {
+        auto const column = app::ui::trackColumnFromId(id);
+        if (!column)
+        {
+          continue;
+        }
+
+        auto const existing =
+          std::find_if(ordered.begin(),
+                       ordered.end(),
+                       [column](app::ui::TrackColumnState const& entry) { return entry.column == *column; });
+        if (existing != ordered.end())
+        {
+          continue;
+        }
+
+        if (auto stateEntry = takeColumn(*column))
+        {
+          ordered.push_back(*stateEntry);
+        }
+      }
+
+      for (auto const& entry : layout.columns)
+      {
+        auto const existing = std::find_if(ordered.begin(),
+                                           ordered.end(),
+                                           [column = entry.column](app::ui::TrackColumnState const& candidate)
+                                           { return candidate.column == column; });
+        if (existing == ordered.end())
+        {
+          ordered.push_back(entry);
+        }
+      }
+
+      layout.columns = std::move(ordered);
+
+      for (auto& entry : layout.columns)
+      {
+        auto const columnId = std::string{app::ui::trackColumnId(entry.column)};
+        if (std::find(state.hiddenColumns.begin(), state.hiddenColumns.end(), columnId) != state.hiddenColumns.end())
+        {
+          entry.visible = false;
+        }
+
+        if (auto const width = state.columnWidths.find(columnId); width != state.columnWidths.end())
+        {
+          entry.width = width->second;
+        }
+      }
+
+      return app::ui::normalizeTrackColumnLayout(std::move(layout));
+    }
+
+    app::core::TrackViewState trackViewStateFromLayout(app::ui::TrackColumnLayout const& layout)
+    {
+      auto normalized = app::ui::normalizeTrackColumnLayout(layout);
+      auto state = app::core::TrackViewState{};
+
+      for (auto const& entry : normalized.columns)
+      {
+        auto const columnId = std::string{app::ui::trackColumnId(entry.column)};
+        state.columnOrder.push_back(columnId);
+
+        if (!entry.visible)
+        {
+          state.hiddenColumns.push_back(columnId);
+        }
+
+        auto const definitionIt = std::find_if(app::ui::trackColumnDefinitions().begin(),
+                                               app::ui::trackColumnDefinitions().end(),
+                                               [column = entry.column](app::ui::TrackColumnDefinition const& definition)
+                                               { return definition.column == column; });
+        if (definitionIt != app::ui::trackColumnDefinitions().end() && entry.width != definitionIt->defaultWidth)
+        {
+          state.columnWidths.insert_or_assign(columnId, entry.width);
+        }
+      }
+
+      return state;
+    }
   }
 
   MainWindow::MainWindow()
@@ -1271,7 +1373,7 @@ namespace app::ui
     auto adapter = std::make_shared<TrackListAdapter>(*_allTrackIds, _rowDataProvider);
     // Manually trigger rebuild since notifyReset was called before adapter was attached
     adapter->onReset();
-    auto trackPage = std::make_unique<TrackViewPage>(adapter);
+    auto trackPage = std::make_unique<TrackViewPage>(adapter, _trackColumnLayoutModel);
 
     auto pageId = pageNameForListId(allTracksListId());
     _stack.add(*trackPage, pageId, "All Tracks");
@@ -1359,7 +1461,7 @@ namespace app::ui
     adapter->onReset();
 
     // Create track page
-    auto trackPage = std::make_unique<TrackViewPage>(adapter);
+    auto trackPage = std::make_unique<TrackViewPage>(adapter, _trackColumnLayoutModel);
 
     auto pageId = pageNameForListId(listId);
     _stack.add(*trackPage, pageId, listName);
@@ -1726,6 +1828,10 @@ namespace app::ui
       auto sessionState = _appConfig.sessionState();
       sessionState.lastLibraryPath = _musicLibrary ? normalizeLibraryPath(_musicLibrary->rootPath()) : std::string{};
       _appConfig.setSessionState(std::move(sessionState));
+      if (_trackColumnLayoutModel)
+      {
+        _appConfig.setTrackViewState(trackViewStateFromLayout(_trackColumnLayoutModel->layout()));
+      }
       _appConfig.save();
     }
     catch (std::exception const& e)
@@ -1739,6 +1845,10 @@ namespace app::ui
     try
     {
       _appConfig = app::core::AppConfig::load();
+      if (_trackColumnLayoutModel)
+      {
+        _trackColumnLayoutModel->setLayout(trackColumnLayoutFromState(_appConfig.trackViewState()));
+      }
 
       auto const& windowState = _appConfig.windowState();
       set_default_size(windowState.width, windowState.height);

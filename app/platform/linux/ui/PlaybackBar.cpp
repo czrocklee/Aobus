@@ -20,17 +20,15 @@ namespace app::ui
 
   void PlaybackBar::setupLayout()
   {
-    set_spacing(8);
-    set_margin_start(8);
-    set_margin_end(8);
-    set_margin_top(4);
-    set_margin_bottom(4);
+    set_spacing(12);
+    set_margin(6);
 
     // Transport controls box
     auto* transportBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-    transportBox->set_spacing(4);
+    transportBox->set_spacing(0); // 0 because we use 'linked' class
     transportBox->set_halign(Gtk::Align::CENTER);
     transportBox->set_valign(Gtk::Align::CENTER);
+    transportBox->add_css_class("linked");
 
     _playButton.set_icon_name("media-playback-start-symbolic");
     _playButton.set_tooltip_text("Play");
@@ -51,7 +49,7 @@ namespace app::ui
 
     // Seek and time box
     auto* seekBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-    seekBox->set_spacing(6);
+    seekBox->set_spacing(12);
     seekBox->set_hexpand(true);
     seekBox->set_halign(Gtk::Align::FILL);
     seekBox->set_valign(Gtk::Align::CENTER);

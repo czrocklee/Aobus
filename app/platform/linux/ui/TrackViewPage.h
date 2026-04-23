@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace app::ui
@@ -25,7 +26,8 @@ namespace app::ui
     using ContextMenuRequestedSignal = sigc::signal<void(double, double)>;
     using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId>, double, double)>;
 
-    explicit TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter);
+    explicit TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter,
+                           std::shared_ptr<TrackColumnLayoutModel> columnLayoutModel);
     ~TrackViewPage() override;
 
     // Get the selected track IDs
@@ -66,10 +68,17 @@ namespace app::ui
     // Setup methods
     void setupColumns();
     void setupPresentationControls();
+    void setupColumnControls();
     void setupHeaderFactory();
     void setupStatusBar();
     void setupActivation();
     void applyPresentationSpec();
+    void applyColumnLayout();
+    void syncColumnToggleStates();
+    void queueSharedColumnLayoutUpdate();
+    bool flushSharedColumnLayoutUpdate();
+    void updateSharedColumnLayout();
+    TrackColumnLayout captureCurrentColumnLayout() const;
     void updateColumnVisibility();
     void onGroupByChanged();
     void onFilterChanged();
@@ -78,11 +87,29 @@ namespace app::ui
     std::size_t selectedTrackCount() const;
     std::optional<TrackId> trackIdAtPosition(std::uint32_t position) const;
 
+    struct ColumnBinding final
+    {
+      TrackColumn id;
+      Glib::RefPtr<Gtk::ColumnViewColumn> column;
+      Gtk::CheckButton* toggle = nullptr;
+      int defaultWidth = -1;
+    };
+
+    ColumnBinding* findColumnBinding(TrackColumn column);
+    ColumnBinding const* findColumnBinding(TrackColumn column) const;
+
     // Child widgets
     Gtk::Box _controlsBar{Gtk::Orientation::HORIZONTAL};
     Gtk::Entry _filterEntry;
     Gtk::Label _groupByLabel;
     Gtk::DropDown _groupByDropdown;
+    Gtk::MenuButton _columnsButton;
+    Gtk::Popover _columnsPopover;
+    Gtk::Box _columnsPopoverBox{Gtk::Orientation::VERTICAL};
+    Gtk::Label _columnsPopoverTitle;
+    Gtk::ListBox _columnToggleList;
+    Gtk::Separator _columnsPopoverSeparator;
+    Gtk::Button _resetColumnsButton;
     Gtk::Label _statusLabel;
     Gtk::ScrolledWindow _scrolledWindow;
     Gtk::ColumnView _columnView;
@@ -93,14 +120,17 @@ namespace app::ui
     Glib::RefPtr<TrackListAdapter> _adapter;
     Glib::RefPtr<Gtk::SortListModel> _sortModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
+    std::shared_ptr<TrackColumnLayoutModel> _columnLayoutModel;
+    Glib::RefPtr<Gio::ListModel> _columnModel;
     Glib::RefPtr<Gtk::StringList> _groupByOptions;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
-    Glib::RefPtr<Gtk::ColumnViewColumn> _artistColumn;
-    Glib::RefPtr<Gtk::ColumnViewColumn> _albumColumn;
-    Glib::RefPtr<Gtk::ColumnViewColumn> _trackNumberColumn;
-    Glib::RefPtr<Gtk::ColumnViewColumn> _titleColumn;
-    Glib::RefPtr<Gtk::ColumnViewColumn> _tagsColumn;
+    std::vector<ColumnBinding> _columns;
     TrackPresentationSpec _presentationSpec;
+    sigc::connection _columnLayoutChangedConnection;
+    sigc::connection _columnModelChangedConnection;
+    sigc::connection _queuedColumnLayoutUpdateConnection;
+    bool _syncingColumnLayout = false;
+    bool _capturingColumnLayout = false;
     bool _suppressNextTrackActivation = false;
 
     // Signals

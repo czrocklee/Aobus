@@ -5,12 +5,37 @@
 
 #include "core/model/TrackRowDataProvider.h"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <string>
 
 namespace app::ui
 {
+
+  namespace
+  {
+    std::string formatDuration(std::chrono::milliseconds duration)
+    {
+      if (duration.count() <= 0)
+      {
+        return {};
+      }
+
+      auto const totalSeconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+      auto const hours = totalSeconds / 3600;
+      auto const minutes = (totalSeconds % 3600) / 60;
+      auto const seconds = totalSeconds % 60;
+
+      if (hours > 0)
+      {
+        return std::format("{}:{}:{:02}", hours, minutes, seconds);
+      }
+
+      return std::format("{}:{:02}", minutes, seconds);
+    }
+  }
 
   TrackRow::TrackRow()
   {
@@ -73,6 +98,29 @@ namespace app::ui
     return _title;
   }
 
+  Glib::ustring TrackRow::getColumnText(TrackColumn column) const
+  {
+    ensureLoaded();
+
+    switch (column)
+    {
+      case TrackColumn::Artist: return _artist;
+      case TrackColumn::Album: return _album;
+      case TrackColumn::AlbumArtist: return _albumArtist;
+      case TrackColumn::Genre: return _genre;
+      case TrackColumn::Year: return _year == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_year)};
+      case TrackColumn::DiscNumber:
+        return _discNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_discNumber)};
+      case TrackColumn::TrackNumber:
+        return _trackNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_trackNumber)};
+      case TrackColumn::Title: return _title;
+      case TrackColumn::Duration: return formatDuration(_duration);
+      case TrackColumn::Tags: return _tags;
+    }
+
+    return {};
+  }
+
   Glib::ustring TrackRow::getDisplayNumber() const
   {
     ensureLoaded();
@@ -112,6 +160,7 @@ namespace app::ui
       .albumArtist = _albumArtist,
       .genre = _genre,
       .title = _title,
+      .durationMs = static_cast<std::uint32_t>(_duration.count()),
       .year = _year,
       .discNumber = _discNumber,
       .trackNumber = _trackNumber,

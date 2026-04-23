@@ -201,6 +201,7 @@ namespace app::ui
 
     // Track pages map
     std::map<rs::core::ListId, TrackPageContext> _trackPages;
+    std::shared_ptr<TrackColumnLayoutModel> _trackColumnLayoutModel = std::make_shared<TrackColumnLayoutModel>();
 
     // Playback support
     std::unique_ptr<PlaybackBar> _playbackBar;
