@@ -38,7 +38,7 @@ namespace app::ui
     std::string formatStream(app::core::playback::StreamFormat const& format)
     {
       std::stringstream ss;
-      ss << (format.sampleRate / 1000.0) << " kHz/" << static_cast<int>(format.bitDepth) << " bit/";
+      ss << (format.sampleRate / 1000.0) << " kHz · " << static_cast<int>(format.bitDepth) << "-bit · ";
       if (format.channels == 1)
       {
         ss << "Mono";
@@ -67,6 +67,30 @@ namespace app::ui
       {
         auto css = Gtk::CssProvider::create();
         css->load_from_data(R"(
+        .status-bar {
+          min-height: 24px;
+          padding-top: 1px;
+          padding-bottom: 1px;
+        }
+        .now-playing-label {
+          transition: all 200ms ease-in-out;
+          padding: 2px 12px;
+          border-radius: 6px;
+          color: @theme_fg_color;
+          opacity: 0.85;
+        }
+        .now-playing-label:hover {
+          background-color: alpha(@theme_selected_bg_color, 0.15);
+          color: @theme_selected_bg_color;
+          opacity: 1.0;
+        }
+        .now-playing-label:active {
+          background-color: alpha(@theme_selected_bg_color, 0.25);
+          opacity: 0.7;
+        }
+        .clickable-label {
+          cursor: pointer;
+        }
         .sink-status-good { color: #34a853; }
         .sink-status-warning { color: #fbbc04; }
         .sink-status-bad { color: #ea4335; }
@@ -104,24 +128,46 @@ namespace app::ui
     // Add a subtle top border via a separator if needed,
     // but for now we just use margins to increase height.
 
-    // Library info (Left)
-    _libraryLabel.add_css_class("dim-label");
-    append(_libraryLabel);
+    // Status label (Far Left)
+    _statusLabel.set_halign(Gtk::Align::START);
+    _statusLabel.add_css_class("status-message");
+    _statusLabel.set_visible(false);
+    append(_statusLabel);
 
-    // Separator
-    auto* sep1 = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
-    sep1->set_margin_start(6);
-    sep1->set_margin_end(6);
-    append(*sep1);
+    // Playback details (Left)
+    _playbackDetailsBox.set_spacing(8);
+    _playbackDetailsBox.set_margin_start(12);
+    _playbackDetailsBox.set_margin_end(12);
+    _playbackLabel.add_css_class("dim-label");
+    _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
+    _sinkStatusIcon.set_pixel_size(12);
+    _sinkStatusIcon.set_visible(false);
+    _playbackDetailsBox.append(_playbackLabel);
+    _playbackDetailsBox.append(_sinkStatusIcon);
+    append(_playbackDetailsBox);
 
-    // Selection info
-    _selectionLabel.add_css_class("dim-label");
-    append(_selectionLabel);
+    // Spacer to push now playing to the center
+    auto* spacer1 = Gtk::make_managed<Gtk::Box>();
+    spacer1->set_hexpand(true);
+    append(*spacer1);
 
-    // Import box (Middle, hidden by default)
+    // Now playing (Center)
+    _nowPlayingLabel.add_css_class("now-playing-label");
+    _nowPlayingLabel.add_css_class("clickable-label");
+    _nowPlayingLabel.set_tooltip_text("Click to show playing list");
+    auto clickGesture = Gtk::GestureClick::create();
+    clickGesture->signal_pressed().connect([this](int, double, double) { _nowPlayingClicked.emit(); });
+    _nowPlayingLabel.add_controller(clickGesture);
+    append(_nowPlayingLabel);
+
+    // Spacer to push info to the right
+    auto* spacer2 = Gtk::make_managed<Gtk::Box>();
+    spacer2->set_hexpand(true);
+    append(*spacer2);
+
+    // Import box (Right, hidden by default)
     _importBox.set_orientation(Gtk::Orientation::HORIZONTAL);
     _importBox.set_spacing(12);
-    _importBox.set_hexpand(true);
     _importBox.set_visible(false);
 
     _importLabel.add_css_class("dim-label");
@@ -132,31 +178,19 @@ namespace app::ui
     _importBox.append(_importProgressBar);
     append(_importBox);
 
-    // Spacer to push status to the right
-    auto* spacer = Gtk::make_managed<Gtk::Box>();
-    spacer->set_hexpand(true);
-    append(*spacer);
+    // Selection info
+    _selectionLabel.add_css_class("dim-label");
+    append(_selectionLabel);
 
-    // Playback details (Right)
-    _playbackDetailsBox.set_spacing(8);
-    _playbackDetailsBox.set_margin_start(12);
-    _playbackDetailsBox.set_margin_end(12);
-    _playbackLabel.add_css_class("dim-label");
-    _sinkLabel.add_css_class("dim-label");
-    _sinkLabel.set_visible(false);
-    _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
-    _sinkStatusIcon.set_pixel_size(12);
-    _sinkStatusIcon.set_visible(false);
-    _playbackDetailsBox.append(_playbackLabel);
-    _playbackDetailsBox.append(_sinkLabel);
-    _playbackDetailsBox.append(_sinkStatusIcon);
-    append(_playbackDetailsBox);
+    // Separator
+    auto* sep1 = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
+    sep1->set_margin_start(6);
+    sep1->set_margin_end(6);
+    append(*sep1);
 
-    // Status label (Far Right)
-    _statusLabel.set_halign(Gtk::Align::END);
-    _statusLabel.add_css_class("status-message");
-    _statusLabel.set_visible(false);
-    append(_statusLabel);
+    // Library info (Far Right)
+    _libraryLabel.add_css_class("dim-label");
+    append(_libraryLabel);
 
     setTrackCount(0);
   }
@@ -218,15 +252,30 @@ namespace app::ui
     if (snapshot.state == app::core::playback::TransportState::Idle ||
         (!snapshot.sourceFormat && !snapshot.activeFormat))
     {
+      _nowPlayingLabel.set_text("");
       _playbackLabel.set_text("");
-      _sinkLabel.set_text("");
-      _sinkLabel.set_visible(false);
-      _sinkLabel.set_tooltip_text("");
-      _sinkStatusIcon.set_tooltip_text("");
-      _sinkStatusIcon.set_visible(false);
+      _playbackLabel.set_tooltip_text("");
       return;
     }
 
+    // Center: Artist - Title
+    if (!snapshot.trackTitle.empty())
+    {
+      if (!snapshot.trackArtist.empty())
+      {
+        _nowPlayingLabel.set_text(snapshot.trackArtist + " - " + snapshot.trackTitle);
+      }
+      else
+      {
+        _nowPlayingLabel.set_text(snapshot.trackTitle);
+      }
+    }
+    else
+    {
+      _nowPlayingLabel.set_text("");
+    }
+
+    // Right: Backend + SW info (Compact)
     std::stringstream ss;
     bool hasText = false;
 
@@ -251,15 +300,27 @@ namespace app::ui
 
     if (snapshot.sourceFormat)
     {
-      ss << (hasText ? " | src " : "src ") << formatStream(*snapshot.sourceFormat);
-      hasText = true;
+      ss << (hasText ? " | " : "") << formatStream(*snapshot.sourceFormat);
+    }
+
+    if (snapshot.underrunCount > 0)
+    {
+      ss << " | " << snapshot.underrunCount << " underruns";
+    }
+
+    _playbackLabel.set_text(ss.str());
+
+    // Tooltip: Full chain (src -> pw -> sink)
+    std::stringstream tt;
+    if (snapshot.sourceFormat)
+    {
+      tt << "Source: " << formatStream(*snapshot.sourceFormat) << "\n";
     }
 
     if (snapshot.activeFormat &&
         (!snapshot.sourceFormat || !sameStreamFormat(*snapshot.sourceFormat, *snapshot.activeFormat)))
     {
-      ss << (hasText ? " -> pw " : "pw ") << formatStream(*snapshot.activeFormat);
-      hasText = true;
+      tt << "PipeWire: " << formatStream(*snapshot.activeFormat) << "\n";
     }
 
     if (snapshot.deviceFormat &&
@@ -267,35 +328,22 @@ namespace app::ui
           (!snapshot.sourceFormat || !sameStreamFormat(*snapshot.sourceFormat, *snapshot.deviceFormat))) ||
          (snapshot.activeFormat && !sameStreamFormat(*snapshot.activeFormat, *snapshot.deviceFormat))))
     {
-      ss << (hasText ? " -> sink " : "sink ") << formatStream(*snapshot.deviceFormat);
-      hasText = true;
+      tt << "Sink: " << formatStream(*snapshot.deviceFormat) << "\n";
     }
 
-    if (snapshot.underrunCount > 0)
+    if (!snapshot.sinkName.empty())
     {
-      ss << (hasText ? " | " : "") << snapshot.underrunCount << " underruns";
+      tt << "Device: " << snapshot.sinkName << "\n";
     }
 
-    _playbackLabel.set_text(ss.str());
-
-    auto const hasSinkInspection =
-      snapshot.sinkStatus != app::core::playback::BackendFormatInfo::SinkStatus::None || !snapshot.sinkTooltip.empty();
-    if (!hasSinkInspection && snapshot.sinkName.empty())
+    if (!snapshot.sinkTooltip.empty())
     {
-      _sinkLabel.set_text("");
-      _sinkLabel.set_visible(false);
-      _sinkLabel.set_tooltip_text("");
-      _sinkStatusIcon.set_tooltip_text("");
-      _sinkStatusIcon.set_visible(false);
-      return;
+      tt << "\n" << snapshot.sinkTooltip;
     }
 
-    auto sinkLabelText =
-      snapshot.sinkName.empty() ? std::string{"Sink: detecting..."} : std::string{"Sink: "} + snapshot.sinkName;
-    _sinkLabel.set_text(sinkLabelText);
-    _sinkLabel.set_visible(true);
-    _sinkLabel.set_tooltip_text(snapshot.sinkTooltip);
+    _playbackLabel.set_tooltip_text(tt.str());
 
+    // Update status icon
     clearSinkStatusClasses(_sinkStatusIcon);
     switch (snapshot.sinkStatus)
     {
@@ -313,7 +361,6 @@ namespace app::ui
         break;
       case app::core::playback::BackendFormatInfo::SinkStatus::None: _sinkStatusIcon.set_visible(false); break;
     }
-
     _sinkStatusIcon.set_tooltip_text(snapshot.sinkTooltip);
   }
 

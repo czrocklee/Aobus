@@ -118,15 +118,19 @@ namespace app::playback
     _formatInfo.deviceFormat = format;
     _formatInfo.isExclusive = _deviceName.rfind("hw:", 0) == 0;
     _formatInfo.sinkName = _deviceName;
-    _formatInfo.sinkStatus =
-      _formatInfo.isExclusive ? BackendFormatInfo::SinkStatus::Good : BackendFormatInfo::SinkStatus::Warning;
-    _formatInfo.sinkTooltip =
-      _formatInfo.isExclusive
-        ? "Direct ALSA hw device selected. This is outside PipeWire and is the strongest available path in the app "
-          "today."
-        : "ALSA playback is using a non-hw device name, so bit-perfect playback is not guaranteed.";
-    if (!_formatInfo.isExclusive)
+    if (_deviceName.rfind("hw:", 0) == 0)
     {
+      _formatInfo.isExclusive = true;
+      _formatInfo.sinkStatus = BackendFormatInfo::SinkStatus::Good;
+      _formatInfo.sinkTooltip = "Direct ALSA hw device selected. This is outside PipeWire and is the strongest "
+                                "available path in the app today.";
+    }
+    else
+    {
+      _formatInfo.isExclusive = false;
+      _formatInfo.sinkStatus = BackendFormatInfo::SinkStatus::Warning;
+      _formatInfo.sinkTooltip = "ALSA playback is using a non-hw device name, so bit-perfect playback is not "
+                                "guaranteed.";
       _formatInfo.conversionReason = "ALSA output is using a non-hw device, so bit-perfect playback is not guaranteed";
     }
 

@@ -914,6 +914,7 @@ namespace app::ui
 
     // Status bar at bottom
     _statusBar = std::make_unique<StatusBar>();
+    _statusBar->signalNowPlayingClicked().connect(sigc::mem_fun(*this, &MainWindow::jumpToPlayingList));
 
     auto* statusSeparator = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
     mainBox->append(*statusSeparator);
@@ -1376,7 +1377,7 @@ namespace app::ui
     auto adapter = std::make_shared<TrackListAdapter>(*_allTrackIds, _rowDataProvider);
     // Manually trigger rebuild since notifyReset was called before adapter was attached
     adapter->onReset();
-    auto trackPage = std::make_unique<TrackViewPage>(adapter, _trackColumnLayoutModel);
+    auto trackPage = std::make_unique<TrackViewPage>(allTracksListId(), adapter, _trackColumnLayoutModel);
 
     auto pageId = pageNameForListId(allTracksListId());
     _stack.add(*trackPage, pageId, "All Tracks");
@@ -1464,7 +1465,7 @@ namespace app::ui
     adapter->onReset();
 
     // Create track page
-    auto trackPage = std::make_unique<TrackViewPage>(adapter, _trackColumnLayoutModel);
+    auto trackPage = std::make_unique<TrackViewPage>(listId, adapter, _trackColumnLayoutModel);
 
     auto pageId = pageNameForListId(listId);
     _stack.add(*trackPage, pageId, listName);
@@ -2032,10 +2033,11 @@ namespace app::ui
 
   bool MainWindow::startPlaybackFromVisiblePage(TrackViewPage const& page, rs::core::TrackId trackId)
   {
-    return startPlaybackSequence(page.getVisibleTrackIds(), trackId);
+    return startPlaybackSequence(page.getVisibleTrackIds(), trackId, page.getListId());
   }
 
-  bool MainWindow::startPlaybackSequence(std::vector<rs::core::TrackId> trackIds, rs::core::TrackId startTrackId)
+  bool MainWindow::startPlaybackSequence(std::vector<rs::core::TrackId> trackIds, rs::core::TrackId startTrackId,
+                                          std::optional<rs::core::ListId> sourceListId)
   {
     if (!_playbackController || !_rowDataProvider)
     {
@@ -2057,6 +2059,7 @@ namespace app::ui
     ActivePlaybackSequence sequence;
     sequence.trackIds = std::move(trackIds);
     sequence.currentIndex = startIndex;
+    sequence.sourceListId = sourceListId;
     _activePlaybackSequence = std::move(sequence);
 
     if (playTrackAtSequenceIndex(startIndex))
@@ -2088,6 +2091,26 @@ namespace app::ui
     }
 
     return false;
+  }
+
+  void MainWindow::jumpToPlayingList()
+  {
+    if (!_activePlaybackSequence || !_activePlaybackSequence->sourceListId)
+    {
+      return;
+    }
+
+    auto const listId = *_activePlaybackSequence->sourceListId;
+    auto const trackId = _activePlaybackSequence->trackIds[_activePlaybackSequence->currentIndex];
+
+    // Switch stack page
+    _stack.set_visible_child(pageNameForListId(listId));
+
+    // Select and scroll to track in that page
+    if (auto const it = _trackPages.find(listId); it != _trackPages.end())
+    {
+      it->second.page->selectTrack(trackId);
+    }
   }
 
   void MainWindow::clearActivePlaybackSequence()

@@ -26,9 +26,11 @@ namespace app::ui
     using ContextMenuRequestedSignal = sigc::signal<void(double, double)>;
     using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId>, double, double)>;
 
-    explicit TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter,
+    explicit TrackViewPage(rs::core::ListId listId, Glib::RefPtr<TrackListAdapter> const& adapter,
                            std::shared_ptr<TrackColumnLayoutModel> columnLayoutModel);
     ~TrackViewPage() override;
+
+    rs::core::ListId getListId() const { return _listId; }
 
     // Get the selected track IDs
     std::vector<TrackId> getSelectedTrackIds() const;
@@ -63,6 +65,9 @@ namespace app::ui
     // Status banner API
     void setStatusMessage(std::string const& message);
     void clearStatusMessage();
+
+    // Navigation and Selection
+    void selectTrack(TrackId trackId);
 
   private:
     // Setup methods
@@ -117,6 +122,7 @@ namespace app::ui
     TagPopover* _tagPopover = nullptr;
 
     // Models
+    rs::core::ListId _listId;
     Glib::RefPtr<TrackListAdapter> _adapter;
     Glib::RefPtr<Gtk::SortListModel> _sortModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;

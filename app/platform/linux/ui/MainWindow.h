@@ -69,6 +69,7 @@ namespace app::ui
   {
     std::vector<rs::core::TrackId> trackIds;
     std::size_t currentIndex = 0;
+    std::optional<rs::core::ListId> sourceListId;
   };
 
   class MainWindow : public Gtk::ApplicationWindow
@@ -144,8 +145,10 @@ namespace app::ui
     void stopPlayback();
     void seekPlayback(std::uint32_t positionMs);
     bool startPlaybackFromVisiblePage(TrackViewPage const& page, rs::core::TrackId trackId);
-    bool startPlaybackSequence(std::vector<rs::core::TrackId> trackIds, rs::core::TrackId startTrackId);
+    bool startPlaybackSequence(std::vector<rs::core::TrackId> trackIds, rs::core::TrackId startTrackId,
+                                std::optional<rs::core::ListId> sourceListId = std::nullopt);
     bool playTrackAtSequenceIndex(std::size_t index);
+    void jumpToPlayingList();
     void clearActivePlaybackSequence();
     void handlePlaybackFinished();
     void bindTrackPagePlayback(TrackViewPage& page);
