@@ -20,10 +20,10 @@ namespace rs::reactive
     using Value = AbstractItemList<Id, T>::Value;
     using Index = AbstractItemList<Id, T>::Index;
     using Observer = AbstractItemList<Id, T>::Observer;
-    using Filter = std::function<bool(T const&)>;
+    using Filter = std::move_only_function<bool(T const&)>;
 
-    ItemFilterList(AbstractItemList<Id, T>& source, Filter const& filter)
-      : _source{source}, _filter{filter}
+    ItemFilterList(AbstractItemList<Id, T>& source, Filter filter)
+      : _source{source}, _filter{std::move(filter)}
     {
       for (auto const idx : std::views::iota(0u, _source.size()))
       {

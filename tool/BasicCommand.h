@@ -12,7 +12,7 @@ class BasicCommand : public Command
 {
 public:
   using VariablesMap = boost::program_options::variables_map;
-  using Executor = std::function<void(VariablesMap const&, std::ostream& os)>;
+  using Executor = std::move_only_function<void(VariablesMap const&, std::ostream& os)>;
 
   BasicCommand() { addOption("help, h", "help message"); }
 

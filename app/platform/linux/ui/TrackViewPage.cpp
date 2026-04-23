@@ -26,7 +26,7 @@ namespace app::ui
 
   namespace
   {
-    using RowCompareFn = std::function<int(TrackRow const&, TrackRow const&)>;
+    using RowCompareFn = std::move_only_function<int(TrackRow const&, TrackRow const&)>;
     constexpr auto kTagsCellWidgetName = "track-tags-cell";
 
     Glib::RefPtr<Gtk::SignalListItemFactory> createTextColumnFactory(TrackColumnDefinition const& definition)
