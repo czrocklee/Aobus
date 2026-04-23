@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "core/ImportWorker.h"
+#include "core/Log.h"
 
 #include <rs/core/TrackBuilder.h>
 
@@ -21,6 +22,7 @@ namespace app::core
 
   void ImportWorker::run()
   {
+    APP_LOG_INFO("Starting import of {} files", _files.size());
     auto txn = _ml.writeTransaction();
     auto trackWriter = _ml.tracks().writer(txn);
     auto& dict = _ml.dictionary();
@@ -30,6 +32,7 @@ namespace app::core
       try
       {
         auto const& path = _files[i];
+        APP_LOG_DEBUG("Importing file: {}", path.string());
 
         // Report progress
         if (_progressCallback)
@@ -41,6 +44,7 @@ namespace app::core
         auto tagFile = rs::tag::File::open(path);
         if (!tagFile)
         {
+          APP_LOG_WARN("Skipping unsupported file: {}", path.string());
           ++_result.skippedCount;
           continue;
         }
@@ -71,8 +75,9 @@ namespace app::core
           });
         _result.insertedIds.push_back(trackId);
       }
-      catch ([[maybe_unused]] std::exception const& e)
+      catch (std::exception const& e)
       {
+        APP_LOG_ERROR("Failed to import {}: {}", _files[i].string(), e.what());
         ++_result.failureCount;
         continue;
       }
@@ -80,6 +85,8 @@ namespace app::core
 
     // Commit the transaction
     txn.commit();
+    APP_LOG_INFO("Import finished: {} inserted, {} failures, {} skipped", 
+      _result.insertedIds.size(), _result.failureCount, _result.skippedCount);
 
     // Call finished callback
     if (_finishedCallback)

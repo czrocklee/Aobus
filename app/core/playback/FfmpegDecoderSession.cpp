@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "core/playback/FfmpegDecoderSession.h"
+#include "core/Log.h"
 
 extern "C"
 {
@@ -15,10 +16,47 @@ extern "C"
 
 #include <algorithm>
 #include <cerrno>
+#include <cstdarg>
 #include <cstring>
 
 namespace
 {
+  void ffmpegLogCallback(void* ptr, int level, char const* fmt, va_list vl)
+  {
+    if (level > av_log_get_level())
+    {
+      return;
+    }
+
+    char line[1024];
+    int print_prefix = 1;
+    ::av_log_format_line(ptr, level, fmt, vl, line, sizeof(line), &print_prefix);
+
+    // Remove trailing newline if present to let spdlog handle formatting
+    std::string message(line);
+    if (!message.empty() && message.back() == '\n')
+    {
+      message.pop_back();
+    }
+    if (message.empty())
+    {
+      return;
+    }
+
+    switch (level)
+    {
+      case AV_LOG_PANIC:
+      case AV_LOG_FATAL: PLAYBACK_LOG_CRITICAL("[ffmpeg] {}", message); break;
+      case AV_LOG_ERROR: PLAYBACK_LOG_ERROR("[ffmpeg] {}", message); break;
+      case AV_LOG_WARNING: PLAYBACK_LOG_WARN("[ffmpeg] {}", message); break;
+      case AV_LOG_INFO: PLAYBACK_LOG_INFO("[ffmpeg] {}", message); break;
+      case AV_LOG_VERBOSE:
+      case AV_LOG_DEBUG: PLAYBACK_LOG_DEBUG("[ffmpeg] {}", message); break;
+      case AV_LOG_TRACE: PLAYBACK_LOG_TRACE("[ffmpeg] {}", message); break;
+      default: PLAYBACK_LOG_DEBUG("[ffmpeg] {}", message); break;
+    }
+  }
+
   std::string ffmpegErrorText(std::int32_t errorCode)
   {
     char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
@@ -81,6 +119,11 @@ namespace app::core::playback
     {
       ::swr_free(&ptr);
     }
+  }
+
+  void FfmpegDecoderSession::initGlobal()
+  {
+    ::av_log_set_callback(ffmpegLogCallback);
   }
 
   FfmpegDecoderSession::FfmpegDecoderSession(StreamFormat outputFormat)
@@ -599,6 +642,7 @@ namespace app::core::playback
 
   void FfmpegDecoderSession::setError(std::string message)
   {
+    PLAYBACK_LOG_ERROR("FFmpeg error: {}", message);
     _lastError = std::move(message);
   }
 

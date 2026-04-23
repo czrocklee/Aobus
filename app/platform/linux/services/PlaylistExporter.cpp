@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/services/PlaylistExporter.h"
+#include "core/Log.h"
 
 #include "core/model/TrackIdList.h"
 #include "core/model/TrackRowDataProvider.h"
@@ -80,7 +81,7 @@ namespace app::services
 
     if (!ofs)
     {
-      std::cerr << "Failed to open playlist file: " << _path << std::endl;
+      APP_LOG_ERROR("Failed to open playlist file: {}", _path.string());
       return;
     }
 

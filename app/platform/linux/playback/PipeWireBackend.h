@@ -19,6 +19,7 @@ struct pw_stream;
 struct pw_thread_loop;
 struct spa_dict;
 struct spa_pod;
+struct spa_source;
 
 namespace app::playback
 {
@@ -45,6 +46,18 @@ namespace app::playback
     app::core::playback::BackendFormatInfo formatInfo() const override;
     std::string_view lastError() const noexcept override { return _lastError; }
 
+    static void onRefreshEvent(void* data, std::uint64_t count);
+    static void onCoreDone(void* data, std::uint32_t id, int seq);
+    static void onRegistryGlobal(void* data, std::uint32_t id, std::uint32_t permissions, char const* type, std::uint32_t version, spa_dict const* props);
+    static void onRegistryGlobalRemove(void* data, std::uint32_t id);
+    static void onLinkInfo(void* data, pw_link_info const* info);
+    static void onNodeInfo(void* data, pw_node_info const* info);
+    static void onSinkNodeParam(void* data, int seq, std::uint32_t id, std::uint32_t index, std::uint32_t next, spa_pod const* param);
+    static void onStreamParamChanged(void* data, std::uint32_t id, spa_pod const* param);
+    static void onStreamStateChanged(void* data, std::int32_t old_state, std::int32_t state, char const* error);
+    static void onStreamProcess(void* data);
+    static void onStreamDrained(void* data);
+
     // Called from PipeWire process callback
     void process();
     void handleDrained() noexcept;
@@ -68,16 +81,29 @@ namespace app::playback
     void setError(std::string message);
     void ensureRegistryMonitor();
     void refreshMonitorState();
+    void triggerRefresh();
+
+    struct LastLoggedState final
+    {
+      std::uint32_t streamNodeId = 0;
+      std::size_t reachableCount = 0;
+      std::size_t candidatesCount = 0;
+      std::uint32_t desiredSinkId = 0;
+      std::string sinkName;
+      bool operator==(LastLoggedState const&) const = default;
+    };
 
     app::core::playback::AudioRenderCallbacks _callbacks;
     app::core::playback::StreamFormat _format;
     pw_thread_loop* _threadLoop = nullptr;
     pw_context* _context = nullptr;
     pw_stream* _stream = nullptr;
+    spa_source* _refreshEvent = nullptr;
     bool _drainPending = false;
     mutable std::mutex _infoMutex;
     std::unique_ptr<RegistryMonitorState> _monitorState;
     app::core::playback::BackendFormatInfo _formatInfo;
+    LastLoggedState _lastLoggedState;
     std::string _lastError;
   };
 

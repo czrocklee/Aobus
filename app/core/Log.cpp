@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
+
+#include "core/Log.h"
+
+#ifdef FFmpeg_FOUND
+#include "core/playback/FfmpegDecoderSession.h"
+#endif
+
+#include <spdlog/async.h>
+#include <spdlog/sinks/null_sink.h>
+#include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+
+#include <filesystem>
+#include <glibmm/miscutils.h>
+#include <vector>
+
+namespace app::core
+{
+  std::shared_ptr<spdlog::logger> Log::_appLogger = spdlog::null_logger_mt("app");
+  std::shared_ptr<spdlog::logger> Log::_playbackLogger = spdlog::null_logger_mt("playback");
+
+  void Log::init()
+  {
+    // Ensure log directory exists
+    auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "rockstudio" / "logs";
+    std::filesystem::create_directories(logDir);
+    auto const logPath = logDir / "app.log";
+
+    // Setup sinks
+    auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    consoleSink->set_pattern("%^[%T] %n: %v%$");
+    consoleSink->set_level(spdlog::level::info);
+
+    auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(logPath.string(), 1024 * 1024 * 5, 3);
+    fileSink->set_pattern("[%Y-%m-%d %T.%e] [%l] %n: %v");
+    fileSink->set_level(spdlog::level::trace);
+
+    auto sinks = std::vector<spdlog::sink_ptr>{consoleSink, fileSink};
+
+    // Initialize async registry
+    spdlog::init_thread_pool(8192, 1);
+
+    // Drop existing loggers to replace them with async versions
+    spdlog::drop("app");
+    spdlog::drop("playback");
+
+    // Create loggers
+    _appLogger = std::make_shared<spdlog::async_logger>(
+      "app", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
+    _appLogger->set_level(spdlog::level::trace);
+    spdlog::register_logger(_appLogger);
+
+    _playbackLogger = std::make_shared<spdlog::async_logger>(
+      "playback", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::overrun_oldest);
+    _playbackLogger->set_level(spdlog::level::trace);
+    spdlog::register_logger(_playbackLogger);
+
+    spdlog::set_default_logger(_appLogger);
+
+#ifdef FFmpeg_FOUND
+    ::app::core::playback::FfmpegDecoderSession::initGlobal();
+#endif
+
+    APP_LOG_INFO("Logging initialized. Log file: {}", logPath.string());
+  }
+
+  void Log::shutdown()
+  {
+    APP_LOG_INFO("Shutting down logging...");
+    spdlog::shutdown();
+  }
+} // namespace app::core

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/playback/PipeWireBackend.h"
+#include "core/Log.h"
 
 extern "C"
 {
@@ -16,6 +17,7 @@ extern "C"
 #include <spa/param/props.h>
 #include <spa/pod/builder.h>
 #include <spa/pod/iter.h>
+#include <spa/support/loop.h>
 #include <spa/utils/defs.h>
 #include <spa/utils/dict.h>
 #include <spa/utils/type.h>
@@ -149,6 +151,32 @@ namespace
   {
     auto const* value = props ? ::spa_dict_lookup(props, key) : nullptr;
     return value ? std::string(value) : std::string{};
+  }
+
+  std::string propsToString(spa_dict const* props)
+  {
+    if (!props || props->n_items == 0)
+    {
+      return "{}";
+    }
+
+    // Rough estimate of size to minimize reallocations: ~40 chars per item
+    std::string result;
+    result.reserve(static_cast<std::size_t>(props->n_items) * 40);
+    result += "{";
+
+    for (std::uint32_t i = 0; i < props->n_items; ++i)
+    {
+      if (i > 0)
+      {
+        result += ", ";
+      }
+      result += props->items[i].key;
+      result += "=";
+      result += props->items[i].value;
+    }
+    result += "}";
+    return result;
   }
 
   NodeRecord parseNodeRecord(std::uint32_t version, spa_dict const* props)
@@ -370,86 +398,92 @@ namespace app::playback
     SinkProps sinkProps;
   };
 
-  static void onStreamProcess(void* data)
+  void PipeWireBackend::onStreamProcess(void* data)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
     self->process();
   }
 
-  static void onStreamParamChanged(void* data, std::uint32_t id, spa_pod const* param)
+  void PipeWireBackend::onStreamParamChanged(void* data, std::uint32_t id, spa_pod const* param)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
     self->handleStreamParamChanged(id, param);
   }
 
-  static void onStreamStateChanged(void* data,
-                                   pw_stream_state oldState,
-                                   pw_stream_state newState,
-                                   char const* errorMessage)
+  void PipeWireBackend::onStreamStateChanged(void* data,
+                                             std::int32_t oldState,
+                                             std::int32_t newState,
+                                             char const* errorMessage)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
-    self->handleStreamStateChanged(static_cast<std::int32_t>(oldState),
-                                   static_cast<std::int32_t>(newState),
+    self->handleStreamStateChanged(oldState,
+                                   newState,
                                    errorMessage ? std::string_view{errorMessage} : std::string_view{});
   }
 
-  static void onStreamDrained(void* data)
+  void PipeWireBackend::onStreamDrained(void* data)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
     self->handleDrained();
   }
 
-  static void onRegistryGlobal(void* data,
-                               std::uint32_t id,
-                               [[maybe_unused]] std::uint32_t permissions,
-                               char const* type,
-                               std::uint32_t version,
-                               spa_dict const* props)
+  void PipeWireBackend::onRegistryGlobal(void* data,
+                                         std::uint32_t id,
+                                         std::uint32_t /*permissions*/,
+                                         char const* type,
+                                         std::uint32_t version,
+                                         spa_dict const* props)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
     self->handleRegistryGlobal(id, type, version, props);
   }
 
-  static void onRegistryGlobalRemove(void* data, std::uint32_t id)
+  void PipeWireBackend::onRegistryGlobalRemove(void* data, std::uint32_t id)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
     self->handleRegistryGlobalRemove(id);
   }
 
-  static void onLinkInfo(void* data, pw_link_info const* info)
+  void PipeWireBackend::onLinkInfo(void* data, pw_link_info const* info)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
     self->handleLinkInfo(info);
   }
 
-  static void onNodeInfo(void* data, pw_node_info const* info)
+  void PipeWireBackend::onNodeInfo(void* data, pw_node_info const* info)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
     self->handleSinkNodeInfo(info);
   }
 
-  static void onSinkNodeParam([[maybe_unused]] void* data,
-                              [[maybe_unused]] int seq,
-                              std::uint32_t id,
-                              [[maybe_unused]] std::uint32_t index,
-                              [[maybe_unused]] std::uint32_t next,
-                              spa_pod const* param)
+  void PipeWireBackend::onSinkNodeParam(void* data,
+                                        int /*seq*/,
+                                        std::uint32_t id,
+                                        std::uint32_t /*index*/,
+                                        std::uint32_t /*next*/,
+                                        spa_pod const* param)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
     self->handleSinkNodeParam(id, param);
   }
 
-  static void onCoreDone(void* data, std::uint32_t id, int seq)
+  void PipeWireBackend::onCoreDone(void* data, std::uint32_t /*id*/, int seq)
   {
     auto* self = static_cast<PipeWireBackend*>(data);
-    self->handleCoreDone(id, seq);
+    self->handleCoreDone(0, seq);
+  }
+
+  void PipeWireBackend::onRefreshEvent(void* data, std::uint64_t /*count*/)
+  {
+    auto* self = static_cast<PipeWireBackend*>(data);
+    self->refreshMonitorState();
   }
 
   pw_core_events const coreEvents = []
   {
     pw_core_events e{};
     e.version = PW_VERSION_CORE_EVENTS;
-    e.done = onCoreDone;
+    e.done = PipeWireBackend::onCoreDone;
     return e;
   }();
 
@@ -457,10 +491,10 @@ namespace app::playback
   {
     pw_stream_events e{};
     e.version = PW_VERSION_STREAM_EVENTS;
-    e.state_changed = onStreamStateChanged;
-    e.param_changed = onStreamParamChanged;
-    e.process = onStreamProcess;
-    e.drained = onStreamDrained;
+    e.state_changed = reinterpret_cast<void (*)(void*, pw_stream_state, pw_stream_state, const char*)>(PipeWireBackend::onStreamStateChanged);
+    e.param_changed = PipeWireBackend::onStreamParamChanged;
+    e.process = PipeWireBackend::onStreamProcess;
+    e.drained = PipeWireBackend::onStreamDrained;
     return e;
   }();
 
@@ -468,8 +502,8 @@ namespace app::playback
   {
     pw_registry_events e{};
     e.version = PW_VERSION_REGISTRY_EVENTS;
-    e.global = onRegistryGlobal;
-    e.global_remove = onRegistryGlobalRemove;
+    e.global = PipeWireBackend::onRegistryGlobal;
+    e.global_remove = PipeWireBackend::onRegistryGlobalRemove;
     return e;
   }();
 
@@ -477,7 +511,7 @@ namespace app::playback
   {
     pw_link_events e{};
     e.version = PW_VERSION_LINK_EVENTS;
-    e.info = onLinkInfo;
+    e.info = PipeWireBackend::onLinkInfo;
     return e;
   }();
 
@@ -485,7 +519,7 @@ namespace app::playback
   {
     pw_node_events e{};
     e.version = PW_VERSION_NODE_EVENTS;
-    e.info = onNodeInfo;
+    e.info = PipeWireBackend::onNodeInfo;
     return e;
   }();
 
@@ -493,8 +527,8 @@ namespace app::playback
   {
     pw_node_events e{};
     e.version = PW_VERSION_NODE_EVENTS;
-    e.info = onNodeInfo;
-    e.param = onSinkNodeParam;
+    e.info = PipeWireBackend::onNodeInfo;
+    e.param = PipeWireBackend::onSinkNodeParam;
     return e;
   }();
 
@@ -565,6 +599,12 @@ namespace app::playback
       _formatInfo = {};
     }
 
+    if (_refreshEvent)
+    {
+      ::pw_loop_destroy_source(::pw_thread_loop_get_loop(_threadLoop), _refreshEvent);
+      _refreshEvent = nullptr;
+    }
+
     if (_stream)
     {
       ::pw_stream_destroy(_stream);
@@ -592,6 +632,7 @@ namespace app::playback
 
   void PipeWireBackend::setError(std::string message)
   {
+    PLAYBACK_LOG_ERROR("PipeWire error: {}", message);
     _lastError = std::move(message);
   }
 
@@ -632,6 +673,8 @@ namespace app::playback
       close();
       return false;
     }
+
+    _refreshEvent = ::pw_loop_add_event(::pw_thread_loop_get_loop(_threadLoop), onRefreshEvent, this);
 
     ::pw_thread_loop_lock(_threadLoop);
 
@@ -709,7 +752,7 @@ namespace app::playback
       return false;
     }
 
-    refreshMonitorState();
+    triggerRefresh();
     return true;
   }
 
@@ -804,6 +847,7 @@ namespace app::playback
       return;
     }
 
+    PLAYBACK_LOG_TRACE("PipeWire event: StreamParamChanged id={}", id);
     auto const parsedFormat = parseRawStreamFormat(param);
     if (!parsedFormat)
     {
@@ -818,7 +862,7 @@ namespace app::playback
       }
     }
 
-    refreshMonitorState();
+    triggerRefresh();
   }
 
   void PipeWireBackend::handleStreamStateChanged(std::int32_t oldState,
@@ -838,7 +882,8 @@ namespace app::playback
 
     if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
     {
-      refreshMonitorState();
+      PLAYBACK_LOG_TRACE("PipeWire event: StreamStateChanged state={}", newState);
+      triggerRefresh();
     }
   }
 
@@ -847,6 +892,15 @@ namespace app::playback
                                              std::uint32_t version,
                                              spa_dict const* props)
   {
+    bool const isNode = (::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
+    bool const isLink = (::strcmp(type, PW_TYPE_INTERFACE_Link) == 0);
+
+    if (!isNode && !isLink)
+    {
+      return;
+    }
+
+    PLAYBACK_LOG_TRACE("PipeWire event: RegistryGlobal id={} type={} props={}", id, type, propsToString(props));
     {
       std::lock_guard<std::mutex> lock(_infoMutex);
       if (!_monitorState)
@@ -863,7 +917,7 @@ namespace app::playback
         }
       }
 
-      if (::strcmp(type, PW_TYPE_INTERFACE_Node) == 0)
+      if (isNode)
       {
         auto record = parseNodeRecord(version, props);
         if (_monitorState->streamNodeId == PW_ID_ANY)
@@ -876,7 +930,7 @@ namespace app::playback
         }
         _monitorState->nodes[id] = std::move(record);
       }
-      else if (::strcmp(type, PW_TYPE_INTERFACE_Link) == 0)
+      else if (isLink)
       {
         auto& link = _monitorState->links[id];
         link.outputNodeId = parseUintProperty(::spa_dict_lookup(props, PW_KEY_LINK_OUTPUT_NODE)).value_or(PW_ID_ANY);
@@ -898,11 +952,12 @@ namespace app::playback
       }
     }
 
-    refreshMonitorState();
+    triggerRefresh();
   }
 
   void PipeWireBackend::handleRegistryGlobalRemove(std::uint32_t id)
   {
+    bool needsRefresh = false;
     {
       std::lock_guard<std::mutex> lock(_infoMutex);
       if (!_monitorState)
@@ -930,6 +985,7 @@ namespace app::playback
         _monitorState->sinkNodeBinding = {};
         _monitorState->sinkFormat.reset();
         _monitorState->sinkProps = {};
+        needsRefresh = true;
       }
 
       if (_monitorState->streamNodeBinding.id == id)
@@ -940,18 +996,33 @@ namespace app::playback
           ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(_monitorState->streamNodeBinding.proxy));
         }
         _monitorState->streamNodeBinding = {};
+        needsRefresh = true;
       }
 
-      _monitorState->nodes.erase(id);
-      _monitorState->links.erase(id);
+      if (_monitorState->nodes.contains(id))
+      {
+        _monitorState->nodes.erase(id);
+        needsRefresh = true;
+      }
+
+      if (_monitorState->links.contains(id))
+      {
+        _monitorState->links.erase(id);
+        needsRefresh = true;
+      }
 
       if (_monitorState->streamNodeId == id)
       {
         _monitorState->streamNodeId = PW_ID_ANY;
+        needsRefresh = true;
       }
     }
 
-    refreshMonitorState();
+    if (needsRefresh)
+    {
+      PLAYBACK_LOG_TRACE("PipeWire event: RegistryGlobalRemove id={}", id);
+      triggerRefresh();
+    }
   }
 
   void PipeWireBackend::handleLinkInfo(pw_link_info const* info)
@@ -961,6 +1032,8 @@ namespace app::playback
       return;
     }
 
+    PLAYBACK_LOG_TRACE("PipeWire event: LinkInfo id={} state={} output_node={} input_node={}", 
+                       info->id, static_cast<int>(info->state), info->output_node_id, info->input_node_id);
     {
       std::lock_guard<std::mutex> lock(_infoMutex);
       if (!_monitorState)
@@ -977,7 +1050,7 @@ namespace app::playback
       }
     }
 
-    refreshMonitorState();
+    triggerRefresh();
   }
 
   void PipeWireBackend::handleSinkNodeInfo(pw_node_info const* info)
@@ -987,6 +1060,8 @@ namespace app::playback
       return;
     }
 
+    PLAYBACK_LOG_TRACE("PipeWire event: SinkNodeInfo id={} state={} props={}", 
+                       info->id, static_cast<int>(info->state), propsToString(info->props));
     {
       std::lock_guard<std::mutex> lock(_infoMutex);
       if (!_monitorState)
@@ -1006,11 +1081,12 @@ namespace app::playback
       }
     }
 
-    refreshMonitorState();
+    triggerRefresh();
   }
 
   void PipeWireBackend::handleSinkNodeParam(std::uint32_t id, spa_pod const* param)
   {
+    PLAYBACK_LOG_TRACE("PipeWire event: SinkNodeParam param_id={}", id);
     {
       std::lock_guard<std::mutex> lock(_infoMutex);
       if (!_monitorState)
@@ -1028,7 +1104,7 @@ namespace app::playback
       }
     }
 
-    refreshMonitorState();
+    triggerRefresh();
   }
 
   void PipeWireBackend::ensureRegistryMonitor()
@@ -1074,7 +1150,19 @@ namespace app::playback
         // Registry is now initially populated
       }
     }
-    refreshMonitorState();
+    triggerRefresh();
+  }
+
+  void PipeWireBackend::triggerRefresh()
+  {
+    if (_refreshEvent)
+    {
+      ::pw_loop_signal_event(::pw_thread_loop_get_loop(_threadLoop), _refreshEvent);
+    }
+    else
+    {
+      refreshMonitorState();
+    }
   }
 
   void PipeWireBackend::refreshMonitorState()
@@ -1292,14 +1380,24 @@ namespace app::playback
         }
       }
 
-      std::cout << "[DEBUG] refreshMonitorState: streamNodeId=" << _monitorState->streamNodeId << " streamNodeName='"
-                << ((_monitorState->streamNodeId != PW_ID_ANY &&
-                     _monitorState->nodes.count(_monitorState->streamNodeId))
-                      ? _monitorState->nodes[_monitorState->streamNodeId].nodeName
-                      : "")
-                << "'"
-                << " reachable=" << reachableNodes.size() << " candidates=" << sinkCandidates.size()
-                << " desiredSink=" << desiredSinkNodeId << " sinkName='" << info.sinkName << "'" << std::endl;
+      LastLoggedState const currentState = {
+        .streamNodeId = _monitorState->streamNodeId,
+        .reachableCount = reachableNodes.size(),
+        .candidatesCount = sinkCandidates.size(),
+        .desiredSinkId = desiredSinkNodeId,
+        .sinkName = info.sinkName
+      };
+
+      if (currentState != _lastLoggedState)
+      {
+        PLAYBACK_LOG_DEBUG("PipeWire graph changed: streamNodeId={} reachable={} candidates={} desiredSink={} sinkName='{}'",
+          currentState.streamNodeId,
+          currentState.reachableCount,
+          currentState.candidatesCount,
+          currentState.desiredSinkId,
+          currentState.sinkName);
+        _lastLoggedState = currentState;
+      }
 
       std::vector<std::string> warningIssues;
       std::vector<std::string> badIssues;

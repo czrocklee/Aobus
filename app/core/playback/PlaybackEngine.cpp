@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "core/playback/PlaybackEngine.h"
+#include "core/Log.h"
 
 #include "core/playback/MemoryPcmSource.h"
 #include "core/playback/StreamingPcmSource.h"
@@ -89,6 +90,7 @@ namespace app::core::playback
 
   void PlaybackEngine::play(TrackPlaybackDescriptor descriptor)
   {
+    PLAYBACK_LOG_INFO("Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
     if (_backend)
     {
       _backend->stop();
@@ -207,6 +209,7 @@ namespace app::core::playback
     std::lock_guard<std::mutex> lock(_stateMutex);
     if (_state == TransportState::Playing || _state == TransportState::Buffering)
     {
+      PLAYBACK_LOG_INFO("Playback paused");
       _state = TransportState::Paused;
       _snapshot.state = TransportState::Paused;
       if (_backend && _backendStarted)
@@ -226,6 +229,7 @@ namespace app::core::playback
       return;
     }
 
+    PLAYBACK_LOG_INFO("Playback resumed");
     if (_backendStarted)
     {
       _state = TransportState::Playing;
@@ -270,6 +274,7 @@ namespace app::core::playback
 
   void PlaybackEngine::stop()
   {
+    PLAYBACK_LOG_INFO("Playback stopped");
     if (_backend)
     {
       _backend->stop();
@@ -289,6 +294,7 @@ namespace app::core::playback
 
   void PlaybackEngine::seek(std::uint32_t positionMs)
   {
+    PLAYBACK_LOG_INFO("Seek requested: {} ms", positionMs);
     auto source = _source.load(std::memory_order_acquire);
     if (!source)
     {

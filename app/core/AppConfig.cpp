@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "core/AppConfig.h"
+#include "core/Log.h"
 
 #include <glibmm/keyfile.h>
 #include <glibmm/miscutils.h>
@@ -69,6 +70,7 @@ namespace app::core
   void AppConfig::save() const
   {
     auto const path = configPath();
+    APP_LOG_INFO("Saving config to: {}", path.string());
     std::filesystem::create_directories(path.parent_path());
 
     auto keyFile = Glib::KeyFile::create();
