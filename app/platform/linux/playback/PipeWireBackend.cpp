@@ -250,6 +250,7 @@ namespace
     }
 
     auto info = spa_audio_info_raw{};
+
     if (::spa_format_audio_raw_parse(param, &info) < 0)
     {
       return std::nullopt;
@@ -920,6 +921,7 @@ namespace app::playback
       if (isNode)
       {
         auto record = parseNodeRecord(version, props);
+
         if (_monitorState->streamNodeId == PW_ID_ANY)
         {
           auto const appName = lookupProperty(props, PW_KEY_APP_NAME);
@@ -1077,6 +1079,7 @@ namespace app::playback
       if (info->change_mask & PW_NODE_CHANGE_MASK_PROPS)
       {
         auto version = std::uint32_t(PW_VERSION_NODE);
+
         if (auto const existing = _monitorState->nodes.find(info->id); existing != _monitorState->nodes.end())
         {
           version = existing->second.version;

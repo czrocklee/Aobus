@@ -69,6 +69,7 @@ namespace app::ui
       [this](Gtk::FlowBoxChild* child) -> bool
       {
         auto text = _searchEntry.get_text();
+
         if (text.empty())
         {
           return true;
@@ -348,6 +349,7 @@ namespace app::ui
   void TagPopover::onEntryActivated()
   {
     auto text = _searchEntry.get_text();
+
     if (text.empty())
     {
       hide();

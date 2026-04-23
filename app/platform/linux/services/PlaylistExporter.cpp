@@ -92,6 +92,7 @@ namespace app::services
 
       // Try to get the URI path for this track
       auto optUri = _provider.getUriPath(id);
+
       if (optUri)
       {
         // Write path relative to playlist location

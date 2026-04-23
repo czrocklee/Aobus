@@ -315,6 +315,7 @@ namespace app::core::playback
     }
 
     auto inChannelLayout = AVChannelLayout{};
+
     if (_codecContext->ch_layout.nb_channels > 0 && ::av_channel_layout_check(&_codecContext->ch_layout) != 0)
     {
       ::av_channel_layout_copy(&inChannelLayout, &_codecContext->ch_layout);
@@ -451,6 +452,7 @@ namespace app::core::playback
       if (ret == 0)
       {
         auto block = convertFrameToInterleavedPcm();
+
         if (block && block->frames > 0)
         {
           return block;

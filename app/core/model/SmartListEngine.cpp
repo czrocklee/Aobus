@@ -65,6 +65,7 @@ namespace app::core::model
       return;
     }
     auto it = _engine._buckets.find(&_source);
+
     if (it != _engine._buckets.end())
     {
       _engine.handleSourceReset(*it->second);
@@ -78,6 +79,7 @@ namespace app::core::model
       return;
     }
     auto it = _engine._buckets.find(&_source);
+
     if (it != _engine._buckets.end())
     {
       _engine.handleSourceInserted(*it->second, id, index);
@@ -91,6 +93,7 @@ namespace app::core::model
       return;
     }
     auto it = _engine._buckets.find(&_source);
+
     if (it != _engine._buckets.end())
     {
       _engine.handleSourceUpdated(*it->second, id, index);
@@ -104,6 +107,7 @@ namespace app::core::model
       return;
     }
     auto it = _engine._buckets.find(&_source);
+
     if (it != _engine._buckets.end())
     {
       _engine.handleSourceRemoved(*it->second, id);
@@ -117,6 +121,7 @@ namespace app::core::model
       return;
     }
     auto it = _engine._buckets.find(&_source);
+
     if (it != _engine._buckets.end())
     {
       _engine.handleSourceDestroyed(*it->second);
@@ -289,6 +294,7 @@ namespace app::core::model
   void SmartListEngine::notifyTrackDataChanged(RegistrationId id, TrackId trackId)
   {
     auto it = _states.find(id);
+
     if (it == _states.end())
     {
       return;
@@ -302,6 +308,7 @@ namespace app::core::model
 
     // Get the source index for proper ordering
     auto sourceIndexOpt = state.bucket->source->indexOf(trackId);
+
     if (!sourceIndexOpt)
     {
       return;
@@ -324,6 +331,7 @@ namespace app::core::model
     for (auto regId : bucket.registrations)
     {
       auto it = _states.find(regId);
+
       if (it != _states.end())
       {
         allStates.push_back(it->second.get());
@@ -351,6 +359,7 @@ namespace app::core::model
     for (auto regId : bucket.registrations)
     {
       auto it = _states.find(regId);
+
       if (it != _states.end() && it->second->dirty)
       {
         applyStagedState(*it->second);
@@ -482,6 +491,7 @@ namespace app::core::model
     for (auto regId : bucket.registrations)
     {
       auto it = _states.find(regId);
+
       if (it == _states.end())
       {
         continue;
@@ -566,6 +576,7 @@ namespace app::core::model
     for (auto regId : bucket.registrations)
     {
       auto it = _states.find(regId);
+
       if (it == _states.end())
       {
         continue;
@@ -633,6 +644,7 @@ namespace app::core::model
       else if (nowMatches && wasPresent)
       {
         auto updateIndex = static_cast<std::size_t>(std::distance(state.members.begin(), it2));
+
         if (state.facade)
         {
           notifyFacadeUpdated(*state.facade, id, updateIndex);
@@ -656,6 +668,7 @@ namespace app::core::model
     for (auto regId : bucket.registrations)
     {
       auto it = _states.find(regId);
+
       if (it == _states.end())
       {
         continue;
@@ -704,6 +717,7 @@ namespace app::core::model
     for (auto regId : bucket.registrations)
     {
       auto it = _states.find(regId);
+
       if (it != _states.end())
       {
         it->second->members.clear();
