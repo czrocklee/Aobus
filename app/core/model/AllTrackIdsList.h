@@ -8,6 +8,7 @@
 #include <rs/core/TrackStore.h>
 #include <rs/lmdb/Transaction.h>
 
+#include <flat_set>
 #include <vector>
 
 namespace app::core::model
@@ -32,12 +33,12 @@ namespace app::core::model
 
     // TrackIdList interface
     std::size_t size() const override { return _trackIds.size(); }
-    TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
+    TrackId trackIdAt(std::size_t index) const override { return *(_trackIds.begin() + index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
   private:
     rs::core::TrackStore* _store;
-    std::vector<TrackId> _trackIds;
+    std::flat_set<TrackId> _trackIds;
   };
 
 } // namespace app::core::model

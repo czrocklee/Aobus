@@ -4,6 +4,7 @@
 #include "core/model/SmartListEngine.h"
 #include "core/Log.h"
 
+#include "core/model/FilteredTrackIdList.h"
 #include "core/model/TrackIdList.h"
 
 #include <rs/expr/ExecutionPlan.h>
@@ -11,50 +12,19 @@
 #include <rs/lmdb/Transaction.h>
 
 #include <algorithm>
+#include <flat_set>
 #include <stdexcept>
 #include <utility>
 
 namespace app::core::model
 {
 
-  struct SmartListEngine::SmartListState
-  {
-    RegistrationId id = 0;
-    TrackIdList* source = nullptr;
-    TrackIdList* facade = nullptr; // The FilteredTrackIdList facade
-
-    std::string expression;
-    bool hasError = false;
-    std::string errorMessage;
-
-    std::unique_ptr<rs::expr::ExecutionPlan> plan;
-    rs::expr::PlanEvaluator evaluator;
-    std::vector<TrackId> members;
-
-    std::string stagedExpression;
-    bool stagedHasError = false;
-    std::string stagedErrorMessage;
-    std::unique_ptr<rs::expr::ExecutionPlan> stagedPlan;
-
-    // Reference to owning bucket (non-owning)
-    SourceBucket* bucket = nullptr;
-
-    // Dirty flag - needs rebuild
-    bool dirty = true;
-  };
-
-  struct SmartListEngine::SourceBucket
-  {
-    TrackIdList* source = nullptr;
-    bool sourceAlive = true;
-    std::vector<RegistrationId> registrations;
-    std::unique_ptr<TrackIdListObserver> observer;
-  };
-
   // SourceObserver implementation
 
   SourceObserver::SourceObserver(SmartListEngine& engine, TrackIdList& source)
-    : _engine{engine}, _source{source}, _valid{true}
+    : _engine{engine}
+    , _source{source}
+    , _valid{true}
   {
   }
 
@@ -114,6 +84,48 @@ namespace app::core::model
     }
   }
 
+  void SourceObserver::onBatchInserted(std::span<const TrackId> ids)
+  {
+    if (!_valid)
+    {
+      return;
+    }
+    auto it = _engine._buckets.find(&_source);
+
+    if (it != _engine._buckets.end())
+    {
+      _engine.handleSourceBatchInserted(*it->second, ids);
+    }
+  }
+
+  void SourceObserver::onBatchUpdated(std::span<const TrackId> ids)
+  {
+    if (!_valid)
+    {
+      return;
+    }
+    auto it = _engine._buckets.find(&_source);
+
+    if (it != _engine._buckets.end())
+    {
+      _engine.handleSourceBatchUpdated(*it->second, ids);
+    }
+  }
+
+  void SourceObserver::onBatchRemoved(std::span<const TrackId> ids)
+  {
+    if (!_valid)
+    {
+      return;
+    }
+    auto it = _engine._buckets.find(&_source);
+
+    if (it != _engine._buckets.end())
+    {
+      _engine.handleSourceBatchRemoved(*it->second, ids);
+    }
+  }
+
   void SourceObserver::onSourceDestroyed()
   {
     if (!_valid)
@@ -143,32 +155,16 @@ namespace app::core::model
       if (bucket->observer)
       {
         static_cast<SourceObserver*>(bucket->observer.get())->invalidate();
-        if (bucket->sourceAlive) source->detach(bucket->observer.get());
+        if (bucket->sourceAlive)
+        {
+          source->detach(bucket->observer.get());
+        }
       }
     }
   }
 
-  SmartListEngine::SmartListState* SmartListEngine::getState(RegistrationId id)
+  void SmartListEngine::registerList(TrackIdList& source, FilteredTrackIdList& list)
   {
-    auto it = _states.find(id);
-    return (it != _states.end()) ? it->second.get() : nullptr;
-  }
-
-  SmartListEngine::SmartListState const* SmartListEngine::getState(RegistrationId id) const
-  {
-    auto it = _states.find(id);
-    return (it != _states.end()) ? it->second.get() : nullptr;
-  }
-
-  SmartListEngine::RegistrationId SmartListEngine::registerList(TrackIdList& source, TrackIdList& facade)
-  {
-    auto id = _nextRegistrationId++;
-    auto state = std::make_unique<SmartListState>();
-    state->id = id;
-    state->source = &source;
-    state->facade = &facade;
-    stageExpression(*state, "");
-
     auto& bucket = _buckets[&source];
     if (!bucket)
     {
@@ -178,255 +174,128 @@ namespace app::core::model
       source.attach(bucket->observer.get());
     }
 
-    state->bucket = bucket.get();
-    bucket->registrations.push_back(id);
-    _states.emplace(id, std::move(state));
-    return id;
+    bucket->lists.push_back(&list);
   }
 
-  void SmartListEngine::unregisterList(RegistrationId id)
+  void SmartListEngine::unregisterList(TrackIdList& source, FilteredTrackIdList& list)
   {
-    auto* state = getState(id);
-    if (!state) return;
-
-    auto* source = state->source;
-    auto* bucket = state->bucket;
-
-    if (bucket)
+    auto it = _buckets.find(&source);
+    if (it == _buckets.end())
     {
-      std::erase(bucket->registrations, id);
-      if (bucket->registrations.empty())
+      return;
+    }
+
+    auto& bucket = *it->second;
+    std::erase(bucket.lists, &list);
+
+    if (bucket.lists.empty())
+    {
+      if (bucket.sourceAlive)
       {
-        if (source && bucket->sourceAlive) source->detach(bucket->observer.get());
-        _buckets.erase(source);
+        source.detach(bucket.observer.get());
+      }
+      _buckets.erase(it);
+    }
+  }
+
+  void SmartListEngine::rebuild(FilteredTrackIdList& list)
+  {
+    auto it = _buckets.find(list._source);
+    if (it == _buckets.end())
+    {
+      return;
+    }
+
+    if (!list._dirty)
+    {
+      list.stageExpression(list._expression);
+    }
+    rebuildDirtyLists(*it->second);
+  }
+
+  void SmartListEngine::notifyTrackDataChanged(TrackIdList& source, TrackId trackId)
+  {
+    auto it = _buckets.find(&source);
+    if (it == _buckets.end())
+    {
+      return;
+    }
+
+    // Re-evaluate membership for all lists in this bucket
+    if (auto sourceIndex = source.indexOf(trackId))
+    {
+      handleSourceUpdated(*it->second, trackId, *sourceIndex);
+    }
+  }
+
+  void SmartListEngine::rebuildActiveLists(SourceBucket& bucket)
+  {
+    if (bucket.lists.empty())
+    {
+      return;
+    }
+
+    rebuildLists(bucket.lists);
+  }
+
+  void SmartListEngine::rebuildDirtyLists(SourceBucket& bucket)
+  {
+    std::vector<FilteredTrackIdList*> dirtyLists;
+    for (auto* list : bucket.lists)
+    {
+      if (list->_dirty)
+      {
+        list->applyStagedState();
+        dirtyLists.push_back(list);
       }
     }
 
-    _states.erase(id);
-  }
-
-  void SmartListEngine::setExpression(RegistrationId id, std::string expr)
-  {
-    auto* state = getState(id);
-    if (!state) throw std::invalid_argument("Invalid registration id");
-    stageExpression(*state, std::move(expr));
-  }
-
-  void SmartListEngine::rebuild(RegistrationId id)
-  {
-    auto* state = getState(id);
-    if (!state || !state->bucket) return;
-
-    if (!state->dirty) stageExpression(*state, state->expression);
-    rebuildDirtyStates(*state->bucket);
-  }
-
-  std::size_t SmartListEngine::size(RegistrationId id) const
-  {
-    auto* state = getState(id);
-    return state ? state->members.size() : 0;
-  }
-
-  TrackId SmartListEngine::trackIdAt(RegistrationId id, std::size_t index) const
-  {
-    auto* state = getState(id);
-    if (!state) throw std::out_of_range("Invalid registration id");
-    return state->members.at(index);
-  }
-
-  std::optional<std::size_t> SmartListEngine::indexOf(RegistrationId id, TrackId trackId) const
-  {
-    auto* state = getState(id);
-    if (!state) return std::nullopt;
-
-    auto const it = std::find(state->members.begin(), state->members.end(), trackId);
-    if (it == state->members.end()) return std::nullopt;
-    return static_cast<std::size_t>(std::distance(state->members.begin(), it));
-  }
-
-  bool SmartListEngine::hasError(RegistrationId id) const
-  {
-    auto* state = getState(id);
-    return state ? (state->dirty ? state->stagedHasError : state->hasError) : true;
-  }
-
-  std::string const& SmartListEngine::errorMessage(RegistrationId id) const
-  {
-    static std::string const empty;
-    auto* state = getState(id);
-    return state ? (state->dirty ? state->stagedErrorMessage : state->errorMessage) : empty;
-  }
-
-  void SmartListEngine::stageExpression(SmartListState& state, std::string expr)
-  {
-    state.stagedExpression = std::move(expr);
-
-    try
-    {
-      auto parsed = state.stagedExpression.empty() ? rs::expr::parse("true") : rs::expr::parse(state.stagedExpression);
-      auto compiler = rs::expr::QueryCompiler{&_ml->dictionary()};
-      state.stagedPlan = std::make_unique<rs::expr::ExecutionPlan>(compiler.compile(parsed));
-      state.stagedHasError = false;
-      state.stagedErrorMessage.clear();
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_ERROR("Smart list expression error for '{}': {}", expr, e.what());
-      state.stagedHasError = true;
-      state.stagedErrorMessage = e.what();
-      state.stagedPlan.reset();
-    }
-
-    state.dirty = true;
-  }
-
-  void SmartListEngine::applyStagedState(SmartListState& state)
-  {
-    if (!state.dirty) return;
-
-    state.expression = state.stagedExpression;
-    state.hasError = state.stagedHasError;
-    state.errorMessage = state.stagedErrorMessage;
-    state.plan = std::move(state.stagedPlan);
-    state.dirty = false;
-  }
-
-  void SmartListEngine::notifyTrackDataChanged(RegistrationId id, TrackId trackId)
-  {
-    auto it = _states.find(id);
-
-    if (it == _states.end())
+    if (dirtyLists.empty())
     {
       return;
     }
 
-    auto& state = *it->second;
-    if (!state.bucket || !state.bucket->source)
-    {
-      return;
-    }
-
-    // Get the source index for proper ordering
-    auto sourceIndexOpt = state.bucket->source->indexOf(trackId);
-
-    if (!sourceIndexOpt)
-    {
-      return;
-    }
-
-    // Re-evaluate whether the track still matches the filter
-    handleSourceUpdated(*state.bucket, trackId, *sourceIndexOpt);
+    rebuildLists(dirtyLists);
   }
 
-  void SmartListEngine::rebuildActiveStates(SourceBucket& bucket)
+  void SmartListEngine::rebuildLists(std::span<FilteredTrackIdList*> lists)
   {
-    if (bucket.registrations.empty())
+    if (lists.empty())
     {
       return;
     }
 
-    std::vector<SmartListState*> allStates;
-    allStates.reserve(bucket.registrations.size());
-
-    for (auto regId : bucket.registrations)
+    std::vector<FilteredTrackIdList*> evaluatableLists;
+    for (auto* list : lists)
     {
-      auto it = _states.find(regId);
-
-      if (it != _states.end())
+      if (list->_hasError || !list->_plan)
       {
-        allStates.push_back(it->second.get());
+        list->_members.clear();
+      }
+      else
+      {
+        evaluatableLists.push_back(list);
       }
     }
 
-    if (allStates.empty())
+    if (!evaluatableLists.empty())
     {
-      return;
+      auto const mode = getUnionMode(evaluatableLists);
+      rebuildGroup(*lists.front()->_source, evaluatableLists, mode);
     }
 
-    rebuildStates(allStates);
-  }
-
-  void SmartListEngine::rebuildDirtyStates(SourceBucket& bucket)
-  {
-    if (bucket.registrations.empty())
+    // Notify Reset for only the provided lists
+    for (auto* list : lists)
     {
-      return;
-    }
-
-    std::vector<SmartListState*> dirtyStates;
-    dirtyStates.reserve(bucket.registrations.size());
-
-    for (auto regId : bucket.registrations)
-    {
-      auto it = _states.find(regId);
-
-      if (it != _states.end() && it->second->dirty)
-      {
-        applyStagedState(*it->second);
-        dirtyStates.push_back(it->second.get());
-      }
-    }
-
-    if (dirtyStates.empty())
-    {
-      return;
-    }
-
-    rebuildStates(dirtyStates);
-  }
-
-  void SmartListEngine::rebuildStates(std::span<SmartListState*> states)
-  {
-    if (states.empty())
-    {
-      return;
-    }
-
-    std::vector<SmartListState*> hotOnlyStates;
-    std::vector<SmartListState*> coldOrBothStates;
-
-    for (auto* state : states)
-    {
-      if (state->hasError || !state->plan)
-      {
-        state->members.clear();
-        continue;
-      }
-
-      switch (state->plan->accessProfile)
-      {
-        case rs::expr::AccessProfile::HotOnly: hotOnlyStates.push_back(state); break;
-        case rs::expr::AccessProfile::ColdOnly:
-        case rs::expr::AccessProfile::HotAndCold: coldOrBothStates.push_back(state); break;
-      }
-    }
-
-    // Rebuild each group
-    if (!hotOnlyStates.empty())
-    {
-      rebuildGroup(*states.front()->source, hotOnlyStates, rs::core::TrackStore::Reader::LoadMode::Hot);
-    }
-
-    if (!coldOrBothStates.empty())
-    {
-      rebuildGroup(*states.front()->source, coldOrBothStates, rs::core::TrackStore::Reader::LoadMode::Both);
-    }
-
-    // Notify facades of reset
-    for (auto* state : states)
-    {
-      if (state->facade)
-      {
-        notifyFacadeReset(*state->facade);
-      }
+      list->TrackIdList::notifyReset();
     }
   }
 
   void SmartListEngine::rebuildGroup(TrackIdList& source,
-                                     std::span<SmartListState*> states,
+                                     std::span<FilteredTrackIdList*> lists,
                                      rs::core::TrackStore::Reader::LoadMode mode)
   {
-    if (states.empty())
+    if (lists.empty())
     {
       return;
     }
@@ -434,7 +303,7 @@ namespace app::core::model
     rs::lmdb::ReadTransaction txn(_ml->readTransaction());
     auto reader = _ml->tracks().reader(txn);
 
-    std::vector<std::vector<TrackId>> nextMembers(states.size());
+    std::vector<std::vector<TrackId>> nextMembers(lists.size());
 
     for (std::size_t i = 0; i < source.size(); ++i)
     {
@@ -446,291 +315,347 @@ namespace app::core::model
         continue;
       }
 
-      for (std::size_t stateIndex = 0; stateIndex < states.size(); ++stateIndex)
+      for (std::size_t listIndex = 0; listIndex < lists.size(); ++listIndex)
       {
-        auto& state = *states[stateIndex];
-        if (state.evaluator.matches(*state.plan, *view))
+        auto* list = lists[listIndex];
+        if (list->_evaluator.matches(*list->_plan, *view))
         {
-          nextMembers[stateIndex].push_back(id);
+          nextMembers[listIndex].push_back(id);
         }
       }
     }
 
-    // Update members directly without notification - will be followed by facade reset
-    for (std::size_t i = 0; i < states.size(); ++i)
+    for (std::size_t i = 0; i < lists.size(); ++i)
     {
-      auto& state = *states[i];
-      state.members = std::move(nextMembers[i]);
+      std::ranges::sort(nextMembers[i]);
+      lists[i]->_members = std::flat_set<TrackId>(std::move(nextMembers[i]));
     }
-  }
-
-  std::size_t SmartListEngine::insertionIndexForSourceOrder(SmartListState const& state, std::size_t sourceIndex)
-  {
-    for (std::size_t i = 0; i < state.members.size(); ++i)
-    {
-      auto const memberSourceIndex = state.source->indexOf(state.members[i]);
-      if (!memberSourceIndex || *memberSourceIndex > sourceIndex)
-      {
-        return i;
-      }
-    }
-
-    return state.members.size();
   }
 
   void SmartListEngine::handleSourceReset(SourceBucket& bucket)
   {
-    rebuildActiveStates(bucket);
+    rebuildActiveLists(bucket);
   }
 
-  void SmartListEngine::handleSourceInserted(SourceBucket& bucket, TrackId id, std::size_t sourceIndex)
+  void SmartListEngine::handleSourceInserted(SourceBucket& bucket, TrackId id, std::size_t /*sourceIndex*/)
   {
-    std::vector<SmartListState*> hotOnlyStates;
-    std::vector<SmartListState*> coldOrBothStates;
-
-    for (auto regId : bucket.registrations)
+    std::vector<FilteredTrackIdList*> evaluatableLists;
+    for (auto* list : bucket.lists)
     {
-      auto it = _states.find(regId);
-
-      if (it == _states.end())
+      if (list->_hasError || !list->_plan || list->_dirty)
       {
         continue;
       }
-
-      auto& state = *it->second;
-      if (state.hasError || !state.plan)
-      {
-        continue;
-      }
-
-      switch (state.plan->accessProfile)
-      {
-        case rs::expr::AccessProfile::HotOnly: hotOnlyStates.push_back(&state); break;
-        case rs::expr::AccessProfile::ColdOnly:
-        case rs::expr::AccessProfile::HotAndCold: coldOrBothStates.push_back(&state); break;
-      }
+      evaluatableLists.push_back(list);
     }
 
-    if (hotOnlyStates.empty() && coldOrBothStates.empty())
+    if (evaluatableLists.empty())
     {
       return;
     }
 
     rs::lmdb::ReadTransaction txn(_ml->readTransaction());
     auto reader = _ml->tracks().reader(txn);
+    auto const mode = getUnionMode(evaluatableLists);
+    auto const view = reader.get(id, mode);
 
-    std::optional<rs::core::TrackView> viewHot;
-    std::optional<rs::core::TrackView> viewBoth;
-
-    if (!coldOrBothStates.empty())
-    {
-      viewBoth = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
-    }
-    else
-    {
-      viewHot = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Hot);
-    }
-
-    for (auto* state : hotOnlyStates)
-    {
-      auto const& view = viewBoth ? viewBoth : viewHot;
-      if (!view || !state->evaluator.matches(*state->plan, *view))
-      {
-        continue;
-      }
-
-      auto const insertIndex = insertionIndexForSourceOrder(*state, sourceIndex);
-      state->members.insert(state->members.begin() + static_cast<std::ptrdiff_t>(insertIndex), id);
-      if (state->facade)
-      {
-        notifyFacadeInserted(*state->facade, id, insertIndex);
-      }
-    }
-
-    if (!viewBoth)
+    if (!view)
     {
       return;
     }
 
-    for (auto* state : coldOrBothStates)
+    for (auto* list : evaluatableLists)
     {
-      if (!state->evaluator.matches(*state->plan, *viewBoth))
+      if (list->_evaluator.matches(*list->_plan, *view))
       {
-        continue;
-      }
-
-      auto const insertIndex = insertionIndexForSourceOrder(*state, sourceIndex);
-      state->members.insert(state->members.begin() + static_cast<std::ptrdiff_t>(insertIndex), id);
-      if (state->facade)
-      {
-        notifyFacadeInserted(*state->facade, id, insertIndex);
+        auto [it, inserted] = list->_members.insert(id);
+        if (inserted)
+        {
+          auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
+          list->TrackIdList::notifyInserted(id, index);
+        }
       }
     }
   }
 
-  void SmartListEngine::handleSourceUpdated(SourceBucket& bucket, TrackId id, std::size_t sourceIndex)
+  void SmartListEngine::handleSourceUpdated(SourceBucket& bucket, TrackId id, std::size_t /*sourceIndex*/)
   {
-    std::vector<SmartListState*> hotOnlyStates;
-    std::vector<SmartListState*> coldOrBothStates;
-
-    for (auto regId : bucket.registrations)
+    std::vector<FilteredTrackIdList*> evaluatableLists;
+    for (auto* list : bucket.lists)
     {
-      auto it = _states.find(regId);
-
-      if (it == _states.end())
+      if (list->_hasError || !list->_plan || list->_dirty)
       {
         continue;
       }
-
-      auto& state = *it->second;
-      if (state.hasError || !state.plan)
-      {
-        continue;
-      }
-
-      switch (state.plan->accessProfile)
-      {
-        case rs::expr::AccessProfile::HotOnly: hotOnlyStates.push_back(&state); break;
-        case rs::expr::AccessProfile::ColdOnly:
-        case rs::expr::AccessProfile::HotAndCold: coldOrBothStates.push_back(&state); break;
-      }
+      evaluatableLists.push_back(list);
     }
 
-    if (hotOnlyStates.empty() && coldOrBothStates.empty())
+    if (evaluatableLists.empty())
     {
       return;
     }
 
     rs::lmdb::ReadTransaction txn(_ml->readTransaction());
     auto reader = _ml->tracks().reader(txn);
+    auto const mode = getUnionMode(evaluatableLists);
+    auto const view = reader.get(id, mode);
 
-    std::optional<rs::core::TrackView> viewHot;
-    std::optional<rs::core::TrackView> viewBoth;
-
-    if (!coldOrBothStates.empty())
+    for (auto* list : evaluatableLists)
     {
-      viewBoth = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
-    }
-    else
-    {
-      viewHot = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Hot);
-    }
-
-    auto updateState = [this, id, sourceIndex](SmartListState& state, std::optional<rs::core::TrackView> const& view)
-    {
-      bool const nowMatches = view && state.evaluator.matches(*state.plan, *view);
-
-      auto const it2 = std::find(state.members.begin(), state.members.end(), id);
-      bool const wasPresent = it2 != state.members.end();
+      bool const nowMatches = view && list->_evaluator.matches(*list->_plan, *view);
+      auto const it = list->_members.find(id);
+      bool const wasPresent = it != list->_members.end();
 
       if (nowMatches && !wasPresent)
       {
-        auto const insertIndex = insertionIndexForSourceOrder(state, sourceIndex);
-        state.members.insert(state.members.begin() + static_cast<std::ptrdiff_t>(insertIndex), id);
-        if (state.facade)
+        auto [it2, inserted] = list->_members.insert(id);
+        if (inserted)
         {
-          notifyFacadeInserted(*state.facade, id, insertIndex);
+          auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it2));
+          list->TrackIdList::notifyInserted(id, index);
         }
       }
       else if (!nowMatches && wasPresent)
       {
-        auto removeIndex = static_cast<std::size_t>(std::distance(state.members.begin(), it2));
-        state.members.erase(it2);
-        if (state.facade)
-        {
-          notifyFacadeRemoved(*state.facade, id, removeIndex);
-        }
+        auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
+        list->_members.erase(it);
+        list->TrackIdList::notifyRemoved(id, index);
       }
       else if (nowMatches && wasPresent)
       {
-        auto updateIndex = static_cast<std::size_t>(std::distance(state.members.begin(), it2));
-
-        if (state.facade)
-        {
-          notifyFacadeUpdated(*state.facade, id, updateIndex);
-        }
+        auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
+        list->TrackIdList::notifyUpdated(id, index);
       }
-    };
-
-    for (auto* state : hotOnlyStates)
-    {
-      updateState(*state, viewBoth ? viewBoth : viewHot);
-    }
-
-    for (auto* state : coldOrBothStates)
-    {
-      updateState(*state, viewBoth);
     }
   }
 
   void SmartListEngine::handleSourceRemoved(SourceBucket& bucket, TrackId id)
   {
-    for (auto regId : bucket.registrations)
+    for (auto* list : bucket.lists)
     {
-      auto it = _states.find(regId);
+      if (list->_dirty)
+      {
+        continue;
+      }
+      auto const it = list->_members.find(id);
+      if (it != list->_members.end())
+      {
+        auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
+        list->_members.erase(it);
+        list->TrackIdList::notifyRemoved(id, index);
+      }
+    }
+  }
 
-      if (it == _states.end())
+  void SmartListEngine::handleSourceBatchInserted(SourceBucket& bucket, std::span<const TrackId> ids)
+  {
+    if (ids.empty())
+    {
+      return;
+    }
+
+    std::vector<FilteredTrackIdList*> evaluatableLists;
+    for (auto* list : bucket.lists)
+    {
+      if (list->_hasError || !list->_plan || list->_dirty)
+      {
+        continue;
+      }
+      evaluatableLists.push_back(list);
+    }
+
+    if (evaluatableLists.empty())
+    {
+      return;
+    }
+
+    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
+    auto reader = _ml->tracks().reader(txn);
+    auto const mode = getUnionMode(evaluatableLists);
+
+    std::vector<std::vector<TrackId>> matchedIds(evaluatableLists.size());
+
+    for (auto id : ids)
+    {
+      auto const view = reader.get(id, mode);
+      if (!view)
       {
         continue;
       }
 
-      auto& state = *it->second;
-      auto const it2 = std::find(state.members.begin(), state.members.end(), id);
-      if (it2 != state.members.end())
+      for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
       {
-        auto removeIndex = static_cast<std::size_t>(std::distance(state.members.begin(), it2));
-        state.members.erase(it2);
-        if (state.facade)
+        if (evaluatableLists[i]->_evaluator.matches(*evaluatableLists[i]->_plan, *view))
         {
-          notifyFacadeRemoved(*state.facade, id, removeIndex);
+          matchedIds[i].push_back(id);
         }
+      }
+    }
+
+    for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
+    {
+      if (!matchedIds[i].empty())
+      {
+        auto& list = *evaluatableLists[i];
+        list._members.insert(matchedIds[i].begin(), matchedIds[i].end());
+        list.TrackIdList::notifyBatchInserted(matchedIds[i]);
       }
     }
   }
 
-  void SmartListEngine::notifyFacadeReset(TrackIdList& facade)
+  void SmartListEngine::handleSourceBatchUpdated(SourceBucket& bucket, std::span<const TrackId> ids)
   {
-    facade.notifyReset();
+    if (ids.empty())
+    {
+      return;
+    }
+
+    std::vector<FilteredTrackIdList*> evaluatableLists;
+    for (auto* list : bucket.lists)
+    {
+      if (list->_hasError || !list->_plan || list->_dirty)
+      {
+        continue;
+      }
+      evaluatableLists.push_back(list);
+    }
+
+    if (evaluatableLists.empty())
+    {
+      return;
+    }
+
+    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
+    auto reader = _ml->tracks().reader(txn);
+    auto const mode = getUnionMode(evaluatableLists);
+
+    // Track transitions for each list
+    struct Transitions
+    {
+      std::vector<TrackId> inserted;
+      std::vector<TrackId> removed;
+      std::vector<TrackId> updated;
+    };
+    std::vector<Transitions> transitions(evaluatableLists.size());
+
+    for (auto id : ids)
+    {
+      auto const view = reader.get(id, mode);
+
+      for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
+      {
+        auto& list = *evaluatableLists[i];
+        bool const nowMatches = view && list._evaluator.matches(*list._plan, *view);
+        bool const wasPresent = list._members.find(id) != list._members.end();
+
+        if (nowMatches && !wasPresent)
+        {
+          transitions[i].inserted.push_back(id);
+        }
+        else if (!nowMatches && wasPresent)
+        {
+          transitions[i].removed.push_back(id);
+        }
+        else if (nowMatches && wasPresent)
+        {
+          transitions[i].updated.push_back(id);
+        }
+      }
+    }
+
+    for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
+    {
+      auto& list = *evaluatableLists[i];
+      auto& trans = transitions[i];
+
+      if (!trans.removed.empty())
+      {
+        for (auto id : trans.removed)
+        {
+          list._members.erase(id);
+        }
+        list.TrackIdList::notifyBatchRemoved(trans.removed);
+      }
+
+      if (!trans.inserted.empty())
+      {
+        list._members.insert(trans.inserted.begin(), trans.inserted.end());
+        list.TrackIdList::notifyBatchInserted(trans.inserted);
+      }
+
+      if (!trans.updated.empty())
+      {
+        list.TrackIdList::notifyBatchUpdated(trans.updated);
+      }
+    }
   }
 
-  void SmartListEngine::notifyFacadeInserted(TrackIdList& facade, TrackId id, std::size_t index)
+  void SmartListEngine::handleSourceBatchRemoved(SourceBucket& bucket, std::span<const TrackId> ids)
   {
-    facade.notifyInserted(id, index);
-  }
+    for (auto* list : bucket.lists)
+    {
+      if (list->_dirty)
+      {
+        continue;
+      }
 
-  void SmartListEngine::notifyFacadeUpdated(TrackIdList& facade, TrackId id, std::size_t index)
-  {
-    facade.notifyUpdated(id, index);
-  }
+      std::vector<TrackId> removed;
+      for (auto id : ids)
+      {
+        if (list->_members.erase(id) > 0)
+        {
+          removed.push_back(id);
+        }
+      }
 
-  void SmartListEngine::notifyFacadeRemoved(TrackIdList& facade, TrackId id, std::size_t index)
-  {
-    facade.notifyRemoved(id, index);
+      if (!removed.empty())
+      {
+        list->notifyBatchRemoved(removed);
+      }
+    }
   }
 
   void SmartListEngine::handleSourceDestroyed(SourceBucket& bucket)
   {
-    // Mark source as dead so unregisterList knows it's already detached
     bucket.sourceAlive = false;
-
-    // Clear state members in all registrations belonging to this bucket
-    for (auto regId : bucket.registrations)
+    for (auto* list : bucket.lists)
     {
-      auto it = _states.find(regId);
+      list->_members.clear();
+      list->TrackIdList::notifyReset();
+    }
+  }
 
-      if (it != _states.end())
+  rs::core::TrackStore::Reader::LoadMode SmartListEngine::getUnionMode(std::span<FilteredTrackIdList*> lists)
+  {
+    bool needsHot = false;
+    bool needsCold = false;
+
+    for (auto* list : lists)
+    {
+      if (!list->_plan)
       {
-        it->second->members.clear();
-        if (it->second->facade)
-        {
-          notifyFacadeReset(*it->second->facade);
-        }
+        continue;
+      }
+      switch (list->_plan->accessProfile)
+      {
+        case rs::expr::AccessProfile::HotOnly: needsHot = true; break;
+        case rs::expr::AccessProfile::ColdOnly: needsCold = true; break;
+        case rs::expr::AccessProfile::HotAndCold:
+          needsHot = true;
+          needsCold = true;
+          break;
       }
     }
 
-    // We don't erase the bucket or null out pointers here because unregisterList
-    // might still be called for individual registrations later, and it needs
-    // to find the bucket by the original source pointer (the key in _buckets).
+    if (needsHot && needsCold)
+    {
+      return rs::core::TrackStore::Reader::LoadMode::Both;
+    }
+    if (needsCold)
+    {
+      return rs::core::TrackStore::Reader::LoadMode::Cold;
+    }
+    return rs::core::TrackStore::Reader::LoadMode::Hot;
   }
 
 } // namespace app::core::model

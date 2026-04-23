@@ -15,6 +15,31 @@ namespace rs::expr
 
   namespace
   {
+    bool requiresHotData(ExecutionPlan const& plan)
+    {
+      return plan.accessProfile != AccessProfile::ColdOnly;
+    }
+
+    bool requiresColdData(ExecutionPlan const& plan)
+    {
+      return plan.accessProfile != AccessProfile::HotOnly;
+    }
+
+    bool hasRequiredTrackData(ExecutionPlan const& plan, core::TrackView const& track)
+    {
+      if (requiresHotData(plan) && !track.isHotValid())
+      {
+        return false;
+      }
+
+      if (requiresColdData(plan) && !track.isColdValid())
+      {
+        return false;
+      }
+
+      return true;
+    }
+
     // Helper to find the previous LoadField instruction
     Instruction const* findPrevLoadField(std::vector<Instruction> const& instructions, Instruction const* current)
     {
@@ -259,6 +284,11 @@ namespace rs::expr
       return true;
     }
 
+    if (!hasRequiredTrackData(plan, track))
+    {
+      return false;
+    }
+
     // Bloom filter fast-path rejection for tag queries
     if (plan.tagBloomMask != 0)
     {
@@ -281,8 +311,7 @@ namespace rs::expr
       return true;
     }
 
-    // Return false for invalid/empty track views
-    if (!track.isHotValid())
+    if (!hasRequiredTrackData(plan, track))
     {
       return false;
     }

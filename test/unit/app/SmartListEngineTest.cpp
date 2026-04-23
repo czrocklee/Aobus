@@ -11,6 +11,7 @@
 #include <rs/core/TrackStore.h>
 #include <test/unit/lmdb/TestUtils.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -78,6 +79,32 @@ namespace
       notifyRemoved(id, *index);
     }
 
+    void batchInsert(std::span<const TrackId> ids)
+    {
+      _ids.insert(_ids.end(), ids.begin(), ids.end());
+      notifyBatchInserted(ids);
+    }
+
+    void batchUpdate(std::span<const TrackId> ids)
+    {
+      notifyBatchUpdated(ids);
+    }
+
+    void batchRemove(std::span<const TrackId> ids)
+    {
+      std::vector<TrackId> actualRemoved;
+      for (auto id : ids)
+      {
+        auto it = std::find(_ids.begin(), _ids.end(), id);
+        if (it != _ids.end())
+        {
+          _ids.erase(it);
+          actualRemoved.push_back(id);
+        }
+      }
+      notifyBatchRemoved(actualRemoved);
+    }
+
     std::size_t size() const override { return _ids.size(); }
 
     TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
@@ -108,6 +135,9 @@ namespace
       Inserted,
       Updated,
       Removed,
+      BatchInserted,
+      BatchUpdated,
+      BatchRemoved,
     };
 
     struct Event
@@ -115,6 +145,7 @@ namespace
       EventKind kind;
       TrackId id{};
       std::size_t index = 0;
+      std::vector<TrackId> batchIds{};
     };
 
     void onReset() override { events.push_back({.kind = EventKind::Reset}); }
@@ -132,6 +163,21 @@ namespace
     void onRemoved(TrackId id, std::size_t index) override
     {
       events.push_back({.kind = EventKind::Removed, .id = id, .index = index});
+    }
+
+    void onBatchInserted(std::span<const TrackId> ids) override
+    {
+      events.push_back({.kind = EventKind::BatchInserted, .batchIds = {ids.begin(), ids.end()}});
+    }
+
+    void onBatchUpdated(std::span<const TrackId> ids) override
+    {
+      events.push_back({.kind = EventKind::BatchUpdated, .batchIds = {ids.begin(), ids.end()}});
+    }
+
+    void onBatchRemoved(std::span<const TrackId> ids) override
+    {
+      events.push_back({.kind = EventKind::BatchRemoved, .batchIds = {ids.begin(), ids.end()}});
     }
 
     void clear() { events.clear(); }
@@ -208,13 +254,14 @@ namespace
 
 TEST_CASE("SmartListEngine", "[app][smartlist]")
 {
-  SECTION("empty expression matches all tracks and preserves source order")
+  SECTION("empty expression matches all tracks and maintains ID order")
   {
     auto testLibrary = TestMusicLibrary{};
     auto first = testLibrary.addTrack(makeTrackSpec("first", 2020));
     auto second = testLibrary.addTrack(makeTrackSpec("second", 2021));
 
     auto source = MutableTrackIdList{};
+    // Source is [second, first]
     source.addInitial(second);
     source.addInitial(first);
 
@@ -227,8 +274,9 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
 
     REQUIRE_FALSE(filtered.hasError());
     REQUIRE(filtered.size() == 2);
-    CHECK(filtered.trackIdAt(0) == second);
-    CHECK(filtered.trackIdAt(1) == first);
+    // flat_set maintains ID order: [first, second] since first(1) < second(2)
+    CHECK(filtered.trackIdAt(0) == first);
+    CHECK(filtered.trackIdAt(1) == second);
     REQUIRE(spy.events.size() == 1);
     CHECK(spy.events[0].kind == ObserverSpy::EventKind::Reset);
 
@@ -477,5 +525,69 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     // Now destroy filtered list - this calls unregisterList
     // This should not crash despite source being gone!
     filtered.reset();
+  }
+
+  SECTION("batch operations emit batch notifications")
+  {
+    auto testLibrary = TestMusicLibrary{};
+    auto engine = SmartListEngine{testLibrary.library()};
+    auto source = MutableTrackIdList{};
+
+    auto list = FilteredTrackIdList{source, testLibrary.library(), engine};
+    list.setExpression("$year >= 2020");
+    list.reload();
+
+    auto spy = ObserverSpy{};
+    list.attach(&spy);
+
+    auto t1 = testLibrary.addTrack(makeTrackSpec("Old", 2010));
+    auto t2 = testLibrary.addTrack(makeTrackSpec("New1", 2021));
+    auto t3 = testLibrary.addTrack(makeTrackSpec("New2", 2022));
+
+    TrackId batchArray[] = {t1, t2, t3};
+    source.batchInsert(batchArray);
+
+    REQUIRE(spy.events.size() == 1);
+    CHECK(spy.events[0].kind == ObserverSpy::EventKind::BatchInserted);
+    // t1 should be filtered out
+    REQUIRE(spy.events[0].batchIds.size() == 2);
+    CHECK(std::ranges::find(spy.events[0].batchIds, t2) != spy.events[0].batchIds.end());
+    CHECK(std::ranges::find(spy.events[0].batchIds, t3) != spy.events[0].batchIds.end());
+    CHECK(list.size() == 2);
+
+    spy.clear();
+    TrackId removeArray[] = {t2};
+    source.batchRemove(removeArray);
+
+    REQUIRE(spy.events.size() == 1);
+    CHECK(spy.events[0].kind == ObserverSpy::EventKind::BatchRemoved);
+    REQUIRE(spy.events[0].batchIds.size() == 1);
+    CHECK(spy.events[0].batchIds[0] == t2);
+    CHECK(list.size() == 1);
+
+    list.detach(&spy);
+  }
+
+  SECTION("load mode optimization for mixed access profiles")
+  {
+    auto testLibrary = TestMusicLibrary{};
+    auto engine = SmartListEngine{testLibrary.library()};
+    auto source = MutableTrackIdList{};
+
+    auto hotList = FilteredTrackIdList{source, testLibrary.library(), engine};
+    hotList.setExpression("$year >= 2020"); // Hot metadata
+
+    auto coldList = FilteredTrackIdList{source, testLibrary.library(), engine};
+    coldList.setExpression("@duration >= 180000"); // Cold property
+
+    auto t1 = testLibrary.addTrack(makeTrackSpec("Track", 2022, 200000));
+    TrackId batchArray[] = {t1};
+    source.batchInsert(batchArray);
+
+    hotList.reload();
+    coldList.reload();
+
+    CHECK(hotList.size() == 1);
+    CHECK(coldList.size() == 1);
   }
 }

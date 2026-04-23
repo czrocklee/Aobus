@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace app::core::model
@@ -27,9 +28,18 @@ namespace app::core::model
     virtual ~TrackIdListObserver() = default;
 
     virtual void onReset() = 0;
+
+    // Single-item notifications for fine-grained UI updates
     virtual void onInserted(TrackId id, std::size_t index) = 0;
     virtual void onUpdated(TrackId id, std::size_t index) = 0;
     virtual void onRemoved(TrackId id, std::size_t index) = 0;
+
+    // Batch notifications for performance during bulk operations.
+    // Default implementation can fallback to individual notifications if needed,
+    // or observers can override for better batch processing.
+    virtual void onBatchInserted(std::span<const TrackId> /*ids*/) {}
+    virtual void onBatchUpdated(std::span<const TrackId> /*ids*/) {}
+    virtual void onBatchRemoved(std::span<const TrackId> /*ids*/) {}
 
     /**
      * Called when the source list is being destroyed.
@@ -40,7 +50,6 @@ namespace app::core::model
 
   /**
    * TrackIdList - Abstract base class for TrackId membership lists.
-   * Provides single-phase observer notification (no begin/end).
    */
   class TrackIdList
   {
@@ -64,6 +73,10 @@ namespace app::core::model
     void notifyInserted(TrackId id, std::size_t index);
     void notifyUpdated(TrackId id, std::size_t index);
     void notifyRemoved(TrackId id, std::size_t index);
+
+    void notifyBatchInserted(std::span<const TrackId> ids);
+    void notifyBatchUpdated(std::span<const TrackId> ids);
+    void notifyBatchRemoved(std::span<const TrackId> ids);
 
   private:
     std::vector<TrackIdListObserver*> _observers;

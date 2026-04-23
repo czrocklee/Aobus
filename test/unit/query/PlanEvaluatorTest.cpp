@@ -101,6 +101,9 @@ namespace
     // Returns TrackView with hot data only (for invalid cold tests)
     rs::core::TrackView hotOnlyView() const { return rs::core::TrackView{_hotData, std::span<std::byte const>{}}; }
 
+    // Returns TrackView with cold data only (for cold-only plan tests)
+    rs::core::TrackView coldOnlyView() const { return rs::core::TrackView{std::span<std::byte const>{}, _coldData}; }
+
   private:
     rs::core::TrackBuilder _builder = rs::core::TrackBuilder::createNew();
     std::optional<rs::lmdb::Environment> _env;
@@ -448,6 +451,33 @@ TEST_CASE("PlanEvaluator - Invalid Track View")
   auto emptyView = rs::core::TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
   auto result = evaluator.evaluateFull(plan, emptyView);
   CHECK(result == false);
+}
+
+TEST_CASE("PlanEvaluator - ColdOnly plan works with cold-only TrackView")
+{
+  auto expr = parse("@duration >= 180000");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  REQUIRE(plan.accessProfile == AccessProfile::ColdOnly);
+
+  auto track = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
+  CHECK(evaluator.evaluateFull(plan, track.coldOnlyView()) == true);
+}
+
+TEST_CASE("PlanEvaluator - Mixed plan still requires both storage tiers")
+{
+  auto expr = parse("$year = 2020 && @duration >= 180000");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  REQUIRE(plan.accessProfile == AccessProfile::HotAndCold);
+
+  auto track = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
+  CHECK(evaluator.evaluateFull(plan, track.hotOnlyView()) == false);
+  CHECK(evaluator.evaluateFull(plan, track.coldOnlyView()) == false);
 }
 
 TEST_CASE("PlanEvaluator - Bitrate Comparison")

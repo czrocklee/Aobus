@@ -16,35 +16,35 @@ namespace app::core::model
   void AllTrackIdsList::reloadFromStore(rs::lmdb::ReadTransaction& txn)
   {
     auto reader = _store->reader(txn);
-    _trackIds.clear();
-    _trackIds.reserve(1000); // Reserve initial capacity
+    std::vector<TrackId> ids;
+    ids.reserve(1000);
 
     for (auto const& [id, view] : reader)
     {
-      (void)view; // TrackView not needed, only TrackId
-      _trackIds.push_back(id);
+      (void)view;
+      ids.push_back(id);
     }
 
-    // Maintain ascending TrackId order
-    std::sort(_trackIds.begin(), _trackIds.end());
+    // flat_set constructor from sorted vector is efficient.
+    std::sort(ids.begin(), ids.end());
+    _trackIds = std::flat_set<TrackId>(std::sorted_unique, std::move(ids));
 
     TrackIdList::notifyReset();
   }
 
   void AllTrackIdsList::notifyInserted(TrackId id)
   {
-    // Insert in sorted position to maintain order
-    auto const pos = std::lower_bound(_trackIds.begin(), _trackIds.end(), id);
-    auto const index = static_cast<std::size_t>(std::distance(_trackIds.begin(), pos));
-    _trackIds.insert(pos, id);
-
-    TrackIdList::notifyInserted(id, index);
+    auto [it, inserted] = _trackIds.insert(id);
+    if (inserted)
+    {
+      auto const index = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
+      TrackIdList::notifyInserted(id, index);
+    }
   }
 
   void AllTrackIdsList::notifyUpdated(TrackId id)
   {
-    auto const optIndex = indexOf(id);
-    if (optIndex.has_value())
+    if (auto const optIndex = indexOf(id))
     {
       TrackIdList::notifyUpdated(id, *optIndex);
     }
@@ -52,11 +52,11 @@ namespace app::core::model
 
   void AllTrackIdsList::notifyRemoved(TrackId id)
   {
-    auto const optIndex = indexOf(id);
-    if (optIndex.has_value())
+    auto const it = _trackIds.find(id);
+    if (it != _trackIds.end())
     {
-      auto const index = *optIndex;
-      _trackIds.erase(_trackIds.begin() + static_cast<std::ptrdiff_t>(index));
+      auto const index = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
+      _trackIds.erase(it);
       TrackIdList::notifyRemoved(id, index);
     }
   }
@@ -69,7 +69,7 @@ namespace app::core::model
 
   std::optional<std::size_t> AllTrackIdsList::indexOf(TrackId id) const
   {
-    auto const it = std::find(_trackIds.begin(), _trackIds.end(), id);
+    auto const it = _trackIds.find(id);
     if (it == _trackIds.end())
     {
       return std::nullopt;
