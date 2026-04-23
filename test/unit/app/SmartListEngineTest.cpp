@@ -182,7 +182,7 @@ namespace
       return id;
     }
 
-    void updateTrack(TrackId id, std::function<void(TrackBuilder&)> const& mutate)
+    void updateTrack(TrackId id, std::move_only_function<void(TrackBuilder&)> mutate)
     {
       auto txn = _library.writeTransaction();
       auto writer = _library.tracks().writer(txn);

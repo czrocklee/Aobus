@@ -20,7 +20,7 @@ namespace
     auto writer = ml.tracks().writer(txn);
     auto& dict = ml.dictionary();
 
-    for (std::filesystem::path const& path : finder)
+    for (std::filesystem::path const& path : finder.paths())
     {
       try
       {

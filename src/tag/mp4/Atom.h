@@ -16,7 +16,7 @@ namespace rs::tag::mp4
   class Atom
   {
   public:
-    using Visitor = std::function<bool(Atom const&)>;
+    using Visitor = std::move_only_function<bool(Atom const&)>;
 
     virtual ~Atom() = default;
 
@@ -28,7 +28,7 @@ namespace rs::tag::mp4
 
     virtual bool isLeaf() const = 0;
 
-    virtual void visitChildren(Visitor const& visitor) const = 0;
+    virtual void visitChildren(Visitor visitor) const = 0;
   };
 
   class AtomView : public Atom
@@ -74,7 +74,7 @@ namespace rs::tag::mp4
 
     bool isLeaf() const override { return true; };
 
-    void visitChildren(Visitor const&) const override {}
+    void visitChildren(Visitor) const override {}
   };
 
   class ContainerAtomView : public AtomView
@@ -85,7 +85,7 @@ namespace rs::tag::mp4
 
     bool isLeaf() const override { return false; };
 
-    void visitChildren(Visitor const& visitor) const override
+    void visitChildren(Visitor visitor) const override
     {
       for (auto const& child : _children)
       {
@@ -116,7 +116,7 @@ namespace rs::tag::mp4
 
     bool isLeaf() const override { return false; };
 
-    void visitChildren(Visitor const& visitor) const override
+    void visitChildren(Visitor visitor) const override
     {
       for (auto const& child : _children)
       {

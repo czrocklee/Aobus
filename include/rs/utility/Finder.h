@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include <boost/iterator/filter_iterator.hpp>
 #include <filesystem>
-#include <functional>
+#include <ranges>
 #include <set>
 
 namespace rs::utility
@@ -13,23 +12,23 @@ namespace rs::utility
   class Finder
   {
   public:
-    Finder(std::string const& rootPath, std::vector<std::string> const& extensions)
-      : _rootPath{rootPath}, _extensions{extensions.begin(), extensions.end()}
+    Finder(std::string rootPath, std::vector<std::string> extensions)
+      : _rootPath{std::move(rootPath)}, _extensions{extensions.begin(), extensions.end()}
     {
-      _filter = [this](std::filesystem::path const& path)
-      { return _extensions.find(path.extension().string()) != _extensions.end(); };
     }
 
-    auto begin() const { return boost::make_filter_iterator(_filter, Iterator{_rootPath}); }
-
-    auto end() const { return boost::make_filter_iterator(_filter, Iterator{}); }
+    auto paths() const
+    {
+      return std::filesystem::recursive_directory_iterator(_rootPath) | std::views::filter(
+               [exts = _extensions](auto const& entry)
+               {
+                 return exts.contains(entry.path().extension().string());
+               })
+             | std::views::transform([](auto const& entry) { return entry.path(); });
+    }
 
   private:
-    using Iterator = std::filesystem::recursive_directory_iterator;
-
     std::string _rootPath;
     std::set<std::string> _extensions;
-    std::function<bool(std::filesystem::path const&)> _filter;
   };
-
 }
