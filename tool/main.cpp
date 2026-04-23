@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <boost/timer/timer.hpp>
-
 #include <rs/core/MusicLibrary.h>
 
 #include "ComboCommand.h"
