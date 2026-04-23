@@ -8,7 +8,6 @@
 #include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
 
-#include <boost/iterator/transform_iterator.hpp>
 #include <optional>
 #include <span>
 #include <vector>
