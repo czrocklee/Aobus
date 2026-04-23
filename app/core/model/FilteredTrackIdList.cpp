@@ -3,93 +3,100 @@
 
 #include "core/model/FilteredTrackIdList.h"
 
+#include "core/Log.h"
 #include "core/model/SmartListEngine.h"
 #include "core/model/TrackIdList.h"
+
+#include <rs/expr/Parser.h>
+
+#include <algorithm>
 
 namespace app::core::model
 {
 
-  FilteredTrackIdList::FilteredTrackIdList(TrackIdList& source, rs::core::MusicLibrary& /*ml*/, SmartListEngine& engine)
-    : _engine{&engine}
+  FilteredTrackIdList::FilteredTrackIdList(TrackIdList& source, rs::core::MusicLibrary& ml, SmartListEngine& engine)
+    : _source{&source}
+    , _ml{&ml}
+    , _engine{&engine}
   {
-    _registrationId = _engine->registerList(source, *this);
-  }
-
-  SmartListEngine* FilteredTrackIdList::engine() const
-  {
-    return (_engine && _engine->isAlive() && _registrationId != 0) ? _engine : nullptr;
+    _engine->registerList(source, *this);
+    stageExpression("");
   }
 
   FilteredTrackIdList::~FilteredTrackIdList()
   {
-    if (auto* e = engine()) e->unregisterList(_registrationId);
+    if (_engine && _engine->isAlive())
+    {
+      _engine->unregisterList(*_source, *this);
+    }
   }
 
   void FilteredTrackIdList::setExpression(std::string expr)
   {
-    if (auto* e = engine()) e->setExpression(_registrationId, std::move(expr));
+    stageExpression(std::move(expr));
   }
 
   void FilteredTrackIdList::reload()
   {
-    if (auto* e = engine()) e->rebuild(_registrationId);
-  }
-
-  std::size_t FilteredTrackIdList::size() const
-  {
-    auto* e = engine();
-    return e ? e->size(_registrationId) : 0;
-  }
-
-  TrackId FilteredTrackIdList::trackIdAt(std::size_t index) const
-  {
-    auto* e = engine();
-    if (!e) throw std::out_of_range("Invalid state");
-    return e->trackIdAt(_registrationId, index);
+    if (_engine && _engine->isAlive())
+    {
+      _engine->rebuild(*this);
+    }
   }
 
   std::optional<std::size_t> FilteredTrackIdList::indexOf(TrackId id) const
   {
-    auto* e = engine();
-    return e ? e->indexOf(_registrationId, id) : std::nullopt;
-  }
-
-  bool FilteredTrackIdList::hasError() const
-  {
-    auto* e = engine();
-    return e ? e->hasError(_registrationId) : true;
-  }
-
-  std::string const& FilteredTrackIdList::errorMessage() const
-  {
-    static std::string const empty;
-    auto* e = engine();
-    return e ? e->errorMessage(_registrationId) : empty;
-  }
-
-  void FilteredTrackIdList::notifyEngineReset()
-  {
-    TrackIdList::notifyReset();
-  }
-
-  void FilteredTrackIdList::notifyEngineInserted(TrackId id, std::size_t index)
-  {
-    TrackIdList::notifyInserted(id, index);
-  }
-
-  void FilteredTrackIdList::notifyEngineUpdated(TrackId id, std::size_t index)
-  {
-    TrackIdList::notifyUpdated(id, index);
-  }
-
-  void FilteredTrackIdList::notifyEngineRemoved(TrackId id, std::size_t index)
-  {
-    TrackIdList::notifyRemoved(id, index);
+    auto const it = _members.find(id);
+    if (it == _members.end())
+    {
+      return std::nullopt;
+    }
+    return static_cast<std::size_t>(std::distance(_members.begin(), it));
   }
 
   void FilteredTrackIdList::notifyTrackDataChanged(TrackId id)
   {
-    if (auto* e = engine()) e->notifyTrackDataChanged(_registrationId, id);
+    if (_engine && _engine->isAlive())
+    {
+      _engine->notifyTrackDataChanged(*_source, id);
+    }
+  }
+
+  void FilteredTrackIdList::stageExpression(std::string expr)
+  {
+    _stagedExpression = std::move(expr);
+
+    try
+    {
+      auto parsed = _stagedExpression.empty() ? rs::expr::parse("true") : rs::expr::parse(_stagedExpression);
+      auto compiler = rs::expr::QueryCompiler{&_ml->dictionary()};
+      _stagedPlan = std::make_unique<rs::expr::ExecutionPlan>(compiler.compile(parsed));
+      _stagedHasError = false;
+      _stagedErrorMessage.clear();
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("Smart list expression error for '{}': {}", _stagedExpression, e.what());
+      _stagedHasError = true;
+      _stagedErrorMessage = e.what();
+      _stagedPlan.reset();
+    }
+
+    _dirty = true;
+  }
+
+  void FilteredTrackIdList::applyStagedState()
+  {
+    if (!_dirty)
+    {
+      return;
+    }
+
+    _expression = std::move(_stagedExpression);
+    _hasError = _stagedHasError;
+    _errorMessage = std::move(_stagedErrorMessage);
+    _plan = std::move(_stagedPlan);
+    _dirty = false;
   }
 
 } // namespace app::core::model

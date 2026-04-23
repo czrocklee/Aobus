@@ -3,6 +3,8 @@
 
 #include "core/model/TrackIdList.h"
 
+#include <algorithm>
+
 namespace app::core::model
 {
 
@@ -22,6 +24,14 @@ namespace app::core::model
   void TrackIdList::detach(TrackIdListObserver* observer)
   {
     std::erase(_observers, observer);
+  }
+
+  void TrackIdList::notifyTrackDataChanged(TrackId id)
+  {
+    if (auto const index = indexOf(id))
+    {
+      notifyUpdated(id, *index);
+    }
   }
 
   void TrackIdList::notifyReset()
@@ -48,19 +58,35 @@ namespace app::core::model
     }
   }
 
-  void TrackIdList::notifyTrackDataChanged(TrackId id)
-  {
-    if (auto index = indexOf(id))
-    {
-      notifyUpdated(id, *index);
-    }
-  }
-
   void TrackIdList::notifyRemoved(TrackId id, std::size_t index)
   {
     for (auto* obs : _observers)
     {
       obs->onRemoved(id, index);
+    }
+  }
+
+  void TrackIdList::notifyBatchInserted(std::span<const TrackId> ids)
+  {
+    for (auto* obs : _observers)
+    {
+      obs->onBatchInserted(ids);
+    }
+  }
+
+  void TrackIdList::notifyBatchUpdated(std::span<const TrackId> ids)
+  {
+    for (auto* obs : _observers)
+    {
+      obs->onBatchUpdated(ids);
+    }
+  }
+
+  void TrackIdList::notifyBatchRemoved(std::span<const TrackId> ids)
+  {
+    for (auto* obs : _observers)
+    {
+      obs->onBatchRemoved(ids);
     }
   }
 
