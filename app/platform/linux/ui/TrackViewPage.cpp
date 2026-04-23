@@ -178,9 +178,10 @@ namespace app::ui
     }
   }
 
-  TrackViewPage::TrackViewPage(Glib::RefPtr<TrackListAdapter> const& adapter,
+  TrackViewPage::TrackViewPage(rs::core::ListId listId, Glib::RefPtr<TrackListAdapter> const& adapter,
                                std::shared_ptr<TrackColumnLayoutModel> columnLayoutModel)
     : Gtk::Box(Gtk::Orientation::VERTICAL)
+    , _listId(listId)
     , _adapter(adapter)
     , _sortModel(Gtk::SortListModel::create(adapter->getModel(), Glib::RefPtr<Gtk::Sorter>{}))
     , _columnLayoutModel(columnLayoutModel ? std::move(columnLayoutModel) : std::make_shared<TrackColumnLayoutModel>())
@@ -711,6 +712,26 @@ namespace app::ui
     }
 
     return row->getTrackId();
+  }
+
+  void TrackViewPage::selectTrack(TrackId trackId)
+  {
+    auto model = _selectionModel->get_model();
+    if (!model)
+    {
+      return;
+    }
+
+    auto const nItems = model->get_n_items();
+    for (std::uint32_t i = 0; i < nItems; ++i)
+    {
+      if (trackIdAtPosition(i) == trackId)
+      {
+        _selectionModel->select_item(i, true);
+        _columnView.scroll_to(i, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
+        break;
+      }
+    }
   }
 
   std::vector<TrackListAdapter::TrackId> TrackViewPage::getVisibleTrackIds() const

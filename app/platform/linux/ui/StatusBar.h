@@ -29,12 +29,18 @@ namespace app::ui
     void setImportProgress(double fraction, std::string const& info);
     void clearImportProgress();
 
+    using NowPlayingClickedSignal = sigc::signal<void()>;
+    NowPlayingClickedSignal& signalNowPlayingClicked() { return _nowPlayingClicked; }
+
   private:
     // Left: Library info
     Gtk::Label _libraryLabel;
 
     // Middle-Left: Selection info
     Gtk::Label _selectionLabel;
+
+    // Center: Now playing info
+    Gtk::Label _nowPlayingLabel;
 
     // Middle-Right: Import progress (hidden by default)
     Gtk::Box _importBox;
@@ -44,15 +50,13 @@ namespace app::ui
     // Right: Playback details
     Gtk::Box _playbackDetailsBox{Gtk::Orientation::HORIZONTAL};
     Gtk::Label _playbackLabel;
-    Gtk::Label _sinkLabel;
     Gtk::Image _sinkStatusIcon;
 
     // Far Right: Status message
     Gtk::Label _statusLabel;
 
     sigc::connection _timerConnection;
-
-    void updateLayoutVisibility();
+    NowPlayingClickedSignal _nowPlayingClicked;
   };
 
 } // namespace app::ui
