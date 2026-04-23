@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <boost/iterator/transform_iterator.hpp>
 #include <rs/core/Type.h>
 #include <rs/lmdb/Database.h>
 #include <span>
