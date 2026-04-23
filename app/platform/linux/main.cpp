@@ -2,12 +2,16 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/ui/MainWindow.h"
+#include "core/Log.h"
 
 #include <gtkmm.h>
 #include <gtkmm/aboutdialog.h>
 
 int main(int argc, char* argv[])
 {
+  app::core::Log::init();
+  APP_LOG_INFO("RockStudio starting...");
+
   Glib::set_application_name("RockStudio");
 
   auto app = Gtk::Application::create("com.rockstudio.app");
@@ -51,5 +55,7 @@ int main(int argc, char* argv[])
       mainWindow->present();
     });
 
-  return app->run(argc, argv);
+  auto const result = app->run(argc, argv);
+  app::core::Log::shutdown();
+  return result;
 }

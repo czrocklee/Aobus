@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/ui/MainWindow.h"
+#include "core/Log.h"
 
 #include <rs/core/ListBuilder.h>
 #include <rs/core/MusicLibrary.h>
@@ -181,12 +182,12 @@ namespace app::ui
                               if (auto const folderPath = folder; folderPath)
                               {
                                 std::filesystem::path path(folderPath->get_path());
-                                std::cout << "Selected folder: " << path << std::endl;
+                                APP_LOG_DEBUG("Selected folder: {}", path.string());
 
                                 // Check if it's an existing library (contains data.mdb) or a new import
                                 auto libPath = path / "data.mdb";
-                                std::cout << "DEBUG: libPath = " << libPath << std::endl;
-                                std::cout << "DEBUG: exists = " << std::filesystem::exists(libPath) << std::endl;
+                                APP_LOG_DEBUG("libPath = {}", libPath.string());
+                                APP_LOG_DEBUG("exists = {}", std::filesystem::exists(libPath));
 
                                 if (std::filesystem::exists(libPath))
                                 {
@@ -202,20 +203,19 @@ namespace app::ui
                             catch (Glib::Error const& e)
                             {
                               // Folder selection was cancelled or failed - silently ignore
-                              std::cerr << "Error selecting folder: " << e.what()
-                                        << std::endl; // NOLINT(bugprone-empty-catch)
+                              APP_LOG_ERROR("Error selecting folder: {}", e.what());
                             }
                           });
   }
 
   void MainWindow::openMusicLibrary(std::filesystem::path const& path)
   {
-    std::cout << "DEBUG: openMusicLibrary called with path: " << path << std::endl;
+    APP_LOG_DEBUG("openMusicLibrary called with path: {}", path.string());
 
     try
     {
       auto musicLibrary = std::make_unique<rs::core::MusicLibrary>(path.string());
-      std::cout << "DEBUG: MusicLibrary created" << std::endl;
+      APP_LOG_DEBUG("MusicLibrary created");
 
       auto rowDataProvider = std::make_shared<app::core::model::TrackRowDataProvider>(*musicLibrary);
       auto allTrackIds = std::make_unique<app::core::model::AllTrackIdsList>(musicLibrary->tracks());
@@ -250,7 +250,7 @@ namespace app::ui
     }
     catch (std::exception const& e)
     {
-      std::cerr << "Failed to open music library: " << e.what() << std::endl;
+      APP_LOG_ERROR("Failed to open music library: {}", e.what());
     }
   }
 
@@ -277,7 +277,7 @@ namespace app::ui
     catch (std::exception const& e)
     {
       // Directory scan failed - silently ignore
-      std::cerr << "Error scanning directory: " << e.what() << std::endl; // NOLINT(bugprone-empty-catch)
+      APP_LOG_ERROR("Error scanning directory: {}", e.what());
     }
   }
 
@@ -300,7 +300,7 @@ namespace app::ui
 
           std::string pathStr = folder->get_path();
           std::filesystem::path path(pathStr);
-          std::cout << "Importing from: " << pathStr << std::endl;
+          APP_LOG_INFO("Importing from: {}", pathStr);
 
           // If no library exists, create one at the import path
 
@@ -316,7 +316,7 @@ namespace app::ui
 
           if (files.empty())
           {
-            std::cerr << "No music files found" << std::endl;
+            APP_LOG_ERROR("No music files found");
             return;
           }
 
@@ -394,7 +394,7 @@ namespace app::ui
         catch (Glib::Error const& e)
         {
           // Folder selection was cancelled or failed - silently ignore
-          std::cerr << "Error selecting folder: " << e.what() << std::endl; // NOLINT(bugprone-empty-catch)
+          APP_LOG_ERROR("Error selecting folder: {}", e.what());
         }
       });
   }
@@ -422,7 +422,7 @@ namespace app::ui
 
     if (files.empty())
     {
-      std::cerr << "No music files found" << std::endl;
+      APP_LOG_ERROR("No music files found");
       return;
     }
 
@@ -867,7 +867,7 @@ namespace app::ui
   {
     if (!_musicLibrary)
     {
-      std::cerr << "No music library open" << std::endl;
+      APP_LOG_ERROR("No music library open");
       return;
     }
 
@@ -929,7 +929,7 @@ namespace app::ui
   {
     if (!_musicLibrary)
     {
-      std::cerr << "No music library open" << std::endl;
+      APP_LOG_ERROR("No music library open");
       return;
     }
 
@@ -1112,7 +1112,7 @@ namespace app::ui
 
     if (listHasChildren(listId))
     {
-      std::cerr << "Cannot delete a list that still has child lists" << std::endl;
+      APP_LOG_ERROR("Cannot delete a list that still has child lists");
       return;
     }
 
@@ -1144,7 +1144,7 @@ namespace app::ui
 
   void MainWindow::rebuildListPages(rs::lmdb::ReadTransaction& txn)
   {
-    std::cout << "DEBUG: rebuildListPages called" << std::endl;
+    APP_LOG_DEBUG("rebuildListPages called");
     // Clear existing track pages
     clearTrackPages();
 
@@ -1331,7 +1331,7 @@ namespace app::ui
         }
         else
         {
-          std::cerr << "Missing source list for smart list " << listId << ", falling back to All Tracks" << std::endl;
+          APP_LOG_ERROR("Missing source list for smart list {}, falling back to All Tracks", listId.value());
         }
       }
 
@@ -1730,7 +1730,7 @@ namespace app::ui
     }
     catch (std::exception const& e)
     {
-      std::cerr << "Failed to save app session: " << e.what() << std::endl;
+      APP_LOG_ERROR("Failed to save app session: {}", e.what());
     }
   }
 
@@ -1767,7 +1767,7 @@ namespace app::ui
     }
     catch (std::exception const& e)
     {
-      std::cerr << "Failed to load app session: " << e.what() << std::endl;
+      APP_LOG_ERROR("Failed to load app session: {}", e.what());
     }
   }
 

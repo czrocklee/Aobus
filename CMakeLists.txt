@@ -42,6 +42,7 @@ target_link_libraries(GTKMM INTERFACE ${GTKMM_LIBRARIES})
 target_compile_options(GTKMM INTERFACE ${GTKMM_CFLAGS_OTHER})
 
 find_package(Boost REQUIRED COMPONENTS headers program_options locale timer filesystem)
+find_package(spdlog CONFIG REQUIRED)
 
 # Catch2 via pkg-config
 pkg_check_modules(CATCH2 REQUIRED catch2)
@@ -261,13 +262,14 @@ add_executable(rs_test
     test/unit/app/TrackRowDataProviderTest.cpp
     test/unit/app/TrackListAdapterTest.cpp
     test/unit/app/SmartListEngineTest.cpp
+    app/core/Log.cpp
     app/platform/linux/ui/TrackPresentation.cpp
     app/core/model/FilteredTrackIdList.cpp
     app/core/model/SmartListEngine.cpp
     app/core/model/TrackIdList.cpp
 )
 target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/app)
-target_link_libraries(rs_test PRIVATE rs Catch2)
+target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog GTKMM)
 if(FFmpeg_FOUND)
   target_sources(rs_test PRIVATE
     test/integration/playback/FfmpegDecoderSessionTest.cpp
@@ -295,6 +297,7 @@ endif()
 add_executable(RockStudio
     app/platform/linux/main.cpp
     app/core/AppConfig.cpp
+    app/core/Log.cpp
     app/platform/linux/ui/MainWindow.cpp
     app/platform/linux/ui/TrackPresentation.cpp
     app/platform/linux/ui/TrackViewPage.cpp
@@ -339,7 +342,7 @@ if(ALSA_FOUND)
   target_sources(RockStudio PRIVATE app/platform/linux/playback/AlsaExclusiveBackend.cpp)
   target_link_libraries(RockStudio PRIVATE ALSA)
 endif()
-target_link_libraries(RockStudio PRIVATE rs GTKMM)
+target_link_libraries(RockStudio PRIVATE rs GTKMM spdlog::spdlog)
 target_include_directories(RockStudio PRIVATE ${CMAKE_SOURCE_DIR}/app)
 # Configure ASan leak detection to use suppression file for third-party libraries (RockStudio app only)
 if(CMAKE_CXX_FLAGS MATCHES "fsanitize")

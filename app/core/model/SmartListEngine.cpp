@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "core/model/SmartListEngine.h"
+#include "core/Log.h"
 
 #include "core/model/TrackIdList.h"
 
@@ -265,6 +266,7 @@ namespace app::core::model
     }
     catch (std::exception const& e)
     {
+      APP_LOG_ERROR("Smart list expression error for '{}': {}", expr, e.what());
       state.stagedHasError = true;
       state.stagedErrorMessage = e.what();
       state.stagedPlan.reset();

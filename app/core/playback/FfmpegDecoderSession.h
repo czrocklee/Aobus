@@ -42,6 +42,8 @@ namespace app::core::playback
   class FfmpegDecoderSession final
   {
   public:
+    static void initGlobal();
+
     explicit FfmpegDecoderSession(StreamFormat outputFormat);
     ~FfmpegDecoderSession();
 

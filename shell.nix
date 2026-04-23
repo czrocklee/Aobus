@@ -36,6 +36,7 @@ pkgs.mkShell {
       boost.dev
       lmdb
       lmdb.dev
+      spdlog
       mimalloc
       catch2
       gsl-lite

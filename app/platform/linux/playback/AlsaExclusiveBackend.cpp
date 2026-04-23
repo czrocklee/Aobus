@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
+#include "core/Log.h"
 
 extern "C"
 {
@@ -43,6 +44,7 @@ namespace app::playback
     if (err < 0)
     {
       _lastError = "Failed to open ALSA device: " + _deviceName;
+      PLAYBACK_LOG_ERROR("{}", _lastError);
       return false;
     }
 
@@ -56,6 +58,7 @@ namespace app::playback
     if (err < 0)
     {
       _lastError = "Failed to initialize ALSA hardware parameters";
+      PLAYBACK_LOG_ERROR("{}", _lastError);
       close();
       return false;
     }
@@ -65,6 +68,7 @@ namespace app::playback
     if (err < 0)
     {
       _lastError = "Failed to set ALSA access mode";
+      PLAYBACK_LOG_ERROR("{}", _lastError);
       close();
       return false;
     }
@@ -75,6 +79,7 @@ namespace app::playback
     if (err < 0)
     {
       _lastError = "Failed to set ALSA sample format";
+      PLAYBACK_LOG_ERROR("{}", _lastError);
       close();
       return false;
     }
@@ -84,6 +89,7 @@ namespace app::playback
     if (err < 0)
     {
       _lastError = "Failed to set ALSA sample rate";
+      PLAYBACK_LOG_ERROR("{}", _lastError);
       close();
       return false;
     }
@@ -93,6 +99,7 @@ namespace app::playback
     if (err < 0)
     {
       _lastError = "Failed to set ALSA channel count";
+      PLAYBACK_LOG_ERROR("{}", _lastError);
       close();
       return false;
     }
@@ -102,6 +109,7 @@ namespace app::playback
     if (err < 0)
     {
       _lastError = "Failed to apply ALSA hardware parameters";
+      PLAYBACK_LOG_ERROR("{}", _lastError);
       close();
       return false;
     }
