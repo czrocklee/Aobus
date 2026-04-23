@@ -14,7 +14,7 @@ namespace app::core
                              std::vector<std::filesystem::path> const& files,
                              ProgressCallback progressCallback,
                              FinishedCallback finishedCallback)
-    : _ml{ml}, _files{files}, _progressCallback{progressCallback}, _finishedCallback{finishedCallback}
+    : _ml{ml}, _files{files}, _progressCallback{std::move(progressCallback)}, _finishedCallback{std::move(finishedCallback)}
   {
   }
 
