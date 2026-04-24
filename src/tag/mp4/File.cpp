@@ -200,6 +200,10 @@ namespace rs::tag::mp4
         {
           auto const& view = static_cast<AtomView const&>(atom);
           std::string_view type = atom.type();
+          if (type == "----")
+          {
+            return true;
+          }
 
           if (auto const* entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size()); entry != nullptr)
           {

@@ -33,6 +33,7 @@ TEST_CASE("Tag reading - basic metadata", "[tag][integration]")
   CHECK(meta.title() == "Test Title");
   CHECK(meta.artist() == "Test Artist");
   CHECK(meta.album() == "Test Album");
+  CHECK(meta.composer() == "Test Composer");
   CHECK(meta.genre() == "Rock");
   CHECK(meta.trackNumber() == 1);
   CHECK(meta.year() == 2024);
@@ -56,6 +57,7 @@ TEST_CASE("Tag reading - hires metadata", "[tag][integration]")
   CHECK(meta.title() == "HiRes Title");
   CHECK(meta.artist() == "HiRes Artist");
   CHECK(meta.album() == "HiRes Album");
+  CHECK(meta.composer() == "HiRes Composer");
   CHECK(meta.genre() == "Electronic");
   CHECK(meta.trackNumber() == 2);
   CHECK(meta.year() == 2025);

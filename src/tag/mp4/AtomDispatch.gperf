@@ -16,6 +16,7 @@ disk, &handleDiscNumbers
 "\251nam", &handleText<&::rs::core::TrackBuilder::MetadataBuilder::title>
 "\251ART", &handleText<&::rs::core::TrackBuilder::MetadataBuilder::artist>
 "\251alb", &handleText<&::rs::core::TrackBuilder::MetadataBuilder::album>
+"\251wrt", &handleText<&::rs::core::TrackBuilder::MetadataBuilder::composer>
 aART, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::albumArtist>
 "\251gen", &handleText<&::rs::core::TrackBuilder::MetadataBuilder::genre>
 "\251day", &handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::year>

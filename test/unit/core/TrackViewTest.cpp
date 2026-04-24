@@ -40,6 +40,7 @@ namespace
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
+    h.composerId = DictionaryId{0};
     h.year = 2020;
     h.codecId = 0;
     h.bitDepth = 16;
@@ -58,6 +59,7 @@ namespace
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
+    h.composerId = DictionaryId{0};
     h.year = 2020;
     h.codecId = 0;
     h.bitDepth = 16;
@@ -138,6 +140,7 @@ namespace
     CHECK(view.metadata().albumId() == DictionaryId{2});
     CHECK(view.metadata().genreId() == DictionaryId{3});
     CHECK(view.metadata().albumArtistId() == DictionaryId{0});
+    CHECK(view.metadata().composerId() == DictionaryId{0});
   }
 
   TEST_CASE("TrackView - Hot Year")
@@ -293,6 +296,7 @@ namespace
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
+    h.composerId = DictionaryId{0};
     h.year = 2020;
     h.codecId = 0;
     h.bitDepth = 16;
@@ -323,6 +327,7 @@ namespace
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
+    h.composerId = DictionaryId{0};
     h.year = 2020;
     h.codecId = 0;
     h.bitDepth = 16;
@@ -357,6 +362,7 @@ namespace
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
+    h.composerId = DictionaryId{0};
     h.year = 2020;
     h.codecId = 0;
     h.bitDepth = 16;
@@ -384,6 +390,7 @@ namespace
     h.albumId = DictionaryId{2};
     h.genreId = DictionaryId{3};
     h.albumArtistId = DictionaryId{0};
+    h.composerId = DictionaryId{0};
     h.year = 2020;
     h.codecId = 0;
     h.bitDepth = 16;

@@ -56,6 +56,7 @@ namespace rs::core
       DictionaryId albumId() const noexcept { return _track.hotHeader().albumId; }
       DictionaryId genreId() const noexcept { return _track.hotHeader().genreId; }
       DictionaryId albumArtistId() const noexcept { return _track.hotHeader().albumArtistId; }
+      DictionaryId composerId() const noexcept { return _track.hotHeader().composerId; }
       std::uint16_t year() const noexcept { return _track.hotHeader().year; }
       std::uint8_t rating() const noexcept { return _track.hotHeader().rating; }
 

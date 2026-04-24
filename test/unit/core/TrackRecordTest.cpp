@@ -23,6 +23,7 @@ TEST_CASE("TrackRecord - Default Constructor")
   CHECK(record.metadata.artist.empty());
   CHECK(record.metadata.album.empty());
   CHECK(record.metadata.albumArtist.empty());
+  CHECK(record.metadata.composer.empty());
   CHECK(record.metadata.genre.empty());
   CHECK(record.metadata.year == 0);
   CHECK(record.metadata.trackNumber == 0);
@@ -51,6 +52,7 @@ TEST_CASE("TrackRecord - Field Assignment")
   record.metadata.artist = "Test Artist";
   record.metadata.album = "Test Album";
   record.metadata.albumArtist = "";
+  record.metadata.composer = "Test Composer";
   record.metadata.genre = "Rock";
   record.metadata.year = 2020;
   record.metadata.trackNumber = 5;
@@ -73,6 +75,7 @@ TEST_CASE("TrackRecord - Field Assignment")
   CHECK(record.metadata.artist == "Test Artist");
   CHECK(record.metadata.album == "Test Album");
   CHECK(record.metadata.albumArtist == "");
+  CHECK(record.metadata.composer == "Test Composer");
   CHECK(record.metadata.genre == "Rock");
   CHECK(record.metadata.year == 2020);
   CHECK(record.metadata.trackNumber == 5);
@@ -116,11 +119,11 @@ TEST_CASE("TrackRecord - Cold struct default values")
 
 TEST_CASE("TrackRecord - Constructor validates both hot and cold", "[core][track]")
 {
-  // Verify that isHotValid and isColdValid work correctly
   auto hotHeader = TrackHotHeader{};
   hotHeader.titleLen = 0;
   hotHeader.tagLen = 0;
   auto hotData = std::vector<std::byte>(sizeof(TrackHotHeader));
+  std::memset(hotData.data(), 0, sizeof(TrackHotHeader));
   std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
   auto coldHeader = TrackColdHeader{};

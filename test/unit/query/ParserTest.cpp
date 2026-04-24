@@ -97,6 +97,7 @@ TEST_CASE("Parser - Variable")
 {
   CHECK("[v{m}title]" == canonicalize(parse("$title")));
   CHECK("[v{m}artist]" == canonicalize(parse("$artist")));
+  CHECK("[v{m}composer]" == canonicalize(parse("$composer")));
   CHECK("[v{p}duration]" == canonicalize(parse("@duration")));
   CHECK("[v{t}Tag]" == canonicalize(parse("#Tag")));
   CHECK("[v{c}isrc]" == canonicalize(parse("%isrc")));
@@ -109,6 +110,7 @@ TEST_CASE("Parser - Variable Shortcuts")
   CHECK("[v{m}a]" == canonicalize(parse("$a")));
   CHECK("[v{m}al]" == canonicalize(parse("$al")));
   CHECK("[v{m}g]" == canonicalize(parse("$g")));
+  CHECK("[v{m}c]" == canonicalize(parse("$c")));
   CHECK("[v{m}y]" == canonicalize(parse("$y")));
   CHECK("[v{m}tn]" == canonicalize(parse("$tn")));
   CHECK("[v{p}l]" == canonicalize(parse("@l")));

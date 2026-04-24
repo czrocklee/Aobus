@@ -79,7 +79,8 @@ namespace rs::expr
         case Field::ArtistId:
         case Field::AlbumId:
         case Field::GenreId:
-        case Field::AlbumArtistId: return true;
+        case Field::AlbumArtistId:
+        case Field::ComposerId: return true;
         default: return false;
       }
     }
@@ -135,6 +136,7 @@ namespace rs::expr
         case Field::AlbumId: dictionaryId = track.metadata().albumId(); break;
         case Field::GenreId: dictionaryId = track.metadata().genreId(); break;
         case Field::AlbumArtistId: dictionaryId = track.metadata().albumArtistId(); break;
+        case Field::ComposerId: dictionaryId = track.metadata().composerId(); break;
         default: return {};
       }
 
@@ -165,6 +167,7 @@ namespace rs::expr
         case Field::AlbumId: return static_cast<std::int64_t>(track.metadata().albumId().value());
         case Field::GenreId: return static_cast<std::int64_t>(track.metadata().genreId().value());
         case Field::AlbumArtistId: return static_cast<std::int64_t>(track.metadata().albumArtistId().value());
+        case Field::ComposerId: return static_cast<std::int64_t>(track.metadata().composerId().value());
         case Field::CoverArtId: return static_cast<std::int64_t>(track.metadata().coverArtId());
 
         // Metadata numeric fields

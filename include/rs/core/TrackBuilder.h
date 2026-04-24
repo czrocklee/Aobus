@@ -62,6 +62,7 @@ namespace rs::core
       MetadataBuilder& artist(std::string_view v);
       MetadataBuilder& album(std::string_view v);
       MetadataBuilder& albumArtist(std::string_view v);
+      MetadataBuilder& composer(std::string_view v);
       MetadataBuilder& genre(std::string_view v);
 
       // Numeric setters
@@ -79,6 +80,7 @@ namespace rs::core
       std::string_view artist() const { return _artist; }
       std::string_view album() const { return _album; }
       std::string_view albumArtist() const { return _albumArtist; }
+      std::string_view composer() const { return _composer; }
       std::string_view genre() const { return _genre; }
       std::uint16_t year() const { return _year; }
       std::uint16_t trackNumber() const { return _trackNumber; }
@@ -96,6 +98,7 @@ namespace rs::core
       std::string_view _artist;
       std::string_view _album;
       std::string_view _albumArtist;
+      std::string_view _composer;
       std::string_view _genre;
 
       // Metadata numerics
@@ -220,6 +223,7 @@ namespace rs::core
       DictionaryId _albumId = DictionaryId{0};
       DictionaryId _genreId = DictionaryId{0};
       DictionaryId _albumArtistId = DictionaryId{0};
+      DictionaryId _composerId = DictionaryId{0};
       std::uint32_t _bloomFilter = 0;
       std::size_t _size = 0;
 

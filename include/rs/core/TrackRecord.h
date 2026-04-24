@@ -47,6 +47,7 @@ namespace rs::core
       std::string artist;
       std::string album;
       std::string albumArtist;
+      std::string composer;
       std::string genre;
       std::uint16_t year = 0;
       std::uint16_t trackNumber = 0;

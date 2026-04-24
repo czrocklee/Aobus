@@ -30,6 +30,8 @@ album, rs::expr::Field::AlbumId
 al, rs::expr::Field::AlbumId
 genre, rs::expr::Field::GenreId
 g, rs::expr::Field::GenreId
+composer, rs::expr::Field::ComposerId
+c, rs::expr::Field::ComposerId
 albumArtist, rs::expr::Field::AlbumArtistId
 aa, rs::expr::Field::AlbumArtistId
 coverArt, rs::expr::Field::CoverArtId

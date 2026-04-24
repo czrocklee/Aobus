@@ -32,6 +32,7 @@ namespace rs::core
     meta._artist = record.metadata.artist;
     meta._album = record.metadata.album;
     meta._albumArtist = record.metadata.albumArtist;
+    meta._composer = record.metadata.composer;
     meta._genre = record.metadata.genre;
     meta._year = record.metadata.year;
     meta._trackNumber = record.metadata.trackNumber;
@@ -80,6 +81,11 @@ namespace rs::core
       if (auto albumArtistId = meta.albumArtistId(); albumArtistId.value() > 0)
       {
         builder.metadata().albumArtist(dict.get(albumArtistId));
+      }
+
+      if (auto composerId = meta.composerId(); composerId.value() > 0)
+      {
+        builder.metadata().composer(dict.get(composerId));
       }
 
       if (auto genreId = meta.genreId(); genreId.value() > 0)
@@ -157,6 +163,7 @@ namespace rs::core
     record.metadata.artist = std::string{meta._artist};
     record.metadata.album = std::string{meta._album};
     record.metadata.albumArtist = std::string{meta._albumArtist};
+    record.metadata.composer = std::string{meta._composer};
     record.metadata.genre = std::string{meta._genre};
 
     record.metadata.year = meta._year;
@@ -215,6 +222,12 @@ namespace rs::core
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::albumArtist(std::string_view v)
   {
     _albumArtist = v;
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::composer(std::string_view v)
+  {
+    _composer = v;
     return *this;
   }
 
@@ -454,9 +467,14 @@ namespace rs::core
       _albumArtistId = dict.put(txn, builder->_metadataBuilder._albumArtist);
     }
 
+    if (!builder->_metadataBuilder._composer.empty())
+    {
+      _composerId = dict.put(txn, builder->_metadataBuilder._composer);
+    }
+
     _bloomFilter = computeBloomFilter(_tagIds);
 
-    // Compute total hot size: Header(32) + tags + title
+    // Compute total hot size: Header(36) + tags + title
     _size = sizeof(TrackHotHeader);
     _size += _tagIds.size() * sizeof(DictionaryId);
     _size += builder->_metadataBuilder._title.size();
@@ -476,6 +494,7 @@ namespace rs::core
       .albumId = _albumId,
       .genreId = _genreId,
       .albumArtistId = _albumArtistId,
+      .composerId = _composerId,
       .year = builder._metadataBuilder._year,
       .codecId = builder._propertyBuilder._codecId,
       .bitDepth = builder._propertyBuilder._bitDepth,
