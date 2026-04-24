@@ -65,7 +65,7 @@ TEST_CASE("ListBuilder - manual list empty trackIds")
   CHECK(view.parentId() == rs::core::ListId{0});
 }
 
-TEST_CASE("ListBuilder - parentId round-trip through record and view")
+TEST_CASE("ListBuilder - parentId round-trip through View")
 {
   auto builder = ListBuilder::createNew()
                    .name("Nested Smart List")
@@ -75,14 +75,14 @@ TEST_CASE("ListBuilder - parentId round-trip through record and view")
 
   auto payload = builder.serialize();
   auto view = ListView{payload};
-  auto record = ListBuilder::fromView(view).record();
 
   CHECK(view.parentId() == rs::core::ListId{42});
-  CHECK(record.parentId == rs::core::ListId{42});
 
-  auto rebuilt = ListBuilder::fromRecord(record).serialize();
+  auto rebuilt = ListBuilder::fromView(view).serialize();
   auto rebuiltView = ListView{rebuilt};
   CHECK(rebuiltView.parentId() == rs::core::ListId{42});
+  CHECK(rebuiltView.name() == "Nested Smart List");
+  CHECK(rebuiltView.filter() == "$year >= 2021");
 }
 
 TEST_CASE("ListBuilder - manual list round-trip through ListStore")

@@ -5,7 +5,6 @@
 
 #include <rs/core/ResourceStore.h>
 #include <rs/core/TrackBuilder.h>
-#include <rs/core/TrackRecord.h>
 #include <rs/core/TrackView.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>

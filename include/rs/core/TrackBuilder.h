@@ -6,7 +6,6 @@
 #include <rs/core/DictionaryStore.h>
 #include <rs/core/ResourceStore.h>
 #include <rs/core/TrackLayout.h>
-#include <rs/core/TrackRecord.h>
 #include <rs/core/TrackView.h>
 #include <rs/lmdb/Transaction.h>
 
@@ -21,12 +20,12 @@ namespace rs::core
   /**
    * TrackBuilder - Fluent builder for constructing track binary data.
    *
-   * Stores strings as string_view pointing to external data (from Record or mmap).
+   * Stores strings as string_view pointing to external data (from std::string or mmap).
    * Sub-builders hold the actual data as member variables.
    *
    * Usage:
-   *   // Pattern A: from existing record, modify hot only
-   *   auto builder = TrackBuilder::fromRecord(existingRecord);
+   *   // Pattern A: from existing view, modify hot only
+   *   auto builder = TrackBuilder::fromView(view, dict);
    *   builder.tags().add("rock").remove("jazz");
    *   auto hotData = builder.serializeHot(txn, dict);
    *   writer.updateHot(trackId, hotData);
@@ -45,11 +44,7 @@ namespace rs::core
   public:
     // Factory methods
     static TrackBuilder createNew();
-    static TrackBuilder fromRecord(TrackRecord const& record);
     static TrackBuilder fromView(TrackView const& view, DictionaryStore& dict);
-
-    // Record access - constructs TrackRecord on-the-fly from stored data
-    TrackRecord record() const;
 
     //=============================================================================
     // Sub-builders - own the data as string_view
