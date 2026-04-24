@@ -3,6 +3,8 @@
 
 #include "LibCommand.h"
 #include "BasicCommand.h"
+#include <rs/core/LibraryExporter.h>
+#include <rs/core/LibraryImporter.h>
 
 #include <iomanip>
 #include <sstream>
@@ -47,10 +49,65 @@ namespace
     os << "Created:           " << formatTimestamp(header.createdAtUnixMs) << "\n";
     os << "Migrated:          " << formatTimestamp(header.migratedAtUnixMs) << "\n";
   }
+
+  void exportLib(core::MusicLibrary& ml, bpo::variables_map const& vm, std::ostream& os)
+  {
+    if (!vm.count("output"))
+    {
+      os << "Error: Output path is required for export.\n";
+      return;
+    }
+
+    auto const path = vm["output"].as<std::string>();
+    auto mode = core::ExportMode::Full;
+
+    if (vm.count("mode"))
+    {
+      auto const modeStr = vm["mode"].as<std::string>();
+      if (modeStr == "minimum")
+        mode = core::ExportMode::Minimum;
+      else if (modeStr == "metadata")
+        mode = core::ExportMode::Metadata;
+      else if (modeStr == "full")
+        mode = core::ExportMode::Full;
+      else
+      {
+        os << "Error: Invalid export mode '" << modeStr << "'. Valid modes are: minimum, metadata, full.\n";
+        return;
+      }
+    }
+
+    core::LibraryExporter exporter(ml);
+    exporter.exportToYaml(path, mode);
+    os << "Library exported to '" << path << "' using mode '" << vm["mode"].as<std::string>() << "'.\n";
+  }
+
+  void importLib(core::MusicLibrary& ml, bpo::variables_map const& vm, std::ostream& os)
+  {
+    if (!vm.count("input"))
+    {
+      os << "Error: Input path is required for import.\n";
+      return;
+    }
+
+    auto const path = vm["input"].as<std::string>();
+    core::LibraryImporter importer(ml);
+    importer.importFromYaml(path);
+    os << "Library imported from '" << path << "'.\n";
+  }
 }
 
 LibCommand::LibCommand(core::MusicLibrary& ml) : _ml{ml}
 {
   addCommand<BasicCommand>("show").setExecutor(
-    [this]([[maybe_unused]] auto const& vm, auto& os) { return show(_ml, os); });
+      [this]([[maybe_unused]] auto const& vm, auto& os) { return show(_ml, os); });
+
+  addCommand<BasicCommand>("export")
+      .addOption("output,o", bpo::value<std::string>(), "Output YAML file path", 1)
+      .addOption("mode,m", bpo::value<std::string>()->default_value("full"), "Export mode (minimum, metadata, full)")
+      .setExecutor([this](auto const& vm, auto& os) { return exportLib(_ml, vm, os); });
+
+  addCommand<BasicCommand>("import")
+      .addOption("input,i", bpo::value<std::string>(), "Input YAML file path", 1)
+      .setExecutor([this](auto const& vm, auto& os) { return importLib(_ml, vm, os); });
 }

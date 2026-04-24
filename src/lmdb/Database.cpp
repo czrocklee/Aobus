@@ -265,6 +265,13 @@ namespace rs::lmdb
     return true;
   }
 
+  void Writer::clear()
+  {
+    throwOnError("mdb_drop", mdb_drop(_txn->_handle.get(), _dbi, 0));
+    _lastId = 0;
+    _cursor = Reader::create(_txn->_handle.get(), _dbi);
+  }
+
   std::optional<std::span<std::byte const>> Writer::get(std::uint32_t id) const
   {
     auto key = makeVal(id);

@@ -5,6 +5,8 @@
 #include "core/Log.h"
 
 #include <rs/core/ListBuilder.h>
+#include <rs/core/LibraryExporter.h>
+#include <rs/core/LibraryImporter.h>
 #include <rs/core/MusicLibrary.h>
 #include <rs/core/ResourceStore.h>
 #include <rs/core/TrackBuilder.h>
@@ -34,6 +36,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <exception>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -589,6 +592,151 @@ namespace app::ui
     _importDialog->show();
   }
 
+  void MainWindow::exportLibrary()
+  {
+    if (!_musicLibrary)
+    {
+      return;
+    }
+
+    // Export Mode selection dialog
+    auto* dialog = Gtk::make_managed<Gtk::Dialog>();
+    dialog->set_title("Select Export Mode");
+    dialog->set_transient_for(*this);
+    dialog->set_modal(true);
+
+    auto* content = dialog->get_content_area();
+    auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
+    box->set_margin(12);
+
+    auto* label = Gtk::make_managed<Gtk::Label>("Choose what to include in the backup:");
+    label->set_halign(Gtk::Align::START);
+    box->append(*label);
+
+    auto* modeCombo = Gtk::make_managed<Gtk::DropDown>();
+    auto modeStrings = Gtk::StringList::create({
+      "App-Only (Tags, Ratings, Lists)",
+      "Metadata + App Data (Title, Artist, Tags, etc.)",
+      "Full Backup (All Metadata + Audio Properties + Cover Art)"
+    });
+    modeCombo->set_model(modeStrings);
+    modeCombo->set_selected(1); // Default to Metadata
+    box->append(*modeCombo);
+
+    content->append(*box);
+    dialog->add_button("Cancel", Gtk::ResponseType::CANCEL);
+    dialog->add_button("Next", Gtk::ResponseType::OK);
+
+    dialog->signal_response().connect([this, dialog, modeCombo](int responseId) {
+      if (responseId != Gtk::ResponseType::OK) {
+        dialog->close();
+        return;
+      }
+
+      rs::core::ExportMode mode = rs::core::ExportMode::Metadata;
+      switch (modeCombo->get_selected()) {
+        case 0: mode = rs::core::ExportMode::Minimum; break;
+        case 1: mode = rs::core::ExportMode::Metadata; break;
+        case 2: mode = rs::core::ExportMode::Full; break;
+      }
+
+      dialog->close();
+
+      auto fileDialog = Gtk::FileDialog::create();
+      fileDialog->set_title("Export Library to YAML");
+      fileDialog->set_initial_name("library_backup.yaml");
+      
+      auto filter = Gtk::FileFilter::create();
+      filter->set_name("YAML files");
+      filter->add_pattern("*.yaml");
+      filter->add_pattern("*.yml");
+      auto filters = Gio::ListStore<Gtk::FileFilter>::create();
+      filters->append(filter);
+      fileDialog->set_filters(filters);
+
+      fileDialog->save(*this, [this, fileDialog, mode](Glib::RefPtr<Gio::AsyncResult>& result) {
+        try {
+          auto file = fileDialog->save_finish(result);
+          if (file) {
+            std::filesystem::path path(file->get_path());
+            
+            // Run export in background thread
+            std::thread([this, path, mode]() {
+              try {
+                rs::core::LibraryExporter exporter(*_musicLibrary);
+                exporter.exportToYaml(path, mode);
+                Glib::MainContext::get_default()->invoke([this]() {
+                  showStatusMessage("Library exported successfully");
+                  return false;
+                });
+              } catch (std::exception const& e) {
+                std::string errorText = e.what();
+                Glib::MainContext::get_default()->invoke([this, errorText]() {
+                  APP_LOG_ERROR("Export failed: {}", errorText);
+                  showStatusMessage("Export failed: " + errorText);
+                  return false;
+                });
+              }
+            }).detach();
+          }
+        } catch (...) {}
+      });
+    });
+
+    dialog->show();
+  }
+
+  void MainWindow::importLibrary()
+  {
+    if (!_musicLibrary)
+    {
+      return;
+    }
+
+    auto fileDialog = Gtk::FileDialog::create();
+    fileDialog->set_title("Import Library from YAML");
+    
+    auto filter = Gtk::FileFilter::create();
+    filter->set_name("YAML files");
+    filter->add_pattern("*.yaml");
+    filter->add_pattern("*.yml");
+    auto filters = Gio::ListStore<Gtk::FileFilter>::create();
+    filters->append(filter);
+    fileDialog->set_filters(filters);
+
+    fileDialog->open(*this, [this, fileDialog](Glib::RefPtr<Gio::AsyncResult>& result) {
+      try {
+        auto file = fileDialog->open_finish(result);
+        if (file) {
+          std::filesystem::path path(file->get_path());
+          
+          // Run import in background thread
+          std::thread([this, path]() {
+            try {
+              rs::core::LibraryImporter importer(*_musicLibrary);
+              importer.importFromYaml(path);
+              Glib::MainContext::get_default()->invoke([this]() {
+                // Refresh everything
+                auto txn = _musicLibrary->readTransaction();
+                _allTrackIds->reloadFromStore(txn);
+                rebuildListPages(txn);
+                showStatusMessage("Library imported successfully");
+                return false;
+              });
+            } catch (std::exception const& e) {
+              std::string errorText = e.what();
+              Glib::MainContext::get_default()->invoke([this, errorText]() {
+                APP_LOG_ERROR("Import failed: {}", errorText);
+                showStatusMessage("Import failed: " + errorText);
+                return false;
+              });
+            }
+          }).detach();
+        }
+      } catch (...) {}
+    });
+  }
+
   void MainWindow::openNewListDialog(rs::core::ListId parentListId)
   {
     if (!_musicLibrary)
@@ -710,6 +858,16 @@ namespace app::ui
     importAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
                                             { importFiles(); });
     add_action(importAction);
+
+    auto exportLibAction = Gio::SimpleAction::create("export-library");
+    exportLibAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+                                            { exportLibrary(); });
+    add_action(exportLibAction);
+
+    auto importLibAction = Gio::SimpleAction::create("import-library");
+    importLibAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+                                            { importLibrary(); });
+    add_action(importLibAction);
 
     _newListAction = Gio::SimpleAction::create("new-list");
     _newListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)

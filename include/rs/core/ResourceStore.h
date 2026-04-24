@@ -33,6 +33,7 @@ namespace rs::core
   public:
     ResourceId create(std::span<std::byte const> data);
     bool del(ResourceId id) { return _writer.del(id.value()); }
+    void clear() { _writer.clear(); }
 
   private:
     explicit Writer(lmdb::Database::Reader&& reader, lmdb::Database::Writer&& writer)

@@ -165,6 +165,11 @@ namespace rs::core
     bool remove(TrackId id);
 
     /**
+     * Clear all tracks.
+     */
+    void clear();
+
+    /**
      * Get track by ID with specified load mode.
      */
     std::optional<TrackView> get(TrackId id, Reader::LoadMode mode) const;

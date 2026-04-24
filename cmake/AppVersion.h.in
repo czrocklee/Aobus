@@ -1,0 +1,6 @@
+#pragma once
+
+namespace rs
+{
+  inline constexpr auto kAppVersion = "@PROJECT_VERSION@";
+}
