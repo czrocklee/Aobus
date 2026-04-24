@@ -735,7 +735,7 @@ namespace app::ui
     // Set up horizontal paned (split view)
     _paned.set_orientation(Gtk::Orientation::HORIZONTAL);
 
-    // Left side: vertical box (like Qt's verticalLayout)
+    // Left side: vertical box
     _leftBox.set_orientation(Gtk::Orientation::VERTICAL);
     _leftBox.set_hexpand(true);
     _leftBox.set_vexpand(true);
@@ -865,7 +865,7 @@ namespace app::ui
     _listScrolledWindow.set_child(_listView);
     _listScrolledWindow.set_vexpand(true);
 
-    // Cover art widget - matches Qt's CoverArtLabel (vsizetype=Maximum, min 50x50)
+    // Cover art widget (min 50x50)
     _coverArtWidget->set_valign(Gtk::Align::END);
     _coverArtWidget->set_halign(Gtk::Align::FILL);
     _coverArtWidget->set_size_request(50, 50);
@@ -890,7 +890,7 @@ namespace app::ui
     _paned.set_start_child(_leftBox);
     _paned.set_end_child(_stack);
 
-    // Set paned behavior to match Qt's 1:2 stretch ratio
+    // Set paned behavior
     // Left side (list) can resize but not shrink, right side gets more space
     _paned.set_resize_start_child(true);
     _paned.set_shrink_start_child(false);
