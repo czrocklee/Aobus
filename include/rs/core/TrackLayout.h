@@ -21,16 +21,16 @@ namespace rs::core
    * Hot fields are used for fast filtering/sorting operations.
    *
    * Layout uses strictly descending member sizes (4→2→1) for natural alignment.
-   * Total size: 32 bytes with 4-byte alignment.
+   * Total size: 36 bytes with 4-byte alignment.
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← hot data begin
-   *   │        TrackHotHeader (32B)         |
+   *   │        TrackHotHeader (36B)         |
    *   │  tagBloom, artistId, albumId,       │
-   *   │  genreId, albumArtistId             │
-   *   │  year, codecId, bitDepth            │
-   *   │  titleLen, tagLen, rating           │
-   *   │  padding                            │
+   *   │  genreId, albumArtistId,            │
+   *   │  composerId, year, codecId,         │
+   *   │  bitDepth, titleLen, tagLen,        │
+   *   │  rating, padding                    │
    *   ├─────────────────────────────────────┤  ← tags begin = header + sizeof(header)
    *   │  tag ID 1 (4B)                      │
    *   │  tag ID 2 (4B)                      │
@@ -48,6 +48,7 @@ namespace rs::core
     DictionaryId albumId;       // Dictionary ID for album
     DictionaryId genreId;       // Dictionary ID for genre
     DictionaryId albumArtistId; // Dictionary ID for album artist
+    DictionaryId composerId;    // Dictionary ID for composer
 
     // 2-byte section
     std::uint16_t year;     // Release year
@@ -59,15 +60,15 @@ namespace rs::core
     // 1-byte section
     std::uint8_t rating; // User rating (0-5)
 
-    // 1 byte padding to reach 32 bytes total
+    // 1 byte padding to reach 36 bytes total
     std::byte padding;
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackHotHeaderSize = 32;
+  constexpr std::size_t kTrackHotHeaderSize = 36;
   constexpr std::size_t kTrackHotHeaderAlignment = 4;
 
-  static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 32 bytes");
+  static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 36 bytes");
   static_assert(alignof(TrackHotHeader) == kTrackHotHeaderAlignment, "TrackHotHeader must have 4-byte alignment");
 
   /**

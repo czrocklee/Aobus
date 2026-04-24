@@ -17,7 +17,7 @@ namespace
 
   TEST_CASE("TrackHotHeader - Size and Alignment")
   {
-    CHECK(sizeof(TrackHotHeader) == 32);
+    CHECK(sizeof(TrackHotHeader) == 36);
     CHECK(alignof(TrackHotHeader) == 4);
   }
 
@@ -29,16 +29,17 @@ namespace
     CHECK(offsetof(TrackHotHeader, albumId) == 8);
     CHECK(offsetof(TrackHotHeader, genreId) == 12);
     CHECK(offsetof(TrackHotHeader, albumArtistId) == 16);
+    CHECK(offsetof(TrackHotHeader, composerId) == 20);
 
-    // Check 2-byte section starts at offset 20
-    CHECK(offsetof(TrackHotHeader, year) == 20);
-    CHECK(offsetof(TrackHotHeader, codecId) == 22);
-    CHECK(offsetof(TrackHotHeader, bitDepth) == 24);
-    CHECK(offsetof(TrackHotHeader, titleLen) == 26);
-    CHECK(offsetof(TrackHotHeader, tagLen) == 28);
+    // Check 2-byte section starts at offset 24
+    CHECK(offsetof(TrackHotHeader, year) == 24);
+    CHECK(offsetof(TrackHotHeader, codecId) == 26);
+    CHECK(offsetof(TrackHotHeader, bitDepth) == 28);
+    CHECK(offsetof(TrackHotHeader, titleLen) == 30);
+    CHECK(offsetof(TrackHotHeader, tagLen) == 32);
 
     // Check 1-byte section
-    CHECK(offsetof(TrackHotHeader, rating) == 30);
+    CHECK(offsetof(TrackHotHeader, rating) == 34);
   }
 
   TEST_CASE("TrackColdHeader - Size and Alignment")

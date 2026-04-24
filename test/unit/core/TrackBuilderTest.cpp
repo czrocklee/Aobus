@@ -47,8 +47,8 @@ TEST_CASE("TrackBuilder - Default Constructor via createNew")
   CHECK(builder.record().metadata.artist.empty());
   CHECK(builder.record().metadata.album.empty());
   CHECK(builder.record().metadata.albumArtist.empty());
-  CHECK(builder.record().metadata.genre.empty());
-  CHECK(builder.record().property.uri.empty());
+  CHECK(builder.record().metadata.composer.empty());
+  CHECK(builder.record().metadata.genre.empty());  CHECK(builder.record().property.uri.empty());
   CHECK(builder.record().property.fileSize == 0);
   CHECK(builder.record().property.bitDepth == 0);
   CHECK(builder.record().tags.names.empty());
@@ -63,8 +63,8 @@ TEST_CASE("TrackBuilder - MetadataBuilder fluent setters")
     .artist("Test Artist")
     .album("Test Album")
     .albumArtist("Test Album Artist")
-    .genre("Rock")
-    .year(2024)
+    .composer("Test Composer")
+    .genre("Rock")    .year(2024)
     .trackNumber(5)
     .totalTracks(10)
     .discNumber(2)
@@ -76,6 +76,7 @@ TEST_CASE("TrackBuilder - MetadataBuilder fluent setters")
   CHECK(builder.record().metadata.artist == "Test Artist");
   CHECK(builder.record().metadata.album == "Test Album");
   CHECK(builder.record().metadata.albumArtist == "Test Album Artist");
+  CHECK(builder.record().metadata.composer == "Test Composer");
   CHECK(builder.record().metadata.genre == "Rock");
   CHECK(builder.record().metadata.year == 2024);
   CHECK(builder.record().metadata.trackNumber == 5);

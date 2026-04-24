@@ -16,6 +16,7 @@ TIT2, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::title>
 TPE1, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::artist>
 TPE2, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::albumArtist>
 TALB, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::album>
+TCOM, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::composer>
 TYER, &handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::year>
 TDRC, &handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::year>
 TRCK, &handleSlashNumber<&::rs::core::TrackBuilder::MetadataBuilder::trackNumber, &::rs::core::TrackBuilder::MetadataBuilder::totalTracks>

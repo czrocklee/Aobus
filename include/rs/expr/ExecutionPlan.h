@@ -38,22 +38,23 @@ namespace rs::expr
     AlbumId = 10,
     GenreId = 11,
     AlbumArtistId = 12,
-    CoverArtId = 13,
+    ComposerId = 13,
+    CoverArtId = 14,
 
     // Metadata numeric fields
-    Year = 14,
-    TrackNumber = 15,
-    TotalTracks = 16,
-    DiscNumber = 17,
-    TotalDiscs = 18,
+    Year = 15,
+    TrackNumber = 16,
+    TotalTracks = 17,
+    DiscNumber = 18,
+    TotalDiscs = 19,
 
     // Tag fields
-    TagBloom = 19,
-    TagCount = 20,
-    Tag = 21,
+    TagBloom = 20,
+    TagCount = 21,
+    Tag = 22,
 
     // Custom field (for %custom_key lookups from cold storage)
-    Custom = 22,
+    Custom = 23,
   };
 
   /**

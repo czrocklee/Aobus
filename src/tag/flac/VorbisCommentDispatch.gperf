@@ -16,6 +16,7 @@ TITLE, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::
 ARTIST, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::artist>
 ALBUM, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::album>
 ALBUMARTIST, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::albumArtist>
+COMPOSER, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::composer>
 TRACKNUMBER, &::rs::tag::flac::handleSlashNumber<&::rs::core::TrackBuilder::MetadataBuilder::trackNumber, &::rs::core::TrackBuilder::MetadataBuilder::totalTracks>
 TRACKTOTAL, &::rs::tag::flac::handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::totalTracks>
 TOTALTRACKS, &::rs::tag::flac::handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::totalTracks>
