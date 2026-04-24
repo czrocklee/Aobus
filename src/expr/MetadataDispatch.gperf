@@ -38,5 +38,7 @@ coverArt, rs::expr::Field::CoverArtId
 ca, rs::expr::Field::CoverArtId
 title, rs::expr::Field::Title
 t, rs::expr::Field::Title
+work, rs::expr::Field::WorkId
+w, rs::expr::Field::WorkId
 %%
 } // namespace metadata_dispatch

@@ -282,14 +282,15 @@ TEST_CASE("ExecutionPlan - Field Enum Values")
   CHECK(static_cast<std::uint8_t>(Field::ArtistId) == 9);
   CHECK(static_cast<std::uint8_t>(Field::AlbumId) == 10);
   CHECK(static_cast<std::uint8_t>(Field::ComposerId) == 13);
+  CHECK(static_cast<std::uint8_t>(Field::WorkId) == 15);
 
   // Metadata numeric fields
-  CHECK(static_cast<std::uint8_t>(Field::Year) == 15);
-  CHECK(static_cast<std::uint8_t>(Field::TrackNumber) == 16);
+  CHECK(static_cast<std::uint8_t>(Field::Year) == 16);
+  CHECK(static_cast<std::uint8_t>(Field::TrackNumber) == 17);
 
   // Tag fields
-  CHECK(static_cast<std::uint8_t>(Field::TagBloom) == 20);
-  CHECK(static_cast<std::uint8_t>(Field::TagCount) == 21);
+  CHECK(static_cast<std::uint8_t>(Field::TagBloom) == 21);
+  CHECK(static_cast<std::uint8_t>(Field::TagCount) == 22);
 }
 
 TEST_CASE("ExecutionPlan - OpCode Enum Values")

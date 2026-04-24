@@ -19,7 +19,7 @@ except ImportError:
     print("mutagen not available, trying alternative...")
 
 
-def create_flac(path: str, title: str, artist: str, album: str, year: str, track: str):
+def create_flac(path: str, title: str, artist: str, album: str, year: str, track: str, work: str = None):
     """Create a minimal FLAC file with metadata."""
     # FLAC requires actual audio data, but we can create minimal valid file
     # Use mutagen to add tags to empty/minimal file
@@ -35,6 +35,8 @@ def create_flac(path: str, title: str, artist: str, album: str, year: str, track
         audio['album'] = album
         audio['date'] = year
         audio['tracknumber'] = track
+        if work:
+            audio['grouping'] = work
         audio.save()
     else:
         # Just create empty file
@@ -42,7 +44,7 @@ def create_flac(path: str, title: str, artist: str, album: str, year: str, track
             pass
 
 
-def create_m4a(path: str, title: str, artist: str, album: str, year: str, track: str):
+def create_m4a(path: str, title: str, artist: str, album: str, year: str, track: str, work: str = None):
     """Create a minimal M4A file with metadata."""
     if HAS_MUTAGEN:
         # Create minimal M4A structure
@@ -57,13 +59,15 @@ def create_m4a(path: str, title: str, artist: str, album: str, year: str, track:
         audio['\xa9alb'] = album  # album
         audio['\xa9day'] = year   # date
         audio['trkn'] = [(int(track), 0)]
+        if work:
+            audio['\xa9grp'] = work
         audio.save()
     else:
         with open(path, 'wb') as f:
             pass
 
 
-def create_mp3(path: str, title: str, artist: str, album: str, year: str, track: str):
+def create_mp3(path: str, title: str, artist: str, album: str, year: str, track: str, work: str = None):
     """Create a minimal MP3 file with metadata."""
     if HAS_MUTAGEN:
         # Create minimal MP3 with ID3v2 tag
@@ -83,6 +87,8 @@ def create_mp3(path: str, title: str, artist: str, album: str, year: str, track:
         audio['TALB'] = album
         audio['TYER'] = year
         audio['TRCK'] = track
+        if work:
+            audio['TIT1'] = work
         audio.save()
     else:
         with open(path, 'wb') as f:
@@ -96,23 +102,23 @@ def main():
 
     # Test tracks
     tracks = [
-        ('song_1.flac', 'Test Song 1', 'Test Artist', 'Test Album 1', '2021', '1'),
-        ('song_2.flac', 'Test Song 2', 'Test Artist', 'Test Album 2', '2022', '2'),
-        ('song_3.m4a', 'M4A Song 3', 'M4A Artist', 'M4A Album', '2020', '3'),
-        ('song_4.m4a', 'M4A Song 4', 'M4A Artist', 'M4A Album', '2020', '4'),
-        ('song_5.mp3', 'MP3 Song 5', 'MP3 Artist', 'MP3 Album', '2019', '5'),
+        ('song_1.flac', 'Test Song 1', 'Test Artist', 'Test Album 1', '2021', '1', 'Symphony No. 5'),
+        ('song_2.flac', 'Test Song 2', 'Test Artist', 'Test Album 2', '2022', '2', 'The Four Seasons'),
+        ('song_3.m4a', 'M4A Song 3', 'M4A Artist', 'M4A Album', '2020', '3', 'Moonlight Sonata'),
+        ('song_4.m4a', 'M4A Song 4', 'M4A Artist', 'M4A Album', '2020', '4', None),
+        ('song_5.mp3', 'MP3 Song 5', 'MP3 Artist', 'MP3 Album', '2019', '5', 'Toccata and Fugue'),
     ]
 
-    for filename, title, artist, album, year, track in tracks:
+    for filename, title, artist, album, year, track, work in tracks:
         path = os.path.join(output_dir, filename)
         ext = os.path.splitext(filename)[1].lower()
 
         if ext == '.flac':
-            create_flac(path, title, artist, album, year, track)
+            create_flac(path, title, artist, album, year, track, work)
         elif ext == '.m4a':
-            create_m4a(path, title, artist, album, year, track)
+            create_m4a(path, title, artist, album, year, track, work)
         elif ext == '.mp3':
-            create_mp3(path, title, artist, album, year, track)
+            create_mp3(path, title, artist, album, year, track, work)
 
         print(f"Created: {filename}")
 

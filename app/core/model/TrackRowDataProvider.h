@@ -35,6 +35,8 @@ namespace app::core::model
     std::string album;
     std::string albumArtist;
     std::string genre;
+    std::string composer;
+    std::string work;
     std::string title;
     std::string tags;
     std::uint16_t year = 0;

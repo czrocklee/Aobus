@@ -12,6 +12,7 @@ struct Id3v2FrameDispatchEntry
   FrameHandler handler;
 };
 %%
+TIT1, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::work>
 TIT2, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::title>
 TPE1, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::artist>
 TPE2, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::albumArtist>

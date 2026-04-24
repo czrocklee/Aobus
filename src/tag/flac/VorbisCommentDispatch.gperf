@@ -24,4 +24,6 @@ DISCNUMBER, &::rs::tag::flac::handleSlashNumber<&::rs::core::TrackBuilder::Metad
 DISCTOTAL, &::rs::tag::flac::handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::totalDiscs>
 TOTALDISCS, &::rs::tag::flac::handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::totalDiscs>
 GENRE, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::genre>
+WORK, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::work>
+GROUPING, &::rs::tag::flac::handleText<&::rs::core::TrackBuilder::MetadataBuilder::work>
 DATE, &::rs::tag::flac::handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::year>

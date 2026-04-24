@@ -24,6 +24,8 @@ namespace app::ui
     Album,
     AlbumArtist,
     Genre,
+    Composer,
+    Work,
     Year,
   };
 
@@ -33,6 +35,8 @@ namespace app::ui
     Album,
     AlbumArtist,
     Genre,
+    Composer,
+    Work,
     Year,
     DiscNumber,
     TrackNumber,
@@ -46,6 +50,8 @@ namespace app::ui
     Album,
     AlbumArtist,
     Genre,
+    Composer,
+    Work,
     Year,
     DiscNumber,
     TrackNumber,
@@ -101,6 +107,8 @@ namespace app::ui
     std::string_view album{};
     std::string_view albumArtist{};
     std::string_view genre{};
+    std::string_view composer{};
+    std::string_view work{};
     std::string_view title{};
     std::uint32_t durationMs = 0;
     std::uint16_t year = 0;

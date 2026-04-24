@@ -29,11 +29,13 @@ namespace app::ui
       std::string_view prefix;
     };
 
-    constexpr auto kMetadataFields = std::array<std::string_view, 11>{
+    constexpr auto kMetadataFields = std::array<std::string_view, 13>{
       "title",
       "artist",
       "album",
       "albumArtist",
+      "composer",
+      "work",
       "genre",
       "year",
       "trackNumber",

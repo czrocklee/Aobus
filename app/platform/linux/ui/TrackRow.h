@@ -55,6 +55,8 @@ namespace app::ui
     mutable std::string _album;
     mutable std::string _albumArtist;
     mutable std::string _genre;
+    mutable std::string _composer;
+    mutable std::string _work;
     mutable std::string _title;
     mutable std::string _tags;
     mutable std::chrono::milliseconds _duration{0};

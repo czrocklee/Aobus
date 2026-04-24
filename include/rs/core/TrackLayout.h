@@ -86,15 +86,15 @@ namespace rs::core
    *   - trackNumber, totalTracks, discNumber, totalDiscs: display only
    *   - uri: playback path, not filtered
    *
-   * Total size: 48 bytes with 4-byte alignment.
+   * Total size: 52 bytes with 4-byte alignment.
    *
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← cold data begin
-   *   │        TrackColdHeader (48B)        │
+   *   │        TrackColdHeader (52B)        │
    *   │  fileSizeLo/Hi, mtimeLo/Hi          │
    *   │  durationMs, sampleRate,            │
-   *   │  coverArtId, bitrate                │
+   *   │  coverArtId, bitrate, workId        │
    *   │  trackNumber, totalTracks,          │
    *   │  discNumber, totalDiscs             │
    *   │  customCount, uriOffset, uriLen     │
@@ -122,6 +122,7 @@ namespace rs::core
     std::uint32_t sampleRate; // Sample rate in Hz
     std::uint32_t coverArtId; // ResourceStore ID for cover art
     std::uint32_t bitrate;    // Bitrate in bps
+    DictionaryId workId;      // Dictionary ID for work
 
     // 2-byte section
     std::uint16_t trackNumber; // Track number
@@ -135,15 +136,15 @@ namespace rs::core
     // 1-byte section
     std::uint8_t channels; // Number of audio channels
 
-    // 1 byte padding to reach 48 bytes total
+    // 1 byte padding to reach 52 bytes total
     std::byte padding;
   };
 
   // Binary layout constants
-  constexpr std::size_t kTrackColdHeaderSize = 48;
+  constexpr std::size_t kTrackColdHeaderSize = 52;
   constexpr std::size_t kTrackColdHeaderAlignment = 4;
 
-  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 48 bytes");
+  static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 52 bytes");
   static_assert(alignof(TrackColdHeader) == kTrackColdHeaderAlignment, "TrackColdHeader must have 4-byte alignment");
 
 } // namespace rs::core

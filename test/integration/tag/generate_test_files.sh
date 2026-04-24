@@ -28,6 +28,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "album=Test Album" \
     -metadata "genre=Rock" \
     -metadata "composer=Test Composer" \
+    -metadata "grouping=Symphony No. 5" \
     -metadata "track=1" \
     -metadata "date=2024" \
     -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
@@ -43,6 +44,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "album=Test Album" \
     -metadata "genre=Rock" \
     -metadata "composer=Test Composer" \
+    -metadata "grouping=Symphony No. 5" \
     -metadata "track=1" \
     -metadata "date=2024" \
     -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
@@ -61,6 +63,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "album=HiRes Album" \
     -metadata "genre=Electronic" \
     -metadata "composer=HiRes Composer" \
+    -metadata "grouping=The Four Seasons" \
     -metadata "track=2" \
     -metadata "date=2025" \
     -af "aformat=sample_fmts=s32:channel_layouts=stereo" \
@@ -77,6 +80,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "album=Test Album" \
     -metadata "genre=Rock" \
     -metadata "composer=Test Composer" \
+    -metadata "grouping=Symphony No. 5" \
     -metadata "track=1" \
     -metadata "date=2024" \
     -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
@@ -92,6 +96,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "album=Test Album" \
     -metadata "genre=Rock" \
     -metadata "composer=Test Composer" \
+    -metadata "grouping=Symphony No. 5" \
     -metadata "track=1" \
     -metadata "date=2024" \
     -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
@@ -110,6 +115,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "album=HiRes Album" \
     -metadata "genre=Electronic" \
     -metadata "composer=HiRes Composer" \
+    -metadata "grouping=The Four Seasons" \
     -metadata "track=2" \
     -metadata "date=2025" \
     -af "aformat=sample_fmts=s32:channel_layouts=stereo" \
@@ -127,6 +133,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "album=Test Album" \
     -metadata "genre=Rock" \
     -metadata "composer=Test Composer" \
+    -metadata "grouping=Symphony No. 5" \
     -metadata "track=1" \
     -metadata "date=2024" \
     -id3v2_version 3 \
@@ -142,6 +149,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "album=Test Album" \
     -metadata "genre=Rock" \
     -metadata "composer=Test Composer" \
+    -metadata "grouping=Symphony No. 5" \
     -metadata "track=1" \
     -metadata "date=2024" \
     -id3v2_version 3 \
@@ -163,6 +171,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "album=HiRes Album" \
     -metadata "genre=Electronic" \
     -metadata "composer=HiRes Composer" \
+    -metadata "grouping=The Four Seasons" \
     -metadata "track=2" \
     -metadata "date=2025" \
     -id3v2_version 3 \

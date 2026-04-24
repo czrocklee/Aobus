@@ -44,7 +44,7 @@ namespace
 
   TEST_CASE("TrackColdHeader - Size and Alignment")
   {
-    CHECK(sizeof(TrackColdHeader) == 48);
+    CHECK(sizeof(TrackColdHeader) == 52);
     CHECK(alignof(TrackColdHeader) == 4);
   }
 
@@ -61,18 +61,19 @@ namespace
     CHECK(offsetof(TrackColdHeader, sampleRate) == 20);
     CHECK(offsetof(TrackColdHeader, coverArtId) == 24);
     CHECK(offsetof(TrackColdHeader, bitrate) == 28);
+    CHECK(offsetof(TrackColdHeader, workId) == 32);
 
     // 2-byte section
-    CHECK(offsetof(TrackColdHeader, trackNumber) == 32);
-    CHECK(offsetof(TrackColdHeader, totalTracks) == 34);
-    CHECK(offsetof(TrackColdHeader, discNumber) == 36);
-    CHECK(offsetof(TrackColdHeader, totalDiscs) == 38);
-    CHECK(offsetof(TrackColdHeader, customCount) == 40);
-    CHECK(offsetof(TrackColdHeader, uriOffset) == 42);
-    CHECK(offsetof(TrackColdHeader, uriLen) == 44);
+    CHECK(offsetof(TrackColdHeader, trackNumber) == 36);
+    CHECK(offsetof(TrackColdHeader, totalTracks) == 38);
+    CHECK(offsetof(TrackColdHeader, discNumber) == 40);
+    CHECK(offsetof(TrackColdHeader, totalDiscs) == 42);
+    CHECK(offsetof(TrackColdHeader, customCount) == 44);
+    CHECK(offsetof(TrackColdHeader, uriOffset) == 46);
+    CHECK(offsetof(TrackColdHeader, uriLen) == 48);
 
     // 1-byte section
-    CHECK(offsetof(TrackColdHeader, channels) == 46);
+    CHECK(offsetof(TrackColdHeader, channels) == 50);
   }
 
 } // anonymous namespace

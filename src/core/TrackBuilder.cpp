@@ -82,6 +82,11 @@ namespace rs::core
         .discNumber(meta.discNumber())
         .totalDiscs(meta.totalDiscs());
 
+      if (auto workId = meta.workId(); workId.value() > 0)
+      {
+        builder.metadata().work(dict.get(workId));
+      }
+
       for (auto const& [dictId, value] : view.custom())
       {
         builder.custom().add(dict.get(dictId), value);
@@ -148,6 +153,12 @@ namespace rs::core
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::genre(std::string_view v)
   {
     _genre = v;
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::work(std::string_view v)
+  {
+    _work = v;
     return *this;
   }
 
@@ -458,6 +469,11 @@ namespace rs::core
       _coverArtId = _builder->_metadataBuilder._coverArtId;
     }
 
+    if (!_builder->_metadataBuilder._work.empty())
+    {
+      _workId = dict.put(txn, _builder->_metadataBuilder._work);
+    }
+
     // Resolve custom keys to DictionaryIds
     _resolvedPairs.reserve(_builder->_customBuilder._customPairs.size());
 
@@ -513,6 +529,7 @@ namespace rs::core
         .sampleRate = prop._sampleRate,
         .coverArtId = _coverArtId,
         .bitrate = prop._bitrate,
+        .workId = _workId,
         .trackNumber = meta._trackNumber,
         .totalTracks = meta._totalTracks,
         .discNumber = meta._discNumber,

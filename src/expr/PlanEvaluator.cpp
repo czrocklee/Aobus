@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 #include <ranges>
 
 namespace rs::expr
@@ -80,7 +81,8 @@ namespace rs::expr
         case Field::AlbumId:
         case Field::GenreId:
         case Field::AlbumArtistId:
-        case Field::ComposerId: return true;
+        case Field::ComposerId:
+        case Field::WorkId: return true;
         default: return false;
       }
     }
@@ -103,24 +105,6 @@ namespace rs::expr
       return plan->stringConstants[idx];
     }
 
-    // Free function to load string field value (can be used by helpers)
-    std::string_view loadStringFieldValue(core::TrackView const& track, Field field, Instruction const* instr)
-    {
-      switch (field)
-      {
-        case Field::Title: return track.metadata().title();
-        case Field::Uri: return track.property().uri();
-        case Field::Custom:
-          if (instr != nullptr && instr->constValue > 0)
-          {
-            auto dictId = core::DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
-            return track.custom().get(dictId).value_or("");
-          }
-          return {};
-        default: return {};
-      }
-    }
-
     std::string_view loadDictionaryFieldValue(core::TrackView const& track, Field field, ExecutionPlan const* plan)
     {
       if (plan == nullptr || plan->dictionary == nullptr)
@@ -137,6 +121,7 @@ namespace rs::expr
         case Field::GenreId: dictionaryId = track.metadata().genreId(); break;
         case Field::AlbumArtistId: dictionaryId = track.metadata().albumArtistId(); break;
         case Field::ComposerId: dictionaryId = track.metadata().composerId(); break;
+        case Field::WorkId: dictionaryId = track.metadata().workId(); break;
         default: return {};
       }
 
@@ -146,6 +131,34 @@ namespace rs::expr
       }
 
       return plan->dictionary->get(dictionaryId);
+    }
+
+    std::string_view loadStringFieldValue(core::TrackView const& track,
+                                          Field field,
+                                          Instruction const* instr,
+                                          ExecutionPlan const* plan = nullptr)
+    {
+      switch (field)
+      {
+        case Field::Title: return track.metadata().title();
+        case Field::Uri: return track.property().uri();
+        case Field::Custom:
+          if (instr != nullptr && instr->constValue > 0)
+          {
+            auto dictId = core::DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
+            return track.custom().get(dictId).value_or("");
+          }
+          return {};
+
+        case Field::ArtistId:
+        case Field::AlbumId:
+        case Field::GenreId:
+        case Field::AlbumArtistId:
+        case Field::ComposerId:
+        case Field::WorkId: return loadDictionaryFieldValue(track, field, plan);
+
+        default: return {};
+      }
     }
 
     // Free function to load field value
@@ -168,6 +181,7 @@ namespace rs::expr
         case Field::GenreId: return static_cast<std::int64_t>(track.metadata().genreId().value());
         case Field::AlbumArtistId: return static_cast<std::int64_t>(track.metadata().albumArtistId().value());
         case Field::ComposerId: return static_cast<std::int64_t>(track.metadata().composerId().value());
+        case Field::WorkId: return static_cast<std::int64_t>(track.metadata().workId().value());
         case Field::CoverArtId: return static_cast<std::int64_t>(track.metadata().coverArtId());
 
         // Metadata numeric fields
@@ -202,7 +216,7 @@ namespace rs::expr
       if (prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
       {
         auto field = static_cast<Field>(prevLoadField->field);
-        std::string_view fieldStr = loadStringFieldValue(track, field, prevLoadField);
+        std::string_view fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);
         std::string_view constantStr = getStringConstant(plan, stringIdx);
         registers[instr.operand - 1] = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
@@ -237,7 +251,7 @@ namespace rs::expr
             prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
         {
           auto field = static_cast<Field>(prevLoadField->field);
-          std::string_view fieldStr = loadStringFieldValue(track, field, prevLoadField);
+          std::string_view fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);
           std::string_view constantStr = getStringConstant(plan, stringIdx);
           registers[instr.operand - 1] = (fieldStr == constantStr) ? 1 : 0;
         }
@@ -266,7 +280,7 @@ namespace rs::expr
 
       if (isStringField(field))
       {
-        fieldStr = loadStringFieldValue(track, field, prevLoadField);
+        fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);
       }
       else if (isDictionaryField(field))
       {

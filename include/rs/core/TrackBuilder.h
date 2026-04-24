@@ -59,6 +59,7 @@ namespace rs::core
       MetadataBuilder& albumArtist(std::string_view v);
       MetadataBuilder& composer(std::string_view v);
       MetadataBuilder& genre(std::string_view v);
+      MetadataBuilder& work(std::string_view v);
 
       // Numeric setters
       MetadataBuilder& year(std::uint16_t v);
@@ -77,6 +78,7 @@ namespace rs::core
       std::string_view albumArtist() const { return _albumArtist; }
       std::string_view composer() const { return _composer; }
       std::string_view genre() const { return _genre; }
+      std::string_view work() const { return _work; }
       std::uint16_t year() const { return _year; }
       std::uint16_t trackNumber() const { return _trackNumber; }
       std::uint16_t totalTracks() const { return _totalTracks; }
@@ -95,6 +97,7 @@ namespace rs::core
       std::string_view _albumArtist;
       std::string_view _composer;
       std::string_view _genre;
+      std::string_view _work;
 
       // Metadata numerics
       std::uint16_t _year = 0;
@@ -246,6 +249,7 @@ namespace rs::core
       std::uint16_t _uriOffset = 0;
       std::uint16_t _uriLen = 0;
       std::uint32_t _coverArtId = 0;
+      DictionaryId _workId = DictionaryId{0};
       std::size_t _size = 0;
 
       friend class TrackBuilder;
