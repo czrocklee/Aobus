@@ -81,7 +81,9 @@ namespace rs::expr
         case Field::ArtistId:
         case Field::AlbumId:
         case Field::GenreId:
-        case Field::AlbumArtistId: return true;
+        case Field::AlbumArtistId:
+        case Field::ComposerId:
+        case Field::WorkId: return true;
         default: return false;
       }
     }
@@ -103,6 +105,7 @@ namespace rs::expr
       {
         case Field::Uri:         // cold: TrackColdHeader
         case Field::CoverArtId:  // cold: TrackColdHeader
+        case Field::WorkId:      // cold: TrackColdHeader
         case Field::TrackNumber: // cold: TrackColdHeader
         case Field::TotalTracks: // cold: TrackColdHeader
         case Field::DiscNumber:  // cold: TrackColdHeader

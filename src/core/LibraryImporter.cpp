@@ -126,9 +126,10 @@ namespace rs::core
       // 1. Try load from physical file (availability fallback)
       std::optional<TrackBuilder> fileBuilder;
       auto fullPath = _ml.rootPath() / uriStr;
+      std::unique_ptr<rs::tag::File> tagFile;
       if (std::filesystem::exists(fullPath))
       {
-        auto tagFile = rs::tag::File::open(fullPath);
+        tagFile = rs::tag::File::open(fullPath);
         if (tagFile)
         {
           fileBuilder = tagFile->loadTrack();

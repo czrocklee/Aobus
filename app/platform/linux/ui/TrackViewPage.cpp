@@ -151,7 +151,9 @@ namespace app::ui
         case TrackGroupBy::Album: return 2;
         case TrackGroupBy::AlbumArtist: return 3;
         case TrackGroupBy::Genre: return 4;
-        case TrackGroupBy::Year: return 5;
+        case TrackGroupBy::Composer: return 5;
+        case TrackGroupBy::Work: return 6;
+        case TrackGroupBy::Year: return 7;
       }
 
       return 0;
@@ -165,7 +167,9 @@ namespace app::ui
         case 2: return TrackGroupBy::Album;
         case 3: return TrackGroupBy::AlbumArtist;
         case 4: return TrackGroupBy::Genre;
-        case 5: return TrackGroupBy::Year;
+        case 5: return TrackGroupBy::Composer;
+        case 6: return TrackGroupBy::Work;
+        case 7: return TrackGroupBy::Year;
         default: return TrackGroupBy::None;
       }
     }
@@ -263,7 +267,7 @@ namespace app::ui
     _groupByLabel.set_halign(Gtk::Align::START);
     _groupByLabel.set_valign(Gtk::Align::CENTER);
 
-    _groupByOptions = Gtk::StringList::create({"None", "Artist", "Album", "Album Artist", "Genre", "Year"});
+    _groupByOptions = Gtk::StringList::create({"None", "Artist", "Album", "Album Artist", "Genre", "Composer", "Work", "Year"});
     _groupByDropdown.set_model(_groupByOptions);
     _groupByDropdown.set_selected(dropdownPositionFor(_presentationSpec.groupBy));
     _groupByDropdown.property_selected().signal_changed().connect(

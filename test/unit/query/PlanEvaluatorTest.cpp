@@ -47,12 +47,16 @@ namespace
               std::uint32_t artistId = 1,
               std::uint32_t albumId = 2,
               std::uint32_t genreId = 3,
-              std::vector<std::uint32_t> tagIds = {})
-      : _title{std::move(title)}, _artist{std::move(artist)}, _album{std::move(album)}, _uri{std::move(uri)}
+              std::vector<std::uint32_t> tagIds = {},
+              std::string composer = "",
+              std::string work = "")
+      : _title{std::move(title)}, _artist{std::move(artist)}, _album{std::move(album)}, _uri{std::move(uri)}, _work{std::move(work)}, _composer{std::move(composer)}
     {
       _builder.metadata().title(_title);
       _builder.metadata().artist(_artist);
       _builder.metadata().album(_album);
+      _builder.metadata().work(_work);
+      _builder.metadata().composer(_composer);
       _builder.metadata().year(year);
       _builder.metadata().trackNumber(trackNumber);
       _builder.property().uri(_uri);
@@ -103,6 +107,8 @@ namespace
     // Returns TrackView with cold data only (for cold-only plan tests)
     rs::core::TrackView coldOnlyView() const { return rs::core::TrackView{std::span<std::byte const>{}, _coldData}; }
 
+    rs::core::DictionaryStore& dictionary() { return *_dict; }
+
   private:
     rs::core::TrackBuilder _builder = rs::core::TrackBuilder::createNew();
     std::optional<rs::lmdb::Environment> _env;
@@ -115,6 +121,8 @@ namespace
     std::string _artist;
     std::string _album;
     std::string _uri;
+    std::string _work;
+    std::string _composer;
     std::vector<std::string> _tagStrings; // Keep tag strings alive for string_view
   };
 
@@ -244,6 +252,60 @@ TEST_CASE("PlanEvaluator - Like Match")
   CHECK(result == false);
 }
 
+TEST_CASE("PlanEvaluator - Work Metadata")
+{
+  auto trackWithWork = TestTrack{"Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", "Symphony No. 5"};
+  auto trackWithoutWork = TestTrack{"Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", ""};
+  auto evaluator = PlanEvaluator{};
+
+  SECTION("$work Equality")
+  {
+    auto expr = parse("$work = 'Symphony No. 5'");
+    auto compiler = QueryCompiler{&trackWithWork.dictionary()};
+    auto plan = compiler.compile(expr);
+    CHECK(evaluator.evaluateFull(plan, trackWithWork.view()) == true);
+    CHECK(evaluator.evaluateFull(plan, trackWithoutWork.view()) == false);
+  }
+
+  SECTION("$w Equality (shorthand)")
+  {
+    auto expr = parse("$w = 'Symphony No. 5'");
+    auto compiler = QueryCompiler{&trackWithWork.dictionary()};
+    auto plan = compiler.compile(expr);
+    CHECK(evaluator.evaluateFull(plan, trackWithWork.view()) == true);
+  }
+
+  SECTION("$work LIKE")
+  {
+    auto expr = parse("$work ~ Symphony");
+    auto compiler = QueryCompiler{&trackWithWork.dictionary()};
+    auto plan = compiler.compile(expr);
+    CHECK(evaluator.evaluateFull(plan, trackWithWork.view()) == true);
+    CHECK(evaluator.evaluateFull(plan, trackWithoutWork.view()) == false);
+  }
+  }
+
+TEST_CASE("PlanEvaluator - Composer Metadata")
+{
+  auto trackWithComposer = TestTrack{"Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "Beethoven", ""};
+  auto evaluator = PlanEvaluator{};
+
+  SECTION("$composer Equality")
+  {
+    auto expr = parse("$composer = Beethoven");
+    auto compiler = QueryCompiler{&trackWithComposer.dictionary()};
+    auto plan = compiler.compile(expr);
+    CHECK(evaluator.evaluateFull(plan, trackWithComposer.view()) == true);
+  }
+
+  SECTION("$composer LIKE")
+  {
+    auto expr = parse("$composer ~ Beet");
+    auto compiler = QueryCompiler{&trackWithComposer.dictionary()};
+    auto plan = compiler.compile(expr);
+    CHECK(evaluator.evaluateFull(plan, trackWithComposer.view()) == true);
+  }
+}
 TEST_CASE("PlanEvaluator - Artist LIKE resolves DictionaryId strings")
 {
   auto temp = TempDir{};

@@ -126,6 +126,18 @@ namespace app::core::model
       row.genre = resolveDictionaryString(genreId);
     }
 
+    auto const composerId = metadata.composerId();
+    if (composerId != rs::core::DictionaryId{0})
+    {
+      row.composer = resolveDictionaryString(composerId);
+    }
+
+    auto const workId = metadata.workId();
+    if (workId != rs::core::DictionaryId{0})
+    {
+      row.work = resolveDictionaryString(workId);
+    }
+
     row.year = metadata.year();
     row.discNumber = metadata.discNumber();
     row.totalDiscs = metadata.totalDiscs();

@@ -145,6 +145,10 @@ namespace rs::tag::mpeg::id3v2
             builder.metadata().rating(*rating);
           }
         }
+        else if (key == "work" || key == "WORK" || key == "grouping" || key == "GROUPING")
+        {
+          builder.metadata().work(rs::tag::detail::stashOwnedString(owner, std::string{value}));
+        }
         else
         {
           // Store as custom pair - stash both strings

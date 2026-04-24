@@ -66,6 +66,7 @@ namespace rs::core
       std::uint16_t discNumber() const noexcept { return _track.coldHeader().discNumber; }
       std::uint16_t totalDiscs() const noexcept { return _track.coldHeader().totalDiscs; }
       std::uint32_t coverArtId() const noexcept { return _track.coldHeader().coverArtId; }
+      DictionaryId workId() const noexcept { return _track.coldHeader().workId; }
 
     private:
       TrackView const& _track;

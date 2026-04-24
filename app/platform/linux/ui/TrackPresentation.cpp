@@ -22,6 +22,8 @@ namespace app::ui
       {TrackColumn::Tags, "tags", "Tags", -1, true, true, false, true},
       {TrackColumn::AlbumArtist, "album-artist", "Album Artist", 180, false, false, false, false},
       {TrackColumn::Genre, "genre", "Genre", 140, false, false, false, false},
+      {TrackColumn::Composer, "composer", "Composer", 140, false, false, false, false},
+      {TrackColumn::Work, "work", "Work", 140, false, false, false, false},
       {TrackColumn::Year, "year", "Year", 80, false, false, true, false},
       {TrackColumn::DiscNumber, "disc-number", "Disc", 70, false, false, true, false},
     });
@@ -140,6 +142,8 @@ namespace app::ui
         case TrackSortField::Album: return compareTextField(lhs.album, rhs.album);
         case TrackSortField::AlbumArtist: return compareTextField(lhs.albumArtist, rhs.albumArtist);
         case TrackSortField::Genre: return compareTextField(lhs.genre, rhs.genre);
+        case TrackSortField::Composer: return compareTextField(lhs.composer, rhs.composer);
+        case TrackSortField::Work: return compareTextField(lhs.work, rhs.work);
         case TrackSortField::Year: return compareNumberField(lhs.year, rhs.year);
         case TrackSortField::DiscNumber: return compareNumberField(lhs.discNumber, rhs.discNumber);
         case TrackSortField::TrackNumber: return compareNumberField(lhs.trackNumber, rhs.trackNumber);
@@ -216,6 +220,26 @@ namespace app::ui
           {TrackSortField::Title},
         };
         return spec;
+      case TrackGroupBy::Composer:
+        spec.sortBy = {
+          {TrackSortField::Composer},
+          {TrackSortField::Artist},
+          {TrackSortField::Album},
+          {TrackSortField::DiscNumber},
+          {TrackSortField::TrackNumber},
+          {TrackSortField::Title},
+        };
+        return spec;
+      case TrackGroupBy::Work:
+        spec.sortBy = {
+          {TrackSortField::Work},
+          {TrackSortField::Artist},
+          {TrackSortField::Album},
+          {TrackSortField::DiscNumber},
+          {TrackSortField::TrackNumber},
+          {TrackSortField::Title},
+        };
+        return spec;
       case TrackGroupBy::Year:
         spec.sortBy = {
           {TrackSortField::Year},
@@ -260,6 +284,8 @@ namespace app::ui
         return compareTextField(lhs.album, rhs.album);
       case TrackGroupBy::AlbumArtist: return compareTextField(lhs.albumArtist, rhs.albumArtist);
       case TrackGroupBy::Genre: return compareTextField(lhs.genre, rhs.genre);
+      case TrackGroupBy::Composer: return compareTextField(lhs.composer, rhs.composer);
+      case TrackGroupBy::Work: return compareTextField(lhs.work, rhs.work);
       case TrackGroupBy::Year: return compareNumberField(lhs.year, rhs.year);
     }
 
@@ -274,6 +300,8 @@ namespace app::ui
       case TrackColumn::Album: return groupBy != TrackGroupBy::Album;
       case TrackColumn::AlbumArtist: return groupBy != TrackGroupBy::Album && groupBy != TrackGroupBy::AlbumArtist;
       case TrackColumn::Genre: return groupBy != TrackGroupBy::Genre;
+      case TrackColumn::Composer: return groupBy != TrackGroupBy::Composer;
+      case TrackColumn::Work: return groupBy != TrackGroupBy::Work;
       case TrackColumn::Year: return groupBy != TrackGroupBy::Year;
       case TrackColumn::DiscNumber:
       case TrackColumn::TrackNumber:
@@ -375,6 +403,8 @@ namespace app::ui
       case TrackGroupBy::AlbumArtist:
         return keys.albumArtist.empty() ? unknownLabel("Album Artist") : std::string{keys.albumArtist};
       case TrackGroupBy::Genre: return keys.genre.empty() ? unknownLabel("Genre") : std::string{keys.genre};
+      case TrackGroupBy::Composer: return keys.composer.empty() ? unknownLabel("Composer") : std::string{keys.composer};
+      case TrackGroupBy::Work: return keys.work.empty() ? unknownLabel("Work") : std::string{keys.work};
       case TrackGroupBy::Year: return keys.year == 0 ? unknownLabel("Year") : std::to_string(keys.year);
     }
 

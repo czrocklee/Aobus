@@ -69,6 +69,8 @@ namespace app::ui
       _album = std::move(optRow->album);
       _albumArtist = std::move(optRow->albumArtist);
       _genre = std::move(optRow->genre);
+      _composer = std::move(optRow->composer);
+      _work = std::move(optRow->work);
       _title = std::move(optRow->title);
       _tags = std::move(optRow->tags);
       _duration = optRow->duration;
@@ -109,6 +111,8 @@ namespace app::ui
       case TrackColumn::Album: return _album;
       case TrackColumn::AlbumArtist: return _albumArtist;
       case TrackColumn::Genre: return _genre;
+      case TrackColumn::Composer: return _composer;
+      case TrackColumn::Work: return _work;
       case TrackColumn::Year: return _year == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_year)};
       case TrackColumn::DiscNumber:
         return _discNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_discNumber)};
@@ -160,6 +164,8 @@ namespace app::ui
       .album = _album,
       .albumArtist = _albumArtist,
       .genre = _genre,
+      .composer = _composer,
+      .work = _work,
       .title = _title,
       .durationMs = static_cast<std::uint32_t>(_duration.count()),
       .year = _year,
