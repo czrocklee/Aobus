@@ -22,18 +22,6 @@ namespace rs::core
     return ListBuilder{};
   }
 
-  ListBuilder ListBuilder::fromRecord(ListRecord const& record)
-  {
-    auto builder = ListBuilder{};
-    builder._parentId = record.parentId;
-    builder._name = record.name;
-    builder._description = record.description;
-    builder._filter = record.filter;
-    builder._tracksBuilder._trackIds = record.trackIds;
-    builder._tracksBuilder._isSmart = !record.filter.empty();
-    return builder;
-  }
-
   ListBuilder ListBuilder::fromView(ListView const& view)
   {
     auto builder = ListBuilder{};
@@ -50,21 +38,6 @@ namespace rs::core
   ListBuilder::TracksBuilder& ListBuilder::tracks()
   {
     return _tracksBuilder;
-  }
-
-  //=============================================================================
-  // ListBuilder::record() - constructs ListRecord on-the-fly
-  //=============================================================================
-
-  ListRecord ListBuilder::record() const
-  {
-    auto record = ListRecord{};
-    record.parentId = _parentId;
-    record.name = std::string{_name};
-    record.description = std::string{_description};
-    record.filter = std::string{_filter};
-    record.trackIds = _tracksBuilder._trackIds;
-    return record;
   }
 
   //=============================================================================

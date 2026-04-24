@@ -4,7 +4,6 @@
 #pragma once
 
 #include <rs/core/ListLayout.h>
-#include <rs/core/ListRecord.h>
 #include <rs/core/ListView.h>
 #include <rs/core/Type.h>
 
@@ -36,11 +35,7 @@ namespace rs::core
   public:
     // Factory methods
     static ListBuilder createNew();
-    static ListBuilder fromRecord(ListRecord const& record);
     static ListBuilder fromView(ListView const& view);
-
-    // Record access - constructs ListRecord on-the-fly
-    ListRecord record() const;
 
     //=============================================================================
     // TracksBuilder - nested class for track management

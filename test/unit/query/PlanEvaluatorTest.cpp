@@ -8,7 +8,6 @@
 #include <rs/core/ResourceStore.h>
 #include <rs/core/TrackBuilder.h>
 #include <rs/core/TrackLayout.h>
-#include <rs/core/TrackRecord.h>
 #include <rs/core/TrackStore.h>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
@@ -679,7 +678,7 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Multiple Tags Hit")
 TEST_CASE("PlanEvaluator - Tag Bloom Filter - Track Computation")
 {
   // Test that track bloom is computed correctly: tagId & 31
-  // Using manual header construction since TrackRecord no longer has serializeHot
+  // Using manual header construction.
   // Tag ID 10 -> bit 10 (10 & 31 = 10)
   {
     auto h = rs::core::TrackHotHeader{};

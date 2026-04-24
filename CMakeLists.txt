@@ -248,7 +248,6 @@ add_executable(rs_test
     test/unit/query/PlanEvaluatorTest.cpp
     test/unit/core/TrackLayoutTest.cpp
     test/unit/core/TrackViewTest.cpp
-    test/unit/core/TrackRecordTest.cpp
     test/unit/core/TrackBuilderTest.cpp
     test/unit/core/ListLayoutTest.cpp
     test/unit/core/ListViewTest.cpp

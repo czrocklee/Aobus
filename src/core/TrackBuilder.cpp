@@ -22,43 +22,6 @@ namespace rs::core
     return TrackBuilder{};
   }
 
-  TrackBuilder TrackBuilder::fromRecord(TrackRecord const& record)
-  {
-    auto builder = TrackBuilder{};
-
-    // Extract string_view from record's owned strings
-    auto& meta = builder._metadataBuilder;
-    meta._title = record.metadata.title;
-    meta._artist = record.metadata.artist;
-    meta._album = record.metadata.album;
-    meta._albumArtist = record.metadata.albumArtist;
-    meta._composer = record.metadata.composer;
-    meta._genre = record.metadata.genre;
-    meta._year = record.metadata.year;
-    meta._trackNumber = record.metadata.trackNumber;
-    meta._totalTracks = record.metadata.totalTracks;
-    meta._discNumber = record.metadata.discNumber;
-    meta._totalDiscs = record.metadata.totalDiscs;
-    meta._coverArtId = record.metadata.coverArtId;
-    meta._rating = record.metadata.rating;
-
-    auto& prop = builder._propertyBuilder;
-    prop._uri = record.property.uri;
-    prop._fileSize = record.property.fileSize;
-    prop._mtime = record.property.mtime;
-    prop._durationMs = record.property.durationMs;
-    prop._bitrate = record.property.bitrate;
-    prop._sampleRate = record.property.sampleRate;
-    prop._codecId = record.property.codecId;
-    prop._channels = record.property.channels;
-    prop._bitDepth = record.property.bitDepth;
-
-    builder._tagsBuilder._tagNames.append_range(record.tags.names);
-    builder._customBuilder._customPairs.append_range(record.custom.pairs);
-
-    return builder;
-  }
-
   TrackBuilder TrackBuilder::fromView(TrackView const& view, DictionaryStore& dict)
   {
     auto builder = TrackBuilder{};
@@ -146,55 +109,6 @@ namespace rs::core
   TrackBuilder::CustomBuilder& TrackBuilder::custom()
   {
     return _customBuilder;
-  }
-
-  //=============================================================================
-  // TrackBuilder::record() - constructs TrackRecord on-the-fly
-  //=============================================================================
-
-  TrackRecord TrackBuilder::record() const
-  {
-    auto record = TrackRecord{};
-    auto const& meta = _metadataBuilder;
-    auto const& prop = _propertyBuilder;
-
-    // Copy string_view data into owned strings in record
-    record.metadata.title = std::string{meta._title};
-    record.metadata.artist = std::string{meta._artist};
-    record.metadata.album = std::string{meta._album};
-    record.metadata.albumArtist = std::string{meta._albumArtist};
-    record.metadata.composer = std::string{meta._composer};
-    record.metadata.genre = std::string{meta._genre};
-
-    record.metadata.year = meta._year;
-    record.metadata.trackNumber = meta._trackNumber;
-    record.metadata.totalTracks = meta._totalTracks;
-    record.metadata.discNumber = meta._discNumber;
-    record.metadata.totalDiscs = meta._totalDiscs;
-    record.metadata.coverArtId = meta._coverArtId;
-    record.metadata.rating = meta._rating;
-
-    record.property.uri = std::string{prop._uri};
-    record.property.fileSize = prop._fileSize;
-    record.property.mtime = prop._mtime;
-    record.property.durationMs = prop._durationMs;
-    record.property.bitrate = prop._bitrate;
-    record.property.sampleRate = prop._sampleRate;
-    record.property.codecId = prop._codecId;
-    record.property.channels = prop._channels;
-    record.property.bitDepth = prop._bitDepth;
-
-    for (auto const& name : _tagsBuilder._tagNames)
-    {
-      record.tags.names.push_back(std::string{name});
-    }
-
-    for (auto const& [key, value] : _customBuilder._customPairs)
-    {
-      record.custom.pairs.emplace_back(std::string{key}, std::string{value});
-    }
-
-    return record;
   }
 
   //=============================================================================

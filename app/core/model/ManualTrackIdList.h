@@ -17,7 +17,6 @@ namespace app::core::model
 
   /**
    * ManualTrackIdList - A TrackIdList that holds a manually curated set of tracks.
-   * Backed by a ListRecord from the library.
    *
    * It also tracks a source TrackIdList to ensure its members still exist
    * and are visible in that source.
