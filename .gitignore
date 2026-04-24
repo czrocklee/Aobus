@@ -64,11 +64,6 @@ vcpkg_installed/
 .DS_Store
 Thumbs.db
 
-# Qt generated files (usually in build, but for safety)
-moc_*.cpp
-ui_*.h
-qrc_*.cpp
-
 # Test results and logs
 *.log
 tests/test_results/

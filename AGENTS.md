@@ -1,104 +1,89 @@
-# CLAUDE.md
+# AGENTS.md
 
-Guidance for Claude Code when working in this repository.
+Guidance for AI agents working in the RockStudio repository.
 
 ## Project Summary
 
-RockStudio is a C++23 music library application with multiple frontends and a shared core:
+RockStudio is a C++23 music library application with a GTK4 (gtkmm) desktop frontend and a CLI tool, sharing a robust core library.
 
-- Core/data/logic: `include/rs/**`, `src/core/**`, `src/expr/**`, `src/tag/**`
-- Qt frontend: `app/**`
-- GTK frontends: `app/gtk/**`, `app/gtkmm/**`
-- CLI tool: `tool/**` (`rsc` target)
-- FlatBuffers schemas and generated code inputs: `fbs/**`
+- **Core Library (`rs`):**
+  - Logic & Data Structures: `include/rs/**`, `src/core/**`.
+  - Expression Engine: `include/rs/expr/**`, `src/expr/**` (uses `gperf` for dispatch).
+  - Tag Parsing: `src/tag/**` (FLAC, MP4, MPEG support).
+  - Database: LMDB wrappers in `include/rs/lmdb/**`, `src/lmdb/**`.
+  - Reactive Patterns: `include/rs/reactive/**`.
+- **Desktop Application (`app`):**
+  - Shared App Logic: `app/core/**`.
+  - Linux Platform (GTK4/gtkmm): `app/platform/linux/**`.
+  - Windows Platform: `app/platform/windows/**` (Stubbed).
+- **CLI Tool (`tool`):** `rsc` target, logic in `tool/**`.
 
-Build is CMake-based and relies on generated artifacts (FlatBuffers + custom generator).
+Build is CMake-based and uses `nix-shell` for dependency management.
 
 ## Environment Setup
 
-Dependencies are managed with Nix. Start work inside the project shell before running build, test, or search commands:
+Dependencies are managed with Nix. Always work inside the project shell:
 
 ```bash
 nix-shell
 ```
 
-Core tools expected to be available in the shell include `cmake`, `pkg-config`, `gcc`, `flatbuffers`, Qt/GTK dependencies, and `rg` (ripgrep).
+Key dependencies: `gtkmm-4.0`, `lmdb`, `boost`, `ffmpeg`, `pipewire`, `alsa`, `gperf`, `spdlog`, `catch2`.
 
 ## Working Rules
 
-1. Make the smallest correct change that solves the request.
-2. Do not rewrite unrelated files or refactor broadly unless asked.
-3. Preserve existing coding style in each touched file.
-4. Prefer `rg`/`rg --files` for search.
-5. If assumptions are required, state them clearly in your final response.
+1. **Small Changes:** Make the smallest correct change that solves the request.
+2. **Focus:** Do not rewrite unrelated files or refactor broadly unless explicitly directed.
+3. **Style:** Rigorously adhere to existing coding style (e.g., C++23 features, naming conventions).
+4. **Search:** Use `rg` for searching. Prefer narrow scopes when possible.
+5. **Assumptions:** State any technical assumptions clearly in your response.
 
 ## Build And Validation
 
-All builds should be run from within `nix-shell`:
+The project builds into `/tmp/build` (configured in `CMakePresets.json`).
+
+### Using `build.sh` (Recommended)
+
+```bash
+./build.sh debug       # Configures and builds with sanitizers, runs tests
+./build.sh release     # Optimized build
+./build.sh debug clean # Full clean rebuild
+```
+
+### Manual CMake
 
 ```bash
 nix-shell --run "cmake --preset linux-debug"
 nix-shell --run "cmake --build /tmp/build --parallel"
+nix-shell --run "/tmp/build/rs_test"
 ```
 
-Or, after configuring once, build directly with:
-
-```bash
-nix-shell --run "cmake --build /tmp/build --parallel"
-```
-
-
-The project builds into `/tmp/build` (as configured in CMakePresets.json).
-
-When changing core logic (`src/core`, `src/expr`, `src/tag`, `include/rs`), always run at least a debug build before finishing.
+Always run tests after modifying core logic or the expression engine.
 
 ## Generated Code Notes
 
-<!-- FlatBuffers schema generation was removed - UI was disabled pending migration. -->
-<!-- If FlatBuffers is re-introduced, add schema generation cmake code here. -->
+- **Gperf:** The expression engine (`src/expr/`) uses `.gperf` files to generate perfect hash tables for metadata, property, and unit dispatching. CMake handles regeneration automatically.
 
 ## Editing Guidance
 
-1. For parser/evaluator work, keep `src/expr/*` and `include/rs/expr/*` in sync.
-2. For tag parsing, keep format-specific code constrained to:
-   - MP3/MPEG: `src/tag/mpeg/**`
-   - FLAC: `src/tag/flac/**`
-   - MP4: `src/tag/mp4/**`
-3. For UI changes, avoid mixing Qt and GTK concerns in one patch unless required.
-4. Avoid changing public headers in `include/rs/**` unless needed for the feature or fix.
-
-## Response Expectations
-
-In final responses:
-
-1. List exactly which files were changed.
-2. Explain user-visible or behavior-impacting changes first.
-3. Report what validation was run (or why not run).
-4. Call out risks, assumptions, or follow-up tasks when relevant.
+1. **Architecture:** Keep business logic in the `rs` core. Application-specific state and UI logic should reside in `app/core` or `app/platform`.
+2. **Expression Engine:** When modifying the parser or evaluator, ensure `src/expr` and `include/rs/expr` stay in sync.
+3. **Tagging:** Keep format-specific code constrained to `src/tag/{flac,mp4,mpeg}`.
+4. **UI:** The Linux frontend uses GTK4 via `gtkmm-4.0`. Avoid mixing UI frameworks or platform-specific code outside of `app/platform`.
+5. **Headers:** Avoid changing public headers in `include/rs/**` unless necessary for the feature or fix.
 
 ## Btrfs Snapshot Safety Net
 
-Before making multi-file or cross-module edits, create a btrfs snapshot to protect against data loss.
+Before making multi-file or cross-module edits, create a btrfs snapshot if supported by the environment.
 
-Treat a task as requiring a snapshot when any of the following is true:
-
-1. You expect to modify 2 or more files.
-2. The change touches multiple subsystems (for example core + UI, or parser + tag code).
-3. The task is a refactor, migration, or broad mechanical update.
-
-For these tasks, run the snapshot command **before** your first file edit:
+Treat a task as requiring a snapshot when:
+1. Modifying 2 or more files.
+2. Touching multiple subsystems (e.g., core + UI).
+3. Performing refactors or migrations.
 
 ```bash
 # Create snapshot
 btrfs-snap /home/rocklee/dev rockstudio-<description>-$(date +%Y%m%d-%H%M%S)
-
-# Create read-only snapshot
-btrfs-snap /home/rocklee/dev rockstudio-<description>-$(date +%Y%m%d-%H%M%S) -r
-
-# List snapshots
-ls -la /.snapshots/
 ```
 
-After creating the snapshot, mention the snapshot name once in your next progress update so recovery points are traceable.
-
-**Important**: Do NOT attempt to restore snapshots yourself. If restoration is needed, ask the user to do it manually.
+Mention the snapshot name in your progress update. Do NOT attempt to restore snapshots yourself.
