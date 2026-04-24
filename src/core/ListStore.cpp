@@ -91,6 +91,11 @@ namespace rs::core
     return _writer.del(id.value());
   }
 
+  void ListStore::Writer::clear()
+  {
+    _writer.clear();
+  }
+
   std::optional<ListView> ListStore::Writer::get(ListId id) const
   {
     return _writer.get(id.value()).transform([](auto const& buffer) { return ListView{buffer}; });

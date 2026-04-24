@@ -101,6 +101,8 @@ namespace app::ui
     void openMusicLibrary(std::filesystem::path const& path);
     void importFiles();
     void importFilesFromPath(std::filesystem::path const& path);
+    void exportLibrary();
+    void importLibrary();
     void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files);
     void openNewListDialog(rs::core::ListId parentListId);
     void openNewSmartListDialog();

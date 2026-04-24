@@ -40,6 +40,7 @@ pkgs.mkShell {
       mimalloc
       catch2
       gsl-lite
+      yaml-cpp
 
       (gtk4.overrideAttrs (old: {
         dontStrip = true;

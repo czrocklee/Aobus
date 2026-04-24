@@ -89,6 +89,7 @@ namespace rs::core
     std::pair<ListId, ListView> create(std::span<std::byte const> data);
     void update(ListId id, std::span<std::byte const> data);
     bool del(ListId id);
+    void clear();
 
     std::optional<ListView> get(ListId id) const;
 

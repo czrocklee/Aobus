@@ -152,6 +152,7 @@ namespace rs::lmdb
     void update(std::uint32_t id, std::span<std::byte const> data);
     std::span<std::byte> update(std::uint32_t id, std::size_t size);
     bool del(std::uint32_t id);
+    void clear();
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
 
   private:

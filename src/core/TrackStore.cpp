@@ -187,6 +187,12 @@ namespace rs::core
     return hotDeleted && coldDeleted;
   }
 
+  void TrackStore::Writer::clear()
+  {
+    _hotWriter.clear();
+    _coldWriter.clear();
+  }
+
   std::optional<TrackView> TrackStore::Writer::get(TrackId id, Reader::LoadMode mode) const
   {
     if (mode == Reader::LoadMode::Hot)

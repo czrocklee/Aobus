@@ -43,6 +43,7 @@ target_compile_options(GTKMM INTERFACE ${GTKMM_CFLAGS_OTHER})
 
 find_package(Boost REQUIRED COMPONENTS headers program_options locale timer filesystem)
 find_package(spdlog CONFIG REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 # Catch2 via pkg-config
 pkg_check_modules(CATCH2 REQUIRED catch2)
@@ -184,6 +185,8 @@ add_library(rs OBJECT
     src/lmdb/Transaction.cpp
     src/lmdb/Database.cpp
     src/core/LibraryMetaStore.cpp
+    src/core/LibraryExporter.cpp
+    src/core/LibraryImporter.cpp
     src/core/MusicLibrary.cpp
     src/core/ResourceStore.cpp
     src/core/DictionaryStore.cpp
@@ -215,7 +218,7 @@ add_library(rs OBJECT
 )
 target_include_directories(rs PUBLIC include)
 target_include_directories(rs PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_link_libraries(rs lmdb Boost::locale)
+target_link_libraries(rs PUBLIC lmdb Boost::locale yaml-cpp)
 add_dependencies(rs tag_dispatch_headers)
 if(CLANG_TIDY_EXECUTABLE)
   set_target_properties(rs PROPERTIES
@@ -255,6 +258,7 @@ add_executable(rs_test
     test/unit/core/ListStoreTest.cpp
     test/unit/core/ListBuilderTest.cpp
     test/unit/core/MusicLibraryTest.cpp
+    test/unit/core/LibraryExportImportTest.cpp
     test/unit/lmdb/EnvironmentTest.cpp
     test/unit/lmdb/TransactionTest.cpp
     test/unit/lmdb/DatabaseTest.cpp
@@ -269,7 +273,7 @@ add_executable(rs_test
     app/core/model/TrackIdList.cpp
 )
 target_include_directories(rs_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/app)
-target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog GTKMM)
+target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog GTKMM yaml-cpp)
 if(FFmpeg_FOUND)
   target_sources(rs_test PRIVATE
     test/integration/playback/FfmpegDecoderSessionTest.cpp
@@ -342,7 +346,7 @@ if(ALSA_FOUND)
   target_sources(RockStudio PRIVATE app/platform/linux/playback/AlsaExclusiveBackend.cpp)
   target_link_libraries(RockStudio PRIVATE ALSA)
 endif()
-target_link_libraries(RockStudio PRIVATE rs GTKMM spdlog::spdlog)
+target_link_libraries(RockStudio PRIVATE rs GTKMM spdlog::spdlog yaml-cpp)
 target_include_directories(RockStudio PRIVATE ${CMAKE_SOURCE_DIR}/app)
 # Configure ASan leak detection to use suppression file for third-party libraries (RockStudio app only)
 if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
