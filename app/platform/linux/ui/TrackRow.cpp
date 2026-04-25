@@ -61,47 +61,68 @@ namespace app::ui
       return;
     }
 
-
     if (auto optRow = _provider->getRow(_id); optRow)
     {
-      _artist = std::move(optRow->artist);
-      _album = std::move(optRow->album);
-      _albumArtist = std::move(optRow->albumArtist);
-      _genre = std::move(optRow->genre);
-      _composer = std::move(optRow->composer);
-      _work = std::move(optRow->work);
-      _title = std::move(optRow->title);
-      _tags = std::move(optRow->tags);
+      _artist = optRow->artist;
+      _album = optRow->album;
+      _albumArtist = optRow->albumArtist;
+      _genre = optRow->genre;
+      _composer = optRow->composer;
+      _work = optRow->work;
+      _title = optRow->title;
+      _tags = optRow->tags;
       _duration = optRow->duration;
       _year = optRow->year;
       _discNumber = optRow->discNumber;
       _totalDiscs = optRow->totalDiscs;
       _trackNumber = optRow->trackNumber;
       _resourceId = optRow->coverArtId ? std::optional<std::uint64_t>{optRow->coverArtId.value()} : std::nullopt;
+
+      // Pre-format numeric strings
+      _yearStr = _year == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_year)};
+      _discNumberStr = _discNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_discNumber)};
+      _trackNumberStr = _trackNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_trackNumber)};
+      _durationStr = formatDuration(_duration);
+
+      if (_trackNumber != 0)
+      {
+        if (_totalDiscs > 1 && _discNumber != 0)
+        {
+          _displayNumberStr = std::to_string(_discNumber) + "-" + std::to_string(_trackNumber);
+        }
+        else
+        {
+          _displayNumberStr = std::to_string(_trackNumber);
+        }
+      }
+      else
+      {
+        _displayNumberStr.clear();
+      }
     }
-    
+
     _loaded = true;
   }
 
-  Glib::ustring TrackRow::getArtist() const
+  const Glib::ustring& TrackRow::getArtist() const
   {
     ensureLoaded();
     return _artist;
   }
 
-  Glib::ustring TrackRow::getAlbum() const
+  const Glib::ustring& TrackRow::getAlbum() const
   {
     ensureLoaded();
     return _album;
   }
 
-  Glib::ustring TrackRow::getTitle() const
+  const Glib::ustring& TrackRow::getTitle() const
   {
     ensureLoaded();
     return _title;
   }
 
-  Glib::ustring TrackRow::getColumnText(TrackColumn column) const
+  const Glib::ustring& TrackRow::getColumnText(TrackColumn column) const
   {
     ensureLoaded();
 
@@ -113,37 +134,25 @@ namespace app::ui
       case TrackColumn::Genre: return _genre;
       case TrackColumn::Composer: return _composer;
       case TrackColumn::Work: return _work;
-      case TrackColumn::Year: return _year == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_year)};
-      case TrackColumn::DiscNumber:
-        return _discNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_discNumber)};
-      case TrackColumn::TrackNumber:
-        return _trackNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_trackNumber)};
+      case TrackColumn::Year: return _yearStr;
+      case TrackColumn::DiscNumber: return _discNumberStr;
+      case TrackColumn::TrackNumber: return _trackNumberStr;
       case TrackColumn::Title: return _title;
-      case TrackColumn::Duration: return formatDuration(_duration);
+      case TrackColumn::Duration: return _durationStr;
       case TrackColumn::Tags: return _tags;
     }
 
-    return {};
+    static const Glib::ustring kEmpty;
+    return kEmpty;
   }
 
-  Glib::ustring TrackRow::getDisplayNumber() const
+  const Glib::ustring& TrackRow::getDisplayNumber() const
   {
     ensureLoaded();
-
-    if (_trackNumber == 0)
-    {
-      return {};
-    }
-
-    if (_totalDiscs > 1 && _discNumber != 0)
-    {
-      return Glib::ustring{std::to_string(_discNumber) + "-" + std::to_string(_trackNumber)};
-    }
-
-    return Glib::ustring{std::to_string(_trackNumber)};
+    return _displayNumberStr;
   }
 
-  Glib::ustring TrackRow::getTags() const
+  const Glib::ustring& TrackRow::getTags() const
   {
     ensureLoaded();
     return _tags;
@@ -160,13 +169,13 @@ namespace app::ui
     ensureLoaded();
 
     return TrackPresentationKeysView{
-      .artist = _artist,
-      .album = _album,
-      .albumArtist = _albumArtist,
-      .genre = _genre,
-      .composer = _composer,
-      .work = _work,
-      .title = _title,
+      .artist = _artist.raw(),
+      .album = _album.raw(),
+      .albumArtist = _albumArtist.raw(),
+      .genre = _genre.raw(),
+      .composer = _composer.raw(),
+      .work = _work.raw(),
+      .title = _title.raw(),
       .durationMs = static_cast<std::uint32_t>(_duration.count()),
       .year = _year,
       .discNumber = _discNumber,
