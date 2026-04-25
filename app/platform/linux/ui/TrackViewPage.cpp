@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/ui/TrackViewPage.h"
+#include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include <glibmm/wrap.h>
 #include <gtk/gtk.h>

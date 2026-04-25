@@ -16,6 +16,7 @@
 
 namespace app::ui
 {
+  class TrackRowDataProvider;
 
   class TrackViewPage final : public Gtk::Box
   {

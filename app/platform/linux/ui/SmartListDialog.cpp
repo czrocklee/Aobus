@@ -2,15 +2,15 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/ui/SmartListDialog.h"
-
 #include "platform/linux/ui/TrackListAdapter.h"
 #include "platform/linux/ui/TrackRow.h"
+#include "platform/linux/ui/TrackRowDataProvider.h"
+#include "platform/linux/ui/TrackViewPage.h"
 
 #include "core/model/AllTrackIdsList.h"
 #include "core/model/FilteredTrackIdList.h"
 #include "core/model/SmartListEngine.h"
 #include "core/model/TrackIdList.h"
-#include "core/model/TrackRowDataProvider.h"
 
 #include <rs/core/MusicLibrary.h>
 
@@ -51,12 +51,14 @@ namespace app::ui
                                    rs::core::MusicLibrary& musicLibrary,
                                    app::core::model::AllTrackIdsList& allTrackIds,
                                    app::core::model::TrackIdList& parentMembershipList,
-                                   rs::core::ListId parentListId)
+                                   rs::core::ListId parentListId,
+                                   TrackRowDataProvider const& provider)
     : _exprBox{musicLibrary}
     , _musicLibrary{&musicLibrary}
     , _allTrackIds{&allTrackIds}
     , _parentMembershipList{&parentMembershipList}
     , _parentListId{parentListId}
+    , _rowDataProvider{&provider}
   {
     set_title("New List");
     set_transient_for(parent);
@@ -242,7 +244,6 @@ namespace app::ui
 
         if (auto label = dynamic_cast<Gtk::Label*>(listItem->get_child()); row && label)
         {
-          row->ensureLoaded();
           auto const& title = row->getTitle();
           auto const& artist = row->getArtist();
           auto const& album = row->getAlbum();
@@ -278,7 +279,6 @@ namespace app::ui
 
           label->set_text(formatted);
         }
-      
       });
 
     auto column = Gtk::ColumnViewColumn::create("Track", factory);
@@ -302,32 +302,11 @@ namespace app::ui
         _previewFilteredList.reset();
         _previewAdapter.reset();
 
-        // Build new preview components
-        std::string_view inheritedExpr;
-
-        // Check if parent is All Tracks (passed from MainWindow as _allTrackIds)
-        auto const isAllTracks = (_parentMembershipList == _allTrackIds);
-
-        if (!isAllTracks)
-        {
-          auto readTxn = _musicLibrary->readTransaction();
-          auto reader = _musicLibrary->lists().reader(readTxn);
-          auto listView = reader.get(_parentListId);
-
-          if (listView)
-          {
-            inheritedExpr = listView->filter();
-          }
-        }
-
         // Use the parent's membership list as source - this already has the inherited filter applied
-        _rowDataProvider = std::make_shared<app::core::model::TrackRowDataProvider>(*_musicLibrary);
-
         // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
-        // Even for All Tracks, we want to preview the results of the local expression
         _previewFilteredList = std::make_unique<app::core::model::FilteredTrackIdList>(
           *_parentMembershipList, *_musicLibrary, *_previewEngine);
-        _previewAdapter = std::make_shared<TrackListAdapter>(*_previewFilteredList, _rowDataProvider);
+        _previewAdapter = std::make_shared<TrackListAdapter>(*_previewFilteredList, *_rowDataProvider);
 
         auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
         _previewColumnView.set_model(selectionModel);
@@ -379,7 +358,7 @@ namespace app::ui
     updateSourceLabels();
 
     // For other lists, use FilteredTrackIdList
-    
+
     if (!_previewFilteredList)
     {
       _expressionValid = false;
@@ -410,7 +389,7 @@ namespace app::ui
         _matchCountLabel.set_markup(
           Glib::ustring::format("<i>Showing all ", total, isAllTracks ? " tracks</i>" : " source tracks</i>"));
       }
-      
+
       updateDialogState();
       return;
     }

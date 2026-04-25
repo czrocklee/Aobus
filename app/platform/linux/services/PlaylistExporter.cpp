@@ -5,7 +5,7 @@
 #include "core/Log.h"
 
 #include "core/model/TrackIdList.h"
-#include "core/model/TrackRowDataProvider.h"
+#include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include <glibmm.h>
 
@@ -16,7 +16,7 @@ namespace app::services
 {
 
   PlaylistExporter::PlaylistExporter(app::core::model::TrackIdList& list,
-                                     app::core::model::TrackRowDataProvider& provider,
+                                     app::ui::TrackRowDataProvider const& provider,
                                      std::filesystem::path root,
                                      std::filesystem::path path)
     : _list{list}, _provider{provider}, _root{std::move(root)}, _path{std::move(path)}

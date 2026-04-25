@@ -3,7 +3,7 @@
 
 #include "platform/linux/ui/TrackRow.h"
 
-#include "core/model/TrackRowDataProvider.h"
+#include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include <chrono>
 #include <cstddef>
@@ -41,99 +41,88 @@ namespace app::ui
   {
   }
 
-  Glib::RefPtr<TrackRow> TrackRow::create(TrackId id, std::shared_ptr<app::core::model::TrackRowDataProvider> provider)
+  Glib::RefPtr<TrackRow> TrackRow::create(TrackId id, TrackRowDataProvider const& provider)
   {
     auto obj = Glib::make_refptr_for_instance<TrackRow>(new TrackRow());
     obj->_id = id;
-    obj->_provider = std::move(provider);
+    obj->_provider = &provider;
     return obj;
   }
 
-  void TrackRow::ensureLoaded() const
+  void TrackRow::populate(Glib::ustring title,
+                          rs::core::DictionaryId artist,
+                          rs::core::DictionaryId album,
+                          rs::core::DictionaryId albumArtist,
+                          rs::core::DictionaryId genre,
+                          rs::core::DictionaryId composer,
+                          rs::core::DictionaryId work,
+                          Glib::ustring tags,
+                          std::chrono::milliseconds duration,
+                          std::uint16_t year,
+                          std::uint16_t discNumber,
+                          std::uint16_t totalDiscs,
+                          std::uint16_t trackNumber,
+                          std::optional<std::uint64_t> resourceId)
   {
-    if (_loaded)
+    _title = std::move(title);
+    _artistId = artist;
+    _albumId = album;
+    _albumArtistId = albumArtist;
+    _genreId = genre;
+    _composerId = composer;
+    _workId = work;
+
+    _tags = std::move(tags);
+    _duration = duration;
+    _year = year;
+    _discNumber = discNumber;
+    _totalDiscs = totalDiscs;
+    _trackNumber = trackNumber;
+    _resourceId = resourceId;
+
+    // Pre-format numeric strings
+    _yearStr = _year == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_year)};
+    _discNumberStr = _discNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_discNumber)};
+    _trackNumberStr = _trackNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_trackNumber)};
+    _durationStr = formatDuration(_duration);
+
+    if (_trackNumber != 0)
     {
-      return;
-    }
-
-    if (!_provider)
-    {
-      return;
-    }
-
-    if (auto optRow = _provider->getRow(_id); optRow)
-    {
-      _artist = optRow->artist;
-      _album = optRow->album;
-      _albumArtist = optRow->albumArtist;
-      _genre = optRow->genre;
-      _composer = optRow->composer;
-      _work = optRow->work;
-      _title = optRow->title;
-      _tags = optRow->tags;
-      _duration = optRow->duration;
-      _year = optRow->year;
-      _discNumber = optRow->discNumber;
-      _totalDiscs = optRow->totalDiscs;
-      _trackNumber = optRow->trackNumber;
-      _resourceId = optRow->coverArtId ? std::optional<std::uint64_t>{optRow->coverArtId.value()} : std::nullopt;
-
-      // Pre-format numeric strings
-      _yearStr = _year == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_year)};
-      _discNumberStr = _discNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_discNumber)};
-      _trackNumberStr = _trackNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_trackNumber)};
-      _durationStr = formatDuration(_duration);
-
-      if (_trackNumber != 0)
+      if (_totalDiscs > 1 && _discNumber != 0)
       {
-        if (_totalDiscs > 1 && _discNumber != 0)
-        {
-          _displayNumberStr = std::to_string(_discNumber) + "-" + std::to_string(_trackNumber);
-        }
-        else
-        {
-          _displayNumberStr = std::to_string(_trackNumber);
-        }
+        _displayNumberStr = std::to_string(_discNumber) + "-" + std::to_string(_trackNumber);
       }
       else
       {
-        _displayNumberStr.clear();
+        _displayNumberStr = std::to_string(_trackNumber);
       }
     }
-
-    _loaded = true;
+    else
+    {
+      _displayNumberStr.clear();
+    }
   }
 
-  const Glib::ustring& TrackRow::getArtist() const
+  Glib::ustring const& TrackRow::getArtist() const
   {
-    ensureLoaded();
-    return _artist;
+    return _provider->resolveDictionaryString(_artistId);
   }
 
-  const Glib::ustring& TrackRow::getAlbum() const
+  Glib::ustring const& TrackRow::getAlbum() const
   {
-    ensureLoaded();
-    return _album;
+    return _provider->resolveDictionaryString(_albumId);
   }
 
-  const Glib::ustring& TrackRow::getTitle() const
+  Glib::ustring const& TrackRow::getColumnText(TrackColumn column) const
   {
-    ensureLoaded();
-    return _title;
-  }
-
-  const Glib::ustring& TrackRow::getColumnText(TrackColumn column) const
-  {
-    ensureLoaded();
-
     switch (column)
     {
-      case TrackColumn::Artist: return _artist;
-      case TrackColumn::Album: return _album;
-      case TrackColumn::AlbumArtist: return _albumArtist;
-      case TrackColumn::Genre: return _genre;
-      case TrackColumn::Composer: return _composer;
-      case TrackColumn::Work: return _work;
+      case TrackColumn::Artist: return getArtist();
+      case TrackColumn::Album: return getAlbum();
+      case TrackColumn::AlbumArtist: return _provider->resolveDictionaryString(_albumArtistId);
+      case TrackColumn::Genre: return _provider->resolveDictionaryString(_genreId);
+      case TrackColumn::Composer: return _provider->resolveDictionaryString(_composerId);
+      case TrackColumn::Work: return _provider->resolveDictionaryString(_workId);
       case TrackColumn::Year: return _yearStr;
       case TrackColumn::DiscNumber: return _discNumberStr;
       case TrackColumn::TrackNumber: return _trackNumberStr;
@@ -142,39 +131,29 @@ namespace app::ui
       case TrackColumn::Tags: return _tags;
     }
 
-    static const Glib::ustring kEmpty;
+    static Glib::ustring const kEmpty;
     return kEmpty;
   }
 
-  const Glib::ustring& TrackRow::getDisplayNumber() const
+  Glib::ustring const& TrackRow::getDisplayNumber() const
   {
-    ensureLoaded();
     return _displayNumberStr;
   }
 
-  const Glib::ustring& TrackRow::getTags() const
+  Glib::ustring const& TrackRow::getTags() const
   {
-    ensureLoaded();
     return _tags;
-  }
-
-  std::chrono::milliseconds TrackRow::getDuration() const
-  {
-    ensureLoaded();
-    return _duration;
   }
 
   TrackPresentationKeysView TrackRow::getPresentationKeys() const
   {
-    ensureLoaded();
-
     return TrackPresentationKeysView{
-      .artist = _artist.raw(),
-      .album = _album.raw(),
-      .albumArtist = _albumArtist.raw(),
-      .genre = _genre.raw(),
-      .composer = _composer.raw(),
-      .work = _work.raw(),
+      .artist = getArtist().raw(),
+      .album = getAlbum().raw(),
+      .albumArtist = _provider->resolveDictionaryString(_albumArtistId).raw(),
+      .genre = _provider->resolveDictionaryString(_genreId).raw(),
+      .composer = _provider->resolveDictionaryString(_composerId).raw(),
+      .work = _provider->resolveDictionaryString(_workId).raw(),
       .title = _title.raw(),
       .durationMs = static_cast<std::uint32_t>(_duration.count()),
       .year = _year,
@@ -182,12 +161,6 @@ namespace app::ui
       .trackNumber = _trackNumber,
       .trackId = _id,
     };
-  }
-
-  std::uint64_t TrackRow::getResourceId() const
-  {
-    ensureLoaded();
-    return _resourceId.value_or(0);
   }
 
 } // namespace app::ui

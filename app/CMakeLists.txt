@@ -22,7 +22,7 @@ add_executable(RockStudio
     core/model/FilteredTrackIdList.cpp
     core/model/SmartListEngine.cpp
     core/model/ManualTrackIdList.cpp
-    core/model/TrackRowDataProvider.cpp
+    platform/linux/ui/TrackRowDataProvider.cpp
     platform/linux/ui/PlaybackBar.cpp
     core/playback/PlaybackController.cpp
     core/playback/PlaybackEngine.cpp

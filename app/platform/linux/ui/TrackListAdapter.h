@@ -8,8 +8,8 @@
 #include <rs/expr/PlanEvaluator.h>
 
 #include "core/model/TrackIdList.h"
-#include "core/model/TrackRowDataProvider.h"
 #include "platform/linux/ui/TrackRow.h"
+#include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include <giomm/liststore.h>
 
@@ -25,8 +25,7 @@ namespace app::ui
   public:
     using TrackId = rs::core::TrackId;
 
-    explicit TrackListAdapter(::app::core::model::TrackIdList& source,
-                              std::shared_ptr<::app::core::model::TrackRowDataProvider> provider);
+    explicit TrackListAdapter(::app::core::model::TrackIdList& source, TrackRowDataProvider const& provider);
     ~TrackListAdapter() override;
 
     Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
@@ -45,7 +44,7 @@ namespace app::ui
     void createRowForTrack(TrackId id);
 
     ::app::core::model::TrackIdList* _source;
-    std::shared_ptr<::app::core::model::TrackRowDataProvider> _provider;
+    TrackRowDataProvider const* _provider;
     Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;
     Glib::ustring _filterText;
   };

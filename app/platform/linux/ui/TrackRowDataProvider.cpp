@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "core/model/TrackRowDataProvider.h"
+#include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include "core/playback/PlaybackTypes.h"
+#include "platform/linux/ui/TrackRow.h"
 
 #include <string_view>
 
 namespace
 {
-  std::string joinResolvedTags(rs::core::TrackView::TagProxy tags, rs::core::DictionaryStore const& dictionary)
+  Glib::ustring joinResolvedTags(rs::core::TrackView::TagProxy tags, rs::core::DictionaryStore const& dictionary)
   {
-    auto text = std::string{};
+    auto text = Glib::ustring{};
     auto first = true;
 
     for (auto const tagId : tags)
@@ -28,7 +29,7 @@ namespace
         text += ", ";
       }
 
-      text += tag;
+      text.append(tag.data(), tag.size());
       first = false;
     }
 
@@ -54,7 +55,7 @@ namespace
   }
 }
 
-namespace app::core::model
+namespace app::ui
 {
 
   TrackRowDataProvider::TrackRowDataProvider(rs::core::MusicLibrary& ml)
@@ -62,93 +63,44 @@ namespace app::core::model
   {
   }
 
-  std::optional<RowData> TrackRowDataProvider::getRow(TrackId id)
+  void TrackRowDataProvider::loadAll()
   {
-    // Check cache first
-    auto const it = _rowCache.find(id);
-
-    if (it != _rowCache.end())
-    {
-      if (it->second.missing)
-      {
-        return std::nullopt;
-      }
-
-      return it->second;
-    }
-
-    // Load both tiers so grouping and section sorting can use stable row-local keys.
     rs::lmdb::ReadTransaction txn(_ml->readTransaction());
     auto reader = _store->reader(txn);
 
-    auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
-
-    if (!optView)
+    for (auto const& [id, view] : reader)
     {
-      // Track not found - cache a "missing" marker
-      auto row = RowData{};
-      row.id = id;
-      row.missing = true;
-      _rowCache.emplace(id, std::move(row));
-      return std::nullopt;
+      auto row = TrackRow::create(id, *this);
+
+      auto const& metadata = view.metadata();
+      auto const title = metadata.title();
+
+      row->populate(Glib::ustring{title.data(), title.size()},
+                    metadata.artistId(),
+                    metadata.albumId(),
+                    metadata.albumArtistId(),
+                    metadata.genreId(),
+                    metadata.composerId(),
+                    metadata.workId(),
+                    joinResolvedTags(view.tags(), *_dict),
+                    std::chrono::milliseconds{view.property().durationMs()},
+                    metadata.year(),
+                    metadata.discNumber(),
+                    metadata.totalDiscs(),
+                    metadata.trackNumber(),
+                    metadata.coverArtId() != 0 ? std::optional<std::uint64_t>{metadata.coverArtId()} : std::nullopt);
+
+      _rowCache[id] = row;
     }
-
-    auto const& view = *optView;
-    auto const& metadata = view.metadata();
-
-    auto row = RowData{};
-    row.id = id;
-    row.title = std::string(metadata.title());
-
-    // Resolve dictionary strings (artist, album) and cache them
-    if (auto const artistId = metadata.artistId(); artistId != rs::core::DictionaryId{0})
-    {
-      row.artist = resolveDictionaryString(artistId);
-    }
-
-    if (auto const albumId = metadata.albumId(); albumId != rs::core::DictionaryId{0})
-    {
-      row.album = resolveDictionaryString(albumId);
-    }
-
-    if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != rs::core::DictionaryId{0})
-    {
-      row.albumArtist = resolveDictionaryString(albumArtistId);
-    }
-
-    if (auto const genreId = metadata.genreId(); genreId != rs::core::DictionaryId{0})
-    {
-      row.genre = resolveDictionaryString(genreId);
-    }
-
-    if (auto const composerId = metadata.composerId(); composerId != rs::core::DictionaryId{0})
-    {
-      row.composer = resolveDictionaryString(composerId);
-    }
-
-    if (auto const workId = metadata.workId(); workId != rs::core::DictionaryId{0})
-    {
-      row.work = resolveDictionaryString(workId);
-    }
-
-    row.year = metadata.year();
-    row.discNumber = metadata.discNumber();
-    row.totalDiscs = metadata.totalDiscs();
-    row.trackNumber = metadata.trackNumber();
-    row.duration = std::chrono::milliseconds{view.property().durationMs()};
-
-    if (auto const coverArtId = metadata.coverArtId(); coverArtId != 0)
-    {
-      row.coverArtId = coverArtId;
-    }
-
-    row.tags = joinResolvedTags(view.tags(), *_dict);
-
-    auto const result = _rowCache.emplace(id, std::move(row));
-    return result.first->second;
   }
 
-  std::optional<std::uint32_t> TrackRowDataProvider::getCoverArtId(TrackId id)
+  Glib::RefPtr<TrackRow> TrackRowDataProvider::getTrackRow(TrackId id) const
+  {
+    auto const it = _rowCache.find(id);
+    return it != _rowCache.end() ? it->second : nullptr;
+  }
+
+  std::optional<std::uint32_t> TrackRowDataProvider::getCoverArtId(TrackId id) const
   {
     // Need cold data for coverArtId
     rs::lmdb::ReadTransaction txn(_ml->readTransaction());
@@ -170,7 +122,7 @@ namespace app::core::model
     return coverArtId;
   }
 
-  std::optional<std::filesystem::path> TrackRowDataProvider::getUriPath(TrackId id)
+  std::optional<std::filesystem::path> TrackRowDataProvider::getUriPath(TrackId id) const
   {
     // Need cold data for URI
     rs::lmdb::ReadTransaction txn(_ml->readTransaction());
@@ -186,7 +138,8 @@ namespace app::core::model
     return resolveLibraryPath(_ml->rootPath(), optView->property().uri());
   }
 
-  std::optional<app::core::playback::TrackPlaybackDescriptor> TrackRowDataProvider::getPlaybackDescriptor(TrackId id)
+  std::optional<app::core::playback::TrackPlaybackDescriptor> TrackRowDataProvider::getPlaybackDescriptor(
+    TrackId id) const
   {
     // Need cold data for URI and property info
     rs::lmdb::ReadTransaction txn(_ml->readTransaction());
@@ -218,13 +171,13 @@ namespace app::core::model
     // Artist
     if (auto const artistId = metadata.artistId(); artistId != rs::core::DictionaryId{0})
     {
-      desc.artist = resolveDictionaryString(artistId);
+      desc.artist = resolveDictionaryString(artistId).raw();
     }
 
     // Album
     if (auto const albumId = metadata.albumId(); albumId != rs::core::DictionaryId{0})
     {
-      desc.album = resolveDictionaryString(albumId);
+      desc.album = resolveDictionaryString(albumId).raw();
     }
 
     // Cover art
@@ -244,13 +197,7 @@ namespace app::core::model
     return desc;
   }
 
-  void TrackRowDataProvider::invalidateHot(TrackId id)
-  {
-    // For hot invalidation, just remove from cache - will reload on next getRow
-    _rowCache.erase(id);
-  }
-
-  void TrackRowDataProvider::invalidateFull(TrackId id)
+  void TrackRowDataProvider::invalidate(TrackId id)
   {
     _rowCache.erase(id);
   }
@@ -260,7 +207,7 @@ namespace app::core::model
     _rowCache.erase(id);
   }
 
-  std::string TrackRowDataProvider::resolveDictionaryString(rs::core::DictionaryId id)
+  Glib::ustring const& TrackRowDataProvider::resolveDictionaryString(rs::core::DictionaryId id) const
   {
     // Check cache first
     if (auto const it = _stringCache.find(id); it != _stringCache.end())
@@ -269,22 +216,20 @@ namespace app::core::model
     }
 
     // Resolve from dictionary and cache
-    // DictionaryStore::get throws if not found, so we catch it
-    std::string result;
+    Glib::ustring result;
 
     try
     {
       auto const str = _dict->get(id);
-      result = std::string(str);
+      result.assign(str.data(), str.size());
     }
     catch (std::exception const&)
     {
-      // Dictionary ID not found - return empty string
-      result = {};
+      result.clear();
     }
 
-    auto const insertResult = _stringCache.emplace(id, result);
+    auto const insertResult = _stringCache.emplace(id, std::move(result));
     return insertResult.first->second;
   }
 
-} // namespace app::core::model
+} // namespace app::ui

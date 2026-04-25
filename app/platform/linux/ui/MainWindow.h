@@ -24,7 +24,6 @@
 namespace app::core::model
 {
   class ListDraft;
-  class TrackRowDataProvider;
   class AllTrackIdsList;
   class FilteredTrackIdList;
   class ManualTrackIdList;
@@ -55,6 +54,7 @@ namespace app::ui
   class CoverArtWidget;
   class ImportProgressDialog;
   class PlaybackBar;
+  class TrackRowDataProvider;
 
   // Page context structure
   struct TrackPageContext final
@@ -163,7 +163,7 @@ namespace app::ui
     std::unique_ptr<rs::core::MusicLibrary> _musicLibrary;
 
     // Shared row data provider (owned)
-    std::shared_ptr<::app::core::model::TrackRowDataProvider> _rowDataProvider;
+    std::unique_ptr<TrackRowDataProvider> _rowDataProvider;
 
     // All tracks TrackId list (owned)
     std::unique_ptr<::app::core::model::AllTrackIdsList> _allTrackIds;

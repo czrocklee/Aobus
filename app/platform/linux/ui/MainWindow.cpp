@@ -17,7 +17,6 @@
 #include "core/model/ListDraft.h"
 #include "core/model/ManualTrackIdList.h"
 #include "core/model/TrackIdList.h"
-#include "core/model/TrackRowDataProvider.h"
 #include "core/playback/PlaybackController.h"
 #include "platform/linux/services/PlaylistExporter.h"
 #include "platform/linux/ui/CoverArtWidget.h"
@@ -28,6 +27,7 @@
 #include "platform/linux/ui/SmartListDialog.h"
 #include "platform/linux/ui/TagPopover.h"
 #include "platform/linux/ui/TrackListAdapter.h"
+#include "platform/linux/ui/TrackRowDataProvider.h"
 #include "platform/linux/ui/TrackViewPage.h"
 
 #include <glibmm/keyfile.h>
@@ -327,7 +327,8 @@ namespace app::ui
       auto musicLibrary = std::make_unique<rs::core::MusicLibrary>(path.string());
       APP_LOG_DEBUG("MusicLibrary created");
 
-      auto rowDataProvider = std::make_shared<app::core::model::TrackRowDataProvider>(*musicLibrary);
+      auto rowDataProvider = std::make_unique<app::ui::TrackRowDataProvider>(*musicLibrary);
+      rowDataProvider->loadAll();
       auto allTrackIds = std::make_unique<app::core::model::AllTrackIdsList>(musicLibrary->tracks());
       auto smartListEngine = std::make_unique<app::core::model::SmartListEngine>(*musicLibrary);
 
@@ -493,7 +494,7 @@ namespace app::ui
                   auto const& result = workerPtr->result();
                   for (auto const trackId : result.insertedIds)
                   {
-                    _rowDataProvider->invalidateFull(trackId);
+                    _rowDataProvider->invalidate(trackId);
                     _allTrackIds->notifyInserted(trackId);
                   }
                   return false;
@@ -519,7 +520,8 @@ namespace app::ui
     _musicLibrary = std::make_unique<rs::core::MusicLibrary>(path.string());
 
     // Initialize row data provider
-    _rowDataProvider = std::make_shared<app::core::model::TrackRowDataProvider>(*_musicLibrary);
+    _rowDataProvider = std::make_unique<app::ui::TrackRowDataProvider>(*_musicLibrary);
+    _rowDataProvider->loadAll();
 
     // Initialize AllTrackIdsList
     _allTrackIds = std::make_unique<app::core::model::AllTrackIdsList>(_musicLibrary->tracks());
@@ -587,7 +589,7 @@ namespace app::ui
             auto const& result = workerPtr->result();
             for (auto const trackId : result.insertedIds)
             {
-              _rowDataProvider->invalidateFull(trackId);
+              _rowDataProvider->invalidate(trackId);
               _allTrackIds->notifyInserted(trackId);
             }
             return false;
@@ -810,8 +812,8 @@ namespace app::ui
       }
     }
 
-    auto* dialog =
-      Gtk::make_managed<SmartListDialog>(*this, *_musicLibrary, *_allTrackIds, *parentMembershipList, parentListId);
+    auto* dialog = Gtk::make_managed<SmartListDialog>(
+      *this, *_musicLibrary, *_allTrackIds, *parentMembershipList, parentListId, *_rowDataProvider);
 
     dialog->signal_response().connect(
       [this, dialog](int responseId)
@@ -1355,8 +1357,8 @@ namespace app::ui
       }
     }
 
-    auto* dialog =
-      Gtk::make_managed<SmartListDialog>(*this, *_musicLibrary, *_allTrackIds, *parentMembershipList, view->parentId());
+    auto* dialog = Gtk::make_managed<SmartListDialog>(
+      *this, *_musicLibrary, *_allTrackIds, *parentMembershipList, view->parentId(), *_rowDataProvider);
 
     dialog->populate(listId, *view);
 
@@ -1581,7 +1583,7 @@ namespace app::ui
   {
     // Create adapter using the shared _allTrackIds (not a page-local copy)
     // _allTrackIds is the authoritative source that import/tag notifies update
-    auto adapter = std::make_shared<TrackListAdapter>(*_allTrackIds, _rowDataProvider);
+    auto adapter = std::make_shared<TrackListAdapter>(*_allTrackIds, *_rowDataProvider);
     // Manually trigger rebuild since notifyReset was called before adapter was attached
     adapter->onReset();
     auto trackPage = std::make_unique<TrackViewPage>(allTracksListId(), adapter, _trackColumnLayoutModel);
@@ -1666,7 +1668,7 @@ namespace app::ui
     }
 
     // Create adapter
-    auto adapter = std::make_shared<TrackListAdapter>(*membershipList, _rowDataProvider);
+    auto adapter = std::make_shared<TrackListAdapter>(*membershipList, *_rowDataProvider);
     // Prime the model with the membership list contents because the list was populated
     // before the adapter attached as an observer.
     adapter->onReset();
@@ -1857,7 +1859,7 @@ namespace app::ui
 
     for (auto const trackId : selectedIds)
     {
-      _rowDataProvider->invalidateHot(trackId);
+      _rowDataProvider->invalidate(trackId);
 
       if (ctx->membershipList)
       {
@@ -1967,7 +1969,7 @@ namespace app::ui
     for (auto id : ids)
     {
       _allTrackIds->notifyUpdated(id);
-      _rowDataProvider->invalidateHot(id);
+      _rowDataProvider->invalidate(id);
     }
   }
 

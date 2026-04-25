@@ -15,13 +15,9 @@
 #include <optional>
 #include <string>
 
-namespace app::core::model
-{
-  class TrackRowDataProvider;
-}
-
 namespace app::ui
 {
+  class TrackRowDataProvider;
 
   class TrackRow final : public Glib::Object
   {
@@ -30,46 +26,61 @@ namespace app::ui
 
     TrackId getTrackId() const { return _id; }
 
-    const Glib::ustring& getArtist() const;
-    const Glib::ustring& getAlbum() const;
-    const Glib::ustring& getTitle() const;
-    const Glib::ustring& getColumnText(TrackColumn column) const;
-    const Glib::ustring& getDisplayNumber() const;
-    const Glib::ustring& getTags() const;
-    std::chrono::milliseconds getDuration() const;
+    Glib::ustring const& getArtist() const;
+    Glib::ustring const& getAlbum() const;
+    Glib::ustring const& getTitle() const { return _title; }
+    Glib::ustring const& getColumnText(TrackColumn column) const;
+    Glib::ustring const& getDisplayNumber() const;
+    Glib::ustring const& getTags() const;
+    std::chrono::milliseconds getDuration() const { return _duration; }
     TrackPresentationKeysView getPresentationKeys() const;
-    std::uint64_t getResourceId() const;
+    std::uint64_t getResourceId() const { return _resourceId.value_or(0); }
 
-    void ensureLoaded() const;
+    static Glib::RefPtr<TrackRow> create(TrackId id, TrackRowDataProvider const& provider);
 
-    static Glib::RefPtr<TrackRow> create(TrackId id, std::shared_ptr<app::core::model::TrackRowDataProvider> provider);
+    void populate(Glib::ustring title,
+                  rs::core::DictionaryId artist,
+                  rs::core::DictionaryId album,
+                  rs::core::DictionaryId albumArtist,
+                  rs::core::DictionaryId genre,
+                  rs::core::DictionaryId composer,
+                  rs::core::DictionaryId work,
+                  Glib::ustring tags,
+                  std::chrono::milliseconds duration,
+                  std::uint16_t year,
+                  std::uint16_t discNumber,
+                  std::uint16_t totalDiscs,
+                  std::uint16_t trackNumber,
+                  std::optional<std::uint64_t> resourceId);
 
   protected:
     explicit TrackRow();
 
   private:
     TrackId _id;
-    std::shared_ptr<app::core::model::TrackRowDataProvider> _provider;
-    mutable bool _loaded = false;
-    mutable Glib::ustring _artist;
-    mutable Glib::ustring _album;
-    mutable Glib::ustring _albumArtist;
-    mutable Glib::ustring _genre;
-    mutable Glib::ustring _composer;
-    mutable Glib::ustring _work;
-    mutable Glib::ustring _title;
-    mutable Glib::ustring _tags;
-    mutable Glib::ustring _yearStr;
-    mutable Glib::ustring _discNumberStr;
-    mutable Glib::ustring _trackNumberStr;
-    mutable Glib::ustring _displayNumberStr;
-    mutable Glib::ustring _durationStr;
-    mutable std::chrono::milliseconds _duration{0};
-    mutable std::uint16_t _year = 0;
-    mutable std::uint16_t _discNumber = 0;
-    mutable std::uint16_t _totalDiscs = 0;
-    mutable std::uint16_t _trackNumber = 0;
-    mutable std::optional<std::uint64_t> _resourceId;
+    TrackRowDataProvider const* _provider = nullptr;
+
+    rs::core::DictionaryId _artistId{0};
+    rs::core::DictionaryId _albumId{0};
+    rs::core::DictionaryId _albumArtistId{0};
+    rs::core::DictionaryId _genreId{0};
+    rs::core::DictionaryId _composerId{0};
+    rs::core::DictionaryId _workId{0};
+
+    Glib::ustring _title;
+    Glib::ustring _tags;
+    Glib::ustring _yearStr;
+    Glib::ustring _discNumberStr;
+    Glib::ustring _trackNumberStr;
+    Glib::ustring _displayNumberStr;
+    Glib::ustring _durationStr;
+
+    std::chrono::milliseconds _duration{0};
+    std::uint16_t _year = 0;
+    std::uint16_t _discNumber = 0;
+    std::uint16_t _totalDiscs = 0;
+    std::uint16_t _trackNumber = 0;
+    std::optional<std::uint64_t> _resourceId;
   };
 
 } // namespace app::ui
