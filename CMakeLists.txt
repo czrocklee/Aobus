@@ -24,10 +24,14 @@ else()
 endif()
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(lmdb REQUIRED)
-pkg_search_module(MIMALLOC REQUIRED mimalloc)
 pkg_check_modules(GTK4 REQUIRED gtk4)
 pkg_check_modules(GTKMM REQUIRED gtkmm-4.0)
+pkg_check_modules(CATCH2 REQUIRED catch2)
+
+find_package(Boost REQUIRED COMPONENTS headers)
+find_package(CLI11 CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 find_program(GLIB_COMPILE_RESOURCES_EXECUTABLE glib-compile-resources REQUIRED)
 find_program(GPERF_EXECUTABLE gperf REQUIRED)
@@ -44,25 +48,16 @@ target_include_directories(GTKMM INTERFACE ${GTKMM_INCLUDE_DIRS})
 target_link_libraries(GTKMM INTERFACE ${GTKMM_LIBRARIES})
 target_compile_options(GTKMM INTERFACE ${GTKMM_CFLAGS_OTHER})
 
-find_package(Boost REQUIRED COMPONENTS headers)
-find_package(CLI11 CONFIG REQUIRED)
-find_package(spdlog CONFIG REQUIRED)
-find_package(yaml-cpp REQUIRED)
-
-# Catch2 via pkg-config
-pkg_check_modules(CATCH2 REQUIRED catch2)
 add_library(Catch2 INTERFACE)
 target_include_directories(Catch2 INTERFACE ${CATCH2_CFLAGS})
 target_link_libraries(Catch2 INTERFACE ${CATCH2_LDFLAGS})
 
 # FFmpeg via pkg-config (optional - playback feature)
-# Try both naming conventions: ffmpeg uses "libavformat" style in nixpkgs
 pkg_check_modules(AVFORMAT libavformat)
 pkg_check_modules(AVCODEC libavcodec)
 pkg_check_modules(AVUTIL libavutil)
 pkg_check_modules(SWRESAMPLE libswresample)
 if(NOT AVFORMAT_FOUND)
-  # Fallback to ffmpeg naming
   pkg_check_modules(AVFORMAT avformat)
   pkg_check_modules(AVCODEC avcodec)
   pkg_check_modules(AVUTIL avutil)
@@ -86,8 +81,6 @@ if(PIPEWIRE_FOUND)
   target_include_directories(PipeWire SYSTEM INTERFACE ${PIPEWIRE_INCLUDE_DIRS})
   target_link_libraries(PipeWire INTERFACE ${PIPEWIRE_LIBRARIES})
   message(STATUS "PipeWire found: audio backend enabled")
-else()
-  message(STATUS "PipeWire not found: audio backend disabled")
 endif()
 
 # ALSA via pkg-config (optional - audio backend)
@@ -97,8 +90,6 @@ if(ALSA_FOUND)
   target_include_directories(ALSA INTERFACE ${ALSA_INCLUDE_DIRS})
   target_link_libraries(ALSA INTERFACE ${ALSA_LIBRARIES})
   message(STATUS "ALSA found: ALSA exclusive backend enabled")
-else()
-  message(STATUS "ALSA not found: ALSA exclusive backend disabled")
 endif()
 
 # clang-tidy setup (manual application to targets)
@@ -123,7 +114,7 @@ if(CLANG_TIDY_EXECUTABLE)
     endif()
   endforeach()
 
-  # clang-tidy checks for strict targets (src, tool)
+  # clang-tidy checks for strict targets (lib, tool)
   set(CLANG_TIDY_STRICT_CHECKS
     "-checks=-*,bugprone-*,performance-*,cppcoreguidelines-*,-cppcoreguidelines-avoid-const-or-ref-data-members,modernize-!-trailing-return,readability-*,portability-*,-clang-diagnostic-*,-bugprone-easily-swappable-parameters,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-readability-convert-member-functions-to-static,-readability-static-definition-in-anonymous-namespace"
   )
@@ -134,7 +125,7 @@ if(CLANG_TIDY_EXECUTABLE)
   )
 
   # Strict header filter (exclude test/)
-  set(CLANG_TIDY_STRICT_FILTER "'/home/rocklee/dev/RockStudio/(src|include|app|tool)/.*'")
+  set(CLANG_TIDY_STRICT_FILTER "'/home/rocklee/dev/RockStudio/(lib|tool|app)/.*'")
   set(CLANG_TIDY_RELAXED_FILTER "'/home/rocklee/dev/RockStudio/test/.*'")
 
   message(STATUS "clang-tidy found: ${CLANG_TIDY_EXECUTABLE}")
@@ -184,7 +175,7 @@ add_custom_target(
     "${EXPR_UNIT_DISPATCH_HEADER}"
 )
 
-# Library targets
+# Module targets
 add_subdirectory(lib)
 add_subdirectory(tool)
 add_subdirectory(test)

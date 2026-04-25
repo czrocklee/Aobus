@@ -1,3 +1,5 @@
+pkg_check_modules(lmdb REQUIRED)
+
 add_library(rs OBJECT
     lmdb/Environment.cpp
     lmdb/Transaction.cpp
