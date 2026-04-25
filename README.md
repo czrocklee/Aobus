@@ -31,6 +31,10 @@ clang-tidy -checks='-*,modernize-*,performance-*,readability-*' lib/**/*.cpp
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for code style guidelines.
 
+## Versioning
+
+See [docs/versioning.md](docs/versioning.md) for the app-version and library-version policy.
+
 ## AI Agents
 
 If you are an AI agent working on this project, please read [AGENTS.md](AGENTS.md) for environment setup and working rules.

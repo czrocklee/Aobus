@@ -4,13 +4,15 @@
 #include "core/Log.h"
 #include "platform/linux/ui/MainWindow.h"
 
+#include <rs/AppVersion.h>
+
 #include <gtkmm.h>
 #include <gtkmm/aboutdialog.h>
 
 int main(int argc, char* argv[])
 {
   app::core::Log::init();
-  APP_LOG_INFO("RockStudio starting...");
+  APP_LOG_INFO("RockStudio {} starting...", rs::kAppVersion);
 
   Glib::set_application_name("RockStudio");
 
@@ -23,12 +25,11 @@ int main(int argc, char* argv[])
     {
       auto dialog = Gtk::AboutDialog{};
       dialog.set_program_name("RockStudio");
-      dialog.set_version("1.0");
+      dialog.set_version(rs::kAppVersion);
       dialog.set_copyright("Copyright 2024 RockStudio");
       dialog.set_license_type(Gtk::License::LGPL_3_0);
 
       // Get active window to set as transient parent
-      
       if (auto windows = app->get_windows(); !windows.empty())
       {
         dialog.set_transient_for(*windows[0]);

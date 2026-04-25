@@ -43,9 +43,7 @@ namespace rs::tool
       auto const& header = ml.metaHeader();
 
       os << "Library ID:        " << formatUuid(header.libraryId) << "\n";
-      os << "Schema Version:    " << header.librarySchemaVersion << "\n";
-      os << "Track Layout Ver:  " << header.trackLayoutVersion << "\n";
-      os << "List Layout Ver:   " << header.listLayoutVersion << "\n";
+      os << "Library Version:   " << header.libraryVersion << "\n";
       os << "Flags:             0x" << std::hex << header.flags << std::dec << "\n";
       os << "Created:           " << formatTimestamp(header.createdAtUnixMs) << "\n";
       os << "Migrated:          " << formatTimestamp(header.migratedAtUnixMs) << "\n";

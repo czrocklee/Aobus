@@ -6,9 +6,7 @@
 #include <rs/Exception.h>
 #include <rs/core/LibraryMeta.h>
 #include <rs/core/LibraryMetaStore.h>
-#include <rs/core/ListLayout.h>
 #include <rs/core/MusicLibrary.h>
-#include <rs/core/TrackLayout.h>
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
@@ -22,17 +20,14 @@ TEST_CASE("MusicLibrary initializes metadata header", "[core][library]")
   auto const firstHeader = first.metaHeader();
 
   REQUIRE(firstHeader.magic == rs::core::kLibraryMetaMagic);
-  REQUIRE(firstHeader.headerVersion == rs::core::kLibraryMetaHeaderVersion);
-  REQUIRE(firstHeader.librarySchemaVersion == rs::core::kLibrarySchemaVersion);
-  REQUIRE(firstHeader.trackLayoutVersion == rs::core::kTrackLayoutVersion);
-  REQUIRE(firstHeader.listLayoutVersion == rs::core::kListLayoutVersion);
+  REQUIRE(firstHeader.libraryVersion == rs::core::kLibraryVersion);
 
   auto const reopened = rs::core::MusicLibrary{temp.path()};
   REQUIRE(reopened.metaHeader().libraryId == firstHeader.libraryId);
   REQUIRE(reopened.metaHeader().createdAtUnixMs == firstHeader.createdAtUnixMs);
 }
 
-TEST_CASE("MusicLibrary rejects unsupported metadata versions", "[core][library]")
+TEST_CASE("MusicLibrary rejects unsupported library versions", "[core][library]")
 {
   auto temp = TempDir{};
   auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8}};
@@ -41,10 +36,7 @@ TEST_CASE("MusicLibrary rejects unsupported metadata versions", "[core][library]
   auto metaStore = rs::core::LibraryMetaStore{rs::lmdb::Database{txn, "meta"}};
   auto header =
     rs::core::LibraryMetaHeader{.magic = rs::core::kLibraryMetaMagic,
-                                .headerVersion = rs::core::kLibraryMetaHeaderVersion,
-                                .librarySchemaVersion = static_cast<std::uint16_t>(rs::core::kLibrarySchemaVersion + 1),
-                                .trackLayoutVersion = rs::core::kTrackLayoutVersion,
-                                .listLayoutVersion = rs::core::kListLayoutVersion,
+                                .libraryVersion = rs::core::kLibraryVersion + 1,
                                 .flags = 0,
                                 .createdAtUnixMs = 1,
                                 .migratedAtUnixMs = 1,

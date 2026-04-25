@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.30)
 
-project(rockstudio)
+project(rockstudio VERSION 0.1.0)
 set (CMAKE_CXX_STANDARD 23)
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/rs")
+configure_file(cmake/AppVersion.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/rs/AppVersion.h" @ONLY)
 
 # Enable testing
 enable_testing()
@@ -218,7 +221,7 @@ add_library(rs OBJECT
     "${EXPR_UNIT_DISPATCH_HEADER}"
 )
 target_include_directories(rs PUBLIC include)
-target_include_directories(rs PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_include_directories(rs PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(rs PUBLIC lmdb yaml-cpp)
 add_dependencies(rs tag_dispatch_headers)
 if(CLANG_TIDY_EXECUTABLE)
