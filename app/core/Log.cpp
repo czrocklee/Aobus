@@ -3,9 +3,7 @@
 
 #include "core/Log.h"
 
-#ifdef FFmpeg_FOUND
-#include "core/playback/FfmpegDecoderSession.h"
-#endif
+#include "core/playback/AudioDecoderSession.h"
 
 #include <spdlog/async.h>
 #include <spdlog/sinks/null_sink.h>
@@ -59,9 +57,7 @@ namespace app::core
 
     spdlog::set_default_logger(_appLogger);
 
-#ifdef FFmpeg_FOUND
-    ::app::core::playback::FfmpegDecoderSession::initGlobal();
-#endif
+    ::app::core::playback::initializeAudioDecoders();
 
     APP_LOG_INFO("Logging initialized. Log file: {}", logPath.string());
   }

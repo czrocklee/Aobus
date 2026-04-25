@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "core/playback/FfmpegDecoderSession.h"
+#include "core/playback/AudioDecoderSession.h"
 #include "core/playback/IPcmSource.h"
 
 #include <cstddef>
@@ -17,7 +17,7 @@ namespace app::core::playback
   class MemoryPcmSource final : public IPcmSource
   {
   public:
-    MemoryPcmSource(FfmpegDecoderSession decoder, DecodedStreamInfo streamInfo);
+    MemoryPcmSource(std::unique_ptr<IAudioDecoderSession> decoder, DecodedStreamInfo streamInfo);
 
     bool initialize();
 
@@ -30,7 +30,7 @@ namespace app::core::playback
   private:
     std::size_t positionToByteOffset(std::uint32_t positionMs) const noexcept;
 
-    FfmpegDecoderSession _decoder;
+    std::unique_ptr<IAudioDecoderSession> _decoder;
     DecodedStreamInfo _streamInfo;
     std::vector<std::byte> _pcmBytes;
     mutable std::mutex _mutex;

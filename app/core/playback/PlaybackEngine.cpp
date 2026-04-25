@@ -4,6 +4,7 @@
 #include "core/playback/PlaybackEngine.h"
 #include "core/Log.h"
 
+#include "core/playback/AudioDecoderSession.h"
 #include "core/playback/MemoryPcmSource.h"
 #include "core/playback/StreamingPcmSource.h"
 
@@ -451,16 +452,23 @@ namespace app::core::playback
     outputFormat.isFloat = false;
     outputFormat.isInterleaved = true;
 
-    auto decoder = FfmpegDecoderSession{outputFormat};
+    auto decoder = createAudioDecoderSession(outputFormat);
 
-    if (!decoder.open(descriptor.filePath))
+    if (!decoder)
     {
-      _snapshot.statusText = std::string(decoder.lastError());
+      _snapshot.statusText = "No audio decoder backend is available";
       _snapshot.activeFormat.reset();
       return false;
     }
 
-    auto const info = decoder.streamInfo();
+    if (!decoder->open(descriptor.filePath))
+    {
+      _snapshot.statusText = std::string(decoder->lastError());
+      _snapshot.activeFormat.reset();
+      return false;
+    }
+
+    auto const info = decoder->streamInfo();
 
     if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
     {

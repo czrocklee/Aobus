@@ -3,16 +3,10 @@
 
 #pragma once
 
-#include "core/playback/PlaybackTypes.h"
+#include "core/playback/AudioDecoderSession.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <filesystem>
 #include <memory>
-#include <optional>
 #include <string>
-#include <string_view>
-#include <vector>
 
 struct AVCodecContext;
 struct AVFormatContext;
@@ -23,43 +17,27 @@ struct SwrContext;
 namespace app::core::playback
 {
 
-  struct PcmBlock final
-  {
-    std::vector<std::byte> bytes;
-    std::uint8_t bitDepth = 16;
-    std::uint32_t frames = 0;
-    std::uint64_t firstFrameIndex = 0;
-    bool endOfStream = false;
-  };
-
-  struct DecodedStreamInfo final
-  {
-    StreamFormat sourceFormat;
-    StreamFormat outputFormat;
-    std::uint32_t durationMs = 0;
-  };
-
-  class FfmpegDecoderSession final
+  class FfmpegDecoderSession final : public IAudioDecoderSession
   {
   public:
     static void initGlobal();
 
     explicit FfmpegDecoderSession(StreamFormat outputFormat);
-    ~FfmpegDecoderSession();
+    ~FfmpegDecoderSession() override;
 
     FfmpegDecoderSession(FfmpegDecoderSession const&) = delete;
     FfmpegDecoderSession& operator=(FfmpegDecoderSession const&) = delete;
     FfmpegDecoderSession(FfmpegDecoderSession&&) noexcept = default;
     FfmpegDecoderSession& operator=(FfmpegDecoderSession&&) noexcept = default;
 
-    bool open(std::filesystem::path const& filePath);
-    void close();
-    bool seek(std::uint32_t positionMs);
-    void flush();
+    bool open(std::filesystem::path const& filePath) override;
+    void close() override;
+    bool seek(std::uint32_t positionMs) override;
+    void flush() override;
 
-    std::optional<PcmBlock> readNextBlock();
-    DecodedStreamInfo streamInfo() const;
-    std::string_view lastError() const noexcept;
+    std::optional<PcmBlock> readNextBlock() override;
+    DecodedStreamInfo streamInfo() const override;
+    std::string_view lastError() const noexcept override;
 
   private:
     struct FormatContextDeleter
