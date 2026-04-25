@@ -60,7 +60,7 @@ namespace app::ui
   struct TrackPageContext final
   {
     std::unique_ptr<::app::core::model::TrackIdList> membershipList;
-    std::shared_ptr<TrackListAdapter> adapter;
+    std::unique_ptr<TrackListAdapter> adapter;
     std::unique_ptr<TrackViewPage> page;
     std::unique_ptr<::app::services::PlaylistExporter> exporter;
   };
@@ -207,7 +207,7 @@ namespace app::ui
 
     // Track pages map
     std::map<rs::core::ListId, TrackPageContext> _trackPages;
-    std::shared_ptr<TrackColumnLayoutModel> _trackColumnLayoutModel = std::make_shared<TrackColumnLayoutModel>();
+    TrackColumnLayoutModel _trackColumnLayoutModel;
 
     // Playback support
     std::unique_ptr<PlaybackBar> _playbackBar;

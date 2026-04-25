@@ -189,13 +189,13 @@ namespace app::ui
   }
 
   TrackViewPage::TrackViewPage(rs::core::ListId listId,
-                               Glib::RefPtr<TrackListAdapter> const& adapter,
-                               std::shared_ptr<TrackColumnLayoutModel> columnLayoutModel)
+                               TrackListAdapter& adapter,
+                               TrackColumnLayoutModel& columnLayoutModel)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
     , _adapter{adapter}
-    , _sortModel{Gtk::SortListModel::create(adapter->getModel(), Glib::RefPtr<Gtk::Sorter>{})}
-    , _columnLayoutModel{columnLayoutModel ? std::move(columnLayoutModel) : std::make_shared<TrackColumnLayoutModel>()}
+    , _sortModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
+    , _columnLayoutModel{columnLayoutModel}
     , _presentationSpec{presentationSpecForGroup(TrackGroupBy::None)}
   {
     // Create multi-selection model to allow bulk operations
@@ -236,7 +236,7 @@ namespace app::ui
     }
 
     _columnLayoutChangedConnection =
-      _columnLayoutModel->signalChanged().connect(sigc::mem_fun(*this, &TrackViewPage::applyColumnLayout));
+      _columnLayoutModel.signalChanged().connect(sigc::mem_fun(*this, &TrackViewPage::applyColumnLayout));
 
     // Set up activation (double-click, Enter key)
     setupActivation();
@@ -307,14 +307,7 @@ namespace app::ui
     _resetColumnsButton.set_label("Reset to Default");
     _resetColumnsButton.set_sensitive(true);
     _resetColumnsButton.add_css_class("suggested-action");
-    _resetColumnsButton.signal_clicked().connect(
-      [this]()
-      {
-        if (_columnLayoutModel)
-        {
-          _columnLayoutModel->reset();
-        }
-      });
+    _resetColumnsButton.signal_clicked().connect([this]() { _columnLayoutModel.reset(); });
 
     _columnsPopoverBox.append(_columnsPopoverTitle);
     _columnsPopoverBox.append(_columnToggleList);
@@ -467,12 +460,12 @@ namespace app::ui
       toggle->signal_toggled().connect(
         [this, columnId = definition.column, toggleButton = toggle]()
         {
-          if (_syncingColumnLayout || !_columnLayoutModel)
+          if (_syncingColumnLayout)
           {
             return;
           }
 
-          auto layout = normalizeTrackColumnLayout(_columnLayoutModel->layout());
+          auto layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
           for (auto& state : layout.columns)
           {
             if (state.column == columnId)
@@ -482,7 +475,7 @@ namespace app::ui
             }
           }
 
-          _columnLayoutModel->setLayout(std::move(layout));
+          _columnLayoutModel.setLayout(std::move(layout));
         });
 
       auto* row = Gtk::make_managed<Gtk::ListBoxRow>();
@@ -501,12 +494,7 @@ namespace app::ui
 
   void TrackViewPage::applyColumnLayout()
   {
-    if (!_columnLayoutModel)
-    {
-      return;
-    }
-
-    auto const layout = normalizeTrackColumnLayout(_columnLayoutModel->layout());
+    auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
     _syncingColumnLayout = true;
 
     for (std::size_t index = 0; index < layout.columns.size(); ++index)
@@ -552,12 +540,7 @@ namespace app::ui
 
   void TrackViewPage::syncColumnToggleStates()
   {
-    if (!_columnLayoutModel)
-    {
-      return;
-    }
-
-    auto const layout = normalizeTrackColumnLayout(_columnLayoutModel->layout());
+    auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
     for (auto const& state : layout.columns)
     {
       auto* binding = findColumnBinding(state.column);
@@ -573,7 +556,7 @@ namespace app::ui
 
   void TrackViewPage::queueSharedColumnLayoutUpdate()
   {
-    if (!_columnLayoutModel || _queuedColumnLayoutUpdateConnection.connected())
+    if (_queuedColumnLayoutUpdateConnection.connected())
     {
       return;
     }
@@ -588,7 +571,7 @@ namespace app::ui
   {
     _queuedColumnLayoutUpdateConnection.disconnect();
 
-    if (_syncingColumnLayout || !_columnLayoutModel)
+    if (_syncingColumnLayout)
     {
       return false;
     }
@@ -599,19 +582,15 @@ namespace app::ui
 
   void TrackViewPage::updateSharedColumnLayout()
   {
-    if (_columnLayoutModel)
-    {
-      _capturingColumnLayout = true;
-      _columnLayoutModel->setLayout(captureCurrentColumnLayout());
-      _capturingColumnLayout = false;
-    }
+    _capturingColumnLayout = true;
+    _columnLayoutModel.setLayout(captureCurrentColumnLayout());
+    _capturingColumnLayout = false;
   }
 
   TrackColumnLayout TrackViewPage::captureCurrentColumnLayout() const
   {
     auto layout = TrackColumnLayout{};
-    auto const currentLayout =
-      _columnLayoutModel ? normalizeTrackColumnLayout(_columnLayoutModel->layout()) : defaultTrackColumnLayout();
+    auto const currentLayout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
 
     auto currentStateFor = [&currentLayout](TrackColumn column)
     {
@@ -656,8 +635,7 @@ namespace app::ui
 
   void TrackViewPage::updateColumnVisibility()
   {
-    auto const layout =
-      _columnLayoutModel ? normalizeTrackColumnLayout(_columnLayoutModel->layout()) : defaultTrackColumnLayout();
+    auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
 
     for (auto const& state : layout.columns)
     {
@@ -681,7 +659,7 @@ namespace app::ui
   void TrackViewPage::onFilterChanged()
   {
     auto filterText = _filterEntry.get_text();
-    _adapter->setFilter(filterText);
+    _adapter.setFilter(filterText);
   }
 
   void TrackViewPage::onSelectionChanged([[maybe_unused]] std::uint32_t position, [[maybe_unused]] std::uint32_t nItems)

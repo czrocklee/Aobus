@@ -1583,10 +1583,10 @@ namespace app::ui
   {
     // Create adapter using the shared _allTrackIds (not a page-local copy)
     // _allTrackIds is the authoritative source that import/tag notifies update
-    auto adapter = std::make_shared<TrackListAdapter>(*_allTrackIds, *_rowDataProvider);
+    auto adapter = std::make_unique<TrackListAdapter>(*_allTrackIds, *_rowDataProvider);
     // Manually trigger rebuild since notifyReset was called before adapter was attached
     adapter->onReset();
-    auto trackPage = std::make_unique<TrackViewPage>(allTracksListId(), adapter, _trackColumnLayoutModel);
+    auto trackPage = std::make_unique<TrackViewPage>(allTracksListId(), *adapter, _trackColumnLayoutModel);
 
     auto pageId = pageNameForListId(allTracksListId());
     _stack.add(*trackPage, pageId, "All Tracks");
@@ -1668,13 +1668,13 @@ namespace app::ui
     }
 
     // Create adapter
-    auto adapter = std::make_shared<TrackListAdapter>(*membershipList, *_rowDataProvider);
+    auto adapter = std::make_unique<TrackListAdapter>(*membershipList, *_rowDataProvider);
     // Prime the model with the membership list contents because the list was populated
     // before the adapter attached as an observer.
     adapter->onReset();
 
     // Create track page
-    auto trackPage = std::make_unique<TrackViewPage>(listId, adapter, _trackColumnLayoutModel);
+    auto trackPage = std::make_unique<TrackViewPage>(listId, *adapter, _trackColumnLayoutModel);
 
     auto pageId = pageNameForListId(listId);
     _stack.add(*trackPage, pageId, listName);
@@ -2049,10 +2049,7 @@ namespace app::ui
       sessionState.lastLibraryPath = _musicLibrary ? normalizeLibraryPath(_musicLibrary->rootPath()) : std::string{};
       _appConfig.setSessionState(std::move(sessionState));
 
-      if (_trackColumnLayoutModel)
-      {
-        _appConfig.setTrackViewState(trackViewStateFromLayout(_trackColumnLayoutModel->layout()));
-      }
+      _appConfig.setTrackViewState(trackViewStateFromLayout(_trackColumnLayoutModel.layout()));
 
       _appConfig.save();
     }
@@ -2067,11 +2064,7 @@ namespace app::ui
     try
     {
       _appConfig = app::core::AppConfig::load();
-
-      if (_trackColumnLayoutModel)
-      {
-        _trackColumnLayoutModel->setLayout(trackColumnLayoutFromState(_appConfig.trackViewState()));
-      }
+      _trackColumnLayoutModel.setLayout(trackColumnLayoutFromState(_appConfig.trackViewState()));
 
       auto const& windowState = _appConfig.windowState();
       set_default_size(windowState.width, windowState.height);

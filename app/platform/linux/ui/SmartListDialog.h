@@ -83,7 +83,7 @@ namespace app::ui
     TrackRowDataProvider const* _rowDataProvider;
     std::unique_ptr<app::core::model::SmartListEngine> _previewEngine;
     std::unique_ptr<app::core::model::FilteredTrackIdList> _previewFilteredList;
-    std::shared_ptr<TrackListAdapter> _previewAdapter;
+    std::unique_ptr<TrackListAdapter> _previewAdapter;
     bool _expressionValid = true;
 
     // Edit mode state

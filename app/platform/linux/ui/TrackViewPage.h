@@ -28,8 +28,8 @@ namespace app::ui
     using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId>, double, double)>;
 
     explicit TrackViewPage(rs::core::ListId listId,
-                           Glib::RefPtr<TrackListAdapter> const& adapter,
-                           std::shared_ptr<TrackColumnLayoutModel> columnLayoutModel);
+                           TrackListAdapter& adapter,
+                           TrackColumnLayoutModel& columnLayoutModel);
     ~TrackViewPage() override;
 
     rs::core::ListId getListId() const { return _listId; }
@@ -125,10 +125,10 @@ namespace app::ui
 
     // Models
     rs::core::ListId _listId;
-    Glib::RefPtr<TrackListAdapter> _adapter;
+    TrackListAdapter& _adapter;
     Glib::RefPtr<Gtk::SortListModel> _sortModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
-    std::shared_ptr<TrackColumnLayoutModel> _columnLayoutModel;
+    TrackColumnLayoutModel& _columnLayoutModel;
     Glib::RefPtr<Gio::ListModel> _columnModel;
     Glib::RefPtr<Gtk::StringList> _groupByOptions;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
