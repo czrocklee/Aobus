@@ -306,7 +306,7 @@ namespace app::ui
         // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
         _previewFilteredList = std::make_unique<app::core::model::FilteredTrackIdList>(
           *_parentMembershipList, *_musicLibrary, *_previewEngine);
-        _previewAdapter = std::make_shared<TrackListAdapter>(*_previewFilteredList, *_rowDataProvider);
+        _previewAdapter = std::make_unique<TrackListAdapter>(*_previewFilteredList, *_rowDataProvider);
 
         auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
         _previewColumnView.set_model(selectionModel);
