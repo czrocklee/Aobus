@@ -6,7 +6,7 @@
 #include <rs/core/MusicLibrary.h>
 
 #include "core/model/TrackIdList.h"
-#include "core/model/TrackRowDataProvider.h"
+#include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include <sigc++/sigc++.h>
 
@@ -22,7 +22,7 @@ namespace app::services
     using TrackId = rs::core::TrackId;
 
     PlaylistExporter(app::core::model::TrackIdList& list,
-                     app::core::model::TrackRowDataProvider& provider,
+                     app::ui::TrackRowDataProvider const& provider,
                      std::filesystem::path root,
                      std::filesystem::path path);
     ~PlaylistExporter() override;
@@ -40,7 +40,7 @@ namespace app::services
     void scheduleForWrite();
 
     app::core::model::TrackIdList& _list;
-    app::core::model::TrackRowDataProvider& _provider;
+    app::ui::TrackRowDataProvider const& _provider;
     std::filesystem::path const _root;
     std::filesystem::path const _path;
     std::unique_ptr<sigc::connection> _timeoutConnection;

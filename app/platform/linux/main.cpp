@@ -3,6 +3,7 @@
 
 #include "core/Log.h"
 #include "platform/linux/ui/MainWindow.h"
+#include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include <rs/AppVersion.h>
 

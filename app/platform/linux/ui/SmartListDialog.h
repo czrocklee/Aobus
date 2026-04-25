@@ -24,13 +24,12 @@ namespace app::core::model
   class FilteredTrackIdList;
   class SmartListEngine;
   class TrackIdList;
-  class TrackRowDataProvider;
 }
 
 namespace app::ui
 {
-
   class TrackListAdapter;
+  class TrackRowDataProvider;
 
   class SmartListDialog final : public Gtk::Dialog
   {
@@ -39,7 +38,8 @@ namespace app::ui
                     rs::core::MusicLibrary& musicLibrary,
                     app::core::model::AllTrackIdsList& allTrackIds,
                     app::core::model::TrackIdList& parentMembershipList,
-                    rs::core::ListId parentListId);
+                    rs::core::ListId parentListId,
+                    TrackRowDataProvider const& provider);
     virtual ~SmartListDialog() override;
 
     // Populate dialog fields from an existing list for editing
@@ -80,7 +80,7 @@ namespace app::ui
     app::core::model::AllTrackIdsList* _allTrackIds;
     app::core::model::TrackIdList* _parentMembershipList;
     rs::core::ListId _parentListId;
-    std::shared_ptr<app::core::model::TrackRowDataProvider> _rowDataProvider;
+    TrackRowDataProvider const* _rowDataProvider;
     std::unique_ptr<app::core::model::SmartListEngine> _previewEngine;
     std::unique_ptr<app::core::model::FilteredTrackIdList> _previewFilteredList;
     std::shared_ptr<TrackListAdapter> _previewAdapter;
