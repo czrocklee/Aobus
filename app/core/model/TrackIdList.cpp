@@ -66,7 +66,7 @@ namespace app::core::model
     }
   }
 
-  void TrackIdList::notifyBatchInserted(std::span<const TrackId> ids)
+  void TrackIdList::notifyBatchInserted(std::span<TrackId const> ids)
   {
     for (auto* obs : _observers)
     {
@@ -74,7 +74,7 @@ namespace app::core::model
     }
   }
 
-  void TrackIdList::notifyBatchUpdated(std::span<const TrackId> ids)
+  void TrackIdList::notifyBatchUpdated(std::span<TrackId const> ids)
   {
     for (auto* obs : _observers)
     {
@@ -82,7 +82,7 @@ namespace app::core::model
     }
   }
 
-  void TrackIdList::notifyBatchRemoved(std::span<const TrackId> ids)
+  void TrackIdList::notifyBatchRemoved(std::span<TrackId const> ids)
   {
     for (auto* obs : _observers)
     {

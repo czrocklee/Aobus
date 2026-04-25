@@ -33,9 +33,9 @@ namespace app::core::model
     void onUpdated(TrackId id, std::size_t index) override;
     void onRemoved(TrackId id, std::size_t index) override;
 
-    void onBatchInserted(std::span<const TrackId> ids) override;
-    void onBatchUpdated(std::span<const TrackId> ids) override;
-    void onBatchRemoved(std::span<const TrackId> ids) override;
+    void onBatchInserted(std::span<TrackId const> ids) override;
+    void onBatchUpdated(std::span<TrackId const> ids) override;
+    void onBatchRemoved(std::span<TrackId const> ids) override;
 
     void onSourceDestroyed() override;
 
@@ -96,9 +96,9 @@ namespace app::core::model
     void handleSourceUpdated(SourceBucket& bucket, TrackId id, std::size_t sourceIndex);
     void handleSourceRemoved(SourceBucket& bucket, TrackId id);
 
-    void handleSourceBatchInserted(SourceBucket& bucket, std::span<const TrackId> ids);
-    void handleSourceBatchUpdated(SourceBucket& bucket, std::span<const TrackId> ids);
-    void handleSourceBatchRemoved(SourceBucket& bucket, std::span<const TrackId> ids);
+    void handleSourceBatchInserted(SourceBucket& bucket, std::span<TrackId const> ids);
+    void handleSourceBatchUpdated(SourceBucket& bucket, std::span<TrackId const> ids);
+    void handleSourceBatchRemoved(SourceBucket& bucket, std::span<TrackId const> ids);
 
     void handleSourceDestroyed(SourceBucket& bucket);
 

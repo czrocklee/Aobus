@@ -43,9 +43,9 @@ namespace app::core::model
     void onUpdated(TrackId id, std::size_t index) override;
     void onRemoved(TrackId id, std::size_t index) override;
 
-    void onBatchInserted(std::span<const TrackId> ids) override;
-    void onBatchUpdated(std::span<const TrackId> ids) override;
-    void onBatchRemoved(std::span<const TrackId> ids) override;
+    void onBatchInserted(std::span<TrackId const> ids) override;
+    void onBatchUpdated(std::span<TrackId const> ids) override;
+    void onBatchRemoved(std::span<TrackId const> ids) override;
 
     bool contains(TrackId id) const;
 

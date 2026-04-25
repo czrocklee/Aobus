@@ -3,23 +3,24 @@
 
 #include <catch2/catch.hpp>
 
-#include <rs/core/MusicLibrary.h>
-#include <rs/core/TrackBuilder.h>
-#include <rs/core/ListBuilder.h>
-#include <rs/core/ResourceStore.h>
 #include <rs/core/DictionaryStore.h>
 #include <rs/core/LibraryExporter.h>
 #include <rs/core/LibraryImporter.h>
+#include <rs/core/ListBuilder.h>
+#include <rs/core/MusicLibrary.h>
+#include <rs/core/ResourceStore.h>
+#include <rs/core/TrackBuilder.h>
 #include <test/unit/lmdb/TestUtils.h>
 
+#include <algorithm>
 #include <fstream>
 #include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
-#include <algorithm>
 
-TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]") {
+TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
+{
   auto temp1 = TempDir{};
   auto ml1 = rs::core::MusicLibrary{temp1.path()};
   auto const smartListName = std::string("Smart List ") + std::string(256, 'S');
@@ -31,7 +32,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]") {
   {
     auto txn = ml1.writeTransaction();
     auto& dict = ml1.dictionary();
-    
+
     auto resWriter = ml1.resources().writer(txn);
     auto resId = resWriter.create(createTestData(100));
     std::ignore = resWriter.create(createTestData(64));
@@ -44,20 +45,19 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]") {
 
     auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml1.resources());
     auto trackWriter = ml1.tracks().writer(txn);
-    auto [trackId, view] = trackWriter.createHotCold(preparedHot.size(), preparedCold.size(), 
-      [&](rs::core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
-        preparedHot.writeTo(hot);
-        preparedCold.writeTo(cold);
-      });
+    auto [trackId, view] =
+      trackWriter.createHotCold(preparedHot.size(),
+                                preparedCold.size(),
+                                [&](rs::core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                {
+                                  preparedHot.writeTo(hot);
+                                  preparedCold.writeTo(cold);
+                                });
 
-    auto smartListBuilder = rs::core::ListBuilder::createNew()
-      .name(smartListName)
-      .filter(smartFilter);
+    auto smartListBuilder = rs::core::ListBuilder::createNew().name(smartListName).filter(smartFilter);
     ml1.lists().writer(txn).create(smartListBuilder.serialize());
 
-    auto manualListBuilder = rs::core::ListBuilder::createNew()
-      .name(manualListName)
-      .description(manualListDescription);
+    auto manualListBuilder = rs::core::ListBuilder::createNew().name(manualListName).description(manualListDescription);
     manualListBuilder.tracks().add(trackId);
     ml1.lists().writer(txn).create(manualListBuilder.serialize());
 
@@ -72,7 +72,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]") {
   // 3. Import into a new library
   auto temp2 = TempDir{};
   auto ml2 = rs::core::MusicLibrary{temp2.path()};
-  
+
   // Pre-create the track in ml2 to test overlay (since physical file song.flac doesn't exist)
   {
     auto txn = ml2.writeTransaction();
@@ -80,11 +80,13 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]") {
     auto trackBuilder = rs::core::TrackBuilder::createNew();
     trackBuilder.property().uri("song.flac"); // technical properties are missing initially
     auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml2.resources());
-    ml2.tracks().writer(txn).createHotCold(preparedHot.size(), preparedCold.size(), 
-      [&](rs::core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
-        preparedHot.writeTo(hot);
-        preparedCold.writeTo(cold);
-      });
+    ml2.tracks().writer(txn).createHotCold(preparedHot.size(),
+                                           preparedCold.size(),
+                                           [&](rs::core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                           {
+                                             preparedHot.writeTo(hot);
+                                             preparedCold.writeTo(cold);
+                                           });
     txn.commit();
   }
 
@@ -100,7 +102,8 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]") {
 
     // Check tracks
     std::vector<std::pair<rs::core::TrackId, rs::core::TrackView>> tracks;
-    for (auto item : trackReader) {
+    for (auto item : trackReader)
+    {
       tracks.push_back(std::move(item));
     }
     REQUIRE(tracks.size() == 1);
@@ -108,7 +111,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]") {
     REQUIRE(std::string(view.property().uri()) == "song.flac");
     REQUIRE(std::string(view.metadata().title()) == "Test Title");
     REQUIRE(std::string(dict.get(view.metadata().artistId())) == "Test Artist");
-    
+
     // Check tags
     auto tags = view.tags();
     std::vector<std::string> tagNames;
@@ -119,7 +122,8 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]") {
     // Check custom
     auto custom = view.custom();
     bool foundMood = false;
-    for (auto [k, v] : custom) {
+    for (auto [k, v] : custom)
+    {
       if (std::string(dict.get(k)) == "mood" && std::string(v) == "happy") foundMood = true;
     }
     REQUIRE(foundMood);
@@ -127,12 +131,16 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]") {
     // Check lists
     int smartCount = 0;
     int manualCount = 0;
-    for (auto const& [lid, lview] : listReader) {
-      if (lview.isSmart()) {
+    for (auto const& [lid, lview] : listReader)
+    {
+      if (lview.isSmart())
+      {
         smartCount++;
         REQUIRE(std::string(lview.name()) == smartListName);
         REQUIRE(std::string(lview.filter()) == smartFilter);
-      } else {
+      }
+      else
+      {
         manualCount++;
         REQUIRE(std::string(lview.name()) == manualListName);
         REQUIRE(std::string(lview.description()) == manualListDescription);
@@ -145,7 +153,8 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]") {
   }
 }
 
-TEST_CASE("Library import remaps list parents regardless of YAML order", "[core][yaml]") {
+TEST_CASE("Library import remaps list parents regardless of YAML order", "[core][yaml]")
+{
   auto temp = TempDir{};
   auto ml = rs::core::MusicLibrary{temp.path()};
 
@@ -156,12 +165,14 @@ TEST_CASE("Library import remaps list parents regardless of YAML order", "[core]
     auto trackBuilder = rs::core::TrackBuilder::createNew();
     trackBuilder.property().uri("song.flac");
     auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml.resources());
-    std::tie(trackId, std::ignore) = ml.tracks().writer(txn).createHotCold(
-      preparedHot.size(), preparedCold.size(),
-      [&](rs::core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
-        preparedHot.writeTo(hot);
-        preparedCold.writeTo(cold);
-      });
+    std::tie(trackId, std::ignore) =
+      ml.tracks().writer(txn).createHotCold(preparedHot.size(),
+                                            preparedCold.size(),
+                                            [&](rs::core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                            {
+                                              preparedHot.writeTo(hot);
+                                              preparedCold.writeTo(cold);
+                                            });
     txn.commit();
   }
 
@@ -197,12 +208,15 @@ library:
     rs::core::ListId parentId;
     rs::core::ListId childId;
 
-    for (auto const& [listId, view] : listReader) {
-      if (std::string(view.name()) == "Parent") {
+    for (auto const& [listId, view] : listReader)
+    {
+      if (std::string(view.name()) == "Parent")
+      {
         parentId = listId;
         parent = view;
       }
-      if (std::string(view.name()) == "Child") {
+      if (std::string(view.name()) == "Child")
+      {
         childId = listId;
         child = view;
       }

@@ -147,8 +147,9 @@ namespace app::ui
     void stopPlayback();
     void seekPlayback(std::uint32_t positionMs);
     bool startPlaybackFromVisiblePage(TrackViewPage const& page, rs::core::TrackId trackId);
-    bool startPlaybackSequence(std::vector<rs::core::TrackId> trackIds, rs::core::TrackId startTrackId,
-                                std::optional<rs::core::ListId> sourceListId = std::nullopt);
+    bool startPlaybackSequence(std::vector<rs::core::TrackId> trackIds,
+                               rs::core::TrackId startTrackId,
+                               std::optional<rs::core::ListId> sourceListId = std::nullopt);
     bool playTrackAtSequenceIndex(std::size_t index);
     void jumpToPlayingList();
     void clearActivePlaybackSequence();

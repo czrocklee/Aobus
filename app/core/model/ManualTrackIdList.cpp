@@ -93,11 +93,11 @@ namespace app::core::model
     }
   }
 
-  void ManualTrackIdList::onBatchInserted(std::span<const TrackId> /*ids*/)
+  void ManualTrackIdList::onBatchInserted(std::span<TrackId const> /*ids*/)
   {
   }
 
-  void ManualTrackIdList::onBatchUpdated(std::span<const TrackId> ids)
+  void ManualTrackIdList::onBatchUpdated(std::span<TrackId const> ids)
   {
     std::vector<TrackId> matched;
     for (auto id : ids)
@@ -113,7 +113,7 @@ namespace app::core::model
     }
   }
 
-  void ManualTrackIdList::onBatchRemoved(std::span<const TrackId> ids)
+  void ManualTrackIdList::onBatchRemoved(std::span<TrackId const> ids)
   {
     std::vector<TrackId> removed;
     for (auto id : ids)

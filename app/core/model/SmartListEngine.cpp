@@ -22,9 +22,7 @@ namespace app::core::model
   // SourceObserver implementation
 
   SourceObserver::SourceObserver(SmartListEngine& engine, TrackIdList& source)
-    : _engine{engine}
-    , _source{source}
-    , _valid{true}
+    : _engine{engine}, _source{source}, _valid{true}
   {
   }
 
@@ -84,7 +82,7 @@ namespace app::core::model
     }
   }
 
-  void SourceObserver::onBatchInserted(std::span<const TrackId> ids)
+  void SourceObserver::onBatchInserted(std::span<TrackId const> ids)
   {
     if (!_valid)
     {
@@ -98,7 +96,7 @@ namespace app::core::model
     }
   }
 
-  void SourceObserver::onBatchUpdated(std::span<const TrackId> ids)
+  void SourceObserver::onBatchUpdated(std::span<TrackId const> ids)
   {
     if (!_valid)
     {
@@ -112,7 +110,7 @@ namespace app::core::model
     }
   }
 
-  void SourceObserver::onBatchRemoved(std::span<const TrackId> ids)
+  void SourceObserver::onBatchRemoved(std::span<TrackId const> ids)
   {
     if (!_valid)
     {
@@ -447,7 +445,7 @@ namespace app::core::model
     }
   }
 
-  void SmartListEngine::handleSourceBatchInserted(SourceBucket& bucket, std::span<const TrackId> ids)
+  void SmartListEngine::handleSourceBatchInserted(SourceBucket& bucket, std::span<TrackId const> ids)
   {
     if (ids.empty())
     {
@@ -503,7 +501,7 @@ namespace app::core::model
     }
   }
 
-  void SmartListEngine::handleSourceBatchUpdated(SourceBucket& bucket, std::span<const TrackId> ids)
+  void SmartListEngine::handleSourceBatchUpdated(SourceBucket& bucket, std::span<TrackId const> ids)
   {
     if (ids.empty())
     {
@@ -590,7 +588,7 @@ namespace app::core::model
     }
   }
 
-  void SmartListEngine::handleSourceBatchRemoved(SourceBucket& bucket, std::span<const TrackId> ids)
+  void SmartListEngine::handleSourceBatchRemoved(SourceBucket& bucket, std::span<TrackId const> ids)
   {
     for (auto* list : bucket.lists)
     {

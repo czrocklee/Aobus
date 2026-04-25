@@ -66,7 +66,7 @@ namespace
 
     static constexpr auto value = lexy::callback<std::string>(
           [](auto lexeme) {  // NOLINT(readability-named-parameter)
-              std::string str(lexeme.begin(), lexeme.end());
+              auto str = std::string{lexeme.begin(), lexeme.end()};
               if (!str.empty() && (str.back() == '\'' || str.back() == '"')) {
                   str.pop_back();
               }
@@ -125,7 +125,7 @@ namespace
                                     lexy::callback<Expression>(
                                       [](std::vector<Expression> list)
                                       {
-                                        Expression result = std::move(list.back());
+                                        auto result = Expression{std::move(list.back())};
                                         for (auto it = list.rbegin() + 1; it != list.rend(); ++it)
                                         {
                                           auto bin = std::make_unique<BinaryExpression>();
@@ -209,12 +209,12 @@ namespace rs::expr
 {
   Expression parse(std::string_view expr)
   {
-    auto input = lexy::string_input<lexy::utf8_char_encoding>(expr);
+    auto input = lexy::string_input<lexy::utf8_char_encoding>{expr};
     auto result = lexy::parse<Stmt>(input, lexy::noop);
 
     if (result.has_value())
     {
-      Expression root = std::move(result).value();
+      auto root = Expression{std::move(result).value()};
       normalize(root);
       return root;
     }

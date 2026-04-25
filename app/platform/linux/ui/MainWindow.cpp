@@ -4,9 +4,9 @@
 #include "platform/linux/ui/MainWindow.h"
 #include "core/Log.h"
 
-#include <rs/core/ListBuilder.h>
 #include <rs/core/LibraryExporter.h>
 #include <rs/core/LibraryImporter.h>
+#include <rs/core/ListBuilder.h>
 #include <rs/core/MusicLibrary.h>
 #include <rs/core/ResourceStore.h>
 #include <rs/core/TrackBuilder.h>
@@ -404,8 +404,8 @@ namespace app::ui
             return;
           }
 
-          std::string pathStr = folder->get_path();
-          std::filesystem::path path(pathStr);
+          auto pathStr = folder->get_path();
+          auto path = std::filesystem::path{pathStr};
           APP_LOG_INFO("Importing from: {}", pathStr);
 
           // If no library exists, create one at the import path
@@ -417,7 +417,7 @@ namespace app::ui
           }
 
           // Scan for music files
-          std::vector<std::filesystem::path> files;
+          auto files = std::vector<std::filesystem::path>{};
           scanDirectory(path, files);
 
           if (files.empty())
@@ -614,11 +614,9 @@ namespace app::ui
     box->append(*label);
 
     auto* modeCombo = Gtk::make_managed<Gtk::DropDown>();
-    auto modeStrings = Gtk::StringList::create({
-      "App-Only (Tags, Ratings, Lists)",
-      "Metadata + App Data (Title, Artist, Tags, etc.)",
-      "Full Backup (All Metadata + Audio Properties + Cover Art)"
-    });
+    auto modeStrings = Gtk::StringList::create({"App-Only (Tags, Ratings, Lists)",
+                                                "Metadata + App Data (Title, Artist, Tags, etc.)",
+                                                "Full Backup (All Metadata + Audio Properties + Cover Art)"});
     modeCombo->set_model(modeStrings);
     modeCombo->set_selected(1); // Default to Metadata
     box->append(*modeCombo);
@@ -627,61 +625,82 @@ namespace app::ui
     dialog->add_button("Cancel", Gtk::ResponseType::CANCEL);
     dialog->add_button("Next", Gtk::ResponseType::OK);
 
-    dialog->signal_response().connect([this, dialog, modeCombo](int responseId) {
-      if (responseId != Gtk::ResponseType::OK) {
+    dialog->signal_response().connect(
+      [this, dialog, modeCombo](int responseId)
+      {
+        if (responseId != Gtk::ResponseType::OK)
+        {
+          dialog->close();
+          return;
+        }
+
+        rs::core::ExportMode mode = rs::core::ExportMode::Metadata;
+        switch (modeCombo->get_selected())
+        {
+          case 0: mode = rs::core::ExportMode::Minimum; break;
+          case 1: mode = rs::core::ExportMode::Metadata; break;
+          case 2: mode = rs::core::ExportMode::Full; break;
+        }
+
         dialog->close();
-        return;
-      }
 
-      rs::core::ExportMode mode = rs::core::ExportMode::Metadata;
-      switch (modeCombo->get_selected()) {
-        case 0: mode = rs::core::ExportMode::Minimum; break;
-        case 1: mode = rs::core::ExportMode::Metadata; break;
-        case 2: mode = rs::core::ExportMode::Full; break;
-      }
+        auto fileDialog = Gtk::FileDialog::create();
+        fileDialog->set_title("Export Library to YAML");
+        fileDialog->set_initial_name("library_backup.yaml");
 
-      dialog->close();
+        auto filter = Gtk::FileFilter::create();
+        filter->set_name("YAML files");
+        filter->add_pattern("*.yaml");
+        filter->add_pattern("*.yml");
+        auto filters = Gio::ListStore<Gtk::FileFilter>::create();
+        filters->append(filter);
+        fileDialog->set_filters(filters);
 
-      auto fileDialog = Gtk::FileDialog::create();
-      fileDialog->set_title("Export Library to YAML");
-      fileDialog->set_initial_name("library_backup.yaml");
-      
-      auto filter = Gtk::FileFilter::create();
-      filter->set_name("YAML files");
-      filter->add_pattern("*.yaml");
-      filter->add_pattern("*.yml");
-      auto filters = Gio::ListStore<Gtk::FileFilter>::create();
-      filters->append(filter);
-      fileDialog->set_filters(filters);
+        fileDialog->save(*this,
+                         [this, fileDialog, mode](Glib::RefPtr<Gio::AsyncResult>& result)
+                         {
+                           try
+                           {
+                             auto file = fileDialog->save_finish(result);
+                             if (file)
+                             {
+                               auto path = std::filesystem::path{file->get_path()};
 
-      fileDialog->save(*this, [this, fileDialog, mode](Glib::RefPtr<Gio::AsyncResult>& result) {
-        try {
-          auto file = fileDialog->save_finish(result);
-          if (file) {
-            std::filesystem::path path(file->get_path());
-            
-            // Run export in background thread
-            std::thread([this, path, mode]() {
-              try {
-                rs::core::LibraryExporter exporter(*_musicLibrary);
-                exporter.exportToYaml(path, mode);
-                Glib::MainContext::get_default()->invoke([this]() {
-                  showStatusMessage("Library exported successfully");
-                  return false;
-                });
-              } catch (std::exception const& e) {
-                std::string errorText = e.what();
-                Glib::MainContext::get_default()->invoke([this, errorText]() {
-                  APP_LOG_ERROR("Export failed: {}", errorText);
-                  showStatusMessage("Export failed: " + errorText);
-                  return false;
-                });
-              }
-            }).detach();
-          }
-        } catch (...) {}
+                               // Run export in background thread
+                               std::thread(
+                                 [this, path, mode]()
+                                 {
+                                   try
+                                   {
+                                     auto exporter = rs::core::LibraryExporter{*_musicLibrary};
+                                     exporter.exportToYaml(path, mode);
+                                     Glib::MainContext::get_default()->invoke(
+                                       [this]()
+                                       {
+                                         showStatusMessage("Library exported successfully");
+                                         return false;
+                                       });
+                                   }
+                                   catch (std::exception const& e)
+                                   {
+                                     auto errorText = std::string{e.what()};
+                                     Glib::MainContext::get_default()->invoke(
+                                       [this, errorText]()
+                                       {
+                                         APP_LOG_ERROR("Export failed: {}", errorText);
+                                         showStatusMessage("Export failed: " + errorText);
+                                         return false;
+                                       });
+                                   }
+                                 })
+                                 .detach();
+                             }
+                           }
+                           catch (...)
+                           {
+                           }
+                         });
       });
-    });
 
     dialog->show();
   }
@@ -695,7 +714,7 @@ namespace app::ui
 
     auto fileDialog = Gtk::FileDialog::create();
     fileDialog->set_title("Import Library from YAML");
-    
+
     auto filter = Gtk::FileFilter::create();
     filter->set_name("YAML files");
     filter->add_pattern("*.yaml");
@@ -704,37 +723,54 @@ namespace app::ui
     filters->append(filter);
     fileDialog->set_filters(filters);
 
-    fileDialog->open(*this, [this, fileDialog](Glib::RefPtr<Gio::AsyncResult>& result) {
-      try {
-        auto file = fileDialog->open_finish(result);
-        if (file) {
-          std::filesystem::path path(file->get_path());
-          
-          // Run import in background thread
-          std::thread([this, path]() {
-            try {
-              rs::core::LibraryImporter importer(*_musicLibrary);
-              importer.importFromYaml(path);
-              Glib::MainContext::get_default()->invoke([this]() {
-                // Refresh everything
-                auto txn = _musicLibrary->readTransaction();
-                _allTrackIds->reloadFromStore(txn);
-                rebuildListPages(txn);
-                showStatusMessage("Library imported successfully");
-                return false;
-              });
-            } catch (std::exception const& e) {
-              std::string errorText = e.what();
-              Glib::MainContext::get_default()->invoke([this, errorText]() {
-                APP_LOG_ERROR("Import failed: {}", errorText);
-                showStatusMessage("Import failed: " + errorText);
-                return false;
-              });
-            }
-          }).detach();
-        }
-      } catch (...) {}
-    });
+    fileDialog->open(*this,
+                     [this, fileDialog](Glib::RefPtr<Gio::AsyncResult>& result)
+                     {
+                       try
+                       {
+                         auto file = fileDialog->open_finish(result);
+                         if (file)
+                         {
+                           auto path = std::filesystem::path{file->get_path()};
+
+                           // Run import in background thread
+                           std::thread(
+                             [this, path]()
+                             {
+                               try
+                               {
+                                 auto importer = rs::core::LibraryImporter{*_musicLibrary};
+                                 importer.importFromYaml(path);
+                                 Glib::MainContext::get_default()->invoke(
+                                   [this]()
+                                   {
+                                     // Refresh everything
+                                     auto txn = _musicLibrary->readTransaction();
+                                     _allTrackIds->reloadFromStore(txn);
+                                     rebuildListPages(txn);
+                                     showStatusMessage("Library imported successfully");
+                                     return false;
+                                   });
+                               }
+                               catch (std::exception const& e)
+                               {
+                                 auto errorText = std::string{e.what()};
+                                 Glib::MainContext::get_default()->invoke(
+                                   [this, errorText]()
+                                   {
+                                     APP_LOG_ERROR("Import failed: {}", errorText);
+                                     showStatusMessage("Import failed: " + errorText);
+                                     return false;
+                                   });
+                               }
+                             })
+                             .detach();
+                         }
+                       }
+                       catch (...)
+                       {
+                       }
+                     });
   }
 
   void MainWindow::openNewListDialog(rs::core::ListId parentListId)
@@ -861,12 +897,12 @@ namespace app::ui
 
     auto exportLibAction = Gio::SimpleAction::create("export-library");
     exportLibAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
-                                            { exportLibrary(); });
+                                               { exportLibrary(); });
     add_action(exportLibAction);
 
     auto importLibAction = Gio::SimpleAction::create("import-library");
     importLibAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
-                                            { importLibrary(); });
+                                               { importLibrary(); });
     add_action(importLibAction);
 
     _newListAction = Gio::SimpleAction::create("new-list");
@@ -1735,7 +1771,7 @@ namespace app::ui
 
     // Show popover at mouse position
     tagPopover->set_parent(page.getColumnView());
-    Gdk::Rectangle rect{static_cast<int>(x), static_cast<int>(y), 1, 1};
+    auto rect = Gdk::Rectangle{static_cast<int>(x), static_cast<int>(y), 1, 1};
     tagPopover->set_pointing_to(rect);
     tagPopover->popup();
   }
@@ -2194,8 +2230,9 @@ namespace app::ui
     return startPlaybackSequence(page.getVisibleTrackIds(), trackId, page.getListId());
   }
 
-  bool MainWindow::startPlaybackSequence(std::vector<rs::core::TrackId> trackIds, rs::core::TrackId startTrackId,
-                                          std::optional<rs::core::ListId> sourceListId)
+  bool MainWindow::startPlaybackSequence(std::vector<rs::core::TrackId> trackIds,
+                                         rs::core::TrackId startTrackId,
+                                         std::optional<rs::core::ListId> sourceListId)
   {
     if (!_playbackController || !_rowDataProvider)
     {

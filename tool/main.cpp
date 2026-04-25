@@ -16,7 +16,7 @@ int main(int argc, char const* argv[])
 {
   auto ml = rs::core::MusicLibrary{"."};
 
-  ComboCommand root;
+  auto root = ComboCommand{};
 
   root.addCommand<TrackCommand>("track", ml);
   root.addCommand<ListCommand>("list", ml);

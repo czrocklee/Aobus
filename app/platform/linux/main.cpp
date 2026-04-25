@@ -21,7 +21,7 @@ int main(int argc, char* argv[])
   aboutAction->signal_activate().connect(
     [&app]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
     {
-      Gtk::AboutDialog dialog;
+      auto dialog = Gtk::AboutDialog{};
       dialog.set_program_name("RockStudio");
       dialog.set_version("1.0");
       dialog.set_copyright("Copyright 2024 RockStudio");
@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
   app->add_action(quitAction);
 
   // Keep window alive - use shared_ptr
-  Glib::RefPtr<app::ui::MainWindow> mainWindow;
+  auto mainWindow = Glib::RefPtr<app::ui::MainWindow>{};
 
   // Connect to activate signal to create window after startup
   app->signal_activate().connect(

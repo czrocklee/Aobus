@@ -92,7 +92,7 @@ namespace app::core::playback
     _ringBuffer.clear();
 
     {
-      std::lock_guard<std::mutex> lock(_decoderMutex);
+      auto lock = std::lock_guard<std::mutex>{_decoderMutex};
       if (!_decoder.seek(positionMs))
       {
         fail(std::string(_decoder.lastError()));
@@ -115,7 +115,7 @@ namespace app::core::playback
 
   std::string StreamingPcmSource::lastError() const
   {
-    std::lock_guard<std::mutex> lock(_errorMutex);
+    auto lock = std::lock_guard<std::mutex>{_errorMutex};
     return _lastError;
   }
 
@@ -173,7 +173,7 @@ namespace app::core::playback
     std::optional<PcmBlock> block;
     std::string errorText;
     {
-      std::lock_guard<std::mutex> lock(_decoderMutex);
+      auto lock = std::lock_guard<std::mutex>{_decoderMutex};
       if (_generation.load(std::memory_order_relaxed) != generation)
       {
         return false;
@@ -232,7 +232,7 @@ namespace app::core::playback
     }
 
     {
-      std::lock_guard<std::mutex> lock(_errorMutex);
+      auto lock = std::lock_guard<std::mutex>{_errorMutex};
       _lastError = std::move(message);
     }
 
@@ -245,7 +245,7 @@ namespace app::core::playback
   void StreamingPcmSource::clearError()
   {
     _failed = false;
-    std::lock_guard<std::mutex> lock(_errorMutex);
+    auto lock = std::lock_guard<std::mutex>{_errorMutex};
     _lastError.clear();
   }
 

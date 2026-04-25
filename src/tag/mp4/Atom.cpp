@@ -46,7 +46,7 @@ namespace rs::tag::mp4
 
   RootAtom fromBuffer(void const* data, std::size_t size)
   {
-    RootAtom root;
+    auto root = RootAtom{};
     parseAtoms(root, std::span<char const>{static_cast<char const*>(data), size});
     return root;
   }

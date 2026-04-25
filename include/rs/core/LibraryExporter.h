@@ -9,7 +9,10 @@
 #include <map>
 #include <string>
 
-namespace YAML { class Emitter; }
+namespace YAML
+{
+  class Emitter;
+}
 
 namespace rs::core
 {

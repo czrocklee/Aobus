@@ -19,12 +19,10 @@ namespace rs::utility
 
     auto paths() const
     {
-      return std::filesystem::recursive_directory_iterator(_rootPath) | std::views::filter(
-               [exts = _extensions](auto const& entry)
-               {
-                 return exts.contains(entry.path().extension().string());
-               })
-             | std::views::transform([](auto const& entry) { return entry.path(); });
+      return std::filesystem::recursive_directory_iterator(_rootPath) |
+             std::views::filter([exts = _extensions](auto const& entry)
+                                { return exts.contains(entry.path().extension().string()); }) |
+             std::views::transform([](auto const& entry) { return entry.path(); });
     }
 
   private:

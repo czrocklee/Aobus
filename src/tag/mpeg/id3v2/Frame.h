@@ -4,13 +4,93 @@
 #pragma once
 
 #include "Layout.h"
-#include <boost/locale/encoding.hpp>
 #include <cstring>
 #include <rs/Exception.h>
+#include <string>
 #include <string_view>
 
 namespace rs::tag::mpeg::id3v2
 {
+  inline std::string convertToUtf8(char const* begin, char const* end, Encoding encoding)
+  {
+    if (begin >= end)
+    {
+      return {};
+    }
+
+    auto const size = static_cast<std::size_t>(end - begin);
+
+    if (encoding == Encoding::Latin_1)
+    {
+      std::string result;
+      result.reserve(size);
+      for (auto const* it = begin; it != end; ++it)
+      {
+        auto const c = static_cast<unsigned char>(*it);
+        if (c < 0x80)
+        {
+          result.push_back(static_cast<char>(c));
+        }
+        else
+        {
+          result.push_back(static_cast<char>(0xC0 | (c >> 6)));
+          result.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+        }
+      }
+      return result;
+    }
+
+    if (encoding == Encoding::UCS_2)
+    {
+      if (size < 2)
+      {
+        return {};
+      }
+
+      auto const* u16_begin = reinterpret_cast<std::uint8_t const*>(begin);
+      auto const* u16_end = reinterpret_cast<std::uint8_t const*>(end);
+
+      bool big_endian = true;
+      if (u16_begin[0] == 0xFF && u16_begin[1] == 0xFE)
+      {
+        big_endian = false;
+        u16_begin += 2;
+      }
+      else if (u16_begin[0] == 0xFE && u16_begin[1] == 0xFF)
+      {
+        big_endian = true;
+        u16_begin += 2;
+      }
+
+      std::string result;
+      result.reserve(size); // Heuristic
+
+      for (auto const* it = u16_begin; it + 1 < u16_end; it += 2)
+      {
+        std::uint16_t cp = big_endian ? (static_cast<std::uint16_t>(it[0]) << 8) | it[1]
+                                      : (static_cast<std::uint16_t>(it[1]) << 8) | it[0];
+
+        if (cp < 0x80)
+        {
+          result.push_back(static_cast<char>(cp));
+        }
+        else if (cp < 0x800)
+        {
+          result.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+          result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        }
+        else
+        {
+          result.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+          result.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+          result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        }
+      }
+      return result;
+    }
+
+    return {};
+  }
 
   template<typename CommonFrameLayout>
   class FrameView
@@ -74,8 +154,7 @@ namespace rs::tag::mpeg::id3v2
       auto begin = static_cast<char const*>(Base::data()) + sizeof(FrameViewLayout);
       auto end = static_cast<char const*>(Base::data()) + Base::size();
       auto encoding = Base::template layout<FrameViewLayout>().encoding;
-      std::string result =
-        boost::locale::conv::to_utf<char>(begin, end, encoding == Encoding::Latin_1 ? "Latin1" : "UCS-2");
+      std::string result = convertToUtf8(begin, end, encoding);
       while (!result.empty() && result.back() == '\0')
       {
         result.pop_back();

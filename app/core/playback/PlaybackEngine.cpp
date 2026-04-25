@@ -90,7 +90,8 @@ namespace app::core::playback
 
   void PlaybackEngine::play(TrackPlaybackDescriptor descriptor)
   {
-    PLAYBACK_LOG_INFO("Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
+    PLAYBACK_LOG_INFO(
+      "Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
     if (_backend)
     {
       _backend->stop();
@@ -99,7 +100,7 @@ namespace app::core::playback
 
     _source.store({}, std::memory_order_release);
 
-    AudioRenderCallbacks callbacks;
+    auto callbacks = AudioRenderCallbacks{};
     callbacks.userData = this;
     callbacks.readPcm = &PlaybackEngine::onReadPcm;
     callbacks.isSourceDrained = &PlaybackEngine::isSourceDrained;
@@ -107,11 +108,11 @@ namespace app::core::playback
     callbacks.onPositionAdvanced = &PlaybackEngine::onPositionAdvanced;
     callbacks.onDrainComplete = &PlaybackEngine::onDrainComplete;
 
-    std::shared_ptr<IPcmSource> source;
-    StreamFormat backendFormat;
+    auto source = std::shared_ptr<IPcmSource>{};
+    auto backendFormat = StreamFormat{};
 
     {
-      std::lock_guard<std::mutex> lock(_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
 
       _underrunCount = 0;
       _backendStarted = false;
@@ -140,7 +141,7 @@ namespace app::core::playback
     if (_backend && !_backend->open(backendFormat, callbacks))
     {
       _source.store({}, std::memory_order_release);
-      std::lock_guard<std::mutex> lock(_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _currentTrack.reset();
       _state = TransportState::Error;
       _snapshot.state = TransportState::Error;
@@ -151,7 +152,7 @@ namespace app::core::playback
     if (_backend)
     {
       auto const backendInfo = _backend->formatInfo();
-      std::lock_guard<std::mutex> lock(_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
       if (backendInfo.streamFormat)
       {
         _snapshot.activeFormat = backendInfo.streamFormat;
@@ -174,7 +175,7 @@ namespace app::core::playback
 
       _source.store({}, std::memory_order_release);
 
-      std::lock_guard<std::mutex> lock(_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _currentTrack.reset();
       _backendStarted = false;
       _playbackDrainPending = false;
@@ -185,7 +186,7 @@ namespace app::core::playback
     }
 
     {
-      std::lock_guard<std::mutex> lock(_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _state = TransportState::Playing;
       _snapshot.state = TransportState::Playing;
       _backendStarted = true;
@@ -206,7 +207,7 @@ namespace app::core::playback
 
   void PlaybackEngine::pause()
   {
-    std::lock_guard<std::mutex> lock(_stateMutex);
+    auto lock = std::lock_guard<std::mutex>{_stateMutex};
     if (_state == TransportState::Playing || _state == TransportState::Buffering)
     {
       PLAYBACK_LOG_INFO("Playback paused");
@@ -223,7 +224,7 @@ namespace app::core::playback
   {
     auto source = _source.load(std::memory_order_acquire);
 
-    std::unique_lock<std::mutex> lock(_stateMutex);
+    auto lock = std::unique_lock<std::mutex>{_stateMutex};
     if (_state != TransportState::Paused)
     {
       return;
@@ -283,7 +284,7 @@ namespace app::core::playback
 
     _source.store({}, std::memory_order_release);
 
-    std::lock_guard<std::mutex> lock(_stateMutex);
+    auto lock = std::lock_guard<std::mutex>{_stateMutex};
     _currentTrack.reset();
     _backendStarted = false;
     _playbackDrainPending = false;
@@ -304,7 +305,7 @@ namespace app::core::playback
 
     bool wasPaused = false;
     {
-      std::lock_guard<std::mutex> lock(_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
       wasPaused = (_state == TransportState::Paused);
       _state = TransportState::Buffering;
       _snapshot.state = TransportState::Buffering;
@@ -323,7 +324,7 @@ namespace app::core::playback
 
     if (!source->seek(positionMs))
     {
-      std::lock_guard<std::mutex> lock(_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _state = TransportState::Error;
       _snapshot.state = TransportState::Error;
       _snapshot.statusText = source->lastError();
@@ -343,7 +344,7 @@ namespace app::core::playback
 
       _source.store({}, std::memory_order_release);
 
-      std::lock_guard<std::mutex> lock(_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _currentTrack.reset();
       _state = TransportState::Idle;
       _snapshot = {};
@@ -353,14 +354,14 @@ namespace app::core::playback
 
     if (wasPaused)
     {
-      std::lock_guard<std::mutex> lock(_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _state = TransportState::Paused;
       _snapshot.state = TransportState::Paused;
       return;
     }
 
     {
-      std::lock_guard<std::mutex> lock(_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _state = TransportState::Playing;
       _snapshot.state = TransportState::Playing;
       _backendStarted = true;
@@ -383,7 +384,7 @@ namespace app::core::playback
   {
     auto source = _source.load(std::memory_order_acquire);
     auto const backendInfo = _backend ? _backend->formatInfo() : BackendFormatInfo{};
-    std::lock_guard<std::mutex> lock(_stateMutex);
+    auto lock = std::lock_guard<std::mutex>{_stateMutex};
     auto snap = _snapshot;
     snap.backend = _backend ? _backend->kind() : BackendKind::None;
     snap.bufferedMs = source ? source->bufferedMs() : 0;
@@ -426,7 +427,7 @@ namespace app::core::playback
                                  std::shared_ptr<IPcmSource>& source,
                                  StreamFormat& backendFormat)
   {
-    StreamFormat outputFormat;
+    auto outputFormat = StreamFormat{};
     outputFormat.sampleRate = descriptor.sampleRateHint;
     outputFormat.channels = descriptor.channelsHint;
     outputFormat.bitDepth = descriptor.bitDepthHint;
@@ -529,7 +530,7 @@ namespace app::core::playback
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
     // Estimate position based on frames consumed
-    std::unique_lock<std::mutex> lock(self->_stateMutex, std::try_to_lock);
+    auto lock = std::unique_lock<std::mutex>{self->_stateMutex, std::try_to_lock};
     if (!lock.owns_lock())
     {
       return;
@@ -552,7 +553,7 @@ namespace app::core::playback
 
     self->_source.store({}, std::memory_order_release);
 
-    std::lock_guard<std::mutex> lock(self->_stateMutex);
+    auto lock = std::lock_guard<std::mutex>{self->_stateMutex};
     self->_currentTrack.reset();
     self->_backendStarted = false;
     self->_state = TransportState::Idle;
@@ -567,7 +568,7 @@ namespace app::core::playback
     auto const errorText = source ? source->lastError() : std::string{};
 
     {
-      std::lock_guard<std::mutex> lock(self->_stateMutex);
+      auto lock = std::lock_guard<std::mutex>{self->_stateMutex};
       if (self->_state == TransportState::Idle)
       {
         return;

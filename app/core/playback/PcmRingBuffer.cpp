@@ -9,7 +9,7 @@ namespace app::core::playback
 {
 
   PcmRingBuffer::PcmRingBuffer()
-    : _queue()
+    : _queue{}
   {
   }
 
@@ -17,7 +17,7 @@ namespace app::core::playback
   {
     if (input.empty()) return 0;
 
-    std::lock_guard<std::mutex> lock(_mutex);
+    auto lock = std::lock_guard<std::mutex>{_mutex};
     auto const written = _queue.push(reinterpret_cast<std::uint8_t const*>(input.data()), input.size());
     _writeCount.fetch_add(written, std::memory_order_release);
     return written;
@@ -27,7 +27,7 @@ namespace app::core::playback
   {
     if (output.empty()) return 0;
 
-    std::lock_guard<std::mutex> lock(_mutex);
+    auto lock = std::lock_guard<std::mutex>{_mutex};
     auto const read = _queue.pop(reinterpret_cast<std::uint8_t*>(output.data()), output.size());
     _readCount.fetch_add(read, std::memory_order_release);
     return read;
@@ -35,7 +35,7 @@ namespace app::core::playback
 
   void PcmRingBuffer::clear() noexcept
   {
-    std::lock_guard<std::mutex> lock(_mutex);
+    auto lock = std::lock_guard<std::mutex>{_mutex};
     std::uint8_t dummy;
     while (_queue.pop(dummy));
     _writeCount.store(0, std::memory_order_relaxed);

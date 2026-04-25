@@ -15,9 +15,7 @@ namespace app::core::model
 {
 
   FilteredTrackIdList::FilteredTrackIdList(TrackIdList& source, rs::core::MusicLibrary& ml, SmartListEngine& engine)
-    : _source{&source}
-    , _ml{&ml}
-    , _engine{&engine}
+    : _source{&source}, _ml{&ml}, _engine{&engine}
   {
     _engine->registerList(source, *this);
     stageExpression("");

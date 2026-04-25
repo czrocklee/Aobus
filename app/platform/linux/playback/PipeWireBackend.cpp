@@ -161,7 +161,7 @@ namespace
     }
 
     // Rough estimate of size to minimize reallocations: ~40 chars per item
-    std::string result;
+    auto result = std::string{};
     result.reserve(static_cast<std::size_t>(props->n_items) * 40);
     result += "{";
 
@@ -221,7 +221,7 @@ namespace
 
   std::string formatText(app::core::playback::StreamFormat const& format)
   {
-    std::ostringstream stream;
+    auto stream = std::ostringstream{};
     stream << (format.sampleRate / 1000.0) << " kHz / " << static_cast<int>(format.bitDepth) << " bit / ";
     if (format.channels == 1)
     {
@@ -256,7 +256,7 @@ namespace
       return std::nullopt;
     }
 
-    app::core::playback::StreamFormat format;
+    auto format = app::core::playback::StreamFormat{};
     format.sampleRate = info.rate;
     format.channels = static_cast<std::uint8_t>(info.channels);
     format.isInterleaved = true;
@@ -389,14 +389,14 @@ namespace app::playback
     spa_hook coreListener = {};
     std::int32_t coreSyncSeq = -1;
     std::uint32_t streamNodeId = PW_ID_ANY;
-    std::unordered_map<std::uint32_t, NodeRecord> nodes;
-    std::unordered_map<std::uint32_t, LinkRecord> links;
-    std::unordered_map<std::uint32_t, LinkBinding> linkBindings;
-    NodeBinding sinkNodeBinding;
-    NodeBinding streamNodeBinding;
-    std::optional<StreamFormat> negotiatedStreamFormat;
-    std::optional<StreamFormat> sinkFormat;
-    SinkProps sinkProps;
+    std::unordered_map<std::uint32_t, NodeRecord> nodes = {};
+    std::unordered_map<std::uint32_t, LinkRecord> links = {};
+    std::unordered_map<std::uint32_t, LinkBinding> linkBindings = {};
+    NodeBinding sinkNodeBinding = {};
+    NodeBinding streamNodeBinding = {};
+    std::optional<StreamFormat> negotiatedStreamFormat = {};
+    std::optional<StreamFormat> sinkFormat = {};
+    SinkProps sinkProps = {};
   };
 
   void PipeWireBackend::onStreamProcess(void* data)
@@ -546,7 +546,7 @@ namespace app::playback
 
   BackendFormatInfo PipeWireBackend::formatInfo() const
   {
-    std::lock_guard<std::mutex> lock(_infoMutex);
+    auto lock = std::lock_guard<std::mutex>{_infoMutex};
     return _formatInfo;
   }
 
@@ -560,7 +560,7 @@ namespace app::playback
     }
 
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       if (_monitorState)
       {
         if (_monitorState->sinkNodeBinding.proxy)
@@ -646,7 +646,7 @@ namespace app::playback
     _lastError.clear();
 
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       _formatInfo = {};
       _formatInfo.isExclusive = false;
       _formatInfo.conversionReason = "Shared PipeWire playback cannot guarantee bit-perfect output";
@@ -701,11 +701,11 @@ namespace app::playback
       return false;
     }
 
-    std::uint8_t buffer[1024];
-    spa_pod_builder builder;
-    ::spa_pod_builder_init(&builder, buffer, sizeof(buffer));
+    auto buffer = std::array<std::uint8_t, 1024>{};
+    auto builder = spa_pod_builder{};
+    ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
 
-    spa_pod_frame frame;
+    auto frame = spa_pod_frame{};
     ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
 
     int spaFormat = SPA_AUDIO_FORMAT_S16_LE;
@@ -733,7 +733,7 @@ namespace app::playback
 
     ::spa_pod_builder_pop(&builder, &frame);
 
-    auto* param = reinterpret_cast<spa_pod*>(buffer);
+    auto* param = reinterpret_cast<spa_pod*>(buffer.data());
     spa_pod const* params[] = {param};
 
     auto const ret = ::pw_stream_connect(
@@ -856,7 +856,7 @@ namespace app::playback
     }
 
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       if (_monitorState)
       {
         _monitorState->negotiatedStreamFormat = parsedFormat;
@@ -903,7 +903,7 @@ namespace app::playback
 
     PLAYBACK_LOG_TRACE("PipeWire event: RegistryGlobal id={} type={} props={}", id, type, propsToString(props));
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       if (!_monitorState)
       {
         return;
@@ -961,7 +961,7 @@ namespace app::playback
   {
     bool needsRefresh = false;
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       if (!_monitorState)
       {
         return;
@@ -1040,7 +1040,7 @@ namespace app::playback
                        info->output_node_id,
                        info->input_node_id);
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       if (!_monitorState)
       {
         return;
@@ -1070,7 +1070,7 @@ namespace app::playback
                        static_cast<int>(info->state),
                        propsToString(info->props));
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       if (!_monitorState)
       {
         return;
@@ -1096,7 +1096,7 @@ namespace app::playback
   {
     PLAYBACK_LOG_TRACE("PipeWire event: SinkNodeParam param_id={}", id);
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       if (!_monitorState)
       {
         return;
@@ -1124,7 +1124,7 @@ namespace app::playback
 
     ::pw_thread_loop_lock(_threadLoop);
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       if (!_monitorState || _monitorState->registry)
       {
         ::pw_thread_loop_unlock(_threadLoop);
@@ -1152,7 +1152,7 @@ namespace app::playback
   {
     (void)id;
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       if (_monitorState && seq == _monitorState->coreSyncSeq)
       {
         // Registry is now initially populated
@@ -1184,7 +1184,7 @@ namespace app::playback
 
     ::pw_thread_loop_lock(_threadLoop);
     {
-      std::lock_guard<std::mutex> lock(_infoMutex);
+      auto lock = std::lock_guard<std::mutex>{_infoMutex};
       if (!_monitorState)
       {
         ::pw_thread_loop_unlock(_threadLoop);
@@ -1258,8 +1258,8 @@ namespace app::playback
         }
       }
 
-      std::vector<std::uint32_t> reachableNodes;
-      std::unordered_set<std::uint32_t> reachableSet;
+      auto reachableNodes = std::vector<std::uint32_t>{};
+      auto reachableSet = std::unordered_set<std::uint32_t>{};
       if (_monitorState->streamNodeId != PW_ID_ANY)
       {
         reachableNodes.push_back(_monitorState->streamNodeId);
@@ -1283,8 +1283,8 @@ namespace app::playback
         }
       }
 
-      std::vector<std::uint32_t> sinkCandidates;
-      std::vector<std::string> intermediaryNodes;
+      auto sinkCandidates = std::vector<std::uint32_t>{};
+      auto intermediaryNodes = std::vector<std::string>{};
       for (auto const nodeId : reachableNodes)
       {
         if (nodeId == _monitorState->streamNodeId)
@@ -1373,7 +1373,7 @@ namespace app::playback
         }
       }
 
-      BackendFormatInfo info;
+      auto info = BackendFormatInfo{};
       info.isExclusive = false;
       info.conversionReason = "Shared PipeWire playback cannot guarantee bit-perfect output";
       info.streamFormat = _monitorState->negotiatedStreamFormat;
@@ -1406,8 +1406,8 @@ namespace app::playback
         _lastLoggedState = currentState;
       }
 
-      std::vector<std::string> warningIssues;
-      std::vector<std::string> badIssues;
+      auto warningIssues = std::vector<std::string>{};
+      auto badIssues = std::vector<std::string>{};
 
       if (_monitorState->streamNodeId == PW_ID_ANY)
       {
@@ -1426,7 +1426,7 @@ namespace app::playback
 
       if (!intermediaryNodes.empty())
       {
-        std::ostringstream details;
+        auto details = std::ostringstream{};
         details << "Audio reaches the sink through intermediary PipeWire nodes: ";
         for (std::size_t index = 0; index < intermediaryNodes.size(); ++index)
         {
@@ -1456,7 +1456,7 @@ namespace app::playback
           badIssues.emplace_back("The PipeWire stream format does not match the sink format.");
         }
 
-        std::unordered_set<std::uint32_t> otherUpstreamNodes;
+        auto otherUpstreamNodes = std::unordered_set<std::uint32_t>{};
         for (auto const& [_, link] : _monitorState->links)
         {
           if (!isActiveLink(link.state) || link.inputNodeId != desiredSinkNodeId || link.outputNodeId == PW_ID_ANY)
@@ -1472,7 +1472,7 @@ namespace app::playback
 
         if (!otherUpstreamNodes.empty())
         {
-          std::ostringstream details;
+          auto details = std::ostringstream{};
           details << "Other active stream nodes are also feeding this sink";
           auto first = true;
           for (auto const nodeId : otherUpstreamNodes)
