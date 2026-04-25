@@ -3,12 +3,10 @@
 
 #pragma once
 
-#include "BasicCommand.h"
-
+#include <CLI/CLI.hpp>
 #include <rs/core/MusicLibrary.h>
 
-class InitCommand : public BasicCommand
+namespace rs::tool
 {
-public:
-  explicit InitCommand(rs::core::MusicLibrary& ml);
-};
+  void setupInitCommand(CLI::App& app, core::MusicLibrary& ml);
+}

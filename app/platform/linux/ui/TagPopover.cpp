@@ -74,6 +74,7 @@ namespace app::ui
         {
           return true;
         }
+        
         auto tagName = getTagNameFromChild(child);
         // Case-insensitive substring match
         std::string lowerTag = tagName;
@@ -110,6 +111,7 @@ namespace app::ui
     for (auto const trackId : _selectedTrackIds)
     {
       auto const view = reader.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot);
+      
       if (!view)
       {
         continue;
@@ -119,6 +121,7 @@ namespace app::ui
       for (auto const tagId : view->tags())
       {
         auto const tag = std::string(dictionary.get(tagId));
+        
         if (!tag.empty())
         {
           tagsOnTrack.insert(tag);
@@ -142,6 +145,7 @@ namespace app::ui
     }
 
     // Second pass: count all tags in library for frequency
+    
     for (auto it = reader.begin(rs::core::TrackStore::Reader::LoadMode::Hot),
               end = reader.end(rs::core::TrackStore::Reader::LoadMode::Hot);
          it != end;
@@ -153,6 +157,7 @@ namespace app::ui
       for (auto const tagId : view.tags())
       {
         auto const tag = std::string(dictionary.get(tagId));
+        
         if (!tag.empty())
         {
           tagsOnTrack.insert(tag);
@@ -174,6 +179,7 @@ namespace app::ui
                         {
                           return lhs.second > rhs.second;
                         }
+                        
                         return lhs.first < rhs.first;
                       });
   }
@@ -181,6 +187,7 @@ namespace app::ui
   void TagPopover::rebuildCurrentTags()
   {
     // Clear existing children
+    
     while (auto* child = _currentTagsBox.get_first_child())
     {
       _currentTagsBox.remove(*child);
@@ -190,10 +197,12 @@ namespace app::ui
     for (auto const& tag : _currentTags)
     {
       // Skip tags pending removal
+      
       if (_pendingRemoves.contains(tag))
       {
         continue;
       }
+      
       auto label = std::string{"[x] "} + tag;
       auto* chip = Gtk::make_managed<Gtk::ToggleButton>(label);
       chip->set_active(true);
@@ -208,10 +217,12 @@ namespace app::ui
     for (auto const& tag : _pendingAdds)
     {
       // Skip if already in _currentTags (would be duplicate)
+      
       if (_currentTags.contains(tag))
       {
         continue;
       }
+      
       auto label = std::string{"[x] "} + tag;
       auto* chip = Gtk::make_managed<Gtk::ToggleButton>(label);
       chip->set_active(true);
@@ -238,6 +249,7 @@ namespace app::ui
   void TagPopover::rebuildAvailableTags()
   {
     // Clear existing children
+    
     while (auto* child = _availableTagsBox.get_first_child())
     {
       _availableTagsBox.remove(*child);
@@ -247,15 +259,19 @@ namespace app::ui
     for (auto const& tag : _pendingRemoves)
     {
       // Skip if already in _currentTags (shouldn't happen but safety check)
+      
       if (_currentTags.contains(tag))
       {
         continue;
       }
+      
       // Skip if in _pendingAdds
+      
       if (_pendingAdds.contains(tag))
       {
         continue;
       }
+      
       auto label = std::string{"[+] "} + tag;
       auto* chip = Gtk::make_managed<Gtk::ToggleButton>(label);
       chip->set_active(false);
@@ -270,18 +286,21 @@ namespace app::ui
     for (auto const& [tag, freq] : _availableTagsByFrequency)
     {
       // Skip tags that are on all selected tracks (they're in Current section)
+      
       if (_currentTags.contains(tag))
       {
         continue;
       }
 
       // Skip tags that are pending removal (already shown above)
+      
       if (_pendingRemoves.contains(tag))
       {
         continue;
       }
 
       // Skip tags that are pending add (just clicked from Available)
+      
       if (_pendingAdds.contains(tag))
       {
         continue;
@@ -309,6 +328,7 @@ namespace app::ui
     if (isCurrentSection)
     {
       // Clicking a current tag removes it from all selected tracks
+      
       if (button->get_active())
       {
         // Already active, do nothing (tag is on all tracks)
@@ -323,6 +343,7 @@ namespace app::ui
     else
     {
       // Clicking an available tag adds it to all selected tracks
+      
       if (button->get_active())
       {
         // Toggled on - add to all
@@ -381,6 +402,7 @@ namespace app::ui
     }
 
     auto* chip = dynamic_cast<Gtk::ToggleButton*>(child->get_child());
+    
     if (!chip)
     {
       return {};

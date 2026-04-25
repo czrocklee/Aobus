@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
+#include <CLI/CLI.hpp>
 #include <rs/core/MusicLibrary.h>
 
-#include "ComboCommand.h"
 #include "InitCommand.h"
 #include "LibCommand.h"
 #include "ListCommand.h"
@@ -16,21 +16,16 @@ int main(int argc, char const* argv[])
 {
   auto ml = rs::core::MusicLibrary{"."};
 
-  auto root = ComboCommand{};
+  CLI::App app{"RockStudio CLI - rsc"};
+  app.require_subcommand(1);
 
-  root.addCommand<TrackCommand>("track", ml);
-  root.addCommand<ListCommand>("list", ml);
-  root.addCommand<InitCommand>("init", ml);
-  root.addCommand<TagCommand>("tag", ml);
-  root.addCommand<LibCommand>("lib", ml);
+  rs::tool::setupTrackCommand(app, ml);
+  rs::tool::setupListCommand(app, ml);
+  rs::tool::setupInitCommand(app, ml);
+  rs::tool::setupTagCommand(app, ml);
+  rs::tool::setupLibCommand(app, ml);
 
-  try
-  {
-    root.execute(argc, argv, std::cout);
-  }
-  catch (std::exception const& e)
-  {
-    std::cerr << e.what() << '\n';
-    return 1;
-  }
+  CLI11_PARSE(app, argc, argv);
+
+  return 0;
 }

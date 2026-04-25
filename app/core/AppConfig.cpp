@@ -86,6 +86,7 @@ namespace
   std::optional<std::pair<std::string, int>> decodeColumnWidth(std::string const& text)
   {
     auto const separator = text.find(':');
+    
     if (separator == std::string::npos || separator == 0 || separator + 1 >= text.size())
     {
       return std::nullopt;
@@ -108,6 +109,7 @@ namespace app::core
   {
     auto config = AppConfig{};
     auto const path = configPath();
+    
     if (!std::filesystem::exists(path)) return config;
 
     auto keyFile = Glib::KeyFile::create();

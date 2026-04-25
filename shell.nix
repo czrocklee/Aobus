@@ -38,6 +38,7 @@ pkgs.mkShell {
       lmdb.dev
       spdlog
       mimalloc
+      cli11
       catch2
       gsl-lite
       yaml-cpp

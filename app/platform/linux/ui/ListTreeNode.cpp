@@ -26,6 +26,7 @@ namespace app::ui
     {
       return nullptr;
     }
+    
     return _children->get_item(index);
   }
 

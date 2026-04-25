@@ -80,6 +80,7 @@ namespace app::ui
       _trackNumber = optRow->trackNumber;
       _resourceId = optRow->coverArtId ? std::optional<std::uint64_t>{optRow->coverArtId.value()} : std::nullopt;
     }
+    
     _loaded = true;
   }
 

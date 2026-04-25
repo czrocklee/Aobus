@@ -137,6 +137,7 @@ namespace app::ui
           std::find_if(layout.columns.begin(),
                        layout.columns.end(),
                        [column](app::ui::TrackColumnState const& entry) { return entry.column == column; });
+        
         if (it == layout.columns.end())
         {
           return std::nullopt;
@@ -148,6 +149,7 @@ namespace app::ui
       for (auto const& id : state.columnOrder)
       {
         auto const column = app::ui::trackColumnFromId(id);
+        
         if (!column)
         {
           continue;
@@ -157,6 +159,7 @@ namespace app::ui
           std::find_if(ordered.begin(),
                        ordered.end(),
                        [column](app::ui::TrackColumnState const& entry) { return entry.column == *column; });
+        
         if (existing != ordered.end())
         {
           continue;
@@ -174,6 +177,7 @@ namespace app::ui
                                            ordered.end(),
                                            [column = entry.column](app::ui::TrackColumnState const& candidate)
                                            { return candidate.column == column; });
+        
         if (existing == ordered.end())
         {
           ordered.push_back(entry);
@@ -185,6 +189,7 @@ namespace app::ui
       for (auto& entry : layout.columns)
       {
         auto const columnId = std::string{app::ui::trackColumnId(entry.column)};
+        
         if (std::find(state.hiddenColumns.begin(), state.hiddenColumns.end(), columnId) != state.hiddenColumns.end())
         {
           entry.visible = false;
@@ -218,6 +223,7 @@ namespace app::ui
                                                app::ui::trackColumnDefinitions().end(),
                                                [column = entry.column](app::ui::TrackColumnDefinition const& definition)
                                                { return definition.column == column; });
+        
         if (definitionIt != app::ui::trackColumnDefinitions().end() && entry.width != definitionIt->defaultWidth)
         {
           state.columnWidths.insert_or_assign(columnId, entry.width);
@@ -662,6 +668,7 @@ namespace app::ui
                            try
                            {
                              auto file = fileDialog->save_finish(result);
+                             
                              if (file)
                              {
                                auto path = std::filesystem::path{file->get_path()};
@@ -729,6 +736,7 @@ namespace app::ui
                        try
                        {
                          auto file = fileDialog->open_finish(result);
+                         
                          if (file)
                          {
                            auto path = std::filesystem::path{file->get_path()};
@@ -782,6 +790,7 @@ namespace app::ui
 
     // Determine the parent membership list
     app::core::model::TrackIdList* parentMembershipList = nullptr;
+    
     if (parentListId == allTracksListId())
     {
       // Use All Tracks as source
@@ -790,6 +799,7 @@ namespace app::ui
     else
     {
       // Find the parent's membership list from track pages
+      
       if (auto const it = _trackPages.find(parentListId); it != _trackPages.end() && it->second.membershipList)
       {
         parentMembershipList = it->second.membershipList.get();
@@ -810,6 +820,7 @@ namespace app::ui
         if (responseId == Gtk::ResponseType::OK)
         {
           auto const draft = dialog->draft();
+          
           if (draft.listId != rs::core::ListId{0})
           {
             updateList(draft);
@@ -1027,6 +1038,7 @@ namespace app::ui
           if (filterLabel)
           {
             auto const filter = row->getFilter();
+            
             if (!filter.empty())
             {
               filterLabel->set_text("[" + filter + "]");
@@ -1039,6 +1051,7 @@ namespace app::ui
             }
           }
         }
+      
       });
 
     _listView.set_factory(factory);
@@ -1200,6 +1213,7 @@ namespace app::ui
     rebuildListPages(readTxn);
 
     // Find and select the newly created list
+    
     if (_treeListModel)
     {
       auto const itemCount = _treeListModel->get_n_items();
@@ -1280,6 +1294,7 @@ namespace app::ui
     }
 
     // Don't allow editing "All Tracks" (position 0)
+    
     if (position == 0)
     {
       return;
@@ -1328,6 +1343,7 @@ namespace app::ui
     // Determine the parent membership list for the preview
     app::core::model::TrackIdList* parentMembershipList = nullptr;
     auto const parentId = view->parentId();
+    
     if (parentId == allTracksListId())
     {
       parentMembershipList = _allTrackIds.get();
@@ -1355,6 +1371,7 @@ namespace app::ui
         if (responseId == Gtk::ResponseType::OK)
         {
           auto const draft = dialog->draft();
+          
           if (draft.listId != rs::core::ListId{0})
           {
             updateList(draft);
@@ -1382,6 +1399,7 @@ namespace app::ui
     }
 
     // Don't allow deleting "All Tracks" (position 0)
+    
     if (position == 0)
     {
       return;
@@ -1464,6 +1482,7 @@ namespace app::ui
     }
 
     // Set up selection model after tree is built
+    
     if (_treeListModel)
     {
       _listSelectionModel = Gtk::SingleSelection::create(_treeListModel);
@@ -1795,6 +1814,7 @@ namespace app::ui
     }
 
     auto* ctx = currentVisibleTrackPageContext();
+    
     if (!ctx)
     {
       return;
@@ -1814,6 +1834,7 @@ namespace app::ui
     for (auto const trackId : selectedIds)
     {
       auto const optView = writer.get(trackId, rs::core::TrackStore::Reader::LoadMode::Hot);
+      
       if (!optView)
       {
         continue;
@@ -1843,6 +1864,7 @@ namespace app::ui
     for (auto const trackId : selectedIds)
     {
       _rowDataProvider->invalidateHot(trackId);
+      
       if (ctx->membershipList)
       {
         ctx->membershipList->notifyTrackDataChanged(trackId);
@@ -1967,12 +1989,14 @@ namespace app::ui
   void MainWindow::onTrackSelectionChanged()
   {
     auto* ctx = currentVisibleTrackPageContext();
+    
     if (!ctx || !ctx->page)
     {
       if (_statusBar)
       {
         _statusBar->setSelectionInfo(0);
       }
+      
       return;
     }
 
@@ -2028,10 +2052,12 @@ namespace app::ui
       auto sessionState = _appConfig.sessionState();
       sessionState.lastLibraryPath = _musicLibrary ? normalizeLibraryPath(_musicLibrary->rootPath()) : std::string{};
       _appConfig.setSessionState(std::move(sessionState));
+      
       if (_trackColumnLayoutModel)
       {
         _appConfig.setTrackViewState(trackViewStateFromLayout(_trackColumnLayoutModel->layout()));
       }
+      
       _appConfig.save();
     }
     catch (std::exception const& e)
@@ -2045,6 +2071,7 @@ namespace app::ui
     try
     {
       _appConfig = app::core::AppConfig::load();
+      
       if (_trackColumnLayoutModel)
       {
         _trackColumnLayoutModel->setLayout(trackColumnLayoutFromState(_appConfig.trackViewState()));
@@ -2064,12 +2091,14 @@ namespace app::ui
       }
 
       auto const& sessionState = _appConfig.sessionState();
+      
       if (sessionState.lastLibraryPath.empty())
       {
         return;
       }
 
       auto const libraryPath = std::filesystem::path{sessionState.lastLibraryPath};
+      
       if (std::filesystem::exists(libraryPath / "data.mdb"))
       {
         openMusicLibrary(libraryPath);
@@ -2140,6 +2169,7 @@ namespace app::ui
       }
 
       auto const* ctx = currentVisibleTrackPageContext();
+      
       if (ctx && ctx->page)
       {
         if (auto const trackId = ctx->page->getPrimarySelectedTrackId(); trackId)
@@ -2189,6 +2219,7 @@ namespace app::ui
       }
 
       auto const* ctx = currentVisibleTrackPageContext();
+      
       if (ctx && ctx->page)
       {
         if (auto const trackId = ctx->page->getPrimarySelectedTrackId(); trackId)
@@ -2302,6 +2333,7 @@ namespace app::ui
     _stack.set_visible_child(pageNameForListId(listId));
 
     // Select and scroll to track in that page
+    
     if (auto const it = _trackPages.find(listId); it != _trackPages.end())
     {
       it->second.page->selectTrack(trackId);
@@ -2321,6 +2353,7 @@ namespace app::ui
     }
 
     auto const nextIndex = _activePlaybackSequence->currentIndex + 1;
+    
     if (playTrackAtSequenceIndex(nextIndex))
     {
       return;

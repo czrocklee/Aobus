@@ -41,7 +41,8 @@ target_include_directories(GTKMM INTERFACE ${GTKMM_INCLUDE_DIRS})
 target_link_libraries(GTKMM INTERFACE ${GTKMM_LIBRARIES})
 target_compile_options(GTKMM INTERFACE ${GTKMM_CFLAGS_OTHER})
 
-find_package(Boost REQUIRED COMPONENTS headers program_options)
+find_package(Boost REQUIRED COMPONENTS headers)
+find_package(CLI11 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
@@ -134,39 +135,39 @@ if(CLANG_TIDY_EXECUTABLE)
   set(CLANG_TIDY_RELAXED_FILTER "'/home/rocklee/dev/RockStudio/test/.*'")
 
   message(STATUS "clang-tidy found: ${CLANG_TIDY_EXECUTABLE}")
-  message(STATUS "clang-tidy strict checks for src/tool, relaxed for test/")
+  message(STATUS "clang-tidy strict checks for lib/tool, relaxed for test/")
 else()
   message(STATUS "clang-tidy not found - install it for linting")
 endif()
 
 add_gperf_header(
   FLAC_VORBIS_DISPATCH_HEADER
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/tag/flac/VorbisCommentDispatch.gperf"
+  "${CMAKE_CURRENT_SOURCE_DIR}/lib/tag/flac/VorbisCommentDispatch.gperf"
   "tag/flac/VorbisCommentDispatch.h"
 )
 add_gperf_header(
   MP4_ATOM_DISPATCH_HEADER
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/tag/mp4/AtomDispatch.gperf"
+  "${CMAKE_CURRENT_SOURCE_DIR}/lib/tag/mp4/AtomDispatch.gperf"
   "tag/mp4/AtomDispatch.h"
 )
 add_gperf_header(
   MPEG_FRAME_DISPATCH_HEADER
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/tag/mpeg/id3v2/FrameDispatch.gperf"
+  "${CMAKE_CURRENT_SOURCE_DIR}/lib/tag/mpeg/id3v2/FrameDispatch.gperf"
   "tag/mpeg/id3v2/FrameDispatch.h"
 )
 add_gperf_header(
   EXPR_property_dispatch_HEADER
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/expr/PropertyDispatch.gperf"
+  "${CMAKE_CURRENT_SOURCE_DIR}/lib/expr/PropertyDispatch.gperf"
   "expr/PropertyDispatch.h"
 )
 add_gperf_header(
   EXPR_metadata_dispatch_HEADER
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/expr/MetadataDispatch.gperf"
+  "${CMAKE_CURRENT_SOURCE_DIR}/lib/expr/MetadataDispatch.gperf"
   "expr/MetadataDispatch.h"
 )
 add_gperf_header(
   EXPR_UNIT_DISPATCH_HEADER
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/expr/UnitDispatch.gperf"
+  "${CMAKE_CURRENT_SOURCE_DIR}/lib/expr/UnitDispatch.gperf"
   "expr/UnitDispatch.h"
 )
 add_custom_target(
@@ -181,35 +182,35 @@ add_custom_target(
 )
 
 add_library(rs OBJECT
-    src/lmdb/Environment.cpp
-    src/lmdb/Transaction.cpp
-    src/lmdb/Database.cpp
-    src/core/LibraryMetaStore.cpp
-    src/core/LibraryExporter.cpp
-    src/core/LibraryImporter.cpp
-    src/core/MusicLibrary.cpp
-    src/core/ResourceStore.cpp
-    src/core/DictionaryStore.cpp
-    src/core/TrackStore.cpp
-    src/core/TrackBuilder.cpp
-    src/core/TrackView.cpp
-    src/core/ListView.cpp
-    src/core/ListStore.cpp
-    src/core/ListBuilder.cpp
-    src/expr/ExecutionPlan.cpp
-    src/expr/PlanEvaluator.cpp
-    src/expr/Expression.cpp
-    src/expr/Parser.cpp
-    src/expr/Serializer.cpp
-    src/tag/File.cpp
-    src/tag/Open.cpp
-    src/tag/flac/File.cpp
-    src/tag/flac/MetadataBlock.cpp
-    src/tag/mp4/File.cpp
-    src/tag/mp4/Atom.cpp
-    src/tag/mpeg/File.cpp
-    src/tag/mpeg/Frame.cpp
-    src/tag/mpeg/id3v2/Reader.cpp
+    lib/lmdb/Environment.cpp
+    lib/lmdb/Transaction.cpp
+    lib/lmdb/Database.cpp
+    lib/core/LibraryMetaStore.cpp
+    lib/core/LibraryExporter.cpp
+    lib/core/LibraryImporter.cpp
+    lib/core/MusicLibrary.cpp
+    lib/core/ResourceStore.cpp
+    lib/core/DictionaryStore.cpp
+    lib/core/TrackStore.cpp
+    lib/core/TrackBuilder.cpp
+    lib/core/TrackView.cpp
+    lib/core/ListView.cpp
+    lib/core/ListStore.cpp
+    lib/core/ListBuilder.cpp
+    lib/expr/ExecutionPlan.cpp
+    lib/expr/PlanEvaluator.cpp
+    lib/expr/Expression.cpp
+    lib/expr/Parser.cpp
+    lib/expr/Serializer.cpp
+    lib/tag/File.cpp
+    lib/tag/Open.cpp
+    lib/tag/flac/File.cpp
+    lib/tag/flac/MetadataBlock.cpp
+    lib/tag/mp4/File.cpp
+    lib/tag/mp4/Atom.cpp
+    lib/tag/mpeg/File.cpp
+    lib/tag/mpeg/Frame.cpp
+    lib/tag/mpeg/id3v2/Reader.cpp
     "${FLAC_VORBIS_DISPATCH_HEADER}"
     "${MP4_ATOM_DISPATCH_HEADER}"
     "${EXPR_property_dispatch_HEADER}"
@@ -234,7 +235,7 @@ add_executable(rsc
     tool/TagCommand.cpp
     tool/TrackCommand.cpp
 )
-target_link_libraries(rsc PRIVATE rs Boost::program_options)
+target_link_libraries(rsc PRIVATE rs CLI11::CLI11)
 if(CLANG_TIDY_EXECUTABLE)
   set_target_properties(rsc PROPERTIES
     CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_STRICT_CHECKS};-header-filter=${CLANG_TIDY_STRICT_FILTER};${CLANG_TIDY_EXTRA_ARGS}"

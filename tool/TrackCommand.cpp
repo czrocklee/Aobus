@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "TrackCommand.h"
-#include "BasicCommand.h"
 #include <rs/core/TrackLayout.h>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
@@ -11,184 +10,195 @@
 
 #include <filesystem>
 #include <iomanip>
+#include <iostream>
 
-namespace
+namespace rs::tool
 {
-  namespace bpo = boost::program_options;
-  using namespace rs;
-
-  std::vector<std::pair<core::TrackId, core::TrackView>> collectTracks(
-      core::MusicLibrary& ml, std::string const& filter)
+  namespace
   {
-    auto txn = ml.readTransaction();
-    auto reader = ml.tracks().reader(txn);
-    auto matches = std::vector<std::pair<core::TrackId, core::TrackView>>{};
+    using namespace rs;
 
-    if (filter.empty())
+    std::vector<std::pair<core::TrackId, core::TrackView>> collectTracks(
+        core::MusicLibrary& ml, std::string const& filter)
     {
-      for (auto [id, view] : reader) { matches.emplace_back(id, std::move(view)); }
+      auto txn = ml.readTransaction();
+      auto reader = ml.tracks().reader(txn);
+      auto matches = std::vector<std::pair<core::TrackId, core::TrackView>>{};
+
+      if (filter.empty())
+      {
+        for (auto [id, view] : reader) { matches.emplace_back(id, std::move(view)); }
+        return matches;
+      }
+
+      auto expr = rs::expr::parse(filter);
+      auto compiler = rs::expr::QueryCompiler{&ml.dictionary()};
+      auto plan = compiler.compile(expr);
+      auto evaluator = rs::expr::PlanEvaluator{};
+
+      for (auto [id, view] : reader)
+      {
+        if (evaluator.matches(plan, view)) { matches.emplace_back(id, std::move(view)); }
+      }
       return matches;
     }
 
-    auto expr = rs::expr::parse(filter);
-    auto compiler = rs::expr::QueryCompiler{&ml.dictionary()};
-    auto plan = compiler.compile(expr);
-    auto evaluator = rs::expr::PlanEvaluator{};
-
-    for (auto [id, view] : reader)
+    void formatJson(std::vector<std::pair<core::TrackId, core::TrackView>> const& matches,
+                    std::size_t offset,
+                    std::size_t limit,
+                    core::MusicLibrary& ml,
+                    std::ostream& os)
     {
-      if (evaluator.matches(plan, view)) { matches.emplace_back(id, std::move(view)); }
-    }
-    return matches;
-  }
-
-  void formatJson(std::vector<std::pair<core::TrackId, core::TrackView>> const& matches,
-                  std::size_t offset,
-                  std::size_t limit,
-                  core::MusicLibrary& ml,
-                  std::ostream& os)
-  {
-    if (offset >= matches.size())
-    {
-      os << "[]\n";
-      return;
-    }
-
-    std::size_t end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
-    os << "[\n";
-
-    for (std::size_t i = offset; i < end; ++i)
-    {
-      auto const& [id, view] = matches[i];
-      os << "  {\"id\": " << id << ", \"title\": \"" << view.metadata().title() << "\"";
-      if (view.metadata().artistId() > 0)
+      if (offset >= matches.size())
       {
-        os << ", \"artist\": \"" << ml.dictionary().get(view.metadata().artistId()) << "\"";
+        os << "[]\n";
+        return;
       }
-      if (view.metadata().albumId() > 0)
+
+      std::size_t end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
+      os << "[\n";
+
+      for (std::size_t i = offset; i < end; ++i)
       {
-        os << ", \"album\": \"" << ml.dictionary().get(view.metadata().albumId()) << "\"";
+        auto const& [id, view] = matches[i];
+        os << "  {\"id\": " << id << ", \"title\": \"" << view.metadata().title() << "\"";
+        
+        if (view.metadata().artistId() > 0)
+        {
+          os << ", \"artist\": \"" << ml.dictionary().get(view.metadata().artistId()) << "\"";
+        }
+        
+        if (view.metadata().albumId() > 0)
+        {
+          os << ", \"album\": \"" << ml.dictionary().get(view.metadata().albumId()) << "\"";
+        }
+        
+        os << "}";
+        
+        if (i < end - 1) { os << ","; }
+        
+        os << "\n";
       }
-      os << "}";
-      if (i < end - 1) { os << ","; }
-      os << "\n";
+
+      os << "]\n";
     }
 
-    os << "]\n";
-  }
-
-  void formatPlain(std::vector<std::pair<core::TrackId, core::TrackView>> const& matches,
-                   std::size_t offset,
-                   std::size_t limit,
-                   std::ostream& os)
-  {
-    if (offset >= matches.size()) { return; }
-
-    std::size_t end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
-
-    for (std::size_t i = offset; i < end; ++i)
+    void formatPlain(std::vector<std::pair<core::TrackId, core::TrackView>> const& matches,
+                     std::size_t offset,
+                     std::size_t limit,
+                     std::ostream& os)
     {
-      auto const& [id, view] = matches[i];
-      os << std::setw(5) << id << " " << view.metadata().title()
-         << '\n'; // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
-    }
+      if (offset >= matches.size()) { return; }
 
-    if (limit > 0 && offset + limit < matches.size())
-    {
-      os << "... (" << (matches.size() - offset - limit) << " more)\n";
-    }
-  }
+      std::size_t end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
 
-  void show(core::MusicLibrary& ml,
-            std::string const& filter,
-            bool json,
-            std::size_t limit,
-            std::size_t offset,
-            std::ostream& os)
-  {
-    auto matches = collectTracks(ml, filter);
-
-    if (json)
-    {
-      formatJson(matches, offset, limit, ml, os);
-    }
-    else
-    {
-      formatPlain(matches, offset, limit, os);
-    }
-  }
-
-  void createTrack(core::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
-  {
-    auto tagFile = tag::File::open(path);
-    if (!tagFile)
-    {
-      os << "unsupported file format: " << path << '\n';
-      return;
-    }
-
-    auto txn = ml.writeTransaction();
-    auto writer = ml.tracks().writer(txn);
-    auto builder = tagFile->loadTrack();
-    builder.property()
-      .uri(path.string())
-      .fileSize(std::filesystem::file_size(path))
-      .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
-
-    auto [preparedHot, preparedCold] = builder.prepare(txn, ml.dictionary(), ml.resources());
-    auto [id, trackView] = writer.createHotCold(
-        preparedHot.size(),
-        preparedCold.size(),
-        [&preparedHot, &preparedCold](core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
-            preparedHot.writeTo(hot);
-            preparedCold.writeTo(cold);
-        });
-    txn.commit();
-
-    os << "add track: " << id << " " << trackView.metadata().title() << '\n';
-  }
-}
-
-TrackCommand::TrackCommand(core::MusicLibrary& ml)
-  : _ml{ml}
-{
-  addCommand<BasicCommand>("show")
-    .addOption("filter,f", bpo::value<std::string>()->default_value(""), "track filter expression", 1)
-    .addOption("json,j", "output as JSON")
-    .addOption("limit,l", bpo::value<std::size_t>()->default_value(0), "limit number of results (0 = all)")
-    .addOption("offset,o", bpo::value<std::size_t>()->default_value(0), "offset results")
-    .setExecutor([this](auto const& vm, auto& os) {
-      return show(_ml,
-                  vm["filter"].template as<std::string>(),
-                  vm.count("json") > 0,
-                  vm["limit"].template as<std::size_t>(),
-                  vm["offset"].template as<std::size_t>(),
-                  os);
-    });
-
-  addCommand<BasicCommand>("create")
-    .addOption("path", bpo::value<std::string>()->required(), "audio file path", 1)
-    .setExecutor([this](auto const& vm, auto& os) {
-      auto path = vm["path"].template as<std::string>();
-      createTrack(_ml, path, os);
-      return "";
-    });
-
-  addCommand<BasicCommand>("delete")
-    .addOption("id", bpo::value<std::uint32_t>()->required(), "track id", 1)
-    .setExecutor([this](auto const& vm, auto& os) {
-      auto id = core::TrackId{vm["id"].template as<std::uint32_t>()};
-      auto txn = _ml.writeTransaction();
-      auto writer = _ml.tracks().writer(txn);
-      if (writer.remove(id))
+      for (std::size_t i = offset; i < end; ++i)
       {
-        os << "deleted track: " << id << '\n';
-        txn.commit();
+        auto const& [id, view] = matches[i];
+        os << std::setw(5) << id << " " << view.metadata().title()
+           << '\n'; // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+      }
+
+      if (limit > 0 && offset + limit < matches.size())
+      {
+        os << "... (" << (matches.size() - offset - limit) << " more)\n";
+      }
+    }
+
+    void show(core::MusicLibrary& ml,
+              std::string const& filter,
+              bool json,
+              std::size_t limit,
+              std::size_t offset,
+              std::ostream& os)
+    {
+      auto matches = collectTracks(ml, filter);
+
+      if (json)
+      {
+        formatJson(matches, offset, limit, ml, os);
       }
       else
       {
-        os << "track not found: " << id << '\n';
+        formatPlain(matches, offset, limit, os);
       }
-      return "";
-    });
+    }
+
+    void createTrack(core::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
+    {
+      auto tagFile = tag::File::open(path);
+      
+      if (!tagFile)
+      {
+        os << "unsupported file format: " << path << '\n';
+        return;
+      }
+
+      auto txn = ml.writeTransaction();
+      auto writer = ml.tracks().writer(txn);
+      auto builder = tagFile->loadTrack();
+      builder.property()
+        .uri(path.string())
+        .fileSize(std::filesystem::file_size(path))
+        .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
+
+      auto [preparedHot, preparedCold] = builder.prepare(txn, ml.dictionary(), ml.resources());
+      auto [id, trackView] = writer.createHotCold(
+          preparedHot.size(),
+          preparedCold.size(),
+          [&preparedHot, &preparedCold](core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
+              preparedHot.writeTo(hot);
+              preparedCold.writeTo(cold);
+          });
+      txn.commit();
+
+      os << "add track: " << id << " " << trackView.metadata().title() << '\n';
+    }
+  }
+
+  void setupTrackCommand(CLI::App& app, core::MusicLibrary& ml)
+  {
+    auto* track = app.add_subcommand("track", "Track management commands");
+
+    auto* showCmd = track->add_subcommand("show", "Show tracks matching a filter");
+    auto* filter = showCmd->add_option("filter,-f,--filter", "track filter expression");
+    auto* json = showCmd->add_flag("-j,--json", "output as JSON");
+    auto* limit = showCmd->add_option("-l,--limit", "limit number of results (0 = all)")->default_val(0);
+    auto* offset = showCmd->add_option("-o,--offset", "offset results")->default_val(0);
+    showCmd->callback(
+      [&ml, filter, json, limit, offset]()
+      {
+        show(ml,
+             filter->as<std::string>(),
+             json->count() > 0,
+             limit->as<std::size_t>(),
+             offset->as<std::size_t>(),
+             std::cout);
+      });
+
+    auto* create = track->add_subcommand("create", "Create a track from a file");
+    auto* path = create->add_option("path", "audio file path")->required();
+    create->callback([&ml, path]() { createTrack(ml, path->as<std::string>(), std::cout); });
+
+    auto* del = track->add_subcommand("delete", "Delete a track by id");
+    auto* id = del->add_option("id", "track id")->required();
+    del->callback(
+      [&ml, id]()
+      {
+        auto txn = ml.writeTransaction();
+        auto writer = ml.tracks().writer(txn);
+        auto const trackId = core::TrackId{id->as<std::uint32_t>()};
+        
+        if (writer.remove(trackId))
+        {
+          std::cout << "deleted track: " << trackId << '\n';
+          txn.commit();
+        }
+        else
+        {
+          std::cout << "track not found: " << trackId << '\n';
+        }
+      
+      });
+  }
 }

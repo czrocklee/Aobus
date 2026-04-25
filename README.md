@@ -24,9 +24,13 @@ C++23 music library application with LMDB storage.
 ## Static Analysis
 
 ```bash
-clang-tidy -checks='-*,modernize-*,performance-*,readability-*' src/**/*.cpp
+clang-tidy -checks='-*,modernize-*,performance-*,readability-*' lib/**/*.cpp
 ```
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for code style guidelines.
+
+## AI Agents
+
+If you are an AI agent working on this project, please read [AGENTS.md](AGENTS.md) for environment setup and working rules.

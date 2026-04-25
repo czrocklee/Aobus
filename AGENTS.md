@@ -7,10 +7,10 @@ Guidance for AI agents working in the RockStudio repository.
 RockStudio is a C++23 music library application with a GTK4 (gtkmm) desktop frontend and a CLI tool, sharing a robust core library.
 
 - **Core Library (`rs`):**
-  - Logic & Data Structures: `include/rs/**`, `src/core/**`.
-  - Expression Engine: `include/rs/expr/**`, `src/expr/**` (uses `gperf` for dispatch).
-  - Tag Parsing: `src/tag/**` (FLAC, MP4, MPEG support).
-  - Database: LMDB wrappers in `include/rs/lmdb/**`, `src/lmdb/**`.
+  - Logic & Data Structures: `include/rs/**`, `lib/core/**`.
+  - Expression Engine: `include/rs/expr/**`, `lib/expr/**` (uses `gperf` for dispatch).
+  - Tag Parsing: `lib/tag/**` (FLAC, MP4, MPEG support).
+  - Database: LMDB wrappers in `include/rs/lmdb/**`, `lib/lmdb/**`.
   - Reactive Patterns: `include/rs/reactive/**`.
 - **Desktop Application (`app`):**
   - Shared App Logic: `app/core/**`.
@@ -32,11 +32,12 @@ Key dependencies: `gtkmm-4.0`, `lmdb`, `boost`, `ffmpeg`, `pipewire`, `alsa`, `g
 
 ## Working Rules
 
-1. **Small Changes:** Make the smallest correct change that solves the request.
-2. **Focus:** Do not rewrite unrelated files or refactor broadly unless explicitly directed.
-3. **Style:** Rigorously adhere to existing coding style (e.g., C++23 features, naming conventions).
+1. **Correctness & Architecture:** Provide the most correct and architecturally sound solution. Avoid workarounds or "quick fixes" that compromise long-term maintainability.
+2. **Focus:** Do not rewrite unrelated files or refactor broadly unless explicitly directed. However, proactively advise on better architectural alternatives or improvements if you identify them during your research.
+3. **Source of Truth:** Rigorously adhere to [CONTRIBUTING.md](CONTRIBUTING.md) for all C++ coding standards, including naming, member ordering, and modern features.
 4. **Search:** Use `rg` for searching. Prefer narrow scopes when possible.
 5. **Assumptions:** State any technical assumptions clearly in your response.
+6. **Btrfs Snapshots:** Create a snapshot before multi-file or cross-module edits (see Safety Net below).
 
 ## Build And Validation
 
@@ -62,13 +63,13 @@ Always run tests after modifying core logic or the expression engine.
 
 ## Generated Code Notes
 
-- **Gperf:** The expression engine (`src/expr/`) uses `.gperf` files to generate perfect hash tables for metadata, property, and unit dispatching. CMake handles regeneration automatically.
+- **Gperf:** The expression engine (`lib/expr/`) uses `.gperf` files to generate perfect hash tables for metadata, property, and unit dispatching. CMake handles regeneration automatically.
 
 ## Editing Guidance
 
 1. **Architecture:** Keep business logic in the `rs` core. Application-specific state and UI logic should reside in `app/core` or `app/platform`.
-2. **Expression Engine:** When modifying the parser or evaluator, ensure `src/expr` and `include/rs/expr` stay in sync.
-3. **Tagging:** Keep format-specific code constrained to `src/tag/{flac,mp4,mpeg}`.
+2. **Expression Engine:** When modifying the parser or evaluator, ensure `lib/expr` and `include/rs/expr` stay in sync.
+3. **Tagging:** Keep format-specific code constrained to `lib/tag/{flac,mp4,mpeg}`.
 4. **UI:** The Linux frontend uses GTK4 via `gtkmm-4.0`. Avoid mixing UI frameworks or platform-specific code outside of `app/platform`.
 5. **Headers:** Avoid changing public headers in `include/rs/**` unless necessary for the feature or fix.
 
