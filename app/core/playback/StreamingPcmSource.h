@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "core/playback/FfmpegDecoderSession.h"
+#include "core/playback/AudioDecoderSession.h"
 #include "core/playback/IPcmSource.h"
 #include "core/playback/PcmRingBuffer.h"
 
@@ -20,7 +20,7 @@ namespace app::core::playback
   class StreamingPcmSource final : public IPcmSource
   {
   public:
-    StreamingPcmSource(FfmpegDecoderSession decoder,
+    StreamingPcmSource(std::unique_ptr<IAudioDecoderSession> decoder,
                        DecodedStreamInfo streamInfo,
                        PcmSourceCallbacks callbacks,
                        std::uint32_t prerollTargetMs,
@@ -45,7 +45,7 @@ namespace app::core::playback
     void fail(std::string message);
     void clearError();
 
-    FfmpegDecoderSession _decoder;
+    std::unique_ptr<IAudioDecoderSession> _decoder;
     DecodedStreamInfo _streamInfo;
     PcmSourceCallbacks _callbacks;
     PcmRingBuffer _ringBuffer;

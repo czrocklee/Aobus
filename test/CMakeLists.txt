@@ -22,6 +22,7 @@ add_executable(rs_test
     unit/app/TrackRowDataProviderTest.cpp
     unit/app/TrackListAdapterTest.cpp
     unit/app/SmartListEngineTest.cpp
+    "${CMAKE_SOURCE_DIR}/app/core/playback/AudioDecoderSession.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/Log.cpp"
     "${CMAKE_SOURCE_DIR}/app/platform/linux/ui/TrackPresentation.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/model/FilteredTrackIdList.cpp"

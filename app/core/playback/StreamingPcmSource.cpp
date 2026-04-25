@@ -32,7 +32,7 @@ namespace
 namespace app::core::playback
 {
 
-  StreamingPcmSource::StreamingPcmSource(FfmpegDecoderSession decoder,
+  StreamingPcmSource::StreamingPcmSource(std::unique_ptr<IAudioDecoderSession> decoder,
                                          DecodedStreamInfo streamInfo,
                                          PcmSourceCallbacks callbacks,
                                          std::uint32_t prerollTargetMs,
@@ -53,7 +53,7 @@ namespace app::core::playback
 
   bool StreamingPcmSource::initialize()
   {
-    
+
     if (auto const generation = _generation.load(std::memory_order_relaxed); !fillUntil(_prerollTargetMs, generation))
     {
       return false;
@@ -93,10 +93,10 @@ namespace app::core::playback
 
     {
       auto lock = std::lock_guard<std::mutex>{_decoderMutex};
-      
-      if (!_decoder.seek(positionMs))
+
+      if (!_decoder->seek(positionMs))
       {
-        fail(std::string(_decoder.lastError()));
+        fail(std::string(_decoder->lastError()));
         return false;
       }
     }
@@ -138,7 +138,7 @@ namespace app::core::playback
   void StreamingPcmSource::decodeLoop(std::stop_token stopToken)
   {
     auto const generation = _generation.load(std::memory_order_relaxed);
-    
+
     while (!stopToken.stop_requested() && !_failed.load(std::memory_order_relaxed) &&
            !_decoderReachedEof.load(std::memory_order_relaxed) &&
            _generation.load(std::memory_order_relaxed) == generation)
@@ -176,17 +176,17 @@ namespace app::core::playback
     std::string errorText;
     {
       auto lock = std::lock_guard<std::mutex>{_decoderMutex};
-      
+
       if (_generation.load(std::memory_order_relaxed) != generation)
       {
         return false;
       }
 
-      block = _decoder.readNextBlock();
-      
+      block = _decoder->readNextBlock();
+
       if (!block)
       {
-        errorText = std::string(_decoder.lastError());
+        errorText = std::string(_decoder->lastError());
       }
     }
 
@@ -213,7 +213,7 @@ namespace app::core::playback
 
     auto* current = bytes.data();
     auto remaining = bytes.size();
-    
+
     while (remaining > 0 && !stopRequested() && _generation.load(std::memory_order_relaxed) == generation)
     {
       auto const written = _ringBuffer.write(std::span<std::byte const>(current, remaining));

@@ -26,6 +26,7 @@ add_executable(RockStudio
     platform/linux/ui/PlaybackBar.cpp
     core/playback/PlaybackController.cpp
     core/playback/PlaybackEngine.cpp
+    core/playback/AudioDecoderSession.cpp
     core/playback/MemoryPcmSource.cpp
     core/playback/PcmRingBuffer.cpp
     core/playback/StreamingPcmSource.cpp
