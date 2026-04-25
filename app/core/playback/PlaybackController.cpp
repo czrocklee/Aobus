@@ -29,6 +29,11 @@ namespace app::core::playback
     _engine->play(descriptor);
   }
 
+  void PlaybackController::setBackend(std::unique_ptr<IAudioBackend> backend)
+  {
+    _engine->setBackend(std::move(backend));
+  }
+
   void PlaybackController::pause()
   {
     _engine->pause();

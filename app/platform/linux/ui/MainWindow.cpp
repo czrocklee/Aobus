@@ -18,6 +18,8 @@
 #include "core/model/ManualTrackIdList.h"
 #include "core/model/TrackIdList.h"
 #include "core/playback/PlaybackController.h"
+#include "platform/linux/playback/AlsaExclusiveBackend.h"
+#include "platform/linux/playback/PipeWireBackend.h"
 #include "platform/linux/services/PlaylistExporter.h"
 #include "platform/linux/ui/CoverArtWidget.h"
 #include "platform/linux/ui/ImportProgressDialog.h"
@@ -1120,6 +1122,7 @@ namespace app::ui
     // Status bar at bottom
     _statusBar = std::make_unique<StatusBar>();
     _statusBar->signalNowPlayingClicked().connect(sigc::mem_fun(*this, &MainWindow::jumpToPlayingList));
+    _statusBar->signalBackendChanged().connect(sigc::mem_fun(*this, &MainWindow::onBackendChanged));
 
     auto* statusSeparator = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
     mainBox->append(*statusSeparator);
@@ -2326,6 +2329,31 @@ namespace app::ui
     if (auto const it = _trackPages.find(listId); it != _trackPages.end())
     {
       it->second.page->selectTrack(trackId);
+    }
+  }
+
+  void MainWindow::onBackendChanged(app::core::playback::BackendKind kind)
+  {
+    if (!_playbackController) return;
+
+    std::unique_ptr<app::core::playback::IAudioBackend> backend;
+
+    switch (kind)
+    {
+    case app::core::playback::BackendKind::PipeWire:
+      backend = std::make_unique<app::playback::PipeWireBackend>();
+      break;
+    case app::core::playback::BackendKind::AlsaExclusive:
+      backend = std::make_unique<app::playback::AlsaExclusiveBackend>("default");
+      break;
+    default:
+      break;
+    }
+
+    if (backend)
+    {
+      _playbackController->setBackend(std::move(backend));
+      _statusBar->showMessage("Switched backend to " + std::string(kind == app::core::playback::BackendKind::PipeWire ? "PipeWire" : "ALSA Exclusive"));
     }
   }
 

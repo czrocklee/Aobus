@@ -22,6 +22,8 @@ namespace app::core::playback
     explicit PlaybackEngine(std::unique_ptr<IAudioBackend> backend);
     ~PlaybackEngine();
 
+    void setBackend(std::unique_ptr<IAudioBackend> backend);
+
     void play(TrackPlaybackDescriptor descriptor);
     void pause();
     void resume();

@@ -30,6 +30,9 @@ nix-shell
 
 Key dependencies: `gtkmm-4.0`, `lmdb`, `boost`, `ffmpeg`, `pipewire`, `alsa`, `gperf`, `spdlog`, `catch2`.
 
+> [!TIP]
+> External library headers (e.g., PipeWire, SPA, or GTK) are located in the Nix store. You can find the exact paths by checking the build configuration or exploring the `/nix/store` directory.
+
 ## Working Rules
 
 1. **Correctness & Architecture:** Provide the most correct and architecturally sound solution. Avoid workarounds or "quick fixes" that compromise long-term maintainability.

@@ -51,7 +51,7 @@ namespace
   class SpaHookGuard final
   {
   public:
-    SpaHookGuard() noexcept = default;
+    SpaHookGuard() noexcept { std::memset(&_hook, 0, sizeof(_hook)); }
     ~SpaHookGuard() { reset(); }
 
     SpaHookGuard(SpaHookGuard const&) = delete;
@@ -61,14 +61,20 @@ namespace
 
     void reset() noexcept
     {
-      ::spa_hook_remove(&_hook);
-      _hook = {};
+      // A hook is "set" if its link is part of a list.
+      // In SPA, an uninitialized or removed link has next = NULL or points to itself depending on init style.
+      // We use memset(0) so next == NULL means not set.
+      if (_hook.link.next != nullptr)
+      {
+        ::spa_hook_remove(&_hook);
+      }
+      std::memset(&_hook, 0, sizeof(_hook));
     }
 
     ::spa_hook* get() noexcept { return &_hook; }
 
   private:
-    ::spa_hook _hook = {};
+    ::spa_hook _hook;
   };
 
   struct NodeRecord final
@@ -329,8 +335,8 @@ namespace app::playback
       void reset()
       {
         id = PW_ID_ANY;
-        proxy.reset();
         listener.reset();
+        proxy.reset();
       }
     };
 
@@ -343,8 +349,8 @@ namespace app::playback
       void reset()
       {
         id = PW_ID_ANY;
-        proxy.reset();
         listener.reset();
+        proxy.reset();
       }
     };
 
@@ -364,12 +370,16 @@ namespace app::playback
     {
       auto const lock = std::lock_guard<std::mutex>{_mutex};
       _refreshEvent.reset();
-      _registry.reset();
-      _registryListener.reset();
-      _coreListener.reset();
+      
       _linkBindings.clear();
       _sinkNodeBinding.reset();
       _streamNodeBinding.reset();
+
+      _registryListener.reset();
+      _registry.reset();
+
+      _coreListener.reset();
+
       _nodes.clear();
       _links.clear();
     }
@@ -930,9 +940,21 @@ namespace app::playback
     {
       _drainPending = false;
       if (_threadLoop) ::pw_thread_loop_lock(_threadLoop.get());
-      if (_monitor) _monitor->stop();
+      
+      if (_monitor)
+      {
+        _monitor->stop();
+        _monitor.reset();
+      }
+
       _stream.reset();
-      if (_threadLoop) { ::pw_thread_loop_unlock(_threadLoop.get()); ::pw_thread_loop_stop(_threadLoop.get()); }
+      
+      if (_threadLoop)
+      {
+        ::pw_thread_loop_unlock(_threadLoop.get());
+        ::pw_thread_loop_stop(_threadLoop.get());
+      }
+
       _context.reset();
       _threadLoop.reset();
     }
