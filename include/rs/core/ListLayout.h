@@ -9,8 +9,6 @@
 
 namespace rs::core
 {
-  constexpr std::uint16_t kListLayoutVersion = 1;
-
   /**
    * ListHeader - POD struct for binary list storage.
    * Layout follows TrackLayout pattern with 4-byte alignment.

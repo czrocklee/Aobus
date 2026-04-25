@@ -4,8 +4,6 @@
 #include <rs/core/MusicLibrary.h>
 
 #include <rs/Exception.h>
-#include <rs/core/ListLayout.h>
-#include <rs/core/TrackLayout.h>
 
 #include <algorithm>
 #include <chrono>
@@ -36,10 +34,7 @@ namespace
   {
     auto const timestamp = nowUnixMs();
     return rs::core::LibraryMetaHeader{.magic = rs::core::kLibraryMetaMagic,
-                                       .headerVersion = rs::core::kLibraryMetaHeaderVersion,
-                                       .librarySchemaVersion = rs::core::kLibrarySchemaVersion,
-                                       .trackLayoutVersion = rs::core::kTrackLayoutVersion,
-                                       .listLayoutVersion = rs::core::kListLayoutVersion,
+                                       .libraryVersion = rs::core::kLibraryVersion,
                                        .flags = 0,
                                        .createdAtUnixMs = timestamp,
                                        .migratedAtUnixMs = timestamp,
@@ -56,36 +51,20 @@ namespace
                       rs::core::kLibraryMetaMagic);
     }
 
-    if (header.headerVersion != rs::core::kLibraryMetaHeaderVersion)
+    if (header.libraryVersion > rs::core::kLibraryVersion)
     {
       RS_THROW_FORMAT(rs::Exception,
-                      "Unsupported library metadata header version {} (expected {})",
-                      header.headerVersion,
-                      rs::core::kLibraryMetaHeaderVersion);
+                      "Unsupported library version {} (maximum supported {})",
+                      header.libraryVersion,
+                      rs::core::kLibraryVersion);
     }
 
-    if (header.librarySchemaVersion != rs::core::kLibrarySchemaVersion)
+    if (header.libraryVersion < rs::core::kLibraryVersion)
     {
       RS_THROW_FORMAT(rs::Exception,
-                      "Unsupported library schema version {} (expected {})",
-                      header.librarySchemaVersion,
-                      rs::core::kLibrarySchemaVersion);
-    }
-
-    if (header.trackLayoutVersion != rs::core::kTrackLayoutVersion)
-    {
-      RS_THROW_FORMAT(rs::Exception,
-                      "Unsupported track layout version {} (expected {})",
-                      header.trackLayoutVersion,
-                      rs::core::kTrackLayoutVersion);
-    }
-
-    if (header.listLayoutVersion != rs::core::kListLayoutVersion)
-    {
-      RS_THROW_FORMAT(rs::Exception,
-                      "Unsupported list layout version {} (expected {})",
-                      header.listLayoutVersion,
-                      rs::core::kListLayoutVersion);
+                      "Library version {} requires migration to version {}",
+                      header.libraryVersion,
+                      rs::core::kLibraryVersion);
     }
   }
 }
