@@ -5,21 +5,22 @@
 
 #include "core/playback/IAudioBackend.h"
 
+extern "C"
+{
+#include <pipewire/core.h>
+#include <pipewire/keys.h>
+#include <pipewire/link.h>
+#include <pipewire/node.h>
+#include <pipewire/pipewire.h>
+#include <pipewire/proxy.h>
+#include <spa/support/loop.h>
+#include <spa/utils/hook.h>
+}
+
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
-
-struct pw_context;
-struct pw_link_info;
-struct pw_node_info;
-struct pw_registry;
-struct pw_stream_events;
-struct pw_stream;
-struct pw_thread_loop;
-struct spa_dict;
-struct spa_pod;
-struct spa_source;
 
 namespace app::playback
 {
@@ -85,13 +86,45 @@ namespace app::playback
     void handleSinkNodeParam(std::uint32_t id, spa_pod const* param);
 
   private:
-    struct RegistryMonitorState;
+    // RAII Deleters
+    struct PwThreadLoopDeleter final { void operator()(::pw_thread_loop* p) const noexcept; };
+    struct PwContextDeleter final { void operator()(::pw_context* p) const noexcept; };
+    struct PwStreamDeleter final { void operator()(::pw_stream* p) const noexcept; };
+    struct PwProxyDeleter final { void operator()(void* p) const noexcept; };
 
-    void destroyResources() noexcept;
-    void setError(std::string message);
-    void ensureRegistryMonitor();
-    void refreshMonitorState();
-    void triggerRefresh();
+    // Smart Pointers
+    using PwThreadLoopPtr = std::unique_ptr<::pw_thread_loop, PwThreadLoopDeleter>;
+    using PwContextPtr = std::unique_ptr<::pw_context, PwContextDeleter>;
+    using PwStreamPtr = std::unique_ptr<::pw_stream, PwStreamDeleter>;
+
+    template <typename T>
+    using PwProxyPtr = std::unique_ptr<T, PwProxyDeleter>;
+
+    using PwLinkPtr = PwProxyPtr<::pw_link>;
+    using PwNodePtr = PwProxyPtr<::pw_node>;
+    using PwRegistryPtr = PwProxyPtr<::pw_registry>;
+
+    // Hook Management
+    class SpaHookGuard final
+    {
+    public:
+      SpaHookGuard() noexcept = default;
+      ~SpaHookGuard() { reset(); }
+
+      // Registered hooks are linked-list nodes; relocation is fatal.
+      SpaHookGuard(SpaHookGuard const&) = delete;
+      SpaHookGuard& operator=(SpaHookGuard const&) = delete;
+      SpaHookGuard(SpaHookGuard&&) = delete;
+      SpaHookGuard& operator=(SpaHookGuard&&) = delete;
+
+      void reset() noexcept;
+      ::spa_hook* get() noexcept { return &_hook; }
+
+    private:
+      ::spa_hook _hook = {};
+    };
+
+    struct RegistryMonitorState;
 
     struct LastLoggedState final
     {
@@ -103,18 +136,26 @@ namespace app::playback
       bool operator==(LastLoggedState const&) const = default;
     };
 
+    void destroyResources() noexcept;
+    void setError(std::string message);
+    void ensureRegistryMonitor();
+    void refreshMonitorState();
+    void triggerRefresh();
+
     app::core::playback::AudioRenderCallbacks _callbacks;
     app::core::playback::StreamFormat _format;
-    pw_thread_loop* _threadLoop = nullptr;
-    pw_context* _context = nullptr;
-    pw_stream* _stream = nullptr;
-    spa_source* _refreshEvent = nullptr;
     bool _drainPending = false;
     mutable std::mutex _infoMutex;
     std::unique_ptr<RegistryMonitorState> _monitorState;
     app::core::playback::BackendFormatInfo _formatInfo;
     LastLoggedState _lastLoggedState;
     std::string _lastError;
+
+    // RAII-wrapped PipeWire handles - ordered for correct destruction
+    PwThreadLoopPtr _threadLoop;
+    PwContextPtr _context;
+    PwStreamPtr _stream;
+    ::spa_source* _refreshEvent = nullptr;
   };
 
 } // namespace app::playback

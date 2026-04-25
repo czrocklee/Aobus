@@ -36,28 +36,25 @@ namespace app::playback
     _formatInfo = {};
     _lastError.clear();
 
-    std::int32_t err;
-    snd_pcm_t* pcm = nullptr;
+    ::snd_pcm_t* pcm = nullptr;
 
     // Open PCM device
-    err = ::snd_pcm_open(&pcm, _deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
+    auto const openErr = ::snd_pcm_open(&pcm, _deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
     
-    if (err < 0)
+    if (openErr < 0)
     {
       _lastError = "Failed to open ALSA device: " + _deviceName;
       PLAYBACK_LOG_ERROR("{}", _lastError);
       return false;
     }
 
-    _pcm = pcm;
+    _pcm.reset(pcm);
 
     // Set hardware parameters
-    snd_pcm_hw_params_t* params = nullptr;
+    ::snd_pcm_hw_params_t* params = nullptr;
     snd_pcm_hw_params_alloca(&params);
 
-    err = ::snd_pcm_hw_params_any(_pcm, params);
-    
-    if (err < 0)
+    if (auto const err = ::snd_pcm_hw_params_any(_pcm.get(), params); err < 0)
     {
       _lastError = "Failed to initialize ALSA hardware parameters";
       PLAYBACK_LOG_ERROR("{}", _lastError);
@@ -66,9 +63,7 @@ namespace app::playback
     }
 
     // Set interleaved access
-    err = ::snd_pcm_hw_params_set_access(_pcm, params, SND_PCM_ACCESS_RW_INTERLEAVED);
-    
-    if (err < 0)
+    if (auto const err = ::snd_pcm_hw_params_set_access(_pcm.get(), params, SND_PCM_ACCESS_RW_INTERLEAVED); err < 0)
     {
       _lastError = "Failed to set ALSA access mode";
       PLAYBACK_LOG_ERROR("{}", _lastError);
@@ -77,10 +72,8 @@ namespace app::playback
     }
 
     // Set sample format (S16)
-    snd_pcm_format_t formatMask = SND_PCM_FORMAT_S16;
-    err = ::snd_pcm_hw_params_set_format(_pcm, params, formatMask);
-    
-    if (err < 0)
+    auto const formatMask = ::SND_PCM_FORMAT_S16;
+    if (auto const err = ::snd_pcm_hw_params_set_format(_pcm.get(), params, formatMask); err < 0)
     {
       _lastError = "Failed to set ALSA sample format";
       PLAYBACK_LOG_ERROR("{}", _lastError);
@@ -89,9 +82,7 @@ namespace app::playback
     }
 
     // Set sample rate
-    err = ::snd_pcm_hw_params_set_rate(_pcm, params, format.sampleRate, 0);
-    
-    if (err < 0)
+    if (auto const err = ::snd_pcm_hw_params_set_rate(_pcm.get(), params, format.sampleRate, 0); err < 0)
     {
       _lastError = "Failed to set ALSA sample rate";
       PLAYBACK_LOG_ERROR("{}", _lastError);
@@ -100,9 +91,7 @@ namespace app::playback
     }
 
     // Set channel count
-    err = ::snd_pcm_hw_params_set_channels(_pcm, params, format.channels);
-    
-    if (err < 0)
+    if (auto const err = ::snd_pcm_hw_params_set_channels(_pcm.get(), params, format.channels); err < 0)
     {
       _lastError = "Failed to set ALSA channel count";
       PLAYBACK_LOG_ERROR("{}", _lastError);
@@ -111,9 +100,7 @@ namespace app::playback
     }
 
     // Apply hardware parameters
-    err = ::snd_pcm_hw_params(_pcm, params);
-    
-    if (err < 0)
+    if (auto const err = ::snd_pcm_hw_params(_pcm.get(), params); err < 0)
     {
       _lastError = "Failed to apply ALSA hardware parameters";
       PLAYBACK_LOG_ERROR("{}", _lastError);
@@ -152,7 +139,7 @@ namespace app::playback
       return;
     }
     
-    ::snd_pcm_start(_pcm);
+    ::snd_pcm_start(_pcm.get());
   }
 
   void AlsaExclusiveBackend::pause()
@@ -162,7 +149,7 @@ namespace app::playback
       return;
     }
     
-    ::snd_pcm_pause(_pcm, 1);
+    ::snd_pcm_pause(_pcm.get(), 1);
   }
 
   void AlsaExclusiveBackend::resume()
@@ -172,7 +159,7 @@ namespace app::playback
       return;
     }
     
-    ::snd_pcm_pause(_pcm, 0);
+    ::snd_pcm_pause(_pcm.get(), 0);
   }
 
   void AlsaExclusiveBackend::flush()
@@ -182,7 +169,7 @@ namespace app::playback
       return;
     }
     
-    ::snd_pcm_drop(_pcm);
+    ::snd_pcm_drop(_pcm.get());
   }
 
   void AlsaExclusiveBackend::drain()
@@ -197,7 +184,7 @@ namespace app::playback
       return;
     }
 
-    ::snd_pcm_drain(_pcm);
+    ::snd_pcm_drain(_pcm.get());
     
     if (_callbacks.onDrainComplete)
     {
@@ -212,24 +199,19 @@ namespace app::playback
       return;
     }
     
-    ::snd_pcm_drop(_pcm);
-    ::snd_pcm_prepare(_pcm);
+    ::snd_pcm_drop(_pcm.get());
+    ::snd_pcm_prepare(_pcm.get());
   }
 
   void AlsaExclusiveBackend::close()
   {
     _formatInfo = {};
-
-    if (_pcm)
-    {
-      ::snd_pcm_close(_pcm);
-      _pcm = nullptr;
-    }
+    _pcm.reset();
   }
 
   DeviceCapabilities AlsaExclusiveBackend::queryCapabilities() const
   {
-    DeviceCapabilities caps;
+    auto caps = DeviceCapabilities{};
 
     if (!_pcm)
     {
@@ -239,20 +221,20 @@ namespace app::playback
     // Query available sample rates
     for (auto const targetRate : {44100, 48000, 88200, 96000, 176400, 192000})
     {
-      if (::snd_pcm_hw_params_test_rate(_pcm, nullptr, targetRate, 0) == 0)
+      if (::snd_pcm_hw_params_test_rate(_pcm.get(), nullptr, targetRate, 0) == 0)
       {
-        caps.sampleRates.push_back(targetRate);
+        caps.sampleRates.push_back(static_cast<std::uint32_t>(targetRate));
       }
     }
 
     // Query available bit depths
     for (auto const depth : {16, 24, 32})
     {
-      snd_pcm_format_t fmt = (depth == 16)   ? SND_PCM_FORMAT_S16
-                             : (depth == 24) ? SND_PCM_FORMAT_S24
-                                             : SND_PCM_FORMAT_S32;
+      auto const fmt = (depth == 16)   ? ::SND_PCM_FORMAT_S16
+                       : (depth == 24) ? ::SND_PCM_FORMAT_S24
+                                       : ::SND_PCM_FORMAT_S32;
       
-      if (::snd_pcm_hw_params_test_format(_pcm, nullptr, fmt) == 0)
+      if (::snd_pcm_hw_params_test_format(_pcm.get(), nullptr, fmt) == 0)
       {
         caps.bitDepths.push_back(static_cast<std::uint8_t>(depth));
       }
@@ -261,7 +243,7 @@ namespace app::playback
     // Query available channel counts
     for (auto const channels : {1, 2, 4, 6, 8})
     {
-      if (::snd_pcm_hw_params_test_channels(_pcm, nullptr, channels) == 0)
+      if (::snd_pcm_hw_params_test_channels(_pcm.get(), nullptr, channels) == 0)
       {
         caps.channelCounts.push_back(static_cast<std::uint8_t>(channels));
       }

@@ -11,6 +11,7 @@ extern "C"
 #include <alsa/asoundlib.h>
 }
 
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -42,8 +43,14 @@ namespace app::playback
     app::core::playback::DeviceCapabilities queryCapabilities() const;
 
   private:
+    struct AlsaPcmDeleter final
+    {
+      void operator()(::snd_pcm_t* pcm) const noexcept { ::snd_pcm_close(pcm); }
+    };
+    using AlsaPcmPtr = std::unique_ptr<::snd_pcm_t, AlsaPcmDeleter>;
+
     std::string _deviceName;
-    snd_pcm_t* _pcm = nullptr;
+    AlsaPcmPtr _pcm;
     app::core::playback::AudioRenderCallbacks _callbacks;
     app::core::playback::StreamFormat _format;
     app::core::playback::BackendFormatInfo _formatInfo;
