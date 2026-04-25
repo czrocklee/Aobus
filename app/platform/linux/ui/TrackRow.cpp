@@ -61,9 +61,8 @@ namespace app::ui
       return;
     }
 
-    auto optRow = _provider->getRow(_id);
 
-    if (optRow)
+    if (auto optRow = _provider->getRow(_id); optRow)
     {
       _artist = std::move(optRow->artist);
       _album = std::move(optRow->album);

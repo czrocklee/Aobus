@@ -239,9 +239,8 @@ namespace app::ui
       {
         auto item = listItem->get_item();
         auto row = std::dynamic_pointer_cast<TrackRow>(item);
-        auto label = dynamic_cast<Gtk::Label*>(listItem->get_child());
 
-        if (row && label)
+        if (auto label = dynamic_cast<Gtk::Label*>(listItem->get_child()); row && label)
         {
           row->ensureLoaded();
           auto const& title = row->getTitle();

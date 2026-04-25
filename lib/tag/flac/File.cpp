@@ -76,9 +76,8 @@ namespace rs::tag::flac
 
           if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
           {
-            auto const durationMs = static_cast<std::uint32_t>((totalSamples * 1000) / view.sampleRate());
             
-            if (durationMs > 0)
+            if (auto const durationMs = static_cast<std::uint32_t>((totalSamples * 1000) / view.sampleRate()); durationMs > 0)
             {
               builder.property()
                 .durationMs(durationMs)

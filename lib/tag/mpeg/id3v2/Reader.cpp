@@ -52,8 +52,8 @@ namespace rs::tag::mpeg::id3v2
                       void const* data,
                       std::size_t size)
     {
-      auto view = V23TextFrameView{data, size};
 
+      auto view = V23TextFrameView{data, size};
       if (auto text = view.text(); !text.empty())
       {
         if (auto value = parseUnsigned<std::uint16_t>(text))

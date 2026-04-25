@@ -179,9 +179,8 @@ namespace rs::tag::mp4
 
         // Sample rate is a 16.16 fixed point, extract integer part
         // Only use if non-zero (ALAC may have 0 here, mdhd has correct rate)
-        auto const sampleRateFixed = audioLayout.sampleRate.value();
         
-        if (sampleRateFixed >> 16 > 0)
+        if (auto const sampleRateFixed = audioLayout.sampleRate.value(); sampleRateFixed >> 16 > 0)
         {
           builder.property().sampleRate(sampleRateFixed >> 16);
         }

@@ -32,10 +32,8 @@ namespace app::core::model
     {
       return;
     }
-    
-    auto it = _engine._buckets.find(&_source);
 
-    if (it != _engine._buckets.end())
+    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
       _engine.handleSourceReset(*it->second);
     }
@@ -47,10 +45,8 @@ namespace app::core::model
     {
       return;
     }
-    
-    auto it = _engine._buckets.find(&_source);
 
-    if (it != _engine._buckets.end())
+    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
       _engine.handleSourceInserted(*it->second, id, index);
     }
@@ -62,10 +58,8 @@ namespace app::core::model
     {
       return;
     }
-    
-    auto it = _engine._buckets.find(&_source);
 
-    if (it != _engine._buckets.end())
+    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
       _engine.handleSourceUpdated(*it->second, id, index);
     }
@@ -77,10 +71,8 @@ namespace app::core::model
     {
       return;
     }
-    
-    auto it = _engine._buckets.find(&_source);
 
-    if (it != _engine._buckets.end())
+    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
       _engine.handleSourceRemoved(*it->second, id);
     }
@@ -92,10 +84,8 @@ namespace app::core::model
     {
       return;
     }
-    
-    auto it = _engine._buckets.find(&_source);
 
-    if (it != _engine._buckets.end())
+    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
       _engine.handleSourceBatchInserted(*it->second, ids);
     }
@@ -107,10 +97,8 @@ namespace app::core::model
     {
       return;
     }
-    
-    auto it = _engine._buckets.find(&_source);
 
-    if (it != _engine._buckets.end())
+    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
       _engine.handleSourceBatchUpdated(*it->second, ids);
     }
@@ -122,10 +110,8 @@ namespace app::core::model
     {
       return;
     }
-    
-    auto it = _engine._buckets.find(&_source);
 
-    if (it != _engine._buckets.end())
+    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
       _engine.handleSourceBatchRemoved(*it->second, ids);
     }
@@ -137,10 +123,8 @@ namespace app::core::model
     {
       return;
     }
-    
-    auto it = _engine._buckets.find(&_source);
 
-    if (it != _engine._buckets.end())
+    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
       _engine.handleSourceDestroyed(*it->second);
     }
@@ -156,12 +140,13 @@ namespace app::core::model
   SmartListEngine::~SmartListEngine()
   {
     _alive = false;
+
     for (auto& [source, bucket] : _buckets)
     {
       if (bucket->observer)
       {
         static_cast<SourceObserver*>(bucket->observer.get())->invalidate();
-        
+
         if (bucket->sourceAlive)
         {
           source->detach(bucket->observer.get());
@@ -173,7 +158,7 @@ namespace app::core::model
   void SmartListEngine::registerList(TrackIdList& source, FilteredTrackIdList& list)
   {
     auto& bucket = _buckets[&source];
-    
+
     if (!bucket)
     {
       bucket = std::make_unique<SourceBucket>();
@@ -188,7 +173,7 @@ namespace app::core::model
   void SmartListEngine::unregisterList(TrackIdList& source, FilteredTrackIdList& list)
   {
     auto it = _buckets.find(&source);
-    
+
     if (it == _buckets.end())
     {
       return;
@@ -203,7 +188,7 @@ namespace app::core::model
       {
         source.detach(bucket.observer.get());
       }
-      
+
       _buckets.erase(it);
     }
   }
@@ -211,7 +196,7 @@ namespace app::core::model
   void SmartListEngine::rebuild(FilteredTrackIdList& list)
   {
     auto it = _buckets.find(list._source);
-    
+
     if (it == _buckets.end())
     {
       return;
@@ -221,21 +206,21 @@ namespace app::core::model
     {
       list.stageExpression(list._expression);
     }
-    
+
     rebuildDirtyLists(*it->second);
   }
 
   void SmartListEngine::notifyTrackDataChanged(TrackIdList& source, TrackId trackId)
   {
     auto it = _buckets.find(&source);
-    
+
     if (it == _buckets.end())
     {
       return;
     }
 
     // Re-evaluate membership for all lists in this bucket
-    
+
     if (auto sourceIndex = source.indexOf(trackId))
     {
       handleSourceUpdated(*it->second, trackId, *sourceIndex);
@@ -332,7 +317,7 @@ namespace app::core::model
       for (std::size_t listIndex = 0; listIndex < lists.size(); ++listIndex)
       {
         auto* list = lists[listIndex];
-        
+
         if (list->_evaluator.matches(*list->_plan, *view))
         {
           nextMembers[listIndex].push_back(id);
@@ -361,7 +346,7 @@ namespace app::core::model
       {
         continue;
       }
-      
+
       evaluatableLists.push_back(list);
     }
 
@@ -385,7 +370,7 @@ namespace app::core::model
       if (list->_evaluator.matches(*list->_plan, *view))
       {
         auto [it, inserted] = list->_members.insert(id);
-        
+
         if (inserted)
         {
           auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
@@ -398,13 +383,14 @@ namespace app::core::model
   void SmartListEngine::handleSourceUpdated(SourceBucket& bucket, TrackId id, std::size_t /*sourceIndex*/)
   {
     std::vector<FilteredTrackIdList*> evaluatableLists;
+
     for (auto* list : bucket.lists)
     {
       if (list->_hasError || !list->_plan || list->_dirty)
       {
         continue;
       }
-      
+
       evaluatableLists.push_back(list);
     }
 
@@ -426,9 +412,7 @@ namespace app::core::model
 
       if (nowMatches && !wasPresent)
       {
-        auto [it2, inserted] = list->_members.insert(id);
-        
-        if (inserted)
+        if (auto [it2, inserted] = list->_members.insert(id); inserted)
         {
           auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it2));
           list->TrackIdList::notifyInserted(id, index);
@@ -456,10 +440,8 @@ namespace app::core::model
       {
         continue;
       }
-      
-      auto const it = list->_members.find(id);
-      
-      if (it != list->_members.end())
+
+      if (auto const it = list->_members.find(id); it != list->_members.end())
       {
         auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
         list->_members.erase(it);
@@ -476,13 +458,14 @@ namespace app::core::model
     }
 
     std::vector<FilteredTrackIdList*> evaluatableLists;
+
     for (auto* list : bucket.lists)
     {
       if (list->_hasError || !list->_plan || list->_dirty)
       {
         continue;
       }
-      
+
       evaluatableLists.push_back(list);
     }
 
@@ -500,7 +483,7 @@ namespace app::core::model
     for (auto id : ids)
     {
       auto const view = reader.get(id, mode);
-      
+
       if (!view)
       {
         continue;
@@ -534,13 +517,14 @@ namespace app::core::model
     }
 
     std::vector<FilteredTrackIdList*> evaluatableLists;
+
     for (auto* list : bucket.lists)
     {
       if (list->_hasError || !list->_plan || list->_dirty)
       {
         continue;
       }
-      
+
       evaluatableLists.push_back(list);
     }
 
@@ -560,6 +544,7 @@ namespace app::core::model
       std::vector<TrackId> removed;
       std::vector<TrackId> updated;
     };
+
     std::vector<Transitions> transitions(evaluatableLists.size());
 
     for (auto id : ids)
@@ -598,6 +583,7 @@ namespace app::core::model
         {
           list._members.erase(id);
         }
+
         list.TrackIdList::notifyBatchRemoved(trans.removed);
       }
 
@@ -624,6 +610,7 @@ namespace app::core::model
       }
 
       std::vector<TrackId> removed;
+
       for (auto id : ids)
       {
         if (list->_members.erase(id) > 0)
@@ -642,6 +629,7 @@ namespace app::core::model
   void SmartListEngine::handleSourceDestroyed(SourceBucket& bucket)
   {
     bucket.sourceAlive = false;
+    
     for (auto* list : bucket.lists)
     {
       list->_members.clear();
@@ -660,7 +648,7 @@ namespace app::core::model
       {
         continue;
       }
-      
+
       switch (list->_plan->accessProfile)
       {
         case rs::expr::AccessProfile::HotOnly: needsHot = true; break;
@@ -676,12 +664,12 @@ namespace app::core::model
     {
       return rs::core::TrackStore::Reader::LoadMode::Both;
     }
-    
+
     if (needsCold)
     {
       return rs::core::TrackStore::Reader::LoadMode::Cold;
     }
-    
+
     return rs::core::TrackStore::Reader::LoadMode::Hot;
   }
 

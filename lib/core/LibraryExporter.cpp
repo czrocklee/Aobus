@@ -92,9 +92,8 @@ namespace rs::core
     {
       out << YAML::Key << "title" << YAML::Value << std::string(metadata.title());
 
-      auto const artistId = metadata.artistId();
       
-      if (artistId != DictionaryId{0}) out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
+      if (auto const artistId = metadata.artistId(); artistId != DictionaryId{0}) out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
 
       auto const albumId = metadata.albumId();
       

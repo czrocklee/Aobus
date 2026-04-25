@@ -109,7 +109,6 @@ namespace app::core
   {
     auto config = AppConfig{};
     auto const path = configPath();
-    
     if (!std::filesystem::exists(path)) return config;
 
     auto keyFile = Glib::KeyFile::create();

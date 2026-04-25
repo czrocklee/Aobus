@@ -28,7 +28,7 @@ namespace app::services
   PlaylistExporter::~PlaylistExporter()
   {
     _list.detach(this);
-    
+
     if (_timeoutConnection)
     {
       _timeoutConnection->disconnect();
@@ -58,7 +58,7 @@ namespace app::services
   void PlaylistExporter::scheduleForWrite()
   {
     // Cancel any existing timeout
-    
+
     if (_timeoutConnection)
     {
       _timeoutConnection->disconnect();
@@ -88,15 +88,11 @@ namespace app::services
     }
 
     // Export playlist from TrackId membership
-    
     for (std::size_t i = 0; i < _list.size(); ++i)
     {
       auto id = _list.trackIdAt(i);
 
-      // Try to get the URI path for this track
-      auto optUri = _provider.getUriPath(id);
-
-      if (optUri)
+      if (auto optUri = _provider.getUriPath(id); optUri)
       {
         // Write path relative to playlist location
         auto relativePath = std::filesystem::relative(*optUri, _path.parent_path());

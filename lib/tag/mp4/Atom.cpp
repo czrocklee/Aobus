@@ -23,8 +23,8 @@ namespace rs::tag::mp4
         auto const* layout =
           reinterpret_cast<AtomLayout const*>(data.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
         auto length = layout->length.value();
-        auto type = std::string_view{layout->type.data(), 4};
 
+        auto type = std::string_view{layout->type.data(), 4};
         if (auto iter = ContainerAtomIterested.find(type); iter != ContainerAtomIterested.end())
         {
           // Atom header is 8 bytes (4 for size + 4 for type)

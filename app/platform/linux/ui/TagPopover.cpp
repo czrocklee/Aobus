@@ -120,9 +120,8 @@ namespace app::ui
       auto tagsOnTrack = std::set<std::string>{};
       for (auto const tagId : view->tags())
       {
-        auto const tag = std::string(dictionary.get(tagId));
         
-        if (!tag.empty())
+        if (auto const tag = std::string(dictionary.get(tagId)); !tag.empty())
         {
           tagsOnTrack.insert(tag);
           ++tagFrequency[tag];
