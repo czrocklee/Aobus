@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "TagCommand.h"
-#include "BasicCommand.h"
 #include <rs/core/DictionaryStore.h>
 #include <rs/core/TrackBuilder.h>
 #include <rs/core/TrackLayout.h>
@@ -12,127 +11,122 @@
 #include <ranges>
 #include <sstream>
 
-namespace
+namespace rs::tool
 {
-  namespace bpo = boost::program_options;
-  using namespace rs::core;
-
-  void addTag(MusicLibrary& ml, TrackId trackId, std::string const& tagName, std::ostream& os)
+  namespace
   {
-    auto txn = ml.writeTransaction();
-    auto writer = ml.tracks().writer(txn);
-    auto optTrackView = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
+    using namespace rs::core;
 
-    if (!optTrackView)
+    void addTag(MusicLibrary& ml, TrackId trackId, std::string const& tagName, std::ostream& os)
     {
-      os << "error: track not found: " << trackId << '\n';
-      return;
+      auto txn = ml.writeTransaction();
+      auto writer = ml.tracks().writer(txn);
+      auto optTrackView = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
+
+      if (!optTrackView)
+      {
+        os << "error: track not found: " << trackId << '\n';
+        return;
+      }
+
+      auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
+
+      // Check if tag already exists by iterating tag names
+      auto tagNames = builder.tags().names();
+      
+      if (std::ranges::any_of(tagNames, [&tagName](auto const& n) { return n == tagName; }))
+      {
+        os << "tag already exists: " << tagName << '\n';
+        return;
+      }
+
+      builder.tags().add(tagName);
+
+      auto hotData = builder.serializeHot(txn, ml.dictionary());
+      writer.updateHot(trackId, hotData);
+      txn.commit();
+
+      os << "added tag: " << tagName << " to track " << trackId << '\n';
     }
 
-    auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
-
-    // Check if tag already exists by iterating tag names
-    auto tagNames = builder.tags().names();
-    if (std::ranges::any_of(tagNames, [&tagName](auto const& n) { return n == tagName; }))
+    void removeTag(MusicLibrary& ml, TrackId trackId, std::string const& tagName, std::ostream& os)
     {
-      os << "tag already exists: " << tagName << '\n';
-      return;
+      auto txn = ml.writeTransaction();
+      auto writer = ml.tracks().writer(txn);
+      auto optTrackView = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
+
+      if (!optTrackView)
+      {
+        os << "error: track not found: " << trackId << '\n';
+        return;
+      }
+
+      auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
+      auto tagNames = builder.tags().names();
+
+      if (!std::ranges::any_of(tagNames, [&tagName](auto const& n) { return n == tagName; }))
+      {
+        os << "tag not found on track: " << tagName << '\n';
+        return;
+      }
+
+      builder.tags().remove(tagName);
+
+      auto hotData = builder.serializeHot(txn, ml.dictionary());
+      writer.updateHot(trackId, hotData);
+      txn.commit();
+
+      os << "removed tag: " << tagName << " from track " << trackId << '\n';
     }
 
-    builder.tags().add(tagName);
+    void showTags(MusicLibrary& ml, TrackId trackId, std::ostream& os)
+    {
+      auto txn = ml.readTransaction();
+      auto reader = ml.tracks().reader(txn);
+      auto optTrackView = reader.get(trackId, TrackStore::Reader::LoadMode::Hot);
 
-    auto hotData = builder.serializeHot(txn, ml.dictionary());
-    writer.updateHot(trackId, hotData);
-    txn.commit();
+      if (!optTrackView)
+      {
+        os << "error: track not found: " << trackId << '\n';
+        return;
+      }
 
-    os << "added tag: " << tagName << " to track " << trackId << '\n';
+      auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
+      auto const& tagNames = builder.tags().names();
+
+      if (tagNames.empty())
+      {
+        os << "no tags" << '\n';
+        return;
+      }
+
+      os << "tags: ";
+      for (auto const& name : tagNames)
+      {
+        os << name << " ";
+      }
+      os << '\n';
+    }
   }
 
-  void removeTag(MusicLibrary& ml, TrackId trackId, std::string const& tagName, std::ostream& os)
+  void setupTagCommand(CLI::App& app, core::MusicLibrary& ml)
   {
-    auto txn = ml.writeTransaction();
-    auto writer = ml.tracks().writer(txn);
-    auto optTrackView = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
+    auto* tag = app.add_subcommand("tag", "Tag management commands");
 
-    if (!optTrackView)
-    {
-      os << "error: track not found: " << trackId << '\n';
-      return;
-    }
+    auto* add = tag->add_subcommand("add", "Add a tag to a track");
+    auto* addId = add->add_option("id", "track id")->required();
+    auto* addTagName = add->add_option("tag", "tag name")->required();
+    add->callback([&ml, addId, addTagName]()
+                  { addTag(ml, core::TrackId{addId->as<std::uint32_t>()}, addTagName->as<std::string>(), std::cout); });
 
-    auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
-    auto tagNames = builder.tags().names();
+    auto* remove = tag->add_subcommand("remove", "Remove a tag from a track");
+    auto* remId = remove->add_option("id", "track id")->required();
+    auto* remTagName = remove->add_option("tag", "tag name")->required();
+    remove->callback([&ml, remId, remTagName]()
+                     { removeTag(ml, core::TrackId{remId->as<std::uint32_t>()}, remTagName->as<std::string>(), std::cout); });
 
-    if (!std::ranges::any_of(tagNames, [&tagName](auto const& n) { return n == tagName; }))
-    {
-      os << "tag not found on track: " << tagName << '\n';
-      return;
-    }
-
-    builder.tags().remove(tagName);
-
-    auto hotData = builder.serializeHot(txn, ml.dictionary());
-    writer.updateHot(trackId, hotData);
-    txn.commit();
-
-    os << "removed tag: " << tagName << " from track " << trackId << '\n';
+    auto* show = tag->add_subcommand("show", "Show tags for a track");
+    auto* showId = show->add_option("id", "track id")->required();
+    show->callback([&ml, showId]() { showTags(ml, core::TrackId{showId->as<std::uint32_t>()}, std::cout); });
   }
-
-  void showTags(MusicLibrary& ml, TrackId trackId, std::ostream& os)
-  {
-    auto txn = ml.readTransaction();
-    auto reader = ml.tracks().reader(txn);
-    auto optTrackView = reader.get(trackId, TrackStore::Reader::LoadMode::Hot);
-
-    if (!optTrackView)
-    {
-      os << "error: track not found: " << trackId << '\n';
-      return;
-    }
-
-    auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
-    auto const& tagNames = builder.tags().names();
-
-    if (tagNames.empty())
-    {
-      os << "no tags" << '\n';
-      return;
-    }
-
-    os << "tags: ";
-    for (auto const& name : tagNames)
-    {
-      os << name << " ";
-    }
-    os << '\n';
-  }
-}
-
-TagCommand::TagCommand(MusicLibrary& ml)
-  : _ml{ml}
-{
-  addCommand<BasicCommand>("add")
-    .addOption("id", bpo::value<std::uint32_t>()->required(), "track id", 1)
-    .addOption("tag", bpo::value<std::string>()->required(), "tag name", 1)
-    .setExecutor([this](auto const& vm, auto& os) {
-      auto id = TrackId{vm["id"].template as<std::uint32_t>()};
-      auto tag = vm["tag"].template as<std::string>();
-      addTag(_ml, id, tag, os);
-    });
-
-  addCommand<BasicCommand>("remove")
-    .addOption("id", bpo::value<std::uint32_t>()->required(), "track id", 1)
-    .addOption("tag", bpo::value<std::string>()->required(), "tag name", 1)
-    .setExecutor([this](auto const& vm, auto& os) {
-      auto id = TrackId{vm["id"].template as<std::uint32_t>()};
-      auto tag = vm["tag"].template as<std::string>();
-      removeTag(_ml, id, tag, os);
-    });
-
-  addCommand<BasicCommand>("show")
-    .addOption("id", bpo::value<std::uint32_t>()->required(), "track id", 1)
-    .setExecutor([this](auto const& vm, auto& os) {
-      auto id = TrackId{vm["id"].template as<std::uint32_t>()};
-      showTags(_ml, id, os);
-    });
 }

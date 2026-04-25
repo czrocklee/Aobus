@@ -35,6 +35,7 @@ namespace app::core::model
   void AllTrackIdsList::notifyInserted(TrackId id)
   {
     auto [it, inserted] = _trackIds.insert(id);
+    
     if (inserted)
     {
       auto const index = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
@@ -53,6 +54,7 @@ namespace app::core::model
   void AllTrackIdsList::notifyRemoved(TrackId id)
   {
     auto const it = _trackIds.find(id);
+    
     if (it != _trackIds.end())
     {
       auto const index = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
@@ -70,10 +72,12 @@ namespace app::core::model
   std::optional<std::size_t> AllTrackIdsList::indexOf(TrackId id) const
   {
     auto const it = _trackIds.find(id);
+    
     if (it == _trackIds.end())
     {
       return std::nullopt;
     }
+    
     return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
   }
 

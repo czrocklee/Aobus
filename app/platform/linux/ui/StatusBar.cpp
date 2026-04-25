@@ -24,6 +24,7 @@ namespace app::ui
       minutes %= 60;
 
       std::stringstream ss;
+      
       if (hours > 0)
       {
         ss << hours << ":" << std::setfill('0') << std::setw(2) << minutes << ":" << std::setw(2) << seconds;
@@ -32,6 +33,7 @@ namespace app::ui
       {
         ss << minutes << ":" << std::setfill('0') << std::setw(2) << seconds;
       }
+      
       return ss.str();
     }
 
@@ -39,6 +41,7 @@ namespace app::ui
     {
       std::stringstream ss;
       ss << (format.sampleRate / 1000.0) << " kHz · " << static_cast<int>(format.bitDepth) << "-bit · ";
+      
       if (format.channels == 1)
       {
         ss << "Mono";
@@ -51,6 +54,7 @@ namespace app::ui
       {
         ss << static_cast<int>(format.channels) << " ch";
       }
+      
       return ss.str();
     }
 
@@ -101,6 +105,7 @@ namespace app::ui
         {
           Gtk::StyleContext::add_provider_for_display(display, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
         }
+        
         return css;
       }();
 
@@ -222,6 +227,7 @@ namespace app::ui
     {
       _timerConnection.disconnect();
     }
+    
     _statusLabel.set_text("");
     _statusLabel.set_visible(false);
   }
@@ -240,10 +246,12 @@ namespace app::ui
     }
 
     std::string text = std::to_string(count) + (count == 1 ? " item selected" : " items selected");
+    
     if (totalDuration && totalDuration->count() > 0)
     {
       text += " (" + formatDuration(*totalDuration) + ")";
     }
+    
     _selectionLabel.set_text(text);
   }
 
@@ -259,6 +267,7 @@ namespace app::ui
     }
 
     // Center: Artist - Title
+    
     if (!snapshot.trackTitle.empty())
     {
       if (!snapshot.trackArtist.empty())
@@ -312,6 +321,7 @@ namespace app::ui
 
     // Tooltip: Full chain (src -> pw -> sink)
     std::stringstream tt;
+    
     if (snapshot.sourceFormat)
     {
       tt << "Source: " << formatStream(*snapshot.sourceFormat) << "\n";

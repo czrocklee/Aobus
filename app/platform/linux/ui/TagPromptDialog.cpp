@@ -21,12 +21,14 @@ namespace app::ui
       auto const isSpace = [](unsigned char ch) { return std::isspace(ch) != 0; };
 
       auto start = value.begin();
+      
       while (start != value.end() && isSpace(static_cast<unsigned char>(*start)))
       {
         ++start;
       }
 
       auto finish = value.end();
+      
       while (finish != start && isSpace(static_cast<unsigned char>(*(finish - 1))))
       {
         --finish;
@@ -79,6 +81,7 @@ namespace app::ui
         {
           out << ',';
         }
+        
         out << ' ' << removeCount << (removeCount == 1 ? " removal" : " removals");
       }
 
@@ -264,12 +267,14 @@ namespace app::ui
   void TagPromptDialog::stageAddTag(std::string tag)
   {
     tag = normalizeTag(tag);
+    
     if (tag.empty())
     {
       return;
     }
 
     auto [it, inserted] = _tagStates.try_emplace(tag, TagState{});
+    
     if (inserted)
     {
       auto insertPos = std::lower_bound(_availableTags.begin(), _availableTags.end(), tag);
@@ -432,6 +437,7 @@ namespace app::ui
     for (auto const& tag : _availableTags)
     {
       auto const it = _tagStates.find(tag);
+      
       if (it != _tagStates.end() && it->second.membershipCount == _selectionCount &&
           it->second.pending != PendingTagChange::RemoveFromAll)
       {
@@ -444,6 +450,7 @@ namespace app::ui
       }
 
       suggestions.push_back(tag);
+      
       if (suggestions.size() == 8)
       {
         break;

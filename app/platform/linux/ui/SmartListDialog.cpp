@@ -279,6 +279,7 @@ namespace app::ui
 
           label->set_text(formatted);
         }
+      
       });
 
     auto column = Gtk::ColumnViewColumn::create("Track", factory);
@@ -379,6 +380,7 @@ namespace app::ui
     updateSourceLabels();
 
     // For other lists, use FilteredTrackIdList
+    
     if (!_previewFilteredList)
     {
       _expressionValid = false;
@@ -409,6 +411,7 @@ namespace app::ui
         _matchCountLabel.set_markup(
           Glib::ustring::format("<i>Showing all ", total, isAllTracks ? " tracks</i>" : " source tracks</i>"));
       }
+      
       updateDialogState();
       return;
     }

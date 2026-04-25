@@ -28,6 +28,7 @@ namespace app::services
   PlaylistExporter::~PlaylistExporter()
   {
     _list.detach(this);
+    
     if (_timeoutConnection)
     {
       _timeoutConnection->disconnect();
@@ -57,6 +58,7 @@ namespace app::services
   void PlaylistExporter::scheduleForWrite()
   {
     // Cancel any existing timeout
+    
     if (_timeoutConnection)
     {
       _timeoutConnection->disconnect();
@@ -86,6 +88,7 @@ namespace app::services
     }
 
     // Export playlist from TrackId membership
+    
     for (std::size_t i = 0; i < _list.size(); ++i)
     {
       auto id = _list.trackIdAt(i);

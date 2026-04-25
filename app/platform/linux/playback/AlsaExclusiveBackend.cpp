@@ -41,6 +41,7 @@ namespace app::playback
 
     // Open PCM device
     err = ::snd_pcm_open(&pcm, _deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
+    
     if (err < 0)
     {
       _lastError = "Failed to open ALSA device: " + _deviceName;
@@ -55,6 +56,7 @@ namespace app::playback
     snd_pcm_hw_params_alloca(&params);
 
     err = ::snd_pcm_hw_params_any(_pcm, params);
+    
     if (err < 0)
     {
       _lastError = "Failed to initialize ALSA hardware parameters";
@@ -65,6 +67,7 @@ namespace app::playback
 
     // Set interleaved access
     err = ::snd_pcm_hw_params_set_access(_pcm, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+    
     if (err < 0)
     {
       _lastError = "Failed to set ALSA access mode";
@@ -76,6 +79,7 @@ namespace app::playback
     // Set sample format (S16)
     snd_pcm_format_t formatMask = SND_PCM_FORMAT_S16;
     err = ::snd_pcm_hw_params_set_format(_pcm, params, formatMask);
+    
     if (err < 0)
     {
       _lastError = "Failed to set ALSA sample format";
@@ -86,6 +90,7 @@ namespace app::playback
 
     // Set sample rate
     err = ::snd_pcm_hw_params_set_rate(_pcm, params, format.sampleRate, 0);
+    
     if (err < 0)
     {
       _lastError = "Failed to set ALSA sample rate";
@@ -96,6 +101,7 @@ namespace app::playback
 
     // Set channel count
     err = ::snd_pcm_hw_params_set_channels(_pcm, params, format.channels);
+    
     if (err < 0)
     {
       _lastError = "Failed to set ALSA channel count";
@@ -106,6 +112,7 @@ namespace app::playback
 
     // Apply hardware parameters
     err = ::snd_pcm_hw_params(_pcm, params);
+    
     if (err < 0)
     {
       _lastError = "Failed to apply ALSA hardware parameters";
@@ -118,6 +125,7 @@ namespace app::playback
     _formatInfo.deviceFormat = format;
     _formatInfo.isExclusive = _deviceName.rfind("hw:", 0) == 0;
     _formatInfo.sinkName = _deviceName;
+    
     if (_deviceName.rfind("hw:", 0) == 0)
     {
       _formatInfo.isExclusive = true;
@@ -143,6 +151,7 @@ namespace app::playback
     {
       return;
     }
+    
     ::snd_pcm_start(_pcm);
   }
 
@@ -152,6 +161,7 @@ namespace app::playback
     {
       return;
     }
+    
     ::snd_pcm_pause(_pcm, 1);
   }
 
@@ -161,6 +171,7 @@ namespace app::playback
     {
       return;
     }
+    
     ::snd_pcm_pause(_pcm, 0);
   }
 
@@ -170,6 +181,7 @@ namespace app::playback
     {
       return;
     }
+    
     ::snd_pcm_drop(_pcm);
   }
 
@@ -181,10 +193,12 @@ namespace app::playback
       {
         _callbacks.onDrainComplete(_callbacks.userData);
       }
+      
       return;
     }
 
     ::snd_pcm_drain(_pcm);
+    
     if (_callbacks.onDrainComplete)
     {
       _callbacks.onDrainComplete(_callbacks.userData);
@@ -197,6 +211,7 @@ namespace app::playback
     {
       return;
     }
+    
     ::snd_pcm_drop(_pcm);
     ::snd_pcm_prepare(_pcm);
   }
@@ -236,6 +251,7 @@ namespace app::playback
       snd_pcm_format_t fmt = (depth == 16)   ? SND_PCM_FORMAT_S16
                              : (depth == 24) ? SND_PCM_FORMAT_S24
                                              : SND_PCM_FORMAT_S32;
+      
       if (::snd_pcm_hw_params_test_format(_pcm, nullptr, fmt) == 0)
       {
         caps.bitDepths.push_back(static_cast<std::uint8_t>(depth));

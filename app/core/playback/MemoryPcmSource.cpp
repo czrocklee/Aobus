@@ -53,6 +53,7 @@ namespace app::core::playback
   {
     auto const estimatedBytes =
       (static_cast<std::uint64_t>(_streamInfo.durationMs) * bytesPerSecond(_streamInfo.outputFormat)) / 1000U;
+    
     if (estimatedBytes > 0 && estimatedBytes < static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
     {
       _pcmBytes.reserve(static_cast<std::size_t>(estimatedBytes));
@@ -85,6 +86,7 @@ namespace app::core::playback
     auto lock = std::lock_guard<std::mutex>{_mutex};
     auto const available = _pcmBytes.size() - _readOffset;
     auto const toCopy = std::min(available, output.size());
+    
     if (toCopy == 0)
     {
       return 0;
@@ -122,6 +124,7 @@ namespace app::core::playback
   std::size_t MemoryPcmSource::positionToByteOffset(std::uint32_t positionMs) const noexcept
   {
     auto const frameByteCount = frameBytes(_streamInfo.outputFormat);
+    
     if (frameByteCount == 0 || _streamInfo.outputFormat.sampleRate == 0)
     {
       return 0;

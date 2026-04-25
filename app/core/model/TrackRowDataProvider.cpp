@@ -69,6 +69,7 @@ namespace app::core::model
   {
     // Check cache first
     auto const it = _rowCache.find(id);
+    
     if (it != _rowCache.end())
     {
       if (it->second.missing)
@@ -84,6 +85,7 @@ namespace app::core::model
     auto reader = _store->reader(txn);
 
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
+    
     if (!optView)
     {
       // Track not found - cache a "missing" marker
@@ -103,36 +105,42 @@ namespace app::core::model
 
     // Resolve dictionary strings (artist, album) and cache them
     auto const artistId = metadata.artistId();
+    
     if (artistId != rs::core::DictionaryId{0})
     {
       row.artist = resolveDictionaryString(artistId);
     }
 
     auto const albumId = metadata.albumId();
+    
     if (albumId != rs::core::DictionaryId{0})
     {
       row.album = resolveDictionaryString(albumId);
     }
 
     auto const albumArtistId = metadata.albumArtistId();
+    
     if (albumArtistId != rs::core::DictionaryId{0})
     {
       row.albumArtist = resolveDictionaryString(albumArtistId);
     }
 
     auto const genreId = metadata.genreId();
+    
     if (genreId != rs::core::DictionaryId{0})
     {
       row.genre = resolveDictionaryString(genreId);
     }
 
     auto const composerId = metadata.composerId();
+    
     if (composerId != rs::core::DictionaryId{0})
     {
       row.composer = resolveDictionaryString(composerId);
     }
 
     auto const workId = metadata.workId();
+    
     if (workId != rs::core::DictionaryId{0})
     {
       row.work = resolveDictionaryString(workId);
@@ -145,6 +153,7 @@ namespace app::core::model
     row.duration = std::chrono::milliseconds{view.property().durationMs()};
 
     auto const coverArtId = metadata.coverArtId();
+    
     if (coverArtId != 0)
     {
       row.coverArtId = coverArtId;
@@ -163,16 +172,19 @@ namespace app::core::model
     auto reader = _store->reader(txn);
 
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
+    
     if (!optView)
     {
       return std::nullopt;
     }
 
     auto const coverArtId = optView->metadata().coverArtId();
+    
     if (coverArtId == 0)
     {
       return std::nullopt;
     }
+    
     return coverArtId;
   }
 
@@ -183,6 +195,7 @@ namespace app::core::model
     auto reader = _store->reader(txn);
 
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
+    
     if (!optView)
     {
       return std::nullopt;
@@ -198,6 +211,7 @@ namespace app::core::model
     auto reader = _store->reader(txn);
 
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
+    
     if (!optView)
     {
       return std::nullopt;
@@ -211,6 +225,7 @@ namespace app::core::model
     desc.trackId = id;
 
     // File path
+    
     if (auto const filePath = resolveLibraryPath(_ml->rootPath(), property.uri()))
     {
       desc.filePath = *filePath;
@@ -221,6 +236,7 @@ namespace app::core::model
 
     // Artist
     auto const artistId = metadata.artistId();
+    
     if (artistId != rs::core::DictionaryId{0})
     {
       desc.artist = resolveDictionaryString(artistId);
@@ -228,6 +244,7 @@ namespace app::core::model
 
     // Album
     auto const albumId = metadata.albumId();
+    
     if (albumId != rs::core::DictionaryId{0})
     {
       desc.album = resolveDictionaryString(albumId);
@@ -235,6 +252,7 @@ namespace app::core::model
 
     // Cover art
     auto const coverArtId = metadata.coverArtId();
+    
     if (coverArtId != 0)
     {
       desc.coverArtId = rs::core::ResourceId{coverArtId};
@@ -271,6 +289,7 @@ namespace app::core::model
   {
     // Check cache first
     auto const it = _stringCache.find(id);
+    
     if (it != _stringCache.end())
     {
       return it->second;

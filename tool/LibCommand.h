@@ -3,14 +3,10 @@
 
 #pragma once
 
-#include "ComboCommand.h"
+#include <CLI/CLI.hpp>
 #include <rs/core/MusicLibrary.h>
 
-class LibCommand : public ComboCommand
+namespace rs::tool
 {
-public:
-  explicit LibCommand(rs::core::MusicLibrary& ml);
-
-private:
-  rs::core::MusicLibrary& _ml;
-};
+  void setupLibCommand(CLI::App& app, core::MusicLibrary& ml);
+}

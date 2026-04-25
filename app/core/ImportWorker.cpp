@@ -38,6 +38,7 @@ namespace app::core
         APP_LOG_DEBUG("Importing file: {}", path.string());
 
         // Report progress
+        
         if (_progressCallback)
         {
           _progressCallback(path, static_cast<std::int32_t>(i));
@@ -61,6 +62,7 @@ namespace app::core
           .mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
                    std::filesystem::last_write_time(path).time_since_epoch())
                    .count());
+        
         if (std::filesystem::exists(path))
         {
           builder.property().fileSize(std::filesystem::file_size(path));
@@ -95,6 +97,7 @@ namespace app::core
                  _result.skippedCount);
 
     // Call finished callback
+    
     if (_finishedCallback)
     {
       _finishedCallback();

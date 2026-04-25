@@ -28,6 +28,7 @@ int main(int argc, char* argv[])
       dialog.set_license_type(Gtk::License::LGPL_3_0);
 
       // Get active window to set as transient parent
+      
       if (auto windows = app->get_windows(); !windows.empty())
       {
         dialog.set_transient_for(*windows[0]);

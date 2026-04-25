@@ -33,6 +33,7 @@ namespace
     {
       tooltip += '\n';
     }
+    
     tooltip += line;
   }
 
@@ -59,6 +60,7 @@ namespace
   std::uint64_t estimatedDecodedBytes(app::core::playback::DecodedStreamInfo const& info) noexcept
   {
     auto const rate = bytesPerSecond(info.outputFormat);
+    
     if (rate == 0 || info.durationMs == 0)
     {
       return 0;
@@ -92,6 +94,7 @@ namespace app::core::playback
   {
     PLAYBACK_LOG_INFO(
       "Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
+    
     if (_backend)
     {
       _backend->stop();
@@ -125,6 +128,7 @@ namespace app::core::playback
       _snapshot.trackArtist = descriptor.artist;
 
       _currentTrack = descriptor;
+      
       if (!openTrack(descriptor, source, backendFormat))
       {
         _state = TransportState::Error;
@@ -132,6 +136,7 @@ namespace app::core::playback
         _currentTrack.reset();
         return;
       }
+      
       _state = TransportState::Buffering;
       _snapshot.state = TransportState::Buffering;
     }
@@ -153,10 +158,12 @@ namespace app::core::playback
     {
       auto const backendInfo = _backend->formatInfo();
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      
       if (backendInfo.streamFormat)
       {
         _snapshot.activeFormat = backendInfo.streamFormat;
       }
+      
       _snapshot.deviceFormat = backendInfo.deviceFormat;
       _snapshot.exclusiveOutput = backendInfo.isExclusive;
       _snapshot.conversionReason = backendInfo.conversionReason;
@@ -208,11 +215,13 @@ namespace app::core::playback
   void PlaybackEngine::pause()
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    
     if (_state == TransportState::Playing || _state == TransportState::Buffering)
     {
       PLAYBACK_LOG_INFO("Playback paused");
       _state = TransportState::Paused;
       _snapshot.state = TransportState::Paused;
+      
       if (_backend && _backendStarted)
       {
         _backend->pause();
@@ -225,26 +234,31 @@ namespace app::core::playback
     auto source = _source.load(std::memory_order_acquire);
 
     auto lock = std::unique_lock<std::mutex>{_stateMutex};
+    
     if (_state != TransportState::Paused)
     {
       return;
     }
 
     PLAYBACK_LOG_INFO("Playback resumed");
+    
     if (_backendStarted)
     {
       _state = TransportState::Playing;
       _snapshot.state = TransportState::Playing;
       lock.unlock();
+      
       if (_backend)
       {
         _backend->resume();
       }
+      
       return;
     }
 
     auto const bufferedMs = source ? source->bufferedMs() : 0;
     auto const drained = !source || source->isDrained();
+    
     if (drained && bufferedMs == 0)
     {
       _source.store({}, std::memory_order_release);
@@ -276,6 +290,7 @@ namespace app::core::playback
   void PlaybackEngine::stop()
   {
     PLAYBACK_LOG_INFO("Playback stopped");
+    
     if (_backend)
     {
       _backend->stop();
@@ -389,10 +404,12 @@ namespace app::core::playback
     snap.backend = _backend ? _backend->kind() : BackendKind::None;
     snap.bufferedMs = source ? source->bufferedMs() : 0;
     snap.underrunCount = _underrunCount.load(std::memory_order_relaxed);
+    
     if (backendInfo.streamFormat)
     {
       snap.activeFormat = backendInfo.streamFormat;
     }
+    
     snap.deviceFormat = backendInfo.deviceFormat;
     snap.exclusiveOutput = backendInfo.isExclusive;
     snap.conversionReason = backendInfo.conversionReason;
@@ -420,6 +437,7 @@ namespace app::core::playback
         snap.sinkTooltip,
         "This is a best-effort server/backend inspection and does not verify conversions after the sink node.");
     }
+    
     return snap;
   }
 
@@ -444,6 +462,7 @@ namespace app::core::playback
     }
 
     auto const info = decoder.streamInfo();
+    
     if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
     {
       _snapshot.statusText = "Decoder did not return a valid output format";
@@ -461,6 +480,7 @@ namespace app::core::playback
         _snapshot.activeFormat.reset();
         return false;
       }
+      
       source = std::move(memorySource);
     }
     else
@@ -478,6 +498,7 @@ namespace app::core::playback
         _snapshot.activeFormat.reset();
         return false;
       }
+      
       source = std::move(streamingSource);
     }
 
@@ -513,10 +534,12 @@ namespace app::core::playback
     }
 
     auto const drained = source->isDrained();
+    
     if (drained)
     {
       self->_playbackDrainPending = true;
     }
+    
     return drained;
   }
 
@@ -531,6 +554,7 @@ namespace app::core::playback
     auto* self = static_cast<PlaybackEngine*>(userData);
     // Estimate position based on frames consumed
     auto lock = std::unique_lock<std::mutex>{self->_stateMutex, std::try_to_lock};
+    
     if (!lock.owns_lock())
     {
       return;
@@ -546,6 +570,7 @@ namespace app::core::playback
   void PlaybackEngine::onDrainComplete(void* userData) noexcept
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
+    
     if (!self->_playbackDrainPending.exchange(false, std::memory_order_relaxed))
     {
       return;
@@ -569,6 +594,7 @@ namespace app::core::playback
 
     {
       auto lock = std::lock_guard<std::mutex>{self->_stateMutex};
+      
       if (self->_state == TransportState::Idle)
       {
         return;

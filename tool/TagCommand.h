@@ -3,14 +3,10 @@
 
 #pragma once
 
-#include "ComboCommand.h"
+#include <CLI/CLI.hpp>
 #include <rs/core/MusicLibrary.h>
 
-class TagCommand : public ComboCommand
+namespace rs::tool
 {
-public:
-  explicit TagCommand(rs::core::MusicLibrary& ml);
-
-private:
-  rs::core::MusicLibrary& _ml;
-};
+  void setupTagCommand(CLI::App& app, core::MusicLibrary& ml);
+}

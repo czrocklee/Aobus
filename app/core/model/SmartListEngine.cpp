@@ -32,6 +32,7 @@ namespace app::core::model
     {
       return;
     }
+    
     auto it = _engine._buckets.find(&_source);
 
     if (it != _engine._buckets.end())
@@ -46,6 +47,7 @@ namespace app::core::model
     {
       return;
     }
+    
     auto it = _engine._buckets.find(&_source);
 
     if (it != _engine._buckets.end())
@@ -60,6 +62,7 @@ namespace app::core::model
     {
       return;
     }
+    
     auto it = _engine._buckets.find(&_source);
 
     if (it != _engine._buckets.end())
@@ -74,6 +77,7 @@ namespace app::core::model
     {
       return;
     }
+    
     auto it = _engine._buckets.find(&_source);
 
     if (it != _engine._buckets.end())
@@ -88,6 +92,7 @@ namespace app::core::model
     {
       return;
     }
+    
     auto it = _engine._buckets.find(&_source);
 
     if (it != _engine._buckets.end())
@@ -102,6 +107,7 @@ namespace app::core::model
     {
       return;
     }
+    
     auto it = _engine._buckets.find(&_source);
 
     if (it != _engine._buckets.end())
@@ -116,6 +122,7 @@ namespace app::core::model
     {
       return;
     }
+    
     auto it = _engine._buckets.find(&_source);
 
     if (it != _engine._buckets.end())
@@ -130,6 +137,7 @@ namespace app::core::model
     {
       return;
     }
+    
     auto it = _engine._buckets.find(&_source);
 
     if (it != _engine._buckets.end())
@@ -153,6 +161,7 @@ namespace app::core::model
       if (bucket->observer)
       {
         static_cast<SourceObserver*>(bucket->observer.get())->invalidate();
+        
         if (bucket->sourceAlive)
         {
           source->detach(bucket->observer.get());
@@ -164,6 +173,7 @@ namespace app::core::model
   void SmartListEngine::registerList(TrackIdList& source, FilteredTrackIdList& list)
   {
     auto& bucket = _buckets[&source];
+    
     if (!bucket)
     {
       bucket = std::make_unique<SourceBucket>();
@@ -178,6 +188,7 @@ namespace app::core::model
   void SmartListEngine::unregisterList(TrackIdList& source, FilteredTrackIdList& list)
   {
     auto it = _buckets.find(&source);
+    
     if (it == _buckets.end())
     {
       return;
@@ -192,6 +203,7 @@ namespace app::core::model
       {
         source.detach(bucket.observer.get());
       }
+      
       _buckets.erase(it);
     }
   }
@@ -199,6 +211,7 @@ namespace app::core::model
   void SmartListEngine::rebuild(FilteredTrackIdList& list)
   {
     auto it = _buckets.find(list._source);
+    
     if (it == _buckets.end())
     {
       return;
@@ -208,18 +221,21 @@ namespace app::core::model
     {
       list.stageExpression(list._expression);
     }
+    
     rebuildDirtyLists(*it->second);
   }
 
   void SmartListEngine::notifyTrackDataChanged(TrackIdList& source, TrackId trackId)
   {
     auto it = _buckets.find(&source);
+    
     if (it == _buckets.end())
     {
       return;
     }
 
     // Re-evaluate membership for all lists in this bucket
+    
     if (auto sourceIndex = source.indexOf(trackId))
     {
       handleSourceUpdated(*it->second, trackId, *sourceIndex);
@@ -316,6 +332,7 @@ namespace app::core::model
       for (std::size_t listIndex = 0; listIndex < lists.size(); ++listIndex)
       {
         auto* list = lists[listIndex];
+        
         if (list->_evaluator.matches(*list->_plan, *view))
         {
           nextMembers[listIndex].push_back(id);
@@ -344,6 +361,7 @@ namespace app::core::model
       {
         continue;
       }
+      
       evaluatableLists.push_back(list);
     }
 
@@ -367,6 +385,7 @@ namespace app::core::model
       if (list->_evaluator.matches(*list->_plan, *view))
       {
         auto [it, inserted] = list->_members.insert(id);
+        
         if (inserted)
         {
           auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
@@ -385,6 +404,7 @@ namespace app::core::model
       {
         continue;
       }
+      
       evaluatableLists.push_back(list);
     }
 
@@ -407,6 +427,7 @@ namespace app::core::model
       if (nowMatches && !wasPresent)
       {
         auto [it2, inserted] = list->_members.insert(id);
+        
         if (inserted)
         {
           auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it2));
@@ -435,7 +456,9 @@ namespace app::core::model
       {
         continue;
       }
+      
       auto const it = list->_members.find(id);
+      
       if (it != list->_members.end())
       {
         auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
@@ -459,6 +482,7 @@ namespace app::core::model
       {
         continue;
       }
+      
       evaluatableLists.push_back(list);
     }
 
@@ -476,6 +500,7 @@ namespace app::core::model
     for (auto id : ids)
     {
       auto const view = reader.get(id, mode);
+      
       if (!view)
       {
         continue;
@@ -515,6 +540,7 @@ namespace app::core::model
       {
         continue;
       }
+      
       evaluatableLists.push_back(list);
     }
 
@@ -634,6 +660,7 @@ namespace app::core::model
       {
         continue;
       }
+      
       switch (list->_plan->accessProfile)
       {
         case rs::expr::AccessProfile::HotOnly: needsHot = true; break;
@@ -649,10 +676,12 @@ namespace app::core::model
     {
       return rs::core::TrackStore::Reader::LoadMode::Both;
     }
+    
     if (needsCold)
     {
       return rs::core::TrackStore::Reader::LoadMode::Cold;
     }
+    
     return rs::core::TrackStore::Reader::LoadMode::Hot;
   }
 

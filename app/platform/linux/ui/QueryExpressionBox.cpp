@@ -179,6 +179,7 @@ namespace app::ui
         {
           label->set_text(stringObject ? stringObject->get_string() : "");
         }
+      
       });
 
     _completionListView.set_factory(factory);

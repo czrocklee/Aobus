@@ -85,6 +85,7 @@ namespace app::core::model
   void ManualTrackIdList::onRemoved(TrackId id, std::size_t /*index*/)
   {
     auto it = std::find(_trackIds.begin(), _trackIds.end(), id);
+    
     if (it != _trackIds.end())
     {
       auto const myIndex = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
@@ -119,6 +120,7 @@ namespace app::core::model
     for (auto id : ids)
     {
       auto it = std::find(_trackIds.begin(), _trackIds.end(), id);
+      
       if (it != _trackIds.end())
       {
         _trackIds.erase(it);
@@ -139,10 +141,12 @@ namespace app::core::model
   std::optional<std::size_t> ManualTrackIdList::indexOf(TrackId id) const
   {
     auto const it = std::find(_trackIds.begin(), _trackIds.end(), id);
+    
     if (it == _trackIds.end())
     {
       return std::nullopt;
     }
+    
     return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
   }
 

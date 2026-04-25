@@ -108,6 +108,7 @@ namespace app::ui
 
     // Update seek scale
     _updatingSeekScale = true;
+    
     if (snapshot.durationMs > 0)
     {
       _seekScale.set_range(0, static_cast<double>(snapshot.durationMs));
@@ -118,6 +119,7 @@ namespace app::ui
       _seekScale.set_range(0, 100);
       _seekScale.set_value(0);
     }
+    
     _updatingSeekScale = false;
 
     // Update transport buttons

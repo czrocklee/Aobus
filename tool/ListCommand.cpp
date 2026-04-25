@@ -5,115 +5,120 @@
 #include <rs/core/ListBuilder.h>
 #include <rs/core/ListStore.h>
 
-#include "BasicCommand.h"
-
 #include <iomanip>
 #include <span>
 #include <vector>
 
-namespace
+namespace rs::tool
 {
-  namespace bpo = boost::program_options;
-  using namespace rs;
-
-  void show(core::MusicLibrary& ml, std::ostream& os)
+  namespace
   {
-    auto txn = ml.readTransaction();
-    auto reader = ml.lists().reader(txn);
-
-    constexpr int idWidth = 5;
-    for (auto [id, view] : reader)
+    void show(core::MusicLibrary& ml, std::ostream& os)
     {
-      os << std::setw(idWidth) << id << " " << view.name() << "\n";
-      os << std::string(idWidth, ' ') << "  [" << (view.isSmart() ? "smart" : "manual") << "] parent: ";
+      auto txn = ml.readTransaction();
+      auto reader = ml.lists().reader(txn);
 
-      if (view.isRootParent())
+      constexpr int idWidth = 5;
+      for (auto [id, view] : reader)
       {
-        os << "all-tracks\n";
-      }
-      else
-      {
-        os << view.parentId() << "\n";
-      }
+        os << std::setw(idWidth) << id << " " << view.name() << "\n";
+        os << std::string(idWidth, ' ') << "  [" << (view.isSmart() ? "smart" : "manual") << "] parent: ";
 
-      if (view.isSmart())
-      {
-        os << std::string(idWidth, ' ') << "  [smart] filter: \"" << view.filter() << "\"\n";
-      }
-      else
-      {
-        os << std::string(idWidth, ' ') << "  [manual] " << view.tracks().size() << " tracks\n";
-      }
+        if (view.isRootParent())
+        {
+          os << "all-tracks\n";
+        }
+        else
+        {
+          os << view.parentId() << "\n";
+        }
 
-      if (!view.description().empty())
-      {
-        os << std::string(idWidth, ' ') << "  desc: \"" << view.description() << "\"\n";
+        if (view.isSmart())
+        {
+          os << std::string(idWidth, ' ') << "  [smart] filter: \"" << view.filter() << "\"\n";
+        }
+        else
+        {
+          os << std::string(idWidth, ' ') << "  [manual] " << view.tracks().size() << " tracks\n";
+        }
+
+        if (!view.description().empty())
+        {
+          os << std::string(idWidth, ' ') << "  desc: \"" << view.description() << "\"\n";
+        }
       }
+    }
+
+    void createList(core::MusicLibrary& ml,
+                    std::string const& name,
+                    std::string const& filter,
+                    std::string const& desc,
+                    core::ListId parentListId,
+                    std::ostream& os)
+    {
+      auto txn = ml.writeTransaction();
+
+      // Build list payload using ListBuilder
+      auto builder = core::ListBuilder::createNew()
+        .name(name)
+        .description(desc)
+        .parentId(parentListId);
+
+      if (!filter.empty())
+      {
+        builder.filter(filter);
+      }
+      
+      auto data = builder.serialize();
+
+      auto [id, view] = ml.lists().writer(txn).create(data);
+      txn.commit();
+
+      os << "add list: " << id << " " << name << "\n";
     }
   }
 
-  void createList(core::MusicLibrary& ml,
-                  std::string const& name,
-                  std::string const& filter,
-                  std::string const& desc,
-                  core::ListId parentListId,
-                  std::ostream& os)
+  void setupListCommand(CLI::App& app, core::MusicLibrary& ml)
   {
-    auto txn = ml.writeTransaction();
+    auto* list = app.add_subcommand("list", "List management commands");
 
-    // Build list payload using ListBuilder
-    auto builder = core::ListBuilder::createNew()
-      .name(name)
-      .description(desc)
-      .parentId(parentListId);
+    list->add_subcommand("show", "Show all lists")->callback([&ml]() { show(ml, std::cout); });
 
-    if (!filter.empty())
-    {
-      builder.filter(filter);
-    }
-    auto data = builder.serialize();
+    auto* create = list->add_subcommand("create", "Create a new list");
+    auto* name = create->add_option("-n,--name", "list name")->required();
+    auto* filter = create->add_option("-f,--filter", "track filter expression");
+    auto* desc = create->add_option("-d,--desc", "list description");
+    auto* parent = create->add_option("-p,--parent", "parent list id (0 = all-tracks)")->default_val(0);
+    create->callback(
+      [&ml, name, filter, desc, parent]()
+      {
+        createList(ml,
+                   name->as<std::string>(),
+                   filter->as<std::string>(),
+                   desc->as<std::string>(),
+                   core::ListId{parent->as<std::uint32_t>()},
+                   std::cout);
+      });
 
-    auto [id, view] = ml.lists().writer(txn).create(data);
-    txn.commit();
-
-    os << "add list: " << id << " " << name << "\n";
+    auto* del = list->add_subcommand("delete", "Delete a list");
+    auto* id = del->add_option("id", "list id")->required();
+    del->callback(
+      [&ml, id]()
+      {
+        auto txn = ml.writeTransaction();
+        auto writer = ml.lists().writer(txn);
+        auto const listId = core::ListId{id->as<std::uint32_t>()};
+        
+        if (writer.del(listId))
+        {
+          std::cout << "deleted list: " << listId << "\n";
+          txn.commit();
+        }
+        else
+        {
+          std::cout << "list not found: " << listId << "\n";
+        }
+      
+      });
   }
-}
-
-ListCommand::ListCommand(core::MusicLibrary& ml) : _ml{ml}
-{
-  addCommand<BasicCommand>("show").setExecutor(
-    [this]([[maybe_unused]] auto const& vm, auto& os) { return show(_ml, os); });
-
-  addCommand<BasicCommand>("create")
-    .addOption("name,n", bpo::value<std::string>()->required(), "list name", 1)
-    .addOption("filter,f", bpo::value<std::string>()->default_value(""), "track filter expression", 1)
-    .addOption("desc,d", bpo::value<std::string>()->default_value(""), "list description", 1)
-    .addOption("parent,p", bpo::value<std::uint32_t>()->default_value(0), "parent list id (0 = all-tracks)", 1)
-    .setExecutor([this](auto const& vm, auto& os) {
-      auto name = vm["name"].template as<std::string>();
-      auto filter = vm["filter"].template as<std::string>();
-      auto desc = vm["desc"].template as<std::string>();
-      auto parentListId = core::ListId{vm["parent"].template as<std::uint32_t>()};
-      createList(_ml, name, filter, desc, parentListId, os);
-      return "";
-    });
-
-  addCommand<BasicCommand>("delete")
-    .addOption("id", bpo::value<std::uint64_t>()->required(), "list id", 1)
-    .setExecutor([this](auto const& vm, auto& os) {
-      auto id = core::ListId{vm["id"].template as<std::uint32_t>()};
-      auto txn = _ml.writeTransaction();
-      auto writer = _ml.lists().writer(txn);
-      if (writer.del(id))
-      {
-        os << "deleted list: " << id << "\n";
-        txn.commit();
-      }
-      else
-      {
-        os << "list not found: " << id << "\n";
-      }
-      return "";
-    });
 }

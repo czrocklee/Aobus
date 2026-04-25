@@ -7,7 +7,7 @@ This guide covers C++ coding conventions for RockStudio contributors.
 - 2. Code Style
   - 2.1. Indentation & Formatting
     - 2.1.1. Use `clang-format` for consistent style
-    - 2.1.2. Keep blank lines before and after control blocks and logical blocks
+    - 2.1.2. Keep blank lines before and after control blocks and groups of related statements
       - auto title = view.getTitle(); \n \n if (title) \n
   - 2.2. Naming Conventions
     - 2.2.1. Classes/Types: PascalCase - `TrackStore`, `Metadata`
@@ -22,9 +22,10 @@ This guide covers C++ coding conventions for RockStudio contributors.
       - Paired header and project local
       - Third-party
       - Standard library
-  - 2.5. Class Member Declaration Order (both .h and .cpp files)
-    - 2.5.1. Access sections must be ordered: `public` → `protected` → `private`
-    - 2.5.2. Within each access section, members must be ordered:
+  - 2.5. Member Order
+    - 2.5.1. Implementation in `.cpp` files should follow the declaration order in the header.
+    - 2.5.2. Header access sections must be ordered: `public` → `protected` → `private`
+    - 2.5.3. Within each access section, members must be ordered:
       1. typedef/using declarations
       2. member functions (non-static)
       3. static functions
@@ -63,7 +64,7 @@ This guide covers C++ coding conventions for RockStudio contributors.
     - 3.2.6. Use init statement: `if (auto var = get(); condition)`
   - 3.3. C++11 Features
     - 3.3.1. Use RAII: adopts `std::unique_ptr` for owned resources, use custom deleter if needed
-    - 3.3.2. DON'T use ``: Too verbose, rely on clang-tidy for check
+    - 3.3.2. DON'T use `virtual` on overridden functions: Redundant when `override` is present
     - 3.3.3. Use `[[maybe_unused]]`: Suppress unused warnings other than (void)
     - 3.3.4. Use `noexcept`: Mark functions that won't throw
     - 3.3.5. Use auto + uniform initialization for non-primtive object declaration:
@@ -78,5 +79,8 @@ This guide covers C++ coding conventions for RockStudio contributors.
       - POD structs (e.g., `TrackHeader`, `ListHeader`)
       - Concrete data classes (e.g., `Metadata`, `TrackView`)
   - 4.3. Const Correctness
-    - 4.3.1. Use `const` wherever possible
-    - 4.3.2. Prefer `&const` for input references
+    - 4.3.1. Use `const` wherever possible:
+      - Local variables: `auto const result = compute();`
+      - Member functions: `std::size_t size() const;`
+      - Pointer to constant data: `char const* name;`
+      - Input references: `void addTrack(Track const& track);` (prefer over passing by value)

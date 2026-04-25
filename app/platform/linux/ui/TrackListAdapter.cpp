@@ -46,26 +46,32 @@ namespace app::ui
       {
         return true;
       }
+      
       if (containsCi(rowData.album, filterStr))
       {
         return true;
       }
+      
       if (containsCi(rowData.albumArtist, filterStr))
       {
         return true;
       }
+      
       if (containsCi(rowData.genre, filterStr))
       {
         return true;
       }
+      
       if (containsCi(rowData.title, filterStr))
       {
         return true;
       }
+      
       if (containsCi(rowData.tags, filterStr))
       {
         return true;
       }
+      
       if (rowData.year != 0 && containsCi(std::to_string(rowData.year), filterStr))
       {
         return true;
@@ -106,6 +112,7 @@ namespace app::ui
     auto const& rowData = *optRow;
 
     // Apply quick filter if set
+    
     if (!matchesFilter(rowData, _filterText))
     {
       return;
@@ -135,6 +142,7 @@ namespace app::ui
   void TrackListAdapter::onInserted(TrackId id, std::size_t index)
   {
     // If filter is active, rebuild to recalculate positions
+    
     if (!_filterText.empty())
     {
       rebuildView();
@@ -152,6 +160,7 @@ namespace app::ui
     auto row = TrackRow::create(id, _provider);
 
     auto const uintIdx = static_cast<std::uint32_t>(index);
+    
     if (uintIdx <= _listModel->get_n_items())
     {
       _listModel->insert(uintIdx, row);
@@ -161,6 +170,7 @@ namespace app::ui
   void TrackListAdapter::onUpdated(TrackId id, std::size_t index)
   {
     // If filter is active, rebuild
+    
     if (!_filterText.empty())
     {
       rebuildView();
@@ -171,6 +181,7 @@ namespace app::ui
     auto const optRow = _provider->getRow(id);
 
     auto const uintIdx = static_cast<std::uint32_t>(index);
+    
     if (uintIdx >= _listModel->get_n_items())
     {
       return;
@@ -192,6 +203,7 @@ namespace app::ui
   void TrackListAdapter::onRemoved([[maybe_unused]] TrackId id, std::size_t index)
   {
     // If filter is active, rebuild
+    
     if (!_filterText.empty())
     {
       rebuildView();
@@ -199,6 +211,7 @@ namespace app::ui
     }
 
     auto const uintIdx = static_cast<std::uint32_t>(index);
+    
     if (uintIdx < _listModel->get_n_items())
     {
       _listModel->remove(uintIdx);

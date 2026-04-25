@@ -56,10 +56,12 @@ namespace app::ui
           auto* label = Gtk::make_managed<Gtk::Label>("");
           label->set_halign(definition.numeric ? Gtk::Align::END : Gtk::Align::START);
           label->set_xalign(definition.numeric ? 1.0F : 0.0F);
+          
           if (!definition.numeric)
           {
             label->set_ellipsize(Pango::EllipsizeMode::END);
           }
+          
           listItem->set_child(*label);
         });
 
@@ -78,18 +80,22 @@ namespace app::ui
           {
             auto* box = dynamic_cast<Gtk::Box*>(listItem->get_child());
             auto* label = box ? dynamic_cast<Gtk::Label*>(box->get_first_child()) : nullptr;
+            
             if (label)
             {
               label->set_text(row->getColumnText(definition.column));
             }
+            
             return;
           }
 
           auto* label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+          
           if (label)
           {
             label->set_text(row->getColumnText(definition.column));
           }
+        
         });
 
       return factory;
@@ -214,6 +220,7 @@ namespace app::ui
     // Set up columns
     setupColumns();
     _columnModel = _columnView.get_columns();
+    
     if (_columnModel)
     {
       _columnModelChangedConnection = _columnModel->signal_items_changed().connect(
@@ -307,6 +314,7 @@ namespace app::ui
         {
           _columnLayoutModel->reset();
         }
+      
       });
 
     _columnsPopoverBox.append(_columnsPopoverTitle);
@@ -366,6 +374,7 @@ namespace app::ui
         {
           text += " ";
         }
+        
         text += "(" + trackCountLabel(header->get_n_items()) + ")";
         label->set_text(text);
       });
@@ -420,6 +429,7 @@ namespace app::ui
       clearStatusMessage();
       return;
     }
+    
     _statusLabel.set_text(message);
     _statusLabel.set_visible(true);
   }
@@ -504,12 +514,14 @@ namespace app::ui
     {
       auto const& state = layout.columns[index];
       auto* binding = findColumnBinding(state.column);
+      
       if (!binding)
       {
         continue;
       }
 
       bool needsInsertion = true;
+      
       if (_columnModel && _columnModel->get_n_items() > index)
       {
         auto object = _columnModel->get_object(static_cast<guint>(index));
@@ -527,6 +539,7 @@ namespace app::ui
       }
 
       auto const width = state.width == -1 ? binding->defaultWidth : state.width;
+      
       if (binding->column->get_fixed_width() != width)
       {
         binding->column->set_fixed_width(width);
@@ -549,6 +562,7 @@ namespace app::ui
     for (auto const& state : layout.columns)
     {
       auto* binding = findColumnBinding(state.column);
+      
       if (!binding || !binding->toggle)
       {
         continue;
@@ -627,6 +641,7 @@ namespace app::ui
       }
 
       auto const columnId = trackColumnFromId(std::string{column->get_id()});
+      
       if (!columnId)
       {
         continue;
@@ -648,6 +663,7 @@ namespace app::ui
     for (auto const& state : layout.columns)
     {
       auto* binding = findColumnBinding(state.column);
+      
       if (!binding)
       {
         continue;
@@ -685,6 +701,7 @@ namespace app::ui
     }
 
     auto const nItems = model->get_n_items();
+    
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
       if (_selectionModel->is_selected(i))
@@ -723,12 +740,14 @@ namespace app::ui
   void TrackViewPage::selectTrack(TrackId trackId)
   {
     auto model = _selectionModel->get_model();
+    
     if (!model)
     {
       return;
     }
 
     auto const nItems = model->get_n_items();
+    
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
       if (trackIdAtPosition(i) == trackId)
@@ -778,6 +797,7 @@ namespace app::ui
 
     // Iterate through all items and check if selected
     auto nItems = model->get_n_items();
+    
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
       if (_selectionModel->is_selected(i))
@@ -804,6 +824,7 @@ namespace app::ui
     }
 
     auto nItems = model->get_n_items();
+    
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
       if (_selectionModel->is_selected(i))
@@ -883,7 +904,9 @@ namespace app::ui
           onActivateCurrentSelection();
           return true;
         }
+        
         // Ctrl+T opens tag edit popover
+        
         if (keyval == GDK_KEY_t || keyval == GDK_KEY_T)
         {
           if (bool(modifiers & Gdk::ModifierType::CONTROL_MASK))
@@ -892,9 +915,11 @@ namespace app::ui
             {
               _tagEditRequested.emit(selectedIds, 0, 0);
             }
+            
             return true;
           }
         }
+        
         return false;
       },
       false);
@@ -912,6 +937,7 @@ namespace app::ui
         }
 
         auto* target = _columnView.pick(x, y, Gtk::PickFlags::NON_TARGETABLE);
+        
         if (!isTagsCellWidget(target))
         {
           return;
@@ -972,6 +998,7 @@ namespace app::ui
 
     // Find first selected item
     auto nItems = model->get_n_items();
+    
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
       if (_selectionModel->is_selected(i))
@@ -980,6 +1007,7 @@ namespace app::ui
         {
           return trackId;
         }
+        
         // Found first selected, no need to continue
         break;
       }
