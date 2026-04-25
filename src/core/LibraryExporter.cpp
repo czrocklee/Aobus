@@ -4,10 +4,10 @@
 #include <rs/core/LibraryExporter.h>
 
 #include <rs/Exception.h>
-#include <rs/core/TrackStore.h>
+#include <rs/core/DictionaryStore.h>
 #include <rs/core/ListStore.h>
 #include <rs/core/ResourceStore.h>
-#include <rs/core/DictionaryStore.h>
+#include <rs/core/TrackStore.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -39,13 +39,13 @@ namespace rs::core
 
   void LibraryExporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
   {
-    std::ofstream ofs(path);
+    auto ofs = std::ofstream{path};
     if (!ofs)
     {
       RS_THROW_FORMAT(rs::Exception, "Failed to open '{}' for writing", path.string());
     }
 
-    YAML::Emitter out(ofs);
+    auto out = YAML::Emitter{ofs};
     out << YAML::BeginMap;
     out << YAML::Key << "version" << YAML::Value << 1;
     out << YAML::Key << "export_mode" << YAML::Value << modeToString(mode);
@@ -89,37 +89,29 @@ namespace rs::core
     if (mode == ExportMode::Metadata || mode == ExportMode::Full)
     {
       out << YAML::Key << "title" << YAML::Value << std::string(metadata.title());
-      
+
       auto const artistId = metadata.artistId();
-      if (artistId != DictionaryId{0})
-        out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
-      
+      if (artistId != DictionaryId{0}) out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
+
       auto const albumId = metadata.albumId();
-      if (albumId != DictionaryId{0})
-        out << YAML::Key << "album" << YAML::Value << std::string(dict.get(albumId));
+      if (albumId != DictionaryId{0}) out << YAML::Key << "album" << YAML::Value << std::string(dict.get(albumId));
 
       auto const albumArtistId = metadata.albumArtistId();
       if (albumArtistId != DictionaryId{0})
         out << YAML::Key << "albumArtist" << YAML::Value << std::string(dict.get(albumArtistId));
 
       auto const genreId = metadata.genreId();
-      if (genreId != DictionaryId{0})
-        out << YAML::Key << "genre" << YAML::Value << std::string(dict.get(genreId));
+      if (genreId != DictionaryId{0}) out << YAML::Key << "genre" << YAML::Value << std::string(dict.get(genreId));
 
-      if (metadata.year() != 0)
-        out << YAML::Key << "year" << YAML::Value << metadata.year();
-      
-      if (metadata.trackNumber() != 0)
-        out << YAML::Key << "trackNumber" << YAML::Value << metadata.trackNumber();
-      
-      if (metadata.totalTracks() != 0)
-        out << YAML::Key << "totalTracks" << YAML::Value << metadata.totalTracks();
+      if (metadata.year() != 0) out << YAML::Key << "year" << YAML::Value << metadata.year();
 
-      if (metadata.discNumber() != 0)
-        out << YAML::Key << "discNumber" << YAML::Value << metadata.discNumber();
+      if (metadata.trackNumber() != 0) out << YAML::Key << "trackNumber" << YAML::Value << metadata.trackNumber();
 
-      if (metadata.totalDiscs() != 0)
-        out << YAML::Key << "totalDiscs" << YAML::Value << metadata.totalDiscs();
+      if (metadata.totalTracks() != 0) out << YAML::Key << "totalTracks" << YAML::Value << metadata.totalTracks();
+
+      if (metadata.discNumber() != 0) out << YAML::Key << "discNumber" << YAML::Value << metadata.discNumber();
+
+      if (metadata.totalDiscs() != 0) out << YAML::Key << "totalDiscs" << YAML::Value << metadata.totalDiscs();
 
       // Custom metadata
       auto const custom = view.custom();
@@ -148,8 +140,7 @@ namespace rs::core
     }
 
     // Common to ALL modes: Rating & Tags
-    if (metadata.rating() != 0)
-      out << YAML::Key << "rating" << YAML::Value << (int)metadata.rating();
+    if (metadata.rating() != 0) out << YAML::Key << "rating" << YAML::Value << (int)metadata.rating();
 
     auto const tags = view.tags();
     if (!tags.empty())
@@ -175,7 +166,7 @@ namespace rs::core
       out << YAML::Key << "id" << YAML::Value << listId.value();
       out << YAML::Key << "parentId" << YAML::Value << listView.parentId().value();
       out << YAML::Key << "name" << YAML::Value << std::string(listView.name());
-      
+
       if (!listView.description().empty())
         out << YAML::Key << "description" << YAML::Value << std::string(listView.description());
 

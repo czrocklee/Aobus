@@ -26,7 +26,8 @@ namespace app::ui
     using ContextMenuRequestedSignal = sigc::signal<void(double, double)>;
     using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId>, double, double)>;
 
-    explicit TrackViewPage(rs::core::ListId listId, Glib::RefPtr<TrackListAdapter> const& adapter,
+    explicit TrackViewPage(rs::core::ListId listId,
+                           Glib::RefPtr<TrackListAdapter> const& adapter,
                            std::shared_ptr<TrackColumnLayoutModel> columnLayoutModel);
     ~TrackViewPage() override;
 

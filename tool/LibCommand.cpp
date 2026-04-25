@@ -16,7 +16,7 @@ namespace
 
   std::string formatUuid(std::array<std::byte, 16> const& id)
   {
-    std::ostringstream oss;
+    auto oss = std::ostringstream{};
     oss << std::hex << std::setfill('0');
     for (size_t i = 0; i < id.size(); ++i)
     {
@@ -32,7 +32,7 @@ namespace
     auto const tp = std::chrono::time_point<std::chrono::system_clock>(
         std::chrono::milliseconds{unixMs});
     auto const time = std::chrono::system_clock::to_time_t(tp);
-    std::ostringstream oss;
+    auto oss = std::ostringstream{};
     oss << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S");
     return oss.str();
   }
@@ -77,7 +77,7 @@ namespace
       }
     }
 
-    core::LibraryExporter exporter(ml);
+    auto exporter = core::LibraryExporter{ml};
     exporter.exportToYaml(path, mode);
     os << "Library exported to '" << path << "' using mode '" << vm["mode"].as<std::string>() << "'.\n";
   }
@@ -91,7 +91,7 @@ namespace
     }
 
     auto const path = vm["input"].as<std::string>();
-    core::LibraryImporter importer(ml);
+    auto importer = core::LibraryImporter{ml};
     importer.importFromYaml(path);
     os << "Library imported from '" << path << "'.\n";
   }

@@ -6,10 +6,13 @@
 #include <rs/core/MusicLibrary.h>
 
 #include <filesystem>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
 
-namespace YAML { class Node; }
+namespace YAML
+{
+  class Node;
+}
 
 namespace rs::core
 {
@@ -30,8 +33,12 @@ namespace rs::core
     void importFromYaml(std::filesystem::path const& path);
 
   private:
-    void importTracks(YAML::Node const& tracks, rs::lmdb::WriteTransaction& txn, std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId);
-    void importLists(YAML::Node const& lists, rs::lmdb::WriteTransaction& txn, std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId);
+    void importTracks(YAML::Node const& tracks,
+                      rs::lmdb::WriteTransaction& txn,
+                      std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId);
+    void importLists(YAML::Node const& lists,
+                     rs::lmdb::WriteTransaction& txn,
+                     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId);
 
     MusicLibrary& _ml;
   };

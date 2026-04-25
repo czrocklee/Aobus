@@ -182,14 +182,15 @@ namespace app::ui
     }
   }
 
-  TrackViewPage::TrackViewPage(rs::core::ListId listId, Glib::RefPtr<TrackListAdapter> const& adapter,
+  TrackViewPage::TrackViewPage(rs::core::ListId listId,
+                               Glib::RefPtr<TrackListAdapter> const& adapter,
                                std::shared_ptr<TrackColumnLayoutModel> columnLayoutModel)
-    : Gtk::Box(Gtk::Orientation::VERTICAL)
-    , _listId(listId)
-    , _adapter(adapter)
-    , _sortModel(Gtk::SortListModel::create(adapter->getModel(), Glib::RefPtr<Gtk::Sorter>{}))
-    , _columnLayoutModel(columnLayoutModel ? std::move(columnLayoutModel) : std::make_shared<TrackColumnLayoutModel>())
-    , _presentationSpec(presentationSpecForGroup(TrackGroupBy::None))
+    : Gtk::Box{Gtk::Orientation::VERTICAL}
+    , _listId{listId}
+    , _adapter{adapter}
+    , _sortModel{Gtk::SortListModel::create(adapter->getModel(), Glib::RefPtr<Gtk::Sorter>{})}
+    , _columnLayoutModel{columnLayoutModel ? std::move(columnLayoutModel) : std::make_shared<TrackColumnLayoutModel>()}
+    , _presentationSpec{presentationSpecForGroup(TrackGroupBy::None)}
   {
     // Create multi-selection model to allow bulk operations
     _selectionModel = Gtk::MultiSelection::create(_sortModel);
@@ -267,7 +268,8 @@ namespace app::ui
     _groupByLabel.set_halign(Gtk::Align::START);
     _groupByLabel.set_valign(Gtk::Align::CENTER);
 
-    _groupByOptions = Gtk::StringList::create({"None", "Artist", "Album", "Album Artist", "Genre", "Composer", "Work", "Year"});
+    _groupByOptions =
+      Gtk::StringList::create({"None", "Artist", "Album", "Album Artist", "Genre", "Composer", "Work", "Year"});
     _groupByDropdown.set_model(_groupByOptions);
     _groupByDropdown.set_selected(dropdownPositionFor(_presentationSpec.groupBy));
     _groupByDropdown.property_selected().signal_changed().connect(
@@ -792,7 +794,7 @@ namespace app::ui
 
   std::chrono::milliseconds TrackViewPage::getSelectedTracksDuration() const
   {
-    std::chrono::milliseconds totalDuration{0};
+    auto totalDuration = std::chrono::milliseconds{0};
 
     auto model = _selectionModel->get_model();
 

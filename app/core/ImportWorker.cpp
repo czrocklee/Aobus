@@ -14,7 +14,10 @@ namespace app::core
                              std::vector<std::filesystem::path> const& files,
                              ProgressCallback progressCallback,
                              FinishedCallback finishedCallback)
-    : _ml{ml}, _files{files}, _progressCallback{std::move(progressCallback)}, _finishedCallback{std::move(finishedCallback)}
+    : _ml{ml}
+    , _files{files}
+    , _progressCallback{std::move(progressCallback)}
+    , _finishedCallback{std::move(finishedCallback)}
   {
   }
 
@@ -86,8 +89,10 @@ namespace app::core
 
     // Commit the transaction
     txn.commit();
-    APP_LOG_INFO("Import finished: {} inserted, {} failures, {} skipped", 
-      _result.insertedIds.size(), _result.failureCount, _result.skippedCount);
+    APP_LOG_INFO("Import finished: {} inserted, {} failures, {} skipped",
+                 _result.insertedIds.size(),
+                 _result.failureCount,
+                 _result.skippedCount);
 
     // Call finished callback
     if (_finishedCallback)

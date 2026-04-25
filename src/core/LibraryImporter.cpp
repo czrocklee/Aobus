@@ -4,18 +4,18 @@
 #include <rs/core/LibraryImporter.h>
 
 #include <rs/Exception.h>
-#include <rs/core/TrackStore.h>
+#include <rs/core/DictionaryStore.h>
+#include <rs/core/ListBuilder.h>
 #include <rs/core/ListStore.h>
 #include <rs/core/ResourceStore.h>
-#include <rs/core/DictionaryStore.h>
 #include <rs/core/TrackBuilder.h>
-#include <rs/core/ListBuilder.h>
+#include <rs/core/TrackStore.h>
 #include <rs/tag/File.h>
 
 #include <yaml-cpp/yaml.h>
 
-#include <cctype>
 #include <algorithm>
+#include <cctype>
 #include <deque>
 #include <unordered_map>
 
@@ -37,10 +37,7 @@ namespace rs::core
 
     std::vector<std::byte> serializeList(ImportedList const& list, ListId parentId)
     {
-      auto builder = ListBuilder::createNew()
-        .name(list.name)
-        .description(list.description)
-        .parentId(parentId);
+      auto builder = ListBuilder::createNew().name(list.name).description(list.description).parentId(parentId);
 
       if (list.isSmart)
       {
@@ -65,7 +62,7 @@ namespace rs::core
 
   void LibraryImporter::importFromYaml(std::filesystem::path const& path)
   {
-    YAML::Node root;
+    auto root = YAML::Node{};
     try
     {
       root = YAML::LoadFile(path.string());
@@ -87,12 +84,12 @@ namespace rs::core
     }
 
     auto txn = _ml.writeTransaction();
-    
+
     // Clear existing data for a fresh import
     _ml.tracks().writer(txn).clear();
     _ml.lists().writer(txn).clear();
 
-    std::unordered_map<std::uint32_t, TrackId> yamlTrackIdToInternalId;
+    auto yamlTrackIdToInternalId = std::unordered_map<std::uint32_t, TrackId>{};
 
     if (library["tracks"])
     {
@@ -107,7 +104,9 @@ namespace rs::core
     txn.commit();
   }
 
-  void LibraryImporter::importTracks(YAML::Node const& tracks, rs::lmdb::WriteTransaction& txn, std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
+  void LibraryImporter::importTracks(YAML::Node const& tracks,
+                                     rs::lmdb::WriteTransaction& txn,
+                                     std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
   {
     auto trackWriter = _ml.tracks().writer(txn);
     auto& dict = _ml.dictionary();
@@ -115,18 +114,19 @@ namespace rs::core
     for (auto const& trackNode : tracks)
     {
       uint32_t yamlTrackId = trackNode["id"] ? trackNode["id"].as<uint32_t>() : 0;
-      std::deque<std::string> trackStrings;
-      auto keepAlive = [&](YAML::Node const& node) -> std::string_view {
+      auto trackStrings = std::deque<std::string>{};
+      auto keepAlive = [&](YAML::Node const& node) -> std::string_view
+      {
         if (!node) return {};
         return trackStrings.emplace_back(node.as<std::string>());
       };
 
       std::string uriStr = trackNode["uri"].as<std::string>();
-      
+
       // 1. Try load from physical file (availability fallback)
       std::optional<TrackBuilder> fileBuilder;
       auto fullPath = _ml.rootPath() / uriStr;
-      std::unique_ptr<rs::tag::File> tagFile;
+      auto tagFile = std::unique_ptr<rs::tag::File>{};
       if (std::filesystem::exists(fullPath))
       {
         tagFile = rs::tag::File::open(fullPath);
@@ -136,16 +136,17 @@ namespace rs::core
           fileBuilder->property().uri(uriStr);
           fileBuilder->property().fileSize(std::filesystem::file_size(fullPath));
           fileBuilder->property().mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
-              std::filesystem::last_write_time(fullPath).time_since_epoch()).count());
+                                          std::filesystem::last_write_time(fullPath).time_since_epoch())
+                                          .count());
         }
       }
 
       // 2. Initialize builder
-      TrackBuilder builder = fileBuilder ? *fileBuilder : TrackBuilder::createNew();
+      auto builder = fileBuilder ? *fileBuilder : TrackBuilder::createNew();
       if (!fileBuilder)
       {
         builder.property().uri(uriStr);
-        // If no file exists, we still try to import metadata from YAML, 
+        // If no file exists, we still try to import metadata from YAML,
         // but technical properties will be empty unless provided in YAML.
       }
 
@@ -190,12 +191,14 @@ namespace rs::core
 
       // 4. Commit as new track
       auto [preparedHot, preparedCold] = builder.prepare(txn, dict, _ml.resources());
-      auto [newTrackId, view] = trackWriter.createHotCold(
-        preparedHot.size(), preparedCold.size(),
-        [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
-          preparedHot.writeTo(hot);
-          preparedCold.writeTo(cold);
-        });
+      auto [newTrackId, view] =
+        trackWriter.createHotCold(preparedHot.size(),
+                                  preparedCold.size(),
+                                  [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                  {
+                                    preparedHot.writeTo(hot);
+                                    preparedCold.writeTo(cold);
+                                  });
       std::ignore = view;
 
       if (yamlTrackId != 0)
@@ -205,7 +208,9 @@ namespace rs::core
     }
   }
 
-  void LibraryImporter::importLists(YAML::Node const& lists, rs::lmdb::WriteTransaction& txn, std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId)
+  void LibraryImporter::importLists(YAML::Node const& lists,
+                                    rs::lmdb::WriteTransaction& txn,
+                                    std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId)
   {
     auto listWriter = _ml.lists().writer(txn);
     auto importedLists = std::vector<ImportedList>{};
@@ -239,10 +244,14 @@ namespace rs::core
         for (auto const& trackRefNode : listNode["tracks"])
         {
           uint32_t yamlId = 0;
-          try {
+          try
+          {
             yamlId = trackRefNode.as<uint32_t>();
-          } catch (...) {
-            RS_THROW_FORMAT(rs::Exception, "List '{}' contains invalid track reference (expected ID)", importedList.name);
+          }
+          catch (...)
+          {
+            RS_THROW_FORMAT(
+              rs::Exception, "List '{}' contains invalid track reference (expected ID)", importedList.name);
           }
 
           if (auto const it = yamlTrackIdToInternalId.find(yamlId); it != yamlTrackIdToInternalId.end())
@@ -285,7 +294,8 @@ namespace rs::core
       auto const parentIt = yamlListIdToNewListId.find(importedList.yamlParentId);
       if (parentIt == yamlListIdToNewListId.end())
       {
-        RS_THROW_FORMAT(rs::Exception, "List '{}' references missing parent id {}", importedList.name, importedList.yamlParentId);
+        RS_THROW_FORMAT(
+          rs::Exception, "List '{}' references missing parent id {}", importedList.name, importedList.yamlParentId);
       }
 
       listWriter.update(childIt->second, serializeList(importedList, parentIt->second));

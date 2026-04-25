@@ -97,7 +97,7 @@ namespace app::ui
       return 0;
     }
 
-    template <typename T>
+    template<typename T>
     int compareNumberField(T lhs, T rhs)
     {
       auto const leftUnknown = lhs == 0;
@@ -412,7 +412,7 @@ namespace app::ui
   }
 
   TrackColumnLayoutModel::TrackColumnLayoutModel(TrackColumnLayout layout)
-    : _layout(normalizeTrackColumnLayout(std::move(layout)))
+    : _layout{normalizeTrackColumnLayout(std::move(layout))}
   {
   }
 

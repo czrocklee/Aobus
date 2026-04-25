@@ -37,9 +37,9 @@ namespace app::core::model
     // Batch notifications for performance during bulk operations.
     // Default implementation can fallback to individual notifications if needed,
     // or observers can override for better batch processing.
-    virtual void onBatchInserted(std::span<const TrackId> /*ids*/) {}
-    virtual void onBatchUpdated(std::span<const TrackId> /*ids*/) {}
-    virtual void onBatchRemoved(std::span<const TrackId> /*ids*/) {}
+    virtual void onBatchInserted(std::span<TrackId const> /*ids*/) {}
+    virtual void onBatchUpdated(std::span<TrackId const> /*ids*/) {}
+    virtual void onBatchRemoved(std::span<TrackId const> /*ids*/) {}
 
     /**
      * Called when the source list is being destroyed.
@@ -74,9 +74,9 @@ namespace app::core::model
     void notifyUpdated(TrackId id, std::size_t index);
     void notifyRemoved(TrackId id, std::size_t index);
 
-    void notifyBatchInserted(std::span<const TrackId> ids);
-    void notifyBatchUpdated(std::span<const TrackId> ids);
-    void notifyBatchRemoved(std::span<const TrackId> ids);
+    void notifyBatchInserted(std::span<TrackId const> ids);
+    void notifyBatchUpdated(std::span<TrackId const> ids);
+    void notifyBatchRemoved(std::span<TrackId const> ids);
 
   private:
     std::vector<TrackIdListObserver*> _observers;

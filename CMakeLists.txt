@@ -41,7 +41,7 @@ target_include_directories(GTKMM INTERFACE ${GTKMM_INCLUDE_DIRS})
 target_link_libraries(GTKMM INTERFACE ${GTKMM_LIBRARIES})
 target_compile_options(GTKMM INTERFACE ${GTKMM_CFLAGS_OTHER})
 
-find_package(Boost REQUIRED COMPONENTS headers program_options locale timer filesystem)
+find_package(Boost REQUIRED COMPONENTS headers program_options)
 find_package(spdlog CONFIG REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
@@ -218,7 +218,7 @@ add_library(rs OBJECT
 )
 target_include_directories(rs PUBLIC include)
 target_include_directories(rs PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_link_libraries(rs PUBLIC lmdb Boost::locale yaml-cpp)
+target_link_libraries(rs PUBLIC lmdb yaml-cpp)
 add_dependencies(rs tag_dispatch_headers)
 if(CLANG_TIDY_EXECUTABLE)
   set_target_properties(rs PROPERTIES

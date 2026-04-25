@@ -82,7 +82,7 @@ namespace app::core::playback
 
   std::size_t MemoryPcmSource::read(std::span<std::byte> output) noexcept
   {
-    std::lock_guard<std::mutex> lock(_mutex);
+    auto lock = std::lock_guard<std::mutex>{_mutex};
     auto const available = _pcmBytes.size() - _readOffset;
     auto const toCopy = std::min(available, output.size());
     if (toCopy == 0)
@@ -97,19 +97,19 @@ namespace app::core::playback
 
   bool MemoryPcmSource::isDrained() const noexcept
   {
-    std::lock_guard<std::mutex> lock(_mutex);
+    auto lock = std::lock_guard<std::mutex>{_mutex};
     return _readOffset >= _pcmBytes.size();
   }
 
   std::uint32_t MemoryPcmSource::bufferedMs() const noexcept
   {
-    std::lock_guard<std::mutex> lock(_mutex);
+    auto lock = std::lock_guard<std::mutex>{_mutex};
     return bufferedDurationMs(_pcmBytes.size() - _readOffset, bytesPerSecond(_streamInfo.outputFormat));
   }
 
   bool MemoryPcmSource::seek(std::uint32_t positionMs)
   {
-    std::lock_guard<std::mutex> lock(_mutex);
+    auto lock = std::lock_guard<std::mutex>{_mutex};
     _readOffset = positionToByteOffset(positionMs);
     return true;
   }

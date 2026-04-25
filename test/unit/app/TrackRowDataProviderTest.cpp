@@ -138,7 +138,7 @@ namespace app::core::model
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
     if (!optView)
     {
-      RowData row;
+      auto row = RowData{};
       row.id = id;
       row.missing = true;
       _rowCache.emplace(id, std::move(row));
@@ -148,7 +148,7 @@ namespace app::core::model
     auto const& view = *optView;
     auto const& metadata = view.metadata();
 
-    RowData row;
+    auto row = RowData{};
     row.id = id;
     row.artist = resolveDictionaryString(metadata.artistId());
     row.album = resolveDictionaryString(metadata.albumId());

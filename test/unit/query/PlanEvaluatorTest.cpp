@@ -50,7 +50,12 @@ namespace
               std::vector<std::uint32_t> tagIds = {},
               std::string composer = "",
               std::string work = "")
-      : _title{std::move(title)}, _artist{std::move(artist)}, _album{std::move(album)}, _uri{std::move(uri)}, _work{std::move(work)}, _composer{std::move(composer)}
+      : _title{std::move(title)}
+      , _artist{std::move(artist)}
+      , _album{std::move(album)}
+      , _uri{std::move(uri)}
+      , _work{std::move(work)}
+      , _composer{std::move(composer)}
     {
       _builder.metadata().title(_title);
       _builder.metadata().artist(_artist);
@@ -254,8 +259,10 @@ TEST_CASE("PlanEvaluator - Like Match")
 
 TEST_CASE("PlanEvaluator - Work Metadata")
 {
-  auto trackWithWork = TestTrack{"Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", "Symphony No. 5"};
-  auto trackWithoutWork = TestTrack{"Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", ""};
+  auto trackWithWork = TestTrack{
+    "Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", "Symphony No. 5"};
+  auto trackWithoutWork =
+    TestTrack{"Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", ""};
   auto evaluator = PlanEvaluator{};
 
   SECTION("$work Equality")
@@ -283,11 +290,12 @@ TEST_CASE("PlanEvaluator - Work Metadata")
     CHECK(evaluator.evaluateFull(plan, trackWithWork.view()) == true);
     CHECK(evaluator.evaluateFull(plan, trackWithoutWork.view()) == false);
   }
-  }
+}
 
 TEST_CASE("PlanEvaluator - Composer Metadata")
 {
-  auto trackWithComposer = TestTrack{"Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "Beethoven", ""};
+  auto trackWithComposer =
+    TestTrack{"Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "Beethoven", ""};
   auto evaluator = PlanEvaluator{};
 
   SECTION("$composer Equality")

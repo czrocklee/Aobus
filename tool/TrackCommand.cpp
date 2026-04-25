@@ -22,7 +22,7 @@ namespace
   {
     auto txn = ml.readTransaction();
     auto reader = ml.tracks().reader(txn);
-    std::vector<std::pair<core::TrackId, core::TrackView>> matches;
+    auto matches = std::vector<std::pair<core::TrackId, core::TrackView>>{};
 
     if (filter.empty())
     {
@@ -33,7 +33,7 @@ namespace
     auto expr = rs::expr::parse(filter);
     auto compiler = rs::expr::QueryCompiler{&ml.dictionary()};
     auto plan = compiler.compile(expr);
-    rs::expr::PlanEvaluator evaluator;
+    auto evaluator = rs::expr::PlanEvaluator{};
 
     for (auto [id, view] : reader)
     {
