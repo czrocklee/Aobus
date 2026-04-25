@@ -332,9 +332,8 @@ namespace app::ui
                           return state.membershipCount == _selectionCount ? 1 : 2;
                         };
                         auto const leftCategory = categoryFor(left);
-                        auto const rightCategory = categoryFor(right);
 
-                        if (leftCategory != rightCategory)
+                        if (auto const rightCategory = categoryFor(right); leftCategory != rightCategory)
                         {
                           return leftCategory < rightCategory;
                         }

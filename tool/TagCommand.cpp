@@ -32,9 +32,8 @@ namespace rs::tool
       auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
 
       // Check if tag already exists by iterating tag names
-      auto tagNames = builder.tags().names();
       
-      if (std::ranges::any_of(tagNames, [&tagName](auto const& n) { return n == tagName; }))
+      if (auto tagNames = builder.tags().names(); std::ranges::any_of(tagNames, [&tagName](auto const& n) { return n == tagName; }))
       {
         os << "tag already exists: " << tagName << '\n';
         return;

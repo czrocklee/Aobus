@@ -314,9 +314,8 @@ namespace rs::expr
     
     if (plan.tagBloomMask != 0)
     {
-      auto trackBloom = track.tags().bloom();
       
-      if ((trackBloom & plan.tagBloomMask) != plan.tagBloomMask)
+      if (auto trackBloom = track.tags().bloom(); (trackBloom & plan.tagBloomMask) != plan.tagBloomMask)
       {
         return false;
       }

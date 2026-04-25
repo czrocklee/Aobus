@@ -76,9 +76,8 @@ namespace app::ui
     int compareTextField(std::string_view lhs, std::string_view rhs)
     {
       auto const leftEmpty = lhs.empty();
-      auto const rightEmpty = rhs.empty();
 
-      if (leftEmpty != rightEmpty)
+      if (auto const rightEmpty = rhs.empty(); leftEmpty != rightEmpty)
       {
         return leftEmpty ? 1 : -1;
       }

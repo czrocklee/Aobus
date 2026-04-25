@@ -478,9 +478,8 @@ namespace app::core::playback
       
       if (ret == 0)
       {
-        auto block = convertFrameToInterleavedPcm();
 
-        if (block && block->frames > 0)
+        if (auto block = convertFrameToInterleavedPcm(); block && block->frames > 0)
         {
           return block;
         }

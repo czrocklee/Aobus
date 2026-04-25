@@ -115,7 +115,6 @@ namespace app::ui
       }
 
       auto const trigger = text[static_cast<std::size_t>(tokenStart - 1)];
-
       if (trigger != '$' && trigger != '@' && trigger != '#' && trigger != '%')
       {
         return std::nullopt;
@@ -179,7 +178,6 @@ namespace app::ui
         {
           label->set_text(stringObject ? stringObject->get_string() : "");
         }
-      
       });
 
     _completionListView.set_factory(factory);

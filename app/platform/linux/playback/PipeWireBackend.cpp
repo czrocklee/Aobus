@@ -938,9 +938,8 @@ namespace app::playback
 
       if (_monitorState->streamNodeId == PW_ID_ANY && _stream)
       {
-        auto const streamNodeId = ::pw_stream_get_node_id(_stream);
         
-        if (streamNodeId != PW_ID_ANY)
+        if (auto const streamNodeId = ::pw_stream_get_node_id(_stream); streamNodeId != PW_ID_ANY)
         {
           _monitorState->streamNodeId = streamNodeId;
         }

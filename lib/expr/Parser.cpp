@@ -214,9 +214,8 @@ namespace rs::expr
   Expression parse(std::string_view expr)
   {
     auto input = lexy::string_input<lexy::utf8_char_encoding>{expr};
-    auto result = lexy::parse<Stmt>(input, lexy::noop);
 
-    if (result.has_value())
+    if (auto result = lexy::parse<Stmt>(input, lexy::noop); result.has_value())
     {
       auto root = Expression{std::move(result).value()};
       normalize(root);

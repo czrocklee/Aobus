@@ -150,9 +150,8 @@ namespace app::ui
     }
 
     // Load and insert at position
-    auto const optRow = _provider->getRow(id);
 
-    if (!optRow)
+    if (auto const optRow = _provider->getRow(id); !optRow)
     {
       return;
     }

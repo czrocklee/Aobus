@@ -14,6 +14,7 @@ namespace app::core::model
     : _source{source}
   {
     _trackIds.reserve(view.tracks().size());
+
     for (auto const& id : view.tracks())
     {
       _trackIds.push_back(id);
@@ -39,6 +40,7 @@ namespace app::core::model
   {
     _trackIds.clear();
     _trackIds.reserve(view.tracks().size());
+
     for (auto const& id : view.tracks())
     {
       if (!_source || _source->indexOf(id))
@@ -46,6 +48,7 @@ namespace app::core::model
         _trackIds.push_back(id);
       }
     }
+
     TrackIdList::notifyReset();
   }
 
@@ -58,6 +61,7 @@ namespace app::core::model
 
     // Filter existing members against new source state
     std::vector<TrackId> next;
+
     for (auto id : _trackIds)
     {
       if (_source->indexOf(id))
@@ -65,6 +69,7 @@ namespace app::core::model
         next.push_back(id);
       }
     }
+
     _trackIds = std::move(next);
     TrackIdList::notifyReset();
   }
@@ -84,9 +89,7 @@ namespace app::core::model
 
   void ManualTrackIdList::onRemoved(TrackId id, std::size_t /*index*/)
   {
-    auto it = std::find(_trackIds.begin(), _trackIds.end(), id);
-    
-    if (it != _trackIds.end())
+    if (auto it = std::find(_trackIds.begin(), _trackIds.end(), id); it != _trackIds.end())
     {
       auto const myIndex = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
       _trackIds.erase(it);
@@ -101,6 +104,7 @@ namespace app::core::model
   void ManualTrackIdList::onBatchUpdated(std::span<TrackId const> ids)
   {
     std::vector<TrackId> matched;
+
     for (auto id : ids)
     {
       if (contains(id))
@@ -108,6 +112,7 @@ namespace app::core::model
         matched.push_back(id);
       }
     }
+
     if (!matched.empty())
     {
       TrackIdList::notifyBatchUpdated(matched);
@@ -117,6 +122,7 @@ namespace app::core::model
   void ManualTrackIdList::onBatchRemoved(std::span<TrackId const> ids)
   {
     std::vector<TrackId> removed;
+
     for (auto id : ids)
     {
       auto it = std::find(_trackIds.begin(), _trackIds.end(), id);
@@ -127,6 +133,7 @@ namespace app::core::model
         removed.push_back(id);
       }
     }
+    
     if (!removed.empty())
     {
       TrackIdList::notifyBatchRemoved(removed);

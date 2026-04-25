@@ -53,9 +53,8 @@ namespace app::core::playback
 
   bool StreamingPcmSource::initialize()
   {
-    auto const generation = _generation.load(std::memory_order_relaxed);
     
-    if (!fillUntil(_prerollTargetMs, generation))
+    if (auto const generation = _generation.load(std::memory_order_relaxed); !fillUntil(_prerollTargetMs, generation))
     {
       return false;
     }

@@ -174,7 +174,7 @@ namespace rs::lmdb
     : _dbi{dbi}, _txn{&txn}, _cursor{Reader::create(txn._handle.get(), _dbi)}
   {
     auto key = MDB_val{0, nullptr};
-
+    
     if (int const rc = mdb_cursor_get(_cursor.get(), &key, nullptr, MDB_LAST); rc == MDB_SUCCESS)
     {
       _lastId = read<std::uint32_t>(key);
