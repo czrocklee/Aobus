@@ -4,6 +4,8 @@
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
 #include "core/Log.h"
 
+#include <rs/utility/Raii.h>
+
 extern "C"
 {
 #include <alsa/asoundlib.h>
@@ -31,7 +33,6 @@ namespace app::playback
   {
     close();
 
-    _format = format;
     _callbacks = callbacks;
     _formatInfo = {};
     _lastError.clear();
@@ -40,7 +41,7 @@ namespace app::playback
 
     // Open PCM device
     auto const openErr = ::snd_pcm_open(&pcm, _deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
-    
+
     if (openErr < 0)
     {
       _lastError = "Failed to open ALSA device: " + _deviceName;
@@ -48,71 +49,67 @@ namespace app::playback
       return false;
     }
 
-    _pcm.reset(pcm);
+    auto safePcm = rs::utility::makeUniquePtr<::snd_pcm_close>(pcm);
 
     // Set hardware parameters
     ::snd_pcm_hw_params_t* params = nullptr;
     snd_pcm_hw_params_alloca(&params);
 
-    if (auto const err = ::snd_pcm_hw_params_any(_pcm.get(), params); err < 0)
+    if (auto const err = ::snd_pcm_hw_params_any(safePcm.get(), params); err < 0)
     {
       _lastError = "Failed to initialize ALSA hardware parameters";
       PLAYBACK_LOG_ERROR("{}", _lastError);
-      close();
       return false;
     }
 
     // Set interleaved access
-    if (auto const err = ::snd_pcm_hw_params_set_access(_pcm.get(), params, SND_PCM_ACCESS_RW_INTERLEAVED); err < 0)
+    if (auto const err = ::snd_pcm_hw_params_set_access(safePcm.get(), params, SND_PCM_ACCESS_RW_INTERLEAVED); err < 0)
     {
       _lastError = "Failed to set ALSA access mode";
       PLAYBACK_LOG_ERROR("{}", _lastError);
-      close();
       return false;
     }
 
     // Set sample format (S16)
     auto const formatMask = ::SND_PCM_FORMAT_S16;
-    if (auto const err = ::snd_pcm_hw_params_set_format(_pcm.get(), params, formatMask); err < 0)
+    if (auto const err = ::snd_pcm_hw_params_set_format(safePcm.get(), params, formatMask); err < 0)
     {
       _lastError = "Failed to set ALSA sample format";
       PLAYBACK_LOG_ERROR("{}", _lastError);
-      close();
       return false;
     }
 
     // Set sample rate
-    if (auto const err = ::snd_pcm_hw_params_set_rate(_pcm.get(), params, format.sampleRate, 0); err < 0)
+    if (auto const err = ::snd_pcm_hw_params_set_rate(safePcm.get(), params, format.sampleRate, 0); err < 0)
     {
       _lastError = "Failed to set ALSA sample rate";
       PLAYBACK_LOG_ERROR("{}", _lastError);
-      close();
       return false;
     }
 
     // Set channel count
-    if (auto const err = ::snd_pcm_hw_params_set_channels(_pcm.get(), params, format.channels); err < 0)
+    if (auto const err = ::snd_pcm_hw_params_set_channels(safePcm.get(), params, format.channels); err < 0)
     {
       _lastError = "Failed to set ALSA channel count";
       PLAYBACK_LOG_ERROR("{}", _lastError);
-      close();
       return false;
     }
 
     // Apply hardware parameters
-    if (auto const err = ::snd_pcm_hw_params(_pcm.get(), params); err < 0)
+    if (auto const err = ::snd_pcm_hw_params(safePcm.get(), params); err < 0)
     {
       _lastError = "Failed to apply ALSA hardware parameters";
       PLAYBACK_LOG_ERROR("{}", _lastError);
-      close();
       return false;
     }
 
+    _format = format;
+    _pcm.reset(safePcm.release());
     _formatInfo.streamFormat = format;
     _formatInfo.deviceFormat = format;
     _formatInfo.isExclusive = _deviceName.rfind("hw:", 0) == 0;
     _formatInfo.sinkName = _deviceName;
-    
+
     if (_deviceName.rfind("hw:", 0) == 0)
     {
       _formatInfo.isExclusive = true;
@@ -138,7 +135,7 @@ namespace app::playback
     {
       return;
     }
-    
+
     ::snd_pcm_start(_pcm.get());
   }
 
@@ -148,7 +145,7 @@ namespace app::playback
     {
       return;
     }
-    
+
     ::snd_pcm_pause(_pcm.get(), 1);
   }
 
@@ -158,7 +155,7 @@ namespace app::playback
     {
       return;
     }
-    
+
     ::snd_pcm_pause(_pcm.get(), 0);
   }
 
@@ -168,7 +165,7 @@ namespace app::playback
     {
       return;
     }
-    
+
     ::snd_pcm_drop(_pcm.get());
   }
 
@@ -180,12 +177,12 @@ namespace app::playback
       {
         _callbacks.onDrainComplete(_callbacks.userData);
       }
-      
+
       return;
     }
 
     ::snd_pcm_drain(_pcm.get());
-    
+
     if (_callbacks.onDrainComplete)
     {
       _callbacks.onDrainComplete(_callbacks.userData);
@@ -198,7 +195,7 @@ namespace app::playback
     {
       return;
     }
-    
+
     ::snd_pcm_drop(_pcm.get());
     ::snd_pcm_prepare(_pcm.get());
   }
@@ -219,7 +216,7 @@ namespace app::playback
     }
 
     // Query available sample rates
-    for (auto const targetRate : {44100, 48000, 88200, 96000, 176400, 192000})
+    for (auto const targetRate : std::to_array({44100, 48000, 88200, 96000, 176400, 192000}))
     {
       if (::snd_pcm_hw_params_test_rate(_pcm.get(), nullptr, targetRate, 0) == 0)
       {
@@ -228,12 +225,12 @@ namespace app::playback
     }
 
     // Query available bit depths
-    for (auto const depth : {16, 24, 32})
+    for (auto const depth : std::to_array({16, 24, 32}))
     {
       auto const fmt = (depth == 16)   ? ::SND_PCM_FORMAT_S16
                        : (depth == 24) ? ::SND_PCM_FORMAT_S24
                                        : ::SND_PCM_FORMAT_S32;
-      
+
       if (::snd_pcm_hw_params_test_format(_pcm.get(), nullptr, fmt) == 0)
       {
         caps.bitDepths.push_back(static_cast<std::uint8_t>(depth));
@@ -241,7 +238,7 @@ namespace app::playback
     }
 
     // Query available channel counts
-    for (auto const channels : {1, 2, 4, 6, 8})
+    for (auto const channels : std::to_array({1, 2, 4, 6, 8}))
     {
       if (::snd_pcm_hw_params_test_channels(_pcm.get(), nullptr, channels) == 0)
       {

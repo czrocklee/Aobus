@@ -29,7 +29,7 @@ namespace app::ui
       std::string_view prefix;
     };
 
-    constexpr auto kMetadataFields = std::array<std::string_view, 13>{
+    constexpr auto kMetadataFields = std::to_array<std::string_view>({
       "title",
       "artist",
       "album",
@@ -43,15 +43,15 @@ namespace app::ui
       "discNumber",
       "totalDiscs",
       "coverArt",
-    };
+    });
 
-    constexpr auto kPropertyFields = std::array<std::string_view, 5>{
+    constexpr auto kPropertyFields = std::to_array<std::string_view>({
       "duration",
       "bitrate",
       "sampleRate",
       "channels",
       "bitDepth",
-    };
+    });
 
     bool isIdentifierStart(char ch)
     {
