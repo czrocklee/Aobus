@@ -17,6 +17,7 @@ extern "C"
 #include <spa/utils/hook.h>
 }
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -87,42 +88,37 @@ namespace app::playback
 
   private:
     // RAII Deleters
-    struct PwThreadLoopDeleter final { void operator()(::pw_thread_loop* p) const noexcept; };
-    struct PwContextDeleter final { void operator()(::pw_context* p) const noexcept; };
-    struct PwStreamDeleter final { void operator()(::pw_stream* p) const noexcept; };
-    struct PwProxyDeleter final { void operator()(void* p) const noexcept; };
+    struct PwThreadLoopDeleter final
+    {
+      void operator()(::pw_thread_loop* p) const noexcept;
+    };
+    struct PwContextDeleter final
+    {
+      void operator()(::pw_context* p) const noexcept;
+    };
+    struct PwStreamDeleter final
+    {
+      void operator()(::pw_stream* p) const noexcept;
+    };
 
     // Smart Pointers
     using PwThreadLoopPtr = std::unique_ptr<::pw_thread_loop, PwThreadLoopDeleter>;
     using PwContextPtr = std::unique_ptr<::pw_context, PwContextDeleter>;
     using PwStreamPtr = std::unique_ptr<::pw_stream, PwStreamDeleter>;
 
-    template <typename T>
-    using PwProxyPtr = std::unique_ptr<T, PwProxyDeleter>;
-
-    using PwLinkPtr = PwProxyPtr<::pw_link>;
-    using PwNodePtr = PwProxyPtr<::pw_node>;
-    using PwRegistryPtr = PwProxyPtr<::pw_registry>;
-
-    // Hook Management
-    class SpaHookGuard final
+    struct SpaSourceDeleter final
     {
-    public:
-      SpaHookGuard() noexcept = default;
-      ~SpaHookGuard() { reset(); }
-
-      // Registered hooks are linked-list nodes; relocation is fatal.
-      SpaHookGuard(SpaHookGuard const&) = delete;
-      SpaHookGuard& operator=(SpaHookGuard const&) = delete;
-      SpaHookGuard(SpaHookGuard&&) = delete;
-      SpaHookGuard& operator=(SpaHookGuard&&) = delete;
-
-      void reset() noexcept;
-      ::spa_hook* get() noexcept { return &_hook; }
-
-    private:
-      ::spa_hook _hook = {};
+      SpaSourceDeleter() noexcept = default;
+      ::pw_thread_loop* loop = nullptr;
+      void operator()(::spa_source* p) const noexcept
+      {
+        if (p && loop)
+        {
+          ::pw_loop_destroy_source(::pw_thread_loop_get_loop(loop), p);
+        }
+      }
     };
+    using SpaSourcePtr = std::unique_ptr<::spa_source, SpaSourceDeleter>;
 
     struct RegistryMonitorState;
 
@@ -144,7 +140,7 @@ namespace app::playback
 
     app::core::playback::AudioRenderCallbacks _callbacks;
     app::core::playback::StreamFormat _format;
-    bool _drainPending = false;
+    std::atomic<bool> _drainPending = false;
     mutable std::mutex _infoMutex;
     std::unique_ptr<RegistryMonitorState> _monitorState;
     app::core::playback::BackendFormatInfo _formatInfo;
@@ -155,7 +151,7 @@ namespace app::playback
     PwThreadLoopPtr _threadLoop;
     PwContextPtr _context;
     PwStreamPtr _stream;
-    ::spa_source* _refreshEvent = nullptr;
+    SpaSourcePtr _refreshEvent;
   };
 
 } // namespace app::playback

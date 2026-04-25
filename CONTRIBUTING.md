@@ -65,7 +65,8 @@ This guide covers C++ coding conventions for RockStudio contributors.
     - 3.2.6. Use init statement: `if (auto var = get(); condition)`
   - 3.3. C++11 Features
     - 3.3.1. Use RAII: adopts `std::unique_ptr` for owned resources, use custom deleter if needed.
-      - Example for C types: `struct PwLoopDeleter { void operator()(::pw_thread_loop* p) const noexcept { ::pw_thread_loop_destroy(p); } };`
+      - Prefer `rs::utility::makeUniquePtr<::c_func>(ptr)` for local RAII in `.cpp` files to avoid boilerplate while maintaining zero overhead.
+      - Example for C types in headers: `struct PwLoopDeleter { void operator()(::pw_thread_loop* p) const noexcept { ::pw_thread_loop_destroy(p); } };`
     - 3.3.2. DON'T use `virtual` on overridden functions: Redundant when `override` is present
     - 3.3.3. Use `[[maybe_unused]]`: Suppress unused warnings other than (void)
     - 3.3.4. Use `noexcept`: Mark functions that won't throw

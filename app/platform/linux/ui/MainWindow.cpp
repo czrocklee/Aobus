@@ -367,7 +367,7 @@ namespace app::ui
 
   void MainWindow::scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files)
   {
-    static constexpr auto kSupportedExtensions = std::array{".mp3", ".m4a", ".flac"};
+    static constexpr auto kSupportedExtensions = std::to_array<std::string_view>({".mp3", ".m4a", ".flac"});
 
     try
     {
