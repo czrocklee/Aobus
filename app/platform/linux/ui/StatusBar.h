@@ -32,6 +32,9 @@ namespace app::ui
     using NowPlayingClickedSignal = sigc::signal<void()>;
     NowPlayingClickedSignal& signalNowPlayingClicked() { return _nowPlayingClicked; }
 
+    using BackendChangedSignal = sigc::signal<void(app::core::playback::BackendKind)>;
+    BackendChangedSignal& signalBackendChanged() { return _backendChanged; }
+
   private:
     // Left: Library info
     Gtk::Label _libraryLabel;
@@ -49,7 +52,8 @@ namespace app::ui
 
     // Right: Playback details
     Gtk::Box _playbackDetailsBox{Gtk::Orientation::HORIZONTAL};
-    Gtk::Label _playbackLabel;
+    Gtk::MenuButton _backendButton;
+    Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;
 
     // Far Right: Status message
@@ -57,6 +61,7 @@ namespace app::ui
 
     sigc::connection _timerConnection;
     NowPlayingClickedSignal _nowPlayingClicked;
+    BackendChangedSignal _backendChanged;
   };
 
 } // namespace app::ui

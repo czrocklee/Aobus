@@ -10,6 +10,7 @@
 namespace app::core::playback
 {
   class PlaybackEngine;
+  class IAudioBackend;
 }
 
 namespace app::core::playback
@@ -22,6 +23,7 @@ namespace app::core::playback
     ~PlaybackController();
 
     void play(TrackPlaybackDescriptor descriptor);
+    void setBackend(std::unique_ptr<IAudioBackend> backend);
     void pause();
     void resume();
     void stop();

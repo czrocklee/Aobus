@@ -11,9 +11,11 @@ extern "C"
 #include <alsa/asoundlib.h>
 }
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 
 namespace app::playback
 {
@@ -55,11 +57,17 @@ namespace app::playback
     };
     using AlsaPcmPtr = std::unique_ptr<::snd_pcm_t, AlsaPcmDeleter>;
 
+    void playbackLoop(std::stop_token stopToken);
+    void recoverFromXrun(int err);
+
     std::string _deviceName;
     AlsaPcmPtr _pcm;
     app::core::playback::AudioRenderCallbacks _callbacks;
     app::core::playback::StreamFormat _format;
     std::string _lastError;
+
+    std::jthread _thread;
+    std::atomic<bool> _paused{false};
   };
 
 } // namespace app::playback

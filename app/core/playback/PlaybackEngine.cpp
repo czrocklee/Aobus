@@ -82,6 +82,45 @@ namespace app::core::playback
     stop();
   }
 
+  void PlaybackEngine::setBackend(std::unique_ptr<IAudioBackend> backend)
+  {
+    struct State
+    {
+      std::optional<TrackPlaybackDescriptor> track;
+      std::uint32_t positionMs = 0;
+      bool wasPlaying = false;
+    };
+
+    auto const state = [this]() {
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      return State{
+        .track = _currentTrack,
+        .positionMs = _snapshot.positionMs,
+        .wasPlaying = (_state == TransportState::Playing)
+      };
+    }();
+
+    stop();
+
+    _backend = std::move(backend);
+
+    {
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
+    }
+
+    if (state.track)
+    {
+      PLAYBACK_LOG_INFO("Resuming track '{}' after backend switch", state.track->title);
+      play(*state.track);
+      seek(state.positionMs);
+      if (!state.wasPlaying)
+      {
+        pause();
+      }
+    }
+  }
+
   void PlaybackEngine::play(TrackPlaybackDescriptor descriptor)
   {
     PLAYBACK_LOG_INFO("Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
@@ -361,7 +400,7 @@ namespace app::core::playback
       .objectPath = ""
     });
 
-    _snapshot.graph.links.push_back({.sourceId = "rs-decoder", .destId = "rs-engine"});
+    _snapshot.graph.links.push_back({.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
 
     backendFormat = info.outputFormat;
     return true;
@@ -397,7 +436,7 @@ namespace app::core::playback
     {
       if (node.type == AudioNodeType::Stream)
       {
-        links.push_back({.sourceId = "rs-engine", .destId = node.id});
+        links.push_back({.sourceId = "rs-engine", .destId = node.id, .isActive = true});
         PLAYBACK_LOG_DEBUG("Bridged Engine to backend stream '{}'", node.id);
         bridged = true;
         break;

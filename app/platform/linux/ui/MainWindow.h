@@ -152,6 +152,7 @@ namespace app::ui
                                std::optional<rs::core::ListId> sourceListId = std::nullopt);
     bool playTrackAtSequenceIndex(std::size_t index);
     void jumpToPlayingList();
+    void onBackendChanged(app::core::playback::BackendKind kind);
     void clearActivePlaybackSequence();
     void handlePlaybackFinished();
     void bindTrackPagePlayback(TrackViewPage& page);

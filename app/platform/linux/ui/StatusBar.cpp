@@ -7,6 +7,10 @@
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/stylecontext.h>
 
+#include <giomm/menu.h>
+#include <giomm/simpleactiongroup.h>
+#include <glibmm/variant.h>
+
 #include <iomanip>
 #include <sstream>
 
@@ -88,6 +92,19 @@ namespace app::ui
         .clickable-label {
           cursor: pointer;
         }
+        .backend-button {
+           border: none;
+           background: none;
+           box-shadow: none;
+           padding: 2px 6px;
+           color: @theme_fg_color;
+           opacity: 0.7;
+           font-weight: bold;
+        }
+        .backend-button:hover {
+           opacity: 1.0;
+           background-color: alpha(@theme_fg_color, 0.1);
+        }
         .sink-status-good { color: #34a853; }
         .sink-status-warning { color: #fbbc04; }
         .sink-status-bad { color: #ea4335; }
@@ -132,11 +149,32 @@ namespace app::ui
     _playbackDetailsBox.set_spacing(8);
     _playbackDetailsBox.set_margin_start(12);
     _playbackDetailsBox.set_margin_end(12);
-    _playbackLabel.add_css_class("dim-label");
+    
+    _backendButton.add_css_class("backend-button");
+    _backendButton.set_label("PipeWire");
+    _backendButton.set_tooltip_text("Click to change audio backend");
+
+    auto actionGroup = Gio::SimpleActionGroup::create();
+    actionGroup->add_action_with_parameter("set-backend", Glib::VARIANT_TYPE_STRING,
+      [this](const Glib::VariantBase& value) {
+        auto name = Glib::VariantBase::cast_dynamic<Glib::Variant<Glib::ustring>>(value).get();
+        if (name == "pipewire") _backendChanged.emit(app::core::playback::BackendKind::PipeWire);
+        else if (name == "alsa") _backendChanged.emit(app::core::playback::BackendKind::AlsaExclusive);
+      });
+    insert_action_group("status", actionGroup);
+
+    auto menu = Gio::Menu::create();
+    menu->append("PipeWire", "status.set-backend('pipewire')");
+    menu->append("ALSA (Exclusive)", "status.set-backend('alsa')");
+    _backendButton.set_menu_model(menu);
+
+    _streamInfoLabel.add_css_class("dim-label");
     _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
     _sinkStatusIcon.set_pixel_size(12);
     _sinkStatusIcon.set_visible(false);
-    _playbackDetailsBox.append(_playbackLabel);
+    
+    _playbackDetailsBox.append(_backendButton);
+    _playbackDetailsBox.append(_streamInfoLabel);
     _playbackDetailsBox.append(_sinkStatusIcon);
     append(_playbackDetailsBox);
 
@@ -249,8 +287,8 @@ namespace app::ui
     if (snapshot.state == app::core::playback::TransportState::Idle)
     {
       _nowPlayingLabel.set_text("");
-      _playbackLabel.set_text("");
-      _playbackLabel.set_tooltip_text("");
+      _streamInfoLabel.set_text("");
+      _backendButton.set_label("PipeWire"); // Default
       _sinkStatusIcon.set_visible(false);
       return;
     }
@@ -272,31 +310,34 @@ namespace app::ui
       _nowPlayingLabel.set_text("");
     }
 
-    // Compact Summary
-    std::stringstream ss;
+    // Backend Label
     switch (snapshot.backend)
     {
-      case app::core::playback::BackendKind::PipeWire: ss << "PipeWire"; break;
-      case app::core::playback::BackendKind::AlsaExclusive: ss << "ALSA (Exclusive)"; break;
-      default: break;
+      case app::core::playback::BackendKind::PipeWire: _backendButton.set_label("PipeWire"); break;
+      case app::core::playback::BackendKind::AlsaExclusive: _backendButton.set_label("ALSA (Exclusive)"); break;
+      default: _backendButton.set_label("None"); break;
     }
 
     // Source Format from Decoder Node
+    std::stringstream ss;
+    bool formatFound = false;
     for (auto const& node : snapshot.graph.nodes)
     {
       if (node.type == app::core::playback::AudioNodeType::Decoder && node.format)
       {
-        ss << " | " << formatStream(*node.format);
+        ss << formatStream(*node.format);
+        formatFound = true;
         break;
       }
     }
 
     if (snapshot.underrunCount > 0)
     {
-      ss << " | " << snapshot.underrunCount << " underruns";
+      if (formatFound) ss << " | ";
+      ss << snapshot.underrunCount << " underruns";
     }
 
-    _playbackLabel.set_text(ss.str());
+    _streamInfoLabel.set_text(ss.str());
 
     // Tooltip: Build dynamic representation of the path from the graph
     std::stringstream tt;
@@ -326,7 +367,7 @@ namespace app::ui
       tt << "\n" << snapshot.qualityTooltip;
     }
 
-    _playbackLabel.set_tooltip_text(tt.str());
+    _streamInfoLabel.set_tooltip_text(tt.str());
     _sinkStatusIcon.set_tooltip_text(tt.str());
 
     // Update status icon
