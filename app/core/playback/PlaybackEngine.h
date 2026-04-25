@@ -35,11 +35,15 @@ namespace app::core::playback
                    std::shared_ptr<IPcmSource>& source,
                    StreamFormat& backendFormat);
 
+    void handleGraphChanged(AudioGraph const& backendGraph);
+    void analyzeAudioQuality();
+
     static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept;
     static bool isSourceDrained(void* userData) noexcept;
     static void onUnderrun(void* userData) noexcept;
     static void onPositionAdvanced(void* userData, std::uint32_t frames) noexcept;
     static void onDrainComplete(void* userData) noexcept;
+    static void onGraphChanged(void* userData, AudioGraph const& graph) noexcept;
     static void onSourceError(void* userData) noexcept;
 
     std::unique_ptr<IAudioBackend> _backend;

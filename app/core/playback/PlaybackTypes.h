@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace app::core::playback
 {
@@ -42,6 +43,8 @@ namespace app::core::playback
     std::uint8_t bitDepth = 0;
     bool isFloat = false;
     bool isInterleaved = true;
+
+    bool operator==(StreamFormat const&) const = default;
   };
 
   struct TrackPlaybackDescriptor final
@@ -58,22 +61,63 @@ namespace app::core::playback
     std::uint8_t bitDepthHint = 0;
   };
 
-  struct BackendFormatInfo final
+  /**
+   * @brief Type of an audio processing node in the playback graph.
+   */
+  enum class AudioNodeType
   {
-    std::optional<StreamFormat> streamFormat;
-    std::optional<StreamFormat> deviceFormat;
-    bool isExclusive = false;
-    std::string conversionReason;
-    enum class SinkStatus
-    {
-      None,
-      Good,
-      Warning,
-      Bad,
-    };
-    std::string sinkName;
-    SinkStatus sinkStatus = SinkStatus::None;
-    std::string sinkTooltip;
+    Decoder,        ///< Source decoder (e.g. FFmpeg)
+    Engine,         ///< RockStudio internal engine (volume, EQ, etc)
+    Stream,         ///< Backend-specific stream node (e.g. PipeWire stream)
+    Intermediary,   ///< Generic processing node (e.g. PipeWire filter)
+    Sink,           ///< Final hardware output device
+    ExternalSource, ///< Another application feeding into a node (mixing)
+  };
+
+  /**
+   * @brief Represents a semantic component in the audio pipeline.
+   */
+  struct AudioNode final
+  {
+    std::string id = "";
+    AudioNodeType type = AudioNodeType::Intermediary;
+    std::string name = "";
+    std::optional<StreamFormat> format = std::nullopt;
+    bool volumeNotUnity = false;
+    bool isMuted = false;
+    std::string objectPath = "";
+  };
+
+  /**
+   * @brief Represents a connection between two audio nodes.
+   */
+  struct AudioLink final
+  {
+    std::string sourceId = "";
+    std::string destId = "";
+    bool isActive = true;
+  };
+
+  /**
+   * @brief Topological representation of the entire playback path.
+   */
+  struct AudioGraph final
+  {
+    std::vector<AudioNode> nodes;
+    std::vector<AudioLink> links;
+  };
+
+  /**
+   * @brief Final conclusion on the quality of the current audio path.
+   */
+  enum class AudioQuality
+  {
+    Unknown,
+    BitPerfect, ///< Exact match, no volume changes, exclusive access
+    Lossless,   ///< Safe conversions (e.g. bit-depth upscaling)
+    Resampled,  ///< Sample rate conversion occurred
+    Mixed,      ///< Multiple active sources sharing the path
+    Lossy,      ///< Bit-depth truncation or channel dropping
   };
 
   struct PlaybackSnapshot final
@@ -87,14 +131,11 @@ namespace app::core::playback
     std::uint32_t positionMs = 0;
     std::uint32_t bufferedMs = 0;
     std::uint32_t underrunCount = 0;
-    std::optional<StreamFormat> sourceFormat;
-    std::optional<StreamFormat> activeFormat;
-    std::optional<StreamFormat> deviceFormat;
-    bool exclusiveOutput = false;
-    std::string conversionReason;
-    std::string sinkName;
-    BackendFormatInfo::SinkStatus sinkStatus = BackendFormatInfo::SinkStatus::None;
-    std::string sinkTooltip;
+
+    // Semantic graph data
+    AudioGraph graph;
+    AudioQuality quality = AudioQuality::Unknown;
+    std::string qualityTooltip;
   };
 
 } // namespace app::core::playback

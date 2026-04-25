@@ -34,7 +34,6 @@ namespace app::playback
     close();
 
     _callbacks = callbacks;
-    _formatInfo = {};
     _lastError.clear();
 
     ::snd_pcm_t* pcm = nullptr;
@@ -70,7 +69,7 @@ namespace app::playback
       return false;
     }
 
-    // Set sample format (S16)
+    // Set sample format (S16) - currently fixed for simplicity in this example
     auto const formatMask = ::SND_PCM_FORMAT_S16;
     if (auto const err = ::snd_pcm_hw_params_set_format(safePcm.get(), params, formatMask); err < 0)
     {
@@ -105,25 +104,35 @@ namespace app::playback
 
     _format = format;
     _pcm.reset(safePcm.release());
-    _formatInfo.streamFormat = format;
-    _formatInfo.deviceFormat = format;
-    _formatInfo.isExclusive = _deviceName.rfind("hw:", 0) == 0;
-    _formatInfo.sinkName = _deviceName;
 
-    if (_deviceName.rfind("hw:", 0) == 0)
+    // Push initial graph
+    if (_callbacks.onGraphChanged)
     {
-      _formatInfo.isExclusive = true;
-      _formatInfo.sinkStatus = BackendFormatInfo::SinkStatus::Good;
-      _formatInfo.sinkTooltip = "Direct ALSA hw device selected. This is outside PipeWire and is the strongest "
-                                "available path in the app today.";
-    }
-    else
-    {
-      _formatInfo.isExclusive = false;
-      _formatInfo.sinkStatus = BackendFormatInfo::SinkStatus::Warning;
-      _formatInfo.sinkTooltip = "ALSA playback is using a non-hw device name, so bit-perfect playback is not "
-                                "guaranteed.";
-      _formatInfo.conversionReason = "ALSA output is using a non-hw device, so bit-perfect playback is not guaranteed";
+      auto graph = AudioGraph{};
+      
+      // Stream Node
+      auto streamNode = AudioNode{
+        .id = "alsa-stream",
+        .type = AudioNodeType::Stream,
+        .name = "ALSA Stream",
+        .format = _format
+      };
+      graph.nodes.push_back(std::move(streamNode));
+
+      // Sink Node
+      auto sinkNode = AudioNode{
+        .id = "alsa-sink",
+        .type = AudioNodeType::Sink,
+        .name = _deviceName,
+        .format = _format,
+        .objectPath = _deviceName
+      };
+      graph.nodes.push_back(std::move(sinkNode));
+
+      // Link
+      graph.links.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink"});
+
+      _callbacks.onGraphChanged(_callbacks.userData, graph);
     }
 
     return true;
@@ -202,7 +211,6 @@ namespace app::playback
 
   void AlsaExclusiveBackend::close()
   {
-    _formatInfo = {};
     _pcm.reset();
   }
 

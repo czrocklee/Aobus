@@ -65,7 +65,7 @@ nix-shell --run "cmake --build '$BUILD_DIR' --parallel"
 # Run tests (only for debug and release)
 if [[ "$BUILD_TYPE" == "debug" || "$BUILD_TYPE" == "release" ]]; then
     echo "Running tests..."
-    nix-shell --run "$BUILD_DIR/rs_test"
+    nix-shell --run "$BUILD_DIR/test/rs_test"
 fi
 
 # PGO instructions

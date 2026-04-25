@@ -58,13 +58,6 @@ namespace app::ui
       return ss.str();
     }
 
-    bool sameStreamFormat(app::core::playback::StreamFormat const& lhs,
-                          app::core::playback::StreamFormat const& rhs) noexcept
-    {
-      return lhs.sampleRate == rhs.sampleRate && lhs.channels == rhs.channels && lhs.bitDepth == rhs.bitDepth &&
-             lhs.isFloat == rhs.isFloat && lhs.isInterleaved == rhs.isInterleaved;
-    }
-
     void ensureStatusBarCss()
     {
       static auto provider = []
@@ -128,9 +121,6 @@ namespace app::ui
     set_valign(Gtk::Align::END);
     set_margin(6);
     add_css_class("status-bar");
-
-    // Add a subtle top border via a separator if needed,
-    // but for now we just use margins to increase height.
 
     // Status label (Far Left)
     _statusLabel.set_halign(Gtk::Align::START);
@@ -256,17 +246,16 @@ namespace app::ui
 
   void StatusBar::setPlaybackDetails(app::core::playback::PlaybackSnapshot const& snapshot)
   {
-    if (snapshot.state == app::core::playback::TransportState::Idle ||
-        (!snapshot.sourceFormat && !snapshot.activeFormat))
+    if (snapshot.state == app::core::playback::TransportState::Idle)
     {
       _nowPlayingLabel.set_text("");
       _playbackLabel.set_text("");
       _playbackLabel.set_tooltip_text("");
+      _sinkStatusIcon.set_visible(false);
       return;
     }
 
-    // Center: Artist - Title
-    
+    // Artist - Title
     if (!snapshot.trackTitle.empty())
     {
       if (!snapshot.trackArtist.empty())
@@ -283,32 +272,23 @@ namespace app::ui
       _nowPlayingLabel.set_text("");
     }
 
-    // Right: Backend + SW info (Compact)
+    // Compact Summary
     std::stringstream ss;
-    bool hasText = false;
-
     switch (snapshot.backend)
     {
-      case app::core::playback::BackendKind::PipeWire:
-        ss << "PipeWire";
-        hasText = true;
-        break;
-      case app::core::playback::BackendKind::AlsaExclusive:
-        ss << "ALSA";
-        hasText = true;
-        break;
+      case app::core::playback::BackendKind::PipeWire: ss << "PipeWire"; break;
+      case app::core::playback::BackendKind::AlsaExclusive: ss << "ALSA (Exclusive)"; break;
       default: break;
     }
 
-    if (snapshot.backend != app::core::playback::BackendKind::None)
+    // Source Format from Decoder Node
+    for (auto const& node : snapshot.graph.nodes)
     {
-      ss << (snapshot.exclusiveOutput ? " exclusive" : " shared");
-      hasText = true;
-    }
-
-    if (snapshot.sourceFormat)
-    {
-      ss << (hasText ? " | " : "") << formatStream(*snapshot.sourceFormat);
+      if (node.type == app::core::playback::AudioNodeType::Decoder && node.format)
+      {
+        ss << " | " << formatStream(*node.format);
+        break;
+      }
     }
 
     if (snapshot.underrunCount > 0)
@@ -318,59 +298,59 @@ namespace app::ui
 
     _playbackLabel.set_text(ss.str());
 
-    // Tooltip: Full chain (src -> pw -> sink)
+    // Tooltip: Build dynamic representation of the path from the graph
     std::stringstream tt;
+    tt << "Audio Pipeline:\n";
     
-    if (snapshot.sourceFormat)
+    for (auto const& node : snapshot.graph.nodes)
     {
-      tt << "Source: " << formatStream(*snapshot.sourceFormat) << "\n";
+      tt << "• ";
+      switch (node.type)
+      {
+        case app::core::playback::AudioNodeType::Decoder: tt << "[Source] "; break;
+        case app::core::playback::AudioNodeType::Engine: tt << "[Engine] "; break;
+        case app::core::playback::AudioNodeType::Stream: tt << "[Stream] "; break;
+        case app::core::playback::AudioNodeType::Intermediary: tt << "[Filter] "; break;
+        case app::core::playback::AudioNodeType::Sink: tt << "[Device] "; break;
+        case app::core::playback::AudioNodeType::ExternalSource: tt << "[Other Source] "; break;
+      }
+      tt << node.name;
+      if (node.format) tt << " (" << formatStream(*node.format) << ")";
+      if (node.volumeNotUnity) tt << " [Vol Control]";
+      if (node.isMuted) tt << " [Muted]";
+      tt << "\n";
     }
 
-    if (snapshot.activeFormat &&
-        (!snapshot.sourceFormat || !sameStreamFormat(*snapshot.sourceFormat, *snapshot.activeFormat)))
+    if (!snapshot.qualityTooltip.empty())
     {
-      tt << "PipeWire: " << formatStream(*snapshot.activeFormat) << "\n";
-    }
-
-    if (snapshot.deviceFormat &&
-        ((!snapshot.activeFormat &&
-          (!snapshot.sourceFormat || !sameStreamFormat(*snapshot.sourceFormat, *snapshot.deviceFormat))) ||
-         (snapshot.activeFormat && !sameStreamFormat(*snapshot.activeFormat, *snapshot.deviceFormat))))
-    {
-      tt << "Sink: " << formatStream(*snapshot.deviceFormat) << "\n";
-    }
-
-    if (!snapshot.sinkName.empty())
-    {
-      tt << "Device: " << snapshot.sinkName << "\n";
-    }
-
-    if (!snapshot.sinkTooltip.empty())
-    {
-      tt << "\n" << snapshot.sinkTooltip;
+      tt << "\n" << snapshot.qualityTooltip;
     }
 
     _playbackLabel.set_tooltip_text(tt.str());
+    _sinkStatusIcon.set_tooltip_text(tt.str());
 
     // Update status icon
     clearSinkStatusClasses(_sinkStatusIcon);
-    switch (snapshot.sinkStatus)
+    _sinkStatusIcon.set_visible(true);
+    
+    using AudioQuality = app::core::playback::AudioQuality;
+    switch (snapshot.quality)
     {
-      case app::core::playback::BackendFormatInfo::SinkStatus::Good:
+      case AudioQuality::BitPerfect:
         _sinkStatusIcon.add_css_class("sink-status-good");
-        _sinkStatusIcon.set_visible(true);
         break;
-      case app::core::playback::BackendFormatInfo::SinkStatus::Warning:
+      case AudioQuality::Lossless:
+      case AudioQuality::Resampled:
         _sinkStatusIcon.add_css_class("sink-status-warning");
-        _sinkStatusIcon.set_visible(true);
         break;
-      case app::core::playback::BackendFormatInfo::SinkStatus::Bad:
+      case AudioQuality::Mixed:
+      case AudioQuality::Lossy:
         _sinkStatusIcon.add_css_class("sink-status-bad");
-        _sinkStatusIcon.set_visible(true);
         break;
-      case app::core::playback::BackendFormatInfo::SinkStatus::None: _sinkStatusIcon.set_visible(false); break;
+      case AudioQuality::Unknown:
+        _sinkStatusIcon.set_visible(false);
+        break;
     }
-    _sinkStatusIcon.set_tooltip_text(snapshot.sinkTooltip);
   }
 
   void StatusBar::setImportProgress(double fraction, std::string const& info)
