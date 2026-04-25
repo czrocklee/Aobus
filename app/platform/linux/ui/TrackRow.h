@@ -30,12 +30,12 @@ namespace app::ui
 
     TrackId getTrackId() const { return _id; }
 
-    Glib::ustring getArtist() const;
-    Glib::ustring getAlbum() const;
-    Glib::ustring getTitle() const;
-    Glib::ustring getColumnText(TrackColumn column) const;
-    Glib::ustring getDisplayNumber() const;
-    Glib::ustring getTags() const;
+    const Glib::ustring& getArtist() const;
+    const Glib::ustring& getAlbum() const;
+    const Glib::ustring& getTitle() const;
+    const Glib::ustring& getColumnText(TrackColumn column) const;
+    const Glib::ustring& getDisplayNumber() const;
+    const Glib::ustring& getTags() const;
     std::chrono::milliseconds getDuration() const;
     TrackPresentationKeysView getPresentationKeys() const;
     std::uint64_t getResourceId() const;
@@ -51,14 +51,19 @@ namespace app::ui
     TrackId _id;
     std::shared_ptr<app::core::model::TrackRowDataProvider> _provider;
     mutable bool _loaded = false;
-    mutable std::string _artist;
-    mutable std::string _album;
-    mutable std::string _albumArtist;
-    mutable std::string _genre;
-    mutable std::string _composer;
-    mutable std::string _work;
-    mutable std::string _title;
-    mutable std::string _tags;
+    mutable Glib::ustring _artist;
+    mutable Glib::ustring _album;
+    mutable Glib::ustring _albumArtist;
+    mutable Glib::ustring _genre;
+    mutable Glib::ustring _composer;
+    mutable Glib::ustring _work;
+    mutable Glib::ustring _title;
+    mutable Glib::ustring _tags;
+    mutable Glib::ustring _yearStr;
+    mutable Glib::ustring _discNumberStr;
+    mutable Glib::ustring _trackNumberStr;
+    mutable Glib::ustring _displayNumberStr;
+    mutable Glib::ustring _durationStr;
     mutable std::chrono::milliseconds _duration{0};
     mutable std::uint16_t _year = 0;
     mutable std::uint16_t _discNumber = 0;
