@@ -13,22 +13,45 @@
 namespace app::core::playback
 {
 
+  /**
+   * @brief Callbacks provided by the engine to the backend.
+   */
   struct AudioRenderCallbacks final
   {
     void* userData = nullptr;
+
+    /// Called by the backend when it needs more PCM data.
     std::size_t (*readPcm)(void* userData, std::span<std::byte> output) noexcept = nullptr;
+
+    /// Called by the backend to check if the source has finished sending data.
     bool (*isSourceDrained)(void* userData) noexcept = nullptr;
+
+    /// Called by the backend when an underrun occurs.
     void (*onUnderrun)(void* userData) noexcept = nullptr;
+
+    /// Called by the backend to report playback progress.
     void (*onPositionAdvanced)(void* userData, std::uint32_t frames) noexcept = nullptr;
+
+    /// Called by the backend when a drain operation has completed.
     void (*onDrainComplete)(void* userData) noexcept = nullptr;
+
+    /// Called by the backend whenever the audio routing graph topology or formats change.
+    void (*onGraphChanged)(void* userData, AudioGraph const& graph) noexcept = nullptr;
   };
 
+  /**
+   * @brief Interface for platform-specific audio output backends.
+   */
   class IAudioBackend
   {
   public:
     virtual ~IAudioBackend() = default;
 
+    /**
+     * @brief Prepares the backend for playback with the given format.
+     */
     virtual bool open(StreamFormat const& format, AudioRenderCallbacks callbacks) = 0;
+
     virtual void start() = 0;
     virtual void pause() = 0;
     virtual void resume() = 0;
@@ -36,8 +59,8 @@ namespace app::core::playback
     virtual void drain() = 0;
     virtual void stop() = 0;
     virtual void close() = 0;
+
     virtual BackendKind kind() const noexcept = 0;
-    virtual BackendFormatInfo formatInfo() const = 0;
     virtual std::string_view lastError() const noexcept = 0;
   };
 

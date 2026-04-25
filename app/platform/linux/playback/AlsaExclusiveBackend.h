@@ -18,6 +18,11 @@ extern "C"
 namespace app::playback
 {
 
+  /**
+   * @brief Backend using direct ALSA access.
+   *
+   * Can provide bit-perfect exclusive access when using "hw:" devices.
+   */
   class AlsaExclusiveBackend final : public app::core::playback::IAudioBackend
   {
   public:
@@ -33,11 +38,12 @@ namespace app::playback
     void drain() override;
     void stop() override;
     void close() override;
+
     app::core::playback::BackendKind kind() const noexcept override
     {
       return app::core::playback::BackendKind::AlsaExclusive;
     }
-    app::core::playback::BackendFormatInfo formatInfo() const override { return _formatInfo; }
+
     std::string_view lastError() const noexcept override { return _lastError; }
 
     app::core::playback::DeviceCapabilities queryCapabilities() const;
@@ -53,7 +59,6 @@ namespace app::playback
     AlsaPcmPtr _pcm;
     app::core::playback::AudioRenderCallbacks _callbacks;
     app::core::playback::StreamFormat _format;
-    app::core::playback::BackendFormatInfo _formatInfo;
     std::string _lastError;
   };
 

@@ -75,7 +75,7 @@ namespace app::ui
       auto const& metadata = view.metadata();
       auto const title = metadata.title();
 
-      row->populate(Glib::ustring{title.data(), title.size()},
+      row->populate(Glib::ustring(title.begin(), title.end()),
                     metadata.artistId(),
                     metadata.albumId(),
                     metadata.albumArtistId(),
@@ -221,7 +221,7 @@ namespace app::ui
     try
     {
       auto const str = _dict->get(id);
-      result.assign(str.data(), str.size());
+      result = Glib::ustring(str.begin(), str.end());
     }
     catch (std::exception const&)
     {

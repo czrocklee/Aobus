@@ -10,7 +10,11 @@
 namespace app::core::playback
 {
 
-  // Fallback backend that does nothing - used when no real backend is available
+  /**
+   * @brief Fallback backend that does nothing.
+   *
+   * Used when no real backend is available.
+   */
   class NullBackend final : public IAudioBackend
   {
   public:
@@ -22,10 +26,12 @@ namespace app::core::playback
       _callbacks = callbacks;
       return true;
     }
+
     void start() override {}
     void pause() override {}
     void resume() override {}
     void flush() override {}
+
     void drain() override
     {
       if (_callbacks.onDrainComplete)
@@ -33,10 +39,11 @@ namespace app::core::playback
         _callbacks.onDrainComplete(_callbacks.userData);
       }
     }
+
     void stop() override {}
     void close() override {}
+
     BackendKind kind() const noexcept override { return BackendKind::None; }
-    BackendFormatInfo formatInfo() const override { return {}; }
     std::string_view lastError() const noexcept override { return {}; }
 
   private:
