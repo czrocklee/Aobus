@@ -184,7 +184,7 @@ namespace
     return result;
   }
 
-  NodeRecord parseNodeRecord(std::uint32_t version, spa_dict const* props)
+  NodeRecord parseNodeRecord(std::uint32_t version, ::spa_dict const* props)
   {
     auto record = NodeRecord{};
     record.version = version;
@@ -263,7 +263,7 @@ namespace
       return std::nullopt;
     }
 
-    auto info = spa_audio_info_raw{};
+    auto info = ::spa_audio_info_raw{};
 
     if (::spa_format_audio_raw_parse(param, &info) < 0)
     {
@@ -386,25 +386,50 @@ namespace app::playback
 {
   using namespace app::core::playback;
 
+  void PipeWireBackend::PwThreadLoopDeleter::operator()(::pw_thread_loop* p) const noexcept { ::pw_thread_loop_destroy(p); }
+  void PipeWireBackend::PwContextDeleter::operator()(::pw_context* p) const noexcept { ::pw_context_destroy(p); }
+  void PipeWireBackend::PwStreamDeleter::operator()(::pw_stream* p) const noexcept { ::pw_stream_destroy(p); }
+  void PipeWireBackend::PwProxyDeleter::operator()(void* p) const noexcept { ::pw_proxy_destroy(static_cast<::pw_proxy*>(p)); }
+
+  void PipeWireBackend::SpaHookGuard::reset() noexcept
+  {
+    ::spa_hook_remove(&_hook);
+    _hook = {};
+  }
+
   struct PipeWireBackend::RegistryMonitorState final
   {
     struct LinkBinding final
     {
       std::uint32_t id = PW_ID_ANY;
-      pw_link* proxy = nullptr;
-      spa_hook listener = {};
+      PwLinkPtr proxy;
+      SpaHookGuard listener;
+
+      void reset()
+      {
+        id = PW_ID_ANY;
+        proxy.reset();
+        listener.reset();
+      }
     };
 
     struct NodeBinding final
     {
       std::uint32_t id = PW_ID_ANY;
-      pw_node* proxy = nullptr;
-      spa_hook listener = {};
+      PwNodePtr proxy;
+      SpaHookGuard listener;
+
+      void reset()
+      {
+        id = PW_ID_ANY;
+        proxy.reset();
+        listener.reset();
+      }
     };
 
-    pw_registry* registry = nullptr;
-    spa_hook registryListener = {};
-    spa_hook coreListener = {};
+    PwRegistryPtr registry;
+    SpaHookGuard registryListener;
+    SpaHookGuard coreListener;
     std::int32_t coreSyncSeq = -1;
     std::uint32_t streamNodeId = PW_ID_ANY;
     std::unordered_map<std::uint32_t, NodeRecord> nodes = {};
@@ -497,19 +522,19 @@ namespace app::playback
     self->refreshMonitorState();
   }
 
-  pw_core_events const coreEvents = []
+  ::pw_core_events const coreEvents = []
   {
-    pw_core_events e{};
+    auto e = ::pw_core_events{};
     e.version = PW_VERSION_CORE_EVENTS;
     e.done = PipeWireBackend::onCoreDone;
     return e;
   }();
 
-  pw_stream_events const streamEvents = []
+  ::pw_stream_events const streamEvents = []
   {
-    pw_stream_events e{};
+    auto e = ::pw_stream_events{};
     e.version = PW_VERSION_STREAM_EVENTS;
-    e.state_changed = reinterpret_cast<void (*)(void*, pw_stream_state, pw_stream_state, char const*)>(
+    e.state_changed = reinterpret_cast<void (*)(void*, ::pw_stream_state, ::pw_stream_state, char const*)>(
       PipeWireBackend::onStreamStateChanged);
     e.param_changed = PipeWireBackend::onStreamParamChanged;
     e.process = PipeWireBackend::onStreamProcess;
@@ -517,34 +542,34 @@ namespace app::playback
     return e;
   }();
 
-  pw_registry_events const registryEvents = []
+  ::pw_registry_events const registryEvents = []
   {
-    pw_registry_events e{};
+    auto e = ::pw_registry_events{};
     e.version = PW_VERSION_REGISTRY_EVENTS;
     e.global = PipeWireBackend::onRegistryGlobal;
     e.global_remove = PipeWireBackend::onRegistryGlobalRemove;
     return e;
   }();
 
-  pw_link_events const linkEvents = []
+  ::pw_link_events const linkEvents = []
   {
-    pw_link_events e{};
+    auto e = ::pw_link_events{};
     e.version = PW_VERSION_LINK_EVENTS;
     e.info = PipeWireBackend::onLinkInfo;
     return e;
   }();
 
-  pw_node_events const streamNodeEvents = []
+  ::pw_node_events const streamNodeEvents = []
   {
-    pw_node_events e{};
+    auto e = ::pw_node_events{};
     e.version = PW_VERSION_NODE_EVENTS;
     e.info = PipeWireBackend::onNodeInfo;
     return e;
   }();
 
-  pw_node_events const sinkNodeEvents = []
+  ::pw_node_events const sinkNodeEvents = []
   {
-    pw_node_events e{};
+    auto e = ::pw_node_events{};
     e.version = PW_VERSION_NODE_EVENTS;
     e.info = PipeWireBackend::onNodeInfo;
     e.param = PipeWireBackend::onSinkNodeParam;
@@ -564,7 +589,7 @@ namespace app::playback
 
   BackendFormatInfo PipeWireBackend::formatInfo() const
   {
-    auto lock = std::lock_guard<std::mutex>{_infoMutex};
+    auto const lock = std::lock_guard<std::mutex>{_infoMutex};
     return _formatInfo;
   }
 
@@ -574,80 +599,31 @@ namespace app::playback
 
     if (_threadLoop)
     {
-      ::pw_thread_loop_lock(_threadLoop);
+      ::pw_thread_loop_lock(_threadLoop.get());
     }
 
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
-      
-      if (_monitorState)
-      {
-        if (_monitorState->sinkNodeBinding.proxy)
-        {
-          ::spa_hook_remove(&_monitorState->sinkNodeBinding.listener);
-          ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(_monitorState->sinkNodeBinding.proxy));
-          _monitorState->sinkNodeBinding = {};
-        }
-
-        if (_monitorState->streamNodeBinding.proxy)
-        {
-          ::spa_hook_remove(&_monitorState->streamNodeBinding.listener);
-          ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(_monitorState->streamNodeBinding.proxy));
-          _monitorState->streamNodeBinding = {};
-        }
-
-        for (auto& [_, binding] : _monitorState->linkBindings)
-        {
-          if (binding.proxy)
-          {
-            ::spa_hook_remove(&binding.listener);
-            ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(binding.proxy));
-          }
-        }
-        _monitorState->linkBindings.clear();
-
-        if (_monitorState->registry)
-        {
-          ::spa_hook_remove(&_monitorState->registryListener);
-          ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(_monitorState->registry));
-          _monitorState->registry = nullptr;
-        }
-
-        _monitorState.reset();
-      }
-
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
+      _monitorState.reset();
       _formatInfo = {};
     }
 
     if (_refreshEvent)
     {
-      ::pw_loop_destroy_source(::pw_thread_loop_get_loop(_threadLoop), _refreshEvent);
+      ::pw_loop_destroy_source(::pw_thread_loop_get_loop(_threadLoop.get()), _refreshEvent);
       _refreshEvent = nullptr;
     }
 
-    if (_stream)
-    {
-      ::pw_stream_destroy(_stream);
-      _stream = nullptr;
-    }
+    _stream.reset();
 
     if (_threadLoop)
     {
-      ::pw_thread_loop_unlock(_threadLoop);
-      ::pw_thread_loop_stop(_threadLoop);
+      ::pw_thread_loop_unlock(_threadLoop.get());
+      ::pw_thread_loop_stop(_threadLoop.get());
     }
 
-    if (_context)
-    {
-      ::pw_context_destroy(_context);
-      _context = nullptr;
-    }
-
-    if (_threadLoop)
-    {
-      ::pw_thread_loop_destroy(_threadLoop);
-      _threadLoop = nullptr;
-    }
+    _context.reset();
+    _threadLoop.reset();
   }
 
   void PipeWireBackend::setError(std::string message)
@@ -665,23 +641,23 @@ namespace app::playback
     _lastError.clear();
 
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
       _formatInfo = {};
       _formatInfo.isExclusive = false;
       _formatInfo.conversionReason = "Shared PipeWire playback cannot guarantee bit-perfect output";
       _monitorState = std::make_unique<RegistryMonitorState>();
     }
 
-    _threadLoop = ::pw_thread_loop_new("rockstudio-pw", nullptr);
-    
+    _threadLoop.reset(::pw_thread_loop_new("rockstudio-pw", nullptr));
+
     if (!_threadLoop)
     {
       setError("Failed to create PipeWire thread loop");
       return false;
     }
 
-    _context = ::pw_context_new(::pw_thread_loop_get_loop(_threadLoop), nullptr, 0);
-    
+    _context.reset(::pw_context_new(::pw_thread_loop_get_loop(_threadLoop.get()), nullptr, 0));
+
     if (!_context)
     {
       setError("Failed to create PipeWire context");
@@ -689,16 +665,16 @@ namespace app::playback
       return false;
     }
 
-    if (::pw_thread_loop_start(_threadLoop) < 0)
+    if (::pw_thread_loop_start(_threadLoop.get()) < 0)
     {
       setError("Failed to start PipeWire thread loop");
       close();
       return false;
     }
 
-    _refreshEvent = ::pw_loop_add_event(::pw_thread_loop_get_loop(_threadLoop), onRefreshEvent, this);
+    _refreshEvent = ::pw_loop_add_event(::pw_thread_loop_get_loop(_threadLoop.get()), onRefreshEvent, this);
 
-    ::pw_thread_loop_lock(_threadLoop);
+    ::pw_thread_loop_lock(_threadLoop.get());
 
     std::string nodeRateStr = "1/" + std::to_string(_format.sampleRate);
     ::pw_properties* props = ::pw_properties_new(PW_KEY_MEDIA_TYPE,
@@ -713,24 +689,24 @@ namespace app::playback
                                                  nodeRateStr.c_str(),
                                                  nullptr);
 
-    _stream = ::pw_stream_new_simple(::pw_thread_loop_get_loop(_threadLoop), "playback", props, &streamEvents, this);
-    
+    _stream.reset(::pw_stream_new_simple(::pw_thread_loop_get_loop(_threadLoop.get()), "playback", props, &streamEvents, this));
+
     if (!_stream)
     {
-      ::pw_thread_loop_unlock(_threadLoop);
+      ::pw_thread_loop_unlock(_threadLoop.get());
       setError("Failed to create PipeWire stream");
       close();
       return false;
     }
 
     auto buffer = std::array<std::uint8_t, 1024>{};
-    auto builder = spa_pod_builder{};
+    auto builder = ::spa_pod_builder{};
     ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
 
-    auto frame = spa_pod_frame{};
+    auto frame = ::spa_pod_frame{};
     ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
 
-    int spaFormat = SPA_AUDIO_FORMAT_S16_LE;
+    auto spaFormat = static_cast<std::int32_t>(SPA_AUDIO_FORMAT_S16_LE);
     
     if (_format.bitDepth == 24)
     {
@@ -756,18 +732,18 @@ namespace app::playback
 
     ::spa_pod_builder_pop(&builder, &frame);
 
-    auto* param = reinterpret_cast<spa_pod*>(buffer.data());
-    spa_pod const* params[] = {param};
+    auto* const param = reinterpret_cast<::spa_pod*>(buffer.data());
+    auto params = std::to_array<::spa_pod const*>({param});
 
     auto const ret = ::pw_stream_connect(
-      _stream,
+      _stream.get(),
       PW_DIRECTION_OUTPUT,
       PW_ID_ANY,
-      static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_INACTIVE),
-      params,
-      1);
+      static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_INACTIVE),
+      params.data(),
+      static_cast<std::uint32_t>(params.size()));
 
-    ::pw_thread_loop_unlock(_threadLoop);
+    ::pw_thread_loop_unlock(_threadLoop.get());
 
     if (ret < 0)
     {
@@ -789,9 +765,9 @@ namespace app::playback
 
     _drainPending = false;
 
-    ::pw_thread_loop_lock(_threadLoop);
-    ::pw_stream_set_active(_stream, true);
-    ::pw_thread_loop_unlock(_threadLoop);
+    ::pw_thread_loop_lock(_threadLoop.get());
+    ::pw_stream_set_active(_stream.get(), true);
+    ::pw_thread_loop_unlock(_threadLoop.get());
   }
 
   void PipeWireBackend::pause()
@@ -801,9 +777,9 @@ namespace app::playback
       return;
     }
 
-    ::pw_thread_loop_lock(_threadLoop);
-    ::pw_stream_set_active(_stream, false);
-    ::pw_thread_loop_unlock(_threadLoop);
+    ::pw_thread_loop_lock(_threadLoop.get());
+    ::pw_stream_set_active(_stream.get(), false);
+    ::pw_thread_loop_unlock(_threadLoop.get());
   }
 
   void PipeWireBackend::resume()
@@ -813,9 +789,9 @@ namespace app::playback
       return;
     }
 
-    ::pw_thread_loop_lock(_threadLoop);
-    ::pw_stream_set_active(_stream, true);
-    ::pw_thread_loop_unlock(_threadLoop);
+    ::pw_thread_loop_lock(_threadLoop.get());
+    ::pw_stream_set_active(_stream.get(), true);
+    ::pw_thread_loop_unlock(_threadLoop.get());
   }
 
   void PipeWireBackend::flush()
@@ -827,9 +803,9 @@ namespace app::playback
 
     _drainPending = false;
 
-    ::pw_thread_loop_lock(_threadLoop);
-    ::pw_stream_flush(_stream, false);
-    ::pw_thread_loop_unlock(_threadLoop);
+    ::pw_thread_loop_lock(_threadLoop.get());
+    ::pw_stream_flush(_stream.get(), false);
+    ::pw_thread_loop_unlock(_threadLoop.get());
   }
 
   void PipeWireBackend::drain()
@@ -840,9 +816,9 @@ namespace app::playback
     }
 
     _drainPending = true;
-    ::pw_thread_loop_lock(_threadLoop);
-    ::pw_stream_flush(_stream, true);
-    ::pw_thread_loop_unlock(_threadLoop);
+    ::pw_thread_loop_lock(_threadLoop.get());
+    ::pw_stream_flush(_stream.get(), true);
+    ::pw_thread_loop_unlock(_threadLoop.get());
   }
 
   void PipeWireBackend::stop()
@@ -854,9 +830,9 @@ namespace app::playback
 
     _drainPending = false;
 
-    ::pw_thread_loop_lock(_threadLoop);
-    ::pw_stream_set_active(_stream, false);
-    ::pw_thread_loop_unlock(_threadLoop);
+    ::pw_thread_loop_lock(_threadLoop.get());
+    ::pw_stream_set_active(_stream.get(), false);
+    ::pw_thread_loop_unlock(_threadLoop.get());
   }
 
   void PipeWireBackend::close()
@@ -880,7 +856,7 @@ namespace app::playback
     }
 
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
       
       if (_monitorState)
       {
@@ -929,7 +905,7 @@ namespace app::playback
 
     PLAYBACK_LOG_TRACE("PipeWire event: RegistryGlobal id={} type={} props={}", id, type, propsToString(props));
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
       
       if (!_monitorState)
       {
@@ -939,7 +915,7 @@ namespace app::playback
       if (_monitorState->streamNodeId == PW_ID_ANY && _stream)
       {
         
-        if (auto const streamNodeId = ::pw_stream_get_node_id(_stream); streamNodeId != PW_ID_ANY)
+        if (auto const streamNodeId = ::pw_stream_get_node_id(_stream.get()); streamNodeId != PW_ID_ANY)
         {
           _monitorState->streamNodeId = streamNodeId;
         }
@@ -947,7 +923,7 @@ namespace app::playback
 
       if (isNode)
       {
-        auto record = parseNodeRecord(version, props);
+        auto const record = parseNodeRecord(version, props);
 
         if (_monitorState->streamNodeId == PW_ID_ANY)
         {
@@ -970,15 +946,15 @@ namespace app::playback
 
         if (_monitorState->registry && !_monitorState->linkBindings.contains(id))
         {
-          auto* proxy = static_cast<pw_link*>(::pw_registry_bind(
-            _monitorState->registry, id, PW_TYPE_INTERFACE_Link, std::min(version, std::uint32_t(PW_VERSION_LINK)), 0));
-          
+          auto* const proxy = static_cast<::pw_link*>(::pw_registry_bind(
+            _monitorState->registry.get(), id, PW_TYPE_INTERFACE_Link, std::min(version, std::uint32_t(PW_VERSION_LINK)), 0));
+
           if (proxy)
           {
             auto& binding = _monitorState->linkBindings[id];
             binding.id = id;
-            binding.proxy = proxy;
-            ::pw_link_add_listener(binding.proxy, &binding.listener, &linkEvents, this);
+            binding.proxy.reset(proxy);
+            ::pw_link_add_listener(binding.proxy.get(), binding.listener.get(), &linkEvents, this);
           }
         }
       }
@@ -991,7 +967,7 @@ namespace app::playback
   {
     bool needsRefresh = false;
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
       
       if (!_monitorState)
       {
@@ -1000,24 +976,12 @@ namespace app::playback
 
       if (auto binding = _monitorState->linkBindings.find(id); binding != _monitorState->linkBindings.end())
       {
-        if (binding->second.proxy)
-        {
-          ::spa_hook_remove(&binding->second.listener);
-          ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(binding->second.proxy));
-        }
-        
         _monitorState->linkBindings.erase(binding);
       }
 
       if (_monitorState->sinkNodeBinding.id == id)
       {
-        if (_monitorState->sinkNodeBinding.proxy)
-        {
-          ::spa_hook_remove(&_monitorState->sinkNodeBinding.listener);
-          ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(_monitorState->sinkNodeBinding.proxy));
-        }
-        
-        _monitorState->sinkNodeBinding = {};
+        _monitorState->sinkNodeBinding.reset();
         _monitorState->sinkFormat.reset();
         _monitorState->sinkProps = {};
         needsRefresh = true;
@@ -1025,13 +989,7 @@ namespace app::playback
 
       if (_monitorState->streamNodeBinding.id == id)
       {
-        if (_monitorState->streamNodeBinding.proxy)
-        {
-          ::spa_hook_remove(&_monitorState->streamNodeBinding.listener);
-          ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(_monitorState->streamNodeBinding.proxy));
-        }
-        
-        _monitorState->streamNodeBinding = {};
+        _monitorState->streamNodeBinding.reset();
         needsRefresh = true;
       }
 
@@ -1074,7 +1032,7 @@ namespace app::playback
                        info->output_node_id,
                        info->input_node_id);
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
       
       if (!_monitorState)
       {
@@ -1106,7 +1064,7 @@ namespace app::playback
                        static_cast<int>(info->state),
                        propsToString(info->props));
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
       
       if (!_monitorState)
       {
@@ -1115,7 +1073,7 @@ namespace app::playback
 
       if (info->change_mask & PW_NODE_CHANGE_MASK_PROPS)
       {
-        auto version = std::uint32_t(PW_VERSION_NODE);
+        auto version = static_cast<std::uint32_t>(PW_VERSION_NODE);
 
         if (auto const existing = _monitorState->nodes.find(info->id); existing != _monitorState->nodes.end())
         {
@@ -1133,7 +1091,7 @@ namespace app::playback
   {
     PLAYBACK_LOG_TRACE("PipeWire event: SinkNodeParam param_id={}", id);
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
       
       if (!_monitorState)
       {
@@ -1160,39 +1118,39 @@ namespace app::playback
       return;
     }
 
-    ::pw_thread_loop_lock(_threadLoop);
+    ::pw_thread_loop_lock(_threadLoop.get());
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
-      
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
+
       if (!_monitorState || _monitorState->registry)
       {
-        ::pw_thread_loop_unlock(_threadLoop);
+        ::pw_thread_loop_unlock(_threadLoop.get());
         return;
       }
 
-      if (auto* core = ::pw_stream_get_core(_stream))
+      if (auto* core = ::pw_stream_get_core(_stream.get()))
       {
         auto* registry = ::pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
-        
+
         if (registry)
         {
-          _monitorState->registry = registry;
-          ::pw_registry_add_listener(_monitorState->registry, &_monitorState->registryListener, &registryEvents, this);
+          _monitorState->registry.reset(registry);
+          ::pw_registry_add_listener(_monitorState->registry.get(), _monitorState->registryListener.get(), &registryEvents, this);
 
           // Add core listener for sync
-          ::pw_core_add_listener(core, &_monitorState->coreListener, &coreEvents, this);
+          ::pw_core_add_listener(core, _monitorState->coreListener.get(), &coreEvents, this);
           _monitorState->coreSyncSeq = ::pw_core_sync(core, PW_ID_CORE, 0);
         }
       }
     }
-    ::pw_thread_loop_unlock(_threadLoop);
+    ::pw_thread_loop_unlock(_threadLoop.get());
   }
 
   void PipeWireBackend::handleCoreDone(std::uint32_t id, int seq)
   {
     (void)id;
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
       
       if (_monitorState && seq == _monitorState->coreSyncSeq)
       {
@@ -1206,7 +1164,7 @@ namespace app::playback
   {
     if (_refreshEvent)
     {
-      ::pw_loop_signal_event(::pw_thread_loop_get_loop(_threadLoop), _refreshEvent);
+      ::pw_loop_signal_event(::pw_thread_loop_get_loop(_threadLoop.get()), _refreshEvent);
     }
     else
     {
@@ -1223,19 +1181,19 @@ namespace app::playback
 
     ensureRegistryMonitor();
 
-    ::pw_thread_loop_lock(_threadLoop);
+    ::pw_thread_loop_lock(_threadLoop.get());
     {
-      auto lock = std::lock_guard<std::mutex>{_infoMutex};
-      
+      auto const lock = std::lock_guard<std::mutex>{_infoMutex};
+
       if (!_monitorState)
       {
-        ::pw_thread_loop_unlock(_threadLoop);
+        ::pw_thread_loop_unlock(_threadLoop.get());
         return;
       }
 
       if (_stream)
       {
-        auto const streamNodeId = ::pw_stream_get_node_id(_stream);
+        auto const streamNodeId = ::pw_stream_get_node_id(_stream.get());
         
         if (streamNodeId != PW_ID_ANY)
         {
@@ -1272,35 +1230,29 @@ namespace app::playback
       }
 
       // Ensure we are bound to our own stream node to get full info (driver-id, etc.)
-      
+
       if (_monitorState->streamNodeId != PW_ID_ANY &&
           _monitorState->streamNodeBinding.id != _monitorState->streamNodeId)
       {
-        if (_monitorState->streamNodeBinding.proxy)
-        {
-          ::spa_hook_remove(&_monitorState->streamNodeBinding.listener);
-          ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(_monitorState->streamNodeBinding.proxy));
-        }
-        
-        _monitorState->streamNodeBinding = {};
+        _monitorState->streamNodeBinding.reset();
 
         auto const nodeIt = _monitorState->nodes.find(_monitorState->streamNodeId);
-        
+
         if (_monitorState->registry && nodeIt != _monitorState->nodes.end())
         {
-          auto* node =
-            static_cast<pw_node*>(::pw_registry_bind(_monitorState->registry,
-                                                     _monitorState->streamNodeId,
-                                                     PW_TYPE_INTERFACE_Node,
-                                                     std::min(nodeIt->second.version, std::uint32_t(PW_VERSION_NODE)),
-                                                     0));
-          
+          auto* const node =
+            static_cast<::pw_node*>(::pw_registry_bind(_monitorState->registry.get(),
+                                                       _monitorState->streamNodeId,
+                                                       PW_TYPE_INTERFACE_Node,
+                                                       std::min(nodeIt->second.version, std::uint32_t(PW_VERSION_NODE)),
+                                                       0));
+
           if (node)
           {
             _monitorState->streamNodeBinding.id = _monitorState->streamNodeId;
-            _monitorState->streamNodeBinding.proxy = node;
-            ::pw_node_add_listener(_monitorState->streamNodeBinding.proxy,
-                                   &_monitorState->streamNodeBinding.listener,
+            _monitorState->streamNodeBinding.proxy.reset(node);
+            ::pw_node_add_listener(_monitorState->streamNodeBinding.proxy.get(),
+                                   _monitorState->streamNodeBinding.listener.get(),
                                    &streamNodeEvents,
                                    this);
           }
@@ -1381,45 +1333,39 @@ namespace app::playback
 
       if (_monitorState->sinkNodeBinding.id != desiredSinkNodeId)
       {
-        if (_monitorState->sinkNodeBinding.proxy)
-        {
-          ::spa_hook_remove(&_monitorState->sinkNodeBinding.listener);
-          ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(_monitorState->sinkNodeBinding.proxy));
-        }
-        
-        _monitorState->sinkNodeBinding = {};
+        _monitorState->sinkNodeBinding.reset();
         _monitorState->sinkFormat.reset();
         _monitorState->sinkProps = {};
 
         if (desiredSinkNodeId != PW_ID_ANY)
         {
           auto const nodeIt = _monitorState->nodes.find(desiredSinkNodeId);
-          
+
           if (_monitorState->registry && nodeIt != _monitorState->nodes.end())
           {
-            auto* node =
-              static_cast<pw_node*>(::pw_registry_bind(_monitorState->registry,
+            auto* const node =
+              static_cast<::pw_node*>(::pw_registry_bind(_monitorState->registry.get(),
                                                        desiredSinkNodeId,
                                                        PW_TYPE_INTERFACE_Node,
                                                        std::min(nodeIt->second.version, std::uint32_t(PW_VERSION_NODE)),
                                                        0));
-            
+
             if (node)
             {
               _monitorState->sinkNodeBinding.id = desiredSinkNodeId;
-              _monitorState->sinkNodeBinding.proxy = node;
+              _monitorState->sinkNodeBinding.proxy.reset(node);
               ::pw_node_add_listener(
-                _monitorState->sinkNodeBinding.proxy, &_monitorState->sinkNodeBinding.listener, &sinkNodeEvents, this);
+                _monitorState->sinkNodeBinding.proxy.get(), _monitorState->sinkNodeBinding.listener.get(), &sinkNodeEvents, this);
 
-              std::array<std::uint32_t, 2> params{SPA_PARAM_Format, SPA_PARAM_Props};
-              ::pw_node_subscribe_params(_monitorState->sinkNodeBinding.proxy, params.data(), params.size());
-              ::pw_node_enum_params(_monitorState->sinkNodeBinding.proxy,
+              auto params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_Props});
+              ::pw_node_subscribe_params(_monitorState->sinkNodeBinding.proxy.get(), params.data(), static_cast<std::uint32_t>(params.size()));
+              ::pw_node_enum_params(_monitorState->sinkNodeBinding.proxy.get(),
                                     1,
                                     SPA_PARAM_Format,
                                     0,
                                     std::numeric_limits<std::uint32_t>::max(),
                                     nullptr);
-              ::pw_node_enum_params(_monitorState->sinkNodeBinding.proxy,
+              ::pw_node_enum_params(_monitorState->sinkNodeBinding.proxy.get(),
                                     2,
                                     SPA_PARAM_Props,
                                     0,
@@ -1645,7 +1591,7 @@ namespace app::playback
 
       _formatInfo = std::move(info);
     }
-    ::pw_thread_loop_unlock(_threadLoop);
+    ::pw_thread_loop_unlock(_threadLoop.get());
   }
 
   void PipeWireBackend::process()
@@ -1655,7 +1601,7 @@ namespace app::playback
       return;
     }
 
-    auto* buffer = ::pw_stream_dequeue_buffer(_stream);
+    auto* const buffer = ::pw_stream_dequeue_buffer(_stream.get());
     
     if (!buffer)
     {
@@ -1667,7 +1613,7 @@ namespace app::playback
       return;
     }
 
-    auto* data = static_cast<std::byte*>(buffer->buffer->datas[0].data);
+    auto* const data = static_cast<std::byte*>(buffer->buffer->datas[0].data);
     auto const size = buffer->buffer->datas[0].maxsize;
     auto const bytesPerSample = (_format.bitDepth == 24) ? 3U : (_format.bitDepth == 32) ? 4U : 2U;
     auto const frameBytes = static_cast<std::size_t>(_format.channels) * bytesPerSample;
@@ -1675,13 +1621,13 @@ namespace app::playback
 
     if (data && requestSize > 0)
     {
-      std::span<std::byte> output(data, requestSize);
+      auto output = std::span<std::byte>(data, requestSize);
       auto const read = _callbacks.readPcm(_callbacks.userData, output);
       auto const alignedRead = read - (read % frameBytes);
 
       if (alignedRead == 0 && _callbacks.isSourceDrained && _callbacks.isSourceDrained(_callbacks.userData))
       {
-        ::pw_stream_return_buffer(_stream, buffer);
+        ::pw_stream_return_buffer(_stream.get(), buffer);
         drain();
         return;
       }
@@ -1697,7 +1643,7 @@ namespace app::playback
       }
     }
 
-    ::pw_stream_queue_buffer(_stream, buffer);
+    ::pw_stream_queue_buffer(_stream.get(), buffer);
   }
 
   void PipeWireBackend::handleDrained() noexcept

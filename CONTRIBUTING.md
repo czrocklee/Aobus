@@ -42,6 +42,7 @@ This guide covers C++ coding conventions for RockStudio contributors.
     - 2.7.1. Use `std::` for integer types: `std::int32_t`, `std::uint64_t`, avoid `int`, `unsigned`
     - 2.7.2. Prefer `std::string` over `char*`
     - 2.7.3. Use `std::string_view` for string parameters that don't own data
+    - 2.7.4. Avoid raw C-style arrays; use `std::array` or `std::to_array` for fixed-size buffers and API parameters.
 - 3. Modern C++ Features
   - 3.1. C++20 Features
     - 3.1.1. Use Concepts: `template<typename T> requires std::integral<T>`
@@ -63,7 +64,8 @@ This guide covers C++ coding conventions for RockStudio contributors.
     - 3.2.5. Use structured bindings: `auto [key, value] : map`
     - 3.2.6. Use init statement: `if (auto var = get(); condition)`
   - 3.3. C++11 Features
-    - 3.3.1. Use RAII: adopts `std::unique_ptr` for owned resources, use custom deleter if needed
+    - 3.3.1. Use RAII: adopts `std::unique_ptr` for owned resources, use custom deleter if needed.
+      - Example for C types: `struct PwLoopDeleter { void operator()(::pw_thread_loop* p) const noexcept { ::pw_thread_loop_destroy(p); } };`
     - 3.3.2. DON'T use `virtual` on overridden functions: Redundant when `override` is present
     - 3.3.3. Use `[[maybe_unused]]`: Suppress unused warnings other than (void)
     - 3.3.4. Use `noexcept`: Mark functions that won't throw
@@ -71,6 +73,7 @@ This guide covers C++ coding conventions for RockStudio contributors.
       - Prefer `auto x = T{a, b};` over `T x{a, b};`
       - Prefer `auto x = T{};` over `T x;`
       - Prefer `T() : _mem{a}` over `T() : _mem(a)`
+      - For simple null pointer initializations, use `T* ptr = nullptr;` instead of `auto* ptr = static_cast<T*>(nullptr);`.
 - 4. Best Practices
   - 4.1. Getters and Accessors
     - 4.1.1. Keep simple one-liner getters/setters inline in headers
@@ -78,9 +81,13 @@ This guide covers C++ coding conventions for RockStudio contributors.
     - 4.2.1. Use `final` on classes not designed for inheritance:
       - POD structs (e.g., `TrackHeader`, `ListHeader`)
       - Concrete data classes (e.g., `Metadata`, `TrackView`)
+    - 4.2.2. Prioritize minimum exposure for internal types:
+      - If a type is only used within a `.cpp` file, keep it in an **anonymous namespace** in that file.
+      - If a type must be declared in a header (e.g., as a member variable), prefer **nested types** (enums, structs, classes) with the narrowest possible visibility (`private` if possible) to improve encapsulation.
   - 4.3. Const Correctness
     - 4.3.1. Use `const` wherever possible:
       - Local variables: `auto const result = compute();`
       - Member functions: `std::size_t size() const;`
       - Pointer to constant data: `char const* name;`
       - Input references: `void addTrack(Track const& track);` (prefer over passing by value)
+      - Mandatory services: Pass by reference (`&`) instead of smart pointers to guarantee non-nullability and document strict hierarchical lifetimes.
