@@ -19,17 +19,19 @@ namespace app::core
   std::shared_ptr<spdlog::logger> Log::_appLogger = spdlog::null_logger_mt("app");
   std::shared_ptr<spdlog::logger> Log::_playbackLogger = spdlog::null_logger_mt("playback");
 
-  void Log::init()
+  void Log::init(LogLevel level)
   {
     // Ensure log directory exists
     auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "rockstudio" / "logs";
     std::filesystem::create_directories(logDir);
     auto const logPath = logDir / "app.log";
 
+    auto const spdLevel = static_cast<spdlog::level::level_enum>(level);
+
     // Setup sinks
     auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     consoleSink->set_pattern("%^[%T] %n: %v%$");
-    consoleSink->set_level(spdlog::level::info);
+    consoleSink->set_level(spdLevel);
 
     auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(logPath.string(), 1024 * 1024 * 5, 3);
     fileSink->set_pattern("[%Y-%m-%d %T.%e] [%l] %n: %v");
@@ -47,7 +49,7 @@ namespace app::core
     // Create loggers
     _appLogger = std::make_shared<spdlog::async_logger>(
       "app", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::block);
-    _appLogger->set_level(spdlog::level::trace);
+    _appLogger->set_level(spdlog::level::trace); // Keep internal level at trace, sinks will filter
     spdlog::register_logger(_appLogger);
 
     _playbackLogger = std::make_shared<spdlog::async_logger>(

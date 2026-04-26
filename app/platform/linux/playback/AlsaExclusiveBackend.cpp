@@ -259,6 +259,11 @@ namespace app::playback
         if (_callbacks.isSourceDrained(_callbacks.userData))
         {
           PLAYBACK_LOG_INFO("ALSA source drained, stopping playback");
+          ::snd_pcm_drain(_pcm.get());
+          if (_callbacks.onDrainComplete)
+          {
+            _callbacks.onDrainComplete(_callbacks.userData);
+          }
           break;
         }
 

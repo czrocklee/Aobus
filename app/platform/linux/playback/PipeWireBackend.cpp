@@ -484,7 +484,7 @@ namespace app::playback
       auto devices = std::vector<app::core::playback::AudioDevice>{};
       auto const lock = std::lock_guard<std::mutex>{_mutex};
 
-      PLAYBACK_LOG_DEBUG("PipeWireMonitor::enumerateSinks: tracking {} nodes", _nodes.size());
+      PLAYBACK_LOG_TRACE("PipeWireMonitor::enumerateSinks: tracking {} nodes", _nodes.size());
 
       for (auto const& [id, node] : _nodes)
       {
@@ -499,6 +499,23 @@ namespace app::playback
         }
       }
       return devices;
+    }
+
+    std::string getTargetNameForDevice(std::string_view deviceId) const
+    {
+      auto const lock = std::lock_guard<std::mutex>{_mutex};
+      for (auto const& [id, node] : _nodes)
+      {
+        if (isSinkMediaClass(node.mediaClass))
+        {
+          auto const currentDeviceId = node.objectSerial ? std::to_string(*node.objectSerial) : std::to_string(id);
+          if (currentDeviceId == deviceId)
+          {
+            return node.nodeName.empty() ? std::to_string(id) : node.nodeName;
+          }
+        }
+      }
+      return std::string{deviceId};
     }
 
   private:
@@ -1188,20 +1205,38 @@ namespace app::playback
     if (id != SPA_PARAM_Format) return;
     auto const negotiatedFormat = parseRawStreamFormat(param);
 
+    if (negotiatedFormat)
+    {
+      PLAYBACK_LOG_INFO("PipeWireBackend: negotiated format: {}Hz/{}b/{}ch (float={})",
+                        negotiatedFormat->sampleRate,
+                        negotiatedFormat->bitDepth,
+                        negotiatedFormat->channels,
+                        negotiatedFormat->isFloat);
+    }
+
     if (_monitor) _monitor->setNegotiatedFormat(negotiatedFormat);
 
-    if (_strictFormatRequired && negotiatedFormat && *negotiatedFormat != _format && !_strictFormatRejected)
+    if (_strictFormatRequired && negotiatedFormat && !_strictFormatRejected)
     {
-      _strictFormatRejected = true;
-      auto const message =
-        std::format("Selected PipeWire device does not support {} in exclusive mode; it negotiated {} instead. "
-                    "Choose another device or use shared PipeWire mode.",
-                    formatStreamFormat(_format),
-                    formatStreamFormat(*negotiatedFormat));
-      PLAYBACK_LOG_ERROR("{}", message);
-      setError(message);
-      if (_callbacks.onBackendError) _callbacks.onBackendError(_callbacks.userData, _lastError);
-      return;
+      bool mismatch = false;
+      if (negotiatedFormat->sampleRate != _format.sampleRate) mismatch = true;
+      if (negotiatedFormat->channels != _format.channels) mismatch = true;
+      if (negotiatedFormat->bitDepth != _format.bitDepth) mismatch = true;
+      if (negotiatedFormat->isFloat != _format.isFloat) mismatch = true;
+
+      if (mismatch)
+      {
+        _strictFormatRejected = true;
+        auto const message =
+          std::format("Selected PipeWire device does not support {} in exclusive mode; it negotiated {} instead. "
+                      "Choose another device or use shared PipeWire mode.",
+                      formatStreamFormat(_format),
+                      formatStreamFormat(*negotiatedFormat));
+        PLAYBACK_LOG_ERROR("{}", message);
+        setError(message);
+        if (_callbacks.onBackendError) _callbacks.onBackendError(_callbacks.userData, _lastError);
+        return;
+      }
     }
 
     if (_monitor) _monitor->triggerRefresh();
@@ -1308,9 +1343,11 @@ namespace app::playback
                                                  nodeRateStr.c_str(),
                                                  nullptr);
 
+    auto targetName = std::string{};
     if (!_targetDeviceId.empty())
     {
-      ::pw_properties_set(props, PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
+      targetName = _impl->_monitor->getTargetNameForDevice(_targetDeviceId);
+      ::pw_properties_set(props, PW_KEY_TARGET_OBJECT, targetName.c_str());
     }
     else if (_exclusiveMode)
     {
@@ -1335,13 +1372,13 @@ namespace app::playback
     auto builder = ::spa_pod_builder{};
     ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
     auto frame = ::spa_pod_frame{};
-    // Exclusive mode requests a fixed hardware format; shared mode advertises the
-    // formats we can supply and lets PipeWire negotiate the final stream format.
-    auto const paramType = useExclusiveMode ? SPA_PARAM_Format : SPA_PARAM_EnumFormat;
+    // We always use EnumFormat to allow PipeWire to negotiate and set up the graph
+    // (e.g. inserting an adapter for lossless bit-depth padding if the DAC requires 32-bit).
+    auto const paramType = SPA_PARAM_EnumFormat;
     ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, paramType);
     auto spaFormat = static_cast<std::int32_t>(SPA_AUDIO_FORMAT_S16_LE);
     if (_impl->_format.bitDepth == 24)
-      spaFormat = SPA_AUDIO_FORMAT_S24_LE;
+      spaFormat = SPA_AUDIO_FORMAT_S24_32_LE;
     else if (_impl->_format.bitDepth == 32)
       spaFormat = SPA_AUDIO_FORMAT_S32_LE;
 
@@ -1367,10 +1404,19 @@ namespace app::playback
       flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
     }
 
-    PLAYBACK_LOG_INFO("PipeWireBackend::open: mode={}, target={}, flags={:#x}",
+    auto targetLogStr = _targetDeviceId;
+    if (!_targetDeviceId.empty() && _targetDeviceId != targetName)
+    {
+      targetLogStr = std::format("{} ({})", _targetDeviceId, targetName);
+    }
+
+    PLAYBACK_LOG_INFO("PipeWireBackend::open: mode={}, target={}, flags={:#x}, requested={}Hz/{}b/{}ch",
                       useExclusiveMode ? "exclusive" : "shared",
-                      _targetDeviceId.empty() ? "<default>" : _targetDeviceId,
-                      static_cast<int>(flags));
+                      targetLogStr.empty() ? "<default>" : targetLogStr,
+                      static_cast<int>(flags),
+                      _impl->_format.sampleRate,
+                      _impl->_format.bitDepth,
+                      _impl->_format.channels);
 
     auto const ret = ::pw_stream_connect(_impl->_stream.get(),
                                          PW_DIRECTION_OUTPUT,
@@ -1452,7 +1498,6 @@ namespace app::playback
     }
 
     auto devices = _impl->_monitor->enumerateSinks();
-    PLAYBACK_LOG_DEBUG("PipeWireBackend::enumerateDevices: got {} sinks from monitor", devices.size());
 
     // Add virtual "System Default" entry
     devices.insert(devices.begin(), {.id = "", .displayName = "System Default", .isDefault = true});

@@ -34,12 +34,12 @@ namespace
 
     // Remove trailing newline if present to let spdlog handle formatting
     std::string message(line);
-    
+
     if (!message.empty() && message.back() == '\n')
     {
       message.pop_back();
     }
-    
+
     if (message.empty())
     {
       return;
@@ -140,28 +140,28 @@ namespace app::core::playback
     close();
 
     // Open input file
-    
+
     if (!openInput(filePath))
     {
       return false;
     }
 
     // Find and open audio stream
-    
+
     if (!openAudioStream())
     {
       return false;
     }
 
     // Configure resampler for planar to interleaved conversion
-    
+
     if (!configureResampler())
     {
       return false;
     }
 
     // Get duration
-    
+
     if (_formatContext && _formatContext->duration != AV_NOPTS_VALUE)
     {
       _streamInfo.durationMs = static_cast<std::uint32_t>(_formatContext->duration / (AV_TIME_BASE / 1000));
@@ -191,7 +191,7 @@ namespace app::core::playback
     AVFormatContext* ctx = nullptr;
 
     std::int32_t ret = ::avformat_open_input(&ctx, filePath.string().c_str(), nullptr, nullptr);
-    
+
     if (ret < 0)
     {
       setError("Failed to open input '" + filePath.string() + "': " + ffmpegErrorText(ret));
@@ -201,7 +201,7 @@ namespace app::core::playback
     _formatContext.reset(ctx);
 
     ret = ::avformat_find_stream_info(ctx, nullptr);
-    
+
     if (ret < 0)
     {
       setError("Failed to read stream info: " + ffmpegErrorText(ret));
@@ -221,7 +221,7 @@ namespace app::core::playback
 
     // Find audio stream
     _audioStreamIndex = ::av_find_best_stream(_formatContext.get(), AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
-    
+
     if (_audioStreamIndex < 0)
     {
       setError("Failed to find audio stream: " + ffmpegErrorText(_audioStreamIndex));
@@ -232,7 +232,7 @@ namespace app::core::playback
 
     // Find decoder
     auto const* codec = ::avcodec_find_decoder(stream->codecpar->codec_id);
-    
+
     if (!codec)
     {
       setError("Failed to find decoder for the audio stream");
@@ -241,7 +241,7 @@ namespace app::core::playback
 
     // Create codec context
     AVCodecContext* codecCtx = avcodec_alloc_context3(codec);
-    
+
     if (!codecCtx)
     {
       setError("Failed to allocate codec context");
@@ -252,7 +252,7 @@ namespace app::core::playback
 
     // Copy codec parameters to context
     std::int32_t ret = ::avcodec_parameters_to_context(_codecContext.get(), stream->codecpar);
-    
+
     if (ret < 0)
     {
       setError("Failed to copy codec parameters: " + ffmpegErrorText(ret));
@@ -261,7 +261,7 @@ namespace app::core::playback
 
     // Open codec
     ret = ::avcodec_open2(_codecContext.get(), codec, nullptr);
-    
+
     if (ret < 0)
     {
       setError("Failed to open codec: " + ffmpegErrorText(ret));
@@ -274,12 +274,12 @@ namespace app::core::playback
 
     // Store source format info
     std::int32_t rawBitDepth = stream->codecpar->bits_per_raw_sample;
-    
+
     if (rawBitDepth <= 0)
     {
       rawBitDepth = _codecContext->bits_per_raw_sample;
     }
-    
+
     if (rawBitDepth <= 0)
     {
       rawBitDepth = ::av_get_bytes_per_sample(_codecContext->sample_fmt) * 8;
@@ -291,19 +291,26 @@ namespace app::core::playback
     _streamInfo.sourceFormat.isFloat = isFloatSampleFormat(_codecContext->sample_fmt);
     _streamInfo.sourceFormat.isInterleaved = !::av_sample_fmt_is_planar(_codecContext->sample_fmt);
 
+    PLAYBACK_LOG_INFO("FfmpegDecoderSession: opened file, source format: {}Hz/{}b/{}ch (codec bit_depth={}, raw={})",
+                      _streamInfo.sourceFormat.sampleRate,
+                      _streamInfo.sourceFormat.bitDepth,
+                      _streamInfo.sourceFormat.channels,
+                      _codecContext->bits_per_raw_sample,
+                      rawBitDepth);
+
     // Output format - use hint if provided, otherwise match source (resampler handles conversion)
     _streamInfo.outputFormat = _outputFormat;
-    
+
     if (_outputFormat.sampleRate == 0)
     {
       _streamInfo.outputFormat.sampleRate = _streamInfo.sourceFormat.sampleRate;
     }
-    
+
     if (_outputFormat.channels == 0)
     {
       _streamInfo.outputFormat.channels = _streamInfo.sourceFormat.channels;
     }
-    
+
     if (_outputFormat.bitDepth == 0)
     {
       _streamInfo.outputFormat.bitDepth = _streamInfo.sourceFormat.bitDepth;
@@ -320,18 +327,15 @@ namespace app::core::playback
       return false;
     }
 
-    // Determine output sample format based on bitdepth
-    // For hi-res (24/32-bit), use S32 as swr doesn't directly support S24
-    AVSampleFormat outSampleFormat;
-    
-    if (_streamInfo.outputFormat.bitDepth > 16)
-    {
-      outSampleFormat = AVSampleFormat::AV_SAMPLE_FMT_S32;
-    }
-    else
-    {
-      outSampleFormat = AVSampleFormat::AV_SAMPLE_FMT_S16;
-    }
+    // Use the exact packed (interleaved) equivalent of the decoder's native format.
+    // This avoids upscaling/resampling while ensuring the data is interleaved as required by the engine.
+    AVSampleFormat outSampleFormat = ::av_get_packed_sample_fmt(_codecContext->sample_fmt);
+
+    // Update our output format info to match what the resampler will actually produce.
+    // This is critical for 24-bit audio which FFmpeg decodes into 32-bit (S32) containers.
+    _streamInfo.outputFormat.bitDepth = static_cast<std::uint8_t>(::av_get_bytes_per_sample(outSampleFormat) * 8);
+    _streamInfo.outputFormat.isFloat = isFloatSampleFormat(outSampleFormat);
+    _streamInfo.outputFormat.isInterleaved = true;
 
     auto inChannelLayout = AVChannelLayout{};
 
@@ -349,7 +353,7 @@ namespace app::core::playback
 
     // Create resampler context
     SwrContext* swrCtx = ::swr_alloc();
-    
+
     if (!swrCtx)
     {
       ::av_channel_layout_uninit(&inChannelLayout);
@@ -370,7 +374,7 @@ namespace app::core::playback
     std::int32_t ret = ::swr_init(swrCtx);
     ::av_channel_layout_uninit(&inChannelLayout);
     ::av_channel_layout_uninit(&outChannelLayout);
-    
+
     if (ret < 0)
     {
       setError("Failed to initialize resampler: " + ffmpegErrorText(ret));
@@ -394,7 +398,7 @@ namespace app::core::playback
     auto const seekFlags = positionMs > getCurrentPositionMs() ? 0 : AVSEEK_FLAG_BACKWARD;
 
     std::int32_t ret = ::av_seek_frame(_formatContext.get(), _audioStreamIndex, timestamp, seekFlags);
-    
+
     if (ret < 0)
     {
       setError("Seek failed at " + std::to_string(positionMs) + " ms: " + ffmpegErrorText(ret));
@@ -436,9 +440,9 @@ namespace app::core::playback
     {
       return 0;
     }
-    
+
     auto const stream = _formatContext->streams[_audioStreamIndex];
-    
+
     if (!stream)
     {
       return 0;
@@ -446,7 +450,7 @@ namespace app::core::playback
 
     auto const base = stream->time_base;
     auto const pts = _frame->pts;
-    
+
     if (pts == AV_NOPTS_VALUE)
     {
       return 0;
@@ -463,7 +467,7 @@ namespace app::core::playback
     }
 
     // Try to drain decoder first
-    
+
     if (_decoderEof)
     {
       auto block = PcmBlock{};
@@ -475,7 +479,7 @@ namespace app::core::playback
     {
       ::av_frame_unref(_frame.get());
       std::int32_t ret = ::avcodec_receive_frame(_codecContext.get(), _frame.get());
-      
+
       if (ret == 0)
       {
 
@@ -483,7 +487,7 @@ namespace app::core::playback
         {
           return block;
         }
-        
+
         continue;
       }
 
@@ -512,7 +516,7 @@ namespace app::core::playback
         }
 
         ret = ::avcodec_send_packet(_codecContext.get(), nullptr);
-        
+
         if (ret < 0 && ret != AVERROR(EAGAIN))
         {
           setError("Error flushing decoder at end of stream: " + ffmpegErrorText(ret));
@@ -525,7 +529,7 @@ namespace app::core::playback
 
       ::av_packet_unref(_packet.get());
       ret = ::av_read_frame(_formatContext.get(), _packet.get());
-      
+
       if (ret == AVERROR_EOF)
       {
         _inputEof = true;
@@ -546,7 +550,7 @@ namespace app::core::playback
 
       ret = ::avcodec_send_packet(_codecContext.get(), _packet.get());
       ::av_packet_unref(_packet.get());
-      
+
       if (ret < 0 && ret != AVERROR(EAGAIN))
       {
         setError("Error sending compressed audio packet to decoder: " + ffmpegErrorText(ret));
@@ -624,7 +628,7 @@ namespace app::core::playback
       block.frames = static_cast<std::uint32_t>(convertedSamples);
       auto const sampleCount = static_cast<std::size_t>(convertedSamples) * outChannels;
       block.bytes.resize(sampleCount * 3);
-      
+
       for (std::size_t i = 0; i < sampleCount; ++i)
       {
         auto const sample = static_cast<std::uint32_t>(outBuffer[i]);

@@ -11,10 +11,21 @@
 
 namespace app::core
 {
+  enum class LogLevel
+  {
+    Trace = 0,
+    Debug = 1,
+    Info = 2,
+    Warn = 3,
+    Error = 4,
+    Critical = 5,
+    Off = 6
+  };
+
   class Log final
   {
   public:
-    static void init();
+    static void init(LogLevel level = LogLevel::Info);
     static void shutdown();
 
     static std::shared_ptr<spdlog::logger>& getAppLogger() { return _appLogger; }

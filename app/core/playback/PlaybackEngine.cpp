@@ -424,9 +424,9 @@ namespace app::core::playback
                                  StreamFormat& backendFormat)
   {
     auto outputFormat = StreamFormat{};
-    outputFormat.sampleRate = descriptor.sampleRateHint;
-    outputFormat.channels = descriptor.channelsHint;
-    outputFormat.bitDepth = descriptor.bitDepthHint;
+    outputFormat.sampleRate = 0; // Use native
+    outputFormat.channels = 0;   // Use native
+    outputFormat.bitDepth = 0;   // Use native
     outputFormat.isFloat = false;
     outputFormat.isInterleaved = true;
 
