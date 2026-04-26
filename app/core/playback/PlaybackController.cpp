@@ -88,35 +88,40 @@ namespace app::core::playback
 
   PlaybackSnapshot PlaybackController::snapshot() const
   {
+    using namespace std::chrono_literals;
+
     auto snap = _engine->snapshot();
+    auto const now = std::chrono::steady_clock::now();
+
+    if (!_cachedBackends.empty() && (now - _lastDiscoveryTime) < 5s)
+    {
+      snap.availableBackends = _cachedBackends;
+      return snap;
+    }
+
     auto allBackends = std::vector<BackendSnapshot>{};
 
     // 1. Add PipeWire (shared/mixing mode)
     if (_pwDiscovery)
     {
       auto pwDevices = _pwDiscovery->enumerateDevices();
-      PLAYBACK_LOG_DEBUG("PlaybackController: PipeWire returned {} devices", pwDevices.size());
-      allBackends.push_back({.kind = BackendKind::PipeWire, .devices = std::move(pwDevices)});
+      PLAYBACK_LOG_DEBUG("PlaybackController: PipeWire discovery found {} devices", pwDevices.size());
+      allBackends.push_back({.kind = BackendKind::PipeWire, .devices = pwDevices});
 
       // Also report PipeWire Exclusive with the same device list
-      allBackends.push_back({.kind = BackendKind::PipeWireExclusive, .devices = _pwDiscovery->enumerateDevices()});
-    }
-    else
-    {
-      PLAYBACK_LOG_DEBUG("PlaybackController: _pwDiscovery is null");
+      allBackends.push_back({.kind = BackendKind::PipeWireExclusive, .devices = std::move(pwDevices)});
     }
 
     // 2. Add ALSA Exclusive
     if (_alsaDiscovery)
     {
       auto alsaDevices = _alsaDiscovery->enumerateDevices();
-      PLAYBACK_LOG_DEBUG("PlaybackController: ALSA returned {} devices", alsaDevices.size());
+      PLAYBACK_LOG_DEBUG("PlaybackController: ALSA discovery found {} devices", alsaDevices.size());
       allBackends.push_back({.kind = BackendKind::AlsaExclusive, .devices = std::move(alsaDevices)});
     }
-    else
-    {
-      PLAYBACK_LOG_DEBUG("PlaybackController: _alsaDiscovery is null");
-    }
+
+    _cachedBackends = allBackends;
+    _lastDiscoveryTime = now;
 
     snap.availableBackends = std::move(allBackends);
     return snap;

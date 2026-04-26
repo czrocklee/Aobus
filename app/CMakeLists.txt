@@ -47,7 +47,7 @@ if(ALSA_FOUND)
   target_sources(RockStudio PRIVATE platform/linux/playback/AlsaExclusiveBackend.cpp)
   target_link_libraries(RockStudio PRIVATE ALSA)
 endif()
-target_link_libraries(RockStudio PRIVATE rs GTKMM spdlog::spdlog yaml-cpp)
+target_link_libraries(RockStudio PRIVATE rs GTKMM spdlog::spdlog yaml-cpp CLI11::CLI11)
 target_include_directories(RockStudio PRIVATE "${CMAKE_SOURCE_DIR}/app")
 
 # Configure ASan leak detection to use suppression file for third-party libraries (RockStudio app only)

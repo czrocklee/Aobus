@@ -5,7 +5,9 @@
 
 #include "core/playback/PlaybackTypes.h"
 
+#include <chrono>
 #include <memory>
+#include <vector>
 
 namespace app::core::playback
 {
@@ -39,6 +41,10 @@ namespace app::core::playback
     // Persistent backends for device enumeration even when inactive
     std::unique_ptr<IAudioBackend> _pwDiscovery;
     std::unique_ptr<IAudioBackend> _alsaDiscovery;
+
+    // Caching for available backends/devices to throttle UI polling
+    mutable std::vector<BackendSnapshot> _cachedBackends;
+    mutable std::chrono::steady_clock::time_point _lastDiscoveryTime;
   };
 
 } // namespace app::core::playback
