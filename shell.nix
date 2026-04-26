@@ -55,6 +55,7 @@ pkgs.mkShell {
       ffmpeg
       pipewire
       alsa-lib
+      udev
     ]
     ++ [ lexy ];
   shellHook = ''

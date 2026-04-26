@@ -140,6 +140,7 @@ namespace app::core::playback
     std::string displayName; ///< User-friendly name
     std::string description; ///< Secondary details (e.g. backend/plugin name)
     bool isDefault = false;  ///< True if this is the system/backend default
+    BackendKind backendKind = BackendKind::None;
 
     bool operator==(AudioDevice const&) const = default;
   };

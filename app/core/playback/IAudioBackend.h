@@ -64,21 +64,6 @@ namespace app::core::playback
     virtual void close() = 0;
 
     /**
-     * @brief Returns available hardware output devices for this backend.
-     */
-    virtual std::vector<AudioDevice> enumerateDevices() = 0;
-
-    /**
-     * @brief Switches the output device.
-     */
-    virtual void setDevice(std::string_view deviceId) = 0;
-
-    /**
-     * @brief Returns the ID of the currently selected device.
-     */
-    virtual std::string_view currentDeviceId() const noexcept = 0;
-
-    /**
      * @brief Enables or disables exclusive mode (for PipeWire backend).
      * In exclusive mode, the stream connects directly to the hardware node,
      * bypassing the mixer for bit-perfect output.

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "core/playback/IAudioBackend.h"
+#include "core/playback/IDeviceDiscovery.h"
 
 #include <string_view>
 
@@ -18,6 +19,19 @@ namespace app::core::playback
   class NullBackend final : public IAudioBackend
   {
   public:
+    class NullDiscovery final : public IDeviceDiscovery
+    {
+    public:
+      void setDevicesChangedCallback(OnDevicesChangedCallback) override {}
+      std::vector<AudioDevice> enumerateDevices() override { return {}; }
+      std::unique_ptr<IAudioBackend> createBackend(AudioDevice const&) override
+      {
+        return std::make_unique<NullBackend>();
+      }
+    };
+
+    static std::unique_ptr<IDeviceDiscovery> createDiscovery() { return std::make_unique<NullDiscovery>(); }
+
     NullBackend() = default;
     ~NullBackend() override = default;
 
@@ -43,9 +57,6 @@ namespace app::core::playback
     void stop() override {}
     void close() override {}
 
-    std::vector<AudioDevice> enumerateDevices() override { return {}; }
-    void setDevice(std::string_view) override {}
-    std::string_view currentDeviceId() const noexcept override { return ""; }
     void setExclusiveMode(bool) override {}
     bool isExclusiveMode() const noexcept override { return false; }
 

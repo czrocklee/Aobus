@@ -6,6 +6,7 @@
 #include "core/playback/OutputMenuModel.h"
 #include "core/playback/PlaybackTypes.h"
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <vector>
@@ -14,6 +15,7 @@ namespace app::core::playback
 {
   class PlaybackEngine;
   class IAudioBackend;
+  class IDeviceDiscovery;
 }
 
 namespace app::core::playback
@@ -25,10 +27,10 @@ namespace app::core::playback
     PlaybackController();
     ~PlaybackController();
 
+    void addDiscovery(std::unique_ptr<IDeviceDiscovery> discovery);
+
     void play(TrackPlaybackDescriptor descriptor);
     void setBackend(std::unique_ptr<IAudioBackend> backend);
-    void setDevice(std::string_view deviceId);
-    void setBackendAndDevice(std::unique_ptr<IAudioBackend> backend, std::string_view deviceId);
     void setOutput(BackendKind kind, std::string_view deviceId);
     void pause();
     void resume();
@@ -40,13 +42,12 @@ namespace app::core::playback
   private:
     std::unique_ptr<PlaybackEngine> _engine;
 
-    // Persistent backends for device enumeration even when inactive
-    std::unique_ptr<IAudioBackend> _pwDiscovery;
-    std::unique_ptr<IAudioBackend> _alsaDiscovery;
+    // Discovery monitors
+    std::vector<std::unique_ptr<IDeviceDiscovery>> _discoveries;
 
-    // Caching for available backends/devices to throttle UI polling
+    mutable std::atomic<bool> _backendsDirty{true};
     mutable std::vector<BackendSnapshot> _cachedBackends;
-    mutable std::chrono::steady_clock::time_point _lastDiscoveryTime;
+    mutable std::vector<AudioDevice> _allDevices;
   };
 
 } // namespace app::core::playback

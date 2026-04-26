@@ -92,6 +92,13 @@ if(ALSA_FOUND)
   message(STATUS "ALSA found: ALSA exclusive backend enabled")
 endif()
 
+# libudev via pkg-config (required for ALSA hardware monitoring)
+pkg_check_modules(UDEV REQUIRED libudev)
+add_library(UDEV INTERFACE)
+target_include_directories(UDEV INTERFACE ${UDEV_INCLUDE_DIRS})
+target_link_libraries(UDEV INTERFACE ${UDEV_LIBRARIES})
+message(STATUS "libudev found and enabled")
+
 # clang-tidy setup (manual application to targets)
 #find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
 unset(CLANG_TIDY_EXECUTABLE)
