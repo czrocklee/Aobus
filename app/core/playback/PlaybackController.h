@@ -30,7 +30,6 @@ namespace app::core::playback
     void addDiscovery(std::unique_ptr<IDeviceDiscovery> discovery);
 
     void play(TrackPlaybackDescriptor descriptor);
-    void setBackend(std::unique_ptr<IAudioBackend> backend);
     void setOutput(BackendKind kind, std::string_view deviceId);
     void pause();
     void resume();
