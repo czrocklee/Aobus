@@ -78,6 +78,14 @@ namespace app::core::playback
      */
     virtual std::string_view currentDeviceId() const noexcept = 0;
 
+    /**
+     * @brief Enables or disables exclusive mode (for PipeWire backend).
+     * In exclusive mode, the stream connects directly to the hardware node,
+     * bypassing the mixer for bit-perfect output.
+     */
+    virtual void setExclusiveMode(bool exclusive) = 0;
+    virtual bool isExclusiveMode() const noexcept = 0;
+
     virtual BackendKind kind() const noexcept = 0;
     virtual std::string_view lastError() const noexcept = 0;
   };

@@ -46,6 +46,8 @@ namespace app::core::playback
     std::vector<AudioDevice> enumerateDevices() override { return {}; }
     void setDevice(std::string_view) override {}
     std::string_view currentDeviceId() const noexcept override { return ""; }
+    void setExclusiveMode(bool) override {}
+    bool isExclusiveMode() const noexcept override { return false; }
 
     BackendKind kind() const noexcept override { return BackendKind::None; }
     std::string_view lastError() const noexcept override { return {}; }

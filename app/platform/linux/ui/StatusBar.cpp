@@ -165,6 +165,8 @@ namespace app::ui
           auto kind = app::core::playback::BackendKind::None;
           if (kindStr == "pipewire")
             kind = app::core::playback::BackendKind::PipeWire;
+          else if (kindStr == "pipewire_exclusive")
+            kind = app::core::playback::BackendKind::PipeWireExclusive;
           else if (kindStr == "alsa")
             kind = app::core::playback::BackendKind::AlsaExclusive;
 
@@ -337,9 +339,24 @@ namespace app::ui
       for (auto const& backend : snapshot.availableBackends)
       {
         auto backendMenu = Gio::Menu::create();
-        std::string const kindStr = (backend.kind == app::core::playback::BackendKind::PipeWire ? "pipewire" : "alsa");
-        std::string const kindDisplay =
-          (backend.kind == app::core::playback::BackendKind::PipeWire ? "PipeWire" : "ALSA Exclusive");
+        std::string kindStr;
+        std::string kindDisplay;
+        switch (backend.kind)
+        {
+          case app::core::playback::BackendKind::PipeWire:
+            kindStr = "pipewire";
+            kindDisplay = "PipeWire";
+            break;
+          case app::core::playback::BackendKind::PipeWireExclusive:
+            kindStr = "pipewire_exclusive";
+            kindDisplay = "PipeWire Exclusive";
+            break;
+          case app::core::playback::BackendKind::AlsaExclusive:
+            kindStr = "alsa";
+            kindDisplay = "ALSA Exclusive";
+            break;
+          default: continue;
+        }
 
         for (auto const& device : backend.devices)
         {
