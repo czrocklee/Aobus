@@ -30,6 +30,9 @@ namespace app::core::playback
     void stop();
     void seek(std::uint32_t positionMs);
 
+    std::vector<AudioDevice> enumerateDevices() const;
+    void setDevice(std::string_view deviceId);
+
     PlaybackSnapshot snapshot() const;
 
   private:
@@ -47,6 +50,9 @@ namespace app::core::playback
     static void onDrainComplete(void* userData) noexcept;
     static void onGraphChanged(void* userData, AudioGraph const& graph) noexcept;
     static void onSourceError(void* userData) noexcept;
+    static void onBackendError(void* userData, std::string_view message) noexcept;
+
+    void handleBackendError(std::string_view message);
 
     std::unique_ptr<IAudioBackend> _backend;
     std::atomic<std::shared_ptr<IPcmSource>> _source;

@@ -75,6 +75,18 @@ namespace app::core::playback
   };
 
   /**
+   * @brief Represents a logical output device within a backend.
+   */
+  struct AudioDevice final
+  {
+    std::string id;          ///< Unique ID (backend specific, e.g. "hw:0,0" or node ID)
+    std::string displayName; ///< User-friendly name
+    bool isDefault = false;  ///< True if this is the system/backend default
+
+    bool operator==(AudioDevice const&) const = default;
+  };
+
+  /**
    * @brief Represents a semantic component in the audio pipeline.
    */
   struct AudioNode final
@@ -86,6 +98,8 @@ namespace app::core::playback
     bool volumeNotUnity = false;
     bool isMuted = false;
     std::string objectPath = "";
+
+    bool operator==(AudioNode const&) const = default;
   };
 
   /**
@@ -96,6 +110,8 @@ namespace app::core::playback
     std::string sourceId = "";
     std::string destId = "";
     bool isActive = true;
+
+    bool operator==(AudioLink const&) const = default;
   };
 
   /**
@@ -105,6 +121,8 @@ namespace app::core::playback
   {
     std::vector<AudioNode> nodes;
     std::vector<AudioLink> links;
+
+    bool operator==(AudioGraph const&) const = default;
   };
 
   /**
@@ -120,17 +138,32 @@ namespace app::core::playback
     Lossy,      ///< Bit-depth truncation or channel dropping
   };
 
+  /**
+   * @brief Represents the current state of a backend and its devices.
+   */
+  struct BackendSnapshot final
+  {
+    BackendKind kind = BackendKind::None;
+    std::vector<AudioDevice> devices;
+
+    bool operator==(BackendSnapshot const&) const = default;
+  };
+
   struct PlaybackSnapshot final
   {
     TransportState state = TransportState::Idle;
     BackendKind backend = BackendKind::None;
     std::string trackTitle;
     std::string trackArtist;
-    std::string statusText;
-    std::uint32_t durationMs = 0;
     std::uint32_t positionMs = 0;
+    std::uint32_t durationMs = 0;
     std::uint32_t bufferedMs = 0;
     std::uint32_t underrunCount = 0;
+    std::string statusText;
+
+    // Device info
+    std::string currentDeviceId;
+    std::vector<BackendSnapshot> availableBackends;
 
     // Semantic graph data
     AudioGraph graph;

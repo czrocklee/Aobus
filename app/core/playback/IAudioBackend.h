@@ -37,6 +37,9 @@ namespace app::core::playback
 
     /// Called by the backend whenever the audio routing graph topology or formats change.
     void (*onGraphChanged)(void* userData, AudioGraph const& graph) noexcept = nullptr;
+
+    /// Called by the backend when a terminal error occurs (e.g. device lost).
+    void (*onBackendError)(void* userData, std::string_view message) noexcept = nullptr;
   };
 
   /**
@@ -59,6 +62,21 @@ namespace app::core::playback
     virtual void drain() = 0;
     virtual void stop() = 0;
     virtual void close() = 0;
+
+    /**
+     * @brief Returns available hardware output devices for this backend.
+     */
+    virtual std::vector<AudioDevice> enumerateDevices() = 0;
+
+    /**
+     * @brief Switches the output device.
+     */
+    virtual void setDevice(std::string_view deviceId) = 0;
+
+    /**
+     * @brief Returns the ID of the currently selected device.
+     */
+    virtual std::string_view currentDeviceId() const noexcept = 0;
 
     virtual BackendKind kind() const noexcept = 0;
     virtual std::string_view lastError() const noexcept = 0;

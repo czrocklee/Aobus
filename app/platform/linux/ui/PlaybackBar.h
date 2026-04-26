@@ -50,6 +50,13 @@ namespace app::ui
     StopSignal _stopRequested;
     SeekSignal _seekRequested;
     bool _updatingSeekScale = false;
+
+    struct LastState
+    {
+      app::core::playback::TransportState state = app::core::playback::TransportState::Idle;
+      std::uint32_t positionSec = 0xFFFFFFFF;
+      std::uint32_t durationSec = 0xFFFFFFFF;
+    } _lastState;
   };
 
 } // namespace app::ui

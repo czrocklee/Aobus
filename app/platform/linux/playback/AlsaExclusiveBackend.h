@@ -41,6 +41,10 @@ namespace app::playback
     void stop() override;
     void close() override;
 
+    std::vector<app::core::playback::AudioDevice> enumerateDevices() override;
+    void setDevice(std::string_view deviceId) override;
+    std::string_view currentDeviceId() const noexcept override;
+
     app::core::playback::BackendKind kind() const noexcept override
     {
       return app::core::playback::BackendKind::AlsaExclusive;
@@ -66,8 +70,12 @@ namespace app::playback
     app::core::playback::StreamFormat _format;
     std::string _lastError;
 
+    std::stop_token _stopToken;
     std::jthread _thread;
     std::atomic<bool> _paused{false};
+
+    mutable std::vector<app::core::playback::AudioDevice> _cachedDevices;
+    mutable std::chrono::steady_clock::time_point _lastEnumerationTime;
   };
 
 } // namespace app::playback

@@ -34,15 +34,16 @@ namespace app::playback
     void stop() override;
     void close() override;
 
-    app::core::playback::BackendKind kind() const noexcept override
-    {
-      return app::core::playback::BackendKind::PipeWire;
-    }
+    std::vector<app::core::playback::AudioDevice> enumerateDevices() override;
+    void setDevice(std::string_view deviceId) override;
+    std::string_view currentDeviceId() const noexcept override;
 
+    app::core::playback::BackendKind kind() const noexcept override;
     std::string_view lastError() const noexcept override;
 
   private:
     std::unique_ptr<Impl> _impl;
+    std::string _targetDeviceId;
   };
 
 } // namespace app::playback

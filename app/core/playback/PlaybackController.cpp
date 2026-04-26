@@ -3,11 +3,16 @@
 
 #include "core/playback/PlaybackController.h"
 
+#include "core/Log.h"
 #include "core/playback/NullBackend.h"
 #include "core/playback/PlaybackEngine.h"
 
 #ifdef PIPEWIRE_FOUND
 #include "platform/linux/playback/PipeWireBackend.h"
+#endif
+
+#ifdef ALSA_FOUND
+#include "platform/linux/playback/AlsaExclusiveBackend.h"
 #endif
 
 namespace app::core::playback
@@ -16,10 +21,23 @@ namespace app::core::playback
   PlaybackController::PlaybackController()
   {
 #ifdef PIPEWIRE_FOUND
-    _engine = std::make_unique<PlaybackEngine>(std::make_unique<::app::playback::PipeWireBackend>());
-#else
-    _engine = std::make_unique<PlaybackEngine>(std::make_unique<NullBackend>());
+    _pwDiscovery = std::make_unique<app::playback::PipeWireBackend>();
 #endif
+#ifdef ALSA_FOUND
+    _alsaDiscovery = std::make_unique<app::playback::AlsaExclusiveBackend>();
+#endif
+
+    // Default engine with PipeWire
+    auto backend = std::unique_ptr<IAudioBackend>{};
+    if (_pwDiscovery)
+    {
+      backend = std::make_unique<app::playback::PipeWireBackend>();
+    }
+    else
+    {
+      backend = std::make_unique<NullBackend>();
+    }
+    _engine = std::make_unique<PlaybackEngine>(std::move(backend));
   }
 
   PlaybackController::~PlaybackController() = default;
@@ -32,6 +50,17 @@ namespace app::core::playback
   void PlaybackController::setBackend(std::unique_ptr<IAudioBackend> backend)
   {
     _engine->setBackend(std::move(backend));
+  }
+
+  void PlaybackController::setDevice(std::string_view deviceId)
+  {
+    _engine->setDevice(deviceId);
+  }
+
+  void PlaybackController::setBackendAndDevice(std::unique_ptr<IAudioBackend> backend, std::string_view deviceId)
+  {
+    _engine->setBackend(std::move(backend));
+    _engine->setDevice(deviceId);
   }
 
   void PlaybackController::pause()
@@ -56,7 +85,35 @@ namespace app::core::playback
 
   PlaybackSnapshot PlaybackController::snapshot() const
   {
-    return _engine->snapshot();
+    auto snap = _engine->snapshot();
+    auto allBackends = std::vector<BackendSnapshot>{};
+
+    // 1. Add PipeWire
+    if (_pwDiscovery)
+    {
+      auto pwDevices = _pwDiscovery->enumerateDevices();
+      PLAYBACK_LOG_DEBUG("PlaybackController: PipeWire returned {} devices", pwDevices.size());
+      allBackends.push_back({.kind = BackendKind::PipeWire, .devices = std::move(pwDevices)});
+    }
+    else
+    {
+      PLAYBACK_LOG_DEBUG("PlaybackController: _pwDiscovery is null");
+    }
+
+    // 2. Add ALSA Exclusive
+    if (_alsaDiscovery)
+    {
+      auto alsaDevices = _alsaDiscovery->enumerateDevices();
+      PLAYBACK_LOG_DEBUG("PlaybackController: ALSA returned {} devices", alsaDevices.size());
+      allBackends.push_back({.kind = BackendKind::AlsaExclusive, .devices = std::move(alsaDevices)});
+    }
+    else
+    {
+      PLAYBACK_LOG_DEBUG("PlaybackController: _alsaDiscovery is null");
+    }
+
+    snap.availableBackends = std::move(allBackends);
+    return snap;
   }
 
 } // namespace app::core::playback

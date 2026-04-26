@@ -28,7 +28,7 @@ namespace app::ui
       minutes %= 60;
 
       std::stringstream ss;
-      
+
       if (hours > 0)
       {
         ss << hours << ":" << std::setfill('0') << std::setw(2) << minutes << ":" << std::setw(2) << seconds;
@@ -37,7 +37,7 @@ namespace app::ui
       {
         ss << minutes << ":" << std::setfill('0') << std::setw(2) << seconds;
       }
-      
+
       return ss.str();
     }
 
@@ -45,7 +45,7 @@ namespace app::ui
     {
       std::stringstream ss;
       ss << (format.sampleRate / 1000.0) << " kHz · " << static_cast<int>(format.bitDepth) << "-bit · ";
-      
+
       if (format.channels == 1)
       {
         ss << "Mono";
@@ -58,7 +58,7 @@ namespace app::ui
       {
         ss << static_cast<int>(format.channels) << " ch";
       }
-      
+
       return ss.str();
     }
 
@@ -92,16 +92,17 @@ namespace app::ui
         .clickable-label {
           cursor: pointer;
         }
-        .backend-button {
+        .output-button {
            border: none;
            background: none;
            box-shadow: none;
-           padding: 2px 6px;
+           padding: 2px 8px;
            color: @theme_fg_color;
-           opacity: 0.7;
+           opacity: 0.8;
            font-weight: bold;
+           border-radius: 6px;
         }
-        .backend-button:hover {
+        .output-button:hover {
            opacity: 1.0;
            background-color: alpha(@theme_fg_color, 0.1);
         }
@@ -114,7 +115,7 @@ namespace app::ui
         {
           Gtk::StyleContext::add_provider_for_display(display, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
         }
-        
+
         return css;
       }();
 
@@ -139,41 +140,45 @@ namespace app::ui
     set_margin(6);
     add_css_class("status-bar");
 
-    // Status label (Far Left)
-    _statusLabel.set_halign(Gtk::Align::START);
-    _statusLabel.add_css_class("status-message");
-    _statusLabel.set_visible(false);
-    append(_statusLabel);
-
     // Playback details (Left)
     _playbackDetailsBox.set_spacing(8);
     _playbackDetailsBox.set_margin_start(12);
     _playbackDetailsBox.set_margin_end(12);
-    
-    _backendButton.add_css_class("backend-button");
-    _backendButton.set_label("PipeWire");
-    _backendButton.set_tooltip_text("Click to change audio backend");
+
+    _outputButton.add_css_class("output-button");
+    _outputButton.set_label("Output");
+    _outputButton.set_tooltip_text("Click to change audio backend or device");
 
     auto actionGroup = Gio::SimpleActionGroup::create();
-    actionGroup->add_action_with_parameter("set-backend", Glib::VARIANT_TYPE_STRING,
-      [this](const Glib::VariantBase& value) {
-        auto name = Glib::VariantBase::cast_dynamic<Glib::Variant<Glib::ustring>>(value).get();
-        if (name == "pipewire") _backendChanged.emit(app::core::playback::BackendKind::PipeWire);
-        else if (name == "alsa") _backendChanged.emit(app::core::playback::BackendKind::AlsaExclusive);
+    actionGroup->add_action_with_parameter(
+      "set-output",
+      Glib::VARIANT_TYPE_STRING,
+      [this](Glib::VariantBase const& value)
+      {
+        auto param = Glib::VariantBase::cast_dynamic<Glib::Variant<Glib::ustring>>(value).get();
+        auto const sep = param.find('|');
+        if (sep != Glib::ustring::npos)
+        {
+          auto const kindStr = param.substr(0, sep);
+          auto const deviceId = param.substr(sep + 1);
+
+          auto kind = app::core::playback::BackendKind::None;
+          if (kindStr == "pipewire")
+            kind = app::core::playback::BackendKind::PipeWire;
+          else if (kindStr == "alsa")
+            kind = app::core::playback::BackendKind::AlsaExclusive;
+
+          _outputChanged.emit(kind, std::string(deviceId));
+        }
       });
     insert_action_group("status", actionGroup);
-
-    auto menu = Gio::Menu::create();
-    menu->append("PipeWire", "status.set-backend('pipewire')");
-    menu->append("ALSA (Exclusive)", "status.set-backend('alsa')");
-    _backendButton.set_menu_model(menu);
 
     _streamInfoLabel.add_css_class("dim-label");
     _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
     _sinkStatusIcon.set_pixel_size(12);
     _sinkStatusIcon.set_visible(false);
-    
-    _playbackDetailsBox.append(_backendButton);
+
+    _playbackDetailsBox.append(_outputButton);
     _playbackDetailsBox.append(_streamInfoLabel);
     _playbackDetailsBox.append(_sinkStatusIcon);
     append(_playbackDetailsBox);
@@ -210,9 +215,20 @@ namespace app::ui
     _importBox.append(_importProgressBar);
     append(_importBox);
 
-    // Selection info
+    // Info Stack: Toggle between Selection Info and Status Messages
+    auto* infoStack = Gtk::make_managed<Gtk::Stack>();
+    infoStack->set_transition_type(Gtk::StackTransitionType::SLIDE_UP_DOWN);
+    infoStack->set_transition_duration(250);
+
     _selectionLabel.add_css_class("dim-label");
-    append(_selectionLabel);
+    _selectionLabel.set_halign(Gtk::Align::END);
+
+    _statusLabel.add_css_class("status-message");
+    _statusLabel.set_halign(Gtk::Align::END);
+
+    infoStack->add(_selectionLabel, "info");
+    infoStack->add(_statusLabel, "status");
+    append(*infoStack);
 
     // Separator
     auto* sep1 = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
@@ -237,7 +253,12 @@ namespace app::ui
     }
 
     _statusLabel.set_text(message);
-    _statusLabel.set_visible(true);
+
+    // Switch stack to status
+    if (auto* stack = dynamic_cast<Gtk::Stack*>(_statusLabel.get_parent()))
+    {
+      stack->set_visible_child("status");
+    }
 
     _timerConnection = Glib::signal_timeout().connect_seconds(
       [this]()
@@ -254,9 +275,14 @@ namespace app::ui
     {
       _timerConnection.disconnect();
     }
-    
+
     _statusLabel.set_text("");
-    _statusLabel.set_visible(false);
+
+    // Switch stack back to info
+    if (auto* stack = dynamic_cast<Gtk::Stack*>(_statusLabel.get_parent()))
+    {
+      stack->set_visible_child("info");
+    }
   }
 
   void StatusBar::setTrackCount(std::size_t count)
@@ -273,22 +299,81 @@ namespace app::ui
     }
 
     std::string text = std::to_string(count) + (count == 1 ? " item selected" : " items selected");
-    
+
     if (totalDuration && totalDuration->count() > 0)
     {
       text += " (" + formatDuration(*totalDuration) + ")";
     }
-    
+
     _selectionLabel.set_text(text);
   }
 
   void StatusBar::setPlaybackDetails(app::core::playback::PlaybackSnapshot const& snapshot)
   {
+    // Skip update if nothing visible has changed
+    if (snapshot.state == _lastPlaybackState.state && snapshot.backend == _lastPlaybackState.backend &&
+        snapshot.trackTitle == _lastPlaybackState.title && snapshot.trackArtist == _lastPlaybackState.artist &&
+        snapshot.underrunCount == _lastPlaybackState.underrunCount && snapshot.quality == _lastPlaybackState.quality &&
+        snapshot.graph == _lastPlaybackState.graph && snapshot.currentDeviceId == _lastPlaybackState.currentDeviceId &&
+        snapshot.availableBackends == _lastPlaybackState.availableBackends)
+    {
+      return;
+    }
+
+    _lastPlaybackState = {.state = snapshot.state,
+                          .backend = snapshot.backend,
+                          .title = snapshot.trackTitle,
+                          .artist = snapshot.trackArtist,
+                          .underrunCount = snapshot.underrunCount,
+                          .quality = snapshot.quality,
+                          .graph = snapshot.graph,
+                          .currentDeviceId = snapshot.currentDeviceId,
+                          .availableBackends = snapshot.availableBackends};
+
+    // Update Output Button Menu
+    {
+      auto menu = Gio::Menu::create();
+
+      for (auto const& backend : snapshot.availableBackends)
+      {
+        auto backendMenu = Gio::Menu::create();
+        std::string const kindStr = (backend.kind == app::core::playback::BackendKind::PipeWire ? "pipewire" : "alsa");
+        std::string const kindDisplay =
+          (backend.kind == app::core::playback::BackendKind::PipeWire ? "PipeWire" : "ALSA Exclusive");
+
+        for (auto const& device : backend.devices)
+        {
+          backendMenu->append(device.displayName, std::format("status.set-output('{}|{}')", kindStr, device.id));
+        }
+        menu->append_submenu(kindDisplay, backendMenu);
+      }
+      _outputButton.set_menu_model(menu);
+    }
+
+    // Update Button Label to current device
+    bool found = false;
+    for (auto const& backend : snapshot.availableBackends)
+    {
+      if (backend.kind == snapshot.backend)
+      {
+        for (auto const& device : backend.devices)
+        {
+          if (device.id == snapshot.currentDeviceId)
+          {
+            _outputButton.set_label(device.displayName);
+            found = true;
+            break;
+          }
+        }
+      }
+      if (found) break;
+    }
+    if (!found) _outputButton.set_label("Output");
+
     if (snapshot.state == app::core::playback::TransportState::Idle)
     {
       _nowPlayingLabel.set_text("");
       _streamInfoLabel.set_text("");
-      _backendButton.set_label("PipeWire"); // Default
       _sinkStatusIcon.set_visible(false);
       return;
     }
@@ -308,14 +393,6 @@ namespace app::ui
     else
     {
       _nowPlayingLabel.set_text("");
-    }
-
-    // Backend Label
-    switch (snapshot.backend)
-    {
-      case app::core::playback::BackendKind::PipeWire: _backendButton.set_label("PipeWire"); break;
-      case app::core::playback::BackendKind::AlsaExclusive: _backendButton.set_label("ALSA (Exclusive)"); break;
-      default: _backendButton.set_label("None"); break;
     }
 
     // Source Format from Decoder Node
@@ -342,7 +419,7 @@ namespace app::ui
     // Tooltip: Build dynamic representation of the path from the graph
     std::stringstream tt;
     tt << "Audio Pipeline:\n";
-    
+
     for (auto const& node : snapshot.graph.nodes)
     {
       tt << "• ";
@@ -373,24 +450,16 @@ namespace app::ui
     // Update status icon
     clearSinkStatusClasses(_sinkStatusIcon);
     _sinkStatusIcon.set_visible(true);
-    
+
     using AudioQuality = app::core::playback::AudioQuality;
     switch (snapshot.quality)
     {
-      case AudioQuality::BitPerfect:
-        _sinkStatusIcon.add_css_class("sink-status-good");
-        break;
+      case AudioQuality::BitPerfect: _sinkStatusIcon.add_css_class("sink-status-good"); break;
       case AudioQuality::Lossless:
-      case AudioQuality::Resampled:
-        _sinkStatusIcon.add_css_class("sink-status-warning");
-        break;
+      case AudioQuality::Resampled: _sinkStatusIcon.add_css_class("sink-status-warning"); break;
       case AudioQuality::Mixed:
-      case AudioQuality::Lossy:
-        _sinkStatusIcon.add_css_class("sink-status-bad");
-        break;
-      case AudioQuality::Unknown:
-        _sinkStatusIcon.set_visible(false);
-        break;
+      case AudioQuality::Lossy: _sinkStatusIcon.add_css_class("sink-status-bad"); break;
+      case AudioQuality::Unknown: _sinkStatusIcon.set_visible(false); break;
     }
   }
 
