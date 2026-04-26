@@ -496,7 +496,7 @@ namespace app::playback
       {
         if (isSinkMediaClass(node.mediaClass))
         {
-          auto const deviceId = node.objectSerial ? std::to_string(*node.objectSerial) : std::to_string(id);
+          auto const deviceId = node.nodeName.empty() ? std::to_string(id) : node.nodeName;
           auto const displayName =
             (node.nodeNick.empty() ? (node.nodeName.empty() ? node.objectPath : node.nodeName) : node.nodeNick);
           auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
@@ -1195,6 +1195,12 @@ namespace app::playback
 
     auto const bytesRead = _callbacks.readPcm(_callbacks.userData, {static_cast<std::byte*>(data), max_size});
 
+    static int logThrottle = 0;
+    if (bytesRead > 0 && ++logThrottle % 100 == 0)
+    {
+      PLAYBACK_LOG_TRACE("PipeWire: Pushing {} bytes to stream", bytesRead);
+    }
+
     if (bytesRead > 0)
     {
       buffer->buffer->datas[0].chunk->offset = 0;
@@ -1333,7 +1339,6 @@ namespace app::playback
       if (useExclusiveMode)
       {
         ::pw_properties_set(props, PW_KEY_NODE_EXCLUSIVE, "true");
-        ::pw_properties_set(props, PW_KEY_NODE_PASSIVE, "true");
       }
     }
 
@@ -1350,7 +1355,7 @@ namespace app::playback
     _impl->_monitor->setStream(_impl->_stream.get());
 
     auto const alsaFormat = (format.bitDepth == 16)   ? SPA_AUDIO_FORMAT_S16_LE
-                            : (format.bitDepth == 24) ? SPA_AUDIO_FORMAT_S24_LE
+                            : (format.bitDepth == 24) ? SPA_AUDIO_FORMAT_S24
                                                       : SPA_AUDIO_FORMAT_S32_LE;
 
     std::uint8_t buffer[1024];
@@ -1358,14 +1363,19 @@ namespace app::playback
     auto info = SPA_AUDIO_INFO_RAW_INIT(.format = alsaFormat,
                                         .rate = _impl->_format.sampleRate,
                                         .channels = _impl->_format.channels);
-    auto params =
-      std::to_array<::spa_pod const*>({(::spa_pod*)::spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info)});
-    ::pw_stream_connect(_impl->_stream.get(),
-                        PW_DIRECTION_OUTPUT,
-                        PW_ID_ANY,
-                        static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
-                        params.data(),
-                        params.size());
+    ::spa_pod const* params[] = {(::spa_pod*)::spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info)};
+
+    if (::pw_stream_connect(_impl->_stream.get(),
+                            PW_DIRECTION_OUTPUT,
+                            PW_ID_ANY,
+                            static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
+                            params,
+                            1) < 0)
+    {
+      _impl->setError("Failed to connect PipeWire stream");
+      ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+      return false;
+    }
 
     ::pw_thread_loop_unlock(_impl->_threadLoop.get());
     return true;

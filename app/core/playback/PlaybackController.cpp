@@ -36,14 +36,6 @@ namespace app::core::playback
     _engine->play(descriptor);
   }
 
-  void PlaybackController::setBackend(std::unique_ptr<IAudioBackend> backend)
-  {
-    if (backend)
-    {
-      _engine->setBackend(std::move(backend), "");
-    }
-  }
-
   void PlaybackController::setOutput(BackendKind kind, std::string_view deviceId)
   {
     auto const currentSnap = _engine->snapshot();
