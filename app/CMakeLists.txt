@@ -24,6 +24,7 @@ add_executable(RockStudio
     core/model/ManualTrackIdList.cpp
     platform/linux/ui/TrackRowDataProvider.cpp
     platform/linux/ui/PlaybackBar.cpp
+    core/playback/OutputMenuModel.cpp
     core/playback/PlaybackController.cpp
     core/playback/PlaybackEngine.cpp
     core/playback/AudioDecoderSession.cpp
