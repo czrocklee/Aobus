@@ -96,34 +96,56 @@ namespace app::ui
 
   void PlaybackBar::setSnapshot(app::core::playback::PlaybackSnapshot const& snapshot)
   {
-    // Update time
-    auto durationSec = snapshot.durationMs / 1000;
-    auto positionSec = snapshot.positionMs / 1000;
-    auto durationMin = durationSec / 60;
-    auto durationRemSec = durationSec % 60;
-    auto positionMin = positionSec / 60;
-    auto positionRemSec = positionSec % 60;
-    _timeLabel.set_text(
-      std::format("{:d}:{:02d} / {:d}:{:02d}", positionMin, positionRemSec, durationMin, durationRemSec));
+    auto const posSec = snapshot.positionMs / 1000;
+    auto const durSec = snapshot.durationMs / 1000;
+
+    if (snapshot.state != _lastState.state || posSec != _lastState.positionSec || durSec != _lastState.durationSec)
+    {
+      _lastState = {.state = snapshot.state, .positionSec = posSec, .durationSec = durSec};
+
+      updateTransportButtons(snapshot.state);
+
+      if (snapshot.state == app::core::playback::TransportState::Idle)
+      {
+        _timeLabel.set_text("00:00 / 00:00");
+      }
+      else
+      {
+        auto durationMin = durSec / 60;
+        auto durationRemSec = durSec % 60;
+        auto positionMin = posSec / 60;
+        auto positionRemSec = posSec % 60;
+        _timeLabel.set_text(
+          std::format("{:d}:{:02d} / {:d}:{:02d}", positionMin, positionRemSec, durationMin, durationRemSec));
+      }
+    }
+
+    // Always update seek scale sensitivity and range for smoothness
+    if (snapshot.state == app::core::playback::TransportState::Idle)
+    {
+      _seekScale.set_range(0, 100);
+      _seekScale.set_value(0);
+      _seekScale.set_sensitive(false);
+      return;
+    }
 
     // Update seek scale
     _updatingSeekScale = true;
-    
+
     if (snapshot.durationMs > 0)
     {
       _seekScale.set_range(0, static_cast<double>(snapshot.durationMs));
       _seekScale.set_value(static_cast<double>(snapshot.positionMs));
+      _seekScale.set_sensitive(true);
     }
     else
     {
       _seekScale.set_range(0, 100);
       _seekScale.set_value(0);
+      _seekScale.set_sensitive(false);
     }
-    
-    _updatingSeekScale = false;
 
-    // Update transport buttons
-    updateTransportButtons(snapshot.state);
+    _updatingSeekScale = false;
   }
 
   void PlaybackBar::setInteractive(bool enabled)

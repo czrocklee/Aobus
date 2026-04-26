@@ -91,13 +91,11 @@ namespace app::core::playback
       bool wasPlaying = false;
     };
 
-    auto const state = [this]() {
+    auto const state = [this]()
+    {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       return State{
-        .track = _currentTrack,
-        .positionMs = _snapshot.positionMs,
-        .wasPlaying = (_state == TransportState::Playing)
-      };
+        .track = _currentTrack, .positionMs = _snapshot.positionMs, .wasPlaying = (_state == TransportState::Playing)};
     }();
 
     stop();
@@ -123,7 +121,8 @@ namespace app::core::playback
 
   void PlaybackEngine::play(TrackPlaybackDescriptor descriptor)
   {
-    PLAYBACK_LOG_INFO("Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
+    PLAYBACK_LOG_INFO(
+      "Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
 
     if (_backend)
     {
@@ -141,6 +140,7 @@ namespace app::core::playback
     callbacks.onPositionAdvanced = &PlaybackEngine::onPositionAdvanced;
     callbacks.onDrainComplete = &PlaybackEngine::onDrainComplete;
     callbacks.onGraphChanged = &PlaybackEngine::onGraphChanged;
+    callbacks.onBackendError = &PlaybackEngine::onBackendError;
 
     auto source = std::shared_ptr<IPcmSource>{};
     auto backendFormat = StreamFormat{};
@@ -185,7 +185,11 @@ namespace app::core::playback
     auto const bufferedMs = source ? source->bufferedMs() : 0;
     if (auto const drained = !source || source->isDrained(); drained && bufferedMs == 0)
     {
-      if (_backend) { _backend->stop(); _backend->close(); }
+      if (_backend)
+      {
+        _backend->stop();
+        _backend->close();
+      }
       _source.store({}, std::memory_order_release);
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _currentTrack.reset();
@@ -257,7 +261,11 @@ namespace app::core::playback
   void PlaybackEngine::stop()
   {
     PLAYBACK_LOG_INFO("Playback stopped");
-    if (_backend) { _backend->stop(); _backend->close(); }
+    if (_backend)
+    {
+      _backend->stop();
+      _backend->close();
+    }
     _source.store({}, std::memory_order_release);
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
     _currentTrack.reset();
@@ -284,7 +292,11 @@ namespace app::core::playback
       _snapshot.statusText.clear();
     }
 
-    if (_backend) { _backend->stop(); _backend->flush(); }
+    if (_backend)
+    {
+      _backend->stop();
+      _backend->flush();
+    }
     _backendStarted = false;
     _playbackDrainPending = false;
 
@@ -301,7 +313,11 @@ namespace app::core::playback
     auto const drained = source->isDrained();
     if (drained && bufferedMs == 0)
     {
-      if (_backend) { _backend->stop(); _backend->close(); }
+      if (_backend)
+      {
+        _backend->stop();
+        _backend->close();
+      }
       _source.store({}, std::memory_order_release);
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _currentTrack.reset();
@@ -329,6 +345,45 @@ namespace app::core::playback
     if (_backend) _backend->start();
   }
 
+  std::vector<AudioDevice> PlaybackEngine::enumerateDevices() const
+  {
+    if (!_backend) return {};
+    return _backend->enumerateDevices();
+  }
+
+  void PlaybackEngine::setDevice(std::string_view deviceId)
+  {
+    if (!_backend) return;
+
+    struct State
+    {
+      std::optional<TrackPlaybackDescriptor> track;
+      std::uint32_t positionMs = 0;
+      bool wasPlaying = false;
+    };
+
+    auto const state = [this]()
+    {
+      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      return State{
+        .track = _currentTrack, .positionMs = _snapshot.positionMs, .wasPlaying = (_state == TransportState::Playing)};
+    }();
+
+    _backend->setDevice(deviceId);
+
+    // If device switch triggered a backend re-open, resume playback
+    if (state.track)
+    {
+      PLAYBACK_LOG_INFO("Resuming track after device switch");
+      play(*state.track);
+      seek(state.positionMs);
+      if (!state.wasPlaying)
+      {
+        pause();
+      }
+    }
+  }
+
   PlaybackSnapshot PlaybackEngine::snapshot() const
   {
     auto source = _source.load(std::memory_order_acquire);
@@ -337,7 +392,31 @@ namespace app::core::playback
     snap.backend = _backend ? _backend->kind() : BackendKind::None;
     snap.bufferedMs = source ? source->bufferedMs() : 0;
     snap.underrunCount = _underrunCount.load(std::memory_order_relaxed);
+
+    if (_backend)
+    {
+      snap.currentDeviceId = _backend->currentDeviceId();
+    }
+
     return snap;
+  }
+
+  void PlaybackEngine::onBackendError(void* userData, std::string_view message) noexcept
+  {
+    static_cast<PlaybackEngine*>(userData)->handleBackendError(message);
+  }
+
+  void PlaybackEngine::handleBackendError(std::string_view message)
+  {
+    PLAYBACK_LOG_ERROR("Backend error: {}", message);
+
+    // Stop immediately
+    stop();
+
+    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    _state = TransportState::Error;
+    _snapshot.state = TransportState::Error;
+    _snapshot.statusText = std::string(message);
   }
 
   bool PlaybackEngine::openTrack(TrackPlaybackDescriptor descriptor,
@@ -352,8 +431,16 @@ namespace app::core::playback
     outputFormat.isInterleaved = true;
 
     auto decoder = createAudioDecoderSession(outputFormat);
-    if (!decoder) { _snapshot.statusText = "No audio decoder backend is available"; return false; }
-    if (!decoder->open(descriptor.filePath)) { _snapshot.statusText = std::string(decoder->lastError()); return false; }
+    if (!decoder)
+    {
+      _snapshot.statusText = "No audio decoder backend is available";
+      return false;
+    }
+    if (!decoder->open(descriptor.filePath))
+    {
+      _snapshot.statusText = std::string(decoder->lastError());
+      return false;
+    }
 
     auto const info = decoder->streamInfo();
     if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
@@ -365,7 +452,11 @@ namespace app::core::playback
     if (shouldUseMemoryPcmSource(info))
     {
       auto memorySource = std::make_shared<MemoryPcmSource>(std::move(decoder), info);
-      if (!memorySource->initialize()) { _snapshot.statusText = memorySource->lastError(); return false; }
+      if (!memorySource->initialize())
+      {
+        _snapshot.statusText = memorySource->lastError();
+        return false;
+      }
       source = std::move(memorySource);
     }
     else
@@ -373,32 +464,33 @@ namespace app::core::playback
       PcmSourceCallbacks sourceCallbacks;
       sourceCallbacks.userData = this;
       sourceCallbacks.onError = &PlaybackEngine::onSourceError;
-      auto streamingSource = std::make_shared<StreamingPcmSource>(std::move(decoder), info, sourceCallbacks, kPrerollTargetMs, kDecodeHighWatermarkMs);
-      if (!streamingSource->initialize()) { _snapshot.statusText = streamingSource->lastError(); return false; }
+      auto streamingSource = std::make_shared<StreamingPcmSource>(
+        std::move(decoder), info, sourceCallbacks, kPrerollTargetMs, kDecodeHighWatermarkMs);
+      if (!streamingSource->initialize())
+      {
+        _snapshot.statusText = streamingSource->lastError();
+        return false;
+      }
       source = std::move(streamingSource);
     }
 
     _snapshot.durationMs = info.durationMs;
     _snapshot.positionMs = 0;
     _snapshot.graph = {};
-    
+
     // Add initial Source (Decoder) Node
-    _snapshot.graph.nodes.push_back({
-      .id = "rs-decoder",
-      .type = AudioNodeType::Decoder,
-      .name = "File Decoder",
-      .format = info.sourceFormat,
-      .objectPath = ""
-    });
+    _snapshot.graph.nodes.push_back({.id = "rs-decoder",
+                                     .type = AudioNodeType::Decoder,
+                                     .name = "File Decoder",
+                                     .format = info.sourceFormat,
+                                     .objectPath = ""});
 
     // Add Engine Node
-    _snapshot.graph.nodes.push_back({
-      .id = "rs-engine",
-      .type = AudioNodeType::Engine,
-      .name = "RockStudio Engine",
-      .format = info.outputFormat,
-      .objectPath = ""
-    });
+    _snapshot.graph.nodes.push_back({.id = "rs-engine",
+                                     .type = AudioNodeType::Engine,
+                                     .name = "RockStudio Engine",
+                                     .format = info.outputFormat,
+                                     .objectPath = ""});
 
     _snapshot.graph.links.push_back({.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
 
@@ -409,9 +501,9 @@ namespace app::core::playback
   void PlaybackEngine::handleGraphChanged(AudioGraph const& backendGraph)
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
-    
-    PLAYBACK_LOG_DEBUG("Graph update received from backend ({} nodes, {} links)", 
-                       backendGraph.nodes.size(), backendGraph.links.size());
+
+    PLAYBACK_LOG_DEBUG(
+      "Graph update received from backend ({} nodes, {} links)", backendGraph.nodes.size(), backendGraph.links.size());
 
     // Keep our internal nodes (Decoder, Engine)
     auto nodes = std::vector<AudioNode>{};
@@ -473,7 +565,7 @@ namespace app::core::playback
       {
         seen.insert(current);
         rsPathNodes.insert(current);
-        
+
         std::string next;
         for (auto const& link : snap.graph.links)
         {
@@ -499,7 +591,8 @@ namespace app::core::playback
     {
       if (sources.size() > 1)
       {
-        auto it = std::find_if(snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == nodeId; });
+        auto it =
+          std::find_if(snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == nodeId; });
         if (it != snap.graph.nodes.end())
         {
           bool rsPathIncluded = false;
@@ -513,7 +606,8 @@ namespace app::core::playback
             }
             else
             {
-              auto sourceNode = std::find_if(snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == sourceId; });
+              auto sourceNode = std::find_if(
+                snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == sourceId; });
               if (sourceNode != snap.graph.nodes.end())
               {
                 otherAppNames.push_back(sourceNode->name);
@@ -555,7 +649,8 @@ namespace app::core::playback
       }
       visited.insert(currentNodeId);
 
-      auto const nodeIt = std::find_if(snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == currentNodeId; });
+      auto const nodeIt = std::find_if(
+        snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == currentNodeId; });
       if (nodeIt == snap.graph.nodes.end())
       {
         PLAYBACK_LOG_DEBUG("Traversal reached end at missing node '{}'", currentNodeId);
@@ -584,11 +679,12 @@ namespace app::core::playback
       {
         if (link.isActive && link.sourceId == currentNodeId)
         {
-          auto const nextNodeIt = std::find_if(snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == link.destId; });
+          auto const nextNodeIt = std::find_if(
+            snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == link.destId; });
           if (nextNodeIt != snap.graph.nodes.end())
           {
             auto const& nextNode = *nextNodeIt;
-            
+
             // Compare formats if both are present
             if (node.format && nextNode.format)
             {
@@ -596,19 +692,25 @@ namespace app::core::playback
               auto const& f2 = *nextNode.format;
 
               PLAYBACK_LOG_DEBUG("    - Link format comparison: [{}Hz/{}b/{}ch] -> [{}Hz/{}b/{}ch]",
-                                f1.sampleRate, f1.bitDepth, f1.channels,
-                                f2.sampleRate, f2.bitDepth, f2.channels);
+                                 f1.sampleRate,
+                                 f1.bitDepth,
+                                 f1.channels,
+                                 f2.sampleRate,
+                                 f2.bitDepth,
+                                 f2.channels);
 
               if (f1.sampleRate != f2.sampleRate)
               {
                 PLAYBACK_LOG_DEBUG("      - Resampling detected");
-                appendLine(snap.qualityTooltip, "• Resampling: " + std::to_string(f1.sampleRate) + " → " + std::to_string(f2.sampleRate));
+                appendLine(snap.qualityTooltip,
+                           "• Resampling: " + std::to_string(f1.sampleRate) + " → " + std::to_string(f2.sampleRate));
                 snap.quality = std::max(snap.quality, AudioQuality::Resampled);
               }
               if (f1.channels != f2.channels)
               {
                 PLAYBACK_LOG_DEBUG("      - Channel mixing detected");
-                appendLine(snap.qualityTooltip, "• Mixing channels: " + std::to_string(f1.channels) + " → " + std::to_string(f2.channels));
+                appendLine(snap.qualityTooltip,
+                           "• Mixing channels: " + std::to_string(f1.channels) + " → " + std::to_string(f2.channels));
                 snap.quality = std::max(snap.quality, AudioQuality::Mixed);
               }
               else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
@@ -622,12 +724,13 @@ namespace app::core::playback
                 else
                 {
                   PLAYBACK_LOG_DEBUG("      - Precision loss (bit-depth truncate)");
-                  appendLine(snap.qualityTooltip, "• Precision loss: " + std::to_string(f1.bitDepth) + " → " + std::to_string(f2.bitDepth));
+                  appendLine(snap.qualityTooltip,
+                             "• Precision loss: " + std::to_string(f1.bitDepth) + " → " + std::to_string(f2.bitDepth));
                   snap.quality = std::max(snap.quality, AudioQuality::Lossy);
                 }
               }
             }
-            
+
             nextNodeId = link.destId;
             break;
           }

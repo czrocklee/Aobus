@@ -21,6 +21,18 @@ namespace app::playback
   AlsaExclusiveBackend::AlsaExclusiveBackend(std::string deviceName)
     : _deviceName{std::move(deviceName)}
   {
+    if (_deviceName == "default" || _deviceName.empty())
+    {
+      auto devices = enumerateDevices();
+      if (!devices.empty())
+      {
+        _deviceName = devices.front().id;
+      }
+      else
+      {
+        _deviceName = "hw:0,0";
+      }
+    }
   }
 
   AlsaExclusiveBackend::~AlsaExclusiveBackend()
@@ -68,9 +80,9 @@ namespace app::playback
     }
 
     // Set sample format
-    auto const alsaFormat = (format.bitDepth == 16) ? SND_PCM_FORMAT_S16_LE :
-                            (format.bitDepth == 24) ? SND_PCM_FORMAT_S24_3LE :
-                                                      SND_PCM_FORMAT_S32_LE;
+    auto const alsaFormat = (format.bitDepth == 16)   ? SND_PCM_FORMAT_S16_LE
+                            : (format.bitDepth == 24) ? SND_PCM_FORMAT_S24_3LE
+                                                      : SND_PCM_FORMAT_S32_LE;
 
     if (::snd_pcm_hw_params_set_format(safePcm.get(), params, alsaFormat) < 0)
     {
@@ -98,13 +110,13 @@ namespace app::playback
     snd_pcm_uframes_t periodSize = 1024;
     if (::snd_pcm_hw_params_set_periods_near(safePcm.get(), params, &periods, 0) < 0)
     {
-       _lastError = "Failed to set ALSA periods";
-       return false;
+      _lastError = "Failed to set ALSA periods";
+      return false;
     }
     if (::snd_pcm_hw_params_set_period_size_near(safePcm.get(), params, &periodSize, 0) < 0)
     {
-       _lastError = "Failed to set ALSA period size";
-       return false;
+      _lastError = "Failed to set ALSA period size";
+      return false;
     }
 
     if (::snd_pcm_hw_params(safePcm.get(), params) < 0)
@@ -126,15 +138,15 @@ namespace app::playback
     // Start threshold: start as soon as we have one period ready
     if (::snd_pcm_sw_params_set_start_threshold(safePcm.get(), swParams, periodSize) < 0)
     {
-       _lastError = "Failed to set ALSA start threshold";
-       return false;
+      _lastError = "Failed to set ALSA start threshold";
+      return false;
     }
 
     // Min availability: wake us when at least one period is free
     if (::snd_pcm_sw_params_set_avail_min(safePcm.get(), swParams, periodSize) < 0)
     {
-       _lastError = "Failed to set ALSA avail min";
-       return false;
+      _lastError = "Failed to set ALSA avail min";
+      return false;
     }
 
     if (::snd_pcm_sw_params(safePcm.get(), swParams) < 0)
@@ -147,33 +159,26 @@ namespace app::playback
     _format.sampleRate = rate; // Update with actual rate from device
     _pcm = std::move(safePcm);
 
-    PLAYBACK_LOG_INFO("ALSA backend opened device '{}' [mmap] format: {}Hz/{}b/{}ch", 
-                       _deviceName, _format.sampleRate, (int)_format.bitDepth, (int)_format.channels);
+    PLAYBACK_LOG_INFO("ALSA backend opened device '{}' [mmap] format: {}Hz/{}b/{}ch",
+                      _deviceName,
+                      _format.sampleRate,
+                      (int)_format.bitDepth,
+                      (int)_format.channels);
 
     // Push initial graph
     if (_callbacks.onGraphChanged)
     {
       auto graph = AudioGraph{};
-      graph.nodes.push_back({
-        .id = "alsa-stream", 
-        .type = AudioNodeType::Stream, 
-        .name = "ALSA Stream", 
-        .format = _format
-      });
-      graph.nodes.push_back({
-        .id = "alsa-sink", 
-        .type = AudioNodeType::Sink, 
-        .name = _deviceName, 
-        .format = _format, 
-        .volumeNotUnity = false, // Exclusive hardware access usually implies no soft volume
-        .isMuted = false,
-        .objectPath = _deviceName
-      });
-      graph.links.push_back({
-        .sourceId = "alsa-stream", 
-        .destId = "alsa-sink",
-        .isActive = true
-      });
+      graph.nodes.push_back(
+        {.id = "alsa-stream", .type = AudioNodeType::Stream, .name = "ALSA Stream", .format = _format});
+      graph.nodes.push_back({.id = "alsa-sink",
+                             .type = AudioNodeType::Sink,
+                             .name = _deviceName,
+                             .format = _format,
+                             .volumeNotUnity = false, // Exclusive hardware access usually implies no soft volume
+                             .isMuted = false,
+                             .objectPath = _deviceName});
+      graph.links.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});
       _callbacks.onGraphChanged(_callbacks.userData, graph);
     }
 
@@ -228,12 +233,13 @@ namespace app::playback
       std::size_t const bytesToRead = frames * (_format.bitDepth / 8) * _format.channels;
 
       // Invoke RockStudio engine to write directly to mmap buffer
-      std::size_t const bytesRead = _callbacks.readPcm(_callbacks.userData, {reinterpret_cast<std::byte*>(dest), bytesToRead});
+      std::size_t const bytesRead =
+        _callbacks.readPcm(_callbacks.userData, {reinterpret_cast<std::byte*>(dest), bytesToRead});
 
       if (bytesRead > 0)
       {
         ::snd_pcm_sframes_t const framesRead = bytesRead / ((_format.bitDepth / 8) * _format.channels);
-        
+
         // Tell ALSA how many frames we actually wrote
         ::snd_pcm_sframes_t const committed = ::snd_pcm_mmap_commit(_pcm.get(), offset, framesRead);
         if (committed < 0)
@@ -249,13 +255,13 @@ namespace app::playback
       {
         // No more data from source (EOF)
         ::snd_pcm_mmap_commit(_pcm.get(), offset, 0);
-        
+
         if (_callbacks.isSourceDrained(_callbacks.userData))
         {
           PLAYBACK_LOG_INFO("ALSA source drained, stopping playback");
           break;
         }
-        
+
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
     }
@@ -279,6 +285,14 @@ namespace app::playback
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
     }
+    else if (err == -ENODEV || err == -EBADF)
+    {
+      _lastError = "ALSA Device Lost: " + std::string(::snd_strerror(err));
+      if (_callbacks.onBackendError)
+      {
+        _callbacks.onBackendError(_callbacks.userData, _lastError);
+      }
+    }
     else if (err < 0)
     {
       PLAYBACK_LOG_ERROR("ALSA playback error: {}", ::snd_strerror(err));
@@ -290,7 +304,7 @@ namespace app::playback
     if (!_pcm) return;
 
     _paused = false;
-    
+
     if (!_thread.joinable())
     {
       _thread = std::jthread([this](std::stop_token st) { playbackLoop(st); });
@@ -336,7 +350,7 @@ namespace app::playback
   {
     _thread.request_stop();
     if (_thread.joinable()) _thread.join();
-    
+
     if (_pcm)
     {
       ::snd_pcm_drop(_pcm.get());
@@ -348,6 +362,76 @@ namespace app::playback
   {
     stop();
     _pcm.reset();
+  }
+
+  std::vector<app::core::playback::AudioDevice> AlsaExclusiveBackend::enumerateDevices()
+  {
+    using namespace std::chrono_literals;
+    auto const now = std::chrono::steady_clock::now();
+
+    if (!_cachedDevices.empty() && (now - _lastEnumerationTime) < 2s)
+    {
+      return _cachedDevices;
+    }
+
+    auto devices = std::vector<app::core::playback::AudioDevice>{};
+    void** hints = nullptr;
+
+    if (::snd_device_name_hint(-1, "pcm", &hints) < 0)
+    {
+      return devices;
+    }
+
+    for (void** h = hints; *h != nullptr; ++h)
+    {
+      char* name = ::snd_device_name_get_hint(*h, "NAME");
+      char* desc = ::snd_device_name_get_hint(*h, "DESC");
+      char* ioid = ::snd_device_name_get_hint(*h, "IOID");
+
+      // We only care about playback devices
+      if (ioid == nullptr || std::string_view{ioid} == "Output")
+      {
+        auto idStr = std::string{name ? name : ""};
+
+        // Filter: We want actual hardware devices. Skip generic virtual nodes.
+        if (idStr != "default" && idStr != "sysdefault" && idStr != "null" && idStr != "pipewire")
+        {
+          auto displayName = std::string{desc ? desc : idStr};
+          std::replace(displayName.begin(), displayName.end(), '\n', ' ');
+
+          devices.push_back({.id = std::move(idStr), .displayName = std::move(displayName), .isDefault = false});
+        }
+      }
+
+      if (name) ::free(name);
+      if (desc) ::free(desc);
+      if (ioid) ::free(ioid);
+    }
+
+    ::snd_device_name_free_hint(hints);
+
+    _cachedDevices = devices;
+    _lastEnumerationTime = now;
+    return devices;
+  }
+
+  void AlsaExclusiveBackend::setDevice(std::string_view deviceId)
+  {
+    if (_deviceName == deviceId) return;
+
+    _deviceName = deviceId;
+
+    if (_pcm)
+    {
+      auto const currentFormat = _format;
+      auto const currentCallbacks = _callbacks;
+      open(currentFormat, currentCallbacks);
+    }
+  }
+
+  std::string_view AlsaExclusiveBackend::currentDeviceId() const noexcept
+  {
+    return _deviceName;
   }
 
   DeviceCapabilities AlsaExclusiveBackend::queryCapabilities() const

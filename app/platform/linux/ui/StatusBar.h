@@ -32,8 +32,8 @@ namespace app::ui
     using NowPlayingClickedSignal = sigc::signal<void()>;
     NowPlayingClickedSignal& signalNowPlayingClicked() { return _nowPlayingClicked; }
 
-    using BackendChangedSignal = sigc::signal<void(app::core::playback::BackendKind)>;
-    BackendChangedSignal& signalBackendChanged() { return _backendChanged; }
+    using OutputChangedSignal = sigc::signal<void(app::core::playback::BackendKind, std::string)>;
+    OutputChangedSignal& signalOutputChanged() { return _outputChanged; }
 
   private:
     // Left: Library info
@@ -52,7 +52,7 @@ namespace app::ui
 
     // Right: Playback details
     Gtk::Box _playbackDetailsBox{Gtk::Orientation::HORIZONTAL};
-    Gtk::MenuButton _backendButton;
+    Gtk::MenuButton _outputButton;
     Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;
 
@@ -61,7 +61,20 @@ namespace app::ui
 
     sigc::connection _timerConnection;
     NowPlayingClickedSignal _nowPlayingClicked;
-    BackendChangedSignal _backendChanged;
+    OutputChangedSignal _outputChanged;
+
+    struct LastPlaybackState
+    {
+      app::core::playback::TransportState state = app::core::playback::TransportState::Idle;
+      app::core::playback::BackendKind backend = app::core::playback::BackendKind::None;
+      std::string title;
+      std::string artist;
+      std::uint32_t underrunCount = 0;
+      app::core::playback::AudioQuality quality = app::core::playback::AudioQuality::Unknown;
+      app::core::playback::AudioGraph graph;
+      std::string currentDeviceId;
+      std::vector<app::core::playback::BackendSnapshot> availableBackends;
+    } _lastPlaybackState;
   };
 
 } // namespace app::ui

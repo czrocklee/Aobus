@@ -43,6 +43,10 @@ namespace app::core::playback
     void stop() override {}
     void close() override {}
 
+    std::vector<AudioDevice> enumerateDevices() override { return {}; }
+    void setDevice(std::string_view) override {}
+    std::string_view currentDeviceId() const noexcept override { return ""; }
+
     BackendKind kind() const noexcept override { return BackendKind::None; }
     std::string_view lastError() const noexcept override { return {}; }
 

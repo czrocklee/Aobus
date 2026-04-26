@@ -1122,7 +1122,7 @@ namespace app::ui
     // Status bar at bottom
     _statusBar = std::make_unique<StatusBar>();
     _statusBar->signalNowPlayingClicked().connect(sigc::mem_fun(*this, &MainWindow::jumpToPlayingList));
-    _statusBar->signalBackendChanged().connect(sigc::mem_fun(*this, &MainWindow::onBackendChanged));
+    _statusBar->signalOutputChanged().connect(sigc::mem_fun(*this, &MainWindow::onOutputChanged));
 
     auto* statusSeparator = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
     mainBox->append(*statusSeparator);
@@ -2332,28 +2332,41 @@ namespace app::ui
     }
   }
 
-  void MainWindow::onBackendChanged(app::core::playback::BackendKind kind)
+  void MainWindow::onOutputChanged(app::core::playback::BackendKind kind, std::string const& deviceId)
   {
     if (!_playbackController) return;
 
-    std::unique_ptr<app::core::playback::IAudioBackend> backend;
+    auto const currentSnap = _playbackController->snapshot();
 
-    switch (kind)
+    // 1. Swap Backend if needed
+    if (kind != currentSnap.backend)
     {
-    case app::core::playback::BackendKind::PipeWire:
-      backend = std::make_unique<app::playback::PipeWireBackend>();
-      break;
-    case app::core::playback::BackendKind::AlsaExclusive:
-      backend = std::make_unique<app::playback::AlsaExclusiveBackend>("default");
-      break;
-    default:
-      break;
+      std::unique_ptr<app::core::playback::IAudioBackend> backend;
+      switch (kind)
+      {
+        case app::core::playback::BackendKind::PipeWire:
+          backend = std::make_unique<app::playback::PipeWireBackend>();
+          break;
+        case app::core::playback::BackendKind::AlsaExclusive:
+          backend = std::make_unique<app::playback::AlsaExclusiveBackend>();
+          break;
+        default: break;
+      }
+
+      if (backend)
+      {
+        // Use the controller's atomic switcher to swap backend AND set target device in one go
+        _playbackController->setBackendAndDevice(std::move(backend), deviceId);
+        _statusBar->showMessage("Switched to " + std::string(kind == app::core::playback::BackendKind::PipeWire
+                                                               ? "PipeWire"
+                                                               : "ALSA Exclusive"));
+      }
     }
-
-    if (backend)
+    else
     {
-      _playbackController->setBackend(std::move(backend));
-      _statusBar->showMessage("Switched backend to " + std::string(kind == app::core::playback::BackendKind::PipeWire ? "PipeWire" : "ALSA Exclusive"));
+      // 2. Just swap device on current backend
+      _playbackController->setDevice(deviceId);
+      _statusBar->showMessage("Switched output device");
     }
   }
 

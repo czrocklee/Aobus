@@ -24,6 +24,8 @@ namespace app::core::playback
 
     void play(TrackPlaybackDescriptor descriptor);
     void setBackend(std::unique_ptr<IAudioBackend> backend);
+    void setDevice(std::string_view deviceId);
+    void setBackendAndDevice(std::unique_ptr<IAudioBackend> backend, std::string_view deviceId);
     void pause();
     void resume();
     void stop();
@@ -33,6 +35,10 @@ namespace app::core::playback
 
   private:
     std::unique_ptr<PlaybackEngine> _engine;
+
+    // Persistent backends for device enumeration even when inactive
+    std::unique_ptr<IAudioBackend> _pwDiscovery;
+    std::unique_ptr<IAudioBackend> _alsaDiscovery;
   };
 
 } // namespace app::core::playback
