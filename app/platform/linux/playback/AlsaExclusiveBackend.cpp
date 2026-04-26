@@ -6,43 +6,172 @@
 
 #include <rs/utility/Raii.h>
 
+#include <libudev.h>
+#include <poll.h>
+
 extern "C"
 {
 #include <alsa/asoundlib.h>
 }
 
+#include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <mutex>
+#include <vector>
 
 namespace app::playback
 {
   using namespace app::core::playback;
 
-  AlsaExclusiveBackend::AlsaExclusiveBackend(std::string deviceName)
-    : _deviceName{std::move(deviceName)}
+  namespace
   {
-    if (_deviceName == "default" || _deviceName.empty())
+    std::vector<AudioDevice> doAlsaEnumerate()
     {
-      auto devices = enumerateDevices();
-      if (!devices.empty())
+      auto devices = std::vector<AudioDevice>{};
+      void** hints_raw = nullptr;
+
+      if (::snd_device_name_hint(-1, "pcm", &hints_raw) < 0)
       {
-        _deviceName = devices.front().id;
+        return devices;
       }
-      else
+
+      auto hints = rs::utility::makeUniquePtr<::snd_device_name_free_hint>(hints_raw);
+
+      for (void** h = hints.get(); *h != nullptr; ++h)
       {
-        _deviceName = "hw:0,0";
+        auto name = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*h, "NAME"));
+        auto desc = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*h, "DESC"));
+        auto ioid = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*h, "IOID"));
+
+        // We only care about playback devices
+        if (ioid == nullptr || std::string_view{static_cast<char*>(ioid.get())} == "Output")
+        {
+          auto idStr = std::string{name ? static_cast<char*>(name.get()) : ""};
+
+          // Filter: We want actual hardware devices. Skip generic virtual nodes.
+          if (idStr != "default" && idStr != "sysdefault" && idStr != "null" && idStr != "pipewire")
+          {
+            auto displayName = std::string{desc ? static_cast<char*>(desc.get()) : idStr};
+            std::replace(displayName.begin(), displayName.end(), '\n', ' ');
+
+            // If the display name starts with the ID, try to strip it for a cleaner first line
+            auto const idPrefix = idStr + " ";
+            if (displayName.starts_with(idPrefix))
+            {
+              displayName = displayName.substr(idPrefix.length());
+            }
+
+            devices.push_back({.id = std::string(idStr),
+                               .displayName = std::move(displayName),
+                               .description = std::move(idStr),
+                               .isDefault = false,
+                               .backendKind = BackendKind::AlsaExclusive});
+          }
+        }
       }
+      return devices;
     }
+
+    class AlsaDiscovery final : public IDeviceDiscovery
+    {
+    public:
+      AlsaDiscovery()
+      {
+        _cachedDevices = doAlsaEnumerate();
+        _monitorThread = std::jthread([this](std::stop_token st) { monitorLoop(st); });
+      }
+
+      void setDevicesChangedCallback(OnDevicesChangedCallback callback) override { _callback = std::move(callback); }
+
+      std::vector<AudioDevice> enumerateDevices() override
+      {
+        std::lock_guard lock(_mutex);
+        return _cachedDevices;
+      }
+
+      std::unique_ptr<IAudioBackend> createBackend(AudioDevice const& device) override
+      {
+        return std::make_unique<AlsaExclusiveBackend>(device);
+      }
+
+    private:
+      void monitorLoop(std::stop_token stopToken)
+      {
+        auto udev = rs::utility::makeUniquePtr<::udev_unref>(::udev_new());
+        if (!udev) return;
+
+        auto monitor =
+          rs::utility::makeUniquePtr<::udev_monitor_unref>(::udev_monitor_new_from_netlink(udev.get(), "udev"));
+        if (!monitor) return;
+
+        ::udev_monitor_filter_add_match_subsystem_devtype(monitor.get(), "sound", nullptr);
+        ::udev_monitor_enable_receiving(monitor.get());
+
+        auto const fd = ::udev_monitor_get_fd(monitor.get());
+
+        while (!stopToken.stop_requested())
+        {
+          struct pollfd fds[1];
+          fds[0].fd = fd;
+          fds[0].events = POLLIN;
+
+          int const ret = ::poll(fds, 1, 500); // 500ms timeout to check stopToken
+          if (ret > 0 && (fds[0].revents & POLLIN))
+          {
+            auto dev = rs::utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitor.get()));
+            if (dev)
+            {
+              PLAYBACK_LOG_INFO("ALSA Discovery: Hardware change detected ({}), refreshing devices...",
+                                ::udev_device_get_action(dev.get()));
+
+              auto newDevices = doAlsaEnumerate();
+              {
+                std::lock_guard lock(_mutex);
+                _cachedDevices = std::move(newDevices);
+              }
+
+              if (_callback)
+              {
+                _callback();
+              }
+            }
+          }
+        }
+      }
+
+      OnDevicesChangedCallback _callback;
+      mutable std::mutex _mutex;
+      std::vector<AudioDevice> _cachedDevices;
+      std::jthread _monitorThread;
+    };
+  } // namespace
+
+  std::unique_ptr<IDeviceDiscovery> AlsaExclusiveBackend::createDiscovery()
+  {
+    return std::make_unique<AlsaDiscovery>();
+  }
+
+  AlsaExclusiveBackend::AlsaExclusiveBackend(app::core::playback::AudioDevice const& device)
+    : _deviceName{device.id}
+  {
+    PLAYBACK_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _deviceName);
   }
 
   AlsaExclusiveBackend::~AlsaExclusiveBackend()
   {
+    PLAYBACK_LOG_DEBUG("AlsaExclusiveBackend: Destroying backend instance");
     stop();
     close();
   }
 
   bool AlsaExclusiveBackend::open(StreamFormat const& format, AudioRenderCallbacks callbacks)
   {
+    PLAYBACK_LOG_INFO("AlsaExclusiveBackend: Opening device '{}' with format {}Hz/{}b/{}ch",
+                      _deviceName,
+                      format.sampleRate,
+                      (int)format.bitDepth,
+                      (int)format.channels);
     close();
 
     _callbacks = callbacks;
@@ -248,7 +377,10 @@ namespace app::playback
         }
         else
         {
-          _callbacks.onPositionAdvanced(_callbacks.userData, static_cast<std::uint32_t>(committed));
+          if (_callbacks.onPositionAdvanced)
+          {
+            _callbacks.onPositionAdvanced(_callbacks.userData, static_cast<std::uint32_t>(committed));
+          }
         }
       }
       else
@@ -279,7 +411,10 @@ namespace app::playback
     if (err == -EPIPE)
     {
       PLAYBACK_LOG_WARN("ALSA underrun (XRUN) detected!");
-      _callbacks.onUnderrun(_callbacks.userData);
+      if (_callbacks.onUnderrun)
+      {
+        _callbacks.onUnderrun(_callbacks.userData);
+      }
       ::snd_pcm_prepare(_pcm.get());
     }
     else if (err == -ESTRPIPE)
@@ -365,88 +500,9 @@ namespace app::playback
 
   void AlsaExclusiveBackend::close()
   {
+    PLAYBACK_LOG_DEBUG("AlsaExclusiveBackend: Closing device");
     stop();
     _pcm.reset();
-  }
-
-  std::vector<app::core::playback::AudioDevice> AlsaExclusiveBackend::enumerateDevices()
-  {
-    using namespace std::chrono_literals;
-    auto const now = std::chrono::steady_clock::now();
-
-    if (!_cachedDevices.empty() && (now - _lastEnumerationTime) < 2s)
-    {
-      return _cachedDevices;
-    }
-
-    auto devices = std::vector<app::core::playback::AudioDevice>{};
-    void** hints = nullptr;
-
-    if (::snd_device_name_hint(-1, "pcm", &hints) < 0)
-    {
-      return devices;
-    }
-
-    for (void** h = hints; *h != nullptr; ++h)
-    {
-      char* name = ::snd_device_name_get_hint(*h, "NAME");
-      char* desc = ::snd_device_name_get_hint(*h, "DESC");
-      char* ioid = ::snd_device_name_get_hint(*h, "IOID");
-
-      // We only care about playback devices
-      if (ioid == nullptr || std::string_view{ioid} == "Output")
-      {
-        auto idStr = std::string{name ? name : ""};
-
-        // Filter: We want actual hardware devices. Skip generic virtual nodes.
-        if (idStr != "default" && idStr != "sysdefault" && idStr != "null" && idStr != "pipewire")
-        {
-          auto displayName = std::string{desc ? desc : idStr};
-          std::replace(displayName.begin(), displayName.end(), '\n', ' ');
-
-          // If the display name starts with the ID, try to strip it for a cleaner first line
-          auto const idPrefix = idStr + " ";
-          if (displayName.starts_with(idPrefix))
-          {
-            displayName = displayName.substr(idPrefix.length());
-          }
-
-          devices.push_back({.id = std::string(idStr),
-                             .displayName = std::move(displayName),
-                             .description = std::move(idStr),
-                             .isDefault = false});
-        }
-      }
-
-      if (name) ::free(name);
-      if (desc) ::free(desc);
-      if (ioid) ::free(ioid);
-    }
-
-    ::snd_device_name_free_hint(hints);
-
-    _cachedDevices = devices;
-    _lastEnumerationTime = now;
-    return devices;
-  }
-
-  void AlsaExclusiveBackend::setDevice(std::string_view deviceId)
-  {
-    if (_deviceName == deviceId) return;
-
-    _deviceName = deviceId;
-
-    if (_pcm)
-    {
-      auto const currentFormat = _format;
-      auto const currentCallbacks = _callbacks;
-      open(currentFormat, currentCallbacks);
-    }
-  }
-
-  std::string_view AlsaExclusiveBackend::currentDeviceId() const noexcept
-  {
-    return _deviceName;
   }
 
   DeviceCapabilities AlsaExclusiveBackend::queryCapabilities() const

@@ -4,43 +4,32 @@
 #include "core/playback/PlaybackController.h"
 
 #include "core/Log.h"
+#include "core/playback/IDeviceDiscovery.h"
 #include "core/playback/NullBackend.h"
 #include "core/playback/PlaybackEngine.h"
 
-#ifdef PIPEWIRE_FOUND
-#include "platform/linux/playback/PipeWireBackend.h"
-#endif
-
-#ifdef ALSA_FOUND
-#include "platform/linux/playback/AlsaExclusiveBackend.h"
-#endif
+#include <algorithm>
+#include <map>
 
 namespace app::core::playback
 {
 
   PlaybackController::PlaybackController()
   {
-#ifdef PIPEWIRE_FOUND
-    _pwDiscovery = std::make_unique<app::playback::PipeWireBackend>();
-#endif
-#ifdef ALSA_FOUND
-    _alsaDiscovery = std::make_unique<app::playback::AlsaExclusiveBackend>();
-#endif
-
-    // Default engine with PipeWire
-    auto backend = std::unique_ptr<IAudioBackend>{};
-    if (_pwDiscovery)
-    {
-      backend = std::make_unique<app::playback::PipeWireBackend>();
-    }
-    else
-    {
-      backend = std::make_unique<NullBackend>();
-    }
-    _engine = std::make_unique<PlaybackEngine>(std::move(backend));
+    // Start with a NullBackend until a discovery provides something real
+    _engine = std::make_unique<PlaybackEngine>(std::make_unique<NullBackend>());
   }
 
   PlaybackController::~PlaybackController() = default;
+
+  void PlaybackController::addDiscovery(std::unique_ptr<IDeviceDiscovery> discovery)
+  {
+    if (!discovery) return;
+
+    discovery->setDevicesChangedCallback([this] { _backendsDirty = true; });
+    _discoveries.push_back(std::move(discovery));
+    _backendsDirty = true;
+  }
 
   void PlaybackController::play(TrackPlaybackDescriptor descriptor)
   {
@@ -49,59 +38,55 @@ namespace app::core::playback
 
   void PlaybackController::setBackend(std::unique_ptr<IAudioBackend> backend)
   {
-    _engine->setBackend(std::move(backend));
-  }
-
-  void PlaybackController::setDevice(std::string_view deviceId)
-  {
-    _engine->setDevice(deviceId);
-  }
-
-  void PlaybackController::setBackendAndDevice(std::unique_ptr<IAudioBackend> backend, std::string_view deviceId)
-  {
     if (backend)
     {
-      backend->setDevice(deviceId);
+      _engine->setBackend(std::move(backend), "");
     }
-    _engine->setBackend(std::move(backend));
   }
 
   void PlaybackController::setOutput(BackendKind kind, std::string_view deviceId)
   {
     auto const currentSnap = _engine->snapshot();
 
-    if (kind == currentSnap.backend)
+    // 1. Check if we already have this output active
+    if (kind == currentSnap.backend && deviceId == currentSnap.currentDeviceId)
     {
-      setDevice(deviceId);
       return;
     }
 
-    auto backend = std::unique_ptr<IAudioBackend>{};
-    bool exclusiveMode = false;
+    // 2. Find the AudioDevice matching the kind and id from our cache
+    auto const it = std::find_if(_allDevices.begin(),
+                                 _allDevices.end(),
+                                 [&](AudioDevice const& d) { return d.backendKind == kind && d.id == deviceId; });
 
-    switch (kind)
+    if (it == _allDevices.end())
     {
-#ifdef PIPEWIRE_FOUND
-      case BackendKind::PipeWire: backend = std::make_unique<app::playback::PipeWireBackend>(); break;
-      case BackendKind::PipeWireExclusive:
-        backend = std::make_unique<app::playback::PipeWireBackend>();
-        exclusiveMode = true;
-        break;
-#endif
-#ifdef ALSA_FOUND
-      case BackendKind::AlsaExclusive: backend = std::make_unique<app::playback::AlsaExclusiveBackend>(); break;
-#endif
-      default: break;
+      PLAYBACK_LOG_ERROR("PlaybackController: Requested unknown output {}:{}", backendKindToId(kind), deviceId);
+      return;
     }
 
-    if (backend)
+    auto const& targetDevice = *it;
+
+    // 3. Find the discovery object that can handle this BackendKind
+    for (auto const& discovery : _discoveries)
     {
-      if (exclusiveMode)
+      auto devices = discovery->enumerateDevices();
+      auto const found =
+        std::any_of(devices.begin(), devices.end(), [&](AudioDevice const& d) { return d == targetDevice; });
+
+      if (found)
       {
-        backend->setExclusiveMode(true);
+        auto backend = discovery->createBackend(targetDevice);
+        if (backend)
+        {
+          _engine->setBackend(std::move(backend), std::string(deviceId));
+          return;
+        }
       }
-      setBackendAndDevice(std::move(backend), deviceId);
     }
+
+    PLAYBACK_LOG_ERROR(
+      "PlaybackController: Failed to create backend for output {}:{}", backendKindToId(kind), deviceId);
   }
 
   void PlaybackController::pause()
@@ -126,54 +111,40 @@ namespace app::core::playback
 
   PlaybackSnapshot PlaybackController::snapshot() const
   {
-    using namespace std::chrono_literals;
-
     auto snap = _engine->snapshot();
-    auto const now = std::chrono::steady_clock::now();
 
-    if (!_cachedBackends.empty() && (now - _lastDiscoveryTime) < 5s)
+    if (_backendsDirty.exchange(false))
     {
-      snap.availableBackends = _cachedBackends;
-      return snap;
+      auto allDevices = std::vector<AudioDevice>{};
+      for (auto const& discovery : _discoveries)
+      {
+        auto devices = discovery->enumerateDevices();
+        allDevices.insert(
+          allDevices.end(), std::make_move_iterator(devices.begin()), std::make_move_iterator(devices.end()));
+      }
+
+      // Group devices by BackendKind
+      std::map<BackendKind, std::vector<AudioDevice>> groups;
+      for (auto const& d : allDevices)
+      {
+        groups[d.backendKind].push_back(d);
+      }
+
+      auto snapshots = std::vector<BackendSnapshot>{};
+      for (auto& [kind, devices] : groups)
+      {
+        snapshots.push_back({.kind = kind,
+                             .displayName = std::string(backendDisplayName(kind)),
+                             .shortName = std::string(backendShortName(kind)),
+                             .id = std::string(backendKindToId(kind)),
+                             .devices = std::move(devices)});
+      }
+
+      _cachedBackends = std::move(snapshots);
+      _allDevices = allDevices; // Store flat list for setOutput lookup
     }
 
-    auto allBackends = std::vector<BackendSnapshot>{};
-
-    // 1. Add PipeWire (shared/mixing mode)
-    if (_pwDiscovery)
-    {
-      auto pwDevices = _pwDiscovery->enumerateDevices();
-      PLAYBACK_LOG_DEBUG("PlaybackController: PipeWire discovery found {} devices", pwDevices.size());
-      allBackends.push_back({.kind = BackendKind::PipeWire,
-                             .displayName = std::string(backendDisplayName(BackendKind::PipeWire)),
-                             .shortName = std::string(backendShortName(BackendKind::PipeWire)),
-                             .id = std::string(backendKindToId(BackendKind::PipeWire)),
-                             .devices = pwDevices});
-
-      // Also report PipeWire Exclusive with the same device list
-      allBackends.push_back({.kind = BackendKind::PipeWireExclusive,
-                             .displayName = std::string(backendDisplayName(BackendKind::PipeWireExclusive)),
-                             .shortName = std::string(backendShortName(BackendKind::PipeWireExclusive)),
-                             .id = std::string(backendKindToId(BackendKind::PipeWireExclusive)),
-                             .devices = std::move(pwDevices)});
-    }
-
-    // 2. Add ALSA Exclusive
-    if (_alsaDiscovery)
-    {
-      auto alsaDevices = _alsaDiscovery->enumerateDevices();
-      PLAYBACK_LOG_DEBUG("PlaybackController: ALSA discovery found {} devices", alsaDevices.size());
-      allBackends.push_back({.kind = BackendKind::AlsaExclusive,
-                             .displayName = std::string(backendDisplayName(BackendKind::AlsaExclusive)),
-                             .shortName = std::string(backendShortName(BackendKind::AlsaExclusive)),
-                             .id = std::string(backendKindToId(BackendKind::AlsaExclusive)),
-                             .devices = std::move(alsaDevices)});
-    }
-
-    _cachedBackends = allBackends;
-    _lastDiscoveryTime = now;
-
-    snap.availableBackends = std::move(allBackends);
+    snap.availableBackends = _cachedBackends;
     return snap;
   }
 

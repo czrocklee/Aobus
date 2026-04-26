@@ -5,6 +5,7 @@
 
 #include "core/playback/FormatNegotiator.h"
 #include "core/playback/IAudioBackend.h"
+#include "core/playback/IDeviceDiscovery.h"
 
 extern "C"
 {
@@ -28,7 +29,9 @@ namespace app::playback
   class AlsaExclusiveBackend final : public app::core::playback::IAudioBackend
   {
   public:
-    explicit AlsaExclusiveBackend(std::string deviceName = "default");
+    static std::unique_ptr<app::core::playback::IDeviceDiscovery> createDiscovery();
+
+    explicit AlsaExclusiveBackend(app::core::playback::AudioDevice const& device);
     ~AlsaExclusiveBackend() override;
 
     bool open(app::core::playback::StreamFormat const& format,
@@ -41,9 +44,6 @@ namespace app::playback
     void stop() override;
     void close() override;
 
-    std::vector<app::core::playback::AudioDevice> enumerateDevices() override;
-    void setDevice(std::string_view deviceId) override;
-    std::string_view currentDeviceId() const noexcept override;
     void setExclusiveMode(bool) override {}
     bool isExclusiveMode() const noexcept override { return true; } // ALSA is always exclusive
 
@@ -75,9 +75,6 @@ namespace app::playback
     std::stop_token _stopToken;
     std::jthread _thread;
     std::atomic<bool> _paused{false};
-
-    mutable std::vector<app::core::playback::AudioDevice> _cachedDevices;
-    mutable std::chrono::steady_clock::time_point _lastEnumerationTime;
   };
 
 } // namespace app::playback

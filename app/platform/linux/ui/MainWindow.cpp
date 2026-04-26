@@ -18,6 +18,8 @@
 #include "core/model/ManualTrackIdList.h"
 #include "core/model/TrackIdList.h"
 #include "core/playback/PlaybackController.h"
+#include "platform/linux/playback/AlsaExclusiveBackend.h"
+#include "platform/linux/playback/PipeWireBackend.h"
 #include "platform/linux/services/PlaylistExporter.h"
 #include "platform/linux/ui/CoverArtWidget.h"
 #include "platform/linux/ui/ImportProgressDialog.h"
@@ -2104,6 +2106,13 @@ namespace app::ui
   {
     _playbackBar = std::make_unique<app::ui::PlaybackBar>();
     _playbackController = std::make_unique<app::core::playback::PlaybackController>();
+
+#ifdef PIPEWIRE_FOUND
+    _playbackController->addDiscovery(app::playback::PipeWireBackend::createDiscovery());
+#endif
+#ifdef ALSA_FOUND
+    _playbackController->addDiscovery(app::playback::AlsaExclusiveBackend::createDiscovery());
+#endif
 
     _playbackBar->signalPlayRequested().connect(sigc::mem_fun(*this, &MainWindow::onPlayRequested));
     _playbackBar->signalPauseRequested().connect(sigc::mem_fun(*this, &MainWindow::onPauseRequested));

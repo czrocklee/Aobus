@@ -22,16 +22,13 @@ namespace app::core::playback
     explicit PlaybackEngine(std::unique_ptr<IAudioBackend> backend);
     ~PlaybackEngine();
 
-    void setBackend(std::unique_ptr<IAudioBackend> backend);
+    void setBackend(std::unique_ptr<IAudioBackend> backend, std::string deviceId);
 
     void play(TrackPlaybackDescriptor descriptor);
     void pause();
     void resume();
     void stop();
     void seek(std::uint32_t positionMs);
-
-    std::vector<AudioDevice> enumerateDevices() const;
-    void setDevice(std::string_view deviceId);
 
     PlaybackSnapshot snapshot() const;
 

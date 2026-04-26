@@ -82,7 +82,7 @@ namespace app::core::playback
     stop();
   }
 
-  void PlaybackEngine::setBackend(std::unique_ptr<IAudioBackend> backend)
+  void PlaybackEngine::setBackend(std::unique_ptr<IAudioBackend> backend, std::string deviceId)
   {
     struct State
     {
@@ -105,6 +105,7 @@ namespace app::core::playback
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
+      _snapshot.currentDeviceId = std::move(deviceId);
     }
 
     if (state.track)
@@ -345,45 +346,6 @@ namespace app::core::playback
     if (_backend) _backend->start();
   }
 
-  std::vector<AudioDevice> PlaybackEngine::enumerateDevices() const
-  {
-    if (!_backend) return {};
-    return _backend->enumerateDevices();
-  }
-
-  void PlaybackEngine::setDevice(std::string_view deviceId)
-  {
-    if (!_backend) return;
-
-    struct State
-    {
-      std::optional<TrackPlaybackDescriptor> track;
-      std::uint32_t positionMs = 0;
-      bool wasPlaying = false;
-    };
-
-    auto const state = [this]()
-    {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
-      return State{
-        .track = _currentTrack, .positionMs = _snapshot.positionMs, .wasPlaying = (_state == TransportState::Playing)};
-    }();
-
-    _backend->setDevice(deviceId);
-
-    // If device switch triggered a backend re-open, resume playback
-    if (state.track)
-    {
-      PLAYBACK_LOG_INFO("Resuming track after device switch");
-      play(*state.track);
-      seek(state.positionMs);
-      if (!state.wasPlaying)
-      {
-        pause();
-      }
-    }
-  }
-
   PlaybackSnapshot PlaybackEngine::snapshot() const
   {
     auto source = _source.load(std::memory_order_acquire);
@@ -392,11 +354,6 @@ namespace app::core::playback
     snap.backend = _backend ? _backend->kind() : BackendKind::None;
     snap.bufferedMs = source ? source->bufferedMs() : 0;
     snap.underrunCount = _underrunCount.load(std::memory_order_relaxed);
-
-    if (_backend)
-    {
-      snap.currentDeviceId = _backend->currentDeviceId();
-    }
 
     return snap;
   }
