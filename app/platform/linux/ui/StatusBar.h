@@ -52,9 +52,14 @@ namespace app::ui
 
     // Right: Playback details
     Gtk::Box _playbackDetailsBox{Gtk::Orientation::HORIZONTAL};
-    Gtk::MenuButton _outputButton;
+    Gtk::ToggleButton _outputButton;
+    Gtk::Popover _outputPopover;
+    Gtk::ListBox _outputListBox;
+    Glib::RefPtr<Gio::ListStore<Glib::Object>> _outputStore;
     Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;
+
+    Gtk::Widget* createOutputWidget(Glib::RefPtr<Glib::Object> const& item);
 
     // Far Right: Status message
     Gtk::Label _statusLabel;

@@ -66,6 +66,44 @@ namespace app::core::playback
     _engine->setBackend(std::move(backend));
   }
 
+  void PlaybackController::setOutput(BackendKind kind, std::string_view deviceId)
+  {
+    auto const currentSnap = _engine->snapshot();
+
+    if (kind == currentSnap.backend)
+    {
+      setDevice(deviceId);
+      return;
+    }
+
+    auto backend = std::unique_ptr<IAudioBackend>{};
+    bool exclusiveMode = false;
+
+    switch (kind)
+    {
+#ifdef PIPEWIRE_FOUND
+      case BackendKind::PipeWire: backend = std::make_unique<app::playback::PipeWireBackend>(); break;
+      case BackendKind::PipeWireExclusive:
+        backend = std::make_unique<app::playback::PipeWireBackend>();
+        exclusiveMode = true;
+        break;
+#endif
+#ifdef ALSA_FOUND
+      case BackendKind::AlsaExclusive: backend = std::make_unique<app::playback::AlsaExclusiveBackend>(); break;
+#endif
+      default: break;
+    }
+
+    if (backend)
+    {
+      if (exclusiveMode)
+      {
+        backend->setExclusiveMode(true);
+      }
+      setBackendAndDevice(std::move(backend), deviceId);
+    }
+  }
+
   void PlaybackController::pause()
   {
     _engine->pause();
@@ -106,10 +144,18 @@ namespace app::core::playback
     {
       auto pwDevices = _pwDiscovery->enumerateDevices();
       PLAYBACK_LOG_DEBUG("PlaybackController: PipeWire discovery found {} devices", pwDevices.size());
-      allBackends.push_back({.kind = BackendKind::PipeWire, .devices = pwDevices});
+      allBackends.push_back({.kind = BackendKind::PipeWire,
+                             .displayName = std::string(backendDisplayName(BackendKind::PipeWire)),
+                             .shortName = std::string(backendShortName(BackendKind::PipeWire)),
+                             .id = std::string(backendKindToId(BackendKind::PipeWire)),
+                             .devices = pwDevices});
 
       // Also report PipeWire Exclusive with the same device list
-      allBackends.push_back({.kind = BackendKind::PipeWireExclusive, .devices = std::move(pwDevices)});
+      allBackends.push_back({.kind = BackendKind::PipeWireExclusive,
+                             .displayName = std::string(backendDisplayName(BackendKind::PipeWireExclusive)),
+                             .shortName = std::string(backendShortName(BackendKind::PipeWireExclusive)),
+                             .id = std::string(backendKindToId(BackendKind::PipeWireExclusive)),
+                             .devices = std::move(pwDevices)});
     }
 
     // 2. Add ALSA Exclusive
@@ -117,7 +163,11 @@ namespace app::core::playback
     {
       auto alsaDevices = _alsaDiscovery->enumerateDevices();
       PLAYBACK_LOG_DEBUG("PlaybackController: ALSA discovery found {} devices", alsaDevices.size());
-      allBackends.push_back({.kind = BackendKind::AlsaExclusive, .devices = std::move(alsaDevices)});
+      allBackends.push_back({.kind = BackendKind::AlsaExclusive,
+                             .displayName = std::string(backendDisplayName(BackendKind::AlsaExclusive)),
+                             .shortName = std::string(backendShortName(BackendKind::AlsaExclusive)),
+                             .id = std::string(backendKindToId(BackendKind::AlsaExclusive)),
+                             .devices = std::move(alsaDevices)});
     }
 
     _cachedBackends = allBackends;

@@ -404,7 +404,17 @@ namespace app::playback
           auto displayName = std::string{desc ? desc : idStr};
           std::replace(displayName.begin(), displayName.end(), '\n', ' ');
 
-          devices.push_back({.id = std::move(idStr), .displayName = std::move(displayName), .isDefault = false});
+          // If the display name starts with the ID, try to strip it for a cleaner first line
+          auto const idPrefix = idStr + " ";
+          if (displayName.starts_with(idPrefix))
+          {
+            displayName = displayName.substr(idPrefix.length());
+          }
+
+          devices.push_back({.id = std::string(idStr),
+                             .displayName = std::move(displayName),
+                             .description = std::move(idStr),
+                             .isDefault = false});
         }
       }
 

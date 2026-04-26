@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "core/playback/OutputMenuModel.h"
 #include "core/playback/PlaybackTypes.h"
 
 #include <chrono>
@@ -28,6 +29,7 @@ namespace app::core::playback
     void setBackend(std::unique_ptr<IAudioBackend> backend);
     void setDevice(std::string_view deviceId);
     void setBackendAndDevice(std::unique_ptr<IAudioBackend> backend, std::string_view deviceId);
+    void setOutput(BackendKind kind, std::string_view deviceId);
     void pause();
     void resume();
     void stop();

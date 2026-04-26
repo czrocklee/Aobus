@@ -495,6 +495,7 @@ namespace app::playback
             {.id = std::move(deviceId),
              .displayName =
                (node.nodeNick.empty() ? (node.nodeName.empty() ? node.objectPath : node.nodeName) : node.nodeNick),
+             .description = (node.nodeNick.empty() ? "" : node.nodeName),
              .isDefault = false});
         }
       }
@@ -1500,7 +1501,8 @@ namespace app::playback
     auto devices = _impl->_monitor->enumerateSinks();
 
     // Add virtual "System Default" entry
-    devices.insert(devices.begin(), {.id = "", .displayName = "System Default", .isDefault = true});
+    devices.insert(
+      devices.begin(), {.id = "", .displayName = "System Default", .description = "PipeWire", .isDefault = true});
 
     return devices;
   }

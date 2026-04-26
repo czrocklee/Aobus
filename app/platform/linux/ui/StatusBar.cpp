@@ -3,6 +3,9 @@
 
 #include "platform/linux/ui/StatusBar.h"
 
+#include "core/Log.h"
+#include "platform/linux/ui/OutputListItems.h"
+
 #include <gdkmm/display.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/stylecontext.h>
@@ -106,6 +109,34 @@ namespace app::ui
            opacity: 1.0;
            background-color: alpha(@theme_fg_color, 0.1);
         }
+        .device-row {
+           padding: 6px 16px;
+           transition: background 150ms ease;
+        }
+        .menu-header {
+           font-weight: 800;
+           font-size: 0.75em;
+           padding-top: 12px;
+           padding-bottom: 4px;
+           padding-left: 12px;
+           padding-right: 12px;
+           color: @theme_selected_bg_color;
+           text-transform: uppercase;
+           letter-spacing: 0.12em;
+           opacity: 0.7;
+        }
+        /* Restore clean top spacing for the first header */
+        listboxrow:first-child .menu-header {
+           padding-top: 8px;
+        }
+        .selected-row {
+           background-color: alpha(@theme_selected_bg_color, 0.15);
+           border-left: 4px solid @theme_selected_bg_color;
+        }
+        .selected-row label {
+           color: @theme_selected_bg_color;
+           font-weight: bold;
+        }
         .sink-status-good { color: #34a853; }
         .sink-status-warning { color: #fbbc04; }
         .sink-status-bad { color: #ea4335; }
@@ -149,31 +180,37 @@ namespace app::ui
     _outputButton.set_label("Output");
     _outputButton.set_tooltip_text("Click to change audio backend or device");
 
-    auto actionGroup = Gio::SimpleActionGroup::create();
-    actionGroup->add_action_with_parameter(
-      "set-output",
-      Glib::VARIANT_TYPE_STRING,
-      [this](Glib::VariantBase const& value)
+    _outputStore = Gio::ListStore<Glib::Object>::create();
+    _outputListBox.set_selection_mode(Gtk::SelectionMode::NONE);
+    _outputListBox.set_show_separators(true); // Restore standard separators
+    _outputListBox.add_css_class("rich-list");
+    _outputListBox.bind_model(_outputStore, sigc::mem_fun(*this, &StatusBar::createOutputWidget));
+
+    auto* scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
+    scrolled->set_child(_outputListBox);
+    scrolled->set_propagate_natural_height(true);
+    scrolled->set_min_content_height(320);
+    scrolled->set_min_content_width(360);
+
+    _outputPopover.set_child(*scrolled);
+    _outputPopover.set_parent(_outputButton);
+    _outputPopover.set_autohide(true);
+    _outputPopover.set_position(Gtk::PositionType::TOP);
+
+    _outputButton.signal_toggled().connect(
+      [this]()
       {
-        auto param = Glib::VariantBase::cast_dynamic<Glib::Variant<Glib::ustring>>(value).get();
-        auto const sep = param.find('|');
-        if (sep != Glib::ustring::npos)
+        if (_outputButton.get_active())
         {
-          auto const kindStr = param.substr(0, sep);
-          auto const deviceId = param.substr(sep + 1);
-
-          auto kind = app::core::playback::BackendKind::None;
-          if (kindStr == "pipewire")
-            kind = app::core::playback::BackendKind::PipeWire;
-          else if (kindStr == "pipewire_exclusive")
-            kind = app::core::playback::BackendKind::PipeWireExclusive;
-          else if (kindStr == "alsa")
-            kind = app::core::playback::BackendKind::AlsaExclusive;
-
-          _outputChanged.emit(kind, std::string(deviceId));
+          _outputPopover.popup();
+        }
+        else
+        {
+          _outputPopover.popdown();
         }
       });
-    insert_action_group("status", actionGroup);
+
+    _outputPopover.signal_closed().connect([this]() { _outputButton.set_active(false); });
 
     _streamInfoLabel.add_css_class("dim-label");
     _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
@@ -310,6 +347,53 @@ namespace app::ui
     _selectionLabel.set_text(text);
   }
 
+  Gtk::Widget* StatusBar::createOutputWidget(Glib::RefPtr<Glib::Object> const& item)
+  {
+    if (auto backendItem = std::dynamic_pointer_cast<BackendItem>(item))
+    {
+      auto* header = Gtk::make_managed<Gtk::Label>(backendItem->name);
+      header->set_halign(Gtk::Align::FILL);
+      header->set_valign(Gtk::Align::CENTER);
+      header->set_xalign(0.0); // Left align text while background fills width
+      header->add_css_class("menu-header");
+      return header;
+    }
+
+    if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
+    {
+      auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
+      rowBox->set_spacing(0); // Explicitly remove gap between lines
+      rowBox->set_valign(Gtk::Align::CENTER);
+      rowBox->add_css_class("device-row");
+
+      auto* nameLabel = Gtk::make_managed<Gtk::Label>(deviceItem->name);
+      nameLabel->set_halign(Gtk::Align::START);
+      nameLabel->set_ellipsize(Pango::EllipsizeMode::END);
+      rowBox->append(*nameLabel);
+
+      if (!deviceItem->description.empty())
+      {
+        auto* descLabel = Gtk::make_managed<Gtk::Label>(deviceItem->description);
+        descLabel->set_halign(Gtk::Align::START);
+        descLabel->add_css_class("menu-description");
+        descLabel->set_ellipsize(Pango::EllipsizeMode::END);
+        rowBox->append(*descLabel);
+      }
+
+      // Mark current device if it matches
+      if (deviceItem->kind == _lastPlaybackState.backend && deviceItem->id == _lastPlaybackState.currentDeviceId)
+      {
+        // We can't easily add a CSS class to the ListBoxRow here because we return the child.
+        // But we can style the rowBox itself or use a helper.
+        rowBox->add_css_class("selected-row");
+      }
+
+      return rowBox;
+    }
+
+    return nullptr;
+  }
+
   void StatusBar::setPlaybackDetails(app::core::playback::PlaybackSnapshot const& snapshot)
   {
     // Skip update if nothing visible has changed
@@ -322,6 +406,12 @@ namespace app::ui
       return;
     }
 
+    // Update Output Button Popover only if backends or current device changed
+    bool const backendsChanged = (snapshot.availableBackends != _lastPlaybackState.availableBackends);
+    bool const deviceChanged = (snapshot.currentDeviceId != _lastPlaybackState.currentDeviceId);
+    bool const backendKindChanged = (snapshot.backend != _lastPlaybackState.backend);
+
+    // Update state before building widgets so createOutputWidget sees the new selection
     _lastPlaybackState = {.state = snapshot.state,
                           .backend = snapshot.backend,
                           .title = snapshot.trackTitle,
@@ -332,39 +422,45 @@ namespace app::ui
                           .currentDeviceId = snapshot.currentDeviceId,
                           .availableBackends = snapshot.availableBackends};
 
-    // Update Output Button Menu
+    if (backendsChanged || deviceChanged || backendKindChanged)
     {
-      auto menu = Gio::Menu::create();
+      APP_LOG_INFO("StatusBar: Rebuilding output model. backendsChanged={} deviceChanged={} backendKindChanged={}",
+                   backendsChanged,
+                   deviceChanged,
+                   backendKindChanged);
+
+      _outputStore->remove_all();
 
       for (auto const& backend : snapshot.availableBackends)
       {
-        auto backendMenu = Gio::Menu::create();
-        std::string kindStr;
-        std::string kindDisplay;
-        switch (backend.kind)
-        {
-          case app::core::playback::BackendKind::PipeWire:
-            kindStr = "pipewire";
-            kindDisplay = "PipeWire";
-            break;
-          case app::core::playback::BackendKind::PipeWireExclusive:
-            kindStr = "pipewire_exclusive";
-            kindDisplay = "PipeWire Exclusive";
-            break;
-          case app::core::playback::BackendKind::AlsaExclusive:
-            kindStr = "alsa";
-            kindDisplay = "ALSA Exclusive";
-            break;
-          default: continue;
-        }
+        _outputStore->append(BackendItem::create(backend.kind, backend.displayName));
 
         for (auto const& device : backend.devices)
         {
-          backendMenu->append(device.displayName, std::format("status.set-output('{}|{}')", kindStr, device.id));
+          _outputStore->append(DeviceItem::create(backend.kind, device));
         }
-        menu->append_submenu(kindDisplay, backendMenu);
       }
-      _outputButton.set_menu_model(menu);
+
+      // Handle selection on the ListBox level (needs to be done once)
+      static bool signalConnected = false;
+      if (!signalConnected)
+      {
+        _outputListBox.signal_row_activated().connect(
+          [this](Gtk::ListBoxRow* row)
+          {
+            auto const index = row->get_index();
+            if (index >= 0 && static_cast<std::size_t>(index) < _outputStore->get_n_items())
+            {
+              auto item = _outputStore->get_item(index);
+              if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
+              {
+                _outputChanged.emit(deviceItem->kind, deviceItem->id);
+                _outputPopover.popdown();
+              }
+            }
+          });
+        signalConnected = true;
+      }
     }
 
     // Update Button Label to current device
@@ -377,7 +473,8 @@ namespace app::ui
         {
           if (device.id == snapshot.currentDeviceId)
           {
-            _outputButton.set_label(device.displayName);
+            _outputButton.set_label(backend.shortName);
+            _outputButton.set_tooltip_text(device.displayName);
             found = true;
             break;
           }
@@ -385,7 +482,11 @@ namespace app::ui
       }
       if (found) break;
     }
-    if (!found) _outputButton.set_label("Output");
+    if (!found)
+    {
+      _outputButton.set_label("Output");
+      _outputButton.set_tooltip_text("Click to change audio backend or device");
+    }
 
     if (snapshot.state == app::core::playback::TransportState::Idle)
     {
