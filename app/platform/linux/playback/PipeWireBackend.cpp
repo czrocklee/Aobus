@@ -28,6 +28,7 @@ extern "C"
 #include <cerrno>
 #include <charconv>
 #include <cstring>
+#include <format>
 #include <iostream>
 #include <limits>
 #include <mutex>
@@ -85,6 +86,7 @@ namespace
     std::string nodeNick;
     std::string nodeDescription;
     std::string objectPath;
+    std::optional<std::uint32_t> objectSerial;
     std::optional<std::uint32_t> driverId;
   };
 
@@ -138,6 +140,12 @@ namespace
     return value ? std::string(value) : std::string{};
   }
 
+  std::string formatStreamFormat(app::core::playback::StreamFormat const& format)
+  {
+    auto const sampleType = format.isFloat ? "float" : "pcm";
+    return std::format("{}Hz/{}-bit/{}ch {}", format.sampleRate, format.bitDepth, format.channels, sampleType);
+  }
+
   NodeRecord parseNodeRecord(std::uint32_t version, ::spa_dict const* props)
   {
     auto record = NodeRecord{};
@@ -147,6 +155,11 @@ namespace
     record.nodeNick = lookupProperty(props, PW_KEY_NODE_NICK);
     record.nodeDescription = lookupProperty(props, PW_KEY_NODE_DESCRIPTION);
     record.objectPath = lookupProperty(props, PW_KEY_OBJECT_PATH);
+
+    if (auto const serial = parseUintProperty(::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL)))
+    {
+      record.objectSerial = serial;
+    }
 
     if (auto const id = parseUintProperty(::spa_dict_lookup(props, "node.driver-id")))
     {
@@ -475,10 +488,11 @@ namespace app::playback
 
       for (auto const& [id, node] : _nodes)
       {
-        if (node.mediaClass == "Audio/Sink")
+        if (isSinkMediaClass(node.mediaClass))
         {
+          auto const deviceId = node.objectSerial ? std::to_string(*node.objectSerial) : std::to_string(id);
           devices.push_back(
-            {.id = std::to_string(id),
+            {.id = std::move(deviceId),
              .displayName =
                (node.nodeNick.empty() ? (node.nodeName.empty() ? node.objectPath : node.nodeName) : node.nodeNick),
              .isDefault = false});
@@ -1093,6 +1107,8 @@ namespace app::playback
     StreamFormat _format;
     std::atomic<bool> _drainPending = false;
     std::string _lastError;
+    bool _strictFormatRequired = false;
+    bool _strictFormatRejected = false;
 
     PwThreadLoopPtr _threadLoop;
     PwContextPtr _context;
@@ -1120,10 +1136,20 @@ namespace app::playback
   // Impl Implementation
   void PipeWireBackend::Impl::handleStreamProcess()
   {
+    static std::atomic<std::uint64_t> callCount{0};
     if (!_callbacks.readPcm) return;
+    if (callCount.fetch_add(1) == 0)
+    {
+      PLAYBACK_LOG_INFO("PipeWireBackend: handleStreamProcess called (first invocation)");
+    }
     auto* const buffer = ::pw_stream_dequeue_buffer(_stream.get());
     if (!buffer)
     {
+      static std::atomic<std::uint64_t> nullCount{0};
+      if (nullCount.fetch_add(1) < 5)
+      {
+        PLAYBACK_LOG_WARN("PipeWireBackend: handleStreamProcess: null buffer (count={})", nullCount.load());
+      }
       if (_callbacks.onUnderrun) _callbacks.onUnderrun(_callbacks.userData);
       return;
     }
@@ -1160,7 +1186,24 @@ namespace app::playback
   void PipeWireBackend::Impl::handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param)
   {
     if (id != SPA_PARAM_Format) return;
-    if (_monitor) _monitor->setNegotiatedFormat(parseRawStreamFormat(param));
+    auto const negotiatedFormat = parseRawStreamFormat(param);
+
+    if (_monitor) _monitor->setNegotiatedFormat(negotiatedFormat);
+
+    if (_strictFormatRequired && negotiatedFormat && *negotiatedFormat != _format && !_strictFormatRejected)
+    {
+      _strictFormatRejected = true;
+      auto const message =
+        std::format("Selected PipeWire device does not support {} in exclusive mode; it negotiated {} instead. "
+                    "Choose another device or use shared PipeWire mode.",
+                    formatStreamFormat(_format),
+                    formatStreamFormat(*negotiatedFormat));
+      PLAYBACK_LOG_ERROR("{}", message);
+      setError(message);
+      if (_callbacks.onBackendError) _callbacks.onBackendError(_callbacks.userData, _lastError);
+      return;
+    }
+
     if (_monitor) _monitor->triggerRefresh();
   }
 
@@ -1168,13 +1211,16 @@ namespace app::playback
                                                        std::int32_t newState,
                                                        char const* errorMessage)
   {
+    PLAYBACK_LOG_INFO("PipeWireBackend: stream state changed to {}", newState);
     if (newState == PW_STREAM_STATE_ERROR)
     {
+      PLAYBACK_LOG_ERROR("PipeWireBackend: stream error: {}", errorMessage ? errorMessage : "unknown");
       if (errorMessage && *errorMessage) setError(std::string{errorMessage});
       return;
     }
     if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
     {
+      PLAYBACK_LOG_INFO("PipeWireBackend: stream state {}, triggering refresh", newState);
       if (_monitor) _monitor->triggerRefresh();
     }
   }
@@ -1234,6 +1280,10 @@ namespace app::playback
     _impl->_format = format;
     _impl->_lastError.clear();
 
+    auto const useExclusiveMode = _exclusiveMode && !_targetDeviceId.empty();
+    _impl->_strictFormatRequired = useExclusiveMode;
+    _impl->_strictFormatRejected = false;
+
     if (!_impl->_threadLoop || !_impl->_context || !_impl->_core)
     {
       _impl->setError("PipeWire not initialized or connection failed");
@@ -1260,7 +1310,12 @@ namespace app::playback
 
     if (!_targetDeviceId.empty())
     {
-      ::pw_properties_set(props, PW_KEY_NODE_TARGET, _targetDeviceId.c_str());
+      ::pw_properties_set(props, PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
+    }
+    else if (_exclusiveMode)
+    {
+      PLAYBACK_LOG_WARN("PipeWireBackend::open: exclusive mode requested without a target device; using default "
+                        "routing until a device is selected");
     }
 
     _impl->_stream.reset(::pw_stream_new_simple(
@@ -1280,7 +1335,10 @@ namespace app::playback
     auto builder = ::spa_pod_builder{};
     ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
     auto frame = ::spa_pod_frame{};
-    ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
+    // Exclusive mode requests a fixed hardware format; shared mode advertises the
+    // formats we can supply and lets PipeWire negotiate the final stream format.
+    auto const paramType = useExclusiveMode ? SPA_PARAM_Format : SPA_PARAM_EnumFormat;
+    ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, paramType);
     auto spaFormat = static_cast<std::int32_t>(SPA_AUDIO_FORMAT_S16_LE);
     if (_impl->_format.bitDepth == 24)
       spaFormat = SPA_AUDIO_FORMAT_S24_LE;
@@ -1302,20 +1360,34 @@ namespace app::playback
     ::spa_pod_builder_pop(&builder, &frame);
     auto* const param = reinterpret_cast<::spa_pod*>(buffer.data());
     auto params = std::to_array<::spa_pod const*>({param});
-    auto const ret = ::pw_stream_connect(
-      _impl->_stream.get(),
-      PW_DIRECTION_OUTPUT,
-      PW_ID_ANY,
-      static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_INACTIVE),
-      params.data(),
-      static_cast<std::uint32_t>(params.size()));
+
+    auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_AUTOCONNECT);
+    if (useExclusiveMode)
+    {
+      flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
+    }
+
+    PLAYBACK_LOG_INFO("PipeWireBackend::open: mode={}, target={}, flags={:#x}",
+                      useExclusiveMode ? "exclusive" : "shared",
+                      _targetDeviceId.empty() ? "<default>" : _targetDeviceId,
+                      static_cast<int>(flags));
+
+    auto const ret = ::pw_stream_connect(_impl->_stream.get(),
+                                         PW_DIRECTION_OUTPUT,
+                                         PW_ID_ANY,
+                                         flags,
+                                         params.data(),
+                                         static_cast<std::uint32_t>(params.size()));
     ::pw_thread_loop_unlock(_impl->_threadLoop.get());
 
     if (ret < 0)
     {
+      PLAYBACK_LOG_ERROR("PipeWireBackend::open: pw_stream_connect failed: ret={}", ret);
       _impl->setError("Failed to connect PipeWire stream: " + std::to_string(-ret));
       return false;
     }
+
+    PLAYBACK_LOG_INFO("PipeWireBackend::open: pw_stream_connect succeeded");
     return true;
   }
 
@@ -1324,6 +1396,7 @@ namespace app::playback
     if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
     _impl->_drainPending = false;
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    PLAYBACK_LOG_INFO("PipeWireBackend::start: activating stream");
     ::pw_stream_set_active(_impl->_stream.get(), true);
     ::pw_thread_loop_unlock(_impl->_threadLoop.get());
   }
@@ -1407,9 +1480,31 @@ namespace app::playback
     return _targetDeviceId;
   }
 
+  void PipeWireBackend::setExclusiveMode(bool exclusive)
+  {
+    if (_exclusiveMode == exclusive) return;
+    _exclusiveMode = exclusive;
+
+    // Only reopen if we already have a device set. If _targetDeviceId is empty
+    // (e.g. exclusive mode requested before device selection), defer to the
+    // upcoming setDevice() or setBackendAndDevice() call which carries the real device.
+    if (_impl && _impl->_stream && !_targetDeviceId.empty())
+    {
+      auto const currentFormat = _impl->_format;
+      auto const currentCallbacks = _impl->_callbacks;
+      open(currentFormat, currentCallbacks);
+    }
+  }
+
+  bool PipeWireBackend::isExclusiveMode() const noexcept
+  {
+    return _exclusiveMode;
+  }
+
   app::core::playback::BackendKind PipeWireBackend::kind() const noexcept
   {
-    return app::core::playback::BackendKind::PipeWire;
+    return _exclusiveMode ? app::core::playback::BackendKind::PipeWireExclusive
+                          : app::core::playback::BackendKind::PipeWire;
   }
 
   std::string_view PipeWireBackend::lastError() const noexcept

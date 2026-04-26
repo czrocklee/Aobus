@@ -32,7 +32,8 @@ namespace app::core::playback
   enum class BackendKind
   {
     None,
-    PipeWire,
+    PipeWire,          // shared/mixing mode
+    PipeWireExclusive, // exclusive/direct hardware
     AlsaExclusive,
   };
 

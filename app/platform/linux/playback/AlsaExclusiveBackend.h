@@ -44,6 +44,8 @@ namespace app::playback
     std::vector<app::core::playback::AudioDevice> enumerateDevices() override;
     void setDevice(std::string_view deviceId) override;
     std::string_view currentDeviceId() const noexcept override;
+    void setExclusiveMode(bool) override {}
+    bool isExclusiveMode() const noexcept override { return true; } // ALSA is always exclusive
 
     app::core::playback::BackendKind kind() const noexcept override
     {

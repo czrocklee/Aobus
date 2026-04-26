@@ -216,6 +216,7 @@ namespace app::ui
     std::uint32_t _playbackTimer = 0;
     std::optional<ActivePlaybackSequence> _activePlaybackSequence;
     ::app::core::playback::TransportState _lastPlaybackState = ::app::core::playback::TransportState::Idle;
+    std::string _lastPlaybackErrorMessage;
 
     // Status bar
     std::unique_ptr<StatusBar> _statusBar;

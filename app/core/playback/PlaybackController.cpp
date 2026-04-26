@@ -59,8 +59,11 @@ namespace app::core::playback
 
   void PlaybackController::setBackendAndDevice(std::unique_ptr<IAudioBackend> backend, std::string_view deviceId)
   {
+    if (backend)
+    {
+      backend->setDevice(deviceId);
+    }
     _engine->setBackend(std::move(backend));
-    _engine->setDevice(deviceId);
   }
 
   void PlaybackController::pause()
@@ -88,12 +91,15 @@ namespace app::core::playback
     auto snap = _engine->snapshot();
     auto allBackends = std::vector<BackendSnapshot>{};
 
-    // 1. Add PipeWire
+    // 1. Add PipeWire (shared/mixing mode)
     if (_pwDiscovery)
     {
       auto pwDevices = _pwDiscovery->enumerateDevices();
       PLAYBACK_LOG_DEBUG("PlaybackController: PipeWire returned {} devices", pwDevices.size());
       allBackends.push_back({.kind = BackendKind::PipeWire, .devices = std::move(pwDevices)});
+
+      // Also report PipeWire Exclusive with the same device list
+      allBackends.push_back({.kind = BackendKind::PipeWireExclusive, .devices = _pwDiscovery->enumerateDevices()});
     }
     else
     {

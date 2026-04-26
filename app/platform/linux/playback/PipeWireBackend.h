@@ -37,6 +37,8 @@ namespace app::playback
     std::vector<app::core::playback::AudioDevice> enumerateDevices() override;
     void setDevice(std::string_view deviceId) override;
     std::string_view currentDeviceId() const noexcept override;
+    void setExclusiveMode(bool exclusive) override;
+    bool isExclusiveMode() const noexcept override;
 
     app::core::playback::BackendKind kind() const noexcept override;
     std::string_view lastError() const noexcept override;
@@ -44,6 +46,7 @@ namespace app::playback
   private:
     std::unique_ptr<Impl> _impl;
     std::string _targetDeviceId;
+    bool _exclusiveMode = false;
   };
 
 } // namespace app::playback

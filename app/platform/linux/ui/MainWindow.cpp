@@ -2139,6 +2139,19 @@ namespace app::ui
     if (_statusBar)
     {
       _statusBar->setPlaybackDetails(snapshot);
+
+      if (snapshot.state == app::core::playback::TransportState::Error)
+      {
+        if (!snapshot.statusText.empty() && snapshot.statusText != _lastPlaybackErrorMessage)
+        {
+          _lastPlaybackErrorMessage = snapshot.statusText;
+          _statusBar->showMessage(snapshot.statusText, std::chrono::seconds{10});
+        }
+      }
+      else
+      {
+        _lastPlaybackErrorMessage.clear();
+      }
     }
 
     if (previousState == app::core::playback::TransportState::Playing &&
@@ -2342,10 +2355,15 @@ namespace app::ui
     if (kind != currentSnap.backend)
     {
       std::unique_ptr<app::core::playback::IAudioBackend> backend;
+      bool exclusiveMode = false;
       switch (kind)
       {
         case app::core::playback::BackendKind::PipeWire:
           backend = std::make_unique<app::playback::PipeWireBackend>();
+          break;
+        case app::core::playback::BackendKind::PipeWireExclusive:
+          backend = std::make_unique<app::playback::PipeWireBackend>();
+          exclusiveMode = true;
           break;
         case app::core::playback::BackendKind::AlsaExclusive:
           backend = std::make_unique<app::playback::AlsaExclusiveBackend>();
@@ -2355,11 +2373,17 @@ namespace app::ui
 
       if (backend)
       {
+        if (exclusiveMode)
+        {
+          backend->setExclusiveMode(true);
+        }
         // Use the controller's atomic switcher to swap backend AND set target device in one go
         _playbackController->setBackendAndDevice(std::move(backend), deviceId);
-        _statusBar->showMessage("Switched to " + std::string(kind == app::core::playback::BackendKind::PipeWire
-                                                               ? "PipeWire"
-                                                               : "ALSA Exclusive"));
+        _statusBar->showMessage("Switched to " +
+                                std::string(kind == app::core::playback::BackendKind::PipeWire ? "PipeWire"
+                                            : kind == app::core::playback::BackendKind::PipeWireExclusive
+                                              ? "PipeWire Exclusive"
+                                              : "ALSA Exclusive"));
       }
     }
     else
