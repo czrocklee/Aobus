@@ -110,7 +110,7 @@ namespace
 
   bool isActiveLink(::pw_link_state state) noexcept
   {
-    return static_cast<int>(state) >= PW_LINK_STATE_INIT;
+    return state == PW_LINK_STATE_PAUSED || state == PW_LINK_STATE_ACTIVE;
   }
 
   std::optional<std::uint32_t> parseUintProperty(char const* value)
@@ -982,6 +982,7 @@ namespace app::playback
       {
         _sinkNodeBinding.reset();
         _sinkFormat.reset();
+        _sinkProps = {};
 
         if (_registry && desiredSinkNodeId != PW_ID_ANY)
         {
@@ -1001,6 +1002,8 @@ namespace app::playback
 
               std::uint32_t params[] = {SPA_PARAM_Format, SPA_PARAM_Props};
               ::pw_node_subscribe_params(_sinkNodeBinding.proxy.get(), params, std::size(params));
+              ::pw_node_enum_params(_sinkNodeBinding.proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
+              ::pw_node_enum_params(_sinkNodeBinding.proxy.get(), 2, SPA_PARAM_Props, 0, -1, nullptr);
               ::pw_node_add_listener(
                 _sinkNodeBinding.proxy.get(), _sinkNodeBinding.listener.get(), &sinkNodeEvents, this);
             }
@@ -1012,48 +1015,67 @@ namespace app::playback
       {
         auto graph = AudioGraph{};
 
-        if (_streamNodeId != PW_ID_ANY)
+        // Identify all nodes that are relevant:
+        // 1. RockStudio path nodes (reachableSet)
+        // 2. Any node that has an active link INTO a RockStudio path node
+        auto fullSet = reachableSet;
+        for (auto const& [_, link] : _links)
         {
-          auto const it = _nodes.find(_streamNodeId);
-          if (it != _nodes.end())
+          if (isActiveLink(link.state) && reachableSet.contains(link.inputNodeId))
           {
-            graph.nodes.push_back({.id = std::to_string(_streamNodeId),
-                                   .type = AudioNodeType::Stream,
-                                   .name = "RockStudio Stream",
-                                   .format = _negotiatedStreamFormat,
-                                   .objectPath = it->second.objectPath});
+            fullSet.insert(link.outputNodeId);
           }
         }
 
-        for (auto const nodeId : reachableSet)
+        for (auto const nodeId : fullSet)
         {
-          if (nodeId == _streamNodeId) continue;
           auto const it = _nodes.find(nodeId);
-          if (it == _nodes.end()) continue; // Safety check
+          if (it == _nodes.end()) continue;
 
           auto const& record = it->second;
           bool isSink = isSinkMediaClass(record.mediaClass);
+          bool isRsStream = (nodeId == _streamNodeId);
+
+          auto nodeType = AudioNodeType::Intermediary;
+          if (isRsStream)
+            nodeType = AudioNodeType::Stream;
+          else if (isSink)
+            nodeType = AudioNodeType::Sink;
+          else if (!reachableSet.contains(nodeId))
+            nodeType = AudioNodeType::ExternalSource;
 
           auto node =
             AudioNode{.id = std::to_string(nodeId),
-                      .type = isSink ? AudioNodeType::Sink : AudioNodeType::Intermediary,
+                      .type = nodeType,
                       .name = (record.nodeNick.empty() ? (record.nodeName.empty() ? record.objectPath : record.nodeName)
                                                        : record.nodeNick),
                       .objectPath = record.objectPath};
 
-          if (isSink && nodeId == desiredSinkNodeId)
+          if (isRsStream)
+          {
+            node.format = _negotiatedStreamFormat;
+          }
+          else if (isSink && nodeId == desiredSinkNodeId)
           {
             node.format = _sinkFormat;
-            node.volumeNotUnity = _sinkProps.volume.has_value() && (*_sinkProps.volume < 0.999F);
-            node.isMuted = _sinkProps.mute.has_value() && *_sinkProps.mute;
+            
+            auto const isUnity = [](float v) { return std::abs(v - 1.0F) < 1e-4F; };
+            bool const volumeAtUnity = (!_sinkProps.volume.has_value() || isUnity(*_sinkProps.volume)) &&
+                                       std::ranges::all_of(_sinkProps.channelVolumes, isUnity) &&
+                                       std::ranges::all_of(_sinkProps.softVolumes, isUnity);
+
+            node.volumeNotUnity = !volumeAtUnity;
+            node.isMuted = (_sinkProps.mute.has_value() && *_sinkProps.mute) ||
+                           (_sinkProps.softMute.has_value() && *_sinkProps.softMute);
           }
+
           graph.nodes.push_back(std::move(node));
         }
 
         for (auto const& [_, link] : _links)
         {
           if (!isActiveLink(link.state)) continue;
-          if (reachableSet.contains(link.outputNodeId) && reachableSet.contains(link.inputNodeId))
+          if (fullSet.contains(link.outputNodeId) && fullSet.contains(link.inputNodeId))
           {
             graph.links.push_back(
               {.sourceId = std::to_string(link.outputNodeId), .destId = std::to_string(link.inputNodeId)});
@@ -1334,11 +1356,14 @@ namespace app::playback
 
     if (!_targetDeviceId.empty())
     {
-      auto const targetName = _impl->_monitor->getTargetNameForDevice(_targetDeviceId);
-      ::pw_properties_set(props, PW_KEY_TARGET_OBJECT, targetName.c_str());
+      // The targetDeviceId we store is the objectSerial (as a string)
+      ::pw_properties_set(props, PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
+      
       if (useExclusiveMode)
       {
         ::pw_properties_set(props, PW_KEY_NODE_EXCLUSIVE, "true");
+        // Passive ensures we don't move if the target is busy; we want an error instead of a fallback
+        ::pw_properties_set(props, PW_KEY_NODE_PASSIVE, "true");
       }
     }
 
@@ -1355,20 +1380,35 @@ namespace app::playback
     _impl->_monitor->setStream(_impl->_stream.get());
 
     auto const alsaFormat = (format.bitDepth == 16)   ? SPA_AUDIO_FORMAT_S16_LE
-                            : (format.bitDepth == 24) ? SPA_AUDIO_FORMAT_S24
+                            : (format.bitDepth == 24) ? SPA_AUDIO_FORMAT_S24_32_LE
                                                       : SPA_AUDIO_FORMAT_S32_LE;
 
     std::uint8_t buffer[1024];
     ::spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
-    auto info = SPA_AUDIO_INFO_RAW_INIT(.format = alsaFormat,
-                                        .rate = _impl->_format.sampleRate,
-                                        .channels = _impl->_format.channels);
-    ::spa_pod const* params[] = {(::spa_pod*)::spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info)};
+    
+    // Build the format object precisely as before
+    ::spa_pod_frame f;
+    ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
+    ::spa_pod_builder_add(&b,
+                          SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                          SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                          SPA_FORMAT_AUDIO_format, SPA_POD_Id(alsaFormat),
+                          SPA_FORMAT_AUDIO_rate, SPA_POD_Int(format.sampleRate),
+                          SPA_FORMAT_AUDIO_channels, SPA_POD_Int(format.channels),
+                          0);
+    ::spa_pod const* param = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+    ::spa_pod const* params[] = {param};
+
+    auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS);
+    if (useExclusiveMode)
+    {
+      flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
+    }
 
     if (::pw_stream_connect(_impl->_stream.get(),
                             PW_DIRECTION_OUTPUT,
                             PW_ID_ANY,
-                            static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
+                            flags,
                             params,
                             1) < 0)
     {

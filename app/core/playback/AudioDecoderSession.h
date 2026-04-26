@@ -31,6 +31,7 @@ namespace app::core::playback
     StreamFormat sourceFormat;
     StreamFormat outputFormat;
     std::uint32_t durationMs = 0;
+    bool isLossy = false;
   };
 
   class IAudioDecoderSession

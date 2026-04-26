@@ -156,6 +156,7 @@ namespace app::core::playback
     std::optional<StreamFormat> format = std::nullopt;
     bool volumeNotUnity = false;
     bool isMuted = false;
+    bool isLossySource = false;
     std::string objectPath = "";
 
     bool operator==(AudioNode const&) const = default;
@@ -186,15 +187,18 @@ namespace app::core::playback
 
   /**
    * @brief Final conclusion on the quality of the current audio path.
+   * Priority (higher value = more degraded/important to show):
+   * BitwisePerfect < LosslessPadded == LosslessFloat < LinearIntervention < LossySource < Clipped
    */
   enum class AudioQuality
   {
     Unknown,
-    BitPerfect, ///< Exact match, no volume changes, exclusive access
-    Lossless,   ///< Safe conversions (e.g. bit-depth upscaling)
-    Resampled,  ///< Sample rate conversion occurred
-    Mixed,      ///< Multiple active sources sharing the path
-    Lossy,      ///< Bit-depth truncation or channel dropping
+    BitwisePerfect,     ///< Purple: Bit-perfect, exclusive, no SRC/Vol/DSP
+    LosslessPadded,     ///< Green: Bit-depth upscaling (integer), no SRC/Vol/DSP
+    LosslessFloat,      ///< Green: Linear normalization to float, no SRC/Vol/DSP
+    LinearIntervention, ///< Amber: Mixed, Resampled, Vol-Adjusted, or DSP
+    LossySource,        ///< Gray: Source is lossy (MP3, AAC, etc.)
+    Clipped,            ///< Red: Signal clipping detected
   };
 
   /**

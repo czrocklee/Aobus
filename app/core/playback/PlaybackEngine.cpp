@@ -440,6 +440,7 @@ namespace app::core::playback
                                      .type = AudioNodeType::Decoder,
                                      .name = "File Decoder",
                                      .format = info.sourceFormat,
+                                     .isLossySource = info.isLossy,
                                      .objectPath = ""});
 
     // Add Engine Node
@@ -506,207 +507,171 @@ namespace app::core::playback
   void PlaybackEngine::analyzeAudioQuality()
   {
     auto& snap = _snapshot;
-    snap.quality = AudioQuality::BitPerfect;
+    snap.quality = AudioQuality::BitwisePerfect;
     snap.qualityTooltip.clear();
 
     PLAYBACK_LOG_DEBUG("Analyzing audio quality for graph with {} nodes", snap.graph.nodes.size());
 
-    appendLine(snap.qualityTooltip, "Audio Routing Analysis");
+    appendLine(snap.qualityTooltip, "Audio Routing Analysis:");
 
-    // 1. Identify all nodes in the RockStudio path
-    std::set<std::string> rsPathNodes;
+    // 1. Build the strict linear path (The "Total Order" of the pipeline)
+    std::vector<AudioNode*> path;
     {
-      std::string current = "rs-decoder";
-      std::set<std::string> seen;
-      while (!current.empty() && !seen.contains(current))
+      std::string currentId = "rs-decoder";
+      std::set<std::string> visited;
+      while (!currentId.empty() && !visited.contains(currentId))
       {
-        seen.insert(current);
-        rsPathNodes.insert(current);
+        visited.insert(currentId);
+        auto it = std::find_if(
+          snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == currentId; });
+        if (it == snap.graph.nodes.end()) break;
 
-        std::string next;
+        path.push_back(&(*it));
+
+        std::string nextId;
         for (auto const& link : snap.graph.links)
         {
-          if (link.isActive && link.sourceId == current)
+          if (link.isActive && link.sourceId == currentId)
           {
-            next = link.destId;
+            nextId = link.destId;
             break;
           }
         }
-        current = next;
+        currentId = nextId;
       }
     }
 
-    // 2. Check for Mixing (Multiple DISTINCT sources feeding a node)
+    // 3. Identify all input sources for each node to detect mixing later
     auto inputSources = std::unordered_map<std::string, std::set<std::string>>{};
     for (auto const& link : snap.graph.links)
     {
       if (link.isActive) inputSources[link.destId].insert(link.sourceId);
     }
 
-    bool hasMixing = false;
-    for (auto const& [nodeId, sources] : inputSources)
+    // 4. Single-pass linear analysis through the path
+    for (size_t i = 0; i < path.size(); ++i)
     {
-      if (sources.size() > 1)
-      {
-        auto it =
-          std::find_if(snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == nodeId; });
-        if (it != snap.graph.nodes.end())
-        {
-          bool rsPathIncluded = false;
-          std::vector<std::string> otherAppNames;
+      auto* node = path[i];
 
-          for (auto const& sourceId : sources)
+      // --- A. Node internal state ---
+      if (node->isLossySource)
+      {
+        appendLine(snap.qualityTooltip, "• Source: Lossy format (" + node->name + ")");
+        snap.quality = std::max(snap.quality, AudioQuality::LossySource);
+      }
+
+      if (node->volumeNotUnity)
+      {
+        appendLine(snap.qualityTooltip, "• Volume: Modification at " + node->name);
+        snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
+      }
+
+      if (node->isMuted)
+      {
+        appendLine(snap.qualityTooltip, "• Status: " + node->name + " is MUTED");
+        snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
+      }
+
+      // --- B. Node external interference (Mixing) ---
+      if (inputSources.contains(node->id))
+      {
+        auto const& sources = inputSources.at(node->id);
+        std::vector<std::string> otherAppNames;
+        for (auto const& srcId : sources)
+        {
+          bool isInternal = std::any_of(path.begin(), path.end(), [&](auto* p) { return p->id == srcId; });
+          if (!isInternal)
           {
-            if (rsPathNodes.contains(sourceId))
+            auto it = std::find_if(
+              snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == srcId; });
+            if (it != snap.graph.nodes.end()) otherAppNames.push_back(it->name);
+          }
+        }
+
+        if (!otherAppNames.empty())
+        {
+          std::sort(otherAppNames.begin(), otherAppNames.end());
+          otherAppNames.erase(std::unique(otherAppNames.begin(), otherAppNames.end()), otherAppNames.end());
+          std::string apps;
+          for (size_t j = 0; j < otherAppNames.size(); ++j)
+          {
+            apps += otherAppNames[j];
+            if (j < otherAppNames.size() - 1) apps += ", ";
+          }
+          appendLine(snap.qualityTooltip, "• Mixed: " + node->name + " shared with " + apps);
+          snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
+        }
+      }
+
+      // --- C. Link transition to next node ---
+      if (i < path.size() - 1)
+      {
+        auto* node = path[i];
+        auto* nextNode = path[i + 1];
+        if (node->format && nextNode->format)
+        {
+          auto const& f1 = *node->format;
+          auto const& f2 = *nextNode->format;
+
+          if (f1.sampleRate != f2.sampleRate)
+          {
+            appendLine(snap.qualityTooltip,
+                       "• Resampling: " + std::to_string(f1.sampleRate) + "Hz → " + std::to_string(f2.sampleRate) + "Hz");
+            snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
+          }
+
+          if (f1.channels != f2.channels)
+          {
+            appendLine(snap.qualityTooltip,
+                       "• Channels: " + std::to_string(f1.channels) + "ch → " + std::to_string(f2.channels) + "ch");
+            snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
+          }
+          else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
+          {
+            if (isLosslessBitDepthChange(f1, f2))
             {
-              rsPathIncluded = true;
+              appendLine(snap.qualityTooltip,
+                         f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
+              snap.quality =
+                std::max(snap.quality, f2.isFloat ? AudioQuality::LosslessFloat : AudioQuality::LosslessPadded);
             }
             else
             {
-              auto sourceNode = std::find_if(
-                snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == sourceId; });
-              if (sourceNode != snap.graph.nodes.end())
-              {
-                otherAppNames.push_back(sourceNode->name);
-              }
+              appendLine(snap.qualityTooltip,
+                         "• Precision: Truncated " + std::to_string(f1.bitDepth) + "b → " + std::to_string(f2.bitDepth) + "b");
+              snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
             }
-          }
-
-          if (rsPathIncluded && !otherAppNames.empty())
-          {
-            std::string apps;
-            std::sort(otherAppNames.begin(), otherAppNames.end());
-            otherAppNames.erase(std::unique(otherAppNames.begin(), otherAppNames.end()), otherAppNames.end());
-
-            for (std::size_t i = 0; i < otherAppNames.size(); ++i)
-            {
-              apps += otherAppNames[i];
-              if (i < otherAppNames.size() - 1) apps += ", ";
-            }
-            appendLine(snap.qualityTooltip, "• Mixed: Sharing " + it->name + " with " + apps);
-            hasMixing = true;
           }
         }
       }
     }
-    if (hasMixing) snap.quality = std::max(snap.quality, AudioQuality::Mixed);
 
-    // 2. Traversal and Format Analysis
-    std::string currentNodeId = "rs-decoder";
-    std::set<std::string> visited;
-
-    PLAYBACK_LOG_DEBUG("Starting graph traversal from 'rs-decoder'");
-
-    while (!currentNodeId.empty())
+    if (snap.quality == AudioQuality::BitwisePerfect)
     {
-      if (visited.contains(currentNodeId))
-      {
-        PLAYBACK_LOG_WARN("Graph cycle detected at '{}'", currentNodeId);
-        break;
-      }
-      visited.insert(currentNodeId);
-
-      auto const nodeIt = std::find_if(
-        snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == currentNodeId; });
-      if (nodeIt == snap.graph.nodes.end())
-      {
-        PLAYBACK_LOG_DEBUG("Traversal reached end at missing node '{}'", currentNodeId);
-        break;
-      }
-
-      auto const& node = *nodeIt;
-      PLAYBACK_LOG_DEBUG("  Node: {} [type={}]", node.name, static_cast<int>(node.type));
-
-      if (node.volumeNotUnity)
-      {
-        PLAYBACK_LOG_DEBUG("    - Volume modification detected");
-        appendLine(snap.qualityTooltip, "• Volume transformation at " + node.name);
-        snap.quality = std::max(snap.quality, AudioQuality::Lossless);
-      }
-      if (node.isMuted)
-      {
-        PLAYBACK_LOG_DEBUG("    - Node is muted");
-        appendLine(snap.qualityTooltip, "• Node is muted: " + node.name);
-        snap.quality = std::max(snap.quality, AudioQuality::Mixed);
-      }
-
-      // Find next node
-      std::string nextNodeId;
-      for (auto const& link : snap.graph.links)
-      {
-        if (link.isActive && link.sourceId == currentNodeId)
-        {
-          auto const nextNodeIt = std::find_if(
-            snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == link.destId; });
-          if (nextNodeIt != snap.graph.nodes.end())
-          {
-            auto const& nextNode = *nextNodeIt;
-
-            // Compare formats if both are present
-            if (node.format && nextNode.format)
-            {
-              auto const& f1 = *node.format;
-              auto const& f2 = *nextNode.format;
-
-              PLAYBACK_LOG_DEBUG("    - Link format comparison: [{}Hz/{}b/{}ch] -> [{}Hz/{}b/{}ch]",
-                                 f1.sampleRate,
-                                 f1.bitDepth,
-                                 f1.channels,
-                                 f2.sampleRate,
-                                 f2.bitDepth,
-                                 f2.channels);
-
-              if (f1.sampleRate != f2.sampleRate)
-              {
-                PLAYBACK_LOG_DEBUG("      - Resampling detected");
-                appendLine(snap.qualityTooltip,
-                           "• Resampling: " + std::to_string(f1.sampleRate) + " → " + std::to_string(f2.sampleRate));
-                snap.quality = std::max(snap.quality, AudioQuality::Resampled);
-              }
-              if (f1.channels != f2.channels)
-              {
-                PLAYBACK_LOG_DEBUG("      - Channel mixing detected");
-                appendLine(snap.qualityTooltip,
-                           "• Mixing channels: " + std::to_string(f1.channels) + " → " + std::to_string(f2.channels));
-                snap.quality = std::max(snap.quality, AudioQuality::Mixed);
-              }
-              else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
-              {
-                if (isLosslessBitDepthChange(f1, f2))
-                {
-                  PLAYBACK_LOG_DEBUG("      - Lossless bit-depth upscale");
-                  appendLine(snap.qualityTooltip, "• Bit-depth upscaling (lossless)");
-                  snap.quality = std::max(snap.quality, AudioQuality::Lossless);
-                }
-                else
-                {
-                  PLAYBACK_LOG_DEBUG("      - Precision loss (bit-depth truncate)");
-                  appendLine(snap.qualityTooltip,
-                             "• Precision loss: " + std::to_string(f1.bitDepth) + " → " + std::to_string(f2.bitDepth));
-                  snap.quality = std::max(snap.quality, AudioQuality::Lossy);
-                }
-              }
-            }
-
-            nextNodeId = link.destId;
-            break;
-          }
-        }
-      }
-      currentNodeId = nextNodeId;
+      appendLine(snap.qualityTooltip, "• Signal Path: Byte-perfect from decoder to device");
     }
 
-    PLAYBACK_LOG_DEBUG("Analysis complete. Final quality: {}", static_cast<int>(snap.quality));
-
-    // Final Summary
+    // 5. Final summary
     switch (snap.quality)
     {
-      case AudioQuality::BitPerfect: appendLine(snap.qualityTooltip, "\nStatus: Bit-Perfect"); break;
-      case AudioQuality::Lossless: appendLine(snap.qualityTooltip, "\nStatus: Lossless Conversion"); break;
-      case AudioQuality::Resampled: appendLine(snap.qualityTooltip, "\nStatus: High Quality (Resampled)"); break;
-      case AudioQuality::Mixed: appendLine(snap.qualityTooltip, "\nStatus: Mixed / Shared"); break;
-      case AudioQuality::Lossy: appendLine(snap.qualityTooltip, "\nStatus: Quality Degraded"); break;
-      case AudioQuality::Unknown: break;
+      case AudioQuality::BitwisePerfect:
+        appendLine(snap.qualityTooltip, "\nConclusion: Bit-perfect output");
+        break;
+      case AudioQuality::LosslessPadded:
+      case AudioQuality::LosslessFloat:
+        appendLine(snap.qualityTooltip, "\nConclusion: Lossless Conversion");
+        break;
+      case AudioQuality::LinearIntervention:
+        appendLine(snap.qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
+        break;
+      case AudioQuality::LossySource:
+        appendLine(snap.qualityTooltip, "\nConclusion: Lossy source format");
+        break;
+      case AudioQuality::Clipped:
+        appendLine(snap.qualityTooltip, "\nConclusion: Signal clipping detected");
+        break;
+      case AudioQuality::Unknown:
+        break;
     }
   }
 

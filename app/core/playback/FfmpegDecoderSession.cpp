@@ -285,6 +285,16 @@ namespace app::core::playback
       rawBitDepth = ::av_get_bytes_per_sample(_codecContext->sample_fmt) * 8;
     }
 
+    // Determine if the source is lossy
+    auto const id = stream->codecpar->codec_id;
+    auto const* desc = ::avcodec_descriptor_get(id);
+    bool isLossless = desc && (desc->props & AV_CODEC_PROP_LOSSLESS) != 0;
+
+    // PCM and some other formats might not have the flag set reliably in all versions
+    if (id >= AV_CODEC_ID_PCM_S16LE && id < AV_CODEC_ID_ADPCM_IMA_QT) isLossless = true;
+
+    _streamInfo.isLossy = !isLossless;
+
     _streamInfo.sourceFormat.sampleRate = _codecContext->sample_rate;
     _streamInfo.sourceFormat.channels = static_cast<std::uint8_t>(_codecContext->ch_layout.nb_channels);
     _streamInfo.sourceFormat.bitDepth = static_cast<std::uint8_t>(rawBitDepth);

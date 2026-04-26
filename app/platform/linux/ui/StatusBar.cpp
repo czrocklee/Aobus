@@ -137,9 +137,11 @@ namespace app::ui
            color: @theme_selected_bg_color;
            font-weight: bold;
         }
-        .sink-status-good { color: #34a853; }
-        .sink-status-warning { color: #fbbc04; }
-        .sink-status-bad { color: #ea4335; }
+        .sink-status-perfect { color: #A855F7; }
+        .sink-status-lossless { color: #10B981; }
+        .sink-status-intervention { color: #F59E0B; }
+        .sink-status-lossy { color: #6B7280; }
+        .sink-status-clipped { color: #EF4444; }
       )");
 
         if (auto display = Gdk::Display::get_default(); display)
@@ -155,9 +157,11 @@ namespace app::ui
 
     void clearSinkStatusClasses(Gtk::Image& image)
     {
-      image.remove_css_class("sink-status-good");
-      image.remove_css_class("sink-status-warning");
-      image.remove_css_class("sink-status-bad");
+      image.remove_css_class("sink-status-perfect");
+      image.remove_css_class("sink-status-lossless");
+      image.remove_css_class("sink-status-intervention");
+      image.remove_css_class("sink-status-lossy");
+      image.remove_css_class("sink-status-clipped");
     }
   }
 
@@ -534,27 +538,49 @@ namespace app::ui
 
     _streamInfoLabel.set_text(ss.str());
 
-    // Tooltip: Build dynamic representation of the path from the graph
+    // Tooltip: Build dynamic representation of the path from the graph (TOTAL ORDER)
     std::stringstream tt;
     tt << "Audio Pipeline:\n";
 
-    for (auto const& node : snapshot.graph.nodes)
     {
-      tt << "• ";
-      switch (node.type)
+      std::string currentId = "rs-decoder";
+      std::set<std::string> visited;
+      while (!currentId.empty() && !visited.contains(currentId))
       {
-        case app::core::playback::AudioNodeType::Decoder: tt << "[Source] "; break;
-        case app::core::playback::AudioNodeType::Engine: tt << "[Engine] "; break;
-        case app::core::playback::AudioNodeType::Stream: tt << "[Stream] "; break;
-        case app::core::playback::AudioNodeType::Intermediary: tt << "[Filter] "; break;
-        case app::core::playback::AudioNodeType::Sink: tt << "[Device] "; break;
-        case app::core::playback::AudioNodeType::ExternalSource: tt << "[Other Source] "; break;
+        visited.insert(currentId);
+        auto it = std::find_if(snapshot.graph.nodes.begin(), snapshot.graph.nodes.end(), 
+                               [&](auto const& n) { return n.id == currentId; });
+        
+        if (it == snapshot.graph.nodes.end()) break;
+
+        auto const& node = *it;
+        tt << "• ";
+        switch (node.type)
+        {
+          case app::core::playback::AudioNodeType::Decoder: tt << "[Source] "; break;
+          case app::core::playback::AudioNodeType::Engine: tt << "[Engine] "; break;
+          case app::core::playback::AudioNodeType::Stream: tt << "[Stream] "; break;
+          case app::core::playback::AudioNodeType::Intermediary: tt << "[Filter] "; break;
+          case app::core::playback::AudioNodeType::Sink: tt << "[Device] "; break;
+          case app::core::playback::AudioNodeType::ExternalSource: tt << "[Other Source] "; break;
+        }
+        tt << node.name;
+        if (node.format) tt << " (" << formatStream(*node.format) << ")";
+        if (node.volumeNotUnity) tt << " [Vol Control]";
+        if (node.isMuted) tt << " [Muted]";
+        tt << "\n";
+
+        std::string nextId;
+        for (auto const& link : snapshot.graph.links)
+        {
+          if (link.isActive && link.sourceId == currentId)
+          {
+            nextId = link.destId;
+            break;
+          }
+        }
+        currentId = nextId;
       }
-      tt << node.name;
-      if (node.format) tt << " (" << formatStream(*node.format) << ")";
-      if (node.volumeNotUnity) tt << " [Vol Control]";
-      if (node.isMuted) tt << " [Muted]";
-      tt << "\n";
     }
 
     if (!snapshot.qualityTooltip.empty())
@@ -572,11 +598,12 @@ namespace app::ui
     using AudioQuality = app::core::playback::AudioQuality;
     switch (snapshot.quality)
     {
-      case AudioQuality::BitPerfect: _sinkStatusIcon.add_css_class("sink-status-good"); break;
-      case AudioQuality::Lossless:
-      case AudioQuality::Resampled: _sinkStatusIcon.add_css_class("sink-status-warning"); break;
-      case AudioQuality::Mixed:
-      case AudioQuality::Lossy: _sinkStatusIcon.add_css_class("sink-status-bad"); break;
+      case AudioQuality::BitwisePerfect: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
+      case AudioQuality::LosslessPadded:
+      case AudioQuality::LosslessFloat: _sinkStatusIcon.add_css_class("sink-status-lossless"); break;
+      case AudioQuality::LinearIntervention: _sinkStatusIcon.add_css_class("sink-status-intervention"); break;
+      case AudioQuality::LossySource: _sinkStatusIcon.add_css_class("sink-status-lossy"); break;
+      case AudioQuality::Clipped: _sinkStatusIcon.add_css_class("sink-status-clipped"); break;
       case AudioQuality::Unknown: _sinkStatusIcon.set_visible(false); break;
     }
   }
