@@ -496,7 +496,7 @@ namespace app::playback
       {
         if (isSinkMediaClass(node.mediaClass))
         {
-          auto const deviceId = node.nodeName.empty() ? std::to_string(id) : node.nodeName;
+          auto const deviceId = node.objectSerial ? std::to_string(*node.objectSerial) : std::to_string(id);
           auto const displayName =
             (node.nodeNick.empty() ? (node.nodeName.empty() ? node.objectPath : node.nodeName) : node.nodeNick);
           auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
@@ -1058,7 +1058,7 @@ namespace app::playback
           else if (isSink && nodeId == desiredSinkNodeId)
           {
             node.format = _sinkFormat;
-            
+
             auto const isUnity = [](float v) { return std::abs(v - 1.0F) < 1e-4F; };
             bool const volumeAtUnity = (!_sinkProps.volume.has_value() || isUnity(*_sinkProps.volume)) &&
                                        std::ranges::all_of(_sinkProps.channelVolumes, isUnity) &&
@@ -1328,7 +1328,7 @@ namespace app::playback
     _impl->_format = format;
     _impl->_lastError.clear();
 
-    auto const useExclusiveMode = _exclusiveMode && !_targetDeviceId.empty();
+    bool const useExclusiveMode = _exclusiveMode && !_targetDeviceId.empty();
     _impl->_strictFormatRequired = useExclusiveMode;
     _impl->_strictFormatRejected = false;
 
@@ -1358,12 +1358,12 @@ namespace app::playback
     {
       // The targetDeviceId we store is the objectSerial (as a string)
       ::pw_properties_set(props, PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
-      
+
       if (useExclusiveMode)
       {
         ::pw_properties_set(props, PW_KEY_NODE_EXCLUSIVE, "true");
         // Passive ensures we don't move if the target is busy; we want an error instead of a fallback
-        ::pw_properties_set(props, PW_KEY_NODE_PASSIVE, "true");
+        //::pw_properties_set(props, PW_KEY_NODE_PASSIVE, "true");
       }
     }
 
@@ -1385,16 +1385,21 @@ namespace app::playback
 
     std::uint8_t buffer[1024];
     ::spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
-    
+
     // Build the format object precisely as before
     ::spa_pod_frame f;
     ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
     ::spa_pod_builder_add(&b,
-                          SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                          SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                          SPA_FORMAT_AUDIO_format, SPA_POD_Id(alsaFormat),
-                          SPA_FORMAT_AUDIO_rate, SPA_POD_Int(format.sampleRate),
-                          SPA_FORMAT_AUDIO_channels, SPA_POD_Int(format.channels),
+                          SPA_FORMAT_mediaType,
+                          SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                          SPA_FORMAT_mediaSubtype,
+                          SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                          SPA_FORMAT_AUDIO_format,
+                          SPA_POD_Id(alsaFormat),
+                          SPA_FORMAT_AUDIO_rate,
+                          SPA_POD_Int(format.sampleRate),
+                          SPA_FORMAT_AUDIO_channels,
+                          SPA_POD_Int(format.channels),
                           0);
     ::spa_pod const* param = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
     ::spa_pod const* params[] = {param};
@@ -1405,12 +1410,7 @@ namespace app::playback
       flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
     }
 
-    if (::pw_stream_connect(_impl->_stream.get(),
-                            PW_DIRECTION_OUTPUT,
-                            PW_ID_ANY,
-                            flags,
-                            params,
-                            1) < 0)
+    if (::pw_stream_connect(_impl->_stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params, 1) < 0)
     {
       _impl->setError("Failed to connect PipeWire stream");
       ::pw_thread_loop_unlock(_impl->_threadLoop.get());
