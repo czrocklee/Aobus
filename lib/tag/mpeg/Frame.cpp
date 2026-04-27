@@ -149,8 +149,8 @@ namespace rs::tag::mpeg
     auto const bitrateIndex = static_cast<std::size_t>(fl.bitrateIndex());
     auto const samplingRateIndex = static_cast<std::size_t>(fl.samplingRateIndex());
 
-    auto const bitrate = VersionLayerBitrateTable[versionId][layer][bitrateIndex];
-    auto const samplingRate = VersionSamplingRateTable[versionId][samplingRateIndex];
+    auto const bitrate = VersionLayerBitrateTable.at(versionId).at(layer).at(bitrateIndex);
+    auto const samplingRate = VersionSamplingRateTable.at(versionId).at(samplingRateIndex);
 
     if (bitrate == 0 || samplingRate == 0)
     {
@@ -163,13 +163,15 @@ namespace rs::tag::mpeg
       // 384 / 8 = 48
       constexpr std::uint32_t kMsPerSecond = 1000;
       constexpr std::size_t kLayerIPadding = 4;
-      return (48 * bitrate * kMsPerSecond) / samplingRate + (fl.paddingBit() ? kLayerIPadding : 0);
+      auto const baseLength = (48 * bitrate * kMsPerSecond) / samplingRate;
+      return baseLength + (fl.paddingBit() != 0 ? kLayerIPadding : 0);
     }
 
     // Layer II/III: frame length = (samplesPerFrame / 8 * bitrate) / samplingRate + padding
     constexpr std::uint32_t kMsPerSecond = 1000;
     constexpr std::size_t kLayerIIIIPadding = 1;
-    return (samplesPerFrame() / 8 * bitrate * kMsPerSecond) / samplingRate + (fl.paddingBit() ? kLayerIIIIPadding : 0);
+    auto const baseLength = (samplesPerFrame() / 8 * bitrate * kMsPerSecond) / samplingRate;
+    return baseLength + (fl.paddingBit() != 0 ? kLayerIIIIPadding : 0);
   }
 
   std::optional<FrameView> locate(void const* buffer, std::size_t size)
@@ -192,8 +194,8 @@ namespace rs::tag::mpeg
   std::uint32_t FrameView::sampleRate() const
   {
     auto const& fl = layout();
-    return VersionSamplingRateTable[static_cast<std::size_t>(fl.versionId())]
-                                   [static_cast<std::size_t>(fl.samplingRateIndex())];
+    return VersionSamplingRateTable.at(static_cast<std::size_t>(fl.versionId()))
+      .at(static_cast<std::size_t>(fl.samplingRateIndex()));
   }
 
   std::uint32_t FrameView::bitrate() const
@@ -201,8 +203,9 @@ namespace rs::tag::mpeg
     auto const& fl = layout();
     // Table values are in kbps, convert to bps
     constexpr std::uint32_t kBpsPerKbps = 1000;
-    return VersionLayerBitrateTable[static_cast<std::size_t>(fl.versionId())][static_cast<std::size_t>(fl.layer())]
-                                   [static_cast<std::size_t>(fl.bitrateIndex())] *
+    return VersionLayerBitrateTable.at(static_cast<std::size_t>(fl.versionId()))
+             .at(static_cast<std::size_t>(fl.layer()))
+             .at(static_cast<std::size_t>(fl.bitrateIndex())) *
            kBpsPerKbps;
   }
 
@@ -285,7 +288,7 @@ namespace rs::tag::mpeg
     constexpr std::uint32_t kXingFlagFrames = 0x01;
     constexpr std::uint32_t kXingFlagBytes = 0x02;
 
-    if (flags & kXingFlagFrames)
+    if ((flags & kXingFlagFrames) != 0)
     {
       std::uint32_t frames = 0;
       std::memcpy(&frames, ptr + fieldOffset, 4);
@@ -293,7 +296,7 @@ namespace rs::tag::mpeg
       fieldOffset += 4;
     }
 
-    if (flags & kXingFlagBytes) // Bytes field present
+    if ((flags & kXingFlagBytes) != 0) // Bytes field present
     {
       std::uint32_t bytes = 0;
       std::memcpy(&bytes, ptr + fieldOffset, 4);

@@ -120,94 +120,94 @@ namespace rs::core
   // MetadataBuilder
   //=============================================================================
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::title(std::string_view v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::title(std::string_view val)
   {
-    _title = v;
+    _title = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::artist(std::string_view v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::artist(std::string_view val)
   {
-    _artist = v;
+    _artist = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::album(std::string_view v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::album(std::string_view val)
   {
-    _album = v;
+    _album = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::albumArtist(std::string_view v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::albumArtist(std::string_view val)
   {
-    _albumArtist = v;
+    _albumArtist = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::composer(std::string_view v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::composer(std::string_view val)
   {
-    _composer = v;
+    _composer = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::genre(std::string_view v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::genre(std::string_view val)
   {
-    _genre = v;
+    _genre = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::work(std::string_view v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::work(std::string_view val)
   {
-    _work = v;
+    _work = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::year(std::uint16_t v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::year(std::uint16_t val)
   {
-    _year = v;
+    _year = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::trackNumber(std::uint16_t v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::trackNumber(std::uint16_t val)
   {
-    _trackNumber = v;
+    _trackNumber = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalTracks(std::uint16_t v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalTracks(std::uint16_t val)
   {
-    _totalTracks = v;
+    _totalTracks = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::discNumber(std::uint16_t v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::discNumber(std::uint16_t val)
   {
-    _discNumber = v;
+    _discNumber = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalDiscs(std::uint16_t v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalDiscs(std::uint16_t val)
   {
-    _totalDiscs = v;
+    _totalDiscs = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtId(std::uint32_t v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtId(std::uint32_t val)
   {
-    _coverArtId = v;
+    _coverArtId = val;
     _embeddedCoverArt = {};
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtData(std::span<std::byte const> v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtData(std::span<std::byte const> val)
   {
-    _embeddedCoverArt = v;
+    _embeddedCoverArt = val;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::rating(std::uint8_t v)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::rating(std::uint8_t val)
   {
-    _rating = v;
+    _rating = val;
     return *this;
   }
 
@@ -215,57 +215,57 @@ namespace rs::core
   // PropertyBuilder
   //=============================================================================
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::fileSize(std::uint64_t v)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::fileSize(std::uint64_t val)
   {
-    _fileSize = v;
+    _fileSize = val;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::mtime(std::uint64_t v)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::mtime(std::uint64_t val)
   {
-    _mtime = v;
+    _mtime = val;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::durationMs(std::uint32_t v)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::durationMs(std::uint32_t val)
   {
-    _durationMs = v;
+    _durationMs = val;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitrate(std::uint32_t v)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitrate(std::uint32_t val)
   {
-    _bitrate = v;
+    _bitrate = val;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::sampleRate(std::uint32_t v)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::sampleRate(std::uint32_t val)
   {
-    _sampleRate = v;
+    _sampleRate = val;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::codecId(std::uint16_t v)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::codecId(std::uint16_t val)
   {
-    _codecId = v;
+    _codecId = val;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::channels(std::uint8_t v)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::channels(std::uint8_t val)
   {
-    _channels = v;
+    _channels = val;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitDepth(std::uint8_t v)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitDepth(std::uint8_t val)
   {
-    _bitDepth = v;
+    _bitDepth = val;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::uri(std::string_view v)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::uri(std::string_view val)
   {
-    _uri = v;
+    _uri = val;
     return *this;
   }
 
