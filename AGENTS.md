@@ -49,9 +49,11 @@ The project builds into `/tmp/build` (configured in `CMakePresets.json`).
 ### Using `build.sh` (Recommended)
 
 ```bash
-./build.sh debug       # Configures and builds with sanitizers, runs tests
-./build.sh release     # Optimized build
-./build.sh debug clean # Full clean rebuild
+./build.sh debug               # Configures and builds with sanitizers, runs tests
+./build.sh release             # Optimized build
+./build.sh debug --clean       # Full clean rebuild
+./build.sh debug --tidy        # Debug build with clang-tidy enabled
+./build.sh debug --clean --tidy # Clean debug build with clang-tidy enabled
 ```
 
 ### Manual CMake
