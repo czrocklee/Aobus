@@ -5,6 +5,7 @@
 
 #include <lmdb.h>
 #include <rs/Exception.h>
+#include <format>
 #include <stdexcept>
 #include <string>
 
@@ -14,7 +15,7 @@ namespace rs::lmdb
   {
     if (code != MDB_SUCCESS)
     {
-      RS_THROW(rs::Exception, std::string{origin} + ": " + mdb_strerror(code));
+      RS_THROW_FORMAT(rs::Exception, "{}: {}", origin, ::mdb_strerror(code));
     }
   }
 }
