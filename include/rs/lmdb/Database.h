@@ -91,7 +91,7 @@ namespace rs::lmdb
     Iterator(Iterator const& other);
     Iterator(Iterator&& other) noexcept;
     ~Iterator();
-    Iterator& operator=(Iterator const&) = default;
+    Iterator& operator=(Iterator const&);
     Iterator& operator=(Iterator&&) = default;
 
     // Forward iterator operations

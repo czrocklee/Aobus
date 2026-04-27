@@ -84,7 +84,7 @@ namespace rs::core
     using value_type = std::pair<TrackId, TrackView>;
 
     Iterator() = default;
-    Iterator(Iterator const& other) = default;
+    Iterator(Iterator const&) = default;
     // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
     ~Iterator() = default;
     Iterator& operator=(Iterator const&) = default;

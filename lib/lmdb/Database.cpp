@@ -144,6 +144,14 @@ namespace rs::lmdb
   {
   }
 
+  Reader::Iterator& Reader::Iterator::operator=(Iterator const& other)
+  {
+    auto temp = Iterator{other};
+    std::swap(_value, temp._value);
+    std::swap(_cursor, temp._cursor);
+    return *this;
+  }
+
   void Reader::Iterator::increment()
   {
     gsl_Expects(_cursor != nullptr);
