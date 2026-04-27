@@ -6,8 +6,8 @@
 
 #include "core/decoder/AudioDecoderFactory.h"
 #include "core/decoder/IAudioDecoderSession.h"
-#include "core/playback/MemoryPcmSource.h"
-#include "core/playback/StreamingPcmSource.h"
+#include "core/source/MemoryPcmSource.h"
+#include "core/source/StreamingPcmSource.h"
 
 #include <algorithm>
 #include <format>
@@ -15,65 +15,66 @@
 #include <set>
 #include <sstream>
 
-namespace
-{
-  constexpr std::uint32_t kPrerollTargetMs = 200;
-  constexpr std::uint32_t kDecodeHighWatermarkMs = 750;
-  constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
-
-  bool isLosslessBitDepthChange(app::core::AudioFormat const& src, app::core::AudioFormat const& dst) noexcept
-  {
-    if (src.isFloat == dst.isFloat)
-    {
-      return src.bitDepth <= dst.bitDepth;
-    }
-
-    if (!src.isFloat && dst.isFloat)
-    {
-      if (dst.bitDepth == 32) return src.bitDepth <= 24;
-      if (dst.bitDepth == 64) return src.bitDepth <= 32;
-    }
-
-    return false;
-  }
-
-  void appendLine(std::string& text, std::string_view line)
-  {
-    if (line.empty()) return;
-    if (!text.empty()) text += '\n';
-    text += line;
-  }
-
-  std::uint64_t bytesPerSecond(app::core::AudioFormat const& format) noexcept
-  {
-    if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
-    {
-      return 0;
-    }
-
-    auto const bytesPerSample = (format.bitDepth == 24U) ? 3U : (format.bitDepth > 16U) ? 4U : 2U;
-    return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
-  }
-
-  std::uint64_t estimatedDecodedBytes(app::core::decoder::DecodedStreamInfo const& info) noexcept
-  {
-    auto const rate = bytesPerSecond(info.outputFormat);
-    if (rate == 0 || info.durationMs == 0) return 0;
-    return (static_cast<std::uint64_t>(info.durationMs) * rate) / 1000U;
-  }
-
-  bool shouldUseMemoryPcmSource(app::core::decoder::DecodedStreamInfo const& info) noexcept
-  {
-    auto const decodedBytes = estimatedDecodedBytes(info);
-    return decodedBytes > 0 && decodedBytes <= kMemoryPcmSourceBudgetBytes;
-  }
-} // namespace
-
 namespace app::core::playback
 {
+
+  namespace
+  {
+    constexpr std::uint32_t kPrerollTargetMs = 200;
+    constexpr std::uint32_t kDecodeHighWatermarkMs = 750;
+    constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
+
+    bool isLosslessBitDepthChange(AudioFormat const& src, AudioFormat const& dst) noexcept
+    {
+      if (src.isFloat == dst.isFloat)
+      {
+        return src.bitDepth <= dst.bitDepth;
+      }
+
+      if (!src.isFloat && dst.isFloat)
+      {
+        if (dst.bitDepth == 32) return src.bitDepth <= 24;
+        if (dst.bitDepth == 64) return src.bitDepth <= 32;
+      }
+
+      return false;
+    }
+
+    void appendLine(std::string& text, std::string_view line)
+    {
+      if (line.empty()) return;
+      if (!text.empty()) text += '\n';
+      text += line;
+    }
+
+    std::uint64_t bytesPerSecond(AudioFormat const& format) noexcept
+    {
+      if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
+      {
+        return 0;
+      }
+
+      auto const bytesPerSample = (format.bitDepth == 24U) ? 3U : (format.bitDepth > 16U) ? 4U : 2U;
+      return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
+    }
+
+    std::uint64_t estimatedDecodedBytes(app::core::decoder::DecodedStreamInfo const& info) noexcept
+    {
+      auto const rate = bytesPerSecond(info.outputFormat);
+      if (rate == 0 || info.durationMs == 0) return 0;
+      return (static_cast<std::uint64_t>(info.durationMs) * rate) / 1000U;
+    }
+
+    bool shouldUseMemoryPcmSource(app::core::decoder::DecodedStreamInfo const& info) noexcept
+    {
+      auto const decodedBytes = estimatedDecodedBytes(info);
+      return decodedBytes > 0 && decodedBytes <= kMemoryPcmSourceBudgetBytes;
+    }
+  } // namespace
+  using namespace app::core::backend;
   using namespace app::core::decoder;
 
-  PlaybackEngine::PlaybackEngine(std::unique_ptr<IAudioBackend> backend)
+  PlaybackEngine::PlaybackEngine(std::unique_ptr<backend::IAudioBackend> backend)
     : _backend{std::move(backend)}
   {
     _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
@@ -84,7 +85,7 @@ namespace app::core::playback
     stop();
   }
 
-  void PlaybackEngine::setBackend(std::unique_ptr<IAudioBackend> backend, std::string deviceId)
+  void PlaybackEngine::setBackend(std::unique_ptr<backend::IAudioBackend> backend, std::string deviceId)
   {
     struct State
     {
@@ -135,7 +136,7 @@ namespace app::core::playback
 
     _source.store({}, std::memory_order_release);
 
-    auto callbacks = AudioRenderCallbacks{};
+    auto callbacks = backend::AudioRenderCallbacks{};
     callbacks.userData = this;
     callbacks.readPcm = &PlaybackEngine::onReadPcm;
     callbacks.isSourceDrained = &PlaybackEngine::isSourceDrained;
@@ -145,7 +146,7 @@ namespace app::core::playback
     callbacks.onGraphChanged = &PlaybackEngine::onGraphChanged;
     callbacks.onBackendError = &PlaybackEngine::onBackendError;
 
-    auto source = std::shared_ptr<IPcmSource>{};
+    auto source = std::shared_ptr<source::IPcmSource>{};
     auto backendFormat = AudioFormat{};
 
     {
@@ -379,7 +380,7 @@ namespace app::core::playback
   }
 
   bool PlaybackEngine::openTrack(TrackPlaybackDescriptor descriptor,
-                                 std::shared_ptr<IPcmSource>& source,
+                                 std::shared_ptr<source::IPcmSource>& source,
                                  AudioFormat& backendFormat)
   {
     auto outputFormat = AudioFormat{};
@@ -410,7 +411,7 @@ namespace app::core::playback
 
     if (shouldUseMemoryPcmSource(info))
     {
-      auto memorySource = std::make_shared<MemoryPcmSource>(std::move(decoder), info);
+      auto memorySource = std::make_shared<source::MemoryPcmSource>(std::move(decoder), info);
       if (!memorySource->initialize())
       {
         _snapshot.statusText = memorySource->lastError();
@@ -420,10 +421,10 @@ namespace app::core::playback
     }
     else
     {
-      PcmSourceCallbacks sourceCallbacks;
+      source::PcmSourceCallbacks sourceCallbacks;
       sourceCallbacks.userData = this;
       sourceCallbacks.onError = &PlaybackEngine::onSourceError;
-      auto streamingSource = std::make_shared<StreamingPcmSource>(
+      auto streamingSource = std::make_shared<source::StreamingPcmSource>(
         std::move(decoder), info, sourceCallbacks, kPrerollTargetMs, kDecodeHighWatermarkMs);
       if (!streamingSource->initialize())
       {
@@ -458,7 +459,7 @@ namespace app::core::playback
     return true;
   }
 
-  void PlaybackEngine::handleGraphChanged(AudioGraph const& backendGraph)
+  void PlaybackEngine::handleGraphChanged(backend::AudioGraph const& backendGraph)
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
 
@@ -646,7 +647,7 @@ namespace app::core::playback
       }
     }
 
-    if (snap.quality == AudioQuality::BitwisePerfect)
+    if (snap.quality == backend::AudioQuality::BitwisePerfect)
     {
       appendLine(snap.qualityTooltip, "• Signal Path: Byte-perfect from decoder to device");
     }
@@ -654,15 +655,23 @@ namespace app::core::playback
     // 5. Final summary
     switch (snap.quality)
     {
-      case AudioQuality::BitwisePerfect: appendLine(snap.qualityTooltip, "\nConclusion: Bit-perfect output"); break;
-      case AudioQuality::LosslessPadded:
-      case AudioQuality::LosslessFloat: appendLine(snap.qualityTooltip, "\nConclusion: Lossless Conversion"); break;
-      case AudioQuality::LinearIntervention:
+      case backend::AudioQuality::BitwisePerfect:
+        appendLine(snap.qualityTooltip, "\nConclusion: Bit-perfect output");
+        break;
+      case backend::AudioQuality::LosslessPadded:
+      case backend::AudioQuality::LosslessFloat:
+        appendLine(snap.qualityTooltip, "\nConclusion: Lossless Conversion");
+        break;
+      case backend::AudioQuality::LinearIntervention:
         appendLine(snap.qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
         break;
-      case AudioQuality::LossySource: appendLine(snap.qualityTooltip, "\nConclusion: Lossy source format"); break;
-      case AudioQuality::Clipped: appendLine(snap.qualityTooltip, "\nConclusion: Signal clipping detected"); break;
-      case AudioQuality::Unknown: break;
+      case backend::AudioQuality::LossySource:
+        appendLine(snap.qualityTooltip, "\nConclusion: Lossy source format");
+        break;
+      case backend::AudioQuality::Clipped:
+        appendLine(snap.qualityTooltip, "\nConclusion: Signal clipping detected");
+        break;
+      case backend::AudioQuality::Unknown: break;
     }
   }
 
@@ -698,7 +707,7 @@ namespace app::core::playback
     // Use Engine node format for position calculation
     for (auto const& node : self->_snapshot.graph.nodes)
     {
-      if (node.type == AudioNodeType::Engine && node.format && node.format->sampleRate > 0)
+      if (node.type == backend::AudioNodeType::Engine && node.format && node.format->sampleRate > 0)
       {
         auto const ms = (static_cast<std::uint64_t>(frames) * 1000) / node.format->sampleRate;
         self->_snapshot.positionMs += static_cast<std::uint32_t>(ms);
@@ -717,10 +726,10 @@ namespace app::core::playback
     self->_backendStarted = false;
     self->_state = TransportState::Idle;
     self->_snapshot = {};
-    self->_snapshot.backend = self->_backend ? self->_backend->kind() : BackendKind::None;
+    self->_snapshot.backend = self->_backend ? self->_backend->kind() : backend::BackendKind::None;
   }
 
-  void PlaybackEngine::onGraphChanged(void* userData, AudioGraph const& graph) noexcept
+  void PlaybackEngine::onGraphChanged(void* userData, backend::AudioGraph const& graph) noexcept
   {
     static_cast<PlaybackEngine*>(userData)->handleGraphChanged(graph);
   }

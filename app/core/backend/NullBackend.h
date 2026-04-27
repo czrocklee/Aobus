@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include "core/playback/IAudioBackend.h"
-#include "core/playback/IDeviceDiscovery.h"
+#include "core/backend/IAudioBackend.h"
+#include "core/backend/IDeviceDiscovery.h"
 
 #include <string_view>
 
-namespace app::core::playback
+namespace app::core::backend
 {
 
   /**
@@ -67,4 +67,4 @@ namespace app::core::playback
     AudioRenderCallbacks _callbacks{};
   };
 
-} // namespace app::core::playback
+} // namespace app::core::backend

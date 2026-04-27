@@ -3,14 +3,14 @@
 
 #pragma once
 
-#include "core/playback/PlaybackTypes.h"
+#include "core/backend/BackendTypes.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string_view>
 
-namespace app::core::playback
+namespace app::core::backend
 {
 
   /**
@@ -75,4 +75,4 @@ namespace app::core::playback
     virtual std::string_view lastError() const noexcept = 0;
   };
 
-} // namespace app::core::playback
+} // namespace app::core::backend

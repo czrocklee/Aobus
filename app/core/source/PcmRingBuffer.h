@@ -11,7 +11,7 @@
 #include <mutex>
 #include <span>
 
-namespace app::core::playback
+namespace app::core::source
 {
 
   // Capacity in bytes. 2097152 ≈ 0.5s at 192kHz stereo 24-bit (about 1.15MB)
@@ -41,4 +41,4 @@ namespace app::core::playback
     std::atomic<std::size_t> _readCount{0};
   };
 
-} // namespace app::core::playback
+} // namespace app::core::source

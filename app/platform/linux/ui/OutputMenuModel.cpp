@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "core/playback/OutputMenuModel.h"
+#include "platform/linux/ui/OutputMenuModel.h"
 
-namespace app::core::playback
+namespace app::ui
 {
 
-  void OutputMenuModel::update(std::vector<BackendSnapshot> const& backends,
-                               BackendKind currentBackend,
+  void OutputMenuModel::update(std::vector<app::core::playback::BackendSnapshot> const& backends,
+                               app::core::backend::BackendKind currentBackend,
                                std::string_view currentDeviceId)
   {
     auto const deviceIdStr = std::string{currentDeviceId};
@@ -24,4 +24,4 @@ namespace app::core::playback
     }
   }
 
-} // namespace app::core::playback
+} // namespace app::ui

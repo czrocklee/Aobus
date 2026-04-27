@@ -4,14 +4,14 @@
 #pragma once
 
 #include "core/decoder/IAudioDecoderSession.h"
-#include "core/playback/IPcmSource.h"
+#include "core/source/IPcmSource.h"
 
 #include <cstddef>
 #include <mutex>
 #include <string>
 #include <vector>
 
-namespace app::core::playback
+namespace app::core::source
 {
 
   class MemoryPcmSource final : public IPcmSource

@@ -59,10 +59,10 @@ namespace app::ui
   // Page context structure
   struct TrackPageContext final
   {
-    std::unique_ptr<::app::core::model::TrackIdList> membershipList;
+    std::unique_ptr<app::core::model::TrackIdList> membershipList;
     std::unique_ptr<TrackListAdapter> adapter;
     std::unique_ptr<TrackViewPage> page;
-    std::unique_ptr<::app::services::PlaylistExporter> exporter;
+    std::unique_ptr<app::services::PlaylistExporter> exporter;
   };
 
   struct ActivePlaybackSequence final
@@ -110,8 +110,8 @@ namespace app::ui
     bool listHasChildren(rs::core::ListId listId) const;
 
     // List management - using ListDraft
-    void createList(::app::core::model::ListDraft const& draft);
-    void updateList(::app::core::model::ListDraft const& draft);
+    void createList(app::core::model::ListDraft const& draft);
+    void updateList(app::core::model::ListDraft const& draft);
     void onDeleteList();
     void onEditList();
 
@@ -152,13 +152,13 @@ namespace app::ui
                                std::optional<rs::core::ListId> sourceListId = std::nullopt);
     bool playTrackAtSequenceIndex(std::size_t index);
     void jumpToPlayingList();
-    void onOutputChanged(app::core::playback::BackendKind kind, std::string const& deviceId);
+    void onOutputChanged(app::core::backend::BackendKind kind, std::string const& deviceId);
     void clearActivePlaybackSequence();
     void handlePlaybackFinished();
     void bindTrackPagePlayback(TrackViewPage& page);
     TrackPageContext* currentVisibleTrackPageContext();
     TrackPageContext const* currentVisibleTrackPageContext() const;
-    std::optional<::app::core::playback::TrackPlaybackDescriptor> currentSelectionPlaybackDescriptor() const;
+    std::optional<app::core::playback::TrackPlaybackDescriptor> currentSelectionPlaybackDescriptor() const;
 
     // Music library instance
     std::unique_ptr<rs::core::MusicLibrary> _musicLibrary;
@@ -167,11 +167,11 @@ namespace app::ui
     std::unique_ptr<TrackRowDataProvider> _rowDataProvider;
 
     // All tracks TrackId list (owned)
-    std::unique_ptr<::app::core::model::AllTrackIdsList> _allTrackIds;
+    std::unique_ptr<app::core::model::AllTrackIdsList> _allTrackIds;
 
     // Smart list engine for shared evaluation
-    std::unique_ptr<::app::core::model::SmartListEngine> _smartListEngine;
-    ::app::core::AppConfig _appConfig;
+    std::unique_ptr<app::core::model::SmartListEngine> _smartListEngine;
+    app::core::AppConfig _appConfig;
 
     // Layout: Horizontal paned with left box and right stack
     Gtk::Paned _paned;
@@ -184,7 +184,7 @@ namespace app::ui
     std::unique_ptr<ImportProgressDialog> _importDialog;
 
     // Import worker - owned and joined on window destruction
-    std::unique_ptr<::app::core::ImportWorker> _importWorker;
+    std::unique_ptr<app::core::ImportWorker> _importWorker;
     std::jthread _importThread;
 
     // Right side: stack for pages
@@ -212,10 +212,10 @@ namespace app::ui
 
     // Playback support
     std::unique_ptr<PlaybackBar> _playbackBar;
-    std::unique_ptr<::app::core::playback::PlaybackController> _playbackController;
+    std::unique_ptr<app::core::playback::PlaybackController> _playbackController;
     std::uint32_t _playbackTimer = 0;
     std::optional<ActivePlaybackSequence> _activePlaybackSequence;
-    ::app::core::playback::TransportState _lastPlaybackState = ::app::core::playback::TransportState::Idle;
+    app::core::playback::TransportState _lastPlaybackState = app::core::playback::TransportState::Idle;
     std::string _lastPlaybackErrorMessage;
 
     // Status bar

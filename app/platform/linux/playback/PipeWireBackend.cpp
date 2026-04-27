@@ -337,7 +337,7 @@ namespace
 
 namespace app::playback
 {
-  using namespace app::core::playback;
+  using namespace app::core::backend;
 
   /**
    * @brief Internal class responsible for monitoring the PipeWire graph and discovering sinks.
@@ -485,9 +485,9 @@ namespace app::playback
     static void onRefreshEvent(void* data, std::uint64_t /*count*/) { static_cast<PipeWireMonitor*>(data)->refresh(); }
 
   public:
-    std::vector<app::core::playback::AudioDevice> enumerateSinks() const
+    std::vector<AudioDevice> enumerateSinks() const
     {
-      auto devices = std::vector<app::core::playback::AudioDevice>{};
+      auto devices = std::vector<AudioDevice>{};
       auto const lock = std::lock_guard<std::mutex>{_mutex};
 
       PLAYBACK_LOG_TRACE("PipeWireMonitor::enumerateSinks: tracking {} nodes", _nodes.size());

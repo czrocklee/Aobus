@@ -2087,8 +2087,8 @@ namespace app::ui
       // Restore audio output selection
       if (!sessionState.lastBackend.empty())
       {
-        auto const kind = app::core::playback::backendKindFromId(sessionState.lastBackend);
-        if (kind != app::core::playback::BackendKind::None)
+        auto const kind = app::core::backend::backendKindFromId(sessionState.lastBackend);
+        if (kind != app::core::backend::BackendKind::None)
         {
           _playbackController->setOutput(kind, sessionState.lastOutputDeviceId);
         }
@@ -2362,16 +2362,16 @@ namespace app::ui
     }
   }
 
-  void MainWindow::onOutputChanged(app::core::playback::BackendKind kind, std::string const& deviceId)
+  void MainWindow::onOutputChanged(app::core::backend::BackendKind kind, std::string const& deviceId)
   {
     if (!_playbackController) return;
 
     _playbackController->setOutput(kind, deviceId);
-    _statusBar->showMessage("Switched to " + std::string(app::core::playback::backendDisplayName(kind)));
+    _statusBar->showMessage("Switched to " + std::string(app::core::backend::backendDisplayName(kind)));
 
     // Persist selection to config
     auto session = _appConfig.sessionState();
-    session.lastBackend = std::string(app::core::playback::backendKindToId(kind));
+    session.lastBackend = std::string(app::core::backend::backendKindToId(kind));
     session.lastOutputDeviceId = deviceId;
     _appConfig.setSessionState(session);
     _appConfig.save();

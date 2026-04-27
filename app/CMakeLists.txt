@@ -24,15 +24,15 @@ add_executable(RockStudio
     core/model/ManualTrackIdList.cpp
     platform/linux/ui/TrackRowDataProvider.cpp
     platform/linux/ui/PlaybackBar.cpp
-    core/playback/OutputMenuModel.cpp
+    platform/linux/ui/OutputMenuModel.cpp
     core/playback/PlaybackController.cpp
     core/playback/PlaybackEngine.cpp
     core/decoder/AudioDecoderFactory.cpp
     core/decoder/FlacDecoderSession.cpp
     core/decoder/AlacDecoderSession.cpp
-    core/playback/MemoryPcmSource.cpp
-    core/playback/PcmRingBuffer.cpp
-    core/playback/StreamingPcmSource.cpp
+    core/source/MemoryPcmSource.cpp
+    core/source/PcmRingBuffer.cpp
+    core/source/StreamingPcmSource.cpp
     core/playback/FormatNegotiator.cpp
 )
 target_link_libraries(RockStudio PRIVATE PkgFLAC PkgALAC)

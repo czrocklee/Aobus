@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "core/playback/IAudioBackend.h"
-#include "core/playback/IPcmSource.h"
+#include "core/backend/IAudioBackend.h"
 #include "core/playback/PlaybackTypes.h"
+#include "core/source/IPcmSource.h"
 
 #include <atomic>
 #include <cstdint>
@@ -19,10 +19,10 @@ namespace app::core::playback
   class PlaybackEngine final
   {
   public:
-    explicit PlaybackEngine(std::unique_ptr<IAudioBackend> backend);
+    explicit PlaybackEngine(std::unique_ptr<backend::IAudioBackend> backend);
     ~PlaybackEngine();
 
-    void setBackend(std::unique_ptr<IAudioBackend> backend, std::string deviceId);
+    void setBackend(std::unique_ptr<backend::IAudioBackend> backend, std::string deviceId);
 
     void play(TrackPlaybackDescriptor descriptor);
     void pause();
@@ -33,9 +33,11 @@ namespace app::core::playback
     PlaybackSnapshot snapshot() const;
 
   private:
-    bool openTrack(TrackPlaybackDescriptor descriptor, std::shared_ptr<IPcmSource>& source, AudioFormat& backendFormat);
+    bool openTrack(TrackPlaybackDescriptor descriptor,
+                   std::shared_ptr<source::IPcmSource>& source,
+                   AudioFormat& backendFormat);
 
-    void handleGraphChanged(AudioGraph const& backendGraph);
+    void handleGraphChanged(backend::AudioGraph const& backendGraph);
     void analyzeAudioQuality();
     void handleBackendError(std::string_view message);
 
@@ -44,12 +46,12 @@ namespace app::core::playback
     static void onUnderrun(void* userData) noexcept;
     static void onPositionAdvanced(void* userData, std::uint32_t frames) noexcept;
     static void onDrainComplete(void* userData) noexcept;
-    static void onGraphChanged(void* userData, AudioGraph const& graph) noexcept;
+    static void onGraphChanged(void* userData, backend::AudioGraph const& graph) noexcept;
     static void onSourceError(void* userData) noexcept;
     static void onBackendError(void* userData, std::string_view message) noexcept;
 
-    std::unique_ptr<IAudioBackend> _backend;
-    std::atomic<std::shared_ptr<IPcmSource>> _source;
+    std::unique_ptr<backend::IAudioBackend> _backend;
+    std::atomic<std::shared_ptr<source::IPcmSource>> _source;
 
     mutable std::mutex _stateMutex;
     PlaybackSnapshot _snapshot;

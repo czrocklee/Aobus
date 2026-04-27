@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "core/playback/PlaybackTypes.h"
+#include "core/backend/BackendTypes.h"
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
 
@@ -16,16 +16,16 @@ namespace app::ui
   class BackendItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<BackendItem> create(app::core::playback::BackendKind kind, std::string const& name)
+    static Glib::RefPtr<BackendItem> create(app::core::backend::BackendKind kind, std::string const& name)
     {
       return Glib::make_refptr_for_instance<BackendItem>(new BackendItem(kind, name));
     }
 
-    app::core::playback::BackendKind kind;
+    app::core::backend::BackendKind kind;
     std::string name;
 
   protected:
-    BackendItem(app::core::playback::BackendKind kind, std::string const& name)
+    BackendItem(app::core::backend::BackendKind kind, std::string const& name)
       : Glib::ObjectBase(typeid(BackendItem)), kind(kind), name(name)
     {
     }
@@ -37,26 +37,23 @@ namespace app::ui
   class DeviceItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<DeviceItem> create(app::core::playback::BackendKind kind,
-                                           app::core::playback::AudioDevice const& device)
+    static Glib::RefPtr<DeviceItem> create(app::core::backend::BackendKind kind,
+                                           app::core::backend::AudioDevice const& device)
     {
       return Glib::make_refptr_for_instance<DeviceItem>(new DeviceItem(kind, device));
     }
 
-    app::core::playback::BackendKind kind;
+    app::core::backend::BackendKind kind;
     std::string id;
     std::string name;
     std::string description;
     bool active = false;
 
     // Helper for diffing
-    bool matches(app::core::playback::BackendKind k, std::string const& devId) const
-    {
-      return kind == k && id == devId;
-    }
+    bool matches(app::core::backend::BackendKind k, std::string const& devId) const { return kind == k && id == devId; }
 
   protected:
-    DeviceItem(app::core::playback::BackendKind kind, app::core::playback::AudioDevice const& device)
+    DeviceItem(app::core::backend::BackendKind kind, app::core::backend::AudioDevice const& device)
       : Glib::ObjectBase(typeid(DeviceItem))
       , kind(kind)
       , id(device.id)
