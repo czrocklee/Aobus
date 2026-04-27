@@ -30,9 +30,9 @@ add_executable(rs_test
     "${CMAKE_SOURCE_DIR}/app/core/model/TrackIdList.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/decoder/FlacDecoderSession.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/decoder/AlacDecoderSession.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/playback/MemoryPcmSource.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/playback/PcmRingBuffer.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/playback/StreamingPcmSource.cpp"
+    "${CMAKE_SOURCE_DIR}/app/core/source/MemoryPcmSource.cpp"
+    "${CMAKE_SOURCE_DIR}/app/core/source/PcmRingBuffer.cpp"
+    "${CMAKE_SOURCE_DIR}/app/core/source/StreamingPcmSource.cpp"
     integration/playback/DecoderIntegrationTest.cpp
     integration/tag/TagTest.cpp
 )

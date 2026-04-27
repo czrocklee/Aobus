@@ -59,7 +59,7 @@ namespace app::core
 
     spdlog::set_default_logger(_appLogger);
 
-    ::app::core::decoder::initializeAudioDecoders();
+    app::core::decoder::initializeAudioDecoders();
 
     APP_LOG_INFO("Logging initialized. Log file: {}", logPath.string());
   }

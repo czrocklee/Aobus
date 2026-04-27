@@ -3,8 +3,8 @@
 
 #include "core/playback/PlaybackController.h"
 #include "core/Log.h"
-#include "core/playback/IDeviceDiscovery.h"
-#include "core/playback/NullBackend.h"
+#include "core/backend/IDeviceDiscovery.h"
+#include "core/backend/NullBackend.h"
 #include "core/playback/PlaybackEngine.h"
 
 #include <algorithm>
@@ -12,16 +12,15 @@
 
 namespace app::core::playback
 {
-
   PlaybackController::PlaybackController()
   {
     // Start with a NullBackend until a discovery provides something real
-    _engine = std::make_unique<PlaybackEngine>(std::make_unique<NullBackend>());
+    _engine = std::make_unique<PlaybackEngine>(std::make_unique<backend::NullBackend>());
   }
 
   PlaybackController::~PlaybackController() = default;
 
-  void PlaybackController::addDiscovery(std::unique_ptr<IDeviceDiscovery> discovery)
+  void PlaybackController::addDiscovery(std::unique_ptr<backend::IDeviceDiscovery> discovery)
   {
     if (!discovery) return;
 
@@ -35,7 +34,7 @@ namespace app::core::playback
     _engine->play(descriptor);
   }
 
-  void PlaybackController::setOutput(BackendKind kind, std::string_view deviceId)
+  void PlaybackController::setOutput(backend::BackendKind kind, std::string_view deviceId)
   {
     auto const currentSnap = _engine->snapshot();
 
@@ -51,9 +50,10 @@ namespace app::core::playback
     }
 
     // 2. Find the AudioDevice matching the kind and id from our cache
-    auto const it = std::find_if(_allDevices.begin(),
-                                 _allDevices.end(),
-                                 [&](AudioDevice const& d) { return d.backendKind == kind && d.id == deviceId; });
+    auto const it =
+      std::find_if(_allDevices.begin(),
+                   _allDevices.end(),
+                   [&](backend::AudioDevice const& d) { return d.backendKind == kind && d.id == deviceId; });
 
     if (it == _allDevices.end())
     {
@@ -68,7 +68,7 @@ namespace app::core::playback
     {
       auto devices = discovery->enumerateDevices();
       auto const found =
-        std::any_of(devices.begin(), devices.end(), [&](AudioDevice const& d) { return d == targetDevice; });
+        std::any_of(devices.begin(), devices.end(), [&](backend::AudioDevice const& d) { return d == targetDevice; });
 
       if (found)
       {
@@ -111,7 +111,7 @@ namespace app::core::playback
 
     if (_backendsDirty.exchange(false))
     {
-      auto allDevices = std::vector<AudioDevice>{};
+      auto allDevices = std::vector<backend::AudioDevice>{};
       for (auto const& discovery : _discoveries)
       {
         auto devices = discovery->enumerateDevices();
@@ -120,7 +120,7 @@ namespace app::core::playback
       }
 
       // Group devices by BackendKind
-      std::map<BackendKind, std::vector<AudioDevice>> groups;
+      std::map<backend::BackendKind, std::vector<backend::AudioDevice>> groups;
       for (auto const& d : allDevices)
       {
         groups[d.backendKind].push_back(d);

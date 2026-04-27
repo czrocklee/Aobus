@@ -3,6 +3,7 @@
 
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
 #include "core/Log.h"
+#include "core/backend/BackendTypes.h"
 
 #include <rs/utility/Raii.h>
 
@@ -22,13 +23,15 @@ extern "C"
 
 namespace app::playback
 {
-  using namespace app::core::playback;
-
   namespace
   {
-    std::vector<AudioDevice> doAlsaEnumerate()
+    using namespace app::core::playback;
+    using namespace app::core::backend;
+    using app::core::backend::AudioDevice;
+
+    std::vector<app::core::backend::AudioDevice> doAlsaEnumerate()
     {
-      auto devices = std::vector<AudioDevice>{};
+      auto devices = std::vector<app::core::backend::AudioDevice>{};
       void** hints_raw = nullptr;
 
       if (::snd_device_name_hint(-1, "pcm", &hints_raw) < 0)
@@ -66,7 +69,7 @@ namespace app::playback
                                .displayName = std::move(displayName),
                                .description = std::move(idStr),
                                .isDefault = false,
-                               .backendKind = BackendKind::AlsaExclusive});
+                               .backendKind = app::core::backend::BackendKind::AlsaExclusive});
           }
         }
       }
@@ -152,7 +155,7 @@ namespace app::playback
     return std::make_unique<AlsaDiscovery>();
   }
 
-  AlsaExclusiveBackend::AlsaExclusiveBackend(app::core::playback::AudioDevice const& device)
+  AlsaExclusiveBackend::AlsaExclusiveBackend(AudioDevice const& device)
     : _deviceName{device.id}
   {
     PLAYBACK_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _deviceName);

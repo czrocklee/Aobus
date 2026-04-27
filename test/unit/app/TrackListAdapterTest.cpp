@@ -3,7 +3,7 @@
 
 #include <catch2/catch.hpp>
 
-// Standalone test for app::ui::app::ui::TrackListAdapter without GTKMM dependency.
+// Standalone test for app::uiapp::ui::TrackListAdapter without GTKMM dependency.
 // Tests adapter functionality with test doubles for GTK objects.
 
 #include <core/model/TrackIdList.h>
@@ -43,7 +43,7 @@ namespace app::core::model::test
   using DictionaryId = rs::core::DictionaryId;
 
   /**
-   * TestTrackRowProvider - Standalone test double for app::ui::app::ui::TrackListAdapter tests.
+   * TestTrackRowProvider - Standalone test double for app::uiapp::ui::TrackListAdapter tests.
    * Named differently to avoid symbol collision when linking.
    */
   class TestTrackRowProvider final
@@ -363,7 +363,7 @@ namespace
   };
 
   /**
-   * Filter matcher - standalone version matching app::ui::app::ui::TrackListAdapter logic.
+   * Filter matcher - standalone version matching app::uiapp::ui::TrackListAdapter logic.
    */
   bool matchesFilter(RowData const& rowData, std::string_view filter)
   {
@@ -392,7 +392,7 @@ namespace
 
 } // namespace
 
-TEST_CASE("app::ui::app::ui::TrackListAdapter", "[app][adapter]")
+TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
 {
   SECTION("TestTrackRowProvider loads row data for filtering")
   {

@@ -3,12 +3,13 @@
 
 #pragma once
 
-#include "core/playback/PlaybackTypes.h"
+#include "core/backend/BackendTypes.h"
+
 #include <functional>
 #include <memory>
 #include <vector>
 
-namespace app::core::playback
+namespace app::core::backend
 {
 
   class IAudioBackend;
@@ -42,4 +43,4 @@ namespace app::core::playback
     virtual std::unique_ptr<IAudioBackend> createBackend(AudioDevice const& device) = 0;
   };
 
-} // namespace app::core::playback
+} // namespace app::core::backend

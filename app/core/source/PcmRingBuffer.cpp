@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "core/playback/PcmRingBuffer.h"
+#include "core/source/PcmRingBuffer.h"
 
 #include <cstring>
 
-namespace app::core::playback
+namespace app::core::source
 {
 
   PcmRingBuffer::PcmRingBuffer()

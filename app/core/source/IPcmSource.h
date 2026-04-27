@@ -10,7 +10,7 @@
 #include <span>
 #include <string>
 
-namespace app::core::playback
+namespace app::core::source
 {
 
   struct PcmSourceCallbacks final
@@ -31,4 +31,4 @@ namespace app::core::playback
     virtual std::string lastError() const = 0;
   };
 
-} // namespace app::core::playback
+} // namespace app::core::source

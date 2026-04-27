@@ -32,7 +32,7 @@ namespace app::ui
     using NowPlayingClickedSignal = sigc::signal<void()>;
     NowPlayingClickedSignal& signalNowPlayingClicked() { return _nowPlayingClicked; }
 
-    using OutputChangedSignal = sigc::signal<void(app::core::playback::BackendKind, std::string)>;
+    using OutputChangedSignal = sigc::signal<void(app::core::backend::BackendKind, std::string)>;
     OutputChangedSignal& signalOutputChanged() { return _outputChanged; }
 
   private:
@@ -71,12 +71,12 @@ namespace app::ui
     struct LastPlaybackState
     {
       app::core::playback::TransportState state = app::core::playback::TransportState::Idle;
-      app::core::playback::BackendKind backend = app::core::playback::BackendKind::None;
+      app::core::backend::BackendKind backend = app::core::backend::BackendKind::None;
       std::string title;
       std::string artist;
       std::uint32_t underrunCount = 0;
-      app::core::playback::AudioQuality quality = app::core::playback::AudioQuality::Unknown;
-      app::core::playback::AudioGraph graph;
+      app::core::backend::AudioQuality quality = app::core::backend::AudioQuality::Unknown;
+      app::core::backend::AudioGraph graph;
       std::string currentDeviceId;
       std::vector<app::core::playback::BackendSnapshot> availableBackends;
     } _lastPlaybackState;

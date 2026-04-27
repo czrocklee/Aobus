@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include "core/backend/IAudioBackend.h"
+#include "core/backend/IDeviceDiscovery.h"
 #include "core/playback/FormatNegotiator.h"
-#include "core/playback/IAudioBackend.h"
-#include "core/playback/IDeviceDiscovery.h"
 
 extern "C"
 {
@@ -26,15 +26,15 @@ namespace app::playback
    *
    * Can provide bit-perfect exclusive access when using "hw:" devices.
    */
-  class AlsaExclusiveBackend final : public app::core::playback::IAudioBackend
+  class AlsaExclusiveBackend final : public app::core::backend::IAudioBackend
   {
   public:
-    static std::unique_ptr<app::core::playback::IDeviceDiscovery> createDiscovery();
+    static std::unique_ptr<app::core::backend::IDeviceDiscovery> createDiscovery();
 
-    explicit AlsaExclusiveBackend(app::core::playback::AudioDevice const& device);
+    explicit AlsaExclusiveBackend(app::core::backend::AudioDevice const& device);
     ~AlsaExclusiveBackend() override;
 
-    bool open(app::core::AudioFormat const& format, app::core::playback::AudioRenderCallbacks callbacks) override;
+    bool open(app::core::AudioFormat const& format, app::core::backend::AudioRenderCallbacks callbacks) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -46,9 +46,9 @@ namespace app::playback
     void setExclusiveMode(bool) override {}
     bool isExclusiveMode() const noexcept override { return true; } // ALSA is always exclusive
 
-    app::core::playback::BackendKind kind() const noexcept override
+    app::core::backend::BackendKind kind() const noexcept override
     {
-      return app::core::playback::BackendKind::AlsaExclusive;
+      return app::core::backend::BackendKind::AlsaExclusive;
     }
 
     std::string_view lastError() const noexcept override { return _lastError; }
@@ -67,7 +67,7 @@ namespace app::playback
 
     std::string _deviceName;
     AlsaPcmPtr _pcm;
-    app::core::playback::AudioRenderCallbacks _callbacks;
+    app::core::backend::AudioRenderCallbacks _callbacks;
     app::core::AudioFormat _format;
     std::string _lastError;
 

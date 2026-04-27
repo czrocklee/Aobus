@@ -536,7 +536,7 @@ namespace app::ui
     bool formatFound = false;
     for (auto const& node : snapshot.graph.nodes)
     {
-      if (node.type == app::core::playback::AudioNodeType::Decoder && node.format)
+      if (node.type == app::core::backend::AudioNodeType::Decoder && node.format)
       {
         ss << formatStream(*node.format);
         formatFound = true;
@@ -571,12 +571,12 @@ namespace app::ui
         tt << "• ";
         switch (node.type)
         {
-          case app::core::playback::AudioNodeType::Decoder: tt << "[Source] "; break;
-          case app::core::playback::AudioNodeType::Engine: tt << "[Engine] "; break;
-          case app::core::playback::AudioNodeType::Stream: tt << "[Stream] "; break;
-          case app::core::playback::AudioNodeType::Intermediary: tt << "[Filter] "; break;
-          case app::core::playback::AudioNodeType::Sink: tt << "[Device] "; break;
-          case app::core::playback::AudioNodeType::ExternalSource: tt << "[Other Source] "; break;
+          case app::core::backend::AudioNodeType::Decoder: tt << "[Source] "; break;
+          case app::core::backend::AudioNodeType::Engine: tt << "[Engine] "; break;
+          case app::core::backend::AudioNodeType::Stream: tt << "[Stream] "; break;
+          case app::core::backend::AudioNodeType::Intermediary: tt << "[Filter] "; break;
+          case app::core::backend::AudioNodeType::Sink: tt << "[Device] "; break;
+          case app::core::backend::AudioNodeType::ExternalSource: tt << "[Other Source] "; break;
         }
         tt << node.name;
         if (node.format) tt << " (" << formatStream(*node.format) << ")";
@@ -609,7 +609,7 @@ namespace app::ui
     clearSinkStatusClasses(_sinkStatusIcon);
     _sinkStatusIcon.set_visible(true);
 
-    using AudioQuality = app::core::playback::AudioQuality;
+    using AudioQuality = app::core::backend::AudioQuality;
     switch (snapshot.quality)
     {
       case AudioQuality::BitwisePerfect: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;

@@ -20,12 +20,12 @@
 namespace app::ui
 {
 
-  class TrackListAdapter final : public ::app::core::model::TrackIdListObserver
+  class TrackListAdapter final : public app::core::model::TrackIdListObserver
   {
   public:
     using TrackId = rs::core::TrackId;
 
-    explicit TrackListAdapter(::app::core::model::TrackIdList& source, TrackRowDataProvider const& provider);
+    explicit TrackListAdapter(app::core::model::TrackIdList& source, TrackRowDataProvider const& provider);
     ~TrackListAdapter() override;
 
     Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
@@ -43,7 +43,7 @@ namespace app::ui
     void rebuildView();
     void createRowForTrack(TrackId id);
 
-    ::app::core::model::TrackIdList* _source;
+    app::core::model::TrackIdList* _source;
     TrackRowDataProvider const* _provider;
     Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;
     Glib::ustring _filterText;

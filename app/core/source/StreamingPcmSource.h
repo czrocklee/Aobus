@@ -4,8 +4,8 @@
 #pragma once
 
 #include "core/decoder/IAudioDecoderSession.h"
-#include "core/playback/IPcmSource.h"
-#include "core/playback/PcmRingBuffer.h"
+#include "core/source/IPcmSource.h"
+#include "core/source/PcmRingBuffer.h"
 
 #include <atomic>
 #include <cstdint>
@@ -14,7 +14,7 @@
 #include <string>
 #include <thread>
 
-namespace app::core::playback
+namespace app::core::source
 {
 
   class StreamingPcmSource final : public IPcmSource

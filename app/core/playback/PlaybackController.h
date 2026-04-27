@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "core/playback/OutputMenuModel.h"
+#include "core/backend/BackendTypes.h"
 #include "core/playback/PlaybackTypes.h"
 
 #include <atomic>
@@ -11,15 +11,14 @@
 #include <memory>
 #include <vector>
 
-namespace app::core::playback
+namespace app::core::backend
 {
-  class PlaybackEngine;
-  class IAudioBackend;
   class IDeviceDiscovery;
 }
 
 namespace app::core::playback
 {
+  class PlaybackEngine;
 
   class PlaybackController final
   {
@@ -27,10 +26,10 @@ namespace app::core::playback
     PlaybackController();
     ~PlaybackController();
 
-    void addDiscovery(std::unique_ptr<IDeviceDiscovery> discovery);
+    void addDiscovery(std::unique_ptr<backend::IDeviceDiscovery> discovery);
 
     void play(TrackPlaybackDescriptor descriptor);
-    void setOutput(BackendKind kind, std::string_view deviceId);
+    void setOutput(backend::BackendKind kind, std::string_view deviceId);
     void pause();
     void resume();
     void stop();
@@ -42,11 +41,11 @@ namespace app::core::playback
     std::unique_ptr<PlaybackEngine> _engine;
 
     // Discovery monitors
-    std::vector<std::unique_ptr<IDeviceDiscovery>> _discoveries;
+    std::vector<std::unique_ptr<backend::IDeviceDiscovery>> _discoveries;
 
     mutable std::atomic<bool> _backendsDirty{true};
     mutable std::vector<BackendSnapshot> _cachedBackends;
-    mutable std::vector<AudioDevice> _allDevices;
+    mutable std::vector<backend::AudioDevice> _allDevices;
   };
 
 } // namespace app::core::playback

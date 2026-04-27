@@ -1,48 +1,47 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "core/playback/MemoryPcmSource.h"
+#include "core/source/MemoryPcmSource.h"
 
 #include <algorithm>
 #include <cstring>
 #include <limits>
 
-namespace
+namespace app::core::source
 {
-  std::size_t frameBytes(app::core::AudioFormat const& format) noexcept
+  namespace
   {
-    if (format.channels == 0 || format.bitDepth == 0)
+    std::size_t frameBytes(AudioFormat const& format) noexcept
     {
-      return 0;
+      if (format.channels == 0 || format.bitDepth == 0)
+      {
+        return 0;
+      }
+
+      auto const bytesPerSample = (format.bitDepth == 24U) ? 3U : (format.bitDepth > 16U) ? 4U : 2U;
+      return static_cast<std::size_t>(format.channels) * bytesPerSample;
     }
 
-    auto const bytesPerSample = (format.bitDepth == 24U) ? 3U : (format.bitDepth > 16U) ? 4U : 2U;
-    return static_cast<std::size_t>(format.channels) * bytesPerSample;
-  }
-
-  std::uint64_t bytesPerSecond(app::core::AudioFormat const& format) noexcept
-  {
-    if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
+    std::uint64_t bytesPerSecond(AudioFormat const& format) noexcept
     {
-      return 0;
+      if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
+      {
+        return 0;
+      }
+
+      return static_cast<std::uint64_t>(format.sampleRate) * frameBytes(format);
     }
 
-    return static_cast<std::uint64_t>(format.sampleRate) * frameBytes(format);
-  }
-
-  std::uint32_t bufferedDurationMs(std::size_t byteCount, std::uint64_t bytesPerSecondValue) noexcept
-  {
-    if (bytesPerSecondValue == 0)
+    std::uint32_t bufferedDurationMs(std::size_t byteCount, std::uint64_t bytesPerSecondValue) noexcept
     {
-      return 0;
+      if (bytesPerSecondValue == 0)
+      {
+        return 0;
+      }
+
+      return static_cast<std::uint32_t>((static_cast<std::uint64_t>(byteCount) * 1000U) / bytesPerSecondValue);
     }
-
-    return static_cast<std::uint32_t>((static_cast<std::uint64_t>(byteCount) * 1000U) / bytesPerSecondValue);
-  }
-} // namespace
-
-namespace app::core::playback
-{
+  } // namespace
 
   MemoryPcmSource::MemoryPcmSource(std::unique_ptr<decoder::IAudioDecoderSession> decoder,
                                    decoder::DecodedStreamInfo streamInfo)
