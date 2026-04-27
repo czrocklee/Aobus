@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build script for RockStudio
-# Usage: ./build.sh [debug|release|pgo1|pgo2|profile] [--clean] [--tidy]
+# Usage: ./build.sh [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang]
 
 set -e
 
@@ -8,16 +8,18 @@ set -e
 BUILD_TYPE="debug"
 CLEAN="false"
 ENABLE_TIDY="false"
+USE_CLANG="false"
 
 show_usage() {
-    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy]"
+    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang]"
     echo "  debug   - Debug build (default, with sanitizers)"
     echo "  release - Release build (optimized, no sanitizers)"
     echo "  pgo1    - PGO step 1: instrumented build for profile generation"
     echo "  pgo2    - PGO step 2: optimized build using collected profile"
     echo "  profile - Optimized build with debug symbols and frame pointers (for perf)"
     echo "  --clean - Clean build directory before building"
-    echo "  --tidy  - Enable clang-tidy during the configure/build"
+    echo "  --tidy  - Enable clang-tidy during the configure/build (implies --clang)"
+    echo "  --clang - Build with clang/clang++ in a dedicated build directory"
 }
 
 for ARG in "$@"; do
@@ -30,6 +32,9 @@ for ARG in "$@"; do
             ;;
         --tidy)
             ENABLE_TIDY="true"
+            ;;
+        --clang)
+            USE_CLANG="true"
             ;;
         -h|--help)
             show_usage
@@ -58,17 +63,30 @@ case "$BUILD_TYPE" in
 esac
 
 # Build directory
-BUILD_DIR="/tmp/build"
-PGO_DIR="/tmp/pgo-build"
-PROFILE_DIR="/tmp/profile"
 SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
+TIDY_SUFFIX=""
+COMPILER_SUFFIX=""
+COMPILER_NAME="gcc"
 
-# Select build directory based on preset
-if [[ "$BUILD_TYPE" == pgo* ]]; then
-    BUILD_DIR="$PGO_DIR"
-elif [[ "$BUILD_TYPE" == "profile" ]]; then
-    BUILD_DIR="$PROFILE_DIR"
+if [[ "$ENABLE_TIDY" == "true" ]]; then
+    USE_CLANG="true"
+    TIDY_SUFFIX="-tidy"
 fi
+
+if [[ "$USE_CLANG" == "true" ]]; then
+    COMPILER_SUFFIX="-clang"
+    COMPILER_NAME="clang"
+fi
+
+case "$BUILD_TYPE" in
+    debug|release|profile)
+        BUILD_DIR="/tmp/build/${BUILD_TYPE}${COMPILER_SUFFIX}${TIDY_SUFFIX}"
+        ;;
+    pgo1|pgo2)
+        # PGO generate/use steps must share a build tree so profile data stays available.
+        BUILD_DIR="/tmp/build/pgo${COMPILER_SUFFIX}${TIDY_SUFFIX}"
+        ;;
+esac
 
 # Clean if requested
 if [[ "$CLEAN" == "true" ]]; then
@@ -83,11 +101,20 @@ if ! command -v nix-shell &> /dev/null; then
 fi
 
 # Configure
-echo "Configuring RockStudio with preset '$PRESET'..."
-CONFIGURE_COMMAND="cmake --preset $PRESET"
+echo "Configuring RockStudio with preset '$PRESET' in '$BUILD_DIR'..."
+CONFIGURE_COMMAND="cmake -S '$SOURCE_DIR' --preset '$PRESET' -B '$BUILD_DIR'"
+BUILD_COMMAND="cmake --build '$BUILD_DIR' --parallel"
+TEST_COMMAND="$BUILD_DIR/test/rs_test"
+
+if [[ "$USE_CLANG" == "true" ]]; then
+    echo "clang enabled for this build."
+    CONFIGURE_COMMAND="CC=clang CXX=clang++ $CONFIGURE_COMMAND"
+    BUILD_COMMAND="CC=clang CXX=clang++ $BUILD_COMMAND"
+    TEST_COMMAND="CC=clang CXX=clang++ $TEST_COMMAND"
+fi
 
 if [[ "$ENABLE_TIDY" == "true" ]]; then
-    echo "clang-tidy enabled for this build."
+    echo "clang-tidy enabled for this build (implies clang toolchain)."
     CONFIGURE_COMMAND+=" -DROCKSTUDIO_ENABLE_CLANG_TIDY=ON"
 fi
 
@@ -95,16 +122,24 @@ nix-shell --run "$CONFIGURE_COMMAND"
 
 # Build
 echo "Building RockStudio..."
-nix-shell --run "cmake --build '$BUILD_DIR' --parallel"
+nix-shell --run "$BUILD_COMMAND"
 
 # Run tests (only for debug and release)
 if [[ "$BUILD_TYPE" == "debug" || "$BUILD_TYPE" == "release" ]]; then
     echo "Running tests..."
-    nix-shell --run "$BUILD_DIR/test/rs_test"
+    nix-shell --run "$TEST_COMMAND"
 fi
 
 # PGO instructions
 if [[ "$BUILD_TYPE" == "pgo1" ]]; then
+    NEXT_COMMAND="./build.sh pgo2"
+    if [[ "$USE_CLANG" == "true" ]]; then
+        NEXT_COMMAND+=" --clang"
+    fi
+    if [[ "$ENABLE_TIDY" == "true" ]]; then
+        NEXT_COMMAND+=" --tidy"
+    fi
+
     echo ""
     echo "============================================"
     echo "PGO Step 1 complete."
@@ -114,7 +149,7 @@ if [[ "$BUILD_TYPE" == "pgo1" ]]; then
     echo "  # Use the app normally, then close it"
     echo ""
     echo "Then run:"
-    echo "  ./build.sh pgo2"
+    echo "  $NEXT_COMMAND"
     echo "============================================"
 elif [[ "$BUILD_TYPE" == "pgo2" ]]; then
     echo ""
@@ -130,4 +165,5 @@ echo ""
 echo "All done!"
 echo "  Preset: $PRESET"
 echo "  Build dir: $BUILD_DIR"
+echo "  compiler: $COMPILER_NAME"
 echo "  clang-tidy: $ENABLE_TIDY"
