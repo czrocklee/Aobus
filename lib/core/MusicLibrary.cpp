@@ -13,8 +13,8 @@ namespace
 {
   // LMDB configuration constants
   constexpr std::size_t kLmdbMapSize = std::size_t{1} * 1024 * 1024 * 1024; // 1 GB
-  constexpr int kLmdbMaxDatabases = 8; // tracks_hot, tracks_cold, lists, resources, dictionary, meta (+ spare)
-  constexpr int kLmdbFileMode = 0664;
+  constexpr std::uint32_t kLmdbMaxDatabases = 8; // tracks_hot, tracks_cold, lists, resources, dictionary, meta (+ spare)
+  constexpr std::uint32_t kLmdbFileMode = 0664;
   constexpr std::size_t kLibraryIdBytes = 16;
 
   std::uint64_t nowUnixMs()

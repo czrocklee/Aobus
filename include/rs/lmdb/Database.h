@@ -90,7 +90,7 @@ namespace rs::lmdb
     Iterator();
     Iterator(Iterator const& other);
     Iterator(Iterator&& other) noexcept;
-    ~Iterator();
+    ~Iterator() noexcept;
     Iterator& operator=(Iterator const&);
     Iterator& operator=(Iterator&&) = default;
 
@@ -135,7 +135,7 @@ namespace rs::lmdb
   class Database::Writer final
   {
   public:
-    ~Writer();
+    ~Writer() noexcept;
 
     // movable
     Writer(Writer&& other) noexcept = default;
