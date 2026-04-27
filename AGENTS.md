@@ -44,25 +44,51 @@ Key dependencies: `gtkmm-4.0`, `lmdb`, `boost`, `ffmpeg`, `pipewire`, `alsa`, `g
 
 ## Build And Validation
 
-The project builds into `/tmp/build` (configured in `CMakePresets.json`).
+`build.sh` keeps each build mode and clang-tidy setting in its own build directory under `/tmp/build` so debug results can be reused across iterations instead of forcing full rebuilds.
+
+- `debug` -> `/tmp/build/debug`
+- `debug --clang` -> `/tmp/build/debug-clang`
+- `debug --tidy` -> `/tmp/build/debug-clang-tidy` (`--tidy` implies `--clang`)
+- `release` -> `/tmp/build/release`
+- `release --clang` -> `/tmp/build/release-clang`
+- `release --tidy` -> `/tmp/build/release-clang-tidy` (`--tidy` implies `--clang`)
+- `profile` -> `/tmp/build/profile`
+- `profile --clang` -> `/tmp/build/profile-clang`
+- `profile --tidy` -> `/tmp/build/profile-clang-tidy` (`--tidy` implies `--clang`)
+- `pgo1` / `pgo2` -> `/tmp/build/pgo`
+- `pgo1 --clang` / `pgo2 --clang` -> `/tmp/build/pgo-clang`
+- `pgo1 --tidy` / `pgo2 --tidy` -> `/tmp/build/pgo-clang-tidy` (`--tidy` implies `--clang`)
+
+The two PGO steps intentionally share the same per-toolchain build directory so the generated profile data remains available for the optimize pass.
+
+Keep debug-build artifacts, failing test binaries, logs, and repro inputs in temporary files or directories under `/tmp` whenever possible. Prefer rerunning the affected target or test from the existing build tree over deleting the build directory and starting from scratch.
+
+During debugging, default to an incremental workflow:
+
+1. Reuse the existing `/tmp/build/...` tree for the current compiler/tooling combination.
+2. Save compiler output, test output, and repro data to temporary files when they will be needed again.
+3. Only use `--clean` when the cache is genuinely invalid or the task specifically requires a fresh configure.
 
 ### Using `build.sh` (Recommended)
 
 ```bash
 ./build.sh debug               # Configures and builds with sanitizers, runs tests
+./build.sh debug --clang       # Clang build in its own cache/build tree
 ./build.sh release             # Optimized build
 ./build.sh debug --clean       # Full clean rebuild
-./build.sh debug --tidy        # Debug build with clang-tidy enabled
-./build.sh debug --clean --tidy # Clean debug build with clang-tidy enabled
+./build.sh debug --tidy        # Debug build with clang-tidy enabled (uses clang)
+./build.sh debug --clean --tidy # Clean debug build with clang-tidy enabled (uses clang)
 ```
 
 ### Manual CMake
 
 ```bash
-nix-shell --run "cmake --preset linux-debug"
-nix-shell --run "cmake --build /tmp/build --parallel"
-nix-shell --run "/tmp/build/rs_test"
+nix-shell --run "cmake --preset linux-debug -B /tmp/build/debug"
+nix-shell --run "cmake --build /tmp/build/debug --parallel"
+nix-shell --run "/tmp/build/debug/test/rs_test"
 ```
+
+When chasing a failure, prefer preserving the current `/tmp/build/...` directory and storing the relevant output alongside it in `/tmp` (for example `/tmp/rs-debug.log`) so you can inspect or diff results without paying for another full rebuild.
 
 Always run tests after modifying core logic or the expression engine.
 

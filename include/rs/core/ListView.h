@@ -63,6 +63,7 @@ namespace rs::core
 
       TrackId const* begin() const { return _trackIds.data(); }
       TrackId const* end() const { return _trackIds.data() + _trackIds.size(); }
+      bool empty() const noexcept { return _trackIds.empty(); }
       std::size_t size() const { return _trackIds.size(); }
 
     private:

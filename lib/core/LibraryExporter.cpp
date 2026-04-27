@@ -30,7 +30,102 @@ namespace rs::core
       }
       return "unknown";
     }
-  }
+
+    void emitTrackMetadata(YAML::Emitter& out, rs::core::TrackView const& view, rs::core::DictionaryStore& dict,
+                           ExportMode /*mode*/)
+    {
+      auto const metadata = view.metadata();
+      out << YAML::Key << "title" << YAML::Value << std::string(metadata.title());
+
+      if (auto const artistId = metadata.artistId(); artistId != rs::core::DictionaryId{0})
+      {
+        out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
+      }
+
+      if (auto const albumId = metadata.albumId(); albumId != rs::core::DictionaryId{0})
+      {
+        out << YAML::Key << "album" << YAML::Value << std::string(dict.get(albumId));
+      }
+
+      if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != rs::core::DictionaryId{0})
+      {
+        out << YAML::Key << "albumArtist" << YAML::Value << std::string(dict.get(albumArtistId));
+      }
+
+      if (auto const genreId = metadata.genreId(); genreId != rs::core::DictionaryId{0})
+      {
+        out << YAML::Key << "genre" << YAML::Value << std::string(dict.get(genreId));
+      }
+
+      if (metadata.year() != 0)
+      {
+        out << YAML::Key << "year" << YAML::Value << metadata.year();
+      }
+
+      if (metadata.trackNumber() != 0)
+      {
+        out << YAML::Key << "trackNumber" << YAML::Value << metadata.trackNumber();
+      }
+
+      if (metadata.totalTracks() != 0)
+      {
+        out << YAML::Key << "totalTracks" << YAML::Value << metadata.totalTracks();
+      }
+
+      if (metadata.discNumber() != 0)
+      {
+        out << YAML::Key << "discNumber" << YAML::Value << metadata.discNumber();
+      }
+
+      if (metadata.totalDiscs() != 0)
+      {
+        out << YAML::Key << "totalDiscs" << YAML::Value << metadata.totalDiscs();
+      }
+
+      auto const custom = view.custom();
+      if (!custom.empty())
+      {
+        out << YAML::Key << "custom" << YAML::Value << YAML::BeginMap;
+        for (auto const& [dictId, value] : custom)
+        {
+          out << YAML::Key << std::string(dict.get(dictId)) << YAML::Value << std::string(value);
+        }
+        out << YAML::EndMap;
+      }
+    }
+
+    void emitTrackProperties(YAML::Emitter& out, rs::core::TrackView::PropertyProxy const& property)
+    {
+      out << YAML::Key << "durationMs" << YAML::Value << property.durationMs();
+      out << YAML::Key << "bitrate" << YAML::Value << property.bitrate();
+      out << YAML::Key << "sampleRate" << YAML::Value << property.sampleRate();
+      out << YAML::Key << "channels" << YAML::Value << static_cast<int>(property.channels());
+      out << YAML::Key << "bitDepth" << YAML::Value << static_cast<int>(property.bitDepth());
+      out << YAML::Key << "codecId" << YAML::Value << property.codecId();
+      out << YAML::Key << "fileSize" << YAML::Value << property.fileSize();
+      out << YAML::Key << "mtime" << YAML::Value << property.mtime();
+    }
+
+    void emitTrackCommon(YAML::Emitter& out, rs::core::TrackView::MetadataProxy const& metadata,
+                         rs::core::TrackView::TagProxy const& tags,
+                         rs::core::DictionaryStore& dict)
+    {
+      if (metadata.rating() != 0)
+      {
+        out << YAML::Key << "rating" << YAML::Value << static_cast<int>(metadata.rating());
+      }
+
+      if (tags.count() != 0)
+      {
+        out << YAML::Key << "tags" << YAML::Value << YAML::BeginSeq;
+        for (auto const tagId : tags)
+        {
+          out << std::string(dict.get(tagId));
+        }
+        out << YAML::EndSeq;
+      }
+    }
+  } // namespace
 
   LibraryExporter::LibraryExporter(MusicLibrary& ml)
     : _ml{ml}
@@ -83,112 +178,15 @@ namespace rs::core
     out << YAML::BeginMap;
     out << YAML::Key << "id" << YAML::Value << id.value();
     auto const property = view.property();
-    auto const metadata = view.metadata();
     out << YAML::Key << "uri" << YAML::Value << std::string(property.uri());
 
-    // Metadata & Custom (Metadata or Full mode)
-
     if (mode == ExportMode::Metadata || mode == ExportMode::Full)
-    {
-      out << YAML::Key << "title" << YAML::Value << std::string(metadata.title());
-
-      if (auto const artistId = metadata.artistId(); artistId != DictionaryId{0})
-      {
-        out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
-      }
-
-      auto const albumId = metadata.albumId();
-
-      if (albumId != DictionaryId{0})
-      {
-        out << YAML::Key << "album" << YAML::Value << std::string(dict.get(albumId));
-      }
-
-      auto const albumArtistId = metadata.albumArtistId();
-
-      if (albumArtistId != DictionaryId{0})
-      {
-        out << YAML::Key << "albumArtist" << YAML::Value << std::string(dict.get(albumArtistId));
-      }
-
-      auto const genreId = metadata.genreId();
-
-      if (genreId != DictionaryId{0})
-      {
-        out << YAML::Key << "genre" << YAML::Value << std::string(dict.get(genreId));
-      }
-
-      if (metadata.year() != 0)
-      {
-        out << YAML::Key << "year" << YAML::Value << metadata.year();
-      }
-
-      if (metadata.trackNumber() != 0)
-      {
-        out << YAML::Key << "trackNumber" << YAML::Value << metadata.trackNumber();
-      }
-
-      if (metadata.totalTracks() != 0)
-      {
-        out << YAML::Key << "totalTracks" << YAML::Value << metadata.totalTracks();
-      }
-
-      if (metadata.discNumber() != 0)
-      {
-        out << YAML::Key << "discNumber" << YAML::Value << metadata.discNumber();
-      }
-
-      if (metadata.totalDiscs() != 0)
-      {
-        out << YAML::Key << "totalDiscs" << YAML::Value << metadata.totalDiscs();
-      }
-
-      // Custom metadata
-      auto const custom = view.custom();
-
-      if (!custom.empty())
-      {
-        out << YAML::Key << "custom" << YAML::Value << YAML::BeginMap;
-        for (auto const& [dictId, value] : custom)
-        {
-          out << YAML::Key << std::string(dict.get(dictId)) << YAML::Value << std::string(value);
-        }
-        out << YAML::EndMap;
-      }
-    }
-
-    // Full mode only: Properties & Cover Art
+      emitTrackMetadata(out, view, dict, mode);
 
     if (mode == ExportMode::Full)
-    {
-      out << YAML::Key << "durationMs" << YAML::Value << property.durationMs();
-      out << YAML::Key << "bitrate" << YAML::Value << property.bitrate();
-      out << YAML::Key << "sampleRate" << YAML::Value << property.sampleRate();
-      out << YAML::Key << "channels" << YAML::Value << (int)property.channels();
-      out << YAML::Key << "bitDepth" << YAML::Value << (int)property.bitDepth();
-      out << YAML::Key << "codecId" << YAML::Value << property.codecId();
-      out << YAML::Key << "fileSize" << YAML::Value << property.fileSize();
-      out << YAML::Key << "mtime" << YAML::Value << property.mtime();
-    }
+      emitTrackProperties(out, property);
 
-    // Common to ALL modes: Rating & Tags
-
-    if (metadata.rating() != 0)
-    {
-      out << YAML::Key << "rating" << YAML::Value << static_cast<int>(metadata.rating());
-    }
-
-    auto const tags = view.tags();
-
-    if (!tags.empty())
-    {
-      out << YAML::Key << "tags" << YAML::Value << YAML::BeginSeq;
-      for (auto const tagId : tags)
-      {
-        out << std::string(dict.get(tagId));
-      }
-      out << YAML::EndSeq;
-    }
+    emitTrackCommon(out, view.metadata(), view.tags(), dict);
 
     out << YAML::EndMap;
   }

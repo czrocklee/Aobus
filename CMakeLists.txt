@@ -135,7 +135,12 @@ if(CLANG_TIDY_EXECUTABLE)
 
   # clang-tidy checks for strict targets (lib, tool)
   set(CLANG_TIDY_STRICT_CHECKS
-    "-checks=-*,bugprone-*,performance-*,cppcoreguidelines-*,-cppcoreguidelines-avoid-const-or-ref-data-members,modernize-!-trailing-return,readability-*,portability-*,-clang-diagnostic-*,-bugprone-easily-swappable-parameters,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-readability-convert-member-functions-to-static,-readability-static-definition-in-anonymous-namespace"
+    "-checks=-*,bugprone-*,performance-*,cppcoreguidelines-*,-cppcoreguidelines-avoid-const-or-ref-data-members,modernize-!-trailing-return,readability-*,portability-*,-clang-diagnostic-*,-bugprone-easily-swappable-parameters,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-readability-convert-member-functions-to-static,-readability-static-definition-in-anonymous-namespace,-clang-diagnostic-note"
+  )
+
+  # clang-tidy config for strict targets (allows 2-char identifiers)
+  set(CLANG_TIDY_STRICT_CONFIG
+    "{Checks: '-*,readability-identifier-length', CheckOptions: [{key: 'readability-identifier-length.MinimumVariableNameLength', value: 2}, {key: 'readability-identifier-length.MinimumParameterNameLength', value: 2}]}"
   )
 
   # clang-tidy checks for relaxed test targets (minimal checks)

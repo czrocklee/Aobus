@@ -26,6 +26,7 @@ namespace
   {
     auto payload = rs::core::ListBuilder::createNew().serialize();
     auto view = ListView{payload};
+    CHECK(view.tracks().empty());
     CHECK(view.tracks().size() == 0);
   }
 
@@ -54,6 +55,7 @@ namespace
     auto view = ListView{payload};
 
     CHECK(view.tracks().size() == 3);
+    CHECK_FALSE(view.tracks().empty());
     CHECK(view.name() == "My List");
     CHECK(view.description() == "Description");
     CHECK(view.isSmart() == false);
