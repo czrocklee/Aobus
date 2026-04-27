@@ -388,7 +388,7 @@ namespace app::core::playback
     outputFormat.isFloat = false;
     outputFormat.isInterleaved = true;
 
-    auto decoder = createAudioDecoderSession(outputFormat);
+    auto decoder = createAudioDecoderSession(descriptor.filePath, outputFormat);
     if (!decoder)
     {
       _snapshot.statusText = "No audio decoder backend is available";

@@ -50,6 +50,6 @@ namespace app::core::playback
   };
 
   void initializeAudioDecoders();
-  std::unique_ptr<IAudioDecoderSession> createAudioDecoderSession(StreamFormat outputFormat);
+  std::unique_ptr<IAudioDecoderSession> createAudioDecoderSession(std::filesystem::path const& filePath, StreamFormat outputFormat);
 
 } // namespace app::core::playback

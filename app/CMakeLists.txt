@@ -32,12 +32,10 @@ add_executable(RockStudio
     core/playback/PcmRingBuffer.cpp
     core/playback/StreamingPcmSource.cpp
     core/playback/FormatNegotiator.cpp
+    core/playback/FlacDecoderSession.cpp
+    core/playback/AlacDecoderSession.cpp
 )
-if(FFmpeg_FOUND)
-  target_compile_definitions(RockStudio PRIVATE FFmpeg_FOUND)
-  target_sources(RockStudio PRIVATE core/playback/FfmpegDecoderSession.cpp)
-  target_link_libraries(RockStudio PRIVATE FFmpeg)
-endif()
+target_link_libraries(RockStudio PRIVATE PkgFLAC PkgALAC)
 if(PIPEWIRE_FOUND)
   target_compile_definitions(RockStudio PRIVATE PIPEWIRE_FOUND)
   target_sources(RockStudio PRIVATE platform/linux/playback/PipeWireBackend.cpp)
