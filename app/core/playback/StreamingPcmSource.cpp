@@ -7,7 +7,7 @@
 
 namespace
 {
-  std::uint64_t bytesPerSecond(app::core::playback::StreamFormat const& format) noexcept
+  std::uint64_t bytesPerSecond(app::core::AudioFormat const& format) noexcept
   {
     if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
     {
@@ -46,7 +46,10 @@ namespace app::core::playback
   {
   }
 
-  StreamingPcmSource::~StreamingPcmSource() { stopDecodeThread(); }
+  StreamingPcmSource::~StreamingPcmSource()
+  {
+    stopDecodeThread();
+  }
 
   bool StreamingPcmSource::initialize()
   {
@@ -63,7 +66,10 @@ namespace app::core::playback
     return !_failed.load(std::memory_order_relaxed);
   }
 
-  std::size_t StreamingPcmSource::read(std::span<std::byte> output) noexcept { return _ringBuffer.read(output); }
+  std::size_t StreamingPcmSource::read(std::span<std::byte> output) noexcept
+  {
+    return _ringBuffer.read(output);
+  }
 
   bool StreamingPcmSource::isDrained() const noexcept
   {

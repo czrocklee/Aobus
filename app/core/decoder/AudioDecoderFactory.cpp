@@ -8,10 +8,12 @@
 namespace app::core::decoder
 {
 
-  void initializeAudioDecoders() {}
+  void initializeAudioDecoders()
+  {
+  }
 
   std::unique_ptr<IAudioDecoderSession> createAudioDecoderSession(std::filesystem::path const& filePath,
-                                                                 playback::StreamFormat outputFormat)
+                                                                  AudioFormat outputFormat)
   {
     auto const ext = filePath.extension().string();
 

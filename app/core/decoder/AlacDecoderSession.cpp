@@ -27,12 +27,12 @@ namespace app::core::decoder
     rs::utility::MappedFile mappedFile;
     std::unique_ptr<Demuxer> demuxer;
 
-    Impl(playback::StreamFormat /*output*/) { decoder = std::make_unique<ALACDecoder>(); }
+    Impl(AudioFormat /*output*/) { decoder = std::make_unique<ALACDecoder>(); }
 
     void setError(std::string_view msg) { error = std::string(msg); }
   };
 
-  AlacDecoderSession::AlacDecoderSession(playback::StreamFormat outputFormat)
+  AlacDecoderSession::AlacDecoderSession(AudioFormat outputFormat)
     : _impl(std::make_unique<Impl>(outputFormat))
   {
   }
@@ -67,7 +67,8 @@ namespace app::core::decoder
 
     if (_impl->timescale > 0)
     {
-      _impl->info.durationMs = static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000) / _impl->timescale);
+      _impl->info.durationMs =
+        static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000) / _impl->timescale);
     }
 
     _impl->info.sourceFormat.channels = 2;
@@ -96,7 +97,9 @@ namespace app::core::decoder
     return true;
   }
 
-  void AlacDecoderSession::flush() {}
+  void AlacDecoderSession::flush()
+  {
+  }
 
   std::optional<PcmBlock> AlacDecoderSession::readNextBlock()
   {
@@ -116,7 +119,8 @@ namespace app::core::decoder
     std::vector<std::byte> decodedPcm(1024 * 1024);
 
     auto bitBuffer = BitBuffer{};
-    BitBufferInit(&bitBuffer, const_cast<uint8_t*>(reinterpret_cast<uint8_t const*>(packet.data())),
+    BitBufferInit(&bitBuffer,
+                  const_cast<uint8_t*>(reinterpret_cast<uint8_t const*>(packet.data())),
                   static_cast<uint32_t>(packet.size()));
 
     auto const status = _impl->decoder->Decode(
@@ -141,8 +145,14 @@ namespace app::core::decoder
     return block;
   }
 
-  DecodedStreamInfo AlacDecoderSession::streamInfo() const { return _impl->info; }
+  DecodedStreamInfo AlacDecoderSession::streamInfo() const
+  {
+    return _impl->info;
+  }
 
-  std::string_view AlacDecoderSession::lastError() const noexcept { return _impl->error; }
+  std::string_view AlacDecoderSession::lastError() const noexcept
+  {
+    return _impl->error;
+  }
 
 } // namespace app::core::decoder

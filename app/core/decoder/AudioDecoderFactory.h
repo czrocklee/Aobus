@@ -20,6 +20,6 @@ namespace app::core::decoder
    * @brief Factory function to create a decoder session for a given file.
    */
   std::unique_ptr<IAudioDecoderSession> createAudioDecoderSession(std::filesystem::path const& filePath,
-                                                                 playback::StreamFormat outputFormat);
+                                                                  AudioFormat outputFormat);
 
 } // namespace app::core::decoder

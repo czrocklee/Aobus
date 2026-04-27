@@ -29,8 +29,8 @@ namespace app::core::decoder
    */
   struct DecodedStreamInfo final
   {
-    playback::StreamFormat sourceFormat;
-    playback::StreamFormat outputFormat;
+    AudioFormat sourceFormat;
+    AudioFormat outputFormat;
     std::uint32_t durationMs = 0;
     bool isLossy = false;
   };

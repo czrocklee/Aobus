@@ -21,8 +21,7 @@ namespace
   constexpr std::uint32_t kDecodeHighWatermarkMs = 750;
   constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
 
-  bool isLosslessBitDepthChange(app::core::playback::StreamFormat const& src,
-                                app::core::playback::StreamFormat const& dst) noexcept
+  bool isLosslessBitDepthChange(app::core::AudioFormat const& src, app::core::AudioFormat const& dst) noexcept
   {
     if (src.isFloat == dst.isFloat)
     {
@@ -45,7 +44,7 @@ namespace
     text += line;
   }
 
-  std::uint64_t bytesPerSecond(app::core::playback::StreamFormat const& format) noexcept
+  std::uint64_t bytesPerSecond(app::core::AudioFormat const& format) noexcept
   {
     if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
     {
@@ -147,7 +146,7 @@ namespace app::core::playback
     callbacks.onBackendError = &PlaybackEngine::onBackendError;
 
     auto source = std::shared_ptr<IPcmSource>{};
-    auto backendFormat = StreamFormat{};
+    auto backendFormat = AudioFormat{};
 
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
@@ -381,9 +380,9 @@ namespace app::core::playback
 
   bool PlaybackEngine::openTrack(TrackPlaybackDescriptor descriptor,
                                  std::shared_ptr<IPcmSource>& source,
-                                 StreamFormat& backendFormat)
+                                 AudioFormat& backendFormat)
   {
-    auto outputFormat = StreamFormat{};
+    auto outputFormat = AudioFormat{};
     outputFormat.sampleRate = 0; // Use native
     outputFormat.channels = 0;   // Use native
     outputFormat.bitDepth = 0;   // Use native

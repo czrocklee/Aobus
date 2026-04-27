@@ -11,7 +11,7 @@ namespace app::core::decoder
   class AlacDecoderSession final : public IAudioDecoderSession
   {
   public:
-    explicit AlacDecoderSession(playback::StreamFormat outputFormat);
+    explicit AlacDecoderSession(AudioFormat outputFormat);
     ~AlacDecoderSession() override;
 
     bool open(std::filesystem::path const& filePath) override;
