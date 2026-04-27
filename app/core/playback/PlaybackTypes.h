@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "../AudioFormat.h"
 #include <rs/core/Type.h>
 
 #include <cstdint>
@@ -93,17 +94,6 @@ namespace app::core::playback
     return BackendKind::None;
   }
 
-  struct StreamFormat final
-  {
-    std::uint32_t sampleRate = 0;
-    std::uint8_t channels = 0;
-    std::uint8_t bitDepth = 0;
-    bool isFloat = false;
-    bool isInterleaved = true;
-
-    bool operator==(StreamFormat const&) const = default;
-  };
-
   struct TrackPlaybackDescriptor final
   {
     rs::core::TrackId trackId{};
@@ -153,7 +143,7 @@ namespace app::core::playback
     std::string id = "";
     AudioNodeType type = AudioNodeType::Intermediary;
     std::string name = "";
-    std::optional<StreamFormat> format = std::nullopt;
+    std::optional<AudioFormat> format = std::nullopt;
     bool volumeNotUnity = false;
     bool isMuted = false;
     bool isLossySource = false;

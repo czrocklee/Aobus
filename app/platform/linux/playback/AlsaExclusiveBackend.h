@@ -34,8 +34,7 @@ namespace app::playback
     explicit AlsaExclusiveBackend(app::core::playback::AudioDevice const& device);
     ~AlsaExclusiveBackend() override;
 
-    bool open(app::core::playback::StreamFormat const& format,
-              app::core::playback::AudioRenderCallbacks callbacks) override;
+    bool open(app::core::AudioFormat const& format, app::core::playback::AudioRenderCallbacks callbacks) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -69,7 +68,7 @@ namespace app::playback
     std::string _deviceName;
     AlsaPcmPtr _pcm;
     app::core::playback::AudioRenderCallbacks _callbacks;
-    app::core::playback::StreamFormat _format;
+    app::core::AudioFormat _format;
     std::string _lastError;
 
     std::stop_token _stopToken;

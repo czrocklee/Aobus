@@ -165,7 +165,7 @@ namespace app::playback
     close();
   }
 
-  bool AlsaExclusiveBackend::open(StreamFormat const& format, AudioRenderCallbacks callbacks)
+  bool AlsaExclusiveBackend::open(app::core::AudioFormat const& format, AudioRenderCallbacks callbacks)
   {
     PLAYBACK_LOG_INFO("AlsaExclusiveBackend: Opening device '{}' with format {}Hz/{}b/{}ch",
                       _deviceName,

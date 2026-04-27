@@ -35,7 +35,7 @@ namespace app::core::playback
     NullBackend() = default;
     ~NullBackend() override = default;
 
-    bool open(StreamFormat const& /*format*/, AudioRenderCallbacks callbacks) override
+    bool open(AudioFormat const& /*format*/, AudioRenderCallbacks callbacks) override
     {
       _callbacks = callbacks;
       return true;

@@ -9,7 +9,7 @@
 
 namespace
 {
-  std::size_t frameBytes(app::core::playback::StreamFormat const& format) noexcept
+  std::size_t frameBytes(app::core::AudioFormat const& format) noexcept
   {
     if (format.channels == 0 || format.bitDepth == 0)
     {
@@ -20,7 +20,7 @@ namespace
     return static_cast<std::size_t>(format.channels) * bytesPerSample;
   }
 
-  std::uint64_t bytesPerSecond(app::core::playback::StreamFormat const& format) noexcept
+  std::uint64_t bytesPerSecond(app::core::AudioFormat const& format) noexcept
   {
     if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
     {

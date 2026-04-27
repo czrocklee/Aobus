@@ -27,8 +27,7 @@ namespace app::playback
     explicit PipeWireBackend(app::core::playback::AudioDevice const& device);
     ~PipeWireBackend() override;
 
-    bool open(app::core::playback::StreamFormat const& format,
-              app::core::playback::AudioRenderCallbacks callbacks) override;
+    bool open(app::core::AudioFormat const& format, app::core::playback::AudioRenderCallbacks callbacks) override;
     void start() override;
     void pause() override;
     void resume() override;

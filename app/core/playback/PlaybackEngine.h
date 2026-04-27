@@ -33,9 +33,7 @@ namespace app::core::playback
     PlaybackSnapshot snapshot() const;
 
   private:
-    bool openTrack(TrackPlaybackDescriptor descriptor,
-                   std::shared_ptr<IPcmSource>& source,
-                   StreamFormat& backendFormat);
+    bool openTrack(TrackPlaybackDescriptor descriptor, std::shared_ptr<IPcmSource>& source, AudioFormat& backendFormat);
 
     void handleGraphChanged(AudioGraph const& backendGraph);
     void analyzeAudioQuality();

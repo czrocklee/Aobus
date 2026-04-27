@@ -53,7 +53,7 @@ namespace app::core::playback
     /**
      * @brief Prepares the backend for playback with the given format.
      */
-    virtual bool open(StreamFormat const& format, AudioRenderCallbacks callbacks) = 0;
+    virtual bool open(AudioFormat const& format, AudioRenderCallbacks callbacks) = 0;
 
     virtual void start() = 0;
     virtual void pause() = 0;

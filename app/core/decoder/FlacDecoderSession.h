@@ -11,7 +11,7 @@ namespace app::core::decoder
   class FlacDecoderSession final : public IAudioDecoderSession
   {
   public:
-    explicit FlacDecoderSession(playback::StreamFormat outputFormat);
+    explicit FlacDecoderSession(AudioFormat outputFormat);
     ~FlacDecoderSession() override;
 
     bool open(std::filesystem::path const& filePath) override;

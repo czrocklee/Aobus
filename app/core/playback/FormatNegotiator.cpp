@@ -19,17 +19,17 @@ namespace app::core::playback
                    Selector&& selector)
     {
       if (supported.empty() || std::ranges::find(supported, target) != supported.end()) return;
-      
+
       target = selector();
       flag = true;
-      
+
       if (!reason.empty()) reason += "; ";
-      
+
       reason += msg;
     }
   }
 
-  RenderPlan FormatNegotiator::buildPlan(StreamFormat sourceFormat, DeviceCapabilities const& caps)
+  RenderPlan FormatNegotiator::buildPlan(AudioFormat sourceFormat, DeviceCapabilities const& caps)
   {
     RenderPlan plan = {
       .sourceFormat = sourceFormat,
@@ -73,7 +73,7 @@ namespace app::core::playback
     plan.decoderOutputFormat.isFloat = false;
 
     if (plan.reason.empty()) plan.reason = "Direct passthrough";
-    
+
     return plan;
   }
 

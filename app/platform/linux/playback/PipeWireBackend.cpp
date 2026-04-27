@@ -134,7 +134,7 @@ namespace
     return value ? std::string(value) : std::string{};
   }
 
-  std::string formatStreamFormat(app::core::playback::StreamFormat const& format)
+  std::string formatStreamFormat(app::core::AudioFormat const& format)
   {
     auto const sampleType = format.isFloat ? "float" : "pcm";
     return std::format("{}Hz/{}-bit/{}ch {}", format.sampleRate, format.bitDepth, format.channels, sampleType);
@@ -167,7 +167,7 @@ namespace
     return record;
   }
 
-  std::optional<app::core::playback::StreamFormat> parseRawStreamFormat(::spa_pod const* param)
+  std::optional<app::core::AudioFormat> parseRawStreamFormat(::spa_pod const* param)
   {
     if (param == nullptr)
     {
@@ -180,7 +180,7 @@ namespace
       return std::nullopt;
     }
 
-    auto format = app::core::playback::StreamFormat{};
+    auto format = app::core::AudioFormat{};
     format.sampleRate = info.rate;
     format.channels = static_cast<std::uint8_t>(info.channels);
     format.isInterleaved = true;
@@ -427,7 +427,7 @@ namespace app::playback
       _callbacks = callbacks;
     }
 
-    void setNegotiatedFormat(std::optional<StreamFormat> format)
+    void setNegotiatedFormat(std::optional<app::core::AudioFormat> format)
     {
       auto const lock = std::lock_guard<std::mutex>{_mutex};
       _negotiatedStreamFormat = format;
@@ -554,8 +554,8 @@ namespace app::playback
     std::unordered_map<std::uint32_t, LinkBinding> _linkBindings = {};
     NodeBinding _sinkNodeBinding = {};
     NodeBinding _streamNodeBinding = {};
-    std::optional<StreamFormat> _negotiatedStreamFormat = {};
-    std::optional<StreamFormat> _sinkFormat = {};
+    std::optional<app::core::AudioFormat> _negotiatedStreamFormat = {};
+    std::optional<app::core::AudioFormat> _sinkFormat = {};
     SinkProps _sinkProps = {};
     SpaSourcePtr _refreshEvent;
   };
@@ -1160,7 +1160,7 @@ namespace app::playback
 
     // Members
     AudioRenderCallbacks _callbacks;
-    StreamFormat _format;
+    app::core::AudioFormat _format;
     std::atomic<bool> _drainPending = false;
     std::string _lastError;
     bool _strictFormatRequired = false;
@@ -1317,7 +1317,7 @@ namespace app::playback
     PLAYBACK_LOG_DEBUG("PipeWireBackend: Destroying backend instance");
   }
 
-  bool PipeWireBackend::open(StreamFormat const& format, AudioRenderCallbacks callbacks)
+  bool PipeWireBackend::open(app::core::AudioFormat const& format, AudioRenderCallbacks callbacks)
   {
     PLAYBACK_LOG_INFO("PipeWireBackend: Opening stream with format {}Hz/{}b/{}ch",
                       format.sampleRate,

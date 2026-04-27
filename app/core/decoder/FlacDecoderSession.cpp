@@ -14,7 +14,7 @@ namespace app::core::decoder
 
   struct FlacDecoderSession::Impl
   {
-    playback::StreamFormat requestedOutput;
+    AudioFormat requestedOutput;
     FLAC__StreamDecoder* decoder = nullptr;
 
     rs::utility::MappedFile mappedFile;
@@ -29,7 +29,7 @@ namespace app::core::decoder
     std::uint64_t nextFrameIndex = 0;
     bool eof = false;
 
-    Impl(playback::StreamFormat output)
+    Impl(AudioFormat output)
       : requestedOutput(output)
     {
       decoder = ::FLAC__stream_decoder_new();
@@ -71,7 +71,7 @@ namespace app::core::decoder
                               void* clientData);
   };
 
-  FlacDecoderSession::FlacDecoderSession(playback::StreamFormat outputFormat)
+  FlacDecoderSession::FlacDecoderSession(AudioFormat outputFormat)
     : _impl(std::make_unique<Impl>(outputFormat))
   {
   }
@@ -206,9 +206,15 @@ namespace app::core::decoder
     return block;
   }
 
-  DecodedStreamInfo FlacDecoderSession::streamInfo() const { return _impl->info; }
+  DecodedStreamInfo FlacDecoderSession::streamInfo() const
+  {
+    return _impl->info;
+  }
 
-  std::string_view FlacDecoderSession::lastError() const noexcept { return _impl->error; }
+  std::string_view FlacDecoderSession::lastError() const noexcept
+  {
+    return _impl->error;
+  }
 
   // Implementation of callbacks
 

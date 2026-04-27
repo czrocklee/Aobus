@@ -44,7 +44,7 @@ namespace app::ui
       return ss.str();
     }
 
-    std::string formatStream(app::core::playback::StreamFormat const& format)
+    std::string formatStream(app::core::AudioFormat const& format)
     {
       std::stringstream ss;
       ss << (format.sampleRate / 1000.0) << " kHz · " << static_cast<int>(format.bitDepth) << "-bit · ";
@@ -562,9 +562,9 @@ namespace app::ui
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
-        auto it = std::find_if(snapshot.graph.nodes.begin(), snapshot.graph.nodes.end(), 
-                               [&](auto const& n) { return n.id == currentId; });
-        
+        auto it = std::find_if(
+          snapshot.graph.nodes.begin(), snapshot.graph.nodes.end(), [&](auto const& n) { return n.id == currentId; });
+
         if (it == snapshot.graph.nodes.end()) break;
 
         auto const& node = *it;

@@ -20,9 +20,9 @@ namespace app::core::playback
 
   struct RenderPlan final
   {
-    StreamFormat sourceFormat = {};
-    StreamFormat deviceFormat = {};
-    StreamFormat decoderOutputFormat = {};
+    AudioFormat sourceFormat = {};
+    AudioFormat deviceFormat = {};
+    AudioFormat decoderOutputFormat = {};
     bool requiresResample = false;
     bool requiresBitDepthConversion = false;
     bool requiresChannelRemap = false;
@@ -32,7 +32,7 @@ namespace app::core::playback
   class FormatNegotiator final
   {
   public:
-    static RenderPlan buildPlan(StreamFormat sourceFormat, DeviceCapabilities const& caps);
+    static RenderPlan buildPlan(AudioFormat sourceFormat, DeviceCapabilities const& caps);
   };
 
 } // namespace app::core::playback
