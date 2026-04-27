@@ -365,14 +365,14 @@ namespace
   /**
    * Filter matcher - standalone version matching app::ui::app::ui::TrackListAdapter logic.
    */
-  bool matchesFilter(RowData const& rowData, std::string const& filter)
+  bool matchesFilter(RowData const& rowData, std::string_view filter)
   {
     if (filter.empty())
     {
       return true;
     }
 
-    auto needle = filter;
+    auto needle = std::string{filter};
     std::transform(needle.begin(), needle.end(), needle.begin(), ::tolower);
 
     auto check = [&needle](std::string const& field) -> bool
