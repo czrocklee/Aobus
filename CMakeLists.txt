@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.30)
 project(rockstudio VERSION 0.1.0)
 set (CMAKE_CXX_STANDARD 23)
 
+option(ROCKSTUDIO_ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
+
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/rs")
 configure_file(cmake/AppVersion.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/rs/AppVersion.h" @ONLY)
 
@@ -100,8 +102,12 @@ target_link_libraries(UDEV INTERFACE ${UDEV_LIBRARIES})
 message(STATUS "libudev found and enabled")
 
 # clang-tidy setup (manual application to targets)
-#find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy)
+unset(CLANG_TIDY_EXECUTABLE CACHE)
 unset(CLANG_TIDY_EXECUTABLE)
+
+if(ROCKSTUDIO_ENABLE_CLANG_TIDY)
+  find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy REQUIRED)
+endif()
 
 if(CLANG_TIDY_EXECUTABLE)
   # Set up GCC include paths for clang-tidy (required for GCC)
@@ -137,8 +143,6 @@ if(CLANG_TIDY_EXECUTABLE)
 
   message(STATUS "clang-tidy found: ${CLANG_TIDY_EXECUTABLE}")
   message(STATUS "clang-tidy strict checks for lib/tool, relaxed for test/")
-else()
-  message(STATUS "clang-tidy not found - install it for linting")
 endif()
 
 add_gperf_header(

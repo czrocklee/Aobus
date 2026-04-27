@@ -1,22 +1,50 @@
 #!/usr/bin/env bash
 # Build script for RockStudio
-# Usage: ./build.sh [debug|release|pgo1|pgo2] [clean]
+# Usage: ./build.sh [debug|release|pgo1|pgo2|profile] [--clean] [--tidy]
 
 set -e
 
 # Default to debug build
-BUILD_TYPE="${1:-debug}"
-CLEAN="${2:-}"
+BUILD_TYPE="debug"
+CLEAN="false"
+ENABLE_TIDY="false"
 
-# Validate build type
-if [[ "$BUILD_TYPE" != "debug" && "$BUILD_TYPE" != "release" && "$BUILD_TYPE" != "pgo1" && "$BUILD_TYPE" != "pgo2" && "$BUILD_TYPE" != "profile" ]]; then
-    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [clean]"
+show_usage() {
+    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy]"
     echo "  debug   - Debug build (default, with sanitizers)"
     echo "  release - Release build (optimized, no sanitizers)"
     echo "  pgo1    - PGO step 1: instrumented build for profile generation"
     echo "  pgo2    - PGO step 2: optimized build using collected profile"
     echo "  profile - Optimized build with debug symbols and frame pointers (for perf)"
-    echo "  clean   - Clean build directory before building"
+    echo "  --clean - Clean build directory before building"
+    echo "  --tidy  - Enable clang-tidy during the configure/build"
+}
+
+for ARG in "$@"; do
+    case "$ARG" in
+        debug|release|pgo1|pgo2|profile)
+            BUILD_TYPE="$ARG"
+            ;;
+        clean|--clean)
+            CLEAN="true"
+            ;;
+        --tidy)
+            ENABLE_TIDY="true"
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        *)
+            show_usage
+            exit 1
+            ;;
+    esac
+done
+
+# Validate build type
+if [[ "$BUILD_TYPE" != "debug" && "$BUILD_TYPE" != "release" && "$BUILD_TYPE" != "pgo1" && "$BUILD_TYPE" != "pgo2" && "$BUILD_TYPE" != "profile" ]]; then
+    show_usage
     exit 1
 fi
 
@@ -43,7 +71,7 @@ elif [[ "$BUILD_TYPE" == "profile" ]]; then
 fi
 
 # Clean if requested
-if [[ "$CLEAN" == "clean" ]]; then
+if [[ "$CLEAN" == "true" ]]; then
     echo "Cleaning build directory ($BUILD_DIR)..."
     rm -rf "$BUILD_DIR"
 fi
@@ -56,7 +84,14 @@ fi
 
 # Configure
 echo "Configuring RockStudio with preset '$PRESET'..."
-nix-shell --run "cmake --preset $PRESET"
+CONFIGURE_COMMAND="cmake --preset $PRESET"
+
+if [[ "$ENABLE_TIDY" == "true" ]]; then
+    echo "clang-tidy enabled for this build."
+    CONFIGURE_COMMAND+=" -DROCKSTUDIO_ENABLE_CLANG_TIDY=ON"
+fi
+
+nix-shell --run "$CONFIGURE_COMMAND"
 
 # Build
 echo "Building RockStudio..."
@@ -95,3 +130,4 @@ echo ""
 echo "All done!"
 echo "  Preset: $PRESET"
 echo "  Build dir: $BUILD_DIR"
+echo "  clang-tidy: $ENABLE_TIDY"
