@@ -28,22 +28,17 @@ add_executable(rs_test
     "${CMAKE_SOURCE_DIR}/app/core/model/FilteredTrackIdList.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/model/SmartListEngine.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/model/TrackIdList.cpp"
-)
-target_include_directories(rs_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog GTKMM yaml-cpp)
-
-if(FFmpeg_FOUND)
-  target_sources(rs_test PRIVATE
-    integration/playback/FfmpegDecoderSessionTest.cpp
-    integration/tag/TagTest.cpp
-    "${CMAKE_SOURCE_DIR}/app/core/playback/FfmpegDecoderSession.cpp"
+    "${CMAKE_SOURCE_DIR}/app/core/playback/FlacDecoderSession.cpp"
+    "${CMAKE_SOURCE_DIR}/app/core/playback/AlacDecoderSession.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/playback/MemoryPcmSource.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/playback/PcmRingBuffer.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/playback/StreamingPcmSource.cpp"
-  )
-  target_link_libraries(rs_test PRIVATE FFmpeg)
-  target_compile_definitions(rs_test PRIVATE FFmpeg_FOUND TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
-endif()
+    integration/playback/DecoderIntegrationTest.cpp
+    integration/tag/TagTest.cpp
+)
+target_include_directories(rs_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
+target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog GTKMM yaml-cpp PkgFLAC PkgALAC)
+target_compile_definitions(rs_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
 
 target_compile_options(rs_test PRIVATE -Wno-array-bounds)
 

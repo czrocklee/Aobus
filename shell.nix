@@ -53,6 +53,8 @@ pkgs.mkShell {
       gsettings-desktop-schemas
 
       ffmpeg
+      flac
+      alac
       pipewire
       alsa-lib
       udev
