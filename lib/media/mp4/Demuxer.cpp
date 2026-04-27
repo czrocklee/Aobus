@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/media/mp4/Demuxer.h>
 #include <rs/media/mp4/Atom.h>
 #include <rs/media/mp4/AtomLayout.h>
+#include <rs/media/mp4/Demuxer.h>
 
+#include <algorithm>
 #include <array>
 #include <boost/endian/conversion.hpp>
 
@@ -13,6 +14,12 @@ namespace rs::media::mp4
 
   namespace
   {
+    struct SampleToChunkEntry final
+    {
+      std::uint32_t firstChunk = 0;
+      std::uint32_t samplesPerChunk = 0;
+    };
+
     Atom const* findNode(Atom const& node, std::span<std::string_view const> path, std::size_t startPos = 0)
     {
       if (startPos >= path.size() || path[startPos] != node.type())
@@ -29,6 +36,68 @@ namespace rs::media::mp4
       node.visitChildren([&](auto const& child) { return ((found = findNode(child, path, startPos + 1)) == nullptr); });
       return found;
     }
+
+    bool buildSampleOffsets(std::vector<Demuxer::SampleEntry>& samples,
+                            std::span<std::uint64_t const> chunkOffsets,
+                            std::span<SampleToChunkEntry const> sampleToChunk)
+    {
+      if (samples.empty() || chunkOffsets.empty() || sampleToChunk.empty())
+      {
+        return false;
+      }
+
+      auto sampleIndex = std::size_t{0};
+
+      for (auto entryIndex = std::size_t{0}; entryIndex < sampleToChunk.size(); ++entryIndex)
+      {
+        auto const& entry = sampleToChunk[entryIndex];
+
+        if (entry.firstChunk == 0 || entry.samplesPerChunk == 0)
+        {
+          return false;
+        }
+
+        auto const chunkStartIndex = static_cast<std::size_t>(entry.firstChunk - 1);
+
+        if (chunkStartIndex >= chunkOffsets.size())
+        {
+          return false;
+        }
+
+        auto chunkEndIndex = chunkOffsets.size();
+
+        if (entryIndex + 1 < sampleToChunk.size())
+        {
+          auto const nextFirstChunk = sampleToChunk[entryIndex + 1].firstChunk;
+
+          if (nextFirstChunk <= entry.firstChunk)
+          {
+            return false;
+          }
+
+          chunkEndIndex = std::min(chunkEndIndex, static_cast<std::size_t>(nextFirstChunk - 1));
+        }
+
+        for (auto chunkIndex = chunkStartIndex; chunkIndex < chunkEndIndex; ++chunkIndex)
+        {
+          auto sampleOffset = chunkOffsets[chunkIndex];
+
+          for (auto sampleInChunk = std::uint32_t{0}; sampleInChunk < entry.samplesPerChunk; ++sampleInChunk)
+          {
+            if (sampleIndex >= samples.size())
+            {
+              return false;
+            }
+
+            samples[sampleIndex].offset = sampleOffset;
+            sampleOffset += samples[sampleIndex].size;
+            ++sampleIndex;
+          }
+        }
+      }
+
+      return sampleIndex == samples.size();
+    }
   } // namespace
 
   Demuxer::Demuxer(std::span<std::byte const> fileData)
@@ -38,7 +107,14 @@ namespace rs::media::mp4
 
   std::string Demuxer::parseTrack(std::string_view targetFormat)
   {
+    _magicCookie.clear();
+    _samples.clear();
+    _timescale = 0;
+    _duration = 0;
+
     RootAtom root = fromBuffer(_fileData.data(), _fileData.size());
+    auto chunkOffsets = std::vector<std::uint64_t>{};
+    auto sampleToChunk = std::vector<SampleToChunkEntry>{};
 
     // mdhd path
     static constexpr std::array kMdhdPath = {
@@ -75,7 +151,7 @@ namespace rs::media::mp4
     }
 
     stblNode->visitChildren(
-      [this, targetFormat](Atom const& atom)
+      [this, targetFormat, &chunkOffsets, &sampleToChunk](Atom const& atom)
       {
         auto type = atom.type();
         auto const& view = static_cast<AtomView const&>(atom);
@@ -83,8 +159,8 @@ namespace rs::media::mp4
         if (type == "stsd")
         {
           constexpr std::size_t kStsdContentHeaderSize = 8;
-          auto const* data = reinterpret_cast<std::uint8_t const*>(view.layout<AtomLayout>().type.data() + 4) +
-                             kStsdContentHeaderSize;
+          auto const* data =
+            reinterpret_cast<std::uint8_t const*>(view.layout<AtomLayout>().type.data() + 4) + kStsdContentHeaderSize;
 
           auto const entrySize = boost::endian::load_big_u32(data);
           auto const format = std::string_view{reinterpret_cast<char const*>(data + 4), 4};
@@ -101,8 +177,8 @@ namespace rs::media::mp4
 
               if (extType == targetFormat)
               {
-                _magicCookie.assign(reinterpret_cast<std::byte const*>(extData + 8),
-                                    reinterpret_cast<std::byte const*>(extData + extSize));
+                _magicCookie.assign(
+                  reinterpret_cast<std::byte const*>(extData), reinterpret_cast<std::byte const*>(extData + extSize));
                 break;
               }
 
@@ -137,6 +213,21 @@ namespace rs::media::mp4
             }
           }
         }
+        else if (type == "stsc")
+        {
+          auto const* data = reinterpret_cast<std::uint8_t const*>(view.layout<AtomLayout>().type.data() + 4) + 4;
+          auto const count = boost::endian::load_big_u32(data);
+
+          data += 4;
+          sampleToChunk.resize(count);
+
+          for (std::uint32_t i = 0; i < count; ++i)
+          {
+            sampleToChunk[i].firstChunk = boost::endian::load_big_u32(data);
+            sampleToChunk[i].samplesPerChunk = boost::endian::load_big_u32(data + 4);
+            data += 12;
+          }
+        }
         else if (type == "stco")
         {
           auto const* data = reinterpret_cast<std::uint8_t const*>(view.layout<AtomLayout>().type.data() + 4) + 4;
@@ -144,13 +235,26 @@ namespace rs::media::mp4
 
           data += 4;
 
-          if (count == static_cast<std::uint32_t>(_samples.size()))
+          chunkOffsets.resize(count);
+
+          for (std::uint32_t i = 0; i < count; ++i)
           {
-            for (std::uint32_t i = 0; i < count; ++i)
-            {
-              _samples[i].offset = boost::endian::load_big_u32(data);
-              data += 4;
-            }
+            chunkOffsets[i] = boost::endian::load_big_u32(data);
+            data += 4;
+          }
+        }
+        else if (type == "co64")
+        {
+          auto const* data = reinterpret_cast<std::uint8_t const*>(view.layout<AtomLayout>().type.data() + 4) + 4;
+          auto const count = boost::endian::load_big_u32(data);
+
+          data += 4;
+          chunkOffsets.resize(count);
+
+          for (std::uint32_t i = 0; i < count; ++i)
+          {
+            chunkOffsets[i] = boost::endian::load_big_u64(data);
+            data += 8;
           }
         }
 
@@ -162,12 +266,23 @@ namespace rs::media::mp4
       return "Failed to extract track extradata or sample table";
     }
 
+    if (!buildSampleOffsets(_samples, chunkOffsets, sampleToChunk))
+    {
+      return "Failed to resolve MP4 sample offsets";
+    }
+
     return {};
   }
 
-  std::span<std::byte const> Demuxer::magicCookie() const { return _magicCookie; }
+  std::span<std::byte const> Demuxer::magicCookie() const
+  {
+    return _magicCookie;
+  }
 
-  std::uint32_t Demuxer::sampleCount() const { return static_cast<std::uint32_t>(_samples.size()); }
+  std::uint32_t Demuxer::sampleCount() const
+  {
+    return static_cast<std::uint32_t>(_samples.size());
+  }
 
   Demuxer::SampleEntry Demuxer::getSampleInfo(std::uint32_t index) const
   {
@@ -194,8 +309,14 @@ namespace rs::media::mp4
     return _fileData.subspan(entry.offset, entry.size);
   }
 
-  std::uint32_t Demuxer::timescale() const { return _timescale; }
+  std::uint32_t Demuxer::timescale() const
+  {
+    return _timescale;
+  }
 
-  std::uint64_t Demuxer::duration() const { return _duration; }
+  std::uint64_t Demuxer::duration() const
+  {
+    return _duration;
+  }
 
 } // namespace rs::media::mp4
