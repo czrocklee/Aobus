@@ -56,6 +56,8 @@ namespace rs::tag::mpeg
     constexpr std::uint8_t FrameSyncByte1 = 0xFF;
     constexpr std::uint8_t FrameSyncByte2Mask = 0xE0;
     constexpr std::size_t FrameSyncSkipSize = 2;
+    constexpr std::uint8_t kCodecIdMp3 = 0x55;
+    constexpr std::size_t kXingDataFieldOffset = 8;
 
     std::uint8_t const* findFrameSync(std::uint8_t const* begin, std::uint8_t const* end)
     {
@@ -284,7 +286,7 @@ namespace rs::tag::mpeg
     std::memcpy(&flags, ptr + 4, 4);
     flags = boost::endian::endian_reverse(flags);
 
-    std::size_t fieldOffset = 8;
+    std::size_t fieldOffset = kXingDataFieldOffset;
     constexpr std::uint32_t kXingFlagFrames = 0x01;
     constexpr std::uint32_t kXingFlagBytes = 0x02;
 

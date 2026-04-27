@@ -158,7 +158,7 @@ namespace rs::tag::mp4
             {
               builder.property()
                 .durationMs(durationMs)
-                .bitrate(static_cast<std::uint32_t>((fileSize * 1000 * kBitsPerByte) / durationMs));
+                .bitrate(static_cast<std::uint32_t>((fileSize * kMsPerSecond * kBitsPerByte) / durationMs));
             }
           }
         }

@@ -12,26 +12,29 @@ namespace rs::tool
 {
   namespace
   {
-    std::string formatUuid(std::array<std::byte, 16> const& id)
+    constexpr std::size_t kUuidByteCount = 16;
+    constexpr std::size_t kUuidDashIndices[] = {3, 5, 7, 9};
+
+    std::string formatUuid(std::array<std::byte, kUuidByteCount> const& id)
     {
       auto oss = std::ostringstream{};
       oss << std::hex << std::setfill('0');
-      
-      for (size_t i = 0; i < id.size(); ++i)
+
+      for (std::size_t i = 0; i < id.size(); ++i)
       {
         oss << std::setw(2) << static_cast<int>(id[i]);
-        
-        if (i == 3 || i == 5 || i == 7 || i == 9)
+
+        if (i == kUuidDashIndices[0] || i == kUuidDashIndices[1] || i == kUuidDashIndices[2] ||
+            i == kUuidDashIndices[3])
           oss << "-";
       }
-      
+
       return oss.str();
     }
 
     std::string formatTimestamp(std::uint64_t unixMs)
     {
-      auto const tp = std::chrono::time_point<std::chrono::system_clock>(
-          std::chrono::milliseconds{unixMs});
+      auto const tp = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds{unixMs});
       auto const time = std::chrono::system_clock::to_time_t(tp);
       auto oss = std::ostringstream{};
       oss << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S");
@@ -55,10 +58,10 @@ namespace rs::tool
 
       if (modeStr == "minimum")
         mode = core::ExportMode::Minimum;
-      
+
       else if (modeStr == "metadata")
         mode = core::ExportMode::Metadata;
-      
+
       else if (modeStr == "full")
         mode = core::ExportMode::Full;
       else
@@ -67,10 +70,10 @@ namespace rs::tool
         return;
       }
 
-    auto exporter = core::LibraryExporter{ml};
-    exporter.exportToYaml(path, mode);
+      auto exporter = core::LibraryExporter{ml};
+      exporter.exportToYaml(path, mode);
       os << "Library exported to '" << path << "' using mode '" << modeStr << "'.\n";
-  }
+    }
 
     void importLib(core::MusicLibrary& ml, std::string const& path, std::ostream& os)
     {
@@ -89,8 +92,8 @@ namespace rs::tool
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");
     auto* exportPath = exportCmd->add_option("output,-o,--output", "Output YAML file path")->required();
     auto* exportMode = exportCmd->add_option("-m,--mode", "Export mode (minimum, metadata, full)")->default_val("full");
-    exportCmd->callback(
-      [&ml, exportPath, exportMode]() { exportLib(ml, exportPath->as<std::string>(), exportMode->as<std::string>(), std::cout); });
+    exportCmd->callback([&ml, exportPath, exportMode]()
+                        { exportLib(ml, exportPath->as<std::string>(), exportMode->as<std::string>(), std::cout); });
 
     auto* importCmd = lib->add_subcommand("import", "Import library from YAML");
     auto* importPath = importCmd->add_option("input,-i,--input", "Input YAML file path")->required();
