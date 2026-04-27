@@ -26,6 +26,8 @@ namespace app::core
   struct SessionState final
   {
     std::string lastLibraryPath;
+    std::string lastBackend;
+    std::string lastOutputDeviceId;
   };
 
   struct TrackViewState final

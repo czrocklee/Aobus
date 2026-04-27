@@ -365,15 +365,20 @@ namespace app::ui
 
     if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
     {
-      auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
-      rowBox->set_spacing(0); // Explicitly remove gap between lines
+      auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+      rowBox->set_spacing(12);
       rowBox->set_valign(Gtk::Align::CENTER);
       rowBox->add_css_class("device-row");
+
+      auto* textBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
+      textBox->set_spacing(0); // Explicitly remove gap between lines
+      textBox->set_hexpand(true);
+      textBox->set_valign(Gtk::Align::CENTER);
 
       auto* nameLabel = Gtk::make_managed<Gtk::Label>(deviceItem->name);
       nameLabel->set_halign(Gtk::Align::START);
       nameLabel->set_ellipsize(Pango::EllipsizeMode::END);
-      rowBox->append(*nameLabel);
+      textBox->append(*nameLabel);
 
       if (!deviceItem->description.empty())
       {
@@ -381,12 +386,19 @@ namespace app::ui
         descLabel->set_halign(Gtk::Align::START);
         descLabel->add_css_class("menu-description");
         descLabel->set_ellipsize(Pango::EllipsizeMode::END);
-        rowBox->append(*descLabel);
+        textBox->append(*descLabel);
       }
 
+      rowBox->append(*textBox);
+
       // Mark current device if it matches
-      if (deviceItem->kind == _lastPlaybackState.backend && deviceItem->id == _lastPlaybackState.currentDeviceId)
+      if (deviceItem->active)
       {
+        auto* checkIcon = Gtk::make_managed<Gtk::Image>();
+        checkIcon->set_from_icon_name("object-select-symbolic");
+        checkIcon->set_pixel_size(16);
+        rowBox->append(*checkIcon);
+
         // We can't easily add a CSS class to the ListBoxRow here because we return the child.
         // But we can style the rowBox itself or use a helper.
         rowBox->add_css_class("selected-row");
@@ -441,7 +453,9 @@ namespace app::ui
 
         for (auto const& device : backend.devices)
         {
-          _outputStore->append(DeviceItem::create(backend.kind, device));
+          auto item = DeviceItem::create(backend.kind, device);
+          item->active = (backend.kind == snapshot.backend && device.id == snapshot.currentDeviceId);
+          _outputStore->append(item);
         }
       }
 

@@ -19,6 +19,8 @@ namespace
 
   constexpr auto kConfigVersionKey = "config_version";
   constexpr auto kLastLibraryKey = "last_library";
+  constexpr auto kLastBackendKey = "last_backend";
+  constexpr auto kLastDeviceIdKey = "last_device_id";
   constexpr auto kWidthKey = "width";
   constexpr auto kHeightKey = "height";
   constexpr auto kMaximizedKey = "maximized";
@@ -124,6 +126,8 @@ namespace app::core
     auto& tvs = config._trackViewState;
 
     ss.lastLibraryPath = getString(keyFile, kAppGroup, kLastLibraryKey);
+    ss.lastBackend = getString(keyFile, kAppGroup, kLastBackendKey);
+    ss.lastOutputDeviceId = getString(keyFile, kAppGroup, kLastDeviceIdKey);
     ws.width = getInt(keyFile, kWindowGroup, kWidthKey, kDefaultWindowWidth);
     ws.height = getInt(keyFile, kWindowGroup, kHeightKey, kDefaultWindowHeight);
     ws.maximized = getBool(keyFile, kWindowGroup, kMaximizedKey, false);
@@ -151,6 +155,8 @@ namespace app::core
     auto keyFile = Glib::KeyFile::create();
     keyFile->set_integer(kAppGroup, kConfigVersionKey, kAppConfigVersion);
     keyFile->set_string(kAppGroup, kLastLibraryKey, _sessionState.lastLibraryPath);
+    keyFile->set_string(kAppGroup, kLastBackendKey, _sessionState.lastBackend);
+    keyFile->set_string(kAppGroup, kLastDeviceIdKey, _sessionState.lastOutputDeviceId);
 
     keyFile->set_integer(kWindowGroup, kWidthKey, _windowState.width);
     keyFile->set_integer(kWindowGroup, kHeightKey, _windowState.height);

@@ -45,6 +45,11 @@ namespace app::core::playback
       return;
     }
 
+    if (_allDevices.empty())
+    {
+      snapshot();
+    }
+
     // 2. Find the AudioDevice matching the kind and id from our cache
     auto const it = std::find_if(_allDevices.begin(),
                                  _allDevices.end(),

@@ -2084,6 +2084,16 @@ namespace app::ui
 
       auto const& sessionState = _appConfig.sessionState();
 
+      // Restore audio output selection
+      if (!sessionState.lastBackend.empty())
+      {
+        auto const kind = app::core::playback::backendKindFromId(sessionState.lastBackend);
+        if (kind != app::core::playback::BackendKind::None)
+        {
+          _playbackController->setOutput(kind, sessionState.lastOutputDeviceId);
+        }
+      }
+
       if (sessionState.lastLibraryPath.empty())
       {
         return;
@@ -2358,6 +2368,13 @@ namespace app::ui
 
     _playbackController->setOutput(kind, deviceId);
     _statusBar->showMessage("Switched to " + std::string(app::core::playback::backendDisplayName(kind)));
+
+    // Persist selection to config
+    auto session = _appConfig.sessionState();
+    session.lastBackend = std::string(app::core::playback::backendKindToId(kind));
+    session.lastOutputDeviceId = deviceId;
+    _appConfig.setSessionState(session);
+    _appConfig.save();
   }
 
   void MainWindow::clearActivePlaybackSequence()
