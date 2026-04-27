@@ -24,9 +24,11 @@ add_library(rs OBJECT
     tag/File.cpp
     tag/Open.cpp
     tag/flac/File.cpp
-    tag/flac/MetadataBlock.cpp
+    media/flac/MetadataBlock.cpp
+    media/mp4/Demuxer.cpp
     tag/mp4/File.cpp
-    tag/mp4/Atom.cpp
+    media/mp4/Atom.cpp
+    utility/MappedFile.cpp
     tag/mpeg/File.cpp
     tag/mpeg/Frame.cpp
     tag/mpeg/id3v2/Reader.cpp

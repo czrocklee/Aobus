@@ -4,7 +4,8 @@
 #include "core/playback/PlaybackEngine.h"
 #include "core/Log.h"
 
-#include "core/playback/AudioDecoderSession.h"
+#include "core/decoder/AudioDecoderFactory.h"
+#include "core/decoder/IAudioDecoderSession.h"
 #include "core/playback/MemoryPcmSource.h"
 #include "core/playback/StreamingPcmSource.h"
 
@@ -55,14 +56,14 @@ namespace
     return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
   }
 
-  std::uint64_t estimatedDecodedBytes(app::core::playback::DecodedStreamInfo const& info) noexcept
+  std::uint64_t estimatedDecodedBytes(app::core::decoder::DecodedStreamInfo const& info) noexcept
   {
     auto const rate = bytesPerSecond(info.outputFormat);
     if (rate == 0 || info.durationMs == 0) return 0;
     return (static_cast<std::uint64_t>(info.durationMs) * rate) / 1000U;
   }
 
-  bool shouldUseMemoryPcmSource(app::core::playback::DecodedStreamInfo const& info) noexcept
+  bool shouldUseMemoryPcmSource(app::core::decoder::DecodedStreamInfo const& info) noexcept
   {
     auto const decodedBytes = estimatedDecodedBytes(info);
     return decodedBytes > 0 && decodedBytes <= kMemoryPcmSourceBudgetBytes;
@@ -71,6 +72,7 @@ namespace
 
 namespace app::core::playback
 {
+  using namespace app::core::decoder;
 
   PlaybackEngine::PlaybackEngine(std::unique_ptr<IAudioBackend> backend)
     : _backend{std::move(backend)}

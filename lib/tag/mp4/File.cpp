@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "../Decoder.h"
-#include "Atom.h"
+#include <rs/media/mp4/Atom.h>
 #include <rs/tag/mp4/File.h>
 #include <rs/utility/ByteView.h>
 
@@ -14,6 +14,8 @@
 
 namespace rs::tag::mp4
 {
+  using namespace rs::media::mp4;
+
   namespace
   {
     using TextSetter =
@@ -195,7 +197,7 @@ namespace rs::tag::mp4
 
   rs::core::TrackBuilder File::loadTrack() const
   {
-    RootAtom root = rs::tag::mp4::fromBuffer(_mappedRegion.get_address(), _mappedRegion.get_size());
+    RootAtom root = rs::media::mp4::fromBuffer(_mappedRegion.get_address(), _mappedRegion.get_size());
     Atom const* ilstNode = findIlstNode(root);
 
     clearOwnedStrings();

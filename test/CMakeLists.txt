@@ -22,14 +22,14 @@ add_executable(rs_test
     unit/app/TrackRowDataProviderTest.cpp
     unit/app/TrackListAdapterTest.cpp
     unit/app/SmartListEngineTest.cpp
-    "${CMAKE_SOURCE_DIR}/app/core/playback/AudioDecoderSession.cpp"
+    "${CMAKE_SOURCE_DIR}/app/core/decoder/AudioDecoderFactory.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/Log.cpp"
     "${CMAKE_SOURCE_DIR}/app/platform/linux/ui/TrackPresentation.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/model/FilteredTrackIdList.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/model/SmartListEngine.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/model/TrackIdList.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/playback/FlacDecoderSession.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/playback/AlacDecoderSession.cpp"
+    "${CMAKE_SOURCE_DIR}/app/core/decoder/FlacDecoderSession.cpp"
+    "${CMAKE_SOURCE_DIR}/app/core/decoder/AlacDecoderSession.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/playback/MemoryPcmSource.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/playback/PcmRingBuffer.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/playback/StreamingPcmSource.cpp"

@@ -39,8 +39,8 @@ A decoder abstraction was already introduced so the rest of playback no longer n
 
 Relevant files:
 
-- `app/core/playback/AudioDecoderSession.h`
-- `app/core/playback/AudioDecoderSession.cpp`
+- `app/core/decoder/IAudioDecoderSession.h`
+- `app/core/decoder/AudioDecoderFactory.cpp`
 - `app/core/Log.cpp`
 
 This refactor already builds and passed the full test binary. It is intended to be the seam used for the FLAC and ALAC replacements.
@@ -176,8 +176,8 @@ Planned behavior:
 
 Relevant files:
 
-- `app/core/playback/AudioDecoderSession.h`
-- `app/core/playback/AudioDecoderSession.cpp`
+- `app/core/decoder/IAudioDecoderSession.h`
+- `app/core/decoder/AudioDecoderFactory.cpp`
 - `app/core/playback/PlaybackEngine.cpp`
 
 ### Phase 2: Replace FFmpeg in build configuration

@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace rs::tag::mp4
+namespace rs::media::mp4
 {
   struct AtomLayout
   {
@@ -133,4 +133,4 @@ namespace rs::tag::mp4
   static_assert(sizeof(AudioSampleEntryLayout) == 36);
   static_assert(alignof(AudioSampleEntryLayout) == 1);
   static_assert(std::is_trivial_v<AudioSampleEntryLayout>);
-}
+} // namespace rs::media::mp4

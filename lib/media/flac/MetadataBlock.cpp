@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "MetadataBlock.h"
+#include <rs/media/flac/MetadataBlock.h>
 #include <rs/utility/ByteView.h>
 
-namespace rs::tag::flac
+namespace rs::media::flac
 {
   std::vector<std::string_view> VorbisCommentBlockView::comments() const
   {
@@ -53,4 +53,4 @@ namespace rs::tag::flac
       RS_THROW(rs::Exception, "invalid flac metadata blocks size, exceeding the file boundary");
     }
   }
-}
+} // namespace rs::media::flac

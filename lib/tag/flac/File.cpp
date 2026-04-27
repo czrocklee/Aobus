@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "../Decoder.h"
-#include "MetadataBlock.h"
 #include <rs/Exception.h>
+#include <rs/media/flac/MetadataBlock.h>
 #include <rs/tag/flac/File.h>
 #include <rs/utility/ByteView.h>
 
@@ -13,6 +13,8 @@
 
 namespace rs::tag::flac
 {
+  using namespace rs::media::flac;
+
   namespace
   {
     // Bits per byte for bitrate calculation

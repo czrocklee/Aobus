@@ -3,7 +3,7 @@
 
 #include "core/Log.h"
 
-#include "core/playback/AudioDecoderSession.h"
+#include "core/decoder/AudioDecoderFactory.h"
 
 #include <spdlog/async.h>
 #include <spdlog/sinks/null_sink.h>
@@ -59,7 +59,7 @@ namespace app::core
 
     spdlog::set_default_logger(_appLogger);
 
-    ::app::core::playback::initializeAudioDecoders();
+    ::app::core::decoder::initializeAudioDecoders();
 
     APP_LOG_INFO("Logging initialized. Log file: {}", logPath.string());
   }

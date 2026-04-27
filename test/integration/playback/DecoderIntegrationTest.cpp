@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "core/playback/FlacDecoderSession.h"
-#include "core/playback/AlacDecoderSession.h"
+#include "core/decoder/FlacDecoderSession.h"
+#include "core/decoder/AlacDecoderSession.h"
 #include "core/Log.h"
 #include <catch2/catch.hpp>
 #include <filesystem>
 
+using namespace app::core::decoder;
 using namespace app::core::playback;
 
 TEST_CASE("FlacDecoderSession handles basic files", "[playback][integration]")

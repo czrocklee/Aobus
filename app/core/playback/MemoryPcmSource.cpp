@@ -44,7 +44,8 @@ namespace
 namespace app::core::playback
 {
 
-  MemoryPcmSource::MemoryPcmSource(std::unique_ptr<IAudioDecoderSession> decoder, DecodedStreamInfo streamInfo)
+  MemoryPcmSource::MemoryPcmSource(std::unique_ptr<decoder::IAudioDecoderSession> decoder,
+                                   decoder::DecodedStreamInfo streamInfo)
     : _decoder{std::move(decoder)}, _streamInfo{streamInfo}
   {
   }
