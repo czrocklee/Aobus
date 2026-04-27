@@ -100,7 +100,7 @@ namespace
   {
     static constexpr auto kUnitToken =
       dsl::token(dsl::minus_sign + dsl::digits<> + dsl::opt(dsl::lit_c<'.'> >> dsl::digits<>) +
-                 dsl::identifier(dsl::ascii::alpha).pattern());
+                 dsl::identifier(dsl::ascii::alpha).pattern()); // NOLINT(readability-static-accessed-through-instance)
     static constexpr auto rule = dsl::peek(kUnitToken) >> dsl::capture(kUnitToken);
     static constexpr auto value = lexy::callback<UnitConstantExpression>(
       [](auto lexeme) { return UnitConstantExpression{std::string{lexeme.begin(), lexeme.end()}}; });
@@ -128,7 +128,7 @@ namespace
                                       [](std::vector<Expression> list)
                                       {
                                         auto result = Expression{std::move(list.back())};
-                                        
+
                                         for (auto it = list.rbegin() + 1; it != list.rend(); ++it)
                                         {
                                           auto bin = std::make_unique<BinaryExpression>();
@@ -137,7 +137,7 @@ namespace
                                             BinaryExpression::Operation{Operator::Add, std::move(result)};
                                           result = Expression{std::move(bin)};
                                         }
-                                        
+
                                         return result;
                                       });
     };
@@ -221,7 +221,7 @@ namespace rs::expr
       normalize(root);
       return root;
     }
-    
+
     RS_THROW_FORMAT(rs::Exception, "parsing {} error", expr);
   }
 }

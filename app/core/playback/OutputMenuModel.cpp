@@ -10,7 +10,7 @@ namespace app::core::playback
                                BackendKind currentBackend,
                                std::string_view currentDeviceId)
   {
-    auto const deviceIdStr = std::string(currentDeviceId);
+    auto const deviceIdStr = std::string{currentDeviceId};
 
     bool const changed =
       (_backends != backends) || (_currentBackend != currentBackend) || (_currentDeviceId != deviceIdStr);

@@ -249,7 +249,8 @@ namespace rs::expr
         lexeme.remove_prefix(1);
       }
 
-      auto const suffixStart = std::ranges::find_if(lexeme, [](unsigned char ch) { return std::isalpha(ch) != 0; });
+      auto const* const suffixStart =
+        std::ranges::find_if(lexeme, [](unsigned char ch) { return std::isalpha(ch) != 0; });
 
       if (suffixStart == lexeme.end())
       {
@@ -429,12 +430,12 @@ namespace rs::expr
   void QueryCompiler::compileVariable(VariableExpression const& var)
   {
     // Tags are hot data
-    
+
     if (var.type == VariableType::Tag)
     {
       _hasHotAccess = true;
       // Try to resolve tag name to ID via dictionary for bloom filter
-      
+
       if (_dict != nullptr)
       {
         auto tagId = _dict->getId(var.name);
@@ -482,7 +483,7 @@ namespace rs::expr
     _lastField = field; // Track for string resolution context
 
     // Track access profile for hot/cold determination based on field storage location
-    
+
     if (isColdField(field))
     {
       _hasColdAccess = true;
@@ -495,7 +496,7 @@ namespace rs::expr
     // For custom fields, pre-resolve dictId and store as constant (Option B)
     // If resolution fails (key not in dictionary), store 0 - evaluator will return empty string
     std::int64_t constValue = 0;
-    
+
     if (var.type == VariableType::Custom)
     {
       if (_dict != nullptr)
@@ -594,7 +595,6 @@ namespace rs::expr
                        .strData = nullptr,
                      });
                    }
-                 
                  }),
                constant);
   }
@@ -602,7 +602,7 @@ namespace rs::expr
   std::int64_t QueryCompiler::resolveStringConstant(std::string const& str, Field field)
   {
     // Only resolve for metadata ID fields and tag fields
-    
+
     if (!_resolveStringConstantsToIds || (!isDictionaryField(field) && !isTagField(field)))
     {
       return -1;
@@ -628,7 +628,7 @@ namespace rs::expr
     _resolveStringConstantsToIds = true;
 
     // Check if the expression is a constant "true"
-    
+
     if (auto const* constant = std::get_if<ConstantExpression>(&expr))
     {
       if (bool const* val = std::get_if<bool>(constant))
@@ -643,7 +643,7 @@ namespace rs::expr
     compileExpression(expr);
 
     // Set access profile based on what data was accessed
-    
+
     if (_hasHotAccess && _hasColdAccess)
     {
       _plan.accessProfile = AccessProfile::HotAndCold;

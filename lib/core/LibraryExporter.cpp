@@ -40,7 +40,7 @@ namespace rs::core
   void LibraryExporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
   {
     auto ofs = std::ofstream{path};
-    
+
     if (!ofs)
     {
       RS_THROW_FORMAT(rs::Exception, "Failed to open '{}' for writing", path.string());
@@ -87,40 +87,65 @@ namespace rs::core
     out << YAML::Key << "uri" << YAML::Value << std::string(property.uri());
 
     // Metadata & Custom (Metadata or Full mode)
-    
+
     if (mode == ExportMode::Metadata || mode == ExportMode::Full)
     {
       out << YAML::Key << "title" << YAML::Value << std::string(metadata.title());
 
-      
-      if (auto const artistId = metadata.artistId(); artistId != DictionaryId{0}) out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
+      if (auto const artistId = metadata.artistId(); artistId != DictionaryId{0})
+      {
+        out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
+      }
 
       auto const albumId = metadata.albumId();
-      
-      if (albumId != DictionaryId{0}) out << YAML::Key << "album" << YAML::Value << std::string(dict.get(albumId));
+
+      if (albumId != DictionaryId{0})
+      {
+        out << YAML::Key << "album" << YAML::Value << std::string(dict.get(albumId));
+      }
 
       auto const albumArtistId = metadata.albumArtistId();
-      
+
       if (albumArtistId != DictionaryId{0})
+      {
         out << YAML::Key << "albumArtist" << YAML::Value << std::string(dict.get(albumArtistId));
+      }
 
       auto const genreId = metadata.genreId();
-      
-      if (genreId != DictionaryId{0}) out << YAML::Key << "genre" << YAML::Value << std::string(dict.get(genreId));
 
-      if (metadata.year() != 0) out << YAML::Key << "year" << YAML::Value << metadata.year();
+      if (genreId != DictionaryId{0})
+      {
+        out << YAML::Key << "genre" << YAML::Value << std::string(dict.get(genreId));
+      }
 
-      if (metadata.trackNumber() != 0) out << YAML::Key << "trackNumber" << YAML::Value << metadata.trackNumber();
+      if (metadata.year() != 0)
+      {
+        out << YAML::Key << "year" << YAML::Value << metadata.year();
+      }
 
-      if (metadata.totalTracks() != 0) out << YAML::Key << "totalTracks" << YAML::Value << metadata.totalTracks();
+      if (metadata.trackNumber() != 0)
+      {
+        out << YAML::Key << "trackNumber" << YAML::Value << metadata.trackNumber();
+      }
 
-      if (metadata.discNumber() != 0) out << YAML::Key << "discNumber" << YAML::Value << metadata.discNumber();
+      if (metadata.totalTracks() != 0)
+      {
+        out << YAML::Key << "totalTracks" << YAML::Value << metadata.totalTracks();
+      }
 
-      if (metadata.totalDiscs() != 0) out << YAML::Key << "totalDiscs" << YAML::Value << metadata.totalDiscs();
+      if (metadata.discNumber() != 0)
+      {
+        out << YAML::Key << "discNumber" << YAML::Value << metadata.discNumber();
+      }
+
+      if (metadata.totalDiscs() != 0)
+      {
+        out << YAML::Key << "totalDiscs" << YAML::Value << metadata.totalDiscs();
+      }
 
       // Custom metadata
       auto const custom = view.custom();
-      
+
       if (!custom.empty())
       {
         out << YAML::Key << "custom" << YAML::Value << YAML::BeginMap;
@@ -133,7 +158,7 @@ namespace rs::core
     }
 
     // Full mode only: Properties & Cover Art
-    
+
     if (mode == ExportMode::Full)
     {
       out << YAML::Key << "durationMs" << YAML::Value << property.durationMs();
@@ -147,11 +172,14 @@ namespace rs::core
     }
 
     // Common to ALL modes: Rating & Tags
-    
-    if (metadata.rating() != 0) out << YAML::Key << "rating" << YAML::Value << (int)metadata.rating();
+
+    if (metadata.rating() != 0)
+    {
+      out << YAML::Key << "rating" << YAML::Value << static_cast<int>(metadata.rating());
+    }
 
     auto const tags = view.tags();
-    
+
     if (!tags.empty())
     {
       out << YAML::Key << "tags" << YAML::Value << YAML::BeginSeq;
@@ -177,7 +205,9 @@ namespace rs::core
       out << YAML::Key << "name" << YAML::Value << std::string(listView.name());
 
       if (!listView.description().empty())
+      {
         out << YAML::Key << "description" << YAML::Value << std::string(listView.description());
+      }
 
       if (listView.isSmart())
       {
@@ -186,7 +216,7 @@ namespace rs::core
       else
       {
         auto const tracks = listView.tracks();
-        
+
         if (!tracks.empty())
         {
           out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
@@ -197,7 +227,7 @@ namespace rs::core
           out << YAML::EndSeq;
         }
       }
-      
+
       out << YAML::EndMap;
     }
     out << YAML::EndSeq;

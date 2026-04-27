@@ -9,6 +9,7 @@
 #include "core/playback/StreamingPcmSource.h"
 
 #include <algorithm>
+#include <format>
 #include <limits>
 #include <set>
 #include <sstream>
@@ -517,7 +518,7 @@ namespace app::core::playback
     // 1. Build the strict linear path (The "Total Order" of the pipeline)
     std::vector<AudioNode*> path;
     {
-      std::string currentId = "rs-decoder";
+      auto currentId = std::string{"rs-decoder"};
       std::set<std::string> visited;
       while (!currentId.empty() && !visited.contains(currentId))
       {
@@ -556,19 +557,19 @@ namespace app::core::playback
       // --- A. Node internal state ---
       if (node->isLossySource)
       {
-        appendLine(snap.qualityTooltip, "• Source: Lossy format (" + node->name + ")");
+        appendLine(snap.qualityTooltip, std::format("• Source: Lossy format ({})", node->name));
         snap.quality = std::max(snap.quality, AudioQuality::LossySource);
       }
 
       if (node->volumeNotUnity)
       {
-        appendLine(snap.qualityTooltip, "• Volume: Modification at " + node->name);
+        appendLine(snap.qualityTooltip, std::format("• Volume: Modification at {}", node->name));
         snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
       }
 
       if (node->isMuted)
       {
-        appendLine(snap.qualityTooltip, "• Status: " + node->name + " is MUTED");
+        appendLine(snap.qualityTooltip, std::format("• Status: {} is MUTED", node->name));
         snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
       }
 
@@ -598,7 +599,7 @@ namespace app::core::playback
             apps += otherAppNames[j];
             if (j < otherAppNames.size() - 1) apps += ", ";
           }
-          appendLine(snap.qualityTooltip, "• Mixed: " + node->name + " shared with " + apps);
+          appendLine(snap.qualityTooltip, std::format("• Mixed: {} shared with {}", node->name, apps));
           snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
         }
       }
@@ -615,15 +616,13 @@ namespace app::core::playback
 
           if (f1.sampleRate != f2.sampleRate)
           {
-            appendLine(snap.qualityTooltip,
-                       "• Resampling: " + std::to_string(f1.sampleRate) + "Hz → " + std::to_string(f2.sampleRate) + "Hz");
+            appendLine(snap.qualityTooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
             snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
           }
 
           if (f1.channels != f2.channels)
           {
-            appendLine(snap.qualityTooltip,
-                       "• Channels: " + std::to_string(f1.channels) + "ch → " + std::to_string(f2.channels) + "ch");
+            appendLine(snap.qualityTooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
             snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
           }
           else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
@@ -637,8 +636,8 @@ namespace app::core::playback
             }
             else
             {
-              appendLine(snap.qualityTooltip,
-                         "• Precision: Truncated " + std::to_string(f1.bitDepth) + "b → " + std::to_string(f2.bitDepth) + "b");
+              appendLine(
+                snap.qualityTooltip, std::format("• Precision: Truncated {}b → {}b", f1.bitDepth, f2.bitDepth));
               snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
             }
           }
@@ -654,24 +653,15 @@ namespace app::core::playback
     // 5. Final summary
     switch (snap.quality)
     {
-      case AudioQuality::BitwisePerfect:
-        appendLine(snap.qualityTooltip, "\nConclusion: Bit-perfect output");
-        break;
+      case AudioQuality::BitwisePerfect: appendLine(snap.qualityTooltip, "\nConclusion: Bit-perfect output"); break;
       case AudioQuality::LosslessPadded:
-      case AudioQuality::LosslessFloat:
-        appendLine(snap.qualityTooltip, "\nConclusion: Lossless Conversion");
-        break;
+      case AudioQuality::LosslessFloat: appendLine(snap.qualityTooltip, "\nConclusion: Lossless Conversion"); break;
       case AudioQuality::LinearIntervention:
         appendLine(snap.qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
         break;
-      case AudioQuality::LossySource:
-        appendLine(snap.qualityTooltip, "\nConclusion: Lossy source format");
-        break;
-      case AudioQuality::Clipped:
-        appendLine(snap.qualityTooltip, "\nConclusion: Signal clipping detected");
-        break;
-      case AudioQuality::Unknown:
-        break;
+      case AudioQuality::LossySource: appendLine(snap.qualityTooltip, "\nConclusion: Lossy source format"); break;
+      case AudioQuality::Clipped: appendLine(snap.qualityTooltip, "\nConclusion: Signal clipping detected"); break;
+      case AudioQuality::Unknown: break;
     }
   }
 

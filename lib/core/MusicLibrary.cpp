@@ -15,6 +15,7 @@ namespace
   constexpr std::size_t kLmdbMapSize = std::size_t{1} * 1024 * 1024 * 1024; // 1 GB
   constexpr int kLmdbMaxDatabases = 8; // tracks_hot, tracks_cold, lists, resources, dictionary, meta (+ spare)
   constexpr int kLmdbFileMode = 0664;
+  constexpr std::size_t kLibraryIdBytes = 16;
 
   std::uint64_t nowUnixMs()
   {
@@ -22,9 +23,9 @@ namespace
     return static_cast<std::uint64_t>(now.time_since_epoch().count());
   }
 
-  std::array<std::byte, 16> generateLibraryId()
+  std::array<std::byte, kLibraryIdBytes> generateLibraryId()
   {
-    auto bytes = std::array<std::byte, 16>{};
+    auto bytes = std::array<std::byte, kLibraryIdBytes>{};
     auto random = std::random_device{};
     std::generate(bytes.begin(), bytes.end(), [&random]() { return static_cast<std::byte>(random()); });
     return bytes;

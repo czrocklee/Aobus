@@ -40,7 +40,7 @@ namespace
                                                              : std::string{};
   }
 
-  int getInt(Glib::RefPtr<Glib::KeyFile> const& kf, char const* group, char const* key, int def)
+  std::int32_t getInt(Glib::RefPtr<Glib::KeyFile> const& kf, char const* group, char const* key, std::int32_t def)
   {
     return (kf->has_group(group) && kf->has_key(group, key)) ? kf->get_integer(group, key) : def;
   }
@@ -62,6 +62,7 @@ namespace
     {
       result.emplace_back(value);
     }
+
     return result;
   }
 
@@ -78,15 +79,15 @@ namespace
     return result;
   }
 
-  std::string encodeColumnWidth(std::pair<std::string, int> const& width)
+  std::string encodeColumnWidth(std::pair<std::string, std::int32_t> const& width)
   {
-    return width.first + ":" + std::to_string(width.second);
+    return std::format("{}:{}", width.first, width.second);
   }
 
-  std::optional<std::pair<std::string, int>> decodeColumnWidth(std::string const& text)
+  std::optional<std::pair<std::string, std::int32_t>> decodeColumnWidth(std::string const& text)
   {
     auto const separator = text.find(':');
-    
+
     if (separator == std::string::npos || separator == 0 || separator + 1 >= text.size())
     {
       return std::nullopt;
@@ -94,7 +95,7 @@ namespace
 
     try
     {
-      return std::pair<std::string, int>{text.substr(0, separator), std::stoi(text.substr(separator + 1))};
+      return std::pair<std::string, std::int32_t>{text.substr(0, separator), std::stoi(text.substr(separator + 1))};
     }
     catch (...)
     {
@@ -109,7 +110,11 @@ namespace app::core
   {
     auto config = AppConfig{};
     auto const path = configPath();
-    if (!std::filesystem::exists(path)) return config;
+
+    if (!std::filesystem::exists(path))
+    {
+      return config;
+    }
 
     auto keyFile = Glib::KeyFile::create();
     keyFile->load_from_file(path.string());
@@ -125,6 +130,7 @@ namespace app::core
     ws.panedPosition = getInt(keyFile, kWindowGroup, kPanedPositionKey, kDefaultPanedPosition);
     tvs.columnOrder = getStringList(keyFile, kTrackViewGroup, kColumnOrderKey);
     tvs.hiddenColumns = getStringList(keyFile, kTrackViewGroup, kHiddenColumnsKey);
+
     for (auto const& entry : getStringList(keyFile, kTrackViewGroup, kColumnWidthsKey))
     {
       if (auto width = decodeColumnWidth(entry))

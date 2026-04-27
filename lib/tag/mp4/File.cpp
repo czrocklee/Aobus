@@ -135,7 +135,7 @@ namespace rs::tag::mp4
     void extractAudioProperties(rs::core::TrackBuilder& builder, RootAtom const& root, std::size_t fileSize)
     {
       // Get mdhd for sample rate and duration
-      
+
       if (auto const* mdhdNode = findMdhdNode(root); mdhdNode != nullptr)
       {
         auto const& view = static_cast<AtomView const&>(*mdhdNode);
@@ -149,21 +149,23 @@ namespace rs::tag::mp4
 
           if (duration > 0)
           {
+            constexpr std::uint32_t kMsPerSecond = 1000;
+            constexpr std::uint32_t kBitsPerByte = 8;
             auto const durationMs =
-              static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000) / timescale);
-            
+              static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * kMsPerSecond) / timescale);
+
             if (durationMs > 0)
             {
               builder.property()
                 .durationMs(durationMs)
-                .bitrate(static_cast<std::uint32_t>((fileSize * 8000) / durationMs));
+                .bitrate(static_cast<std::uint32_t>((fileSize * 1000 * kBitsPerByte) / durationMs));
             }
           }
         }
       }
 
       // Get stsd for channels and bit depth
-      
+
       if (auto const* stsdNode = findStsdNode(root); stsdNode != nullptr)
       {
         auto const& view = static_cast<AtomView const&>(*stsdNode);
@@ -171,7 +173,9 @@ namespace rs::tag::mp4
 
         // stsd contains a version byte (1), flags (3), and then entry count (4)
         // Entries start after 8 bytes of stsd content
-        auto const* data = reinterpret_cast<std::uint8_t const*>(&stsdLayout) + sizeof(AtomLayout) + 8;
+        constexpr std::size_t kStsdContentHeaderSize = 8;
+        auto const* data =
+          reinterpret_cast<std::uint8_t const*>(&stsdLayout) + sizeof(AtomLayout) + kStsdContentHeaderSize;
 
         // Now data points to the first sample entry (includes length + type)
         auto const& audioLayout = *reinterpret_cast<AudioSampleEntryLayout const*>(data);
@@ -179,10 +183,11 @@ namespace rs::tag::mp4
 
         // Sample rate is a 16.16 fixed point, extract integer part
         // Only use if non-zero (ALAC may have 0 here, mdhd has correct rate)
-        
-        if (auto const sampleRateFixed = audioLayout.sampleRate.value(); sampleRateFixed >> 16 > 0)
+        constexpr std::size_t kFixedPointShift = 16;
+
+        if (auto const sampleRateFixed = audioLayout.sampleRate.value(); sampleRateFixed >> kFixedPointShift > 0)
         {
-          builder.property().sampleRate(sampleRateFixed >> 16);
+          builder.property().sampleRate(sampleRateFixed >> kFixedPointShift);
         }
       }
     }
@@ -203,7 +208,7 @@ namespace rs::tag::mp4
         {
           auto const& view = static_cast<AtomView const&>(atom);
           std::string_view type = atom.type();
-          
+
           if (type == "----")
           {
             return true;
