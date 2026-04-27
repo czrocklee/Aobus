@@ -32,7 +32,7 @@ namespace app::core
   {
     std::vector<std::string> columnOrder;
     std::vector<std::string> hiddenColumns;
-    std::map<std::string, int, std::less<>> columnWidths;
+    std::map<std::string, std::int32_t, std::less<>> columnWidths;
   };
 
   class AppConfig final

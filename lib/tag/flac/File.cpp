@@ -15,6 +15,11 @@ namespace rs::tag::flac
 {
   namespace
   {
+    // Bits per byte for bitrate calculation
+    constexpr std::uint32_t kBitsPerByte = 8;
+    // Milliseconds per second
+    constexpr std::uint32_t kMsPerSecond = 1000;
+
     using TextSetter =
       rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter =
@@ -40,7 +45,7 @@ namespace rs::tag::flac
     {
       auto const separator = value.find('/');
       handleNumber<PrimarySetter>(builder, value.substr(0, separator));
-      
+
       if (separator != std::string_view::npos)
       {
         handleNumber<SecondarySetter>(builder, value.substr(separator + 1));
@@ -76,12 +81,14 @@ namespace rs::tag::flac
 
           if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
           {
-            
-            if (auto const durationMs = static_cast<std::uint32_t>((totalSamples * 1000) / view.sampleRate()); durationMs > 0)
+
+            if (auto const durationMs = static_cast<std::uint32_t>((totalSamples * kMsPerSecond) / view.sampleRate());
+                durationMs > 0)
             {
               builder.property()
                 .durationMs(durationMs)
-                .bitrate(static_cast<std::uint32_t>((_mappedRegion.get_size() * 8000) / durationMs));
+                .bitrate(
+                  static_cast<std::uint32_t>((_mappedRegion.get_size() * kBitsPerByte * kMsPerSecond) / durationMs));
             }
           }
 
@@ -94,7 +101,7 @@ namespace rs::tag::flac
             [&](std::string_view comment)
             {
               auto const pos = comment.find('=');
-              
+
               if (pos == std::string_view::npos)
               {
                 return;
@@ -111,7 +118,6 @@ namespace rs::tag::flac
               {
                 builder.custom().add(key, value);
               }
-            
             });
 
           break;

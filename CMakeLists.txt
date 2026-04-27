@@ -51,8 +51,14 @@ target_link_libraries(GTKMM INTERFACE ${GTKMM_LIBRARIES})
 target_compile_options(GTKMM INTERFACE ${GTKMM_CFLAGS_OTHER})
 
 add_library(Catch2 INTERFACE)
-target_include_directories(Catch2 INTERFACE ${CATCH2_CFLAGS})
-target_link_libraries(Catch2 INTERFACE ${CATCH2_LDFLAGS})
+target_include_directories(Catch2 SYSTEM INTERFACE ${CATCH2_INCLUDE_DIRS})
+target_compile_options(Catch2 INTERFACE ${CATCH2_CFLAGS_OTHER})
+target_link_libraries(Catch2 INTERFACE ${CATCH2_LIBRARIES})
+target_link_options(Catch2 INTERFACE ${CATCH2_LDFLAGS_OTHER})
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  target_compile_options(Catch2 INTERFACE -Wno-maybe-uninitialized)
+endif()
 
 # FFmpeg via pkg-config (optional - playback feature)
 pkg_check_modules(AVFORMAT libavformat)

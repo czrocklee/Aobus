@@ -372,7 +372,7 @@ namespace rs::core
     }
 
     // Resolve metadata strings to DictionaryIds for header
-    
+
     if (!builder->_metadataBuilder._artist.empty())
     {
       _artistId = dict.put(txn, builder->_metadataBuilder._artist);
@@ -440,7 +440,7 @@ namespace rs::core
     }
 
     // Write title
-    
+
     if (!builder._metadataBuilder._title.empty())
     {
       std::memcpy(out.data() + pos, builder._metadataBuilder._title.data(), builder._metadataBuilder._title.size());
@@ -448,7 +448,7 @@ namespace rs::core
     }
 
     // Pad to 4 bytes
-    
+
     while (pos % 4 != 0)
     {
       out[pos++] = std::byte{0};
@@ -462,7 +462,7 @@ namespace rs::core
     : _builder{builder}
   {
     // Handle embedded cover art - store resolved ID in PreparedCold
-    
+
     if (!_builder->_metadataBuilder._embeddedCoverArt.empty())
     {
       auto writer = resources.writer(txn);
@@ -501,14 +501,16 @@ namespace rs::core
 
     _uriLen = static_cast<std::uint16_t>(_builder->_propertyBuilder._uri.size());
 
-    // Cold layout: header(48) + entries(N*8) + values + uri
+    // Cold layout: header(52) + entries(N*8) + values + uri
     std::size_t size = sizeof(TrackColdHeader);
-    size += entryCount * 8; // 8 bytes per entry
+    constexpr std::size_t kEntrySize = 8;
+    constexpr std::size_t kAlignmentMask = 3;
+    size += entryCount * kEntrySize;
     size += totalValueSize;
     size += _uriLen;
-    size = (size + 3) & ~3; // pad to 4 bytes
+    size = (size + kAlignmentMask) & ~kAlignmentMask; // pad to 4 bytes
 
-    _uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + entryCount * 8 + totalValueSize);
+    _uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + entryCount * kEntrySize + totalValueSize);
     _size = size;
   }
 
@@ -579,7 +581,7 @@ namespace rs::core
     }
 
     // Write uri
-    
+
     if (_uriLen > 0)
     {
       std::memcpy(out.data() + pos, _builder->_propertyBuilder._uri.data(), _uriLen);
@@ -587,7 +589,7 @@ namespace rs::core
     }
 
     // Pad to 4 bytes
-    
+
     while (pos % 4 != 0)
     {
       out[pos++] = std::byte{0};

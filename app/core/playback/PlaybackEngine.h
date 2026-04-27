@@ -39,6 +39,7 @@ namespace app::core::playback
 
     void handleGraphChanged(AudioGraph const& backendGraph);
     void analyzeAudioQuality();
+    void handleBackendError(std::string_view message);
 
     static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept;
     static bool isSourceDrained(void* userData) noexcept;
@@ -48,8 +49,6 @@ namespace app::core::playback
     static void onGraphChanged(void* userData, AudioGraph const& graph) noexcept;
     static void onSourceError(void* userData) noexcept;
     static void onBackendError(void* userData, std::string_view message) noexcept;
-
-    void handleBackendError(std::string_view message);
 
     std::unique_ptr<IAudioBackend> _backend;
     std::atomic<std::shared_ptr<IPcmSource>> _source;

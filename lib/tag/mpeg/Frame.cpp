@@ -63,7 +63,7 @@ namespace rs::tag::mpeg
       {
         auto const size = static_cast<std::size_t>(end - begin);
         auto const* sync = static_cast<std::uint8_t const*>(std::memchr(begin, FrameSyncByte1, size));
-        
+
         if (sync == nullptr)
         {
           return nullptr;
@@ -78,7 +78,7 @@ namespace rs::tag::mpeg
         {
           return sync;
         }
-        
+
         begin = sync + 1;
       }
 
@@ -88,46 +88,52 @@ namespace rs::tag::mpeg
 
   bool FrameView::isValid() const
   {
+    constexpr std::uint8_t kFrameSyncByte = 0xFF;
+    constexpr std::uint8_t kSync2Expected = 0x07;
+    constexpr std::uint8_t kBitrateIndexFree = 0;
+    constexpr std::uint8_t kBitrateIndexReserved = 15;
+    constexpr std::uint8_t kSamplingRateIndexReserved = 3;
+
     auto const& header = layout();
 
     // sync1 must be 0xFF
-    
-    if (header.sync1() != 0xFF)
+
+    if (header.sync1() != kFrameSyncByte)
     {
       return false;
     }
 
     // sync2 bits (top 3 bits of second byte) must be 0b111
-    
-    if (header.sync2() != 0x07)
+
+    if (header.sync2() != kSync2Expected)
     {
       return false;
     }
 
     // versionId cannot be Reserved (0b01)
-    
+
     if (header.versionId() == VersionID::Reserved)
     {
       return false;
     }
 
     // layer cannot be Reserved (0b00)
-    
+
     if (header.layer() == LayerDescription::Reserved)
     {
       return false;
     }
 
     // bitrateIndex cannot be 0 (free) or 15 (reserved)
-    
-    if (header.bitrateIndex() == 0 || header.bitrateIndex() == 15)
+
+    if (header.bitrateIndex() == kBitrateIndexFree || header.bitrateIndex() == kBitrateIndexReserved)
     {
       return false;
     }
 
     // samplingRateIndex cannot be 3 (reserved)
-    
-    if (header.samplingRateIndex() == 3)
+
+    if (header.samplingRateIndex() == kSamplingRateIndexReserved)
     {
       return false;
     }
@@ -155,11 +161,15 @@ namespace rs::tag::mpeg
     {
       // Layer I: frame length = (384 * bitrate) / samplingRate + padding
       // 384 / 8 = 48
-      return (48 * bitrate * 1000) / samplingRate + (fl.paddingBit() ? 4 : 0);
+      constexpr std::uint32_t kMsPerSecond = 1000;
+      constexpr std::size_t kLayerIPadding = 4;
+      return (48 * bitrate * kMsPerSecond) / samplingRate + (fl.paddingBit() ? kLayerIPadding : 0);
     }
 
     // Layer II/III: frame length = (samplesPerFrame / 8 * bitrate) / samplingRate + padding
-    return (samplesPerFrame() / 8 * bitrate * 1000) / samplingRate + (fl.paddingBit() ? 1 : 0);
+    constexpr std::uint32_t kMsPerSecond = 1000;
+    constexpr std::size_t kLayerIIIIPadding = 1;
+    return (samplesPerFrame() / 8 * bitrate * kMsPerSecond) / samplingRate + (fl.paddingBit() ? kLayerIIIIPadding : 0);
   }
 
   std::optional<FrameView> locate(void const* buffer, std::size_t size)
@@ -190,9 +200,10 @@ namespace rs::tag::mpeg
   {
     auto const& fl = layout();
     // Table values are in kbps, convert to bps
+    constexpr std::uint32_t kBpsPerKbps = 1000;
     return VersionLayerBitrateTable[static_cast<std::size_t>(fl.versionId())][static_cast<std::size_t>(fl.layer())]
                                    [static_cast<std::size_t>(fl.bitrateIndex())] *
-           1000;
+           kBpsPerKbps;
   }
 
   std::uint8_t FrameView::channels() const
@@ -205,31 +216,34 @@ namespace rs::tag::mpeg
   std::uint16_t FrameView::samplesPerFrame() const
   {
     auto const& fl = layout();
-    auto const version = fl.versionId();
     auto const layer = fl.layer();
+    constexpr std::uint16_t kSamplesLayerI = 384;
+    constexpr std::uint16_t kSamplesLayerII = 1152;
+    constexpr std::uint16_t kSamplesLayerIIIVer1 = 1152;
+    constexpr std::uint16_t kSamplesLayerIIIVer2 = 576;
 
     if (layer == LayerDescription::LayerI)
     {
-      return 384;
+      return kSamplesLayerI;
     }
-    
+
     if (layer == LayerDescription::LayerII)
     {
-      return 1152;
+      return kSamplesLayerII;
     }
-    
+
     if (layer == LayerDescription::LayerIII)
     {
-      return (version == VersionID::Ver1) ? 1152 : 576;
+      return (fl.versionId() == VersionID::Ver1) ? kSamplesLayerIIIVer1 : kSamplesLayerIIIVer2;
     }
-    
+
     return 0;
   }
 
   std::optional<FrameView::XingInfo> FrameView::xingInfo() const
   {
     auto const& fl = layout();
-    
+
     if (fl.layer() != LayerDescription::LayerIII)
     {
       return {};
@@ -237,21 +251,26 @@ namespace rs::tag::mpeg
 
     // Offset of "Xing" or "Info" relative to frame start (excluding 4-byte header)
     std::size_t offset = 0;
-    
+    constexpr std::size_t kXingHeaderSize = 4;
+    constexpr std::size_t kXingOffsetVer1Stereo = 32;
+    constexpr std::size_t kXingOffsetVer1Mono = 17;
+    constexpr std::size_t kXingOffsetVer2Stereo = 17;
+    constexpr std::size_t kXingOffsetVer2Mono = 9;
+
     if (fl.versionId() == VersionID::Ver1)
     {
-      offset = (fl.channelMode() == ChannelMode::SingleChannel) ? 17 : 32;
+      offset = (fl.channelMode() == ChannelMode::SingleChannel) ? kXingOffsetVer1Mono : kXingOffsetVer1Stereo;
     }
     else
     {
-      offset = (fl.channelMode() == ChannelMode::SingleChannel) ? 9 : 17;
+      offset = (fl.channelMode() == ChannelMode::SingleChannel) ? kXingOffsetVer2Mono : kXingOffsetVer2Stereo;
     }
 
     // Header is 4 bytes
-    offset += 4;
+    offset += kXingHeaderSize;
 
     auto const* ptr = static_cast<std::uint8_t const*>(_data) + offset;
-    
+
     if (std::memcmp(ptr, "Xing", 4) != 0 && std::memcmp(ptr, "Info", 4) != 0)
     {
       return {};
@@ -263,16 +282,18 @@ namespace rs::tag::mpeg
     flags = boost::endian::endian_reverse(flags);
 
     std::size_t fieldOffset = 8;
-    
-    if (flags & 0x01) // Frames field present
+    constexpr std::uint32_t kXingFlagFrames = 0x01;
+    constexpr std::uint32_t kXingFlagBytes = 0x02;
+
+    if (flags & kXingFlagFrames)
     {
       std::uint32_t frames = 0;
       std::memcpy(&frames, ptr + fieldOffset, 4);
       info.frames = boost::endian::endian_reverse(frames);
       fieldOffset += 4;
     }
-    
-    if (flags & 0x02) // Bytes field present
+
+    if (flags & kXingFlagBytes) // Bytes field present
     {
       std::uint32_t bytes = 0;
       std::memcpy(&bytes, ptr + fieldOffset, 4);

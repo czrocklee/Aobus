@@ -78,7 +78,7 @@ namespace rs::core
     }
 
     YAML::Node library = root["library"];
-    
+
     if (!library)
     {
       RS_THROW(rs::Exception, "Missing 'library' section in YAML");
@@ -118,8 +118,11 @@ namespace rs::core
       auto trackStrings = std::deque<std::string>{};
       auto keepAlive = [&](YAML::Node const& node) -> std::string_view
       {
-        if (!node) return {};
-        
+        if (!node)
+        {
+          return {};
+        }
+
         return trackStrings.emplace_back(node.as<std::string>());
       };
 
@@ -129,11 +132,11 @@ namespace rs::core
       std::optional<TrackBuilder> fileBuilder;
       auto fullPath = _ml.rootPath() / uriStr;
       auto tagFile = std::unique_ptr<rs::tag::File>{};
-      
+
       if (std::filesystem::exists(fullPath))
       {
         tagFile = rs::tag::File::open(fullPath);
-        
+
         if (tagFile)
         {
           fileBuilder = tagFile->loadTrack();
@@ -147,7 +150,7 @@ namespace rs::core
 
       // 2. Initialize builder
       auto builder = fileBuilder ? *fileBuilder : TrackBuilder::createNew();
-      
+
       if (!fileBuilder)
       {
         builder.property().uri(uriStr);
@@ -156,28 +159,61 @@ namespace rs::core
       }
 
       // 3. Overlay YAML data (Priority: YAML > File)
-      
-      if (trackNode["title"]) builder.metadata().title(keepAlive(trackNode["title"]));
-      
-      if (trackNode["artist"]) builder.metadata().artist(keepAlive(trackNode["artist"]));
-      
-      if (trackNode["album"]) builder.metadata().album(keepAlive(trackNode["album"]));
-      
-      if (trackNode["albumArtist"]) builder.metadata().albumArtist(keepAlive(trackNode["albumArtist"]));
-      
-      if (trackNode["genre"]) builder.metadata().genre(keepAlive(trackNode["genre"]));
-      
-      if (trackNode["year"]) builder.metadata().year(trackNode["year"].as<uint16_t>());
-      
-      if (trackNode["trackNumber"]) builder.metadata().trackNumber(trackNode["trackNumber"].as<uint16_t>());
-      
-      if (trackNode["totalTracks"]) builder.metadata().totalTracks(trackNode["totalTracks"].as<uint16_t>());
-      
-      if (trackNode["discNumber"]) builder.metadata().discNumber(trackNode["discNumber"].as<uint16_t>());
-      
-      if (trackNode["totalDiscs"]) builder.metadata().totalDiscs(trackNode["totalDiscs"].as<uint16_t>());
-      
-      if (trackNode["rating"]) builder.metadata().rating(trackNode["rating"].as<uint8_t>());
+
+      if (trackNode["title"])
+      {
+        builder.metadata().title(keepAlive(trackNode["title"]));
+      }
+
+      if (trackNode["artist"])
+      {
+        builder.metadata().artist(keepAlive(trackNode["artist"]));
+      }
+
+      if (trackNode["album"])
+      {
+        builder.metadata().album(keepAlive(trackNode["album"]));
+      }
+
+      if (trackNode["albumArtist"])
+      {
+        builder.metadata().albumArtist(keepAlive(trackNode["albumArtist"]));
+      }
+
+      if (trackNode["genre"])
+      {
+        builder.metadata().genre(keepAlive(trackNode["genre"]));
+      }
+
+      if (trackNode["year"])
+      {
+        builder.metadata().year(trackNode["year"].as<uint16_t>());
+      }
+
+      if (trackNode["trackNumber"])
+      {
+        builder.metadata().trackNumber(trackNode["trackNumber"].as<uint16_t>());
+      }
+
+      if (trackNode["totalTracks"])
+      {
+        builder.metadata().totalTracks(trackNode["totalTracks"].as<uint16_t>());
+      }
+
+      if (trackNode["discNumber"])
+      {
+        builder.metadata().discNumber(trackNode["discNumber"].as<uint16_t>());
+      }
+
+      if (trackNode["totalDiscs"])
+      {
+        builder.metadata().totalDiscs(trackNode["totalDiscs"].as<uint16_t>());
+      }
+
+      if (trackNode["rating"])
+      {
+        builder.metadata().rating(trackNode["rating"].as<uint8_t>());
+      }
 
       if (trackNode["tags"])
       {
@@ -191,7 +227,7 @@ namespace rs::core
       if (trackNode["custom"])
       {
         builder.custom().clear();
-        
+
         for (auto it = trackNode["custom"].begin(); it != trackNode["custom"].end(); ++it)
         {
           builder.custom().add(keepAlive(it->first), keepAlive(it->second));
@@ -199,18 +235,36 @@ namespace rs::core
       }
 
       // YAML technical properties (optional override)
-      
-      if (trackNode["durationMs"]) builder.property().durationMs(trackNode["durationMs"].as<uint32_t>());
-      
-      if (trackNode["bitrate"]) builder.property().bitrate(trackNode["bitrate"].as<uint32_t>());
-      
-      if (trackNode["sampleRate"]) builder.property().sampleRate(trackNode["sampleRate"].as<uint32_t>());
-      
-      if (trackNode["channels"]) builder.property().channels(trackNode["channels"].as<uint8_t>());
-      
-      if (trackNode["bitDepth"]) builder.property().bitDepth(trackNode["bitDepth"].as<uint8_t>());
-      
-      if (trackNode["codecId"]) builder.property().codecId(trackNode["codecId"].as<uint16_t>());
+
+      if (trackNode["durationMs"])
+      {
+        builder.property().durationMs(trackNode["durationMs"].as<uint32_t>());
+      }
+
+      if (trackNode["bitrate"])
+      {
+        builder.property().bitrate(trackNode["bitrate"].as<uint32_t>());
+      }
+
+      if (trackNode["sampleRate"])
+      {
+        builder.property().sampleRate(trackNode["sampleRate"].as<uint32_t>());
+      }
+
+      if (trackNode["channels"])
+      {
+        builder.property().channels(trackNode["channels"].as<uint8_t>());
+      }
+
+      if (trackNode["bitDepth"])
+      {
+        builder.property().bitDepth(trackNode["bitDepth"].as<uint8_t>());
+      }
+
+      if (trackNode["codecId"])
+      {
+        builder.property().codecId(trackNode["codecId"].as<uint16_t>());
+      }
 
       // 4. Commit as new track
       auto [preparedHot, preparedCold] = builder.prepare(txn, dict, _ml.resources());
@@ -296,7 +350,7 @@ namespace rs::core
     for (auto const& importedList : importedLists)
     {
       auto const [mappingIt, inserted] = yamlListIdToNewListId.emplace(importedList.yamlId, ListId{});
-      
+
       if (!inserted)
       {
         RS_THROW_FORMAT(rs::Exception, "Duplicate list id {} in YAML import", importedList.yamlId);
@@ -316,7 +370,7 @@ namespace rs::core
 
       auto const childIt = yamlListIdToNewListId.find(importedList.yamlId);
       auto const parentIt = yamlListIdToNewListId.find(importedList.yamlParentId);
-      
+
       if (parentIt == yamlListIdToNewListId.end())
       {
         RS_THROW_FORMAT(

@@ -20,8 +20,6 @@ namespace app::core::playback
   class FfmpegDecoderSession final : public IAudioDecoderSession
   {
   public:
-    static void initGlobal();
-
     explicit FfmpegDecoderSession(StreamFormat outputFormat);
     ~FfmpegDecoderSession() override;
 
@@ -38,6 +36,8 @@ namespace app::core::playback
     std::optional<PcmBlock> readNextBlock() override;
     DecodedStreamInfo streamInfo() const override;
     std::string_view lastError() const noexcept override;
+
+    static void initGlobal();
 
   private:
     struct FormatContextDeleter

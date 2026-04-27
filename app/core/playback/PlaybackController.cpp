@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "core/playback/PlaybackController.h"
-
 #include "core/Log.h"
 #include "core/playback/IDeviceDiscovery.h"
 #include "core/playback/NullBackend.h"

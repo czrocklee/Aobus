@@ -33,7 +33,7 @@ namespace
     ::av_log_format_line(ptr, level, fmt, vl, line, sizeof(line), &print_prefix);
 
     // Remove trailing newline if present to let spdlog handle formatting
-    std::string message(line);
+    auto message = std::string{line};
 
     if (!message.empty() && message.back() == '\n')
     {
@@ -123,11 +123,6 @@ namespace app::core::playback
     }
   }
 
-  void FfmpegDecoderSession::initGlobal()
-  {
-    ::av_log_set_callback(ffmpegLogCallback);
-  }
-
   FfmpegDecoderSession::FfmpegDecoderSession(StreamFormat outputFormat)
     : _outputFormat{outputFormat}
   {
@@ -186,6 +181,169 @@ namespace app::core::playback
     _streamInfo = {};
   }
 
+  bool FfmpegDecoderSession::seek(std::uint32_t positionMs)
+  {
+    if (!_formatContext || _audioStreamIndex < 0)
+    {
+      return false;
+    }
+
+    auto const* stream = _formatContext->streams[_audioStreamIndex];
+    auto const timestamp = ::av_rescale_q(static_cast<std::int64_t>(positionMs), {1, 1000}, stream->time_base);
+    auto const seekFlags = positionMs > getCurrentPositionMs() ? 0 : AVSEEK_FLAG_BACKWARD;
+
+    std::int32_t ret = ::av_seek_frame(_formatContext.get(), _audioStreamIndex, timestamp, seekFlags);
+
+    if (ret < 0)
+    {
+      setError("Seek failed at " + std::to_string(positionMs) + " ms: " + ffmpegErrorText(ret));
+      return false;
+    }
+
+    // Flush decoder
+    flush();
+
+    if (_streamInfo.outputFormat.sampleRate > 0)
+    {
+      _decodedFrameCursor = (static_cast<std::uint64_t>(positionMs) * _streamInfo.outputFormat.sampleRate) / 1000;
+    }
+
+    return true;
+  }
+
+  void FfmpegDecoderSession::flush()
+  {
+    if (_codecContext)
+    {
+      ::avcodec_flush_buffers(_codecContext.get());
+    }
+
+    if (_swrContext)
+    {
+      ::swr_close(_swrContext.get());
+      ::swr_init(_swrContext.get());
+    }
+
+    _decoderEof = false;
+    _inputEof = false;
+    _flushPacketSent = false;
+  }
+
+  std::optional<PcmBlock> FfmpegDecoderSession::readNextBlock()
+  {
+    if (!_formatContext || !_codecContext || !_packet || !_frame)
+    {
+      return std::nullopt;
+    }
+
+    // Try to drain decoder first
+
+    if (_decoderEof)
+    {
+      auto block = PcmBlock{};
+      block.endOfStream = true;
+      return block;
+    }
+
+    while (true)
+    {
+      ::av_frame_unref(_frame.get());
+      std::int32_t ret = ::avcodec_receive_frame(_codecContext.get(), _frame.get());
+
+      if (ret == 0)
+      {
+
+        if (auto block = convertFrameToInterleavedPcm(); block && block->frames > 0)
+        {
+          return block;
+        }
+
+        continue;
+      }
+
+      if (ret == AVERROR_EOF)
+      {
+        _decoderEof = true;
+        auto block = PcmBlock{};
+        block.endOfStream = true;
+        return block;
+      }
+
+      if (ret != AVERROR(EAGAIN))
+      {
+        setError("Error receiving decoded audio frame: " + ffmpegErrorText(ret));
+        return std::nullopt;
+      }
+
+      if (_inputEof)
+      {
+        if (_flushPacketSent)
+        {
+          _decoderEof = true;
+          auto block = PcmBlock{};
+          block.endOfStream = true;
+          return block;
+        }
+
+        ret = ::avcodec_send_packet(_codecContext.get(), nullptr);
+
+        if (ret < 0 && ret != AVERROR(EAGAIN))
+        {
+          setError("Error flushing decoder at end of stream: " + ffmpegErrorText(ret));
+          return std::nullopt;
+        }
+
+        _flushPacketSent = true;
+        continue;
+      }
+
+      ::av_packet_unref(_packet.get());
+      ret = ::av_read_frame(_formatContext.get(), _packet.get());
+
+      if (ret == AVERROR_EOF)
+      {
+        _inputEof = true;
+        continue;
+      }
+
+      if (ret < 0)
+      {
+        setError("Error reading compressed audio packet: " + ffmpegErrorText(ret));
+        return std::nullopt;
+      }
+
+      if (_packet->stream_index != _audioStreamIndex)
+      {
+        ::av_packet_unref(_packet.get());
+        continue;
+      }
+
+      ret = ::avcodec_send_packet(_codecContext.get(), _packet.get());
+      ::av_packet_unref(_packet.get());
+
+      if (ret < 0 && ret != AVERROR(EAGAIN))
+      {
+        setError("Error sending compressed audio packet to decoder: " + ffmpegErrorText(ret));
+        return std::nullopt;
+      }
+    }
+  }
+
+  DecodedStreamInfo FfmpegDecoderSession::streamInfo() const
+  {
+    return _streamInfo;
+  }
+
+  std::string_view FfmpegDecoderSession::lastError() const noexcept
+  {
+    return _lastError;
+  }
+
+  void FfmpegDecoderSession::initGlobal()
+  {
+    ::av_log_set_callback(ffmpegLogCallback);
+  }
+
   bool FfmpegDecoderSession::openInput(std::filesystem::path const& filePath)
   {
     AVFormatContext* ctx = nullptr;
@@ -240,7 +398,7 @@ namespace app::core::playback
     }
 
     // Create codec context
-    AVCodecContext* codecCtx = avcodec_alloc_context3(codec);
+    AVCodecContext* codecCtx = ::avcodec_alloc_context3(codec);
 
     if (!codecCtx)
     {
@@ -396,179 +554,6 @@ namespace app::core::playback
     return true;
   }
 
-  bool FfmpegDecoderSession::seek(std::uint32_t positionMs)
-  {
-    if (!_formatContext || _audioStreamIndex < 0)
-    {
-      return false;
-    }
-
-    auto const* stream = _formatContext->streams[_audioStreamIndex];
-    auto const timestamp = ::av_rescale_q(static_cast<std::int64_t>(positionMs), {1, 1000}, stream->time_base);
-    auto const seekFlags = positionMs > getCurrentPositionMs() ? 0 : AVSEEK_FLAG_BACKWARD;
-
-    std::int32_t ret = ::av_seek_frame(_formatContext.get(), _audioStreamIndex, timestamp, seekFlags);
-
-    if (ret < 0)
-    {
-      setError("Seek failed at " + std::to_string(positionMs) + " ms: " + ffmpegErrorText(ret));
-      return false;
-    }
-
-    // Flush decoder
-    flush();
-
-    if (_streamInfo.outputFormat.sampleRate > 0)
-    {
-      _decodedFrameCursor = (static_cast<std::uint64_t>(positionMs) * _streamInfo.outputFormat.sampleRate) / 1000;
-    }
-
-    return true;
-  }
-
-  void FfmpegDecoderSession::flush()
-  {
-    if (_codecContext)
-    {
-      ::avcodec_flush_buffers(_codecContext.get());
-    }
-
-    if (_swrContext)
-    {
-      ::swr_close(_swrContext.get());
-      ::swr_init(_swrContext.get());
-    }
-
-    _decoderEof = false;
-    _inputEof = false;
-    _flushPacketSent = false;
-  }
-
-  std::uint32_t FfmpegDecoderSession::getCurrentPositionMs() const
-  {
-    if (!_formatContext || !_codecContext || !_frame)
-    {
-      return 0;
-    }
-
-    auto const stream = _formatContext->streams[_audioStreamIndex];
-
-    if (!stream)
-    {
-      return 0;
-    }
-
-    auto const base = stream->time_base;
-    auto const pts = _frame->pts;
-
-    if (pts == AV_NOPTS_VALUE)
-    {
-      return 0;
-    }
-
-    return static_cast<std::uint32_t>(::av_rescale_q(pts, base, {1, 1000}));
-  }
-
-  std::optional<PcmBlock> FfmpegDecoderSession::readNextBlock()
-  {
-    if (!_formatContext || !_codecContext || !_packet || !_frame)
-    {
-      return std::nullopt;
-    }
-
-    // Try to drain decoder first
-
-    if (_decoderEof)
-    {
-      auto block = PcmBlock{};
-      block.endOfStream = true;
-      return block;
-    }
-
-    while (true)
-    {
-      ::av_frame_unref(_frame.get());
-      std::int32_t ret = ::avcodec_receive_frame(_codecContext.get(), _frame.get());
-
-      if (ret == 0)
-      {
-
-        if (auto block = convertFrameToInterleavedPcm(); block && block->frames > 0)
-        {
-          return block;
-        }
-
-        continue;
-      }
-
-      if (ret == AVERROR_EOF)
-      {
-        _decoderEof = true;
-        auto block = PcmBlock{};
-        block.endOfStream = true;
-        return block;
-      }
-
-      if (ret != AVERROR(EAGAIN))
-      {
-        setError("Error receiving decoded audio frame: " + ffmpegErrorText(ret));
-        return std::nullopt;
-      }
-
-      if (_inputEof)
-      {
-        if (_flushPacketSent)
-        {
-          _decoderEof = true;
-          auto block = PcmBlock{};
-          block.endOfStream = true;
-          return block;
-        }
-
-        ret = ::avcodec_send_packet(_codecContext.get(), nullptr);
-
-        if (ret < 0 && ret != AVERROR(EAGAIN))
-        {
-          setError("Error flushing decoder at end of stream: " + ffmpegErrorText(ret));
-          return std::nullopt;
-        }
-
-        _flushPacketSent = true;
-        continue;
-      }
-
-      ::av_packet_unref(_packet.get());
-      ret = ::av_read_frame(_formatContext.get(), _packet.get());
-
-      if (ret == AVERROR_EOF)
-      {
-        _inputEof = true;
-        continue;
-      }
-
-      if (ret < 0)
-      {
-        setError("Error reading compressed audio packet: " + ffmpegErrorText(ret));
-        return std::nullopt;
-      }
-
-      if (_packet->stream_index != _audioStreamIndex)
-      {
-        ::av_packet_unref(_packet.get());
-        continue;
-      }
-
-      ret = ::avcodec_send_packet(_codecContext.get(), _packet.get());
-      ::av_packet_unref(_packet.get());
-
-      if (ret < 0 && ret != AVERROR(EAGAIN))
-      {
-        setError("Error sending compressed audio packet to decoder: " + ffmpegErrorText(ret));
-        return std::nullopt;
-      }
-    }
-  }
-
   std::optional<PcmBlock> FfmpegDecoderSession::convertFrameToInterleavedPcm()
   {
     if (!_frame || !_swrContext)
@@ -617,7 +602,7 @@ namespace app::core::playback
       block.frames = static_cast<std::uint32_t>(convertedSamples);
       auto const byteCount = static_cast<std::size_t>(convertedSamples) * outChannels * sizeof(std::int32_t);
       block.bytes.resize(byteCount);
-      ::memcpy(block.bytes.data(), outBuffer.data(), byteCount);
+      std::memcpy(block.bytes.data(), outBuffer.data(), byteCount);
     }
     else if (outBitDepth == 24)
     {
@@ -667,7 +652,7 @@ namespace app::core::playback
       // Convert to bytes
       auto const byteCount = convertedSamples * outChannels * sizeof(std::int16_t);
       block.bytes.resize(byteCount);
-      ::memcpy(block.bytes.data(), outBuffer.data(), byteCount);
+      std::memcpy(block.bytes.data(), outBuffer.data(), byteCount);
     }
 
     // Update cursor (estimate based on sample rate ratio)
@@ -677,14 +662,29 @@ namespace app::core::playback
     return block;
   }
 
-  DecodedStreamInfo FfmpegDecoderSession::streamInfo() const
+  std::uint32_t FfmpegDecoderSession::getCurrentPositionMs() const
   {
-    return _streamInfo;
-  }
+    if (!_formatContext || !_codecContext || !_frame)
+    {
+      return 0;
+    }
 
-  std::string_view FfmpegDecoderSession::lastError() const noexcept
-  {
-    return _lastError;
+    auto const stream = _formatContext->streams[_audioStreamIndex];
+
+    if (!stream)
+    {
+      return 0;
+    }
+
+    auto const base = stream->time_base;
+    auto const pts = _frame->pts;
+
+    if (pts == AV_NOPTS_VALUE)
+    {
+      return 0;
+    }
+
+    return static_cast<std::uint32_t>(::av_rescale_q(pts, base, {1, 1000}));
   }
 
   void FfmpegDecoderSession::setError(std::string message)

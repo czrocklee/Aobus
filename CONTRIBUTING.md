@@ -37,7 +37,8 @@ This guide defines RockStudio's C++ coding conventions.
   - 2.6. Namespaces
     - 2.6.1. Use nested namespace syntax: `namespace rs::core { ... }`
     - 2.6.2. Prefer anonymous namespaces to `static` for internal linkage
-    - 2.6.3. Prefix C functions and C types with `::`: `::mdb_cursor_open()`, `::pw_core_sync()`, `::snd_pcm_format_t`
+    - 2.6.3. Prefix external C library functions and types with `::`: `::mdb_cursor_open()`, `::pw_core_sync()`, `::snd_pcm_format_t`
+    - 2.6.4. For C functions and types also available in the C++ standard library (e.g., from `<cstring>`, `<cmath>`, `<cstddef>`), use the `std::` prefix: `std::memcpy()`, `std::abs()`, `std::size_t`
   - 2.7. Types
     - 2.7.1. Use `std::` integer types such as `std::int32_t` and `std::uint64_t`; avoid plain `int` and `unsigned` unless matching an external API
     - 2.7.2. Prefer `std::string` to owning `char*`
