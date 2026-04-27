@@ -504,11 +504,12 @@ namespace rs::core
     // Cold layout: header(52) + entries(N*8) + values + uri
     std::size_t size = sizeof(TrackColdHeader);
     constexpr std::size_t kEntrySize = 8;
-    constexpr std::size_t kAlignmentMask = 3;
+    constexpr std::size_t kAlignmentBytes = 4;
+    constexpr std::size_t kAlignmentMask = kAlignmentBytes - 1;
     size += entryCount * kEntrySize;
     size += totalValueSize;
     size += _uriLen;
-    size = (size + kAlignmentMask) & ~kAlignmentMask; // pad to 4 bytes
+    size = (size + kAlignmentMask) & ~kAlignmentMask;
 
     _uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + entryCount * kEntrySize + totalValueSize);
     _size = size;
@@ -554,8 +555,8 @@ namespace rs::core
     struct Entry
     {
       DictionaryId dictId;
-      std::uint16_t offset;
-      std::uint16_t len;
+      std::uint16_t offset = 0;
+      std::uint16_t len = 0;
     };
 
     auto valueOffset = std::size_t{sizeof(TrackColdHeader) + _resolvedPairs.size() * 8};

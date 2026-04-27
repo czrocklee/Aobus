@@ -10,6 +10,11 @@
 
 namespace rs::tag::mpeg
 {
+  namespace
+  {
+    constexpr std::uint8_t kCodecIdMp3 = 0x55;
+  }
+
   rs::core::TrackBuilder File::loadTrack() const
   {
     clearOwnedStrings();
@@ -29,7 +34,8 @@ namespace rs::tag::mpeg
 
       // Handle ID3v2.4 footer (10 bytes if flag 0x10 is set)
       constexpr std::size_t kId3v2FooterSize = 10;
-      if (id3v2Header->majorVersion >= 4 && (id3v2Header->flags & 0x10))
+      constexpr std::uint8_t kId3v2FooterFlag = 0x10;
+      if (id3v2Header->majorVersion >= 4 && (id3v2Header->flags & kId3v2FooterFlag))
       {
         id3v2TotalSize += kId3v2FooterSize;
       }
@@ -68,8 +74,8 @@ namespace rs::tag::mpeg
         .sampleRate(frameView->sampleRate())
         .bitrate(bitrate)
         .channels(frameView->channels())
-        .bitDepth(16)   // MPEG audio is 16-bit
-        .codecId(0x55); // MP3
+        .bitDepth(16)
+        .codecId(kCodecIdMp3);
 
       // 4. Calculate duration
       // Prefer Xing/Info header if present for accurate duration (especially VBR)
@@ -89,8 +95,8 @@ namespace rs::tag::mpeg
 
           if (xing->bytes > 0 && durationMs > 0)
           {
-            bitrate =
-              static_cast<std::uint32_t>((static_cast<std::uint64_t>(xing->bytes) * 1000 * kBitsPerByte) / durationMs);
+            bitrate = static_cast<std::uint32_t>(
+              (static_cast<std::uint64_t>(xing->bytes) * kMsPerSecond * kBitsPerByte) / durationMs);
             builder.property().bitrate(bitrate);
           }
         }
@@ -113,7 +119,8 @@ namespace rs::tag::mpeg
         if (lastBytePtr > firstFramePtr)
         {
           std::uint64_t const actualAudioBytes = lastBytePtr - firstFramePtr;
-          builder.property().durationMs(static_cast<std::uint32_t>((actualAudioBytes * 1000 * kBitsPerByte) / bitrate));
+          builder.property().durationMs(
+            static_cast<std::uint32_t>((actualAudioBytes * kMsPerSecond * kBitsPerByte) / bitrate));
         }
       }
     }
