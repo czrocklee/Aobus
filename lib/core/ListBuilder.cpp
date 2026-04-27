@@ -44,27 +44,27 @@ namespace rs::core
   // Direct setters
   //=============================================================================
 
-  ListBuilder& ListBuilder::name(std::string_view v)
+  ListBuilder& ListBuilder::name(std::string_view val)
   {
-    _name = v;
+    _name = val;
     return *this;
   }
 
-  ListBuilder& ListBuilder::description(std::string_view v)
+  ListBuilder& ListBuilder::description(std::string_view val)
   {
-    _description = v;
+    _description = val;
     return *this;
   }
 
-  ListBuilder& ListBuilder::filter(std::string_view v)
+  ListBuilder& ListBuilder::filter(std::string_view val)
   {
-    _filter = v;
+    _filter = val;
     return *this;
   }
 
-  ListBuilder& ListBuilder::parentId(ListId v)
+  ListBuilder& ListBuilder::parentId(ListId val)
   {
-    _parentId = v;
+    _parentId = val;
     return *this;
   }
 
@@ -90,9 +90,9 @@ namespace rs::core
     return *this;
   }
 
-  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::isSmart(bool v)
+  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::isSmart(bool val)
   {
-    _isSmart = v;
+    _isSmart = val;
     return *this;
   }
 
@@ -139,7 +139,7 @@ namespace rs::core
     result.insert_range(result.end(), utility::bytes::view(header));
 
     // Copy trackIds
-    
+
     if (!trackIds.empty())
     {
       result.insert_range(result.end(), utility::bytes::view(std::span<TrackId const>{trackIds}));
@@ -151,7 +151,7 @@ namespace rs::core
     result.insert_range(result.end(), utility::bytes::view(expression));
 
     // Pad to 4-byte alignment
-    
+
     while (result.size() % 4 != 0)
     {
       result.push_back(std::byte{0});
