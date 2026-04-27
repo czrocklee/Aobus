@@ -76,7 +76,7 @@ namespace
 
       for (auto id : tagIds)
       {
-        auto const& str = _tagStrings.emplace_back("tag" + std::to_string(id));
+        auto const& str = _tagStrings.emplace_back(std::format("tag{}", id));
         _builder.tags().add(str);
       }
 

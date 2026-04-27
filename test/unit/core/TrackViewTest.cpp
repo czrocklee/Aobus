@@ -585,7 +585,7 @@ namespace
 
     for (int i = 0; i < 100; ++i)
     {
-      pairs.emplace_back(std::string("key") + std::to_string(i), std::string("value") + std::to_string(i));
+      pairs.emplace_back(std::format("key{}", i), std::format("value{}", i));
     }
 
     auto data = createColdData({}, pairs, "");

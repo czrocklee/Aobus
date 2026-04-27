@@ -92,7 +92,7 @@ namespace
       std::vector<TrackId> actualRemoved;
       for (auto id : ids)
       {
-        auto it = std::find(_ids.begin(), _ids.end(), id);
+        auto it = std::ranges::find(_ids, id);
         if (it != _ids.end())
         {
           _ids.erase(it);
