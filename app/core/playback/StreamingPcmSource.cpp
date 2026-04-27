@@ -32,8 +32,8 @@ namespace
 namespace app::core::playback
 {
 
-  StreamingPcmSource::StreamingPcmSource(std::unique_ptr<IAudioDecoderSession> decoder,
-                                         DecodedStreamInfo streamInfo,
+  StreamingPcmSource::StreamingPcmSource(std::unique_ptr<decoder::IAudioDecoderSession> decoder,
+                                         decoder::DecodedStreamInfo streamInfo,
                                          PcmSourceCallbacks callbacks,
                                          std::uint32_t prerollTargetMs,
                                          std::uint32_t decodeHighWatermarkMs)
@@ -46,14 +46,10 @@ namespace app::core::playback
   {
   }
 
-  StreamingPcmSource::~StreamingPcmSource()
-  {
-    stopDecodeThread();
-  }
+  StreamingPcmSource::~StreamingPcmSource() { stopDecodeThread(); }
 
   bool StreamingPcmSource::initialize()
   {
-
     if (auto const generation = _generation.load(std::memory_order_relaxed); !fillUntil(_prerollTargetMs, generation))
     {
       return false;
@@ -67,10 +63,7 @@ namespace app::core::playback
     return !_failed.load(std::memory_order_relaxed);
   }
 
-  std::size_t StreamingPcmSource::read(std::span<std::byte> output) noexcept
-  {
-    return _ringBuffer.read(output);
-  }
+  std::size_t StreamingPcmSource::read(std::span<std::byte> output) noexcept { return _ringBuffer.read(output); }
 
   bool StreamingPcmSource::isDrained() const noexcept
   {
@@ -172,7 +165,7 @@ namespace app::core::playback
 
   bool StreamingPcmSource::decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken)
   {
-    std::optional<PcmBlock> block;
+    std::optional<decoder::PcmBlock> block;
     std::string errorText;
     {
       auto lock = std::lock_guard<std::mutex>{_decoderMutex};

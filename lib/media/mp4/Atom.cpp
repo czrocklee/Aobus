@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "Atom.h"
+#include <rs/media/mp4/Atom.h>
 
 #include <cassert>
 #include <iostream>
 #include <map>
 #include <span>
 
-namespace rs::tag::mp4
+namespace rs::media::mp4
 {
   namespace
   {
@@ -50,4 +50,4 @@ namespace rs::tag::mp4
     parseAtoms(root, std::span<char const>{static_cast<char const*>(data), size});
     return root;
   }
-}
+} // namespace rs::media::mp4

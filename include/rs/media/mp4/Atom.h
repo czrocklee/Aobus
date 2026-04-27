@@ -11,7 +11,7 @@
 #include <string_view>
 #include <vector>
 
-namespace rs::tag::mp4
+namespace rs::media::mp4
 {
   class Atom
   {
@@ -133,5 +133,5 @@ namespace rs::tag::mp4
     std::vector<std::unique_ptr<Atom>> _children;
   };
 
-  RootAtom fromBuffer(void const* data, std::size_t);
-}
+  RootAtom fromBuffer(void const* data, std::size_t size);
+} // namespace rs::media::mp4

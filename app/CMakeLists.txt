@@ -27,13 +27,13 @@ add_executable(RockStudio
     core/playback/OutputMenuModel.cpp
     core/playback/PlaybackController.cpp
     core/playback/PlaybackEngine.cpp
-    core/playback/AudioDecoderSession.cpp
+    core/decoder/AudioDecoderFactory.cpp
+    core/decoder/FlacDecoderSession.cpp
+    core/decoder/AlacDecoderSession.cpp
     core/playback/MemoryPcmSource.cpp
     core/playback/PcmRingBuffer.cpp
     core/playback/StreamingPcmSource.cpp
     core/playback/FormatNegotiator.cpp
-    core/playback/FlacDecoderSession.cpp
-    core/playback/AlacDecoderSession.cpp
 )
 target_link_libraries(RockStudio PRIVATE PkgFLAC PkgALAC)
 if(PIPEWIRE_FOUND)

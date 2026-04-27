@@ -12,7 +12,7 @@
 #include <string_view>
 #include <vector>
 
-namespace rs::tag::flac
+namespace rs::media::flac
 {
   namespace detail
   {
@@ -202,4 +202,4 @@ namespace rs::tag::flac
     MetadataBlockView _view;
     std::size_t _sizeLeft;
   };
-}
+} // namespace rs::media::flac

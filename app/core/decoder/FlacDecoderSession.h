@@ -3,16 +3,16 @@
 
 #pragma once
 
-#include "core/playback/AudioDecoderSession.h"
+#include "core/decoder/IAudioDecoderSession.h"
 
-namespace app::core::playback
+namespace app::core::decoder
 {
 
-  class AlacDecoderSession final : public IAudioDecoderSession
+  class FlacDecoderSession final : public IAudioDecoderSession
   {
   public:
-    explicit AlacDecoderSession(StreamFormat outputFormat);
-    ~AlacDecoderSession() override;
+    explicit FlacDecoderSession(playback::StreamFormat outputFormat);
+    ~FlacDecoderSession() override;
 
     bool open(std::filesystem::path const& filePath) override;
     void close() override;
@@ -28,4 +28,4 @@ namespace app::core::playback
     std::unique_ptr<Impl> _impl;
   };
 
-} // namespace app::core::playback
+} // namespace app::core::decoder

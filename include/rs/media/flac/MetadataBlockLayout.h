@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace rs::tag::flac
+namespace rs::media::flac
 {
   enum class MetadataBlockType : std::uint8_t
   {
@@ -51,4 +51,4 @@ namespace rs::tag::flac
   static_assert(alignof(StreamInfoLayout) == 1);
   static_assert(std::is_trivial_v<StreamInfoLayout>);
 
-}
+} // namespace rs::media::flac
