@@ -49,12 +49,21 @@ TEST_CASE("AlacDecoderSession handles basic files", "[playback][integration]")
   }
 
   app::core::AudioFormat outputFormat;
-  outputFormat.bitDepth = 16;
   outputFormat.isInterleaved = true;
 
   AlacDecoderSession decoder(outputFormat);
-  // AlacDecoderSession::open will currently return true but is a skeleton
   REQUIRE(decoder.open(testFile));
+
+  auto const info = decoder.streamInfo();
+  CHECK(info.sourceFormat.sampleRate == 96000);
+  CHECK(info.sourceFormat.channels == 2);
+  CHECK(info.sourceFormat.bitDepth == 24);
+
+  auto block = decoder.readNextBlock();
+  REQUIRE(block.has_value());
+  CHECK(block->frames > 0);
+  CHECK(block->bitDepth == 24);
+  CHECK(block->bytes.size() == static_cast<std::size_t>(block->frames) * 2U * 3U);
 
   decoder.close();
 }

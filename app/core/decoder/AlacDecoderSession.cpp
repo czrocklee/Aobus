@@ -4,6 +4,7 @@
 #include "core/decoder/AlacDecoderSession.h"
 #include "core/Log.h"
 
+#include <alac/ALACAudioTypes.h>
 #include <alac/ALACBitUtilities.h>
 #include <alac/ALACDecoder.h>
 
@@ -13,6 +14,19 @@
 namespace app::core::decoder
 {
   using namespace rs::media::mp4;
+
+  namespace
+  {
+    std::uint32_t bytesPerSample(std::uint8_t bitDepth) noexcept
+    {
+      if (bitDepth == 24U)
+      {
+        return 3;
+      }
+
+      return (bitDepth > 16U) ? 4U : 2U;
+    }
+  } // namespace
 
   struct AlacDecoderSession::Impl
   {
@@ -41,6 +55,8 @@ namespace app::core::decoder
 
   bool AlacDecoderSession::open(std::filesystem::path const& filePath)
   {
+    close();
+
     auto const mapError = _impl->mappedFile.map(filePath);
 
     if (!mapError.empty())
@@ -59,11 +75,31 @@ namespace app::core::decoder
     }
 
     auto const cookie = _impl->demuxer->magicCookie();
-    _impl->decoder->Init(const_cast<std::uint8_t*>(reinterpret_cast<std::uint8_t const*>(cookie.data())),
-                         static_cast<uint32_t>(cookie.size()));
+    auto const initStatus =
+      _impl->decoder->Init(const_cast<std::uint8_t*>(reinterpret_cast<std::uint8_t const*>(cookie.data())),
+                           static_cast<std::uint32_t>(cookie.size()));
+
+    if (initStatus != ALAC_noErr)
+    {
+      _impl->setError("Failed to initialize ALAC decoder");
+      return false;
+    }
+
+    auto const& config = _impl->decoder->mConfig;
+
+    if (config.sampleRate == 0 || config.numChannels == 0 || config.bitDepth == 0)
+    {
+      _impl->setError("Invalid ALAC stream configuration");
+      return false;
+    }
 
     _impl->timescale = _impl->demuxer->timescale();
     auto const duration = _impl->demuxer->duration();
+
+    if (_impl->timescale == 0)
+    {
+      _impl->timescale = config.sampleRate;
+    }
 
     if (_impl->timescale > 0)
     {
@@ -71,10 +107,12 @@ namespace app::core::decoder
         static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000) / _impl->timescale);
     }
 
-    _impl->info.sourceFormat.channels = 2;
-    _impl->info.sourceFormat.sampleRate = _impl->timescale;
-    _impl->info.sourceFormat.bitDepth = 16;
+    _impl->info.sourceFormat.channels = config.numChannels;
+    _impl->info.sourceFormat.sampleRate = config.sampleRate;
+    _impl->info.sourceFormat.bitDepth = config.bitDepth;
+    _impl->info.sourceFormat.isInterleaved = true;
     _impl->info.outputFormat = _impl->info.sourceFormat;
+    _impl->currentSampleIndex = 0;
 
     return true;
   }
@@ -84,6 +122,7 @@ namespace app::core::decoder
     _impl->demuxer.reset();
     _impl->mappedFile.unmap();
     _impl->currentSampleIndex = 0;
+    _impl->timescale = 0;
   }
 
   bool AlacDecoderSession::seek(std::uint32_t /*positionMs*/)
@@ -112,28 +151,48 @@ namespace app::core::decoder
 
     if (packet.empty())
     {
+      _impl->setError("Failed to read ALAC sample payload");
+      return std::nullopt;
+    }
+
+    auto const maxFrames = (_impl->decoder->mConfig.frameLength > 0)
+                             ? _impl->decoder->mConfig.frameLength
+                             : static_cast<std::uint32_t>(kALACDefaultFramesPerPacket);
+    auto const bytesPerFrame = _impl->info.outputFormat.channels * bytesPerSample(_impl->info.outputFormat.bitDepth);
+
+    if (bytesPerFrame == 0)
+    {
+      _impl->setError("Invalid ALAC output format");
       return std::nullopt;
     }
 
     std::uint32_t numFrames = 0;
-    std::vector<std::byte> decodedPcm(1024 * 1024);
+    std::vector<std::byte> decodedPcm(static_cast<std::size_t>(maxFrames) * bytesPerFrame);
 
     auto bitBuffer = BitBuffer{};
     BitBufferInit(&bitBuffer,
                   const_cast<uint8_t*>(reinterpret_cast<uint8_t const*>(packet.data())),
                   static_cast<uint32_t>(packet.size()));
 
-    auto const status = _impl->decoder->Decode(
-      &bitBuffer, reinterpret_cast<uint8_t*>(decodedPcm.data()), 4096, _impl->info.outputFormat.channels, &numFrames);
+    auto const status = _impl->decoder->Decode(&bitBuffer,
+                                               reinterpret_cast<uint8_t*>(decodedPcm.data()),
+                                               maxFrames,
+                                               _impl->info.outputFormat.channels,
+                                               &numFrames);
 
     if (status != 0)
     {
+      _impl->setError("ALAC decode failed");
+      return std::nullopt;
+    }
+
+    if (numFrames > maxFrames)
+    {
+      _impl->setError("ALAC decoder returned too many frames");
       return std::nullopt;
     }
 
     auto block = PcmBlock{};
-    auto const bytesPerFrame = _impl->info.outputFormat.channels * (_impl->info.outputFormat.bitDepth / 8);
-
     decodedPcm.resize(numFrames * bytesPerFrame);
     block.bytes = std::move(decodedPcm);
     block.frames = numFrames;
