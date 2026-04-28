@@ -51,6 +51,8 @@ This guide defines RockStudio's C++ coding conventions.
     - 3.1.3. Use `std::span` for non-owning buffer and container views
     - 3.1.4. Use `std::ranges`
       - prefer algorithms over iterator-based code when they express the intent clearly
+      - use projections to simplify search and comparison algorithms (e.g., `std::ranges::find(range, value, &Type::member)`)
+      - maintain consistency across algorithm families; if using `std::ranges::sort`, prefer `std::ranges::unique` over iterator-based versions
       - chain views with pipe syntax
       - prefer `std::views::` for brevity
       - `std::span` works directly with ranges algorithms
@@ -77,6 +79,8 @@ This guide defines RockStudio's C++ coding conventions.
     - 3.3.5. Prefer `auto` for non-primitive object construction
       - Prefer `auto x = T{a, b};` over `T x{a, b};`
       - Prefer `auto x = T{};` over `T x;`
+      - Avoid `auto` for primitive types (e.g., `int`, `unsigned int`, `double`) if it requires a `static_cast` or reduces clarity
+      - Interfacing with C APIs: Use explicit types when an API requires a pointer to a specific C type (e.g., `unsigned int*`) to ensure strict type compatibility
       - Exception: for simple null pointer initialization, use `T* ptr = nullptr;` instead of `auto* ptr = static_cast<T*>(nullptr);`
 - 4. Best Practices
   - 4.1. Getters and Accessors

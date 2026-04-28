@@ -72,7 +72,7 @@ namespace app::ui
     std::optional<rs::core::ListId> sourceListId;
   };
 
-  class MainWindow : public Gtk::ApplicationWindow
+  class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
     MainWindow();

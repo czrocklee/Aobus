@@ -136,4 +136,4 @@ namespace app::core::source
     return static_cast<std::size_t>(clampedOffset - (clampedOffset % frameByteCount));
   }
 
-} // namespace app::core::playback
+} // namespace app::core::source

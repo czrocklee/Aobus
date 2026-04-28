@@ -4,6 +4,7 @@
 #include "core/model/AllTrackIdsList.h"
 
 #include <algorithm>
+#include <ranges>
 
 namespace app::core::model
 {
@@ -26,7 +27,7 @@ namespace app::core::model
     }
 
     // flat_set constructor from sorted vector is efficient.
-    std::sort(ids.begin(), ids.end());
+    std::ranges::sort(ids);
     _trackIds = std::flat_set<TrackId>(std::sorted_unique, std::move(ids));
 
     TrackIdList::notifyReset();

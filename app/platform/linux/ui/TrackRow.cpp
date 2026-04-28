@@ -81,20 +81,20 @@ namespace app::ui
     _resourceId = resourceId;
 
     // Pre-format numeric strings
-    _yearStr = _year == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_year)};
-    _discNumberStr = _discNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_discNumber)};
-    _trackNumberStr = _trackNumber == 0 ? Glib::ustring{} : Glib::ustring{std::to_string(_trackNumber)};
+    _yearStr = _year == 0 ? Glib::ustring{} : Glib::ustring{std::format("{}", _year)};
+    _discNumberStr = _discNumber == 0 ? Glib::ustring{} : Glib::ustring{std::format("{}", _discNumber)};
+    _trackNumberStr = _trackNumber == 0 ? Glib::ustring{} : Glib::ustring{std::format("{}", _trackNumber)};
     _durationStr = formatDuration(_duration);
 
     if (_trackNumber != 0)
     {
       if (_totalDiscs > 1 && _discNumber != 0)
       {
-        _displayNumberStr = std::to_string(_discNumber) + "-" + std::to_string(_trackNumber);
+        _displayNumberStr = std::format("{}-{}", _discNumber, _trackNumber);
       }
       else
       {
-        _displayNumberStr = std::to_string(_trackNumber);
+        _displayNumberStr = std::format("{}", _trackNumber);
       }
     }
     else

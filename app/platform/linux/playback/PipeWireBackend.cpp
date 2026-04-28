@@ -496,7 +496,7 @@ namespace app::playback
       {
         if (isSinkMediaClass(node.mediaClass))
         {
-          auto const deviceId = node.objectSerial ? std::to_string(*node.objectSerial) : std::to_string(id);
+          auto const deviceId = node.objectSerial ? std::format("{}", *node.objectSerial) : std::format("{}", id);
           auto const displayName =
             (node.nodeNick.empty() ? (node.nodeName.empty() ? node.objectPath : node.nodeName) : node.nodeNick);
           auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
@@ -526,10 +526,11 @@ namespace app::playback
       {
         if (isSinkMediaClass(node.mediaClass))
         {
-          auto const currentDeviceId = node.objectSerial ? std::to_string(*node.objectSerial) : std::to_string(id);
+          auto const currentDeviceId =
+            node.objectSerial ? std::format("{}", *node.objectSerial) : std::format("{}", id);
           if (currentDeviceId == deviceId)
           {
-            return node.nodeName.empty() ? std::to_string(id) : node.nodeName;
+            return node.nodeName.empty() ? std::format("{}", id) : node.nodeName;
           }
         }
       }
@@ -1045,7 +1046,7 @@ namespace app::playback
             nodeType = AudioNodeType::ExternalSource;
 
           auto node =
-            AudioNode{.id = std::to_string(nodeId),
+            AudioNode{.id = std::format("{}", nodeId),
                       .type = nodeType,
                       .name = (record.nodeNick.empty() ? (record.nodeName.empty() ? record.objectPath : record.nodeName)
                                                        : record.nodeNick),
@@ -1078,7 +1079,7 @@ namespace app::playback
           if (fullSet.contains(link.outputNodeId) && fullSet.contains(link.inputNodeId))
           {
             graph.links.push_back(
-              {.sourceId = std::to_string(link.outputNodeId), .destId = std::to_string(link.inputNodeId)});
+              {.sourceId = std::format("{}", link.outputNodeId), .destId = std::format("{}", link.inputNodeId)});
           }
         }
 
@@ -1341,7 +1342,7 @@ namespace app::playback
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
     _impl->_monitor->setCallbacks(callbacks);
 
-    std::string nodeRateStr = "1/" + std::to_string(_impl->_format.sampleRate);
+    std::string nodeRateStr = std::format("1/{}", _impl->_format.sampleRate);
     ::pw_properties* props = ::pw_properties_new(PW_KEY_MEDIA_TYPE,
                                                  "Audio",
                                                  PW_KEY_MEDIA_CATEGORY,

@@ -13,7 +13,7 @@
 namespace app::ui
 {
 
-  class StatusBar : public Gtk::Box
+  class StatusBar final : public Gtk::Box
   {
   public:
     StatusBar();

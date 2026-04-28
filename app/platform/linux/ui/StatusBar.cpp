@@ -14,6 +14,8 @@
 #include <giomm/simpleactiongroup.h>
 #include <glibmm/variant.h>
 
+#include <format>
+#include <ranges>
 #include <iomanip>
 #include <sstream>
 
@@ -330,7 +332,7 @@ namespace app::ui
 
   void StatusBar::setTrackCount(std::size_t count)
   {
-    _libraryLabel.set_text(std::to_string(count) + " tracks");
+    _libraryLabel.set_text(std::format("{} tracks", count));
   }
 
   void StatusBar::setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration)
@@ -341,7 +343,7 @@ namespace app::ui
       return;
     }
 
-    std::string text = std::to_string(count) + (count == 1 ? " item selected" : " items selected");
+    std::string text = std::format("{} {}", count, count == 1 ? "item selected" : "items selected");
 
     if (totalDuration && totalDuration->count() > 0)
     {
@@ -562,11 +564,9 @@ namespace app::ui
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
-        auto it = std::find_if(
-          snapshot.graph.nodes.begin(), snapshot.graph.nodes.end(), [&](auto const& n) { return n.id == currentId; });
+        auto it = std::ranges::find(snapshot.graph.nodes, currentId, &app::core::backend::AudioNode::id);
 
         if (it == snapshot.graph.nodes.end()) break;
-
         auto const& node = *it;
         tt << "• ";
         switch (node.type)

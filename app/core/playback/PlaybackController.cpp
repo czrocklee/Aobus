@@ -8,6 +8,7 @@
 #include "core/playback/PlaybackEngine.h"
 
 #include <algorithm>
+#include <ranges>
 #include <map>
 
 namespace app::core::playback
@@ -50,10 +51,8 @@ namespace app::core::playback
     }
 
     // 2. Find the AudioDevice matching the kind and id from our cache
-    auto const it =
-      std::find_if(_allDevices.begin(),
-                   _allDevices.end(),
-                   [&](backend::AudioDevice const& d) { return d.backendKind == kind && d.id == deviceId; });
+    auto const it = std::ranges::find_if(
+      _allDevices, [&](backend::AudioDevice const& d) { return d.backendKind == kind && d.id == deviceId; });
 
     if (it == _allDevices.end())
     {
@@ -67,8 +66,7 @@ namespace app::core::playback
     for (auto const& discovery : _discoveries)
     {
       auto devices = discovery->enumerateDevices();
-      auto const found =
-        std::any_of(devices.begin(), devices.end(), [&](backend::AudioDevice const& d) { return d == targetDevice; });
+      auto const found = std::ranges::any_of(devices, [&](backend::AudioDevice const& d) { return d == targetDevice; });
 
       if (found)
       {

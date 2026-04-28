@@ -17,6 +17,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <format>
+#include <ranges>
 #include <functional>
 #include <memory>
 #include <string>
@@ -182,7 +184,7 @@ namespace app::ui
 
     std::string trackCountLabel(guint count)
     {
-      auto label = std::to_string(count);
+      auto label = std::format("{}", count);
       label += count == 1 ? " track" : " tracks";
       return label;
     }
@@ -594,9 +596,8 @@ namespace app::ui
 
     auto currentStateFor = [&currentLayout](TrackColumn column)
     {
-      auto const it = std::find_if(currentLayout.columns.begin(),
-                                   currentLayout.columns.end(),
-                                   [column](TrackColumnState const& state) { return state.column == column; });
+      auto const it =
+        std::ranges::find_if(currentLayout.columns, [&](TrackColumnState const& s) { return s.column == column; });
       return it != currentLayout.columns.end() ? *it : TrackColumnState{.column = column};
     };
 
@@ -993,15 +994,13 @@ namespace app::ui
 
   TrackViewPage::ColumnBinding* TrackViewPage::findColumnBinding(TrackColumn column)
   {
-    auto const it = std::find_if(
-      _columns.begin(), _columns.end(), [column](ColumnBinding const& binding) { return binding.id == column; });
+    auto const it = std::ranges::find(_columns, column, &ColumnBinding::id);
     return it != _columns.end() ? &*it : nullptr;
   }
 
   TrackViewPage::ColumnBinding const* TrackViewPage::findColumnBinding(TrackColumn column) const
   {
-    auto const it = std::find_if(
-      _columns.begin(), _columns.end(), [column](ColumnBinding const& binding) { return binding.id == column; });
+    auto const it = std::ranges::find(_columns, column, &ColumnBinding::id);
     return it != _columns.end() ? &*it : nullptr;
   }
 
