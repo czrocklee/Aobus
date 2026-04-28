@@ -11,7 +11,6 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 #include <filesystem>
-#include <glibmm/miscutils.h>
 #include <vector>
 
 namespace app::core
@@ -19,10 +18,12 @@ namespace app::core
   std::shared_ptr<spdlog::logger> Log::_appLogger = spdlog::null_logger_mt("app");
   std::shared_ptr<spdlog::logger> Log::_playbackLogger = spdlog::null_logger_mt("playback");
 
-  void Log::init(LogLevel level)
+  void Log::init(LogLevel level, std::filesystem::path logDir)
   {
-    // Ensure log directory exists
-    auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "rockstudio" / "logs";
+    if (logDir.empty())
+    {
+      logDir = std::filesystem::current_path() / "logs";
+    }
     std::filesystem::create_directories(logDir);
     auto const logPath = logDir / "app.log";
 

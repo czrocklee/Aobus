@@ -480,7 +480,7 @@ namespace app::core::playback
     // Add Engine Node
     _routeSnapshot.graph.nodes.push_back(backend::AudioNode{
       .id = "rs-engine",
-      .type = backend::AudioNodeType::Intermediary,
+      .type = backend::AudioNodeType::Engine,
       .name = "RockStudio Engine",
       .format = info.outputFormat,
       .volumeNotUnity = false,

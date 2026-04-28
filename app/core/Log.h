@@ -6,6 +6,7 @@
 #include <spdlog/fmt/ostr.h> // for logging custom types
 #include <spdlog/spdlog.h>
 
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -25,7 +26,7 @@ namespace app::core
   class Log final
   {
   public:
-    static void init(LogLevel level = LogLevel::Info);
+    static void init(LogLevel level = LogLevel::Info, std::filesystem::path logDir = {});
     static void shutdown();
 
     static std::shared_ptr<spdlog::logger>& getAppLogger() { return _appLogger; }

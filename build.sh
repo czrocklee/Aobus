@@ -105,6 +105,7 @@ echo "Configuring RockStudio with preset '$PRESET' in '$BUILD_DIR'..."
 CONFIGURE_COMMAND="cmake -S '$SOURCE_DIR' --preset '$PRESET' -B '$BUILD_DIR'"
 BUILD_COMMAND="cmake --build '$BUILD_DIR' --parallel"
 TEST_COMMAND="$BUILD_DIR/test/rs_test"
+TEST_LINUX_COMMAND="$BUILD_DIR/test/rs_test_linux"
 
 if [[ "$USE_CLANG" == "true" ]]; then
     echo "clang enabled for this build."
@@ -127,7 +128,7 @@ nix-shell --run "$BUILD_COMMAND"
 # Run tests (only for debug and release)
 if [[ "$BUILD_TYPE" == "debug" || "$BUILD_TYPE" == "release" ]]; then
     echo "Running tests..."
-    nix-shell --run "$TEST_COMMAND"
+    nix-shell --run "$TEST_COMMAND && $TEST_LINUX_COMMAND"
 fi
 
 # PGO instructions
@@ -167,3 +168,4 @@ echo "  Preset: $PRESET"
 echo "  Build dir: $BUILD_DIR"
 echo "  compiler: $COMPILER_NAME"
 echo "  clang-tidy: $ENABLE_TIDY"
+echo "  tests: rs_test + rs_test_linux"
