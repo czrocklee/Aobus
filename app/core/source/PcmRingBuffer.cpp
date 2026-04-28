@@ -37,9 +37,9 @@ namespace app::core::source
   {
     auto lock = std::lock_guard<std::mutex>{_mutex};
     std::uint8_t dummy;
-    
+
     while (_queue.pop(dummy));
-    
+
     _writeCount.store(0, std::memory_order_relaxed);
     _readCount.store(0, std::memory_order_relaxed);
   }

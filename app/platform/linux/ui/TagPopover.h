@@ -15,7 +15,7 @@
 namespace app::ui
 {
 
-  class TagPopover : public Gtk::Popover
+  class TagPopover final : public Gtk::Popover
   {
   public:
     using TrackId = rs::core::TrackId;

@@ -39,6 +39,8 @@
 #include <algorithm>
 #include <cctype>
 #include <exception>
+#include <format>
+#include <ranges>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -71,7 +73,7 @@ namespace app::ui
         return "all-tracks";
       }
 
-      return "list-" + std::to_string(static_cast<unsigned long>(listId.value()));
+      return "list-" + std::format("{}", listId.value());
     }
 
     struct StoredListNode final
@@ -97,7 +99,7 @@ namespace app::ui
 
     std::string tagChangeStatusMessage(std::size_t selectionCount, std::size_t addCount, std::size_t removeCount)
     {
-      auto message = std::to_string(selectionCount);
+      auto message = std::format("{}", selectionCount);
       message += selectionCount == 1 ? " track updated" : " tracks updated";
 
       if (addCount == 0 && removeCount == 0)
@@ -109,7 +111,7 @@ namespace app::ui
 
       if (addCount > 0)
       {
-        message += std::to_string(addCount);
+        message += std::format("{}", addCount);
         message += addCount == 1 ? " tag added" : " tags added";
       }
 
@@ -120,7 +122,7 @@ namespace app::ui
           message += ", ";
         }
 
-        message += std::to_string(removeCount);
+        message += std::format("{}", removeCount);
         message += removeCount == 1 ? " tag removed" : " tags removed";
       }
 
@@ -135,10 +137,7 @@ namespace app::ui
 
       auto takeColumn = [&layout](app::ui::TrackColumn column) -> std::optional<app::ui::TrackColumnState>
       {
-        auto const it =
-          std::find_if(layout.columns.begin(),
-                       layout.columns.end(),
-                       [column](app::ui::TrackColumnState const& entry) { return entry.column == column; });
+        auto const it = std::ranges::find(layout.columns, column, &app::ui::TrackColumnState::column);
 
         if (it == layout.columns.end())
         {
@@ -157,10 +156,7 @@ namespace app::ui
           continue;
         }
 
-        auto const existing =
-          std::find_if(ordered.begin(),
-                       ordered.end(),
-                       [column](app::ui::TrackColumnState const& entry) { return entry.column == *column; });
+        auto const existing = std::ranges::find(ordered, *column, &app::ui::TrackColumnState::column);
 
         if (existing != ordered.end())
         {
@@ -175,10 +171,7 @@ namespace app::ui
 
       for (auto const& entry : layout.columns)
       {
-        auto const existing = std::find_if(ordered.begin(),
-                                           ordered.end(),
-                                           [column = entry.column](app::ui::TrackColumnState const& candidate)
-                                           { return candidate.column == column; });
+        auto const existing = std::ranges::find(ordered, entry.column, &app::ui::TrackColumnState::column);
 
         if (existing == ordered.end())
         {
@@ -192,7 +185,7 @@ namespace app::ui
       {
         auto const columnId = std::string{app::ui::trackColumnId(entry.column)};
 
-        if (std::find(state.hiddenColumns.begin(), state.hiddenColumns.end(), columnId) != state.hiddenColumns.end())
+        if (std::ranges::find(state.hiddenColumns, columnId) != state.hiddenColumns.end())
         {
           entry.visible = false;
         }
@@ -221,10 +214,8 @@ namespace app::ui
           state.hiddenColumns.push_back(columnId);
         }
 
-        auto const definitionIt = std::find_if(app::ui::trackColumnDefinitions().begin(),
-                                               app::ui::trackColumnDefinitions().end(),
-                                               [column = entry.column](app::ui::TrackColumnDefinition const& definition)
-                                               { return definition.column == column; });
+        auto const definitionIt = std::ranges::find(
+          app::ui::trackColumnDefinitions(), entry.column, &app::ui::TrackColumnDefinition::column);
 
         if (definitionIt != app::ui::trackColumnDefinitions().end() && entry.width != definitionIt->defaultWidth)
         {

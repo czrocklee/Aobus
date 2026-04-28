@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <format>
+#include <ranges>
 #include <limits>
 #include <set>
 #include <sstream>
@@ -525,8 +526,7 @@ namespace app::core::playback
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
-        auto it = std::find_if(
-          snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == currentId; });
+        auto it = std::ranges::find_if(snap.graph.nodes, [&](auto const& n) { return n.id == currentId; });
         if (it == snap.graph.nodes.end()) break;
 
         path.push_back(&(*it));
@@ -582,19 +582,19 @@ namespace app::core::playback
         std::vector<std::string> otherAppNames;
         for (auto const& srcId : sources)
         {
-          bool isInternal = std::any_of(path.begin(), path.end(), [&](auto* p) { return p->id == srcId; });
+          bool isInternal = std::ranges::any_of(path, [&](auto* p) { return p->id == srcId; });
           if (!isInternal)
           {
-            auto it = std::find_if(
-              snap.graph.nodes.begin(), snap.graph.nodes.end(), [&](auto const& n) { return n.id == srcId; });
+            auto it = std::ranges::find_if(snap.graph.nodes, [&](auto const& n) { return n.id == srcId; });
             if (it != snap.graph.nodes.end()) otherAppNames.push_back(it->name);
           }
         }
 
         if (!otherAppNames.empty())
         {
-          std::sort(otherAppNames.begin(), otherAppNames.end());
-          otherAppNames.erase(std::unique(otherAppNames.begin(), otherAppNames.end()), otherAppNames.end());
+          std::ranges::sort(otherAppNames);
+          auto [first, last] = std::ranges::unique(otherAppNames);
+          otherAppNames.erase(first, last);
           std::string apps;
           for (size_t j = 0; j < otherAppNames.size(); ++j)
           {

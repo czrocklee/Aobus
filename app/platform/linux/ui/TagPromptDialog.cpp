@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <format>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -21,14 +22,14 @@ namespace app::ui
       auto const isSpace = [](unsigned char ch) { return std::isspace(ch) != 0; };
 
       auto start = value.begin();
-      
+
       while (start != value.end() && isSpace(static_cast<unsigned char>(*start)))
       {
         ++start;
       }
 
       auto finish = value.end();
-      
+
       while (finish != start && isSpace(static_cast<unsigned char>(*(finish - 1))))
       {
         --finish;
@@ -54,7 +55,7 @@ namespace app::ui
 
     std::string selectionSummary(std::size_t selectionCount)
     {
-      auto text = std::to_string(selectionCount);
+      auto text = std::format("{}", selectionCount);
       text += selectionCount == 1 ? " track selected." : " tracks selected.";
       text += " Shared tags can be removed, and mixed tags can be applied to every selected track.";
       return text;
@@ -81,7 +82,7 @@ namespace app::ui
         {
           out << ',';
         }
-        
+
         out << ' ' << removeCount << (removeCount == 1 ? " removal" : " removals");
       }
 
@@ -267,14 +268,14 @@ namespace app::ui
   void TagPromptDialog::stageAddTag(std::string tag)
   {
     tag = normalizeTag(tag);
-    
+
     if (tag.empty())
     {
       return;
     }
 
     auto [it, inserted] = _tagStates.try_emplace(tag, TagState{});
-    
+
     if (inserted)
     {
       auto insertPos = std::lower_bound(_availableTags.begin(), _availableTags.end(), tag);
@@ -373,8 +374,7 @@ namespace app::ui
         }
         else
         {
-          statusText = "currently on " + std::to_string(state.membershipCount) + " of " +
-                       std::to_string(_selectionCount) + ", add to all on save";
+          statusText = std::format("currently on {} of {}, add to all on save", state.membershipCount, _selectionCount);
         }
       }
       else if (state.pending == PendingTagChange::RemoveFromAll)
@@ -387,8 +387,7 @@ namespace app::ui
       }
       else
       {
-        statusText =
-          "on " + std::to_string(state.membershipCount) + " of " + std::to_string(_selectionCount) + " selected tracks";
+        statusText = std::format("on {} of {} selected tracks", state.membershipCount, _selectionCount);
       }
 
       auto* statusLabel = Gtk::make_managed<Gtk::Label>(statusText);
@@ -436,7 +435,7 @@ namespace app::ui
     for (auto const& tag : _availableTags)
     {
       auto const it = _tagStates.find(tag);
-      
+
       if (it != _tagStates.end() && it->second.membershipCount == _selectionCount &&
           it->second.pending != PendingTagChange::RemoveFromAll)
       {
@@ -449,7 +448,7 @@ namespace app::ui
       }
 
       suggestions.push_back(tag);
-      
+
       if (suggestions.size() == 8)
       {
         break;

@@ -4,6 +4,7 @@
 #include "core/playback/FormatNegotiator.h"
 
 #include <algorithm>
+#include <ranges>
 
 namespace app::core::playback
 {
@@ -45,12 +46,11 @@ namespace app::core::playback
               "sample rate resampling required",
               [&]
               {
-                return *std::max_element(caps.sampleRates.begin(),
-                                         caps.sampleRates.end(),
-                                         [sr = sourceFormat.sampleRate](auto a, auto b)
-                                         {
-                                           return (a % sr) > (b % sr); // Prefer multiples or closest
-                                         });
+                return *std::ranges::max_element(caps.sampleRates,
+                                                 [sr = sourceFormat.sampleRate](auto a, auto b)
+                                                 {
+                                                   return (a % sr) > (b % sr); // Prefer multiples or closest
+                                                 });
               });
 
     negotiate(plan.deviceFormat.bitDepth,
@@ -58,7 +58,7 @@ namespace app::core::playback
               plan.requiresBitDepthConversion,
               plan.reason,
               "bit depth conversion required",
-              [&] { return *std::max_element(caps.bitDepths.begin(), caps.bitDepths.end()); });
+              [&] { return *std::ranges::max_element(caps.bitDepths); });
 
     negotiate(plan.deviceFormat.channels,
               caps.channelCounts,

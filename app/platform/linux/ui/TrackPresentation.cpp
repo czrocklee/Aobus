@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <format>
+#include <ranges>
 #include <string>
 
 namespace app::ui
@@ -31,7 +33,7 @@ namespace app::ui
     TrackColumnDefinition const* trackColumnDefinition(TrackColumn column)
     {
       auto const it = std::ranges::find(kTrackColumnDefinitions, column, &TrackColumnDefinition::column);
-      
+
       if (it == kTrackColumnDefinitions.end())
       {
         return nullptr;
@@ -53,7 +55,7 @@ namespace app::ui
         {
           return -1;
         }
-        
+
         if (lc > rc)
         {
           return 1;
@@ -64,7 +66,7 @@ namespace app::ui
       {
         return -1;
       }
-      
+
       if (lhs.size() > rhs.size())
       {
         return 1;
@@ -91,7 +93,7 @@ namespace app::ui
       {
         return -1;
       }
-      
+
       if (lhs > rhs)
       {
         return 1;
@@ -115,7 +117,7 @@ namespace app::ui
       {
         return -1;
       }
-      
+
       if (lhs > rhs)
       {
         return 1;
@@ -130,7 +132,7 @@ namespace app::ui
       {
         return -1;
       }
-      
+
       if (lhs.value() > rhs.value())
       {
         return 1;
@@ -167,7 +169,7 @@ namespace app::ui
     TrackColumnState defaultColumnState(TrackColumn column)
     {
       auto const* definition = trackColumnDefinition(column);
-      
+
       if (!definition)
       {
         return {.column = column};
@@ -283,12 +285,12 @@ namespace app::ui
       case TrackGroupBy::None: return 0;
       case TrackGroupBy::Artist: return compareTextField(lhs.artist, rhs.artist);
       case TrackGroupBy::Album:
-        
+
         if (auto const albumArtistCmp = compareTextField(lhs.albumArtist, rhs.albumArtist); albumArtistCmp != 0)
         {
           return albumArtistCmp;
         }
-        
+
         return compareTextField(lhs.album, rhs.album);
       case TrackGroupBy::AlbumArtist: return compareTextField(lhs.albumArtist, rhs.albumArtist);
       case TrackGroupBy::Genre: return compareTextField(lhs.genre, rhs.genre);
@@ -329,7 +331,7 @@ namespace app::ui
   std::optional<TrackColumn> trackColumnFromId(std::string_view id)
   {
     auto const it = std::ranges::find(kTrackColumnDefinitions, id, &TrackColumnDefinition::id);
-    
+
     if (it == kTrackColumnDefinitions.end())
     {
       return std::nullopt;
@@ -368,7 +370,7 @@ namespace app::ui
     for (auto const& state : layout.columns)
     {
       auto const* definition = trackColumnDefinition(state.column);
-      
+
       if (!definition || hasColumn(state.column))
       {
         continue;
@@ -399,7 +401,7 @@ namespace app::ui
       case TrackGroupBy::None: return {};
       case TrackGroupBy::Artist: return keys.artist.empty() ? unknownLabel("Artist") : std::string{keys.artist};
       case TrackGroupBy::Album:
-        
+
         if (keys.album.empty())
         {
           return unknownLabel("Album");
@@ -416,7 +418,7 @@ namespace app::ui
       case TrackGroupBy::Genre: return keys.genre.empty() ? unknownLabel("Genre") : std::string{keys.genre};
       case TrackGroupBy::Composer: return keys.composer.empty() ? unknownLabel("Composer") : std::string{keys.composer};
       case TrackGroupBy::Work: return keys.work.empty() ? unknownLabel("Work") : std::string{keys.work};
-      case TrackGroupBy::Year: return keys.year == 0 ? unknownLabel("Year") : std::to_string(keys.year);
+      case TrackGroupBy::Year: return keys.year == 0 ? unknownLabel("Year") : std::format("{}", keys.year);
     }
 
     return {};
