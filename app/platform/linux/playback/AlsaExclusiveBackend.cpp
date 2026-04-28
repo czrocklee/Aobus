@@ -3,6 +3,7 @@
 
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
 #include "core/Log.h"
+#include "core/util/ThreadUtils.h"
 #include "core/backend/BackendTypes.h"
 
 #include <rs/utility/Raii.h>
@@ -138,7 +139,10 @@ namespace app::playback
       AlsaDiscovery()
       {
         _cachedDevices = doAlsaEnumerate();
-        _monitorThread = std::jthread([this](std::stop_token st) { monitorLoop(st); });
+        _monitorThread = std::jthread([this](std::stop_token st) {
+          app::core::util::setCurrentThreadName("AlsaDeviceMonitor");
+          monitorLoop(st);
+        });
       }
 
       void setDevicesChangedCallback(OnDevicesChangedCallback callback) override { _callback = std::move(callback); }
@@ -515,7 +519,10 @@ namespace app::playback
 
     if (!_thread.joinable())
     {
-      _thread = std::jthread([this](std::stop_token st) { playbackLoop(st); });
+      _thread = std::jthread([this](std::stop_token st) {
+        app::core::util::setCurrentThreadName("AlsaPlayback");
+        playbackLoop(st);
+      });
     }
 
     ::snd_pcm_start(_pcm.get());

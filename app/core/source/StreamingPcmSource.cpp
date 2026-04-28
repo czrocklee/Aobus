@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "core/source/StreamingPcmSource.h"
+#include "core/util/ThreadUtils.h"
 
 #include <chrono>
 
@@ -121,7 +122,10 @@ namespace app::core::source
   void StreamingPcmSource::startDecodeThread()
   {
     stopDecodeThread();
-    _decodeThread = std::jthread([this](std::stop_token token) { decodeLoop(token); });
+    _decodeThread = std::jthread([this](std::stop_token token) {
+      app::core::util::setCurrentThreadName("StreamingPcmSource-Decode");
+      decodeLoop(token);
+    });
   }
 
   void StreamingPcmSource::stopDecodeThread()

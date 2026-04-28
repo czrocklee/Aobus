@@ -154,6 +154,7 @@ namespace app::core::playback
 
     if (_backend)
     {
+      _backend->open(AudioFormat{}, {});
       _backend->stop();
       _backend->close();
     }
@@ -277,6 +278,7 @@ namespace app::core::playback
     PLAYBACK_LOG_INFO("Playback stopped");
     if (_backend)
     {
+      _backend->open(AudioFormat{}, {});
       _backend->stop();
       _backend->close();
     }

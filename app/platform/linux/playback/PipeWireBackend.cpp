@@ -574,7 +574,7 @@ namespace app::playback
     std::unordered_map<std::uint32_t, NodeRecord> _nodes = {};
     std::unordered_map<std::uint32_t, LinkRecord> _links = {};
     std::unordered_map<std::uint32_t, LinkBinding> _linkBindings = {};
-    std::unordered_map<std::uint32_t, NodeBinding> _sinkNodeBindings = {};
+    std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> _sinkNodeBindings = {};
     NodeBinding _streamNodeBinding = {};
     std::optional<app::core::AudioFormat> _negotiatedStreamFormat = {};
     std::optional<app::core::AudioFormat> _sinkFormat = {};
@@ -828,6 +828,8 @@ namespace app::playback
     {
       triggerRefresh();
     }
+    
+    // Call external callback OUTSIDE lock
     if (deviceRemoved && _onDevicesChanged)
     {
       _onDevicesChanged();
@@ -924,7 +926,7 @@ namespace app::playback
 
     ::pw_thread_loop_lock(_loop);
     {
-      auto const lock = std::lock_guard<std::mutex>{_mutex};
+      auto lock = std::unique_lock<std::mutex>{_mutex};
 
       if (_stream)
       {
@@ -1037,23 +1039,27 @@ namespace app::playback
                                  0));
             if (proxy)
             {
-              auto& binding = _sinkNodeBindings[id];
-              binding.id = id;
-              binding.monitor = this;
-              binding.proxy.reset(proxy);
+              auto binding = std::make_unique<NodeBinding>();
+              binding->id = id;
+              binding->monitor = this;
+              binding->proxy.reset(proxy);
 
               std::uint32_t params[] = {SPA_PARAM_Format, SPA_PARAM_EnumFormat, SPA_PARAM_Props};
-              ::pw_node_subscribe_params(binding.proxy.get(), params, 3);
-              ::pw_node_enum_params(binding.proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
-              ::pw_node_enum_params(binding.proxy.get(), 2, SPA_PARAM_EnumFormat, 0, -1, nullptr);
-              ::pw_node_enum_params(binding.proxy.get(), 3, SPA_PARAM_Props, 0, -1, nullptr);
-              ::pw_node_add_listener(binding.proxy.get(), binding.listener.get(), &sinkNodeEvents, &binding);
+              ::pw_node_subscribe_params(binding->proxy.get(), params, 3);
+              ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
+              ::pw_node_enum_params(binding->proxy.get(), 2, SPA_PARAM_EnumFormat, 0, -1, nullptr);
+              ::pw_node_enum_params(binding->proxy.get(), 3, SPA_PARAM_Props, 0, -1, nullptr);
+
+              auto* pBinding = binding.get();
+              ::pw_node_add_listener(pBinding->proxy.get(), pBinding->listener.get(), &sinkNodeEvents, pBinding);
+              _sinkNodeBindings[id] = std::move(binding);
             }
+
           }
         }
       }
 
-      if (_callbacks.onGraphChanged)
+      if (_callbacks.onGraphChanged && _callbacks.userData)
       {
         auto graph = AudioGraph{};
 
@@ -1124,7 +1130,13 @@ namespace app::playback
           }
         }
 
+        // Release mutex before calling external callback to prevent deadlocks/owner-died mutex
+        lock.unlock();
         _callbacks.onGraphChanged(_callbacks.userData, graph);
+      }
+      else
+      {
+        lock.unlock();
       }
     }
     ::pw_thread_loop_unlock(_loop);
@@ -1165,11 +1177,10 @@ namespace app::playback
 
     void destroyStream()
     {
-      bool const inThread = _threadLoop && ::pw_thread_loop_in_thread(_threadLoop.get());
-      if (_threadLoop && !inThread) ::pw_thread_loop_lock(_threadLoop.get());
+      if (_threadLoop) ::pw_thread_loop_lock(_threadLoop.get());
       _streamListener.reset();
       _stream.reset();
-      if (_threadLoop && !inThread) ::pw_thread_loop_unlock(_threadLoop.get());
+      if (_threadLoop) ::pw_thread_loop_unlock(_threadLoop.get());
     }
 
     void setError(std::string message)
@@ -1362,6 +1373,13 @@ namespace app::playback
 
   bool PipeWireBackend::open(app::core::AudioFormat const& format, AudioRenderCallbacks callbacks)
   {
+    if (format.sampleRate == 0)
+    {
+      _impl->_callbacks = {};
+      _impl->destroyStream();
+      return true;
+    }
+
     PLAYBACK_LOG_INFO("PipeWireBackend: Opening stream with format {}Hz/{}b/{}ch",
                       format.sampleRate,
                       (int)format.bitDepth,
@@ -1477,19 +1495,17 @@ namespace app::playback
   {
     if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
     PLAYBACK_LOG_DEBUG("PipeWireBackend: Starting playback");
-    bool const inThread = ::pw_thread_loop_in_thread(_impl->_threadLoop.get());
-    if (!inThread) ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
     ::pw_stream_set_active(_impl->_stream.get(), true);
-    if (!inThread) ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
   }
 
   void PipeWireBackend::pause()
   {
     if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
-    bool const inThread = ::pw_thread_loop_in_thread(_impl->_threadLoop.get());
-    if (!inThread) ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
     ::pw_stream_set_active(_impl->_stream.get(), false);
-    if (!inThread) ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
   }
 
   void PipeWireBackend::resume()
@@ -1501,20 +1517,18 @@ namespace app::playback
   {
     if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
     _impl->_drainPending = false;
-    bool const inThread = ::pw_thread_loop_in_thread(_impl->_threadLoop.get());
-    if (!inThread) ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
     ::pw_stream_flush(_impl->_stream.get(), false);
-    if (!inThread) ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
   }
 
   void PipeWireBackend::drain()
   {
     if (!_impl || !_impl->_stream || !_impl->_threadLoop || _impl->_drainPending) return;
     _impl->_drainPending = true;
-    bool const inThread = ::pw_thread_loop_in_thread(_impl->_threadLoop.get());
-    if (!inThread) ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
     ::pw_stream_flush(_impl->_stream.get(), true);
-    if (!inThread) ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
   }
 
   void PipeWireBackend::stop()
@@ -1522,10 +1536,9 @@ namespace app::playback
     if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
     PLAYBACK_LOG_DEBUG("PipeWireBackend: Stopping playback");
     _impl->_drainPending = false;
-    bool const inThread = ::pw_thread_loop_in_thread(_impl->_threadLoop.get());
-    if (!inThread) ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
     ::pw_stream_set_active(_impl->_stream.get(), false);
-    if (!inThread) ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
   }
 
   void PipeWireBackend::close()
