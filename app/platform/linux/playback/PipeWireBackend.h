@@ -4,24 +4,17 @@
 #pragma once
 
 #include "core/backend/IAudioBackend.h"
-#include "core/backend/IDeviceDiscovery.h"
-
 #include <memory>
 #include <string_view>
 
 namespace app::playback
 {
-
   /**
    * @brief Audio backend using PipeWire.
-   *
-   * This backend provides shared playback through the PipeWire server.
    */
   class PipeWireBackend final : public app::core::backend::IAudioBackend
   {
   public:
-    static std::unique_ptr<app::core::backend::IDeviceDiscovery> createDiscovery();
-
     struct Impl;
 
     explicit PipeWireBackend(app::core::backend::AudioDevice const& device);

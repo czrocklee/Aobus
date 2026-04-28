@@ -39,12 +39,19 @@ add_executable(RockStudio
 target_link_libraries(RockStudio PRIVATE PkgFLAC PkgALAC)
 if(PIPEWIRE_FOUND)
   target_compile_definitions(RockStudio PRIVATE PIPEWIRE_FOUND)
-  target_sources(RockStudio PRIVATE platform/linux/playback/PipeWireBackend.cpp)
+  target_sources(RockStudio PRIVATE
+    platform/linux/playback/PipeWireBackend.cpp
+    platform/linux/playback/PipeWireManager.cpp
+    platform/linux/playback/PipeWireInternal.cpp
+  )
   target_link_libraries(RockStudio PRIVATE PipeWire)
 endif()
 if(ALSA_FOUND)
   target_compile_definitions(RockStudio PRIVATE ALSA_FOUND)
-  target_sources(RockStudio PRIVATE platform/linux/playback/AlsaExclusiveBackend.cpp)
+  target_sources(RockStudio PRIVATE
+    platform/linux/playback/AlsaExclusiveBackend.cpp
+    platform/linux/playback/AlsaManager.cpp
+  )
   target_link_libraries(RockStudio PRIVATE ALSA UDEV)
 endif()
 target_link_libraries(RockStudio PRIVATE rs GTKMM spdlog::spdlog yaml-cpp CLI11::CLI11)

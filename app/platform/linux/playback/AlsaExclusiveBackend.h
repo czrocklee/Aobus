@@ -4,33 +4,26 @@
 #pragma once
 
 #include "core/backend/IAudioBackend.h"
-#include "core/backend/IDeviceDiscovery.h"
-#include "core/playback/FormatNegotiator.h"
+
+#include <memory>
+#include <string>
+#include <thread>
+#include <atomic>
 
 extern "C"
 {
 #include <alsa/asoundlib.h>
 }
 
-#include <atomic>
-#include <memory>
-#include <string>
-#include <string_view>
-#include <thread>
-
 namespace app::playback
 {
 
   /**
-   * @brief Backend using direct ALSA access.
-   *
-   * Can provide bit-perfect exclusive access when using "hw:" devices.
+   * @brief Audio backend using ALSA in exclusive (hardware) mode.
    */
   class AlsaExclusiveBackend final : public app::core::backend::IAudioBackend
   {
   public:
-    static std::unique_ptr<app::core::backend::IDeviceDiscovery> createDiscovery();
-
     explicit AlsaExclusiveBackend(app::core::backend::AudioDevice const& device);
     ~AlsaExclusiveBackend() override;
 
@@ -43,20 +36,19 @@ namespace app::playback
     void stop() override;
     void close() override;
 
-    void setExclusiveMode(bool) override {}
-    bool isExclusiveMode() const noexcept override { return true; } // ALSA is always exclusive
+    void setExclusiveMode(bool exclusive) override;
+    bool isExclusiveMode() const noexcept override;
 
-    app::core::backend::BackendKind kind() const noexcept override
-    {
-      return app::core::backend::BackendKind::AlsaExclusive;
-    }
-
-    std::string_view lastError() const noexcept override { return _lastError; }
+    app::core::backend::BackendKind kind() const noexcept override;
+    std::string_view lastError() const noexcept override;
 
   private:
-    struct AlsaPcmDeleter final
+    struct AlsaPcmDeleter
     {
-      void operator()(::snd_pcm_t* pcm) const noexcept { ::snd_pcm_close(pcm); }
+      void operator()(::snd_pcm_t* p) const noexcept
+      {
+        if (p) ::snd_pcm_close(p);
+      }
     };
     using AlsaPcmPtr = std::unique_ptr<::snd_pcm_t, AlsaPcmDeleter>;
 
@@ -64,12 +56,11 @@ namespace app::playback
     void recoverFromXrun(int err);
 
     std::string _deviceName;
-    AlsaPcmPtr _pcm;
-    app::core::backend::AudioRenderCallbacks _callbacks;
     app::core::AudioFormat _format;
+    app::core::backend::AudioRenderCallbacks _callbacks;
     std::string _lastError;
 
-    std::stop_token _stopToken;
+    AlsaPcmPtr _pcm;
     std::jthread _thread;
     std::atomic<bool> _paused{false};
   };
