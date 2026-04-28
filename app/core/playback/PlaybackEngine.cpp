@@ -26,33 +26,6 @@ namespace app::core::playback
     constexpr std::uint32_t kDecodeHighWatermarkMs = 750;
     constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
 
-    bool isLosslessBitDepthChange(AudioFormat const& src, AudioFormat const& dst) noexcept
-    {
-      if (src.isFloat == dst.isFloat)
-      {
-        // If both are same type, it's lossless if destination has enough precision
-        auto const srcBits = src.validBits != 0 ? src.validBits : src.bitDepth;
-        auto const dstBits = dst.validBits != 0 ? dst.validBits : dst.bitDepth;
-        return srcBits <= dstBits;
-      }
-
-      if (!src.isFloat && dst.isFloat)
-      {
-        auto const srcBits = src.validBits != 0 ? src.validBits : src.bitDepth;
-        if (dst.bitDepth == 32) return srcBits <= 24;
-        if (dst.bitDepth == 64) return srcBits <= 32;
-      }
-
-      return false;
-    }
-
-    void appendLine(std::string& text, std::string_view line)
-    {
-      if (line.empty()) return;
-      if (!text.empty()) text += '\n';
-      text += line;
-    }
-
     std::uint64_t bytesPerSecond(AudioFormat const& format) noexcept
     {
       if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
@@ -137,6 +110,18 @@ namespace app::core::playback
     _onTrackEnded = std::move(callback);
   }
 
+  void PlaybackEngine::setOnRouteChanged(OnRouteChanged callback)
+  {
+    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    _onRouteChanged = std::move(callback);
+  }
+
+  EngineRouteSnapshot PlaybackEngine::routeSnapshot() const
+  {
+    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    return _routeSnapshot;
+  }
+
   void PlaybackEngine::resetToIdle()
   {
     _currentTrack.reset();
@@ -144,6 +129,14 @@ namespace app::core::playback
     _playbackDrainPending = false;
     _snapshot = {};
     _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
+
+    _routeSnapshot = {};
+    if (_onRouteChanged)
+    {
+      auto snap = _routeSnapshot;
+      if (_dispatcher) _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      else _onRouteChanged(snap);
+    }
   }
 
 
@@ -168,7 +161,7 @@ namespace app::core::playback
     callbacks.onUnderrun = &PlaybackEngine::onUnderrun;
     callbacks.onPositionAdvanced = &PlaybackEngine::onPositionAdvanced;
     callbacks.onDrainComplete = &PlaybackEngine::onDrainComplete;
-    callbacks.onGraphChanged = &PlaybackEngine::onGraphChanged;
+    callbacks.onRouteReady = &PlaybackEngine::onRouteReady;
     callbacks.onBackendError = &PlaybackEngine::onBackendError;
 
     auto source = std::shared_ptr<source::IPcmSource>{};
@@ -485,230 +478,31 @@ namespace app::core::playback
                                      .objectPath = ""});
 
     // Add Engine Node
-    _snapshot.graph.nodes.push_back({.id = "rs-engine",
-                                     .type = AudioNodeType::Engine,
-                                     .name = "RockStudio Engine",
-                                     .format = info.outputFormat,
-                                     .objectPath = ""});
+    _routeSnapshot.graph.nodes.push_back(backend::AudioNode{
+      .id = "rs-engine",
+      .type = backend::AudioNodeType::Intermediary,
+      .name = "RockStudio Engine",
+      .format = info.outputFormat,
+      .volumeNotUnity = false,
+      .isMuted = false,
+      .isLossySource = false
+    });
+    
+    _routeSnapshot.graph.links.push_back(backend::AudioLink{
+      .sourceId = "rs-decoder",
+      .destId = "rs-engine",
+      .isActive = true
+    });
 
-    _snapshot.graph.links.push_back({.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
+    _snapshot.graph = _routeSnapshot.graph;
+    if (_onRouteChanged)
+    {
+      auto snap = _routeSnapshot;
+      if (_dispatcher) _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      else _onRouteChanged(snap);
+    }
 
     return true;
-  }
-
-  void PlaybackEngine::handleGraphChanged(backend::AudioGraph const& backendGraph)
-  {
-    auto lock = std::lock_guard<std::mutex>{_stateMutex};
-
-    PLAYBACK_LOG_DEBUG(
-      "Graph update received from backend ({} nodes, {} links)", backendGraph.nodes.size(), backendGraph.links.size());
-
-    // Keep our internal nodes (Decoder, Engine)
-    auto nodes = std::vector<AudioNode>{};
-    auto links = std::vector<AudioLink>{};
-
-    for (auto const& node : _snapshot.graph.nodes)
-    {
-      if (node.type == AudioNodeType::Decoder || node.type == AudioNodeType::Engine) nodes.push_back(node);
-    }
-    for (auto const& link : _snapshot.graph.links)
-    {
-      if (link.sourceId == "rs-decoder" && link.destId == "rs-engine") links.push_back(link);
-    }
-
-    // Add backend nodes
-    for (auto const& node : backendGraph.nodes) nodes.push_back(node);
-    for (auto const& link : backendGraph.links) links.push_back(link);
-
-    // Bridge our Engine to the Backend Stream
-    bool bridged = false;
-    for (auto const& node : backendGraph.nodes)
-    {
-      if (node.type == AudioNodeType::Stream)
-      {
-        links.push_back({.sourceId = "rs-engine", .destId = node.id, .isActive = true});
-        PLAYBACK_LOG_DEBUG("Bridged Engine to backend stream '{}'", node.id);
-        bridged = true;
-        break;
-      }
-    }
-
-    if (!bridged)
-    {
-      PLAYBACK_LOG_WARN("Could not find backend stream node to bridge the engine!");
-    }
-
-    _snapshot.graph.nodes = std::move(nodes);
-    _snapshot.graph.links = std::move(links);
-
-    analyzeAudioQuality();
-  }
-
-  void PlaybackEngine::analyzeAudioQuality()
-  {
-    auto& snap = _snapshot;
-    snap.quality = AudioQuality::BitwisePerfect;
-    snap.qualityTooltip.clear();
-
-    PLAYBACK_LOG_DEBUG("Analyzing audio quality for graph with {} nodes", snap.graph.nodes.size());
-
-    appendLine(snap.qualityTooltip, "Audio Routing Analysis:");
-
-    // 1. Build the strict linear path (The "Total Order" of the pipeline)
-    std::vector<AudioNode*> path;
-    {
-      auto currentId = std::string{"rs-decoder"};
-      std::set<std::string> visited;
-      while (!currentId.empty() && !visited.contains(currentId))
-      {
-        visited.insert(currentId);
-        auto it = std::ranges::find_if(snap.graph.nodes, [&](auto const& n) { return n.id == currentId; });
-        if (it == snap.graph.nodes.end()) break;
-
-        path.push_back(&(*it));
-
-        std::string nextId;
-        for (auto const& link : snap.graph.links)
-        {
-          if (link.isActive && link.sourceId == currentId)
-          {
-            nextId = link.destId;
-            break;
-          }
-        }
-        currentId = nextId;
-      }
-    }
-
-    // 3. Identify all input sources for each node to detect mixing later
-    auto inputSources = std::unordered_map<std::string, std::set<std::string>>{};
-    for (auto const& link : snap.graph.links)
-    {
-      if (link.isActive) inputSources[link.destId].insert(link.sourceId);
-    }
-
-    // 4. Single-pass linear analysis through the path
-    for (size_t i = 0; i < path.size(); ++i)
-    {
-      auto* node = path[i];
-
-      // --- A. Node internal state ---
-      if (node->isLossySource)
-      {
-        appendLine(snap.qualityTooltip, std::format("• Source: Lossy format ({})", node->name));
-        snap.quality = std::max(snap.quality, AudioQuality::LossySource);
-      }
-
-      if (node->volumeNotUnity)
-      {
-        appendLine(snap.qualityTooltip, std::format("• Volume: Modification at {}", node->name));
-        snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
-      }
-
-      if (node->isMuted)
-      {
-        appendLine(snap.qualityTooltip, std::format("• Status: {} is MUTED", node->name));
-        snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
-      }
-
-      // --- B. Node external interference (Mixing) ---
-      if (inputSources.contains(node->id))
-      {
-        auto const& sources = inputSources.at(node->id);
-        std::vector<std::string> otherAppNames;
-        for (auto const& srcId : sources)
-        {
-          bool isInternal = std::ranges::any_of(path, [&](auto* p) { return p->id == srcId; });
-          if (!isInternal)
-          {
-            auto it = std::ranges::find_if(snap.graph.nodes, [&](auto const& n) { return n.id == srcId; });
-            if (it != snap.graph.nodes.end()) otherAppNames.push_back(it->name);
-          }
-        }
-
-        if (!otherAppNames.empty())
-        {
-          std::ranges::sort(otherAppNames);
-          auto [first, last] = std::ranges::unique(otherAppNames);
-          otherAppNames.erase(first, last);
-          std::string apps;
-          for (size_t j = 0; j < otherAppNames.size(); ++j)
-          {
-            apps += otherAppNames[j];
-            if (j < otherAppNames.size() - 1) apps += ", ";
-          }
-          appendLine(snap.qualityTooltip, std::format("• Mixed: {} shared with {}", node->name, apps));
-          snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
-        }
-      }
-
-      // --- C. Link transition to next node ---
-      if (i < path.size() - 1)
-      {
-        auto* node = path[i];
-        auto* nextNode = path[i + 1];
-        if (node->format && nextNode->format)
-        {
-          auto const& f1 = *node->format;
-          auto const& f2 = *nextNode->format;
-
-          if (f1.sampleRate != f2.sampleRate)
-          {
-            appendLine(snap.qualityTooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
-            snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
-          }
-
-          if (f1.channels != f2.channels)
-          {
-            appendLine(snap.qualityTooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
-            snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
-          }
-          else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
-          {
-            if (isLosslessBitDepthChange(f1, f2))
-            {
-              appendLine(snap.qualityTooltip,
-                         f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
-              snap.quality =
-                std::max(snap.quality, f2.isFloat ? AudioQuality::LosslessFloat : AudioQuality::LosslessPadded);
-            }
-            else
-            {
-              appendLine(
-                snap.qualityTooltip, std::format("• Precision: Truncated {}b → {}b", f1.bitDepth, f2.bitDepth));
-              snap.quality = std::max(snap.quality, AudioQuality::LinearIntervention);
-            }
-          }
-        }
-      }
-    }
-
-    if (snap.quality == backend::AudioQuality::BitwisePerfect)
-    {
-      appendLine(snap.qualityTooltip, "• Signal Path: Byte-perfect from decoder to device");
-    }
-
-    // 5. Final summary
-    switch (snap.quality)
-    {
-      case backend::AudioQuality::BitwisePerfect:
-        appendLine(snap.qualityTooltip, "\nConclusion: Bit-perfect output");
-        break;
-      case backend::AudioQuality::LosslessPadded:
-      case backend::AudioQuality::LosslessFloat:
-        appendLine(snap.qualityTooltip, "\nConclusion: Lossless Conversion");
-        break;
-      case backend::AudioQuality::LinearIntervention:
-        appendLine(snap.qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
-        break;
-      case backend::AudioQuality::LossySource:
-        appendLine(snap.qualityTooltip, "\nConclusion: Lossy source format");
-        break;
-      case backend::AudioQuality::Clipped:
-        appendLine(snap.qualityTooltip, "\nConclusion: Signal clipping detected");
-        break;
-      case backend::AudioQuality::Unknown: break;
-    }
   }
 
   std::size_t PlaybackEngine::onReadPcm(void* userData, std::span<std::byte> output) noexcept
@@ -756,15 +550,9 @@ namespace app::core::playback
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
     if (!self->_playbackDrainPending.exchange(false, std::memory_order_relaxed)) return;
-    
-    if (self->_dispatcher)
-    {
-      self->_dispatcher->dispatch([self]() { self->handleDrainComplete(); });
-    }
-    else
-    {
-      self->handleDrainComplete();
-    }
+
+    if (self->_dispatcher) self->_dispatcher->dispatch([self]() { self->handleDrainComplete(); });
+    else self->handleDrainComplete();
   }
 
   void PlaybackEngine::handleDrainComplete()
@@ -782,17 +570,32 @@ namespace app::core::playback
     if (cb) cb();
   }
 
-  void PlaybackEngine::onGraphChanged(void* userData, backend::AudioGraph const& graph) noexcept
+  void PlaybackEngine::onRouteReady(void* userData, std::string_view routeAnchor) noexcept
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
+    auto anchor = std::string(routeAnchor);
     if (self->_dispatcher)
     {
-      auto graphCopy = graph;
-      self->_dispatcher->dispatch([self, g = std::move(graphCopy)]() { self->handleGraphChanged(g); });
+      self->_dispatcher->dispatch([self, a = std::move(anchor)]() { self->handleRouteReady(a); });
     }
     else
     {
-      self->handleGraphChanged(graph);
+      self->handleRouteReady(anchor);
+    }
+  }
+
+  void PlaybackEngine::handleRouteReady(std::string_view routeAnchor)
+  {
+    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    _routeSnapshot.anchor = BackendRouteAnchor{
+      .backend = _backend ? _backend->kind() : backend::BackendKind::None,
+      .id = std::string(routeAnchor)
+    };
+    if (_onRouteChanged)
+    {
+      auto snap = _routeSnapshot;
+      if (_dispatcher) _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      else _onRouteChanged(snap);
     }
   }
 

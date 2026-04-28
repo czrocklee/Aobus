@@ -35,8 +35,8 @@ namespace app::core::backend
     /// Called by the backend when a drain operation has completed.
     void (*onDrainComplete)(void* userData) noexcept = nullptr;
 
-    /// Called by the backend whenever the audio routing graph topology or formats change.
-    void (*onGraphChanged)(void* userData, AudioGraph const& graph) noexcept = nullptr;
+    /// Called by the backend when the stream's runtime node ID or route anchor is stable.
+    void (*onRouteReady)(void* userData, std::string_view routeAnchor) noexcept = nullptr;
 
     /// Called by the backend when a terminal error occurs (e.g. device lost).
     void (*onBackendError)(void* userData, std::string_view message) noexcept = nullptr;

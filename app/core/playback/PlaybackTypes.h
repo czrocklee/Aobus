@@ -59,6 +59,22 @@ namespace app::core::playback
     bool operator==(BackendSnapshot const&) const = default;
   };
 
+  struct BackendRouteAnchor final
+  {
+    backend::BackendKind backend = backend::BackendKind::None;
+    std::string id;
+
+    bool operator==(BackendRouteAnchor const&) const = default;
+  };
+
+  struct EngineRouteSnapshot final
+  {
+    backend::AudioGraph graph;
+    std::optional<BackendRouteAnchor> anchor;
+
+    bool operator==(EngineRouteSnapshot const&) const = default;
+  };
+
   struct PlaybackSnapshot final
   {
     TransportState state = TransportState::Idle;

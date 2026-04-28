@@ -31,8 +31,6 @@ namespace app::playback
       if (_threadLoop) ::pw_thread_loop_stop(_threadLoop.get());
       _streamListener.reset();
       _stream.reset();
-      if (_monitor) _monitor->stop();
-      _monitor.reset();
       _core.reset();
       _context.reset();
       _threadLoop.reset();
@@ -74,13 +72,13 @@ namespace app::playback
     std::string _lastError;
     bool _strictFormatRequired = false;
     bool _strictFormatRejected = false;
+    bool _routeAnchorReported = false;
 
     PwThreadLoopPtr _threadLoop;
     PwContextPtr _context;
     PwCorePtr _core;
     PwStreamPtr _stream;
     SpaHookGuard _streamListener;
-    std::unique_ptr<PipeWireMonitor> _monitor;
   };
 
   namespace
@@ -133,7 +131,6 @@ namespace app::playback
     if (auto negotiated = parseRawStreamFormat(param))
     {
       _format = *negotiated;
-      if (_monitor) _monitor->setNegotiatedFormat(negotiated);
     }
   }
 
@@ -143,6 +140,18 @@ namespace app::playback
     {
       setError(errorMessage ? errorMessage : "Unknown PipeWire stream error");
       if (_callbacks.onBackendError) _callbacks.onBackendError(_callbacks.userData, _lastError);
+    }
+    else if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
+    {
+      if (!_routeAnchorReported && _callbacks.onRouteReady && _stream)
+      {
+        auto id = ::pw_stream_get_node_id(_stream.get());
+        if (id != PW_ID_ANY)
+        {
+          _routeAnchorReported = true;
+          _callbacks.onRouteReady(_callbacks.userData, std::format("{}", id));
+        }
+      }
     }
   }
 
@@ -166,11 +175,6 @@ namespace app::playback
         ::pw_thread_loop_start(_impl->_threadLoop.get());
         ::pw_thread_loop_lock(_impl->_threadLoop.get());
         _impl->_core.reset(::pw_context_connect(_impl->_context.get(), nullptr, 0));
-        if (_impl->_core)
-        {
-          _impl->_monitor = std::make_unique<PipeWireMonitor>(_impl->_threadLoop.get(), _impl->_core.get(), app::core::backend::AudioRenderCallbacks{});
-          _impl->_monitor->start();
-        }
         ::pw_thread_loop_unlock(_impl->_threadLoop.get());
       }
     }
@@ -184,11 +188,11 @@ namespace app::playback
     _impl->_callbacks = callbacks;
     _impl->_format = format;
     _impl->_lastError.clear();
+    _impl->_routeAnchorReported = false;
     bool useExclusive = _exclusiveMode && !_targetDeviceId.empty();
     if (!_impl->_threadLoop || !_impl->_context || !_impl->_core) { _impl->setError("PipeWire not initialized"); return false; }
 
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
-    _impl->_monitor->setCallbacks(callbacks);
     ::pw_properties* props = ::pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_APP_NAME, "RockStudio", PW_KEY_NODE_NAME, "RockStudio Playback", nullptr);
     if (!_targetDeviceId.empty()) {
       ::pw_properties_set(props, PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());

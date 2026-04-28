@@ -34,6 +34,10 @@ namespace app::core::playback
     void setBackend(std::unique_ptr<backend::IAudioBackend> backend, backend::AudioDevice const& device);
     void setOnTrackEnded(std::function<void()> callback);
 
+    using OnRouteChanged = std::function<void(EngineRouteSnapshot const&)>;
+    void setOnRouteChanged(OnRouteChanged callback);
+    EngineRouteSnapshot routeSnapshot() const;
+
     void play(TrackPlaybackDescriptor descriptor);
     void pause();
     void resume();
@@ -48,7 +52,7 @@ namespace app::core::playback
     static void onUnderrun(void* userData) noexcept;
     static void onPositionAdvanced(void* userData, std::uint32_t framesRead) noexcept;
     static void onDrainComplete(void* userData) noexcept;
-    static void onGraphChanged(void* userData, backend::AudioGraph const& graph) noexcept;
+    static void onRouteReady(void* userData, std::string_view routeAnchor) noexcept;
     static void onBackendError(void* userData, std::string_view message) noexcept;
 
     // Source callbacks
@@ -58,8 +62,7 @@ namespace app::core::playback
     void handleBackendError(std::string_view message);
     void handleSourceError(std::string const& message);
     void handleDrainComplete();
-    void handleGraphChanged(backend::AudioGraph const& graph);
-    void analyzeAudioQuality();
+    void handleRouteReady(std::string_view routeAnchor);
     void resetToIdle();
     bool openTrack(TrackPlaybackDescriptor descriptor,
                    std::shared_ptr<source::IPcmSource>& source,
@@ -76,8 +79,11 @@ namespace app::core::playback
 
     mutable std::mutex _stateMutex;
     std::optional<TrackPlaybackDescriptor> _currentTrack;
+    std::string _lastError;
     PlaybackSnapshot _snapshot;
     std::function<void()> _onTrackEnded;
+    OnRouteChanged _onRouteChanged;
+    EngineRouteSnapshot _routeSnapshot;
   };
 
 } // namespace app::core::playback

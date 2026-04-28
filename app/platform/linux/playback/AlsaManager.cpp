@@ -129,4 +129,34 @@ namespace app::playback
   {
     return std::make_unique<AlsaExclusiveBackend>(device);
   }
+
+  struct AlsaSubscription final : public app::core::backend::IGraphSubscription {};
+
+  std::unique_ptr<app::core::backend::IGraphSubscription> AlsaManager::subscribeGraph(std::string_view routeAnchor,
+                                                                                      OnGraphChangedCallback callback)
+  {
+    if (callback)
+    {
+      app::core::backend::AudioGraph graph;
+      graph.nodes.push_back({
+        .id = "alsa-stream",
+        .type = app::core::backend::AudioNodeType::Stream,
+        .name = "ALSA Stream",
+        .objectPath = ""
+      });
+      graph.nodes.push_back({
+        .id = "alsa-sink",
+        .type = app::core::backend::AudioNodeType::Sink,
+        .name = std::string(routeAnchor),
+        .objectPath = std::string(routeAnchor)
+      });
+      graph.links.push_back({
+        .sourceId = "alsa-stream",
+        .destId = "alsa-sink",
+        .isActive = true
+      });
+      callback(graph);
+    }
+    return std::make_unique<AlsaSubscription>();
+  }
 } // namespace app::playback

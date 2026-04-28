@@ -213,6 +213,13 @@ namespace app::playback
       void reset() { id = PW_ID_ANY; monitor = nullptr; listener.reset(); proxy.reset(); }
     };
 
+    struct GraphSubscription final
+    {
+      std::uint64_t id = 0;
+      std::string routeAnchor;
+      std::function<void(app::core::backend::AudioGraph const&)> callback;
+    };
+
     Impl(PipeWireMonitor* parent, ::pw_thread_loop* loop, ::pw_core* core, app::core::backend::AudioRenderCallbacks callbacks)
       : parent(parent), loop(loop), core(core), callbacks(callbacks) {}
 
@@ -239,6 +246,9 @@ namespace app::playback
     std::unordered_map<std::uint32_t, app::core::backend::DeviceCapabilities> sinkCapabilitiesMap;
     SinkProps sinkProps;
     SpaSourcePtr refreshEvent;
+
+    std::uint64_t nextSubscriptionId = 1;
+    std::vector<GraphSubscription> subscriptions;
 
     void triggerRefresh()
     {
@@ -357,6 +367,25 @@ namespace app::playback
       if (isSinkMediaClass(node.mediaClass) && node.nodeName == name) return id;
     }
     return std::nullopt;
+  }
+
+  std::uint64_t PipeWireMonitor::subscribeGraph(std::string_view routeAnchor, std::function<void(app::core::backend::AudioGraph const&)> callback)
+  {
+    auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
+    auto id = _impl->nextSubscriptionId++;
+    _impl->subscriptions.push_back({.id = id, .routeAnchor = std::string(routeAnchor), .callback = std::move(callback)});
+    _impl->triggerRefresh();
+    return id;
+  }
+
+  void PipeWireMonitor::unsubscribeGraph(std::uint64_t id)
+  {
+    auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
+    auto it = std::ranges::find_if(_impl->subscriptions, [id](auto const& sub) { return sub.id == id; });
+    if (it != _impl->subscriptions.end())
+    {
+      _impl->subscriptions.erase(it);
+    }
   }
 
   void PipeWireMonitor::onRegistryGlobal(void* data, std::uint32_t id, std::uint32_t, char const* type, std::uint32_t version, ::spa_dict const* props)
@@ -533,18 +562,32 @@ namespace app::playback
         }
       }
 
-      if (callbacks.onGraphChanged && callbacks.userData) {
+      auto executeGraphCallback = [&](std::uint32_t streamId, std::function<void(app::core::backend::AudioGraph const&)> const& cb) {
         app::core::backend::AudioGraph graph;
-        auto fullSet = reachableSet;
-        for (auto const& [_, link] : links) if (isActiveLink(link.state) && reachableSet.contains(link.inputNodeId)) fullSet.insert(link.outputNodeId);
+        auto fullSet = reachableSet; // We can recompute reachableSet per streamId later if needed, but for now we assume streamNodeId is the primary driver
+        // Wait, to be correct we should recompute reachableSet per streamId.
+        // Let's do a localized recompute for the specific streamId.
+        auto localReachableNodes = std::vector<std::uint32_t>{};
+        auto localReachableSet = std::unordered_set<std::uint32_t>{};
+        if (streamId != PW_ID_ANY) { localReachableNodes.push_back(streamId); localReachableSet.insert(streamId); }
+        for (std::size_t i = 0; i < localReachableNodes.size(); ++i) {
+          auto curr = localReachableNodes[i];
+          for (auto const& [_, link] : links) {
+            if (!isActiveLink(link.state) || link.outputNodeId != curr || link.inputNodeId == PW_ID_ANY) continue;
+            if (localReachableSet.insert(link.inputNodeId).second) localReachableNodes.push_back(link.inputNodeId);
+          }
+        }
+        
+        auto localFullSet = localReachableSet;
+        for (auto const& [_, link] : links) if (isActiveLink(link.state) && localReachableSet.contains(link.inputNodeId)) localFullSet.insert(link.outputNodeId);
 
-        for (auto id : fullSet) {
+        for (auto id : localFullSet) {
           auto it = nodes.find(id); if (it == nodes.end()) continue;
           bool isSink = isSinkMediaClass(it->second.mediaClass);
-          bool isRs = (id == streamNodeId);
-          auto type = isRs ? app::core::backend::AudioNodeType::Stream : (isSink ? app::core::backend::AudioNodeType::Sink : (reachableSet.contains(id) ? app::core::backend::AudioNodeType::Intermediary : app::core::backend::AudioNodeType::ExternalSource));
+          bool isRs = (id == streamId);
+          auto type = isRs ? app::core::backend::AudioNodeType::Stream : (isSink ? app::core::backend::AudioNodeType::Sink : (localReachableSet.contains(id) ? app::core::backend::AudioNodeType::Intermediary : app::core::backend::AudioNodeType::ExternalSource));
           app::core::backend::AudioNode node{.id = std::format("{}", id), .type = type, .name = (it->second.nodeNick.empty() ? (it->second.nodeName.empty() ? it->second.objectPath : it->second.nodeName) : it->second.nodeNick), .objectPath = it->second.objectPath};
-          if (isRs) node.format = negotiatedStreamFormat;
+          if (isRs && streamId == streamNodeId) node.format = negotiatedStreamFormat; // We only have stream format for our internal stream right now
           else if (isSink && id == desiredSinkNodeId) {
             node.format = sinkFormat;
             auto const isUnity = [](float v) { return std::abs(v - 1.0F) < 1e-4F; };
@@ -556,12 +599,21 @@ namespace app::playback
         }
 
         for (auto const& [_, link] : links) {
-          if (isActiveLink(link.state) && fullSet.contains(link.outputNodeId) && fullSet.contains(link.inputNodeId))
+          if (isActiveLink(link.state) && localFullSet.contains(link.outputNodeId) && localFullSet.contains(link.inputNodeId))
             graph.links.push_back({.sourceId = std::format("{}", link.outputNodeId), .destId = std::format("{}", link.inputNodeId)});
         }
-        lock.unlock();
-        callbacks.onGraphChanged(callbacks.userData, graph);
-      } else lock.unlock();
+        cb(graph);
+      };
+
+      for (auto const& sub : subscriptions) {
+        auto parsedId = parseUintProperty(sub.routeAnchor.c_str());
+        std::uint32_t targetId = parsedId ? *parsedId : PW_ID_ANY;
+        if (targetId != PW_ID_ANY && sub.callback) {
+          executeGraphCallback(targetId, sub.callback);
+        }
+      }
+
+      lock.unlock();
     }
     ::pw_thread_loop_unlock(loop);
   }
