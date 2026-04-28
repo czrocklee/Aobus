@@ -1,8 +1,13 @@
+# rs_test: portable unit + integration tests (app_core only)
 add_executable(rs_test
     main.cpp
+
+    # query tests
     unit/query/ParserTest.cpp
     unit/query/ExecutionPlanTest.cpp
     unit/query/PlanEvaluatorTest.cpp
+
+    # core tests
     unit/core/TrackLayoutTest.cpp
     unit/core/TrackViewTest.cpp
     unit/core/TrackBuilderTest.cpp
@@ -15,60 +20,55 @@ add_executable(rs_test
     unit/core/ListBuilderTest.cpp
     unit/core/MusicLibraryTest.cpp
     unit/core/LibraryExportImportTest.cpp
+
+    # lmdb tests
     unit/lmdb/EnvironmentTest.cpp
     unit/lmdb/TransactionTest.cpp
     unit/lmdb/DatabaseTest.cpp
-    unit/app/TrackPresentationTest.cpp
-    unit/app/TrackRowDataProviderTest.cpp
-    unit/app/TrackListAdapterTest.cpp
-    unit/app/SmartListEngineTest.cpp
+
+    # app unit tests (app_core only, no platform deps)
+    unit/app/FormatNegotiatorTest.cpp
     unit/app/PlaybackControllerTest.cpp
-    "${CMAKE_SOURCE_DIR}/app/core/playback/PlaybackController.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/playback/PlaybackEngine.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/playback/FormatNegotiator.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/decoder/AudioDecoderFactory.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/Log.cpp"
-    "${CMAKE_SOURCE_DIR}/app/platform/linux/ui/TrackPresentation.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/model/FilteredTrackIdList.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/model/SmartListEngine.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/model/TrackIdList.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/decoder/FlacDecoderSession.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/decoder/AlacDecoderSession.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/source/MemoryPcmSource.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/source/PcmRingBuffer.cpp"
-    "${CMAKE_SOURCE_DIR}/app/core/source/StreamingPcmSource.cpp"
+    unit/app/PlaybackEngineTest.cpp
+    unit/app/SmartListEngineTest.cpp
+
+    # integration tests
     integration/playback/DecoderIntegrationTest.cpp
     integration/tag/TagTest.cpp
 )
-target_include_directories(rs_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog GTKMM yaml-cpp PkgFLAC PkgALAC)
+
+target_include_directories(rs_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
+target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog yaml-cpp PkgFLAC PkgALAC app_core)
+
 if(PIPEWIRE_FOUND)
   target_compile_definitions(rs_test PRIVATE PIPEWIRE_FOUND)
-  target_sources(rs_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/app/platform/linux/playback/PipeWireBackend.cpp"
-    "${CMAKE_SOURCE_DIR}/app/platform/linux/playback/PipeWireManager.cpp"
-    "${CMAKE_SOURCE_DIR}/app/platform/linux/playback/PipeWireInternal.cpp"
-  )
   target_link_libraries(rs_test PRIVATE PipeWire)
 endif()
+
 if(ALSA_FOUND)
   target_compile_definitions(rs_test PRIVATE ALSA_FOUND)
-  target_sources(rs_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/app/platform/linux/playback/AlsaExclusiveBackend.cpp"
-    "${CMAKE_SOURCE_DIR}/app/platform/linux/playback/AlsaManager.cpp"
-  )
   target_link_libraries(rs_test PRIVATE ALSA UDEV)
 endif()
+
 target_compile_definitions(rs_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
-
 target_compile_options(rs_test PRIVATE -Wno-array-bounds)
-
-# Register rs_test with CTest
 add_test(NAME rs_test COMMAND rs_test)
 
-# Relaxed clang-tidy for test: allow magic numbers, chained comparisons
 if(CLANG_TIDY_EXECUTABLE)
   set_target_properties(rs_test PROPERTIES
     CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_RELAXED_CHECKS};-header-filter=${CLANG_TIDY_RELAXED_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
   )
 endif()
+
+# rs_test_linux: Linux UI tests (require app_linux and GTKMM)
+add_executable(rs_test_linux
+    main.cpp
+
+    unit/linux/TrackListAdapterTest.cpp
+    unit/linux/TrackPresentationTest.cpp
+    unit/linux/TrackRowDataProviderTest.cpp
+)
+
+target_include_directories(rs_test_linux PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
+target_link_libraries(rs_test_linux PRIVATE rs Catch2 spdlog::spdlog app_core app_linux GTKMM)
+add_test(NAME rs_test_linux COMMAND rs_test_linux)

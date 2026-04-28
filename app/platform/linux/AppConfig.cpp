@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "core/AppConfig.h"
+#include "platform/linux/AppConfig.h"
 #include "core/Log.h"
 
 #include <glibmm/keyfile.h>
