@@ -19,7 +19,7 @@ namespace app::core
 
 namespace app::core::backend
 {
-  class IDeviceDiscovery;
+  class IBackendManager;
 }
 
 namespace app::core::playback
@@ -34,7 +34,7 @@ namespace app::core::playback
 
     void setTrackEndedCallback(std::function<void()> callback);
 
-    void addDiscovery(std::unique_ptr<backend::IDeviceDiscovery> discovery);
+    void addManager(std::unique_ptr<backend::IBackendManager> manager);
 
     void play(TrackPlaybackDescriptor descriptor);
     void setOutput(backend::BackendKind kind, std::string_view deviceId);
@@ -48,8 +48,8 @@ namespace app::core::playback
   private:
     std::unique_ptr<PlaybackEngine> _engine;
 
-    // Discovery monitors
-    std::vector<std::unique_ptr<backend::IDeviceDiscovery>> _discoveries;
+    // Backend managers
+    std::vector<std::unique_ptr<backend::IBackendManager>> _managers;
 
     std::shared_ptr<IMainThreadDispatcher> _dispatcher;
     std::function<void()> _onTrackEnded;

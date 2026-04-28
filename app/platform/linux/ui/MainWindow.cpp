@@ -19,8 +19,12 @@
 #include "core/model/ManualTrackIdList.h"
 #include "core/model/TrackIdList.h"
 #include "core/playback/PlaybackController.h"
-#include "platform/linux/playback/AlsaExclusiveBackend.h"
-#include "platform/linux/playback/PipeWireBackend.h"
+#ifdef ALSA_FOUND
+#include "platform/linux/playback/AlsaManager.h"
+#endif
+#ifdef PIPEWIRE_FOUND
+#include "platform/linux/playback/PipeWireManager.h"
+#endif
 #include "platform/linux/services/PlaylistExporter.h"
 #include "platform/linux/ui/CoverArtWidget.h"
 #include "platform/linux/ui/ImportProgressDialog.h"
@@ -2116,10 +2120,10 @@ namespace app::ui
     _playbackController->setTrackEndedCallback([this]() { handlePlaybackFinished(); });
 
 #ifdef PIPEWIRE_FOUND
-    _playbackController->addDiscovery(app::playback::PipeWireBackend::createDiscovery());
+    _playbackController->addManager(std::make_unique<app::playback::PipeWireManager>());
 #endif
 #ifdef ALSA_FOUND
-    _playbackController->addDiscovery(app::playback::AlsaExclusiveBackend::createDiscovery());
+    _playbackController->addManager(std::make_unique<app::playback::AlsaManager>());
 #endif
 
     _playbackBar->signalPlayRequested().connect(sigc::mem_fun(*this, &MainWindow::onPlayRequested));

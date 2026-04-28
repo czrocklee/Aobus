@@ -4,40 +4,48 @@
 #pragma once
 
 #include "core/backend/IAudioBackend.h"
-#include "core/backend/IDeviceDiscovery.h"
+#include "core/backend/IBackendManager.h"
 
-#include <string_view>
+#include <memory>
+#include <vector>
 
 namespace app::core::backend
 {
 
   /**
-   * @brief Fallback backend that does nothing.
-   *
-   * Used when no real backend is available.
+   * @brief A backend that does nothing. Used as a fallback or for testing.
    */
   class NullBackend final : public IAudioBackend
   {
   public:
-    class NullDiscovery final : public IDeviceDiscovery
+    class NullManager final : public IBackendManager
     {
     public:
-      void setDevicesChangedCallback(OnDevicesChangedCallback) override {}
-      std::vector<AudioDevice> enumerateDevices() override { return {}; }
-      std::unique_ptr<IAudioBackend> createBackend(AudioDevice const&) override
+      void setDevicesChangedCallback(OnDevicesChangedCallback /*callback*/) override {}
+      std::vector<AudioDevice> enumerateDevices() override
+      {
+        return {{.id = "null",
+                 .displayName = "None",
+                 .description = "No audio output",
+                 .backendKind = BackendKind::None,
+                 .capabilities = {}}};
+      }
+
+      std::unique_ptr<IAudioBackend> createBackend(AudioDevice const& /*device*/) override
       {
         return std::make_unique<NullBackend>();
       }
     };
-
-    static std::unique_ptr<IDeviceDiscovery> createDiscovery() { return std::make_unique<NullDiscovery>(); }
 
     NullBackend() = default;
     ~NullBackend() override = default;
 
     bool open(AudioFormat const& /*format*/, AudioRenderCallbacks callbacks) override
     {
-      _callbacks = callbacks;
+      if (callbacks.onGraphChanged)
+      {
+        callbacks.onGraphChanged(callbacks.userData, {});
+      }
       return true;
     }
 
@@ -45,26 +53,18 @@ namespace app::core::backend
     void pause() override {}
     void resume() override {}
     void flush() override {}
-
     void drain() override
     {
-      if (_callbacks.onDrainComplete)
-      {
-        _callbacks.onDrainComplete(_callbacks.userData);
-      }
+      // No-op, but we should probably signal completion if requested
     }
-
     void stop() override {}
     void close() override {}
 
-    void setExclusiveMode(bool) override {}
+    void setExclusiveMode(bool /*exclusive*/) override {}
     bool isExclusiveMode() const noexcept override { return false; }
 
     BackendKind kind() const noexcept override { return BackendKind::None; }
-    std::string_view lastError() const noexcept override { return {}; }
-
-  private:
-    AudioRenderCallbacks _callbacks{};
+    std::string_view lastError() const noexcept override { return ""; }
   };
 
 } // namespace app::core::backend

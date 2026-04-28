@@ -17,12 +17,12 @@ namespace app::core::backend
   /**
    * @brief Interface for backend-specific device monitoring and discovery.
    */
-  class IDeviceDiscovery
+  class IBackendManager
   {
   public:
     using OnDevicesChangedCallback = std::function<void()>;
 
-    virtual ~IDeviceDiscovery() = default;
+    virtual ~IBackendManager() = default;
 
     /**
      * @brief Sets a callback to be invoked when the list of available devices changes.
@@ -31,7 +31,7 @@ namespace app::core::backend
 
     /**
      * @brief Returns all output devices discovered by this provider.
-     * Note: A single discovery object may return devices with different BackendKinds
+     * Note: A single manager object may return devices with different BackendKinds
      * (e.g. PipeWire Shared and PipeWire Exclusive).
      */
     virtual std::vector<AudioDevice> enumerateDevices() = 0;

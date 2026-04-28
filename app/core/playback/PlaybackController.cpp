@@ -3,7 +3,7 @@
 
 #include "core/playback/PlaybackController.h"
 #include "core/Log.h"
-#include "core/backend/IDeviceDiscovery.h"
+#include "core/backend/IBackendManager.h"
 #include "core/backend/NullBackend.h"
 #include "core/playback/PlaybackEngine.h"
 
@@ -16,7 +16,7 @@ namespace app::core::playback
   PlaybackController::PlaybackController(std::shared_ptr<IMainThreadDispatcher> dispatcher)
     : _dispatcher(std::move(dispatcher))
   {
-    // Start with a NullBackend until a discovery provides something real
+    // Start with a NullBackend until a manager provides something real
     _engine = std::make_unique<PlaybackEngine>(std::make_unique<backend::NullBackend>(),
                                                backend::AudioDevice{
                                                  .id = "null",
@@ -39,12 +39,12 @@ namespace app::core::playback
 
   PlaybackController::~PlaybackController() = default;
 
-  void PlaybackController::addDiscovery(std::unique_ptr<backend::IDeviceDiscovery> discovery)
+  void PlaybackController::addManager(std::unique_ptr<backend::IBackendManager> manager)
   {
-    if (!discovery) return;
+    if (!manager) return;
 
-    discovery->setDevicesChangedCallback([this] { _backendsDirty = true; });
-    _discoveries.push_back(std::move(discovery));
+    manager->setDevicesChangedCallback([this] { _backendsDirty = true; });
+    _managers.push_back(std::move(manager));
     _backendsDirty = true;
   }
 
@@ -80,15 +80,15 @@ namespace app::core::playback
 
     auto const& targetDevice = *it;
 
-    // 3. Find the discovery object that can handle this BackendKind
-    for (auto const& discovery : _discoveries)
+    // 3. Find the manager object that can handle this BackendKind
+    for (auto const& manager : _managers)
     {
-      auto devices = discovery->enumerateDevices();
+      auto devices = manager->enumerateDevices();
       auto const found = std::ranges::any_of(devices, [&](backend::AudioDevice const& d) { return d == targetDevice; });
 
       if (found)
       {
-        auto backend = discovery->createBackend(targetDevice);
+        auto backend = manager->createBackend(targetDevice);
         if (backend)
         {
           _engine->setBackend(std::move(backend), targetDevice);
@@ -128,9 +128,9 @@ namespace app::core::playback
     if (_backendsDirty.exchange(false))
     {
       auto allDevices = std::vector<backend::AudioDevice>{};
-      for (auto const& discovery : _discoveries)
+      for (auto const& manager : _managers)
       {
-        auto devices = discovery->enumerateDevices();
+        auto devices = manager->enumerateDevices();
         allDevices.insert(
           allDevices.end(), std::make_move_iterator(devices.begin()), std::make_move_iterator(devices.end()));
       }
