@@ -14,6 +14,12 @@ namespace app::core::backend
 
   class IAudioBackend;
 
+  class IGraphSubscription
+  {
+  public:
+    virtual ~IGraphSubscription() = default;
+  };
+
   /**
    * @brief Interface for backend-specific device monitoring and discovery.
    */
@@ -21,6 +27,7 @@ namespace app::core::backend
   {
   public:
     using OnDevicesChangedCallback = std::function<void()>;
+    using OnGraphChangedCallback = std::function<void(AudioGraph const&)>;
 
     virtual ~IBackendManager() = default;
 
@@ -41,6 +48,12 @@ namespace app::core::backend
      * The device object passed here MUST have been previously returned by enumerateDevices().
      */
     virtual std::unique_ptr<IAudioBackend> createBackend(AudioDevice const& device) = 0;
+
+    /**
+     * @brief Subscribes to system graph updates rooted at the given anchor.
+     */
+    virtual std::unique_ptr<IGraphSubscription> subscribeGraph(std::string_view routeAnchor,
+                                                               OnGraphChangedCallback callback) = 0;
   };
 
 } // namespace app::core::backend

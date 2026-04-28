@@ -5,6 +5,7 @@
 
 #include "core/backend/BackendTypes.h"
 #include "core/playback/PlaybackTypes.h"
+#include "core/backend/IBackendManager.h"
 
 #include <atomic>
 #include <chrono>
@@ -45,11 +46,18 @@ namespace app::core::playback
 
     PlaybackSnapshot snapshot() const;
 
+    // Public for testing
+    void handleRouteChanged(EngineRouteSnapshot const& snapshot, std::uint64_t generation);
+    void updateMergedGraph();
+    void analyzeAudioQuality();
+    std::uint64_t _playbackGeneration = 0;
+
   private:
     std::unique_ptr<PlaybackEngine> _engine;
 
     // Backend managers
     std::vector<std::unique_ptr<backend::IBackendManager>> _managers;
+    backend::IBackendManager* _activeManager = nullptr;
 
     std::shared_ptr<IMainThreadDispatcher> _dispatcher;
     std::function<void()> _onTrackEnded;
@@ -57,6 +65,18 @@ namespace app::core::playback
     mutable std::atomic<bool> _backendsDirty{true};
     mutable std::vector<BackendSnapshot> _cachedBackends;
     mutable std::vector<backend::AudioDevice> _allDevices;
+
+    // Controller-owned state
+    // Remove redeclaration
+    EngineRouteSnapshot _cachedEngineRoute;
+    backend::AudioGraph _cachedSystemGraph;
+    std::unique_ptr<backend::IGraphSubscription> _graphSubscription;
+
+    backend::AudioGraph _mergedGraph;
+    backend::AudioQuality _quality = backend::AudioQuality::Unknown;
+    std::string _qualityTooltip;
+
+    void handleSystemGraphChanged(backend::AudioGraph const& graph, std::uint64_t generation);
   };
 
 } // namespace app::core::playback

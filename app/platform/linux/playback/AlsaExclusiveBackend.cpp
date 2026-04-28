@@ -82,12 +82,8 @@ namespace app::playback
     _format.sampleRate = rate;
     _pcm = std::move(safePcm);
 
-    if (_callbacks.onGraphChanged) {
-      app::core::backend::AudioGraph graph;
-      graph.nodes.push_back({.id = "alsa-stream", .type = app::core::backend::AudioNodeType::Stream, .name = "ALSA Stream", .format = _format});
-      graph.nodes.push_back({.id = "alsa-sink", .type = app::core::backend::AudioNodeType::Sink, .name = _deviceName, .format = _format, .objectPath = _deviceName});
-      graph.links.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});
-      _callbacks.onGraphChanged(_callbacks.userData, graph);
+    if (_callbacks.onRouteReady) {
+      _callbacks.onRouteReady(_callbacks.userData, _deviceName);
     }
     return true;
   }

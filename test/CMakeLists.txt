@@ -22,6 +22,10 @@ add_executable(rs_test
     unit/app/TrackRowDataProviderTest.cpp
     unit/app/TrackListAdapterTest.cpp
     unit/app/SmartListEngineTest.cpp
+    unit/app/PlaybackControllerTest.cpp
+    "${CMAKE_SOURCE_DIR}/app/core/playback/PlaybackController.cpp"
+    "${CMAKE_SOURCE_DIR}/app/core/playback/PlaybackEngine.cpp"
+    "${CMAKE_SOURCE_DIR}/app/core/playback/FormatNegotiator.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/decoder/AudioDecoderFactory.cpp"
     "${CMAKE_SOURCE_DIR}/app/core/Log.cpp"
     "${CMAKE_SOURCE_DIR}/app/platform/linux/ui/TrackPresentation.cpp"
@@ -38,6 +42,23 @@ add_executable(rs_test
 )
 target_include_directories(rs_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog GTKMM yaml-cpp PkgFLAC PkgALAC)
+if(PIPEWIRE_FOUND)
+  target_compile_definitions(rs_test PRIVATE PIPEWIRE_FOUND)
+  target_sources(rs_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/app/platform/linux/playback/PipeWireBackend.cpp"
+    "${CMAKE_SOURCE_DIR}/app/platform/linux/playback/PipeWireManager.cpp"
+    "${CMAKE_SOURCE_DIR}/app/platform/linux/playback/PipeWireInternal.cpp"
+  )
+  target_link_libraries(rs_test PRIVATE PipeWire)
+endif()
+if(ALSA_FOUND)
+  target_compile_definitions(rs_test PRIVATE ALSA_FOUND)
+  target_sources(rs_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/app/platform/linux/playback/AlsaExclusiveBackend.cpp"
+    "${CMAKE_SOURCE_DIR}/app/platform/linux/playback/AlsaManager.cpp"
+  )
+  target_link_libraries(rs_test PRIVATE ALSA UDEV)
+endif()
 target_compile_definitions(rs_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
 
 target_compile_options(rs_test PRIVATE -Wno-array-bounds)

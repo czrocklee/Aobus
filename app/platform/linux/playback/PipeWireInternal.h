@@ -134,6 +134,9 @@ namespace app::playback
     std::vector<app::core::backend::AudioDevice> enumerateSinks() const;
     std::optional<std::uint32_t> findSinkIdByName(std::string_view name) const;
 
+    std::uint64_t subscribeGraph(std::string_view routeAnchor, std::function<void(app::core::backend::AudioGraph const&)> callback);
+    void unsubscribeGraph(std::uint64_t id);
+
     // Callbacks (must be public for C-style interop)
     static void onCoreDone(void* data, std::uint32_t id, int seq);
     static void onRegistryGlobal(void* data, std::uint32_t id, std::uint32_t permissions, char const* type, std::uint32_t version, ::spa_dict const* props);

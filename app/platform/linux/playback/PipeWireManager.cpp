@@ -72,4 +72,20 @@ namespace app::playback
   {
     return std::make_unique<PipeWireBackend>(device);
   }
+
+  struct PipeWireSubscription final : public app::core::backend::IGraphSubscription
+  {
+    PipeWireMonitor* monitor;
+    std::uint64_t id;
+    PipeWireSubscription(PipeWireMonitor* m, std::uint64_t i) : monitor(m), id(i) {}
+    ~PipeWireSubscription() override { if (monitor) monitor->unsubscribeGraph(id); }
+  };
+
+  std::unique_ptr<app::core::backend::IGraphSubscription> PipeWireManager::subscribeGraph(std::string_view routeAnchor,
+                                                                                          OnGraphChangedCallback callback)
+  {
+    if (!_impl->monitor) return nullptr;
+    auto id = _impl->monitor->subscribeGraph(routeAnchor, std::move(callback));
+    return std::make_unique<PipeWireSubscription>(_impl->monitor.get(), id);
+  }
 } // namespace app::playback
