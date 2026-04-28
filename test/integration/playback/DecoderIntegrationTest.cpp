@@ -39,6 +39,36 @@ TEST_CASE("FlacDecoderSession handles basic files", "[playback][integration]")
   decoder.close();
 }
 
+TEST_CASE("FlacDecoderSession handles S24_32 decoding", "[playback][integration]")
+{
+  auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+  if (!std::filesystem::exists(testFile))
+  {
+    WARN("Test file not found");
+    return;
+  }
+
+  // Request 32-bit container with 24-bit precision
+  app::core::AudioFormat outputFormat;
+  outputFormat.bitDepth = 32;
+  outputFormat.validBits = 24;
+  outputFormat.isInterleaved = true;
+
+  FlacDecoderSession decoder(outputFormat);
+  REQUIRE(decoder.open(testFile));
+
+  auto info = decoder.streamInfo();
+  CHECK(info.outputFormat.bitDepth == 32);
+  CHECK(info.outputFormat.validBits == 24);
+
+  auto block = decoder.readNextBlock();
+  REQUIRE(block.has_value());
+  CHECK(block->bitDepth == 32);
+  CHECK(block->bytes.size() == static_cast<std::size_t>(block->frames) * info.sourceFormat.channels * 4U);
+
+  decoder.close();
+}
+
 TEST_CASE("AlacDecoderSession handles basic files", "[playback][integration]")
 {
   auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "hires.m4a";

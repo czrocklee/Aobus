@@ -8,8 +8,14 @@
 
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <vector>
+
+namespace app::core
+{
+  class IMainThreadDispatcher;
+}
 
 namespace app::core::backend
 {
@@ -23,8 +29,10 @@ namespace app::core::playback
   class PlaybackController final
   {
   public:
-    PlaybackController();
+    PlaybackController(std::shared_ptr<IMainThreadDispatcher> dispatcher);
     ~PlaybackController();
+
+    void setTrackEndedCallback(std::function<void()> callback);
 
     void addDiscovery(std::unique_ptr<backend::IDeviceDiscovery> discovery);
 
@@ -42,6 +50,9 @@ namespace app::core::playback
 
     // Discovery monitors
     std::vector<std::unique_ptr<backend::IDeviceDiscovery>> _discoveries;
+
+    std::shared_ptr<IMainThreadDispatcher> _dispatcher;
+    std::function<void()> _onTrackEnded;
 
     mutable std::atomic<bool> _backendsDirty{true};
     mutable std::vector<BackendSnapshot> _cachedBackends;

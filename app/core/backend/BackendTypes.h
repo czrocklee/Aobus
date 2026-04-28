@@ -77,7 +77,19 @@ namespace app::core::backend
   }
 
   /**
-   * @brief Represents a logical output device within a backend.
+   * @brief Hardware capabilities of an audio device.
+   */
+  struct DeviceCapabilities final
+  {
+    std::vector<std::uint32_t> sampleRates;
+    std::vector<std::uint8_t> bitDepths;
+    std::vector<std::uint8_t> channelCounts;
+
+    bool operator==(DeviceCapabilities const&) const = default;
+  };
+
+  /**
+   * @brief Describes an available audio output device.
    */
   struct AudioDevice final
   {
@@ -86,6 +98,7 @@ namespace app::core::backend
     std::string description;
     bool isDefault = false;
     BackendKind backendKind = BackendKind::None;
+    DeviceCapabilities capabilities = {};
 
     bool operator==(AudioDevice const&) const = default;
   };

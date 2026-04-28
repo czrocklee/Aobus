@@ -5,6 +5,7 @@ add_executable(RockStudio
     platform/linux/ui/MainWindow.cpp
     platform/linux/ui/TrackPresentation.cpp
     platform/linux/ui/TrackViewPage.cpp
+    platform/linux/ui/GtkMainThreadDispatcher.cpp
     platform/linux/ui/TrackListAdapter.cpp
     platform/linux/ui/TrackRow.cpp
     platform/linux/ui/ListRow.cpp

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "core/backend/BackendTypes.h"
 #include "core/playback/PlaybackTypes.h"
 
 #include <string>
@@ -10,13 +11,6 @@
 
 namespace app::core::playback
 {
-
-  struct DeviceCapabilities final
-  {
-    std::vector<std::uint32_t> sampleRates;
-    std::vector<std::uint8_t> bitDepths;
-    std::vector<std::uint8_t> channelCounts;
-  };
 
   struct RenderPlan final
   {
@@ -32,7 +26,7 @@ namespace app::core::playback
   class FormatNegotiator final
   {
   public:
-    static RenderPlan buildPlan(AudioFormat sourceFormat, DeviceCapabilities const& caps);
+    static RenderPlan buildPlan(AudioFormat sourceFormat, backend::DeviceCapabilities const& caps);
   };
 
 } // namespace app::core::playback

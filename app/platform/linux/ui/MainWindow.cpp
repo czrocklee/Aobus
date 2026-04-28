@@ -2106,7 +2106,10 @@ namespace app::ui
   void MainWindow::setupPlayback()
   {
     _playbackBar = std::make_unique<app::ui::PlaybackBar>();
-    _playbackController = std::make_unique<app::core::playback::PlaybackController>();
+    _dispatcher = std::make_shared<app::ui::GtkMainThreadDispatcher>();
+    _playbackController = std::make_unique<app::core::playback::PlaybackController>(_dispatcher);
+
+    _playbackController->setTrackEndedCallback([this]() { handlePlaybackFinished(); });
 
 #ifdef PIPEWIRE_FOUND
     _playbackController->addDiscovery(app::playback::PipeWireBackend::createDiscovery());
@@ -2139,7 +2142,6 @@ namespace app::ui
     }
 
     auto snapshot = _playbackController->snapshot();
-    auto const previousState = _lastPlaybackState;
     _lastPlaybackState = snapshot.state;
 
     _playbackBar->setSnapshot(snapshot);
@@ -2160,12 +2162,6 @@ namespace app::ui
       {
         _lastPlaybackErrorMessage.clear();
       }
-    }
-
-    if (previousState == app::core::playback::TransportState::Playing &&
-        snapshot.state == app::core::playback::TransportState::Idle)
-    {
-      handlePlaybackFinished();
     }
   }
 

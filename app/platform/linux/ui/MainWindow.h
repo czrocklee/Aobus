@@ -8,6 +8,7 @@
 #include "core/playback/PlaybackTypes.h"
 #include "platform/linux/ui/StatusBar.h"
 #include "platform/linux/ui/TrackViewPage.h"
+#include "platform/linux/ui/GtkMainThreadDispatcher.h"
 
 #include <rs/core/MusicLibrary.h>
 
@@ -212,6 +213,7 @@ namespace app::ui
 
     // Playback support
     std::unique_ptr<PlaybackBar> _playbackBar;
+    std::shared_ptr<GtkMainThreadDispatcher> _dispatcher;
     std::unique_ptr<app::core::playback::PlaybackController> _playbackController;
     std::uint32_t _playbackTimer = 0;
     std::optional<ActivePlaybackSequence> _activePlaybackSequence;
