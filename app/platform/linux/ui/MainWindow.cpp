@@ -3,6 +3,7 @@
 
 #include "platform/linux/ui/MainWindow.h"
 #include "core/Log.h"
+#include "core/util/ThreadUtils.h"
 
 #include <rs/core/LibraryExporter.h>
 #include <rs/core/LibraryImporter.h>
@@ -479,6 +480,7 @@ namespace app::ui
           _importThread = std::jthread(
             [this, workerPtr]([[maybe_unused]] std::stop_token stoken)
             {
+              app::core::util::setCurrentThreadName("FileImport");
               workerPtr->run();
               // After import completes, notify observers incrementally
               Glib::MainContext::get_default()->invoke(
@@ -673,6 +675,7 @@ namespace app::ui
                              std::thread(
                                [this, path, mode]()
                                {
+                                 app::core::util::setCurrentThreadName("LibraryExport");
                                  try
                                  {
                                    auto exporter = rs::core::LibraryExporter{*_musicLibrary};
@@ -740,6 +743,7 @@ namespace app::ui
                            std::thread(
                              [this, path]()
                              {
+                               app::core::util::setCurrentThreadName("LibraryImport");
                                try
                                {
                                  auto importer = rs::core::LibraryImporter{*_musicLibrary};
