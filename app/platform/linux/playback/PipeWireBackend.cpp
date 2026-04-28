@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/playback/PipeWireBackend.h"
-#include "platform/linux/playback/PipeWireInternal.h"
+#include "platform/linux/playback/detail/PipeWireShared.h"
 #include "core/Log.h"
 
 extern "C"
@@ -19,6 +19,8 @@ extern "C"
 
 namespace app::playback
 {
+  using namespace detail;
+
   /**
    * @brief Implementation of PipeWireBackend.
    */

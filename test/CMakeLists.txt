@@ -34,11 +34,12 @@ add_executable(rs_test
 
     # integration tests
     integration/playback/DecoderIntegrationTest.cpp
+    integration/playback/PipeWireManagerTest.cpp
     integration/tag/TagTest.cpp
 )
 
 target_include_directories(rs_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog yaml-cpp PkgFLAC PkgALAC app_core)
+target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog yaml-cpp PkgFLAC PkgALAC app_core app_linux)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(rs_test PRIVATE PIPEWIRE_FOUND)

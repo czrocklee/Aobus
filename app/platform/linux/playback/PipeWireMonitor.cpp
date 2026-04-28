@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "platform/linux/playback/PipeWireInternal.h"
+#include "platform/linux/playback/PipeWireMonitor.h"
+#include "platform/linux/playback/detail/PipeWireShared.h"
 #include "core/Log.h"
 
 extern "C"
@@ -33,46 +34,37 @@ extern "C"
 
 namespace app::playback
 {
-  // --- RAII Deleters Implementation ---
+  // --- Internal Types (Monitor only) ---
 
-  void PwProxyDeleter::operator()(void* p) const noexcept { ::pw_proxy_destroy(static_cast<::pw_proxy*>(p)); }
-  void PwThreadLoopDeleter::operator()(::pw_thread_loop* p) const noexcept { ::pw_thread_loop_destroy(p); }
-  void PwContextDeleter::operator()(::pw_context* p) const noexcept { ::pw_context_destroy(p); }
-  void PwCoreDeleter::operator()(::pw_core* p) const noexcept { ::pw_core_disconnect(p); }
-  void PwStreamDeleter::operator()(::pw_stream* p) const noexcept { ::pw_stream_destroy(p); }
-  void PwRegistryDeleter::operator()(::pw_registry* p) const noexcept { ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p)); }
-  void PwLinkDeleter::operator()(::pw_link* p) const noexcept { ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p)); }
-
-  void SpaSourceDeleter::operator()(::spa_source* p) const noexcept
+  struct NodeRecord final
   {
-    if (p && loop)
-    {
-      ::pw_loop_destroy_source(::pw_thread_loop_get_loop(loop), p);
-    }
-  }
+    std::uint32_t version = 0;
+    std::string mediaClass;
+    std::string nodeName;
+    std::string nodeNick;
+    std::string nodeDescription;
+    std::string objectPath;
+    std::optional<std::uint32_t> objectSerial;
+    std::optional<std::uint32_t> driverId;
+  };
 
-  SpaHookGuard::SpaHookGuard() noexcept { std::memset(&_hook, 0, sizeof(_hook)); }
-  SpaHookGuard::~SpaHookGuard() { reset(); }
-  void SpaHookGuard::reset() noexcept
+  struct LinkRecord final
   {
-    if (_hook.link.next != nullptr)
-    {
-      ::spa_hook_remove(&_hook);
-    }
-    std::memset(&_hook, 0, sizeof(_hook));
-  }
+    std::uint32_t outputNodeId = PW_ID_ANY;
+    std::uint32_t inputNodeId = PW_ID_ANY;
+    ::pw_link_state state = PW_LINK_STATE_INIT;
+  };
 
-  // --- Helpers Implementation ---
-
-  void ensurePipeWireInit()
+  struct SinkProps final
   {
-    struct PwInitGuard
-    {
-      PwInitGuard() { ::pw_init(nullptr, nullptr); }
-      ~PwInitGuard() { ::pw_deinit(); }
-    };
-    static PwInitGuard guard;
-  }
+    std::optional<float> volume;
+    std::optional<bool> mute;
+    std::vector<float> channelVolumes;
+    std::optional<bool> softMute;
+    std::vector<float> softVolumes;
+  };
+
+  // --- Internal Helpers (Monitor only) ---
 
   bool isSinkMediaClass(std::string const& mediaClass)
   {
@@ -82,15 +74,6 @@ namespace app::playback
   bool isActiveLink(::pw_link_state state) noexcept
   {
     return state == PW_LINK_STATE_PAUSED || state == PW_LINK_STATE_ACTIVE;
-  }
-
-  std::optional<std::uint32_t> parseUintProperty(char const* value)
-  {
-    if (value == nullptr || *value == '\0') return std::nullopt;
-    char* end = nullptr;
-    auto const parsed = ::strtoul(value, &end, 10);
-    if (end == value) return std::nullopt;
-    return static_cast<std::uint32_t>(parsed);
   }
 
   std::string lookupProperty(::spa_dict const* props, char const* key)
@@ -115,56 +98,15 @@ namespace app::playback
     record.nodeDescription = lookupProperty(props, PW_KEY_NODE_DESCRIPTION);
     record.objectPath = lookupProperty(props, PW_KEY_OBJECT_PATH);
 
-    if (auto const serial = parseUintProperty(::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL)))
+    if (auto const serial = detail::parseUintProperty(::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL)))
       record.objectSerial = serial;
 
-    if (auto const id = parseUintProperty(::spa_dict_lookup(props, "node.driver-id")))
+    if (auto const id = detail::parseUintProperty(::spa_dict_lookup(props, "node.driver-id")))
       record.driverId = id;
-    else if (auto const id = parseUintProperty(::spa_dict_lookup(props, "node.driver")))
+    else if (auto const id = detail::parseUintProperty(::spa_dict_lookup(props, "node.driver")))
       record.driverId = id;
 
     return record;
-  }
-
-  std::optional<app::core::AudioFormat> parseRawStreamFormat(::spa_pod const* param)
-  {
-    if (param == nullptr) return std::nullopt;
-    auto info = ::spa_audio_info_raw{};
-    if (::spa_format_audio_raw_parse(param, &info) < 0) return std::nullopt;
-
-    auto format = app::core::AudioFormat{};
-    format.sampleRate = info.rate;
-    format.channels = static_cast<std::uint8_t>(info.channels);
-    format.isInterleaved = true;
-
-    if (info.format == SPA_AUDIO_FORMAT_S16 || info.format == SPA_AUDIO_FORMAT_S16_LE || info.format == SPA_AUDIO_FORMAT_S16_BE)
-    {
-      format.bitDepth = 16;
-      format.isFloat = false;
-    }
-    else if (info.format == SPA_AUDIO_FORMAT_S24 || info.format == SPA_AUDIO_FORMAT_S24_LE || info.format == SPA_AUDIO_FORMAT_S24_BE)
-    {
-      format.bitDepth = 24; format.validBits = 24; format.isFloat = false;
-    }
-    else if (info.format == SPA_AUDIO_FORMAT_S24_32 || info.format == SPA_AUDIO_FORMAT_S24_32_LE || info.format == SPA_AUDIO_FORMAT_S24_32_BE)
-    {
-      format.bitDepth = 32; format.validBits = 24; format.isFloat = false;
-    }
-    else if (info.format == SPA_AUDIO_FORMAT_S32 || info.format == SPA_AUDIO_FORMAT_S32_LE || info.format == SPA_AUDIO_FORMAT_S32_BE)
-    {
-      format.bitDepth = 32; format.validBits = 32; format.isFloat = false;
-    }
-    else if (info.format == SPA_AUDIO_FORMAT_F32 || info.format == SPA_AUDIO_FORMAT_F32_LE || info.format == SPA_AUDIO_FORMAT_F32_BE)
-    {
-      format.bitDepth = 32; format.validBits = 32; format.isFloat = true;
-    }
-    else if (info.format == SPA_AUDIO_FORMAT_F64 || info.format == SPA_AUDIO_FORMAT_F64_LE || info.format == SPA_AUDIO_FORMAT_F64_BE)
-    {
-      format.bitDepth = 64; format.validBits = 64; format.isFloat = true;
-    }
-    else return std::nullopt;
-
-    return format;
   }
 
   bool copyFloatArray(::spa_pod const& pod, std::vector<float>& output)
@@ -192,15 +134,15 @@ namespace app::playback
     if (auto const* p = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softVolumes)) copyFloatArray(p->value, sinkProps.softVolumes);
   }
 
-  // --- PipeWireMonitor Internal Classes ---
+  // --- PipeWireMonitor Impl ---
 
   struct PipeWireMonitor::Impl
   {
     struct LinkBinding final
     {
       std::uint32_t id = PW_ID_ANY;
-      PwProxyPtr<::pw_link> proxy;
-      SpaHookGuard listener;
+      detail::PwProxyPtr<::pw_link> proxy;
+      detail::SpaHookGuard listener;
       void reset() { id = PW_ID_ANY; listener.reset(); proxy.reset(); }
     };
 
@@ -208,8 +150,8 @@ namespace app::playback
     {
       std::uint32_t id = PW_ID_ANY;
       PipeWireMonitor* monitor = nullptr;
-      PwProxyPtr<::pw_node> proxy;
-      SpaHookGuard listener;
+      detail::PwProxyPtr<::pw_node> proxy;
+      detail::SpaHookGuard listener;
       void reset() { id = PW_ID_ANY; monitor = nullptr; listener.reset(); proxy.reset(); }
     };
 
@@ -231,9 +173,9 @@ namespace app::playback
     std::function<void()> onDevicesChanged;
 
     mutable std::mutex mutex;
-    PwRegistryPtr registry;
-    SpaHookGuard registryListener;
-    SpaHookGuard coreListener;
+    detail::PwRegistryPtr registry;
+    detail::SpaHookGuard registryListener;
+    detail::SpaHookGuard coreListener;
     std::int32_t coreSyncSeq = -1;
     std::uint32_t streamNodeId = PW_ID_ANY;
     std::unordered_map<std::uint32_t, NodeRecord> nodes;
@@ -245,7 +187,7 @@ namespace app::playback
     std::optional<app::core::AudioFormat> sinkFormat;
     std::unordered_map<std::uint32_t, app::core::backend::DeviceCapabilities> sinkCapabilitiesMap;
     SinkProps sinkProps;
-    SpaSourcePtr refreshEvent;
+    detail::SpaSourcePtr refreshEvent;
 
     std::uint64_t nextSubscriptionId = 1;
     std::vector<GraphSubscription> subscriptions;
@@ -473,9 +415,9 @@ namespace app::playback
     auto* self = binding->monitor;
     {
       auto const lock = std::lock_guard<std::mutex>{self->_impl->mutex};
-      if (id == SPA_PARAM_Format) self->_impl->sinkFormat = parseRawStreamFormat(param);
+      if (id == SPA_PARAM_Format) self->_impl->sinkFormat = detail::parseRawStreamFormat(param);
       else if (id == SPA_PARAM_EnumFormat) {
-        if (auto fmt = parseRawStreamFormat(param)) {
+        if (auto fmt = detail::parseRawStreamFormat(param)) {
           auto& caps = self->_impl->sinkCapabilitiesMap[binding->id];
           if (std::ranges::find(caps.sampleRates, fmt->sampleRate) == caps.sampleRates.end()) caps.sampleRates.push_back(fmt->sampleRate);
           if (std::ranges::find(caps.bitDepths, fmt->bitDepth) == caps.bitDepths.end()) caps.bitDepths.push_back(fmt->bitDepth);
@@ -564,12 +506,10 @@ namespace app::playback
 
       auto executeGraphCallback = [&](std::uint32_t streamId, std::function<void(app::core::backend::AudioGraph const&)> const& cb) {
         app::core::backend::AudioGraph graph;
-        auto fullSet = reachableSet; // We can recompute reachableSet per streamId later if needed, but for now we assume streamNodeId is the primary driver
-        // Wait, to be correct we should recompute reachableSet per streamId.
-        // Let's do a localized recompute for the specific streamId.
         auto localReachableNodes = std::vector<std::uint32_t>{};
         auto localReachableSet = std::unordered_set<std::uint32_t>{};
         if (streamId != PW_ID_ANY) { localReachableNodes.push_back(streamId); localReachableSet.insert(streamId); }
+
         for (std::size_t i = 0; i < localReachableNodes.size(); ++i) {
           auto curr = localReachableNodes[i];
           for (auto const& [_, link] : links) {
@@ -577,21 +517,47 @@ namespace app::playback
             if (localReachableSet.insert(link.inputNodeId).second) localReachableNodes.push_back(link.inputNodeId);
           }
         }
-        
+
         auto localFullSet = localReachableSet;
-        for (auto const& [_, link] : links) if (isActiveLink(link.state) && localReachableSet.contains(link.inputNodeId)) localFullSet.insert(link.outputNodeId);
+        for (auto const& [_, link] : links)
+          if (isActiveLink(link.state) && localReachableSet.contains(link.inputNodeId))
+            localFullSet.insert(link.outputNodeId);
 
         for (auto id : localFullSet) {
-          auto it = nodes.find(id); if (it == nodes.end()) continue;
+          auto it = nodes.find(id);
+          if (it == nodes.end()) {
+            if (id == streamId) {
+              app::core::backend::AudioNode node{
+                .id = std::format("{}", id),
+                .type = app::core::backend::AudioNodeType::Stream,
+                .name = "RockStudio Playback",
+                .format = negotiatedStreamFormat
+              };
+              graph.nodes.push_back(std::move(node));
+            }
+            continue;
+          }
           bool isSink = isSinkMediaClass(it->second.mediaClass);
           bool isRs = (id == streamId);
-          auto type = isRs ? app::core::backend::AudioNodeType::Stream : (isSink ? app::core::backend::AudioNodeType::Sink : (localReachableSet.contains(id) ? app::core::backend::AudioNodeType::Intermediary : app::core::backend::AudioNodeType::ExternalSource));
-          app::core::backend::AudioNode node{.id = std::format("{}", id), .type = type, .name = (it->second.nodeNick.empty() ? (it->second.nodeName.empty() ? it->second.objectPath : it->second.nodeName) : it->second.nodeNick), .objectPath = it->second.objectPath};
-          if (isRs && streamId == streamNodeId) node.format = negotiatedStreamFormat; // We only have stream format for our internal stream right now
+          auto type = isRs ? app::core::backend::AudioNodeType::Stream
+                           : (isSink ? app::core::backend::AudioNodeType::Sink
+                                     : (localReachableSet.contains(id) ? app::core::backend::AudioNodeType::Intermediary
+                                                                      : app::core::backend::AudioNodeType::ExternalSource));
+          app::core::backend::AudioNode node{
+            .id = std::format("{}", id),
+            .type = type,
+            .name = (it->second.nodeNick.empty()
+                       ? (it->second.nodeName.empty() ? it->second.objectPath : it->second.nodeName)
+                       : it->second.nodeNick),
+            .objectPath = it->second.objectPath
+          };
+          if (isRs && streamId == streamNodeId) node.format = negotiatedStreamFormat;
           else if (isSink && id == desiredSinkNodeId) {
             node.format = sinkFormat;
             auto const isUnity = [](float v) { return std::abs(v - 1.0F) < 1e-4F; };
-            bool volumeAtUnity = (!sinkProps.volume || isUnity(*sinkProps.volume)) && std::ranges::all_of(sinkProps.channelVolumes, isUnity) && std::ranges::all_of(sinkProps.softVolumes, isUnity);
+            bool volumeAtUnity = (!sinkProps.volume || isUnity(*sinkProps.volume)) &&
+                                 std::ranges::all_of(sinkProps.channelVolumes, isUnity) &&
+                                 std::ranges::all_of(sinkProps.softVolumes, isUnity);
             node.volumeNotUnity = !volumeAtUnity;
             node.isMuted = (sinkProps.mute && *sinkProps.mute) || (sinkProps.softMute && *sinkProps.softMute);
           }
@@ -600,13 +566,15 @@ namespace app::playback
 
         for (auto const& [_, link] : links) {
           if (isActiveLink(link.state) && localFullSet.contains(link.outputNodeId) && localFullSet.contains(link.inputNodeId))
-            graph.links.push_back({.sourceId = std::format("{}", link.outputNodeId), .destId = std::format("{}", link.inputNodeId)});
+            graph.links.push_back({.sourceId = std::format("{}", link.outputNodeId),
+                                   .destId = std::format("{}", link.inputNodeId),
+                                   .isActive = true});
         }
         cb(graph);
       };
 
       for (auto const& sub : subscriptions) {
-        auto parsedId = parseUintProperty(sub.routeAnchor.c_str());
+        auto parsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
         std::uint32_t targetId = parsedId ? *parsedId : PW_ID_ANY;
         if (targetId != PW_ID_ANY && sub.callback) {
           executeGraphCallback(targetId, sub.callback);
