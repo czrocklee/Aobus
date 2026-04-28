@@ -3,15 +3,22 @@
 
 #pragma once
 
-#include "core/backend/IAudioBackend.h"
+#include "core/AudioFormat.h"
+#include "core/IMainThreadDispatcher.h"
 #include "core/playback/PlaybackTypes.h"
-#include "core/source/IPcmSource.h"
+#include "core/backend/IAudioBackend.h"
 
 #include <atomic>
-#include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string_view>
+
+namespace app::core::source
+{
+  class IPcmSource;
+}
 
 namespace app::core::playback
 {
@@ -19,10 +26,13 @@ namespace app::core::playback
   class PlaybackEngine final
   {
   public:
-    explicit PlaybackEngine(std::unique_ptr<backend::IAudioBackend> backend);
+    PlaybackEngine(std::unique_ptr<backend::IAudioBackend> backend,
+                   backend::AudioDevice const& device,
+                   std::shared_ptr<IMainThreadDispatcher> dispatcher = nullptr);
     ~PlaybackEngine();
 
-    void setBackend(std::unique_ptr<backend::IAudioBackend> backend, std::string deviceId);
+    void setBackend(std::unique_ptr<backend::IAudioBackend> backend, backend::AudioDevice const& device);
+    void setOnTrackEnded(std::function<void()> callback);
 
     void play(TrackPlaybackDescriptor descriptor);
     void pause();
@@ -32,35 +42,42 @@ namespace app::core::playback
 
     PlaybackSnapshot snapshot() const;
 
+    // Backend callbacks
+    static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept;
+    static bool isSourceDrained(void* userData) noexcept;
+    static void onUnderrun(void* userData) noexcept;
+    static void onPositionAdvanced(void* userData, std::uint32_t framesRead) noexcept;
+    static void onDrainComplete(void* userData) noexcept;
+    static void onGraphChanged(void* userData, backend::AudioGraph const& graph) noexcept;
+    static void onBackendError(void* userData, std::string_view message) noexcept;
+
+    // Source callbacks
+    static void onSourceError(void* userData) noexcept;
+
   private:
+    void handleBackendError(std::string_view message);
+    void handleSourceError(std::string const& message);
+    void handleDrainComplete();
+    void handleGraphChanged(backend::AudioGraph const& graph);
+    void analyzeAudioQuality();
+    void resetToIdle();
     bool openTrack(TrackPlaybackDescriptor descriptor,
                    std::shared_ptr<source::IPcmSource>& source,
                    AudioFormat& backendFormat);
 
-    void handleGraphChanged(backend::AudioGraph const& backendGraph);
-    void analyzeAudioQuality();
-    void handleBackendError(std::string_view message);
-
-    static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept;
-    static bool isSourceDrained(void* userData) noexcept;
-    static void onUnderrun(void* userData) noexcept;
-    static void onPositionAdvanced(void* userData, std::uint32_t frames) noexcept;
-    static void onDrainComplete(void* userData) noexcept;
-    static void onGraphChanged(void* userData, backend::AudioGraph const& graph) noexcept;
-    static void onSourceError(void* userData) noexcept;
-    static void onBackendError(void* userData, std::string_view message) noexcept;
-
     std::unique_ptr<backend::IAudioBackend> _backend;
+    std::shared_ptr<IMainThreadDispatcher> _dispatcher;
+    backend::AudioDevice _currentDevice;
+    
     std::atomic<std::shared_ptr<source::IPcmSource>> _source;
+    std::atomic<bool> _backendStarted{false};
+    std::atomic<bool> _playbackDrainPending{false};
+    std::atomic<std::uint32_t> _underrunCount{0};
 
     mutable std::mutex _stateMutex;
-    PlaybackSnapshot _snapshot;
     std::optional<TrackPlaybackDescriptor> _currentTrack;
-
-    std::atomic<TransportState> _state = TransportState::Idle;
-    std::atomic<std::uint32_t> _underrunCount = 0;
-    std::atomic<bool> _backendStarted = false;
-    std::atomic<bool> _playbackDrainPending = false;
+    PlaybackSnapshot _snapshot;
+    std::function<void()> _onTrackEnded;
   };
 
 } // namespace app::core::playback

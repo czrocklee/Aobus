@@ -29,6 +29,59 @@ namespace app::playback
     using namespace app::core::backend;
     using app::core::backend::AudioDevice;
 
+    DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
+    {
+      auto caps = DeviceCapabilities{};
+
+      ::snd_pcm_t* tempPcm = nullptr;
+      if (::snd_pcm_open(&tempPcm, deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK) < 0)
+      {
+        return caps;
+      }
+
+      ::snd_pcm_hw_params_t* params = nullptr;
+      snd_pcm_hw_params_alloca(&params);
+      if (::snd_pcm_hw_params_any(tempPcm, params) < 0)
+      {
+        ::snd_pcm_close(tempPcm);
+        return caps;
+      }
+
+      // Query available sample rates
+      for (auto const targetRate : std::to_array({44100, 48000, 88200, 96000, 176400, 192000}))
+      {
+        if (::snd_pcm_hw_params_test_rate(tempPcm, params, targetRate, 0) == 0)
+        {
+          caps.sampleRates.push_back(static_cast<std::uint32_t>(targetRate));
+        }
+      }
+
+      // Query available bit depths
+      for (auto const depth : std::to_array({16, 24, 32}))
+      {
+        auto const fmt = (depth == 16)   ? ::SND_PCM_FORMAT_S16_LE
+                         : (depth == 24) ? ::SND_PCM_FORMAT_S24_3LE
+                                         : ::SND_PCM_FORMAT_S32_LE;
+
+        if (::snd_pcm_hw_params_test_format(tempPcm, params, fmt) == 0)
+        {
+          caps.bitDepths.push_back(static_cast<std::uint8_t>(depth));
+        }
+      }
+
+      // Query available channel counts
+      for (auto const channels : std::to_array({1, 2, 4, 6, 8}))
+      {
+        if (::snd_pcm_hw_params_test_channels(tempPcm, params, channels) == 0)
+        {
+          caps.channelCounts.push_back(static_cast<std::uint8_t>(channels));
+        }
+      }
+
+      ::snd_pcm_close(tempPcm);
+      return caps;
+    }
+
     std::vector<app::core::backend::AudioDevice> doAlsaEnumerate()
     {
       auto devices = std::vector<app::core::backend::AudioDevice>{};
@@ -65,11 +118,14 @@ namespace app::playback
               displayName = displayName.substr(idPrefix.length());
             }
 
+            auto caps = queryAlsaDeviceCapabilities(idStr);
+
             devices.push_back({.id = std::string(idStr),
                                .displayName = std::move(displayName),
                                .description = std::move(idStr),
                                .isDefault = false,
-                               .backendKind = app::core::backend::BackendKind::AlsaExclusive});
+                               .backendKind = app::core::backend::BackendKind::AlsaExclusive,
+                               .capabilities = caps});
           }
         }
       }
@@ -212,9 +268,18 @@ namespace app::playback
     }
 
     // Set sample format
-    auto const alsaFormat = (format.bitDepth == 16)   ? SND_PCM_FORMAT_S16_LE
-                            : (format.bitDepth == 24) ? SND_PCM_FORMAT_S24_3LE
-                                                      : SND_PCM_FORMAT_S32_LE;
+    auto alsaFormat = SND_PCM_FORMAT_S16_LE;
+    if (format.bitDepth == 32)
+    {
+      if (format.validBits == 24)
+        alsaFormat = SND_PCM_FORMAT_S24_LE;
+      else
+        alsaFormat = SND_PCM_FORMAT_S32_LE;
+    }
+    else if (format.bitDepth == 24)
+    {
+      alsaFormat = SND_PCM_FORMAT_S24_3LE;
+    }
 
     if (::snd_pcm_hw_params_set_format(safePcm.get(), params, alsaFormat) < 0)
     {
@@ -492,7 +557,10 @@ namespace app::playback
   void AlsaExclusiveBackend::stop()
   {
     _thread.request_stop();
-    if (_thread.joinable()) _thread.join();
+    if (_thread.joinable() && std::this_thread::get_id() != _thread.get_id())
+    {
+      _thread.join();
+    }
 
     if (_pcm)
     {
@@ -506,56 +574,6 @@ namespace app::playback
     PLAYBACK_LOG_DEBUG("AlsaExclusiveBackend: Closing device");
     stop();
     _pcm.reset();
-  }
-
-  DeviceCapabilities AlsaExclusiveBackend::queryCapabilities() const
-  {
-    auto caps = DeviceCapabilities{};
-
-    if (!_pcm)
-    {
-      return caps;
-    }
-
-    ::snd_pcm_hw_params_t* params = nullptr;
-    snd_pcm_hw_params_alloca(&params);
-    if (::snd_pcm_hw_params_any(_pcm.get(), params) < 0)
-    {
-      return caps;
-    }
-
-    // Query available sample rates
-    for (auto const targetRate : std::to_array({44100, 48000, 88200, 96000, 176400, 192000}))
-    {
-      if (::snd_pcm_hw_params_test_rate(_pcm.get(), params, targetRate, 0) == 0)
-      {
-        caps.sampleRates.push_back(static_cast<std::uint32_t>(targetRate));
-      }
-    }
-
-    // Query available bit depths
-    for (auto const depth : std::to_array({16, 24, 32}))
-    {
-      auto const fmt = (depth == 16)   ? ::SND_PCM_FORMAT_S16_LE
-                       : (depth == 24) ? ::SND_PCM_FORMAT_S24_3LE
-                                       : ::SND_PCM_FORMAT_S32_LE;
-
-      if (::snd_pcm_hw_params_test_format(_pcm.get(), params, fmt) == 0)
-      {
-        caps.bitDepths.push_back(static_cast<std::uint8_t>(depth));
-      }
-    }
-
-    // Query available channel counts
-    for (auto const channels : std::to_array({1, 2, 4, 6, 8}))
-    {
-      if (::snd_pcm_hw_params_test_channels(_pcm.get(), params, channels) == 0)
-      {
-        caps.channelCounts.push_back(static_cast<std::uint8_t>(channels));
-      }
-    }
-
-    return caps;
   }
 
 } // namespace app::playback

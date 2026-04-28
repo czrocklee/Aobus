@@ -16,6 +16,7 @@ namespace app::core
     std::uint32_t sampleRate = 0;
     std::uint8_t channels = 0;
     std::uint8_t bitDepth = 0;
+    std::uint8_t validBits = 0;
     bool isFloat = false;
     bool isInterleaved = true;
 

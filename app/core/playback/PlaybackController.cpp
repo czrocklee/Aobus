@@ -13,10 +13,28 @@
 
 namespace app::core::playback
 {
-  PlaybackController::PlaybackController()
+  PlaybackController::PlaybackController(std::shared_ptr<IMainThreadDispatcher> dispatcher)
+    : _dispatcher(std::move(dispatcher))
   {
     // Start with a NullBackend until a discovery provides something real
-    _engine = std::make_unique<PlaybackEngine>(std::make_unique<backend::NullBackend>());
+    _engine = std::make_unique<PlaybackEngine>(std::make_unique<backend::NullBackend>(),
+                                               backend::AudioDevice{
+                                                 .id = "null",
+                                                 .displayName = "None",
+                                                 .description = "No audio output selected",
+                                                 .backendKind = backend::BackendKind::None,
+                                                 .capabilities = {}
+                                               },
+                                               _dispatcher);
+
+    _engine->setOnTrackEnded([this]() {
+      if (_onTrackEnded) _onTrackEnded();
+    });
+  }
+
+  void PlaybackController::setTrackEndedCallback(std::function<void()> callback)
+  {
+    _onTrackEnded = std::move(callback);
   }
 
   PlaybackController::~PlaybackController() = default;
@@ -73,7 +91,7 @@ namespace app::core::playback
         auto backend = discovery->createBackend(targetDevice);
         if (backend)
         {
-          _engine->setBackend(std::move(backend), std::string(deviceId));
+          _engine->setBackend(std::move(backend), targetDevice);
           return;
         }
       }

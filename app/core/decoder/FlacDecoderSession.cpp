@@ -328,6 +328,29 @@ namespace app::core::decoder
         }
       }
     }
+    else if (outBps == 32)
+    {
+      impl->pcmBuffer.resize(blockSize * channels * 4);
+      auto* out = reinterpret_cast<std::int32_t*>(impl->pcmBuffer.data());
+
+      for (std::uint32_t i = 0; i < blockSize; ++i)
+      {
+        for (std::uint32_t ch = 0; channels > 0 && ch < channels; ++ch)
+        {
+          auto val = static_cast<std::int32_t>(buffer[ch][i]);
+
+          // If we are padding 24-bit into 32-bit, ensure it's properly shifted if needed.
+          // libFLAC gives us signed 32-bit integers.
+          // S24_32_LE usually expects the 24 bits in the most significant bytes OR just as a 32-bit int.
+          // Actually, PipeWire's S24_32_LE is "24 bits in 32 bit, LSB aligned, padded with 0".
+          // Wait, let's check PipeWire/ALSA S24_32_LE definition.
+          // ALSA SND_PCM_FORMAT_S24_32_LE: "Signed 24 bit Little Endian in 32 bit, LSB justified".
+          // That means it's just a 32-bit integer where the top 8 bits are zero/ignored.
+          
+          *out++ = val;
+        }
+      }
+    }
     else
     {
       return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
@@ -352,6 +375,7 @@ namespace app::core::decoder
       impl->info.sourceFormat.channels = static_cast<std::uint8_t>(metadata->data.stream_info.channels);
       impl->info.sourceFormat.sampleRate = metadata->data.stream_info.sample_rate;
       impl->info.sourceFormat.bitDepth = static_cast<std::uint8_t>(metadata->data.stream_info.bits_per_sample);
+      impl->info.sourceFormat.validBits = impl->info.sourceFormat.bitDepth;
       impl->info.sourceFormat.isFloat = false;
       impl->info.sourceFormat.isInterleaved = true;
 
@@ -360,6 +384,9 @@ namespace app::core::decoder
       if (impl->requestedOutput.bitDepth != 0)
       {
         impl->info.outputFormat.bitDepth = impl->requestedOutput.bitDepth;
+        impl->info.outputFormat.validBits = (impl->requestedOutput.validBits != 0) 
+                                            ? impl->requestedOutput.validBits 
+                                            : impl->requestedOutput.bitDepth;
       }
 
       if (metadata->data.stream_info.sample_rate > 0)

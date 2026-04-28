@@ -30,7 +30,7 @@ namespace app::core::playback
     }
   }
 
-  RenderPlan FormatNegotiator::buildPlan(AudioFormat sourceFormat, DeviceCapabilities const& caps)
+  RenderPlan FormatNegotiator::buildPlan(AudioFormat sourceFormat, backend::DeviceCapabilities const& caps)
   {
     RenderPlan plan = {
       .sourceFormat = sourceFormat,
@@ -67,10 +67,55 @@ namespace app::core::playback
               "channel remapping required",
               [&] { return caps.channelCounts.front(); });
 
-    plan.decoderOutputFormat = plan.deviceFormat;
-    plan.decoderOutputFormat.bitDepth = 16;
+    // --- Decoder Output Format Negotiation ---
+    plan.decoderOutputFormat = plan.sourceFormat;
     plan.decoderOutputFormat.isInterleaved = true;
     plan.decoderOutputFormat.isFloat = false;
+
+    // Determine best decoder output format based on device capabilities
+    if (plan.sourceFormat.bitDepth == 24)
+    {
+      if (std::ranges::find(caps.bitDepths, 32) != caps.bitDepths.end())
+      {
+        plan.decoderOutputFormat.bitDepth = 32;
+        plan.decoderOutputFormat.validBits = 24;
+      }
+      else if (std::ranges::find(caps.bitDepths, 24) != caps.bitDepths.end())
+      {
+        plan.decoderOutputFormat.bitDepth = 24;
+        plan.decoderOutputFormat.validBits = 24;
+      }
+      else
+      {
+        plan.decoderOutputFormat.bitDepth = 16;
+        plan.decoderOutputFormat.validBits = 16;
+      }
+    }
+    else if (plan.sourceFormat.bitDepth == 16)
+    {
+      plan.decoderOutputFormat.bitDepth = 16;
+      plan.decoderOutputFormat.validBits = 16;
+    }
+    else if (plan.sourceFormat.bitDepth == 32)
+    {
+      if (std::ranges::find(caps.bitDepths, 32) != caps.bitDepths.end())
+      {
+        plan.decoderOutputFormat.bitDepth = 32;
+        plan.decoderOutputFormat.validBits = 32;
+      }
+      else
+      {
+        plan.decoderOutputFormat.bitDepth = 16;
+        plan.decoderOutputFormat.validBits = 16;
+      }
+    }
+
+    // Ensure deviceFormat matches decoderOutputFormat if no other conversion is needed
+    if (!plan.requiresBitDepthConversion)
+    {
+      plan.deviceFormat.bitDepth = plan.decoderOutputFormat.bitDepth;
+      plan.deviceFormat.validBits = plan.decoderOutputFormat.validBits;
+    }
 
     if (plan.reason.empty()) plan.reason = "Direct passthrough";
 

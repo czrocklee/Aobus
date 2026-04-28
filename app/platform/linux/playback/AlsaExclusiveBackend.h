@@ -53,8 +53,6 @@ namespace app::playback
 
     std::string_view lastError() const noexcept override { return _lastError; }
 
-    app::core::playback::DeviceCapabilities queryCapabilities() const;
-
   private:
     struct AlsaPcmDeleter final
     {
