@@ -2,11 +2,14 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/playback/PipeWireManager.h"
-#include "platform/linux/playback/PipeWireInternal.h"
 #include "platform/linux/playback/PipeWireBackend.h"
+#include "platform/linux/playback/PipeWireMonitor.h"
+#include "platform/linux/playback/detail/PipeWireShared.h"
 
 namespace app::playback
 {
+  using namespace detail;
+
   struct PipeWireManager::Impl
   {
     PwThreadLoopPtr threadLoop;
@@ -30,7 +33,8 @@ namespace app::playback
       core.reset(::pw_context_connect(context.get(), nullptr, 0));
       if (core)
       {
-        monitor = std::make_unique<PipeWireMonitor>(threadLoop.get(), core.get(), app::core::backend::AudioRenderCallbacks{});
+        monitor =
+          std::make_unique<PipeWireMonitor>(threadLoop.get(), core.get(), app::core::backend::AudioRenderCallbacks{});
         monitor->start();
       }
       ::pw_thread_loop_unlock(threadLoop.get());
@@ -46,7 +50,10 @@ namespace app::playback
     }
   };
 
-  PipeWireManager::PipeWireManager() : _impl(std::make_unique<Impl>()) {}
+  PipeWireManager::PipeWireManager()
+    : _impl(std::make_unique<Impl>())
+  {
+  }
   PipeWireManager::~PipeWireManager() = default;
 
   void PipeWireManager::setDevicesChangedCallback(OnDevicesChangedCallback callback)
@@ -68,7 +75,8 @@ namespace app::playback
     return devices;
   }
 
-  std::unique_ptr<app::core::backend::IAudioBackend> PipeWireManager::createBackend(app::core::backend::AudioDevice const& device)
+  std::unique_ptr<app::core::backend::IAudioBackend> PipeWireManager::createBackend(
+    app::core::backend::AudioDevice const& device)
   {
     return std::make_unique<PipeWireBackend>(device);
   }
@@ -77,12 +85,19 @@ namespace app::playback
   {
     PipeWireMonitor* monitor;
     std::uint64_t id;
-    PipeWireSubscription(PipeWireMonitor* m, std::uint64_t i) : monitor(m), id(i) {}
-    ~PipeWireSubscription() override { if (monitor) monitor->unsubscribeGraph(id); }
+    PipeWireSubscription(PipeWireMonitor* m, std::uint64_t i)
+      : monitor(m), id(i)
+    {
+    }
+    ~PipeWireSubscription() override
+    {
+      if (monitor) monitor->unsubscribeGraph(id);
+    }
   };
 
-  std::unique_ptr<app::core::backend::IGraphSubscription> PipeWireManager::subscribeGraph(std::string_view routeAnchor,
-                                                                                          OnGraphChangedCallback callback)
+  std::unique_ptr<app::core::backend::IGraphSubscription> PipeWireManager::subscribeGraph(
+    std::string_view routeAnchor,
+    OnGraphChangedCallback callback)
   {
     if (!_impl->monitor) return nullptr;
     auto id = _impl->monitor->subscribeGraph(routeAnchor, std::move(callback));

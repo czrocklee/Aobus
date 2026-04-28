@@ -65,8 +65,6 @@ target_link_libraries(app_core PRIVATE PkgFLAC PkgALAC spdlog::spdlog yaml-cpp)
 # app_linux: Linux platform implementation (depends on app_core)
 add_library(app_linux STATIC)
 target_sources(app_linux PRIVATE
-    platform/linux/main.cpp
-
     platform/linux/AppConfig.cpp
     platform/linux/AppConfig.h
 
@@ -98,7 +96,10 @@ if(PIPEWIRE_FOUND)
   target_sources(app_linux PRIVATE
     platform/linux/playback/PipeWireBackend.cpp
     platform/linux/playback/PipeWireManager.cpp
-    platform/linux/playback/PipeWireInternal.cpp
+    platform/linux/playback/PipeWireMonitor.cpp
+    platform/linux/playback/PipeWireMonitor.h
+    platform/linux/playback/detail/PipeWireShared.h
+    platform/linux/playback/detail/PipeWireShared.cpp
   )
   target_link_libraries(app_linux PRIVATE PipeWire)
 endif()
@@ -113,8 +114,8 @@ if(ALSA_FOUND)
 endif()
 
 # RockStudio executable (links app_linux, no direct source compilation)
-add_executable(RockStudio)
-target_link_libraries(RockStudio PRIVATE app_linux rs)
+add_executable(RockStudio platform/linux/main.cpp)
+target_link_libraries(RockStudio PRIVATE app_linux rs GTKMM glibmm-2.68)
 target_include_directories(RockStudio PRIVATE "${CMAKE_SOURCE_DIR}/app")
 
 # Configure ASan leak detection to use suppression file for third-party libraries (RockStudio app only)
