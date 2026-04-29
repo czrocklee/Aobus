@@ -58,15 +58,6 @@ namespace app::playback
     void handleStreamStateChanged(enum pw_stream_state oldState, enum pw_stream_state newState, char const* errorMessage);
     void handleStreamDrained();
 
-    // Static callbacks
-    static void onStreamProcess(void* data) { static_cast<Impl*>(data)->handleStreamProcess(); }
-    static void onStreamParamChanged(void* data, std::uint32_t id, ::spa_pod const* param) { static_cast<Impl*>(data)->handleStreamParamChanged(id, param); }
-    static void onStreamStateChanged(void* data, enum pw_stream_state oldState, enum pw_stream_state newState, char const* errorMessage)
-    {
-      static_cast<Impl*>(data)->handleStreamStateChanged(oldState, newState, errorMessage);
-    }
-    static void onStreamDrained(void* data) { static_cast<Impl*>(data)->handleStreamDrained(); }
-
     // Members
     app::core::backend::AudioRenderCallbacks _callbacks;
     app::core::AudioFormat _format;
@@ -85,13 +76,21 @@ namespace app::playback
 
   namespace
   {
+    void onStreamProcess(void* data) { static_cast<PipeWireBackend::Impl*>(data)->handleStreamProcess(); }
+    void onStreamParamChanged(void* data, std::uint32_t id, ::spa_pod const* param) { static_cast<PipeWireBackend::Impl*>(data)->handleStreamParamChanged(id, param); }
+    void onStreamStateChanged(void* data, enum pw_stream_state oldState, enum pw_stream_state newState, char const* errorMessage)
+    {
+      static_cast<PipeWireBackend::Impl*>(data)->handleStreamStateChanged(oldState, newState, errorMessage);
+    }
+    void onStreamDrained(void* data) { static_cast<PipeWireBackend::Impl*>(data)->handleStreamDrained(); }
+
     ::pw_stream_events const streamEvents = [] {
       auto e = ::pw_stream_events{};
       e.version = PW_VERSION_STREAM_EVENTS;
-      e.state_changed = PipeWireBackend::Impl::onStreamStateChanged;
-      e.param_changed = PipeWireBackend::Impl::onStreamParamChanged;
-      e.process = PipeWireBackend::Impl::onStreamProcess;
-      e.drained = PipeWireBackend::Impl::onStreamDrained;
+      e.state_changed = onStreamStateChanged;
+      e.param_changed = onStreamParamChanged;
+      e.process = onStreamProcess;
+      e.drained = onStreamDrained;
       return e;
     }();
   }
@@ -133,6 +132,12 @@ namespace app::playback
     if (auto negotiated = parseRawStreamFormat(param))
     {
       _format = *negotiated;
+      PLAYBACK_LOG_INFO("Negotiated PipeWire format: {}Hz, {}b, {} channels",
+                        _format.sampleRate, _format.bitDepth, _format.channels);
+      if (_callbacks.onFormatChanged)
+      {
+        _callbacks.onFormatChanged(_callbacks.userData, _format);
+      }
     }
   }
 
@@ -223,15 +228,78 @@ namespace app::playback
     return true;
   }
 
-  void PipeWireBackend::start() { if (!_impl || !_impl->_stream || !_impl->_threadLoop) return; ::pw_thread_loop_lock(_impl->_threadLoop.get()); ::pw_stream_set_active(_impl->_stream.get(), true); ::pw_thread_loop_unlock(_impl->_threadLoop.get()); }
-  void PipeWireBackend::pause() { if (!_impl || !_impl->_stream || !_impl->_threadLoop) return; ::pw_thread_loop_lock(_impl->_threadLoop.get()); ::pw_stream_set_active(_impl->_stream.get(), false); ::pw_thread_loop_unlock(_impl->_threadLoop.get()); }
-  void PipeWireBackend::resume() { start(); }
-  void PipeWireBackend::flush() { if (!_impl || !_impl->_stream || !_impl->_threadLoop) return; _impl->_drainPending = false; ::pw_thread_loop_lock(_impl->_threadLoop.get()); ::pw_stream_flush(_impl->_stream.get(), false); ::pw_thread_loop_unlock(_impl->_threadLoop.get()); }
-  void PipeWireBackend::drain() { if (!_impl || !_impl->_stream || !_impl->_threadLoop || _impl->_drainPending) return; _impl->_drainPending = true; ::pw_thread_loop_lock(_impl->_threadLoop.get()); ::pw_stream_flush(_impl->_stream.get(), true); ::pw_thread_loop_unlock(_impl->_threadLoop.get()); }
-  void PipeWireBackend::stop() { if (!_impl || !_impl->_stream || !_impl->_threadLoop) return; _impl->_drainPending = false; ::pw_thread_loop_lock(_impl->_threadLoop.get()); ::pw_stream_set_active(_impl->_stream.get(), false); ::pw_thread_loop_unlock(_impl->_threadLoop.get()); }
-  void PipeWireBackend::close() { if (_impl) _impl->destroyStream(); }
-  void PipeWireBackend::setExclusiveMode(bool exclusive) { if (_exclusiveMode == exclusive) return; _exclusiveMode = exclusive; if (_impl && _impl->_stream && !_targetDeviceId.empty()) open(_impl->_format, _impl->_callbacks); }
-  bool PipeWireBackend::isExclusiveMode() const noexcept { return _exclusiveMode; }
-  app::core::backend::BackendKind PipeWireBackend::kind() const noexcept { return _exclusiveMode ? app::core::backend::BackendKind::PipeWireExclusive : app::core::backend::BackendKind::PipeWire; }
-  std::string_view PipeWireBackend::lastError() const noexcept { return _impl ? _impl->_lastError : ""; }
+  void PipeWireBackend::start()
+  {
+    if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_stream_set_active(_impl->_stream.get(), true);
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+  }
+
+  void PipeWireBackend::pause()
+  {
+    if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_stream_set_active(_impl->_stream.get(), false);
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+  }
+
+  void PipeWireBackend::resume()
+  {
+    start();
+  }
+
+  void PipeWireBackend::flush()
+  {
+    if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
+    _impl->_drainPending = false;
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_stream_flush(_impl->_stream.get(), false);
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+  }
+
+  void PipeWireBackend::drain()
+  {
+    if (!_impl || !_impl->_stream || !_impl->_threadLoop || _impl->_drainPending) return;
+    _impl->_drainPending = true;
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_stream_flush(_impl->_stream.get(), true);
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+  }
+
+  void PipeWireBackend::stop()
+  {
+    if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
+    _impl->_drainPending = false;
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_stream_set_active(_impl->_stream.get(), false);
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+  }
+
+  void PipeWireBackend::close()
+  {
+    if (_impl) _impl->destroyStream();
+  }
+
+  void PipeWireBackend::setExclusiveMode(bool exclusive)
+  {
+    if (_exclusiveMode == exclusive) return;
+    _exclusiveMode = exclusive;
+    if (_impl && _impl->_stream && !_targetDeviceId.empty()) open(_impl->_format, _impl->_callbacks);
+  }
+
+  bool PipeWireBackend::isExclusiveMode() const noexcept
+  {
+    return _exclusiveMode;
+  }
+
+  app::core::backend::BackendKind PipeWireBackend::kind() const noexcept
+  {
+    return _exclusiveMode ? app::core::backend::BackendKind::PipeWireExclusive : app::core::backend::BackendKind::PipeWire;
+  }
+
+  std::string_view PipeWireBackend::lastError() const noexcept
+  {
+    return _impl ? _impl->_lastError : "";
+  }
 } // namespace app::playback

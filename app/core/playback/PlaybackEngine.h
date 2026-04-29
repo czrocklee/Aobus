@@ -53,6 +53,7 @@ namespace app::core::playback
     static void onPositionAdvanced(void* userData, std::uint32_t framesRead) noexcept;
     static void onDrainComplete(void* userData) noexcept;
     static void onRouteReady(void* userData, std::string_view routeAnchor) noexcept;
+    static void onFormatChanged(void* userData, AudioFormat const& format) noexcept;
     static void onBackendError(void* userData, std::string_view message) noexcept;
 
     // Source callbacks
@@ -61,6 +62,7 @@ namespace app::core::playback
   private:
     void handleBackendError(std::string_view message);
     void handleSourceError(std::string const& message);
+    void handleFormatChanged(AudioFormat const& format);
     void handleDrainComplete();
     void handleRouteReady(std::string_view routeAnchor);
     void resetToIdle();

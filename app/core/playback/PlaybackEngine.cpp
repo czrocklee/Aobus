@@ -162,6 +162,7 @@ namespace app::core::playback
     callbacks.onPositionAdvanced = &PlaybackEngine::onPositionAdvanced;
     callbacks.onDrainComplete = &PlaybackEngine::onDrainComplete;
     callbacks.onRouteReady = &PlaybackEngine::onRouteReady;
+    callbacks.onFormatChanged = &PlaybackEngine::onFormatChanged;
     callbacks.onBackendError = &PlaybackEngine::onBackendError;
 
     auto source = std::shared_ptr<source::IPcmSource>{};
@@ -413,27 +414,61 @@ namespace app::core::playback
     // --- Format Negotiation ---
     if (_backend)
     {
-      auto const caps = _currentDevice.capabilities;
-      auto const plan = FormatNegotiator::buildPlan(info.sourceFormat, caps);
-      
-      PLAYBACK_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}", 
-                        (int)plan.decoderOutputFormat.bitDepth, (int)plan.decoderOutputFormat.validBits,
-                        plan.deviceFormat.sampleRate, (int)plan.deviceFormat.bitDepth,
-                        plan.reason);
-      
-      // Re-open decoder with negotiated format if it differs from source
-      if (!(plan.decoderOutputFormat == info.sourceFormat))
+      auto const backendKind = _backend->kind();
+      if (backendKind == BackendKind::PipeWire)
       {
-        decoder->close();
-        decoder = createAudioDecoderSession(descriptor.filePath, plan.decoderOutputFormat);
-        if (!decoder || !decoder->open(descriptor.filePath))
+        backendFormat = info.outputFormat;
+        PLAYBACK_LOG_INFO(
+          "PipeWire shared mode keeps the client stream at {}Hz/{}b/{}ch; the server graph may still resample downstream",
+          backendFormat.sampleRate,
+          static_cast<int>(backendFormat.bitDepth),
+          static_cast<int>(backendFormat.channels));
+      }
+      else
+      {
+        auto const caps = _currentDevice.capabilities;
+        auto const plan = FormatNegotiator::buildPlan(info.sourceFormat, caps);
+
+        if (plan.requiresResample)
         {
-          _snapshot.statusText = "Failed to re-open decoder with negotiated format";
+          _snapshot.statusText =
+            std::format("{} does not support {} Hz and RockStudio has no resampler yet",
+                        backendDisplayName(backendKind),
+                        info.sourceFormat.sampleRate);
           return false;
         }
-        info = decoder->streamInfo();
+
+        if (plan.requiresChannelRemap)
+        {
+          _snapshot.statusText =
+            std::format("{} does not support {} channels and RockStudio has no channel remapper yet",
+                        backendDisplayName(backendKind),
+                        static_cast<int>(info.sourceFormat.channels));
+          return false;
+        }
+
+        PLAYBACK_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
+                          static_cast<int>(plan.decoderOutputFormat.bitDepth),
+                          static_cast<int>(plan.decoderOutputFormat.validBits),
+                          plan.deviceFormat.sampleRate,
+                          static_cast<int>(plan.deviceFormat.bitDepth),
+                          plan.reason);
+
+        // Re-open decoder with negotiated format if it differs from source.
+        if (!(plan.decoderOutputFormat == info.sourceFormat))
+        {
+          decoder->close();
+          decoder = createAudioDecoderSession(descriptor.filePath, plan.decoderOutputFormat);
+          if (!decoder || !decoder->open(descriptor.filePath))
+          {
+            _snapshot.statusText = "Failed to re-open decoder with negotiated format";
+            return false;
+          }
+          info = decoder->streamInfo();
+        }
+
+        backendFormat = plan.deviceFormat;
       }
-      backendFormat = plan.deviceFormat;
     }
     else
     {
@@ -470,12 +505,12 @@ namespace app::core::playback
     _snapshot.graph = {};
 
     // Add initial Source (Decoder) Node
-    _snapshot.graph.nodes.push_back({.id = "rs-decoder",
-                                     .type = AudioNodeType::Decoder,
-                                     .name = "File Decoder",
-                                     .format = info.sourceFormat,
-                                     .isLossySource = info.isLossy,
-                                     .objectPath = ""});
+    _routeSnapshot.graph.nodes.push_back({.id = "rs-decoder",
+                                          .type = AudioNodeType::Decoder,
+                                          .name = "File Decoder",
+                                          .format = info.sourceFormat,
+                                          .isLossySource = info.isLossy,
+                                          .objectPath = ""});
 
     // Add Engine Node
     _routeSnapshot.graph.nodes.push_back(backend::AudioNode{
@@ -630,6 +665,51 @@ namespace app::core::playback
     if (_backend)
     {
       _backend->stop();
+    }
+  }
+
+  void PlaybackEngine::onFormatChanged(void* userData, AudioFormat const& format) noexcept
+  {
+    auto* self = static_cast<PlaybackEngine*>(userData);
+    if (self->_dispatcher)
+    {
+      self->_dispatcher->dispatch([self, format]() { self->handleFormatChanged(format); });
+    }
+    else
+    {
+      self->handleFormatChanged(format);
+    }
+  }
+
+  void PlaybackEngine::handleFormatChanged(AudioFormat const& format)
+  {
+    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    
+    // Update engine node in the route snapshot
+    for (auto& node : _routeSnapshot.graph.nodes)
+    {
+      if (node.id == "rs-engine")
+      {
+        node.format = format;
+        break;
+      }
+    }
+
+    // Update engine node in the public snapshot
+    for (auto& node : _snapshot.graph.nodes)
+    {
+      if (node.id == "rs-engine")
+      {
+        node.format = format;
+        break;
+      }
+    }
+
+    if (_onRouteChanged)
+    {
+      auto snap = _routeSnapshot;
+      if (_dispatcher) _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      else _onRouteChanged(snap);
     }
   }
 

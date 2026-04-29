@@ -45,9 +45,17 @@ TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
   AudioDevice device{ .id = "test-device", .displayName = "Test", .description = "Test", .isDefault = false, .backendKind = BackendKind::None };
 
   Fake(Method(mockBackend, open));
+  Fake(Method(mockBackend, start));
+  Fake(Method(mockBackend, pause));
+  Fake(Method(mockBackend, resume));
+  Fake(Method(mockBackend, flush));
+  Fake(Method(mockBackend, drain));
   Fake(Method(mockBackend, stop));
   Fake(Method(mockBackend, close));
+  Fake(Method(mockBackend, setExclusiveMode));
+  When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
   When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::None);
+  When(Method(mockBackend, lastError)).AlwaysReturn("");
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
   
@@ -108,4 +116,178 @@ TEST_CASE("PlaybackEngine - Backend Swapping", "[playback][engine][hot-swap]")
     REQUIRE(snap.backend == BackendKind::AlsaExclusive);
     REQUIRE(snap.currentDeviceId == "dev2");
   }
+}
+
+TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
+{
+  auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+  if (!std::filesystem::exists(testFile))
+  {
+    WARN("Test file not found, skipping Graph Integrity test");
+    return;
+  }
+
+  Mock<IAudioBackend> mockBackend;
+  auto dispatcher = std::make_shared<MockDispatcher>();
+  AudioDevice device{ .id = "test-device", .displayName = "Test", .description = "Test", .isDefault = false, .backendKind = BackendKind::None };
+
+  Fake(Method(mockBackend, open));
+  Fake(Method(mockBackend, start));
+  Fake(Method(mockBackend, pause));
+  Fake(Method(mockBackend, resume));
+  Fake(Method(mockBackend, flush));
+  Fake(Method(mockBackend, drain));
+  Fake(Method(mockBackend, stop));
+  Fake(Method(mockBackend, close));
+  Fake(Method(mockBackend, setExclusiveMode));
+  When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
+  When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::None);
+  When(Method(mockBackend, lastError)).AlwaysReturn("");
+
+  auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
+  PlaybackEngine engine(std::move(backendPtr), device, dispatcher);
+
+  TrackPlaybackDescriptor descriptor;
+  descriptor.filePath = testFile.string();
+  descriptor.title = "Test Title";
+  descriptor.artist = "Test Artist";
+
+  engine.play(descriptor);
+
+  auto snap = engine.snapshot();
+  
+  SECTION("rs-decoder is present in the graph")
+  {
+    auto it = std::ranges::find_if(snap.graph.nodes, [](auto const& n) { return n.id == "rs-decoder"; });
+    REQUIRE(it != snap.graph.nodes.end());
+    CHECK(it->type == AudioNodeType::Decoder);
+    CHECK(it->format.has_value());
+    CHECK(it->format->sampleRate == 44100);
+  }
+
+  SECTION("rs-engine is present in the graph")
+  {
+    auto it = std::ranges::find_if(snap.graph.nodes, [](auto const& n) { return n.id == "rs-engine"; });
+    REQUIRE(it != snap.graph.nodes.end());
+    CHECK(it->type == AudioNodeType::Engine);
+  }
+
+  SECTION("rs-decoder is linked to rs-engine")
+  {
+    auto it = std::ranges::find_if(snap.graph.links, [](auto const& l) {
+      return l.sourceId == "rs-decoder" && l.destId == "rs-engine";
+    });
+    CHECK(it != snap.graph.links.end());
+    if (it != snap.graph.links.end()) {
+      CHECK(it->isActive);
+    }
+  }
+
+  engine.stop();
+}
+
+TEST_CASE("PlaybackEngine - PipeWire shared mode keeps native sample rate", "[playback][engine][pipewire]")
+{
+  auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+  if (!std::filesystem::exists(testFile))
+  {
+    WARN("Test file not found, skipping PipeWire shared format test");
+    return;
+  }
+
+  Mock<IAudioBackend> mockBackend;
+  auto dispatcher = std::make_shared<MockDispatcher>();
+  AudioDevice device{.id = "pipewire-shared",
+                     .displayName = "PipeWire",
+                     .description = "PipeWire Shared",
+                     .isDefault = false,
+                     .backendKind = BackendKind::PipeWire,
+                     .capabilities = {.sampleRates = {48000}, .bitDepths = {16}, .channelCounts = {2}}};
+
+  auto openedFormats = std::vector<AudioFormat>{};
+  When(Method(mockBackend, open)).AlwaysDo([&](AudioFormat const& format, AudioRenderCallbacks) {
+    openedFormats.push_back(format);
+    return true;
+  });
+  Fake(Method(mockBackend, start));
+  Fake(Method(mockBackend, pause));
+  Fake(Method(mockBackend, resume));
+  Fake(Method(mockBackend, flush));
+  Fake(Method(mockBackend, drain));
+  Fake(Method(mockBackend, stop));
+  Fake(Method(mockBackend, close));
+  Fake(Method(mockBackend, setExclusiveMode));
+  When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
+  When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::PipeWire);
+  When(Method(mockBackend, lastError)).AlwaysReturn("");
+
+  auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
+  auto engine = PlaybackEngine(std::move(backendPtr), device, dispatcher);
+
+  TrackPlaybackDescriptor descriptor;
+  descriptor.filePath = testFile.string();
+  descriptor.title = "PipeWire Shared";
+  descriptor.artist = "Test Artist";
+
+  engine.play(descriptor);
+
+  REQUIRE(openedFormats.size() >= 2);
+  CHECK(openedFormats.back().sampleRate == 44100);
+  CHECK(openedFormats.back().channels == 2);
+  CHECK(openedFormats.back().bitDepth == 16);
+  CHECK(engine.snapshot().state == TransportState::Playing);
+
+  engine.stop();
+}
+
+TEST_CASE("PlaybackEngine - Unsupported backend sample rate fails without resampler", "[playback][engine][format]")
+{
+  auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+  if (!std::filesystem::exists(testFile))
+  {
+    WARN("Test file not found, skipping backend sample-rate validation test");
+    return;
+  }
+
+  Mock<IAudioBackend> mockBackend;
+  auto dispatcher = std::make_shared<MockDispatcher>();
+  AudioDevice device{.id = "alsa-exclusive",
+                     .displayName = "ALSA",
+                     .description = "ALSA Exclusive",
+                     .isDefault = false,
+                     .backendKind = BackendKind::AlsaExclusive,
+                     .capabilities = {.sampleRates = {48000}, .bitDepths = {16}, .channelCounts = {2}}};
+
+  auto openedFormats = std::vector<AudioFormat>{};
+  When(Method(mockBackend, open)).AlwaysDo([&](AudioFormat const& format, AudioRenderCallbacks) {
+    openedFormats.push_back(format);
+    return true;
+  });
+  Fake(Method(mockBackend, start));
+  Fake(Method(mockBackend, pause));
+  Fake(Method(mockBackend, resume));
+  Fake(Method(mockBackend, flush));
+  Fake(Method(mockBackend, drain));
+  Fake(Method(mockBackend, stop));
+  Fake(Method(mockBackend, close));
+  Fake(Method(mockBackend, setExclusiveMode));
+  When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(true);
+  When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::AlsaExclusive);
+  When(Method(mockBackend, lastError)).AlwaysReturn("");
+
+  auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
+  auto engine = PlaybackEngine(std::move(backendPtr), device, dispatcher);
+
+  TrackPlaybackDescriptor descriptor;
+  descriptor.filePath = testFile.string();
+  descriptor.title = "Unsupported Sample Rate";
+  descriptor.artist = "Test Artist";
+
+  engine.play(descriptor);
+
+  auto const snap = engine.snapshot();
+  REQUIRE(snap.state == TransportState::Error);
+  CHECK(snap.statusText.find("no resampler yet") != std::string::npos);
+  REQUIRE(openedFormats.size() == 1);
+  CHECK(openedFormats.front().sampleRate == 0);
 }
