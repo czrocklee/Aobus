@@ -30,7 +30,7 @@ namespace app::core
     auto trackWriter = _ml.tracks().writer(txn);
     auto& dict = _ml.dictionary();
 
-    for (auto i = 0u; i < _files.size(); ++i)
+    for (auto i = 0U; i < _files.size(); ++i)
     {
       try
       {

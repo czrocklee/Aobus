@@ -84,8 +84,7 @@ namespace rs::core
         out << YAML::Key << "totalDiscs" << YAML::Value << metadata.totalDiscs();
       }
 
-      auto const custom = view.custom();
-      if (!custom.empty())
+      if (auto const custom = view.custom(); !custom.empty())
       {
         out << YAML::Key << "custom" << YAML::Value << YAML::BeginMap;
         for (auto const& [dictId, value] : custom)

@@ -80,6 +80,12 @@ namespace app::ui
       std::string currentDeviceId;
       std::vector<app::core::playback::BackendSnapshot> availableBackends;
     } _lastPlaybackState;
+
+    // Layout constants
+    static constexpr int kOutputScrolledMinHeight = 320;
+    static constexpr int kOutputScrolledMinWidth = 360;
+    static constexpr int kImportProgressWidth = 200;
+    static constexpr int kTransitionDurationMs = 250;
   };
 
 } // namespace app::ui

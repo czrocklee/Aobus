@@ -28,6 +28,7 @@
 #include "platform/linux/services/PlaylistExporter.h"
 #include "platform/linux/ui/CoverArtWidget.h"
 #include "platform/linux/ui/ImportProgressDialog.h"
+#include "platform/linux/ui/LayoutConstants.h"
 #include "platform/linux/ui/ListRow.h"
 #include "platform/linux/ui/ListTreeNode.h"
 #include "platform/linux/ui/PlaybackBar.h"
@@ -99,7 +100,7 @@ namespace app::ui
 
     bool hasTagName(std::vector<std::string_view> const& tagNames, std::string_view tag)
     {
-      return std::ranges::find(tagNames, tag) != tagNames.end();
+      return std::ranges::contains(tagNames, tag);
     }
 
     std::string tagChangeStatusMessage(std::size_t selectionCount, std::size_t addCount, std::size_t removeCount)
@@ -190,7 +191,7 @@ namespace app::ui
       {
         auto const columnId = std::string{app::ui::trackColumnId(entry.column)};
 
-        if (std::ranges::find(state.hiddenColumns, columnId) != state.hiddenColumns.end())
+        if (std::ranges::contains(state.hiddenColumns, columnId))
         {
           entry.visible = false;
         }
@@ -201,7 +202,7 @@ namespace app::ui
         }
       }
 
-      return app::ui::normalizeTrackColumnLayout(std::move(layout));
+      return app::ui::normalizeTrackColumnLayout(layout);
     }
 
     app::core::TrackViewState trackViewStateFromLayout(app::ui::TrackColumnLayout const& layout)
@@ -242,7 +243,6 @@ namespace app::ui
     , _listTreeStore{nullptr}
     , _treeListModel{nullptr}
     , _listSelectionModel{nullptr}
-    , _trackPages{}
     , _playbackBar{nullptr}
     , _playbackController{nullptr}
   {
@@ -286,10 +286,9 @@ namespace app::ui
                           {
                             try
                             {
-                              auto folder = dialog->select_folder_finish(result);
-                              if (auto const folderPath = folder; folderPath)
+                              if (auto const folder = dialog->select_folder_finish(result); folder)
                               {
-                                std::filesystem::path path(folderPath->get_path());
+                                std::filesystem::path path(folder->get_path());
                                 APP_LOG_DEBUG("Selected folder: {}", path.string());
 
                                 // Check if it's an existing library (contains data.mdb) or a new import
@@ -374,9 +373,9 @@ namespace app::ui
         if (entry.is_regular_file())
         {
           auto ext = entry.path().extension().string();
-          std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return std::tolower(c); });
+          std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return std::tolower(ch); });
 
-          if (std::ranges::find(kSupportedExtensions, ext) != kSupportedExtensions.end())
+          if (std::ranges::contains(kSupportedExtensions, ext))
           {
             files.push_back(entry.path());
           }
@@ -401,106 +400,101 @@ namespace app::ui
       {
         try
         {
-          auto folder = dialog->select_folder_finish(result);
-
-          if (!folder)
+          if (auto const folder = dialog->select_folder_finish(result); folder)
           {
-            return;
-          }
+            auto const pathStr = folder->get_path();
+            auto const path = std::filesystem::path{pathStr};
+            APP_LOG_INFO("Importing from: {}", pathStr);
 
-          auto pathStr = folder->get_path();
-          auto path = std::filesystem::path{pathStr};
-          APP_LOG_INFO("Importing from: {}", pathStr);
-
-          // If no library exists, create one at the import path
-
-          if (!_musicLibrary)
-          {
-            _musicLibrary = std::make_unique<rs::core::MusicLibrary>(pathStr);
-            set_title("RockStudio [" + pathStr + "]");
-          }
-
-          // Scan for music files
-          auto files = std::vector<std::filesystem::path>{};
-          scanDirectory(path, files);
-
-          if (files.empty())
-          {
-            APP_LOG_ERROR("No music files found");
-            return;
-          }
-
-          // Create progress dialog owned by MainWindow (stored as member)
-          _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), *this);
-          auto* dialogPtr = _importDialog.get();
-          _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
-
-          // Create worker - owned by MainWindow
-          _importWorker = std::make_unique<app::core::ImportWorker>(
-            *_musicLibrary,
-            files,
-            [this, dialogPtr](std::filesystem::path const& path, int index)
+            // If no library exists, create one at the import path
+            if (!_musicLibrary)
             {
-              // Progress callback - marshal to main thread
-              Glib::MainContext::get_default()->invoke(
-                [this, dialogPtr, path, index]()
-                {
-                  if (dialogPtr)
-                  {
-                    dialogPtr->onNewTrack(path.string(), index);
-                  }
+              _musicLibrary = std::make_unique<rs::core::MusicLibrary>(pathStr);
+              set_title("RockStudio [" + pathStr + "]");
+            }
 
-                  auto fraction = static_cast<double>(index) / static_cast<double>(_importWorker->fileCount());
-                  updateImportProgress(fraction, "Importing: " + path.filename().string());
+            // Scan for music files
+            auto files = std::vector<std::filesystem::path>{};
+            scanDirectory(path, files);
 
-                  return false;
-                });
-            },
-            [this, dialogPtr]()
+            if (files.empty())
             {
-              // Finished callback - marshal to main thread
-              Glib::MainContext::get_default()->invoke(
-                [this, dialogPtr]()
-                {
-                  if (dialogPtr)
+              APP_LOG_ERROR("No music files found");
+              return;
+            }
+
+            // Create progress dialog owned by MainWindow (stored as member)
+            _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), *this);
+            auto* dialogPtr = _importDialog.get();
+            _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
+
+            // Create worker - owned by MainWindow
+            _importWorker = std::make_unique<app::core::ImportWorker>(
+              *_musicLibrary,
+              files,
+              [this, dialogPtr](std::filesystem::path const& filePath, int index)
+              {
+                // Progress callback - marshal to main thread
+                Glib::MainContext::get_default()->invoke(
+                  [this, dialogPtr, filePath, index]()
                   {
-                    dialogPtr->ready();
-                  }
+                    if (dialogPtr)
+                    {
+                      dialogPtr->onNewTrack(filePath.string(), index);
+                    }
 
-                  updateImportProgress(1.0, "Import complete");
+                    auto fraction = static_cast<double>(index) / static_cast<double>(_importWorker->fileCount());
+                    updateImportProgress(fraction, "Importing: " + filePath.filename().string());
 
-                  return false;
-                });
-            });
+                    return false;
+                  });
+              },
+              [this, dialogPtr]()
+              {
+                // Finished callback - marshal to main thread
+                Glib::MainContext::get_default()->invoke(
+                  [this, dialogPtr]()
+                  {
+                    if (dialogPtr)
+                    {
+                      dialogPtr->ready();
+                    }
 
-          // Run in background thread - owned and joined on window destruction
-          auto* workerPtr = _importWorker.get();
+                    updateImportProgress(1.0, "Import complete");
 
-          if (_importThread.joinable())
-          {
-            _importThread.join();
+                    return false;
+                  });
+              });
+
+            // Run in background thread - owned and joined on window destruction
+            auto* workerPtr = _importWorker.get();
+
+            if (_importThread.joinable())
+            {
+              _importThread.join();
+            }
+
+            _importThread = std::jthread(
+              [this, workerPtr]([[maybe_unused]] std::stop_token const& stoken)
+              {
+                app::core::util::setCurrentThreadName("FileImport");
+                workerPtr->run();
+                // After import completes, notify observers incrementally
+                Glib::MainContext::get_default()->invoke(
+                  [this, workerPtr]()
+                  {
+                    auto const& res = workerPtr->result();
+                    for (auto const trackId : res.insertedIds)
+                    {
+                      _rowDataProvider->invalidate(trackId);
+                      _allTrackIds->notifyInserted(trackId);
+                    }
+                    return false;
+                  });
+              });
+
+            _importDialog->show();
           }
-
-          _importThread = std::jthread(
-            [this, workerPtr]([[maybe_unused]] std::stop_token stoken)
-            {
-              app::core::util::setCurrentThreadName("FileImport");
-              workerPtr->run();
-              // After import completes, notify observers incrementally
-              Glib::MainContext::get_default()->invoke(
-                [this, workerPtr]()
-                {
-                  auto const& result = workerPtr->result();
-                  for (auto const trackId : result.insertedIds)
-                  {
-                    _rowDataProvider->invalidate(trackId);
-                    _allTrackIds->notifyInserted(trackId);
-                  }
-                  return false;
-                });
-            });
-
-          _importDialog->show();
         }
         catch (Glib::Error const& e)
         {
@@ -578,7 +572,7 @@ namespace app::ui
     }
 
     _importThread = std::jthread(
-      [this, workerPtr]([[maybe_unused]] std::stop_token stoken)
+      [this, workerPtr]([[maybe_unused]] std::stop_token const& stoken)
       {
         workerPtr->run();
         // After import completes, notify observers incrementally
@@ -612,8 +606,8 @@ namespace app::ui
     dialog->set_modal(true);
 
     auto* content = dialog->get_content_area();
-    auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
-    box->set_margin(12);
+    auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, Layout::kMarginMedium);
+    box->set_margin(Layout::kMarginMedium);
 
     auto* label = Gtk::make_managed<Gtk::Label>("Choose what to include in the backup:");
     label->set_halign(Gtk::Align::START);
@@ -646,6 +640,7 @@ namespace app::ui
           case 0: mode = rs::core::ExportMode::Minimum; break;
           case 1: mode = rs::core::ExportMode::Metadata; break;
           case 2: mode = rs::core::ExportMode::Full; break;
+          default: break;
         }
 
         dialog->close();
@@ -705,8 +700,13 @@ namespace app::ui
                                })
                                .detach();
                            }
+                           catch (std::exception const& e)
+                           {
+                             APP_LOG_ERROR("Library export error: {}", e.what());
+                           }
                            catch (...)
                            {
+                             APP_LOG_ERROR("Unknown library export error");
                            }
                          });
       });
@@ -778,8 +778,13 @@ namespace app::ui
                              .detach();
                          }
                        }
+                       catch (std::exception const& e)
+                       {
+                         APP_LOG_ERROR("Library import error: {}", e.what());
+                       }
                        catch (...)
                        {
+                         APP_LOG_ERROR("Unknown library import error");
                        }
                      });
   }
@@ -957,10 +962,10 @@ namespace app::ui
         auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
         rowBox->set_halign(Gtk::Align::FILL);
         rowBox->set_hexpand(true);
-        rowBox->set_margin_start(6);
-        rowBox->set_margin_end(6);
-        rowBox->set_margin_top(3);
-        rowBox->set_margin_bottom(3);
+        rowBox->set_margin_start(Layout::kMarginMedium);
+        rowBox->set_margin_end(Layout::kMarginMedium);
+        rowBox->set_margin_top(Layout::kMarginSmall);
+        rowBox->set_margin_bottom(Layout::kMarginSmall);
 
         auto* expander = Gtk::make_managed<Gtk::TreeExpander>();
         rowBox->append(*expander);
@@ -972,7 +977,7 @@ namespace app::ui
         auto* filterLabel = Gtk::make_managed<Gtk::Label>("");
         filterLabel->set_halign(Gtk::Align::START);
         filterLabel->add_css_class("dim-label");
-        filterLabel->set_margin_start(6);
+        filterLabel->set_margin_start(Layout::kMarginMedium);
         filterLabel->set_ellipsize(Pango::EllipsizeMode::END);
         filterLabel->set_hexpand(true);
         rowBox->append(*filterLabel);
@@ -980,15 +985,15 @@ namespace app::ui
         auto clickController = Gtk::GestureClick::create();
         clickController->set_button(GDK_BUTTON_SECONDARY);
         clickController->signal_pressed().connect(
-          [this, listItem, rowBox](int /*nPress*/, double x, double y)
+          [this, listItem, rowBox](int /*nPress*/, double xPos, double yPos)
           {
             if (auto const position = listItem->get_position(); position != GTK_INVALID_LIST_POSITION)
             {
               _listSelectionModel->set_selected(position);
             }
 
-            auto point =
-              rowBox->compute_point(_listView, Gdk::Graphene::Point(static_cast<float>(x), static_cast<float>(y)));
+            auto point = rowBox->compute_point(
+              _listView, Gdk::Graphene::Point(static_cast<float>(xPos), static_cast<float>(yPos)));
 
             if (!point)
             {
@@ -1020,10 +1025,10 @@ namespace app::ui
         }
 
         auto row = node->getRow();
-        auto box = dynamic_cast<Gtk::Box*>(listItem->get_child());
-        auto expander = box ? dynamic_cast<Gtk::TreeExpander*>(box->get_first_child()) : nullptr;
-        auto label = expander ? dynamic_cast<Gtk::Label*>(expander->get_next_sibling()) : nullptr;
-        auto filterLabel = label ? dynamic_cast<Gtk::Label*>(label->get_next_sibling()) : nullptr;
+        auto* box = dynamic_cast<Gtk::Box*>(listItem->get_child());
+        auto* expander = box ? dynamic_cast<Gtk::TreeExpander*>(box->get_first_child()) : nullptr;
+        auto* label = expander ? dynamic_cast<Gtk::Label*>(expander->get_next_sibling()) : nullptr;
+        auto* filterLabel = label ? dynamic_cast<Gtk::Label*>(label->get_next_sibling()) : nullptr;
 
         if (expander)
         {
@@ -1074,7 +1079,7 @@ namespace app::ui
     // Cover art widget (min 50x50)
     _coverArtWidget->set_valign(Gtk::Align::END);
     _coverArtWidget->set_halign(Gtk::Align::FILL);
-    _coverArtWidget->set_size_request(50, 50);
+    _coverArtWidget->set_size_request(kCoverArtSize, kCoverArtSize);
     _coverArtWidget->set_vexpand(false);
     _coverArtWidget->set_hexpand(false);
 
@@ -1601,11 +1606,12 @@ namespace app::ui
         updateCoverArt(ids);
         onTrackSelectionChanged();
       });
-    trackPage->signalContextMenuRequested().connect([this, trackPagePtr = trackPage.get()](double x, double y)
-                                                    { showTrackContextMenu(*trackPagePtr, x, y); });
+    trackPage->signalContextMenuRequested().connect([this, trackPagePtr = trackPage.get()](double xPos, double yPos)
+                                                    { showTrackContextMenu(*trackPagePtr, xPos, yPos); });
     trackPage->signalTagEditRequested().connect(
-      [this, trackPagePtr = trackPage.get()](std::vector<rs::core::TrackId> ids, double x, double y)
-      { showTagEditor(*trackPagePtr, ids, x, y); });
+      [this, trackPagePtr = trackPage.get()](
+        std::vector<rs::core::TrackId> const& selectedIds, double xPos, double yPos)
+      { showTagEditor(*trackPagePtr, selectedIds, xPos, yPos); });
 
     // Connect track activation to playback
     bindTrackPagePlayback(*trackPage);
@@ -1689,11 +1695,12 @@ namespace app::ui
         updateCoverArt(ids);
         onTrackSelectionChanged();
       });
-    trackPage->signalContextMenuRequested().connect([this, trackPagePtr = trackPage.get()](double x, double y)
-                                                    { showTrackContextMenu(*trackPagePtr, x, y); });
+    trackPage->signalContextMenuRequested().connect([this, trackPagePtr = trackPage.get()](double xPos, double yPos)
+                                                    { showTrackContextMenu(*trackPagePtr, xPos, yPos); });
     trackPage->signalTagEditRequested().connect(
-      [this, trackPagePtr = trackPage.get()](std::vector<rs::core::TrackId> ids, double x, double y)
-      { showTagEditor(*trackPagePtr, ids, x, y); });
+      [this, trackPagePtr = trackPage.get()](
+        std::vector<rs::core::TrackId> const& selectedIds, double xPos, double yPos)
+      { showTagEditor(*trackPagePtr, selectedIds, xPos, yPos); });
 
     // Connect track activation to playback
     bindTrackPagePlayback(*trackPage);
@@ -1740,7 +1747,7 @@ namespace app::ui
     add_action(_trackTagRemoveAction);
   }
 
-  void MainWindow::showTrackContextMenu(TrackViewPage& page, double x, double y)
+  void MainWindow::showTrackContextMenu(TrackViewPage& page, double xPos, double yPos)
   {
     if (!_musicLibrary)
     {
@@ -1763,10 +1770,13 @@ namespace app::ui
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
     // Show the popover anchored to the right-click position
-    page.showTagPopover(*tagPopover, x, y);
+    page.showTagPopover(*tagPopover, xPos, yPos);
   }
 
-  void MainWindow::showTagEditor(TrackViewPage& page, std::vector<rs::core::TrackId> selectedIds, double x, double y)
+  void MainWindow::showTagEditor(TrackViewPage& page,
+                                 std::vector<rs::core::TrackId> const& selectedIds,
+                                 double xPos,
+                                 double yPos)
   {
     if (!_musicLibrary)
     {
@@ -1788,7 +1798,7 @@ namespace app::ui
 
     // Show popover at mouse position
     tagPopover->set_parent(page.getColumnView());
-    auto rect = Gdk::Rectangle{static_cast<int>(x), static_cast<int>(y), 1, 1};
+    auto rect = Gdk::Rectangle{static_cast<int>(xPos), static_cast<int>(yPos), 1, 1};
     tagPopover->set_pointing_to(rect);
     tagPopover->popup();
   }
@@ -1813,7 +1823,7 @@ namespace app::ui
 
     auto* ctx = currentVisibleTrackPageContext();
 
-    if (!ctx)
+    if (ctx == nullptr)
     {
       return;
     }
@@ -1988,7 +1998,7 @@ namespace app::ui
   {
     auto* ctx = currentVisibleTrackPageContext();
 
-    if (!ctx || !ctx->page)
+    if (ctx == nullptr || ctx->page == nullptr)
     {
       if (_statusBar)
       {
@@ -2163,7 +2173,7 @@ namespace app::ui
         if (!snapshot.statusText.empty() && snapshot.statusText != _lastPlaybackErrorMessage)
         {
           _lastPlaybackErrorMessage = snapshot.statusText;
-          _statusBar->showMessage(snapshot.statusText, std::chrono::seconds{10});
+          _statusBar->showMessage(snapshot.statusText, std::chrono::seconds{10}); // NOLINT(readability-magic-numbers)
         }
       }
       else
@@ -2187,7 +2197,7 @@ namespace app::ui
 
       auto const* ctx = currentVisibleTrackPageContext();
 
-      if (ctx && ctx->page)
+      if (ctx != nullptr && ctx->page != nullptr)
       {
         if (auto const trackId = ctx->page->getPrimarySelectedTrackId(); trackId)
         {
@@ -2237,7 +2247,7 @@ namespace app::ui
 
       auto const* ctx = currentVisibleTrackPageContext();
 
-      if (ctx && ctx->page)
+      if (ctx != nullptr && ctx->page != nullptr)
       {
         if (auto const trackId = ctx->page->getPrimarySelectedTrackId(); trackId)
         {
@@ -2407,7 +2417,7 @@ namespace app::ui
   {
     auto const* ctx = currentVisibleTrackPageContext();
 
-    if (!ctx || !ctx->page)
+    if (ctx == nullptr || ctx->page == nullptr)
     {
       return std::nullopt;
     }
@@ -2434,12 +2444,12 @@ namespace app::ui
   {
     auto* visibleChild = _stack.get_visible_child();
 
-    if (!visibleChild)
+    if (visibleChild == nullptr)
     {
       return nullptr;
     }
 
-    for (auto& [_, ctx] : _trackPages)
+    for (auto& [listId, ctx] : _trackPages)
     {
       if (ctx.page.get() == visibleChild)
       {
@@ -2454,11 +2464,12 @@ namespace app::ui
   {
     auto const* visibleChild = _stack.get_visible_child();
 
-    if (!visibleChild)
+    if (visibleChild == nullptr)
     {
       return nullptr;
     }
 
+    // NOLINTNEXTLINE(readability-identifier-length)
     for (auto const& [_, ctx] : _trackPages)
     {
       if (ctx.page.get() == visibleChild)

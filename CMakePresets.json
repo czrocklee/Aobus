@@ -7,7 +7,6 @@
       "binaryDir": "/tmp/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_VERBOSE_MAKEFILE" : "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -Wno-error"
       }
@@ -18,7 +17,6 @@
       "binaryDir": "/tmp/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_VERBOSE_MAKEFILE" : "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
@@ -28,7 +26,6 @@
       "binaryDir": "/tmp/pgo-build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_VERBOSE_MAKEFILE" : "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_CXX_FLAGS": "-fprofile-generate -fprofile-arcs -O2 -g -fno-omit-frame-pointer -Wno-error",
         "CMAKE_EXE_LINKER_FLAGS": "-fprofile-arcs"
@@ -40,7 +37,6 @@
       "binaryDir": "/tmp/pgo-build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_VERBOSE_MAKEFILE" : "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_CXX_FLAGS": "-fprofile-use -fprofile-correction -O3 -g -fno-omit-frame-pointer -Wno-error",
         "CMAKE_EXE_LINKER_FLAGS": "-fprofile-use"
@@ -53,7 +49,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_CXX_FLAGS": "-fno-omit-frame-pointer",
-        "CMAKE_VERBOSE_MAKEFILE": "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     }

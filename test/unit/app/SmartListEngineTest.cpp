@@ -548,8 +548,8 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     CHECK(spy.events[0].kind == ObserverSpy::EventKind::BatchInserted);
     // t1 should be filtered out
     REQUIRE(spy.events[0].batchIds.size() == 2);
-    CHECK(std::ranges::find(spy.events[0].batchIds, t2) != spy.events[0].batchIds.end());
-    CHECK(std::ranges::find(spy.events[0].batchIds, t3) != spy.events[0].batchIds.end());
+    CHECK(std::ranges::contains(spy.events[0].batchIds, t2));
+    CHECK(std::ranges::contains(spy.events[0].batchIds, t3));
     CHECK(list.size() == 2);
 
     spy.clear();

@@ -88,7 +88,7 @@ namespace app::ui
 
     // Track context menu (tagging)
     void showTrackContextMenu(TrackViewPage& page, double x, double y);
-    void showTagEditor(TrackViewPage& page, std::vector<rs::core::TrackId> selectedIds, double x, double y);
+    void showTagEditor(TrackViewPage& page, std::vector<rs::core::TrackId> const& selectedIds, double x, double y);
     void addTagToCurrentSelection(std::string const& tag);
     void removeTagFromCurrentSelection(std::string const& tag);
     void applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
@@ -221,6 +221,9 @@ namespace app::ui
 
     // Status bar
     std::unique_ptr<StatusBar> _statusBar;
+
+    // Layout constants
+    static constexpr int kCoverArtSize = 50;
   };
 
 } // namespace app::ui

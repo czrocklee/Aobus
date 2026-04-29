@@ -18,8 +18,8 @@ namespace rs::tool
   {
     using namespace rs;
 
-    std::vector<std::pair<core::TrackId, core::TrackView>> collectTracks(
-        core::MusicLibrary& ml, std::string const& filter)
+    std::vector<std::pair<core::TrackId, core::TrackView>> collectTracks(core::MusicLibrary& ml,
+                                                                         std::string const& filter)
     {
       auto txn = ml.readTransaction();
       auto reader = ml.tracks().reader(txn);
@@ -27,7 +27,10 @@ namespace rs::tool
 
       if (filter.empty())
       {
-        for (auto [id, view] : reader) { matches.emplace_back(id, std::move(view)); }
+        for (auto [id, view] : reader)
+        {
+          matches.emplace_back(id, std::move(view));
+        }
         return matches;
       }
 
@@ -38,7 +41,10 @@ namespace rs::tool
 
       for (auto [id, view] : reader)
       {
-        if (evaluator.matches(plan, view)) { matches.emplace_back(id, std::move(view)); }
+        if (evaluator.matches(plan, view))
+        {
+          matches.emplace_back(id, std::move(view));
+        }
       }
       return matches;
     }
@@ -62,21 +68,24 @@ namespace rs::tool
       {
         auto const& [id, view] = matches[i];
         os << "  {\"id\": " << id << ", \"title\": \"" << view.metadata().title() << "\"";
-        
+
         if (view.metadata().artistId() > 0)
         {
           os << ", \"artist\": \"" << ml.dictionary().get(view.metadata().artistId()) << "\"";
         }
-        
+
         if (view.metadata().albumId() > 0)
         {
           os << ", \"album\": \"" << ml.dictionary().get(view.metadata().albumId()) << "\"";
         }
-        
+
         os << "}";
-        
-        if (i < end - 1) { os << ","; }
-        
+
+        if (i < end - 1)
+        {
+          os << ",";
+        }
+
         os << "\n";
       }
 
@@ -88,15 +97,17 @@ namespace rs::tool
                      std::size_t limit,
                      std::ostream& os)
     {
-      if (offset >= matches.size()) { return; }
+      if (offset >= matches.size())
+      {
+        return;
+      }
 
       std::size_t end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
 
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& [id, view] = matches[i];
-        os << std::setw(5) << id << " " << view.metadata().title()
-           << '\n'; // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+        os << std::setw(5) << id << " " << view.metadata().title() << '\n'; // NOLINT(readability-magic-numbers)
       }
 
       if (limit > 0 && offset + limit < matches.size())
@@ -127,7 +138,7 @@ namespace rs::tool
     void createTrack(core::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
     {
       auto tagFile = tag::File::open(path);
-      
+
       if (!tagFile)
       {
         os << "unsupported file format: " << path << '\n';
@@ -144,12 +155,13 @@ namespace rs::tool
 
       auto [preparedHot, preparedCold] = builder.prepare(txn, ml.dictionary(), ml.resources());
       auto [id, trackView] = writer.createHotCold(
-          preparedHot.size(),
-          preparedCold.size(),
-          [&preparedHot, &preparedCold](core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
-              preparedHot.writeTo(hot);
-              preparedCold.writeTo(cold);
-          });
+        preparedHot.size(),
+        preparedCold.size(),
+        [&preparedHot, &preparedCold](core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+        {
+          preparedHot.writeTo(hot);
+          preparedCold.writeTo(cold);
+        });
       txn.commit();
 
       os << "add track: " << id << " " << trackView.metadata().title() << '\n';
@@ -188,7 +200,7 @@ namespace rs::tool
         auto txn = ml.writeTransaction();
         auto writer = ml.tracks().writer(txn);
         auto const trackId = core::TrackId{id->as<std::uint32_t>()};
-        
+
         if (writer.remove(trackId))
         {
           std::cout << "deleted track: " << trackId << '\n';
@@ -198,7 +210,6 @@ namespace rs::tool
         {
           std::cout << "track not found: " << trackId << '\n';
         }
-      
       });
   }
 }

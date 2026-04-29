@@ -14,12 +14,6 @@
 namespace app::core::source
 {
 
-  struct PcmSourceCallbacks final
-  {
-    void* userData = nullptr;
-    void (*onError)(void* userData, std::string_view message) noexcept = nullptr;
-  };
-
   class IPcmSource
   {
   public:

@@ -134,4 +134,20 @@ namespace rs::utility
       return (static_cast<std::uint64_t>(hi) << 32) | lo;
     }
   }
+
+  /**
+   * Explicitly unchecked downcast. Use when the derived type is guaranteed
+   * by the application logic and performance is preferred over RTTI overhead.
+   */
+  template<typename T, typename U>
+  inline T* unsafeDowncast(U* ptr) noexcept
+  {
+    return static_cast<T*>(ptr); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+  }
+
+  template<typename T, typename U>
+  inline T& unsafeDowncast(U& ref) noexcept
+  {
+    return static_cast<T&>(ref); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+  }
 }

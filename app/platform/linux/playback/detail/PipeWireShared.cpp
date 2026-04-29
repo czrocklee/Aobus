@@ -18,6 +18,11 @@ namespace app::playback::detail
     {
       PwInitGuard() { ::pw_init(nullptr, nullptr); }
       ~PwInitGuard() { ::pw_deinit(); }
+
+      PwInitGuard(PwInitGuard const&) = delete;
+      PwInitGuard& operator=(PwInitGuard const&) = delete;
+      PwInitGuard(PwInitGuard&&) = delete;
+      PwInitGuard& operator=(PwInitGuard&&) = delete;
     };
     static PwInitGuard guard;
   }

@@ -20,7 +20,7 @@ namespace app::core::model
       _trackIds.push_back(id);
     }
 
-    if (_source)
+    if (_source != nullptr)
     {
       _source->attach(this);
     }
@@ -30,7 +30,7 @@ namespace app::core::model
 
   ManualTrackIdList::~ManualTrackIdList()
   {
-    if (_source)
+    if (_source != nullptr)
     {
       _source->detach(this);
     }
@@ -43,7 +43,7 @@ namespace app::core::model
 
     for (auto const& id : view.tracks())
     {
-      if (!_source || _source->indexOf(id))
+      if (_source == nullptr || _source->indexOf(id))
       {
         _trackIds.push_back(id);
       }
@@ -54,7 +54,7 @@ namespace app::core::model
 
   void ManualTrackIdList::onReset()
   {
-    if (!_source)
+    if (_source == nullptr)
     {
       return;
     }
@@ -89,7 +89,7 @@ namespace app::core::model
 
   void ManualTrackIdList::onRemoved(TrackId id, std::size_t /*index*/)
   {
-    if (auto it = std::find(_trackIds.begin(), _trackIds.end(), id); it != _trackIds.end())
+    if (auto it = std::ranges::find(_trackIds, id); it != _trackIds.end())
     {
       auto const myIndex = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
       _trackIds.erase(it);
@@ -125,7 +125,7 @@ namespace app::core::model
 
     for (auto id : ids)
     {
-      auto it = std::find(_trackIds.begin(), _trackIds.end(), id);
+      auto it = std::ranges::find(_trackIds, id);
 
       if (it != _trackIds.end())
       {
@@ -142,12 +142,12 @@ namespace app::core::model
 
   bool ManualTrackIdList::contains(TrackId id) const
   {
-    return std::find(_trackIds.begin(), _trackIds.end(), id) != _trackIds.end();
+    return std::ranges::contains(_trackIds, id);
   }
 
   std::optional<std::size_t> ManualTrackIdList::indexOf(TrackId id) const
   {
-    auto const it = std::find(_trackIds.begin(), _trackIds.end(), id);
+    auto const it = std::ranges::find(_trackIds, id);
 
     if (it == _trackIds.end())
     {

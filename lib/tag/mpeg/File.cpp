@@ -26,7 +26,7 @@ namespace rs::tag::mpeg
     // 1. Try to parse ID3v2 tag at the beginning
 
     if (_mappedRegion.get_size() >= sizeof(id3v2::HeaderLayout) &&
-        std::memcmp(_mappedRegion.get_address(), "ID3", 3) == 0)
+        std::memcmp(_mappedRegion.get_address(), "ID3", sizeof("ID3") - 1) == 0)
     {
       auto const* id3v2Header = static_cast<id3v2::HeaderLayout const*>(_mappedRegion.get_address());
       std::size_t const id3v2BodySize = id3v2::decodeSize(id3v2Header->size);
@@ -35,7 +35,7 @@ namespace rs::tag::mpeg
       // Handle ID3v2.4 footer (10 bytes if flag 0x10 is set)
       constexpr std::size_t kId3v2FooterSize = 10;
       constexpr std::uint8_t kId3v2FooterFlag = 0x10;
-      if (id3v2Header->majorVersion >= 4 && (id3v2Header->flags & kId3v2FooterFlag))
+      if (id3v2Header->majorVersion >= 4 && (id3v2Header->flags & kId3v2FooterFlag) != 0)
       {
         id3v2TotalSize += kId3v2FooterSize;
       }
@@ -56,7 +56,7 @@ namespace rs::tag::mpeg
     {
       auto const* end = static_cast<std::uint8_t const*>(_mappedRegion.get_address()) + _mappedRegion.get_size();
 
-      if (std::memcmp(end - kId3v1TagSize, "TAG", 3) == 0)
+      if (std::memcmp(end - kId3v1TagSize, "TAG", sizeof("TAG") - 1) == 0)
       {
         audioSize -= kId3v1TagSize;
         hasId3v1 = true;

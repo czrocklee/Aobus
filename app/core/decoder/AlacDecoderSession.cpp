@@ -17,11 +17,14 @@ namespace app::core::decoder
 
   namespace
   {
+    constexpr std::uint32_t kSignExtensionMask = 0xFF000000U;
+    constexpr std::uint8_t kBytesPer24BitSample = 3;
+
     std::uint32_t bytesPerSample(std::uint8_t bitDepth) noexcept
     {
       if (bitDepth == 24U)
       {
-        return 3;
+        return kBytesPer24BitSample;
       }
 
       if (bitDepth == 32U)
@@ -207,13 +210,14 @@ namespace app::core::decoder
         auto* dst = reinterpret_cast<std::int32_t*>(targetPcm.data());
         for (std::uint32_t i = 0; i < numFrames * channels; ++i)
         {
-          std::int32_t val = src[0] | (src[1] << 8) | (src[2] << 16);
-          if (val & 0x800000)
+          std::int32_t val = static_cast<std::int32_t>(src[0]) | (static_cast<std::int32_t>(src[1]) << 8) |
+                             (static_cast<std::int32_t>(src[2]) << 16);
+          if ((val & 0x800000) != 0)
           {
-            val |= 0xFF000000;
+            val |= kSignExtensionMask;
           }
           *dst++ = val;
-          src += 3;
+          src += kBytesPer24BitSample;
         }
       }
       else
@@ -249,7 +253,7 @@ namespace app::core::decoder
       }
 
       auto block = PcmBlock{};
-      decodedPcm.resize(numFrames * targetBytesPerFrame);
+      decodedPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
       block.bytes = std::move(decodedPcm);
       block.frames = numFrames;
       block.bitDepth = targetBps;

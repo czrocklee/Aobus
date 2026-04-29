@@ -29,6 +29,7 @@ namespace app::playback
 
     rs::Result<> open(app::core::AudioFormat const& format,
                       app::core::backend::AudioRenderCallbacks callbacks) override;
+    void reset() override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -52,7 +53,7 @@ namespace app::playback
     };
     using AlsaPcmPtr = std::unique_ptr<::snd_pcm_t, AlsaPcmDeleter>;
 
-    void playbackLoop(std::stop_token stopToken);
+    void playbackLoop(std::stop_token const& stopToken);
     void recoverFromXrun(int err);
 
     std::string _deviceName;

@@ -47,6 +47,10 @@ namespace app::ui
     std::vector<std::string> _availableCustomKeys;
     std::int32_t _completionTokenStart = -1;
     bool _suppressNextCompletionUpdate = false;
+
+    // Layout constants
+    static constexpr int kCompletionWidth = 260;
+    static constexpr int kCompletionHeight = 180;
   };
 
 } // namespace app::ui

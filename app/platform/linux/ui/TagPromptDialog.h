@@ -66,6 +66,10 @@ namespace app::ui
     Gtk::Box _suggestionsBox{Gtk::Orientation::VERTICAL};
     Gtk::Button _okButton;
     Gtk::Button _cancelButton;
+
+    // Layout constants
+    static constexpr int kTagsScrolledMinHeight = 220;
+    static constexpr int kSuggestionsScrolledMinHeight = 96;
   };
 
 } // namespace app::ui

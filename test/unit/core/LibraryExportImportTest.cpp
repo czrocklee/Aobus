@@ -116,8 +116,8 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     auto tags = view.tags();
     std::vector<std::string> tagNames;
     for (auto tid : tags) tagNames.push_back(std::string(dict.get(tid)));
-    REQUIRE(std::ranges::find(tagNames, "rock") != tagNames.end());
-    REQUIRE(std::ranges::find(tagNames, "favorite") != tagNames.end());
+    REQUIRE(std::ranges::contains(tagNames, "rock"));
+    REQUIRE(std::ranges::contains(tagNames, "favorite"));
 
     // Check custom
     auto custom = view.custom();

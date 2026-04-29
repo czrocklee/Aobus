@@ -9,7 +9,6 @@ namespace app::core::source
 {
 
   PcmRingBuffer::PcmRingBuffer()
-    : _queue{}
   {
   }
 
@@ -42,7 +41,7 @@ namespace app::core::source
   void PcmRingBuffer::clear() noexcept
   {
     auto lock = std::lock_guard<std::mutex>{_mutex};
-    std::uint8_t dummy;
+    std::uint8_t dummy{};
 
     while (_queue.pop(dummy))
     {

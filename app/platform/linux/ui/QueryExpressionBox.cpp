@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/ui/QueryExpressionBox.h"
+#include "platform/linux/ui/LayoutConstants.h"
 
 #include <gdk/gdk.h>
 
@@ -149,9 +150,6 @@ namespace app::ui
 
   void QueryExpressionBox::setupCompletion()
   {
-    constexpr int kCompletionWidth = 260;
-    constexpr int kCompletionHeight = 180;
-
     _completionItems = Gtk::StringList::create();
     _completionSelection = Gtk::SingleSelection::create(_completionItems);
 
@@ -161,10 +159,10 @@ namespace app::ui
       {
         auto* label = Gtk::make_managed<Gtk::Label>("");
         label->set_halign(Gtk::Align::START);
-        label->set_margin_start(8);
-        label->set_margin_end(8);
-        label->set_margin_top(4);
-        label->set_margin_bottom(4);
+        label->set_margin_start(Layout::kSpacingLarge);
+        label->set_margin_end(Layout::kSpacingLarge);
+        label->set_margin_top(Layout::kMarginSmall);
+        label->set_margin_bottom(Layout::kMarginSmall);
         listItem->set_child(*label);
       });
 
@@ -174,7 +172,7 @@ namespace app::ui
         auto item = listItem->get_item();
         auto stringObject = std::dynamic_pointer_cast<Gtk::StringObject>(item);
 
-        if (auto label = dynamic_cast<Gtk::Label*>(listItem->get_child()); label != nullptr)
+        if (auto* label = dynamic_cast<Gtk::Label*>(listItem->get_child()); label != nullptr)
         {
           label->set_text(stringObject ? stringObject->get_string() : "");
         }
@@ -390,6 +388,7 @@ namespace app::ui
          iter != end;
          ++iter)
     {
+      // NOLINTNEXTLINE(readability-identifier-length)
       auto const& [_, view] = *iter;
 
       for (auto const tagId : view.tags())
@@ -400,6 +399,7 @@ namespace app::ui
         }
       }
 
+      // NOLINTNEXTLINE(readability-identifier-length)
       for (auto const& [dictId, _] : view.custom())
       {
         if (auto const key = dictionary.get(dictId); isQueryableIdentifier(key))

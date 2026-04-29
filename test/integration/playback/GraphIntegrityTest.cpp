@@ -79,7 +79,7 @@ TEST_CASE("PlaybackEngine - Graph Integrity", "[playback][integration][graph]")
   SECTION("rs-decoder has valid format")
   {
     auto snap = engine.snapshot();
-    auto it = std::ranges::find_if(snap.graph.nodes, [](auto const& n) { return n.id == "rs-decoder"; });
+    auto it = std::ranges::find(snap.graph.nodes, "rs-decoder", &app::core::backend::AudioNode::id);
     if (it != snap.graph.nodes.end())
     {
       REQUIRE(it->format.has_value());

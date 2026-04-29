@@ -71,7 +71,7 @@ namespace app::services
         writeFile();
         return false;
       },
-      3000));
+      3000)); // NOLINT(readability-magic-numbers)
   }
 
   void PlaylistExporter::writeFile()
@@ -96,12 +96,12 @@ namespace app::services
       {
         // Write path relative to playlist location
         auto relativePath = std::filesystem::relative(*optUri, _path.parent_path());
-        ofs << relativePath.string() << std::endl;
+        ofs << relativePath.string() << '\n';
       }
       else
       {
         // Fallback: write track ID as comment
-        ofs << "# track://" << id.value() << " (URI not found)" << std::endl;
+        ofs << "# track://" << id.value() << " (URI not found)" << '\n';
       }
     }
   }

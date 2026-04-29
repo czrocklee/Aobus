@@ -28,7 +28,7 @@ namespace
   {
     auto bytes = std::array<std::byte, kLibraryIdBytes>{};
     auto random = std::random_device{};
-    std::generate(bytes.begin(), bytes.end(), [&random]() { return static_cast<std::byte>(random()); });
+    std::ranges::generate(bytes, [&random]() { return static_cast<std::byte>(random()); });
     return bytes;
   }
 

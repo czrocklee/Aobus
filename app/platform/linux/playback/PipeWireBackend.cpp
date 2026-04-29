@@ -32,7 +32,10 @@ namespace app::playback
 
     ~Impl()
     {
-      if (_threadLoop) ::pw_thread_loop_stop(_threadLoop.get());
+      if (_threadLoop)
+      {
+        ::pw_thread_loop_stop(_threadLoop.get());
+      }
       _streamListener.reset();
       _stream.reset();
       _core.reset();
@@ -42,11 +45,22 @@ namespace app::playback
 
     void destroyStream()
     {
-      if (_threadLoop) ::pw_thread_loop_lock(_threadLoop.get());
+      if (_threadLoop)
+      {
+        ::pw_thread_loop_lock(_threadLoop.get());
+      }
       _streamListener.reset();
       _stream.reset();
-      if (_threadLoop) ::pw_thread_loop_unlock(_threadLoop.get());
+      if (_threadLoop)
+      {
+        ::pw_thread_loop_unlock(_threadLoop.get());
+      }
     }
+
+    Impl(Impl const&) = delete;
+    Impl& operator=(Impl const&) = delete;
+    Impl(Impl&&) = delete;
+    Impl& operator=(Impl&&) = delete;
 
     // Event Handlers
     void handleStreamProcess();
@@ -95,13 +109,13 @@ namespace app::playback
 
     ::pw_stream_events const streamEvents = []
     {
-      auto e = ::pw_stream_events{};
-      e.version = PW_VERSION_STREAM_EVENTS;
-      e.state_changed = onStreamStateChanged;
-      e.param_changed = onStreamParamChanged;
-      e.process = onStreamProcess;
-      e.drained = onStreamDrained;
-      return e;
+      auto ev = ::pw_stream_events{};
+      ev.version = PW_VERSION_STREAM_EVENTS;
+      ev.state_changed = onStreamStateChanged;
+      ev.param_changed = onStreamParamChanged;
+      ev.process = onStreamProcess;
+      ev.drained = onStreamDrained;
+      return ev;
     }();
   }
 
@@ -146,7 +160,7 @@ namespace app::playback
       buffer->buffer->datas[0].chunk->offset = 0;
       buffer->buffer->datas[0].chunk->size = 0;
       ::pw_stream_queue_buffer(_stream.get(), buffer);
-      if (_callbacks.isSourceDrained && _callbacks.isSourceDrained(_callbacks.userData))
+      if (_callbacks.isSourceDrained != nullptr && _callbacks.isSourceDrained(_callbacks.userData) != 0)
       {
         ::pw_stream_flush(_stream.get(), true);
       }
@@ -164,28 +178,29 @@ namespace app::playback
       _format = *negotiated;
       PLAYBACK_LOG_INFO(
         "Negotiated PipeWire format: {}Hz, {}b, {} channels", _format.sampleRate, _format.bitDepth, _format.channels);
-      if (_callbacks.onFormatChanged)
+      if (_callbacks.onFormatChanged != nullptr)
       {
         _callbacks.onFormatChanged(_callbacks.userData, _format);
       }
     }
   }
 
-  void PipeWireBackend::Impl::handleStreamStateChanged(enum pw_stream_state,
+  void PipeWireBackend::Impl::handleStreamStateChanged([[maybe_unused]] enum pw_stream_state oldState,
                                                        enum pw_stream_state newState,
                                                        char const* errorMessage)
   {
     if (newState == PW_STREAM_STATE_ERROR)
     {
       PLAYBACK_LOG_ERROR("PipeWire error: {}", errorMessage ? errorMessage : "Unknown PipeWire stream error");
-      if (_callbacks.onBackendError)
+      if (_callbacks.onBackendError != nullptr)
       {
-        _callbacks.onBackendError(_callbacks.userData, errorMessage ? errorMessage : "Unknown PipeWire stream error");
+        _callbacks.onBackendError(
+          _callbacks.userData, errorMessage != nullptr ? errorMessage : "Unknown PipeWire stream error");
       }
     }
     else if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
     {
-      if (!_routeAnchorReported && _callbacks.onRouteReady && _stream)
+      if (!_routeAnchorReported && _callbacks.onRouteReady != nullptr && _stream)
       {
         auto id = ::pw_stream_get_node_id(_stream.get());
         if (id != PW_ID_ANY)
@@ -200,7 +215,7 @@ namespace app::playback
   void PipeWireBackend::Impl::handleStreamDrained()
   {
     _drainPending = false;
-    if (_callbacks.onDrainComplete)
+    if (_callbacks.onDrainComplete != nullptr)
     {
       _callbacks.onDrainComplete(_callbacks.userData);
     }
@@ -230,12 +245,6 @@ namespace app::playback
   rs::Result<> PipeWireBackend::open(app::core::AudioFormat const& format,
                                      app::core::backend::AudioRenderCallbacks callbacks)
   {
-    if (format.sampleRate == 0)
-    {
-      _impl->_callbacks = {};
-      _impl->destroyStream();
-      return {};
-    }
     _impl->_callbacks = callbacks;
     _impl->_format = format;
     _impl->_routeAnchorReported = false;
@@ -290,12 +299,12 @@ namespace app::playback
       spaFmt = SPA_AUDIO_FORMAT_S24_LE;
     }
 
-    std::uint8_t buffer[1024];
-    ::spa_pod_builder b = {};
-    ::spa_pod_builder_init(&b, buffer, sizeof(buffer));
-    ::spa_pod_frame f;
-    ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
-    ::spa_pod_builder_add(&b,
+    auto buffer = std::array<std::uint8_t, 1024>{};
+    ::spa_pod_builder builder = {};
+    ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
+    ::spa_pod_frame frame;
+    ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
+    ::spa_pod_builder_add(&builder,
                           SPA_FORMAT_mediaType,
                           SPA_POD_Id(SPA_MEDIA_TYPE_audio),
                           SPA_FORMAT_mediaSubtype,
@@ -310,13 +319,13 @@ namespace app::playback
 
     if (format.channels == 2)
     {
-      std::uint32_t position[2] = {SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR};
-      ::spa_pod_builder_add(&b,
+      auto position = std::array<std::uint32_t, 2>{SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR};
+      ::spa_pod_builder_add(&builder,
                             SPA_FORMAT_AUDIO_position,
-                            SPA_POD_Array(sizeof(std::uint32_t), SPA_TYPE_Id, 2, static_cast<std::uint32_t*>(position)),
+                            SPA_POD_Array(sizeof(std::uint32_t), SPA_TYPE_Id, position.size(), position.data()),
                             0);
     }
-    ::spa_pod const* param = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+    ::spa_pod const* param = static_cast<::spa_pod*>(::spa_pod_builder_pop(&builder, &frame));
     std::array<::spa_pod const*, 1> params = {param};
     auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
                                                 PW_STREAM_FLAG_RT_PROCESS);
@@ -332,6 +341,12 @@ namespace app::playback
     }
     ::pw_thread_loop_unlock(_impl->_threadLoop.get());
     return {};
+  }
+
+  void PipeWireBackend::reset()
+  {
+    _impl->_callbacks = {};
+    _impl->destroyStream();
   }
 
   void PipeWireBackend::start()

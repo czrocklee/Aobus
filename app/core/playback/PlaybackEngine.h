@@ -38,7 +38,7 @@ namespace app::core::playback
     void setOnRouteChanged(OnRouteChanged callback);
     EngineRouteSnapshot routeSnapshot() const;
 
-    void play(TrackPlaybackDescriptor descriptor);
+    void play(TrackPlaybackDescriptor const& descriptor);
     void pause();
     void resume();
     void stop();
@@ -56,17 +56,14 @@ namespace app::core::playback
     static void onFormatChanged(void* userData, AudioFormat const& format) noexcept;
     static void onBackendError(void* userData, std::string_view message) noexcept;
 
-    // Source callbacks
-    static void onSourceError(void* userData, std::string_view message) noexcept;
-
   private:
     void handleBackendError(std::string_view message);
-    void handleSourceError(std::string const& message);
+    void handleSourceError(rs::Error const& error);
     void handleFormatChanged(AudioFormat const& format);
     void handleDrainComplete();
     void handleRouteReady(std::string_view routeAnchor);
     void resetToIdle();
-    bool openTrack(TrackPlaybackDescriptor descriptor,
+    bool openTrack(TrackPlaybackDescriptor const& descriptor,
                    std::shared_ptr<source::IPcmSource>& source,
                    AudioFormat& backendFormat);
 

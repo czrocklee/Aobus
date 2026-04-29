@@ -32,8 +32,8 @@ namespace rs::tool
       auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
 
       // Check if tag already exists by iterating tag names
-      
-      if (auto tagNames = builder.tags().names(); std::ranges::any_of(tagNames, [&tagName](auto const& n) { return n == tagName; }))
+
+      if (std::ranges::contains(builder.tags().names(), tagName))
       {
         os << "tag already exists: " << tagName << '\n';
         return;
@@ -61,9 +61,8 @@ namespace rs::tool
       }
 
       auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
-      auto tagNames = builder.tags().names();
 
-      if (!std::ranges::any_of(tagNames, [&tagName](auto const& n) { return n == tagName; }))
+      if (!std::ranges::contains(builder.tags().names(), tagName))
       {
         os << "tag not found on track: " << tagName << '\n';
         return;
@@ -121,8 +120,9 @@ namespace rs::tool
     auto* remove = tag->add_subcommand("remove", "Remove a tag from a track");
     auto* remId = remove->add_option("id", "track id")->required();
     auto* remTagName = remove->add_option("tag", "tag name")->required();
-    remove->callback([&ml, remId, remTagName]()
-                     { removeTag(ml, core::TrackId{remId->as<std::uint32_t>()}, remTagName->as<std::string>(), std::cout); });
+    remove->callback(
+      [&ml, remId, remTagName]()
+      { removeTag(ml, core::TrackId{remId->as<std::uint32_t>()}, remTagName->as<std::string>(), std::cout); });
 
     auto* show = tag->add_subcommand("show", "Show tags for a track");
     auto* showId = show->add_option("id", "track id")->required();

@@ -19,7 +19,7 @@ namespace app::core::playback
                    char const* msg,
                    Selector&& selector)
     {
-      if (supported.empty() || std::ranges::find(supported, target) != supported.end())
+      if (supported.empty() || std::ranges::contains(supported, target))
       {
         return;
       }
@@ -53,9 +53,9 @@ namespace app::core::playback
               [&]
               {
                 return *std::ranges::max_element(caps.sampleRates,
-                                                 [sr = sourceFormat.sampleRate](auto a, auto b)
+                                                 [sr = sourceFormat.sampleRate](auto lhs, auto rhs)
                                                  {
-                                                   return (a % sr) > (b % sr); // Prefer multiples or closest
+                                                   return (lhs % sr) > (rhs % sr); // Prefer multiples or closest
                                                  });
               });
 
@@ -81,12 +81,12 @@ namespace app::core::playback
     // Determine best decoder output format based on device capabilities
     if (plan.sourceFormat.bitDepth == 24)
     {
-      if (std::ranges::find(caps.bitDepths, 32) != caps.bitDepths.end())
+      if (std::ranges::contains(caps.bitDepths, 32))
       {
         plan.decoderOutputFormat.bitDepth = 32;
         plan.decoderOutputFormat.validBits = 24;
       }
-      else if (std::ranges::find(caps.bitDepths, 24) != caps.bitDepths.end())
+      else if (std::ranges::contains(caps.bitDepths, 24))
       {
         plan.decoderOutputFormat.bitDepth = 24;
         plan.decoderOutputFormat.validBits = 24;
@@ -104,7 +104,7 @@ namespace app::core::playback
     }
     else if (plan.sourceFormat.bitDepth == 32)
     {
-      if (std::ranges::find(caps.bitDepths, 32) != caps.bitDepths.end())
+      if (std::ranges::contains(caps.bitDepths, 32))
       {
         plan.decoderOutputFormat.bitDepth = 32;
         plan.decoderOutputFormat.validBits = 32;

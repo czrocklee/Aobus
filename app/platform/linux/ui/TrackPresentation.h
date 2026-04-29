@@ -120,8 +120,8 @@ namespace app::ui
   TrackPresentationSpec presentationSpecForGroup(TrackGroupBy groupBy);
 
   std::int32_t compareForSort(TrackPresentationKeysView lhs,
-                     TrackPresentationKeysView rhs,
-                     std::span<TrackSortTerm const> sortBy);
+                              TrackPresentationKeysView rhs,
+                              std::span<TrackSortTerm const> sortBy);
 
   std::int32_t compareForGrouping(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackGroupBy groupBy);
 
@@ -135,7 +135,7 @@ namespace app::ui
 
   TrackColumnLayout defaultTrackColumnLayout();
 
-  TrackColumnLayout normalizeTrackColumnLayout(TrackColumnLayout layout);
+  TrackColumnLayout normalizeTrackColumnLayout(TrackColumnLayout const& layout);
 
   std::string groupLabelFor(TrackPresentationKeysView keys, TrackGroupBy groupBy);
 
@@ -144,10 +144,10 @@ namespace app::ui
   public:
     using ChangedSignal = sigc::signal<void()>;
 
-    explicit TrackColumnLayoutModel(TrackColumnLayout layout = defaultTrackColumnLayout());
+    explicit TrackColumnLayoutModel(TrackColumnLayout const& layout = defaultTrackColumnLayout());
 
     TrackColumnLayout const& layout() const { return _layout; }
-    void setLayout(TrackColumnLayout layout);
+    void setLayout(TrackColumnLayout const& layout);
     void reset();
 
     ChangedSignal& signalChanged() { return _changed; }

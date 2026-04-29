@@ -30,6 +30,7 @@ namespace
     {
     }
     rs::Result<> open(AudioFormat const& f, AudioRenderCallbacks c) override { return _real.open(f, c); }
+    void reset() override { _real.reset(); }
     void start() override { _real.start(); }
     void pause() override { _real.pause(); }
     void resume() override { _real.resume(); }
@@ -54,6 +55,7 @@ TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
                      .backendKind = BackendKind::None};
 
   Fake(Method(mockBackend, open));
+  Fake(Method(mockBackend, reset));
   Fake(Method(mockBackend, start));
   Fake(Method(mockBackend, pause));
   Fake(Method(mockBackend, resume));
@@ -72,6 +74,7 @@ TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
   SECTION("Stop correctly cleans up backend")
   {
     engine.stop();
+    Verify(Method(mockBackend, reset)).AtLeastOnce();
     Verify(Method(mockBackend, stop)).AtLeastOnce();
     Verify(Method(mockBackend, close)).AtLeastOnce();
 
@@ -104,8 +107,10 @@ TEST_CASE("PlaybackEngine - Backend Swapping", "[playback][engine][hot-swap]")
   Mock<IAudioBackend> mockBackend2;
   auto dispatcher = std::make_shared<MockDispatcher>();
 
-  Fake(Method(mockBackend1, open), Method(mockBackend1, stop), Method(mockBackend1, close));
-  Fake(Method(mockBackend2, open), Method(mockBackend2, stop), Method(mockBackend2, close));
+  Fake(
+    Method(mockBackend1, open), Method(mockBackend1, reset), Method(mockBackend1, stop), Method(mockBackend1, close));
+  Fake(
+    Method(mockBackend2, open), Method(mockBackend2, reset), Method(mockBackend2, stop), Method(mockBackend2, close));
   When(Method(mockBackend1, kind)).AlwaysReturn(BackendKind::None);
   When(Method(mockBackend2, kind)).AlwaysReturn(BackendKind::AlsaExclusive);
 
@@ -125,6 +130,7 @@ TEST_CASE("PlaybackEngine - Backend Swapping", "[playback][engine][hot-swap]")
                        .isDefault = false,
                        .backendKind = BackendKind::AlsaExclusive});
 
+    Verify(Method(mockBackend1, reset)).Once();
     Verify(Method(mockBackend1, stop)).Once();
     Verify(Method(mockBackend1, close)).Once();
 
@@ -152,6 +158,7 @@ TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
                      .backendKind = BackendKind::None};
 
   Fake(Method(mockBackend, open));
+  Fake(Method(mockBackend, reset));
   Fake(Method(mockBackend, start));
   Fake(Method(mockBackend, pause));
   Fake(Method(mockBackend, resume));
@@ -177,7 +184,7 @@ TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
 
   SECTION("rs-decoder is present in the graph")
   {
-    auto it = std::ranges::find_if(snap.graph.nodes, [](auto const& n) { return n.id == "rs-decoder"; });
+    auto it = std::ranges::find(snap.graph.nodes, "rs-decoder", &app::core::backend::AudioNode::id);
     REQUIRE(it != snap.graph.nodes.end());
     CHECK(it->type == AudioNodeType::Decoder);
     CHECK(it->format.has_value());
@@ -186,7 +193,7 @@ TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
 
   SECTION("rs-engine is present in the graph")
   {
-    auto it = std::ranges::find_if(snap.graph.nodes, [](auto const& n) { return n.id == "rs-engine"; });
+    auto it = std::ranges::find(snap.graph.nodes, "rs-engine", &app::core::backend::AudioNode::id);
     REQUIRE(it != snap.graph.nodes.end());
     CHECK(it->type == AudioNodeType::Engine);
   }
@@ -231,6 +238,7 @@ TEST_CASE("PlaybackEngine - PipeWire shared mode keeps native sample rate", "[pl
         openedFormats.push_back(format);
         return rs::Result<>();
       });
+  Fake(Method(mockBackend, reset));
   Fake(Method(mockBackend, start));
   Fake(Method(mockBackend, pause));
   Fake(Method(mockBackend, resume));
@@ -252,7 +260,8 @@ TEST_CASE("PlaybackEngine - PipeWire shared mode keeps native sample rate", "[pl
 
   engine.play(descriptor);
 
-  REQUIRE(openedFormats.size() >= 2);
+  Verify(Method(mockBackend, reset)).AtLeastOnce();
+  REQUIRE(openedFormats.size() >= 1);
   CHECK(openedFormats.back().sampleRate == 44100);
   CHECK(openedFormats.back().channels == 2);
   CHECK(openedFormats.back().bitDepth == 16);
@@ -287,6 +296,7 @@ TEST_CASE("PlaybackEngine - Unsupported backend sample rate fails without resamp
         openedFormats.push_back(format);
         return rs::Result<>();
       });
+  Fake(Method(mockBackend, reset));
   Fake(Method(mockBackend, start));
   Fake(Method(mockBackend, pause));
   Fake(Method(mockBackend, resume));
@@ -308,9 +318,9 @@ TEST_CASE("PlaybackEngine - Unsupported backend sample rate fails without resamp
 
   engine.play(descriptor);
 
+  Verify(Method(mockBackend, reset)).AtLeastOnce();
   auto const snap = engine.snapshot();
   REQUIRE(snap.state == TransportState::Error);
   CHECK(snap.statusText.find("no resampler yet") != std::string::npos);
-  REQUIRE(openedFormats.size() == 1);
-  CHECK(openedFormats.front().sampleRate == 0);
+  REQUIRE(openedFormats.size() == 0);
 }

@@ -111,7 +111,7 @@ namespace rs::media::mp4
 
     if (auto const* node = root.find(kMdhdPath))
     {
-      auto const& view = static_cast<AtomView const&>(*node);
+      auto const& view = rs::utility::unsafeDowncast<AtomView const>(*node);
       auto const& layout = view.layout<MdhdAtomLayout>();
       _timescale = layout.timescale.value();
       _duration = layout.duration.value();
@@ -132,7 +132,7 @@ namespace rs::media::mp4
 
     if (auto const* node = root.find(kCookiePath))
     {
-      auto const& view = static_cast<AtomView const&>(*node);
+      auto const& view = rs::utility::unsafeDowncast<AtomView const>(*node);
       auto const bytes = view.bytes();
       _magicCookie.assign(bytes.begin(), bytes.end());
     }
@@ -149,7 +149,7 @@ namespace rs::media::mp4
 
     auto const* stblNode = root.find(kStblPath);
 
-    if (!stblNode)
+    if (stblNode == nullptr)
     {
       return "Missing stbl atom";
     }
@@ -158,7 +158,7 @@ namespace rs::media::mp4
       [this, &chunkOffsets, &sampleToChunk](Atom const& atom)
       {
         auto type = atom.type();
-        auto const& view = static_cast<AtomView const&>(atom);
+        auto const& view = rs::utility::unsafeDowncast<AtomView const>(atom);
         auto const atomBytes = view.bytes();
 
         if (type == "stsz")

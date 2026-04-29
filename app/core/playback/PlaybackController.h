@@ -37,7 +37,8 @@ namespace app::core::playback
 
     void addManager(std::unique_ptr<backend::IBackendManager> manager);
 
-    void play(TrackPlaybackDescriptor descriptor);
+    void play(TrackPlaybackDescriptor const& descriptor);
+
     void setOutput(backend::BackendKind kind, std::string_view deviceId);
     void pause();
     void resume();

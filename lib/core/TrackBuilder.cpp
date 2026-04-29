@@ -404,16 +404,16 @@ namespace rs::core
     _size = sizeof(TrackHotHeader);
     _size += _tagIds.size() * sizeof(DictionaryId);
     _size += builder->_metadataBuilder._title.size();
-    _size = (_size + 3) & ~3; // pad to 4 bytes
+    _size = (_size + 3) & ~3; // NOLINT(readability-magic-numbers) pad to 4 bytes
   }
 
   void TrackBuilder::PreparedHot::writeTo(std::span<std::byte> out) const
   {
     // Exact size validation and alignment check
     assert(out.size() == _size && "PreparedHot::writeTo: size mismatch");
-    assert(reinterpret_cast<std::uintptr_t>(out.data()) % 4 == 0 && "out must be 4-byte aligned");
+    assert((std::uintptr_t(out.data()) % 4) == 0 && "out must be 4-byte aligned");
 
-    auto& builder = *_builder;
+    auto const& builder = *_builder;
     new (out.data()) TrackHotHeader{
       .tagBloom = _bloomFilter,
       .artistId = _artistId,
@@ -494,6 +494,7 @@ namespace rs::core
     std::size_t entryCount = _resolvedPairs.size();
     std::size_t totalValueSize = 0;
 
+    // NOLINTNEXTLINE(readability-identifier-length)
     for (auto const& [_, value] : _resolvedPairs)
     {
       totalValueSize += value.size();
@@ -519,7 +520,7 @@ namespace rs::core
   {
     // Exact size validation and alignment check
     assert(out.size() == _size && "PreparedCold::writeTo: size mismatch");
-    assert(reinterpret_cast<std::uintptr_t>(out.data()) % 4 == 0 && "out must be 4-byte aligned");
+    assert((std::uintptr_t(out.data()) % 4) == 0 && "out must be 4-byte aligned");
 
     auto const& meta = _builder->_metadataBuilder;
     auto const& prop = _builder->_propertyBuilder;
@@ -571,6 +572,7 @@ namespace rs::core
     }
 
     // Write all values contiguously
+    // NOLINTNEXTLINE(readability-identifier-length)
     for (auto const& [_, value] : _resolvedPairs)
     {
       if (!value.empty())

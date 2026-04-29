@@ -4,6 +4,7 @@
 #include "platform/linux/ui/StatusBar.h"
 
 #include "core/Log.h"
+#include "platform/linux/ui/LayoutConstants.h"
 #include "platform/linux/ui/OutputListItems.h"
 
 #include <gdkmm/display.h>
@@ -49,7 +50,8 @@ namespace app::ui
     std::string formatStream(app::core::AudioFormat const& format)
     {
       std::stringstream ss;
-      ss << (format.sampleRate / 1000.0) << " kHz · " << static_cast<int>(format.bitDepth) << "-bit · ";
+      ss << (format.sampleRate / 1000.0) << " kHz · " << static_cast<int>(format.bitDepth)
+         << "-bit · "; // NOLINT(readability-magic-numbers)
 
       if (format.channels == 1)
       {
@@ -174,13 +176,13 @@ namespace app::ui
 
     set_hexpand(true);
     set_valign(Gtk::Align::END);
-    set_margin(6);
+    set_margin(Layout::kMarginSmall);
     add_css_class("status-bar");
 
     // Playback details (Left)
-    _playbackDetailsBox.set_spacing(8);
-    _playbackDetailsBox.set_margin_start(12);
-    _playbackDetailsBox.set_margin_end(12);
+    _playbackDetailsBox.set_spacing(Layout::kSpacingLarge);
+    _playbackDetailsBox.set_margin_start(Layout::kMarginMedium);
+    _playbackDetailsBox.set_margin_end(Layout::kMarginMedium);
 
     _outputButton.add_css_class("output-button");
     _outputButton.set_label("Output");
@@ -195,8 +197,8 @@ namespace app::ui
     auto* scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
     scrolled->set_child(_outputListBox);
     scrolled->set_propagate_natural_height(true);
-    scrolled->set_min_content_height(320);
-    scrolled->set_min_content_width(360);
+    scrolled->set_min_content_height(kOutputScrolledMinHeight);
+    scrolled->set_min_content_width(kOutputScrolledMinWidth);
 
     _outputPopover.set_child(*scrolled);
     _outputPopover.set_parent(_outputButton);
@@ -220,7 +222,7 @@ namespace app::ui
 
     _streamInfoLabel.add_css_class("dim-label");
     _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
-    _sinkStatusIcon.set_pixel_size(12);
+    _sinkStatusIcon.set_pixel_size(Layout::kIconSizeXSmall);
     _sinkStatusIcon.set_visible(false);
 
     _playbackDetailsBox.append(_outputButton);
@@ -249,21 +251,21 @@ namespace app::ui
 
     // Import box (Right, hidden by default)
     _importBox.set_orientation(Gtk::Orientation::HORIZONTAL);
-    _importBox.set_spacing(12);
+    _importBox.set_spacing(Layout::kSpacingXLarge);
     _importBox.set_visible(false);
 
     _importLabel.add_css_class("dim-label");
     _importBox.append(_importLabel);
 
     _importProgressBar.set_valign(Gtk::Align::CENTER);
-    _importProgressBar.set_size_request(200, -1);
+    _importProgressBar.set_size_request(kImportProgressWidth, -1);
     _importBox.append(_importProgressBar);
     append(_importBox);
 
     // Info Stack: Toggle between Selection Info and Status Messages
     auto* infoStack = Gtk::make_managed<Gtk::Stack>();
     infoStack->set_transition_type(Gtk::StackTransitionType::SLIDE_UP_DOWN);
-    infoStack->set_transition_duration(250);
+    infoStack->set_transition_duration(kTransitionDurationMs);
 
     _selectionLabel.add_css_class("dim-label");
     _selectionLabel.set_halign(Gtk::Align::END);
@@ -277,8 +279,8 @@ namespace app::ui
 
     // Separator
     auto* sep1 = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
-    sep1->set_margin_start(6);
-    sep1->set_margin_end(6);
+    sep1->set_margin_start(Layout::kMarginMedium);
+    sep1->set_margin_end(Layout::kMarginMedium);
     append(*sep1);
 
     // Library info (Far Right)
@@ -368,7 +370,7 @@ namespace app::ui
     if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
     {
       auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-      rowBox->set_spacing(12);
+      rowBox->set_spacing(Layout::kSpacingXLarge);
       rowBox->set_valign(Gtk::Align::CENTER);
       rowBox->add_css_class("device-row");
 
@@ -572,7 +574,10 @@ namespace app::ui
         visited.insert(currentId);
         auto it = std::ranges::find(snapshot.graph.nodes, currentId, &app::core::backend::AudioNode::id);
 
-        if (it == snapshot.graph.nodes.end()) break;
+        if (it == snapshot.graph.nodes.end())
+        {
+          break;
+        }
         auto const& node = *it;
         tt << "• ";
         switch (node.type)
@@ -585,9 +590,18 @@ namespace app::ui
           case app::core::backend::AudioNodeType::ExternalSource: tt << "[Other Source] "; break;
         }
         tt << node.name;
-        if (node.format) tt << " (" << formatStream(*node.format) << ")";
-        if (node.volumeNotUnity) tt << " [Vol Control]";
-        if (node.isMuted) tt << " [Muted]";
+        if (node.format)
+        {
+          tt << " (" << formatStream(*node.format) << ")";
+        }
+        if (node.volumeNotUnity)
+        {
+          tt << " [Vol Control]";
+        }
+        if (node.isMuted)
+        {
+          tt << " [Muted]";
+        }
         tt << "\n";
 
         std::string nextId;

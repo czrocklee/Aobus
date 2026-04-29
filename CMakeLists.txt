@@ -127,12 +127,12 @@ if(CLANG_TIDY_EXECUTABLE)
 
   # clang-tidy checks for strict targets (lib, tool)
   set(CLANG_TIDY_STRICT_CHECKS
-    "-checks=-*,bugprone-*,performance-*,cppcoreguidelines-*,-cppcoreguidelines-avoid-const-or-ref-data-members,modernize-!-trailing-return,readability-*,portability-*,-clang-diagnostic-*,-bugprone-easily-swappable-parameters,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-readability-convert-member-functions-to-static,-readability-static-definition-in-anonymous-namespace,-clang-diagnostic-note"
+    "-checks=-*,bugprone-*,performance-*,cppcoreguidelines-*,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-avoid-const-or-ref-data-members,modernize-!-trailing-return,readability-*,portability-*,-clang-diagnostic-*,-bugprone-easily-swappable-parameters,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-readability-convert-member-functions-to-static,-readability-static-definition-in-anonymous-namespace,-clang-diagnostic-note"
   )
 
-  # clang-tidy config for strict targets (allows 2-char identifiers)
+  # clang-tidy config for strict targets (allows 2-char identifiers and ignores iterators for qualified-auto)
   set(CLANG_TIDY_STRICT_CONFIG
-    "{Checks: '-*,readability-identifier-length', CheckOptions: [{key: 'readability-identifier-length.MinimumVariableNameLength', value: 2}, {key: 'readability-identifier-length.MinimumParameterNameLength', value: 2}]}"
+    "{Checks: '-*,readability-identifier-length,readability-magic-numbers,readability-qualified-auto', CheckOptions: [{key: 'readability-identifier-length.MinimumVariableNameLength', value: 2}, {key: 'readability-identifier-length.MinimumParameterNameLength', value: 2}, {key: 'readability-identifier-length.IgnoredBindingNames', value: '^[_]$'}, {key: 'readability-magic-numbers.IgnorePowersOf2IntegerValues', value: true}, {key: 'readability-magic-numbers.IgnoredIntegerValues', value: '24;1000;1000U;60;100'}, {key: 'readability-qualified-auto.AllowedTypes', value: 'std::array<.*>::(const_)?iterator;std::string_view::(const_)?iterator;.*::iterator;.*Iterator'}]}"
   )
 
   # clang-tidy checks for relaxed test targets (minimal checks)

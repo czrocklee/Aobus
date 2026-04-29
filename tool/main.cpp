@@ -14,18 +14,30 @@
 
 int main(int argc, char const* argv[])
 {
-  auto ml = rs::core::MusicLibrary{"."};
+  try
+  {
+    auto ml = rs::core::MusicLibrary{"."};
 
-  CLI::App app{"RockStudio CLI - rsc"};
-  app.require_subcommand(1);
+    CLI::App app{"RockStudio CLI - rsc"};
+    app.require_subcommand(1);
 
-  rs::tool::setupTrackCommand(app, ml);
-  rs::tool::setupListCommand(app, ml);
-  rs::tool::setupInitCommand(app, ml);
-  rs::tool::setupTagCommand(app, ml);
-  rs::tool::setupLibCommand(app, ml);
+    rs::tool::setupTrackCommand(app, ml);
+    rs::tool::setupListCommand(app, ml);
+    rs::tool::setupInitCommand(app, ml);
+    rs::tool::setupTagCommand(app, ml);
+    rs::tool::setupLibCommand(app, ml);
 
-  CLI11_PARSE(app, argc, argv);
-
-  return 0;
+    CLI11_PARSE(app, argc, argv);
+    return 0;
+  }
+  catch (std::exception const& e)
+  {
+    std::cerr << "Error: " << e.what() << std::endl;
+    return 1;
+  }
+  catch (...)
+  {
+    std::cerr << "Unknown error occurred" << std::endl;
+    return 1;
+  }
 }

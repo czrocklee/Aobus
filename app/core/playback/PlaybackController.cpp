@@ -116,7 +116,7 @@ namespace app::core::playback
     _backendsDirty = true;
   }
 
-  void PlaybackController::play(TrackPlaybackDescriptor descriptor)
+  void PlaybackController::play(TrackPlaybackDescriptor const& descriptor)
   {
     _playbackGeneration++;
     _cachedEngineRoute = {};
@@ -145,7 +145,7 @@ namespace app::core::playback
 
     // 2. Find the AudioDevice matching the kind and id from our cache
     auto const it = std::ranges::find_if(
-      _allDevices, [&](backend::AudioDevice const& d) { return d.backendKind == kind && d.id == deviceId; });
+      _allDevices, [&](backend::AudioDevice const& dev) { return dev.backendKind == kind && dev.id == deviceId; });
 
     if (it == _allDevices.end())
     {
@@ -159,12 +159,11 @@ namespace app::core::playback
     for (auto const& manager : _managers)
     {
       auto devices = manager->enumerateDevices();
-      auto const found = std::ranges::any_of(devices, [&](backend::AudioDevice const& d) { return d == targetDevice; });
+      auto const found = std::ranges::contains(devices, targetDevice);
 
       if (found)
       {
-        auto backend = manager->createBackend(targetDevice);
-        if (backend)
+        if (auto backend = manager->createBackend(targetDevice))
         {
           _activeManager = manager.get();
           _playbackGeneration++;
@@ -221,9 +220,9 @@ namespace app::core::playback
 
       // Group devices by BackendKind
       std::map<backend::BackendKind, std::vector<backend::AudioDevice>> groups;
-      for (auto const& d : allDevices)
+      for (auto const& dev : allDevices)
       {
-        groups[d.backendKind].push_back(d);
+        groups[dev.backendKind].push_back(dev);
       }
 
       auto snapshots = std::vector<BackendSnapshot>{};
@@ -259,7 +258,7 @@ namespace app::core::playback
     _cachedEngineRoute = snapshot;
 
     // Check if we have a valid anchor and manager to subscribe to the system graph
-    if (_cachedEngineRoute.anchor && _activeManager)
+    if (_cachedEngineRoute.anchor.has_value() && _activeManager)
     {
       if (!_graphSubscription)
       {
@@ -367,21 +366,26 @@ namespace app::core::playback
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
-        auto it = std::ranges::find_if(_mergedGraph.nodes, [&](auto const& n) { return n.id == currentId; });
-        if (it == _mergedGraph.nodes.end()) break;
-
-        path.push_back(&(*it));
-
-        std::string nextId;
-        for (auto const& link : _mergedGraph.links)
+        if (auto it = std::ranges::find(_mergedGraph.nodes, currentId, &backend::AudioNode::id);
+            it == _mergedGraph.nodes.end())
         {
-          if (link.isActive && link.sourceId == currentId)
-          {
-            nextId = link.destId;
-            break;
-          }
+          break;
         }
-        currentId = nextId;
+        else
+        {
+          path.push_back(&(*it));
+
+          std::string nextId;
+          for (auto const& link : _mergedGraph.links)
+          {
+            if (link.isActive && link.sourceId == currentId)
+            {
+              nextId = link.destId;
+              break;
+            }
+          }
+          currentId = nextId;
+        }
       }
     }
 
@@ -389,7 +393,10 @@ namespace app::core::playback
     auto inputSources = std::unordered_map<std::string, std::set<std::string>>{};
     for (auto const& link : _mergedGraph.links)
     {
-      if (link.isActive) inputSources[link.destId].insert(link.sourceId);
+      if (link.isActive)
+      {
+        inputSources[link.destId].insert(link.sourceId);
+      }
     }
 
     for (size_t i = 0; i < path.size(); ++i)
@@ -420,11 +427,13 @@ namespace app::core::playback
         std::vector<std::string> otherAppNames;
         for (auto const& srcId : sources)
         {
-          bool isInternal = std::ranges::any_of(path, [&](auto* p) { return p->id == srcId; });
-          if (!isInternal)
+          if (bool isInternal = std::ranges::contains(path, srcId, &backend::AudioNode::id); !isInternal)
           {
-            auto it = std::ranges::find_if(_mergedGraph.nodes, [&](auto const& n) { return n.id == srcId; });
-            if (it != _mergedGraph.nodes.end()) otherAppNames.push_back(it->name);
+            if (auto it = std::ranges::find(_mergedGraph.nodes, srcId, &backend::AudioNode::id);
+                it != _mergedGraph.nodes.end())
+            {
+              otherAppNames.push_back(it->name);
+            }
           }
         }
         if (!otherAppNames.empty())
@@ -436,7 +445,10 @@ namespace app::core::playback
           for (size_t j = 0; j < otherAppNames.size(); ++j)
           {
             apps += otherAppNames[j];
-            if (j < otherAppNames.size() - 1) apps += ", ";
+            if (j < otherAppNames.size() - 1)
+            {
+              apps += ", ";
+            }
           }
           appendLine(_qualityTooltip, std::format("• Mixed: {} shared with {}", node->name, apps));
           _quality = std::max(_quality, backend::AudioQuality::LinearIntervention);

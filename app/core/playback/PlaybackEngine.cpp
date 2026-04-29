@@ -25,6 +25,7 @@ namespace app::core::playback
     constexpr std::uint32_t kPrerollTargetMs = 200;
     constexpr std::uint32_t kDecodeHighWatermarkMs = 750;
     constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
+    constexpr std::uint8_t kBytesPer24BitSample = 3;
 
     std::uint64_t bytesPerSecond(AudioFormat const& format) noexcept
     {
@@ -33,7 +34,16 @@ namespace app::core::playback
         return 0;
       }
 
-      auto const bytesPerSample = (format.bitDepth == 24U) ? 3U : (format.bitDepth > 16U) ? 4U : 2U;
+      std::uint32_t bytesPerSample = 2U;
+      if (format.bitDepth == 24U)
+      {
+        bytesPerSample = kBytesPer24BitSample;
+      }
+      else if (format.bitDepth > 16U)
+      {
+        bytesPerSample = 4U;
+      }
+
       return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
     }
 
@@ -149,14 +159,14 @@ namespace app::core::playback
     }
   }
 
-  void PlaybackEngine::play(TrackPlaybackDescriptor descriptor)
+  void PlaybackEngine::play(TrackPlaybackDescriptor const& descriptor)
   {
     PLAYBACK_LOG_INFO(
       "Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
 
     if (_backend)
     {
-      _backend->open(AudioFormat{}, {});
+      _backend->reset();
       _backend->stop();
       _backend->close();
     }
@@ -300,7 +310,7 @@ namespace app::core::playback
     PLAYBACK_LOG_INFO("Playback stopped");
     if (_backend)
     {
-      _backend->open(AudioFormat{}, {});
+      _backend->reset();
       _backend->stop();
       _backend->close();
     }
@@ -313,7 +323,10 @@ namespace app::core::playback
   {
     PLAYBACK_LOG_INFO("Seek requested: {} ms", positionMs);
     auto source = _source.load(std::memory_order_acquire);
-    if (!source) return;
+    if (!source)
+    {
+      return;
+    }
 
     bool wasPaused = false;
     {
@@ -413,7 +426,7 @@ namespace app::core::playback
     _snapshot.statusText = std::string(message);
   }
 
-  bool PlaybackEngine::openTrack(TrackPlaybackDescriptor descriptor,
+  bool PlaybackEngine::openTrack(TrackPlaybackDescriptor const& descriptor,
                                  std::shared_ptr<source::IPcmSource>& source,
                                  AudioFormat& backendFormat)
   {
@@ -526,17 +539,31 @@ namespace app::core::playback
     }
     else
     {
-      source::PcmSourceCallbacks sourceCallbacks;
-      sourceCallbacks.userData = this;
-      sourceCallbacks.onError = &PlaybackEngine::onSourceError;
       auto streamingSource = std::make_shared<source::StreamingPcmSource>(
-        std::move(decoder), info, sourceCallbacks, kPrerollTargetMs, kDecodeHighWatermarkMs);
+        std::move(decoder),
+        info,
+        [this](rs::Error const& err)
+        {
+          if (_dispatcher)
+          {
+            _dispatcher->dispatch([this, err]() { handleSourceError(err); });
+          }
+          else
+          {
+            handleSourceError(err);
+          }
+        },
+        kPrerollTargetMs,
+        kDecodeHighWatermarkMs);
+
       auto const initResult = streamingSource->initialize();
+
       if (!initResult)
       {
         _snapshot.statusText = initResult.error().message;
         return false;
       }
+
       source = std::move(streamingSource);
     }
 
@@ -592,9 +619,15 @@ namespace app::core::playback
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
     auto source = self->_source.load(std::memory_order_acquire);
-    if (!source) return true;
+    if (!source)
+    {
+      return true;
+    }
     auto const drained = source->isDrained();
-    if (drained) self->_playbackDrainPending = true;
+    if (drained)
+    {
+      self->_playbackDrainPending = true;
+    }
     return drained;
   }
 
@@ -608,7 +641,10 @@ namespace app::core::playback
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
     auto lock = std::unique_lock<std::mutex>{self->_stateMutex, std::try_to_lock};
-    if (!lock.owns_lock()) return;
+    if (!lock.owns_lock())
+    {
+      return;
+    }
 
     // Use Engine node format for position calculation
     for (auto const& node : self->_snapshot.graph.nodes)
@@ -625,12 +661,19 @@ namespace app::core::playback
   void PlaybackEngine::onDrainComplete(void* userData) noexcept
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
-    if (!self->_playbackDrainPending.exchange(false, std::memory_order_relaxed)) return;
+    if (!self->_playbackDrainPending.exchange(false, std::memory_order_relaxed))
+    {
+      return;
+    }
 
     if (self->_dispatcher)
+    {
       self->_dispatcher->dispatch([self]() { self->handleDrainComplete(); });
+    }
     else
+    {
       self->handleDrainComplete();
+    }
   }
 
   void PlaybackEngine::handleDrainComplete()
@@ -645,7 +688,10 @@ namespace app::core::playback
     }
 
     // Callback OUTSIDE lock — allows play() to re-acquire _stateMutex
-    if (cb) cb();
+    if (cb)
+    {
+      cb();
+    }
   }
 
   void PlaybackEngine::onRouteReady(void* userData, std::string_view routeAnchor) noexcept
@@ -654,7 +700,7 @@ namespace app::core::playback
     auto anchor = std::string(routeAnchor);
     if (self->_dispatcher)
     {
-      self->_dispatcher->dispatch([self, a = std::move(anchor)]() { self->handleRouteReady(a); });
+      self->_dispatcher->dispatch([self, anchorCopy = std::move(anchor)]() { self->handleRouteReady(anchorCopy); });
     }
     else
     {
@@ -681,30 +727,20 @@ namespace app::core::playback
     }
   }
 
-  void PlaybackEngine::onSourceError(void* userData, std::string_view message) noexcept
-  {
-    auto* self = static_cast<PlaybackEngine*>(userData);
-    std::string errorText(message);
-
-    if (self->_dispatcher)
-    {
-      self->_dispatcher->dispatch([self, errorText]() { self->handleSourceError(errorText); });
-    }
-    else
-    {
-      self->handleSourceError(errorText);
-    }
-  }
-
-  void PlaybackEngine::handleSourceError(std::string const& message)
+  void PlaybackEngine::handleSourceError(rs::Error const& error)
   {
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
-      if (_snapshot.state == TransportState::Idle) return;
+
+      if (_snapshot.state == TransportState::Idle)
+      {
+        return;
+      }
+
       _backendStarted = false;
       _playbackDrainPending = false;
       _snapshot.state = TransportState::Error;
-      _snapshot.statusText = message.empty() ? "PCM source failed" : message;
+      _snapshot.statusText = error.message.empty() ? "PCM source failed" : error.message;
     }
 
     // Backend call OUTSIDE lock to avoid holding _stateMutex during backend operations
