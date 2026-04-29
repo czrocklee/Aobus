@@ -7,6 +7,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <rs/Error.h>
 #include <string_view>
 
 namespace app::core::decoder
@@ -24,7 +25,7 @@ namespace app::core::decoder
     /**
      * @brief Opens an audio file for decoding.
      */
-    virtual bool open(std::filesystem::path const& filePath) = 0;
+    virtual rs::Result<> open(std::filesystem::path const& filePath) = 0;
 
     /**
      * @brief Closes the current session and releases resources.
@@ -34,7 +35,7 @@ namespace app::core::decoder
     /**
      * @brief Seeks to a specific position in milliseconds.
      */
-    virtual bool seek(std::uint32_t positionMs) = 0;
+    virtual rs::Result<> seek(std::uint32_t positionMs) = 0;
 
     /**
      * @brief Flushes internal decoder buffers.
@@ -43,19 +44,14 @@ namespace app::core::decoder
 
     /**
      * @brief Decodes and returns the next block of PCM data.
-     * @return A PcmBlock if successful, or std::nullopt on error.
+     * @return A PcmBlock if successful, or an error.
      */
-    virtual std::optional<PcmBlock> readNextBlock() = 0;
+    virtual rs::Result<PcmBlock> readNextBlock() = 0;
 
     /**
      * @brief Returns information about the decoded stream.
      */
     virtual DecodedStreamInfo streamInfo() const = 0;
-
-    /**
-     * @brief Returns a human-readable description of the last error.
-     */
-    virtual std::string_view lastError() const noexcept = 0;
   };
 
 } // namespace app::core::decoder

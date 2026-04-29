@@ -198,14 +198,18 @@ namespace app::core::playback
 
     _source.store(source, std::memory_order_release);
 
-    if (_backend && !_backend->open(backendFormat, callbacks))
+    if (_backend)
     {
-      _source.store({}, std::memory_order_release);
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
-      _currentTrack.reset();
-      _snapshot.state = TransportState::Error;
-      _snapshot.statusText = std::string(_backend->lastError());
-      return;
+      auto const openResult = _backend->open(backendFormat, callbacks);
+      if (!openResult)
+      {
+        _source.store({}, std::memory_order_release);
+        auto lock = std::lock_guard<std::mutex>{_stateMutex};
+        _currentTrack.reset();
+        _snapshot.state = TransportState::Error;
+        _snapshot.statusText = openResult.error().message;
+        return;
+      }
     }
 
     auto const bufferedMs = source ? source->bufferedMs() : 0;
@@ -328,11 +332,12 @@ namespace app::core::playback
     _backendStarted = false;
     _playbackDrainPending = false;
 
-    if (!source->seek(positionMs))
+    auto const seekResult = source->seek(positionMs);
+    if (!seekResult)
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _snapshot.state = TransportState::Error;
-      _snapshot.statusText = source->lastError();
+      _snapshot.statusText = seekResult.error().message;
       return;
     }
 
@@ -425,9 +430,10 @@ namespace app::core::playback
       _snapshot.statusText = "No audio decoder backend is available";
       return false;
     }
-    if (!decoder->open(descriptor.filePath))
+    auto const openResult = decoder->open(descriptor.filePath);
+    if (!openResult)
     {
-      _snapshot.statusText = std::string(decoder->lastError());
+      _snapshot.statusText = openResult.error().message;
       return false;
     }
 
@@ -485,7 +491,13 @@ namespace app::core::playback
         {
           decoder->close();
           decoder = createAudioDecoderSession(descriptor.filePath, plan.decoderOutputFormat);
-          if (!decoder || !decoder->open(descriptor.filePath))
+          if (!decoder)
+          {
+            _snapshot.statusText = "Failed to re-open decoder with negotiated format";
+            return false;
+          }
+          auto const reOpenResult = decoder->open(descriptor.filePath);
+          if (!reOpenResult)
           {
             _snapshot.statusText = "Failed to re-open decoder with negotiated format";
             return false;
@@ -504,9 +516,10 @@ namespace app::core::playback
     if (shouldUseMemoryPcmSource(info))
     {
       auto memorySource = std::make_shared<source::MemoryPcmSource>(std::move(decoder), info);
-      if (!memorySource->initialize())
+      auto const initResult = memorySource->initialize();
+      if (!initResult)
       {
-        _snapshot.statusText = memorySource->lastError();
+        _snapshot.statusText = initResult.error().message;
         return false;
       }
       source = std::move(memorySource);
@@ -518,9 +531,10 @@ namespace app::core::playback
       sourceCallbacks.onError = &PlaybackEngine::onSourceError;
       auto streamingSource = std::make_shared<source::StreamingPcmSource>(
         std::move(decoder), info, sourceCallbacks, kPrerollTargetMs, kDecodeHighWatermarkMs);
-      if (!streamingSource->initialize())
+      auto const initResult = streamingSource->initialize();
+      if (!initResult)
       {
-        _snapshot.statusText = streamingSource->lastError();
+        _snapshot.statusText = initResult.error().message;
         return false;
       }
       source = std::move(streamingSource);
@@ -667,11 +681,10 @@ namespace app::core::playback
     }
   }
 
-  void PlaybackEngine::onSourceError(void* userData) noexcept
+  void PlaybackEngine::onSourceError(void* userData, std::string_view message) noexcept
   {
     auto* self = static_cast<PlaybackEngine*>(userData);
-    auto source = self->_source.load(std::memory_order_acquire);
-    auto const errorText = source ? source->lastError() : std::string{};
+    std::string errorText(message);
 
     if (self->_dispatcher)
     {

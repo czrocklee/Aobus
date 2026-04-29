@@ -59,7 +59,10 @@ namespace app::core::backend
     NullBackend() = default;
     ~NullBackend() override = default;
 
-    bool open(AudioFormat const& /*format*/, AudioRenderCallbacks /*callbacks*/) override { return true; }
+    rs::Result<> open(AudioFormat const& /*format*/, AudioRenderCallbacks /*callbacks*/) override
+    {
+      return rs::Result<>();
+    }
 
     void start() override {}
     void pause() override {}
@@ -76,7 +79,6 @@ namespace app::core::backend
     bool isExclusiveMode() const noexcept override { return false; }
 
     BackendKind kind() const noexcept override { return BackendKind::None; }
-    std::string_view lastError() const noexcept override { return ""; }
   };
 
 } // namespace app::core::backend

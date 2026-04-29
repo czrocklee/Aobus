@@ -27,7 +27,8 @@ namespace app::playback
     explicit AlsaExclusiveBackend(app::core::backend::AudioDevice const& device);
     ~AlsaExclusiveBackend() override;
 
-    bool open(app::core::AudioFormat const& format, app::core::backend::AudioRenderCallbacks callbacks) override;
+    rs::Result<> open(app::core::AudioFormat const& format,
+                      app::core::backend::AudioRenderCallbacks callbacks) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -40,7 +41,6 @@ namespace app::playback
     bool isExclusiveMode() const noexcept override;
 
     app::core::backend::BackendKind kind() const noexcept override;
-    std::string_view lastError() const noexcept override;
 
   private:
     struct AlsaPcmDeleter
@@ -58,7 +58,6 @@ namespace app::playback
     std::string _deviceName;
     app::core::AudioFormat _format;
     app::core::backend::AudioRenderCallbacks _callbacks;
-    std::string _lastError;
 
     AlsaPcmPtr _pcm;
     std::jthread _thread;

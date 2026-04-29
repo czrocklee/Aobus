@@ -91,7 +91,7 @@ TEST_CASE("PipeWireManager - Integration with Real Daemon via API", "[integratio
     {
       ::pw_context_destroy(context);
       ::pw_main_loop_destroy(loop);
-      std::cout << "Skipping PipeWire integration test: Daemon not running" << std::endl;
+      std::cout << "Skipping PipeWire integration test: Daemon not running" << '\n';
       return;
     }
     ::pw_core_disconnect(core);
@@ -102,7 +102,7 @@ TEST_CASE("PipeWireManager - Integration with Real Daemon via API", "[integratio
   DummySinkGuard sinkGuard;
   if (!sinkGuard.isValid())
   {
-    std::cout << "Skipping PipeWire integration test: Failed to create dummy sink" << std::endl;
+    std::cout << "Skipping PipeWire integration test: Failed to create dummy sink" << '\n';
     return;
   }
 

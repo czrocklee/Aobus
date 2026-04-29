@@ -1,10 +1,11 @@
 # RockStudio C++ Coding Guide
 
 This guide defines RockStudio's C++ coding conventions.
+Rules are numbered for easy reference in reviews and tooling.
 
-- 1. C++ Standard
+- 1\. C++ Standard
   - 1.1. Target `C++23` without modules
-- 2. Code Style
+- 2\. Code Style
   - 2.1. Indentation & Formatting
     - 2.1.1. Use `clang-format`
     - 2.1.2. Use blank lines before and after control blocks, and between distinct statement groups
@@ -17,6 +18,7 @@ This guide defines RockStudio's C++ coding conventions.
     - 2.2.3. Variables use `camelCase`: `trackCount`, `filePath`
     - 2.2.4. Non-static data members use `_camelCase`: `_handle`, `_tracks`
     - 2.2.5. Constants use `kCamelCase`: `kMaxSize`, `kDefaultFlags`
+    - 2.2.6. Enum values follow their scope: scoped enums use `PascalCase` (`Code::IoError`), unscoped constants use `kCamelCase`
   - 2.3. Headers
     - 2.3.1. Use `#pragma once`
   - 2.4. Includes
@@ -28,7 +30,7 @@ This guide defines RockStudio's C++ coding conventions.
     - 2.5.1. Keep `.cpp` member definitions in the same order as the header
     - 2.5.2. Order header access sections as `public` → `protected` → `private`
     - 2.5.3. Within each access section, order members as:
-      1. `using` declarations
+      1. nested types and `using` declarations
       2. non-static member functions
       3. static functions
       4. non-static data members
@@ -44,7 +46,13 @@ This guide defines RockStudio's C++ coding conventions.
     - 2.7.2. Prefer `std::string` to owning `char*`
     - 2.7.3. Avoid raw C arrays; use `std::array` or `std::to_array` for fixed-size buffers and API parameters
     - 2.7.4. Prefer `using` to `typedef`
-- 3. Modern C++ Features
+  - 2.8. Casts
+    - 2.8.1. Never use C-style casts (`(int)x`); use `static_cast`, `reinterpret_cast`, or `const_cast` as appropriate
+    - 2.8.2. Prefer `static_cast` for numeric widening/narrowing conversions in log statements and format strings
+  - 2.9. Output
+    - 2.9.1. Prefer `'\n'` to `std::endl` — `std::endl` forces a flush, which is rarely desired
+    - 2.9.2. Use the project logging facility (`PLAYBACK_LOG_INFO`, etc.) rather than `std::cout`/`std::cerr` for runtime diagnostics
+- 3\. Modern C++ Features
   - 3.1. C++20 Features
     - 3.1.1. Use concepts: `template<typename T> requires std::integral<T>`
     - 3.1.2. Prefer `std::format` to `printf` and `sprintf`
@@ -59,8 +67,9 @@ This guide defines RockStudio's C++ coding conventions.
     - 3.1.5. Use `[[no_unique_address]]` for empty-member optimization
     - 3.1.6. Use `starts_with()` and `ends_with()` for prefix and suffix checks
     - 3.1.7. Use designated initializers for structs
+    - 3.1.8. Use `std::jthread` and `std::stop_token` for background threads that need cooperative cancellation
   - 3.2. C++17 Features and Attributes
-    - 3.2.1. Use `std::optional` for nullable return values
+    - 3.2.1. Use `std::optional` for nullable return values where absence is not an error (e.g., lookups, optional fields); do not use it to report failures — use `std::expected` instead (see 3.3.1)
     - 3.2.2. Use `std::variant` for type-safe unions
     - 3.2.3. Use `std::string_view` for non-owning string parameters
     - 3.2.4. Use `if constexpr` to remove compile-time branches
@@ -68,21 +77,28 @@ This guide defines RockStudio's C++ coding conventions.
     - 3.2.6. Use init-statements in `if` and `switch` when they keep temporary scope local: `if (auto var = get(); condition)`
     - 3.2.7. Do not use `[[nodiscard]]`; rely on `clang-tidy` to catch ignored return values
     - 3.2.8. Use `[[maybe_unused]]` for intentionally unused entities instead of warning-suppression casts
-  - 3.3. General Language Practices
-    - 3.3.1. Use RAII. Prefer `std::unique_ptr` for owned resources and add a custom deleter when needed
+  - 3.3. C++23 Features
+    - 3.3.1. Use `std::expected<T, E>` for operations that can fail recoverably
+      - Use the project alias `rs::Result<T>` (defaults to `rs::Result<>` for `void`), defined in `include/rs/Error.h`
+      - The error type is `rs::Error`, a struct with an error `Code` enum and a `message` string
+      - Do not use `bool` return + side-channel `lastError()` for new code
+      - Do not use `std::optional` to represent failure; reserve it for legitimate absence
+      - Do not use `std::error_code` / `std::error_category`; the project has no cross-library error interop needs
+  - 3.4. General Language Practices
+    - 3.4.1. Use RAII. Prefer `std::unique_ptr` for owned resources and add a custom deleter when needed
       - In `.cpp` files, prefer `rs::utility::makeUniquePtr<::c_func>(ptr)` for local RAII without extra boilerplate
       - In headers, wrap C resources with an explicit deleter type, for example `struct PwLoopDeleter { void operator()(::pw_thread_loop* p) const noexcept { ::pw_thread_loop_destroy(p); } };`
-    - 3.3.2. Do not repeat `virtual` on overridden functions; use `override`
-    - 3.3.3. Prefer brace initialization in member initializer lists
+    - 3.4.2. Do not repeat `virtual` on overridden functions; use `override`
+    - 3.4.3. Prefer brace initialization in member initializer lists
       - Prefer `T() : _mem{a}` over `T() : _mem(a)`
-    - 3.3.4. Mark functions `noexcept` when they cannot throw
-    - 3.3.5. Prefer `auto` for non-primitive object construction
+    - 3.4.4. Mark functions `noexcept` when they cannot throw
+    - 3.4.5. Prefer `auto` for non-primitive object construction
       - Prefer `auto x = T{a, b};` over `T x{a, b};`
       - Prefer `auto x = T{};` over `T x;`
       - Avoid `auto` for primitive types (e.g., `int`, `unsigned int`, `double`) if it requires a `static_cast` or reduces clarity
       - Interfacing with C APIs: Use explicit types when an API requires a pointer to a specific C type (e.g., `unsigned int*`) to ensure strict type compatibility
       - Exception: for simple null pointer initialization, use `T* ptr = nullptr;` instead of `auto* ptr = static_cast<T*>(nullptr);`
-- 4. Best Practices
+- 4\. Best Practices
   - 4.1. Getters and Accessors
     - 4.1.1. Keep trivial one-line getters and setters inline in headers
   - 4.2. Class Design
@@ -92,6 +108,10 @@ This guide defines RockStudio's C++ coding conventions.
     - 4.2.2. Minimize type exposure
       - If a type is used only in one `.cpp`, keep it in that file's anonymous namespace
       - If a type must appear in a header, prefer a nested type with the narrowest possible visibility, ideally `private`
+    - 4.2.3. Use the Pimpl idiom for complex implementation details
+      - Forward-declare an `Impl` struct in the header: `struct Impl;`
+      - Define it as `struct ClassName::Impl final { ... };` in the `.cpp` file
+      - Hold via `std::unique_ptr<Impl> _impl;`
   - 4.3. Const Correctness
     - 4.3.1. Use `const` wherever possible
       - locals: `auto const result = compute();`
@@ -99,3 +119,33 @@ This guide defines RockStudio's C++ coding conventions.
       - pointers to constant data: `char const* name;`
       - input parameters: `void addTrack(Track const& track);`
       - mandatory services: pass by reference, not smart pointer, to express non-nullability and lifetime requirements
+  - 4.4. Threading
+    - 4.4.1. Name all background threads using `app::core::util::setCurrentThreadName()` for debuggability
+    - 4.4.2. Use `std::jthread` with `std::stop_token` for cooperative cancellation — do not roll manual stop flags
+    - 4.4.3. Access shared state through `std::mutex` + `std::lock_guard`; prefer `std::unique_lock` only when needed for conditional unlocking
+    - 4.4.4. Use `std::atomic` for simple flags and counters shared between threads; avoid `volatile`
+- 5\. Error Handling
+  - 5.1. Three-Layer Policy
+    - 5.1.1. **`rs::Result<T>`** (alias for `std::expected<T, rs::Error>`) — Recoverable fallible operations
+      - Use when the operation can legitimately fail and the caller is expected to handle it
+      - Examples: `rs::Result<> open(path)`, `rs::Result<PcmBlock> readNextBlock()`
+      - The error value travels with the return — no separate `lastError()` query needed
+    - 5.1.2. **`rs::Exception`** (via `RS_THROW` / `RS_THROW_FORMAT`) — Invariant violations
+      - Use for data corruption, programmer errors, impossible states, and unrecoverable system failures
+      - Examples: LMDB failures, expression parser errors, malformed tag data, import/export format violations
+      - Catch at boundary points only (e.g., UI event handlers, import workers, background threads)
+    - 5.1.3. **`std::optional<T>`** — Legitimate absence
+      - Use when "not found" is a normal outcome, not an error
+      - Examples: database lookups, optional UI state, finding a sink by name
+  - 5.2. Error Type
+    - 5.2.1. Use `rs::Result<T>` (alias for `std::expected<T, rs::Error>`) as the return type; use `rs::Result<>` when `T` is `void`
+      - `rs::Error` has a `Code` enum for programmatic dispatch and a `message` string for human context
+      - Use `rs::makeError(code, message)` to construct error results concisely
+    - 5.2.2. Return `{}` for success when the return type is `rs::Result<>` (void expected)
+      - Prefer `return {};` over `return rs::Result<>();` for consistency
+      - Use `return std::unexpected(rs::Error{...})` for explicit error construction
+  - 5.3. Anti-Patterns
+    - 5.3.1. Do not use `bool` return + `lastError()` getter for error reporting in new code
+    - 5.3.2. Do not return an empty `std::string` to indicate success
+    - 5.3.3. Do not use `std::optional` to signal an error — use `std::expected` and let `std::nullopt` mean "absent, not broken"
+    - 5.3.4. Do not catch exceptions inside low-level code to convert them to error strings; let them propagate to boundary points

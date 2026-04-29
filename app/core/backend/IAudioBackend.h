@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <rs/Error.h>
 #include <span>
 #include <string_view>
 
@@ -56,7 +57,7 @@ namespace app::core::backend
     /**
      * @brief Prepares the backend for playback with the given format.
      */
-    virtual bool open(AudioFormat const& format, AudioRenderCallbacks callbacks) = 0;
+    virtual rs::Result<> open(AudioFormat const& format, AudioRenderCallbacks callbacks) = 0;
 
     virtual void start() = 0;
     virtual void pause() = 0;
@@ -75,7 +76,6 @@ namespace app::core::backend
     virtual bool isExclusiveMode() const noexcept = 0;
 
     virtual BackendKind kind() const noexcept = 0;
-    virtual std::string_view lastError() const noexcept = 0;
   };
 
 } // namespace app::core::backend

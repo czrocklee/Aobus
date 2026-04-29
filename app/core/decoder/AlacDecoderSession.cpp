@@ -36,7 +36,6 @@ namespace app::core::decoder
   struct AlacDecoderSession::Impl
   {
     AudioFormat requestedOutput;
-    std::string error;
     DecodedStreamInfo info;
 
     std::unique_ptr<ALACDecoder> decoder;
@@ -52,8 +51,6 @@ namespace app::core::decoder
     {
       decoder = std::make_unique<ALACDecoder>();
     }
-
-    void setError(std::string_view msg) { error = std::string(msg); }
   };
 
   AlacDecoderSession::AlacDecoderSession(AudioFormat outputFormat)
@@ -63,16 +60,13 @@ namespace app::core::decoder
 
   AlacDecoderSession::~AlacDecoderSession() = default;
 
-  bool AlacDecoderSession::open(std::filesystem::path const& filePath)
+  rs::Result<> AlacDecoderSession::open(std::filesystem::path const& filePath)
   {
     close();
 
-    auto const mapError = _impl->mappedFile.map(filePath);
-
-    if (!mapError.empty())
+    if (auto const mapResult = _impl->mappedFile.map(filePath); !mapResult)
     {
-      _impl->setError(mapError);
-      return false;
+      return std::unexpected(mapResult.error());
     }
 
     _impl->demuxer = std::make_unique<Demuxer>(_impl->mappedFile.bytes());
@@ -80,8 +74,7 @@ namespace app::core::decoder
 
     if (!demuxError.empty())
     {
-      _impl->setError(demuxError);
-      return false;
+      return rs::makeError(rs::Error::Code::InitFailed, demuxError);
     }
 
     auto const cookie = _impl->demuxer->magicCookie();
@@ -91,16 +84,14 @@ namespace app::core::decoder
 
     if (initStatus != ALAC_noErr)
     {
-      _impl->setError("Failed to initialize ALAC decoder");
-      return false;
+      return rs::makeError(rs::Error::Code::InitFailed, "Failed to initialize ALAC decoder");
     }
 
     auto const& config = _impl->decoder->mConfig;
 
     if (config.sampleRate == 0 || config.numChannels == 0 || config.bitDepth == 0)
     {
-      _impl->setError("Invalid ALAC stream configuration");
-      return false;
+      return rs::makeError(rs::Error::Code::InitFailed, "Invalid ALAC stream configuration");
     }
 
     _impl->timescale = _impl->demuxer->timescale();
@@ -134,7 +125,7 @@ namespace app::core::decoder
 
     _impl->currentSampleIndex = 0;
 
-    return true;
+    return {};
   }
 
   void AlacDecoderSession::close()
@@ -145,22 +136,22 @@ namespace app::core::decoder
     _impl->timescale = 0;
   }
 
-  bool AlacDecoderSession::seek(std::uint32_t /*positionMs*/)
+  rs::Result<> AlacDecoderSession::seek(std::uint32_t /*positionMs*/)
   {
     if (_impl->timescale == 0)
     {
-      return false;
+      return rs::makeError(rs::Error::Code::SeekFailed, "Timescale is 0");
     }
 
     _impl->currentSampleIndex = 0;
-    return true;
+    return {};
   }
 
   void AlacDecoderSession::flush()
   {
   }
 
-  std::optional<PcmBlock> AlacDecoderSession::readNextBlock()
+  rs::Result<PcmBlock> AlacDecoderSession::readNextBlock()
   {
     if (!_impl->demuxer || _impl->currentSampleIndex >= _impl->demuxer->sampleCount())
     {
@@ -171,8 +162,7 @@ namespace app::core::decoder
 
     if (packet.empty())
     {
-      _impl->setError("Failed to read ALAC sample payload");
-      return std::nullopt;
+      return rs::makeError(rs::Error::Code::DecodeFailed, "Failed to read ALAC sample payload");
     }
 
     auto const maxFrames = (_impl->decoder->mConfig.frameLength > 0)
@@ -188,8 +178,7 @@ namespace app::core::decoder
 
     if (sourceBytesPerFrame == 0 || targetBytesPerFrame == 0)
     {
-      _impl->setError("Invalid ALAC format calculation");
-      return std::nullopt;
+      return rs::makeError(rs::Error::Code::DecodeFailed, "Invalid ALAC format calculation");
     }
 
     std::uint32_t numFrames = 0;
@@ -207,8 +196,7 @@ namespace app::core::decoder
         &bitBuffer, reinterpret_cast<uint8_t*>(sourcePcm.data()), maxFrames, channels, &numFrames);
       if (status != 0)
       {
-        _impl->setError("ALAC decode failed");
-        return std::nullopt;
+        return rs::makeError(rs::Error::Code::DecodeFailed, "ALAC decode failed");
       }
 
       std::vector<std::byte> targetPcm(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
@@ -230,8 +218,8 @@ namespace app::core::decoder
       }
       else
       {
-        _impl->setError(std::format("Unsupported ALAC conversion: {} -> {}", sourceBps, targetBps));
-        return std::nullopt;
+        return rs::makeError(
+          rs::Error::Code::NotSupported, std::format("Unsupported ALAC conversion: {} -> {}", sourceBps, targetBps));
       }
 
       auto block = PcmBlock{};
@@ -257,8 +245,7 @@ namespace app::core::decoder
 
       if (status != 0)
       {
-        _impl->setError("ALAC decode failed");
-        return std::nullopt;
+        return rs::makeError(rs::Error::Code::DecodeFailed, "ALAC decode failed");
       }
 
       auto block = PcmBlock{};
@@ -277,11 +264,6 @@ namespace app::core::decoder
   DecodedStreamInfo AlacDecoderSession::streamInfo() const
   {
     return _impl->info;
-  }
-
-  std::string_view AlacDecoderSession::lastError() const noexcept
-  {
-    return _impl->error;
   }
 
 } // namespace app::core::decoder

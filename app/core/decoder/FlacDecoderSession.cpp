@@ -21,7 +21,6 @@ namespace app::core::decoder
     std::uint64_t currentOffset = 0;
 
     DecodedStreamInfo info;
-    std::string error;
 
     // Buffer for decoded samples
     std::vector<std::byte> pcmBuffer;
@@ -78,16 +77,13 @@ namespace app::core::decoder
 
   FlacDecoderSession::~FlacDecoderSession() = default;
 
-  bool FlacDecoderSession::open(std::filesystem::path const& filePath)
+  rs::Result<> FlacDecoderSession::open(std::filesystem::path const& filePath)
   {
     close();
 
-    auto const mapError = _impl->mappedFile.map(filePath);
-
-    if (!mapError.empty())
+    if (auto const mapResult = _impl->mappedFile.map(filePath); !mapResult)
     {
-      _impl->error = mapError;
-      return false;
+      return std::unexpected(mapResult.error());
     }
 
     _impl->currentOffset = 0;
@@ -107,18 +103,16 @@ namespace app::core::decoder
 
     if (initStatus != FLAC__STREAM_DECODER_INIT_STATUS_OK)
     {
-      _impl->error = "Failed to initialize FLAC decoder";
-      return false;
+      return rs::makeError(rs::Error::Code::InitFailed, "Failed to initialize FLAC decoder");
     }
 
     // Process until metadata is read
     if (!::FLAC__stream_decoder_process_until_end_of_metadata(_impl->decoder))
     {
-      _impl->error = "Failed to read FLAC metadata";
-      return false;
+      return rs::makeError(rs::Error::Code::DecodeFailed, "Failed to read FLAC metadata");
     }
 
-    return true;
+    return {};
   }
 
   void FlacDecoderSession::close()
@@ -133,7 +127,7 @@ namespace app::core::decoder
     _impl->bufferedFrames = 0;
   }
 
-  bool FlacDecoderSession::seek(std::uint32_t positionMs)
+  rs::Result<> FlacDecoderSession::seek(std::uint32_t positionMs)
   {
     _impl->pcmBuffer.clear();
     _impl->bufferedFrames = 0;
@@ -143,19 +137,18 @@ namespace app::core::decoder
 
     if (sampleRate == 0)
     {
-      return false;
+      return rs::makeError(rs::Error::Code::SeekFailed, "Sample rate is 0");
     }
 
     auto const targetSample = static_cast<FLAC__uint64>(positionMs) * sampleRate / 1000;
 
     if (!::FLAC__stream_decoder_seek_absolute(_impl->decoder, targetSample))
     {
-      _impl->error = "FLAC seek failed";
-      return false;
+      return rs::makeError(rs::Error::Code::SeekFailed, "FLAC seek failed");
     }
 
     _impl->nextFrameIndex = targetSample;
-    return true;
+    return {};
   }
 
   void FlacDecoderSession::flush()
@@ -165,7 +158,7 @@ namespace app::core::decoder
     _impl->bufferedFrames = 0;
   }
 
-  std::optional<PcmBlock> FlacDecoderSession::readNextBlock()
+  rs::Result<PcmBlock> FlacDecoderSession::readNextBlock()
   {
     if (_impl->eof && _impl->bufferedFrames == 0)
     {
@@ -183,7 +176,7 @@ namespace app::core::decoder
           break;
         }
 
-        return std::nullopt;
+        return rs::makeError(rs::Error::Code::DecodeFailed, "FLAC process single failed");
       }
 
       if (::FLAC__stream_decoder_get_state(_impl->decoder) == FLAC__STREAM_DECODER_END_OF_STREAM)
@@ -215,11 +208,6 @@ namespace app::core::decoder
   DecodedStreamInfo FlacDecoderSession::streamInfo() const
   {
     return _impl->info;
-  }
-
-  std::string_view FlacDecoderSession::lastError() const noexcept
-  {
-    return _impl->error;
   }
 
   // Implementation of callbacks
@@ -409,7 +397,7 @@ namespace app::core::decoder
                                                void* clientData)
   {
     auto* impl = static_cast<Impl*>(clientData);
-    impl->error = std::format("FLAC error: {}", ::FLAC__StreamDecoderErrorStatusString[status]);
+    /* TODO logging */
   }
 
 } // namespace app::core::decoder

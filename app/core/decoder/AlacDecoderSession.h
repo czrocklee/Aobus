@@ -14,14 +14,13 @@ namespace app::core::decoder
     explicit AlacDecoderSession(AudioFormat outputFormat);
     ~AlacDecoderSession() override;
 
-    bool open(std::filesystem::path const& filePath) override;
+    rs::Result<> open(std::filesystem::path const& filePath) override;
     void close() override;
-    bool seek(std::uint32_t positionMs) override;
+    rs::Result<> seek(std::uint32_t positionMs) override;
     void flush() override;
 
-    std::optional<PcmBlock> readNextBlock() override;
+    rs::Result<PcmBlock> readNextBlock() override;
     DecodedStreamInfo streamInfo() const override;
-    std::string_view lastError() const noexcept override;
 
   private:
     struct Impl;

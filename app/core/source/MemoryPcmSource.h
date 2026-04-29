@@ -19,13 +19,12 @@ namespace app::core::source
   public:
     MemoryPcmSource(std::unique_ptr<decoder::IAudioDecoderSession> decoder, decoder::DecodedStreamInfo streamInfo);
 
-    bool initialize();
+    rs::Result<> initialize();
+    rs::Result<> seek(std::uint32_t positionMs) override;
 
     std::size_t read(std::span<std::byte> output) noexcept override;
     bool isDrained() const noexcept override;
     std::uint32_t bufferedMs() const noexcept override;
-    bool seek(std::uint32_t positionMs) override;
-    std::string lastError() const override;
 
   private:
     std::size_t positionToByteOffset(std::uint32_t positionMs) const noexcept;
@@ -35,7 +34,6 @@ namespace app::core::source
     std::vector<std::byte> _pcmBytes;
     mutable std::mutex _mutex;
     std::size_t _readOffset = 0;
-    std::string _lastError;
   };
 
 } // namespace app::core::playback
