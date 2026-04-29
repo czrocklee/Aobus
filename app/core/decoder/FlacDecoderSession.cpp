@@ -185,6 +185,12 @@ namespace app::core::decoder
 
         return std::nullopt;
       }
+
+      if (::FLAC__stream_decoder_get_state(_impl->decoder) == FLAC__STREAM_DECODER_END_OF_STREAM)
+      {
+        _impl->eof = true;
+        break;
+      }
     }
 
     if (_impl->bufferedFrames == 0 && _impl->eof)

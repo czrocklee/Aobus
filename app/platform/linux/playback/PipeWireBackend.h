@@ -16,7 +16,6 @@ namespace app::playback
   {
   public:
     struct Impl;
-
     explicit PipeWireBackend(app::core::backend::AudioDevice const& device);
     ~PipeWireBackend() override;
 

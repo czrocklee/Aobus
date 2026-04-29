@@ -35,6 +35,7 @@ add_executable(rs_test
     # integration tests
     integration/playback/DecoderIntegrationTest.cpp
     integration/playback/PipeWireManagerTest.cpp
+    integration/playback/GraphIntegrityTest.cpp
     integration/tag/TagTest.cpp
 )
 

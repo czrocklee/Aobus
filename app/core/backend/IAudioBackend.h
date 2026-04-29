@@ -38,6 +38,9 @@ namespace app::core::backend
     /// Called by the backend when the stream's runtime node ID or route anchor is stable.
     void (*onRouteReady)(void* userData, std::string_view routeAnchor) noexcept = nullptr;
 
+    /// Called by the backend when its input stream format is negotiated or changes.
+    void (*onFormatChanged)(void* userData, AudioFormat const& format) noexcept = nullptr;
+
     /// Called by the backend when a terminal error occurs (e.g. device lost).
     void (*onBackendError)(void* userData, std::string_view message) noexcept = nullptr;
   };

@@ -12,41 +12,18 @@ namespace app::playback
 
   struct PipeWireManager::Impl
   {
-    PwThreadLoopPtr threadLoop;
-    PwContextPtr context;
-    PwCorePtr core;
     std::unique_ptr<PipeWireMonitor> monitor;
 
     Impl()
     {
       ensurePipeWireInit();
-
-      threadLoop.reset(::pw_thread_loop_new("PipeWireManager", nullptr));
-      if (!threadLoop) return;
-
-      context.reset(::pw_context_new(::pw_thread_loop_get_loop(threadLoop.get()), nullptr, 0));
-      if (!context) return;
-
-      if (::pw_thread_loop_start(threadLoop.get()) < 0) return;
-
-      ::pw_thread_loop_lock(threadLoop.get());
-      core.reset(::pw_context_connect(context.get(), nullptr, 0));
-      if (core)
-      {
-        monitor =
-          std::make_unique<PipeWireMonitor>(threadLoop.get(), core.get(), app::core::backend::AudioRenderCallbacks{});
-        monitor->start();
-      }
-      ::pw_thread_loop_unlock(threadLoop.get());
+      monitor = std::make_unique<PipeWireMonitor>();
+      monitor->start();
     }
 
     ~Impl()
     {
-      if (threadLoop) ::pw_thread_loop_stop(threadLoop.get());
       monitor.reset();
-      core.reset();
-      context.reset();
-      threadLoop.reset();
     }
   };
 
