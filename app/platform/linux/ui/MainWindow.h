@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include "platform/linux/AppConfig.h"
 #include "core/model/SmartListEngine.h"
 #include "core/playback/PlaybackTypes.h"
+#include "platform/linux/AppConfig.h"
+#include "platform/linux/ui/GtkMainThreadDispatcher.h"
 #include "platform/linux/ui/StatusBar.h"
 #include "platform/linux/ui/TrackViewPage.h"
-#include "platform/linux/ui/GtkMainThreadDispatcher.h"
 
 #include <rs/core/MusicLibrary.h>
 
@@ -21,10 +21,9 @@
 #include <optional>
 #include <thread>
 #include <vector>
-
 namespace app::core::model
 {
-  class ListDraft;
+  struct ListDraft;
   class AllTrackIdsList;
   class FilteredTrackIdList;
   class ManualTrackIdList;

@@ -42,6 +42,9 @@ namespace rs::utility
     return {static_cast<std::byte const*>(_mappedRegion.get_address()), _mappedRegion.get_size()};
   }
 
-  bool MappedFile::isMapped() const { return _isMapped; }
+  bool MappedFile::isMapped() const
+  {
+    return _isMapped;
+  }
 
 } // namespace rs::utility

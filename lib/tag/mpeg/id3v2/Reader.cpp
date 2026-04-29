@@ -104,22 +104,22 @@ namespace rs::tag::mpeg::id3v2
       // Skip encoding byte
       ++ptr;
       // Skip MIME type
-      
+
       while (*ptr != '\0')
       {
         ++ptr;
       }
-      
+
       ++ptr; // skip null terminator
       // Skip picture type
       ++ptr;
       // Skip description (null-terminated)
-      
+
       while (*ptr != '\0')
       {
         ++ptr;
       }
-      
+
       ++ptr; // skip null terminator
 
       std::size_t const imageSize = size - (ptr - frameData);

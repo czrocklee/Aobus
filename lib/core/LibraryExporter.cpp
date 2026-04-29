@@ -31,7 +31,9 @@ namespace rs::core
       return "unknown";
     }
 
-    void emitTrackMetadata(YAML::Emitter& out, rs::core::TrackView const& view, rs::core::DictionaryStore& dict,
+    void emitTrackMetadata(YAML::Emitter& out,
+                           rs::core::TrackView const& view,
+                           rs::core::DictionaryStore& dict,
                            ExportMode /*mode*/)
     {
       auto const metadata = view.metadata();
@@ -106,7 +108,8 @@ namespace rs::core
       out << YAML::Key << "mtime" << YAML::Value << property.mtime();
     }
 
-    void emitTrackCommon(YAML::Emitter& out, rs::core::TrackView::MetadataProxy const& metadata,
+    void emitTrackCommon(YAML::Emitter& out,
+                         rs::core::TrackView::MetadataProxy const& metadata,
                          rs::core::TrackView::TagProxy const& tags,
                          rs::core::DictionaryStore& dict)
     {
@@ -180,11 +183,9 @@ namespace rs::core
     auto const property = view.property();
     out << YAML::Key << "uri" << YAML::Value << std::string(property.uri());
 
-    if (mode == ExportMode::Metadata || mode == ExportMode::Full)
-      emitTrackMetadata(out, view, dict, mode);
+    if (mode == ExportMode::Metadata || mode == ExportMode::Full) emitTrackMetadata(out, view, dict, mode);
 
-    if (mode == ExportMode::Full)
-      emitTrackProperties(out, property);
+    if (mode == ExportMode::Full) emitTrackProperties(out, property);
 
     emitTrackCommon(out, view.metadata(), view.tags(), dict);
 

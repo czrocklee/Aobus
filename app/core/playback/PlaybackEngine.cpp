@@ -4,16 +4,16 @@
 #include "core/playback/PlaybackEngine.h"
 #include "core/Log.h"
 
-#include "core/playback/FormatNegotiator.h"
 #include "core/decoder/AudioDecoderFactory.h"
 #include "core/decoder/IAudioDecoderSession.h"
+#include "core/playback/FormatNegotiator.h"
 #include "core/source/MemoryPcmSource.h"
 #include "core/source/StreamingPcmSource.h"
 
 #include <algorithm>
 #include <format>
-#include <ranges>
 #include <limits>
+#include <ranges>
 #include <set>
 #include <sstream>
 
@@ -78,8 +78,9 @@ namespace app::core::playback
     auto const state = [this]()
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
-      return State{
-        .track = _currentTrack, .positionMs = _snapshot.positionMs, .wasPlaying = (_snapshot.state == TransportState::Playing)};
+      return State{.track = _currentTrack,
+                   .positionMs = _snapshot.positionMs,
+                   .wasPlaying = (_snapshot.state == TransportState::Playing)};
     }();
 
     stop();
@@ -134,11 +135,12 @@ namespace app::core::playback
     if (_onRouteChanged)
     {
       auto snap = _routeSnapshot;
-      if (_dispatcher) _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
-      else _onRouteChanged(snap);
+      if (_dispatcher)
+        _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      else
+        _onRouteChanged(snap);
     }
   }
-
 
   void PlaybackEngine::play(TrackPlaybackDescriptor descriptor)
   {
@@ -418,11 +420,11 @@ namespace app::core::playback
       if (backendKind == BackendKind::PipeWire)
       {
         backendFormat = info.outputFormat;
-        PLAYBACK_LOG_INFO(
-          "PipeWire shared mode keeps the client stream at {}Hz/{}b/{}ch; the server graph may still resample downstream",
-          backendFormat.sampleRate,
-          static_cast<int>(backendFormat.bitDepth),
-          static_cast<int>(backendFormat.channels));
+        PLAYBACK_LOG_INFO("PipeWire shared mode keeps the client stream at {}Hz/{}b/{}ch; the server graph may still "
+                          "resample downstream",
+                          backendFormat.sampleRate,
+                          static_cast<int>(backendFormat.bitDepth),
+                          static_cast<int>(backendFormat.channels));
       }
       else
       {
@@ -431,10 +433,9 @@ namespace app::core::playback
 
         if (plan.requiresResample)
         {
-          _snapshot.statusText =
-            std::format("{} does not support {} Hz and RockStudio has no resampler yet",
-                        backendDisplayName(backendKind),
-                        info.sourceFormat.sampleRate);
+          _snapshot.statusText = std::format("{} does not support {} Hz and RockStudio has no resampler yet",
+                                             backendDisplayName(backendKind),
+                                             info.sourceFormat.sampleRate);
           return false;
         }
 
@@ -513,28 +514,25 @@ namespace app::core::playback
                                           .objectPath = ""});
 
     // Add Engine Node
-    _routeSnapshot.graph.nodes.push_back(backend::AudioNode{
-      .id = "rs-engine",
-      .type = backend::AudioNodeType::Engine,
-      .name = "RockStudio Engine",
-      .format = info.outputFormat,
-      .volumeNotUnity = false,
-      .isMuted = false,
-      .isLossySource = false
-    });
-    
-    _routeSnapshot.graph.links.push_back(backend::AudioLink{
-      .sourceId = "rs-decoder",
-      .destId = "rs-engine",
-      .isActive = true
-    });
+    _routeSnapshot.graph.nodes.push_back(backend::AudioNode{.id = "rs-engine",
+                                                            .type = backend::AudioNodeType::Engine,
+                                                            .name = "RockStudio Engine",
+                                                            .format = info.outputFormat,
+                                                            .volumeNotUnity = false,
+                                                            .isMuted = false,
+                                                            .isLossySource = false});
+
+    _routeSnapshot.graph.links.push_back(
+      backend::AudioLink{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
 
     _snapshot.graph = _routeSnapshot.graph;
     if (_onRouteChanged)
     {
       auto snap = _routeSnapshot;
-      if (_dispatcher) _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
-      else _onRouteChanged(snap);
+      if (_dispatcher)
+        _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      else
+        _onRouteChanged(snap);
     }
 
     return true;
@@ -586,8 +584,10 @@ namespace app::core::playback
     auto* self = static_cast<PlaybackEngine*>(userData);
     if (!self->_playbackDrainPending.exchange(false, std::memory_order_relaxed)) return;
 
-    if (self->_dispatcher) self->_dispatcher->dispatch([self]() { self->handleDrainComplete(); });
-    else self->handleDrainComplete();
+    if (self->_dispatcher)
+      self->_dispatcher->dispatch([self]() { self->handleDrainComplete(); });
+    else
+      self->handleDrainComplete();
   }
 
   void PlaybackEngine::handleDrainComplete()
@@ -623,14 +623,14 @@ namespace app::core::playback
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
     _routeSnapshot.anchor = BackendRouteAnchor{
-      .backend = _backend ? _backend->kind() : backend::BackendKind::None,
-      .id = std::string(routeAnchor)
-    };
+      .backend = _backend ? _backend->kind() : backend::BackendKind::None, .id = std::string(routeAnchor)};
     if (_onRouteChanged)
     {
       auto snap = _routeSnapshot;
-      if (_dispatcher) _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
-      else _onRouteChanged(snap);
+      if (_dispatcher)
+        _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      else
+        _onRouteChanged(snap);
     }
   }
 
@@ -639,7 +639,7 @@ namespace app::core::playback
     auto* self = static_cast<PlaybackEngine*>(userData);
     auto source = self->_source.load(std::memory_order_acquire);
     auto const errorText = source ? source->lastError() : std::string{};
-    
+
     if (self->_dispatcher)
     {
       self->_dispatcher->dispatch([self, errorText]() { self->handleSourceError(errorText); });
@@ -684,7 +684,7 @@ namespace app::core::playback
   void PlaybackEngine::handleFormatChanged(AudioFormat const& format)
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
-    
+
     // Update engine node in the route snapshot
     for (auto& node : _routeSnapshot.graph.nodes)
     {
@@ -708,8 +708,10 @@ namespace app::core::playback
     if (_onRouteChanged)
     {
       auto snap = _routeSnapshot;
-      if (_dispatcher) _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
-      else _onRouteChanged(snap);
+      if (_dispatcher)
+        _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      else
+        _onRouteChanged(snap);
     }
   }
 

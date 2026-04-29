@@ -143,13 +143,13 @@ namespace rs::expr
         case Field::Title: return track.metadata().title();
         case Field::Uri: return track.property().uri();
         case Field::Custom:
-          
+
           if (instr != nullptr && instr->constValue > 0)
           {
             auto dictId = core::DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
             return track.custom().get(dictId).value_or("");
           }
-          
+
           return {};
 
         case Field::ArtistId:
@@ -215,7 +215,7 @@ namespace rs::expr
       auto stringIdx = registers[instr.operand];
 
       // Check for string comparison first
-      
+
       if (prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
       {
         auto field = static_cast<Field>(prevLoadField->field);
@@ -299,7 +299,7 @@ namespace rs::expr
   bool PlanEvaluator::matches(ExecutionPlan const& plan, core::TrackView const& track) const
   {
     // Fast path: empty query matches all
-    
+
     if (plan.matchesAll)
     {
       return true;
@@ -311,10 +311,10 @@ namespace rs::expr
     }
 
     // Bloom filter fast-path rejection for tag queries
-    
+
     if (plan.tagBloomMask != 0)
     {
-      
+
       if (auto trackBloom = track.tags().bloom(); (trackBloom & plan.tagBloomMask) != plan.tagBloomMask)
       {
         return false;

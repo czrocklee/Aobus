@@ -57,7 +57,7 @@ namespace rs::core
       }
 
       // Prevent infinite loop (though extremely unlikely with 32-bit hash space)
-      
+
       if (key == std::numeric_limits<std::uint32_t>::max())
       {
         RS_THROW(Exception, "Hash table full");

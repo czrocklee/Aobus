@@ -121,7 +121,6 @@ namespace app::ui
     Gtk::ScrolledWindow _scrolledWindow;
     Gtk::ColumnView _columnView;
     Gtk::Popover _contextPopover;
-    TagPopover* _tagPopover = nullptr;
 
     // Models
     rs::core::ListId _listId;

@@ -24,11 +24,11 @@ namespace rs::tag::mpeg::id3v2
     {
       std::string result;
       result.reserve(size);
-      
+
       for (auto const* it = begin; it != end; ++it)
       {
         auto const c = static_cast<unsigned char>(*it);
-        
+
         if (c < 0x80)
         {
           result.push_back(static_cast<char>(c));
@@ -39,7 +39,7 @@ namespace rs::tag::mpeg::id3v2
           result.push_back(static_cast<char>(0x80 | (c & 0x3F)));
         }
       }
-      
+
       return result;
     }
 
@@ -54,7 +54,7 @@ namespace rs::tag::mpeg::id3v2
       auto const* u16_end = reinterpret_cast<std::uint8_t const*>(end);
 
       bool big_endian = true;
-      
+
       if (u16_begin[0] == 0xFF && u16_begin[1] == 0xFE)
       {
         big_endian = false;
@@ -90,7 +90,7 @@ namespace rs::tag::mpeg::id3v2
           result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
         }
       }
-      
+
       return result;
     }
 
@@ -160,12 +160,12 @@ namespace rs::tag::mpeg::id3v2
       auto end = static_cast<char const*>(Base::data()) + Base::size();
       auto encoding = Base::template layout<FrameViewLayout>().encoding;
       std::string result = convertToUtf8(begin, end, encoding);
-      
+
       while (!result.empty() && result.back() == '\0')
       {
         result.pop_back();
       }
-      
+
       return result;
     }
   };
@@ -224,7 +224,7 @@ namespace rs::tag::mpeg::id3v2
       }
 
       auto const lastSize = _view.size();
-      
+
       if (_sizeLeft <= lastSize)
       {
         _sizeLeft = 0;
@@ -237,14 +237,14 @@ namespace rs::tag::mpeg::id3v2
 
       // Check for padding (zeros at the end of the tag)
       bool isPadding = (*nextFrame == 0);
-      
+
       if (isPadding && _sizeLeft > 1)
       {
         isPadding = (std::memcmp(nextFrame, nextFrame + 1, _sizeLeft - 1) == 0);
       }
 
       _view = isPadding ? ViewT{nullptr, 0} : ViewT{nextFrame, _sizeLeft};
-      
+
       if (isPadding)
       {
         _sizeLeft = 0;

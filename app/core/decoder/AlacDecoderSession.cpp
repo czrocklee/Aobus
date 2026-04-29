@@ -122,17 +122,16 @@ namespace app::core::decoder
     _impl->info.sourceFormat.bitDepth = config.bitDepth;
     _impl->info.sourceFormat.validBits = config.bitDepth;
     _impl->info.sourceFormat.isInterleaved = true;
-    
+
     _impl->info.outputFormat = _impl->info.sourceFormat;
-    
+
     if (_impl->requestedOutput.bitDepth != 0)
     {
       _impl->info.outputFormat.bitDepth = _impl->requestedOutput.bitDepth;
-      _impl->info.outputFormat.validBits = (_impl->requestedOutput.validBits != 0) 
-                                           ? _impl->requestedOutput.validBits 
-                                           : _impl->requestedOutput.bitDepth;
+      _impl->info.outputFormat.validBits =
+        (_impl->requestedOutput.validBits != 0) ? _impl->requestedOutput.validBits : _impl->requestedOutput.bitDepth;
     }
-    
+
     _impl->currentSampleIndex = 0;
 
     return true;
@@ -179,7 +178,7 @@ namespace app::core::decoder
     auto const maxFrames = (_impl->decoder->mConfig.frameLength > 0)
                              ? _impl->decoder->mConfig.frameLength
                              : static_cast<std::uint32_t>(kALACDefaultFramesPerPacket);
-    
+
     auto const sourceBps = _impl->info.sourceFormat.bitDepth;
     auto const targetBps = _impl->info.outputFormat.bitDepth;
     auto const channels = _impl->info.outputFormat.channels;
@@ -194,7 +193,7 @@ namespace app::core::decoder
     }
 
     std::uint32_t numFrames = 0;
-    
+
     // If we need conversion (e.g. 24 -> 32), decode to temp buffer first
     if (sourceBps != targetBps)
     {
@@ -204,11 +203,8 @@ namespace app::core::decoder
                     const_cast<uint8_t*>(reinterpret_cast<uint8_t const*>(packet.data())),
                     static_cast<uint32_t>(packet.size()));
 
-      auto const status = _impl->decoder->Decode(&bitBuffer,
-                                                 reinterpret_cast<uint8_t*>(sourcePcm.data()),
-                                                 maxFrames,
-                                                 channels,
-                                                 &numFrames);
+      auto const status = _impl->decoder->Decode(
+        &bitBuffer, reinterpret_cast<uint8_t*>(sourcePcm.data()), maxFrames, channels, &numFrames);
       if (status != 0)
       {
         _impl->setError("ALAC decode failed");
@@ -216,7 +212,7 @@ namespace app::core::decoder
       }
 
       std::vector<std::byte> targetPcm(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
-      
+
       if (sourceBps == 24 && targetBps == 32)
       {
         auto* src = reinterpret_cast<std::uint8_t*>(sourcePcm.data());
@@ -253,11 +249,8 @@ namespace app::core::decoder
                     const_cast<uint8_t*>(reinterpret_cast<uint8_t const*>(packet.data())),
                     static_cast<uint32_t>(packet.size()));
 
-      auto const status = _impl->decoder->Decode(&bitBuffer,
-                                                 reinterpret_cast<uint8_t*>(decodedPcm.data()),
-                                                 maxFrames,
-                                                 channels,
-                                                 &numFrames);
+      auto const status = _impl->decoder->Decode(
+        &bitBuffer, reinterpret_cast<uint8_t*>(decodedPcm.data()), maxFrames, channels, &numFrames);
 
       if (status != 0)
       {

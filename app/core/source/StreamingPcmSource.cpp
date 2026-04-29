@@ -122,10 +122,12 @@ namespace app::core::source
   void StreamingPcmSource::startDecodeThread()
   {
     stopDecodeThread();
-    _decodeThread = std::jthread([this](std::stop_token token) {
-      app::core::util::setCurrentThreadName("StreamingPcmSource-Decode");
-      decodeLoop(token);
-    });
+    _decodeThread = std::jthread(
+      [this](std::stop_token token)
+      {
+        app::core::util::setCurrentThreadName("StreamingPcmSource-Decode");
+        decodeLoop(token);
+      });
   }
 
   void StreamingPcmSource::stopDecodeThread()

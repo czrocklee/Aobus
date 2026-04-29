@@ -34,13 +34,12 @@ TEST_CASE("MusicLibrary rejects unsupported library versions", "[core][library]"
 
   auto txn = rs::lmdb::WriteTransaction{env};
   auto metaStore = rs::core::LibraryMetaStore{rs::lmdb::Database{txn, "meta"}};
-  auto header =
-    rs::core::LibraryMetaHeader{.magic = rs::core::kLibraryMetaMagic,
-                                .libraryVersion = rs::core::kLibraryVersion + 1,
-                                .flags = 0,
-                                .createdAtUnixMs = 1,
-                                .migratedAtUnixMs = 1,
-                                .libraryId = {}};
+  auto header = rs::core::LibraryMetaHeader{.magic = rs::core::kLibraryMetaMagic,
+                                            .libraryVersion = rs::core::kLibraryVersion + 1,
+                                            .flags = 0,
+                                            .createdAtUnixMs = 1,
+                                            .migratedAtUnixMs = 1,
+                                            .libraryId = {}};
   metaStore.create(txn, header);
   txn.commit();
 

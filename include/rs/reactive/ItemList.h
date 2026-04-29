@@ -65,7 +65,7 @@ namespace rs::reactive
       {
         return std::addressof(iter->second);
       }
-      
+
       return nullptr;
     }
 
@@ -75,7 +75,7 @@ namespace rs::reactive
       {
         return std::addressof(iter->second);
       }
-      
+
       return nullptr;
     }
 

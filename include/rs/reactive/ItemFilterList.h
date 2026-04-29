@@ -53,7 +53,6 @@ namespace rs::reactive
       {
         insert(id, val, idx);
       }
-    
     };
 
     void onBeginUpdate(Id id, T const& val, Index idx) override { onBeginRemove(id, val, idx); };
@@ -66,7 +65,6 @@ namespace rs::reactive
       {
         remove(id, val, iter);
       }
-    
     };
 
     void onBeginClear() override

@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include <format>
 #include <lmdb.h>
 #include <rs/Exception.h>
-#include <format>
 #include <stdexcept>
 #include <string>
 

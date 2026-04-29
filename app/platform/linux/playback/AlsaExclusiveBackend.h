@@ -5,10 +5,10 @@
 
 #include "core/backend/IAudioBackend.h"
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <thread>
-#include <atomic>
 
 extern "C"
 {

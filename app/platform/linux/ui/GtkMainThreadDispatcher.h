@@ -4,8 +4,8 @@
 #pragma once
 
 #include "core/IMainThreadDispatcher.h"
-#include <glibmm/dispatcher.h>
 #include <functional>
+#include <glibmm/dispatcher.h>
 #include <mutex>
 #include <vector>
 
