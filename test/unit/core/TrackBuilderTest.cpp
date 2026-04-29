@@ -127,8 +127,8 @@ TEST_CASE("TrackBuilder - TagsBuilder add/remove/clear")
   CHECK(builder.tags().names().size() == 2);
 
   // Check remaining tags
-  CHECK(std::ranges::find(builder.tags().names(), "rock") != builder.tags().names().end());
-  CHECK(std::ranges::find(builder.tags().names(), "blues") != builder.tags().names().end());
+  CHECK(std::ranges::contains(builder.tags().names(), "rock"));
+  CHECK(std::ranges::contains(builder.tags().names(), "blues"));
 
   // Clear
   builder.tags().clear();

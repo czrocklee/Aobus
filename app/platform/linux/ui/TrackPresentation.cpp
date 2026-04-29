@@ -170,7 +170,7 @@ namespace app::ui
     {
       auto const* definition = trackColumnDefinition(column);
 
-      if (!definition)
+      if (definition == nullptr)
       {
         return {.column = column};
       }
@@ -258,6 +258,7 @@ namespace app::ui
           {TrackSortField::Title},
         };
         return spec;
+      default: break;
     }
 
     return spec;
@@ -343,7 +344,7 @@ namespace app::ui
   std::string_view trackColumnId(TrackColumn column)
   {
     auto const* definition = trackColumnDefinition(column);
-    return definition ? definition->id : std::string_view{};
+    return definition != nullptr ? definition->id : std::string_view{};
   }
 
   TrackColumnLayout defaultTrackColumnLayout()
@@ -358,20 +359,19 @@ namespace app::ui
 
     return layout;
   }
-
-  TrackColumnLayout normalizeTrackColumnLayout(TrackColumnLayout layout)
+  TrackColumnLayout normalizeTrackColumnLayout(TrackColumnLayout const& layout)
   {
     auto result = TrackColumnLayout{};
     result.columns.reserve(kTrackColumnDefinitions.size());
 
     auto hasColumn = [&result](TrackColumn column)
-    { return std::ranges::find(result.columns, column, &TrackColumnState::column) != result.columns.end(); };
+    { return std::ranges::contains(result.columns, column, &TrackColumnState::column); };
 
     for (auto const& state : layout.columns)
     {
       auto const* definition = trackColumnDefinition(state.column);
 
-      if (!definition || hasColumn(state.column))
+      if (definition == nullptr || hasColumn(state.column))
       {
         continue;
       }
@@ -424,14 +424,14 @@ namespace app::ui
     return {};
   }
 
-  TrackColumnLayoutModel::TrackColumnLayoutModel(TrackColumnLayout layout)
-    : _layout{normalizeTrackColumnLayout(std::move(layout))}
+  TrackColumnLayoutModel::TrackColumnLayoutModel(TrackColumnLayout const& layout)
+    : _layout{normalizeTrackColumnLayout(layout)}
   {
   }
 
-  void TrackColumnLayoutModel::setLayout(TrackColumnLayout layout)
+  void TrackColumnLayoutModel::setLayout(TrackColumnLayout const& layout)
   {
-    auto normalized = normalizeTrackColumnLayout(std::move(layout));
+    auto normalized = normalizeTrackColumnLayout(layout);
 
     if (_layout == normalized)
     {

@@ -59,6 +59,11 @@ namespace app::core::backend
      */
     virtual rs::Result<> open(AudioFormat const& format, AudioRenderCallbacks callbacks) = 0;
 
+    /**
+     * @brief Resets the backend, closing any open streams and detaching callbacks.
+     */
+    virtual void reset() = 0;
+
     virtual void start() = 0;
     virtual void pause() = 0;
     virtual void resume() = 0;

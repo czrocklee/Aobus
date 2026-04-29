@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/ui/TagPromptDialog.h"
+#include "platform/linux/ui/LayoutConstants.h"
 
 #include <algorithm>
 #include <cctype>
@@ -21,14 +22,14 @@ namespace app::ui
     {
       auto const isSpace = [](unsigned char ch) { return std::isspace(ch) != 0; };
 
-      auto start = value.begin();
+      auto const* start = value.begin();
 
       while (start != value.end() && isSpace(static_cast<unsigned char>(*start)))
       {
         ++start;
       }
 
-      auto finish = value.end();
+      auto const* finish = value.end();
 
       while (finish != start && isSpace(static_cast<unsigned char>(*(finish - 1))))
       {
@@ -89,6 +90,14 @@ namespace app::ui
       return out.str();
     }
 
+    std::vector<std::string> prepareAvailableTags(std::vector<std::string> tags)
+    {
+      std::ranges::sort(tags);
+      auto const uniqueRange = std::ranges::unique(tags);
+      tags.erase(uniqueRange.begin(), uniqueRange.end());
+      return tags;
+    }
+
   }
 
   std::string TagPromptDialog::normalizeTag(std::string_view tag)
@@ -100,17 +109,12 @@ namespace app::ui
                                    std::size_t selectionCount,
                                    std::map<std::string, std::size_t> selectedTagCounts,
                                    std::vector<std::string> availableTags)
-    : _selectionCount{selectionCount}
+    : _selectionCount{selectionCount}, _availableTags{prepareAvailableTags(std::move(availableTags))}
   {
     for (auto& [tag, count] : selectedTagCounts)
     {
-      _tagStates.emplace(std::move(tag), TagState{.membershipCount = count});
+      _tagStates.emplace(tag, TagState{.membershipCount = count});
     }
-
-    std::ranges::sort(availableTags);
-    auto const uniqueRange = std::ranges::unique(availableTags);
-    availableTags.erase(uniqueRange.begin(), uniqueRange.end());
-    _availableTags = std::move(availableTags);
 
     set_title("Edit Tags");
     set_transient_for(parent);
@@ -149,7 +153,7 @@ namespace app::ui
     _tagsBox.set_spacing(kSectionSpacing);
     _tagsScrolledWindow.set_hexpand(true);
     _tagsScrolledWindow.set_vexpand(true);
-    _tagsScrolledWindow.set_min_content_height(220);
+    _tagsScrolledWindow.set_min_content_height(kTagsScrolledMinHeight);
     _tagsScrolledWindow.set_child(_tagsBox);
     box.append(_tagsScrolledWindow);
 
@@ -174,7 +178,7 @@ namespace app::ui
     _suggestionsBox.set_spacing(kSectionSpacing);
     _suggestionsScrolledWindow.set_hexpand(true);
     _suggestionsScrolledWindow.set_vexpand(false);
-    _suggestionsScrolledWindow.set_min_content_height(96);
+    _suggestionsScrolledWindow.set_min_content_height(kSuggestionsScrolledMinHeight);
     _suggestionsScrolledWindow.set_child(_suggestionsBox);
     box.append(_suggestionsScrolledWindow);
 
@@ -279,7 +283,7 @@ namespace app::ui
 
     if (inserted)
     {
-      auto insertPos = std::lower_bound(_availableTags.begin(), _availableTags.end(), tag);
+      auto insertPos = std::ranges::lower_bound(_availableTags, tag);
       _availableTags.insert(insertPos, tag);
     }
 

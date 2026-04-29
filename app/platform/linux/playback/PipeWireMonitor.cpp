@@ -64,7 +64,7 @@ namespace app::playback
     std::vector<float> softVolumes;
   };
 
-  enum class NodeBindingRole
+  enum class NodeBindingRole : std::uint8_t
   {
     Stream,
     Sink,
@@ -84,13 +84,13 @@ namespace app::playback
 
   std::string lookupProperty(::spa_dict const* props, char const* key)
   {
-    auto const* value = props ? ::spa_dict_lookup(props, key) : nullptr;
-    return value ? std::string(value) : std::string{};
+    auto const* value = props != nullptr ? ::spa_dict_lookup(props, key) : nullptr;
+    return value != nullptr ? std::string(value) : std::string{};
   }
 
   std::string formatStreamFormat(app::core::AudioFormat const& format)
   {
-    auto const sampleType = format.isFloat ? "float" : "pcm";
+    auto const* const sampleType = format.isFloat ? "float" : "pcm";
     return std::format("{}Hz/{}-bit/{}ch {}", format.sampleRate, format.bitDepth, format.channels, sampleType);
   }
 
@@ -105,12 +105,18 @@ namespace app::playback
     record.objectPath = lookupProperty(props, PW_KEY_OBJECT_PATH);
 
     if (auto const serial = detail::parseUintProperty(::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL)))
+    {
       record.objectSerial = serial;
+    }
 
     if (auto const id = detail::parseUintProperty(::spa_dict_lookup(props, "node.driver-id")))
+    {
       record.driverId = id;
+    }
     else if (auto const id = detail::parseUintProperty(::spa_dict_lookup(props, "node.driver")))
+    {
       record.driverId = id;
+    }
 
     return record;
   }
@@ -137,22 +143,30 @@ namespace app::playback
 
   void collectIntValues(::spa_pod const* pod, std::vector<std::uint32_t>& output)
   {
-    if (pod == nullptr) return;
-    if (::spa_pod_is_int(pod))
+    if (pod == nullptr)
+    {
+      return;
+    }
+    if (::spa_pod_is_int(pod) != 0)
     {
       std::int32_t val = 0;
       if (::spa_pod_get_int(pod, &val) == 0)
       {
-        if (std::ranges::find(output, static_cast<std::uint32_t>(val)) == output.end())
+        if (!std::ranges::contains(output, static_cast<std::uint32_t>(val)))
+        {
           output.push_back(static_cast<std::uint32_t>(val));
+        }
       }
     }
-    else if (::spa_pod_is_choice(pod))
+    else if (::spa_pod_is_choice(pod) != 0)
     {
       auto const* choice = reinterpret_cast<::spa_pod_choice const*>(pod);
       auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
       auto const type = SPA_POD_CHOICE_VALUE_TYPE(choice);
-      if (n_vals == 0 || type != SPA_TYPE_Int) return;
+      if (n_vals == 0 || type != SPA_TYPE_Int)
+      {
+        return;
+      }
 
       auto const* vals = static_cast<std::int32_t const*>(SPA_POD_CHOICE_VALUES(choice));
       auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
@@ -162,8 +176,10 @@ namespace app::playback
         for (std::uint32_t i = 0; i < n_vals; ++i)
         {
           std::int32_t val = vals[i];
-          if (std::ranges::find(output, static_cast<std::uint32_t>(val)) == output.end())
+          if (!std::ranges::contains(output, static_cast<std::uint32_t>(val)))
+          {
             output.push_back(static_cast<std::uint32_t>(val));
+          }
         }
       }
       else if (choice_type == SPA_CHOICE_Range)
@@ -171,37 +187,52 @@ namespace app::playback
         std::int32_t min = (n_vals > 1) ? vals[1] : vals[0];
         std::int32_t max = (n_vals > 2) ? vals[2] : min;
 
-        static constexpr std::uint32_t commonRates[] = {44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
-        for (auto r : commonRates)
+        static constexpr auto commonRates =
+          std::array<std::uint32_t, 8>{44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
+        for (auto rate : commonRates)
         {
-          if (r >= static_cast<std::uint32_t>(min) && r <= static_cast<std::uint32_t>(max))
+          if (rate >= static_cast<std::uint32_t>(min) && rate <= static_cast<std::uint32_t>(max))
           {
-            if (std::ranges::find(output, r) == output.end()) output.push_back(r);
+            if (!std::ranges::contains(output, rate))
+            {
+              output.push_back(rate);
+            }
           }
         }
-        if (std::ranges::find(output, static_cast<std::uint32_t>(vals[0])) == output.end())
+        if (!std::ranges::contains(output, static_cast<std::uint32_t>(vals[0])))
+        {
           output.push_back(static_cast<std::uint32_t>(vals[0]));
+        }
       }
     }
   }
 
   void collectIdValues(::spa_pod const* pod, std::vector<std::uint32_t>& output)
   {
-    if (pod == nullptr) return;
-    if (::spa_pod_is_id(pod))
+    if (pod == nullptr)
+    {
+      return;
+    }
+    if (::spa_pod_is_id(pod) != 0)
     {
       std::uint32_t val = 0;
       if (::spa_pod_get_id(pod, &val) == 0)
       {
-        if (std::ranges::find(output, val) == output.end()) output.push_back(val);
+        if (!std::ranges::contains(output, val))
+        {
+          output.push_back(val);
+        }
       }
     }
-    else if (::spa_pod_is_choice(pod))
+    else if (::spa_pod_is_choice(pod) != 0)
     {
       auto const* choice = reinterpret_cast<::spa_pod_choice const*>(pod);
       auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
       auto const type = SPA_POD_CHOICE_VALUE_TYPE(choice);
-      if (n_vals == 0 || type != SPA_TYPE_Id) return;
+      if (n_vals == 0 || type != SPA_TYPE_Id)
+      {
+        return;
+      }
 
       auto const* vals = static_cast<std::uint32_t const*>(SPA_POD_CHOICE_VALUES(choice));
       auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
@@ -211,7 +242,10 @@ namespace app::playback
         for (std::uint32_t i = 0; i < n_vals; ++i)
         {
           std::uint32_t val = vals[i];
-          if (std::ranges::find(output, val) == output.end()) output.push_back(val);
+          if (!std::ranges::contains(output, val))
+          {
+            output.push_back(val);
+          }
         }
       }
     }
@@ -219,7 +253,10 @@ namespace app::playback
 
   void parseEnumFormat(::spa_pod const* param, app::core::backend::DeviceCapabilities& caps)
   {
-    if (param == nullptr || !::spa_pod_is_object(param)) return;
+    if (param == nullptr || ::spa_pod_is_object(param) == 0)
+    {
+      return;
+    }
 
     ::spa_pod_prop const* prop = nullptr;
     auto const* obj = reinterpret_cast<::spa_pod_object const*>(param);
@@ -230,10 +267,13 @@ namespace app::playback
       {
         std::vector<std::uint32_t> formats;
         collectIdValues(&prop->value, formats);
-        for (auto f : formats)
+        for (auto fmt : formats)
         {
-          auto bd = spaFormatToBitDepth(f);
-          if (bd > 0 && std::ranges::find(caps.bitDepths, bd) == caps.bitDepths.end()) caps.bitDepths.push_back(bd);
+          auto bd = spaFormatToBitDepth(fmt);
+          if (bd > 0 && !std::ranges::contains(caps.bitDepths, bd))
+          {
+            caps.bitDepths.push_back(bd);
+          }
         }
       }
       else if (prop->key == SPA_FORMAT_AUDIO_rate)
@@ -244,12 +284,15 @@ namespace app::playback
       {
         std::vector<std::uint32_t> channels;
         collectIntValues(&prop->value, channels);
-        for (auto c : channels)
+        for (auto ch : channels)
         {
-          if (c > 0 && c <= 255)
+          if (ch > 0 && ch <= 255) // NOLINT(readability-magic-numbers)
           {
-            auto c8 = static_cast<std::uint8_t>(c);
-            if (std::ranges::find(caps.channelCounts, c8) == caps.channelCounts.end()) caps.channelCounts.push_back(c8);
+            auto c8 = static_cast<std::uint8_t>(ch);
+            if (!std::ranges::contains(caps.channelCounts, c8))
+            {
+              caps.channelCounts.push_back(c8);
+            }
           }
         }
       }
@@ -260,33 +303,52 @@ namespace app::playback
   {
     auto values = std::array<float, 16>{};
     auto const count = ::spa_pod_copy_array(&pod, SPA_TYPE_Float, values.data(), values.size());
-    if (count == 0) return false;
+    if (count == 0)
+    {
+      return false;
+    }
     output.assign(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(count));
     return true;
   }
 
   void mergeSinkProps(SinkProps& sinkProps, ::spa_pod const* param)
   {
-    if (param == nullptr) return;
-    if (auto const* p = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
+    if (param == nullptr)
     {
-      float v = 0.0F;
-      if (::spa_pod_get_float(&p->value, &v) == 0) sinkProps.volume = v;
+      return;
     }
-    if (auto const* p = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
     {
-      bool v = false;
-      if (::spa_pod_get_bool(&p->value, &v) == 0) sinkProps.mute = v;
+      float val = 0.0F;
+      if (::spa_pod_get_float(&prop->value, &val) == 0)
+      {
+        sinkProps.volume = val;
+      }
     }
-    if (auto const* p = ::spa_pod_find_prop(param, nullptr, SPA_PROP_channelVolumes))
-      copyFloatArray(p->value, sinkProps.channelVolumes);
-    if (auto const* p = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softMute))
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
     {
-      bool v = false;
-      if (::spa_pod_get_bool(&p->value, &v) == 0) sinkProps.softMute = v;
+      bool val = false;
+      if (::spa_pod_get_bool(&prop->value, &val) == 0)
+      {
+        sinkProps.mute = val;
+      }
     }
-    if (auto const* p = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softVolumes))
-      copyFloatArray(p->value, sinkProps.softVolumes);
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_channelVolumes))
+    {
+      copyFloatArray(prop->value, sinkProps.channelVolumes);
+    }
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softMute))
+    {
+      bool val = false;
+      if (::spa_pod_get_bool(&prop->value, &val) == 0)
+      {
+        sinkProps.softMute = val;
+      }
+    }
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softVolumes))
+    {
+      copyFloatArray(prop->value, sinkProps.softVolumes);
+    }
   }
 
   // --- PipeWireMonitor Impl ---
@@ -334,12 +396,21 @@ namespace app::playback
     {
       detail::ensurePipeWireInit();
       threadLoop.reset(::pw_thread_loop_new("PipeWireMonitor", nullptr));
-      if (!threadLoop) return;
+      if (!threadLoop)
+      {
+        return;
+      }
 
       context.reset(::pw_context_new(::pw_thread_loop_get_loop(threadLoop.get()), nullptr, 0));
-      if (!context) return;
+      if (!context)
+      {
+        return;
+      }
 
-      if (::pw_thread_loop_start(threadLoop.get()) < 0) return;
+      if (::pw_thread_loop_start(threadLoop.get()) < 0)
+      {
+        return;
+      }
 
       ::pw_thread_loop_lock(threadLoop.get());
       core.reset(::pw_context_connect(context.get(), nullptr, 0));
@@ -348,7 +419,10 @@ namespace app::playback
 
     ~Impl()
     {
-      if (threadLoop) ::pw_thread_loop_stop(threadLoop.get());
+      if (threadLoop)
+      {
+        ::pw_thread_loop_stop(threadLoop.get());
+      }
       refreshEvent.reset();
       linkBindings.clear();
       streamNodeBindings.clear();
@@ -362,6 +436,11 @@ namespace app::playback
       context.reset();
       threadLoop.reset();
     }
+
+    Impl(Impl const&) = delete;
+    Impl& operator=(Impl const&) = delete;
+    Impl(Impl&&) = delete;
+    Impl& operator=(Impl&&) = delete;
 
     detail::PwThreadLoopPtr threadLoop;
     detail::PwContextPtr context;
@@ -389,9 +468,13 @@ namespace app::playback
     void triggerRefresh()
     {
       if (refreshEvent)
+      {
         ::pw_loop_signal_event(::pw_thread_loop_get_loop(threadLoop.get()), refreshEvent.get());
+      }
       else
+      {
         refresh();
+      }
     }
 
     void refresh();
@@ -401,7 +484,7 @@ namespace app::playback
 
   namespace
   {
-    void onCoreDone(void* data, std::uint32_t, int seq)
+    void onCoreDone(void* data, [[maybe_unused]] std::uint32_t, int seq)
     {
       auto* impl = static_cast<PipeWireMonitor::Impl*>(data);
       {
@@ -415,7 +498,7 @@ namespace app::playback
 
     void onRegistryGlobal(void* data,
                           std::uint32_t id,
-                          std::uint32_t,
+                          [[maybe_unused]] std::uint32_t permissions,
                           char const* type,
                           std::uint32_t version,
                           ::spa_dict const* props)
@@ -423,12 +506,18 @@ namespace app::playback
       auto* impl = static_cast<PipeWireMonitor::Impl*>(data);
       bool isNode = (::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
       bool isLink = (::strcmp(type, PW_TYPE_INTERFACE_Link) == 0);
-      if (!isNode && !isLink) return;
+      if (!isNode && !isLink)
+      {
+        return;
+      }
 
       static ::pw_link_events const linkEvents = {.version = PW_VERSION_LINK_EVENTS,
                                                   .info = [](void* data, ::pw_link_info const* info)
                                                   {
-                                                    if (!info) return;
+                                                    if (!info)
+                                                    {
+                                                      return;
+                                                    }
                                                     auto* impl = static_cast<PipeWireMonitor::Impl*>(data);
                                                     {
                                                       auto const lock = std::lock_guard<std::mutex>{impl->mutex};
@@ -436,7 +525,9 @@ namespace app::playback
                                                       link.outputNodeId = info->output_node_id;
                                                       link.inputNodeId = info->input_node_id;
                                                       if (info->change_mask & PW_LINK_CHANGE_MASK_STATE)
+                                                      {
                                                         link.state = info->state;
+                                                      }
                                                     }
                                                     impl->triggerRefresh();
                                                   }};
@@ -444,17 +535,19 @@ namespace app::playback
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
         if (isNode)
+        {
           impl->nodes[id] = parseNodeRecord(version, props);
+        }
         else if (isLink)
         {
           auto* proxy = static_cast<::pw_link*>(
             ::pw_registry_bind(impl->registry.get(), id, PW_TYPE_INTERFACE_Link, PW_VERSION_LINK, 0));
-          if (proxy)
+          if (proxy != nullptr)
           {
-            auto& b = impl->linkBindings[id];
-            b.id = id;
-            b.proxy.reset(proxy);
-            ::pw_link_add_listener(b.proxy.get(), b.listener.get(), &linkEvents, impl);
+            auto& binding = impl->linkBindings[id];
+            binding.id = id;
+            binding.proxy.reset(proxy);
+            ::pw_link_add_listener(binding.proxy.get(), binding.listener.get(), &linkEvents, impl);
           }
         }
       }
@@ -464,7 +557,10 @@ namespace app::playback
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
         if (isSinkMediaClass(impl->nodes[id].mediaClass))
         {
-          if (impl->onDevicesChanged) impl->onDevicesChanged();
+          if (impl->onDevicesChanged)
+          {
+            impl->onDevicesChanged();
+          }
         }
       }
     }
@@ -475,7 +571,10 @@ namespace app::playback
       bool needsRefresh = false, deviceRemoved = false;
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
-        if (auto it = impl->linkBindings.find(id); it != impl->linkBindings.end()) impl->linkBindings.erase(it);
+        if (auto it = impl->linkBindings.find(id); it != impl->linkBindings.end())
+        {
+          impl->linkBindings.erase(it);
+        }
         if (auto it = impl->streamNodeBindings.find(id); it != impl->streamNodeBindings.end())
         {
           impl->streamNodeBindings.erase(it);
@@ -492,7 +591,10 @@ namespace app::playback
         }
         if (impl->nodes.contains(id))
         {
-          if (isSinkMediaClass(impl->nodes[id].mediaClass)) deviceRemoved = true;
+          if (isSinkMediaClass(impl->nodes[id].mediaClass))
+          {
+            deviceRemoved = true;
+          }
           impl->nodes.erase(id);
           needsRefresh = true;
         }
@@ -502,28 +604,45 @@ namespace app::playback
           needsRefresh = true;
         }
       }
-      if (needsRefresh) impl->triggerRefresh();
-      if (deviceRemoved && impl->onDevicesChanged) impl->onDevicesChanged();
+      if (needsRefresh)
+      {
+        impl->triggerRefresh();
+      }
+      if (deviceRemoved && impl->onDevicesChanged)
+      {
+        impl->onDevicesChanged();
+      }
     }
 
     void onNodeInfo(void* data, ::pw_node_info const* info)
     {
-      if (!info) return;
+      if (info == nullptr)
+      {
+        return;
+      }
       auto* binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
       auto* impl = binding->impl;
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
-        if (info->change_mask & PW_NODE_CHANGE_MASK_PROPS)
+        if ((info->change_mask & PW_NODE_CHANGE_MASK_PROPS) != 0)
         {
           auto version = static_cast<std::uint32_t>(PW_VERSION_NODE);
-          if (auto it = impl->nodes.find(info->id); it != impl->nodes.end()) version = it->second.version;
+          if (auto it = impl->nodes.find(info->id); it != impl->nodes.end())
+          {
+            version = it->second.version;
+          }
           impl->nodes[info->id] = parseNodeRecord(version, info->props);
         }
       }
       impl->triggerRefresh();
     }
 
-    void onNodeParam(void* data, int, std::uint32_t id, std::uint32_t, std::uint32_t, ::spa_pod const* param)
+    void onNodeParam(void* data,
+                     [[maybe_unused]] int seq,
+                     std::uint32_t id,
+                     [[maybe_unused]] std::uint32_t index,
+                     [[maybe_unused]] std::uint32_t next,
+                     ::spa_pod const* param)
     {
       auto* binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
       auto* impl = binding->impl;
@@ -540,7 +659,10 @@ namespace app::playback
         {
           if (!impl->nodeFormatMap.contains(binding->id))
           {
-            if (auto fmt = detail::parseRawStreamFormat(param)) impl->nodeFormatMap[binding->id] = *fmt;
+            if (auto fmt = detail::parseRawStreamFormat(param))
+            {
+              impl->nodeFormatMap[binding->id] = *fmt;
+            }
           }
           auto& caps = impl->sinkCapabilitiesMap[binding->id];
           parseEnumFormat(param, caps);
@@ -555,40 +677,40 @@ namespace app::playback
 
     ::pw_core_events const coreEvents = []
     {
-      ::pw_core_events e = {};
-      e.version = PW_VERSION_CORE_EVENTS;
-      e.done = onCoreDone;
-      return e;
+      ::pw_core_events ev = {};
+      ev.version = PW_VERSION_CORE_EVENTS;
+      ev.done = onCoreDone;
+      return ev;
     }();
 
     ::pw_registry_events const registryEvents = []
     {
-      ::pw_registry_events e = {};
-      e.version = PW_VERSION_REGISTRY_EVENTS;
-      e.global = onRegistryGlobal;
-      e.global_remove = onRegistryGlobalRemove;
-      return e;
+      ::pw_registry_events ev = {};
+      ev.version = PW_VERSION_REGISTRY_EVENTS;
+      ev.global = onRegistryGlobal;
+      ev.global_remove = onRegistryGlobalRemove;
+      return ev;
     }();
 
     ::pw_node_events const streamNodeEvents = []
     {
-      ::pw_node_events e = {};
-      e.version = PW_VERSION_NODE_EVENTS;
-      e.info = onNodeInfo;
-      e.param = onNodeParam;
-      return e;
+      ::pw_node_events ev = {};
+      ev.version = PW_VERSION_NODE_EVENTS;
+      ev.info = onNodeInfo;
+      ev.param = onNodeParam;
+      return ev;
     }();
 
     ::pw_node_events const sinkNodeEvents = []
     {
-      ::pw_node_events e = {};
-      e.version = PW_VERSION_NODE_EVENTS;
-      e.info = onNodeInfo;
-      e.param = onNodeParam;
-      return e;
+      ::pw_node_events ev = {};
+      ev.version = PW_VERSION_NODE_EVENTS;
+      ev.info = onNodeInfo;
+      ev.param = onNodeParam;
+      return ev;
     }();
 
-    void onRefreshEvent(void* data, std::uint64_t)
+    void onRefreshEvent(void* data, [[maybe_unused]] std::uint64_t expiry)
     {
       static_cast<PipeWireMonitor::Impl*>(data)->refresh();
     }
@@ -605,7 +727,10 @@ namespace app::playback
 
   void PipeWireMonitor::start()
   {
-    if (!_impl->threadLoop) return;
+    if (!_impl->threadLoop)
+    {
+      return;
+    }
     _impl->refreshEvent.get_deleter().loop = _impl->threadLoop.get();
     _impl->refreshEvent.reset(
       ::pw_loop_add_event(::pw_thread_loop_get_loop(_impl->threadLoop.get()), onRefreshEvent, _impl.get()));
@@ -658,12 +783,17 @@ namespace app::playback
       if (isSinkMediaClass(node.mediaClass))
       {
         auto const deviceId = node.objectSerial ? std::format("{}", *node.objectSerial) : std::format("{}", id);
-        auto const displayName =
-          (node.nodeNick.empty() ? (node.nodeName.empty() ? node.objectPath : node.nodeName) : node.nodeNick);
+        auto displayName = node.nodeNick;
+        if (displayName.empty())
+        {
+          displayName = node.nodeName.empty() ? node.objectPath : node.nodeName;
+        }
         auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
         auto caps = app::core::backend::DeviceCapabilities{};
         if (auto const it = _impl->sinkCapabilitiesMap.find(id); it != _impl->sinkCapabilitiesMap.end())
+        {
           caps = it->second;
+        }
 
         devices.push_back({.id = deviceId,
                            .displayName = displayName,
@@ -687,7 +817,10 @@ namespace app::playback
     auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
     for (auto const& [id, node] : _impl->nodes)
     {
-      if (isSinkMediaClass(node.mediaClass) && node.nodeName == name) return id;
+      if (isSinkMediaClass(node.mediaClass) && node.nodeName == name)
+      {
+        return id;
+      }
     }
     return std::nullopt;
   }
@@ -706,7 +839,7 @@ namespace app::playback
   void PipeWireMonitor::unsubscribeGraph(std::uint64_t id)
   {
     auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
-    auto it = std::ranges::find_if(_impl->subscriptions, [id](auto const& sub) { return sub.id == id; });
+    auto it = std::ranges::find(_impl->subscriptions, id, &Impl::GraphSubscription::id);
     if (it != _impl->subscriptions.end())
     {
       _impl->subscriptions.erase(it);
@@ -727,7 +860,9 @@ namespace app::playback
       for (auto const& sub : subscriptions)
       {
         if (auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str()))
+        {
           subscribedStreamIds.insert(*parsedId);
+        }
       }
 
       for (auto it = streamNodeBindings.begin(); it != streamNodeBindings.end();)
@@ -738,15 +873,23 @@ namespace app::playback
           it = streamNodeBindings.erase(it);
         }
         else
+        {
           ++it;
+        }
       }
 
       for (auto streamId : subscribedStreamIds)
       {
-        if (streamNodeBindings.contains(streamId)) continue;
+        if (streamNodeBindings.contains(streamId))
+        {
+          continue;
+        }
 
         auto const it = nodes.find(streamId);
-        if (!registry || it == nodes.end()) continue;
+        if (!registry || it == nodes.end())
+        {
+          continue;
+        }
 
         auto* node = static_cast<::pw_node*>(
           ::pw_registry_bind(registry.get(),
@@ -754,15 +897,18 @@ namespace app::playback
                              PW_TYPE_INTERFACE_Node,
                              std::min(it->second.version, static_cast<std::uint32_t>(PW_VERSION_NODE)),
                              0));
-        if (!node) continue;
+        if (node == nullptr)
+        {
+          continue;
+        }
 
         auto binding = std::make_unique<NodeBinding>();
         binding->id = streamId;
         binding->impl = this;
         binding->role = NodeBindingRole::Stream;
         binding->proxy.reset(node);
-        std::uint32_t params[] = {SPA_PARAM_Format};
-        ::pw_node_subscribe_params(binding->proxy.get(), params, 1);
+        auto params = std::array<std::uint32_t, 1>{SPA_PARAM_Format};
+        ::pw_node_subscribe_params(binding->proxy.get(), params.data(), params.size());
         ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
         auto* bindingPtr = binding.get();
         ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &streamNodeEvents, bindingPtr);
@@ -775,21 +921,23 @@ namespace app::playback
         {
           auto* proxy = static_cast<::pw_node*>(::pw_registry_bind(
             registry.get(), id, PW_TYPE_INTERFACE_Node, std::min(node.version, (std::uint32_t)PW_VERSION_NODE), 0));
-          if (proxy)
+          if (proxy != nullptr)
           {
-            auto b = std::make_unique<NodeBinding>();
-            b->id = id;
-            b->impl = this;
-            b->role = NodeBindingRole::Sink;
-            b->proxy.reset(proxy);
-            std::uint32_t ps[] = {SPA_PARAM_Format, SPA_PARAM_EnumFormat, SPA_PARAM_Props};
-            ::pw_node_subscribe_params(b->proxy.get(), ps, 3);
-            ::pw_node_enum_params(b->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
-            ::pw_node_enum_params(b->proxy.get(), 2, SPA_PARAM_EnumFormat, 0, -1, nullptr);
-            ::pw_node_enum_params(b->proxy.get(), 3, SPA_PARAM_Props, 0, -1, nullptr);
-            auto* p = b.get();
-            ::pw_node_add_listener(p->proxy.get(), p->listener.get(), &sinkNodeEvents, p);
-            sinkNodeBindings[id] = std::move(b);
+            auto binding = std::make_unique<NodeBinding>();
+            binding->id = id;
+            binding->impl = this;
+            binding->role = NodeBindingRole::Sink;
+            binding->proxy.reset(proxy);
+            auto params = std::array<std::uint32_t, 3>{
+              SPA_PARAM_Format, SPA_PARAM_EnumFormat, SPA_PARAM_Props}; // NOLINT(readability-magic-numbers)
+            ::pw_node_subscribe_params(binding->proxy.get(), params.data(), params.size());
+            ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
+            ::pw_node_enum_params(binding->proxy.get(), 2, SPA_PARAM_EnumFormat, 0, -1, nullptr);
+            ::pw_node_enum_params(
+              binding->proxy.get(), 3, SPA_PARAM_Props, 0, -1, nullptr); // NOLINT(readability-magic-numbers)
+            auto* bindingPtr = binding.get();
+            ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &sinkNodeEvents, bindingPtr);
+            sinkNodeBindings[id] = std::move(binding);
           }
         }
       }
@@ -809,17 +957,29 @@ namespace app::playback
         for (std::size_t i = 0; i < localReachableNodes.size(); ++i)
         {
           auto curr = localReachableNodes[i];
+          // NOLINTNEXTLINE(readability-identifier-length)
           for (auto const& [_, link] : links)
           {
-            if (!isActiveLink(link.state) || link.outputNodeId != curr || link.inputNodeId == PW_ID_ANY) continue;
-            if (localReachableSet.insert(link.inputNodeId).second) localReachableNodes.push_back(link.inputNodeId);
+            if (!isActiveLink(link.state) || link.outputNodeId != curr || link.inputNodeId == PW_ID_ANY)
+            {
+              continue;
+            }
+            if (localReachableSet.insert(link.inputNodeId).second)
+            {
+              localReachableNodes.push_back(link.inputNodeId);
+            }
           }
         }
 
         auto localFullSet = localReachableSet;
+        // NOLINTNEXTLINE(readability-identifier-length)
         for (auto const& [_, link] : links)
+        {
           if (isActiveLink(link.state) && localReachableSet.contains(link.inputNodeId))
+          {
             localFullSet.insert(link.outputNodeId);
+          }
+        }
 
         for (auto id : localFullSet)
         {
@@ -838,27 +998,39 @@ namespace app::playback
           }
           bool isSink = isSinkMediaClass(it->second.mediaClass);
           bool isRs = (id == streamId);
-          auto type =
-            isRs ? app::core::backend::AudioNodeType::Stream
-                 : (isSink ? app::core::backend::AudioNodeType::Sink
-                           : (localReachableSet.contains(id) ? app::core::backend::AudioNodeType::Intermediary
-                                                             : app::core::backend::AudioNodeType::ExternalSource));
+          auto type = app::core::backend::AudioNodeType::ExternalSource;
+          if (isRs)
+          {
+            type = app::core::backend::AudioNodeType::Stream;
+          }
+          else if (isSink)
+          {
+            type = app::core::backend::AudioNodeType::Sink;
+          }
+          else if (localReachableSet.contains(id))
+          {
+            type = app::core::backend::AudioNodeType::Intermediary;
+          }
+          auto name = it->second.nodeNick;
+          if (name.empty())
+          {
+            name = it->second.nodeName.empty() ? it->second.objectPath : it->second.nodeName;
+          }
+
           app::core::backend::AudioNode node{
-            .id = std::format("{}", id),
-            .type = type,
-            .name =
-              (it->second.nodeNick.empty() ? (it->second.nodeName.empty() ? it->second.objectPath : it->second.nodeName)
-                                           : it->second.nodeNick),
-            .objectPath = it->second.objectPath};
+            .id = std::format("{}", id), .type = type, .name = name, .objectPath = it->second.objectPath};
           if (auto const formatIt = nodeFormatMap.find(id); formatIt != nodeFormatMap.end())
+          {
             node.format = formatIt->second;
+          }
 
           if (isSink)
           {
             if (auto const propsIt = sinkPropsMap.find(id); propsIt != sinkPropsMap.end())
             {
               auto const& sinkProps = propsIt->second;
-              auto const isUnity = [](float v) { return std::abs(v - 1.0F) < 1e-4F; };
+              auto const isUnity = [](float value)
+              { return std::abs(value - 1.0F) < 1e-4F; }; // NOLINT(readability-magic-numbers)
               bool volumeAtUnity = (!sinkProps.volume || isUnity(*sinkProps.volume)) &&
                                    std::ranges::all_of(sinkProps.channelVolumes, isUnity) &&
                                    std::ranges::all_of(sinkProps.softVolumes, isUnity);
@@ -869,13 +1041,16 @@ namespace app::playback
           graph.nodes.push_back(std::move(node));
         }
 
+        // NOLINTNEXTLINE(readability-identifier-length)
         for (auto const& [_, link] : links)
         {
           if (isActiveLink(link.state) && localFullSet.contains(link.outputNodeId) &&
               localFullSet.contains(link.inputNodeId))
+          {
             graph.links.push_back({.sourceId = std::format("{}", link.outputNodeId),
                                    .destId = std::format("{}", link.inputNodeId),
                                    .isActive = true});
+          }
         }
         cb(graph);
       };

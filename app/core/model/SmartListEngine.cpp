@@ -22,7 +22,7 @@ namespace app::core::model
   // SourceObserver implementation
 
   SourceObserver::SourceObserver(SmartListEngine& engine, TrackIdList& source)
-    : _engine{engine}, _source{source}, _valid{true}
+    : _engine{engine}, _source{source}
   {
   }
 
@@ -145,7 +145,7 @@ namespace app::core::model
     {
       if (bucket->observer)
       {
-        static_cast<SourceObserver*>(bucket->observer.get())->invalidate();
+        rs::utility::unsafeDowncast<SourceObserver>(bucket->observer.get())->invalidate();
 
         if (bucket->sourceAlive)
         {
@@ -555,7 +555,7 @@ namespace app::core::model
       {
         auto& list = *evaluatableLists[i];
         bool const nowMatches = view && list._evaluator.matches(*list._plan, *view);
-        bool const wasPresent = list._members.find(id) != list._members.end();
+        bool const wasPresent = list._members.contains(id);
 
         if (nowMatches && !wasPresent)
         {

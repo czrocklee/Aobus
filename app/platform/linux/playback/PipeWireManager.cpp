@@ -22,6 +22,11 @@ namespace app::playback
     }
 
     ~Impl() { monitor.reset(); }
+
+    Impl(Impl const&) = delete;
+    Impl& operator=(Impl const&) = delete;
+    Impl(Impl&&) = delete;
+    Impl& operator=(Impl&&) = delete;
   };
 
   PipeWireManager::PipeWireManager()
@@ -65,14 +70,22 @@ namespace app::playback
   {
     PipeWireMonitor* monitor;
     std::uint64_t id;
-    PipeWireSubscription(PipeWireMonitor* m, std::uint64_t i)
-      : monitor(m), id(i)
+    PipeWireSubscription(PipeWireMonitor* monitorPtr, std::uint64_t subscriptionId)
+      : monitor(monitorPtr), id(subscriptionId)
     {
     }
     ~PipeWireSubscription() override
     {
-      if (monitor) monitor->unsubscribeGraph(id);
+      if (monitor != nullptr)
+      {
+        monitor->unsubscribeGraph(id);
+      }
     }
+
+    PipeWireSubscription(PipeWireSubscription const&) = delete;
+    PipeWireSubscription& operator=(PipeWireSubscription const&) = delete;
+    PipeWireSubscription(PipeWireSubscription&&) = delete;
+    PipeWireSubscription& operator=(PipeWireSubscription&&) = delete;
   };
 
   std::unique_ptr<app::core::backend::IGraphSubscription> PipeWireManager::subscribeGraph(

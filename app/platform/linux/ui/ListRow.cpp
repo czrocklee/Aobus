@@ -7,7 +7,7 @@ namespace app::ui
 {
 
   ListRow::ListRow()
-    : _listId{ListId{0}}, _parentId{ListId{0}}, _depth{0}, _isSmart{false}, _name{}
+    : _listId{ListId{0}}, _parentId{ListId{0}}
   {
   }
 
@@ -18,7 +18,7 @@ namespace app::ui
                                         Glib::ustring const& name,
                                         Glib::ustring const& filter)
   {
-    auto obj = Glib::make_refptr_for_instance<ListRow>(new ListRow());
+    auto obj = Glib::make_refptr_for_instance<ListRow>(new ListRow()); // NOLINT(cppcoreguidelines-owning-memory)
     obj->_listId = id;
     obj->_parentId = parentId;
     obj->_depth = depth;

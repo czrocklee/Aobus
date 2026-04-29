@@ -64,6 +64,8 @@ namespace app::core::backend
       return rs::Result<>();
     }
 
+    void reset() override {}
+
     void start() override {}
     void pause() override {}
     void resume() override {}

@@ -21,6 +21,7 @@ namespace app::playback
 
     rs::Result<> open(app::core::AudioFormat const& format,
                       app::core::backend::AudioRenderCallbacks callbacks) override;
+    void reset() override;
     void start() override;
     void pause() override;
     void resume() override;

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
+#include <rs/tag/mp4/File.h>
+
 #include "../Decoder.h"
 #include <rs/media/mp4/Atom.h>
-#include <rs/tag/mp4/File.h>
+#include <rs/media/mp4/AtomLayout.h>
 #include <rs/utility/ByteView.h>
 
 #include <array>
@@ -72,7 +74,7 @@ namespace rs::tag::mp4
 
 #include "tag/mp4/AtomDispatch.h"
 
-    constexpr std::array kIlstPath = {
+    static constexpr std::array kIlstPath = {
       std::string_view{"root"},
       std::string_view{"moov"},
       std::string_view{"udta"},
@@ -80,8 +82,7 @@ namespace rs::tag::mp4
       std::string_view{"ilst"},
     };
 
-    // Path to mdhd: moov > trak > mdia > mdhd
-    constexpr std::array kMdhdPath = {
+    static constexpr std::array kMdhdPath = {
       std::string_view{"root"},
       std::string_view{"moov"},
       std::string_view{"trak"},
@@ -89,8 +90,7 @@ namespace rs::tag::mp4
       std::string_view{"mdhd"},
     };
 
-    // Path to stsd: moov > trak > mdia > minf > stbl > stsd
-    constexpr std::array kStsdPath = {
+    static constexpr std::array kStsdPath = {
       std::string_view{"root"},
       std::string_view{"moov"},
       std::string_view{"trak"},
@@ -107,7 +107,7 @@ namespace rs::tag::mp4
 
       if (auto const* mdhdNode = root.find(kMdhdPath); mdhdNode != nullptr)
       {
-        auto const& view = static_cast<AtomView const&>(*mdhdNode);
+        auto const& view = rs::utility::unsafeDowncast<AtomView const>(*mdhdNode);
         auto const& layout = view.layout<MdhdAtomLayout>();
         auto const timescale = layout.timescale.value();
         auto const duration = layout.duration.value();
@@ -137,7 +137,7 @@ namespace rs::tag::mp4
 
       if (auto const* stsdNode = root.find(kStsdPath); stsdNode != nullptr)
       {
-        auto const& view = static_cast<AtomView const&>(*stsdNode);
+        auto const& view = rs::utility::unsafeDowncast<AtomView const>(*stsdNode);
         auto const& stsdLayout = view.layout<AtomLayout>();
 
         // stsd contains a version byte (1), flags (3), and then entry count (4)
@@ -164,7 +164,8 @@ namespace rs::tag::mp4
 
   rs::core::TrackBuilder File::loadTrack() const
   {
-    RootAtom root = rs::media::mp4::fromBuffer(utility::bytes::view(_mappedRegion.get_address(), _mappedRegion.get_size()));
+    RootAtom root =
+      rs::media::mp4::fromBuffer(utility::bytes::view(_mappedRegion.get_address(), _mappedRegion.get_size()));
     Atom const* ilstNode = root.find(kIlstPath);
 
     clearOwnedStrings();
@@ -175,7 +176,7 @@ namespace rs::tag::mp4
       ilstNode->visitChildren(
         [&](Atom const& atom)
         {
-          auto const& view = static_cast<AtomView const&>(atom);
+          auto const& view = rs::utility::unsafeDowncast<AtomView const>(atom);
           std::string_view type = atom.type();
 
           if (type == "----")
@@ -194,7 +195,6 @@ namespace rs::tag::mp4
         });
     }
 
-    // Extract audio properties from mdhd and stsd
     extractAudioProperties(builder, root, _mappedRegion.get_size());
 
     return builder;

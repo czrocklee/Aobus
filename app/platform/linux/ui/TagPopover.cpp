@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/ui/TagPopover.h"
+#include "platform/linux/ui/LayoutConstants.h"
 
 #include <algorithm>
 
@@ -24,7 +25,7 @@ namespace app::ui
 
   void TagPopover::setupUi()
   {
-    _mainBox.set_spacing(6);
+    _mainBox.set_spacing(Layout::kMarginSmall);
     // Remove hardcoded margin to let theme handle it
     set_child(_mainBox);
 
@@ -36,7 +37,7 @@ namespace app::ui
     // Current Tags section label
     _currentLabel.set_markup("<span size='small' weight='bold'>CURRENT TAGS</span>");
     _currentLabel.set_halign(Gtk::Align::START);
-    _currentLabel.set_margin_top(4);
+    _currentLabel.set_margin_top(Layout::kMarginSmall);
     _currentLabel.add_css_class("dim-label");
     _mainBox.append(_currentLabel);
 
@@ -79,8 +80,8 @@ namespace app::ui
         // Case-insensitive substring match
         std::string lowerTag = tagName;
         std::string lowerSearch = text;
-        std::ranges::transform(lowerTag, lowerTag.begin(), [](unsigned char c) { return std::tolower(c); });
-        std::ranges::transform(lowerSearch, lowerSearch.begin(), [](unsigned char c) { return std::tolower(c); });
+        std::ranges::transform(lowerTag, lowerTag.begin(), [](unsigned char ch) { return std::tolower(ch); });
+        std::ranges::transform(lowerSearch, lowerSearch.begin(), [](unsigned char ch) { return std::tolower(ch); });
         return lowerTag.find(lowerSearch) != std::string::npos;
       });
 
@@ -150,6 +151,7 @@ namespace app::ui
          it != end;
          ++it)
     {
+      // NOLINTNEXTLINE(readability-identifier-length)
       auto const& [_, view] = *it;
 
       auto tagsOnTrack = std::set<std::string>{};
@@ -233,8 +235,8 @@ namespace app::ui
     }
 
     // Check if there's anything to show (excluding pending removes)
-    auto const visibleCount = std::count_if(
-      _currentTags.begin(), _currentTags.end(), [this](auto const& tag) { return !_pendingRemoves.contains(tag); });
+    auto const visibleCount =
+      std::ranges::count_if(_currentTags, [this](auto const& tag) { return !_pendingRemoves.contains(tag); });
     auto const hasPendingAdds = !_pendingAdds.empty();
 
     if (visibleCount == 0 && !hasPendingAdds)
@@ -307,7 +309,7 @@ namespace app::ui
 
       // Determine prefix: [+] for available, [-] for partial (on some but not all)
       auto const isPartial = _tagMembershipCounts.contains(tag) && !_currentTags.contains(tag);
-      auto prefix = isPartial ? "[-] " : "[+] ";
+      auto const* prefix = isPartial ? "[-] " : "[+] ";
       auto label = prefix + tag;
 
       auto* chip = Gtk::make_managed<Gtk::ToggleButton>(label);
@@ -395,14 +397,14 @@ namespace app::ui
 
   std::string TagPopover::getTagNameFromChild(Gtk::FlowBoxChild* child)
   {
-    if (!child)
+    if (child == nullptr)
     {
       return {};
     }
 
     auto* chip = dynamic_cast<Gtk::ToggleButton*>(child->get_child());
 
-    if (!chip)
+    if (chip == nullptr)
     {
       return {};
     }

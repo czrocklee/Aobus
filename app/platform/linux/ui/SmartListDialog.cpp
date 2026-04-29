@@ -242,7 +242,7 @@ namespace app::ui
         auto item = listItem->get_item();
         auto row = std::dynamic_pointer_cast<TrackRow>(item);
 
-        if (auto label = dynamic_cast<Gtk::Label*>(listItem->get_child()); row && label)
+        if (auto* label = dynamic_cast<Gtk::Label*>(listItem->get_child()); row && label)
         {
           auto const& title = row->getTitle();
           auto const& artist = row->getArtist();

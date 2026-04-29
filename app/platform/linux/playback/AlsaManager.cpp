@@ -8,6 +8,7 @@
 #include <rs/utility/Raii.h>
 
 #include <algorithm>
+#include <array>
 #include <libudev.h>
 #include <mutex>
 #include <poll.h>
@@ -23,6 +24,8 @@ namespace app::playback
 {
   namespace
   {
+    constexpr int kUdevPollTimeoutMs = 500;
+
     app::core::backend::DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
     {
       auto caps = app::core::backend::DeviceCapabilities{};
@@ -40,28 +43,36 @@ namespace app::playback
         return caps;
       }
 
-      for (auto const r : std::to_array({44100, 48000, 88200, 96000, 176400, 192000}))
+      for (auto const rate : std::to_array({44100, 48000, 88200, 96000, 176400, 192000}))
       {
-        if (::snd_pcm_hw_params_test_rate(tempPcm, params, r, 0) == 0)
+        if (::snd_pcm_hw_params_test_rate(tempPcm, params, rate, 0) == 0)
         {
-          caps.sampleRates.push_back(static_cast<std::uint32_t>(r));
+          caps.sampleRates.push_back(static_cast<std::uint32_t>(rate));
         }
       }
 
-      for (auto const d : std::to_array({16, 24, 32}))
+      for (auto const depth : std::to_array({16, 24, 32}))
       {
-        auto const fmt = (d == 16) ? SND_PCM_FORMAT_S16_LE : (d == 24) ? SND_PCM_FORMAT_S24_3LE : SND_PCM_FORMAT_S32_LE;
+        auto fmt = SND_PCM_FORMAT_S32_LE;
+        if (depth == 16)
+        {
+          fmt = SND_PCM_FORMAT_S16_LE;
+        }
+        else if (depth == 24)
+        {
+          fmt = SND_PCM_FORMAT_S24_3LE;
+        }
         if (::snd_pcm_hw_params_test_format(tempPcm, params, fmt) == 0)
         {
-          caps.bitDepths.push_back(static_cast<std::uint8_t>(d));
+          caps.bitDepths.push_back(static_cast<std::uint8_t>(depth));
         }
       }
 
-      for (auto const c : std::to_array({1, 2, 4, 6, 8}))
+      for (auto const ch : std::to_array({1, 2, 4, 6, 8}))
       {
-        if (::snd_pcm_hw_params_test_channels(tempPcm, params, c) == 0)
+        if (::snd_pcm_hw_params_test_channels(tempPcm, params, ch) == 0)
         {
-          caps.channelCounts.push_back(static_cast<std::uint8_t>(c));
+          caps.channelCounts.push_back(static_cast<std::uint8_t>(ch));
         }
       }
 
@@ -79,11 +90,11 @@ namespace app::playback
       }
       auto hints = rs::utility::makeUniquePtr<::snd_device_name_free_hint>(hints_raw);
 
-      for (void** h = hints.get(); *h != nullptr; ++h)
+      for (void** hint = hints.get(); *hint != nullptr; ++hint)
       {
-        auto name = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*h, "NAME"));
-        auto desc = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*h, "DESC"));
-        auto ioid = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*h, "IOID"));
+        auto name = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "NAME"));
+        auto desc = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "DESC"));
+        auto ioid = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "IOID"));
 
         if (ioid == nullptr || std::string_view{static_cast<char*>(ioid.get())} == "Output")
         {
@@ -91,7 +102,7 @@ namespace app::playback
           if (idStr != "default" && idStr != "sysdefault" && idStr != "null" && idStr != "pipewire")
           {
             auto displayName = std::string{desc ? static_cast<char*>(desc.get()) : idStr};
-            std::replace(displayName.begin(), displayName.end(), '\n', ' ');
+            std::ranges::replace(displayName, '\n', ' ');
             if (displayName.starts_with(idStr + " "))
             {
               displayName = displayName.substr(idStr.length() + 1);
@@ -120,14 +131,14 @@ namespace app::playback
     {
       cachedDevices = doAlsaEnumerate();
       monitorThread = std::jthread(
-        [this](std::stop_token st)
+        [this](std::stop_token const& st)
         {
           app::core::util::setCurrentThreadName("AlsaDeviceMonitor");
           monitorLoop(st);
         });
     }
 
-    void monitorLoop(std::stop_token stopToken)
+    void monitorLoop(std::stop_token const& stopToken)
     {
       auto udev = rs::utility::makeUniquePtr<::udev_unref>(::udev_new());
       if (!udev)
@@ -146,10 +157,11 @@ namespace app::playback
 
       while (!stopToken.stop_requested())
       {
-        struct pollfd fds[1];
+        auto fds = std::array<struct pollfd, 1>{};
         fds[0].fd = fd;
         fds[0].events = POLLIN;
-        if (::poll(fds, 1, 500) > 0 && (fds[0].revents & POLLIN))
+        if (::poll(fds.data(), static_cast<nfds_t>(fds.size()), kUdevPollTimeoutMs) > 0 &&
+            (fds[0].revents & POLLIN) != 0)
         {
           auto dev = rs::utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitor.get()));
           if (dev)

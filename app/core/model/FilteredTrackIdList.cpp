@@ -23,7 +23,7 @@ namespace app::core::model
 
   FilteredTrackIdList::~FilteredTrackIdList()
   {
-    if (_engine && _engine->isAlive())
+    if (_engine != nullptr && _engine->isAlive())
     {
       _engine->unregisterList(*_source, *this);
     }
@@ -36,7 +36,7 @@ namespace app::core::model
 
   void FilteredTrackIdList::reload()
   {
-    if (_engine && _engine->isAlive())
+    if (_engine != nullptr && _engine->isAlive())
     {
       _engine->rebuild(*this);
     }
@@ -56,7 +56,7 @@ namespace app::core::model
 
   void FilteredTrackIdList::notifyTrackDataChanged(TrackId id)
   {
-    if (_engine && _engine->isAlive())
+    if (_engine != nullptr && _engine->isAlive())
     {
       _engine->notifyTrackDataChanged(*_source, id);
     }

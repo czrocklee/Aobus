@@ -11,6 +11,17 @@
 
 namespace app::core::decoder
 {
+  namespace
+  {
+    constexpr std::uint8_t kLowByteMask = 0xFF;
+    constexpr std::uint8_t kBytesPer24BitSample = 3;
+
+    FLAC__StreamMetadata_StreamInfo const& getStreamInfo(FLAC__StreamMetadata const* metadata)
+    {
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
+      return metadata->data.stream_info;
+    }
+  }
 
   struct FlacDecoderSession::Impl
   {
@@ -29,22 +40,26 @@ namespace app::core::decoder
     bool eof = false;
 
     Impl(AudioFormat output)
-      : requestedOutput(output)
+      : requestedOutput(output), decoder(::FLAC__stream_decoder_new())
     {
-      decoder = ::FLAC__stream_decoder_new();
     }
 
     ~Impl()
     {
-      if (decoder)
+      if (decoder != nullptr)
       {
         ::FLAC__stream_decoder_delete(decoder);
       }
     }
 
+    Impl(Impl const&) = delete;
+    Impl& operator=(Impl const&) = delete;
+    Impl(Impl&&) = delete;
+    Impl& operator=(Impl&&) = delete;
+
     // Callbacks for libFLAC
     static FLAC__StreamDecoderReadStatus readCallback(FLAC__StreamDecoder const* decoder,
-                                                      FLAC__byte buffer[],
+                                                      FLAC__byte* buffer,
                                                       size_t* bytes,
                                                       void* clientData);
     static FLAC__StreamDecoderSeekStatus seekCallback(FLAC__StreamDecoder const* decoder,
@@ -60,7 +75,7 @@ namespace app::core::decoder
 
     static FLAC__StreamDecoderWriteStatus writeCallback(FLAC__StreamDecoder const* decoder,
                                                         FLAC__Frame const* frame,
-                                                        FLAC__int32 const* const buffer[],
+                                                        FLAC__int32 const* const* buffer,
                                                         void* clientData);
     static void metadataCallback(FLAC__StreamDecoder const* decoder,
                                  FLAC__StreamMetadata const* metadata,
@@ -107,7 +122,7 @@ namespace app::core::decoder
     }
 
     // Process until metadata is read
-    if (!::FLAC__stream_decoder_process_until_end_of_metadata(_impl->decoder))
+    if (::FLAC__stream_decoder_process_until_end_of_metadata(_impl->decoder) == 0)
     {
       return rs::makeError(rs::Error::Code::DecodeFailed, "Failed to read FLAC metadata");
     }
@@ -117,7 +132,7 @@ namespace app::core::decoder
 
   void FlacDecoderSession::close()
   {
-    if (_impl->decoder)
+    if (_impl->decoder != nullptr)
     {
       ::FLAC__stream_decoder_finish(_impl->decoder);
     }
@@ -142,7 +157,7 @@ namespace app::core::decoder
 
     auto const targetSample = static_cast<FLAC__uint64>(positionMs) * sampleRate / 1000;
 
-    if (!::FLAC__stream_decoder_seek_absolute(_impl->decoder, targetSample))
+    if (::FLAC__stream_decoder_seek_absolute(_impl->decoder, targetSample) == 0)
     {
       return rs::makeError(rs::Error::Code::SeekFailed, "FLAC seek failed");
     }
@@ -168,7 +183,7 @@ namespace app::core::decoder
     // If buffer is empty, process a single frame
     while (_impl->bufferedFrames == 0 && !_impl->eof)
     {
-      if (!::FLAC__stream_decoder_process_single(_impl->decoder))
+      if (::FLAC__stream_decoder_process_single(_impl->decoder) == 0)
       {
         if (::FLAC__stream_decoder_get_state(_impl->decoder) == FLAC__STREAM_DECODER_END_OF_STREAM)
         {
@@ -213,7 +228,7 @@ namespace app::core::decoder
   // Implementation of callbacks
 
   FLAC__StreamDecoderReadStatus FlacDecoderSession::Impl::readCallback(FLAC__StreamDecoder const* /*decoder*/,
-                                                                       FLAC__byte buffer[],
+                                                                       FLAC__byte* buffer,
                                                                        size_t* bytes,
                                                                        void* clientData)
   {
@@ -277,12 +292,12 @@ namespace app::core::decoder
   FLAC__bool FlacDecoderSession::Impl::eofCallback(FLAC__StreamDecoder const* /*decoder*/, void* clientData)
   {
     auto* impl = static_cast<Impl*>(clientData);
-    return impl->currentOffset >= impl->mappedFile.bytes().size();
+    return static_cast<FLAC__bool>(impl->currentOffset >= impl->mappedFile.bytes().size());
   }
 
   FLAC__StreamDecoderWriteStatus FlacDecoderSession::Impl::writeCallback(FLAC__StreamDecoder const* /*decoder*/,
                                                                          FLAC__Frame const* frame,
-                                                                         FLAC__int32 const* const buffer[],
+                                                                         FLAC__int32 const* const* buffer,
                                                                          void* clientData)
   {
     auto* impl = static_cast<Impl*>(clientData);
@@ -295,7 +310,7 @@ namespace app::core::decoder
 
     if (outBps == 16)
     {
-      impl->pcmBuffer.resize(blockSize * channels * 2);
+      impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 2);
       auto* out = reinterpret_cast<std::int16_t*>(impl->pcmBuffer.data());
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
@@ -308,7 +323,7 @@ namespace app::core::decoder
     }
     else if (outBps == 24)
     {
-      impl->pcmBuffer.resize(blockSize * channels * 3);
+      impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * kBytesPer24BitSample);
       auto* out = reinterpret_cast<std::uint8_t*>(impl->pcmBuffer.data());
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
@@ -316,15 +331,15 @@ namespace app::core::decoder
         for (std::uint32_t ch = 0; channels > 0 && ch < channels; ++ch)
         {
           auto const val = static_cast<std::int32_t>(buffer[ch][i]);
-          *out++ = static_cast<std::uint8_t>(val & 0xFF);
-          *out++ = static_cast<std::uint8_t>((val >> 8) & 0xFF);
-          *out++ = static_cast<std::uint8_t>((val >> 16) & 0xFF);
+          *out++ = static_cast<std::uint8_t>(val & kLowByteMask);
+          *out++ = static_cast<std::uint8_t>((val >> 8) & kLowByteMask);
+          *out++ = static_cast<std::uint8_t>((val >> 16) & kLowByteMask);
         }
       }
     }
     else if (outBps == 32)
     {
-      impl->pcmBuffer.resize(blockSize * channels * 4);
+      impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 4);
       auto* out = reinterpret_cast<std::int32_t*>(impl->pcmBuffer.data());
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
@@ -366,9 +381,11 @@ namespace app::core::decoder
 
     if (metadata->type == FLAC__METADATA_TYPE_STREAMINFO)
     {
-      impl->info.sourceFormat.channels = static_cast<std::uint8_t>(metadata->data.stream_info.channels);
-      impl->info.sourceFormat.sampleRate = metadata->data.stream_info.sample_rate;
-      impl->info.sourceFormat.bitDepth = static_cast<std::uint8_t>(metadata->data.stream_info.bits_per_sample);
+      auto const& streamInfo = getStreamInfo(metadata);
+
+      impl->info.sourceFormat.channels = static_cast<std::uint8_t>(streamInfo.channels);
+      impl->info.sourceFormat.sampleRate = streamInfo.sample_rate;
+      impl->info.sourceFormat.bitDepth = static_cast<std::uint8_t>(streamInfo.bits_per_sample);
       impl->info.sourceFormat.validBits = impl->info.sourceFormat.bitDepth;
       impl->info.sourceFormat.isFloat = false;
       impl->info.sourceFormat.isInterleaved = true;
@@ -382,10 +399,9 @@ namespace app::core::decoder
           (impl->requestedOutput.validBits != 0) ? impl->requestedOutput.validBits : impl->requestedOutput.bitDepth;
       }
 
-      if (metadata->data.stream_info.sample_rate > 0)
+      if (streamInfo.sample_rate > 0)
       {
-        impl->info.durationMs = static_cast<std::uint32_t>(metadata->data.stream_info.total_samples * 1000 /
-                                                           metadata->data.stream_info.sample_rate);
+        impl->info.durationMs = static_cast<std::uint32_t>(streamInfo.total_samples * 1000 / streamInfo.sample_rate);
       }
 
       impl->info.isLossy = false;
@@ -393,10 +409,10 @@ namespace app::core::decoder
   }
 
   void FlacDecoderSession::Impl::errorCallback(FLAC__StreamDecoder const* /*decoder*/,
-                                               FLAC__StreamDecoderErrorStatus status,
-                                               void* clientData)
+                                               [[maybe_unused]] FLAC__StreamDecoderErrorStatus status,
+                                               [[maybe_unused]] void* clientData)
   {
-    auto* impl = static_cast<Impl*>(clientData);
+    [[maybe_unused]] auto* impl = static_cast<Impl*>(clientData);
     /* TODO logging */
   }
 

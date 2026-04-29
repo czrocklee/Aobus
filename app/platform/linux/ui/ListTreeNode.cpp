@@ -9,13 +9,14 @@ namespace app::ui
 {
 
   ListTreeNode::ListTreeNode()
-    : _row{}, _children{Gio::ListStore<ListTreeNode>::create()}, _parent{nullptr}
+    : _children{Gio::ListStore<ListTreeNode>::create()}
   {
   }
 
   Glib::RefPtr<ListTreeNode> ListTreeNode::create(Glib::RefPtr<ListRow> const& row)
   {
-    auto obj = Glib::make_refptr_for_instance<ListTreeNode>(new ListTreeNode());
+    auto obj =
+      Glib::make_refptr_for_instance<ListTreeNode>(new ListTreeNode()); // NOLINT(cppcoreguidelines-owning-memory)
     obj->_row = row;
     return obj;
   }

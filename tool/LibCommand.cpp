@@ -5,6 +5,7 @@
 #include <rs/core/LibraryExporter.h>
 #include <rs/core/LibraryImporter.h>
 
+#include <array>
 #include <iomanip>
 #include <sstream>
 
@@ -13,7 +14,10 @@ namespace rs::tool
   namespace
   {
     constexpr std::size_t kUuidByteCount = 16;
-    constexpr std::size_t kUuidDashIndices[] = {3, 5, 7, 9};
+    constexpr std::size_t kUuidDash0 = 3; // NOLINT(readability-magic-numbers)
+    constexpr std::size_t kUuidDash1 = 5; // NOLINT(readability-magic-numbers)
+    constexpr std::size_t kUuidDash2 = 7; // NOLINT(readability-magic-numbers)
+    constexpr std::size_t kUuidDash3 = 9; // NOLINT(readability-magic-numbers)
 
     std::string formatUuid(std::array<std::byte, kUuidByteCount> const& id)
     {
@@ -24,8 +28,7 @@ namespace rs::tool
       {
         oss << std::setw(2) << static_cast<int>(id[i]);
 
-        if (i == kUuidDashIndices[0] || i == kUuidDashIndices[1] || i == kUuidDashIndices[2] ||
-            i == kUuidDashIndices[3])
+        if (i == kUuidDash0 || i == kUuidDash1 || i == kUuidDash2 || i == kUuidDash3)
         {
           oss << "-";
         }

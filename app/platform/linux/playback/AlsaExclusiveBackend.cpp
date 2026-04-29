@@ -22,6 +22,9 @@ extern "C"
 
 namespace app::playback
 {
+  constexpr int kAlsaWaitTimeoutMs = 500;
+  constexpr int kPollRetryDelayMs = 10;
+
   AlsaExclusiveBackend::AlsaExclusiveBackend(app::core::backend::AudioDevice const& device)
     : _deviceName{device.id}
   {
@@ -115,23 +118,23 @@ namespace app::playback
     _format.sampleRate = rate;
     _pcm = std::move(safePcm);
 
-    if (_callbacks.onRouteReady)
+    if (_callbacks.onRouteReady != nullptr)
     {
       _callbacks.onRouteReady(_callbacks.userData, _deviceName);
     }
     return {};
   }
 
-  void AlsaExclusiveBackend::playbackLoop(std::stop_token stopToken)
+  void AlsaExclusiveBackend::playbackLoop(std::stop_token const& stopToken)
   {
     while (!stopToken.stop_requested())
     {
       if (_paused.load(std::memory_order_relaxed))
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(kPollRetryDelayMs));
         continue;
       }
-      if (::snd_pcm_wait(_pcm.get(), 500) < 0)
+      if (::snd_pcm_wait(_pcm.get(), kAlsaWaitTimeoutMs) < 0)
       {
         recoverFromXrun(-EPIPE);
         continue;
@@ -157,7 +160,7 @@ namespace app::playback
       }
 
       char* dest = static_cast<char*>(areas[0].addr) + (offset * (areas[0].step / 8));
-      std::size_t const bytesToRead = frames * (_format.bitDepth / 8) * _format.channels;
+      std::size_t const bytesToRead = static_cast<std::size_t>(frames) * (_format.bitDepth / 8) * _format.channels;
       std::size_t const bytesRead =
         _callbacks.readPcm(_callbacks.userData, {reinterpret_cast<std::byte*>(dest), bytesToRead});
 
@@ -169,7 +172,7 @@ namespace app::playback
         {
           recoverFromXrun(static_cast<int>(committed));
         }
-        else if (_callbacks.onPositionAdvanced)
+        else if (_callbacks.onPositionAdvanced != nullptr)
         {
           _callbacks.onPositionAdvanced(_callbacks.userData, static_cast<std::uint32_t>(committed));
         }
@@ -180,7 +183,7 @@ namespace app::playback
         if (_callbacks.isSourceDrained(_callbacks.userData))
         {
           ::snd_pcm_drain(_pcm.get());
-          if (_callbacks.onDrainComplete)
+          if (_callbacks.onDrainComplete != nullptr)
           {
             _callbacks.onDrainComplete(_callbacks.userData);
           }
@@ -195,7 +198,7 @@ namespace app::playback
   {
     if (err == -EPIPE)
     {
-      if (_callbacks.onUnderrun)
+      if (_callbacks.onUnderrun != nullptr)
       {
         _callbacks.onUnderrun(_callbacks.userData);
       }
@@ -205,17 +208,23 @@ namespace app::playback
     {
       while (::snd_pcm_resume(_pcm.get()) == -EAGAIN)
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(kPollRetryDelayMs));
       }
     }
     else if (err == -ENODEV || err == -EBADF)
     {
       auto errorMsg = std::format("ALSA Device Lost: {}", ::snd_strerror(err));
-      if (_callbacks.onBackendError)
+      if (_callbacks.onBackendError != nullptr)
       {
         _callbacks.onBackendError(_callbacks.userData, errorMsg);
       }
     }
+  }
+
+  void AlsaExclusiveBackend::reset()
+  {
+    close();
+    _callbacks = {};
   }
 
   void AlsaExclusiveBackend::start()
@@ -227,7 +236,7 @@ namespace app::playback
     if (!_thread.joinable())
     {
       _thread = std::jthread(
-        [this](std::stop_token st)
+        [this](std::stop_token const& st)
         {
           app::core::util::setCurrentThreadName("AlsaPlayback");
           playbackLoop(st);
@@ -264,14 +273,14 @@ namespace app::playback
   {
     if (!_pcm)
     {
-      if (_callbacks.onDrainComplete)
+      if (_callbacks.onDrainComplete != nullptr)
       {
         _callbacks.onDrainComplete(_callbacks.userData);
       }
       return;
     }
     ::snd_pcm_drain(_pcm.get());
-    if (_callbacks.onDrainComplete)
+    if (_callbacks.onDrainComplete != nullptr)
     {
       _callbacks.onDrainComplete(_callbacks.userData);
     }
@@ -294,7 +303,7 @@ namespace app::playback
     stop();
     _pcm.reset();
   }
-  void AlsaExclusiveBackend::setExclusiveMode(bool)
+  void AlsaExclusiveBackend::setExclusiveMode([[maybe_unused]] bool exclusive)
   {
   }
   bool AlsaExclusiveBackend::isExclusiveMode() const noexcept

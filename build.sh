@@ -1,28 +1,31 @@
-#!/usr/bin/env bash
-# Build script for RockStudio
-# Usage: ./build.sh [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang]
+#!/ usr / bin / env bash
+#Build script for RockStudio
+#Usage :./ build.sh[debug | release | pgo1 | pgo2 | profile][--clean][--tidy][--clang]
 
 set -e
 
-# Default to debug build
+#Default to debug build
 BUILD_TYPE="debug"
 CLEAN="false"
 ENABLE_TIDY="false"
 USE_CLANG="false"
+VERBOSE="false"
 
 show_usage() {
-    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang]"
-    echo "  debug   - Debug build (default, with sanitizers)"
-    echo "  release - Release build (optimized, no sanitizers)"
-    echo "  pgo1    - PGO step 1: instrumented build for profile generation"
-    echo "  pgo2    - PGO step 2: optimized build using collected profile"
-    echo "  profile - Optimized build with debug symbols and frame pointers (for perf)"
-    echo "  --clean - Clean build directory before building"
-    echo "  --tidy  - Enable clang-tidy during the configure/build (implies --clang)"
-    echo "  --clang - Build with clang/clang++ in a dedicated build directory"
+    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang] [--verbose]"
+    echo "  debug     - Debug build (default, with sanitizers)"
+    echo "  release   - Release build (optimized, no sanitizers)"
+    echo "  pgo1      - PGO step 1: instrumented build for profile generation"
+    echo "  pgo2      - PGO step 2: optimized build using collected profile"
+    echo "  profile   - Optimized build with debug symbols and frame pointers (for perf)"
+    echo "  --clean   - Clean build directory before building"
+    echo "  --tidy    - Enable clang-tidy during the configure/build (implies --clang)"
+    echo "  --clang   - Build with clang/clang++ in a dedicated build directory"
+    echo "  --verbose - Show full build lines"
 }
 
-for ARG in "$@"; do
+for ARG in "$@";
+do
     case "$ARG" in
         debug|release|pgo1|pgo2|profile)
             BUILD_TYPE="$ARG"
@@ -36,6 +39,9 @@ for ARG in "$@"; do
         --clang)
             USE_CLANG="true"
             ;;
+        --verbose)
+            VERBOSE="true"
+            ;;
         -h|--help)
             show_usage
             exit 0
@@ -47,13 +53,13 @@ for ARG in "$@"; do
     esac
 done
 
-# Validate build type
+#Validate build type
 if [[ "$BUILD_TYPE" != "debug" && "$BUILD_TYPE" != "release" && "$BUILD_TYPE" != "pgo1" && "$BUILD_TYPE" != "pgo2" && "$BUILD_TYPE" != "profile" ]]; then
     show_usage
     exit 1
 fi
 
-# Convert to CMake preset name
+#Convert to CMake preset name
 case "$BUILD_TYPE" in
     debug)   PRESET="linux-debug" ;;
     release) PRESET="linux-release" ;;
@@ -62,7 +68,7 @@ case "$BUILD_TYPE" in
     profile) PRESET="profile" ;;
 esac
 
-# Build directory
+#Build directory
 SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
 TIDY_SUFFIX=""
 COMPILER_SUFFIX=""
@@ -83,29 +89,36 @@ case "$BUILD_TYPE" in
         BUILD_DIR="/tmp/build/${BUILD_TYPE}${COMPILER_SUFFIX}${TIDY_SUFFIX}"
         ;;
     pgo1|pgo2)
-        # PGO generate/use steps must share a build tree so profile data stays available.
+#PGO generate / use steps must share a build tree so profile data stays available.
         BUILD_DIR="/tmp/build/pgo${COMPILER_SUFFIX}${TIDY_SUFFIX}"
         ;;
 esac
 
-# Clean if requested
+#Clean if requested
 if [[ "$CLEAN" == "true" ]]; then
     echo "Cleaning build directory ($BUILD_DIR)..."
     rm -rf "$BUILD_DIR"
 fi
 
-# Ensure nix-shell is available
+#Ensure nix - shell is available
 if ! command -v nix-shell &> /dev/null; then
     echo "Error: nix-shell is required"
     exit 1
 fi
 
-# Configure
+#Configure
 echo "Configuring RockStudio with preset '$PRESET' in '$BUILD_DIR'..."
 CONFIGURE_COMMAND="cmake -S '$SOURCE_DIR' --preset '$PRESET' -B '$BUILD_DIR'"
 BUILD_COMMAND="cmake --build '$BUILD_DIR' --parallel"
 TEST_COMMAND="$BUILD_DIR/test/rs_test"
 TEST_LINUX_COMMAND="$BUILD_DIR/test/rs_test_linux"
+
+if [[ "$VERBOSE" == "true" ]]; then
+    CONFIGURE_COMMAND+=" -DCMAKE_VERBOSE_MAKEFILE=ON"
+    BUILD_COMMAND+=" --verbose"
+else
+    CONFIGURE_COMMAND+=" -DCMAKE_VERBOSE_MAKEFILE=OFF"
+fi
 
 if [[ "$USE_CLANG" == "true" ]]; then
     echo "clang enabled for this build."
@@ -121,17 +134,17 @@ fi
 
 nix-shell --run "$CONFIGURE_COMMAND"
 
-# Build
+#Build
 echo "Building RockStudio..."
 nix-shell --run "$BUILD_COMMAND"
 
-# Run tests (only for debug and release)
+#Run tests(only for debug and release)
 if [[ "$BUILD_TYPE" == "debug" || "$BUILD_TYPE" == "release" ]]; then
     echo "Running tests..."
     nix-shell --run "$TEST_COMMAND && $TEST_LINUX_COMMAND"
 fi
 
-# PGO instructions
+#PGO instructions
 if [[ "$BUILD_TYPE" == "pgo1" ]]; then
     NEXT_COMMAND="./build.sh pgo2"
     if [[ "$USE_CLANG" == "true" ]]; then
@@ -168,4 +181,5 @@ echo "  Preset: $PRESET"
 echo "  Build dir: $BUILD_DIR"
 echo "  compiler: $COMPILER_NAME"
 echo "  clang-tidy: $ENABLE_TIDY"
+echo "  verbose: $VERBOSE"
 echo "  tests: rs_test + rs_test_linux"

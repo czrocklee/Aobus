@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/ui/PlaybackBar.h"
+#include "platform/linux/ui/LayoutConstants.h"
 
 #include <gtkmm/button.h>
 #include <gtkmm/scale.h>
@@ -20,8 +21,8 @@ namespace app::ui
 
   void PlaybackBar::setupLayout()
   {
-    set_spacing(12);
-    set_margin(6);
+    set_spacing(Layout::kMarginMedium);
+    set_margin(Layout::kMarginSmall);
 
     // Transport controls box
     auto* transportBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
@@ -49,7 +50,7 @@ namespace app::ui
 
     // Seek and time box
     auto* seekBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-    seekBox->set_spacing(12);
+    seekBox->set_spacing(Layout::kSpacingXLarge);
     seekBox->set_hexpand(true);
     seekBox->set_halign(Gtk::Align::FILL);
     seekBox->set_valign(Gtk::Align::CENTER);
@@ -63,7 +64,7 @@ namespace app::ui
     _timeLabel.set_text("0:00");
     _timeLabel.set_halign(Gtk::Align::END);
     _timeLabel.set_valign(Gtk::Align::CENTER);
-    _timeLabel.set_width_chars(7);
+    _timeLabel.set_width_chars(kWidthChars);
 
     seekBox->append(_seekScale);
     seekBox->append(_timeLabel);

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/ui/TrackViewPage.h"
+#include "platform/linux/ui/LayoutConstants.h"
 #include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include <glibmm/wrap.h>
@@ -105,7 +106,7 @@ namespace app::ui
 
     TrackRow const* trackRowFromItem(gconstpointer item)
     {
-      if (!item)
+      if (item == nullptr)
       {
         return nullptr;
       }
@@ -116,7 +117,7 @@ namespace app::ui
 
     Glib::RefPtr<Gtk::Sorter> createRowSorter(RowCompareFn compare)
     {
-      auto* comparePtr = new RowCompareFn{std::move(compare)};
+      auto* comparePtr = new RowCompareFn{std::move(compare)}; // NOLINT(cppcoreguidelines-owning-memory)
       auto* customSorter = gtk_custom_sorter_new(
         [](gconstpointer lhs, gconstpointer rhs, gpointer userData) -> int
         {
@@ -139,7 +140,7 @@ namespace app::ui
 
     bool isTagsCellWidget(Gtk::Widget const* widget)
     {
-      for (auto current = widget; current != nullptr; current = current->get_parent())
+      for (auto const* current = widget; current != nullptr; current = current->get_parent())
       {
         if (current->has_css_class(kTagsCellWidgetName))
         {
@@ -157,11 +158,11 @@ namespace app::ui
         case TrackGroupBy::None: return 0;
         case TrackGroupBy::Artist: return 1;
         case TrackGroupBy::Album: return 2;
-        case TrackGroupBy::AlbumArtist: return 3;
+        case TrackGroupBy::AlbumArtist: return 3; // NOLINT(readability-magic-numbers)
         case TrackGroupBy::Genre: return 4;
-        case TrackGroupBy::Composer: return 5;
-        case TrackGroupBy::Work: return 6;
-        case TrackGroupBy::Year: return 7;
+        case TrackGroupBy::Composer: return 5; // NOLINT(readability-magic-numbers)
+        case TrackGroupBy::Work: return 6;     // NOLINT(readability-magic-numbers)
+        case TrackGroupBy::Year: return 7;     // NOLINT(readability-magic-numbers)
       }
 
       return 0;
@@ -173,11 +174,11 @@ namespace app::ui
       {
         case 1: return TrackGroupBy::Artist;
         case 2: return TrackGroupBy::Album;
-        case 3: return TrackGroupBy::AlbumArtist;
+        case 3: return TrackGroupBy::AlbumArtist; // NOLINT(readability-magic-numbers)
         case 4: return TrackGroupBy::Genre;
-        case 5: return TrackGroupBy::Composer;
-        case 6: return TrackGroupBy::Work;
-        case 7: return TrackGroupBy::Year;
+        case 5: return TrackGroupBy::Composer; // NOLINT(readability-magic-numbers)
+        case 6: return TrackGroupBy::Work;     // NOLINT(readability-magic-numbers)
+        case 7: return TrackGroupBy::Year;     // NOLINT(readability-magic-numbers)
         default: return TrackGroupBy::None;
       }
     }
@@ -263,7 +264,7 @@ namespace app::ui
 
   void TrackViewPage::setupPresentationControls()
   {
-    _controlsBar.set_spacing(8);
+    _controlsBar.set_spacing(Layout::kSpacingLarge);
     _controlsBar.set_margin_start(4);
     _controlsBar.set_margin_end(4);
     _controlsBar.set_margin_top(4);
@@ -297,7 +298,7 @@ namespace app::ui
     _columnsButton.set_label("Columns");
     _columnsButton.set_popover(_columnsPopover);
 
-    _columnsPopoverBox.set_spacing(4);
+    _columnsPopoverBox.set_spacing(Layout::kSpacingSmall);
 
     _columnsPopoverTitle.set_markup("<span size='small' weight='bold'>VISIBLE COLUMNS</span>");
     _columnsPopoverTitle.set_halign(Gtk::Align::START);
@@ -327,17 +328,17 @@ namespace app::ui
       {
         auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
 
-        if (auto h = header; !h)
+        if (!header)
         {
           return;
         }
 
         auto* label = Gtk::make_managed<Gtk::Label>("");
         label->set_halign(Gtk::Align::START);
-        label->set_margin_start(8);
-        label->set_margin_end(8);
-        label->set_margin_top(8);
-        label->set_margin_bottom(4);
+        label->set_margin_start(Layout::kSpacingLarge);
+        label->set_margin_end(Layout::kSpacingLarge);
+        label->set_margin_top(Layout::kSpacingLarge);
+        label->set_margin_bottom(Layout::kMarginSmall);
         label->set_xalign(0.0F);
         header->set_child(*label);
       });
@@ -504,7 +505,7 @@ namespace app::ui
       auto const& state = layout.columns[index];
       auto* binding = findColumnBinding(state.column);
 
-      if (!binding)
+      if (binding == nullptr)
       {
         continue;
       }
@@ -547,7 +548,7 @@ namespace app::ui
     {
       auto* binding = findColumnBinding(state.column);
 
-      if (!binding || !binding->toggle)
+      if (binding == nullptr || binding->toggle == nullptr)
       {
         continue;
       }
@@ -592,12 +593,11 @@ namespace app::ui
   TrackColumnLayout TrackViewPage::captureCurrentColumnLayout() const
   {
     auto layout = TrackColumnLayout{};
-    auto const currentLayout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
+    auto currentLayout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
 
     auto currentStateFor = [&currentLayout](TrackColumn column)
     {
-      auto const it =
-        std::ranges::find_if(currentLayout.columns, [&](TrackColumnState const& s) { return s.column == column; });
+      auto const it = std::ranges::find(currentLayout.columns, column, &TrackColumnState::column);
       return it != currentLayout.columns.end() ? *it : TrackColumnState{.column = column};
     };
 
@@ -642,7 +642,7 @@ namespace app::ui
     {
       auto* binding = findColumnBinding(state.column);
 
-      if (!binding)
+      if (binding == nullptr)
       {
         continue;
       }
@@ -839,9 +839,9 @@ namespace app::ui
     return _tagEditRequested;
   }
 
-  void TrackViewPage::showTagPopover(TagPopover& popover, double x, double y)
+  void TrackViewPage::showTagPopover(TagPopover& popover, double xPos, double yPos)
   {
-    auto rect = Gdk::Rectangle{static_cast<int>(x), static_cast<int>(y), 1, 1};
+    auto rect = Gdk::Rectangle{static_cast<int>(xPos), static_cast<int>(yPos), 1, 1};
     popover.set_parent(_columnView);
     popover.set_pointing_to(rect);
     popover.popup();
@@ -907,14 +907,14 @@ namespace app::ui
     primaryClickController->set_button(GDK_BUTTON_PRIMARY);
     primaryClickController->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
     primaryClickController->signal_pressed().connect(
-      [this, primaryClickController](int nPress, double x, double y)
+      [this, primaryClickController](int nPress, double xPos, double yPos)
       {
         if (nPress != 2)
         {
           return;
         }
 
-        if (auto* target = _columnView.pick(x, y, Gtk::PickFlags::NON_TARGETABLE); !isTagsCellWidget(target))
+        if (auto* target = _columnView.pick(xPos, yPos, Gtk::PickFlags::NON_TARGETABLE); !isTagsCellWidget(target))
         {
           return;
         }
@@ -928,7 +928,7 @@ namespace app::ui
 
         primaryClickController->set_state(Gtk::EventSequenceState::CLAIMED);
         _suppressNextTrackActivation = true;
-        _tagEditRequested.emit(selectedIds, x, y);
+        _tagEditRequested.emit(selectedIds, xPos, yPos);
       });
 
     _columnView.add_controller(primaryClickController);
@@ -936,14 +936,14 @@ namespace app::ui
     auto secondaryClickController = Gtk::GestureClick::create();
     secondaryClickController->set_button(GDK_BUTTON_SECONDARY);
     secondaryClickController->signal_released().connect(
-      [this](int, double x, double y)
+      [this, secondaryClickController](int, double xPos, double yPos)
       {
         if (selectedTrackCount() == 0)
         {
           return;
         }
 
-        _contextMenuRequested.emit(x, y);
+        _contextMenuRequested.emit(xPos, yPos);
       });
 
     _columnView.add_controller(secondaryClickController);

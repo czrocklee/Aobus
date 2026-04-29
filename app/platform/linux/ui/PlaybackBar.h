@@ -57,6 +57,9 @@ namespace app::ui
       std::uint32_t positionSec = 0xFFFFFFFF;
       std::uint32_t durationSec = 0xFFFFFFFF;
     } _lastState;
+
+    // Layout constants
+    static constexpr int kWidthChars = 7;
   };
 
 } // namespace app::ui

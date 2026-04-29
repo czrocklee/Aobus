@@ -67,7 +67,7 @@ namespace rs::media::mp4
         else if (parent.type() == "stsd" && (type == "alac" || type == "mp4a"))
         {
           // Audio sample entries (alac, mp4a) in stsd have 28 bytes of fixed data
-          skip = 28;
+          skip = 28; // NOLINT(readability-magic-numbers)
         }
 
         if (skip)

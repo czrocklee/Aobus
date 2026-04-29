@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <stop_token>
 #include <string>
@@ -22,7 +23,7 @@ namespace app::core::source
   public:
     StreamingPcmSource(std::unique_ptr<decoder::IAudioDecoderSession> decoder,
                        decoder::DecodedStreamInfo streamInfo,
-                       PcmSourceCallbacks callbacks,
+                       std::function<void(rs::Error const&)> onError,
                        std::uint32_t prerollTargetMs,
                        std::uint32_t decodeHighWatermarkMs);
     ~StreamingPcmSource() override;
@@ -37,14 +38,14 @@ namespace app::core::source
   private:
     void startDecodeThread();
     void stopDecodeThread();
-    void decodeLoop(std::stop_token stopToken);
+    void decodeLoop(std::stop_token const& stopToken);
     rs::Result<> fillUntil(std::uint32_t targetBufferedMs, std::uint64_t generation);
     rs::Result<bool> decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken);
     bool writeBlock(std::span<std::byte const> bytes, std::uint64_t generation, std::stop_token const* stopToken);
 
     std::unique_ptr<decoder::IAudioDecoderSession> _decoder;
     decoder::DecodedStreamInfo _streamInfo;
-    PcmSourceCallbacks _callbacks;
+    std::function<void(rs::Error const&)> _onError;
     PcmRingBuffer _ringBuffer;
     std::jthread _decodeThread;
     mutable std::mutex _decoderMutex;
@@ -56,4 +57,4 @@ namespace app::core::source
     std::uint32_t _decodeHighWatermarkMs = 0;
   };
 
-} // namespace app::core::playback
+} // namespace app::core::source

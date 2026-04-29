@@ -1,6 +1,6 @@
 ---
 name: gen-cpp-code
-description: Expert C++23 code generation for RockStudio. Use when creating or modifying headers (.h), implementations (.cpp), or gperf files (.gperf) in include/, lib/, app/, tool/, or test/ directories.
+description: Expert C++23 code generation and modification for RockStudio. MUST be activated for ANY task that involves writing, editing, or refactoring C++ code (features, bug fixes, architecture changes). Covers all core development across headers, implementations, and gperf files.
 ---
 
 # RockStudio C++ Code Generation

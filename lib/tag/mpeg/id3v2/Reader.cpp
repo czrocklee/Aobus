@@ -175,7 +175,7 @@ namespace rs::tag::mpeg::id3v2
     switch (header.majorVersion)
     {
       case 2: return rs::core::TrackBuilder::createNew();
-      case 3:
+      case 3: // NOLINT(readability-magic-numbers)
       case 4:
       {
         auto builder = rs::core::TrackBuilder::createNew();

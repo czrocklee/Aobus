@@ -10,6 +10,8 @@ namespace app::core::source
 {
   namespace
   {
+    constexpr std::uint8_t kBytesPer24BitSample = 3;
+
     std::uint64_t bytesPerSecond(AudioFormat const& format) noexcept
     {
       if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
@@ -17,7 +19,16 @@ namespace app::core::source
         return 0;
       }
 
-      auto const bytesPerSample = (format.bitDepth == 24U) ? 3U : (format.bitDepth > 16U) ? 4U : 2U;
+      std::uint32_t bytesPerSample = 2U;
+      if (format.bitDepth == 24U)
+      {
+        bytesPerSample = kBytesPer24BitSample;
+      }
+      else if (format.bitDepth > 16U)
+      {
+        bytesPerSample = 4U;
+      }
+
       return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
     }
 
@@ -34,12 +45,12 @@ namespace app::core::source
 
   StreamingPcmSource::StreamingPcmSource(std::unique_ptr<decoder::IAudioDecoderSession> decoder,
                                          decoder::DecodedStreamInfo streamInfo,
-                                         PcmSourceCallbacks callbacks,
+                                         std::function<void(rs::Error const&)> onError,
                                          std::uint32_t prerollTargetMs,
                                          std::uint32_t decodeHighWatermarkMs)
     : _decoder{std::move(decoder)}
     , _streamInfo{streamInfo}
-    , _callbacks{callbacks}
+    , _onError{std::move(onError)}
     , _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
     , _prerollTargetMs{prerollTargetMs}
     , _decodeHighWatermarkMs{decodeHighWatermarkMs}
@@ -102,13 +113,17 @@ namespace app::core::source
       auto lock = std::lock_guard<std::mutex>{_decoderMutex};
 
       auto const seekResult = _decoder->seek(positionMs);
+
       if (!seekResult)
       {
         if (!_failed.exchange(true, std::memory_order_relaxed))
         {
-          if (_callbacks.onError)
-            _callbacks.onError(_callbacks.userData, std::format("Seek failed: {}", seekResult.error().message));
+          if (_onError)
+          {
+            _onError(seekResult.error());
+          }
         }
+
         return seekResult;
       }
     }
@@ -135,8 +150,9 @@ namespace app::core::source
   void StreamingPcmSource::startDecodeThread()
   {
     stopDecodeThread();
+
     _decodeThread = std::jthread(
-      [this](std::stop_token token)
+      [this](std::stop_token const& token)
       {
         app::core::util::setCurrentThreadName("StreamingPcmSource-Decode");
         decodeLoop(token);
@@ -152,7 +168,7 @@ namespace app::core::source
     }
   }
 
-  void StreamingPcmSource::decodeLoop(std::stop_token stopToken)
+  void StreamingPcmSource::decodeLoop(std::stop_token const& stopToken)
   {
     auto const generation = _generation.load(std::memory_order_relaxed);
 
@@ -162,19 +178,25 @@ namespace app::core::source
     {
       if (bufferedMs() >= _decodeHighWatermarkMs)
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5)); // NOLINT(readability-magic-numbers)
         continue;
       }
 
       auto const result = decodeNextBlock(generation, &stopToken);
+
       if (!result)
       {
         if (!_failed.exchange(true, std::memory_order_relaxed))
         {
-          if (_callbacks.onError) _callbacks.onError(_callbacks.userData, result.error().message);
+          if (_onError)
+          {
+            _onError(result.error());
+          }
         }
+
         break;
       }
+
       if (!*result)
       {
         break;
@@ -188,14 +210,20 @@ namespace app::core::source
            _generation.load(std::memory_order_relaxed) == generation && bufferedMs() < targetBufferedMs)
     {
       auto const result = decodeNextBlock(generation, nullptr);
+
       if (!result)
       {
         if (!_failed.exchange(true, std::memory_order_relaxed))
         {
-          if (_callbacks.onError) _callbacks.onError(_callbacks.userData, result.error().message);
+          if (_onError)
+          {
+            _onError(result.error());
+          }
         }
+
         return std::unexpected(result.error());
       }
+
       if (!*result)
       {
         break;
@@ -207,6 +235,7 @@ namespace app::core::source
       return std::unexpected(
         rs::Error{.code = rs::Error::Code::Generic, .message = "Streaming source is in failed state"});
     }
+
     return {};
   }
 
@@ -227,6 +256,7 @@ namespace app::core::source
       {
         return std::unexpected(blockResult.error());
       }
+
       block = *blockResult;
     }
 
@@ -245,7 +275,7 @@ namespace app::core::source
   {
     auto const stopRequested = [stopToken]() { return stopToken && stopToken->stop_requested(); };
 
-    auto* current = bytes.data();
+    auto const* current = bytes.data();
     auto remaining = bytes.size();
 
     while (remaining > 0 && !stopRequested() && _generation.load(std::memory_order_relaxed) == generation)

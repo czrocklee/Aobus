@@ -11,6 +11,8 @@ namespace app::core::source
 {
   namespace
   {
+    constexpr std::uint8_t kBytesPer24BitSample = 3;
+
     std::size_t frameBytes(AudioFormat const& format) noexcept
     {
       if (format.channels == 0 || format.bitDepth == 0)
@@ -18,7 +20,16 @@ namespace app::core::source
         return 0;
       }
 
-      auto const bytesPerSample = (format.bitDepth == 24U) ? 3U : (format.bitDepth > 16U) ? 4U : 2U;
+      std::uint32_t bytesPerSample = 2U;
+      if (format.bitDepth == 24U)
+      {
+        bytesPerSample = kBytesPer24BitSample;
+      }
+      else if (format.bitDepth > 16U)
+      {
+        bytesPerSample = 4U;
+      }
+
       return static_cast<std::size_t>(format.channels) * bytesPerSample;
     }
 

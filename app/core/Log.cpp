@@ -34,7 +34,8 @@ namespace app::core
     consoleSink->set_pattern("%^[%T] %n: %v%$");
     consoleSink->set_level(spdLevel);
 
-    auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(logPath.string(), 1024 * 1024 * 5, 3);
+    auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+      logPath.string(), 1024 * 1024 * 5, 3); // NOLINT(readability-magic-numbers)
     fileSink->set_pattern("[%Y-%m-%d %T.%e] [%l] %n: %v");
     fileSink->set_level(spdlog::level::trace);
 
