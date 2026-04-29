@@ -20,8 +20,14 @@ namespace app::core::playback
   {
     void appendLine(std::string& text, std::string_view line)
     {
-      if (line.empty()) return;
-      if (!text.empty()) text += '\n';
+      if (line.empty())
+      {
+        return;
+      }
+      if (!text.empty())
+      {
+        text += '\n';
+      }
       text += line;
     }
 
@@ -36,8 +42,14 @@ namespace app::core::playback
       if (!src.isFloat && dst.isFloat)
       {
         auto const srcBits = src.validBits != 0 ? src.validBits : src.bitDepth;
-        if (dst.bitDepth == 32) return srcBits <= 24;
-        if (dst.bitDepth == 64) return srcBits <= 32;
+        if (dst.bitDepth == 32)
+        {
+          return srcBits <= 24;
+        }
+        if (dst.bitDepth == 64)
+        {
+          return srcBits <= 32;
+        }
       }
       return false;
     }
@@ -57,7 +69,10 @@ namespace app::core::playback
     _engine->setOnTrackEnded(
       [this]()
       {
-        if (_onTrackEnded) _onTrackEnded();
+        if (_onTrackEnded)
+        {
+          _onTrackEnded();
+        }
       });
 
     _engine->setOnRouteChanged(
@@ -66,9 +81,13 @@ namespace app::core::playback
         // Capture generation to prevent stale updates
         auto const generation = _playbackGeneration;
         if (_dispatcher)
+        {
           _dispatcher->dispatch([this, snapshot, generation]() { handleRouteChanged(snapshot, generation); });
+        }
         else
+        {
           handleRouteChanged(snapshot, generation);
+        }
       });
   }
 
@@ -87,7 +106,10 @@ namespace app::core::playback
 
   void PlaybackController::addManager(std::unique_ptr<backend::IBackendManager> manager)
   {
-    if (!manager) return;
+    if (!manager)
+    {
+      return;
+    }
 
     manager->setDevicesChangedCallback([this] { _backendsDirty = true; });
     _managers.push_back(std::move(manager));
@@ -230,7 +252,10 @@ namespace app::core::playback
 
   void PlaybackController::handleRouteChanged(EngineRouteSnapshot const& snapshot, std::uint64_t generation)
   {
-    if (generation != _playbackGeneration) return;
+    if (generation != _playbackGeneration)
+    {
+      return;
+    }
     _cachedEngineRoute = snapshot;
 
     // Check if we have a valid anchor and manager to subscribe to the system graph
@@ -243,9 +268,13 @@ namespace app::core::playback
           [this, generation](backend::AudioGraph const& graph)
           {
             if (_dispatcher)
+            {
               _dispatcher->dispatch([this, graph, generation]() { handleSystemGraphChanged(graph, generation); });
+            }
             else
+            {
               handleSystemGraphChanged(graph, generation);
+            }
           });
       }
     }
@@ -260,7 +289,10 @@ namespace app::core::playback
 
   void PlaybackController::handleSystemGraphChanged(backend::AudioGraph const& graph, std::uint64_t generation)
   {
-    if (generation != _playbackGeneration) return;
+    if (generation != _playbackGeneration)
+    {
+      return;
+    }
     _cachedSystemGraph = graph;
     updateMergedGraph();
   }
@@ -289,7 +321,10 @@ namespace app::core::playback
       }
       _mergedGraph.nodes.push_back(node);
     }
-    for (auto const& link : _cachedSystemGraph.links) _mergedGraph.links.push_back(link);
+    for (auto const& link : _cachedSystemGraph.links)
+    {
+      _mergedGraph.links.push_back(link);
+    }
 
     // Find the backend stream node to bridge the engine to
     std::string streamNodeId;

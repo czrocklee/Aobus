@@ -24,18 +24,30 @@ namespace app::playback::detail
 
   std::optional<std::uint32_t> parseUintProperty(char const* value)
   {
-    if (value == nullptr || *value == '\0') return std::nullopt;
+    if (value == nullptr || *value == '\0')
+    {
+      return std::nullopt;
+    }
     char* end = nullptr;
     auto const parsed = ::strtoul(value, &end, 10);
-    if (end == value) return std::nullopt;
+    if (end == value)
+    {
+      return std::nullopt;
+    }
     return static_cast<std::uint32_t>(parsed);
   }
 
   std::optional<app::core::AudioFormat> parseRawStreamFormat(::spa_pod const* param)
   {
-    if (param == nullptr) return std::nullopt;
+    if (param == nullptr)
+    {
+      return std::nullopt;
+    }
     auto info = ::spa_audio_info_raw{};
-    if (::spa_format_audio_raw_parse(param, &info) < 0) return std::nullopt;
+    if (::spa_format_audio_raw_parse(param, &info) < 0)
+    {
+      return std::nullopt;
+    }
 
     auto format = app::core::AudioFormat{};
     format.sampleRate = info.rate;
@@ -84,7 +96,9 @@ namespace app::playback::detail
       format.isFloat = true;
     }
     else
+    {
       return std::nullopt;
+    }
 
     return format;
   }

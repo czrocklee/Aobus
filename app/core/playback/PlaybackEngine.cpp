@@ -40,7 +40,10 @@ namespace app::core::playback
     std::uint64_t estimatedDecodedBytes(app::core::decoder::DecodedStreamInfo const& info) noexcept
     {
       auto const rate = bytesPerSecond(info.outputFormat);
-      if (rate == 0 || info.durationMs == 0) return 0;
+      if (rate == 0 || info.durationMs == 0)
+      {
+        return 0;
+      }
       return (static_cast<std::uint64_t>(info.durationMs) * rate) / 1000U;
     }
 
@@ -136,9 +139,13 @@ namespace app::core::playback
     {
       auto snap = _routeSnapshot;
       if (_dispatcher)
+      {
         _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      }
       else
+      {
         _onRouteChanged(snap);
+      }
     }
   }
 
@@ -221,7 +228,10 @@ namespace app::core::playback
       _backendStarted = true;
     }
 
-    if (_backend) _backend->start();
+    if (_backend)
+    {
+      _backend->start();
+    }
   }
 
   void PlaybackEngine::pause()
@@ -236,21 +246,30 @@ namespace app::core::playback
         shouldPause = _backendStarted.load();
       }
     }
-    if (shouldPause && _backend) _backend->pause();
+    if (shouldPause && _backend)
+    {
+      _backend->pause();
+    }
   }
 
   void PlaybackEngine::resume()
   {
     auto source = _source.load(std::memory_order_acquire);
     auto lock = std::unique_lock<std::mutex>{_stateMutex};
-    if (_snapshot.state != TransportState::Paused) return;
+    if (_snapshot.state != TransportState::Paused)
+    {
+      return;
+    }
 
     PLAYBACK_LOG_INFO("Playback resumed");
     if (_backendStarted)
     {
       _snapshot.state = TransportState::Playing;
       lock.unlock();
-      if (_backend) _backend->resume();
+      if (_backend)
+      {
+        _backend->resume();
+      }
       return;
     }
 
@@ -266,7 +285,10 @@ namespace app::core::playback
     _snapshot.state = TransportState::Playing;
     _backendStarted = true;
     lock.unlock();
-    if (_backend) _backend->start();
+    if (_backend)
+    {
+      _backend->start();
+    }
   }
 
   void PlaybackEngine::stop()
@@ -342,7 +364,10 @@ namespace app::core::playback
       _backendStarted = true;
     }
 
-    if (_backend) _backend->start();
+    if (_backend)
+    {
+      _backend->start();
+    }
   }
 
   PlaybackSnapshot PlaybackEngine::snapshot() const
@@ -530,9 +555,13 @@ namespace app::core::playback
     {
       auto snap = _routeSnapshot;
       if (_dispatcher)
+      {
         _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      }
       else
+      {
         _onRouteChanged(snap);
+      }
     }
 
     return true;
@@ -628,9 +657,13 @@ namespace app::core::playback
     {
       auto snap = _routeSnapshot;
       if (_dispatcher)
+      {
         _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      }
       else
+      {
         _onRouteChanged(snap);
+      }
     }
   }
 
@@ -709,9 +742,13 @@ namespace app::core::playback
     {
       auto snap = _routeSnapshot;
       if (_dispatcher)
+      {
         _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+      }
       else
+      {
         _onRouteChanged(snap);
+      }
     }
   }
 

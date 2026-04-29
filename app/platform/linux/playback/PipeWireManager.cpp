@@ -32,12 +32,18 @@ namespace app::playback
 
   void PipeWireManager::setDevicesChangedCallback(OnDevicesChangedCallback callback)
   {
-    if (_impl->monitor) _impl->monitor->setDevicesChangedCallback(std::move(callback));
+    if (_impl->monitor)
+    {
+      _impl->monitor->setDevicesChangedCallback(std::move(callback));
+    }
   }
 
   std::vector<app::core::backend::AudioDevice> PipeWireManager::enumerateDevices()
   {
-    if (!_impl->monitor) return {};
+    if (!_impl->monitor)
+    {
+      return {};
+    }
     auto devices = _impl->monitor->enumerateSinks();
     // Add virtual "System Default" entry
     devices.insert(devices.begin(),
@@ -73,7 +79,10 @@ namespace app::playback
     std::string_view routeAnchor,
     OnGraphChangedCallback callback)
   {
-    if (!_impl->monitor) return nullptr;
+    if (!_impl->monitor)
+    {
+      return nullptr;
+    }
     auto id = _impl->monitor->subscribeGraph(routeAnchor, std::move(callback));
     return std::make_unique<PipeWireSubscription>(_impl->monitor.get(), id);
   }

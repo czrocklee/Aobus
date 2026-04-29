@@ -26,7 +26,9 @@ namespace rs::tool
 
         if (i == kUuidDashIndices[0] || i == kUuidDashIndices[1] || i == kUuidDashIndices[2] ||
             i == kUuidDashIndices[3])
+        {
           oss << "-";
+        }
       }
 
       return oss.str();
@@ -57,13 +59,17 @@ namespace rs::tool
       auto mode = core::ExportMode::Full;
 
       if (modeStr == "minimum")
+      {
         mode = core::ExportMode::Minimum;
-
+      }
       else if (modeStr == "metadata")
+      {
         mode = core::ExportMode::Metadata;
-
+      }
       else if (modeStr == "full")
+      {
         mode = core::ExportMode::Full;
+      }
       else
       {
         os << "Error: Invalid export mode '" << modeStr << "'. Valid modes are: minimum, metadata, full.\n";
