@@ -100,45 +100,12 @@ namespace rs::tag::mp4
       std::string_view{"stsd"},
     };
 
-    template<std::size_t Extent>
-    Atom const* findNode(Atom const& node, std::span<std::string_view const, Extent> path, std::size_t startPos)
-    {
-      if (startPos >= path.size() || path[startPos] != node.type())
-      {
-        return nullptr;
-      }
-
-      if (startPos == path.size() - 1)
-      {
-        return &node;
-      }
-
-      Atom const* found = nullptr;
-      node.visitChildren([&](auto const& child) { return ((found = findNode(child, path, startPos + 1)) == nullptr); });
-      return found;
-    }
-
-    Atom const* findIlstNode(RootAtom const& root)
-    {
-      return findNode(root, std::span<std::string_view const, kIlstPath.size()>{kIlstPath}, 0);
-    }
-
-    Atom const* findMdhdNode(RootAtom const& root)
-    {
-      return findNode(root, std::span<std::string_view const, kMdhdPath.size()>{kMdhdPath}, 0);
-    }
-
-    Atom const* findStsdNode(RootAtom const& root)
-    {
-      return findNode(root, std::span<std::string_view const, kStsdPath.size()>{kStsdPath}, 0);
-    }
-
     // Helper to extract audio properties from mdhd and stsd
     void extractAudioProperties(rs::core::TrackBuilder& builder, RootAtom const& root, std::size_t fileSize)
     {
       // Get mdhd for sample rate and duration
 
-      if (auto const* mdhdNode = findMdhdNode(root); mdhdNode != nullptr)
+      if (auto const* mdhdNode = root.find(kMdhdPath); mdhdNode != nullptr)
       {
         auto const& view = static_cast<AtomView const&>(*mdhdNode);
         auto const& layout = view.layout<MdhdAtomLayout>();
@@ -168,7 +135,7 @@ namespace rs::tag::mp4
 
       // Get stsd for channels and bit depth
 
-      if (auto const* stsdNode = findStsdNode(root); stsdNode != nullptr)
+      if (auto const* stsdNode = root.find(kStsdPath); stsdNode != nullptr)
       {
         auto const& view = static_cast<AtomView const&>(*stsdNode);
         auto const& stsdLayout = view.layout<AtomLayout>();
@@ -197,8 +164,8 @@ namespace rs::tag::mp4
 
   rs::core::TrackBuilder File::loadTrack() const
   {
-    RootAtom root = rs::media::mp4::fromBuffer(_mappedRegion.get_address(), _mappedRegion.get_size());
-    Atom const* ilstNode = findIlstNode(root);
+    RootAtom root = rs::media::mp4::fromBuffer(utility::bytes::view(_mappedRegion.get_address(), _mappedRegion.get_size()));
+    Atom const* ilstNode = root.find(kIlstPath);
 
     clearOwnedStrings();
     auto builder = rs::core::TrackBuilder::createNew();
