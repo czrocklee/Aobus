@@ -4,6 +4,7 @@
 #include <rs/media/mp4/Atom.h>
 #include <rs/media/mp4/AtomLayout.h>
 #include <rs/media/mp4/Demuxer.h>
+#include <rs/utility/ByteView.h>
 
 #include <algorithm>
 #include <array>
@@ -19,23 +20,6 @@ namespace rs::media::mp4
       std::uint32_t firstChunk = 0;
       std::uint32_t samplesPerChunk = 0;
     };
-
-    Atom const* findNode(Atom const& node, std::span<std::string_view const> path, std::size_t startPos = 0)
-    {
-      if (startPos >= path.size() || path[startPos] != node.type())
-      {
-        return nullptr;
-      }
-
-      if (startPos == path.size() - 1)
-      {
-        return &node;
-      }
-
-      Atom const* found = nullptr;
-      node.visitChildren([&](auto const& child) { return ((found = findNode(child, path, startPos + 1)) == nullptr); });
-      return found;
-    }
 
     bool buildSampleOffsets(std::vector<Demuxer::SampleEntry>& samples,
                             std::span<std::uint64_t const> chunkOffsets,
@@ -112,7 +96,7 @@ namespace rs::media::mp4
     _timescale = 0;
     _duration = 0;
 
-    RootAtom root = fromBuffer(_fileData.data(), _fileData.size());
+    RootAtom root = fromBuffer(_fileData);
     auto chunkOffsets = std::vector<std::uint64_t>{};
     auto sampleToChunk = std::vector<SampleToChunkEntry>{};
 
@@ -125,12 +109,32 @@ namespace rs::media::mp4
       std::string_view{"mdhd"},
     };
 
-    if (auto const* node = findNode(root, kMdhdPath))
+    if (auto const* node = root.find(kMdhdPath))
     {
       auto const& view = static_cast<AtomView const&>(*node);
       auto const& layout = view.layout<MdhdAtomLayout>();
       _timescale = layout.timescale.value();
       _duration = layout.duration.value();
+    }
+
+    // Cookie path (extensions in sample entry)
+    std::array const kCookiePath = {
+      std::string_view{"root"},
+      std::string_view{"moov"},
+      std::string_view{"trak"},
+      std::string_view{"mdia"},
+      std::string_view{"minf"},
+      std::string_view{"stbl"},
+      std::string_view{"stsd"},
+      targetFormat,
+      targetFormat,
+    };
+
+    if (auto const* node = root.find(kCookiePath))
+    {
+      auto const& view = static_cast<AtomView const&>(*node);
+      auto const bytes = view.bytes();
+      _magicCookie.assign(bytes.begin(), bytes.end());
     }
 
     // stbl path
@@ -143,7 +147,7 @@ namespace rs::media::mp4
       std::string_view{"stbl"},
     };
 
-    auto const* stblNode = findNode(root, kStblPath);
+    auto const* stblNode = root.find(kStblPath);
 
     if (!stblNode)
     {
@@ -151,110 +155,74 @@ namespace rs::media::mp4
     }
 
     stblNode->visitChildren(
-      [this, targetFormat, &chunkOffsets, &sampleToChunk](Atom const& atom)
+      [this, &chunkOffsets, &sampleToChunk](Atom const& atom)
       {
         auto type = atom.type();
         auto const& view = static_cast<AtomView const&>(atom);
+        auto const atomBytes = view.bytes();
 
-        if (type == "stsd")
+        if (type == "stsz")
         {
-          constexpr std::size_t kStsdContentHeaderSize = 8;
-          auto const* data =
-            reinterpret_cast<std::uint8_t const*>(view.layout<AtomLayout>().type.data() + 4) + kStsdContentHeaderSize;
-
-          auto const entrySize = boost::endian::load_big_u32(data);
-          auto const format = std::string_view{reinterpret_cast<char const*>(data + 4), 4};
-
-          if (format == targetFormat)
-          {
-            auto const* extData = data + 8 + 28;
-            auto const* extEnd = data + entrySize;
-
-            while (extData + 8 <= extEnd)
-            {
-              auto const extSize = boost::endian::load_big_u32(extData);
-              auto const extType = std::string_view{reinterpret_cast<char const*>(extData + 4), 4};
-
-              if (extType == targetFormat)
-              {
-                _magicCookie.assign(
-                  reinterpret_cast<std::byte const*>(extData), reinterpret_cast<std::byte const*>(extData + extSize));
-                break;
-              }
-
-              if (extSize < 8)
-              {
-                break;
-              }
-
-              extData += extSize;
-            }
-          }
-        }
-        else if (type == "stsz")
-        {
-          auto const* data = reinterpret_cast<std::uint8_t const*>(view.layout<AtomLayout>().type.data() + 4) + 4;
-          auto const sampleSize = boost::endian::load_big_u32(data);
-          auto const count = boost::endian::load_big_u32(data + 4);
+          auto const* header = utility::layout::view<StszAtomLayout>(atomBytes);
+          auto const sampleSize = header->sampleSize.value();
+          auto const count = header->sampleCount.value();
 
           _samples.resize(count);
-          data += 8;
 
-          for (std::uint32_t i = 0; i < count; ++i)
+          if (sampleSize == 0)
           {
-            if (sampleSize == 0)
+            auto entries = utility::layout::viewArray<StszAtomLayout::Entry>(atomBytes.subspan(sizeof(StszAtomLayout)));
+            for (std::size_t i = 0; i < entries.size(); ++i)
             {
-              _samples[i].size = boost::endian::load_big_u32(data);
-              data += 4;
+              _samples[i].size = entries[i].size.value();
             }
-            else
+          }
+          else
+          {
+            for (auto& sample : _samples)
             {
-              _samples[i].size = sampleSize;
+              sample.size = sampleSize;
             }
           }
         }
         else if (type == "stsc")
         {
-          auto const* data = reinterpret_cast<std::uint8_t const*>(view.layout<AtomLayout>().type.data() + 4) + 4;
-          auto const count = boost::endian::load_big_u32(data);
+          auto const* header = utility::layout::view<StscAtomLayout>(atomBytes);
+          auto const count = header->entryCount.value();
 
-          data += 4;
           sampleToChunk.resize(count);
+          auto entries = utility::layout::viewArray<StscAtomLayout::Entry>(atomBytes.subspan(sizeof(StscAtomLayout)));
 
-          for (std::uint32_t i = 0; i < count; ++i)
+          for (std::size_t i = 0; i < entries.size(); ++i)
           {
-            sampleToChunk[i].firstChunk = boost::endian::load_big_u32(data);
-            sampleToChunk[i].samplesPerChunk = boost::endian::load_big_u32(data + 4);
-            data += 12;
+            sampleToChunk[i].firstChunk = entries[i].firstChunk.value();
+            sampleToChunk[i].samplesPerChunk = entries[i].samplesPerChunk.value();
           }
         }
         else if (type == "stco")
         {
-          auto const* data = reinterpret_cast<std::uint8_t const*>(view.layout<AtomLayout>().type.data() + 4) + 4;
-          auto const count = boost::endian::load_big_u32(data);
-
-          data += 4;
+          auto const* header = utility::layout::view<StcoAtomLayout>(atomBytes);
+          auto const count = header->entryCount.value();
 
           chunkOffsets.resize(count);
+          auto entries = utility::layout::viewArray<StcoAtomLayout::Entry>(atomBytes.subspan(sizeof(StcoAtomLayout)));
 
-          for (std::uint32_t i = 0; i < count; ++i)
+          for (std::size_t i = 0; i < entries.size(); ++i)
           {
-            chunkOffsets[i] = boost::endian::load_big_u32(data);
-            data += 4;
+            chunkOffsets[i] = entries[i].chunkOffset.value();
           }
         }
         else if (type == "co64")
         {
-          auto const* data = reinterpret_cast<std::uint8_t const*>(view.layout<AtomLayout>().type.data() + 4) + 4;
-          auto const count = boost::endian::load_big_u32(data);
+          auto const* header = utility::layout::view<Co64AtomLayout>(atomBytes);
+          auto const count = header->entryCount.value();
 
-          data += 4;
           chunkOffsets.resize(count);
+          auto entries = utility::layout::viewArray<Co64AtomLayout::Entry>(atomBytes.subspan(sizeof(Co64AtomLayout)));
 
-          for (std::uint32_t i = 0; i < count; ++i)
+          for (std::size_t i = 0; i < entries.size(); ++i)
           {
-            chunkOffsets[i] = boost::endian::load_big_u64(data);
-            data += 8;
+            chunkOffsets[i] = entries[i].chunkOffset.value();
           }
         }
 

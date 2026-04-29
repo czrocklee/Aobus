@@ -103,6 +103,108 @@ namespace rs::media::mp4
   static_assert(alignof(MdhdAtomLayout) == 1);
   static_assert(std::is_trivial_v<MdhdAtomLayout>);
 
+  // stsd (Sample Description Box)
+  // Fixed header: length + type + version/flags + entryCount (16 bytes)
+  // Followed by entryCount sample entries
+  struct StsdAtomLayout
+  {
+    using FixedSize = std::false_type;
+
+    AtomLayout common;
+    boost::endian::big_uint32_buf_t versionAndFlags;
+    boost::endian::big_uint32_buf_t entryCount;
+  };
+
+  static_assert(sizeof(StsdAtomLayout) == 16);
+  static_assert(alignof(StsdAtomLayout) == 1);
+  static_assert(std::is_trivial_v<StsdAtomLayout>);
+
+  // stsz (Sample Size Box)  // Fixed header: length + type + version/flags + sampleSize + sampleCount (20 bytes)
+  // Followed by sampleCount entries of 4 bytes each (when sampleSize == 0)
+  struct StszAtomLayout
+  {
+    using FixedSize = std::false_type;
+
+    AtomLayout common;
+    boost::endian::big_uint32_buf_t versionAndFlags;
+    boost::endian::big_uint32_buf_t sampleSize;
+    boost::endian::big_uint32_buf_t sampleCount;
+
+    struct Entry
+    {
+      boost::endian::big_uint32_buf_t size;
+    };
+  };
+
+  static_assert(sizeof(StszAtomLayout) == 20);
+  static_assert(alignof(StszAtomLayout) == 1);
+  static_assert(std::is_trivial_v<StszAtomLayout>);
+
+  // stsc (Sample To Chunk Box)
+  // Fixed header: length + type + version/flags + entryCount (16 bytes)
+  // Followed by entryCount entries of 12 bytes each
+  struct StscAtomLayout
+  {
+    using FixedSize = std::false_type;
+
+    AtomLayout common;
+    boost::endian::big_uint32_buf_t versionAndFlags;
+    boost::endian::big_uint32_buf_t entryCount;
+
+    struct Entry
+    {
+      boost::endian::big_uint32_buf_t firstChunk;
+      boost::endian::big_uint32_buf_t samplesPerChunk;
+      boost::endian::big_uint32_buf_t sampleDescIndex;
+    };
+  };
+
+  static_assert(sizeof(StscAtomLayout) == 16);
+  static_assert(alignof(StscAtomLayout) == 1);
+  static_assert(std::is_trivial_v<StscAtomLayout>);
+
+  // stco (Chunk Offset Box - 32-bit)
+  // Fixed header: length + type + version/flags + entryCount (16 bytes)
+  // Followed by entryCount entries of 4 bytes each
+  struct StcoAtomLayout
+  {
+    using FixedSize = std::false_type;
+
+    AtomLayout common;
+    boost::endian::big_uint32_buf_t versionAndFlags;
+    boost::endian::big_uint32_buf_t entryCount;
+
+    struct Entry
+    {
+      boost::endian::big_uint32_buf_t chunkOffset;
+    };
+  };
+
+  static_assert(sizeof(StcoAtomLayout) == 16);
+  static_assert(alignof(StcoAtomLayout) == 1);
+  static_assert(std::is_trivial_v<StcoAtomLayout>);
+
+  // co64 (Chunk Offset Box - 64-bit)
+  // Fixed header: length + type + version/flags + entryCount (16 bytes)
+  // Followed by entryCount entries of 8 bytes each
+  struct Co64AtomLayout
+  {
+    using FixedSize = std::false_type;
+
+    AtomLayout common;
+    boost::endian::big_uint32_buf_t versionAndFlags;
+    boost::endian::big_uint32_buf_t entryCount;
+
+    struct Entry
+    {
+      boost::endian::big_uint64_buf_t chunkOffset;
+    };
+  };
+  
+  static_assert(sizeof(Co64AtomLayout) == 16);
+  static_assert(alignof(Co64AtomLayout) == 1);
+  static_assert(std::is_trivial_v<Co64AtomLayout>);
+
   // AudioSampleEntry for stsd - contains audio codec info
   // Full AudioSampleEntry with header is 28 bytes:
   // bytes 0-3: reserved (4)

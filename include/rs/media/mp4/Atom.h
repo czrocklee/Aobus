@@ -32,6 +32,12 @@ namespace rs::media::mp4
     virtual bool isLeaf() const = 0;
 
     virtual void visitChildren(Visitor visitor) const = 0;
+
+    /**
+     * @brief Find an atom by its path (e.g., {"root", "moov", "trak"}).
+     * @return Pointer to the found atom, or nullptr if not found.
+     */
+    Atom const* find(std::span<std::string_view const> path) const;
   };
 
   class AtomView : public Atom
@@ -56,16 +62,16 @@ namespace rs::media::mp4
     template<typename Layout>
     Layout const& layout() const
     {
-      if (auto length = layout<AtomLayout>().length.value(); typename Layout::FixedSize{})
+      if constexpr (sizeof(typename Layout::FixedSize) != 0 && Layout::FixedSize::value)
       {
-        assert(length == sizeof(Layout));
+        assert(utility::layout::view<AtomLayout>(_data)->length.value() == sizeof(Layout));
       }
       else
       {
-        assert(length >= sizeof(Layout));
+        assert(utility::layout::view<AtomLayout>(_data)->length.value() >= sizeof(Layout));
       }
 
-      return *std::launder(reinterpret_cast<Layout const*>(_data.data()));
+      return *utility::layout::view<Layout>(_data);
     }
 
   private:
@@ -141,5 +147,5 @@ namespace rs::media::mp4
     std::vector<std::unique_ptr<Atom>> _children;
   };
 
-  RootAtom fromBuffer(void const* data, std::size_t size);
+  RootAtom fromBuffer(std::span<std::byte const> data);
 } // namespace rs::media::mp4
