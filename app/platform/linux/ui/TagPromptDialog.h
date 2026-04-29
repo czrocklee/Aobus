@@ -34,7 +34,7 @@ namespace app::ui
       RemoveFromAll,
     };
 
-    struct TagState
+    struct TagState final
     {
       std::size_t membershipCount = 0;
       PendingTagChange pending = PendingTagChange::Keep;

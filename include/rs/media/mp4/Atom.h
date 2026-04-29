@@ -4,10 +4,13 @@
 #pragma once
 
 #include "AtomLayout.h"
+#include <rs/utility/ByteView.h>
+
 #include <algorithm>
 #include <cassert>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -34,21 +37,26 @@ namespace rs::media::mp4
   class AtomView : public Atom
   {
   public:
-    AtomView(void const* data, std::size_t /*size*/, Atom& parent)
+    AtomView(std::span<std::byte const> data, Atom& parent)
       : _data{data}, _parent{parent}
     {
     }
 
     std::uint32_t length() const override { return layout<AtomLayout>().length.value(); }
 
-    std::string_view type() const override { return std::string_view{layout<AtomLayout>().type.data(), 4}; }
+    std::string_view type() const override
+    {
+      return utility::bytes::stringView(utility::bytes::view(layout<AtomLayout>().type));
+    }
 
     Atom const* parent() const override { return &_parent; }
+
+    std::span<std::byte const> bytes() const { return _data; }
 
     template<typename Layout>
     Layout const& layout() const
     {
-      if (auto length = static_cast<AtomLayout const*>(_data)->length.value(); typename Layout::FixedSize{})
+      if (auto length = layout<AtomLayout>().length.value(); typename Layout::FixedSize{})
       {
         assert(length == sizeof(Layout));
       }
@@ -57,11 +65,11 @@ namespace rs::media::mp4
         assert(length >= sizeof(Layout));
       }
 
-      return *static_cast<Layout const*>(_data);
+      return *std::launder(reinterpret_cast<Layout const*>(_data.data()));
     }
 
   private:
-    void const* _data;
+    std::span<std::byte const> _data;
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers)
     Atom& _parent;
   };

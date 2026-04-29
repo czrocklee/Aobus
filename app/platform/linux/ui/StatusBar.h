@@ -68,7 +68,7 @@ namespace app::ui
     NowPlayingClickedSignal _nowPlayingClicked;
     OutputChangedSignal _outputChanged;
 
-    struct LastPlaybackState
+    struct LastPlaybackState final
     {
       app::core::playback::TransportState state = app::core::playback::TransportState::Idle;
       app::core::backend::BackendKind backend = app::core::backend::BackendKind::None;

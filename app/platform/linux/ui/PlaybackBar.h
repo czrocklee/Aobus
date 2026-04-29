@@ -51,7 +51,7 @@ namespace app::ui
     SeekSignal _seekRequested;
     bool _updatingSeekScale = false;
 
-    struct LastState
+    struct LastState final
     {
       app::core::playback::TransportState state = app::core::playback::TransportState::Idle;
       std::uint32_t positionSec = 0xFFFFFFFF;

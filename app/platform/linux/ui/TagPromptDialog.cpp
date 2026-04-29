@@ -108,7 +108,8 @@ namespace app::ui
     }
 
     std::ranges::sort(availableTags);
-    availableTags.erase(std::unique(availableTags.begin(), availableTags.end()), availableTags.end());
+    auto const uniqueRange = std::ranges::unique(availableTags);
+    availableTags.erase(uniqueRange.begin(), uniqueRange.end());
     _availableTags = std::move(availableTags);
 
     set_title("Edit Tags");
