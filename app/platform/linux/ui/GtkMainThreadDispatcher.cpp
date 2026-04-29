@@ -12,7 +12,10 @@ namespace app::ui
 
   void GtkMainThreadDispatcher::dispatch(std::function<void()> task)
   {
-    if (!task) return;
+    if (!task)
+    {
+      return;
+    }
 
     {
       std::lock_guard<std::mutex> lock(_mutex);
@@ -31,7 +34,10 @@ namespace app::ui
 
     for (auto const& task : tasksToRun)
     {
-      if (task) task();
+      if (task)
+      {
+        task();
+      }
     }
   }
 } // namespace app::ui

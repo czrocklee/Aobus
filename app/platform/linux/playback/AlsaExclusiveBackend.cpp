@@ -71,9 +71,13 @@ namespace app::playback
 
     auto alsaFormat = SND_PCM_FORMAT_S16_LE;
     if (format.bitDepth == 32)
+    {
       alsaFormat = (format.validBits == 24) ? SND_PCM_FORMAT_S24_LE : SND_PCM_FORMAT_S32_LE;
+    }
     else if (format.bitDepth == 24)
+    {
       alsaFormat = SND_PCM_FORMAT_S24_3LE;
+    }
 
     if (::snd_pcm_hw_params_set_format(safePcm.get(), params, alsaFormat) < 0)
     {
@@ -148,7 +152,10 @@ namespace app::playback
         recoverFromXrun(static_cast<int>(avail));
         continue;
       }
-      if (avail == 0) continue;
+      if (avail == 0)
+      {
+        continue;
+      }
 
       ::snd_pcm_uframes_t frames = static_cast<::snd_pcm_uframes_t>(avail);
       ::snd_pcm_channel_area_t const* areas = nullptr;
@@ -169,9 +176,13 @@ namespace app::playback
         auto committed =
           ::snd_pcm_mmap_commit(_pcm.get(), offset, bytesRead / ((_format.bitDepth / 8) * _format.channels));
         if (committed < 0)
+        {
           recoverFromXrun(static_cast<int>(committed));
+        }
         else if (_callbacks.onPositionAdvanced)
+        {
           _callbacks.onPositionAdvanced(_callbacks.userData, static_cast<std::uint32_t>(committed));
+        }
       }
       else
       {
@@ -179,7 +190,10 @@ namespace app::playback
         if (_callbacks.isSourceDrained(_callbacks.userData))
         {
           ::snd_pcm_drain(_pcm.get());
-          if (_callbacks.onDrainComplete) _callbacks.onDrainComplete(_callbacks.userData);
+          if (_callbacks.onDrainComplete)
+          {
+            _callbacks.onDrainComplete(_callbacks.userData);
+          }
           break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -191,31 +205,44 @@ namespace app::playback
   {
     if (err == -EPIPE)
     {
-      if (_callbacks.onUnderrun) _callbacks.onUnderrun(_callbacks.userData);
+      if (_callbacks.onUnderrun)
+      {
+        _callbacks.onUnderrun(_callbacks.userData);
+      }
       ::snd_pcm_prepare(_pcm.get());
     }
     else if (err == -ESTRPIPE)
     {
-      while (::snd_pcm_resume(_pcm.get()) == -EAGAIN) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      while (::snd_pcm_resume(_pcm.get()) == -EAGAIN)
+      {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
     }
     else if (err == -ENODEV || err == -EBADF)
     {
       _lastError = "ALSA Device Lost: " + std::string(::snd_strerror(err));
-      if (_callbacks.onBackendError) _callbacks.onBackendError(_callbacks.userData, _lastError);
+      if (_callbacks.onBackendError)
+      {
+        _callbacks.onBackendError(_callbacks.userData, _lastError);
+      }
     }
   }
 
   void AlsaExclusiveBackend::start()
   {
-    if (!_pcm) return;
-    _paused = false;
+    if (!_pcm)
+    {
+      return;
+    }
     if (!_thread.joinable())
+    {
       _thread = std::jthread(
         [this](std::stop_token st)
         {
           app::core::util::setCurrentThreadName("AlsaPlayback");
           playbackLoop(st);
         });
+    }
     ::snd_pcm_start(_pcm.get());
   }
 
@@ -247,16 +274,25 @@ namespace app::playback
   {
     if (!_pcm)
     {
-      if (_callbacks.onDrainComplete) _callbacks.onDrainComplete(_callbacks.userData);
+      if (_callbacks.onDrainComplete)
+      {
+        _callbacks.onDrainComplete(_callbacks.userData);
+      }
       return;
     }
     ::snd_pcm_drain(_pcm.get());
-    if (_callbacks.onDrainComplete) _callbacks.onDrainComplete(_callbacks.userData);
+    if (_callbacks.onDrainComplete)
+    {
+      _callbacks.onDrainComplete(_callbacks.userData);
+    }
   }
   void AlsaExclusiveBackend::stop()
   {
     _thread.request_stop();
-    if (_thread.joinable() && std::this_thread::get_id() != _thread.get_id()) _thread.join();
+    if (_thread.joinable() && std::this_thread::get_id() != _thread.get_id())
+    {
+      _thread.join();
+    }
     if (_pcm)
     {
       ::snd_pcm_drop(_pcm.get());

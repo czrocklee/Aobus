@@ -114,7 +114,10 @@ namespace app::playback
   void PipeWireBackend::Impl::handleStreamProcess()
   {
     auto* buffer = ::pw_stream_dequeue_buffer(_stream.get());
-    if (buffer == nullptr) return;
+    if (buffer == nullptr)
+    {
+      return;
+    }
 
     auto* data = buffer->buffer->datas[0].data;
     if (data == nullptr)
@@ -125,7 +128,10 @@ namespace app::playback
 
     auto const max_size = buffer->buffer->datas[0].maxsize;
     auto stride = buffer->buffer->datas[0].chunk->stride;
-    if (stride == 0 && _format.channels > 0 && _format.bitDepth > 0) stride = _format.channels * (_format.bitDepth / 8);
+    if (stride == 0 && _format.channels > 0 && _format.bitDepth > 0)
+    {
+      stride = _format.channels * (_format.bitDepth / 8);
+    }
     if (stride == 0)
     {
       ::pw_stream_queue_buffer(_stream.get(), buffer);
@@ -147,13 +153,18 @@ namespace app::playback
       buffer->buffer->datas[0].chunk->size = 0;
       ::pw_stream_queue_buffer(_stream.get(), buffer);
       if (_callbacks.isSourceDrained && _callbacks.isSourceDrained(_callbacks.userData))
+      {
         ::pw_stream_flush(_stream.get(), true);
+      }
     }
   }
 
   void PipeWireBackend::Impl::handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param)
   {
-    if (param == nullptr || id != SPA_PARAM_Format) return;
+    if (param == nullptr || id != SPA_PARAM_Format)
+    {
+      return;
+    }
     if (auto negotiated = parseRawStreamFormat(param))
     {
       _format = *negotiated;
@@ -173,7 +184,10 @@ namespace app::playback
     if (newState == PW_STREAM_STATE_ERROR)
     {
       setError(errorMessage ? errorMessage : "Unknown PipeWire stream error");
-      if (_callbacks.onBackendError) _callbacks.onBackendError(_callbacks.userData, _lastError);
+      if (_callbacks.onBackendError)
+      {
+        _callbacks.onBackendError(_callbacks.userData, _lastError);
+      }
     }
     else if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
     {
@@ -192,7 +206,10 @@ namespace app::playback
   void PipeWireBackend::Impl::handleStreamDrained()
   {
     _drainPending = false;
-    if (_callbacks.onDrainComplete) _callbacks.onDrainComplete(_callbacks.userData);
+    if (_callbacks.onDrainComplete)
+    {
+      _callbacks.onDrainComplete(_callbacks.userData);
+    }
   }
 
   PipeWireBackend::PipeWireBackend(app::core::backend::AudioDevice const& device)
@@ -255,7 +272,10 @@ namespace app::playback
     if (!_targetDeviceId.empty())
     {
       ::pw_properties_set(props.get(), PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
-      if (useExclusive) ::pw_properties_set(props.get(), PW_KEY_NODE_EXCLUSIVE, "true");
+      if (useExclusive)
+      {
+        ::pw_properties_set(props.get(), PW_KEY_NODE_EXCLUSIVE, "true");
+      }
     }
 
     _impl->_stream.reset(::pw_stream_new(_impl->_core.get(), "RockStudio Playback", props.release()));
@@ -270,9 +290,13 @@ namespace app::playback
 
     auto spaFmt = SPA_AUDIO_FORMAT_S16_LE;
     if (format.bitDepth == 32)
+    {
       spaFmt = (format.validBits == 24) ? SPA_AUDIO_FORMAT_S24_32_LE : SPA_AUDIO_FORMAT_S32_LE;
+    }
     else if (format.bitDepth == 24)
+    {
       spaFmt = SPA_AUDIO_FORMAT_S24_LE;
+    }
 
     std::uint8_t buffer[1024];
     ::spa_pod_builder b = {};
@@ -325,7 +349,10 @@ namespace app::playback
 
   void PipeWireBackend::pause()
   {
-    if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
+    if (!_impl || !_impl->_stream || !_impl->_threadLoop)
+    {
+      return;
+    }
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
     ::pw_stream_set_active(_impl->_stream.get(), false);
     ::pw_thread_loop_unlock(_impl->_threadLoop.get());
@@ -338,7 +365,10 @@ namespace app::playback
 
   void PipeWireBackend::flush()
   {
-    if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
+    if (!_impl || !_impl->_stream || !_impl->_threadLoop)
+    {
+      return;
+    }
     _impl->_drainPending = false;
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
     ::pw_stream_flush(_impl->_stream.get(), false);
@@ -347,7 +377,10 @@ namespace app::playback
 
   void PipeWireBackend::drain()
   {
-    if (!_impl || !_impl->_stream || !_impl->_threadLoop || _impl->_drainPending) return;
+    if (!_impl || !_impl->_stream || !_impl->_threadLoop || _impl->_drainPending)
+    {
+      return;
+    }
     _impl->_drainPending = true;
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
     ::pw_stream_flush(_impl->_stream.get(), true);
@@ -356,7 +389,10 @@ namespace app::playback
 
   void PipeWireBackend::stop()
   {
-    if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
+    if (!_impl || !_impl->_stream || !_impl->_threadLoop)
+    {
+      return;
+    }
     _impl->_drainPending = false;
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
     ::pw_stream_set_active(_impl->_stream.get(), false);
@@ -365,14 +401,23 @@ namespace app::playback
 
   void PipeWireBackend::close()
   {
-    if (_impl) _impl->destroyStream();
+    if (_impl)
+    {
+      _impl->destroyStream();
+    }
   }
 
   void PipeWireBackend::setExclusiveMode(bool exclusive)
   {
-    if (_exclusiveMode == exclusive) return;
+    if (_exclusiveMode == exclusive)
+    {
+      return;
+    }
     _exclusiveMode = exclusive;
-    if (_impl && _impl->_stream && !_targetDeviceId.empty()) open(_impl->_format, _impl->_callbacks);
+    if (_impl && _impl->_stream && !_targetDeviceId.empty())
+    {
+      open(_impl->_format, _impl->_callbacks);
+    }
   }
 
   bool PipeWireBackend::isExclusiveMode() const noexcept

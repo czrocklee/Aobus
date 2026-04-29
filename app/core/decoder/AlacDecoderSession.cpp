@@ -220,7 +220,10 @@ namespace app::core::decoder
         for (std::uint32_t i = 0; i < numFrames * channels; ++i)
         {
           std::int32_t val = src[0] | (src[1] << 8) | (src[2] << 16);
-          if (val & 0x800000) val |= 0xFF000000; // Sign extend
+          if (val & 0x800000)
+          {
+            val |= 0xFF000000;
+          }
           *dst++ = val;
           src += 3;
         }

@@ -500,7 +500,10 @@ namespace app::ui
           }
         }
       }
-      if (found) break;
+      if (found)
+      {
+        break;
+      }
     }
     if (!found)
     {
@@ -548,7 +551,10 @@ namespace app::ui
 
     if (snapshot.underrunCount > 0)
     {
-      if (formatFound) ss << " | ";
+      if (formatFound)
+      {
+        ss << " | ";
+      }
       ss << snapshot.underrunCount << " underruns";
     }
 

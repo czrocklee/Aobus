@@ -183,9 +183,15 @@ namespace rs::core
     auto const property = view.property();
     out << YAML::Key << "uri" << YAML::Value << std::string(property.uri());
 
-    if (mode == ExportMode::Metadata || mode == ExportMode::Full) emitTrackMetadata(out, view, dict, mode);
+    if (mode == ExportMode::Metadata || mode == ExportMode::Full)
+    {
+      emitTrackMetadata(out, view, dict, mode);
+    }
 
-    if (mode == ExportMode::Full) emitTrackProperties(out, property);
+    if (mode == ExportMode::Full)
+    {
+      emitTrackProperties(out, property);
+    }
 
     emitTrackCommon(out, view.metadata(), view.tags(), dict);
 

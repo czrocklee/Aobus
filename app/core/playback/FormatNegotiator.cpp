@@ -19,12 +19,18 @@ namespace app::core::playback
                    char const* msg,
                    Selector&& selector)
     {
-      if (supported.empty() || std::ranges::find(supported, target) != supported.end()) return;
+      if (supported.empty() || std::ranges::find(supported, target) != supported.end())
+      {
+        return;
+      }
 
       target = selector();
       flag = true;
 
-      if (!reason.empty()) reason += "; ";
+      if (!reason.empty())
+      {
+        reason += "; ";
+      }
 
       reason += msg;
     }
@@ -117,7 +123,10 @@ namespace app::core::playback
       plan.deviceFormat.validBits = plan.decoderOutputFormat.validBits;
     }
 
-    if (plan.reason.empty()) plan.reason = "Direct passthrough";
+    if (plan.reason.empty())
+    {
+      plan.reason = "Direct passthrough";
+    }
 
     return plan;
   }

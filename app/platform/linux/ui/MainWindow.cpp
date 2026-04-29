@@ -2359,7 +2359,10 @@ namespace app::ui
 
   void MainWindow::onOutputChanged(app::core::backend::BackendKind kind, std::string const& deviceId)
   {
-    if (!_playbackController) return;
+    if (!_playbackController)
+    {
+      return;
+    }
 
     _playbackController->setOutput(kind, deviceId);
     _statusBar->showMessage("Switched to " + std::string(app::core::backend::backendDisplayName(kind)));

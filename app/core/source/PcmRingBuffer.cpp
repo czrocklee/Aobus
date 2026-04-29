@@ -15,7 +15,10 @@ namespace app::core::source
 
   std::size_t PcmRingBuffer::write(std::span<std::byte const> input) noexcept
   {
-    if (input.empty()) return 0;
+    if (input.empty())
+    {
+      return 0;
+    }
 
     auto lock = std::lock_guard<std::mutex>{_mutex};
     auto const written = _queue.push(reinterpret_cast<std::uint8_t const*>(input.data()), input.size());
@@ -25,7 +28,10 @@ namespace app::core::source
 
   std::size_t PcmRingBuffer::read(std::span<std::byte> output) noexcept
   {
-    if (output.empty()) return 0;
+    if (output.empty())
+    {
+      return 0;
+    }
 
     auto lock = std::lock_guard<std::mutex>{_mutex};
     auto const read = _queue.pop(reinterpret_cast<std::uint8_t*>(output.data()), output.size());
@@ -38,7 +44,9 @@ namespace app::core::source
     auto lock = std::lock_guard<std::mutex>{_mutex};
     std::uint8_t dummy;
 
-    while (_queue.pop(dummy));
+    while (_queue.pop(dummy))
+    {
+    }
 
     _writeCount.store(0, std::memory_order_relaxed);
     _readCount.store(0, std::memory_order_relaxed);
