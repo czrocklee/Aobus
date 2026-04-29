@@ -200,7 +200,16 @@ namespace app::playback
     if (!_impl->_threadLoop || !_impl->_context || !_impl->_core) { _impl->setError("PipeWire not initialized"); return false; }
 
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
-    ::pw_properties* props = ::pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_APP_NAME, "RockStudio", PW_KEY_NODE_NAME, "RockStudio Playback", nullptr);
+    ::pw_properties* props = ::pw_properties_new(
+      PW_KEY_MEDIA_TYPE, "Audio",
+      PW_KEY_MEDIA_CATEGORY, "Playback",
+      PW_KEY_MEDIA_ROLE, "Music",
+      PW_KEY_APP_NAME, "RockStudio",
+      PW_KEY_APP_ID, "io.github.RockStudio",
+      PW_KEY_NODE_NAME, "RockStudio Playback",
+      nullptr);
+    ::pw_properties_setf(props, PW_KEY_NODE_RATE, "1/%u", format.sampleRate);
+
     if (!_targetDeviceId.empty()) {
       ::pw_properties_set(props, PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
       if (useExclusive) ::pw_properties_set(props, PW_KEY_NODE_EXCLUSIVE, "true");
@@ -217,10 +226,23 @@ namespace app::playback
 
     std::uint8_t buffer[1024]; ::spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
     ::spa_pod_frame f; ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
-    ::spa_pod_builder_add(&b, SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_audio), SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw), SPA_FORMAT_AUDIO_format, SPA_POD_Id(spaFmt), SPA_FORMAT_AUDIO_rate, SPA_POD_Int(format.sampleRate), SPA_FORMAT_AUDIO_channels, SPA_POD_Int(format.channels), 0);
+    ::spa_pod_builder_add(&b,
+      SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+      SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+      SPA_FORMAT_AUDIO_format, SPA_POD_Id(spaFmt),
+      SPA_FORMAT_AUDIO_rate, SPA_POD_Int(format.sampleRate),
+      SPA_FORMAT_AUDIO_channels, SPA_POD_Int(format.channels),
+      0);
+
+    if (format.channels == 2) {
+      std::uint32_t position[2] = { SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR };
+      ::spa_pod_builder_add(&b,
+        SPA_FORMAT_AUDIO_position, SPA_POD_Array(sizeof(std::uint32_t), SPA_TYPE_Id, 2, position),
+        0);
+    }
     ::spa_pod const* param = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
     ::spa_pod const* params[] = {param};
-    auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS);
+    auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS);
     if (useExclusive) flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
 
     if (::pw_stream_connect(_impl->_stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params, 1) < 0) { _impl->setError("Failed to connect stream"); ::pw_thread_loop_unlock(_impl->_threadLoop.get()); return false; }
