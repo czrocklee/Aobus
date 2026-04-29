@@ -7,6 +7,7 @@
 #include <boost/interprocess/mapped_region.hpp>
 #include <cstddef>
 #include <filesystem>
+#include <rs/Error.h>
 #include <span>
 #include <string>
 
@@ -31,9 +32,9 @@ namespace rs::utility
     /**
      * @brief Maps the specified file into memory (read-only).
      * @param filePath The path to the file to map.
-     * @return An empty string on success, or an error message on failure.
+     * @return rs::Result<>::ok() on success, or an error with message on failure.
      */
-    std::string map(std::filesystem::path const& filePath);
+    rs::Result<> map(std::filesystem::path const& filePath);
 
     /**
      * @brief Closes the mapping.

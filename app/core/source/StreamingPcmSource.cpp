@@ -51,11 +51,13 @@ namespace app::core::source
     stopDecodeThread();
   }
 
-  bool StreamingPcmSource::initialize()
+  rs::Result<> StreamingPcmSource::initialize()
   {
-    if (auto const generation = _generation.load(std::memory_order_relaxed); !fillUntil(_prerollTargetMs, generation))
+    auto const generation = _generation.load(std::memory_order_relaxed);
+
+    if (auto const fillResult = fillUntil(_prerollTargetMs, generation); !fillResult)
     {
-      return false;
+      return fillResult;
     }
 
     if (!_decoderReachedEof.load(std::memory_order_relaxed))
@@ -63,7 +65,13 @@ namespace app::core::source
       startDecodeThread();
     }
 
-    return !_failed.load(std::memory_order_relaxed);
+    if (_failed.load(std::memory_order_relaxed))
+    {
+      return std::unexpected(
+        rs::Error{.code = rs::Error::Code::Generic, .message = "Streaming source failed during initialization"});
+    }
+
+    return {};
   }
 
   std::size_t StreamingPcmSource::read(std::span<std::byte> output) noexcept
@@ -81,28 +89,33 @@ namespace app::core::source
     return bufferedDurationMs(_ringBuffer.size(), _bytesPerSecond);
   }
 
-  bool StreamingPcmSource::seek(std::uint32_t positionMs)
+  rs::Result<> StreamingPcmSource::seek(std::uint32_t positionMs)
   {
     stopDecodeThread();
 
     auto const generation = _generation.fetch_add(1, std::memory_order_relaxed) + 1;
-    clearError();
+    _failed = false;
     _decoderReachedEof = false;
     _ringBuffer.clear();
 
     {
       auto lock = std::lock_guard<std::mutex>{_decoderMutex};
 
-      if (!_decoder->seek(positionMs))
+      auto const seekResult = _decoder->seek(positionMs);
+      if (!seekResult)
       {
-        fail(std::string(_decoder->lastError()));
-        return false;
+        if (!_failed.exchange(true, std::memory_order_relaxed))
+        {
+          if (_callbacks.onError)
+            _callbacks.onError(_callbacks.userData, std::format("Seek failed: {}", seekResult.error().message));
+        }
+        return seekResult;
       }
     }
 
-    if (!fillUntil(_prerollTargetMs, generation))
+    if (auto const fillResult = fillUntil(_prerollTargetMs, generation); !fillResult)
     {
-      return false;
+      return fillResult;
     }
 
     if (!_decoderReachedEof.load(std::memory_order_relaxed))
@@ -110,13 +123,13 @@ namespace app::core::source
       startDecodeThread();
     }
 
-    return !_failed.load(std::memory_order_relaxed);
-  }
+    if (_failed.load(std::memory_order_relaxed))
+    {
+      return std::unexpected(
+        rs::Error{.code = rs::Error::Code::Generic, .message = "Streaming source is in failed state"});
+    }
 
-  std::string StreamingPcmSource::lastError() const
-  {
-    auto lock = std::lock_guard<std::mutex>{_errorMutex};
-    return _lastError;
+    return {};
   }
 
   void StreamingPcmSource::startDecodeThread()
@@ -153,31 +166,53 @@ namespace app::core::source
         continue;
       }
 
-      if (!decodeNextBlock(generation, &stopToken))
+      auto const result = decodeNextBlock(generation, &stopToken);
+      if (!result)
+      {
+        if (!_failed.exchange(true, std::memory_order_relaxed))
+        {
+          if (_callbacks.onError) _callbacks.onError(_callbacks.userData, result.error().message);
+        }
+        break;
+      }
+      if (!*result)
       {
         break;
       }
     }
   }
 
-  bool StreamingPcmSource::fillUntil(std::uint32_t targetBufferedMs, std::uint64_t generation)
+  rs::Result<> StreamingPcmSource::fillUntil(std::uint32_t targetBufferedMs, std::uint64_t generation)
   {
     while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
            _generation.load(std::memory_order_relaxed) == generation && bufferedMs() < targetBufferedMs)
     {
-      if (!decodeNextBlock(generation, nullptr))
+      auto const result = decodeNextBlock(generation, nullptr);
+      if (!result)
+      {
+        if (!_failed.exchange(true, std::memory_order_relaxed))
+        {
+          if (_callbacks.onError) _callbacks.onError(_callbacks.userData, result.error().message);
+        }
+        return std::unexpected(result.error());
+      }
+      if (!*result)
       {
         break;
       }
     }
 
-    return !_failed.load(std::memory_order_relaxed);
+    if (_failed.load(std::memory_order_relaxed))
+    {
+      return std::unexpected(
+        rs::Error{.code = rs::Error::Code::Generic, .message = "Streaming source is in failed state"});
+    }
+    return {};
   }
 
-  bool StreamingPcmSource::decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken)
+  rs::Result<bool> StreamingPcmSource::decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken)
   {
-    std::optional<decoder::PcmBlock> block;
-    std::string errorText;
+    decoder::PcmBlock block;
     {
       auto lock = std::lock_guard<std::mutex>{_decoderMutex};
 
@@ -186,27 +221,22 @@ namespace app::core::source
         return false;
       }
 
-      block = _decoder->readNextBlock();
+      auto const blockResult = _decoder->readNextBlock();
 
-      if (!block)
+      if (!blockResult)
       {
-        errorText = std::string(_decoder->lastError());
+        return std::unexpected(blockResult.error());
       }
+      block = *blockResult;
     }
 
-    if (!block)
-    {
-      fail(std::move(errorText));
-      return false;
-    }
-
-    if (block->endOfStream)
+    if (block.endOfStream)
     {
       _decoderReachedEof = true;
       return false;
     }
 
-    return writeBlock(std::span<std::byte const>(block->bytes.data(), block->bytes.size()), generation, stopToken);
+    return writeBlock(std::span<std::byte const>(block.bytes.data(), block.bytes.size()), generation, stopToken);
   }
 
   bool StreamingPcmSource::writeBlock(std::span<std::byte const> bytes,
@@ -233,29 +263,4 @@ namespace app::core::source
     return remaining == 0;
   }
 
-  void StreamingPcmSource::fail(std::string message)
-  {
-    if (_failed.exchange(true, std::memory_order_relaxed))
-    {
-      return;
-    }
-
-    {
-      auto lock = std::lock_guard<std::mutex>{_errorMutex};
-      _lastError = std::move(message);
-    }
-
-    if (_callbacks.onError)
-    {
-      _callbacks.onError(_callbacks.userData);
-    }
-  }
-
-  void StreamingPcmSource::clearError()
-  {
-    _failed = false;
-    auto lock = std::lock_guard<std::mutex>{_errorMutex};
-    _lastError.clear();
-  }
-
-} // namespace app::core::playback
+} // namespace app::core::source

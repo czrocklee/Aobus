@@ -49,7 +49,7 @@ namespace app::core::source
   {
   }
 
-  bool MemoryPcmSource::initialize()
+  rs::Result<> MemoryPcmSource::initialize()
   {
     auto const estimatedBytes =
       (static_cast<std::uint64_t>(_streamInfo.durationMs) * bytesPerSecond(_streamInfo.outputFormat)) / 1000U;
@@ -61,24 +61,25 @@ namespace app::core::source
 
     while (true)
     {
-      auto block = _decoder->readNextBlock();
+      auto const blockResult = _decoder->readNextBlock();
 
-      if (!block)
+      if (!blockResult)
       {
-        _lastError = std::string(_decoder->lastError());
-        return false;
+        return std::unexpected(
+          rs::Error{.code = rs::Error::Code::DecodeFailed, .message = blockResult.error().message});
       }
 
-      if (block->endOfStream)
+      auto const& block = *blockResult;
+      if (block.endOfStream)
       {
         break;
       }
 
-      _pcmBytes.insert(_pcmBytes.end(), block->bytes.begin(), block->bytes.end());
+      _pcmBytes.insert(_pcmBytes.end(), block.bytes.begin(), block.bytes.end());
     }
 
     _decoder->close();
-    return true;
+    return {};
   }
 
   std::size_t MemoryPcmSource::read(std::span<std::byte> output) noexcept
@@ -109,16 +110,11 @@ namespace app::core::source
     return bufferedDurationMs(_pcmBytes.size() - _readOffset, bytesPerSecond(_streamInfo.outputFormat));
   }
 
-  bool MemoryPcmSource::seek(std::uint32_t positionMs)
+  rs::Result<> MemoryPcmSource::seek(std::uint32_t positionMs)
   {
     auto lock = std::lock_guard<std::mutex>{_mutex};
     _readOffset = positionToByteOffset(positionMs);
-    return true;
-  }
-
-  std::string MemoryPcmSource::lastError() const
-  {
-    return _lastError;
+    return {};
   }
 
   std::size_t MemoryPcmSource::positionToByteOffset(std::uint32_t positionMs) const noexcept

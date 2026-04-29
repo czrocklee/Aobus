@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <rs/Error.h>
 #include <span>
 #include <string>
 
@@ -16,7 +17,7 @@ namespace app::core::source
   struct PcmSourceCallbacks final
   {
     void* userData = nullptr;
-    void (*onError)(void* userData) noexcept = nullptr;
+    void (*onError)(void* userData, std::string_view message) noexcept = nullptr;
   };
 
   class IPcmSource
@@ -24,11 +25,10 @@ namespace app::core::source
   public:
     virtual ~IPcmSource() = default;
 
+    virtual rs::Result<> seek(std::uint32_t positionMs) = 0;
     virtual std::size_t read(std::span<std::byte> output) noexcept = 0;
     virtual bool isDrained() const noexcept = 0;
     virtual std::uint32_t bufferedMs() const noexcept = 0;
-    virtual bool seek(std::uint32_t positionMs) = 0;
-    virtual std::string lastError() const = 0;
   };
 
 } // namespace app::core::source

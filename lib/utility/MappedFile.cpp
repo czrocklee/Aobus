@@ -8,7 +8,7 @@
 namespace rs::utility
 {
 
-  std::string MappedFile::map(std::filesystem::path const& filePath)
+  rs::Result<> MappedFile::map(std::filesystem::path const& filePath)
   {
     unmap();
 
@@ -21,7 +21,8 @@ namespace rs::utility
     }
     catch (std::exception const& e)
     {
-      return std::format("Failed to mmap file: {}", e.what());
+      return std::unexpected(
+        rs::Error{.code = rs::Error::Code::IoError, .message = std::format("Failed to mmap file: {}", e.what())});
     }
   }
 

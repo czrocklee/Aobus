@@ -5,6 +5,8 @@
 #include "core/backend/IAudioBackend.h"
 #include "core/playback/PlaybackEngine.h"
 
+#include <rs/Error.h>
+
 using namespace app::core::playback;
 using namespace app::core::backend;
 using namespace app::core;
@@ -27,7 +29,7 @@ namespace
       : _real(real)
     {
     }
-    bool open(AudioFormat const& f, AudioRenderCallbacks c) override { return _real.open(f, c); }
+    rs::Result<> open(AudioFormat const& f, AudioRenderCallbacks c) override { return _real.open(f, c); }
     void start() override { _real.start(); }
     void pause() override { _real.pause(); }
     void resume() override { _real.resume(); }
@@ -38,7 +40,6 @@ namespace
     void setExclusiveMode(bool e) override { _real.setExclusiveMode(e); }
     bool isExclusiveMode() const noexcept override { return _real.isExclusiveMode(); }
     BackendKind kind() const noexcept override { return _real.kind(); }
-    std::string_view lastError() const noexcept override { return _real.lastError(); }
   };
 }
 
@@ -63,7 +64,6 @@ TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
   Fake(Method(mockBackend, setExclusiveMode));
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
   When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::None);
-  When(Method(mockBackend, lastError)).AlwaysReturn("");
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
 
@@ -162,7 +162,6 @@ TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
   Fake(Method(mockBackend, setExclusiveMode));
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
   When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::None);
-  When(Method(mockBackend, lastError)).AlwaysReturn("");
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
   PlaybackEngine engine(std::move(backendPtr), device, dispatcher);
@@ -230,7 +229,7 @@ TEST_CASE("PlaybackEngine - PipeWire shared mode keeps native sample rate", "[pl
       [&](AudioFormat const& format, AudioRenderCallbacks)
       {
         openedFormats.push_back(format);
-        return true;
+        return rs::Result<>();
       });
   Fake(Method(mockBackend, start));
   Fake(Method(mockBackend, pause));
@@ -242,7 +241,6 @@ TEST_CASE("PlaybackEngine - PipeWire shared mode keeps native sample rate", "[pl
   Fake(Method(mockBackend, setExclusiveMode));
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
   When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::PipeWire);
-  When(Method(mockBackend, lastError)).AlwaysReturn("");
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
   auto engine = PlaybackEngine(std::move(backendPtr), device, dispatcher);
@@ -287,7 +285,7 @@ TEST_CASE("PlaybackEngine - Unsupported backend sample rate fails without resamp
       [&](AudioFormat const& format, AudioRenderCallbacks)
       {
         openedFormats.push_back(format);
-        return true;
+        return rs::Result<>();
       });
   Fake(Method(mockBackend, start));
   Fake(Method(mockBackend, pause));
@@ -299,7 +297,6 @@ TEST_CASE("PlaybackEngine - Unsupported backend sample rate fails without resamp
   Fake(Method(mockBackend, setExclusiveMode));
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(true);
   When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::AlsaExclusive);
-  When(Method(mockBackend, lastError)).AlwaysReturn("");
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
   auto engine = PlaybackEngine(std::move(backendPtr), device, dispatcher);

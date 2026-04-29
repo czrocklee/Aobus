@@ -57,7 +57,7 @@ namespace app::core::playback
     static void onBackendError(void* userData, std::string_view message) noexcept;
 
     // Source callbacks
-    static void onSourceError(void* userData) noexcept;
+    static void onSourceError(void* userData, std::string_view message) noexcept;
 
   private:
     void handleBackendError(std::string_view message);
@@ -81,7 +81,6 @@ namespace app::core::playback
 
     mutable std::mutex _stateMutex;
     std::optional<TrackPlaybackDescriptor> _currentTrack;
-    std::string _lastError;
     PlaybackSnapshot _snapshot;
     std::function<void()> _onTrackEnded;
     OnRouteChanged _onRouteChanged;

@@ -19,7 +19,8 @@ namespace app::playback
     explicit PipeWireBackend(app::core::backend::AudioDevice const& device);
     ~PipeWireBackend() override;
 
-    bool open(app::core::AudioFormat const& format, app::core::backend::AudioRenderCallbacks callbacks) override;
+    rs::Result<> open(app::core::AudioFormat const& format,
+                      app::core::backend::AudioRenderCallbacks callbacks) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -32,7 +33,6 @@ namespace app::playback
     bool isExclusiveMode() const noexcept override;
 
     app::core::backend::BackendKind kind() const noexcept override;
-    std::string_view lastError() const noexcept override;
 
   private:
     std::unique_ptr<Impl> _impl;

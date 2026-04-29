@@ -14,6 +14,7 @@ extern "C"
 }
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <format>
 #include <mutex>
@@ -47,12 +48,6 @@ namespace app::playback
       if (_threadLoop) ::pw_thread_loop_unlock(_threadLoop.get());
     }
 
-    void setError(std::string message)
-    {
-      PLAYBACK_LOG_ERROR("PipeWire error: {}", message);
-      _lastError = std::move(message);
-    }
-
     // Event Handlers
     void handleStreamProcess();
     void handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param);
@@ -65,7 +60,6 @@ namespace app::playback
     app::core::backend::AudioRenderCallbacks _callbacks;
     app::core::AudioFormat _format;
     std::atomic<bool> _drainPending = false;
-    std::string _lastError;
     bool _strictFormatRequired = false;
     bool _strictFormatRejected = false;
     bool _routeAnchorReported = false;
@@ -183,10 +177,10 @@ namespace app::playback
   {
     if (newState == PW_STREAM_STATE_ERROR)
     {
-      setError(errorMessage ? errorMessage : "Unknown PipeWire stream error");
+      PLAYBACK_LOG_ERROR("PipeWire error: {}", errorMessage ? errorMessage : "Unknown PipeWire stream error");
       if (_callbacks.onBackendError)
       {
-        _callbacks.onBackendError(_callbacks.userData, _lastError);
+        _callbacks.onBackendError(_callbacks.userData, errorMessage ? errorMessage : "Unknown PipeWire stream error");
       }
     }
     else if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
@@ -233,23 +227,22 @@ namespace app::playback
 
   PipeWireBackend::~PipeWireBackend() = default;
 
-  bool PipeWireBackend::open(app::core::AudioFormat const& format, app::core::backend::AudioRenderCallbacks callbacks)
+  rs::Result<> PipeWireBackend::open(app::core::AudioFormat const& format,
+                                     app::core::backend::AudioRenderCallbacks callbacks)
   {
     if (format.sampleRate == 0)
     {
       _impl->_callbacks = {};
       _impl->destroyStream();
-      return true;
+      return {};
     }
     _impl->_callbacks = callbacks;
     _impl->_format = format;
-    _impl->_lastError.clear();
     _impl->_routeAnchorReported = false;
     bool useExclusive = _exclusiveMode && !_targetDeviceId.empty();
     if (!_impl->_threadLoop || !_impl->_context || !_impl->_core)
     {
-      _impl->setError("PipeWire not initialized");
-      return false;
+      return rs::makeError(rs::Error::Code::InitFailed, "PipeWire not initialized");
     }
 
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
@@ -281,9 +274,8 @@ namespace app::playback
     _impl->_stream.reset(::pw_stream_new(_impl->_core.get(), "RockStudio Playback", props.release()));
     if (!_impl->_stream)
     {
-      _impl->setError("Failed to create stream");
       ::pw_thread_loop_unlock(_impl->_threadLoop.get());
-      return false;
+      return rs::makeError(rs::Error::Code::InitFailed, "Failed to create stream");
     }
     _impl->_streamListener.reset();
     ::pw_stream_add_listener(_impl->_stream.get(), _impl->_streamListener.get(), &streamEvents, _impl.get());
@@ -319,29 +311,35 @@ namespace app::playback
     if (format.channels == 2)
     {
       std::uint32_t position[2] = {SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR};
-      ::spa_pod_builder_add(
-        &b, SPA_FORMAT_AUDIO_position, SPA_POD_Array(sizeof(std::uint32_t), SPA_TYPE_Id, 2, position), 0);
+      ::spa_pod_builder_add(&b,
+                            SPA_FORMAT_AUDIO_position,
+                            SPA_POD_Array(sizeof(std::uint32_t), SPA_TYPE_Id, 2, static_cast<std::uint32_t*>(position)),
+                            0);
     }
     ::spa_pod const* param = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
-    ::spa_pod const* params[] = {param};
+    std::array<::spa_pod const*, 1> params = {param};
     auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
                                                 PW_STREAM_FLAG_RT_PROCESS);
     if (useExclusive)
-      flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
-
-    if (::pw_stream_connect(_impl->_stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params, 1) < 0)
     {
-      _impl->setError("Failed to connect stream");
+      flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
+    }
+
+    if (::pw_stream_connect(_impl->_stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params.data(), 1) < 0)
+    {
       ::pw_thread_loop_unlock(_impl->_threadLoop.get());
-      return false;
+      return rs::makeError(rs::Error::Code::InitFailed, "Failed to connect stream");
     }
     ::pw_thread_loop_unlock(_impl->_threadLoop.get());
-    return true;
+    return {};
   }
 
   void PipeWireBackend::start()
   {
-    if (!_impl || !_impl->_stream || !_impl->_threadLoop) return;
+    if (!_impl || !_impl->_stream || !_impl->_threadLoop)
+    {
+      return;
+    }
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
     ::pw_stream_set_active(_impl->_stream.get(), true);
     ::pw_thread_loop_unlock(_impl->_threadLoop.get());
@@ -416,7 +414,10 @@ namespace app::playback
     _exclusiveMode = exclusive;
     if (_impl && _impl->_stream && !_targetDeviceId.empty())
     {
-      open(_impl->_format, _impl->_callbacks);
+      if (auto const openResult = open(_impl->_format, _impl->_callbacks); !openResult)
+      {
+        PLAYBACK_LOG_ERROR("Failed to reopen stream after exclusive mode change: {}", openResult.error().message);
+      }
     }
   }
 
@@ -429,11 +430,5 @@ namespace app::playback
   {
     return _exclusiveMode ? app::core::backend::BackendKind::PipeWireExclusive
                           : app::core::backend::BackendKind::PipeWire;
-  }
-
-  std::string_view PipeWireBackend::lastError() const noexcept
-  {
-    if (!_impl) return "";
-    return _impl->_lastError;
   }
 } // namespace app::playback
