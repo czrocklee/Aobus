@@ -1,9 +1,9 @@
-#include <catch2/catch.hpp>
 #include "fakeit.hpp"
+#include <catch2/catch.hpp>
 
-#include "core/playback/PlaybackEngine.h"
-#include "core/backend/IAudioBackend.h"
 #include "core/IMainThreadDispatcher.h"
+#include "core/backend/IAudioBackend.h"
+#include "core/playback/PlaybackEngine.h"
 
 using namespace app::core::playback;
 using namespace app::core::backend;
@@ -21,8 +21,12 @@ namespace
   class MockBackendProxy : public IAudioBackend
   {
     IAudioBackend& _real;
+
   public:
-    MockBackendProxy(IAudioBackend& real) : _real(real) {}
+    MockBackendProxy(IAudioBackend& real)
+      : _real(real)
+    {
+    }
     bool open(AudioFormat const& f, AudioRenderCallbacks c) override { return _real.open(f, c); }
     void start() override { _real.start(); }
     void pause() override { _real.pause(); }
@@ -42,7 +46,11 @@ TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
 {
   Mock<IAudioBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
-  AudioDevice device{ .id = "test-device", .displayName = "Test", .description = "Test", .isDefault = false, .backendKind = BackendKind::None };
+  AudioDevice device{.id = "test-device",
+                     .displayName = "Test",
+                     .description = "Test",
+                     .isDefault = false,
+                     .backendKind = BackendKind::None};
 
   Fake(Method(mockBackend, open));
   Fake(Method(mockBackend, start));
@@ -58,7 +66,7 @@ TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
   When(Method(mockBackend, lastError)).AlwaysReturn("");
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
-  
+
   PlaybackEngine engine(std::move(backendPtr), device, dispatcher);
 
   SECTION("Stop correctly cleans up backend")
@@ -66,7 +74,7 @@ TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
     engine.stop();
     Verify(Method(mockBackend, stop)).AtLeastOnce();
     Verify(Method(mockBackend, close)).AtLeastOnce();
-    
+
     auto snap = engine.snapshot();
     REQUIRE(snap.state == TransportState::Idle);
   }
@@ -74,7 +82,7 @@ TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
   SECTION("Backend error transitions to Error state")
   {
     PlaybackEngine::onBackendError(&engine, "Hardware failure");
-    
+
     auto snap = engine.snapshot();
     REQUIRE(snap.state == TransportState::Error);
     REQUIRE(snap.statusText == "Hardware failure");
@@ -83,7 +91,7 @@ TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
   SECTION("Route ready updates snapshot")
   {
     PlaybackEngine::onRouteReady(&engine, "anchor-123");
-    
+
     auto route = engine.routeSnapshot();
     REQUIRE(route.anchor.has_value());
     REQUIRE(route.anchor->id == "anchor-123");
@@ -95,23 +103,31 @@ TEST_CASE("PlaybackEngine - Backend Swapping", "[playback][engine][hot-swap]")
   Mock<IAudioBackend> mockBackend1;
   Mock<IAudioBackend> mockBackend2;
   auto dispatcher = std::make_shared<MockDispatcher>();
-  
+
   Fake(Method(mockBackend1, open), Method(mockBackend1, stop), Method(mockBackend1, close));
   Fake(Method(mockBackend2, open), Method(mockBackend2, stop), Method(mockBackend2, close));
   When(Method(mockBackend1, kind)).AlwaysReturn(BackendKind::None);
   When(Method(mockBackend2, kind)).AlwaysReturn(BackendKind::AlsaExclusive);
 
   auto backend1 = std::make_unique<MockBackendProxy>(mockBackend1.get());
-  PlaybackEngine engine(std::move(backend1), { .id = "dev1", .displayName = "D1", .description = "D1", .isDefault = false, .backendKind = BackendKind::None }, dispatcher);
+  PlaybackEngine engine(
+    std::move(backend1),
+    {.id = "dev1", .displayName = "D1", .description = "D1", .isDefault = false, .backendKind = BackendKind::None},
+    dispatcher);
 
   SECTION("Switching backend while idle")
   {
     auto backend2 = std::make_unique<MockBackendProxy>(mockBackend2.get());
-    engine.setBackend(std::move(backend2), { .id = "dev2", .displayName = "D2", .description = "D2", .isDefault = false, .backendKind = BackendKind::AlsaExclusive });
-    
+    engine.setBackend(std::move(backend2),
+                      {.id = "dev2",
+                       .displayName = "D2",
+                       .description = "D2",
+                       .isDefault = false,
+                       .backendKind = BackendKind::AlsaExclusive});
+
     Verify(Method(mockBackend1, stop)).Once();
     Verify(Method(mockBackend1, close)).Once();
-    
+
     auto snap = engine.snapshot();
     REQUIRE(snap.backend == BackendKind::AlsaExclusive);
     REQUIRE(snap.currentDeviceId == "dev2");
@@ -129,7 +145,11 @@ TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
 
   Mock<IAudioBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
-  AudioDevice device{ .id = "test-device", .displayName = "Test", .description = "Test", .isDefault = false, .backendKind = BackendKind::None };
+  AudioDevice device{.id = "test-device",
+                     .displayName = "Test",
+                     .description = "Test",
+                     .isDefault = false,
+                     .backendKind = BackendKind::None};
 
   Fake(Method(mockBackend, open));
   Fake(Method(mockBackend, start));
@@ -155,7 +175,7 @@ TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
   engine.play(descriptor);
 
   auto snap = engine.snapshot();
-  
+
   SECTION("rs-decoder is present in the graph")
   {
     auto it = std::ranges::find_if(snap.graph.nodes, [](auto const& n) { return n.id == "rs-decoder"; });
@@ -174,11 +194,11 @@ TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
 
   SECTION("rs-decoder is linked to rs-engine")
   {
-    auto it = std::ranges::find_if(snap.graph.links, [](auto const& l) {
-      return l.sourceId == "rs-decoder" && l.destId == "rs-engine";
-    });
+    auto it = std::ranges::find_if(
+      snap.graph.links, [](auto const& l) { return l.sourceId == "rs-decoder" && l.destId == "rs-engine"; });
     CHECK(it != snap.graph.links.end());
-    if (it != snap.graph.links.end()) {
+    if (it != snap.graph.links.end())
+    {
       CHECK(it->isActive);
     }
   }
@@ -205,10 +225,13 @@ TEST_CASE("PlaybackEngine - PipeWire shared mode keeps native sample rate", "[pl
                      .capabilities = {.sampleRates = {48000}, .bitDepths = {16}, .channelCounts = {2}}};
 
   auto openedFormats = std::vector<AudioFormat>{};
-  When(Method(mockBackend, open)).AlwaysDo([&](AudioFormat const& format, AudioRenderCallbacks) {
-    openedFormats.push_back(format);
-    return true;
-  });
+  When(Method(mockBackend, open))
+    .AlwaysDo(
+      [&](AudioFormat const& format, AudioRenderCallbacks)
+      {
+        openedFormats.push_back(format);
+        return true;
+      });
   Fake(Method(mockBackend, start));
   Fake(Method(mockBackend, pause));
   Fake(Method(mockBackend, resume));
@@ -259,10 +282,13 @@ TEST_CASE("PlaybackEngine - Unsupported backend sample rate fails without resamp
                      .capabilities = {.sampleRates = {48000}, .bitDepths = {16}, .channelCounts = {2}}};
 
   auto openedFormats = std::vector<AudioFormat>{};
-  When(Method(mockBackend, open)).AlwaysDo([&](AudioFormat const& format, AudioRenderCallbacks) {
-    openedFormats.push_back(format);
-    return true;
-  });
+  When(Method(mockBackend, open))
+    .AlwaysDo(
+      [&](AudioFormat const& format, AudioRenderCallbacks)
+      {
+        openedFormats.push_back(format);
+        return true;
+      });
   Fake(Method(mockBackend, start));
   Fake(Method(mockBackend, pause));
   Fake(Method(mockBackend, resume));

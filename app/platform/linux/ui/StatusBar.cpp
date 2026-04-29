@@ -15,8 +15,8 @@
 #include <glibmm/variant.h>
 
 #include <format>
-#include <ranges>
 #include <iomanip>
+#include <ranges>
 #include <sstream>
 
 namespace app::ui

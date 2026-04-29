@@ -43,7 +43,6 @@ public:
   TempDir& operator=(TempDir&&) = default;
 
   std::string path() const { return _path.string(); }
-  std::string_view path_view() const { return _path.string(); }
 
 private:
   std::filesystem::path _path;

@@ -43,10 +43,7 @@ namespace rs::core
     class TracksBuilder
     {
     public:
-      explicit TracksBuilder(ListBuilder& builder)
-        : _builder{builder}
-      {
-      }
+      explicit TracksBuilder() = default;
 
       TracksBuilder& add(TrackId id);
       TracksBuilder& remove(TrackId id);
@@ -59,7 +56,6 @@ namespace rs::core
     private:
       friend class ListBuilder;
 
-      ListBuilder& _builder;
       std::vector<TrackId> _trackIds;
       bool _isSmart = false;
     };
@@ -89,7 +85,7 @@ namespace rs::core
     friend class TracksBuilder;
 
     // Sub-builder stored as member
-    TracksBuilder _tracksBuilder{*this};
+    TracksBuilder _tracksBuilder;
   };
 
 } // namespace rs::core

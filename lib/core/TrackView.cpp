@@ -72,7 +72,7 @@ namespace rs::core
     auto customEntries = entries();
 
     // Small N: linear search via ranges::find_if (cache-friendly, no divisions)
-    
+
     if (customEntries.size() < kSearchThreshold)
     {
       if (auto it = std::ranges::find(customEntries, dictId, &Entry::dictId); it != customEntries.end())
@@ -85,7 +85,7 @@ namespace rs::core
     }
 
     // Large N: binary search via ranges::lower_bound
-    
+
     if (auto it = std::ranges::lower_bound(customEntries, dictId, {}, &Entry::dictId);
         it != customEntries.end() && it->dictId == dictId)
     {

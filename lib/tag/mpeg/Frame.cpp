@@ -55,8 +55,6 @@ namespace rs::tag::mpeg
 
     constexpr std::uint8_t FrameSyncByte1 = 0xFF;
     constexpr std::uint8_t FrameSyncByte2Mask = 0xE0;
-    constexpr std::size_t FrameSyncSkipSize = 2;
-    constexpr std::uint8_t kCodecIdMp3 = 0x55;
     constexpr std::size_t kXingDataFieldOffset = 8;
 
     std::uint8_t const* findFrameSync(std::uint8_t const* begin, std::uint8_t const* end)

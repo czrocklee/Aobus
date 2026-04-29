@@ -8,11 +8,11 @@
 #include "core/playback/PlaybackEngine.h"
 
 #include <algorithm>
-#include <ranges>
+#include <format>
 #include <map>
+#include <ranges>
 #include <set>
 #include <unordered_map>
-#include <format>
 
 namespace app::core::playback
 {
@@ -27,12 +27,14 @@ namespace app::core::playback
 
     bool isLosslessBitDepthChange(app::core::AudioFormat const& src, app::core::AudioFormat const& dst) noexcept
     {
-      if (src.isFloat == dst.isFloat) {
+      if (src.isFloat == dst.isFloat)
+      {
         auto const srcBits = src.validBits != 0 ? src.validBits : src.bitDepth;
         auto const dstBits = dst.validBits != 0 ? dst.validBits : dst.bitDepth;
         return srcBits <= dstBits;
       }
-      if (!src.isFloat && dst.isFloat) {
+      if (!src.isFloat && dst.isFloat)
+      {
         auto const srcBits = src.validBits != 0 ? src.validBits : src.bitDepth;
         if (dst.bitDepth == 32) return srcBits <= 24;
         if (dst.bitDepth == 64) return srcBits <= 32;
@@ -45,25 +47,29 @@ namespace app::core::playback
   {
     // Start with a NullBackend until a manager provides something real
     _engine = std::make_unique<PlaybackEngine>(std::make_unique<backend::NullBackend>(),
-                                               backend::AudioDevice{
-                                                 .id = "null",
-                                                 .displayName = "None",
-                                                 .description = "No audio output selected",
-                                                 .backendKind = backend::BackendKind::None,
-                                                 .capabilities = {}
-                                               },
+                                               backend::AudioDevice{.id = "null",
+                                                                    .displayName = "None",
+                                                                    .description = "No audio output selected",
+                                                                    .backendKind = backend::BackendKind::None,
+                                                                    .capabilities = {}},
                                                _dispatcher);
 
-    _engine->setOnTrackEnded([this]() {
-      if (_onTrackEnded) _onTrackEnded();
-    });
+    _engine->setOnTrackEnded(
+      [this]()
+      {
+        if (_onTrackEnded) _onTrackEnded();
+      });
 
-    _engine->setOnRouteChanged([this](EngineRouteSnapshot const& snapshot) {
-      // Capture generation to prevent stale updates
-      auto const generation = _playbackGeneration;
-      if (_dispatcher) _dispatcher->dispatch([this, snapshot, generation]() { handleRouteChanged(snapshot, generation); });
-      else handleRouteChanged(snapshot, generation);
-    });
+    _engine->setOnRouteChanged(
+      [this](EngineRouteSnapshot const& snapshot)
+      {
+        // Capture generation to prevent stale updates
+        auto const generation = _playbackGeneration;
+        if (_dispatcher)
+          _dispatcher->dispatch([this, snapshot, generation]() { handleRouteChanged(snapshot, generation); });
+        else
+          handleRouteChanged(snapshot, generation);
+      });
   }
 
   void PlaybackController::setTrackEndedCallback(std::function<void()> callback)
@@ -232,10 +238,14 @@ namespace app::core::playback
     {
       if (!_graphSubscription)
       {
-        _graphSubscription = _activeManager->subscribeGraph(_cachedEngineRoute.anchor->id,
-          [this, generation](backend::AudioGraph const& graph) {
-            if (_dispatcher) _dispatcher->dispatch([this, graph, generation]() { handleSystemGraphChanged(graph, generation); });
-            else handleSystemGraphChanged(graph, generation);
+        _graphSubscription = _activeManager->subscribeGraph(
+          _cachedEngineRoute.anchor->id,
+          [this, generation](backend::AudioGraph const& graph)
+          {
+            if (_dispatcher)
+              _dispatcher->dispatch([this, graph, generation]() { handleSystemGraphChanged(graph, generation); });
+            else
+              handleSystemGraphChanged(graph, generation);
           });
       }
     }
@@ -258,7 +268,7 @@ namespace app::core::playback
   void PlaybackController::updateMergedGraph()
   {
     _mergedGraph = _cachedEngineRoute.graph;
-    
+
     // Find the engine output format to enrich system nodes that might be missing it (like ALSA)
     std::optional<AudioFormat> engineFormat;
     for (auto const& node : _cachedEngineRoute.graph.nodes)
@@ -351,60 +361,82 @@ namespace app::core::playback
     {
       auto* node = path[i];
 
-      if (node->isLossySource) {
+      if (node->isLossySource)
+      {
         appendLine(_qualityTooltip, std::format("• Source: Lossy format ({})", node->name));
         _quality = std::max(_quality, backend::AudioQuality::LossySource);
       }
 
-      if (node->volumeNotUnity) {
+      if (node->volumeNotUnity)
+      {
         appendLine(_qualityTooltip, std::format("• Volume: Modification at {}", node->name));
         _quality = std::max(_quality, backend::AudioQuality::LinearIntervention);
       }
 
-      if (node->isMuted) {
+      if (node->isMuted)
+      {
         appendLine(_qualityTooltip, std::format("• Status: {} is MUTED", node->name));
         _quality = std::max(_quality, backend::AudioQuality::LinearIntervention);
       }
 
-      if (inputSources.contains(node->id)) {
+      if (inputSources.contains(node->id))
+      {
         auto const& sources = inputSources.at(node->id);
         std::vector<std::string> otherAppNames;
-        for (auto const& srcId : sources) {
+        for (auto const& srcId : sources)
+        {
           bool isInternal = std::ranges::any_of(path, [&](auto* p) { return p->id == srcId; });
-          if (!isInternal) {
+          if (!isInternal)
+          {
             auto it = std::ranges::find_if(_mergedGraph.nodes, [&](auto const& n) { return n.id == srcId; });
             if (it != _mergedGraph.nodes.end()) otherAppNames.push_back(it->name);
           }
         }
-        if (!otherAppNames.empty()) {
+        if (!otherAppNames.empty())
+        {
           std::ranges::sort(otherAppNames);
           auto [first, last] = std::ranges::unique(otherAppNames);
           otherAppNames.erase(first, last);
           std::string apps;
-          for (size_t j = 0; j < otherAppNames.size(); ++j) { apps += otherAppNames[j]; if (j < otherAppNames.size() - 1) apps += ", "; }
+          for (size_t j = 0; j < otherAppNames.size(); ++j)
+          {
+            apps += otherAppNames[j];
+            if (j < otherAppNames.size() - 1) apps += ", ";
+          }
           appendLine(_qualityTooltip, std::format("• Mixed: {} shared with {}", node->name, apps));
           _quality = std::max(_quality, backend::AudioQuality::LinearIntervention);
         }
       }
 
-      if (i < path.size() - 1) {
+      if (i < path.size() - 1)
+      {
         auto* nextNode = path[i + 1];
-        if (node->format && nextNode->format) {
+        if (node->format && nextNode->format)
+        {
           auto const& f1 = *node->format;
           auto const& f2 = *nextNode->format;
 
-          if (f1.sampleRate != f2.sampleRate) {
+          if (f1.sampleRate != f2.sampleRate)
+          {
             appendLine(_qualityTooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
             _quality = std::max(_quality, backend::AudioQuality::LinearIntervention);
           }
-          if (f1.channels != f2.channels) {
+          if (f1.channels != f2.channels)
+          {
             appendLine(_qualityTooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
             _quality = std::max(_quality, backend::AudioQuality::LinearIntervention);
-          } else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat) {
-            if (isLosslessBitDepthChange(f1, f2)) {
-              appendLine(_qualityTooltip, f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
-              _quality = std::max(_quality, f2.isFloat ? backend::AudioQuality::LosslessFloat : backend::AudioQuality::LosslessPadded);
-            } else {
+          }
+          else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
+          {
+            if (isLosslessBitDepthChange(f1, f2))
+            {
+              appendLine(_qualityTooltip,
+                         f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
+              _quality = std::max(
+                _quality, f2.isFloat ? backend::AudioQuality::LosslessFloat : backend::AudioQuality::LosslessPadded);
+            }
+            else
+            {
               appendLine(_qualityTooltip, std::format("• Precision: Truncated {}b → {}b", f1.bitDepth, f2.bitDepth));
               _quality = std::max(_quality, backend::AudioQuality::LinearIntervention);
             }
@@ -413,15 +445,23 @@ namespace app::core::playback
       }
     }
 
-    if (_quality == backend::AudioQuality::BitwisePerfect) {
+    if (_quality == backend::AudioQuality::BitwisePerfect)
+    {
       appendLine(_qualityTooltip, "• Signal Path: Byte-perfect from decoder to device");
     }
 
-    switch (_quality) {
-      case backend::AudioQuality::BitwisePerfect: appendLine(_qualityTooltip, "\nConclusion: Bit-perfect output"); break;
+    switch (_quality)
+    {
+      case backend::AudioQuality::BitwisePerfect:
+        appendLine(_qualityTooltip, "\nConclusion: Bit-perfect output");
+        break;
       case backend::AudioQuality::LosslessPadded:
-      case backend::AudioQuality::LosslessFloat: appendLine(_qualityTooltip, "\nConclusion: Lossless Conversion"); break;
-      case backend::AudioQuality::LinearIntervention: appendLine(_qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)"); break;
+      case backend::AudioQuality::LosslessFloat:
+        appendLine(_qualityTooltip, "\nConclusion: Lossless Conversion");
+        break;
+      case backend::AudioQuality::LinearIntervention:
+        appendLine(_qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
+        break;
       case backend::AudioQuality::LossySource: appendLine(_qualityTooltip, "\nConclusion: Lossy source format"); break;
       case backend::AudioQuality::Clipped: appendLine(_qualityTooltip, "\nConclusion: Signal clipping detected"); break;
       case backend::AudioQuality::Unknown: break;

@@ -4,8 +4,8 @@
 #pragma once
 
 #include "core/backend/BackendTypes.h"
-#include "core/playback/PlaybackTypes.h"
 #include "core/backend/IBackendManager.h"
+#include "core/playback/PlaybackTypes.h"
 
 #include <atomic>
 #include <chrono>

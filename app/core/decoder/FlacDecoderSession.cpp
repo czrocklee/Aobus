@@ -352,7 +352,7 @@ namespace app::core::decoder
           // Wait, let's check PipeWire/ALSA S24_32_LE definition.
           // ALSA SND_PCM_FORMAT_S24_32_LE: "Signed 24 bit Little Endian in 32 bit, LSB justified".
           // That means it's just a 32-bit integer where the top 8 bits are zero/ignored.
-          
+
           *out++ = val;
         }
       }
@@ -390,9 +390,8 @@ namespace app::core::decoder
       if (impl->requestedOutput.bitDepth != 0)
       {
         impl->info.outputFormat.bitDepth = impl->requestedOutput.bitDepth;
-        impl->info.outputFormat.validBits = (impl->requestedOutput.validBits != 0) 
-                                            ? impl->requestedOutput.validBits 
-                                            : impl->requestedOutput.bitDepth;
+        impl->info.outputFormat.validBits =
+          (impl->requestedOutput.validBits != 0) ? impl->requestedOutput.validBits : impl->requestedOutput.bitDepth;
       }
 
       if (metadata->data.stream_info.sample_rate > 0)

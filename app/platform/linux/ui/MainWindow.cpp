@@ -45,12 +45,12 @@
 #include <cctype>
 #include <exception>
 #include <format>
-#include <ranges>
 #include <fstream>
 #include <functional>
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <ranges>
 #include <set>
 #include <thread>
 #include <unordered_set>
@@ -219,8 +219,8 @@ namespace app::ui
           state.hiddenColumns.push_back(columnId);
         }
 
-        auto const definitionIt = std::ranges::find(
-          app::ui::trackColumnDefinitions(), entry.column, &app::ui::TrackColumnDefinition::column);
+        auto const definitionIt =
+          std::ranges::find(app::ui::trackColumnDefinitions(), entry.column, &app::ui::TrackColumnDefinition::column);
 
         if (definitionIt != app::ui::trackColumnDefinitions().end() && entry.width != definitionIt->defaultWidth)
         {
@@ -1566,7 +1566,7 @@ namespace app::ui
     // Return nullptr for leaf nodes so GTK doesn't show an expander
     _treeListModel = Gtk::TreeListModel::create(
       _listTreeStore,
-      [this](Glib::RefPtr<Glib::ObjectBase> const& item) -> Glib::RefPtr<Gio::ListModel>
+      [](Glib::RefPtr<Glib::ObjectBase> const& item) -> Glib::RefPtr<Gio::ListModel>
       {
         auto node = std::dynamic_pointer_cast<ListTreeNode>(item);
 

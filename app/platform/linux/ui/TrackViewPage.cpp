@@ -18,9 +18,9 @@
 #include <algorithm>
 #include <cstdint>
 #include <format>
-#include <ranges>
 #include <functional>
 #include <memory>
+#include <ranges>
 #include <string>
 #include <vector>
 

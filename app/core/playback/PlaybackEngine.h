@@ -5,8 +5,8 @@
 
 #include "core/AudioFormat.h"
 #include "core/IMainThreadDispatcher.h"
-#include "core/playback/PlaybackTypes.h"
 #include "core/backend/IAudioBackend.h"
+#include "core/playback/PlaybackTypes.h"
 
 #include <atomic>
 #include <functional>
@@ -73,7 +73,7 @@ namespace app::core::playback
     std::unique_ptr<backend::IAudioBackend> _backend;
     std::shared_ptr<IMainThreadDispatcher> _dispatcher;
     backend::AudioDevice _currentDevice;
-    
+
     std::atomic<std::shared_ptr<source::IPcmSource>> _source;
     std::atomic<bool> _backendStarted{false};
     std::atomic<bool> _playbackDrainPending{false};

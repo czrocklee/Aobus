@@ -553,16 +553,40 @@ namespace app::playback
       impl->triggerRefresh();
     }
 
-    ::pw_core_events const coreEvents = {.version = PW_VERSION_CORE_EVENTS, .done = onCoreDone};
-    ::pw_registry_events const registryEvents = {.version = PW_VERSION_REGISTRY_EVENTS,
-                                                 .global = onRegistryGlobal,
-                                                 .global_remove = onRegistryGlobalRemove};
-    ::pw_node_events const streamNodeEvents = {.version = PW_VERSION_NODE_EVENTS,
-                                               .info = onNodeInfo,
-                                               .param = onNodeParam};
-    ::pw_node_events const sinkNodeEvents = {.version = PW_VERSION_NODE_EVENTS,
-                                             .info = onNodeInfo,
-                                             .param = onNodeParam};
+    ::pw_core_events const coreEvents = []
+    {
+      ::pw_core_events e = {};
+      e.version = PW_VERSION_CORE_EVENTS;
+      e.done = onCoreDone;
+      return e;
+    }();
+
+    ::pw_registry_events const registryEvents = []
+    {
+      ::pw_registry_events e = {};
+      e.version = PW_VERSION_REGISTRY_EVENTS;
+      e.global = onRegistryGlobal;
+      e.global_remove = onRegistryGlobalRemove;
+      return e;
+    }();
+
+    ::pw_node_events const streamNodeEvents = []
+    {
+      ::pw_node_events e = {};
+      e.version = PW_VERSION_NODE_EVENTS;
+      e.info = onNodeInfo;
+      e.param = onNodeParam;
+      return e;
+    }();
+
+    ::pw_node_events const sinkNodeEvents = []
+    {
+      ::pw_node_events e = {};
+      e.version = PW_VERSION_NODE_EVENTS;
+      e.info = onNodeInfo;
+      e.param = onNodeParam;
+      return e;
+    }();
 
     void onRefreshEvent(void* data, std::uint64_t)
     {

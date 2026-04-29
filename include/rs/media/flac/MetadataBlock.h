@@ -109,7 +109,7 @@ namespace rs::media::flac
       detail::parseString<std::uint32_t, boost::endian::order::little>(ptr, end); // vendor string
 
       std::uint32_t const count = detail::parseLength<std::uint32_t, boost::endian::order::little>(ptr, end);
-      
+
       for (std::uint32_t i = 0; i < count; ++i)
       {
         handleComment(detail::parseString<std::uint32_t, boost::endian::order::little>(ptr, end));

@@ -45,12 +45,12 @@ namespace app::core::model
   std::optional<std::size_t> FilteredTrackIdList::indexOf(TrackId id) const
   {
     auto const it = _members.find(id);
-    
+
     if (it == _members.end())
     {
       return std::nullopt;
     }
-    
+
     return static_cast<std::size_t>(std::distance(_members.begin(), it));
   }
 

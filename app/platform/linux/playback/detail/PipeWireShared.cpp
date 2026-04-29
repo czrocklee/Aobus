@@ -42,32 +42,49 @@ namespace app::playback::detail
     format.channels = static_cast<std::uint8_t>(info.channels);
     format.isInterleaved = true;
 
-    if (info.format == SPA_AUDIO_FORMAT_S16 || info.format == SPA_AUDIO_FORMAT_S16_LE || info.format == SPA_AUDIO_FORMAT_S16_BE)
+    if (info.format == SPA_AUDIO_FORMAT_S16 || info.format == SPA_AUDIO_FORMAT_S16_LE ||
+        info.format == SPA_AUDIO_FORMAT_S16_BE)
     {
       format.bitDepth = 16;
       format.isFloat = false;
     }
-    else if (info.format == SPA_AUDIO_FORMAT_S24 || info.format == SPA_AUDIO_FORMAT_S24_LE || info.format == SPA_AUDIO_FORMAT_S24_BE)
+    else if (info.format == SPA_AUDIO_FORMAT_S24 || info.format == SPA_AUDIO_FORMAT_S24_LE ||
+             info.format == SPA_AUDIO_FORMAT_S24_BE)
     {
-      format.bitDepth = 24; format.validBits = 24; format.isFloat = false;
+      format.bitDepth = 24;
+      format.validBits = 24;
+      format.isFloat = false;
     }
-    else if (info.format == SPA_AUDIO_FORMAT_S24_32 || info.format == SPA_AUDIO_FORMAT_S24_32_LE || info.format == SPA_AUDIO_FORMAT_S24_32_BE)
+    else if (info.format == SPA_AUDIO_FORMAT_S24_32 || info.format == SPA_AUDIO_FORMAT_S24_32_LE ||
+             info.format == SPA_AUDIO_FORMAT_S24_32_BE)
     {
-      format.bitDepth = 32; format.validBits = 24; format.isFloat = false;
+      format.bitDepth = 32;
+      format.validBits = 24;
+      format.isFloat = false;
     }
-    else if (info.format == SPA_AUDIO_FORMAT_S32 || info.format == SPA_AUDIO_FORMAT_S32_LE || info.format == SPA_AUDIO_FORMAT_S32_BE)
+    else if (info.format == SPA_AUDIO_FORMAT_S32 || info.format == SPA_AUDIO_FORMAT_S32_LE ||
+             info.format == SPA_AUDIO_FORMAT_S32_BE)
     {
-      format.bitDepth = 32; format.validBits = 32; format.isFloat = false;
+      format.bitDepth = 32;
+      format.validBits = 32;
+      format.isFloat = false;
     }
-    else if (info.format == SPA_AUDIO_FORMAT_F32 || info.format == SPA_AUDIO_FORMAT_F32_LE || info.format == SPA_AUDIO_FORMAT_F32_BE)
+    else if (info.format == SPA_AUDIO_FORMAT_F32 || info.format == SPA_AUDIO_FORMAT_F32_LE ||
+             info.format == SPA_AUDIO_FORMAT_F32_BE)
     {
-      format.bitDepth = 32; format.validBits = 32; format.isFloat = true;
+      format.bitDepth = 32;
+      format.validBits = 32;
+      format.isFloat = true;
     }
-    else if (info.format == SPA_AUDIO_FORMAT_F64 || info.format == SPA_AUDIO_FORMAT_F64_LE || info.format == SPA_AUDIO_FORMAT_F64_BE)
+    else if (info.format == SPA_AUDIO_FORMAT_F64 || info.format == SPA_AUDIO_FORMAT_F64_LE ||
+             info.format == SPA_AUDIO_FORMAT_F64_BE)
     {
-      format.bitDepth = 64; format.validBits = 64; format.isFloat = true;
+      format.bitDepth = 64;
+      format.validBits = 64;
+      format.isFloat = true;
     }
-    else return std::nullopt;
+    else
+      return std::nullopt;
 
     return format;
   }

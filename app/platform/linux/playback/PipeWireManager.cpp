@@ -21,10 +21,7 @@ namespace app::playback
       monitor->start();
     }
 
-    ~Impl()
-    {
-      monitor.reset();
-    }
+    ~Impl() { monitor.reset(); }
   };
 
   PipeWireManager::PipeWireManager()

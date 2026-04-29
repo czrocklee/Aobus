@@ -9,7 +9,7 @@ namespace app::core
 {
   /**
    * @brief Interface for dispatching tasks to the main UI thread.
-   * 
+   *
    * This interface allows core components to execute code on the UI thread
    * without depending on specific UI frameworks like GTK or Qt.
    */
@@ -20,7 +20,7 @@ namespace app::core
 
     /**
      * @brief Dispatches a task to be executed on the main UI thread.
-     * 
+     *
      * @param task The function object to execute.
      */
     virtual void dispatch(std::function<void()> task) = 0;

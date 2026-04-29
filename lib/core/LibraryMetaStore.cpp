@@ -18,7 +18,7 @@ namespace rs::core
   std::optional<LibraryMetaHeader> LibraryMetaStore::load(lmdb::ReadTransaction& txn) const
   {
     auto const bytes = _database.reader(txn).get(kHeaderRecordId);
-    
+
     if (!bytes)
     {
       return std::nullopt;

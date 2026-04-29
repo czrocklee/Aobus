@@ -33,7 +33,7 @@ namespace rs::core
     {
       return Iterator{std::move(iter)};
     }
-    
+
     return end();
   }
 

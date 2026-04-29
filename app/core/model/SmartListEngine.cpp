@@ -629,7 +629,7 @@ namespace app::core::model
   void SmartListEngine::handleSourceDestroyed(SourceBucket& bucket)
   {
     bucket.sourceAlive = false;
-    
+
     for (auto* list : bucket.lists)
     {
       list->_members.clear();

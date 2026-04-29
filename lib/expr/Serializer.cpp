@@ -43,7 +43,7 @@ namespace
       {
         return;
       }
-      
+
       auto guard = ParenthesisGuard{oss, (counter++ > 0) && binary->operation};
       std::visit(*this, binary->operand);
 
@@ -59,7 +59,7 @@ namespace
       {
         return;
       }
-      
+
       oss << "not ";
       std::visit(*this, unary->operand);
     }

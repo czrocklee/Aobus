@@ -82,7 +82,7 @@ namespace rs::core
     {
       RS_THROW(Exception, "Index out of range");
     }
-    
+
     return _trackIds[index];
   }
 

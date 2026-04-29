@@ -29,11 +29,11 @@ namespace rs::core
   DictionaryId DictionaryStore::put(lmdb::WriteTransaction& txn, std::string_view value)
   {
     // Check in-memory index first (includes entries from reserve)
-    
+
     if (auto it = _stringToId.find(value); it != _stringToId.end())
     {
       // If this string was reserved, we need to persist it now
-      
+
       if (_reservedStrings.contains(value))
       {
         auto writer = _database.writer(txn);
@@ -59,7 +59,7 @@ namespace rs::core
     auto idx = id.value();
 
     // 0 is null/invalid
-    
+
     if (idx == 0)
     {
       RS_THROW(rs::Exception, "Invalid dictionary ID");
@@ -91,7 +91,7 @@ namespace rs::core
   DictionaryId DictionaryStore::reserve(std::string_view str)
   {
     // Check if already exists
-    
+
     if (auto it = _stringToId.find(str); it != _stringToId.end())
     {
       return it->second;

@@ -15,7 +15,7 @@ namespace rs::expr
         {
           return;
         }
-        
+
         normalize(binary->operand);
 
         if (!binary->operation)
@@ -34,7 +34,7 @@ namespace rs::expr
         {
           return;
         }
-        
+
         normalize(unary->operand);
       }
 
@@ -47,20 +47,20 @@ namespace rs::expr
         {
           return;
         }
-        
+
         auto* op = &binary.operation->operand;
         auto* rhs = std::get_if<std::unique_ptr<BinaryExpression>>(op);
-        
+
         if (rhs == nullptr || !*rhs)
         {
           return;
         }
-        
+
         if (!(*rhs)->operation || (*rhs)->operation->op != Operator::Add)
         {
           return;
         }
-        
+
         std::swap(binary.operand, (*rhs)->operation->operand);
         std::swap((*rhs)->operand, (*rhs)->operation->operand);
         std::swap(binary.operand, *op);

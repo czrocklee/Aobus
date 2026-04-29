@@ -36,7 +36,8 @@ namespace app::core::backend
         return std::make_unique<NullBackend>();
       }
 
-      struct NullSubscription final : public IGraphSubscription {};
+      struct NullSubscription final : public IGraphSubscription
+      {};
 
       std::unique_ptr<IGraphSubscription> subscribeGraph(std::string_view /*routeAnchor*/,
                                                          OnGraphChangedCallback callback) override
@@ -44,23 +45,11 @@ namespace app::core::backend
         if (callback)
         {
           AudioGraph graph;
-          graph.nodes.push_back({
-            .id = "null-stream",
-            .type = AudioNodeType::Stream,
-            .name = "Null Stream",
-            .objectPath = ""
-          });
-          graph.nodes.push_back({
-            .id = "null-sink",
-            .type = AudioNodeType::Sink,
-            .name = "Null Device",
-            .objectPath = ""
-          });
-          graph.links.push_back({
-            .sourceId = "null-stream",
-            .destId = "null-sink",
-            .isActive = true
-          });
+          graph.nodes.push_back(
+            {.id = "null-stream", .type = AudioNodeType::Stream, .name = "Null Stream", .objectPath = ""});
+          graph.nodes.push_back(
+            {.id = "null-sink", .type = AudioNodeType::Sink, .name = "Null Device", .objectPath = ""});
+          graph.links.push_back({.sourceId = "null-stream", .destId = "null-sink", .isActive = true});
           callback(graph);
         }
         return std::make_unique<NullSubscription>();
@@ -70,10 +59,7 @@ namespace app::core::backend
     NullBackend() = default;
     ~NullBackend() override = default;
 
-    bool open(AudioFormat const& /*format*/, AudioRenderCallbacks /*callbacks*/) override
-    {
-      return true;
-    }
+    bool open(AudioFormat const& /*format*/, AudioRenderCallbacks /*callbacks*/) override { return true; }
 
     void start() override {}
     void pause() override {}
