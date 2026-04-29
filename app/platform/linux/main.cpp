@@ -12,6 +12,8 @@
 
 #include <CLI/CLI.hpp>
 
+#include <print>
+
 int main(int argc, char* argv[])
 {
   CLI::App cliApp{"RockStudio Music Library"};
@@ -38,7 +40,7 @@ int main(int argc, char* argv[])
     "--version",
     []()
     {
-      std::printf("RockStudio %s\n", rs::kAppVersion);
+      std::print("RockStudio {}\n", rs::kAppVersion);
       std::exit(0);
     },
     "Show version information");

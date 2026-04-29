@@ -99,7 +99,7 @@ namespace app::ui
       TrackColumn id;
       Glib::RefPtr<Gtk::ColumnViewColumn> column;
       Gtk::CheckButton* toggle = nullptr;
-      int defaultWidth = -1;
+      std::int32_t defaultWidth = -1;
     };
 
     ColumnBinding* findColumnBinding(TrackColumn column);

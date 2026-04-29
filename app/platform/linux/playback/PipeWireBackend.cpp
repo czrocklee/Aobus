@@ -4,6 +4,7 @@
 #include "platform/linux/playback/PipeWireBackend.h"
 #include "core/Log.h"
 #include "platform/linux/playback/detail/PipeWireShared.h"
+#include <rs/utility/Raii.h>
 
 extern "C"
 {
@@ -235,28 +236,29 @@ namespace app::playback
     }
 
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
-    ::pw_properties* props = ::pw_properties_new(PW_KEY_MEDIA_TYPE,
-                                                 "Audio",
-                                                 PW_KEY_MEDIA_CATEGORY,
-                                                 "Playback",
-                                                 PW_KEY_MEDIA_ROLE,
-                                                 "Music",
-                                                 PW_KEY_APP_NAME,
-                                                 "RockStudio",
-                                                 PW_KEY_APP_ID,
-                                                 "io.github.RockStudio",
-                                                 PW_KEY_NODE_NAME,
-                                                 "RockStudio Playback",
-                                                 nullptr);
-    ::pw_properties_setf(props, PW_KEY_NODE_RATE, "1/%u", format.sampleRate);
+    ::pw_properties* rawProps = ::pw_properties_new(PW_KEY_MEDIA_TYPE,
+                                                    "Audio",
+                                                    PW_KEY_MEDIA_CATEGORY,
+                                                    "Playback",
+                                                    PW_KEY_MEDIA_ROLE,
+                                                    "Music",
+                                                    PW_KEY_APP_NAME,
+                                                    "RockStudio",
+                                                    PW_KEY_APP_ID,
+                                                    "io.github.RockStudio",
+                                                    PW_KEY_NODE_NAME,
+                                                    "RockStudio Playback",
+                                                    nullptr);
+    auto props = rs::utility::makeUniquePtr<::pw_properties_free>(rawProps);
+    ::pw_properties_setf(props.get(), PW_KEY_NODE_RATE, "1/%u", format.sampleRate);
 
     if (!_targetDeviceId.empty())
     {
-      ::pw_properties_set(props, PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
-      if (useExclusive) ::pw_properties_set(props, PW_KEY_NODE_EXCLUSIVE, "true");
+      ::pw_properties_set(props.get(), PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
+      if (useExclusive) ::pw_properties_set(props.get(), PW_KEY_NODE_EXCLUSIVE, "true");
     }
 
-    _impl->_stream.reset(::pw_stream_new(_impl->_core.get(), "RockStudio Playback", props));
+    _impl->_stream.reset(::pw_stream_new(_impl->_core.get(), "RockStudio Playback", props.release()));
     if (!_impl->_stream)
     {
       _impl->setError("Failed to create stream");

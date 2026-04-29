@@ -62,6 +62,12 @@ target_sources(app_core PRIVATE
 target_link_libraries(app_core PUBLIC rs)
 target_link_libraries(app_core PRIVATE PkgFLAC PkgALAC spdlog::spdlog yaml-cpp)
 
+if(CLANG_TIDY_EXECUTABLE)
+  set_target_properties(app_core PROPERTIES
+    CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_STRICT_CHECKS};--config=${CLANG_TIDY_STRICT_CONFIG};-header-filter=${CLANG_TIDY_STRICT_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
+  )
+endif()
+
 # app_linux: Linux platform implementation (depends on app_core)
 add_library(app_linux STATIC)
 target_sources(app_linux PRIVATE
@@ -111,6 +117,12 @@ if(ALSA_FOUND)
     platform/linux/playback/AlsaManager.cpp
   )
   target_link_libraries(app_linux PRIVATE ALSA UDEV)
+endif()
+
+if(CLANG_TIDY_EXECUTABLE)
+  set_target_properties(app_linux PROPERTIES
+    CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_STRICT_CHECKS};--config=${CLANG_TIDY_STRICT_CONFIG};-header-filter=${CLANG_TIDY_STRICT_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
+  )
 endif()
 
 # RockStudio executable (links app_linux, no direct source compilation)

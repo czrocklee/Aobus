@@ -30,7 +30,7 @@ namespace app::playback
       if (::snd_pcm_open(&tempPcm, deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK) < 0) return caps;
 
       ::snd_pcm_hw_params_t* params = nullptr;
-      snd_pcm_hw_params_alloca(&params);
+      snd_pcm_hw_params_alloca(&params); // macro
       if (::snd_pcm_hw_params_any(tempPcm, params) < 0)
       {
         ::snd_pcm_close(tempPcm);

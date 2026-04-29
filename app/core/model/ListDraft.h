@@ -24,7 +24,7 @@ namespace app::core::model
    * ListDraft - Plain data transfer object for list creation.
    * Populated by SmartListDialog and consumed by MainWindow to create or update lists.
    */
-  struct ListDraft
+  struct ListDraft final
   {
     ListKind kind = ListKind::Smart;
     rs::core::ListId parentId = rs::core::ListId{0};

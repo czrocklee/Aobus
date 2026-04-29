@@ -65,7 +65,7 @@ namespace app::ui
     TrackColumn column;
     std::string_view id;
     std::string_view title;
-    int defaultWidth = -1;
+    std::int32_t defaultWidth = -1;
     bool defaultVisible = true;
     bool expands = false;
     bool numeric = false;
@@ -76,7 +76,7 @@ namespace app::ui
   {
     TrackColumn column = TrackColumn::Title;
     bool visible = true;
-    int width = -1;
+    std::int32_t width = -1;
 
     auto operator==(TrackColumnState const&) const -> bool = default;
   };
@@ -119,11 +119,11 @@ namespace app::ui
 
   TrackPresentationSpec presentationSpecForGroup(TrackGroupBy groupBy);
 
-  int compareForSort(TrackPresentationKeysView lhs,
+  std::int32_t compareForSort(TrackPresentationKeysView lhs,
                      TrackPresentationKeysView rhs,
                      std::span<TrackSortTerm const> sortBy);
 
-  int compareForGrouping(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackGroupBy groupBy);
+  std::int32_t compareForGrouping(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackGroupBy groupBy);
 
   bool shouldShowColumn(TrackGroupBy groupBy, TrackColumn column);
 

@@ -57,7 +57,7 @@ namespace app::playback
 
     auto safePcm = AlsaPcmPtr(pcm);
     ::snd_pcm_hw_params_t* params = nullptr;
-    snd_pcm_hw_params_alloca(&params);
+    snd_pcm_hw_params_alloca(&params); // macro
     if (::snd_pcm_hw_params_any(safePcm.get(), params) < 0)
     {
       _lastError = "Failed to init ALSA hw params";
@@ -80,7 +80,7 @@ namespace app::playback
       _lastError = "Bit depth not supported";
       return false;
     }
-    unsigned int rate = format.sampleRate;
+    std::uint32_t rate = format.sampleRate;
     if (::snd_pcm_hw_params_set_rate_near(safePcm.get(), params, &rate, 0) < 0)
     {
       _lastError = "Failed to set rate";
@@ -92,7 +92,7 @@ namespace app::playback
       return false;
     }
 
-    unsigned int periods = 4;
+    std::uint32_t periods = 4;
     snd_pcm_uframes_t periodSize = 1024;
     ::snd_pcm_hw_params_set_periods_near(safePcm.get(), params, &periods, 0);
     ::snd_pcm_hw_params_set_period_size_near(safePcm.get(), params, &periodSize, 0);

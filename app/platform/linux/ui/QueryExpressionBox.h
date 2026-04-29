@@ -5,6 +5,7 @@
 
 #include <gtkmm.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -44,7 +45,7 @@ namespace app::ui
     rs::core::MusicLibrary* _musicLibrary;
     std::vector<std::string> _availableTags;
     std::vector<std::string> _availableCustomKeys;
-    int _completionTokenStart = -1;
+    std::int32_t _completionTokenStart = -1;
     bool _suppressNextCompletionUpdate = false;
   };
 

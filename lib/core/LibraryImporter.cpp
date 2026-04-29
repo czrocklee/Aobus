@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <deque>
 #include <unordered_map>
 
@@ -114,7 +115,7 @@ namespace rs::core
 
     for (auto const& trackNode : tracks)
     {
-      uint32_t yamlTrackId = trackNode["id"] ? trackNode["id"].as<uint32_t>() : 0;
+      std::uint32_t yamlTrackId = trackNode["id"] ? trackNode["id"].as<std::uint32_t>() : 0;
       auto trackStrings = std::deque<std::string>{};
       auto keepAlive = [&](YAML::Node const& node) -> std::string_view
       {
@@ -320,10 +321,10 @@ namespace rs::core
         importedList.trackIds.reserve(listNode["tracks"].size());
         for (auto const& trackRefNode : listNode["tracks"])
         {
-          uint32_t yamlId = 0;
+          std::uint32_t yamlId = 0;
           try
           {
-            yamlId = trackRefNode.as<uint32_t>();
+            yamlId = trackRefNode.as<std::uint32_t>();
           }
           catch (...)
           {
