@@ -6,11 +6,11 @@
 
 namespace rs::lmdb
 {
-  auto ReadTransaction::create(MDB_env* env, MDB_txn* parent, unsigned int flags)
+  auto ReadTransaction::create(::MDB_env* env, ::MDB_txn* parent, unsigned int flags)
   {
-    MDB_txn* handle = nullptr;
+    ::MDB_txn* handle = nullptr;
     throwOnError("mdb_txn_begin", ::mdb_txn_begin(env, parent, flags, &handle));
-    return std::unique_ptr<MDB_txn, ReadTransaction::MdbTxnDeleter>{handle};
+    return std::unique_ptr<::MDB_txn, ReadTransaction::MdbTxnDeleter>{handle};
   }
 
   ReadTransaction::ReadTransaction(Environment const& env)

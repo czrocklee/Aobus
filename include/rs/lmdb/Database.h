@@ -35,7 +35,7 @@ namespace rs::lmdb
     Writer writer(WriteTransaction& txn) const;
 
   private:
-    MDB_dbi _dbi = std::numeric_limits<MDB_dbi>::max();
+    ::MDB_dbi _dbi = std::numeric_limits<::MDB_dbi>::max();
   };
 
   class Database::Reader final
@@ -60,18 +60,18 @@ namespace rs::lmdb
     Reader& operator=(Reader const&) = delete;
 
   protected:
-    Reader(MDB_dbi dbi, MDB_txn* txn);
+    Reader(::MDB_dbi dbi, ::MDB_txn* txn);
 
     struct MdbCursorDeleter
     {
-      void operator()(MDB_cursor* cur) const noexcept { mdb_cursor_close(cur); }
+      void operator()(::MDB_cursor* cur) const noexcept { ::mdb_cursor_close(cur); }
     };
 
-    using CursorPtr = std::unique_ptr<MDB_cursor, MdbCursorDeleter>;
-    static CursorPtr create(MDB_txn* txn, MDB_dbi dbi);
+    using CursorPtr = std::unique_ptr<::MDB_cursor, MdbCursorDeleter>;
+    static CursorPtr create(::MDB_txn* txn, ::MDB_dbi dbi);
 
-    MDB_dbi _dbi;
-    MDB_txn* _txn;
+    ::MDB_dbi _dbi;
+    ::MDB_txn* _txn;
 
     friend class Database;
     friend class Writer;
@@ -156,9 +156,9 @@ namespace rs::lmdb
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
 
   private:
-    Writer(MDB_dbi dbi, WriteTransaction& txn);
+    Writer(::MDB_dbi dbi, WriteTransaction& txn);
 
-    MDB_dbi _dbi;
+    ::MDB_dbi _dbi;
     WriteTransaction* _txn;
     Reader::CursorPtr _cursor;
     std::uint32_t _lastId = 0; // Start from 1 (0 = null, so first append returns 1)

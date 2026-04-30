@@ -16,7 +16,7 @@
 
 namespace rs::core
 {
-  class MusicLibrary
+  class MusicLibrary final
   {
   public:
     explicit MusicLibrary(std::filesystem::path rootPath);

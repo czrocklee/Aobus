@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 
 // Standalone test for app::uiapp::ui::TrackListAdapter without GTKMM dependency.
 // Tests adapter functionality with test doubles for GTK objects.
@@ -73,12 +73,14 @@ namespace app::core::model::test
   std::string TestTrackRowProvider::resolveDictionaryString(DictionaryId id)
   {
     auto const it = _stringCache.find(id);
+
     if (it != _stringCache.end())
     {
       return it->second;
     }
 
     std::string result;
+
     try
     {
       auto const str = _dict->get(id);
@@ -90,6 +92,7 @@ namespace app::core::model::test
     }
 
     auto const insertResult = _stringCache.emplace(id, result);
+
     return insertResult.first->second;
   }
 
@@ -101,12 +104,14 @@ namespace app::core::model::test
   std::optional<RowData> TestTrackRowProvider::getRow(rs::core::TrackId id)
   {
     auto const it = _rowCache.find(id);
+
     if (it != _rowCache.end())
     {
       if (it->second.missing)
       {
         return std::nullopt;
       }
+
       return it->second;
     }
 
@@ -114,12 +119,14 @@ namespace app::core::model::test
     auto reader = _store->reader(txn);
 
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
+
     if (!optView)
     {
       RowData row;
       row.id = id;
       row.missing = true;
       _rowCache.emplace(id, std::move(row));
+
       return std::nullopt;
     }
 
@@ -131,24 +138,28 @@ namespace app::core::model::test
     row.title = std::string(metadata.title());
 
     auto const artistId = metadata.artistId();
+
     if (artistId != DictionaryId{0})
     {
       row.artist = resolveDictionaryString(artistId);
     }
 
     auto const albumId = metadata.albumId();
+
     if (albumId != DictionaryId{0})
     {
       row.album = resolveDictionaryString(albumId);
     }
 
     auto const albumArtistId = metadata.albumArtistId();
+
     if (albumArtistId != DictionaryId{0})
     {
       row.albumArtist = resolveDictionaryString(albumArtistId);
     }
 
     auto const genreId = metadata.genreId();
+
     if (genreId != DictionaryId{0})
     {
       row.genre = resolveDictionaryString(genreId);
@@ -159,12 +170,14 @@ namespace app::core::model::test
     row.trackNumber = metadata.trackNumber();
 
     auto const coverArtId = metadata.coverArtId();
+
     if (coverArtId != 0)
     {
       row.coverArtId = coverArtId;
     }
 
     auto const result = _rowCache.emplace(id, std::move(row));
+
     return result.first->second;
   }
 
@@ -220,6 +233,7 @@ namespace
     spec.artist = artist;
     spec.album = album;
     spec.year = year;
+
     return spec;
   }
 
@@ -261,6 +275,7 @@ namespace
       auto [id, _view] = writer.createHotCold(hotData, coldData);
       (void)_view;
       txn.commit();
+
       return id;
     }
 
@@ -306,14 +321,14 @@ namespace
 
     std::optional<std::size_t> indexOf(TrackId id) const override
     {
-      for (std::size_t i = 0; i < _ids.size(); ++i)
+      auto const it = std::ranges::find(_ids, id);
+
+      if (it == _ids.end())
       {
-        if (_ids[i] == id)
-        {
-          return i;
-        }
+        return std::nullopt;
       }
-      return std::nullopt;
+
+      return static_cast<std::size_t>(std::ranges::distance(_ids.begin(), it));
     }
 
     std::vector<TrackId> const& ids() const { return _ids; }
@@ -376,7 +391,7 @@ namespace
     }
 
     auto needle = std::string{filter};
-    std::transform(needle.begin(), needle.end(), needle.begin(), ::tolower);
+    std::ranges::transform(needle, needle.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
     auto check = [&needle](std::string const& field) -> bool
     {
@@ -384,8 +399,10 @@ namespace
       {
         return false;
       }
+
       auto lower = field;
-      std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+      std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
       return lower.find(needle) != std::string::npos;
     };
 
@@ -401,7 +418,7 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
-    auto trackId = testLibrary.addTrack(makeTrackSpec("My Song", "Beatles", "Abbey Road", 2023));
+    auto const trackId = testLibrary.addTrack(makeTrackSpec("My Song", "Beatles", "Abbey Road", 2023));
 
     auto const row = provider->getRow(trackId);
     REQUIRE(row.has_value());
@@ -415,7 +432,7 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
-    auto trackId = testLibrary.addTrack(makeTrackSpec("Song", "Beatles", "Album", 2020));
+    auto const trackId = testLibrary.addTrack(makeTrackSpec("Song", "Beatles", "Album", 2020));
 
     auto const row = provider->getRow(trackId);
     REQUIRE(row.has_value());
@@ -428,7 +445,7 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
-    auto trackId = testLibrary.addTrack(makeTrackSpec("Song", "Artist", "Abbey Road", 2020));
+    auto const trackId = testLibrary.addTrack(makeTrackSpec("Song", "Artist", "Abbey Road", 2020));
 
     auto const row = provider->getRow(trackId);
     REQUIRE(row.has_value());
@@ -441,7 +458,7 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
-    auto trackId = testLibrary.addTrack(makeTrackSpec("Yesterday", "Artist", "Album", 2020));
+    auto const trackId = testLibrary.addTrack(makeTrackSpec("Yesterday", "Artist", "Album", 2020));
 
     auto const row = provider->getRow(trackId);
     REQUIRE(row.has_value());
@@ -454,7 +471,7 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
-    auto trackId = testLibrary.addTrack(makeTrackSpec("Song", "The Beatles", "Album", 2020));
+    auto const trackId = testLibrary.addTrack(makeTrackSpec("Song", "The Beatles", "Album", 2020));
 
     auto const row = provider->getRow(trackId);
     REQUIRE(row.has_value());
@@ -468,7 +485,7 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
-    auto trackId = testLibrary.addTrack(makeTrackSpec("Song", "Artist", "Album", 2020));
+    auto const trackId = testLibrary.addTrack(makeTrackSpec("Song", "Artist", "Album", 2020));
 
     auto const row = provider->getRow(trackId);
     REQUIRE(row.has_value());
@@ -482,7 +499,7 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
     auto spy = ObserverSpy{};
     source.attach(&spy);
 
-    auto id = TrackId{1};
+    auto const id = TrackId{1};
     source.addInitial(id);
 
     CHECK(spy.events.size() == 0); // addInitial doesn't notify
@@ -498,8 +515,8 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
   SECTION("MutableTrackIdList notifies observers on remove")
   {
     auto source = MutableTrackIdList{};
-    auto id1 = TrackId{1};
-    auto id2 = TrackId{2};
+    auto const id1 = TrackId{1};
+    auto const id2 = TrackId{2};
     source.addInitial(id1);
     source.addInitial(id2);
 
@@ -517,7 +534,7 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
   SECTION("MutableTrackIdList notifies observers on update")
   {
     auto source = MutableTrackIdList{};
-    auto id = TrackId{1};
+    auto const id = TrackId{1};
     source.addInitial(id);
 
     auto spy = ObserverSpy{};
@@ -548,7 +565,7 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
   {
     auto testLibrary = TestMusicLibrary{};
     auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
-    auto trackId = testLibrary.addTrack(makeTrackSpec("Cache Test", "Artist", "Album", 2020));
+    auto const trackId = testLibrary.addTrack(makeTrackSpec("Cache Test", "Artist", "Album", 2020));
 
     // First load
     auto const first = provider->getRow(trackId);
@@ -568,13 +585,13 @@ TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
     auto testLibrary = TestMusicLibrary{};
     auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
 
-    auto track1 = testLibrary.addTrack(makeTrackSpec("Song A", "Beatles", "Album 1", 2020));
-    auto track2 = testLibrary.addTrack(makeTrackSpec("Song B", "Stones", "Album 2", 2021));
-    auto track3 = testLibrary.addTrack(makeTrackSpec("Song C", "Beatles", "Album 3", 2022));
+    auto const track1 = testLibrary.addTrack(makeTrackSpec("Song A", "Beatles", "Album 1", 2020));
+    auto const track2 = testLibrary.addTrack(makeTrackSpec("Song B", "Stones", "Album 2", 2021));
+    auto const track3 = testLibrary.addTrack(makeTrackSpec("Song C", "Beatles", "Album 3", 2022));
 
-    auto row1 = provider->getRow(track1);
-    auto row2 = provider->getRow(track2);
-    auto row3 = provider->getRow(track3);
+    auto const row1 = provider->getRow(track1);
+    auto const row2 = provider->getRow(track2);
+    auto const row3 = provider->getRow(track3);
 
     REQUIRE(row1.has_value());
     REQUIRE(row2.has_value());
