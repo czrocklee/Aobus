@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 #pragma once
 
-#include "core/AudioFormat.h"
-#include "core/backend/BackendTypes.h"
+#include <rs/audio/AudioFormat.h>
+#include <rs/audio/BackendTypes.h>
 
 #include <functional>
 #include <memory>
@@ -26,11 +26,11 @@ namespace app::playback
     void refresh();
 
     void setDevicesChangedCallback(std::function<void()> callback);
-    std::vector<app::core::backend::AudioDevice> enumerateSinks() const;
+    std::vector<rs::audio::AudioDevice> enumerateSinks() const;
     std::optional<std::uint32_t> findSinkIdByName(std::string_view name) const;
 
     std::uint64_t subscribeGraph(std::string_view routeAnchor,
-                                 std::function<void(app::core::backend::AudioGraph const&)> callback);
+                                 std::function<void(rs::audio::AudioGraph const&)> callback);
     void unsubscribeGraph(std::uint64_t id);
 
   private:

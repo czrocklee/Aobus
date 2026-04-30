@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/playback/PipeWireMonitor.h"
-#include "core/Log.h"
 #include "platform/linux/playback/detail/PipeWireShared.h"
+#include <rs/utility/Log.h>
 
 extern "C"
 {
@@ -88,7 +88,7 @@ namespace app::playback
     return value != nullptr ? std::string(value) : std::string{};
   }
 
-  std::string formatStreamFormat(app::core::AudioFormat const& format)
+  std::string formatStreamFormat(rs::audio::AudioFormat const& format)
   {
     auto const* const sampleType = format.isFloat ? "float" : "pcm";
     return std::format("{}Hz/{}-bit/{}ch {}", format.sampleRate, format.bitDepth, format.channels, sampleType);
@@ -251,7 +251,7 @@ namespace app::playback
     }
   }
 
-  void parseEnumFormat(::spa_pod const* param, app::core::backend::DeviceCapabilities& caps)
+  void parseEnumFormat(::spa_pod const* param, rs::audio::DeviceCapabilities& caps)
   {
     if (param == nullptr || ::spa_pod_is_object(param) == 0)
     {
@@ -389,7 +389,7 @@ namespace app::playback
     {
       std::uint64_t id = 0;
       std::string routeAnchor;
-      std::function<void(app::core::backend::AudioGraph const&)> callback;
+      std::function<void(rs::audio::AudioGraph const&)> callback;
     };
 
     Impl()
@@ -457,8 +457,8 @@ namespace app::playback
     std::unordered_map<std::uint32_t, LinkBinding> linkBindings;
     std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> streamNodeBindings;
     std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> sinkNodeBindings;
-    std::unordered_map<std::uint32_t, app::core::AudioFormat> nodeFormatMap;
-    std::unordered_map<std::uint32_t, app::core::backend::DeviceCapabilities> sinkCapabilitiesMap;
+    std::unordered_map<std::uint32_t, rs::audio::AudioFormat> nodeFormatMap;
+    std::unordered_map<std::uint32_t, rs::audio::DeviceCapabilities> sinkCapabilitiesMap;
     std::unordered_map<std::uint32_t, SinkProps> sinkPropsMap;
     detail::SpaSourcePtr refreshEvent;
 
@@ -774,9 +774,9 @@ namespace app::playback
     _impl->onDevicesChanged = std::move(callback);
   }
 
-  std::vector<app::core::backend::AudioDevice> PipeWireMonitor::enumerateSinks() const
+  std::vector<rs::audio::AudioDevice> PipeWireMonitor::enumerateSinks() const
   {
-    auto devices = std::vector<app::core::backend::AudioDevice>{};
+    auto devices = std::vector<rs::audio::AudioDevice>{};
     auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
     for (auto const& [id, node] : _impl->nodes)
     {
@@ -789,7 +789,7 @@ namespace app::playback
           displayName = node.nodeName.empty() ? node.objectPath : node.nodeName;
         }
         auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
-        auto caps = app::core::backend::DeviceCapabilities{};
+        auto caps = rs::audio::DeviceCapabilities{};
         if (auto const it = _impl->sinkCapabilitiesMap.find(id); it != _impl->sinkCapabilitiesMap.end())
         {
           caps = it->second;
@@ -799,13 +799,13 @@ namespace app::playback
                            .displayName = displayName,
                            .description = description,
                            .isDefault = false,
-                           .backendKind = app::core::backend::BackendKind::PipeWire,
+                           .backendKind = rs::audio::BackendKind::PipeWire,
                            .capabilities = {}});
         devices.push_back({.id = deviceId,
                            .displayName = std::format("{} (Exclusive)", displayName),
                            .description = description,
                            .isDefault = false,
-                           .backendKind = app::core::backend::BackendKind::PipeWireExclusive,
+                           .backendKind = rs::audio::BackendKind::PipeWireExclusive,
                            .capabilities = caps});
       }
     }
@@ -826,7 +826,7 @@ namespace app::playback
   }
 
   std::uint64_t PipeWireMonitor::subscribeGraph(std::string_view routeAnchor,
-                                                std::function<void(app::core::backend::AudioGraph const&)> callback)
+                                                std::function<void(rs::audio::AudioGraph const&)> callback)
   {
     auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
     auto id = _impl->nextSubscriptionId++;
@@ -942,10 +942,10 @@ namespace app::playback
         }
       }
 
-      auto executeGraphCallback =
-        [&](std::uint32_t streamId, std::function<void(app::core::backend::AudioGraph const&)> const& cb)
+      auto executeGraphCallback = [&](
+                                    std::uint32_t streamId, std::function<void(rs::audio::AudioGraph const&)> const& cb)
       {
-        app::core::backend::AudioGraph graph;
+        rs::audio::AudioGraph graph;
         auto localReachableNodes = std::vector<std::uint32_t>{};
         auto localReachableSet = std::unordered_set<std::uint32_t>{};
         if (streamId != PW_ID_ANY)
@@ -988,28 +988,28 @@ namespace app::playback
           {
             if (id == streamId)
             {
-              app::core::backend::AudioNode node{.id = std::format("{}", id),
-                                                 .type = app::core::backend::AudioNodeType::Stream,
-                                                 .name = "RockStudio Playback",
-                                                 .format = std::nullopt};
+              rs::audio::AudioNode node{.id = std::format("{}", id),
+                                        .type = rs::audio::AudioNodeType::Stream,
+                                        .name = "RockStudio Playback",
+                                        .format = std::nullopt};
               graph.nodes.push_back(std::move(node));
             }
             continue;
           }
           bool isSink = isSinkMediaClass(it->second.mediaClass);
           bool isRs = (id == streamId);
-          auto type = app::core::backend::AudioNodeType::ExternalSource;
+          auto type = rs::audio::AudioNodeType::ExternalSource;
           if (isRs)
           {
-            type = app::core::backend::AudioNodeType::Stream;
+            type = rs::audio::AudioNodeType::Stream;
           }
           else if (isSink)
           {
-            type = app::core::backend::AudioNodeType::Sink;
+            type = rs::audio::AudioNodeType::Sink;
           }
           else if (localReachableSet.contains(id))
           {
-            type = app::core::backend::AudioNodeType::Intermediary;
+            type = rs::audio::AudioNodeType::Intermediary;
           }
           auto name = it->second.nodeNick;
           if (name.empty())
@@ -1017,7 +1017,7 @@ namespace app::playback
             name = it->second.nodeName.empty() ? it->second.objectPath : it->second.nodeName;
           }
 
-          app::core::backend::AudioNode node{
+          rs::audio::AudioNode node{
             .id = std::format("{}", id), .type = type, .name = name, .objectPath = it->second.objectPath};
           if (auto const formatIt = nodeFormatMap.find(id); formatIt != nodeFormatMap.end())
           {

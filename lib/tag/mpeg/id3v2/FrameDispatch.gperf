@@ -7,21 +7,21 @@
 %define lookup-function-name lookupFrame
 struct Id3v2FrameDispatchEntry
 {
-  using FrameHandler = void (*)(rs::core::TrackBuilder&, rs::tag::File const&, void const*, std::size_t);
+  using FrameHandler = void (*)(rs::library::TrackBuilder&, rs::tag::File const&, void const*, std::size_t);
   char const* name;
   FrameHandler handler;
 };
 %%
-TIT1, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::work>
-TIT2, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::title>
-TPE1, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::artist>
-TPE2, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::albumArtist>
-TALB, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::album>
-TCOM, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::composer>
-TYER, &handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::year>
-TDRC, &handleNumber<&::rs::core::TrackBuilder::MetadataBuilder::year>
-TRCK, &handleSlashNumber<&::rs::core::TrackBuilder::MetadataBuilder::trackNumber, &::rs::core::TrackBuilder::MetadataBuilder::totalTracks>
-TPOS, &handleSlashNumber<&::rs::core::TrackBuilder::MetadataBuilder::discNumber, &::rs::core::TrackBuilder::MetadataBuilder::totalDiscs>
-TCON, &handleText<&::rs::core::TrackBuilder::MetadataBuilder::genre>
+TIT1, &handleText<&::rs::library::TrackBuilder::MetadataBuilder::work>
+TIT2, &handleText<&::rs::library::TrackBuilder::MetadataBuilder::title>
+TPE1, &handleText<&::rs::library::TrackBuilder::MetadataBuilder::artist>
+TPE2, &handleText<&::rs::library::TrackBuilder::MetadataBuilder::albumArtist>
+TALB, &handleText<&::rs::library::TrackBuilder::MetadataBuilder::album>
+TCOM, &handleText<&::rs::library::TrackBuilder::MetadataBuilder::composer>
+TYER, &handleNumber<&::rs::library::TrackBuilder::MetadataBuilder::year>
+TDRC, &handleNumber<&::rs::library::TrackBuilder::MetadataBuilder::year>
+TRCK, &handleSlashNumber<&::rs::library::TrackBuilder::MetadataBuilder::trackNumber, &::rs::library::TrackBuilder::MetadataBuilder::totalTracks>
+TPOS, &handleSlashNumber<&::rs::library::TrackBuilder::MetadataBuilder::discNumber, &::rs::library::TrackBuilder::MetadataBuilder::totalDiscs>
+TCON, &handleText<&::rs::library::TrackBuilder::MetadataBuilder::genre>
 APIC, &handlePicture
 TXXX, &handleTxxx

@@ -126,7 +126,7 @@ namespace app::ui
       return 0;
     }
 
-    int compareTrackId(rs::core::TrackId lhs, rs::core::TrackId rhs)
+    int compareTrackId(rs::TrackId lhs, rs::TrackId rhs)
     {
       if (lhs.value() < rhs.value())
       {

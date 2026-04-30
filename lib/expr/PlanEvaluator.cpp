@@ -3,9 +3,9 @@
 
 #include <rs/expr/PlanEvaluator.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <algorithm>
 #include <cstring>
+#include <gsl-lite/gsl-lite.hpp>
 #include <iostream>
 #include <ranges>
 
@@ -27,7 +27,7 @@ namespace rs::expr
       return plan.accessProfile != AccessProfile::HotOnly;
     }
 
-    bool hasRequiredTrackData(ExecutionPlan const& plan, core::TrackView const& track)
+    bool hasRequiredTrackData(ExecutionPlan const& plan, rs::library::TrackView const& track)
     {
       if (requiresHotData(plan) && !track.isHotValid())
       {
@@ -106,7 +106,9 @@ namespace rs::expr
       return plan->stringConstants[idx];
     }
 
-    std::string_view loadDictionaryFieldValue(core::TrackView const& track, Field field, ExecutionPlan const* plan)
+    std::string_view loadDictionaryFieldValue(rs::library::TrackView const& track,
+                                              Field field,
+                                              ExecutionPlan const* plan)
     {
       gsl_Expects(plan != nullptr);
       gsl_Expects(plan->dictionary != nullptr);
@@ -116,7 +118,7 @@ namespace rs::expr
         return {};
       }
 
-      auto dictionaryId = core::DictionaryId{0};
+      auto dictionaryId = rs::DictionaryId{0};
 
       switch (field)
       {
@@ -129,7 +131,7 @@ namespace rs::expr
         default: return {};
       }
 
-      if (dictionaryId == core::DictionaryId{0})
+      if (dictionaryId == rs::DictionaryId{0})
       {
         return {};
       }
@@ -137,7 +139,7 @@ namespace rs::expr
       return plan->dictionary->get(dictionaryId);
     }
 
-    std::string_view loadStringFieldValue(core::TrackView const& track,
+    std::string_view loadStringFieldValue(rs::library::TrackView const& track,
                                           Field field,
                                           Instruction const* instr,
                                           ExecutionPlan const* plan = nullptr)
@@ -150,7 +152,7 @@ namespace rs::expr
 
           if (instr != nullptr && instr->constValue > 0)
           {
-            auto dictId = core::DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
+            auto dictId = rs::DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
             return track.custom().get(dictId).value_or("");
           }
 
@@ -168,7 +170,7 @@ namespace rs::expr
     }
 
     // Free function to load field value
-    std::int64_t loadFieldValue(core::TrackView const& track, Field field)
+    std::int64_t loadFieldValue(rs::library::TrackView const& track, Field field)
     {
       switch (field)
       {
@@ -210,7 +212,7 @@ namespace rs::expr
     // Execute comparison operation (helper for Ne, Lt, Le, Gt, Ge)
     template<typename Op>
     void executeComparison(std::vector<std::int64_t>& registers,
-                           core::TrackView const& track,
+                           rs::library::TrackView const& track,
                            ExecutionPlan const* plan,
                            Instruction const& instr,
                            Op&& op)
@@ -238,7 +240,7 @@ namespace rs::expr
 
     // Execute equality comparison (special case for tag lookups)
     void executeEq(std::vector<std::int64_t>& registers,
-                   core::TrackView const& track,
+                   rs::library::TrackView const& track,
                    ExecutionPlan const* plan,
                    Instruction const& instr,
                    std::vector<Instruction> const& instructions)
@@ -248,7 +250,7 @@ namespace rs::expr
 
       if (isTagComparison)
       {
-        auto tagIdToMatch = core::DictionaryId{static_cast<std::uint32_t>(registers[instr.operand])};
+        auto tagIdToMatch = rs::DictionaryId{static_cast<std::uint32_t>(registers[instr.operand])};
         auto matches = track.tags().has(tagIdToMatch);
         registers[instr.operand - 1] = matches ? 1 : 0;
       }
@@ -273,7 +275,7 @@ namespace rs::expr
 
     // Execute LIKE comparison (substring matching for string fields)
     void executeLike(std::vector<std::int64_t>& registers,
-                     core::TrackView const& track,
+                     rs::library::TrackView const& track,
                      ExecutionPlan const* plan,
                      Instruction const& instr,
                      std::vector<Instruction> const& instructions)
@@ -300,7 +302,7 @@ namespace rs::expr
     }
   }
 
-  bool PlanEvaluator::matches(ExecutionPlan const& plan, core::TrackView const& track) const
+  bool PlanEvaluator::matches(ExecutionPlan const& plan, rs::library::TrackView const& track) const
   {
     // Fast path: empty query matches all
 
@@ -330,7 +332,7 @@ namespace rs::expr
   }
 
   // NOLINTNEXTLINE(readability-function-size,readability-function-cognitive-complexity)
-  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, core::TrackView const& track) const
+  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, rs::library::TrackView const& track) const
   {
     if (plan.matchesAll)
     {

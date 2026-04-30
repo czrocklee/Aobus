@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include <rs/core/MusicLibrary.h>
 #include <rs/expr/Parser.h>
 #include <rs/expr/PlanEvaluator.h>
+#include <rs/library/MusicLibrary.h>
 
-#include "core/model/TrackIdList.h"
 #include "platform/linux/ui/TrackRow.h"
 #include "platform/linux/ui/TrackRowDataProvider.h"
+#include <rs/model/TrackIdList.h>
 
 #include <giomm/liststore.h>
 
@@ -20,12 +20,12 @@
 namespace app::ui
 {
 
-  class TrackListAdapter final : public app::core::model::TrackIdListObserver
+  class TrackListAdapter final : public rs::model::TrackIdListObserver
   {
   public:
-    using TrackId = rs::core::TrackId;
+    using TrackId = rs::TrackId;
 
-    explicit TrackListAdapter(app::core::model::TrackIdList& source, TrackRowDataProvider const& provider);
+    explicit TrackListAdapter(rs::model::TrackIdList& source, TrackRowDataProvider const& provider);
     ~TrackListAdapter() override;
 
     Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
@@ -43,7 +43,7 @@ namespace app::ui
     void rebuildView();
     void createRowForTrack(TrackId id);
 
-    app::core::model::TrackIdList& _source;
+    rs::model::TrackIdList& _source;
     TrackRowDataProvider const& _provider;
     Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;
     Glib::ustring _filterText;

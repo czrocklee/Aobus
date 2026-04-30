@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/core/DictionaryStore.h>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
+#include <rs/library/DictionaryStore.h>
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
@@ -416,7 +416,7 @@ TEST_CASE("ExecutionPlan - LIKE operator works for ArtistId")
   auto temp = TempDir{};
   auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = rs::lmdb::WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+  auto dict = rs::library::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
   dict.put(wtxn, "Johann Sebastian Bach");
 
   auto expr = parse(R"($artist ~ "Bach")");

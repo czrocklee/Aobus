@@ -50,12 +50,12 @@ namespace app::ui
   }
 
   void TrackRow::populate(Glib::ustring title,
-                          rs::core::DictionaryId artist,
-                          rs::core::DictionaryId album,
-                          rs::core::DictionaryId albumArtist,
-                          rs::core::DictionaryId genre,
-                          rs::core::DictionaryId composer,
-                          rs::core::DictionaryId work,
+                          rs::DictionaryId artist,
+                          rs::DictionaryId album,
+                          rs::DictionaryId albumArtist,
+                          rs::DictionaryId genre,
+                          rs::DictionaryId composer,
+                          rs::DictionaryId work,
                           Glib::ustring tags,
                           std::chrono::milliseconds duration,
                           std::uint16_t year,

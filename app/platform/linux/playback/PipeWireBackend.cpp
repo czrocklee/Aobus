@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/playback/PipeWireBackend.h"
-#include "core/Log.h"
 #include "platform/linux/playback/detail/PipeWireShared.h"
+#include <rs/utility/Log.h>
 #include <rs/utility/Raii.h>
 
 extern "C"
@@ -71,8 +71,8 @@ namespace app::playback
     void handleStreamDrained();
 
     // Members
-    app::core::backend::AudioRenderCallbacks _callbacks;
-    app::core::AudioFormat _format;
+    rs::audio::AudioRenderCallbacks _callbacks;
+    rs::audio::AudioFormat _format;
     std::atomic<bool> _drainPending = false;
     bool _strictFormatRequired = false;
     bool _strictFormatRejected = false;
@@ -221,10 +221,10 @@ namespace app::playback
     }
   }
 
-  PipeWireBackend::PipeWireBackend(app::core::backend::AudioDevice const& device)
+  PipeWireBackend::PipeWireBackend(rs::audio::AudioDevice const& device)
     : _impl{std::make_unique<Impl>()}
     , _targetDeviceId{device.id}
-    , _exclusiveMode{device.backendKind == app::core::backend::BackendKind::PipeWireExclusive}
+    , _exclusiveMode{device.backendKind == rs::audio::BackendKind::PipeWireExclusive}
   {
     _impl->_threadLoop.reset(::pw_thread_loop_new("PipeWireBackend", nullptr));
     if (_impl->_threadLoop)
@@ -242,8 +242,7 @@ namespace app::playback
 
   PipeWireBackend::~PipeWireBackend() = default;
 
-  rs::Result<> PipeWireBackend::open(app::core::AudioFormat const& format,
-                                     app::core::backend::AudioRenderCallbacks callbacks)
+  rs::Result<> PipeWireBackend::open(rs::audio::AudioFormat const& format, rs::audio::AudioRenderCallbacks callbacks)
   {
     _impl->_callbacks = callbacks;
     _impl->_format = format;
@@ -441,9 +440,8 @@ namespace app::playback
     return _exclusiveMode;
   }
 
-  app::core::backend::BackendKind PipeWireBackend::kind() const noexcept
+  rs::audio::BackendKind PipeWireBackend::kind() const noexcept
   {
-    return _exclusiveMode ? app::core::backend::BackendKind::PipeWireExclusive
-                          : app::core::backend::BackendKind::PipeWire;
+    return _exclusiveMode ? rs::audio::BackendKind::PipeWireExclusive : rs::audio::BackendKind::PipeWire;
   }
 } // namespace app::playback

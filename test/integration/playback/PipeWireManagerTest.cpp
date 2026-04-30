@@ -1,23 +1,22 @@
 #include "platform/linux/playback/PipeWireManager.h"
-#include "core/backend/IAudioBackend.h"
 #include "platform/linux/playback/PipeWireBackend.h"
 #include "platform/linux/playback/detail/PipeWireShared.h"
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <memory>
+#include <rs/audio/IAudioBackend.h>
 #include <thread>
 #include <vector>
 
 using namespace app::playback;
 using namespace app::playback::detail;
-using namespace app::core::backend;
-using namespace app::core;
+using namespace rs::audio;
 
 namespace
 {
@@ -195,88 +194,4 @@ TEST_CASE("PipeWireManager - Integration with Real Daemon via API", "[integratio
       ::pw_thread_loop_stop(threadLoop.get());
     }
   }
-
-  /*
-  SECTION(".Graph subscription shows full path to sink")
-  {
-      AudioDevice dummyDevice;
-      // Wait a bit for PipeWire to propagate the new node
-      for (int i = 0; i < 20; ++i) {
-          auto devices = manager.enumerateDevices();
-          for (auto const& d : devices) {
-              if (d.displayName == "rs-test-dummy-sink" || d.id == "rs-test-dummy-sink") {
-                  dummyDevice = d;
-                  break;
-              }
-          }
-          if (!dummyDevice.id.empty()) break;
-          std::this_thread::sleep_for(std::chrono::milliseconds(50));
-      }
-
-      REQUIRE(!dummyDevice.id.empty());
-
-      auto backend = manager.createBackend(dummyDevice);
-      AudioFormat format{.sampleRate = 48000, .channels = 2, .bitDepth = 16, .isFloat = false};
-
-      std::string routeAnchor;
-      AudioRenderCallbacks cb{};
-      cb.userData = &routeAnchor;
-      cb.onRouteReady = [](void* data, std::string_view anchor) noexcept {
-          *static_cast<std::string*>(data) = anchor;
-      };
-      // Provide dummy callbacks to avoid SEGV when backend calls them
-      cb.readPcm = [](void*, std::span<std::byte> output) noexcept -> std::size_t {
-          if (output.data()) memset(output.data(), 0, output.size());
-          return output.size();
-      };
-      cb.onPositionAdvanced = [](void*, std::uint32_t) noexcept {};
-
-      REQUIRE(backend->open(format, cb));
-      backend->start();
-
-      // Wait for route anchor (asynchronous)
-      for (int i = 0; i < 100 && routeAnchor.empty(); ++i) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(20));
-      }
-      REQUIRE(!routeAnchor.empty());
-
-      AudioGraph receivedGraph;
-      bool graphReceived = false;
-      auto sub = manager.subscribeGraph(routeAnchor, [&](AudioGraph const& g) {
-          receivedGraph = g;
-          graphReceived = true;
-      });
-
-      // Wait for graph update
-      for (int i = 0; i < 100 && !graphReceived; ++i) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(20));
-      }
-
-      REQUIRE(graphReceived);
-
-      // Verify topological structure
-      bool hasStream = false;
-      bool hasSink = false;
-      for (auto const& node : receivedGraph.nodes) {
-          if (node.type == AudioNodeType::Stream) hasStream = true;
-          if (node.type == AudioNodeType::Sink) hasSink = true;
-      }
-
-      CHECK(hasStream);
-      CHECK(hasSink);
-      // There should be at least one link from stream to sink
-      CHECK(!receivedGraph.links.empty());
-
-      // Check our synthesized node logic (from fix)
-      auto streamIt = std::ranges::find_if(receivedGraph.nodes, [](auto const& n) {
-          return n.type == AudioNodeType::Stream;
-      });
-      REQUIRE(streamIt != receivedGraph.nodes.end());
-      CHECK(streamIt->id == routeAnchor);
-      CHECK(streamIt->name == "RockStudio Playback");
-
-      backend->stop();
-      backend->close();
-  }
-  */
 }

@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/services/PlaylistExporter.h"
-#include "core/Log.h"
+#include <rs/utility/Log.h>
 
-#include "core/model/TrackIdList.h"
 #include "platform/linux/ui/TrackRowDataProvider.h"
+#include <rs/model/TrackIdList.h>
 
 #include <glibmm.h>
 
@@ -15,7 +15,7 @@
 namespace app::services
 {
 
-  PlaylistExporter::PlaylistExporter(app::core::model::TrackIdList& list,
+  PlaylistExporter::PlaylistExporter(rs::model::TrackIdList& list,
                                      app::ui::TrackRowDataProvider const& provider,
                                      std::filesystem::path root,
                                      std::filesystem::path path)

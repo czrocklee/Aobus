@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <rs/core/TrackView.h>
 #include <rs/expr/ExecutionPlan.h>
+#include <rs/library/TrackView.h>
 
 #include <string_view>
 #include <vector>
@@ -29,7 +29,7 @@ namespace rs::expr
      * @param track The track view to evaluate
      * @return true if the track matches the query
      */
-    bool matches(ExecutionPlan const& plan, core::TrackView const& track) const;
+    bool matches(ExecutionPlan const& plan, rs::library::TrackView const& track) const;
 
     /**
      * Evaluate the full execution plan (without bloom filter optimization).
@@ -38,7 +38,7 @@ namespace rs::expr
      * @param track The track view to evaluate
      * @return true if the track matches the query
      */
-    bool evaluateFull(ExecutionPlan const& plan, core::TrackView const& track) const;
+    bool evaluateFull(ExecutionPlan const& plan, rs::library::TrackView const& track) const;
 
   private:
     // Register stack for evaluation

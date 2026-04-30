@@ -1,36 +1,37 @@
-# rs_test: portable unit + integration tests (app_core only)
+# rs_test: portable unit + integration tests
 add_executable(rs_test
     # query tests
     unit/query/ParserTest.cpp
     unit/query/ExecutionPlanTest.cpp
     unit/query/PlanEvaluatorTest.cpp
 
-    # core tests
-    unit/core/TrackLayoutTest.cpp
-    unit/core/TrackViewTest.cpp
-    unit/core/TrackBuilderTest.cpp
-    unit/core/ListLayoutTest.cpp
-    unit/core/ListViewTest.cpp
-    unit/core/DictionaryTest.cpp
-    unit/core/ResourceStoreTest.cpp
-    unit/core/TrackStoreTest.cpp
-    unit/core/ListStoreTest.cpp
-    unit/core/ListBuilderTest.cpp
-    unit/core/MusicLibraryTest.cpp
-    unit/core/LibraryExportImportTest.cpp
+    # library tests
+    unit/library/TrackLayoutTest.cpp
+    unit/library/TrackViewTest.cpp
+    unit/library/TrackBuilderTest.cpp
+    unit/library/ListLayoutTest.cpp
+    unit/library/ListViewTest.cpp
+    unit/library/DictionaryTest.cpp
+    unit/library/ResourceStoreTest.cpp
+    unit/library/TrackStoreTest.cpp
+    unit/library/ListStoreTest.cpp
+    unit/library/ListBuilderTest.cpp
+    unit/library/MusicLibraryTest.cpp
+    unit/library/LibraryExportImportTest.cpp
 
     # lmdb tests
     unit/lmdb/EnvironmentTest.cpp
     unit/lmdb/TransactionTest.cpp
     unit/lmdb/DatabaseTest.cpp
 
-    # app unit tests (app_core only, no platform deps)
+    # app unit tests (no platform deps)
     unit/app/FormatNegotiatorTest.cpp
     unit/app/PlaybackControllerTest.cpp
     unit/app/PlaybackEngineTest.cpp
     unit/app/SmartListEngineTest.cpp
 
     # integration tests
+    unit/query/ParserTest.cpp
     integration/playback/DecoderIntegrationTest.cpp
     integration/playback/PipeWireManagerTest.cpp
     integration/playback/GraphIntegrityTest.cpp
@@ -38,7 +39,7 @@ add_executable(rs_test
 )
 
 target_include_directories(rs_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog yaml-cpp PkgFLAC PkgALAC app_core app_linux Catch2::Catch2WithMain)
+target_link_libraries(rs_test PRIVATE rs rs_model rs_audio app_linux Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(rs_test PRIVATE PIPEWIRE_FOUND)
@@ -68,5 +69,5 @@ add_executable(rs_test_linux
 )
 
 target_include_directories(rs_test_linux PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(rs_test_linux PRIVATE rs Catch2 spdlog::spdlog app_core app_linux GTKMM Catch2::Catch2WithMain)
+target_link_libraries(rs_test_linux PRIVATE rs rs_model rs_audio app_linux GTKMM Catch2 spdlog::spdlog Catch2::Catch2WithMain)
 add_test(NAME rs_test_linux COMMAND rs_test_linux)

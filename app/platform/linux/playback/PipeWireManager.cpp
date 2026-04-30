@@ -43,7 +43,7 @@ namespace app::playback
     }
   }
 
-  std::vector<app::core::backend::AudioDevice> PipeWireManager::enumerateDevices()
+  std::vector<rs::audio::AudioDevice> PipeWireManager::enumerateDevices()
   {
     if (!_impl->monitor)
     {
@@ -56,17 +56,16 @@ namespace app::playback
                     .displayName = "System Default",
                     .description = "PipeWire",
                     .isDefault = true,
-                    .backendKind = app::core::backend::BackendKind::PipeWire});
+                    .backendKind = rs::audio::BackendKind::PipeWire});
     return devices;
   }
 
-  std::unique_ptr<app::core::backend::IAudioBackend> PipeWireManager::createBackend(
-    app::core::backend::AudioDevice const& device)
+  std::unique_ptr<rs::audio::IAudioBackend> PipeWireManager::createBackend(rs::audio::AudioDevice const& device)
   {
     return std::make_unique<PipeWireBackend>(device);
   }
 
-  struct PipeWireSubscription final : public app::core::backend::IGraphSubscription
+  struct PipeWireSubscription final : public rs::audio::IGraphSubscription
   {
     PipeWireMonitor* monitor;
     std::uint64_t id;
@@ -88,9 +87,8 @@ namespace app::playback
     PipeWireSubscription& operator=(PipeWireSubscription&&) = delete;
   };
 
-  std::unique_ptr<app::core::backend::IGraphSubscription> PipeWireManager::subscribeGraph(
-    std::string_view routeAnchor,
-    OnGraphChangedCallback callback)
+  std::unique_ptr<rs::audio::IGraphSubscription> PipeWireManager::subscribeGraph(std::string_view routeAnchor,
+                                                                                 OnGraphChangedCallback callback)
   {
     if (!_impl->monitor)
     {

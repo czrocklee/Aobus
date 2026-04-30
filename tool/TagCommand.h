@@ -4,9 +4,9 @@
 #pragma once
 
 #include <CLI/CLI.hpp>
-#include <rs/core/MusicLibrary.h>
+#include <rs/library/MusicLibrary.h>
 
 namespace rs::tool
 {
-  void setupTagCommand(CLI::App& app, core::MusicLibrary& ml);
+  void setupTagCommand(CLI::App& app, rs::library::MusicLibrary& ml);
 }

@@ -5,8 +5,8 @@
 
 #include "MetadataBlockLayout.h"
 #include <boost/endian/conversion.hpp>
-#include <gsl-lite/gsl-lite.hpp>
 #include <cstring>
+#include <gsl-lite/gsl-lite.hpp>
 #include <rs/Exception.h>
 #include <span>
 #include <string_view>

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "core/backend/IAudioBackend.h"
+#include <rs/audio/IAudioBackend.h>
 
 #include <atomic>
 #include <memory>
@@ -21,14 +21,13 @@ namespace app::playback
   /**
    * @brief Audio backend using ALSA in exclusive (hardware) mode.
    */
-  class AlsaExclusiveBackend final : public app::core::backend::IAudioBackend
+  class AlsaExclusiveBackend final : public rs::audio::IAudioBackend
   {
   public:
-    explicit AlsaExclusiveBackend(app::core::backend::AudioDevice const& device);
+    explicit AlsaExclusiveBackend(rs::audio::AudioDevice const& device);
     ~AlsaExclusiveBackend() override;
 
-    rs::Result<> open(app::core::AudioFormat const& format,
-                      app::core::backend::AudioRenderCallbacks callbacks) override;
+    rs::Result<> open(rs::audio::AudioFormat const& format, rs::audio::AudioRenderCallbacks callbacks) override;
     void reset() override;
     void start() override;
     void pause() override;
@@ -41,7 +40,7 @@ namespace app::playback
     void setExclusiveMode(bool exclusive) override;
     bool isExclusiveMode() const noexcept override;
 
-    app::core::backend::BackendKind kind() const noexcept override;
+    rs::audio::BackendKind kind() const noexcept override;
 
   private:
     struct AlsaPcmDeleter
@@ -57,8 +56,8 @@ namespace app::playback
     void recoverFromXrun(int err);
 
     std::string _deviceName;
-    app::core::AudioFormat _format;
-    app::core::backend::AudioRenderCallbacks _callbacks;
+    rs::audio::AudioFormat _format;
+    rs::audio::AudioRenderCallbacks _callbacks;
 
     AlsaPcmPtr _pcm;
     std::jthread _thread;

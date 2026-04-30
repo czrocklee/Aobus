@@ -16,9 +16,9 @@ namespace rs::tag::mpeg::id3v2
   namespace
   {
     using TextSetter =
-      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
+      rs::library::TrackBuilder::MetadataBuilder& (rs::library::TrackBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter =
-      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+      rs::library::TrackBuilder::MetadataBuilder& (rs::library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
     template<typename T>
     std::optional<T> parseUnsigned(std::string_view text)
@@ -36,18 +36,21 @@ namespace rs::tag::mpeg::id3v2
       return std::nullopt;
     }
 
-    void handlePicture(rs::core::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size);
-    void handleTxxx(rs::core::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size);
+    void handlePicture(rs::library::TrackBuilder& builder,
+                       rs::tag::File const& owner,
+                       void const* data,
+                       std::size_t size);
+    void handleTxxx(rs::library::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size);
 
     template<TextSetter Setter>
-    void handleText(rs::core::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size)
+    void handleText(rs::library::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size)
     {
       auto view = V23TextFrameView{data, size};
       (builder.metadata().*Setter)(rs::tag::detail::stashOwnedString(owner, view.text()));
     }
 
     template<NumberSetter Setter>
-    void handleNumber(rs::core::TrackBuilder& builder,
+    void handleNumber(rs::library::TrackBuilder& builder,
                       [[maybe_unused]] rs::tag::File const& owner,
                       void const* data,
                       std::size_t size)
@@ -64,7 +67,7 @@ namespace rs::tag::mpeg::id3v2
     }
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
-    void handleSlashNumber(rs::core::TrackBuilder& builder,
+    void handleSlashNumber(rs::library::TrackBuilder& builder,
                            [[maybe_unused]] rs::tag::File const& owner,
                            void const* data,
                            std::size_t size)
@@ -87,7 +90,7 @@ namespace rs::tag::mpeg::id3v2
       }
     }
 
-    void handlePicture(rs::core::TrackBuilder& builder,
+    void handlePicture(rs::library::TrackBuilder& builder,
                        [[maybe_unused]] rs::tag::File const& owner,
                        void const* data,
                        std::size_t size)
@@ -126,7 +129,7 @@ namespace rs::tag::mpeg::id3v2
       builder.metadata().coverArtData(std::span{reinterpret_cast<std::byte const*>(ptr), imageSize});
     }
 
-    void handleTxxx(rs::core::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size)
+    void handleTxxx(rs::library::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size)
     {
       // TXXX frame layout:
       //   encoding byte (1)
@@ -167,18 +170,18 @@ namespace rs::tag::mpeg::id3v2
 
   } // namespace
 
-  rs::core::TrackBuilder loadFrames(rs::tag::File const& owner,
-                                    HeaderLayout const& header,
-                                    void const* buffer,
-                                    std::size_t size)
+  rs::library::TrackBuilder loadFrames(rs::tag::File const& owner,
+                                       HeaderLayout const& header,
+                                       void const* buffer,
+                                       std::size_t size)
   {
     switch (header.majorVersion)
     {
-      case 2: return rs::core::TrackBuilder::createNew();
+      case 2: return rs::library::TrackBuilder::createNew();
       case 3: // NOLINT(readability-magic-numbers)
       case 4:
       {
-        auto builder = rs::core::TrackBuilder::createNew();
+        auto builder = rs::library::TrackBuilder::createNew();
         auto frameIter = FrameViewIterator<V23FrameView>{buffer, size};
         auto frameEnd = FrameViewIterator<V23FrameView>{};
 
@@ -195,7 +198,7 @@ namespace rs::tag::mpeg::id3v2
 
         return builder;
       }
-      default: return rs::core::TrackBuilder::createNew();
+      default: return rs::library::TrackBuilder::createNew();
     }
   }
 } // namespace rs::tag::mpeg::id3v2

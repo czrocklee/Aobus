@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "core/IMainThreadDispatcher.h"
-#include "core/backend/NullBackend.h"
-#include "core/playback/PlaybackEngine.h"
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 #include <chrono>
 #include <filesystem>
+#include <rs/audio/NullBackend.h>
+#include <rs/audio/PlaybackEngine.h>
+#include <rs/utility/IMainThreadDispatcher.h>
 #include <thread>
 
-using namespace app::core::playback;
-using namespace app::core::backend;
-using namespace app::core;
+using namespace rs::audio;
+using namespace rs::audio;
+using namespace rs::audio;
 
 namespace
 {
-  class ImmediateDispatcher : public IMainThreadDispatcher
+  class ImmediateDispatcher : public rs::IMainThreadDispatcher
   {
   public:
     void dispatch(std::function<void()> callback) override { callback(); }
@@ -82,7 +82,7 @@ TEST_CASE("PlaybackEngine - Graph Integrity", "[playback][integration][graph]")
   SECTION("rs-decoder has valid format")
   {
     auto snap = engine.snapshot();
-    auto it = std::ranges::find(snap.graph.nodes, "rs-decoder", &app::core::backend::AudioNode::id);
+    auto it = std::ranges::find(snap.graph.nodes, "rs-decoder", &rs::audio::AudioNode::id);
     if (it != snap.graph.nodes.end())
     {
       REQUIRE(it->format.has_value());

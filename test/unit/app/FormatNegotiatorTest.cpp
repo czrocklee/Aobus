@@ -1,12 +1,12 @@
-#include "core/playback/FormatNegotiator.h"
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
+#include <rs/audio/FormatNegotiator.h>
 
-using namespace app::core::playback;
-using namespace app::core::backend;
-using namespace app::core;
+using namespace rs::audio;
+using namespace rs::audio;
+using namespace rs::audio;
 
 TEST_CASE("FormatNegotiator - Build Plan", "[playback][format_negotiator]")
 {

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/core/MusicLibrary.h>
+#include <rs/library/MusicLibrary.h>
 
 #include <gtkmm.h>
 
@@ -18,9 +18,9 @@ namespace app::ui
   class TagPopover final : public Gtk::Popover
   {
   public:
-    using TrackId = rs::core::TrackId;
+    using TrackId = rs::TrackId;
 
-    TagPopover(rs::core::MusicLibrary& musicLibrary, std::vector<TrackId> selectedTrackIds);
+    TagPopover(rs::library::MusicLibrary& musicLibrary, std::vector<TrackId> selectedTrackIds);
     ~TagPopover() override;
 
     // Signal emitted when tags are changed
@@ -39,7 +39,7 @@ namespace app::ui
     std::string getTagNameFromChild(Gtk::FlowBoxChild* child);
     static void setChipStyle(Gtk::ToggleButton& chip, bool isHighlighted);
 
-    rs::core::MusicLibrary& _musicLibrary;
+    rs::library::MusicLibrary& _musicLibrary;
     std::vector<TrackId> _selectedTrackIds;
 
     // Tag data

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "core/playback/PlaybackTypes.h"
+#include <rs/audio/PlaybackTypes.h>
 
 #include <gtkmm.h>
 
@@ -24,7 +24,7 @@ namespace app::ui
 
     void setTrackCount(std::size_t count);
     void setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
-    void setPlaybackDetails(app::core::playback::PlaybackSnapshot const& snapshot);
+    void setPlaybackDetails(rs::audio::PlaybackSnapshot const& snapshot);
 
     void setImportProgress(double fraction, std::string const& info);
     void clearImportProgress();
@@ -32,7 +32,7 @@ namespace app::ui
     using NowPlayingClickedSignal = sigc::signal<void()>;
     NowPlayingClickedSignal& signalNowPlayingClicked() { return _nowPlayingClicked; }
 
-    using OutputChangedSignal = sigc::signal<void(app::core::backend::BackendKind, std::string)>;
+    using OutputChangedSignal = sigc::signal<void(rs::audio::BackendKind, std::string)>;
     OutputChangedSignal& signalOutputChanged() { return _outputChanged; }
 
   private:
@@ -70,15 +70,15 @@ namespace app::ui
 
     struct LastPlaybackState final
     {
-      app::core::playback::TransportState state = app::core::playback::TransportState::Idle;
-      app::core::backend::BackendKind backend = app::core::backend::BackendKind::None;
+      rs::audio::TransportState state = rs::audio::TransportState::Idle;
+      rs::audio::BackendKind backend = rs::audio::BackendKind::None;
       std::string title;
       std::string artist;
       std::uint32_t underrunCount = 0;
-      app::core::backend::AudioQuality quality = app::core::backend::AudioQuality::Unknown;
-      app::core::backend::AudioGraph graph;
+      rs::audio::AudioQuality quality = rs::audio::AudioQuality::Unknown;
+      rs::audio::AudioGraph graph;
       std::string currentDeviceId;
-      std::vector<app::core::playback::BackendSnapshot> availableBackends;
+      std::vector<rs::audio::BackendSnapshot> availableBackends;
     } _lastPlaybackState;
 
     // Layout constants

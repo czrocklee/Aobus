@@ -6,9 +6,9 @@
 #include "AtomLayout.h"
 #include <rs/utility/ByteView.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <algorithm>
 #include <functional>
+#include <gsl-lite/gsl-lite.hpp>
 #include <memory>
 #include <span>
 #include <string_view>

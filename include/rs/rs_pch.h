@@ -7,7 +7,7 @@
 #pragma once
 
 // Stable headers with high include counts
-#include <rs/core/Type.h>
+#include <rs/Type.h>
 #include <rs/utility/ByteView.h>
 
 // Common std headers used everywhere

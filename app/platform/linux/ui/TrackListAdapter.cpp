@@ -15,7 +15,7 @@
 namespace app::ui
 {
 
-  TrackListAdapter::TrackListAdapter(app::core::model::TrackIdList& source, TrackRowDataProvider const& provider)
+  TrackListAdapter::TrackListAdapter(rs::model::TrackIdList& source, TrackRowDataProvider const& provider)
     : _source{source}, _provider{provider}, _listModel(Gio::ListStore<TrackRow>::create())
   {
     _source.attach(this);

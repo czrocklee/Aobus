@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <rs/core/DictionaryStore.h>
-#include <rs/core/MusicLibrary.h>
-#include <rs/core/TrackStore.h>
+#include <rs/library/DictionaryStore.h>
+#include <rs/library/MusicLibrary.h>
+#include <rs/library/TrackStore.h>
 
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
@@ -18,7 +18,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace app::core::playback
+namespace rs::audio
 {
   struct TrackPlaybackDescriptor;
 }
@@ -39,9 +39,9 @@ namespace app::ui
   class TrackRowDataProvider final
   {
   public:
-    using TrackId = rs::core::TrackId;
+    using TrackId = rs::TrackId;
 
-    explicit TrackRowDataProvider(rs::core::MusicLibrary& ml);
+    explicit TrackRowDataProvider(rs::library::MusicLibrary& ml);
 
     /**
      * Batch-load all tracks from the library into the central cache.
@@ -58,7 +58,7 @@ namespace app::ui
     /**
      * Resolve a dictionary string and cache it.
      */
-    Glib::ustring const& resolveDictionaryString(rs::core::DictionaryId id) const;
+    Glib::ustring const& resolveDictionaryString(rs::DictionaryId id) const;
 
     /**
      * Get cover art resource ID for a track (direct from DB).
@@ -73,7 +73,7 @@ namespace app::ui
     /**
      * Get playback descriptor for a track (direct from DB).
      */
-    std::optional<app::core::playback::TrackPlaybackDescriptor> getPlaybackDescriptor(TrackId id) const;
+    std::optional<rs::audio::TrackPlaybackDescriptor> getPlaybackDescriptor(TrackId id) const;
 
     /**
      * Invalidate entry for a track (after updates).
@@ -88,15 +88,15 @@ namespace app::ui
     /**
      * Get the dictionary store reference.
      */
-    rs::core::DictionaryStore const& dictionary() const { return _dict; }
+    rs::library::DictionaryStore const& dictionary() const { return _dict; }
 
   private:
-    rs::core::MusicLibrary& _ml;
-    rs::core::TrackStore& _store;
-    rs::core::DictionaryStore& _dict;
+    rs::library::MusicLibrary& _ml;
+    rs::library::TrackStore& _store;
+    rs::library::DictionaryStore& _dict;
 
     mutable std::unordered_map<TrackId, Glib::RefPtr<TrackRow>> _rowCache;
-    mutable std::unordered_map<rs::core::DictionaryId, Glib::ustring> _stringCache;
+    mutable std::unordered_map<rs::DictionaryId, Glib::ustring> _stringCache;
   };
 
 } // namespace app::ui

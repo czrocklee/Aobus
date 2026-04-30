@@ -12,6 +12,6 @@ namespace rs::tag::flac
   public:
     using rs::tag::File::File;
 
-    rs::core::TrackBuilder loadTrack() const override;
+    rs::library::TrackBuilder loadTrack() const override;
   };
 }

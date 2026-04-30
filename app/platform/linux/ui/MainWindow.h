@@ -3,15 +3,15 @@
 
 #pragma once
 
-#include "core/model/SmartListEngine.h"
-#include "core/playback/PlaybackTypes.h"
 #include "platform/linux/AppConfig.h"
 #include "platform/linux/ui/GtkMainThreadDispatcher.h"
 #include "platform/linux/ui/StatusBar.h"
 #include "platform/linux/ui/TrackViewPage.h"
+#include <rs/audio/PlaybackTypes.h>
+#include <rs/model/SmartListEngine.h>
 
-#include <rs/core/LibraryExporter.h>
-#include <rs/core/MusicLibrary.h>
+#include <rs/library/LibraryExporter.h>
+#include <rs/library/MusicLibrary.h>
 
 #include <gtkmm.h>
 
@@ -22,7 +22,7 @@
 #include <optional>
 #include <thread>
 #include <vector>
-namespace app::core::model
+namespace rs::model
 {
   struct ListDraft;
   class AllTrackIdsList;
@@ -31,7 +31,7 @@ namespace app::core::model
   class TrackIdList;
 }
 
-namespace app::core
+namespace rs::library
 {
   class ImportWorker;
 }
@@ -41,7 +41,7 @@ namespace app::services
   class PlaylistExporter;
 }
 
-namespace app::core::playback
+namespace rs::audio
 {
   class PlaybackController;
 }
@@ -60,7 +60,7 @@ namespace app::ui
   // Page context structure
   struct TrackPageContext final
   {
-    std::unique_ptr<app::core::model::TrackIdList> membershipList;
+    std::unique_ptr<rs::model::TrackIdList> membershipList;
     std::unique_ptr<TrackListAdapter> adapter;
     std::unique_ptr<TrackViewPage> page;
     std::unique_ptr<app::services::PlaylistExporter> exporter;
@@ -68,9 +68,9 @@ namespace app::ui
 
   struct ActivePlaybackSequence final
   {
-    std::vector<rs::core::TrackId> trackIds;
+    std::vector<rs::TrackId> trackIds;
     std::size_t currentIndex = 0;
-    std::optional<rs::core::ListId> sourceListId;
+    std::optional<rs::ListId> sourceListId;
   };
 
   class MainWindow final : public Gtk::ApplicationWindow
@@ -82,14 +82,14 @@ namespace app::ui
   private:
     // List selection callback
     void onListSelectionChanged(std::uint32_t position, std::uint32_t nItems);
-    void updateCoverArt(std::vector<rs::core::TrackId> const& selectedIds);
+    void updateCoverArt(std::vector<rs::TrackId> const& selectedIds);
 
     // List context menu
     void showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle const& rect);
 
     // Track context menu (tagging)
     void showTrackContextMenu(TrackViewPage& page, double x, double y);
-    void showTagEditor(TrackViewPage& page, std::vector<rs::core::TrackId> const& selectedIds, double x, double y);
+    void showTagEditor(TrackViewPage& page, std::vector<rs::TrackId> const& selectedIds, double x, double y);
     void addTagToCurrentSelection(std::string const& tag);
     void removeTagFromCurrentSelection(std::string const& tag);
     void applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
@@ -110,19 +110,21 @@ namespace app::ui
     void importFilesFromPath(std::filesystem::path const& path);
     void exportLibrary();
     void onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
-    void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result, rs::core::ExportMode mode, Glib::RefPtr<Gtk::FileDialog> const& fileDialog);
-    void executeExportTask(std::filesystem::path const& path, rs::core::ExportMode mode);
+    void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
+                              rs::library::ExportMode mode,
+                              Glib::RefPtr<Gtk::FileDialog> const& fileDialog);
+    void executeExportTask(std::filesystem::path const& path, rs::library::ExportMode mode);
     void importLibrary();
     void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files);
-    void openNewListDialog(rs::core::ListId parentListId);
+    void openNewListDialog(rs::ListId parentListId);
     void openNewSmartListDialog();
-    void openEditListDialog(rs::core::ListId listId);
-    bool listHasChildren(rs::core::ListId listId) const;
+    void openEditListDialog(rs::ListId listId);
+    bool listHasChildren(rs::ListId listId) const;
 
     // List management - using ListDraft
-    void createList(app::core::model::ListDraft const& draft);
-    void selectSidebarList(rs::core::ListId listId);
-    void updateList(app::core::model::ListDraft const& draft);
+    void createList(rs::model::ListDraft const& draft);
+    void selectSidebarList(rs::ListId listId);
+    void updateList(rs::model::ListDraft const& draft);
     void onDeleteList();
     void onEditList();
 
@@ -133,12 +135,12 @@ namespace app::ui
     void buildListTree(rs::lmdb::ReadTransaction& txn);
     void rebuildListPages(rs::lmdb::ReadTransaction& txn);
     void buildPageForAllTracks();
-    void buildPageForStoredList(rs::core::ListId listId, rs::core::ListView const& view);
+    void buildPageForStoredList(rs::ListId listId, rs::library::ListView const& view);
 
     // Notification handlers from AllTrackIdsList
-    void notifyTracksInserted(std::vector<rs::core::TrackId> const& ids);
-    void notifyTracksUpdated(std::vector<rs::core::TrackId> const& ids);
-    void notifyTracksRemoved(std::vector<rs::core::TrackId> const& ids);
+    void notifyTracksInserted(std::vector<rs::TrackId> const& ids);
+    void notifyTracksUpdated(std::vector<rs::TrackId> const& ids);
+    void notifyTracksRemoved(std::vector<rs::TrackId> const& ids);
 
     void onTrackSelectionChanged();
     void updateImportProgress(double fraction, std::string const& info);
@@ -157,32 +159,32 @@ namespace app::ui
     void pausePlayback();
     void stopPlayback();
     void seekPlayback(std::uint32_t positionMs);
-    bool startPlaybackFromVisiblePage(TrackViewPage const& page, rs::core::TrackId trackId);
-    bool startPlaybackSequence(std::vector<rs::core::TrackId> trackIds,
-                               rs::core::TrackId startTrackId,
-                               std::optional<rs::core::ListId> sourceListId = std::nullopt);
+    bool startPlaybackFromVisiblePage(TrackViewPage const& page, rs::TrackId trackId);
+    bool startPlaybackSequence(std::vector<rs::TrackId> trackIds,
+                               rs::TrackId startTrackId,
+                               std::optional<rs::ListId> sourceListId = std::nullopt);
     bool playTrackAtSequenceIndex(std::size_t index);
     void jumpToPlayingList();
-    void onOutputChanged(app::core::backend::BackendKind kind, std::string const& deviceId);
+    void onOutputChanged(rs::audio::BackendKind kind, std::string const& deviceId);
     void clearActivePlaybackSequence();
     void handlePlaybackFinished();
     void bindTrackPagePlayback(TrackViewPage& page);
     TrackPageContext* currentVisibleTrackPageContext();
     TrackPageContext const* currentVisibleTrackPageContext() const;
-    std::optional<app::core::playback::TrackPlaybackDescriptor> currentSelectionPlaybackDescriptor() const;
+    std::optional<rs::audio::TrackPlaybackDescriptor> currentSelectionPlaybackDescriptor() const;
 
     // Music library instance
-    std::unique_ptr<rs::core::MusicLibrary> _musicLibrary;
+    std::unique_ptr<rs::library::MusicLibrary> _musicLibrary;
 
     // Shared row data provider (owned)
     std::unique_ptr<TrackRowDataProvider> _rowDataProvider;
 
     // All tracks TrackId list (owned)
-    std::unique_ptr<app::core::model::AllTrackIdsList> _allTrackIds;
+    std::unique_ptr<rs::model::AllTrackIdsList> _allTrackIds;
 
     // Smart list engine for shared evaluation
-    std::unique_ptr<app::core::model::SmartListEngine> _smartListEngine;
-    app::core::AppConfig _appConfig;
+    std::unique_ptr<rs::model::SmartListEngine> _smartListEngine;
+    rs::library::AppConfig _appConfig;
 
     // Layout: Horizontal paned with left box and right stack
     Gtk::Paned _paned;
@@ -195,7 +197,7 @@ namespace app::ui
     std::unique_ptr<ImportProgressDialog> _importDialog;
 
     // Import worker - owned and joined on window destruction
-    std::unique_ptr<app::core::ImportWorker> _importWorker;
+    std::unique_ptr<rs::library::ImportWorker> _importWorker;
     std::jthread _importThread;
 
     // Right side: stack for pages
@@ -209,7 +211,7 @@ namespace app::ui
     Glib::RefPtr<Gio::ListStore<ListTreeNode>> _listTreeStore;
     Glib::RefPtr<Gtk::TreeListModel> _treeListModel;
     Glib::RefPtr<Gtk::SingleSelection> _listSelectionModel;
-    std::map<rs::core::ListId, Glib::RefPtr<ListTreeNode>> _nodesById;
+    std::map<rs::ListId, Glib::RefPtr<ListTreeNode>> _nodesById;
     Glib::RefPtr<Gio::SimpleAction> _newListAction;
     Glib::RefPtr<Gio::SimpleAction> _deleteListAction;
     Glib::RefPtr<Gio::SimpleAction> _editListAction;
@@ -218,16 +220,16 @@ namespace app::ui
     Glib::RefPtr<Gio::SimpleAction> _trackTagToggleAction;
 
     // Track pages map
-    std::map<rs::core::ListId, TrackPageContext> _trackPages;
+    std::map<rs::ListId, TrackPageContext> _trackPages;
     TrackColumnLayoutModel _trackColumnLayoutModel;
 
     // Playback support
     std::unique_ptr<PlaybackBar> _playbackBar;
     std::shared_ptr<GtkMainThreadDispatcher> _dispatcher;
-    std::unique_ptr<app::core::playback::PlaybackController> _playbackController;
+    std::unique_ptr<rs::audio::PlaybackController> _playbackController;
     std::uint32_t _playbackTimer = 0;
     std::optional<ActivePlaybackSequence> _activePlaybackSequence;
-    app::core::playback::TransportState _lastPlaybackState = app::core::playback::TransportState::Idle;
+    rs::audio::TransportState _lastPlaybackState = rs::audio::TransportState::Idle;
     std::string _lastPlaybackErrorMessage;
 
     // Status bar
