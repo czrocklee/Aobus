@@ -24,7 +24,7 @@ target_sources(app_linux PRIVATE
 
     platform/linux/services/PlaylistExporter.cpp
 )
-target_link_libraries(app_linux PRIVATE rs rs_model rs_audio GTKMM glibmm-2.68)
+target_link_libraries(app_linux PRIVATE rs rs_model rs_audio PkgGTKMM glibmm-2.68)
 target_include_directories(app_linux PRIVATE "${CMAKE_SOURCE_DIR}/app")
 
 if(PIPEWIRE_FOUND)
@@ -37,7 +37,7 @@ if(PIPEWIRE_FOUND)
     platform/linux/playback/detail/PipeWireShared.h
     platform/linux/playback/detail/PipeWireShared.cpp
   )
-  target_link_libraries(app_linux PRIVATE PipeWire)
+  target_link_libraries(app_linux PRIVATE PkgPipeWire)
 endif()
 
 if(ALSA_FOUND)
@@ -46,18 +46,14 @@ if(ALSA_FOUND)
     platform/linux/playback/AlsaExclusiveBackend.cpp
     platform/linux/playback/AlsaManager.cpp
   )
-  target_link_libraries(app_linux PRIVATE ALSA UDEV)
+  target_link_libraries(app_linux PRIVATE PkgALSA PkgUDEV)
 endif()
 
-if(CLANG_TIDY_EXECUTABLE)
-  set_target_properties(app_linux PROPERTIES
-    CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_STRICT_CHECKS};--config=${CLANG_TIDY_STRICT_CONFIG};-header-filter=${CLANG_TIDY_STRICT_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
-  )
-endif()
+rockstudio_apply_clang_tidy(app_linux STRICT)
 
 # RockStudio executable (links app_linux, no direct source compilation)
 add_executable(RockStudio platform/linux/main.cpp)
-target_link_libraries(RockStudio PRIVATE app_linux rs GTKMM glibmm-2.68)
+target_link_libraries(RockStudio PRIVATE app_linux rs PkgGTKMM glibmm-2.68)
 target_include_directories(RockStudio PRIVATE "${CMAKE_SOURCE_DIR}/app")
 
 # Configure ASan leak detection to use suppression file for third-party libraries (RockStudio app only)
