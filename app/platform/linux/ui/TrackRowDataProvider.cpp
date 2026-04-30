@@ -3,14 +3,14 @@
 
 #include "platform/linux/ui/TrackRowDataProvider.h"
 
-#include "core/playback/PlaybackTypes.h"
 #include "platform/linux/ui/TrackRow.h"
+#include <rs/audio/PlaybackTypes.h>
 
 #include <string_view>
 
 namespace
 {
-  Glib::ustring joinResolvedTags(rs::core::TrackView::TagProxy tags, rs::core::DictionaryStore const& dictionary)
+  Glib::ustring joinResolvedTags(rs::library::TrackView::TagProxy tags, rs::library::DictionaryStore const& dictionary)
   {
     auto text = Glib::ustring{};
     auto first = true;
@@ -58,7 +58,7 @@ namespace
 namespace app::ui
 {
 
-  TrackRowDataProvider::TrackRowDataProvider(rs::core::MusicLibrary& ml)
+  TrackRowDataProvider::TrackRowDataProvider(rs::library::MusicLibrary& ml)
     : _ml{ml}, _store{ml.tracks()}, _dict{ml.dictionary()}
   {
   }
@@ -105,7 +105,7 @@ namespace app::ui
     // Need cold data for coverArtId
     rs::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _store.reader(txn);
-    auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -128,7 +128,7 @@ namespace app::ui
     rs::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _store.reader(txn);
 
-    auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -138,14 +138,13 @@ namespace app::ui
     return resolveLibraryPath(_ml.rootPath(), optView->property().uri());
   }
 
-  std::optional<app::core::playback::TrackPlaybackDescriptor> TrackRowDataProvider::getPlaybackDescriptor(
-    TrackId id) const
+  std::optional<rs::audio::TrackPlaybackDescriptor> TrackRowDataProvider::getPlaybackDescriptor(TrackId id) const
   {
     // Need cold data for URI and property info
     rs::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _store.reader(txn);
 
-    auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -156,7 +155,7 @@ namespace app::ui
     auto const& metadata = view.metadata();
     auto const& property = view.property();
 
-    app::core::playback::TrackPlaybackDescriptor desc;
+    rs::audio::TrackPlaybackDescriptor desc;
     desc.trackId = id;
 
     // File path
@@ -169,13 +168,13 @@ namespace app::ui
     desc.title = std::string{metadata.title()};
 
     // Artist
-    if (auto const artistId = metadata.artistId(); artistId != rs::core::DictionaryId{0})
+    if (auto const artistId = metadata.artistId(); artistId != rs::DictionaryId{0})
     {
       desc.artist = resolveDictionaryString(artistId).raw();
     }
 
     // Album
-    if (auto const albumId = metadata.albumId(); albumId != rs::core::DictionaryId{0})
+    if (auto const albumId = metadata.albumId(); albumId != rs::DictionaryId{0})
     {
       desc.album = resolveDictionaryString(albumId).raw();
     }
@@ -183,7 +182,7 @@ namespace app::ui
     // Cover art
     if (auto const coverArtId = metadata.coverArtId(); coverArtId != 0)
     {
-      desc.coverArtId = rs::core::ResourceId{coverArtId};
+      desc.coverArtId = rs::ResourceId{coverArtId};
     }
 
     // Duration
@@ -207,7 +206,7 @@ namespace app::ui
     _rowCache.erase(id);
   }
 
-  Glib::ustring const& TrackRowDataProvider::resolveDictionaryString(rs::core::DictionaryId id) const
+  Glib::ustring const& TrackRowDataProvider::resolveDictionaryString(rs::DictionaryId id) const
   {
     // Check cache first
     if (auto const it = _stringCache.find(id); it != _stringCache.end())

@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <CLI/CLI.hpp>
-#include <rs/core/MusicLibrary.h>
+#include <rs/library/MusicLibrary.h>
 
 #include "InitCommand.h"
 #include "LibCommand.h"
@@ -16,7 +16,7 @@ int main(int argc, char const* argv[])
 {
   try
   {
-    auto ml = rs::core::MusicLibrary{"."};
+    auto ml = rs::library::MusicLibrary{"."};
 
     CLI::App app{"RockStudio CLI - rsc"};
     app.require_subcommand(1);

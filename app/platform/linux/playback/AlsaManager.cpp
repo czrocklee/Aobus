@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/playback/AlsaManager.h"
-#include "core/Log.h"
-#include "core/util/ThreadUtils.h"
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
+#include <rs/utility/Log.h>
 #include <rs/utility/Raii.h>
+#include <rs/utility/ThreadUtils.h>
 
 #include <algorithm>
 #include <array>
@@ -26,9 +26,9 @@ namespace app::playback
   {
     constexpr int kUdevPollTimeoutMs = 500;
 
-    app::core::backend::DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
+    rs::audio::DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
     {
-      auto caps = app::core::backend::DeviceCapabilities{};
+      auto caps = rs::audio::DeviceCapabilities{};
       ::snd_pcm_t* tempPcm = nullptr;
       if (::snd_pcm_open(&tempPcm, deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK) < 0)
       {
@@ -80,9 +80,9 @@ namespace app::playback
       return caps;
     }
 
-    std::vector<app::core::backend::AudioDevice> doAlsaEnumerate()
+    std::vector<rs::audio::AudioDevice> doAlsaEnumerate()
     {
-      auto devices = std::vector<app::core::backend::AudioDevice>{};
+      auto devices = std::vector<rs::audio::AudioDevice>{};
       void** hints_raw = nullptr;
       if (::snd_device_name_hint(-1, "pcm", &hints_raw) < 0)
       {
@@ -111,7 +111,7 @@ namespace app::playback
                                .displayName = std::move(displayName),
                                .description = idStr,
                                .isDefault = false,
-                               .backendKind = app::core::backend::BackendKind::AlsaExclusive,
+                               .backendKind = rs::audio::BackendKind::AlsaExclusive,
                                .capabilities = queryAlsaDeviceCapabilities(idStr)});
           }
         }
@@ -124,7 +124,7 @@ namespace app::playback
   {
     OnDevicesChangedCallback callback;
     mutable std::mutex mutex;
-    std::vector<app::core::backend::AudioDevice> cachedDevices;
+    std::vector<rs::audio::AudioDevice> cachedDevices;
     std::jthread monitorThread;
 
     Impl()
@@ -133,7 +133,7 @@ namespace app::playback
       monitorThread = std::jthread(
         [this](std::stop_token const& st)
         {
-          app::core::util::setCurrentThreadName("AlsaDeviceMonitor");
+          rs::setCurrentThreadName("AlsaDeviceMonitor");
           monitorLoop(st);
         });
     }
@@ -192,33 +192,30 @@ namespace app::playback
     _impl->callback = std::move(callback);
   }
 
-  std::vector<app::core::backend::AudioDevice> AlsaManager::enumerateDevices()
+  std::vector<rs::audio::AudioDevice> AlsaManager::enumerateDevices()
   {
     std::lock_guard lock(_impl->mutex);
     return _impl->cachedDevices;
   }
 
-  std::unique_ptr<app::core::backend::IAudioBackend> AlsaManager::createBackend(
-    app::core::backend::AudioDevice const& device)
+  std::unique_ptr<rs::audio::IAudioBackend> AlsaManager::createBackend(rs::audio::AudioDevice const& device)
   {
     return std::make_unique<AlsaExclusiveBackend>(device);
   }
 
-  struct AlsaSubscription final : public app::core::backend::IGraphSubscription
+  struct AlsaSubscription final : public rs::audio::IGraphSubscription
   {};
 
-  std::unique_ptr<app::core::backend::IGraphSubscription> AlsaManager::subscribeGraph(std::string_view routeAnchor,
-                                                                                      OnGraphChangedCallback callback)
+  std::unique_ptr<rs::audio::IGraphSubscription> AlsaManager::subscribeGraph(std::string_view routeAnchor,
+                                                                             OnGraphChangedCallback callback)
   {
     if (callback)
     {
-      app::core::backend::AudioGraph graph;
-      graph.nodes.push_back({.id = "alsa-stream",
-                             .type = app::core::backend::AudioNodeType::Stream,
-                             .name = "ALSA Stream",
-                             .objectPath = ""});
+      rs::audio::AudioGraph graph;
+      graph.nodes.push_back(
+        {.id = "alsa-stream", .type = rs::audio::AudioNodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
       graph.nodes.push_back({.id = "alsa-sink",
-                             .type = app::core::backend::AudioNodeType::Sink,
+                             .type = rs::audio::AudioNodeType::Sink,
                              .name = std::string(routeAnchor),
                              .objectPath = std::string(routeAnchor)});
       graph.links.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});

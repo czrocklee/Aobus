@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "core/Log.h"
-#include "core/decoder/AlacDecoderSession.h"
-#include "core/decoder/FlacDecoderSession.h"
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 #include <filesystem>
+#include <rs/audio/AlacDecoderSession.h>
+#include <rs/audio/FlacDecoderSession.h>
+#include <rs/utility/Log.h>
 
-using namespace app::core::decoder;
-using namespace app::core::playback;
+using namespace rs::audio;
+using namespace rs::audio;
 
 TEST_CASE("FlacDecoderSession handles basic files", "[playback][integration]")
 {
-  app::core::Log::init(app::core::LogLevel::Info);
+  rs::log::Log::init(rs::log::LogLevel::Info);
   auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
   if (!std::filesystem::exists(testFile))
   {
@@ -23,7 +23,7 @@ TEST_CASE("FlacDecoderSession handles basic files", "[playback][integration]")
     return;
   }
 
-  app::core::AudioFormat outputFormat;
+  rs::audio::AudioFormat outputFormat;
   outputFormat.bitDepth = 16;
   outputFormat.isInterleaved = true;
 
@@ -52,7 +52,7 @@ TEST_CASE("FlacDecoderSession handles S24_32 decoding", "[playback][integration]
   }
 
   // Request 32-bit container with 24-bit precision
-  app::core::AudioFormat outputFormat;
+  rs::audio::AudioFormat outputFormat;
   outputFormat.bitDepth = 32;
   outputFormat.validBits = 24;
   outputFormat.isInterleaved = true;
@@ -81,7 +81,7 @@ TEST_CASE("AlacDecoderSession handles basic files", "[playback][integration]")
     return;
   }
 
-  app::core::AudioFormat outputFormat;
+  rs::audio::AudioFormat outputFormat;
   outputFormat.isInterleaved = true;
 
   AlacDecoderSession decoder(outputFormat);

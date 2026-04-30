@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "LibCommand.h"
-#include <rs/core/LibraryExporter.h>
-#include <rs/core/LibraryImporter.h>
+#include <rs/library/LibraryExporter.h>
+#include <rs/library/LibraryImporter.h>
 
 #include <array>
 #include <iomanip>
@@ -46,7 +46,7 @@ namespace rs::tool
       return oss.str();
     }
 
-    void show(core::MusicLibrary& ml, std::ostream& os)
+    void show(rs::library::MusicLibrary& ml, std::ostream& os)
     {
       auto const& header = ml.metaHeader();
 
@@ -57,21 +57,21 @@ namespace rs::tool
       os << "Migrated:          " << formatTimestamp(header.migratedAtUnixMs) << "\n";
     }
 
-    void exportLib(core::MusicLibrary& ml, std::string const& path, std::string const& modeStr, std::ostream& os)
+    void exportLib(rs::library::MusicLibrary& ml, std::string const& path, std::string const& modeStr, std::ostream& os)
     {
-      auto mode = core::ExportMode::Full;
+      auto mode = rs::library::ExportMode::Full;
 
       if (modeStr == "minimum")
       {
-        mode = core::ExportMode::Minimum;
+        mode = rs::library::ExportMode::Minimum;
       }
       else if (modeStr == "metadata")
       {
-        mode = core::ExportMode::Metadata;
+        mode = rs::library::ExportMode::Metadata;
       }
       else if (modeStr == "full")
       {
-        mode = core::ExportMode::Full;
+        mode = rs::library::ExportMode::Full;
       }
       else
       {
@@ -79,20 +79,20 @@ namespace rs::tool
         return;
       }
 
-      auto exporter = core::LibraryExporter{ml};
+      auto exporter = rs::library::LibraryExporter{ml};
       exporter.exportToYaml(path, mode);
       os << "Library exported to '" << path << "' using mode '" << modeStr << "'.\n";
     }
 
-    void importLib(core::MusicLibrary& ml, std::string const& path, std::ostream& os)
+    void importLib(rs::library::MusicLibrary& ml, std::string const& path, std::ostream& os)
     {
-      auto importer = core::LibraryImporter{ml};
+      auto importer = rs::library::LibraryImporter{ml};
       importer.importFromYaml(path);
       os << "Library imported from '" << path << "'.\n";
     }
   }
 
-  void setupLibCommand(CLI::App& app, core::MusicLibrary& ml)
+  void setupLibCommand(CLI::App& app, rs::library::MusicLibrary& ml)
   {
     auto* lib = app.add_subcommand("lib", "Library management commands");
 

@@ -200,7 +200,7 @@ namespace rs::media::mp4
       boost::endian::big_uint64_buf_t chunkOffset;
     };
   };
-  
+
   static_assert(sizeof(Co64AtomLayout) == 16);
   static_assert(alignof(Co64AtomLayout) == 1);
   static_assert(std::is_trivial_v<Co64AtomLayout>);

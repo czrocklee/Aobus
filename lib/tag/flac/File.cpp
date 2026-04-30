@@ -23,18 +23,18 @@ namespace rs::tag::flac
     constexpr std::uint32_t kMsPerSecond = 1000;
 
     using TextSetter =
-      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
+      rs::library::TrackBuilder::MetadataBuilder& (rs::library::TrackBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter =
-      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+      rs::library::TrackBuilder::MetadataBuilder& (rs::library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
     template<TextSetter Setter>
-    void handleText(rs::core::TrackBuilder& builder, std::string_view value)
+    void handleText(rs::library::TrackBuilder& builder, std::string_view value)
     {
       (builder.metadata().*Setter)(value);
     }
 
     template<NumberSetter Setter>
-    void handleNumber(rs::core::TrackBuilder& builder, std::string_view value)
+    void handleNumber(rs::library::TrackBuilder& builder, std::string_view value)
     {
       if (auto parsed = decodeUint16(value); parsed)
       {
@@ -43,7 +43,7 @@ namespace rs::tag::flac
     }
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
-    void handleSlashNumber(rs::core::TrackBuilder& builder, std::string_view value)
+    void handleSlashNumber(rs::library::TrackBuilder& builder, std::string_view value)
     {
       auto const separator = value.find('/');
       handleNumber<PrimarySetter>(builder, value.substr(0, separator));
@@ -58,7 +58,7 @@ namespace rs::tag::flac
 
   } // namespace
 
-  rs::core::TrackBuilder File::loadTrack() const
+  rs::library::TrackBuilder File::loadTrack() const
   {
     if (_mappedRegion.get_size() < 4 || std::memcmp(_mappedRegion.get_address(), "fLaC", 4) != 0)
     {
@@ -66,7 +66,7 @@ namespace rs::tag::flac
     }
 
     clearOwnedStrings();
-    auto builder = rs::core::TrackBuilder::createNew();
+    auto builder = rs::library::TrackBuilder::createNew();
 
     auto iter = MetadataBlockViewIterator{
       static_cast<char const*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};

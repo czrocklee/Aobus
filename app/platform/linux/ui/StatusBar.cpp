@@ -3,9 +3,9 @@
 
 #include "platform/linux/ui/StatusBar.h"
 
-#include "core/Log.h"
 #include "platform/linux/ui/LayoutConstants.h"
 #include "platform/linux/ui/OutputListItems.h"
+#include <rs/utility/Log.h>
 
 #include <gdkmm/display.h>
 #include <gtkmm/cssprovider.h>
@@ -47,7 +47,7 @@ namespace app::ui
       return ss.str();
     }
 
-    std::string formatStream(app::core::AudioFormat const& format)
+    std::string formatStream(rs::audio::AudioFormat const& format)
     {
       std::stringstream ss;
       ss << (format.sampleRate / 1000.0) << " kHz · " << static_cast<int>(format.bitDepth)
@@ -414,7 +414,7 @@ namespace app::ui
     return nullptr;
   }
 
-  void StatusBar::setPlaybackDetails(app::core::playback::PlaybackSnapshot const& snapshot)
+  void StatusBar::setPlaybackDetails(rs::audio::PlaybackSnapshot const& snapshot)
   {
     // Skip update if nothing visible has changed
     if (snapshot.state == _lastPlaybackState.state && snapshot.backend == _lastPlaybackState.backend &&
@@ -513,7 +513,7 @@ namespace app::ui
       _outputButton.set_tooltip_text("Click to change audio backend or device");
     }
 
-    if (snapshot.state == app::core::playback::TransportState::Idle)
+    if (snapshot.state == rs::audio::TransportState::Idle)
     {
       _nowPlayingLabel.set_text("");
       _streamInfoLabel.set_text("");
@@ -543,7 +543,7 @@ namespace app::ui
     bool formatFound = false;
     for (auto const& node : snapshot.graph.nodes)
     {
-      if (node.type == app::core::backend::AudioNodeType::Decoder && node.format)
+      if (node.type == rs::audio::AudioNodeType::Decoder && node.format)
       {
         ss << formatStream(*node.format);
         formatFound = true;
@@ -572,7 +572,7 @@ namespace app::ui
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
-        auto it = std::ranges::find(snapshot.graph.nodes, currentId, &app::core::backend::AudioNode::id);
+        auto it = std::ranges::find(snapshot.graph.nodes, currentId, &rs::audio::AudioNode::id);
 
         if (it == snapshot.graph.nodes.end())
         {
@@ -582,12 +582,12 @@ namespace app::ui
         tt << "• ";
         switch (node.type)
         {
-          case app::core::backend::AudioNodeType::Decoder: tt << "[Source] "; break;
-          case app::core::backend::AudioNodeType::Engine: tt << "[Engine] "; break;
-          case app::core::backend::AudioNodeType::Stream: tt << "[Stream] "; break;
-          case app::core::backend::AudioNodeType::Intermediary: tt << "[Filter] "; break;
-          case app::core::backend::AudioNodeType::Sink: tt << "[Device] "; break;
-          case app::core::backend::AudioNodeType::ExternalSource: tt << "[Other Source] "; break;
+          case rs::audio::AudioNodeType::Decoder: tt << "[Source] "; break;
+          case rs::audio::AudioNodeType::Engine: tt << "[Engine] "; break;
+          case rs::audio::AudioNodeType::Stream: tt << "[Stream] "; break;
+          case rs::audio::AudioNodeType::Intermediary: tt << "[Filter] "; break;
+          case rs::audio::AudioNodeType::Sink: tt << "[Device] "; break;
+          case rs::audio::AudioNodeType::ExternalSource: tt << "[Other Source] "; break;
         }
         tt << node.name;
         if (node.format)
@@ -629,7 +629,7 @@ namespace app::ui
     clearSinkStatusClasses(_sinkStatusIcon);
     _sinkStatusIcon.set_visible(true);
 
-    using AudioQuality = app::core::backend::AudioQuality;
+    using AudioQuality = rs::audio::AudioQuality;
     switch (snapshot.quality)
     {
       case AudioQuality::BitwisePerfect: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;

@@ -21,9 +21,9 @@ namespace rs::tag::mp4
   namespace
   {
     using TextSetter =
-      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::string_view);
+      rs::library::TrackBuilder::MetadataBuilder& (rs::library::TrackBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter =
-      rs::core::TrackBuilder::MetadataBuilder& (rs::core::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+      rs::library::TrackBuilder::MetadataBuilder& (rs::library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
     std::span<std::byte const> atomData(AtomView const& view)
     {
@@ -38,26 +38,26 @@ namespace rs::tag::mp4
       return utility::bytes::stringView(atomData(view));
     }
 
-    void handleTrackNumbers(rs::core::TrackBuilder& builder, AtomView const& view)
+    void handleTrackNumbers(rs::library::TrackBuilder& builder, AtomView const& view)
     {
       auto const& layout = view.layout<TrknAtomLayout>();
       builder.metadata().trackNumber(layout.trackNumber.value()).totalTracks(layout.totalTracks.value());
     }
 
-    void handleDiscNumbers(rs::core::TrackBuilder& builder, AtomView const& view)
+    void handleDiscNumbers(rs::library::TrackBuilder& builder, AtomView const& view)
     {
       auto const& layout = view.layout<DiskAtomLayout>();
       builder.metadata().discNumber(layout.discNumber.value()).totalDiscs(layout.totalDiscs.value());
     }
 
     template<TextSetter Setter>
-    void handleText(rs::core::TrackBuilder& builder, AtomView const& view)
+    void handleText(rs::library::TrackBuilder& builder, AtomView const& view)
     {
       (builder.metadata().*Setter)(atomTextView(view));
     }
 
     template<NumberSetter Setter>
-    void handleNumber(rs::core::TrackBuilder& builder, AtomView const& view)
+    void handleNumber(rs::library::TrackBuilder& builder, AtomView const& view)
     {
       if (auto year = decodeUint16(atomTextView(view)); year)
       {
@@ -65,12 +65,12 @@ namespace rs::tag::mp4
       }
     }
 
-    void handleCoverArt(rs::core::TrackBuilder& builder, AtomView const& view)
+    void handleCoverArt(rs::library::TrackBuilder& builder, AtomView const& view)
     {
       builder.metadata().coverArtData(atomData(view));
     }
 
-    using AtomHandler = void (*)(rs::core::TrackBuilder&, AtomView const&);
+    using AtomHandler = void (*)(rs::library::TrackBuilder&, AtomView const&);
 
 #include "tag/mp4/AtomDispatch.h"
 
@@ -101,7 +101,7 @@ namespace rs::tag::mp4
     };
 
     // Helper to extract audio properties from mdhd and stsd
-    void extractAudioProperties(rs::core::TrackBuilder& builder, RootAtom const& root, std::size_t fileSize)
+    void extractAudioProperties(rs::library::TrackBuilder& builder, RootAtom const& root, std::size_t fileSize)
     {
       // Get mdhd for sample rate and duration
 
@@ -162,14 +162,14 @@ namespace rs::tag::mp4
     }
   } // namespace
 
-  rs::core::TrackBuilder File::loadTrack() const
+  rs::library::TrackBuilder File::loadTrack() const
   {
     RootAtom root =
       rs::media::mp4::fromBuffer(utility::bytes::view(_mappedRegion.get_address(), _mappedRegion.get_size()));
     Atom const* ilstNode = root.find(kIlstPath);
 
     clearOwnedStrings();
-    auto builder = rs::core::TrackBuilder::createNew();
+    auto builder = rs::library::TrackBuilder::createNew();
 
     if (ilstNode != nullptr)
     {

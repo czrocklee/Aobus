@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/core/ResourceStore.h>
+#include <rs/library/ResourceStore.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
 #include <rs/tag/File.h>
@@ -162,8 +162,8 @@ TEST_CASE("Cover art extraction", "[tag][integration]")
   fs::create_directories(tempDir);
   auto env = rs::lmdb::Environment{tempDir, {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = rs::lmdb::WriteTransaction{env};
-  auto dict = rs::core::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-  auto resources = rs::core::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
+  auto dict = rs::library::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+  auto resources = rs::library::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
 
   auto [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
@@ -171,7 +171,7 @@ TEST_CASE("Cover art extraction", "[tag][integration]")
   CHECK(!coldData.empty());
 
   // Check cover art ID directly from serialized cold header
-  auto* coldHdr = reinterpret_cast<rs::core::TrackColdHeader const*>(coldData.data());
+  auto* coldHdr = reinterpret_cast<rs::library::TrackColdHeader const*>(coldData.data());
   CHECK(coldHdr->coverArtId > 0);
 
   // Cleanup - transaction will abort if not committed

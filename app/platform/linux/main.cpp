@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "core/Log.h"
 #include "platform/linux/ui/MainWindow.h"
 #include "platform/linux/ui/TrackRowDataProvider.h"
+#include <rs/utility/Log.h>
 
 #include <rs/AppVersion.h>
 
@@ -19,16 +19,16 @@ int main(int argc, char* argv[])
   CLI::App cliApp{"RockStudio Music Library"};
   cliApp.allow_extras(); // Allow GTK specific arguments
 
-  auto logLevel = app::core::LogLevel::Info;
+  auto logLevel = rs::log::LogLevel::Info;
 
   // Map strings to LogLevel enum for CLI11
-  std::map<std::string, app::core::LogLevel> logMapping{{"trace", app::core::LogLevel::Trace},
-                                                        {"debug", app::core::LogLevel::Debug},
-                                                        {"info", app::core::LogLevel::Info},
-                                                        {"warn", app::core::LogLevel::Warn},
-                                                        {"error", app::core::LogLevel::Error},
-                                                        {"critical", app::core::LogLevel::Critical},
-                                                        {"off", app::core::LogLevel::Off}};
+  std::map<std::string, rs::log::LogLevel> logMapping{{"trace", rs::log::LogLevel::Trace},
+                                                      {"debug", rs::log::LogLevel::Debug},
+                                                      {"info", rs::log::LogLevel::Info},
+                                                      {"warn", rs::log::LogLevel::Warn},
+                                                      {"error", rs::log::LogLevel::Error},
+                                                      {"critical", rs::log::LogLevel::Critical},
+                                                      {"off", rs::log::LogLevel::Off}};
 
   int verbosity = 0;
   cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");
@@ -58,12 +58,12 @@ int main(int argc, char* argv[])
   if (cliApp.count("-v") > 0)
   {
     if (verbosity == 1)
-      logLevel = app::core::LogLevel::Debug;
+      logLevel = rs::log::LogLevel::Debug;
     else if (verbosity >= 2)
-      logLevel = app::core::LogLevel::Trace;
+      logLevel = rs::log::LogLevel::Trace;
   }
 
-  app::core::Log::init(logLevel);
+  rs::log::Log::init(logLevel);
   APP_LOG_INFO("========================================================");
   APP_LOG_INFO("RockStudio {} starting...", rs::kAppVersion);
 
@@ -121,6 +121,6 @@ int main(int argc, char* argv[])
   int gtkArgc = static_cast<int>(gtkArgv.size());
 
   auto const result = app->run(gtkArgc, gtkArgv.data());
-  app::core::Log::shutdown();
+  rs::log::Log::shutdown();
   return result;
 }

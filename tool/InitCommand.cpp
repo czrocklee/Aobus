@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "InitCommand.h"
-#include <rs/core/MusicLibrary.h>
+#include <rs/library/MusicLibrary.h>
 #include <rs/tag/File.h>
 #include <rs/utility/Finder.h>
 
@@ -12,7 +12,7 @@ namespace rs::tool
 {
   namespace
   {
-    void scanAndImport(core::MusicLibrary& ml, std::ostream& os)
+    void scanAndImport(rs::library::MusicLibrary& ml, std::ostream& os)
     {
       utility::Finder finder{".", {".flac", ".m4a", ".mp3"}};
       auto txn = ml.writeTransaction();
@@ -39,7 +39,7 @@ namespace rs::tool
           auto [id, trackView] = writer.createHotCold(
               preparedHot.size(),
               preparedCold.size(),
-              [&preparedHot, &preparedCold](core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
+              [&preparedHot, &preparedCold](rs::TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
                   preparedHot.writeTo(hot);
                   preparedCold.writeTo(cold);
               });
@@ -55,7 +55,7 @@ namespace rs::tool
     }
   }
 
-  void setupInitCommand(CLI::App& app, core::MusicLibrary& ml)
+  void setupInitCommand(CLI::App& app, rs::library::MusicLibrary& ml)
   {
     auto* cmd = app.add_subcommand("init", "Scan current directory and initialize library");
     cmd->callback([&ml]() { scanAndImport(ml, std::cout); });

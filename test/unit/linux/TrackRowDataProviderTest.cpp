@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 
 // Standalone test for row data loading without GTKMM dependency.
-// Tests app::core::model::TrackRowDataProvider functionality in isolation.
+// Tests rs::model::TrackRowDataProvider functionality in isolation.
 
-#include <rs/core/MusicLibrary.h>
-#include <rs/core/TrackBuilder.h>
-#include <rs/core/TrackStore.h>
+#include <rs/library/MusicLibrary.h>
+#include <rs/library/TrackBuilder.h>
+#include <rs/library/TrackStore.h>
 #include <rs/lmdb/Transaction.h>
 #include <test/unit/lmdb/TestUtils.h>
 
@@ -22,20 +22,20 @@
 #include <utility>
 #include <vector>
 
-namespace app::core::model
+namespace rs::model
 {
   struct RowData;
-  using TrackId = rs::core::TrackId;
-  using DictionaryId = rs::core::DictionaryId;
+  using TrackId = rs::TrackId;
+  using DictionaryId = rs::DictionaryId;
 
   /**
    * Standalone TrackRowDataProvider test double.
-   * Mirrors the real app::core::model::TrackRowDataProvider but without GTKMM includes.
+   * Mirrors the real rs::model::TrackRowDataProvider but without GTKMM includes.
    */
   class TrackRowDataProvider final
   {
   public:
-    explicit TrackRowDataProvider(rs::core::MusicLibrary& ml);
+    explicit TrackRowDataProvider(rs::library::MusicLibrary& ml);
 
     std::optional<RowData> getRow(TrackId id);
     void invalidateHot(TrackId id);
@@ -45,9 +45,9 @@ namespace app::core::model
   private:
     std::string resolveDictionaryString(DictionaryId id);
 
-    rs::core::MusicLibrary* _ml;
-    rs::core::TrackStore* _store;
-    rs::core::DictionaryStore* _dict;
+    rs::library::MusicLibrary* _ml;
+    rs::library::TrackStore* _store;
+    rs::library::DictionaryStore* _dict;
 
     std::unordered_map<TrackId, RowData> _rowCache;
     std::unordered_map<DictionaryId, std::string> _stringCache;
@@ -93,7 +93,7 @@ namespace app::core::model
     return insertResult.first->second;
   }
 
-  std::string joinResolvedTags(rs::core::TrackView::TagProxy tags, rs::core::DictionaryStore const& dictionary)
+  std::string joinResolvedTags(rs::library::TrackView::TagProxy tags, rs::library::DictionaryStore const& dictionary)
   {
     auto text = std::string{};
     auto first = true;
@@ -118,7 +118,7 @@ namespace app::core::model
     return text;
   }
 
-  TrackRowDataProvider::TrackRowDataProvider(rs::core::MusicLibrary& ml)
+  TrackRowDataProvider::TrackRowDataProvider(rs::library::MusicLibrary& ml)
     : _ml{&ml}, _store{&ml.tracks()}, _dict{&ml.dictionary()}
   {
   }
@@ -138,7 +138,7 @@ namespace app::core::model
     rs::lmdb::ReadTransaction txn(_ml->readTransaction());
     auto reader = _store->reader(txn);
 
-    auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
     if (!optView)
     {
       auto row = RowData{};
@@ -205,14 +205,14 @@ namespace app::core::model
     {
     }
 
-    rs::core::MusicLibrary& library() { return _library; }
+    rs::library::MusicLibrary& library() { return _library; }
 
     TrackId addTrack(TrackSpec const& spec)
     {
       auto txn = _library.writeTransaction();
       auto writer = _library.tracks().writer(txn);
 
-      auto builder = rs::core::TrackBuilder::createNew();
+      auto builder = rs::library::TrackBuilder::createNew();
       builder.metadata()
         .title(spec.title)
         .artist(spec.artist)
@@ -240,12 +240,12 @@ namespace app::core::model
 
   private:
     TempDir _tempDir;
-    rs::core::MusicLibrary _library;
+    rs::library::MusicLibrary _library;
   };
 
-} // namespace app::core::model
+} // namespace rs::model
 
-using namespace app::core::model;
+using namespace rs::model;
 
 TEST_CASE("TrackRowDataProvider loads track data correctly", "[app][model]")
 {
@@ -311,7 +311,7 @@ TEST_CASE("TrackRowDataProvider loads track data correctly", "[app][model]")
   SECTION("Non-existent track")
   {
     auto provider = TrackRowDataProvider{testLibrary.library()};
-    auto dummyId = rs::core::TrackId{9999};
+    auto dummyId = rs::TrackId{9999};
 
     auto row = provider.getRow(dummyId);
     CHECK_FALSE(row.has_value());

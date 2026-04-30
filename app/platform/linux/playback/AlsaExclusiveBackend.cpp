@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
-#include "core/Log.h"
-#include "core/backend/BackendTypes.h"
-#include "core/util/ThreadUtils.h"
+#include <rs/audio/BackendTypes.h>
+#include <rs/utility/Log.h>
+#include <rs/utility/ThreadUtils.h>
 
 #include <poll.h>
 #include <rs/utility/Raii.h>
@@ -25,7 +25,7 @@ namespace app::playback
   constexpr int kAlsaWaitTimeoutMs = 500;
   constexpr int kPollRetryDelayMs = 10;
 
-  AlsaExclusiveBackend::AlsaExclusiveBackend(app::core::backend::AudioDevice const& device)
+  AlsaExclusiveBackend::AlsaExclusiveBackend(rs::audio::AudioDevice const& device)
     : _deviceName{device.id}
   {
     PLAYBACK_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _deviceName);
@@ -38,8 +38,8 @@ namespace app::playback
     close();
   }
 
-  rs::Result<> AlsaExclusiveBackend::open(app::core::AudioFormat const& format,
-                                          app::core::backend::AudioRenderCallbacks callbacks)
+  rs::Result<> AlsaExclusiveBackend::open(rs::audio::AudioFormat const& format,
+                                          rs::audio::AudioRenderCallbacks callbacks)
   {
     PLAYBACK_LOG_INFO("AlsaExclusiveBackend: Opening device '{}' with format {}Hz/{}b/{}ch",
                       _deviceName,
@@ -238,7 +238,7 @@ namespace app::playback
       _thread = std::jthread(
         [this](std::stop_token const& st)
         {
-          app::core::util::setCurrentThreadName("AlsaPlayback");
+          rs::setCurrentThreadName("AlsaPlayback");
           playbackLoop(st);
         });
     }
@@ -310,8 +310,8 @@ namespace app::playback
   {
     return true;
   }
-  app::core::backend::BackendKind AlsaExclusiveBackend::kind() const noexcept
+  rs::audio::BackendKind AlsaExclusiveBackend::kind() const noexcept
   {
-    return app::core::backend::BackendKind::AlsaExclusive;
+    return rs::audio::BackendKind::AlsaExclusive;
   }
 } // namespace app::playback

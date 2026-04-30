@@ -7,12 +7,12 @@
 #include "platform/linux/ui/TrackRowDataProvider.h"
 #include "platform/linux/ui/TrackViewPage.h"
 
-#include "core/model/AllTrackIdsList.h"
-#include "core/model/FilteredTrackIdList.h"
-#include "core/model/SmartListEngine.h"
-#include "core/model/TrackIdList.h"
+#include <rs/model/AllTrackIdsList.h>
+#include <rs/model/FilteredTrackIdList.h>
+#include <rs/model/SmartListEngine.h>
+#include <rs/model/TrackIdList.h>
 
-#include <rs/core/MusicLibrary.h>
+#include <rs/library/MusicLibrary.h>
 
 #include <algorithm>
 
@@ -48,10 +48,10 @@ namespace app::ui
   }
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
-                                   rs::core::MusicLibrary& musicLibrary,
-                                   app::core::model::AllTrackIdsList& allTrackIds,
-                                   app::core::model::TrackIdList& parentMembershipList,
-                                   rs::core::ListId parentListId,
+                                   rs::library::MusicLibrary& musicLibrary,
+                                   rs::model::AllTrackIdsList& allTrackIds,
+                                   rs::model::TrackIdList& parentMembershipList,
+                                   rs::ListId parentListId,
                                    TrackRowDataProvider const& provider)
     : _exprBox{musicLibrary}
     , _musicLibrary{musicLibrary}
@@ -73,7 +73,7 @@ namespace app::ui
     _exprTimeoutConnection.disconnect();
   }
 
-  void SmartListDialog::populate(rs::core::ListId id, rs::core::ListView const& view)
+  void SmartListDialog::populate(rs::ListId id, rs::library::ListView const& view)
   {
     _editListId = id;
     _nameEntry.set_text(std::string(view.name()));
@@ -84,9 +84,9 @@ namespace app::ui
     updateDialogState();
   }
 
-  rs::core::ListId SmartListDialog::editListId() const
+  rs::ListId SmartListDialog::editListId() const
   {
-    return _editListId.value_or(rs::core::ListId{0});
+    return _editListId.value_or(rs::ListId{0});
   }
 
   void SmartListDialog::setupUi()
@@ -216,7 +216,7 @@ namespace app::ui
   void SmartListDialog::setupPreview()
   {
     // Create preview engine for expression evaluation
-    _previewEngine = std::make_unique<app::core::model::SmartListEngine>(_musicLibrary);
+    _previewEngine = std::make_unique<rs::model::SmartListEngine>(_musicLibrary);
 
     setupPreviewColumns();
     rebuildPreviewSource();
@@ -304,8 +304,8 @@ namespace app::ui
 
         // Use the parent's membership list as source - this already has the inherited filter applied
         // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
-        _previewFilteredList = std::make_unique<app::core::model::FilteredTrackIdList>(
-          _parentMembershipList, _musicLibrary, *_previewEngine);
+        _previewFilteredList =
+          std::make_unique<rs::model::FilteredTrackIdList>(_parentMembershipList, _musicLibrary, *_previewEngine);
         _previewAdapter = std::make_unique<TrackListAdapter>(*_previewFilteredList, _rowDataProvider);
 
         auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
@@ -436,10 +436,10 @@ namespace app::ui
     updateDialogState();
   }
 
-  app::core::model::ListDraft SmartListDialog::draft() const
+  rs::model::ListDraft SmartListDialog::draft() const
   {
-    auto draftData = app::core::model::ListDraft{};
-    draftData.kind = app::core::model::ListKind::Smart;
+    auto draftData = rs::model::ListDraft{};
+    draftData.kind = rs::model::ListKind::Smart;
     draftData.parentId = _parentListId;
     draftData.listId = editListId();
     draftData.name = _nameEntry.get_text();

@@ -27,12 +27,10 @@ namespace app::ui
     using ContextMenuRequestedSignal = sigc::signal<void(double, double)>;
     using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId>, double, double)>;
 
-    explicit TrackViewPage(rs::core::ListId listId,
-                           TrackListAdapter& adapter,
-                           TrackColumnLayoutModel& columnLayoutModel);
+    explicit TrackViewPage(rs::ListId listId, TrackListAdapter& adapter, TrackColumnLayoutModel& columnLayoutModel);
     ~TrackViewPage() override;
 
-    rs::core::ListId getListId() const { return _listId; }
+    rs::ListId getListId() const { return _listId; }
 
     // Get the selected track IDs
     std::vector<TrackId> getSelectedTrackIds() const;
@@ -123,7 +121,7 @@ namespace app::ui
     Gtk::Popover _contextPopover;
 
     // Models
-    rs::core::ListId _listId;
+    rs::ListId _listId;
     TrackListAdapter& _adapter;
     Glib::RefPtr<Gtk::SortListModel> _sortModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;

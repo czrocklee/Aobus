@@ -191,9 +191,7 @@ namespace app::ui
     }
   }
 
-  TrackViewPage::TrackViewPage(rs::core::ListId listId,
-                               TrackListAdapter& adapter,
-                               TrackColumnLayoutModel& columnLayoutModel)
+  TrackViewPage::TrackViewPage(rs::ListId listId, TrackListAdapter& adapter, TrackColumnLayoutModel& columnLayoutModel)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
     , _adapter{adapter}

@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "TagCommand.h"
-#include <rs/core/DictionaryStore.h>
-#include <rs/core/TrackBuilder.h>
-#include <rs/core/TrackLayout.h>
-#include <rs/core/TrackStore.h>
+#include <rs/library/DictionaryStore.h>
+#include <rs/library/TrackBuilder.h>
+#include <rs/library/TrackLayout.h>
+#include <rs/library/TrackStore.h>
 
 #include <algorithm>
 #include <ranges>
@@ -15,7 +15,7 @@ namespace rs::tool
 {
   namespace
   {
-    using namespace rs::core;
+    using namespace rs::library;
 
     void addTag(MusicLibrary& ml, TrackId trackId, std::string const& tagName, std::ostream& os)
     {
@@ -107,7 +107,7 @@ namespace rs::tool
     }
   }
 
-  void setupTagCommand(CLI::App& app, core::MusicLibrary& ml)
+  void setupTagCommand(CLI::App& app, rs::library::MusicLibrary& ml)
   {
     auto* tag = app.add_subcommand("tag", "Tag management commands");
 
@@ -115,17 +115,17 @@ namespace rs::tool
     auto* addId = add->add_option("id", "track id")->required();
     auto* addTagName = add->add_option("tag", "tag name")->required();
     add->callback([&ml, addId, addTagName]()
-                  { addTag(ml, core::TrackId{addId->as<std::uint32_t>()}, addTagName->as<std::string>(), std::cout); });
+                  { addTag(ml, rs::TrackId{addId->as<std::uint32_t>()}, addTagName->as<std::string>(), std::cout); });
 
     auto* remove = tag->add_subcommand("remove", "Remove a tag from a track");
     auto* remId = remove->add_option("id", "track id")->required();
     auto* remTagName = remove->add_option("tag", "tag name")->required();
     remove->callback(
       [&ml, remId, remTagName]()
-      { removeTag(ml, core::TrackId{remId->as<std::uint32_t>()}, remTagName->as<std::string>(), std::cout); });
+      { removeTag(ml, rs::TrackId{remId->as<std::uint32_t>()}, remTagName->as<std::string>(), std::cout); });
 
     auto* show = tag->add_subcommand("show", "Show tags for a track");
     auto* showId = show->add_option("id", "track id")->required();
-    show->callback([&ml, showId]() { showTags(ml, core::TrackId{showId->as<std::uint32_t>()}, std::cout); });
+    show->callback([&ml, showId]() { showTags(ml, rs::TrackId{showId->as<std::uint32_t>()}, std::cout); });
   }
 }

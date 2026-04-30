@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <rs/core/DictionaryStore.h>
-#include <rs/core/TrackLayout.h>
 #include <rs/expr/Expression.h>
+#include <rs/library/DictionaryStore.h>
+#include <rs/library/TrackLayout.h>
 
 #include <cstdint>
 #include <optional>
@@ -116,7 +116,7 @@ namespace rs::expr
     std::vector<std::string> stringConstants;
 
     // Dictionary used to resolve DictionaryId-backed metadata during evaluation.
-    core::DictionaryStore const* dictionary = nullptr;
+    rs::library::DictionaryStore const* dictionary = nullptr;
 
     // Bloom filter for tag fast-path rejection
     std::uint32_t tagBloomMask = 0;
@@ -144,7 +144,7 @@ namespace rs::expr
      *
      * @param dict Pointer to DictionaryStore for resolving string constants to IDs, can be nullptr
      */
-    explicit QueryCompiler(core::DictionaryStore* dict);
+    explicit QueryCompiler(rs::library::DictionaryStore* dict);
 
     /**
      * Compile an expression AST into an execution plan.
@@ -169,7 +169,7 @@ namespace rs::expr
     // Member variables
     ExecutionPlan _plan;
     std::uint32_t _nextReg = 0;
-    core::DictionaryStore* _dict = nullptr;
+    rs::library::DictionaryStore* _dict = nullptr;
     Field _lastField = Field::TagBloom; // Track last field for context
     bool _hasHotAccess = false;         // Track if expression uses hot (metadata/property/tag) variables
     bool _hasColdAccess = false;        // Track if expression uses cold (custom) variables

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 
 #include "platform/linux/ui/TrackPresentation.h"
 
@@ -48,9 +48,9 @@ TEST_CASE("app::ui::TrackPresentation duration sorting", "[app][presentation]")
 
   auto const sortBy = std::vector<TrackSortTerm>{{TrackSortField::Duration}};
 
-  TrackPresentationKeysView shortTrack{.durationMs = 1000, .trackId = rs::core::TrackId{1}};
-  TrackPresentationKeysView longTrack{.durationMs = 5000, .trackId = rs::core::TrackId{2}};
-  TrackPresentationKeysView noDurationTrack{.durationMs = 0, .trackId = rs::core::TrackId{3}};
+  TrackPresentationKeysView shortTrack{.durationMs = 1000, .trackId = rs::TrackId{1}};
+  TrackPresentationKeysView longTrack{.durationMs = 5000, .trackId = rs::TrackId{2}};
+  TrackPresentationKeysView noDurationTrack{.durationMs = 0, .trackId = rs::TrackId{3}};
 
   SECTION("shorter duration comes first")
   {
@@ -66,7 +66,7 @@ TEST_CASE("app::ui::TrackPresentation duration sorting", "[app][presentation]")
 
   SECTION("equal duration falls back to track ID")
   {
-    TrackPresentationKeysView shortTrack2{.durationMs = 1000, .trackId = rs::core::TrackId{4}};
+    TrackPresentationKeysView shortTrack2{.durationMs = 1000, .trackId = rs::TrackId{4}};
     REQUIRE(compareForSort(shortTrack, shortTrack2, sortBy) < 0);
   }
 }

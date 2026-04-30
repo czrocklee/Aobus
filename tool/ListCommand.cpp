@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "ListCommand.h"
-#include <rs/core/ListBuilder.h>
-#include <rs/core/ListStore.h>
+#include <rs/library/ListBuilder.h>
+#include <rs/library/ListStore.h>
 
 #include <iomanip>
 #include <span>
@@ -13,7 +13,7 @@ namespace rs::tool
 {
   namespace
   {
-    void show(core::MusicLibrary& ml, std::ostream& os)
+    void show(rs::library::MusicLibrary& ml, std::ostream& os)
     {
       auto txn = ml.readTransaction();
       auto reader = ml.lists().reader(txn);
@@ -49,17 +49,17 @@ namespace rs::tool
       }
     }
 
-    void createList(core::MusicLibrary& ml,
+    void createList(rs::library::MusicLibrary& ml,
                     std::string const& name,
                     std::string const& filter,
                     std::string const& desc,
-                    core::ListId parentListId,
+                    rs::ListId parentListId,
                     std::ostream& os)
     {
       auto txn = ml.writeTransaction();
 
       // Build list payload using ListBuilder
-      auto builder = core::ListBuilder::createNew()
+      auto builder = rs::library::ListBuilder::createNew()
         .name(name)
         .description(desc)
         .parentId(parentListId);
@@ -78,7 +78,7 @@ namespace rs::tool
     }
   }
 
-  void setupListCommand(CLI::App& app, core::MusicLibrary& ml)
+  void setupListCommand(CLI::App& app, rs::library::MusicLibrary& ml)
   {
     auto* list = app.add_subcommand("list", "List management commands");
 
@@ -96,7 +96,7 @@ namespace rs::tool
                    name->as<std::string>(),
                    filter->as<std::string>(),
                    desc->as<std::string>(),
-                   core::ListId{parent->as<std::uint32_t>()},
+                   rs::ListId{parent->as<std::uint32_t>()},
                    std::cout);
       });
 
@@ -107,7 +107,7 @@ namespace rs::tool
       {
         auto txn = ml.writeTransaction();
         auto writer = ml.lists().writer(txn);
-        auto const listId = core::ListId{id->as<std::uint32_t>()};
+        auto const listId = rs::ListId{id->as<std::uint32_t>()};
         
         if (writer.del(listId))
         {

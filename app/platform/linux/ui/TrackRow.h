@@ -5,7 +5,7 @@
 
 #include "platform/linux/ui/TrackPresentation.h"
 
-#include <rs/core/MusicLibrary.h>
+#include <rs/library/MusicLibrary.h>
 
 #include <gtkmm.h>
 
@@ -22,7 +22,7 @@ namespace app::ui
   class TrackRow final : public Glib::Object
   {
   public:
-    using TrackId = rs::core::TrackId;
+    using TrackId = rs::TrackId;
 
     TrackId getTrackId() const { return _id; }
 
@@ -39,12 +39,12 @@ namespace app::ui
     static Glib::RefPtr<TrackRow> create(TrackId id, TrackRowDataProvider const& provider);
 
     void populate(Glib::ustring title,
-                  rs::core::DictionaryId artist,
-                  rs::core::DictionaryId album,
-                  rs::core::DictionaryId albumArtist,
-                  rs::core::DictionaryId genre,
-                  rs::core::DictionaryId composer,
-                  rs::core::DictionaryId work,
+                  rs::DictionaryId artist,
+                  rs::DictionaryId album,
+                  rs::DictionaryId albumArtist,
+                  rs::DictionaryId genre,
+                  rs::DictionaryId composer,
+                  rs::DictionaryId work,
                   Glib::ustring tags,
                   std::chrono::milliseconds duration,
                   std::uint16_t year,
@@ -60,12 +60,12 @@ namespace app::ui
     TrackId _id;
     TrackRowDataProvider const* _provider = nullptr;
 
-    rs::core::DictionaryId _artistId{0};
-    rs::core::DictionaryId _albumId{0};
-    rs::core::DictionaryId _albumArtistId{0};
-    rs::core::DictionaryId _genreId{0};
-    rs::core::DictionaryId _composerId{0};
-    rs::core::DictionaryId _workId{0};
+    rs::DictionaryId _artistId{0};
+    rs::DictionaryId _albumId{0};
+    rs::DictionaryId _albumArtistId{0};
+    rs::DictionaryId _genreId{0};
+    rs::DictionaryId _composerId{0};
+    rs::DictionaryId _workId{0};
 
     Glib::ustring _title;
     Glib::ustring _tags;

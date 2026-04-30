@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "core/model/ListDraft.h"
 #include "platform/linux/ui/QueryExpressionBox.h"
+#include <rs/model/ListDraft.h>
 
 #include <gtkmm.h>
 
@@ -12,13 +12,13 @@
 #include <optional>
 #include <string>
 
-namespace rs::core
+namespace rs::library
 {
   class MusicLibrary;
   class ListView;
 }
 
-namespace app::core::model
+namespace rs::model
 {
   class AllTrackIdsList;
   class FilteredTrackIdList;
@@ -35,21 +35,21 @@ namespace app::ui
   {
   public:
     SmartListDialog(Gtk::Window& parent,
-                    rs::core::MusicLibrary& musicLibrary,
-                    app::core::model::AllTrackIdsList& allTrackIds,
-                    app::core::model::TrackIdList& parentMembershipList,
-                    rs::core::ListId parentListId,
+                    rs::library::MusicLibrary& musicLibrary,
+                    rs::model::AllTrackIdsList& allTrackIds,
+                    rs::model::TrackIdList& parentMembershipList,
+                    rs::ListId parentListId,
                     TrackRowDataProvider const& provider);
     virtual ~SmartListDialog() override;
 
     // Populate dialog fields from an existing list for editing
-    void populate(rs::core::ListId id, rs::core::ListView const& view);
+    void populate(rs::ListId id, rs::library::ListView const& view);
 
     // Returns the ListId for update (0 if creating a new list)
-    rs::core::ListId editListId() const;
+    rs::ListId editListId() const;
 
     // Returns a ListDraft populated from the dialog fields
-    app::core::model::ListDraft draft() const;
+    rs::model::ListDraft draft() const;
 
   private:
     void setupUi();
@@ -76,18 +76,18 @@ namespace app::ui
     sigc::connection _exprTimeoutConnection;
 
     // Preview infrastructure
-    rs::core::MusicLibrary& _musicLibrary;
-    app::core::model::AllTrackIdsList& _allTrackIds;
-    app::core::model::TrackIdList& _parentMembershipList;
-    rs::core::ListId _parentListId;
+    rs::library::MusicLibrary& _musicLibrary;
+    rs::model::AllTrackIdsList& _allTrackIds;
+    rs::model::TrackIdList& _parentMembershipList;
+    rs::ListId _parentListId;
     TrackRowDataProvider const& _rowDataProvider;
-    std::unique_ptr<app::core::model::FilteredTrackIdList> _previewFilteredList;
-    std::unique_ptr<app::core::model::SmartListEngine> _previewEngine;
+    std::unique_ptr<rs::model::FilteredTrackIdList> _previewFilteredList;
+    std::unique_ptr<rs::model::SmartListEngine> _previewEngine;
     std::unique_ptr<TrackListAdapter> _previewAdapter;
     bool _expressionValid = true;
 
     // Edit mode state
-    std::optional<rs::core::ListId> _editListId;
+    std::optional<rs::ListId> _editListId;
   };
 
 } // namespace app::ui

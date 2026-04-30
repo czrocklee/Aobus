@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/AppConfig.h"
-#include "core/Log.h"
+#include <rs/utility/Log.h>
 
 #include <glibmm/keyfile.h>
 #include <glibmm/miscutils.h>
@@ -106,7 +106,7 @@ namespace
   }
 }
 
-namespace app::core
+namespace rs::library
 {
   AppConfig AppConfig::load()
   {

@@ -1,23 +1,23 @@
 #include "fakeit.hpp"
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 
-#include "core/IMainThreadDispatcher.h"
-#include "core/backend/IAudioBackend.h"
-#include "core/playback/PlaybackEngine.h"
+#include <rs/audio/IAudioBackend.h>
+#include <rs/audio/PlaybackEngine.h>
+#include <rs/utility/IMainThreadDispatcher.h>
 
 #include <rs/Error.h>
 
-using namespace app::core::playback;
-using namespace app::core::backend;
-using namespace app::core;
+using namespace rs::audio;
+using namespace rs::audio;
+using namespace rs::audio;
 using namespace fakeit;
 
 namespace
 {
-  class MockDispatcher : public IMainThreadDispatcher
+  class MockDispatcher : public rs::IMainThreadDispatcher
   {
   public:
     void dispatch(std::function<void()> callback) override { callback(); }
@@ -187,7 +187,7 @@ TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
 
   SECTION("rs-decoder is present in the graph")
   {
-    auto it = std::ranges::find(snap.graph.nodes, "rs-decoder", &app::core::backend::AudioNode::id);
+    auto it = std::ranges::find(snap.graph.nodes, "rs-decoder", &rs::audio::AudioNode::id);
     REQUIRE(it != snap.graph.nodes.end());
     CHECK(it->type == AudioNodeType::Decoder);
     CHECK(it->format.has_value());
@@ -196,7 +196,7 @@ TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
 
   SECTION("rs-engine is present in the graph")
   {
-    auto it = std::ranges::find(snap.graph.nodes, "rs-engine", &app::core::backend::AudioNode::id);
+    auto it = std::ranges::find(snap.graph.nodes, "rs-engine", &rs::audio::AudioNode::id);
     REQUIRE(it != snap.graph.nodes.end());
     CHECK(it->type == AudioNodeType::Engine);
   }

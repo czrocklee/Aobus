@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <core/model/FilteredTrackIdList.h>
-#include <core/model/SmartListEngine.h>
-#include <core/model/TrackIdList.h>
-#include <rs/core/MusicLibrary.h>
-#include <rs/core/TrackBuilder.h>
-#include <rs/core/TrackStore.h>
+#include <rs/library/MusicLibrary.h>
+#include <rs/library/TrackBuilder.h>
+#include <rs/library/TrackStore.h>
+#include <rs/model/FilteredTrackIdList.h>
+#include <rs/model/SmartListEngine.h>
+#include <rs/model/TrackIdList.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <algorithm>
@@ -27,14 +27,14 @@
 namespace
 {
 
-  using app::core::model::FilteredTrackIdList;
-  using app::core::model::SmartListEngine;
-  using app::core::model::TrackIdList;
-  using app::core::model::TrackIdListObserver;
-  using rs::core::MusicLibrary;
-  using rs::core::TrackBuilder;
-  using rs::core::TrackId;
-  using rs::core::TrackStore;
+  using rs::TrackId;
+  using rs::library::MusicLibrary;
+  using rs::library::TrackBuilder;
+  using rs::library::TrackStore;
+  using rs::model::FilteredTrackIdList;
+  using rs::model::SmartListEngine;
+  using rs::model::TrackIdList;
+  using rs::model::TrackIdListObserver;
 
   struct TrackSpec
   {

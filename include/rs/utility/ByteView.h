@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <gsl-lite/gsl-lite.hpp>
 #include <memory>
 #include <span>
 #include <string>

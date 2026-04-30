@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 
 #include <optional>
-#include <rs/core/DictionaryStore.h>
-#include <rs/core/ResourceStore.h>
-#include <rs/core/TrackBuilder.h>
-#include <rs/core/TrackLayout.h>
-#include <rs/core/TrackStore.h>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
 #include <rs/expr/PlanEvaluator.h>
+#include <rs/library/DictionaryStore.h>
+#include <rs/library/ResourceStore.h>
+#include <rs/library/TrackBuilder.h>
+#include <rs/library/TrackLayout.h>
+#include <rs/library/TrackStore.h>
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
 #include <rs/utility/ByteView.h>
 #include <span>
-#include <test/unit/core/TestUtils.h>
+#include <test/unit/library/TestUtils.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <vector>
@@ -28,7 +28,7 @@
 namespace
 {
 
-  using rs::core::DictionaryId;
+  using rs::DictionaryId;
   using rs::lmdb::Database;
 
   // Helper class to hold both the serialized data and create TrackView
@@ -97,7 +97,7 @@ namespace
       // Fix up the header with specific IDs
       // Note: we serialize then modify, so const_cast is safe
       auto* header =
-        const_cast<rs::core::TrackHotHeader*>(rs::utility::layout::view<rs::core::TrackHotHeader>(_hotData));
+        const_cast<rs::library::TrackHotHeader*>(rs::utility::layout::view<rs::library::TrackHotHeader>(_hotData));
       header->artistId = DictionaryId{artistId};
       header->albumId = DictionaryId{albumId};
       header->genreId = DictionaryId{genreId};
@@ -107,21 +107,27 @@ namespace
     }
 
     // Returns TrackView with both hot and cold data
-    rs::core::TrackView view() const { return rs::core::TrackView{_hotData, _coldData}; }
+    rs::library::TrackView view() const { return rs::library::TrackView{_hotData, _coldData}; }
 
     // Returns TrackView with hot data only (for invalid cold tests)
-    rs::core::TrackView hotOnlyView() const { return rs::core::TrackView{_hotData, std::span<std::byte const>{}}; }
+    rs::library::TrackView hotOnlyView() const
+    {
+      return rs::library::TrackView{_hotData, std::span<std::byte const>{}};
+    }
 
     // Returns TrackView with cold data only (for cold-only plan tests)
-    rs::core::TrackView coldOnlyView() const { return rs::core::TrackView{std::span<std::byte const>{}, _coldData}; }
+    rs::library::TrackView coldOnlyView() const
+    {
+      return rs::library::TrackView{std::span<std::byte const>{}, _coldData};
+    }
 
-    rs::core::DictionaryStore& dictionary() { return *_dict; }
+    rs::library::DictionaryStore& dictionary() { return *_dict; }
 
   private:
-    rs::core::TrackBuilder _builder = rs::core::TrackBuilder::createNew();
+    rs::library::TrackBuilder _builder = rs::library::TrackBuilder::createNew();
     std::optional<rs::lmdb::Environment> _env;
-    std::optional<rs::core::DictionaryStore> _dict;
-    std::optional<rs::core::ResourceStore> _resources;
+    std::optional<rs::library::DictionaryStore> _dict;
+    std::optional<rs::library::ResourceStore> _resources;
     std::vector<std::byte> _hotData;
     std::vector<std::byte> _coldData;
     // Store strings as members so string_view pointers remain valid
@@ -134,12 +140,12 @@ namespace
     std::vector<std::string> _tagStrings; // Keep tag strings alive for string_view
   };
 
-  std::vector<std::byte> makeHotOnlyTrack(rs::core::DictionaryId artistId = rs::core::DictionaryId{0},
-                                          rs::core::DictionaryId albumId = rs::core::DictionaryId{0},
-                                          rs::core::DictionaryId genreId = rs::core::DictionaryId{0},
-                                          rs::core::DictionaryId albumArtistId = rs::core::DictionaryId{0})
+  std::vector<std::byte> makeHotOnlyTrack(rs::DictionaryId artistId = rs::DictionaryId{0},
+                                          rs::DictionaryId albumId = rs::DictionaryId{0},
+                                          rs::DictionaryId genreId = rs::DictionaryId{0},
+                                          rs::DictionaryId albumArtistId = rs::DictionaryId{0})
   {
-    auto header = rs::core::TrackHotHeader{};
+    auto header = rs::library::TrackHotHeader{};
     header.artistId = artistId;
     header.albumId = albumId;
     header.genreId = genreId;
@@ -152,8 +158,8 @@ namespace
 
 } // namespace
 
-using rs::core::DictionaryId;
-using rs::core::DictionaryStore;
+using rs::DictionaryId;
+using rs::library::DictionaryStore;
 using rs::lmdb::Database;
 using rs::lmdb::Environment;
 using rs::lmdb::ReadTransaction;
@@ -332,15 +338,15 @@ TEST_CASE("PlanEvaluator - Artist LIKE resolves DictionaryId strings")
   auto evaluator = PlanEvaluator{};
 
   auto matchingHotData = makeHotOnlyTrack(bachId);
-  auto matchingTrack = rs::core::TrackView{matchingHotData, std::span<std::byte const>{}};
+  auto matchingTrack = rs::library::TrackView{matchingHotData, std::span<std::byte const>{}};
   CHECK(evaluator.evaluateFull(plan, matchingTrack) == true);
 
   auto nonMatchingHotData = makeHotOnlyTrack(mozartId);
-  auto nonMatchingTrack = rs::core::TrackView{nonMatchingHotData, std::span<std::byte const>{}};
+  auto nonMatchingTrack = rs::library::TrackView{nonMatchingHotData, std::span<std::byte const>{}};
   CHECK(evaluator.evaluateFull(plan, nonMatchingTrack) == false);
 
   auto missingArtistHotData = makeHotOnlyTrack();
-  auto missingArtistTrack = rs::core::TrackView{missingArtistHotData, std::span<std::byte const>{}};
+  auto missingArtistTrack = rs::library::TrackView{missingArtistHotData, std::span<std::byte const>{}};
   CHECK(evaluator.evaluateFull(plan, missingArtistTrack) == false);
 }
 
@@ -520,7 +526,7 @@ TEST_CASE("PlanEvaluator - Invalid Track View")
   auto evaluator = PlanEvaluator{};
 
   // Empty hot data creates an invalid TrackView
-  auto emptyView = rs::core::TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
+  auto emptyView = rs::library::TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
   auto result = evaluator.evaluateFull(plan, emptyView);
   CHECK(result == false);
 }
@@ -754,31 +760,31 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Track Computation")
   // Using manual header construction.
   // Tag ID 10 -> bit 10 (10 & 31 = 10)
   {
-    auto h = rs::core::TrackHotHeader{};
+    auto h = rs::library::TrackHotHeader{};
     h.tagBloom = (1U << (10 & 31)); // bit 10
     auto data = test::serializeHeader(h);
     data.push_back(static_cast<std::byte>('\0')); // empty title
-    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
+    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.tags().bloom() == (1U << 10));
   }
 
   // Tag ID 32 -> bit 0 (32 & 31 = 0)
   {
-    auto h = rs::core::TrackHotHeader{};
+    auto h = rs::library::TrackHotHeader{};
     h.tagBloom = (1U << (32 & 31)); // bit 0
     auto data = test::serializeHeader(h);
     data.push_back(static_cast<std::byte>('\0')); // empty title
-    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
+    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.tags().bloom() == 1U);
   }
 
   // Multiple tags: ID 5 and ID 20
   {
-    auto h = rs::core::TrackHotHeader{};
+    auto h = rs::library::TrackHotHeader{};
     h.tagBloom = (1U << (5 & 31)) | (1U << (20 & 31)); // bits 5 and 20
     auto data = test::serializeHeader(h);
     data.push_back(static_cast<std::byte>('\0')); // empty title
-    auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
+    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
     CHECK((view.tags().bloom() & (1U << 5)) != 0);  // Bit 5 should be set
     CHECK((view.tags().bloom() & (1U << 20)) != 0); // Bit 20 should be set
   }
@@ -792,7 +798,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   auto evaluator = PlanEvaluator{};
 
   // Create a track with tag bloom bit 0 set (simulating tag ID 32)
-  auto h = rs::core::TrackHotHeader{};
+  auto h = rs::library::TrackHotHeader{};
   h.tagBloom = 0x00000001U; // Only bit 0 set
 
   auto data = std::vector<std::byte>{};
@@ -801,7 +807,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
+  auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
 
   // Bloom filter rejects because query mask doesn't match track bloom
   auto result = evaluator.matches(plan, view);
@@ -817,7 +823,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
 
   // Create a track with tag bloom that has some bits set
   // (without dictionary, mask is 0, so this won't actually test fast path)
-  auto h = rs::core::TrackHotHeader{};
+  auto h = rs::library::TrackHotHeader{};
   h.tagBloom = 0xFFFFFFFFU; // All bits set
 
   auto data = std::vector<std::byte>{};
@@ -826,7 +832,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  auto view = rs::core::TrackView{data, std::span<std::byte const>{}};
+  auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
 
   // With mask 0, bloom check passes (no filtering), falls through to full eval
   auto result = evaluator.matches(plan, view);

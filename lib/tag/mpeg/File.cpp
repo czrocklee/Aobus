@@ -15,10 +15,10 @@ namespace rs::tag::mpeg
     constexpr std::uint8_t kCodecIdMp3 = 0x55;
   }
 
-  rs::core::TrackBuilder File::loadTrack() const
+  rs::library::TrackBuilder File::loadTrack() const
   {
     clearOwnedStrings();
-    auto builder = rs::core::TrackBuilder::createNew();
+    auto builder = rs::library::TrackBuilder::createNew();
 
     void const* audioStart = _mappedRegion.get_address();
     std::size_t audioSize = _mappedRegion.get_size();

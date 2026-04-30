@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "TrackCommand.h"
-#include <rs/core/TrackLayout.h>
+#include <rs/library/TrackLayout.h>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
 #include <rs/expr/PlanEvaluator.h>
@@ -18,12 +18,12 @@ namespace rs::tool
   {
     using namespace rs;
 
-    std::vector<std::pair<core::TrackId, core::TrackView>> collectTracks(core::MusicLibrary& ml,
+    std::vector<std::pair<rs::TrackId, rs::library::TrackView>> collectTracks(rs::library::MusicLibrary& ml,
                                                                          std::string const& filter)
     {
       auto txn = ml.readTransaction();
       auto reader = ml.tracks().reader(txn);
-      auto matches = std::vector<std::pair<core::TrackId, core::TrackView>>{};
+      auto matches = std::vector<std::pair<rs::TrackId, rs::library::TrackView>>{};
 
       if (filter.empty())
       {
@@ -49,10 +49,10 @@ namespace rs::tool
       return matches;
     }
 
-    void formatJson(std::vector<std::pair<core::TrackId, core::TrackView>> const& matches,
+    void formatJson(std::vector<std::pair<rs::TrackId, rs::library::TrackView>> const& matches,
                     std::size_t offset,
                     std::size_t limit,
-                    core::MusicLibrary& ml,
+                    rs::library::MusicLibrary& ml,
                     std::ostream& os)
     {
       if (offset >= matches.size())
@@ -92,7 +92,7 @@ namespace rs::tool
       os << "]\n";
     }
 
-    void formatPlain(std::vector<std::pair<core::TrackId, core::TrackView>> const& matches,
+    void formatPlain(std::vector<std::pair<rs::TrackId, rs::library::TrackView>> const& matches,
                      std::size_t offset,
                      std::size_t limit,
                      std::ostream& os)
@@ -116,7 +116,7 @@ namespace rs::tool
       }
     }
 
-    void show(core::MusicLibrary& ml,
+    void show(rs::library::MusicLibrary& ml,
               std::string const& filter,
               bool json,
               std::size_t limit,
@@ -135,7 +135,7 @@ namespace rs::tool
       }
     }
 
-    void createTrack(core::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
+    void createTrack(rs::library::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
     {
       auto tagFile = tag::File::open(path);
 
@@ -157,7 +157,7 @@ namespace rs::tool
       auto [id, trackView] = writer.createHotCold(
         preparedHot.size(),
         preparedCold.size(),
-        [&preparedHot, &preparedCold](core::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+        [&preparedHot, &preparedCold](rs::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
         {
           preparedHot.writeTo(hot);
           preparedCold.writeTo(cold);
@@ -168,7 +168,7 @@ namespace rs::tool
     }
   }
 
-  void setupTrackCommand(CLI::App& app, core::MusicLibrary& ml)
+  void setupTrackCommand(CLI::App& app, rs::library::MusicLibrary& ml)
   {
     auto* track = app.add_subcommand("track", "Track management commands");
 
@@ -199,7 +199,7 @@ namespace rs::tool
       {
         auto txn = ml.writeTransaction();
         auto writer = ml.tracks().writer(txn);
-        auto const trackId = core::TrackId{id->as<std::uint32_t>()};
+        auto const trackId = rs::TrackId{id->as<std::uint32_t>()};
 
         if (writer.remove(trackId))
         {

@@ -6,7 +6,7 @@
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <filesystem>
-#include <rs/core/TrackBuilder.h>
+#include <rs/library/TrackBuilder.h>
 
 #include <deque>
 #include <string>
@@ -56,7 +56,7 @@ namespace rs::tag
      * IMPORTANT: The builder must have serialize() called before this File is destroyed
      * or before loadTrack() is called again on this File instance.
      */
-    virtual rs::core::TrackBuilder loadTrack() const = 0;
+    virtual rs::library::TrackBuilder loadTrack() const = 0;
 
     /**
      * Open a tag file by path, auto-detecting format from extension.

@@ -5,12 +5,12 @@
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/utility/VariantVisitor.h>
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <cstring>
 #include <exception>
+#include <gsl-lite/gsl-lite.hpp>
 #include <limits>
 #include <ranges>
 #include <string>
@@ -338,7 +338,7 @@ namespace rs::expr
     }
   }
 
-  QueryCompiler::QueryCompiler(core::DictionaryStore* dict)
+  QueryCompiler::QueryCompiler(rs::library::DictionaryStore* dict)
     : _dict{dict}
   {
     gsl_Expects(dict != nullptr);

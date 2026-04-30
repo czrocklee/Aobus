@@ -1,19 +1,19 @@
 #include "fakeit.hpp"
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 
-#include "core/backend/BackendTypes.h"
-#include "core/backend/IAudioBackend.h"
-#include "core/backend/IBackendManager.h"
-#include "core/backend/NullBackend.h"
-#include "core/playback/PlaybackController.h"
-#include "core/playback/PlaybackEngine.h"
+#include <rs/audio/BackendTypes.h>
+#include <rs/audio/IAudioBackend.h>
+#include <rs/audio/IBackendManager.h>
+#include <rs/audio/NullBackend.h>
+#include <rs/audio/PlaybackController.h>
+#include <rs/audio/PlaybackEngine.h>
 
-using namespace app::core::playback;
-using namespace app::core::backend;
-using namespace app::core;
+using namespace rs::audio;
+using namespace rs::audio;
+using namespace rs::audio;
 using namespace fakeit;
 
 namespace
@@ -113,7 +113,7 @@ TEST_CASE("PlaybackController - Quality Analysis with FakeIt", "[playback][contr
                                             .backendKind = BackendKind::None,
                                             .capabilities = {}}});
   When(Method(mockManager, createBackend))
-    .AlwaysDo([&](AudioDevice const&) { return std::make_unique<backend::NullBackend>(); });
+    .AlwaysDo([&](AudioDevice const&) { return std::make_unique<rs::audio::NullBackend>(); });
   When(Method(mockManager, subscribeGraph))
     .AlwaysDo(
       [&](std::string_view, IBackendManager::OnGraphChangedCallback cb)
@@ -224,7 +224,7 @@ TEST_CASE("PlaybackController - Lifecycle and Stale Updates with FakeIt", "[play
                                             .backendKind = BackendKind::None,
                                             .capabilities = {}}});
   When(Method(mockManager, createBackend))
-    .AlwaysDo([&](AudioDevice const&) { return std::make_unique<backend::NullBackend>(); });
+    .AlwaysDo([&](AudioDevice const&) { return std::make_unique<rs::audio::NullBackend>(); });
   When(Method(mockManager, subscribeGraph))
     .AlwaysDo([](std::string_view, IBackendManager::OnGraphChangedCallback)
               { return std::make_unique<MockSubscription>(); });
