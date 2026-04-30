@@ -39,27 +39,22 @@ add_executable(rs_test
 )
 
 target_include_directories(rs_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(rs_test PRIVATE rs rs_model rs_audio app_linux Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
+target_link_libraries(rs_test PRIVATE rs app_linux Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(rs_test PRIVATE PIPEWIRE_FOUND)
-  target_link_libraries(rs_test PRIVATE PipeWire)
+  target_link_libraries(rs_test PRIVATE PkgPipeWire)
 endif()
 
 if(ALSA_FOUND)
   target_compile_definitions(rs_test PRIVATE ALSA_FOUND)
-  target_link_libraries(rs_test PRIVATE ALSA UDEV)
+  target_link_libraries(rs_test PRIVATE PkgALSA PkgUDEV)
 endif()
 
 target_compile_definitions(rs_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
 target_compile_options(rs_test PRIVATE -Wno-array-bounds)
 add_test(NAME rs_test COMMAND rs_test)
-
-if(CLANG_TIDY_EXECUTABLE)
-  set_target_properties(rs_test PROPERTIES
-    CXX_CLANG_TIDY "${CLANG_TIDY_EXECUTABLE};${CLANG_TIDY_RELAXED_CHECKS};-header-filter=${CLANG_TIDY_RELAXED_FILTER};${CLANG_TIDY_EXTRA_ARGS}"
-  )
-endif()
+rockstudio_apply_clang_tidy(rs_test RELAXED)
 
 # rs_test_linux: Linux UI tests (require app_linux and GTKMM)
 add_executable(rs_test_linux
@@ -69,5 +64,5 @@ add_executable(rs_test_linux
 )
 
 target_include_directories(rs_test_linux PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(rs_test_linux PRIVATE rs rs_model rs_audio app_linux GTKMM Catch2 spdlog::spdlog Catch2::Catch2WithMain)
+target_link_libraries(rs_test_linux PRIVATE rs app_linux PkgGTKMM Catch2 spdlog::spdlog Catch2::Catch2WithMain)
 add_test(NAME rs_test_linux COMMAND rs_test_linux)

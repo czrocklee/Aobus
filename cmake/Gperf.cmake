@@ -5,7 +5,7 @@
 # Generates a header file from a gperf input file.
 
 function(add_gperf_header out_var input relative_output)
-  set(output "${CMAKE_CURRENT_BINARY_DIR}/generated/${relative_output}")
+  set(output "${CMAKE_BINARY_DIR}/generated/${relative_output}")
   get_filename_component(output_dir "${output}" DIRECTORY)
 
   add_custom_command(
@@ -16,10 +16,10 @@ function(add_gperf_header out_var input relative_output)
       -DGPERF_EXECUTABLE=${GPERF_EXECUTABLE}
       -DINPUT=${input}
       -DOUTPUT=${output}
-      -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunGperf.cmake"
+      -P "${CMAKE_SOURCE_DIR}/cmake/RunGperf.cmake"
     DEPENDS
       "${input}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunGperf.cmake"
+      "${CMAKE_SOURCE_DIR}/cmake/RunGperf.cmake"
     VERBATIM
   )
 
