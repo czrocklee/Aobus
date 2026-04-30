@@ -42,7 +42,7 @@ namespace rs::core
      * MetadataProxy - Accessors for track metadata ($ prefix).
      * Includes: title, artist, album, genre, year, rating, track info, disc info, uri, cover art.
      */
-    class MetadataProxy
+    class MetadataProxy final
     {
     public:
       explicit MetadataProxy(TrackView const& track)
@@ -77,7 +77,7 @@ namespace rs::core
      * Technical audio characteristics: codec, bitDepth, duration, bitrate,
      * sampleRate, channels, fileSize, mtime, uri.
      */
-    class PropertyProxy
+    class PropertyProxy final
     {
     public:
       explicit PropertyProxy(TrackView const& track)
@@ -105,7 +105,7 @@ namespace rs::core
     /**
      * TagProxy - Accessors for tag data (bloom filter, tag IDs).
      */
-    class TagProxy : public std::ranges::view_interface<TagProxy>
+    class TagProxy final : public std::ranges::view_interface<TagProxy>
     {
     public:
       explicit TagProxy(std::span<std::byte const> hotData)
@@ -145,7 +145,7 @@ namespace rs::core
     /**
      * CustomProxy - Accessors for custom key-value metadata.
      */
-    class CustomProxy : public std::ranges::view_interface<CustomProxy>
+    class CustomProxy final : public std::ranges::view_interface<CustomProxy>
     {
     public:
       explicit CustomProxy(std::span<std::byte const> coldData)

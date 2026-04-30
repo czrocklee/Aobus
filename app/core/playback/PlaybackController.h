@@ -51,9 +51,12 @@ namespace app::core::playback
     void handleRouteChanged(EngineRouteSnapshot const& snapshot, std::uint64_t generation);
     void updateMergedGraph();
     void analyzeAudioQuality();
+
     std::uint64_t _playbackGeneration = 0;
 
   private:
+    void handleSystemGraphChanged(backend::AudioGraph const& graph, std::uint64_t generation);
+
     std::unique_ptr<PlaybackEngine> _engine;
 
     // Backend managers
@@ -68,7 +71,6 @@ namespace app::core::playback
     mutable std::vector<backend::AudioDevice> _allDevices;
 
     // Controller-owned state
-    // Remove redeclaration
     EngineRouteSnapshot _cachedEngineRoute;
     backend::AudioGraph _cachedSystemGraph;
     std::unique_ptr<backend::IGraphSubscription> _graphSubscription;
@@ -76,8 +78,6 @@ namespace app::core::playback
     backend::AudioGraph _mergedGraph;
     backend::AudioQuality _quality = backend::AudioQuality::Unknown;
     std::string _qualityTooltip;
-
-    void handleSystemGraphChanged(backend::AudioGraph const& graph, std::uint64_t generation);
   };
 
 } // namespace app::core::playback

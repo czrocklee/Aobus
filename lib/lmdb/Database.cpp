@@ -17,18 +17,18 @@ namespace rs::lmdb
   namespace
   {
     template<typename T>
-    MDB_val makeVal(T const& val)
+    ::MDB_val makeVal(T const& val)
     {
       return {.mv_size = sizeof(T), .mv_data = const_cast<T*>(&val)};
     }
 
-    inline MDB_val makeVal(void const* data = nullptr, std::size_t size = 0)
+    inline ::MDB_val makeVal(void const* data = nullptr, std::size_t size = 0)
     {
       return {.mv_size = size, .mv_data = const_cast<void*>(data)}; // NOLINT(cppcoreguidelines-pro-type-const-cast)
     }
 
     template<typename T>
-    T read(MDB_val val)
+    T read(::MDB_val val)
     {
       if (val.mv_size != sizeof(T))
       {
@@ -64,7 +64,7 @@ namespace rs::lmdb
     return Writer{_dbi, txn};
   }
 
-  Reader::Reader(MDB_dbi dbi, MDB_txn* txn)
+  Reader::Reader(::MDB_dbi dbi, ::MDB_txn* txn)
     : _dbi{dbi}, _txn{txn}
   {
     gsl_Expects(txn != nullptr);
@@ -87,8 +87,8 @@ namespace rs::lmdb
 
   std::uint32_t Reader::maxKey() const
   {
-    auto cursor = create(_txn, _dbi);
-    auto key = MDB_val{0, nullptr};
+    auto const cursor = create(_txn, _dbi);
+    auto key = ::MDB_val{0, nullptr};
     auto val = makeVal(nullptr, 0);
     int const rc = ::mdb_cursor_get(cursor.get(), &key, &val, MDB_LAST);
 
@@ -101,10 +101,10 @@ namespace rs::lmdb
     return read<std::uint32_t>(key);
   }
 
-  Reader::CursorPtr Reader::create(MDB_txn* txn, MDB_dbi dbi)
+  Reader::CursorPtr Reader::create(::MDB_txn* txn, ::MDB_dbi dbi)
   {
     gsl_Expects(txn != nullptr);
-    MDB_cursor* cursor = nullptr;
+    ::MDB_cursor* cursor = nullptr;
     throwOnError("mdb_cursor_open", ::mdb_cursor_open(txn, dbi, &cursor));
     return CursorPtr{cursor};
   }
@@ -136,8 +136,8 @@ namespace rs::lmdb
     if (other._cursor)
     {
       _cursor = Reader::create(::mdb_cursor_txn(other._cursor.get()), ::mdb_cursor_dbi(other._cursor.get()));
-      auto key = makeVal(&_value.first, sizeof(std::uint32_t));
-      throwOnError("mdb_cursor_get", ::mdb_cursor_get(_cursor.get(), &key, nullptr, MDB_SET));
+      auto const key = makeVal(&_value.first, sizeof(std::uint32_t));
+      throwOnError("mdb_cursor_get", ::mdb_cursor_get(_cursor.get(), const_cast<::MDB_val*>(&key), nullptr, MDB_SET));
     }
   }
 
@@ -180,10 +180,10 @@ namespace rs::lmdb
     return _value;
   }
 
-  Writer::Writer(MDB_dbi dbi, WriteTransaction& txn)
+  Writer::Writer(::MDB_dbi dbi, WriteTransaction& txn)
     : _dbi{dbi}, _txn{&txn}, _cursor{Reader::create(txn._handle.get(), _dbi)}
   {
-    auto key = MDB_val{0, nullptr};
+    auto key = ::MDB_val{0, nullptr};
 
     if (int const rc = ::mdb_cursor_get(_cursor.get(), &key, nullptr, MDB_LAST); rc == MDB_SUCCESS)
     {

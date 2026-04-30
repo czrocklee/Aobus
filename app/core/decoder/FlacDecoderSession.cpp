@@ -63,24 +63,30 @@ namespace app::core::decoder
                                                       FLAC__byte* buffer,
                                                       size_t* bytes,
                                                       void* clientData);
+
     static FLAC__StreamDecoderSeekStatus seekCallback(FLAC__StreamDecoder const* decoder,
                                                       FLAC__uint64 absoluteByteOffset,
                                                       void* clientData);
+
     static FLAC__StreamDecoderTellStatus tellCallback(FLAC__StreamDecoder const* decoder,
                                                       FLAC__uint64* absoluteByteOffset,
                                                       void* clientData);
+
     static FLAC__StreamDecoderLengthStatus lengthCallback(FLAC__StreamDecoder const* decoder,
                                                           FLAC__uint64* streamLength,
                                                           void* clientData);
+
     static FLAC__bool eofCallback(FLAC__StreamDecoder const* decoder, void* clientData);
 
     static FLAC__StreamDecoderWriteStatus writeCallback(FLAC__StreamDecoder const* decoder,
                                                         FLAC__Frame const* frame,
                                                         FLAC__int32 const* const* buffer,
                                                         void* clientData);
+
     static void metadataCallback(FLAC__StreamDecoder const* decoder,
                                  FLAC__StreamMetadata const* metadata,
                                  void* clientData);
+
     static void errorCallback(FLAC__StreamDecoder const* decoder,
                               FLAC__StreamDecoderErrorStatus status,
                               void* clientData);
@@ -164,6 +170,7 @@ namespace app::core::decoder
     }
 
     _impl->nextFrameIndex = targetSample;
+
     return {};
   }
 
@@ -233,7 +240,7 @@ namespace app::core::decoder
                                                                        size_t* bytes,
                                                                        void* clientData)
   {
-    auto* impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
     auto const fileBytes = impl->mappedFile.bytes();
 
     if (*bytes > 0)
@@ -250,6 +257,7 @@ namespace app::core::decoder
       std::memcpy(buffer, fileBytes.data() + impl->currentOffset, toRead);
       impl->currentOffset += toRead;
       *bytes = toRead;
+
       return FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
     }
 
@@ -260,7 +268,7 @@ namespace app::core::decoder
                                                                        FLAC__uint64 absoluteByteOffset,
                                                                        void* clientData)
   {
-    auto* impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
     auto const fileBytes = impl->mappedFile.bytes();
 
     if (absoluteByteOffset >= fileBytes.size())
@@ -269,6 +277,7 @@ namespace app::core::decoder
     }
 
     impl->currentOffset = absoluteByteOffset;
+
     return FLAC__STREAM_DECODER_SEEK_STATUS_OK;
   }
 
@@ -276,8 +285,9 @@ namespace app::core::decoder
                                                                        FLAC__uint64* absoluteByteOffset,
                                                                        void* clientData)
   {
-    auto* impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
     *absoluteByteOffset = impl->currentOffset;
+
     return FLAC__STREAM_DECODER_TELL_STATUS_OK;
   }
 
@@ -285,14 +295,16 @@ namespace app::core::decoder
                                                                            FLAC__uint64* streamLength,
                                                                            void* clientData)
   {
-    auto* impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
     *streamLength = impl->mappedFile.bytes().size();
+
     return FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
   }
 
   FLAC__bool FlacDecoderSession::Impl::eofCallback(FLAC__StreamDecoder const* /*decoder*/, void* clientData)
   {
-    auto* impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
+
     return static_cast<FLAC__bool>(impl->currentOffset >= impl->mappedFile.bytes().size());
   }
 
@@ -301,7 +313,7 @@ namespace app::core::decoder
                                                                          FLAC__int32 const* const* buffer,
                                                                          void* clientData)
   {
-    auto* impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
 
     auto const channels = frame->header.channels;
     auto const bps = frame->header.bits_per_sample;
@@ -347,7 +359,7 @@ namespace app::core::decoder
       {
         for (std::uint32_t ch = 0; channels > 0 && ch < channels; ++ch)
         {
-          auto val = static_cast<std::int32_t>(buffer[ch][i]);
+          auto const val = static_cast<std::int32_t>(buffer[ch][i]);
 
           // If we are padding 24-bit into 32-bit, ensure it's properly shifted if needed.
           // libFLAC gives us signed 32-bit integers.
@@ -371,14 +383,14 @@ namespace app::core::decoder
     impl->info.outputFormat.channels = static_cast<std::uint8_t>(channels);
     impl->info.outputFormat.sampleRate = frame->header.sample_rate;
 
-    return ::FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
+    return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
   }
 
   void FlacDecoderSession::Impl::metadataCallback(FLAC__StreamDecoder const* /*decoder*/,
                                                   FLAC__StreamMetadata const* metadata,
                                                   void* clientData)
   {
-    auto* impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
 
     if (metadata->type == FLAC__METADATA_TYPE_STREAMINFO)
     {
@@ -413,7 +425,7 @@ namespace app::core::decoder
                                                [[maybe_unused]] FLAC__StreamDecoderErrorStatus status,
                                                [[maybe_unused]] void* clientData)
   {
-    [[maybe_unused]] auto* impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    [[maybe_unused]] auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
     /* TODO logging */
   }
 

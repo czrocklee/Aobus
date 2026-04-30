@@ -22,7 +22,7 @@ namespace rs::core
    * Uses LMDB for persistent storage (id → string) and builds an in-memory
    * hash map for fast string → id lookups when loaded.
    */
-  class DictionaryStore
+  class DictionaryStore final
   {
   public:
     /**

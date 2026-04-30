@@ -10,11 +10,11 @@
 #include "core/source/MemoryPcmSource.h"
 #include "core/source/StreamingPcmSource.h"
 
-#include <rs/utility/ByteView.h>
 #include <algorithm>
 #include <format>
 #include <limits>
 #include <ranges>
+#include <rs/utility/ByteView.h>
 #include <set>
 #include <sstream>
 
@@ -92,6 +92,7 @@ namespace app::core::playback
     auto const state = [this]()
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
+
       return State{.track = _currentTrack,
                    .positionMs = _snapshot.positionMs,
                    .wasPlaying = (_snapshot.state == TransportState::Playing)};
@@ -113,12 +114,14 @@ namespace app::core::playback
       PLAYBACK_LOG_INFO("Resuming track '{}' after backend switch", state.track->title);
       play(*state.track);
       seek(state.positionMs);
+
       if (!state.wasPlaying)
       {
         pause();
       }
     }
   }
+
   void PlaybackEngine::setOnTrackEnded(std::function<void()> callback)
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
@@ -146,9 +149,11 @@ namespace app::core::playback
     _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
 
     _routeSnapshot = {};
+
     if (_onRouteChanged)
     {
-      auto snap = _routeSnapshot;
+      auto const snap = _routeSnapshot;
+
       if (_dispatcher)
       {
         _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
@@ -212,6 +217,7 @@ namespace app::core::playback
     if (_backend)
     {
       auto const openResult = _backend->open(backendFormat, callbacks);
+
       if (!openResult)
       {
         _source.store({}, std::memory_order_release);
@@ -224,6 +230,7 @@ namespace app::core::playback
     }
 
     auto const bufferedMs = source ? source->bufferedMs() : 0;
+
     if (auto const drained = !source || source->isDrained(); drained && bufferedMs == 0)
     {
       if (_backend)
@@ -231,6 +238,7 @@ namespace app::core::playback
         _backend->stop();
         _backend->close();
       }
+
       _source.store({}, std::memory_order_release);
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       resetToIdle();
@@ -252,8 +260,10 @@ namespace app::core::playback
   void PlaybackEngine::pause()
   {
     bool shouldPause = false;
+
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
+
       if (_snapshot.state == TransportState::Playing || _snapshot.state == TransportState::Buffering)
       {
         PLAYBACK_LOG_INFO("Playback paused");
@@ -261,6 +271,7 @@ namespace app::core::playback
         shouldPause = _backendStarted.load();
       }
     }
+
     if (shouldPause && _backend)
     {
       _backend->pause();
@@ -269,27 +280,32 @@ namespace app::core::playback
 
   void PlaybackEngine::resume()
   {
-    auto source = _source.load(std::memory_order_acquire);
+    auto const source = _source.load(std::memory_order_acquire);
     auto lock = std::unique_lock<std::mutex>{_stateMutex};
+
     if (_snapshot.state != TransportState::Paused)
     {
       return;
     }
 
     PLAYBACK_LOG_INFO("Playback resumed");
+
     if (_backendStarted)
     {
       _snapshot.state = TransportState::Playing;
       lock.unlock();
+
       if (_backend)
       {
         _backend->resume();
       }
+
       return;
     }
 
     auto const bufferedMs = source ? source->bufferedMs() : 0;
     auto const drained = !source || source->isDrained();
+
     if (drained && bufferedMs == 0)
     {
       _source.store({}, std::memory_order_release);
@@ -300,6 +316,7 @@ namespace app::core::playback
     _snapshot.state = TransportState::Playing;
     _backendStarted = true;
     lock.unlock();
+
     if (_backend)
     {
       _backend->start();
@@ -309,12 +326,14 @@ namespace app::core::playback
   void PlaybackEngine::stop()
   {
     PLAYBACK_LOG_INFO("Playback stopped");
+
     if (_backend)
     {
       _backend->reset();
       _backend->stop();
       _backend->close();
     }
+
     _source.store({}, std::memory_order_release);
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
     resetToIdle();
@@ -323,13 +342,15 @@ namespace app::core::playback
   void PlaybackEngine::seek(std::uint32_t positionMs)
   {
     PLAYBACK_LOG_INFO("Seek requested: {} ms", positionMs);
-    auto source = _source.load(std::memory_order_acquire);
+    auto const source = _source.load(std::memory_order_acquire);
+
     if (!source)
     {
       return;
     }
 
     bool wasPaused = false;
+
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       wasPaused = (_snapshot.state == TransportState::Paused);
@@ -343,10 +364,12 @@ namespace app::core::playback
       _backend->stop();
       _backend->flush();
     }
+
     _backendStarted = false;
     _playbackDrainPending = false;
 
     auto const seekResult = source->seek(positionMs);
+
     if (!seekResult)
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
@@ -357,6 +380,7 @@ namespace app::core::playback
 
     auto const bufferedMs = source->bufferedMs();
     auto const drained = source->isDrained();
+
     if (drained && bufferedMs == 0)
     {
       if (_backend)
@@ -364,6 +388,7 @@ namespace app::core::playback
         _backend->stop();
         _backend->close();
       }
+
       _source.store({}, std::memory_order_release);
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       resetToIdle();
@@ -391,7 +416,7 @@ namespace app::core::playback
 
   PlaybackSnapshot PlaybackEngine::snapshot() const
   {
-    auto source = _source.load(std::memory_order_acquire);
+    auto const source = _source.load(std::memory_order_acquire);
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
     auto snap = _snapshot;
     snap.backend = _backend ? _backend->kind() : BackendKind::None;
@@ -403,8 +428,9 @@ namespace app::core::playback
 
   void PlaybackEngine::onBackendError(void* userData, std::string_view message) noexcept
   {
-    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     auto msg = std::string(message);
+
     if (self->_dispatcher)
     {
       self->_dispatcher->dispatch([self, msg = std::move(msg)]() { self->handleBackendError(msg); });
@@ -439,12 +465,15 @@ namespace app::core::playback
     outputFormat.isInterleaved = true;
 
     auto decoder = createAudioDecoderSession(descriptor.filePath, outputFormat);
+
     if (!decoder)
     {
       _snapshot.statusText = "No audio decoder backend is available";
       return false;
     }
+
     auto const openResult = decoder->open(descriptor.filePath);
+
     if (!openResult)
     {
       _snapshot.statusText = openResult.error().message;
@@ -452,6 +481,7 @@ namespace app::core::playback
     }
 
     auto info = decoder->streamInfo();
+
     if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
     {
       _snapshot.statusText = "Decoder did not return a valid output format";
@@ -462,6 +492,7 @@ namespace app::core::playback
     if (_backend)
     {
       auto const backendKind = _backend->kind();
+
       if (backendKind == BackendKind::PipeWire)
       {
         backendFormat = info.outputFormat;
@@ -505,17 +536,21 @@ namespace app::core::playback
         {
           decoder->close();
           decoder = createAudioDecoderSession(descriptor.filePath, plan.decoderOutputFormat);
+
           if (!decoder)
           {
             _snapshot.statusText = "Failed to re-open decoder with negotiated format";
             return false;
           }
+
           auto const reOpenResult = decoder->open(descriptor.filePath);
+
           if (!reOpenResult)
           {
             _snapshot.statusText = "Failed to re-open decoder with negotiated format";
             return false;
           }
+
           info = decoder->streamInfo();
         }
 
@@ -529,18 +564,20 @@ namespace app::core::playback
 
     if (shouldUseMemoryPcmSource(info))
     {
-      auto memorySource = std::make_shared<source::MemoryPcmSource>(std::move(decoder), info);
+      auto const memorySource = std::make_shared<source::MemoryPcmSource>(std::move(decoder), info);
       auto const initResult = memorySource->initialize();
+
       if (!initResult)
       {
         _snapshot.statusText = initResult.error().message;
         return false;
       }
+
       source = std::move(memorySource);
     }
     else
     {
-      auto streamingSource = std::make_shared<source::StreamingPcmSource>(
+      auto const streamingSource = std::make_shared<source::StreamingPcmSource>(
         std::move(decoder),
         info,
         [this](rs::Error const& err)
@@ -593,9 +630,11 @@ namespace app::core::playback
       backend::AudioLink{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
 
     _snapshot.graph = _routeSnapshot.graph;
+
     if (_onRouteChanged)
     {
-      auto snap = _routeSnapshot;
+      auto const snap = _routeSnapshot;
+
       if (_dispatcher)
       {
         _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
@@ -611,37 +650,43 @@ namespace app::core::playback
 
   std::size_t PlaybackEngine::onReadPcm(void* userData, std::span<std::byte> output) noexcept
   {
-    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
-    auto source = self->_source.load(std::memory_order_acquire);
+    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto const source = self->_source.load(std::memory_order_acquire);
+
     return source ? source->read(output) : 0;
   }
 
   bool PlaybackEngine::isSourceDrained(void* userData) noexcept
   {
-    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
-    auto source = self->_source.load(std::memory_order_acquire);
+    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto const source = self->_source.load(std::memory_order_acquire);
+
     if (!source)
     {
       return true;
     }
+
     auto const drained = source->isDrained();
+
     if (drained)
     {
       self->_playbackDrainPending = true;
     }
+
     return drained;
   }
 
   void PlaybackEngine::onUnderrun(void* userData) noexcept
   {
-    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     ++self->_underrunCount;
   }
 
   void PlaybackEngine::onPositionAdvanced(void* userData, std::uint32_t frames) noexcept
   {
-    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     auto lock = std::unique_lock<std::mutex>{self->_stateMutex, std::try_to_lock};
+
     if (!lock.owns_lock())
     {
       return;
@@ -661,7 +706,8 @@ namespace app::core::playback
 
   void PlaybackEngine::onDrainComplete(void* userData) noexcept
   {
-    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+
     if (!self->_playbackDrainPending.exchange(false, std::memory_order_relaxed))
     {
       return;
@@ -682,6 +728,7 @@ namespace app::core::playback
     _source.store({}, std::memory_order_release);
 
     std::function<void()> cb;
+
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       resetToIdle();
@@ -697,8 +744,9 @@ namespace app::core::playback
 
   void PlaybackEngine::onRouteReady(void* userData, std::string_view routeAnchor) noexcept
   {
-    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     auto anchor = std::string(routeAnchor);
+
     if (self->_dispatcher)
     {
       self->_dispatcher->dispatch([self, anchorCopy = std::move(anchor)]() { self->handleRouteReady(anchorCopy); });
@@ -714,9 +762,11 @@ namespace app::core::playback
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
     _routeSnapshot.anchor = BackendRouteAnchor{
       .backend = _backend ? _backend->kind() : backend::BackendKind::None, .id = std::string(routeAnchor)};
+
     if (_onRouteChanged)
     {
-      auto snap = _routeSnapshot;
+      auto const snap = _routeSnapshot;
+
       if (_dispatcher)
       {
         _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
@@ -753,7 +803,8 @@ namespace app::core::playback
 
   void PlaybackEngine::onFormatChanged(void* userData, AudioFormat const& format) noexcept
   {
-    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+
     if (self->_dispatcher)
     {
       self->_dispatcher->dispatch([self, format]() { self->handleFormatChanged(format); });
@@ -790,7 +841,8 @@ namespace app::core::playback
 
     if (_onRouteChanged)
     {
-      auto snap = _routeSnapshot;
+      auto const snap = _routeSnapshot;
+
       if (_dispatcher)
       {
         _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });

@@ -37,23 +37,29 @@ namespace app::core::playback
       {
         auto const srcBits = src.validBits != 0 ? src.validBits : src.bitDepth;
         auto const dstBits = dst.validBits != 0 ? dst.validBits : dst.bitDepth;
+
         return srcBits <= dstBits;
       }
+
       if (!src.isFloat && dst.isFloat)
       {
         auto const srcBits = src.validBits != 0 ? src.validBits : src.bitDepth;
+
         if (dst.bitDepth == 32)
         {
           return srcBits <= 24;
         }
+
         if (dst.bitDepth == 64)
         {
           return srcBits <= 32;
         }
       }
+
       return false;
     }
   }
+
   PlaybackController::PlaybackController(std::shared_ptr<IMainThreadDispatcher> dispatcher)
     : _dispatcher(std::move(dispatcher))
   {
@@ -80,6 +86,7 @@ namespace app::core::playback
       {
         // Capture generation to prevent stale updates
         auto const generation = _playbackGeneration;
+
         if (_dispatcher)
         {
           _dispatcher->dispatch([this, snapshot, generation]() { handleRouteChanged(snapshot, generation); });
@@ -168,6 +175,7 @@ namespace app::core::playback
           _activeManager = manager.get();
           _playbackGeneration++;
           _engine->setBackend(std::move(backend), targetDevice);
+
           return;
         }
       }
@@ -211,6 +219,7 @@ namespace app::core::playback
     if (_backendsDirty.exchange(false))
     {
       auto allDevices = std::vector<backend::AudioDevice>{};
+
       for (auto const& manager : _managers)
       {
         auto devices = manager->enumerateDevices();
@@ -220,12 +229,14 @@ namespace app::core::playback
 
       // Group devices by BackendKind
       std::map<backend::BackendKind, std::vector<backend::AudioDevice>> groups;
+
       for (auto const& dev : allDevices)
       {
         groups[dev.backendKind].push_back(dev);
       }
 
       auto snapshots = std::vector<BackendSnapshot>{};
+
       for (auto& [kind, devices] : groups)
       {
         snapshots.push_back({.kind = kind,
@@ -255,6 +266,7 @@ namespace app::core::playback
     {
       return;
     }
+
     _cachedEngineRoute = snapshot;
 
     // Check if we have a valid anchor and manager to subscribe to the system graph
@@ -292,6 +304,7 @@ namespace app::core::playback
     {
       return;
     }
+
     _cachedSystemGraph = graph;
     updateMergedGraph();
   }
@@ -302,6 +315,7 @@ namespace app::core::playback
 
     // Find the engine output format to enrich system nodes that might be missing it (like ALSA)
     std::optional<AudioFormat> engineFormat;
+
     for (auto const& node : _cachedEngineRoute.graph.nodes)
     {
       if (node.id == "rs-engine")
@@ -318,8 +332,10 @@ namespace app::core::playback
       {
         node.format = engineFormat;
       }
+
       _mergedGraph.nodes.push_back(node);
     }
+
     for (auto const& link : _cachedSystemGraph.links)
     {
       _mergedGraph.links.push_back(link);
@@ -327,6 +343,7 @@ namespace app::core::playback
 
     // Find the backend stream node to bridge the engine to
     std::string streamNodeId;
+
     for (auto const& node : _cachedSystemGraph.nodes)
     {
       if (node.type == backend::AudioNodeType::Stream)
@@ -363,9 +380,11 @@ namespace app::core::playback
     {
       auto currentId = std::string{"rs-decoder"};
       std::set<std::string> visited;
+
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
+
         if (auto it = std::ranges::find(_mergedGraph.nodes, currentId, &backend::AudioNode::id);
             it == _mergedGraph.nodes.end())
         {
@@ -376,6 +395,7 @@ namespace app::core::playback
           path.push_back(&(*it));
 
           std::string nextId;
+
           for (auto const& link : _mergedGraph.links)
           {
             if (link.isActive && link.sourceId == currentId)
@@ -384,6 +404,7 @@ namespace app::core::playback
               break;
             }
           }
+
           currentId = nextId;
         }
       }
@@ -391,6 +412,7 @@ namespace app::core::playback
 
     // 2. Identify mixing sources
     auto inputSources = std::unordered_map<std::string, std::set<std::string>>{};
+
     for (auto const& link : _mergedGraph.links)
     {
       if (link.isActive)
@@ -401,7 +423,7 @@ namespace app::core::playback
 
     for (size_t i = 0; i < path.size(); ++i)
     {
-      auto* node = path[i];
+      auto* const node = path[i];
 
       if (node->isLossySource)
       {
@@ -425,9 +447,10 @@ namespace app::core::playback
       {
         auto const& sources = inputSources.at(node->id);
         std::vector<std::string> otherAppNames;
+
         for (auto const& srcId : sources)
         {
-          if (bool isInternal = std::ranges::contains(path, srcId, &backend::AudioNode::id); !isInternal)
+          if (bool const isInternal = std::ranges::contains(path, srcId, &backend::AudioNode::id); !isInternal)
           {
             if (auto it = std::ranges::find(_mergedGraph.nodes, srcId, &backend::AudioNode::id);
                 it != _mergedGraph.nodes.end())
@@ -436,20 +459,24 @@ namespace app::core::playback
             }
           }
         }
+
         if (!otherAppNames.empty())
         {
           std::ranges::sort(otherAppNames);
           auto [first, last] = std::ranges::unique(otherAppNames);
           otherAppNames.erase(first, last);
           std::string apps;
+
           for (size_t j = 0; j < otherAppNames.size(); ++j)
           {
             apps += otherAppNames[j];
+
             if (j < otherAppNames.size() - 1)
             {
               apps += ", ";
             }
           }
+
           appendLine(_qualityTooltip, std::format("• Mixed: {} shared with {}", node->name, apps));
           _quality = std::max(_quality, backend::AudioQuality::LinearIntervention);
         }
@@ -457,7 +484,8 @@ namespace app::core::playback
 
       if (i < path.size() - 1)
       {
-        auto* nextNode = path[i + 1];
+        auto* const nextNode = path[i + 1];
+
         if (node->format && nextNode->format)
         {
           auto const& f1 = *node->format;
@@ -468,6 +496,7 @@ namespace app::core::playback
             appendLine(_qualityTooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
             _quality = std::max(_quality, backend::AudioQuality::LinearIntervention);
           }
+
           if (f1.channels != f2.channels)
           {
             appendLine(_qualityTooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
@@ -502,15 +531,20 @@ namespace app::core::playback
       case backend::AudioQuality::BitwisePerfect:
         appendLine(_qualityTooltip, "\nConclusion: Bit-perfect output");
         break;
+
       case backend::AudioQuality::LosslessPadded:
       case backend::AudioQuality::LosslessFloat:
         appendLine(_qualityTooltip, "\nConclusion: Lossless Conversion");
         break;
+
       case backend::AudioQuality::LinearIntervention:
         appendLine(_qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
         break;
+
       case backend::AudioQuality::LossySource: appendLine(_qualityTooltip, "\nConclusion: Lossy source format"); break;
+
       case backend::AudioQuality::Clipped: appendLine(_qualityTooltip, "\nConclusion: Signal clipping detected"); break;
+
       case backend::AudioQuality::Unknown: break;
     }
   }

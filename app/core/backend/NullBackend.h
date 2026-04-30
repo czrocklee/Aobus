@@ -59,10 +59,7 @@ namespace app::core::backend
     NullBackend() = default;
     ~NullBackend() override = default;
 
-    rs::Result<> open(AudioFormat const& /*format*/, AudioRenderCallbacks /*callbacks*/) override
-    {
-      return rs::Result<>();
-    }
+    rs::Result<> open(AudioFormat const& /*format*/, AudioRenderCallbacks /*callbacks*/) override { return {}; }
 
     void reset() override {}
 
