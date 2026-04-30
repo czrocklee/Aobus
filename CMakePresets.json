@@ -7,8 +7,7 @@
       "binaryDir": "/tmp/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -Wno-error"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
     {

@@ -37,7 +37,7 @@ namespace app::core::model
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
   private:
-    rs::core::TrackStore* _store;
+    rs::core::TrackStore& _store;
     std::flat_set<TrackId> _trackIds;
   };
 

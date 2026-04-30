@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <gsl-lite/gsl-lite.hpp>
 #include <memory>
 
 namespace rs::utility
@@ -18,6 +19,8 @@ namespace rs::utility
   template<auto Fn, typename T>
   auto makeUniquePtr(T* p)
   {
+    gsl_Expects(p != nullptr);
+
     struct Deleter final
     {
       void operator()(T* ptr) const noexcept { Fn(ptr); }

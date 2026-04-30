@@ -76,13 +76,13 @@ namespace app::ui
     sigc::connection _exprTimeoutConnection;
 
     // Preview infrastructure
-    rs::core::MusicLibrary* _musicLibrary;
-    app::core::model::AllTrackIdsList* _allTrackIds;
-    app::core::model::TrackIdList* _parentMembershipList;
+    rs::core::MusicLibrary& _musicLibrary;
+    app::core::model::AllTrackIdsList& _allTrackIds;
+    app::core::model::TrackIdList& _parentMembershipList;
     rs::core::ListId _parentListId;
-    TrackRowDataProvider const* _rowDataProvider;
-    std::unique_ptr<app::core::model::SmartListEngine> _previewEngine;
+    TrackRowDataProvider const& _rowDataProvider;
     std::unique_ptr<app::core::model::FilteredTrackIdList> _previewFilteredList;
+    std::unique_ptr<app::core::model::SmartListEngine> _previewEngine;
     std::unique_ptr<TrackListAdapter> _previewAdapter;
     bool _expressionValid = true;
 

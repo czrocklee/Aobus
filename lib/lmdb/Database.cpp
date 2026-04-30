@@ -67,6 +67,7 @@ namespace rs::lmdb
   Reader::Reader(MDB_dbi dbi, MDB_txn* txn)
     : _dbi{dbi}, _txn{txn}
   {
+    gsl_Expects(txn != nullptr);
   }
 
   std::optional<std::span<std::byte const>> Reader::get(std::uint32_t id) const
@@ -102,6 +103,7 @@ namespace rs::lmdb
 
   Reader::CursorPtr Reader::create(MDB_txn* txn, MDB_dbi dbi)
   {
+    gsl_Expects(txn != nullptr);
     MDB_cursor* cursor = nullptr;
     throwOnError("mdb_cursor_open", ::mdb_cursor_open(txn, dbi, &cursor));
     return CursorPtr{cursor};

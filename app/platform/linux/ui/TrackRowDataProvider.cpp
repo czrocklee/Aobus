@@ -59,14 +59,14 @@ namespace app::ui
 {
 
   TrackRowDataProvider::TrackRowDataProvider(rs::core::MusicLibrary& ml)
-    : _ml{&ml}, _store{&ml.tracks()}, _dict{&ml.dictionary()}
+    : _ml{ml}, _store{ml.tracks()}, _dict{ml.dictionary()}
   {
   }
 
   void TrackRowDataProvider::loadAll()
   {
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
-    auto reader = _store->reader(txn);
+    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    auto reader = _store.reader(txn);
 
     for (auto const& [id, view] : reader)
     {
@@ -82,7 +82,7 @@ namespace app::ui
                     metadata.genreId(),
                     metadata.composerId(),
                     metadata.workId(),
-                    joinResolvedTags(view.tags(), *_dict),
+                    joinResolvedTags(view.tags(), _dict),
                     std::chrono::milliseconds{view.property().durationMs()},
                     metadata.year(),
                     metadata.discNumber(),
@@ -103,8 +103,8 @@ namespace app::ui
   std::optional<std::uint32_t> TrackRowDataProvider::getCoverArtId(TrackId id) const
   {
     // Need cold data for coverArtId
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
-    auto reader = _store->reader(txn);
+    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    auto reader = _store.reader(txn);
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
@@ -125,8 +125,8 @@ namespace app::ui
   std::optional<std::filesystem::path> TrackRowDataProvider::getUriPath(TrackId id) const
   {
     // Need cold data for URI
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
-    auto reader = _store->reader(txn);
+    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    auto reader = _store.reader(txn);
 
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
 
@@ -135,15 +135,15 @@ namespace app::ui
       return std::nullopt;
     }
 
-    return resolveLibraryPath(_ml->rootPath(), optView->property().uri());
+    return resolveLibraryPath(_ml.rootPath(), optView->property().uri());
   }
 
   std::optional<app::core::playback::TrackPlaybackDescriptor> TrackRowDataProvider::getPlaybackDescriptor(
     TrackId id) const
   {
     // Need cold data for URI and property info
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
-    auto reader = _store->reader(txn);
+    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    auto reader = _store.reader(txn);
 
     auto const optView = reader.get(id, rs::core::TrackStore::Reader::LoadMode::Both);
 
@@ -160,7 +160,7 @@ namespace app::ui
     desc.trackId = id;
 
     // File path
-    if (auto const filePath = resolveLibraryPath(_ml->rootPath(), property.uri()))
+    if (auto const filePath = resolveLibraryPath(_ml.rootPath(), property.uri()))
     {
       desc.filePath = *filePath;
     }
@@ -220,7 +220,7 @@ namespace app::ui
 
     try
     {
-      auto const str = _dict->get(id);
+      auto const str = _dict.get(id);
       result = Glib::ustring(str.begin(), str.end());
     }
     catch (std::exception const&)

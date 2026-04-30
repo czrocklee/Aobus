@@ -104,7 +104,7 @@ namespace app::core::model
 
     static rs::core::TrackStore::Reader::LoadMode getUnionMode(std::span<FilteredTrackIdList*> lists);
 
-    rs::core::MusicLibrary* _ml;
+    rs::core::MusicLibrary& _ml;
     std::map<TrackIdList*, std::unique_ptr<SourceBucket>> _buckets;
     bool _alive = true;
 

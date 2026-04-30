@@ -16,14 +16,14 @@ namespace app::ui
 {
 
   TrackListAdapter::TrackListAdapter(app::core::model::TrackIdList& source, TrackRowDataProvider const& provider)
-    : _source{&source}, _provider{&provider}, _listModel(Gio::ListStore<TrackRow>::create())
+    : _source{source}, _provider{provider}, _listModel(Gio::ListStore<TrackRow>::create())
   {
-    _source->attach(this);
+    _source.attach(this);
   }
 
   TrackListAdapter::~TrackListAdapter()
   {
-    _source->detach(this);
+    _source.detach(this);
   }
 
   void TrackListAdapter::setFilter(Glib::ustring const& filterText)
@@ -34,7 +34,7 @@ namespace app::ui
 
   void TrackListAdapter::createRowForTrack(TrackId id)
   {
-    if (auto row = _provider->getTrackRow(id))
+    if (auto row = _provider.getTrackRow(id))
     {
       _listModel->append(row);
     }
@@ -44,9 +44,9 @@ namespace app::ui
   {
     _listModel->remove_all();
 
-    for (std::size_t i = 0; i < _source->size(); ++i)
+    for (std::size_t i = 0; i < _source.size(); ++i)
     {
-      auto const id = _source->trackIdAt(i);
+      auto const id = _source.trackIdAt(i);
       createRowForTrack(id);
     }
   }
@@ -68,7 +68,7 @@ namespace app::ui
 
     // Load and insert at position
 
-    if (auto row = _provider->getTrackRow(id))
+    if (auto row = _provider.getTrackRow(id))
     {
       auto const uintIdx = static_cast<std::uint32_t>(index);
 
@@ -90,7 +90,7 @@ namespace app::ui
     }
 
     // Update the row at position
-    auto row = _provider->getTrackRow(id);
+    auto row = _provider.getTrackRow(id);
 
     auto const uintIdx = static_cast<std::uint32_t>(index);
 

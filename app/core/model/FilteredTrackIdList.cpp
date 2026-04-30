@@ -15,9 +15,9 @@ namespace app::core::model
 {
 
   FilteredTrackIdList::FilteredTrackIdList(TrackIdList& source, rs::core::MusicLibrary& ml, SmartListEngine& engine)
-    : _source{&source}, _ml{&ml}, _engine{&engine}
+    : _source{source}, _ml{ml}, _engine{&engine}
   {
-    _engine->registerList(source, *this);
+    _engine->registerList(_source, *this);
     stageExpression("");
   }
 
@@ -25,7 +25,7 @@ namespace app::core::model
   {
     if (_engine != nullptr && _engine->isAlive())
     {
-      _engine->unregisterList(*_source, *this);
+      _engine->unregisterList(_source, *this);
     }
   }
 
@@ -58,7 +58,7 @@ namespace app::core::model
   {
     if (_engine != nullptr && _engine->isAlive())
     {
-      _engine->notifyTrackDataChanged(*_source, id);
+      _engine->notifyTrackDataChanged(_source, id);
     }
   }
 
@@ -69,7 +69,7 @@ namespace app::core::model
     try
     {
       auto parsed = _stagedExpression.empty() ? rs::expr::parse("true") : rs::expr::parse(_stagedExpression);
-      auto compiler = rs::expr::QueryCompiler{&_ml->dictionary()};
+      auto compiler = rs::expr::QueryCompiler{&_ml.dictionary()};
       _stagedPlan = std::make_unique<rs::expr::ExecutionPlan>(compiler.compile(parsed));
       _stagedHasError = false;
       _stagedErrorMessage.clear();

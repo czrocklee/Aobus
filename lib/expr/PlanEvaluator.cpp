@@ -3,6 +3,7 @@
 
 #include <rs/expr/PlanEvaluator.h>
 
+#include <gsl-lite/gsl-lite.hpp>
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -107,6 +108,9 @@ namespace rs::expr
 
     std::string_view loadDictionaryFieldValue(core::TrackView const& track, Field field, ExecutionPlan const* plan)
     {
+      gsl_Expects(plan != nullptr);
+      gsl_Expects(plan->dictionary != nullptr);
+
       if (plan == nullptr || plan->dictionary == nullptr)
       {
         return {};
