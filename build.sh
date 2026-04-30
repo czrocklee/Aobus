@@ -1,4 +1,4 @@
-#!/ usr / bin / env bash
+#!/usr/bin/env bash
 #Build script for RockStudio
 #Usage :./ build.sh[debug | release | pgo1 | pgo2 | profile][--clean][--tidy][--clang]
 
@@ -9,11 +9,12 @@ BUILD_TYPE="debug"
 CLEAN="false"
 ENABLE_TIDY="false"
 USE_CLANG="false"
+ENABLE_ASAN="false"
 VERBOSE="false"
 
 show_usage() {
-    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang] [--verbose]"
-    echo "  debug     - Debug build (default, with sanitizers)"
+    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang] [--asan] [--verbose]"
+    echo "  debug     - Debug build (default, no sanitizers)"
     echo "  release   - Release build (optimized, no sanitizers)"
     echo "  pgo1      - PGO step 1: instrumented build for profile generation"
     echo "  pgo2      - PGO step 2: optimized build using collected profile"
@@ -21,6 +22,7 @@ show_usage() {
     echo "  --clean   - Clean build directory before building"
     echo "  --tidy    - Enable clang-tidy during the configure/build (implies --clang)"
     echo "  --clang   - Build with clang/clang++ in a dedicated build directory"
+    echo "  --asan    - Enable address/undefined sanitizers (Debug only, default: off)"
     echo "  --verbose - Show full build lines"
 }
 
@@ -35,6 +37,9 @@ do
             ;;
         --tidy)
             ENABLE_TIDY="true"
+            ;;
+        --asan)
+            ENABLE_ASAN="true"
             ;;
         --clang)
             USE_CLANG="true"
@@ -72,6 +77,7 @@ esac
 SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
 TIDY_SUFFIX=""
 COMPILER_SUFFIX=""
+ASAN_SUFFIX=""
 COMPILER_NAME="gcc"
 
 if [[ "$ENABLE_TIDY" == "true" ]]; then
@@ -84,9 +90,13 @@ if [[ "$USE_CLANG" == "true" ]]; then
     COMPILER_NAME="clang"
 fi
 
+if [[ "$ENABLE_ASAN" == "true" ]]; then
+    ASAN_SUFFIX="-asan"
+fi
+
 case "$BUILD_TYPE" in
     debug|release|profile)
-        BUILD_DIR="/tmp/build/${BUILD_TYPE}${COMPILER_SUFFIX}${TIDY_SUFFIX}"
+        BUILD_DIR="/tmp/build/${BUILD_TYPE}${COMPILER_SUFFIX}${TIDY_SUFFIX}${ASAN_SUFFIX}"
         ;;
     pgo1|pgo2)
 #PGO generate / use steps must share a build tree so profile data stays available.
@@ -130,6 +140,11 @@ fi
 if [[ "$ENABLE_TIDY" == "true" ]]; then
     echo "clang-tidy enabled for this build (implies clang toolchain)."
     CONFIGURE_COMMAND+=" -DROCKSTUDIO_ENABLE_CLANG_TIDY=ON"
+fi
+
+if [[ "$ENABLE_ASAN" == "true" ]]; then
+    echo "ASan/UBSan enabled for this build."
+    CONFIGURE_COMMAND+=" -DROCKSTUDIO_ENABLE_ASAN=ON"
 fi
 
 nix-shell --run "$CONFIGURE_COMMAND"
@@ -181,5 +196,6 @@ echo "  Preset: $PRESET"
 echo "  Build dir: $BUILD_DIR"
 echo "  compiler: $COMPILER_NAME"
 echo "  clang-tidy: $ENABLE_TIDY"
+echo "  asan: $ENABLE_ASAN"
 echo "  verbose: $VERBOSE"
 echo "  tests: rs_test + rs_test_linux"

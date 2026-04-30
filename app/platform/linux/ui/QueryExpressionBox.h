@@ -42,7 +42,7 @@ namespace app::ui
     Gtk::ListView _completionListView;
     Glib::RefPtr<Gtk::StringList> _completionItems;
     Glib::RefPtr<Gtk::SingleSelection> _completionSelection;
-    rs::core::MusicLibrary* _musicLibrary;
+    rs::core::MusicLibrary& _musicLibrary;
     std::vector<std::string> _availableTags;
     std::vector<std::string> _availableCustomKeys;
     std::int32_t _completionTokenStart = -1;

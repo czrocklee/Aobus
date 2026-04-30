@@ -4,8 +4,8 @@
 #include <rs/core/TrackBuilder.h>
 #include <rs/utility/ByteView.h>
 
+#include <gsl-lite/gsl-lite.hpp>
 #include <algorithm>
-#include <cassert>
 #include <cstring>
 
 namespace rs::core
@@ -410,8 +410,8 @@ namespace rs::core
   void TrackBuilder::PreparedHot::writeTo(std::span<std::byte> out) const
   {
     // Exact size validation and alignment check
-    assert(out.size() == _size && "PreparedHot::writeTo: size mismatch");
-    assert((std::uintptr_t(out.data()) % 4) == 0 && "out must be 4-byte aligned");
+    gsl_Expects(out.size() == _size);
+    gsl_Expects((std::uintptr_t(out.data()) % 4) == 0);
 
     auto const& builder = *_builder;
     new (out.data()) TrackHotHeader{
@@ -519,8 +519,8 @@ namespace rs::core
   void TrackBuilder::PreparedCold::writeTo(std::span<std::byte> out) const
   {
     // Exact size validation and alignment check
-    assert(out.size() == _size && "PreparedCold::writeTo: size mismatch");
-    assert((std::uintptr_t(out.data()) % 4) == 0 && "out must be 4-byte aligned");
+    gsl_Expects(out.size() == _size);
+    gsl_Expects((std::uintptr_t(out.data()) % 4) == 0);
 
     auto const& meta = _builder->_metadataBuilder;
     auto const& prop = _builder->_propertyBuilder;

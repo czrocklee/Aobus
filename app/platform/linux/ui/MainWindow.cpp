@@ -395,113 +395,126 @@ namespace app::ui
     dialog->set_title("Import Music Files");
 
     dialog->select_folder(
-      *this,
-      [this, dialog](Glib::RefPtr<Gio::AsyncResult>& result)
+      *this, [this, dialog](Glib::RefPtr<Gio::AsyncResult>& result) { onImportFolderSelected(result, dialog); });
+  }
+
+  void MainWindow::onImportFolderSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog)
+  {
+    try
+    {
+      if (auto const folder = dialog->select_folder_finish(result); folder)
       {
-        try
+        auto const pathStr = folder->get_path();
+        auto const path = std::filesystem::path{pathStr};
+        APP_LOG_INFO("Importing from: {}", pathStr);
+
+        // If no library exists, create one at the import path
+        if (!_musicLibrary)
         {
-          if (auto const folder = dialog->select_folder_finish(result); folder)
+          _musicLibrary = std::make_unique<rs::core::MusicLibrary>(pathStr);
+          set_title("RockStudio [" + pathStr + "]");
+        }
+
+        // Scan for music files
+        auto files = std::vector<std::filesystem::path>{};
+        scanDirectory(path, files);
+
+        if (files.empty())
+        {
+          APP_LOG_ERROR("No music files found");
+          return;
+        }
+
+        executeImportTask(path, files);
+      }
+    }
+    catch (Glib::Error const& e)
+    {
+      // Folder selection was cancelled or failed - silently ignore
+      APP_LOG_ERROR("Error selecting folder: {}", e.what());
+    }
+  }
+
+  void MainWindow::executeImportTask(std::filesystem::path const& /*path*/, std::vector<std::filesystem::path> const& files)
+  {
+    // Create progress dialog owned by MainWindow (stored as member)
+    _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), *this);
+    auto* dialogPtr = _importDialog.get();
+    _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
+
+    // Create worker - owned by MainWindow
+    _importWorker = std::make_unique<app::core::ImportWorker>(
+      *_musicLibrary,
+      files,
+      [this](std::filesystem::path const& filePath, int index)
+      {
+        // Progress callback - marshal to main thread
+        Glib::MainContext::get_default()->invoke(
+          [this, filePath, index]()
           {
-            auto const pathStr = folder->get_path();
-            auto const path = std::filesystem::path{pathStr};
-            APP_LOG_INFO("Importing from: {}", pathStr);
-
-            // If no library exists, create one at the import path
-            if (!_musicLibrary)
-            {
-              _musicLibrary = std::make_unique<rs::core::MusicLibrary>(pathStr);
-              set_title("RockStudio [" + pathStr + "]");
-            }
-
-            // Scan for music files
-            auto files = std::vector<std::filesystem::path>{};
-            scanDirectory(path, files);
-
-            if (files.empty())
-            {
-              APP_LOG_ERROR("No music files found");
-              return;
-            }
-
-            // Create progress dialog owned by MainWindow (stored as member)
-            _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), *this);
-            auto* dialogPtr = _importDialog.get();
-            _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
-
-            // Create worker - owned by MainWindow
-            _importWorker = std::make_unique<app::core::ImportWorker>(
-              *_musicLibrary,
-              files,
-              [this, dialogPtr](std::filesystem::path const& filePath, int index)
-              {
-                // Progress callback - marshal to main thread
-                Glib::MainContext::get_default()->invoke(
-                  [this, dialogPtr, filePath, index]()
-                  {
-                    if (dialogPtr)
-                    {
-                      dialogPtr->onNewTrack(filePath.string(), index);
-                    }
-
-                    auto fraction = static_cast<double>(index) / static_cast<double>(_importWorker->fileCount());
-                    updateImportProgress(fraction, "Importing: " + filePath.filename().string());
-
-                    return false;
-                  });
-              },
-              [this, dialogPtr]()
-              {
-                // Finished callback - marshal to main thread
-                Glib::MainContext::get_default()->invoke(
-                  [this, dialogPtr]()
-                  {
-                    if (dialogPtr)
-                    {
-                      dialogPtr->ready();
-                    }
-
-                    updateImportProgress(1.0, "Import complete");
-
-                    return false;
-                  });
-              });
-
-            // Run in background thread - owned and joined on window destruction
-            auto* workerPtr = _importWorker.get();
-
-            if (_importThread.joinable())
-            {
-              _importThread.join();
-            }
-
-            _importThread = std::jthread(
-              [this, workerPtr]([[maybe_unused]] std::stop_token const& stoken)
-              {
-                app::core::util::setCurrentThreadName("FileImport");
-                workerPtr->run();
-                // After import completes, notify observers incrementally
-                Glib::MainContext::get_default()->invoke(
-                  [this, workerPtr]()
-                  {
-                    auto const& res = workerPtr->result();
-                    for (auto const trackId : res.insertedIds)
-                    {
-                      _rowDataProvider->invalidate(trackId);
-                      _allTrackIds->notifyInserted(trackId);
-                    }
-                    return false;
-                  });
-              });
-
-            _importDialog->show();
-          }
-        }
-        catch (Glib::Error const& e)
-        {
-          // Folder selection was cancelled or failed - silently ignore
-          APP_LOG_ERROR("Error selecting folder: {}", e.what());
-        }
+            onImportProgress(filePath.string(), index);
+            return false;
+          });
+      },
+      [this]()
+      {
+        // Finished callback - marshal to main thread
+        Glib::MainContext::get_default()->invoke(
+          [this]()
+          {
+            onImportFinished();
+            return false;
+          });
       });
+
+    // Run in background thread - owned and joined on window destruction
+    auto* workerPtr = _importWorker.get();
+
+    if (_importThread.joinable())
+    {
+      _importThread.join();
+    }
+
+    _importThread = std::jthread(
+      [this, workerPtr]([[maybe_unused]] std::stop_token const& stoken)
+      {
+        app::core::util::setCurrentThreadName("FileImport");
+        workerPtr->run();
+        // After import completes, notify observers incrementally
+        Glib::MainContext::get_default()->invoke(
+          [this, workerPtr]()
+          {
+            auto const& res = workerPtr->result();
+            for (auto const trackId : res.insertedIds)
+            {
+              _rowDataProvider->invalidate(trackId);
+              _allTrackIds->notifyInserted(trackId);
+            }
+            return false;
+          });
+      });
+
+    _importDialog->show();
+  }
+
+  void MainWindow::onImportProgress(std::string const& filePath, int index)
+  {
+    if (auto* dialogPtr = _importDialog.get())
+    {
+      dialogPtr->onNewTrack(filePath, index);
+    }
+    auto const fraction = static_cast<double>(index) / static_cast<double>(_importWorker->fileCount());
+    auto const filename = std::filesystem::path{filePath}.filename().string();
+    updateImportProgress(fraction, "Importing: " + filename);
+  }
+
+  void MainWindow::onImportFinished()
+  {
+    if (auto* dialogPtr = _importDialog.get())
+    {
+      dialogPtr->ready();
+    }
+    updateImportProgress(1.0, "Import complete");
   }
 
   void MainWindow::importFilesFromPath(std::filesystem::path const& path)
@@ -625,93 +638,98 @@ namespace app::ui
     dialog->add_button("Cancel", Gtk::ResponseType::CANCEL);
     dialog->add_button("Next", Gtk::ResponseType::OK);
 
-    dialog->signal_response().connect(
-      [this, dialog, modeCombo](int responseId)
-      {
-        if (responseId != Gtk::ResponseType::OK)
-        {
-          dialog->close();
-          return;
-        }
-
-        rs::core::ExportMode mode = rs::core::ExportMode::Metadata;
-        switch (modeCombo->get_selected())
-        {
-          case 0: mode = rs::core::ExportMode::Minimum; break;
-          case 1: mode = rs::core::ExportMode::Metadata; break;
-          case 2: mode = rs::core::ExportMode::Full; break;
-          default: break;
-        }
-
-        dialog->close();
-
-        auto fileDialog = Gtk::FileDialog::create();
-        fileDialog->set_title("Export Library to YAML");
-        fileDialog->set_initial_name("library_backup.yaml");
-
-        auto filter = Gtk::FileFilter::create();
-        filter->set_name("YAML files");
-        filter->add_pattern("*.yaml");
-        filter->add_pattern("*.yml");
-        auto filters = Gio::ListStore<Gtk::FileFilter>::create();
-        filters->append(filter);
-        fileDialog->set_filters(filters);
-
-        fileDialog->save(*this,
-                         [this, fileDialog, mode](Glib::RefPtr<Gio::AsyncResult>& result)
-                         {
-                           try
-                           {
-                             auto file = fileDialog->save_finish(result);
-
-                             if (!file)
-                             {
-                               return;
-                             }
-                             auto path = std::filesystem::path{file->get_path()};
-
-                             // Run export in background thread
-                             std::thread(
-                               [this, path, mode]()
-                               {
-                                 app::core::util::setCurrentThreadName("LibraryExport");
-                                 try
-                                 {
-                                   auto exporter = rs::core::LibraryExporter{*_musicLibrary};
-                                   exporter.exportToYaml(path, mode);
-                                   Glib::MainContext::get_default()->invoke(
-                                     [this]()
-                                     {
-                                       showStatusMessage("Library exported successfully");
-                                       return false;
-                                     });
-                                 }
-                                 catch (std::exception const& e)
-                                 {
-                                   auto errorText = std::string{e.what()};
-                                   Glib::MainContext::get_default()->invoke(
-                                     [this, errorText]()
-                                     {
-                                       APP_LOG_ERROR("Export failed: {}", errorText);
-                                       showStatusMessage("Export failed: " + errorText);
-                                       return false;
-                                     });
-                                 }
-                               })
-                               .detach();
-                           }
-                           catch (std::exception const& e)
-                           {
-                             APP_LOG_ERROR("Library export error: {}", e.what());
-                           }
-                           catch (...)
-                           {
-                             APP_LOG_ERROR("Unknown library export error");
-                           }
-                         });
-      });
+    dialog->signal_response().connect([this, dialog, modeCombo](int responseId) { onExportModeConfirmed(responseId, modeCombo, dialog); });
 
     dialog->show();
+  }
+
+  void MainWindow::onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog)
+  {
+    if (responseId != Gtk::ResponseType::OK)
+    {
+      dialog->close();
+      return;
+    }
+
+    rs::core::ExportMode mode = rs::core::ExportMode::Metadata;
+    switch (modeCombo->get_selected())
+    {
+      case 0: mode = rs::core::ExportMode::Minimum; break;
+      case 1: mode = rs::core::ExportMode::Metadata; break;
+      case 2: mode = rs::core::ExportMode::Full; break;
+      default: break;
+    }
+
+    dialog->close();
+
+    auto fileDialog = Gtk::FileDialog::create();
+    fileDialog->set_title("Export Library to YAML");
+    fileDialog->set_initial_name("library_backup.yaml");
+
+    auto filter = Gtk::FileFilter::create();
+    filter->set_name("YAML files");
+    filter->add_pattern("*.yaml");
+    filter->add_pattern("*.yml");
+    auto filters = Gio::ListStore<Gtk::FileFilter>::create();
+    filters->append(filter);
+    fileDialog->set_filters(filters);
+
+    fileDialog->save(*this, [this, fileDialog, mode](Glib::RefPtr<Gio::AsyncResult>& result) { onExportFileSelected(result, mode, fileDialog); });
+  }
+
+  void MainWindow::onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result, rs::core::ExportMode mode, Glib::RefPtr<Gtk::FileDialog> const& fileDialog)
+  {
+    try
+    {
+      auto file = fileDialog->save_finish(result);
+
+      if (!file)
+      {
+        return;
+      }
+      auto path = std::filesystem::path{file->get_path()};
+      executeExportTask(path, mode);
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("Library export error: {}", e.what());
+    }
+    catch (...)
+    {
+      APP_LOG_ERROR("Unknown library export error");
+    }
+  }
+
+  void MainWindow::executeExportTask(std::filesystem::path const& path, rs::core::ExportMode mode)
+  {
+    std::thread(
+      [this, path, mode]()
+      {
+        app::core::util::setCurrentThreadName("LibraryExport");
+        try
+        {
+          auto exporter = rs::core::LibraryExporter{*_musicLibrary};
+          exporter.exportToYaml(path, mode);
+          Glib::MainContext::get_default()->invoke(
+            [this]()
+            {
+              showStatusMessage("Library exported successfully");
+              return false;
+            });
+        }
+        catch (std::exception const& e)
+        {
+          auto errorText = std::string{e.what()};
+          Glib::MainContext::get_default()->invoke(
+            [this, errorText]()
+            {
+              APP_LOG_ERROR("Export failed: {}", errorText);
+              showStatusMessage("Export failed: " + errorText);
+              return false;
+            });
+        }
+      })
+      .detach();
   }
 
   void MainWindow::importLibrary()
@@ -956,107 +974,8 @@ namespace app::ui
 
     // List view for the sidebar
     auto factory = Gtk::SignalListItemFactory::create();
-    factory->signal_setup().connect(
-      [this](Glib::RefPtr<Gtk::ListItem> const& listItem)
-      {
-        auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-        rowBox->set_halign(Gtk::Align::FILL);
-        rowBox->set_hexpand(true);
-        rowBox->set_margin_start(Layout::kMarginMedium);
-        rowBox->set_margin_end(Layout::kMarginMedium);
-        rowBox->set_margin_top(Layout::kMarginSmall);
-        rowBox->set_margin_bottom(Layout::kMarginSmall);
-
-        auto* expander = Gtk::make_managed<Gtk::TreeExpander>();
-        rowBox->append(*expander);
-
-        auto* label = Gtk::make_managed<Gtk::Label>("");
-        label->set_halign(Gtk::Align::START);
-        rowBox->append(*label);
-
-        auto* filterLabel = Gtk::make_managed<Gtk::Label>("");
-        filterLabel->set_halign(Gtk::Align::START);
-        filterLabel->add_css_class("dim-label");
-        filterLabel->set_margin_start(Layout::kMarginMedium);
-        filterLabel->set_ellipsize(Pango::EllipsizeMode::END);
-        filterLabel->set_hexpand(true);
-        rowBox->append(*filterLabel);
-
-        auto clickController = Gtk::GestureClick::create();
-        clickController->set_button(GDK_BUTTON_SECONDARY);
-        clickController->signal_pressed().connect(
-          [this, listItem, rowBox](int /*nPress*/, double xPos, double yPos)
-          {
-            if (auto const position = listItem->get_position(); position != GTK_INVALID_LIST_POSITION)
-            {
-              _listSelectionModel->set_selected(position);
-            }
-
-            auto point = rowBox->compute_point(
-              _listView, Gdk::Graphene::Point(static_cast<float>(xPos), static_cast<float>(yPos)));
-
-            if (!point)
-            {
-              return;
-            }
-
-            auto rect = Gdk::Rectangle(static_cast<int>(point->get_x()), static_cast<int>(point->get_y()), 1, 1);
-            showListContextMenu(_listView, rect);
-          });
-
-        rowBox->add_controller(clickController);
-        listItem->set_child(*rowBox);
-      });
-    factory->signal_bind().connect(
-      [](Glib::RefPtr<Gtk::ListItem> const& listItem)
-      {
-        auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(listItem->get_item());
-
-        if (!treeListRow)
-        {
-          return;
-        }
-
-        auto node = std::dynamic_pointer_cast<ListTreeNode>(treeListRow->get_item());
-
-        if (!node)
-        {
-          return;
-        }
-
-        auto row = node->getRow();
-        auto* box = dynamic_cast<Gtk::Box*>(listItem->get_child());
-        auto* expander = box ? dynamic_cast<Gtk::TreeExpander*>(box->get_first_child()) : nullptr;
-        auto* label = expander ? dynamic_cast<Gtk::Label*>(expander->get_next_sibling()) : nullptr;
-        auto* filterLabel = label ? dynamic_cast<Gtk::Label*>(label->get_next_sibling()) : nullptr;
-
-        if (expander)
-        {
-          expander->set_list_row(treeListRow);
-        }
-
-        if (row && label)
-        {
-          // Gtk::TreeExpander handles indentation automatically
-          label->set_text(row->getName());
-
-          if (filterLabel)
-          {
-            auto const filter = row->getFilter();
-
-            if (!filter.empty())
-            {
-              filterLabel->set_text("[" + filter + "]");
-              filterLabel->set_visible(true);
-            }
-            else
-            {
-              filterLabel->set_text("");
-              filterLabel->set_visible(false);
-            }
-          }
-        }
-      });
+    factory->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem) { setupSidebarListItem(listItem); });
+    factory->signal_bind().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItem) { bindSidebarListItem(listItem); });
 
     _listView.set_factory(factory);
     _listView.set_halign(Gtk::Align::FILL);
@@ -1134,6 +1053,112 @@ namespace app::ui
 
     // Set as window child
     set_child(*mainBox);
+  }
+
+  void MainWindow::setupSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
+    auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    rowBox->set_halign(Gtk::Align::FILL);
+    rowBox->set_hexpand(true);
+    rowBox->set_margin_start(Layout::kMarginMedium);
+    rowBox->set_margin_end(Layout::kMarginMedium);
+    rowBox->set_margin_top(Layout::kMarginSmall);
+    rowBox->set_margin_bottom(Layout::kMarginSmall);
+
+    auto* expander = Gtk::make_managed<Gtk::TreeExpander>();
+    rowBox->append(*expander);
+
+    auto* label = Gtk::make_managed<Gtk::Label>("");
+    label->set_halign(Gtk::Align::START);
+    rowBox->append(*label);
+
+    auto* filterLabel = Gtk::make_managed<Gtk::Label>("");
+    filterLabel->set_halign(Gtk::Align::START);
+    filterLabel->add_css_class("dim-label");
+    filterLabel->set_margin_start(Layout::kMarginMedium);
+    filterLabel->set_ellipsize(Pango::EllipsizeMode::END);
+    filterLabel->set_hexpand(true);
+    rowBox->append(*filterLabel);
+
+    auto clickController = Gtk::GestureClick::create();
+    clickController->set_button(GDK_BUTTON_SECONDARY);
+    clickController->signal_pressed().connect(
+      [this, listItem, rowBox](int /*nPress*/, double xPos, double yPos)
+      {
+        if (auto const position = listItem->get_position(); position != GTK_INVALID_LIST_POSITION)
+        {
+          _listSelectionModel->set_selected(position);
+        }
+
+        auto point =
+          rowBox->compute_point(_listView, Gdk::Graphene::Point(static_cast<float>(xPos), static_cast<float>(yPos)));
+
+        if (!point)
+        {
+          return;
+        }
+
+        auto rect = Gdk::Rectangle(static_cast<int>(point->get_x()), static_cast<int>(point->get_y()), 1, 1);
+        showListContextMenu(_listView, rect);
+      });
+
+    rowBox->add_controller(clickController);
+    listItem->set_child(*rowBox);
+  }
+
+  void MainWindow::bindSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
+  {
+    auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(listItem->get_item());
+    if (!treeListRow)
+    {
+      return;
+    }
+
+    auto node = std::dynamic_pointer_cast<ListTreeNode>(treeListRow->get_item());
+    if (!node)
+    {
+      return;
+    }
+
+    auto* box = dynamic_cast<Gtk::Box*>(listItem->get_child());
+    auto* expander = box != nullptr ? dynamic_cast<Gtk::TreeExpander*>(box->get_first_child()) : nullptr;
+    auto* label = expander != nullptr ? dynamic_cast<Gtk::Label*>(expander->get_next_sibling()) : nullptr;
+    auto* filterLabel = label != nullptr ? dynamic_cast<Gtk::Label*>(label->get_next_sibling()) : nullptr;
+
+    if (expander != nullptr)
+    {
+      expander->set_list_row(treeListRow);
+    }
+
+    if (label == nullptr)
+    {
+      return;
+    }
+
+    auto row = node->getRow();
+    if (!row)
+    {
+      return;
+    }
+
+    label->set_text(row->getName());
+
+    if (filterLabel == nullptr)
+    {
+      return;
+    }
+
+    auto const filter = row->getFilter();
+    if (!filter.empty())
+    {
+      filterLabel->set_text("[" + filter + "]");
+      filterLabel->set_visible(true);
+    }
+    else
+    {
+      filterLabel->set_text("");
+      filterLabel->set_visible(false);
+    }
   }
 
   void MainWindow::showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle const& rect)
@@ -1218,26 +1243,42 @@ namespace app::ui
     rebuildListPages(readTxn);
 
     // Find and select the newly created list
-    if (_treeListModel)
-    {
-      auto const itemCount = _treeListModel->get_n_items();
+    selectSidebarList(listId);
+  }
 
-      for (guint index = 0; index < itemCount; ++index)
+  void MainWindow::selectSidebarList(rs::core::ListId listId)
+  {
+    if (!_treeListModel)
+    {
+      return;
+    }
+
+    auto const itemCount = _treeListModel->get_n_items();
+
+    for (guint index = 0; index < itemCount; ++index)
+    {
+      auto item = _treeListModel->get_object(index);
+      if (!item)
       {
-        if (auto item = _treeListModel->get_object(index); item != nullptr)
-        {
-          if (auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(item); treeListRow != nullptr)
-          {
-            if (auto node = std::dynamic_pointer_cast<ListTreeNode>(treeListRow->get_item()); node != nullptr)
-            {
-              if (node->getListId() == listId)
-              {
-                _listSelectionModel->set_selected(index);
-                break;
-              }
-            }
-          }
-        }
+        continue;
+      }
+
+      auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(item);
+      if (!treeListRow)
+      {
+        continue;
+      }
+
+      auto node = std::dynamic_pointer_cast<ListTreeNode>(treeListRow->get_item());
+      if (!node)
+      {
+        continue;
+      }
+
+      if (node->getListId() == listId)
+      {
+        _listSelectionModel->set_selected(index);
+        break;
       }
     }
   }

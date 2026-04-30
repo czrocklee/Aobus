@@ -133,7 +133,7 @@ namespace app::core::model
   // SmartListEngine implementation
 
   SmartListEngine::SmartListEngine(rs::core::MusicLibrary& ml)
-    : _ml{&ml}
+    : _ml{ml}
   {
   }
 
@@ -195,7 +195,7 @@ namespace app::core::model
 
   void SmartListEngine::rebuild(FilteredTrackIdList& list)
   {
-    auto it = _buckets.find(list._source);
+    auto it = _buckets.find(&list._source);
 
     if (it == _buckets.end())
     {
@@ -280,7 +280,7 @@ namespace app::core::model
     if (!evaluatableLists.empty())
     {
       auto const mode = getUnionMode(evaluatableLists);
-      rebuildGroup(*lists.front()->_source, evaluatableLists, mode);
+      rebuildGroup(lists.front()->_source, evaluatableLists, mode);
     }
 
     // Notify Reset for only the provided lists
@@ -299,8 +299,8 @@ namespace app::core::model
       return;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
-    auto reader = _ml->tracks().reader(txn);
+    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    auto reader = _ml.tracks().reader(txn);
 
     std::vector<std::vector<TrackId>> nextMembers(lists.size());
 
@@ -355,8 +355,8 @@ namespace app::core::model
       return;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
-    auto reader = _ml->tracks().reader(txn);
+    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    auto reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
     auto const view = reader.get(id, mode);
 
@@ -399,8 +399,8 @@ namespace app::core::model
       return;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
-    auto reader = _ml->tracks().reader(txn);
+    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    auto reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
     auto const view = reader.get(id, mode);
 
@@ -474,8 +474,8 @@ namespace app::core::model
       return;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
-    auto reader = _ml->tracks().reader(txn);
+    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    auto reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
 
     std::vector<std::vector<TrackId>> matchedIds(evaluatableLists.size());
@@ -533,8 +533,8 @@ namespace app::core::model
       return;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
-    auto reader = _ml->tracks().reader(txn);
+    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    auto reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
 
     // Track transitions for each list

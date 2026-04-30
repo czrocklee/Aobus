@@ -10,6 +10,7 @@
 #include "core/source/MemoryPcmSource.h"
 #include "core/source/StreamingPcmSource.h"
 
+#include <rs/utility/ByteView.h>
 #include <algorithm>
 #include <format>
 #include <limits>
@@ -402,7 +403,7 @@ namespace app::core::playback
 
   void PlaybackEngine::onBackendError(void* userData, std::string_view message) noexcept
   {
-    auto* self = static_cast<PlaybackEngine*>(userData);
+    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     auto msg = std::string(message);
     if (self->_dispatcher)
     {
@@ -610,14 +611,14 @@ namespace app::core::playback
 
   std::size_t PlaybackEngine::onReadPcm(void* userData, std::span<std::byte> output) noexcept
   {
-    auto* self = static_cast<PlaybackEngine*>(userData);
+    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     auto source = self->_source.load(std::memory_order_acquire);
     return source ? source->read(output) : 0;
   }
 
   bool PlaybackEngine::isSourceDrained(void* userData) noexcept
   {
-    auto* self = static_cast<PlaybackEngine*>(userData);
+    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     auto source = self->_source.load(std::memory_order_acquire);
     if (!source)
     {
@@ -633,13 +634,13 @@ namespace app::core::playback
 
   void PlaybackEngine::onUnderrun(void* userData) noexcept
   {
-    auto* self = static_cast<PlaybackEngine*>(userData);
+    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     ++self->_underrunCount;
   }
 
   void PlaybackEngine::onPositionAdvanced(void* userData, std::uint32_t frames) noexcept
   {
-    auto* self = static_cast<PlaybackEngine*>(userData);
+    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     auto lock = std::unique_lock<std::mutex>{self->_stateMutex, std::try_to_lock};
     if (!lock.owns_lock())
     {
@@ -660,7 +661,7 @@ namespace app::core::playback
 
   void PlaybackEngine::onDrainComplete(void* userData) noexcept
   {
-    auto* self = static_cast<PlaybackEngine*>(userData);
+    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     if (!self->_playbackDrainPending.exchange(false, std::memory_order_relaxed))
     {
       return;
@@ -696,7 +697,7 @@ namespace app::core::playback
 
   void PlaybackEngine::onRouteReady(void* userData, std::string_view routeAnchor) noexcept
   {
-    auto* self = static_cast<PlaybackEngine*>(userData);
+    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     auto anchor = std::string(routeAnchor);
     if (self->_dispatcher)
     {
@@ -752,7 +753,7 @@ namespace app::core::playback
 
   void PlaybackEngine::onFormatChanged(void* userData, AudioFormat const& format) noexcept
   {
-    auto* self = static_cast<PlaybackEngine*>(userData);
+    auto* self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
     if (self->_dispatcher)
     {
       self->_dispatcher->dispatch([self, format]() { self->handleFormatChanged(format); });

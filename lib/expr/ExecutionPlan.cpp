@@ -5,6 +5,7 @@
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/utility/VariantVisitor.h>
 
+#include <gsl-lite/gsl-lite.hpp>
 #include <algorithm>
 #include <cctype>
 #include <charconv>
@@ -340,6 +341,7 @@ namespace rs::expr
   QueryCompiler::QueryCompiler(core::DictionaryStore* dict)
     : _dict{dict}
   {
+    gsl_Expects(dict != nullptr);
   }
 
   std::uint32_t QueryCompiler::addStringConstant(std::string_view str)

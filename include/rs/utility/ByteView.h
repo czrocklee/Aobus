@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <cassert>
+#include <gsl-lite/gsl-lite.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -91,8 +91,8 @@ namespace rs::utility
     inline T const* view(std::span<std::byte const> span) noexcept
     {
       detail::requireTrivialLayout<T>();
-      assert(span.size() >= sizeof(T));
-      assert(detail::isAligned(span.data(), alignof(T)));
+      gsl_Expects(span.size() >= sizeof(T));
+      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
       return reinterpret_cast<T const*>(span.data());
     }
 
@@ -100,8 +100,8 @@ namespace rs::utility
     inline std::span<T const> viewArray(std::span<std::byte const> span) noexcept
     {
       detail::requireTrivialLayout<T>();
-      assert(span.size() % sizeof(T) == 0);
-      assert(detail::isAligned(span.data(), alignof(T)));
+      gsl_Expects(span.size() % sizeof(T) == 0);
+      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
       return {reinterpret_cast<T const*>(span.data()), span.size() / sizeof(T)};
     }
 
@@ -110,7 +110,7 @@ namespace rs::utility
     {
       detail::requireTrivialLayout<T>();
       auto const* data = reinterpret_cast<std::byte const*>(base) + offset;
-      assert(detail::isAligned(data, alignof(T)));
+      gsl_Expects(detail::isAligned(data, alignof(T)));
       return reinterpret_cast<T const*>(data);
     }
   }
@@ -142,12 +142,15 @@ namespace rs::utility
   template<typename T, typename U>
   inline T* unsafeDowncast(U* ptr) noexcept
   {
+    static_assert(std::is_void_v<U> || std::is_base_of_v<U, T>, "T must be derived from U for unsafeDowncast");
+    gsl_Expects(ptr != nullptr);
     return static_cast<T*>(ptr); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
   }
 
   template<typename T, typename U>
   inline T& unsafeDowncast(U& ref) noexcept
   {
+    static_assert(std::is_base_of_v<U, T>, "T must be derived from U for unsafeDowncast");
     return static_cast<T&>(ref); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
   }
 }

@@ -49,8 +49,8 @@ namespace app::core::model
     void stageExpression(std::string expr);
     void applyStagedState();
 
-    TrackIdList* _source = nullptr;
-    rs::core::MusicLibrary* _ml = nullptr;
+    TrackIdList& _source;
+    rs::core::MusicLibrary& _ml;
     SmartListEngine* _engine = nullptr;
 
     std::flat_set<TrackId> _members;

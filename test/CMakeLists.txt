@@ -1,7 +1,5 @@
 # rs_test: portable unit + integration tests (app_core only)
 add_executable(rs_test
-    main.cpp
-
     # query tests
     unit/query/ParserTest.cpp
     unit/query/ExecutionPlanTest.cpp
@@ -40,7 +38,7 @@ add_executable(rs_test
 )
 
 target_include_directories(rs_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog yaml-cpp PkgFLAC PkgALAC app_core app_linux)
+target_link_libraries(rs_test PRIVATE rs Catch2 spdlog::spdlog yaml-cpp PkgFLAC PkgALAC app_core app_linux Catch2::Catch2WithMain)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(rs_test PRIVATE PIPEWIRE_FOUND)
@@ -64,13 +62,11 @@ endif()
 
 # rs_test_linux: Linux UI tests (require app_linux and GTKMM)
 add_executable(rs_test_linux
-    main.cpp
-
     unit/linux/TrackListAdapterTest.cpp
     unit/linux/TrackPresentationTest.cpp
     unit/linux/TrackRowDataProviderTest.cpp
 )
 
 target_include_directories(rs_test_linux PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(rs_test_linux PRIVATE rs Catch2 spdlog::spdlog app_core app_linux GTKMM)
+target_link_libraries(rs_test_linux PRIVATE rs Catch2 spdlog::spdlog app_core app_linux GTKMM Catch2::Catch2WithMain)
 add_test(NAME rs_test_linux COMMAND rs_test_linux)

@@ -43,8 +43,8 @@ namespace app::ui
     void rebuildView();
     void createRowForTrack(TrackId id);
 
-    app::core::model::TrackIdList* _source;
-    TrackRowDataProvider const* _provider;
+    app::core::model::TrackIdList& _source;
+    TrackRowDataProvider const& _provider;
     Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;
     Glib::ustring _filterText;
   };

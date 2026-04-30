@@ -5,7 +5,7 @@
 
 #include "MetadataBlockLayout.h"
 #include <boost/endian/conversion.hpp>
-#include <cassert>
+#include <gsl-lite/gsl-lite.hpp>
 #include <cstring>
 #include <rs/Exception.h>
 #include <span>
@@ -80,11 +80,11 @@ namespace rs::media::flac
     {
       if (auto size = static_cast<MetadataBlockLayout const*>(_data)->size.value(); typename Layout::FixedSize{})
       {
-        assert(size == sizeof(Layout));
+        gsl_Expects(size == sizeof(Layout));
       }
       else
       {
-        assert(size >= sizeof(Layout));
+        gsl_Expects(size >= sizeof(Layout));
       }
 
       return *static_cast<Layout const*>(_data);

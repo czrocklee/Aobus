@@ -10,13 +10,13 @@ namespace app::core::model
 {
 
   AllTrackIdsList::AllTrackIdsList(rs::core::TrackStore& store)
-    : _store{&store}
+    : _store{store}
   {
   }
 
   void AllTrackIdsList::reloadFromStore(rs::lmdb::ReadTransaction& txn)
   {
-    auto reader = _store->reader(txn);
+    auto reader = _store.reader(txn);
     std::vector<TrackId> ids;
     ids.reserve(1000);
 

@@ -10,6 +10,7 @@
 #include "platform/linux/ui/StatusBar.h"
 #include "platform/linux/ui/TrackViewPage.h"
 
+#include <rs/core/LibraryExporter.h>
 #include <rs/core/MusicLibrary.h>
 
 #include <gtkmm.h>
@@ -97,11 +98,20 @@ namespace app::ui
 
     void setupMenu();
     void setupLayout();
+    void setupSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
+    void bindSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
     void openLibrary();
     void openMusicLibrary(std::filesystem::path const& path);
     void importFiles();
+    void onImportFolderSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
+    void onImportProgress(std::string const& filePath, int index);
+    void onImportFinished();
+    void executeImportTask(std::filesystem::path const& path, std::vector<std::filesystem::path> const& files);
     void importFilesFromPath(std::filesystem::path const& path);
     void exportLibrary();
+    void onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
+    void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result, rs::core::ExportMode mode, Glib::RefPtr<Gtk::FileDialog> const& fileDialog);
+    void executeExportTask(std::filesystem::path const& path, rs::core::ExportMode mode);
     void importLibrary();
     void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files);
     void openNewListDialog(rs::core::ListId parentListId);
@@ -111,6 +121,7 @@ namespace app::ui
 
     // List management - using ListDraft
     void createList(app::core::model::ListDraft const& draft);
+    void selectSidebarList(rs::core::ListId listId);
     void updateList(app::core::model::ListDraft const& draft);
     void onDeleteList();
     void onEditList();

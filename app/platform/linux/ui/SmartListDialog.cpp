@@ -54,11 +54,11 @@ namespace app::ui
                                    rs::core::ListId parentListId,
                                    TrackRowDataProvider const& provider)
     : _exprBox{musicLibrary}
-    , _musicLibrary{&musicLibrary}
-    , _allTrackIds{&allTrackIds}
-    , _parentMembershipList{&parentMembershipList}
+    , _musicLibrary{musicLibrary}
+    , _allTrackIds{allTrackIds}
+    , _parentMembershipList{parentMembershipList}
     , _parentListId{parentListId}
-    , _rowDataProvider{&provider}
+    , _rowDataProvider{provider}
   {
     set_title("New List");
     set_transient_for(parent);
@@ -216,7 +216,7 @@ namespace app::ui
   void SmartListDialog::setupPreview()
   {
     // Create preview engine for expression evaluation
-    _previewEngine = std::make_unique<app::core::model::SmartListEngine>(*_musicLibrary);
+    _previewEngine = std::make_unique<app::core::model::SmartListEngine>(_musicLibrary);
 
     setupPreviewColumns();
     rebuildPreviewSource();
@@ -305,8 +305,8 @@ namespace app::ui
         // Use the parent's membership list as source - this already has the inherited filter applied
         // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
         _previewFilteredList = std::make_unique<app::core::model::FilteredTrackIdList>(
-          *_parentMembershipList, *_musicLibrary, *_previewEngine);
-        _previewAdapter = std::make_unique<TrackListAdapter>(*_previewFilteredList, *_rowDataProvider);
+          _parentMembershipList, _musicLibrary, *_previewEngine);
+        _previewAdapter = std::make_unique<TrackListAdapter>(*_previewFilteredList, _rowDataProvider);
 
         auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
         _previewColumnView.set_model(selectionModel);
@@ -321,12 +321,12 @@ namespace app::ui
     std::string_view inheritedExpr;
 
     // Check if parent is All Tracks
-    auto const isAllTracks = (_parentMembershipList == _allTrackIds);
+    auto const isAllTracks = (&_parentMembershipList == &_allTrackIds);
 
     if (!isAllTracks)
     {
-      auto readTxn = _musicLibrary->readTransaction();
-      auto reader = _musicLibrary->lists().reader(readTxn);
+      auto readTxn = _musicLibrary.readTransaction();
+      auto reader = _musicLibrary.lists().reader(readTxn);
       auto listView = reader.get(_parentListId);
 
       if (listView)
@@ -368,7 +368,7 @@ namespace app::ui
     }
 
     auto const& expr = _exprBox.entry().get_text();
-    auto const isAllTracks = (_parentMembershipList == _allTrackIds);
+    auto const isAllTracks = (&_parentMembershipList == &_allTrackIds);
 
     if (expr.empty())
     {

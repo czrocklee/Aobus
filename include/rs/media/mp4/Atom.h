@@ -6,8 +6,8 @@
 #include "AtomLayout.h"
 #include <rs/utility/ByteView.h>
 
+#include <gsl-lite/gsl-lite.hpp>
 #include <algorithm>
-#include <cassert>
 #include <functional>
 #include <memory>
 #include <span>
@@ -64,11 +64,11 @@ namespace rs::media::mp4
     {
       if constexpr (sizeof(typename Layout::FixedSize) != 0 && Layout::FixedSize::value)
       {
-        assert(utility::layout::view<AtomLayout>(_data)->length.value() == sizeof(Layout));
+        gsl_Expects(utility::layout::view<AtomLayout>(_data)->length.value() == sizeof(Layout));
       }
       else
       {
-        assert(utility::layout::view<AtomLayout>(_data)->length.value() >= sizeof(Layout));
+        gsl_Expects(utility::layout::view<AtomLayout>(_data)->length.value() >= sizeof(Layout));
       }
 
       return *utility::layout::view<Layout>(_data);

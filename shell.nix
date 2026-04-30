@@ -29,6 +29,7 @@ pkgs.mkShell {
       ripgrep
       pkg-config
       ninja
+      mold
       clang
       gcc
       gdb
@@ -39,7 +40,7 @@ pkgs.mkShell {
       spdlog
       mimalloc
       cli11
-      catch2
+      catch2_3
       gsl-lite
       yaml-cpp
 

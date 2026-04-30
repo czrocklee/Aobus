@@ -88,12 +88,12 @@ namespace app::ui
     /**
      * Get the dictionary store reference.
      */
-    rs::core::DictionaryStore const& dictionary() const { return *_dict; }
+    rs::core::DictionaryStore const& dictionary() const { return _dict; }
 
   private:
-    rs::core::MusicLibrary* _ml;
-    rs::core::TrackStore* _store;
-    rs::core::DictionaryStore* _dict;
+    rs::core::MusicLibrary& _ml;
+    rs::core::TrackStore& _store;
+    rs::core::DictionaryStore& _dict;
 
     mutable std::unordered_map<TrackId, Glib::RefPtr<TrackRow>> _rowCache;
     mutable std::unordered_map<rs::core::DictionaryId, Glib::ustring> _stringCache;

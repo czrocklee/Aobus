@@ -4,12 +4,24 @@ project(rockstudio VERSION 0.1.0)
 set (CMAKE_CXX_STANDARD 23)
 
 option(ROCKSTUDIO_ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
+option(ROCKSTUDIO_ENABLE_ASAN "Enable address/undefined sanitizers (debug builds only)" OFF)
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/rs")
 configure_file(cmake/AppVersion.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/rs/AppVersion.h" @ONLY)
 
 # Enable testing
 enable_testing()
+
+# ASan/UBSan: controlled by ROCKSTUDIO_ENABLE_ASAN (default OFF, only valid for Debug builds)
+if(ROCKSTUDIO_ENABLE_ASAN)
+  if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(WARNING "ROCKSTUDIO_ENABLE_ASAN is intended for Debug builds; ${CMAKE_BUILD_TYPE} build type is not recommended")
+  endif()
+  if(NOT CMAKE_CXX_FLAGS MATCHES "fsanitize")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined -fno-omit-frame-pointer")
+  endif()
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined")
+endif()
 
 # Strict compiler warnings (disable -Werror when using sanitizers, also disable for third-party headers)
 if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
@@ -25,10 +37,34 @@ else()
   add_compile_definitions(gsl_CONFIG_CONTRACT_CHECKING_OFF=1)
 endif()
 
+# --- Linker Optimization ---
+option(USE_FAST_LINKER "Try to use mold or lld for faster linking if available" ON)
+
+if(USE_FAST_LINKER)
+  execute_process(COMMAND ${CMAKE_CXX_COMPILER} -fuse-ld=mold -Wl,--version OUTPUT_VARIABLE MOLD_VERSION ERROR_QUIET)
+  if(MOLD_VERSION)
+    set(FAST_LINKER_FLAGS "-fuse-ld=mold")
+  else()
+    execute_process(COMMAND ${CMAKE_CXX_COMPILER} -fuse-ld=lld -Wl,--version OUTPUT_VARIABLE LLD_VERSION ERROR_QUIET)
+    if(LLD_VERSION)
+      set(FAST_LINKER_FLAGS "-fuse-ld=lld")
+    endif()
+  endif()
+
+  if(FAST_LINKER_FLAGS)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FAST_LINKER_FLAGS}")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${FAST_LINKER_FLAGS}")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${FAST_LINKER_FLAGS}")
+    message(STATUS "Using fast linker: ${FAST_LINKER_FLAGS}")
+  endif()
+endif()
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK4 REQUIRED gtk4)
 pkg_check_modules(GTKMM REQUIRED gtkmm-4.0)
-pkg_check_modules(CATCH2 REQUIRED catch2)
+
+# Catch2 v3 setup
+find_package(Catch2 3 REQUIRED)
 
 find_package(Boost REQUIRED COMPONENTS headers)
 find_package(CLI11 CONFIG REQUIRED)
@@ -49,16 +85,6 @@ add_library(GTKMM INTERFACE)
 target_include_directories(GTKMM INTERFACE ${GTKMM_INCLUDE_DIRS})
 target_link_libraries(GTKMM INTERFACE ${GTKMM_LIBRARIES})
 target_compile_options(GTKMM INTERFACE ${GTKMM_CFLAGS_OTHER})
-
-add_library(Catch2 INTERFACE)
-target_include_directories(Catch2 SYSTEM INTERFACE ${CATCH2_INCLUDE_DIRS})
-target_compile_options(Catch2 INTERFACE ${CATCH2_CFLAGS_OTHER})
-target_link_libraries(Catch2 INTERFACE ${CATCH2_LIBRARIES})
-target_link_options(Catch2 INTERFACE ${CATCH2_LDFLAGS_OTHER})
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  target_compile_options(Catch2 INTERFACE -Wno-maybe-uninitialized)
-endif()
 
 # FLAC via pkg-config (required for playback migration)
 pkg_check_modules(FLAC REQUIRED flac)
@@ -189,8 +215,7 @@ add_custom_target(
     "${EXPR_UNIT_DISPATCH_HEADER}"
 )
 
-# Module targets
 add_subdirectory(lib)
 add_subdirectory(tool)
-add_subdirectory(test)
 add_subdirectory(app)
+add_subdirectory(test)
