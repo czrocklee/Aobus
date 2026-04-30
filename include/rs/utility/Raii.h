@@ -19,8 +19,6 @@ namespace rs::utility
   template<auto Fn, typename T>
   auto makeUniquePtr(T* p)
   {
-    gsl_Expects(p != nullptr);
-
     struct Deleter final
     {
       void operator()(T* ptr) const noexcept { Fn(ptr); }
@@ -28,5 +26,6 @@ namespace rs::utility
 
     return std::unique_ptr<T, Deleter>{p};
   }
+
 
 } // namespace rs::utility

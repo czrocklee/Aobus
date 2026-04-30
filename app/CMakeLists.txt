@@ -5,6 +5,13 @@ target_sources(app_linux PRIVATE
     platform/linux/AppConfig.h
 
     platform/linux/ui/MainWindow.cpp
+    platform/linux/ui/LibrarySession.cpp
+    platform/linux/ui/TrackPageGraph.cpp
+    platform/linux/ui/PlaybackCoordinator.cpp
+    platform/linux/ui/ImportExportCoordinator.cpp
+    platform/linux/ui/ListSidebarController.cpp
+    platform/linux/ui/TagEditController.cpp
+    platform/linux/ui/SessionPersistence.cpp
     platform/linux/ui/TrackPresentation.cpp
     platform/linux/ui/TrackViewPage.cpp
     platform/linux/ui/GtkMainThreadDispatcher.cpp

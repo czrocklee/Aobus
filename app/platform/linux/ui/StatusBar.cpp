@@ -420,7 +420,8 @@ namespace app::ui
     if (snapshot.state == _lastPlaybackState.state && snapshot.backend == _lastPlaybackState.backend &&
         snapshot.trackTitle == _lastPlaybackState.title && snapshot.trackArtist == _lastPlaybackState.artist &&
         snapshot.underrunCount == _lastPlaybackState.underrunCount && snapshot.quality == _lastPlaybackState.quality &&
-        snapshot.graph == _lastPlaybackState.graph && snapshot.currentDeviceId == _lastPlaybackState.currentDeviceId &&
+        snapshot.qualityTooltip == _lastPlaybackState.qualityTooltip && snapshot.graph == _lastPlaybackState.graph &&
+        snapshot.currentDeviceId == _lastPlaybackState.currentDeviceId &&
         snapshot.availableBackends == _lastPlaybackState.availableBackends)
     {
       return;
@@ -438,6 +439,7 @@ namespace app::ui
                           .artist = snapshot.trackArtist,
                           .underrunCount = snapshot.underrunCount,
                           .quality = snapshot.quality,
+                          .qualityTooltip = snapshot.qualityTooltip,
                           .graph = snapshot.graph,
                           .currentDeviceId = snapshot.currentDeviceId,
                           .availableBackends = snapshot.availableBackends};
@@ -496,7 +498,10 @@ namespace app::ui
           if (device.id == snapshot.currentDeviceId)
           {
             _outputButton.set_label(backend.shortName);
-            _outputButton.set_tooltip_text(device.displayName);
+            if (_outputButton.get_tooltip_text() != device.displayName)
+            {
+              _outputButton.set_tooltip_text(device.displayName);
+            }
             found = true;
             break;
           }
@@ -518,6 +523,7 @@ namespace app::ui
       _nowPlayingLabel.set_text("");
       _streamInfoLabel.set_text("");
       _sinkStatusIcon.set_visible(false);
+      _lastTooltipText.clear();
       return;
     }
 
@@ -622,8 +628,15 @@ namespace app::ui
       tt << "\n" << snapshot.qualityTooltip;
     }
 
-    _streamInfoLabel.set_tooltip_text(tt.str());
-    _sinkStatusIcon.set_tooltip_text(tt.str());
+    auto const finalTooltip = tt.str();
+    if (finalTooltip != _lastTooltipText)
+    {
+      APP_LOG_DEBUG("StatusBar: Updating tooltip (length={})", finalTooltip.length());
+      _playbackDetailsBox.set_tooltip_text(finalTooltip);
+      _streamInfoLabel.set_tooltip_text(finalTooltip);
+      _sinkStatusIcon.set_tooltip_text(finalTooltip);
+      _lastTooltipText = finalTooltip;
+    }
 
     // Update status icon
     clearSinkStatusClasses(_sinkStatusIcon);

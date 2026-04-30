@@ -76,10 +76,12 @@ namespace app::ui
       std::string artist;
       std::uint32_t underrunCount = 0;
       rs::audio::AudioQuality quality = rs::audio::AudioQuality::Unknown;
+      std::string qualityTooltip;
       rs::audio::AudioGraph graph;
       std::string currentDeviceId;
       std::vector<rs::audio::BackendSnapshot> availableBackends;
     } _lastPlaybackState;
+    std::string _lastTooltipText;
 
     // Layout constants
     static constexpr int kOutputScrolledMinHeight = 320;

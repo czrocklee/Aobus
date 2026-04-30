@@ -65,6 +65,9 @@ namespace app::ui
 
   void TrackRowDataProvider::loadAll()
   {
+    _rowCache.clear();
+    _stringCache.clear();
+
     rs::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _store.reader(txn);
 

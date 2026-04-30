@@ -63,7 +63,8 @@ int main(int argc, char* argv[])
       logLevel = rs::log::LogLevel::Trace;
   }
 
-  rs::log::Log::init(logLevel);
+  auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "rockstudio" / "logs";
+  rs::log::Log::init(logLevel, logDir);
   APP_LOG_INFO("========================================================");
   APP_LOG_INFO("RockStudio {} starting...", rs::kAppVersion);
 
@@ -120,6 +121,7 @@ int main(int argc, char* argv[])
   }
   int gtkArgc = static_cast<int>(gtkArgv.size());
 
+  APP_LOG_INFO("Entering GTK main loop");
   auto const result = app->run(gtkArgc, gtkArgv.data());
   rs::log::Log::shutdown();
   return result;
