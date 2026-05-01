@@ -72,7 +72,12 @@ namespace rs::library
      * @param str The string to reserve
      * @return The reserved ID
      */
-    DictionaryId reserve(std::string_view str);
+    /**
+     * Get the ID for a string, or intern it if it doesn't exist.
+     * Unlike put(), this does not immediately persist to the database.
+     * The ID remains valid for the lifetime of the DictionaryStore.
+     */
+    DictionaryId getOrIntern(std::string_view str);
 
   private:
     lmdb::Database _database;

@@ -5,7 +5,7 @@
 set -e
 
 TEST_DIR="/tmp/rsc_shell_test"
-RSC="/tmp/build/rsc"
+RSC="/tmp/build/debug/tool/rsc"
 
 cleanup() { rm -rf "$TEST_DIR"; mkdir -p "$TEST_DIR"; }
 
@@ -73,6 +73,12 @@ echo "  PASS"
 echo "Test 9: Track delete..."
 "$RSC" track delete 1 | grep -q "deleted track"
 ! "$RSC" track show --json | grep -q "Rock Song"
+echo "  PASS"
+
+# Test 10: Non-existent tag query
+echo "Test 10: Non-existent tag query..."
+# This should not throw an error
+"$RSC" track show --filter "#NonExistentTag" > /dev/null
 echo "  PASS"
 
 rm -rf "$TEST_DIR"

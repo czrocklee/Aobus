@@ -17,7 +17,8 @@ Use RockStudio's built-in `clang-tidy` integration as part of conformance valida
 2. **Load the standard** from [CONTRIBUTING.md](../../../CONTRIBUTING.md) and cite the specific rule being enforced.
 3. **Run `clang-tidy` through the project build when it is relevant**.
    - Prefer `./build.sh debug --tidy` for normal validation because it uses the repository's configured checks and now automatically selects the Clang toolchain.
-   - Reuse the existing `/tmp/build/...-clang-tidy` tree whenever possible instead of forcing `--clean`.
+   - **For targeted audits**: Always `touch` the specific C++ source files (implementation files and/or headers) you wish to audit immediately before running the build. This forces the build system to re-analyze them even if they haven't changed.
+   - **For full-project audits**: Use `./build.sh debug --tidy --clean`. A clean build is the only reliable way to ensure a comprehensive analysis of every file in the project.
    - Save reusable output to `/tmp`, for example `/tmp/rs-clang-tidy.log`, when you need to inspect or compare findings across iterations.
    - Treat diagnostics in untouched files as background noise unless the user asked for a broader cleanup.
 4. **Prioritize repeated project violations first**, especially under `app/`, before hunting for marginal style issues.
