@@ -26,14 +26,14 @@ add_executable(rs_test
 
     # app unit tests (no platform deps)
     unit/app/FormatNegotiatorTest.cpp
-    unit/app/PlaybackControllerTest.cpp
+    unit/app/PlayerTest.cpp
     unit/app/PlaybackEngineTest.cpp
     unit/app/SmartListEngineTest.cpp
 
     # integration tests
     unit/query/ParserTest.cpp
     integration/playback/DecoderIntegrationTest.cpp
-    integration/playback/PipeWireManagerTest.cpp
+    integration/playback/PipeWireProviderTest.cpp
     integration/playback/GraphIntegrityTest.cpp
     integration/tag/TagTest.cpp
 )

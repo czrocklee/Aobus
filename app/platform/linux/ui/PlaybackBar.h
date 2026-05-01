@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/PlaybackTypes.h>
+#include <rs/audio/Types.h>
 
 #include <gtkmm.h>
 
@@ -22,7 +22,7 @@ namespace app::ui
     PlaybackBar();
     ~PlaybackBar() override;
 
-    void setSnapshot(rs::audio::PlaybackSnapshot const& snapshot);
+    void setSnapshot(rs::audio::Snapshot const& snapshot);
     void setInteractive(bool enabled);
 
     PlaySignal& signalPlayRequested();
@@ -33,7 +33,7 @@ namespace app::ui
   private:
     void setupLayout();
     void setupSignals();
-    void updateTransportButtons(rs::audio::TransportState state);
+    void updateTransportButtons(rs::audio::Transport state);
 
     // Transport controls
     Gtk::Button _playButton;
@@ -52,7 +52,7 @@ namespace app::ui
 
     struct LastState final
     {
-      rs::audio::TransportState state = rs::audio::TransportState::Idle;
+      rs::audio::Transport transport = rs::audio::Transport::Idle;
       std::uint32_t positionSec = 0xFFFFFFFF;
       std::uint32_t durationSec = 0xFFFFFFFF;
     } _lastState;

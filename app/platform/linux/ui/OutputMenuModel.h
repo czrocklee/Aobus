@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/PlaybackTypes.h>
+#include <rs/audio/Types.h>
 
 #include <sigc++/sigc++.h>
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/StreamingPcmSource.h>
+#include <rs/audio/StreamingSource.h>
 #include <rs/utility/Log.h>
 #include <rs/utility/ThreadUtils.h>
 
@@ -13,7 +13,7 @@ namespace rs::audio
   {
     constexpr std::uint8_t kBytesPer24BitSample = 3;
 
-    std::uint64_t bytesPerSecond(AudioFormat const& format) noexcept
+    std::uint64_t bytesPerSecond(Format const& format) noexcept
     {
       if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
       {
@@ -44,7 +44,7 @@ namespace rs::audio
     }
   } // namespace
 
-  StreamingPcmSource::StreamingPcmSource(std::unique_ptr<IDecoderSession> decoder,
+  StreamingSource::StreamingSource(std::unique_ptr<IDecoderSession> decoder,
                                          DecodedStreamInfo streamInfo,
                                          std::function<void(rs::Error const&)> onError,
                                          std::uint32_t prerollTargetMs,
@@ -58,12 +58,12 @@ namespace rs::audio
   {
   }
 
-  StreamingPcmSource::~StreamingPcmSource()
+  StreamingSource::~StreamingSource()
   {
     stopDecodeThread();
   }
 
-  rs::Result<> StreamingPcmSource::initialize()
+  rs::Result<> StreamingSource::initialize()
   {
     auto const generation = _generation.load(std::memory_order_relaxed);
 
@@ -86,22 +86,22 @@ namespace rs::audio
     return {};
   }
 
-  std::size_t StreamingPcmSource::read(std::span<std::byte> output) noexcept
+  std::size_t StreamingSource::read(std::span<std::byte> output) noexcept
   {
     return _ringBuffer.read(output);
   }
 
-  bool StreamingPcmSource::isDrained() const noexcept
+  bool StreamingSource::isDrained() const noexcept
   {
     return _decoderReachedEof.load(std::memory_order_relaxed) && _ringBuffer.size() == 0;
   }
 
-  std::uint32_t StreamingPcmSource::bufferedMs() const noexcept
+  std::uint32_t StreamingSource::bufferedMs() const noexcept
   {
     return bufferedDurationMs(_ringBuffer.size(), _bytesPerSecond);
   }
 
-  rs::Result<> StreamingPcmSource::seek(std::uint32_t positionMs)
+  rs::Result<> StreamingSource::seek(std::uint32_t positionMs)
   {
     stopDecodeThread();
 
@@ -148,19 +148,19 @@ namespace rs::audio
     return {};
   }
 
-  void StreamingPcmSource::startDecodeThread()
+  void StreamingSource::startDecodeThread()
   {
     stopDecodeThread();
 
     _decodeThread = std::jthread(
       [this](std::stop_token const& token)
       {
-        rs::setCurrentThreadName("StreamingPcmSource-Decode");
+        rs::setCurrentThreadName("StreamingSource-Decode");
         decodeLoop(token);
       });
   }
 
-  void StreamingPcmSource::stopDecodeThread()
+  void StreamingSource::stopDecodeThread()
   {
     if (_decodeThread.joinable())
     {
@@ -169,7 +169,7 @@ namespace rs::audio
     }
   }
 
-  void StreamingPcmSource::decodeLoop(std::stop_token const& stopToken)
+  void StreamingSource::decodeLoop(std::stop_token const& stopToken)
   {
     auto const generation = _generation.load(std::memory_order_relaxed);
 
@@ -205,7 +205,7 @@ namespace rs::audio
     }
   }
 
-  rs::Result<> StreamingPcmSource::fillUntil(std::uint32_t targetBufferedMs, std::uint64_t generation)
+  rs::Result<> StreamingSource::fillUntil(std::uint32_t targetBufferedMs, std::uint64_t generation)
   {
     while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
            _generation.load(std::memory_order_relaxed) == generation && bufferedMs() < targetBufferedMs)
@@ -240,7 +240,7 @@ namespace rs::audio
     return {};
   }
 
-  rs::Result<bool> StreamingPcmSource::decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken)
+  rs::Result<bool> StreamingSource::decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken)
   {
     PcmBlock block;
     {
@@ -270,7 +270,7 @@ namespace rs::audio
     return writeBlock(std::span<std::byte const>(block.bytes.data(), block.bytes.size()), generation, stopToken);
   }
 
-  bool StreamingPcmSource::writeBlock(std::span<std::byte const> bytes,
+  bool StreamingSource::writeBlock(std::span<std::byte const> bytes,
                                       std::uint64_t generation,
                                       std::stop_token const* stopToken)
   {

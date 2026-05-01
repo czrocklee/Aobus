@@ -6,8 +6,8 @@
 #include "platform/linux/ui/GtkMainThreadDispatcher.h"
 #include "platform/linux/ui/PlaybackBar.h"
 #include "platform/linux/ui/TrackPageGraph.h"
-#include <rs/audio/PlaybackController.h>
-#include <rs/audio/PlaybackTypes.h>
+#include <rs/audio/Player.h>
+#include <rs/audio/Types.h>
 
 #include <gtkmm.h>
 
@@ -40,7 +40,7 @@ namespace app::ui
     virtual TrackPageContext const* currentVisibleTrackPageContext() const = 0;
     virtual TrackPageContext* findTrackPageContext(rs::ListId listId) = 0;
     virtual void showListPage(rs::ListId listId) = 0;
-    virtual void updatePlaybackStatus(rs::audio::PlaybackSnapshot const& snapshot) = 0;
+    virtual void updatePlaybackStatus(rs::audio::Snapshot const& snapshot) = 0;
     virtual void showPlaybackMessage(std::string const& message,
                                      std::optional<std::chrono::seconds> timeout = std::nullopt) = 0;
   };
@@ -72,8 +72,8 @@ namespace app::ui
     void handlePlaybackFinished();
     void clearActivePlaybackSequence();
 
-    void setPlaybackController(std::unique_ptr<rs::audio::PlaybackController> controller);
-    rs::audio::PlaybackController* playbackController() { return _playbackController.get(); }
+    void setPlaybackController(std::unique_ptr<rs::audio::Player> controller);
+    rs::audio::Player* player() { return _player.get(); }
 
   private:
     void setupPlayback();
@@ -90,10 +90,10 @@ namespace app::ui
     std::function<TrackRowDataProvider*()> _providerSource;
     std::unique_ptr<PlaybackBar> _playbackBar;
     std::shared_ptr<GtkMainThreadDispatcher> _dispatcher;
-    std::unique_ptr<rs::audio::PlaybackController> _playbackController;
+    std::unique_ptr<rs::audio::Player> _player;
     std::uint32_t _playbackTimer = 0;
     std::optional<ActivePlaybackSequence> _activePlaybackSequence;
-    rs::audio::TransportState _lastPlaybackState = rs::audio::TransportState::Idle;
+    rs::audio::Transport _lastPlaybackState = rs::audio::Transport::Idle;
     std::string _lastPlaybackErrorMessage;
   };
 } // namespace app::ui

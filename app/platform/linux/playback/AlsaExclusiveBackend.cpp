@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
-#include <rs/audio/BackendTypes.h>
+#include <rs/audio/Backend.h>
 #include <rs/utility/ByteView.h>
 #include <rs/utility/Log.h>
 #include <rs/utility/ThreadUtils.h>
@@ -26,23 +26,23 @@ namespace app::playback
   constexpr int kAlsaWaitTimeoutMs = 500;
   constexpr int kPollRetryDelayMs = 10;
 
-  AlsaExclusiveBackend::AlsaExclusiveBackend(rs::audio::AudioDevice const& device)
+  AlsaExclusiveBackend::AlsaExclusiveBackend(rs::audio::Device const& device)
     : _deviceName{device.id}
   {
-    PLAYBACK_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _deviceName);
+    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _deviceName);
   }
 
   AlsaExclusiveBackend::~AlsaExclusiveBackend()
   {
-    PLAYBACK_LOG_DEBUG("AlsaExclusiveBackend: Destroying backend instance");
+    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Destroying backend instance");
     stop();
     close();
   }
 
-  rs::Result<> AlsaExclusiveBackend::open(rs::audio::AudioFormat const& format,
+  rs::Result<> AlsaExclusiveBackend::open(rs::audio::Format const& format,
                                           rs::audio::RenderCallbacks callbacks)
   {
-    PLAYBACK_LOG_INFO("AlsaExclusiveBackend: Opening device '{}' with format {}Hz/{}b/{}ch",
+    AUDIO_LOG_INFO("AlsaExclusiveBackend: Opening device '{}' with format {}Hz/{}b/{}ch",
                       _deviceName,
                       format.sampleRate,
                       static_cast<int>(format.bitDepth),

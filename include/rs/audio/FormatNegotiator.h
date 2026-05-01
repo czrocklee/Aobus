@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <rs/audio/BackendTypes.h>
-#include <rs/audio/PlaybackTypes.h>
+#include <rs/audio/Backend.h>
+#include <rs/audio/Types.h>
 
 #include <string>
 #include <vector>
@@ -13,9 +13,9 @@ namespace rs::audio
 {
   struct RenderPlan final
   {
-    AudioFormat sourceFormat = {};
-    AudioFormat deviceFormat = {};
-    AudioFormat decoderOutputFormat = {};
+    Format sourceFormat = {};
+    Format deviceFormat = {};
+    Format decoderOutputFormat = {};
     bool requiresResample = false;
     bool requiresBitDepthConversion = false;
     bool requiresChannelRemap = false;
@@ -25,6 +25,6 @@ namespace rs::audio
   class FormatNegotiator final
   {
   public:
-    static RenderPlan buildPlan(AudioFormat sourceFormat, DeviceCapabilities const& caps);
+    static RenderPlan buildPlan(Format sourceFormat, DeviceCapabilities const& caps);
   };
 } // namespace rs::audio

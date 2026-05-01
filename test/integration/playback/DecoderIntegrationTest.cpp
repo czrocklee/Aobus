@@ -23,7 +23,7 @@ TEST_CASE("FlacDecoderSession handles basic files", "[playback][integration]")
     return;
   }
 
-  rs::audio::AudioFormat outputFormat;
+  rs::audio::Format outputFormat;
   outputFormat.bitDepth = 16;
   outputFormat.isInterleaved = true;
 
@@ -52,7 +52,7 @@ TEST_CASE("FlacDecoderSession handles S24_32 decoding", "[playback][integration]
   }
 
   // Request 32-bit container with 24-bit precision
-  rs::audio::AudioFormat outputFormat;
+  rs::audio::Format outputFormat;
   outputFormat.bitDepth = 32;
   outputFormat.validBits = 24;
   outputFormat.isInterleaved = true;
@@ -81,7 +81,7 @@ TEST_CASE("AlacDecoderSession handles basic files", "[playback][integration]")
     return;
   }
 
-  rs::audio::AudioFormat outputFormat;
+  rs::audio::Format outputFormat;
   outputFormat.isInterleaved = true;
 
   AlacDecoderSession decoder(outputFormat);

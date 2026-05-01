@@ -3,7 +3,7 @@
 
 #include <platform/linux/playback/PipeWireBackend.h>
 #include <rs/audio/IBackend.h>
-#include <rs/audio/PlaybackEngine.h>
+#include <rs/audio/Engine.h>
 #include <rs/utility/Log.h>
 
 #include <catch2/catch_approx.hpp>
@@ -22,7 +22,7 @@ namespace rs::audio
 
     // Use PipeWire backend
     auto backend = std::make_unique<app::rs::audio::PipeWireBackend>();
-    auto engine = std::make_unique<PlaybackEngine>(std::move(backend));
+    auto engine = std::make_unique<Engine>(std::move(backend));
 
     // Prepare a track (using a known test file if available, otherwise just use a dummy path to trigger analysis)
     TrackPlaybackDescriptor descriptor;

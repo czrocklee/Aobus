@@ -41,7 +41,7 @@ namespace app::playback::detail
     return static_cast<std::uint32_t>(parsed);
   }
 
-  std::optional<rs::audio::AudioFormat> parseRawStreamFormat(::spa_pod const* param)
+  std::optional<rs::audio::Format> parseRawStreamFormat(::spa_pod const* param)
   {
     if (param == nullptr)
     {
@@ -53,7 +53,7 @@ namespace app::playback::detail
       return std::nullopt;
     }
 
-    auto format = rs::audio::AudioFormat{};
+    auto format = rs::audio::Format{};
     format.sampleRate = info.rate;
     format.channels = static_cast<std::uint8_t>(info.channels);
     format.isInterleaved = true;

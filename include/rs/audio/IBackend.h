@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/BackendTypes.h>
+#include <rs/audio/Backend.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -39,7 +39,7 @@ namespace rs::audio
     void (*onRouteReady)(void* userData, std::string_view routeAnchor) noexcept = nullptr;
 
     /// Called by the backend when its input stream format is negotiated or changes.
-    void (*onFormatChanged)(void* userData, AudioFormat const& format) noexcept = nullptr;
+    void (*onFormatChanged)(void* userData, Format const& format) noexcept = nullptr;
 
     /// Called by the backend when a terminal error occurs (e.g. device lost).
     void (*onBackendError)(void* userData, std::string_view message) noexcept = nullptr;
@@ -56,7 +56,7 @@ namespace rs::audio
     /**
      * @brief Prepares the backend for playback with the given format.
      */
-    virtual rs::Result<> open(AudioFormat const& format, RenderCallbacks callbacks) = 0;
+    virtual rs::Result<> open(Format const& format, RenderCallbacks callbacks) = 0;
 
     /**
      * @brief Resets the backend, closing any open streams and detaching callbacks.

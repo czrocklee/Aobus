@@ -10,7 +10,7 @@ namespace rs::audio
   class FlacDecoderSession final : public IDecoderSession
   {
   public:
-    explicit FlacDecoderSession(AudioFormat outputFormat);
+    explicit FlacDecoderSession(Format outputFormat);
     ~FlacDecoderSession() override;
 
     rs::Result<> open(std::filesystem::path const& filePath) override;

@@ -90,7 +90,7 @@ namespace app::playback
     return value != nullptr ? std::string(value) : std::string{};
   }
 
-  std::string formatStreamFormat(rs::audio::AudioFormat const& format)
+  std::string formatStreamFormat(rs::audio::Format const& format)
   {
     auto const* const sampleType = format.isFloat ? "float" : "pcm";
     return std::format("{}Hz/{}-bit/{}ch {}", format.sampleRate, format.bitDepth, format.channels, sampleType);
@@ -395,7 +395,13 @@ namespace app::playback
     {
       std::uint64_t id = 0;
       std::string routeAnchor;
-      std::function<void(rs::audio::AudioGraph const&)> callback;
+      std::function<void(rs::audio::flow::Graph const&)> callback;
+    };
+
+    struct DeviceSubscription final
+    {
+      std::uint64_t id = 0;
+      PipeWireMonitor::DeviceCallback callback;
     };
 
     Impl()
@@ -451,7 +457,6 @@ namespace app::playback
     detail::PwThreadLoopPtr threadLoop;
     detail::PwContextPtr context;
     detail::PwCorePtr core;
-    std::function<void()> onDevicesChanged;
 
     mutable std::mutex mutex;
     detail::PwRegistryPtr registry;
@@ -463,13 +468,14 @@ namespace app::playback
     std::unordered_map<std::uint32_t, LinkBinding> linkBindings;
     std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> streamNodeBindings;
     std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> sinkNodeBindings;
-    std::unordered_map<std::uint32_t, rs::audio::AudioFormat> nodeFormatMap;
+    std::unordered_map<std::uint32_t, rs::audio::Format> nodeFormatMap;
     std::unordered_map<std::uint32_t, rs::audio::DeviceCapabilities> sinkCapabilitiesMap;
     std::unordered_map<std::uint32_t, SinkProps> sinkPropsMap;
     detail::SpaSourcePtr refreshEvent;
 
     std::uint64_t nextSubscriptionId = 1;
-    std::vector<GraphSubscription> subscriptions;
+    std::vector<GraphSubscription> graphSubscriptions;
+    std::vector<DeviceSubscription> deviceSubscriptions;
 
     void triggerRefresh()
     {
@@ -485,10 +491,17 @@ namespace app::playback
 
     void refresh();
 
+    rs::audio::Subscription subscribeDevices(DeviceCallback callback);
+    rs::audio::Subscription subscribeGraph(std::string_view routeAnchor,
+                                           std::function<void(rs::audio::flow::Graph const&)> callback);
+
+    std::vector<rs::audio::Device> enumerateSinks() const;
+
   private:
     void syncStreamBindings(std::unordered_set<std::uint32_t> const& subscribedStreamIds);
     void syncSinkBindings();
     void processGraphSubscribers();
+    void processDeviceSubscribers();
 
     struct ReachableContext
     {
@@ -498,10 +511,10 @@ namespace app::playback
     };
 
     ReachableContext findReachableNodes(std::uint32_t streamId) const;
-    rs::audio::AudioNode convertToAudioNode(std::uint32_t id,
-                                            std::uint32_t streamId,
-                                            std::unordered_set<std::uint32_t> const& reachableSet) const;
-    void populateGraph(rs::audio::AudioGraph& graph, std::uint32_t streamId) const;
+    rs::audio::flow::Node convertToAudioNode(std::uint32_t id,
+                                             std::uint32_t streamId,
+                                             std::unordered_set<std::uint32_t> const& reachableSet) const;
+    void populateGraph(rs::audio::flow::Graph& graph, std::uint32_t streamId) const;
   };
 
   // --- Anonymous Namespace for Callbacks ---
@@ -587,26 +600,12 @@ namespace app::playback
       }
 
       impl->triggerRefresh();
-
-      if (isNode)
-      {
-        auto const lock = std::lock_guard<std::mutex>{impl->mutex};
-
-        if (isSinkMediaClass(impl->nodes[id].mediaClass))
-        {
-          if (impl->onDevicesChanged)
-          {
-            impl->onDevicesChanged();
-          }
-        }
-      }
     }
 
     void onRegistryGlobalRemove(void* data, std::uint32_t id)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
       bool needsRefresh = false;
-      bool deviceRemoved = false;
 
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
@@ -634,11 +633,6 @@ namespace app::playback
 
         if (impl->nodes.contains(id))
         {
-          if (isSinkMediaClass(impl->nodes[id].mediaClass))
-          {
-            deviceRemoved = true;
-          }
-
           impl->nodes.erase(id);
           needsRefresh = true;
         }
@@ -653,11 +647,6 @@ namespace app::playback
       if (needsRefresh)
       {
         impl->triggerRefresh();
-      }
-
-      if (deviceRemoved && impl->onDevicesChanged)
-      {
-        impl->onDevicesChanged();
       }
     }
 
@@ -829,17 +818,92 @@ namespace app::playback
     _impl->sinkPropsMap.clear();
   }
 
-  void PipeWireMonitor::setDevicesChangedCallback(std::function<void()> callback)
+  rs::audio::Subscription PipeWireMonitor::subscribeDevices(DeviceCallback callback)
   {
-    auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
-    _impl->onDevicesChanged = std::move(callback);
+    return _impl->subscribeDevices(std::move(callback));
   }
 
-  std::vector<rs::audio::AudioDevice> PipeWireMonitor::enumerateSinks() const
+  std::vector<rs::audio::Device> PipeWireMonitor::enumerateSinks() const
   {
-    auto devices = std::vector<rs::audio::AudioDevice>{};
+    return _impl->enumerateSinks();
+  }
+
+  std::optional<std::uint32_t> PipeWireMonitor::findSinkIdByName(std::string_view name) const
+  {
     auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
     for (auto const& [id, node] : _impl->nodes)
+    {
+      if (isSinkMediaClass(node.mediaClass) && node.nodeName == name)
+      {
+        return id;
+      }
+    }
+    return std::nullopt;
+  }
+
+  rs::audio::Subscription PipeWireMonitor::subscribeGraph(std::string_view routeAnchor,
+                                                          std::function<void(rs::audio::flow::Graph const&)> callback)
+  {
+    return _impl->subscribeGraph(routeAnchor, std::move(callback));
+  }
+
+  void PipeWireMonitor::refresh()
+  {
+    _impl->refresh();
+  }
+
+  // --- Impl Implementations ---
+
+  rs::audio::Subscription PipeWireMonitor::Impl::subscribeDevices(DeviceCallback callback)
+  {
+    auto const id = nextSubscriptionId++;
+    auto const lock = std::lock_guard<std::mutex>{mutex};
+    deviceSubscriptions.push_back({id, std::move(callback)});
+
+    // Trigger immediate update
+    if (deviceSubscriptions.back().callback)
+    {
+      deviceSubscriptions.back().callback(enumerateSinks());
+    }
+
+    return rs::audio::Subscription{[this, id]()
+                                   {
+                                     auto const lock = std::lock_guard<std::mutex>{mutex};
+                                     auto const it =
+                                       std::ranges::find(deviceSubscriptions, id, &DeviceSubscription::id);
+                                     if (it != deviceSubscriptions.end())
+                                     {
+                                       deviceSubscriptions.erase(it);
+                                     }
+                                   }};
+  }
+
+  rs::audio::Subscription PipeWireMonitor::Impl::subscribeGraph(
+    std::string_view routeAnchor,
+    std::function<void(rs::audio::flow::Graph const&)> callback)
+  {
+    auto const id = nextSubscriptionId++;
+    auto const lock = std::lock_guard<std::mutex>{mutex};
+    graphSubscriptions.push_back({id, std::string(routeAnchor), std::move(callback)});
+
+    triggerRefresh();
+
+    return rs::audio::Subscription{[this, id]()
+                                   {
+                                     auto const lock = std::lock_guard<std::mutex>{mutex};
+                                     auto const it = std::ranges::find(graphSubscriptions, id, &GraphSubscription::id);
+                                     if (it != graphSubscriptions.end())
+                                     {
+                                       graphSubscriptions.erase(it);
+                                     }
+                                     triggerRefresh();
+                                   }};
+  }
+
+  std::vector<rs::audio::Device> PipeWireMonitor::Impl::enumerateSinks() const
+  {
+    auto devices = std::vector<rs::audio::Device>{};
+    for (auto const& [id, node] : nodes)
     {
       if (isSinkMediaClass(node.mediaClass))
       {
@@ -851,7 +915,7 @@ namespace app::playback
         }
         auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
         auto caps = rs::audio::DeviceCapabilities{};
-        if (auto const it = _impl->sinkCapabilitiesMap.find(id); it != _impl->sinkCapabilitiesMap.end())
+        if (auto const it = sinkCapabilitiesMap.find(id); it != sinkCapabilitiesMap.end())
         {
           caps = it->second;
         }
@@ -873,45 +937,6 @@ namespace app::playback
     return devices;
   }
 
-  std::optional<std::uint32_t> PipeWireMonitor::findSinkIdByName(std::string_view name) const
-  {
-    auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
-    for (auto const& [id, node] : _impl->nodes)
-    {
-      if (isSinkMediaClass(node.mediaClass) && node.nodeName == name)
-      {
-        return id;
-      }
-    }
-    return std::nullopt;
-  }
-
-  std::uint64_t PipeWireMonitor::subscribeGraph(std::string_view routeAnchor,
-                                                std::function<void(rs::audio::AudioGraph const&)> callback)
-  {
-    auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
-    auto id = _impl->nextSubscriptionId++;
-    _impl->subscriptions.push_back(
-      {.id = id, .routeAnchor = std::string(routeAnchor), .callback = std::move(callback)});
-    _impl->triggerRefresh();
-    return id;
-  }
-
-  void PipeWireMonitor::unsubscribeGraph(std::uint64_t id)
-  {
-    auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
-    auto it = std::ranges::find(_impl->subscriptions, id, &Impl::GraphSubscription::id);
-    if (it != _impl->subscriptions.end())
-    {
-      _impl->subscriptions.erase(it);
-    }
-  }
-
-  void PipeWireMonitor::refresh()
-  {
-    _impl->refresh();
-  }
-
   void PipeWireMonitor::Impl::refresh()
   {
     ::pw_thread_loop_lock(threadLoop.get());
@@ -919,7 +944,7 @@ namespace app::playback
       auto lock = std::unique_lock<std::mutex>{mutex};
       auto subscribedStreamIds = std::unordered_set<std::uint32_t>{};
 
-      for (auto const& sub : subscriptions)
+      for (auto const& sub : graphSubscriptions)
       {
         if (auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str()))
         {
@@ -930,6 +955,7 @@ namespace app::playback
       syncStreamBindings(subscribedStreamIds);
       syncSinkBindings();
       processGraphSubscribers();
+      processDeviceSubscribers();
 
       lock.unlock();
     }
@@ -1026,15 +1052,31 @@ namespace app::playback
 
   void PipeWireMonitor::Impl::processGraphSubscribers()
   {
-    for (auto const& sub : subscriptions)
+    for (auto const& sub : graphSubscriptions)
     {
       auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
 
       if (parsedId && *parsedId != PW_ID_ANY && sub.callback)
       {
-        rs::audio::AudioGraph graph;
+        rs::audio::flow::Graph graph;
         populateGraph(graph, *parsedId);
         sub.callback(graph);
+      }
+    }
+  }
+
+  void PipeWireMonitor::Impl::processDeviceSubscribers()
+  {
+    if (deviceSubscriptions.empty())
+    {
+      return;
+    }
+    auto const devices = enumerateSinks();
+    for (auto const& sub : deviceSubscriptions)
+    {
+      if (sub.callback)
+      {
+        sub.callback(devices);
       }
     }
   }
@@ -1082,7 +1124,7 @@ namespace app::playback
     return ctx;
   }
 
-  rs::audio::AudioNode PipeWireMonitor::Impl::convertToAudioNode(
+  rs::audio::flow::Node PipeWireMonitor::Impl::convertToAudioNode(
     std::uint32_t id,
     std::uint32_t streamId,
     std::unordered_set<std::uint32_t> const& reachableSet) const
@@ -1093,30 +1135,30 @@ namespace app::playback
     {
       if (id == streamId)
       {
-        return rs::audio::AudioNode{.id = std::format("{}", id),
-                                    .type = rs::audio::AudioNodeType::Stream,
-                                    .name = "RockStudio Playback",
-                                    .format = std::nullopt};
+        return rs::audio::flow::Node{.id = std::format("{}", id),
+                                     .type = rs::audio::flow::NodeType::Stream,
+                                     .name = "RockStudio Playback",
+                                     .format = std::nullopt};
       }
 
-      return rs::audio::AudioNode{};
+      return rs::audio::flow::Node{};
     }
 
     bool const isSink = isSinkMediaClass(it->second.mediaClass);
     bool const isRs = (id == streamId);
-    auto type = rs::audio::AudioNodeType::ExternalSource;
+    auto type = rs::audio::flow::NodeType::ExternalSource;
 
     if (isRs)
     {
-      type = rs::audio::AudioNodeType::Stream;
+      type = rs::audio::flow::NodeType::Stream;
     }
     else if (isSink)
     {
-      type = rs::audio::AudioNodeType::Sink;
+      type = rs::audio::flow::NodeType::Sink;
     }
     else if (reachableSet.contains(id))
     {
-      type = rs::audio::AudioNodeType::Intermediary;
+      type = rs::audio::flow::NodeType::Intermediary;
     }
 
     auto name = it->second.nodeNick;
@@ -1126,7 +1168,7 @@ namespace app::playback
       name = it->second.nodeName.empty() ? it->second.objectPath : it->second.nodeName;
     }
 
-    rs::audio::AudioNode node{
+    rs::audio::flow::Node node{
       .id = std::format("{}", id), .type = type, .name = name, .objectPath = it->second.objectPath};
 
     if (auto const formatIt = nodeFormatMap.find(id); formatIt != nodeFormatMap.end())
@@ -1154,7 +1196,7 @@ namespace app::playback
     return node;
   }
 
-  void PipeWireMonitor::Impl::populateGraph(rs::audio::AudioGraph& graph, std::uint32_t streamId) const
+  void PipeWireMonitor::Impl::populateGraph(rs::audio::flow::Graph& graph, std::uint32_t streamId) const
   {
     auto const ctx = findReachableNodes(streamId);
 
@@ -1173,9 +1215,9 @@ namespace app::playback
     {
       if (isActiveLink(link.state) && ctx.fullSet.contains(link.outputNodeId) && ctx.fullSet.contains(link.inputNodeId))
       {
-        graph.links.push_back({.sourceId = std::format("{}", link.outputNodeId),
-                               .destId = std::format("{}", link.inputNodeId),
-                               .isActive = true});
+        graph.connections.push_back({.sourceId = std::format("{}", link.outputNodeId),
+                                     .destId = std::format("{}", link.inputNodeId),
+                                     .isActive = true});
       }
     }
   }

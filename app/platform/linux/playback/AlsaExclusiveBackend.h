@@ -23,10 +23,10 @@ namespace app::playback
   class AlsaExclusiveBackend final : public rs::audio::IBackend
   {
   public:
-    explicit AlsaExclusiveBackend(rs::audio::AudioDevice const& device);
+    explicit AlsaExclusiveBackend(rs::audio::Device const& device);
     ~AlsaExclusiveBackend() override;
 
-    rs::Result<> open(rs::audio::AudioFormat const& format, rs::audio::RenderCallbacks callbacks) override;
+    rs::Result<> open(rs::audio::Format const& format, rs::audio::RenderCallbacks callbacks) override;
     void reset() override;
     void start() override;
     void pause() override;
@@ -55,7 +55,7 @@ namespace app::playback
     void recoverFromXrun(int err);
 
     std::string _deviceName;
-    rs::audio::AudioFormat _format;
+    rs::audio::Format _format;
     rs::audio::RenderCallbacks _callbacks;
 
     AlsaPcmPtr _pcm;

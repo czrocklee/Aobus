@@ -19,5 +19,5 @@ namespace rs::audio
    * @brief Factory function to create a decoder session for a given file.
    */
   std::unique_ptr<IDecoderSession> createDecoderSession(std::filesystem::path const& filePath,
-                                                                  AudioFormat outputFormat);
+                                                                  Format outputFormat);
 } // namespace rs::audio

@@ -8,7 +8,7 @@
 #include "platform/linux/ui/TrackPresentation.h"
 
 #include <gtkmm.h>
-#include <rs/audio/BackendTypes.h>
+#include <rs/audio/Backend.h>
 
 #include <memory>
 #include <string>

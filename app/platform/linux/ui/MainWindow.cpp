@@ -3,7 +3,7 @@
 
 #include "platform/linux/ui/MainWindow.h"
 #include "platform/linux/services/PlaylistExporter.h"
-#include <rs/audio/PlaybackController.h>
+#include <rs/audio/Player.h>
 #include <rs/utility/Log.h>
 
 #include "platform/linux/ui/CoverArtWidget.h"
@@ -188,7 +188,7 @@ namespace app::ui
     _trackPageGraph->show(listId);
   }
 
-  void MainWindow::updatePlaybackStatus(rs::audio::PlaybackSnapshot const& snapshot)
+  void MainWindow::updatePlaybackStatus(rs::audio::Snapshot const& snapshot)
   {
     if (_statusBar)
     {
@@ -497,7 +497,7 @@ namespace app::ui
 
     if (backendKind != rs::audio::BackendKind::None)
     {
-      if (auto* controller = _playbackCoordinator->playbackController())
+      if (auto* controller = _playbackCoordinator->player())
       {
         controller->setOutput(backendKind, deviceId);
       }
@@ -520,7 +520,7 @@ namespace app::ui
 
   void MainWindow::onOutputChanged(rs::audio::BackendKind kind, std::string const& deviceId)
   {
-    auto* controller = _playbackCoordinator->playbackController();
+    auto* controller = _playbackCoordinator->player();
 
     if (controller == nullptr)
     {

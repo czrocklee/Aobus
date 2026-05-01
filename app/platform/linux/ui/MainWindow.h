@@ -18,7 +18,7 @@
 #include <gtkmm.h>
 #include <memory>
 #include <optional>
-#include <rs/audio/PlaybackTypes.h>
+#include <rs/audio/Types.h>
 #include <vector>
 
 namespace app::services
@@ -28,7 +28,7 @@ namespace app::services
 
 namespace rs::audio
 {
-  class PlaybackController;
+  class Player;
 }
 
 namespace app::ui
@@ -55,7 +55,7 @@ namespace app::ui
     TrackPageContext const* currentVisibleTrackPageContext() const override;
     TrackPageContext* findTrackPageContext(rs::ListId listId) override;
     void showListPage(rs::ListId listId) override;
-    void updatePlaybackStatus(rs::audio::PlaybackSnapshot const& snapshot) override;
+    void updatePlaybackStatus(rs::audio::Snapshot const& snapshot) override;
     void showPlaybackMessage(std::string const& message,
                              std::optional<std::chrono::seconds> timeout = std::nullopt) override;
 

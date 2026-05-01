@@ -25,7 +25,7 @@ namespace rs::audio
 
   struct FlacDecoderSession::Impl
   {
-    AudioFormat requestedOutput;
+    Format requestedOutput;
     FLAC__StreamDecoder* decoder = nullptr;
 
     rs::utility::MappedFile mappedFile;
@@ -39,7 +39,7 @@ namespace rs::audio
     std::uint64_t nextFrameIndex = 0;
     bool eof = false;
 
-    Impl(AudioFormat output)
+    Impl(Format output)
       : requestedOutput(output), decoder(::FLAC__stream_decoder_new())
     {
     }
@@ -91,7 +91,7 @@ namespace rs::audio
                               void* clientData);
   };
 
-  FlacDecoderSession::FlacDecoderSession(AudioFormat outputFormat)
+  FlacDecoderSession::FlacDecoderSession(Format outputFormat)
     : _impl(std::make_unique<Impl>(outputFormat))
   {
   }

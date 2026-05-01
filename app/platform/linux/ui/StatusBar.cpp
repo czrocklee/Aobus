@@ -46,7 +46,7 @@ namespace app::ui
       return ss.str();
     }
 
-    std::string formatStream(rs::audio::AudioFormat const& format)
+    std::string formatStream(rs::audio::Format const& format)
     {
       std::stringstream ss;
       constexpr auto kKhzMultiplier = 1000.0;
@@ -429,7 +429,7 @@ namespace app::ui
     return nullptr;
   }
 
-  void StatusBar::updateOutputModel(rs::audio::PlaybackSnapshot const& snapshot)
+  void StatusBar::updateOutputModel(rs::audio::Snapshot const& snapshot)
   {
     _outputStore->remove_all();
 
@@ -446,7 +446,7 @@ namespace app::ui
     }
   }
 
-  void StatusBar::updateOutputLabel(rs::audio::PlaybackSnapshot const& snapshot)
+  void StatusBar::updateOutputLabel(rs::audio::Snapshot const& snapshot)
   {
     bool found = false;
     for (auto const& backend : snapshot.availableBackends)
@@ -480,9 +480,9 @@ namespace app::ui
     }
   }
 
-  void StatusBar::updatePlaybackStatusLabels(rs::audio::PlaybackSnapshot const& snapshot)
+  void StatusBar::updatePlaybackStatusLabels(rs::audio::Snapshot const& snapshot)
   {
-    if (snapshot.state == rs::audio::TransportState::Idle)
+    if (snapshot.transport == rs::audio::Transport::Idle)
     {
       _nowPlayingLabel.set_text("");
       _streamInfoLabel.set_text("");
@@ -511,9 +511,9 @@ namespace app::ui
     // Source Format from Decoder Node
     std::stringstream ss;
     bool formatFound = false;
-    for (auto const& node : snapshot.graph.nodes)
+    for (auto const& node : snapshot.flow.nodes)
     {
-      if (node.type == rs::audio::AudioNodeType::Decoder && node.format)
+      if (node.type == rs::audio::flow::NodeType::Decoder && node.format)
       {
         ss << formatStream(*node.format);
         formatFound = true;
@@ -538,20 +538,20 @@ namespace app::ui
     clearSinkStatusClasses(_sinkStatusIcon);
     _sinkStatusIcon.set_visible(true);
 
-    using AudioQuality = rs::audio::AudioQuality;
+    using Quality = rs::audio::Quality;
     switch (snapshot.quality)
     {
-      case AudioQuality::BitwisePerfect: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
-      case AudioQuality::LosslessPadded:
-      case AudioQuality::LosslessFloat: _sinkStatusIcon.add_css_class("sink-status-lossless"); break;
-      case AudioQuality::LinearIntervention: _sinkStatusIcon.add_css_class("sink-status-intervention"); break;
-      case AudioQuality::LossySource: _sinkStatusIcon.add_css_class("sink-status-lossy"); break;
-      case AudioQuality::Clipped: _sinkStatusIcon.add_css_class("sink-status-clipped"); break;
-      case AudioQuality::Unknown: _sinkStatusIcon.set_visible(false); break;
+      case Quality::BitwisePerfect: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
+      case Quality::LosslessPadded:
+      case Quality::LosslessFloat: _sinkStatusIcon.add_css_class("sink-status-lossless"); break;
+      case Quality::LinearIntervention: _sinkStatusIcon.add_css_class("sink-status-intervention"); break;
+      case Quality::LossySource: _sinkStatusIcon.add_css_class("sink-status-lossy"); break;
+      case Quality::Clipped: _sinkStatusIcon.add_css_class("sink-status-clipped"); break;
+      case Quality::Unknown: _sinkStatusIcon.set_visible(false); break;
     }
   }
 
-  void StatusBar::updatePlaybackTooltip(rs::audio::PlaybackSnapshot const& snapshot)
+  void StatusBar::updatePlaybackTooltip(rs::audio::Snapshot const& snapshot)
   {
     // Tooltip: Build dynamic representation of the path from the graph (TOTAL ORDER)
     std::stringstream tt;
@@ -563,9 +563,9 @@ namespace app::ui
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
-        auto it = std::ranges::find(snapshot.graph.nodes, currentId, &rs::audio::AudioNode::id);
+        auto it = std::ranges::find(snapshot.flow.nodes, currentId, &rs::audio::flow::Node::id);
 
-        if (it == snapshot.graph.nodes.end())
+        if (it == snapshot.flow.nodes.end())
         {
           break;
         }
@@ -573,12 +573,12 @@ namespace app::ui
         tt << "• ";
         switch (node.type)
         {
-          case rs::audio::AudioNodeType::Decoder: tt << "[Source] "; break;
-          case rs::audio::AudioNodeType::Engine: tt << "[Engine] "; break;
-          case rs::audio::AudioNodeType::Stream: tt << "[Stream] "; break;
-          case rs::audio::AudioNodeType::Intermediary: tt << "[Filter] "; break;
-          case rs::audio::AudioNodeType::Sink: tt << "[Device] "; break;
-          case rs::audio::AudioNodeType::ExternalSource: tt << "[Other Source] "; break;
+          case rs::audio::flow::NodeType::Decoder: tt << "[Source] "; break;
+          case rs::audio::flow::NodeType::Engine: tt << "[Engine] "; break;
+          case rs::audio::flow::NodeType::Stream: tt << "[Stream] "; break;
+          case rs::audio::flow::NodeType::Intermediary: tt << "[Filter] "; break;
+          case rs::audio::flow::NodeType::Sink: tt << "[Device] "; break;
+          case rs::audio::flow::NodeType::ExternalSource: tt << "[Other Source] "; break;
         }
         tt << node.name;
         if (node.format)
@@ -596,7 +596,7 @@ namespace app::ui
         tt << "\n";
 
         std::string nextId;
-        for (auto const& link : snapshot.graph.links)
+        for (auto const& link : snapshot.flow.connections)
         {
           if (link.isActive && link.sourceId == currentId)
           {
@@ -624,13 +624,13 @@ namespace app::ui
     }
   }
 
-  void StatusBar::setPlaybackDetails(rs::audio::PlaybackSnapshot const& snapshot)
+  void StatusBar::setPlaybackDetails(rs::audio::Snapshot const& snapshot)
   {
     // Skip update if nothing visible has changed
-    if (snapshot.state == _lastPlaybackState.state && snapshot.backend == _lastPlaybackState.backend &&
+    if (snapshot.transport == _lastPlaybackState.transport && snapshot.backend == _lastPlaybackState.backend &&
         snapshot.trackTitle == _lastPlaybackState.title && snapshot.trackArtist == _lastPlaybackState.artist &&
         snapshot.underrunCount == _lastPlaybackState.underrunCount && snapshot.quality == _lastPlaybackState.quality &&
-        snapshot.qualityTooltip == _lastPlaybackState.qualityTooltip && snapshot.graph == _lastPlaybackState.graph &&
+        snapshot.qualityTooltip == _lastPlaybackState.qualityTooltip && snapshot.flow == _lastPlaybackState.flow &&
         snapshot.currentDeviceId == _lastPlaybackState.currentDeviceId &&
         snapshot.availableBackends == _lastPlaybackState.availableBackends)
     {
@@ -643,14 +643,14 @@ namespace app::ui
     bool const backendKindChanged = (snapshot.backend != _lastPlaybackState.backend);
 
     // Update state cache
-    _lastPlaybackState = {.state = snapshot.state,
+    _lastPlaybackState = {.transport = snapshot.transport,
                           .backend = snapshot.backend,
                           .title = snapshot.trackTitle,
                           .artist = snapshot.trackArtist,
                           .underrunCount = snapshot.underrunCount,
                           .quality = snapshot.quality,
                           .qualityTooltip = snapshot.qualityTooltip,
-                          .graph = snapshot.graph,
+                          .flow = snapshot.flow,
                           .currentDeviceId = snapshot.currentDeviceId,
                           .availableBackends = snapshot.availableBackends};
 

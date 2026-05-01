@@ -1,4 +1,4 @@
-#include "platform/linux/playback/PipeWireManager.h"
+#include "platform/linux/playback/PipeWireProvider.h"
 #include "platform/linux/playback/PipeWireBackend.h"
 #include "platform/linux/playback/detail/PipeWireShared.h"
 #include <catch2/catch_approx.hpp>
@@ -79,7 +79,7 @@ namespace
   };
 }
 
-TEST_CASE("PipeWireManager - Integration with Real Daemon via API", "[integration][pipewire]")
+TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integration][pipewire]")
 {
   // Check if PipeWire is available
   ensurePipeWireInit();
@@ -91,6 +91,7 @@ TEST_CASE("PipeWireManager - Integration with Real Daemon via API", "[integratio
     auto* core = ::pw_context_connect(context, nullptr, 0);
     if (!core)
     {
+      ::pw_context_destroy(context);
       ::pw_context_destroy(context);
       ::pw_main_loop_destroy(loop);
       std::cout << "Skipping PipeWire integration test: Daemon not running" << '\n';
@@ -108,16 +109,17 @@ TEST_CASE("PipeWireManager - Integration with Real Daemon via API", "[integratio
     return;
   }
 
-  PipeWireManager manager;
+  PipeWireProvider provider;
+  std::vector<Device> currentDevices;
+  auto sub = provider.subscribeDevices([&](std::vector<Device> const& devices) { currentDevices = devices; });
 
   SECTION("Enumeration finds the dummy sink")
   {
     bool found = false;
-    // Wait a bit for PipeWire to propagate the new node to the manager's registry
+    // Wait a bit for PipeWire to propagate the new node to the provider's registry
     for (int i = 0; i < 20; ++i)
     {
-      auto devices = manager.enumerateDevices();
-      for (auto const& d : devices)
+      for (auto const& d : currentDevices)
       {
         if (d.displayName == "rs-test-dummy-sink" || d.id == "rs-test-dummy-sink")
         {
@@ -171,8 +173,7 @@ TEST_CASE("PipeWireManager - Integration with Real Daemon via API", "[integratio
       bool found = false;
       for (int i = 0; i < 20; ++i)
       {
-        auto devices = manager.enumerateDevices();
-        for (auto const& d : devices)
+        for (auto const& d : currentDevices)
         {
           if (d.displayName == "rs-test-duplex-sink" || d.id == "rs-test-duplex-sink")
           {
