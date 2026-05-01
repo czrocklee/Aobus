@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <platform/linux/playback/PipeWireBackend.h>
-#include <rs/audio/IAudioBackend.h>
+#include <rs/audio/IBackend.h>
 #include <rs/audio/PlaybackEngine.h>
 #include <rs/utility/Log.h>
 

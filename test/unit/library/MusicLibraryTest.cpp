@@ -7,8 +7,8 @@
 #include <catch2/matchers/catch_matchers_all.hpp>
 
 #include <rs/Exception.h>
-#include <rs/library/LibraryMeta.h>
-#include <rs/library/LibraryMetaStore.h>
+#include <rs/library/Meta.h>
+#include <rs/library/MetaStore.h>
 #include <rs/library/MusicLibrary.h>
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
@@ -36,8 +36,8 @@ TEST_CASE("MusicLibrary rejects unsupported library versions", "[core][library]"
   auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8}};
 
   auto txn = rs::lmdb::WriteTransaction{env};
-  auto metaStore = rs::library::LibraryMetaStore{rs::lmdb::Database{txn, "meta"}};
-  auto header = rs::library::LibraryMetaHeader{.magic = rs::library::kLibraryMetaMagic,
+  auto metaStore = rs::library::MetaStore{rs::lmdb::Database{txn, "meta"}};
+  auto header = rs::library::MetaHeader{.magic = rs::library::kLibraryMetaMagic,
                                                .libraryVersion = rs::library::kLibraryVersion + 1,
                                                .flags = 0,
                                                .createdAtUnixMs = 1,

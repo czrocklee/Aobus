@@ -16,10 +16,10 @@ namespace rs::audio
    * @brief Interface for an audio decoding session.
    * Handles opening a file, seeking, and reading PCM blocks.
    */
-  class IAudioDecoderSession
+  class IDecoderSession
   {
   public:
-    virtual ~IAudioDecoderSession() = default;
+    virtual ~IDecoderSession() = default;
 
     /**
      * @brief Opens an audio file for decoding.

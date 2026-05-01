@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/IAudioDecoderSession.h>
+#include <rs/audio/IDecoderSession.h>
 #include <rs/audio/IPcmSource.h>
 #include <rs/audio/PcmRingBuffer.h>
 
@@ -20,8 +20,8 @@ namespace rs::audio
   class StreamingPcmSource final : public IPcmSource
   {
   public:
-    StreamingPcmSource(std::unique_ptr<rs::audio::IAudioDecoderSession> decoder,
-                       rs::audio::DecodedStreamInfo streamInfo,
+    StreamingPcmSource(std::unique_ptr<IDecoderSession> decoder,
+                       DecodedStreamInfo streamInfo,
                        std::function<void(rs::Error const&)> onError,
                        std::uint32_t prerollTargetMs,
                        std::uint32_t decodeHighWatermarkMs);
@@ -42,8 +42,8 @@ namespace rs::audio
     rs::Result<bool> decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken);
     bool writeBlock(std::span<std::byte const> bytes, std::uint64_t generation, std::stop_token const* stopToken);
 
-    std::unique_ptr<rs::audio::IAudioDecoderSession> _decoder;
-    rs::audio::DecodedStreamInfo _streamInfo;
+    std::unique_ptr<IDecoderSession> _decoder;
+    DecodedStreamInfo _streamInfo;
     std::function<void(rs::Error const&)> _onError;
     PcmRingBuffer _ringBuffer;
     std::jthread _decodeThread;

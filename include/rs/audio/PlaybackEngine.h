@@ -5,8 +5,8 @@
 
 #include <rs/audio/AudioFormat.h>
 #include <rs/audio/DecoderTypes.h>
-#include <rs/audio/IAudioBackend.h>
-#include <rs/audio/IAudioDecoderSession.h>
+#include <rs/audio/IBackend.h>
+#include <rs/audio/IDecoderSession.h>
 #include <rs/audio/PlaybackTypes.h>
 #include <rs/utility/IMainThreadDispatcher.h>
 
@@ -30,12 +30,12 @@ namespace rs::audio
   public:
     using OnRouteChanged = std::function<void(EngineRouteSnapshot const&)>;
 
-    PlaybackEngine(std::unique_ptr<rs::audio::IAudioBackend> backend,
-                   rs::audio::AudioDevice const& device,
+    PlaybackEngine(std::unique_ptr<IBackend> backend,
+                   AudioDevice const& device,
                    std::shared_ptr<rs::IMainThreadDispatcher> dispatcher = nullptr);
     ~PlaybackEngine();
 
-    void setBackend(std::unique_ptr<rs::audio::IAudioBackend> backend, rs::audio::AudioDevice const& device);
+    void setBackend(std::unique_ptr<IBackend> backend, AudioDevice const& device);
     void setOnTrackEnded(std::function<void()> callback);
 
     void setOnRouteChanged(OnRouteChanged callback);
@@ -67,22 +67,22 @@ namespace rs::audio
     void handleRouteReady(std::string_view routeAnchor);
     void resetToIdle();
     bool openTrack(TrackPlaybackDescriptor const& descriptor,
-                   std::shared_ptr<rs::audio::IPcmSource>& source,
+                   std::shared_ptr<IPcmSource>& source,
                    AudioFormat& backendFormat);
 
     bool negotiateFormat(std::filesystem::path const& path,
                          DecodedStreamInfo const& info,
-                         std::unique_ptr<IAudioDecoderSession>& decoder,
+                         std::unique_ptr<IDecoderSession>& decoder,
                          AudioFormat& backendFormat);
 
-    std::shared_ptr<IPcmSource> createPcmSource(std::unique_ptr<IAudioDecoderSession> decoder,
+    std::shared_ptr<IPcmSource> createPcmSource(std::unique_ptr<IDecoderSession> decoder,
                                                 DecodedStreamInfo const& info);
 
-    std::unique_ptr<rs::audio::IAudioBackend> _backend;
+    std::unique_ptr<IBackend> _backend;
     std::shared_ptr<rs::IMainThreadDispatcher> _dispatcher;
-    rs::audio::AudioDevice _currentDevice;
+    AudioDevice _currentDevice;
 
-    std::atomic<std::shared_ptr<rs::audio::IPcmSource>> _source;
+    std::atomic<std::shared_ptr<IPcmSource>> _source;
     std::atomic<bool> _backendStarted{false};
     std::atomic<bool> _playbackDrainPending{false};
     std::atomic<std::uint32_t> _underrunCount{0};

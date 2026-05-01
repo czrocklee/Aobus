@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/IAudioDecoderSession.h>
+#include <rs/audio/IDecoderSession.h>
 
 #include <filesystem>
 #include <memory>
@@ -13,11 +13,11 @@ namespace rs::audio
   /**
    * @brief Global initialization for audio decoders (if needed).
    */
-  void initializeAudioDecoders();
+  void initializeDecoders();
 
   /**
    * @brief Factory function to create a decoder session for a given file.
    */
-  std::unique_ptr<IAudioDecoderSession> createAudioDecoderSession(std::filesystem::path const& filePath,
+  std::unique_ptr<IDecoderSession> createDecoderSession(std::filesystem::path const& filePath,
                                                                   AudioFormat outputFormat);
 } // namespace rs::audio

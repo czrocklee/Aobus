@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/IAudioBackend.h>
+#include <rs/audio/IBackend.h>
 #include <rs/audio/IBackendManager.h>
 
 #include <memory>
@@ -14,7 +14,7 @@ namespace rs::audio
   /**
    * @brief A backend that does nothing. Used as a fallback or for testing.
    */
-  class NullBackend final : public IAudioBackend
+  class NullBackend final : public IBackend
   {
   public:
     class NullManager final : public IBackendManager
@@ -30,7 +30,7 @@ namespace rs::audio
                  .capabilities = {}}};
       }
 
-      std::unique_ptr<IAudioBackend> createBackend(AudioDevice const& /*device*/) override
+      std::unique_ptr<IBackend> createBackend(AudioDevice const& /*device*/) override
       {
         return std::make_unique<NullBackend>();
       }
@@ -58,7 +58,7 @@ namespace rs::audio
     NullBackend() = default;
     ~NullBackend() override = default;
 
-    rs::Result<> open(AudioFormat const& /*format*/, AudioRenderCallbacks /*callbacks*/) override { return {}; }
+    rs::Result<> open(AudioFormat const& /*format*/, RenderCallbacks /*callbacks*/) override { return {}; }
 
     void reset() override {}
 

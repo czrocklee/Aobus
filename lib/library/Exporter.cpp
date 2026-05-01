@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/LibraryExporter.h>
+#include <rs/library/Exporter.h>
 
 #include <rs/Exception.h>
 #include <rs/library/DictionaryStore.h>
@@ -30,10 +30,7 @@ namespace rs::library
       return "unknown";
     }
 
-    void emitTrackMetadata(YAML::Emitter& out,
-                           rs::library::TrackView const& view,
-                           rs::library::DictionaryStore& dict,
-                           ExportMode /*mode*/)
+    void emitTrackMetadata(YAML::Emitter& out, TrackView const& view, DictionaryStore& dict, ExportMode /*mode*/)
     {
       auto const metadata = view.metadata();
       out << YAML::Key << "title" << YAML::Value << std::string(metadata.title());
@@ -94,7 +91,7 @@ namespace rs::library
       }
     }
 
-    void emitTrackProperties(YAML::Emitter& out, rs::library::TrackView::PropertyProxy const& property)
+    void emitTrackProperties(YAML::Emitter& out, TrackView::PropertyProxy const& property)
     {
       out << YAML::Key << "durationMs" << YAML::Value << property.durationMs();
       out << YAML::Key << "bitrate" << YAML::Value << property.bitrate();
@@ -107,9 +104,9 @@ namespace rs::library
     }
 
     void emitTrackCommon(YAML::Emitter& out,
-                         rs::library::TrackView::MetadataProxy const& metadata,
-                         rs::library::TrackView::TagProxy const& tags,
-                         rs::library::DictionaryStore& dict)
+                         TrackView::MetadataProxy const& metadata,
+                         TrackView::TagProxy const& tags,
+                         DictionaryStore& dict)
     {
       if (metadata.rating() != 0)
       {
@@ -128,12 +125,12 @@ namespace rs::library
     }
   } // namespace
 
-  LibraryExporter::LibraryExporter(MusicLibrary& ml)
+  Exporter::Exporter(MusicLibrary& ml)
     : _ml{ml}
   {
   }
 
-  void LibraryExporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
+  void Exporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
   {
     auto ofs = std::ofstream{path};
 
@@ -162,7 +159,7 @@ namespace rs::library
     }
   }
 
-  void LibraryExporter::exportTracks(YAML::Emitter& out, rs::lmdb::ReadTransaction& txn, ExportMode mode)
+  void Exporter::exportTracks(YAML::Emitter& out, rs::lmdb::ReadTransaction& txn, ExportMode mode)
   {
     auto trackReader = _ml.tracks().reader(txn);
     out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
@@ -173,7 +170,7 @@ namespace rs::library
     out << YAML::EndSeq;
   }
 
-  void LibraryExporter::exportTrack(YAML::Emitter& out, TrackId id, TrackView const& view, ExportMode mode)
+  void Exporter::exportTrack(YAML::Emitter& out, TrackId id, TrackView const& view, ExportMode mode)
   {
     auto& dict = _ml.dictionary();
     out << YAML::BeginMap;
@@ -196,7 +193,7 @@ namespace rs::library
     out << YAML::EndMap;
   }
 
-  void LibraryExporter::exportLists(YAML::Emitter& out, rs::lmdb::ReadTransaction& txn)
+  void Exporter::exportLists(YAML::Emitter& out, rs::lmdb::ReadTransaction& txn)
   {
     out << YAML::Key << "lists" << YAML::Value << YAML::BeginSeq;
     auto listReader = _ml.lists().reader(txn);

@@ -54,8 +54,7 @@ namespace rs::audio
     }
   } // namespace
 
-  MemoryPcmSource::MemoryPcmSource(std::unique_ptr<rs::audio::IAudioDecoderSession> decoder,
-                                   rs::audio::DecodedStreamInfo streamInfo)
+  MemoryPcmSource::MemoryPcmSource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo streamInfo)
     : _decoder{std::move(decoder)}, _streamInfo{streamInfo}
   {
   }

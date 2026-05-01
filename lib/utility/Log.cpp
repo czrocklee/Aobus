@@ -3,7 +3,7 @@
 
 #include <rs/utility/Log.h>
 
-#include <rs/audio/AudioDecoderFactory.h>
+#include <rs/audio/DecoderFactory.h>
 
 #include <spdlog/async.h>
 #include <spdlog/sinks/null_sink.h>
@@ -61,7 +61,7 @@ namespace rs::log
 
     spdlog::set_default_logger(_appLogger);
 
-    rs::audio::initializeAudioDecoders();
+    rs::audio::initializeDecoders();
 
     APP_LOG_INFO("Logging initialized. Log file: {}", logPath.string());
   }

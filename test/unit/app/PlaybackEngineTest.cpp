@@ -4,7 +4,7 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/audio/IAudioBackend.h>
+#include <rs/audio/IBackend.h>
 #include <rs/audio/PlaybackEngine.h>
 #include <rs/utility/IMainThreadDispatcher.h>
 
@@ -23,16 +23,16 @@ namespace
     void dispatch(std::function<void()> callback) override { callback(); }
   };
 
-  class MockBackendProxy : public IAudioBackend
+  class MockBackendProxy : public IBackend
   {
-    IAudioBackend& _real;
+    IBackend& _real;
 
   public:
-    MockBackendProxy(IAudioBackend& real)
+    MockBackendProxy(IBackend& real)
       : _real(real)
     {
     }
-    rs::Result<> open(AudioFormat const& f, AudioRenderCallbacks c) override { return _real.open(f, c); }
+    rs::Result<> open(AudioFormat const& f, RenderCallbacks c) override { return _real.open(f, c); }
     void reset() override { _real.reset(); }
     void start() override { _real.start(); }
     void pause() override { _real.pause(); }
@@ -49,7 +49,7 @@ namespace
 
 TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
 {
-  Mock<IAudioBackend> mockBackend;
+  Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
   AudioDevice device{.id = "test-device",
                      .displayName = "Test",
@@ -106,8 +106,8 @@ TEST_CASE("PlaybackEngine - Basic Orchestration", "[playback][engine]")
 
 TEST_CASE("PlaybackEngine - Backend Swapping", "[playback][engine][hot-swap]")
 {
-  Mock<IAudioBackend> mockBackend1;
-  Mock<IAudioBackend> mockBackend2;
+  Mock<IBackend> mockBackend1;
+  Mock<IBackend> mockBackend2;
   auto dispatcher = std::make_shared<MockDispatcher>();
 
   Fake(
@@ -152,7 +152,7 @@ TEST_CASE("PlaybackEngine - Graph Initialization", "[playback][engine][graph]")
     return;
   }
 
-  Mock<IAudioBackend> mockBackend;
+  Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
   AudioDevice device{.id = "test-device",
                      .displayName = "Test",
@@ -224,7 +224,7 @@ TEST_CASE("PlaybackEngine - PipeWire shared mode keeps native sample rate", "[pl
     return;
   }
 
-  Mock<IAudioBackend> mockBackend;
+  Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
   AudioDevice device{.id = "pipewire-shared",
                      .displayName = "PipeWire",
@@ -236,7 +236,7 @@ TEST_CASE("PlaybackEngine - PipeWire shared mode keeps native sample rate", "[pl
   auto openedFormats = std::vector<AudioFormat>{};
   When(Method(mockBackend, open))
     .AlwaysDo(
-      [&](AudioFormat const& format, AudioRenderCallbacks)
+      [&](AudioFormat const& format, RenderCallbacks)
       {
         openedFormats.push_back(format);
         return rs::Result<>();
@@ -282,7 +282,7 @@ TEST_CASE("PlaybackEngine - Unsupported backend sample rate fails without resamp
     return;
   }
 
-  Mock<IAudioBackend> mockBackend;
+  Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
   AudioDevice device{.id = "alsa-exclusive",
                      .displayName = "ALSA",
@@ -294,7 +294,7 @@ TEST_CASE("PlaybackEngine - Unsupported backend sample rate fails without resamp
   auto openedFormats = std::vector<AudioFormat>{};
   When(Method(mockBackend, open))
     .AlwaysDo(
-      [&](AudioFormat const& format, AudioRenderCallbacks)
+      [&](AudioFormat const& format, RenderCallbacks)
       {
         openedFormats.push_back(format);
         return rs::Result<>();

@@ -32,10 +32,10 @@ namespace
     return bytes;
   }
 
-  rs::library::LibraryMetaHeader makeMetaHeader()
+  rs::library::MetaHeader makeMetaHeader()
   {
     auto const timestamp = nowUnixMs();
-    return rs::library::LibraryMetaHeader{.magic = rs::library::kLibraryMetaMagic,
+    return rs::library::MetaHeader{.magic = rs::library::kLibraryMetaMagic,
                                           .libraryVersion = rs::library::kLibraryVersion,
                                           .flags = 0,
                                           .createdAtUnixMs = timestamp,
@@ -43,7 +43,7 @@ namespace
                                           .libraryId = generateLibraryId()};
   }
 
-  void validateMetaHeader(rs::library::LibraryMetaHeader const& header)
+  void validateMetaHeader(rs::library::MetaHeader const& header)
   {
     if (header.magic != rs::library::kLibraryMetaMagic)
     {

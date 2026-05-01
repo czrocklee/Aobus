@@ -28,11 +28,11 @@ namespace rs::audio
 
     void setTrackEndedCallback(std::function<void()> callback);
 
-    void addManager(std::unique_ptr<rs::audio::IBackendManager> manager);
+    void addManager(std::unique_ptr<IBackendManager> manager);
 
     void play(TrackPlaybackDescriptor const& descriptor);
 
-    void setOutput(rs::audio::BackendKind kind, std::string_view deviceId);
+    void setOutput(BackendKind kind, std::string_view deviceId);
     void pause();
     void resume();
     void stop();
@@ -48,34 +48,34 @@ namespace rs::audio
     std::uint64_t _playbackGeneration = 0;
 
   private:
-    void handleSystemGraphChanged(rs::audio::AudioGraph const& graph, std::uint64_t generation);
+    void handleSystemGraphChanged(AudioGraph const& graph, std::uint64_t generation);
 
-    std::vector<rs::audio::AudioNode const*> findPlaybackPath(std::string const& startId) const;
-    void processInputSources(rs::audio::AudioNode const& node,
-                             std::span<rs::audio::AudioNode const* const> path,
+    std::vector<AudioNode const*> findPlaybackPath(std::string const& startId) const;
+    void processInputSources(AudioNode const& node,
+                             std::span<AudioNode const* const> path,
                              std::unordered_map<std::string, std::set<std::string>> const& inputSources);
-    void assessNodeQuality(rs::audio::AudioNode const& node, rs::audio::AudioNode const* nextNode);
+    void assessNodeQuality(AudioNode const& node, AudioNode const* nextNode);
 
     std::unique_ptr<PlaybackEngine> _engine;
 
     // Backend managers
-    std::vector<std::unique_ptr<rs::audio::IBackendManager>> _managers;
-    rs::audio::IBackendManager* _activeManager = nullptr;
+    std::vector<std::unique_ptr<IBackendManager>> _managers;
+    IBackendManager* _activeManager = nullptr;
 
     std::shared_ptr<rs::IMainThreadDispatcher> _dispatcher;
     std::function<void()> _onTrackEnded;
 
     mutable std::atomic<bool> _backendsDirty{true};
     mutable std::vector<BackendSnapshot> _cachedBackends;
-    mutable std::vector<rs::audio::AudioDevice> _allDevices;
+    mutable std::vector<AudioDevice> _allDevices;
 
     // Controller-owned state
     EngineRouteSnapshot _cachedEngineRoute;
-    rs::audio::AudioGraph _cachedSystemGraph;
-    std::unique_ptr<rs::audio::IGraphSubscription> _graphSubscription;
+    AudioGraph _cachedSystemGraph;
+    std::unique_ptr<IGraphSubscription> _graphSubscription;
 
-    rs::audio::AudioGraph _mergedGraph;
-    rs::audio::AudioQuality _quality = rs::audio::AudioQuality::Unknown;
+    AudioGraph _mergedGraph;
+    AudioQuality _quality = AudioQuality::Unknown;
     std::string _qualityTooltip;
   };
 } // namespace rs::audio

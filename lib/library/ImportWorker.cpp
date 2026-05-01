@@ -10,7 +10,7 @@
 
 namespace rs::library
 {
-  ImportWorker::ImportWorker(rs::library::MusicLibrary& ml,
+  ImportWorker::ImportWorker(MusicLibrary& ml,
                              std::vector<std::filesystem::path> const& files,
                              ProgressCallback progressCallback,
                              FinishedCallback finishedCallback)

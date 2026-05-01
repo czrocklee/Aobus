@@ -4,9 +4,9 @@
 #include <rs/audio/PlaybackEngine.h>
 #include <rs/utility/Log.h>
 
-#include <rs/audio/AudioDecoderFactory.h>
+#include <rs/audio/DecoderFactory.h>
 #include <rs/audio/FormatNegotiator.h>
-#include <rs/audio/IAudioDecoderSession.h>
+#include <rs/audio/IDecoderSession.h>
 #include <rs/audio/MemoryPcmSource.h>
 #include <rs/audio/StreamingPcmSource.h>
 
@@ -49,7 +49,7 @@ namespace rs::audio
       return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
     }
 
-    std::uint64_t estimatedDecodedBytes(rs::audio::DecodedStreamInfo const& info) noexcept
+    std::uint64_t estimatedDecodedBytes(DecodedStreamInfo const& info) noexcept
     {
       auto const rate = bytesPerSecond(info.outputFormat);
       if (rate == 0 || info.durationMs == 0)
@@ -59,15 +59,15 @@ namespace rs::audio
       return (static_cast<std::uint64_t>(info.durationMs) * rate) / 1000U;
     }
 
-    bool shouldUseMemoryPcmSource(rs::audio::DecodedStreamInfo const& info) noexcept
+    bool shouldUseMemoryPcmSource(DecodedStreamInfo const& info) noexcept
     {
       auto const decodedBytes = estimatedDecodedBytes(info);
       return decodedBytes > 0 && decodedBytes <= kMemoryPcmSourceBudgetBytes;
     }
   } // namespace
 
-  PlaybackEngine::PlaybackEngine(std::unique_ptr<rs::audio::IAudioBackend> backend,
-                                 rs::audio::AudioDevice const& device,
+  PlaybackEngine::PlaybackEngine(std::unique_ptr<IBackend> backend,
+                                 AudioDevice const& device,
                                  std::shared_ptr<rs::IMainThreadDispatcher> dispatcher)
     : _backend{std::move(backend)}, _dispatcher{std::move(dispatcher)}, _currentDevice{device}
   {
@@ -79,8 +79,7 @@ namespace rs::audio
     stop();
   }
 
-  void PlaybackEngine::setBackend(std::unique_ptr<rs::audio::IAudioBackend> backend,
-                                  rs::audio::AudioDevice const& device)
+  void PlaybackEngine::setBackend(std::unique_ptr<IBackend> backend, AudioDevice const& device)
   {
     struct State
     {
@@ -179,7 +178,7 @@ namespace rs::audio
 
     _source.store({}, std::memory_order_release);
 
-    auto callbacks = rs::audio::AudioRenderCallbacks{};
+    auto callbacks = RenderCallbacks{};
     callbacks.userData = this;
     callbacks.readPcm = &PlaybackEngine::onReadPcm;
     callbacks.isSourceDrained = &PlaybackEngine::isSourceDrained;
@@ -190,7 +189,7 @@ namespace rs::audio
     callbacks.onFormatChanged = &PlaybackEngine::onFormatChanged;
     callbacks.onBackendError = &PlaybackEngine::onBackendError;
 
-    auto source = std::shared_ptr<rs::audio::IPcmSource>{};
+    auto source = std::shared_ptr<IPcmSource>{};
     auto backendFormat = AudioFormat{};
 
     {
@@ -451,7 +450,7 @@ namespace rs::audio
 
   bool PlaybackEngine::negotiateFormat(std::filesystem::path const& path,
                                        DecodedStreamInfo const& info,
-                                       std::unique_ptr<IAudioDecoderSession>& decoder,
+                                       std::unique_ptr<IDecoderSession>& decoder,
                                        AudioFormat& backendFormat)
   {
     if (!_backend)
@@ -500,7 +499,7 @@ namespace rs::audio
     if (!(plan.decoderOutputFormat == info.sourceFormat))
     {
       decoder->close();
-      decoder = createAudioDecoderSession(path, plan.decoderOutputFormat);
+      decoder = createDecoderSession(path, plan.decoderOutputFormat);
 
       if (!decoder)
       {
@@ -519,12 +518,12 @@ namespace rs::audio
     return true;
   }
 
-  std::shared_ptr<IPcmSource> PlaybackEngine::createPcmSource(std::unique_ptr<IAudioDecoderSession> decoder,
+  std::shared_ptr<IPcmSource> PlaybackEngine::createPcmSource(std::unique_ptr<IDecoderSession> decoder,
                                                               DecodedStreamInfo const& info)
   {
     if (shouldUseMemoryPcmSource(info))
     {
-      auto memorySource = std::make_shared<rs::audio::MemoryPcmSource>(std::move(decoder), info);
+      auto memorySource = std::make_shared<MemoryPcmSource>(std::move(decoder), info);
 
       if (auto const initResult = memorySource->initialize(); !initResult)
       {
@@ -535,7 +534,7 @@ namespace rs::audio
       return memorySource;
     }
 
-    auto streamingSource = std::make_shared<rs::audio::StreamingPcmSource>(
+    auto streamingSource = std::make_shared<StreamingPcmSource>(
       std::move(decoder),
       info,
       [this](rs::Error const& err)
@@ -562,7 +561,7 @@ namespace rs::audio
   }
 
   bool PlaybackEngine::openTrack(TrackPlaybackDescriptor const& descriptor,
-                                 std::shared_ptr<rs::audio::IPcmSource>& source,
+                                 std::shared_ptr<IPcmSource>& source,
                                  AudioFormat& backendFormat)
   {
     auto outputFormat = AudioFormat{};
@@ -572,7 +571,7 @@ namespace rs::audio
     outputFormat.isFloat = false;
     outputFormat.isInterleaved = true;
 
-    auto decoder = createAudioDecoderSession(descriptor.filePath, outputFormat);
+    auto decoder = createDecoderSession(descriptor.filePath, outputFormat);
 
     if (decoder == nullptr)
     {
@@ -621,17 +620,16 @@ namespace rs::audio
                                           .objectPath = ""});
 
     // Add Engine Node
-    _routeSnapshot.graph.nodes.push_back(rs::audio::AudioNode{.id = "rs-engine",
-                                                              .type = rs::audio::AudioNodeType::Engine,
-                                                              .name = "RockStudio Engine",
-                                                              .format = info.outputFormat,
-                                                              .volumeNotUnity = false,
-                                                              .isMuted = false,
-                                                              .isLossySource = false});
+    _routeSnapshot.graph.nodes.push_back(AudioNode{.id = "rs-engine",
+                                                   .type = AudioNodeType::Engine,
+                                                   .name = "RockStudio Engine",
+                                                   .format = info.outputFormat,
+                                                   .volumeNotUnity = false,
+                                                   .isMuted = false,
+                                                   .isLossySource = false});
 
     _routeSnapshot.graph.links.clear();
-    _routeSnapshot.graph.links.push_back(
-      rs::audio::AudioLink{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
+    _routeSnapshot.graph.links.push_back(AudioLink{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
 
     _snapshot.graph = _routeSnapshot.graph;
 
@@ -699,7 +697,7 @@ namespace rs::audio
     // Use Engine node format for position calculation
     for (auto const& node : self->_snapshot.graph.nodes)
     {
-      if (node.type == rs::audio::AudioNodeType::Engine && node.format && node.format->sampleRate > 0)
+      if (node.type == AudioNodeType::Engine && node.format && node.format->sampleRate > 0)
       {
         auto const ms = (static_cast<std::uint64_t>(frames) * 1000) / node.format->sampleRate;
         self->_snapshot.positionMs += static_cast<std::uint32_t>(ms);
@@ -764,8 +762,8 @@ namespace rs::audio
   void PlaybackEngine::handleRouteReady(std::string_view routeAnchor)
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
-    _routeSnapshot.anchor = BackendRouteAnchor{
-      .backend = _backend ? _backend->kind() : rs::audio::BackendKind::None, .id = std::string(routeAnchor)};
+    _routeSnapshot.anchor =
+      BackendRouteAnchor{.backend = _backend ? _backend->kind() : BackendKind::None, .id = std::string(routeAnchor)};
 
     if (_onRouteChanged)
     {

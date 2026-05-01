@@ -25,6 +25,6 @@ namespace rs::audio
   class FormatNegotiator final
   {
   public:
-    static RenderPlan buildPlan(AudioFormat sourceFormat, rs::audio::DeviceCapabilities const& caps);
+    static RenderPlan buildPlan(AudioFormat sourceFormat, DeviceCapabilities const& caps);
   };
 } // namespace rs::audio

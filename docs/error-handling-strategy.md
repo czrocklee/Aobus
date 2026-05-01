@@ -60,7 +60,7 @@ Heavily used in `lib/`:
 | Expression engine | ~15 | `Parser.cpp`, `ExecutionPlan.cpp` |
 | Core library stores | ~10 | `MusicLibrary.cpp`, `DictionaryStore.cpp`, `ListView.cpp` |
 | Tag parsing | ~8 | FLAC `MetadataBlock.cpp`, ID3v2 `Frame.h` |
-| Library import/export | ~12 | `LibraryImporter.cpp`, `LibraryExporter.cpp` |
+| Library import/export | ~12 | `Importer.cpp`, `Exporter.cpp` |
 
 **Usage is appropriate here** — these are invariant violations (corrupted data,
 programmer errors, unrecoverable I/O). The `app` layer catches them at boundary points:

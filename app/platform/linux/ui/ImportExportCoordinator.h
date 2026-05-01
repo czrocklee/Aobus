@@ -6,7 +6,7 @@
 #include "platform/linux/ui/ImportProgressDialog.h"
 #include "platform/linux/ui/LibrarySession.h"
 #include <rs/library/ImportWorker.h>
-#include <rs/library/LibraryExporter.h>
+#include <rs/library/Exporter.h>
 
 #include <gtkmm.h>
 

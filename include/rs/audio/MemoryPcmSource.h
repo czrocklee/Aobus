@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/IAudioDecoderSession.h>
+#include <rs/audio/IDecoderSession.h>
 #include <rs/audio/IPcmSource.h>
 
 #include <cstddef>
@@ -16,7 +16,7 @@ namespace rs::audio
   class MemoryPcmSource final : public IPcmSource
   {
   public:
-    MemoryPcmSource(std::unique_ptr<rs::audio::IAudioDecoderSession> decoder, rs::audio::DecodedStreamInfo streamInfo);
+    MemoryPcmSource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo streamInfo);
 
     rs::Result<> initialize();
     rs::Result<> seek(std::uint32_t positionMs) override;
@@ -28,8 +28,8 @@ namespace rs::audio
   private:
     std::size_t positionToByteOffset(std::uint32_t positionMs) const noexcept;
 
-    std::unique_ptr<rs::audio::IAudioDecoderSession> _decoder;
-    rs::audio::DecodedStreamInfo _streamInfo;
+    std::unique_ptr<IDecoderSession> _decoder;
+    DecodedStreamInfo _streamInfo;
     std::vector<std::byte> _pcmBytes;
     mutable std::mutex _mutex;
     std::size_t _readOffset = 0;

@@ -3,8 +3,8 @@
 
 #include "LibCommand.h"
 #include <chrono>
-#include <rs/library/LibraryExporter.h>
-#include <rs/library/LibraryImporter.h>
+#include <rs/library/Exporter.h>
+#include <rs/library/Importer.h>
 
 #include <array>
 #include <format>
@@ -79,14 +79,14 @@ namespace rs::tool
         return;
       }
 
-      auto exporter = rs::library::LibraryExporter{ml};
+      auto exporter = rs::library::Exporter{ml};
       exporter.exportToYaml(path, mode);
       os << "Library exported to '" << path << "' using mode '" << modeStr << "'.\n";
     }
 
     void importLib(rs::library::MusicLibrary& ml, std::string const& path, std::ostream& os)
     {
-      auto importer = rs::library::LibraryImporter{ml};
+      auto importer = rs::library::Importer{ml};
       importer.importFromYaml(path);
       os << "Library imported from '" << path << "'.\n";
     }

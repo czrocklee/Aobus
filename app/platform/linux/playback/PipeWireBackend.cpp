@@ -71,7 +71,7 @@ namespace app::playback
     void handleStreamDrained();
 
     // Members
-    rs::audio::AudioRenderCallbacks _callbacks;
+    rs::audio::RenderCallbacks _callbacks;
     rs::audio::AudioFormat _format;
     std::atomic<bool> _drainPending = false;
     bool _strictFormatRequired = false;
@@ -242,7 +242,7 @@ namespace app::playback
 
   PipeWireBackend::~PipeWireBackend() = default;
 
-  rs::Result<> PipeWireBackend::open(rs::audio::AudioFormat const& format, rs::audio::AudioRenderCallbacks callbacks)
+  rs::Result<> PipeWireBackend::open(rs::audio::AudioFormat const& format, rs::audio::RenderCallbacks callbacks)
   {
     _impl->_callbacks = callbacks;
     _impl->_format = format;

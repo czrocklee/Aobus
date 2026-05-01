@@ -7,8 +7,8 @@
 #include <catch2/matchers/catch_matchers_all.hpp>
 
 #include <rs/library/DictionaryStore.h>
-#include <rs/library/LibraryExporter.h>
-#include <rs/library/LibraryImporter.h>
+#include <rs/library/Exporter.h>
+#include <rs/library/Importer.h>
 #include <rs/library/ListBuilder.h>
 #include <rs/library/MusicLibrary.h>
 #include <rs/library/ResourceStore.h>
@@ -70,7 +70,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
 
   // 2. Export to YAML
   std::filesystem::path yamlPath = std::filesystem::path(temp1.path()) / "backup.yaml";
-  rs::library::LibraryExporter exporter(ml1);
+  rs::library::Exporter exporter(ml1);
   REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, rs::library::ExportMode::Full));
 
   // 3. Import into a new library
@@ -94,7 +94,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     txn.commit();
   }
 
-  rs::library::LibraryImporter importer(ml2);
+  rs::library::Importer importer(ml2);
   REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
 
   // 4. Verify
@@ -200,7 +200,7 @@ library:
 )";
   }
 
-  rs::library::LibraryImporter importer(ml);
+  rs::library::Importer importer(ml);
   REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
 
   {

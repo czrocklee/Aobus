@@ -19,7 +19,7 @@ namespace app::playback
 
     void setDevicesChangedCallback(OnDevicesChangedCallback callback) override;
     std::vector<rs::audio::AudioDevice> enumerateDevices() override;
-    std::unique_ptr<rs::audio::IAudioBackend> createBackend(rs::audio::AudioDevice const& device) override;
+    std::unique_ptr<rs::audio::IBackend> createBackend(rs::audio::AudioDevice const& device) override;
     std::unique_ptr<rs::audio::IGraphSubscription> subscribeGraph(std::string_view routeAnchor,
                                                                   OnGraphChangedCallback callback) override;
 

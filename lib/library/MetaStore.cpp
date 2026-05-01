@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/LibraryMetaStore.h>
+#include <rs/library/MetaStore.h>
 
 #include <rs/Exception.h>
 #include <rs/utility/ByteView.h>
@@ -15,7 +15,7 @@ namespace
 
 namespace rs::library
 {
-  std::optional<LibraryMetaHeader> LibraryMetaStore::load(lmdb::ReadTransaction& txn) const
+  std::optional<MetaHeader> MetaStore::load(lmdb::ReadTransaction& txn) const
   {
     auto const bytes = _database.reader(txn).get(kHeaderRecordId);
 
@@ -24,25 +24,25 @@ namespace rs::library
       return std::nullopt;
     }
 
-    if (bytes->size() != sizeof(LibraryMetaHeader))
+    if (bytes->size() != sizeof(MetaHeader))
     {
       RS_THROW_FORMAT(rs::Exception,
                       "Invalid library metadata header size {} (expected {})",
                       bytes->size(),
-                      sizeof(LibraryMetaHeader));
+                      sizeof(MetaHeader));
     }
 
-    auto header = LibraryMetaHeader{};
+    auto header = MetaHeader{};
     std::memcpy(&header, bytes->data(), sizeof(header));
     return header;
   }
 
-  void LibraryMetaStore::create(lmdb::WriteTransaction& txn, LibraryMetaHeader const& header)
+  void MetaStore::create(lmdb::WriteTransaction& txn, MetaHeader const& header)
   {
     _database.writer(txn).create(kHeaderRecordId, utility::bytes::view(header));
   }
 
-  void LibraryMetaStore::update(lmdb::WriteTransaction& txn, LibraryMetaHeader const& header)
+  void MetaStore::update(lmdb::WriteTransaction& txn, MetaHeader const& header)
   {
     _database.writer(txn).update(kHeaderRecordId, utility::bytes::view(header));
   }

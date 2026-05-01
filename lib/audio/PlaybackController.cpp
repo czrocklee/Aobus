@@ -31,7 +31,7 @@ namespace rs::audio
       text += line;
     }
 
-    bool isLosslessBitDepthChange(rs::audio::AudioFormat const& src, rs::audio::AudioFormat const& dst) noexcept
+    bool isLosslessBitDepthChange(AudioFormat const& src, AudioFormat const& dst) noexcept
     {
       if (src.isFloat == dst.isFloat)
       {
@@ -64,12 +64,12 @@ namespace rs::audio
     : _dispatcher(std::move(dispatcher))
   {
     // Start with a NullBackend until a manager provides something real
-    _engine = std::make_unique<PlaybackEngine>(std::make_unique<rs::audio::NullBackend>(),
-                                               rs::audio::AudioDevice{.id = "null",
-                                                                      .displayName = "None",
-                                                                      .description = "No audio output selected",
-                                                                      .backendKind = rs::audio::BackendKind::None,
-                                                                      .capabilities = {}},
+    _engine = std::make_unique<PlaybackEngine>(std::make_unique<NullBackend>(),
+                                               AudioDevice{.id = "null",
+                                                           .displayName = "None",
+                                                           .description = "No audio output selected",
+                                                           .backendKind = BackendKind::None,
+                                                           .capabilities = {}},
                                                _dispatcher);
 
     _engine->setOnTrackEnded(
@@ -111,7 +111,7 @@ namespace rs::audio
     }
   }
 
-  void PlaybackController::addManager(std::unique_ptr<rs::audio::IBackendManager> manager)
+  void PlaybackController::addManager(std::unique_ptr<IBackendManager> manager)
   {
     if (!manager)
     {
@@ -129,13 +129,13 @@ namespace rs::audio
     _cachedEngineRoute = {};
     _cachedSystemGraph = {};
     _mergedGraph = {};
-    _quality = rs::audio::AudioQuality::Unknown;
+    _quality = AudioQuality::Unknown;
     _qualityTooltip.clear();
     _graphSubscription.reset();
     _engine->play(descriptor);
   }
 
-  void PlaybackController::setOutput(rs::audio::BackendKind kind, std::string_view deviceId)
+  void PlaybackController::setOutput(BackendKind kind, std::string_view deviceId)
   {
     auto const currentSnap = _engine->snapshot();
 
@@ -152,7 +152,7 @@ namespace rs::audio
 
     // 2. Find the AudioDevice matching the kind and id from our cache
     auto const it = std::ranges::find_if(
-      _allDevices, [&](rs::audio::AudioDevice const& dev) { return dev.backendKind == kind && dev.id == deviceId; });
+      _allDevices, [&](AudioDevice const& dev) { return dev.backendKind == kind && dev.id == deviceId; });
 
     if (it == _allDevices.end())
     {
@@ -201,7 +201,7 @@ namespace rs::audio
     _cachedEngineRoute = {};
     _cachedSystemGraph = {};
     _mergedGraph = {};
-    _quality = rs::audio::AudioQuality::Unknown;
+    _quality = AudioQuality::Unknown;
     _qualityTooltip.clear();
     _graphSubscription.reset();
     _engine->stop();
@@ -218,7 +218,7 @@ namespace rs::audio
 
     if (_backendsDirty.exchange(false))
     {
-      auto allDevices = std::vector<rs::audio::AudioDevice>{};
+      auto allDevices = std::vector<AudioDevice>{};
 
       for (auto const& manager : _managers)
       {
@@ -228,7 +228,7 @@ namespace rs::audio
       }
 
       // Group devices by BackendKind
-      std::map<rs::audio::BackendKind, std::vector<rs::audio::AudioDevice>> groups;
+      std::map<BackendKind, std::vector<AudioDevice>> groups;
 
       for (auto const& dev : allDevices)
       {
@@ -276,7 +276,7 @@ namespace rs::audio
       {
         _graphSubscription = _activeManager->subscribeGraph(
           _cachedEngineRoute.anchor->id,
-          [this, generation](rs::audio::AudioGraph const& graph)
+          [this, generation](AudioGraph const& graph)
           {
             if (_dispatcher)
             {
@@ -298,7 +298,7 @@ namespace rs::audio
     updateMergedGraph();
   }
 
-  void PlaybackController::handleSystemGraphChanged(rs::audio::AudioGraph const& graph, std::uint64_t generation)
+  void PlaybackController::handleSystemGraphChanged(AudioGraph const& graph, std::uint64_t generation)
   {
     if (generation != _playbackGeneration)
     {
@@ -346,7 +346,7 @@ namespace rs::audio
 
     for (auto const& node : _cachedSystemGraph.nodes)
     {
-      if (node.type == rs::audio::AudioNodeType::Stream)
+      if (node.type == AudioNodeType::Stream)
       {
         streamNodeId = node.id;
         break;
@@ -361,9 +361,9 @@ namespace rs::audio
     analyzeAudioQuality();
   }
 
-  std::vector<rs::audio::AudioNode const*> PlaybackController::findPlaybackPath(std::string const& startId) const
+  std::vector<AudioNode const*> PlaybackController::findPlaybackPath(std::string const& startId) const
   {
-    std::vector<rs::audio::AudioNode const*> path;
+    std::vector<AudioNode const*> path;
     auto currentId = startId;
     std::set<std::string> visited;
 
@@ -371,7 +371,7 @@ namespace rs::audio
     {
       visited.insert(currentId);
 
-      auto const it = std::ranges::find(_mergedGraph.nodes, currentId, &rs::audio::AudioNode::id);
+      auto const it = std::ranges::find(_mergedGraph.nodes, currentId, &AudioNode::id);
 
       if (it == _mergedGraph.nodes.end())
       {
@@ -398,8 +398,8 @@ namespace rs::audio
   }
 
   void PlaybackController::processInputSources(
-    rs::audio::AudioNode const& node,
-    std::span<rs::audio::AudioNode const* const> path,
+    AudioNode const& node,
+    std::span<AudioNode const* const> path,
     std::unordered_map<std::string, std::set<std::string>> const& inputSources)
   {
     if (inputSources.contains(node.id))
@@ -409,9 +409,9 @@ namespace rs::audio
 
       for (auto const& srcId : sources)
       {
-        if (bool const isInternal = std::ranges::contains(path, srcId, &rs::audio::AudioNode::id); !isInternal)
+        if (bool const isInternal = std::ranges::contains(path, srcId, &AudioNode::id); !isInternal)
         {
-          if (auto const it = std::ranges::find(_mergedGraph.nodes, srcId, &rs::audio::AudioNode::id);
+          if (auto const it = std::ranges::find(_mergedGraph.nodes, srcId, &AudioNode::id);
               it != _mergedGraph.nodes.end())
           {
             otherAppNames.push_back(it->name);
@@ -437,29 +437,29 @@ namespace rs::audio
         }
 
         appendLine(_qualityTooltip, std::format("• Mixed: {} shared with {}", node.name, apps));
-        _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+        _quality = std::max(_quality, AudioQuality::LinearIntervention);
       }
     }
   }
 
-  void PlaybackController::assessNodeQuality(rs::audio::AudioNode const& node, rs::audio::AudioNode const* nextNode)
+  void PlaybackController::assessNodeQuality(AudioNode const& node, AudioNode const* nextNode)
   {
     if (node.isLossySource)
     {
       appendLine(_qualityTooltip, std::format("• Source: Lossy format ({})", node.name));
-      _quality = std::max(_quality, rs::audio::AudioQuality::LossySource);
+      _quality = std::max(_quality, AudioQuality::LossySource);
     }
 
     if (node.volumeNotUnity)
     {
       appendLine(_qualityTooltip, std::format("• Volume: Modification at {}", node.name));
-      _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+      _quality = std::max(_quality, AudioQuality::LinearIntervention);
     }
 
     if (node.isMuted)
     {
       appendLine(_qualityTooltip, std::format("• Status: {} is MUTED", node.name));
-      _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+      _quality = std::max(_quality, AudioQuality::LinearIntervention);
     }
 
     if (nextNode != nullptr)
@@ -472,13 +472,13 @@ namespace rs::audio
         if (f1.sampleRate != f2.sampleRate)
         {
           appendLine(_qualityTooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
-          _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+          _quality = std::max(_quality, AudioQuality::LinearIntervention);
         }
 
         if (f1.channels != f2.channels)
         {
           appendLine(_qualityTooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
-          _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+          _quality = std::max(_quality, AudioQuality::LinearIntervention);
         }
         else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
         {
@@ -486,13 +486,12 @@ namespace rs::audio
           {
             appendLine(
               _qualityTooltip, f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
-            _quality = std::max(
-              _quality, f2.isFloat ? rs::audio::AudioQuality::LosslessFloat : rs::audio::AudioQuality::LosslessPadded);
+            _quality = std::max(_quality, f2.isFloat ? AudioQuality::LosslessFloat : AudioQuality::LosslessPadded);
           }
           else
           {
             appendLine(_qualityTooltip, std::format("• Precision: Truncated {}b → {}b", f1.bitDepth, f2.bitDepth));
-            _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+            _quality = std::max(_quality, AudioQuality::LinearIntervention);
           }
         }
       }
@@ -502,12 +501,12 @@ namespace rs::audio
   void PlaybackController::analyzeAudioQuality()
   {
     // Now analyze the merged graph
-    _quality = rs::audio::AudioQuality::BitwisePerfect;
+    _quality = AudioQuality::BitwisePerfect;
     _qualityTooltip.clear();
 
     if (_mergedGraph.nodes.empty())
     {
-      _quality = rs::audio::AudioQuality::Unknown;
+      _quality = AudioQuality::Unknown;
       return;
     }
 
@@ -536,35 +535,27 @@ namespace rs::audio
       processInputSources(*node, path, inputSources);
     }
 
-    if (_quality == rs::audio::AudioQuality::BitwisePerfect)
+    if (_quality == AudioQuality::BitwisePerfect)
     {
       appendLine(_qualityTooltip, "• Signal Path: Byte-perfect from decoder to device");
     }
 
     switch (_quality)
     {
-      case rs::audio::AudioQuality::BitwisePerfect:
-        appendLine(_qualityTooltip, "\nConclusion: Bit-perfect output");
-        break;
+      case AudioQuality::BitwisePerfect: appendLine(_qualityTooltip, "\nConclusion: Bit-perfect output"); break;
 
-      case rs::audio::AudioQuality::LosslessPadded:
-      case rs::audio::AudioQuality::LosslessFloat:
-        appendLine(_qualityTooltip, "\nConclusion: Lossless Conversion");
-        break;
+      case AudioQuality::LosslessPadded:
+      case AudioQuality::LosslessFloat: appendLine(_qualityTooltip, "\nConclusion: Lossless Conversion"); break;
 
-      case rs::audio::AudioQuality::LinearIntervention:
+      case AudioQuality::LinearIntervention:
         appendLine(_qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
         break;
 
-      case rs::audio::AudioQuality::LossySource:
-        appendLine(_qualityTooltip, "\nConclusion: Lossy source format");
-        break;
+      case AudioQuality::LossySource: appendLine(_qualityTooltip, "\nConclusion: Lossy source format"); break;
 
-      case rs::audio::AudioQuality::Clipped:
-        appendLine(_qualityTooltip, "\nConclusion: Signal clipping detected");
-        break;
+      case AudioQuality::Clipped: appendLine(_qualityTooltip, "\nConclusion: Signal clipping detected"); break;
 
-      case rs::audio::AudioQuality::Unknown: break;
+      case AudioQuality::Unknown: break;
     }
   }
 } // namespace rs::audio

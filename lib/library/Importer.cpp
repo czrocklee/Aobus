@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/LibraryImporter.h>
+#include <rs/library/Importer.h>
 
 #include <rs/Exception.h>
 #include <rs/library/DictionaryStore.h>
@@ -55,12 +55,12 @@ namespace rs::library
     }
   }
 
-  LibraryImporter::LibraryImporter(MusicLibrary& ml)
+  Importer::Importer(MusicLibrary& ml)
     : _ml{ml}
   {
   }
 
-  void LibraryImporter::importFromYaml(std::filesystem::path const& path)
+  void Importer::importFromYaml(std::filesystem::path const& path)
   {
     auto root = YAML::Node{};
     try
@@ -105,7 +105,7 @@ namespace rs::library
     txn.commit();
   }
 
-  void LibraryImporter::importTracks(YAML::Node const& tracks,
+  void Importer::importTracks(YAML::Node const& tracks,
                                      rs::lmdb::WriteTransaction& txn,
                                      std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
   {
@@ -169,7 +169,7 @@ namespace rs::library
     }
   }
 
-  void LibraryImporter::overlayMetadata(TrackBuilder& builder,
+  void Importer::overlayMetadata(TrackBuilder& builder,
                                         YAML::Node const& trackNode,
                                         std::deque<std::string>& trackStrings) const
   {
@@ -239,7 +239,7 @@ namespace rs::library
     }
   }
 
-  void LibraryImporter::overlayCustomData(TrackBuilder& builder,
+  void Importer::overlayCustomData(TrackBuilder& builder,
                                           YAML::Node const& trackNode,
                                           std::deque<std::string>& trackStrings) const
   {
@@ -274,7 +274,7 @@ namespace rs::library
     }
   }
 
-  void LibraryImporter::overlayTechnicalProperties(TrackBuilder& builder, YAML::Node const& trackNode) const
+  void Importer::overlayTechnicalProperties(TrackBuilder& builder, YAML::Node const& trackNode) const
   {
     if (trackNode["durationMs"])
     {
@@ -307,7 +307,7 @@ namespace rs::library
     }
   }
 
-  void LibraryImporter::importLists(YAML::Node const& lists,
+  void Importer::importLists(YAML::Node const& lists,
                                     rs::lmdb::WriteTransaction& txn,
                                     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId)
   {
