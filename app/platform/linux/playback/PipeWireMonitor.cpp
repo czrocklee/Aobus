@@ -3,6 +3,7 @@
 
 #include "platform/linux/playback/PipeWireMonitor.h"
 #include "platform/linux/playback/detail/PipeWireShared.h"
+#include <rs/utility/ByteView.h>
 #include <rs/utility/Log.h>
 
 extern "C"
@@ -141,6 +142,51 @@ namespace app::playback
     }
   }
 
+  void addUnique(std::vector<std::uint32_t>& output, std::uint32_t value)
+  {
+    if (!std::ranges::contains(output, value))
+    {
+      output.push_back(value);
+    }
+  }
+
+  void processChoiceIntValues(::spa_pod_choice const* choice, std::vector<std::uint32_t>& output)
+  {
+    auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
+    auto const type = SPA_POD_CHOICE_VALUE_TYPE(choice);
+    if (n_vals == 0 || type != SPA_TYPE_Int)
+    {
+      return;
+    }
+
+    auto const* vals = static_cast<std::int32_t const*>(SPA_POD_CHOICE_VALUES(choice));
+    auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
+
+    if (choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
+    {
+      for (std::uint32_t i = 0; i < n_vals; ++i)
+      {
+        addUnique(output, static_cast<std::uint32_t>(vals[i]));
+      }
+    }
+    else if (choice_type == SPA_CHOICE_Range)
+    {
+      std::int32_t min = (n_vals > 1) ? vals[1] : vals[0];
+      std::int32_t max = (n_vals > 2) ? vals[2] : min;
+
+      static constexpr auto commonRates =
+        std::array<std::uint32_t, 8>{44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
+      for (auto rate : commonRates)
+      {
+        if (rate >= static_cast<std::uint32_t>(min) && rate <= static_cast<std::uint32_t>(max))
+        {
+          addUnique(output, rate);
+        }
+      }
+      addUnique(output, static_cast<std::uint32_t>(vals[0]));
+    }
+  }
+
   void collectIntValues(::spa_pod const* pod, std::vector<std::uint32_t>& output)
   {
     if (pod == nullptr)
@@ -152,58 +198,14 @@ namespace app::playback
       std::int32_t val = 0;
       if (::spa_pod_get_int(pod, &val) == 0)
       {
-        if (!std::ranges::contains(output, static_cast<std::uint32_t>(val)))
-        {
-          output.push_back(static_cast<std::uint32_t>(val));
-        }
+        addUnique(output, static_cast<std::uint32_t>(val));
       }
     }
     else if (::spa_pod_is_choice(pod) != 0)
     {
-      auto const* choice = reinterpret_cast<::spa_pod_choice const*>(pod);
-      auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
-      auto const type = SPA_POD_CHOICE_VALUE_TYPE(choice);
-      if (n_vals == 0 || type != SPA_TYPE_Int)
-      {
-        return;
-      }
-
-      auto const* vals = static_cast<std::int32_t const*>(SPA_POD_CHOICE_VALUES(choice));
-      auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
-
-      if (choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
-      {
-        for (std::uint32_t i = 0; i < n_vals; ++i)
-        {
-          std::int32_t val = vals[i];
-          if (!std::ranges::contains(output, static_cast<std::uint32_t>(val)))
-          {
-            output.push_back(static_cast<std::uint32_t>(val));
-          }
-        }
-      }
-      else if (choice_type == SPA_CHOICE_Range)
-      {
-        std::int32_t min = (n_vals > 1) ? vals[1] : vals[0];
-        std::int32_t max = (n_vals > 2) ? vals[2] : min;
-
-        static constexpr auto commonRates =
-          std::array<std::uint32_t, 8>{44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
-        for (auto rate : commonRates)
-        {
-          if (rate >= static_cast<std::uint32_t>(min) && rate <= static_cast<std::uint32_t>(max))
-          {
-            if (!std::ranges::contains(output, rate))
-            {
-              output.push_back(rate);
-            }
-          }
-        }
-        if (!std::ranges::contains(output, static_cast<std::uint32_t>(vals[0])))
-        {
-          output.push_back(static_cast<std::uint32_t>(vals[0]));
-        }
-      }
+      auto const podSpan = rs::utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
+      auto const* choice = rs::utility::layout::view<::spa_pod_choice>(podSpan);
+      processChoiceIntValues(choice, output);
     }
   }
 
@@ -226,7 +228,8 @@ namespace app::playback
     }
     else if (::spa_pod_is_choice(pod) != 0)
     {
-      auto const* choice = reinterpret_cast<::spa_pod_choice const*>(pod);
+      auto const podSpan = rs::utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
+      auto const* choice = rs::utility::layout::view<::spa_pod_choice>(podSpan);
       auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
       auto const type = SPA_POD_CHOICE_VALUE_TYPE(choice);
       if (n_vals == 0 || type != SPA_TYPE_Id)
@@ -259,7 +262,8 @@ namespace app::playback
     }
 
     ::spa_pod_prop const* prop = nullptr;
-    auto const* obj = reinterpret_cast<::spa_pod_object const*>(param);
+    auto const podSpan = rs::utility::bytes::view(param, param->size + sizeof(::spa_pod));
+    auto const* obj = rs::utility::layout::view<::spa_pod_object>(podSpan);
 
     SPA_POD_OBJECT_FOREACH(obj, prop)
     {
@@ -478,13 +482,31 @@ namespace app::playback
     }
 
     void refresh();
+
+  private:
+    void syncStreamBindings(std::unordered_set<std::uint32_t> const& subscribedStreamIds);
+    void syncSinkBindings();
+    void processGraphSubscribers();
+
+    struct ReachableContext
+    {
+      std::vector<std::uint32_t> reachableNodes;
+      std::unordered_set<std::uint32_t> reachableSet;
+      std::unordered_set<std::uint32_t> fullSet;
+    };
+
+    ReachableContext findReachableNodes(std::uint32_t streamId) const;
+    rs::audio::AudioNode convertToAudioNode(std::uint32_t id,
+                                            std::uint32_t streamId,
+                                            std::unordered_set<std::uint32_t> const& reachableSet) const;
+    void populateGraph(rs::audio::AudioGraph& graph, std::uint32_t streamId) const;
   };
 
   // --- Anonymous Namespace for Callbacks ---
 
   namespace
   {
-    void onCoreDone(void* data, [[maybe_unused]] std::uint32_t, int seq)
+    void onCoreDone(void* data, [[maybe_unused]] std::uint32_t id, int seq)
     {
       auto* impl = static_cast<PipeWireMonitor::Impl*>(data);
       {
@@ -540,13 +562,12 @@ namespace app::playback
         }
         else if (isLink)
         {
-          auto* proxy = static_cast<::pw_link*>(
-            ::pw_registry_bind(impl->registry.get(), id, PW_TYPE_INTERFACE_Link, PW_VERSION_LINK, 0));
+          auto* proxy = ::pw_registry_bind(impl->registry.get(), id, PW_TYPE_INTERFACE_Link, PW_VERSION_LINK, 0);
           if (proxy != nullptr)
           {
             auto& binding = impl->linkBindings[id];
             binding.id = id;
-            binding.proxy.reset(proxy);
+            binding.proxy.reset(static_cast<::pw_link*>(proxy));
             ::pw_link_add_listener(binding.proxy.get(), binding.listener.get(), &linkEvents, impl);
           }
         }
@@ -568,7 +589,8 @@ namespace app::playback
     void onRegistryGlobalRemove(void* data, std::uint32_t id)
     {
       auto* impl = static_cast<PipeWireMonitor::Impl*>(data);
-      bool needsRefresh = false, deviceRemoved = false;
+      bool needsRefresh = false;
+      bool deviceRemoved = false;
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
         if (auto it = impl->linkBindings.find(id); it != impl->linkBindings.end())
@@ -738,8 +760,8 @@ namespace app::playback
     ::pw_thread_loop_lock(_impl->threadLoop.get());
     if (_impl->core)
     {
-      _impl->registry.reset(
-        reinterpret_cast<::pw_registry*>(::pw_core_get_registry(_impl->core.get(), PW_VERSION_REGISTRY, 0)));
+      auto* registry = ::pw_core_get_registry(_impl->core.get(), PW_VERSION_REGISTRY, 0);
+      _impl->registry.reset(static_cast<::pw_registry*>(registry));
       if (_impl->registry)
       {
         ::pw_registry_add_listener(_impl->registry.get(), _impl->registryListener.get(), &registryEvents, _impl.get());
@@ -857,6 +879,7 @@ namespace app::playback
     {
       auto lock = std::unique_lock<std::mutex>{mutex};
       auto subscribedStreamIds = std::unordered_set<std::uint32_t>{};
+
       for (auto const& sub : subscriptions)
       {
         if (auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str()))
@@ -865,209 +888,255 @@ namespace app::playback
         }
       }
 
-      for (auto it = streamNodeBindings.begin(); it != streamNodeBindings.end();)
-      {
-        if (!subscribedStreamIds.contains(it->first))
-        {
-          nodeFormatMap.erase(it->first);
-          it = streamNodeBindings.erase(it);
-        }
-        else
-        {
-          ++it;
-        }
-      }
-
-      for (auto streamId : subscribedStreamIds)
-      {
-        if (streamNodeBindings.contains(streamId))
-        {
-          continue;
-        }
-
-        auto const it = nodes.find(streamId);
-        if (!registry || it == nodes.end())
-        {
-          continue;
-        }
-
-        auto* node = static_cast<::pw_node*>(
-          ::pw_registry_bind(registry.get(),
-                             streamId,
-                             PW_TYPE_INTERFACE_Node,
-                             std::min(it->second.version, static_cast<std::uint32_t>(PW_VERSION_NODE)),
-                             0));
-        if (node == nullptr)
-        {
-          continue;
-        }
-
-        auto binding = std::make_unique<NodeBinding>();
-        binding->id = streamId;
-        binding->impl = this;
-        binding->role = NodeBindingRole::Stream;
-        binding->proxy.reset(node);
-        auto params = std::array<std::uint32_t, 1>{SPA_PARAM_Format};
-        ::pw_node_subscribe_params(binding->proxy.get(), params.data(), params.size());
-        ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
-        auto* bindingPtr = binding.get();
-        ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &streamNodeEvents, bindingPtr);
-        streamNodeBindings[streamId] = std::move(binding);
-      }
-
-      for (auto const& [id, node] : nodes)
-      {
-        if (isSinkMediaClass(node.mediaClass) && !sinkNodeBindings.contains(id))
-        {
-          auto* proxy = static_cast<::pw_node*>(::pw_registry_bind(
-            registry.get(), id, PW_TYPE_INTERFACE_Node, std::min(node.version, (std::uint32_t)PW_VERSION_NODE), 0));
-          if (proxy != nullptr)
-          {
-            auto binding = std::make_unique<NodeBinding>();
-            binding->id = id;
-            binding->impl = this;
-            binding->role = NodeBindingRole::Sink;
-            binding->proxy.reset(proxy);
-            auto params = std::array<std::uint32_t, 3>{
-              SPA_PARAM_Format, SPA_PARAM_EnumFormat, SPA_PARAM_Props}; // NOLINT(readability-magic-numbers)
-            ::pw_node_subscribe_params(binding->proxy.get(), params.data(), params.size());
-            ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
-            ::pw_node_enum_params(binding->proxy.get(), 2, SPA_PARAM_EnumFormat, 0, -1, nullptr);
-            ::pw_node_enum_params(
-              binding->proxy.get(), 3, SPA_PARAM_Props, 0, -1, nullptr); // NOLINT(readability-magic-numbers)
-            auto* bindingPtr = binding.get();
-            ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &sinkNodeEvents, bindingPtr);
-            sinkNodeBindings[id] = std::move(binding);
-          }
-        }
-      }
-
-      auto executeGraphCallback = [&](
-                                    std::uint32_t streamId, std::function<void(rs::audio::AudioGraph const&)> const& cb)
-      {
-        rs::audio::AudioGraph graph;
-        auto localReachableNodes = std::vector<std::uint32_t>{};
-        auto localReachableSet = std::unordered_set<std::uint32_t>{};
-        if (streamId != PW_ID_ANY)
-        {
-          localReachableNodes.push_back(streamId);
-          localReachableSet.insert(streamId);
-        }
-
-        for (std::size_t i = 0; i < localReachableNodes.size(); ++i)
-        {
-          auto curr = localReachableNodes[i];
-          // NOLINTNEXTLINE(readability-identifier-length)
-          for (auto const& [_, link] : links)
-          {
-            if (!isActiveLink(link.state) || link.outputNodeId != curr || link.inputNodeId == PW_ID_ANY)
-            {
-              continue;
-            }
-            if (localReachableSet.insert(link.inputNodeId).second)
-            {
-              localReachableNodes.push_back(link.inputNodeId);
-            }
-          }
-        }
-
-        auto localFullSet = localReachableSet;
-        // NOLINTNEXTLINE(readability-identifier-length)
-        for (auto const& [_, link] : links)
-        {
-          if (isActiveLink(link.state) && localReachableSet.contains(link.inputNodeId))
-          {
-            localFullSet.insert(link.outputNodeId);
-          }
-        }
-
-        for (auto id : localFullSet)
-        {
-          auto it = nodes.find(id);
-          if (it == nodes.end())
-          {
-            if (id == streamId)
-            {
-              rs::audio::AudioNode node{.id = std::format("{}", id),
-                                        .type = rs::audio::AudioNodeType::Stream,
-                                        .name = "RockStudio Playback",
-                                        .format = std::nullopt};
-              graph.nodes.push_back(std::move(node));
-            }
-            continue;
-          }
-          bool isSink = isSinkMediaClass(it->second.mediaClass);
-          bool isRs = (id == streamId);
-          auto type = rs::audio::AudioNodeType::ExternalSource;
-          if (isRs)
-          {
-            type = rs::audio::AudioNodeType::Stream;
-          }
-          else if (isSink)
-          {
-            type = rs::audio::AudioNodeType::Sink;
-          }
-          else if (localReachableSet.contains(id))
-          {
-            type = rs::audio::AudioNodeType::Intermediary;
-          }
-          auto name = it->second.nodeNick;
-          if (name.empty())
-          {
-            name = it->second.nodeName.empty() ? it->second.objectPath : it->second.nodeName;
-          }
-
-          rs::audio::AudioNode node{
-            .id = std::format("{}", id), .type = type, .name = name, .objectPath = it->second.objectPath};
-          if (auto const formatIt = nodeFormatMap.find(id); formatIt != nodeFormatMap.end())
-          {
-            node.format = formatIt->second;
-          }
-
-          if (isSink)
-          {
-            if (auto const propsIt = sinkPropsMap.find(id); propsIt != sinkPropsMap.end())
-            {
-              auto const& sinkProps = propsIt->second;
-              auto const isUnity = [](float value)
-              { return std::abs(value - 1.0F) < 1e-4F; }; // NOLINT(readability-magic-numbers)
-              bool volumeAtUnity = (!sinkProps.volume || isUnity(*sinkProps.volume)) &&
-                                   std::ranges::all_of(sinkProps.channelVolumes, isUnity) &&
-                                   std::ranges::all_of(sinkProps.softVolumes, isUnity);
-              node.volumeNotUnity = !volumeAtUnity;
-              node.isMuted = (sinkProps.mute && *sinkProps.mute) || (sinkProps.softMute && *sinkProps.softMute);
-            }
-          }
-          graph.nodes.push_back(std::move(node));
-        }
-
-        // NOLINTNEXTLINE(readability-identifier-length)
-        for (auto const& [_, link] : links)
-        {
-          if (isActiveLink(link.state) && localFullSet.contains(link.outputNodeId) &&
-              localFullSet.contains(link.inputNodeId))
-          {
-            graph.links.push_back({.sourceId = std::format("{}", link.outputNodeId),
-                                   .destId = std::format("{}", link.inputNodeId),
-                                   .isActive = true});
-          }
-        }
-        cb(graph);
-      };
-
-      for (auto const& sub : subscriptions)
-      {
-        auto parsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
-        std::uint32_t targetId = parsedId ? *parsedId : PW_ID_ANY;
-        if (targetId != PW_ID_ANY && sub.callback)
-        {
-          executeGraphCallback(targetId, sub.callback);
-        }
-      }
+      syncStreamBindings(subscribedStreamIds);
+      syncSinkBindings();
+      processGraphSubscribers();
 
       lock.unlock();
     }
     ::pw_thread_loop_unlock(threadLoop.get());
+  }
+
+  void PipeWireMonitor::Impl::syncStreamBindings(std::unordered_set<std::uint32_t> const& subscribedStreamIds)
+  {
+    for (auto it = streamNodeBindings.begin(); it != streamNodeBindings.end();)
+    {
+      if (!subscribedStreamIds.contains(it->first))
+      {
+        nodeFormatMap.erase(it->first);
+        it = streamNodeBindings.erase(it);
+      }
+      else
+      {
+        ++it;
+      }
+    }
+
+    for (auto streamId : subscribedStreamIds)
+    {
+      if (streamNodeBindings.contains(streamId))
+      {
+        continue;
+      }
+
+      auto const it = nodes.find(streamId);
+
+      if (!registry || it == nodes.end())
+      {
+        continue;
+      }
+
+      auto* node = ::pw_registry_bind(registry.get(),
+                                      streamId,
+                                      PW_TYPE_INTERFACE_Node,
+                                      std::min(it->second.version, static_cast<std::uint32_t>(PW_VERSION_NODE)),
+                                      0);
+
+      if (node == nullptr)
+      {
+        continue;
+      }
+
+      auto binding = std::make_unique<NodeBinding>();
+      binding->id = streamId;
+      binding->impl = this;
+      binding->role = NodeBindingRole::Stream;
+      binding->proxy.reset(static_cast<::pw_node*>(node));
+      auto params = std::to_array<std::uint32_t>({SPA_PARAM_Format});
+      ::pw_node_subscribe_params(binding->proxy.get(), const_cast<std::uint32_t*>(params.data()), params.size());
+      ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
+      auto* bindingPtr = binding.get();
+      ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &streamNodeEvents, bindingPtr);
+      streamNodeBindings[streamId] = std::move(binding);
+    }
+  }
+
+  void PipeWireMonitor::Impl::syncSinkBindings()
+  {
+    for (auto const& [id, node] : nodes)
+    {
+      if (isSinkMediaClass(node.mediaClass) && !sinkNodeBindings.contains(id))
+      {
+        auto* proxy = ::pw_registry_bind(
+          registry.get(), id, PW_TYPE_INTERFACE_Node, std::min(node.version, (std::uint32_t)PW_VERSION_NODE), 0);
+
+        if (proxy != nullptr)
+        {
+          auto binding = std::make_unique<NodeBinding>();
+          binding->id = id;
+          binding->impl = this;
+          binding->role = NodeBindingRole::Sink;
+          binding->proxy.reset(static_cast<::pw_node*>(proxy));
+
+          auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_EnumFormat, SPA_PARAM_Props});
+          ::pw_node_subscribe_params(binding->proxy.get(), const_cast<std::uint32_t*>(params.data()), params.size());
+          ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
+          ::pw_node_enum_params(binding->proxy.get(), 2, SPA_PARAM_EnumFormat, 0, -1, nullptr);
+          ::pw_node_enum_params(
+            binding->proxy.get(), 3, SPA_PARAM_Props, 0, -1, nullptr); // NOLINT(readability-magic-numbers)
+
+          auto* bindingPtr = binding.get();
+          ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &sinkNodeEvents, bindingPtr);
+          sinkNodeBindings[id] = std::move(binding);
+        }
+      }
+    }
+  }
+
+  void PipeWireMonitor::Impl::processGraphSubscribers()
+  {
+    for (auto const& sub : subscriptions)
+    {
+      auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
+
+      if (parsedId && *parsedId != PW_ID_ANY && sub.callback)
+      {
+        rs::audio::AudioGraph graph;
+        populateGraph(graph, *parsedId);
+        sub.callback(graph);
+      }
+    }
+  }
+
+  PipeWireMonitor::Impl::ReachableContext PipeWireMonitor::Impl::findReachableNodes(std::uint32_t streamId) const
+  {
+    ReachableContext ctx;
+
+    if (streamId != PW_ID_ANY)
+    {
+      ctx.reachableNodes.push_back(streamId);
+      ctx.reachableSet.insert(streamId);
+    }
+
+    for (std::size_t i = 0; i < ctx.reachableNodes.size(); ++i)
+    {
+      auto curr = ctx.reachableNodes[i];
+
+      // NOLINTNEXTLINE(readability-identifier-length)
+      for (auto const& [_, link] : links)
+      {
+        if (!isActiveLink(link.state) || link.outputNodeId != curr || link.inputNodeId == PW_ID_ANY)
+        {
+          continue;
+        }
+
+        if (ctx.reachableSet.insert(link.inputNodeId).second)
+        {
+          ctx.reachableNodes.push_back(link.inputNodeId);
+        }
+      }
+    }
+
+    ctx.fullSet = ctx.reachableSet;
+
+    // NOLINTNEXTLINE(readability-identifier-length)
+    for (auto const& [_, link] : links)
+    {
+      if (isActiveLink(link.state) && ctx.reachableSet.contains(link.inputNodeId))
+      {
+        ctx.fullSet.insert(link.outputNodeId);
+      }
+    }
+
+    return ctx;
+  }
+
+  rs::audio::AudioNode PipeWireMonitor::Impl::convertToAudioNode(
+    std::uint32_t id,
+    std::uint32_t streamId,
+    std::unordered_set<std::uint32_t> const& reachableSet) const
+  {
+    auto const it = nodes.find(id);
+
+    if (it == nodes.end())
+    {
+      if (id == streamId)
+      {
+        return rs::audio::AudioNode{.id = std::format("{}", id),
+                                    .type = rs::audio::AudioNodeType::Stream,
+                                    .name = "RockStudio Playback",
+                                    .format = std::nullopt};
+      }
+
+      return rs::audio::AudioNode{};
+    }
+
+    bool const isSink = isSinkMediaClass(it->second.mediaClass);
+    bool const isRs = (id == streamId);
+    auto type = rs::audio::AudioNodeType::ExternalSource;
+
+    if (isRs)
+    {
+      type = rs::audio::AudioNodeType::Stream;
+    }
+    else if (isSink)
+    {
+      type = rs::audio::AudioNodeType::Sink;
+    }
+    else if (reachableSet.contains(id))
+    {
+      type = rs::audio::AudioNodeType::Intermediary;
+    }
+
+    auto name = it->second.nodeNick;
+
+    if (name.empty())
+    {
+      name = it->second.nodeName.empty() ? it->second.objectPath : it->second.nodeName;
+    }
+
+    rs::audio::AudioNode node{
+      .id = std::format("{}", id), .type = type, .name = name, .objectPath = it->second.objectPath};
+
+    if (auto const formatIt = nodeFormatMap.find(id); formatIt != nodeFormatMap.end())
+    {
+      node.format = formatIt->second;
+    }
+
+    if (isSink)
+    {
+      if (auto const propsIt = sinkPropsMap.find(id); propsIt != sinkPropsMap.end())
+      {
+        auto const& sinkProps = propsIt->second;
+        auto const isUnity = [](float value)
+        { return std::abs(value - 1.0F) < 1e-4F; }; // NOLINT(readability-magic-numbers)
+
+        bool const volumeAtUnity = (!sinkProps.volume || isUnity(*sinkProps.volume)) &&
+                                   std::ranges::all_of(sinkProps.channelVolumes, isUnity) &&
+                                   std::ranges::all_of(sinkProps.softVolumes, isUnity);
+
+        node.volumeNotUnity = !volumeAtUnity;
+        node.isMuted = (sinkProps.mute && *sinkProps.mute) || (sinkProps.softMute && *sinkProps.softMute);
+      }
+    }
+
+    return node;
+  }
+
+  void PipeWireMonitor::Impl::populateGraph(rs::audio::AudioGraph& graph, std::uint32_t streamId) const
+  {
+    auto const ctx = findReachableNodes(streamId);
+
+    for (auto id : ctx.fullSet)
+    {
+      auto node = convertToAudioNode(id, streamId, ctx.reachableSet);
+
+      if (!node.id.empty())
+      {
+        graph.nodes.push_back(std::move(node));
+      }
+    }
+
+    // NOLINTNEXTLINE(readability-identifier-length)
+    for (auto const& [_, link] : links)
+    {
+      if (isActiveLink(link.state) && ctx.fullSet.contains(link.outputNodeId) && ctx.fullSet.contains(link.inputNodeId))
+      {
+        graph.links.push_back({.sourceId = std::format("{}", link.outputNodeId),
+                               .destId = std::format("{}", link.inputNodeId),
+                               .isActive = true});
+      }
+    }
   }
 
 } // namespace app::playback

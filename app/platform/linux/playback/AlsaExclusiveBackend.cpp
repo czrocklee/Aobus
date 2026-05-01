@@ -3,6 +3,7 @@
 
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
 #include <rs/audio/BackendTypes.h>
+#include <rs/utility/ByteView.h>
 #include <rs/utility/Log.h>
 #include <rs/utility/ThreadUtils.h>
 
@@ -159,19 +160,21 @@ namespace app::playback
         continue;
       }
 
-      char* dest = static_cast<char*>(areas[0].addr) + (offset * (areas[0].step / 8));
+      auto* const dest = static_cast<std::byte*>(areas[0].addr) + (offset * (areas[0].step / 8));
       std::size_t const bytesToRead = static_cast<std::size_t>(frames) * (_format.bitDepth / 8) * _format.channels;
       std::size_t const bytesRead =
-        _callbacks.readPcm(_callbacks.userData, {reinterpret_cast<std::byte*>(dest), bytesToRead});
+        _callbacks.readPcm(_callbacks.userData, rs::utility::bytes::view(dest, bytesToRead));
 
       if (bytesRead > 0)
       {
-        auto committed =
-          ::snd_pcm_mmap_commit(_pcm.get(), offset, bytesRead / ((_format.bitDepth / 8) * _format.channels));
+        auto committed = ::snd_pcm_mmap_commit(
+          _pcm.get(), offset, bytesRead / static_cast<std::size_t>((_format.bitDepth / 8) * _format.channels));
+
         if (committed < 0)
         {
           recoverFromXrun(static_cast<int>(committed));
         }
+
         else if (_callbacks.onPositionAdvanced != nullptr)
         {
           _callbacks.onPositionAdvanced(_callbacks.userData, static_cast<std::uint32_t>(committed));
@@ -180,15 +183,19 @@ namespace app::playback
       else
       {
         ::snd_pcm_mmap_commit(_pcm.get(), offset, 0);
+
         if (_callbacks.isSourceDrained(_callbacks.userData))
         {
           ::snd_pcm_drain(_pcm.get());
+
           if (_callbacks.onDrainComplete != nullptr)
           {
             _callbacks.onDrainComplete(_callbacks.userData);
           }
+
           break;
         }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
     }

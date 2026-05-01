@@ -3,8 +3,8 @@
 
 #include "platform/linux/ui/TagEditController.h"
 #include "platform/linux/ui/TagPopover.h"
-#include <rs/library/TrackBuilder.h>
 #include <format>
+#include <rs/library/TrackBuilder.h>
 
 namespace app::ui
 {
@@ -12,14 +12,7 @@ namespace app::ui
   {
     bool hasTagName(std::vector<std::string_view> const& tagNames, std::string_view tag)
     {
-      for (auto const& name : tagNames)
-      {
-        if (name == tag)
-        {
-          return true;
-        }
-      }
-      return false;
+      return std::ranges::contains(tagNames, tag);
     }
 
     std::string tagChangeStatusMessage(std::size_t trackCount, std::size_t addedCount, std::size_t removedCount)
@@ -52,9 +45,8 @@ namespace app::ui
     }
   }
 
-  TagEditController::TagEditController(Gtk::Window& parent, Callbacks callbacks)
-    : _parent(parent)
-    , _callbacks(std::move(callbacks))
+  TagEditController::TagEditController(Gtk::Window& /*parent*/, Callbacks callbacks)
+    : _callbacks(std::move(callbacks))
   {
     setupActions();
   }
@@ -83,13 +75,23 @@ namespace app::ui
 
   void TagEditController::addActionsTo(Gio::ActionMap& actionMap)
   {
-    if (_trackTagAddAction) actionMap.add_action(_trackTagAddAction);
-    if (_trackTagRemoveAction) actionMap.add_action(_trackTagRemoveAction);
+    if (_trackTagAddAction)
+    {
+      actionMap.add_action(_trackTagAddAction);
+    }
+
+    if (_trackTagRemoveAction)
+    {
+      actionMap.add_action(_trackTagRemoveAction);
+    }
   }
 
-  void TagEditController::showTrackContextMenu(TrackViewPage& page, TrackSelectionContext const& selection, double x, double y)
+  void TagEditController::showTrackContextMenu(TrackViewPage& page,
+                                               TrackSelectionContext const& selection,
+                                               double posX,
+                                               double posY)
   {
-    if (!_currentSession || selection.selectedIds.empty())
+    if (_currentSession == nullptr || selection.selectedIds.empty())
     {
       return;
     }
@@ -105,12 +107,15 @@ namespace app::ui
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
     // Show the popover anchored to the right-click position
-    page.showTagPopover(*tagPopover, x, y);
+    page.showTagPopover(*tagPopover, posX, posY);
   }
 
-  void TagEditController::showTagEditor(TrackViewPage& page, TrackSelectionContext const& selection, double x, double y)
+  void TagEditController::showTagEditor(TrackViewPage& page,
+                                        TrackSelectionContext const& selection,
+                                        double posX,
+                                        double posY)
   {
-    if (!_currentSession || selection.selectedIds.empty())
+    if (_currentSession == nullptr || selection.selectedIds.empty())
     {
       return;
     }
@@ -127,7 +132,7 @@ namespace app::ui
 
     // Show popover at mouse position
     tagPopover->set_parent(page.getColumnView());
-    auto rect = Gdk::Rectangle{static_cast<int>(x), static_cast<int>(y), 1, 1};
+    auto rect = Gdk::Rectangle{static_cast<int>(posX), static_cast<int>(posY), 1, 1};
     tagPopover->set_pointing_to(rect);
     tagPopover->popup();
   }
@@ -145,7 +150,7 @@ namespace app::ui
   void TagEditController::applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
                                                            std::vector<std::string> const& tagsToRemove)
   {
-    if (!_currentSession || !_activeSelection)
+    if (_currentSession == nullptr || !_activeSelection)
     {
       return;
     }
@@ -195,7 +200,7 @@ namespace app::ui
     {
       _currentSession->rowDataProvider->invalidate(trackId);
 
-      if (selection.membershipList)
+      if (selection.membershipList != nullptr)
       {
         selection.membershipList->notifyTrackDataChanged(trackId);
       }
@@ -213,7 +218,8 @@ namespace app::ui
 
     if (_callbacks.onStatusMessage)
     {
-      _callbacks.onStatusMessage(tagChangeStatusMessage(selection.selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
+      _callbacks.onStatusMessage(
+        tagChangeStatusMessage(selection.selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
     }
   }
 

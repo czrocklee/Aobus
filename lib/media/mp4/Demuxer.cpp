@@ -13,80 +13,139 @@
 namespace rs::media::mp4
 {
 
-  namespace
+  Demuxer::Demuxer(std::span<std::byte const> fileData)
+    : _fileData(fileData)
   {
-    struct SampleToChunkEntry final
-    {
-      std::uint32_t firstChunk = 0;
-      std::uint32_t samplesPerChunk = 0;
-    };
+  }
 
-    bool buildSampleOffsets(std::vector<Demuxer::SampleEntry>& samples,
-                            std::span<std::uint64_t const> chunkOffsets,
-                            std::span<SampleToChunkEntry const> sampleToChunk)
+  bool Demuxer::buildSampleOffsets(std::vector<SampleEntry>& samples,
+                                   std::span<std::uint64_t const> chunkOffsets,
+                                   std::span<SampleToChunkEntry const> sampleToChunk)
+  {
+    if (samples.empty() || chunkOffsets.empty() || sampleToChunk.empty())
     {
-      if (samples.empty() || chunkOffsets.empty() || sampleToChunk.empty())
+      return false;
+    }
+
+    auto sampleIndex = std::size_t{0};
+
+    for (auto entryIndex = std::size_t{0}; entryIndex < sampleToChunk.size(); ++entryIndex)
+    {
+      auto const& entry = sampleToChunk[entryIndex];
+
+      if (entry.firstChunk == 0 || entry.samplesPerChunk == 0)
       {
         return false;
       }
 
-      auto sampleIndex = std::size_t{0};
+      auto const chunkStartIndex = static_cast<std::size_t>(entry.firstChunk - 1);
 
-      for (auto entryIndex = std::size_t{0}; entryIndex < sampleToChunk.size(); ++entryIndex)
+      if (chunkStartIndex >= chunkOffsets.size())
       {
-        auto const& entry = sampleToChunk[entryIndex];
+        return false;
+      }
 
-        if (entry.firstChunk == 0 || entry.samplesPerChunk == 0)
+      auto chunkEndIndex = chunkOffsets.size();
+
+      if (entryIndex + 1 < sampleToChunk.size())
+      {
+        auto const nextFirstChunk = sampleToChunk[entryIndex + 1].firstChunk;
+
+        if (nextFirstChunk <= entry.firstChunk)
         {
           return false;
         }
 
-        auto const chunkStartIndex = static_cast<std::size_t>(entry.firstChunk - 1);
+        chunkEndIndex = std::min(chunkEndIndex, static_cast<std::size_t>(nextFirstChunk - 1));
+      }
 
-        if (chunkStartIndex >= chunkOffsets.size())
+      for (auto chunkIndex = chunkStartIndex; chunkIndex < chunkEndIndex; ++chunkIndex)
+      {
+        auto sampleOffset = chunkOffsets[chunkIndex];
+
+        for (auto sampleInChunk = std::uint32_t{0}; sampleInChunk < entry.samplesPerChunk; ++sampleInChunk)
         {
-          return false;
-        }
-
-        auto chunkEndIndex = chunkOffsets.size();
-
-        if (entryIndex + 1 < sampleToChunk.size())
-        {
-          auto const nextFirstChunk = sampleToChunk[entryIndex + 1].firstChunk;
-
-          if (nextFirstChunk <= entry.firstChunk)
+          if (sampleIndex >= samples.size())
           {
             return false;
           }
 
-          chunkEndIndex = std::min(chunkEndIndex, static_cast<std::size_t>(nextFirstChunk - 1));
-        }
-
-        for (auto chunkIndex = chunkStartIndex; chunkIndex < chunkEndIndex; ++chunkIndex)
-        {
-          auto sampleOffset = chunkOffsets[chunkIndex];
-
-          for (auto sampleInChunk = std::uint32_t{0}; sampleInChunk < entry.samplesPerChunk; ++sampleInChunk)
-          {
-            if (sampleIndex >= samples.size())
-            {
-              return false;
-            }
-
-            samples[sampleIndex].offset = sampleOffset;
-            sampleOffset += samples[sampleIndex].size;
-            ++sampleIndex;
-          }
+          samples[sampleIndex].offset = sampleOffset;
+          sampleOffset += samples[sampleIndex].size;
+          ++sampleIndex;
         }
       }
-
-      return sampleIndex == samples.size();
     }
-  } // namespace
 
-  Demuxer::Demuxer(std::span<std::byte const> fileData)
-    : _fileData(fileData)
+    return sampleIndex == samples.size();
+  }
+
+  void Demuxer::parseStsz(std::span<std::byte const> bytes)
   {
+    auto const* header = utility::layout::view<StszAtomLayout>(bytes);
+    auto const sampleSize = header->sampleSize.value();
+    auto const count = header->sampleCount.value();
+
+    _samples.resize(count);
+
+    if (sampleSize == 0)
+    {
+      auto entries = utility::layout::viewArray<StszAtomLayout::Entry>(bytes.subspan(sizeof(StszAtomLayout)));
+      for (std::size_t i = 0; i < entries.size(); ++i)
+      {
+        _samples[i].size = entries[i].size.value();
+      }
+    }
+    else
+    {
+      for (auto& sample : _samples)
+      {
+        sample.size = sampleSize;
+      }
+    }
+  }
+
+  void Demuxer::parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out)
+  {
+    auto const* header = utility::layout::view<StscAtomLayout>(bytes);
+    auto const count = header->entryCount.value();
+
+    out.resize(count);
+    auto entries = utility::layout::viewArray<StscAtomLayout::Entry>(bytes.subspan(sizeof(StscAtomLayout)));
+
+    for (std::size_t i = 0; i < entries.size(); ++i)
+    {
+      out[i].firstChunk = entries[i].firstChunk.value();
+      out[i].samplesPerChunk = entries[i].samplesPerChunk.value();
+    }
+  }
+
+  void Demuxer::parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out)
+  {
+    auto const* header = utility::layout::view<StcoAtomLayout>(bytes);
+    auto const count = header->entryCount.value();
+
+    out.resize(count);
+    auto entries = utility::layout::viewArray<StcoAtomLayout::Entry>(bytes.subspan(sizeof(StcoAtomLayout)));
+
+    for (std::size_t i = 0; i < entries.size(); ++i)
+    {
+      out[i] = entries[i].chunkOffset.value();
+    }
+  }
+
+  void Demuxer::parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out)
+  {
+    auto const* header = utility::layout::view<Co64AtomLayout>(bytes);
+    auto const count = header->entryCount.value();
+
+    out.resize(count);
+    auto entries = utility::layout::viewArray<Co64AtomLayout::Entry>(bytes.subspan(sizeof(Co64AtomLayout)));
+
+    for (std::size_t i = 0; i < entries.size(); ++i)
+    {
+      out[i] = entries[i].chunkOffset.value();
+    }
   }
 
   std::string Demuxer::parseTrack(std::string_view targetFormat)
@@ -163,67 +222,19 @@ namespace rs::media::mp4
 
         if (type == "stsz")
         {
-          auto const* header = utility::layout::view<StszAtomLayout>(atomBytes);
-          auto const sampleSize = header->sampleSize.value();
-          auto const count = header->sampleCount.value();
-
-          _samples.resize(count);
-
-          if (sampleSize == 0)
-          {
-            auto entries = utility::layout::viewArray<StszAtomLayout::Entry>(atomBytes.subspan(sizeof(StszAtomLayout)));
-            for (std::size_t i = 0; i < entries.size(); ++i)
-            {
-              _samples[i].size = entries[i].size.value();
-            }
-          }
-          else
-          {
-            for (auto& sample : _samples)
-            {
-              sample.size = sampleSize;
-            }
-          }
+          parseStsz(atomBytes);
         }
         else if (type == "stsc")
         {
-          auto const* header = utility::layout::view<StscAtomLayout>(atomBytes);
-          auto const count = header->entryCount.value();
-
-          sampleToChunk.resize(count);
-          auto entries = utility::layout::viewArray<StscAtomLayout::Entry>(atomBytes.subspan(sizeof(StscAtomLayout)));
-
-          for (std::size_t i = 0; i < entries.size(); ++i)
-          {
-            sampleToChunk[i].firstChunk = entries[i].firstChunk.value();
-            sampleToChunk[i].samplesPerChunk = entries[i].samplesPerChunk.value();
-          }
+          parseStsc(atomBytes, sampleToChunk);
         }
         else if (type == "stco")
         {
-          auto const* header = utility::layout::view<StcoAtomLayout>(atomBytes);
-          auto const count = header->entryCount.value();
-
-          chunkOffsets.resize(count);
-          auto entries = utility::layout::viewArray<StcoAtomLayout::Entry>(atomBytes.subspan(sizeof(StcoAtomLayout)));
-
-          for (std::size_t i = 0; i < entries.size(); ++i)
-          {
-            chunkOffsets[i] = entries[i].chunkOffset.value();
-          }
+          parseStco(atomBytes, chunkOffsets);
         }
         else if (type == "co64")
         {
-          auto const* header = utility::layout::view<Co64AtomLayout>(atomBytes);
-          auto const count = header->entryCount.value();
-
-          chunkOffsets.resize(count);
-          auto entries = utility::layout::viewArray<Co64AtomLayout::Entry>(atomBytes.subspan(sizeof(Co64AtomLayout)));
-
-          for (std::size_t i = 0; i < entries.size(); ++i)
-          {
-            chunkOffsets[i] = entries[i].chunkOffset.value();
-          }
+          parseCo64(atomBytes, chunkOffsets);
         }
 
         return true;

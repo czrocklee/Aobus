@@ -39,12 +39,16 @@ namespace app::ui
 
     void rebuildTree(LibrarySession& session, rs::lmdb::ReadTransaction& txn);
     void select(rs::ListId listId);
-    
+    void createSmartListFromExpression(rs::ListId parentListId, std::string expression);
+
     // Add to action group for menu access
     void addActionsTo(Gio::ActionMap& actionMap);
 
   private:
     void setupLayout();
+
+    static constexpr int kSidebarWidth = 200;
+
     void setupSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
     void bindSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
     void onListSelectionChanged(std::uint32_t position, std::uint32_t nItems);
@@ -53,7 +57,7 @@ namespace app::ui
     void showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle const& rect);
 
     // List management - using ListDraft
-    void openNewListDialog(rs::ListId parentListId);
+    void openNewListDialog(rs::ListId parentListId, std::string initialExpression = {});
     void openNewSmartListDialog();
     void openEditListDialog(rs::ListId listId);
     bool listHasChildren(rs::ListId listId) const;

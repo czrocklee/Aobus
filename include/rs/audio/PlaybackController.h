@@ -12,6 +12,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <set>
 #include <vector>
 
 namespace rs::audio
@@ -48,6 +49,12 @@ namespace rs::audio
 
   private:
     void handleSystemGraphChanged(rs::audio::AudioGraph const& graph, std::uint64_t generation);
+
+    std::vector<rs::audio::AudioNode const*> findPlaybackPath(std::string const& startId) const;
+    void processInputSources(rs::audio::AudioNode const& node,
+                             std::span<rs::audio::AudioNode const* const> path,
+                             std::unordered_map<std::string, std::set<std::string>> const& inputSources);
+    void assessNodeQuality(rs::audio::AudioNode const& node, rs::audio::AudioNode const* nextNode);
 
     std::unique_ptr<PlaybackEngine> _engine;
 

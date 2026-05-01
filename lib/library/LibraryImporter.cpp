@@ -115,30 +115,17 @@ namespace rs::library
 
     for (auto const& trackNode : tracks)
     {
-      std::uint32_t yamlTrackId = trackNode["id"] ? trackNode["id"].as<std::uint32_t>() : 0;
+      std::uint32_t const yamlTrackId = trackNode["id"] ? trackNode["id"].as<std::uint32_t>() : 0;
       auto trackStrings = std::deque<std::string>{};
-      auto keepAlive = [&](YAML::Node const& node) -> std::string_view
-      {
-        if (!node)
-        {
-          return {};
-        }
-
-        return trackStrings.emplace_back(node.as<std::string>());
-      };
-
-      std::string uriStr = trackNode["uri"].as<std::string>();
+      std::string const uriStr = trackNode["uri"].as<std::string>();
 
       // 1. Try load from physical file (availability fallback)
       std::optional<TrackBuilder> fileBuilder;
-      auto fullPath = _ml.rootPath() / uriStr;
-      auto tagFile = std::unique_ptr<rs::tag::File>{};
+      auto const fullPath = _ml.rootPath() / uriStr;
 
       if (std::filesystem::exists(fullPath))
       {
-        tagFile = rs::tag::File::open(fullPath);
-
-        if (tagFile)
+        if (auto tagFile = rs::tag::File::open(fullPath); tagFile != nullptr)
         {
           fileBuilder = tagFile->loadTrack();
           fileBuilder->property().uri(uriStr);
@@ -160,112 +147,9 @@ namespace rs::library
       }
 
       // 3. Overlay YAML data (Priority: YAML > File)
-
-      if (trackNode["title"])
-      {
-        builder.metadata().title(keepAlive(trackNode["title"]));
-      }
-
-      if (trackNode["artist"])
-      {
-        builder.metadata().artist(keepAlive(trackNode["artist"]));
-      }
-
-      if (trackNode["album"])
-      {
-        builder.metadata().album(keepAlive(trackNode["album"]));
-      }
-
-      if (trackNode["albumArtist"])
-      {
-        builder.metadata().albumArtist(keepAlive(trackNode["albumArtist"]));
-      }
-
-      if (trackNode["genre"])
-      {
-        builder.metadata().genre(keepAlive(trackNode["genre"]));
-      }
-
-      if (trackNode["year"])
-      {
-        builder.metadata().year(trackNode["year"].as<uint16_t>());
-      }
-
-      if (trackNode["trackNumber"])
-      {
-        builder.metadata().trackNumber(trackNode["trackNumber"].as<uint16_t>());
-      }
-
-      if (trackNode["totalTracks"])
-      {
-        builder.metadata().totalTracks(trackNode["totalTracks"].as<uint16_t>());
-      }
-
-      if (trackNode["discNumber"])
-      {
-        builder.metadata().discNumber(trackNode["discNumber"].as<uint16_t>());
-      }
-
-      if (trackNode["totalDiscs"])
-      {
-        builder.metadata().totalDiscs(trackNode["totalDiscs"].as<uint16_t>());
-      }
-
-      if (trackNode["rating"])
-      {
-        builder.metadata().rating(trackNode["rating"].as<uint8_t>());
-      }
-
-      if (trackNode["tags"])
-      {
-        builder.tags().clear();
-        for (auto const& tag : trackNode["tags"])
-        {
-          builder.tags().add(keepAlive(tag));
-        }
-      }
-
-      if (trackNode["custom"])
-      {
-        builder.custom().clear();
-
-        for (auto it = trackNode["custom"].begin(); it != trackNode["custom"].end(); ++it)
-        {
-          builder.custom().add(keepAlive(it->first), keepAlive(it->second));
-        }
-      }
-
-      // YAML technical properties (optional override)
-
-      if (trackNode["durationMs"])
-      {
-        builder.property().durationMs(trackNode["durationMs"].as<uint32_t>());
-      }
-
-      if (trackNode["bitrate"])
-      {
-        builder.property().bitrate(trackNode["bitrate"].as<uint32_t>());
-      }
-
-      if (trackNode["sampleRate"])
-      {
-        builder.property().sampleRate(trackNode["sampleRate"].as<uint32_t>());
-      }
-
-      if (trackNode["channels"])
-      {
-        builder.property().channels(trackNode["channels"].as<uint8_t>());
-      }
-
-      if (trackNode["bitDepth"])
-      {
-        builder.property().bitDepth(trackNode["bitDepth"].as<uint8_t>());
-      }
-
-      if (trackNode["codecId"])
-      {
-        builder.property().codecId(trackNode["codecId"].as<uint16_t>());
-      }
+      overlayMetadata(builder, trackNode, trackStrings);
+      overlayCustomData(builder, trackNode, trackStrings);
+      overlayTechnicalProperties(builder, trackNode);
 
       // 4. Commit as new track
       auto [preparedHot, preparedCold] = builder.prepare(txn, dict, _ml.resources());
@@ -283,6 +167,144 @@ namespace rs::library
       {
         yamlTrackIdToInternalId[yamlTrackId] = newTrackId;
       }
+    }
+  }
+
+  void LibraryImporter::overlayMetadata(TrackBuilder& builder,
+                                        YAML::Node const& trackNode,
+                                        std::deque<std::string>& trackStrings) const
+  {
+    auto keepAlive = [&](YAML::Node const& node) -> std::string_view
+    {
+      if (!node)
+      {
+        return {};
+      }
+
+      return trackStrings.emplace_back(node.as<std::string>());
+    };
+
+    if (trackNode["title"])
+    {
+      builder.metadata().title(keepAlive(trackNode["title"]));
+    }
+
+    if (trackNode["artist"])
+    {
+      builder.metadata().artist(keepAlive(trackNode["artist"]));
+    }
+
+    if (trackNode["album"])
+    {
+      builder.metadata().album(keepAlive(trackNode["album"]));
+    }
+
+    if (trackNode["albumArtist"])
+    {
+      builder.metadata().albumArtist(keepAlive(trackNode["albumArtist"]));
+    }
+
+    if (trackNode["genre"])
+    {
+      builder.metadata().genre(keepAlive(trackNode["genre"]));
+    }
+
+    if (trackNode["year"])
+    {
+      builder.metadata().year(trackNode["year"].as<uint16_t>());
+    }
+
+    if (trackNode["trackNumber"])
+    {
+      builder.metadata().trackNumber(trackNode["trackNumber"].as<uint16_t>());
+    }
+
+    if (trackNode["totalTracks"])
+    {
+      builder.metadata().totalTracks(trackNode["totalTracks"].as<uint16_t>());
+    }
+
+    if (trackNode["discNumber"])
+    {
+      builder.metadata().discNumber(trackNode["discNumber"].as<uint16_t>());
+    }
+
+    if (trackNode["totalDiscs"])
+    {
+      builder.metadata().totalDiscs(trackNode["totalDiscs"].as<uint16_t>());
+    }
+
+    if (trackNode["rating"])
+    {
+      builder.metadata().rating(trackNode["rating"].as<uint8_t>());
+    }
+  }
+
+  void LibraryImporter::overlayCustomData(TrackBuilder& builder,
+                                          YAML::Node const& trackNode,
+                                          std::deque<std::string>& trackStrings) const
+  {
+    auto keepAlive = [&](YAML::Node const& node) -> std::string_view
+    {
+      if (!node)
+      {
+        return {};
+      }
+
+      return trackStrings.emplace_back(node.as<std::string>());
+    };
+
+    if (trackNode["tags"])
+    {
+      builder.tags().clear();
+
+      for (auto const& tag : trackNode["tags"])
+      {
+        builder.tags().add(keepAlive(tag));
+      }
+    }
+
+    if (trackNode["custom"])
+    {
+      builder.custom().clear();
+
+      for (auto it = trackNode["custom"].begin(); it != trackNode["custom"].end(); ++it)
+      {
+        builder.custom().add(keepAlive(it->first), keepAlive(it->second));
+      }
+    }
+  }
+
+  void LibraryImporter::overlayTechnicalProperties(TrackBuilder& builder, YAML::Node const& trackNode) const
+  {
+    if (trackNode["durationMs"])
+    {
+      builder.property().durationMs(trackNode["durationMs"].as<uint32_t>());
+    }
+
+    if (trackNode["bitrate"])
+    {
+      builder.property().bitrate(trackNode["bitrate"].as<uint32_t>());
+    }
+
+    if (trackNode["sampleRate"])
+    {
+      builder.property().sampleRate(trackNode["sampleRate"].as<uint32_t>());
+    }
+
+    if (trackNode["channels"])
+    {
+      builder.property().channels(trackNode["channels"].as<uint8_t>());
+    }
+
+    if (trackNode["bitDepth"])
+    {
+      builder.property().bitDepth(trackNode["bitDepth"].as<uint8_t>());
+    }
+
+    if (trackNode["codecId"])
+    {
+      builder.property().codecId(trackNode["codecId"].as<uint16_t>());
     }
   }
 

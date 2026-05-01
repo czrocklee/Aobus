@@ -77,7 +77,7 @@ namespace rs::model
     }
     catch (std::exception const& e)
     {
-      std::cerr << "Smart list expression error for '" << _stagedExpression << "': " << e.what() << std::endl;
+      std::cerr << "Smart list expression error for '" << _stagedExpression << "': " << e.what() << '\n';
       _stagedHasError = true;
       _stagedErrorMessage = e.what();
       _stagedPlan.reset();

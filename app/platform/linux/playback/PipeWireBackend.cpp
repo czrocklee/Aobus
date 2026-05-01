@@ -301,7 +301,7 @@ namespace app::playback
     auto buffer = std::array<std::uint8_t, 1024>{};
     ::spa_pod_builder builder = {};
     ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
-    ::spa_pod_frame frame;
+    ::spa_pod_frame frame{};
     ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
     ::spa_pod_builder_add(&builder,
                           SPA_FORMAT_mediaType,

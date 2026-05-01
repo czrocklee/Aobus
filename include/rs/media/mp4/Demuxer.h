@@ -68,6 +68,21 @@ namespace rs::media::mp4
     std::uint64_t duration() const;
 
   private:
+    struct SampleToChunkEntry final
+    {
+      std::uint32_t firstChunk = 0;
+      std::uint32_t samplesPerChunk = 0;
+    };
+
+    void parseStsz(std::span<std::byte const> bytes);
+    void parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out);
+    void parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
+    void parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
+
+    static bool buildSampleOffsets(std::vector<SampleEntry>& samples,
+                                   std::span<std::uint64_t const> chunkOffsets,
+                                   std::span<SampleToChunkEntry const> sampleToChunk);
+
     std::span<std::byte const> _fileData;
     std::vector<std::byte> _magicCookie;
     std::vector<SampleEntry> _samples;

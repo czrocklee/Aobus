@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2026 RockStudio Contributors
 
 #include "platform/linux/ui/TrackPageGraph.h"
-#include <rs/utility/Log.h>
 #include <rs/model/AllTrackIdsList.h>
 #include <rs/model/FilteredTrackIdList.h>
 #include <rs/model/ManualTrackIdList.h>
+#include <rs/utility/Log.h>
 
 #include <format>
 #include <limits>
@@ -31,9 +31,7 @@ namespace app::ui
   }
 
   TrackPageGraph::TrackPageGraph(Gtk::Stack& stack, TrackColumnLayoutModel& layoutModel, Callbacks callbacks)
-    : _stack(stack)
-    , _layoutModel(layoutModel)
-    , _callbacks(std::move(callbacks))
+    : _stack(stack), _layoutModel(layoutModel), _callbacks(std::move(callbacks))
   {
   }
 
@@ -85,25 +83,39 @@ namespace app::ui
 
   TrackPageContext* TrackPageGraph::currentVisible()
   {
-    auto* visibleChild = _stack.get_visible_child();
-    if (!visibleChild) return nullptr;
+    auto* const visibleChild = _stack.get_visible_child();
+    if (visibleChild == nullptr)
+    {
+      return nullptr;
+    }
 
     for (auto& [id, ctx] : _trackPages)
     {
-      if (ctx.page.get() == visibleChild) return &ctx;
+      if (ctx.page.get() == visibleChild)
+      {
+        return &ctx;
+      }
     }
+
     return nullptr;
   }
 
   TrackPageContext const* TrackPageGraph::currentVisible() const
   {
-    auto const* visibleChild = _stack.get_visible_child();
-    if (!visibleChild) return nullptr;
+    auto const* const visibleChild = _stack.get_visible_child();
+    if (visibleChild == nullptr)
+    {
+      return nullptr;
+    }
 
     for (auto const& [id, ctx] : _trackPages)
     {
-      if (ctx.page.get() == visibleChild) return &ctx;
+      if (ctx.page.get() == visibleChild)
+      {
+        return &ctx;
+      }
     }
+
     return nullptr;
   }
 
@@ -114,7 +126,8 @@ namespace app::ui
 
   void TrackPageGraph::buildPageForAllTracks(LibrarySession& session)
   {
-    auto adapter = std::make_unique<TrackListAdapter>(*session.allTrackIds, *session.rowDataProvider);
+    auto adapter =
+      std::make_unique<TrackListAdapter>(*session.allTrackIds, *session.musicLibrary, *session.rowDataProvider);
     adapter->onReset();
     auto trackPage = std::make_unique<TrackViewPage>(allTracksListId(), *adapter, _layoutModel);
 
@@ -125,12 +138,14 @@ namespace app::ui
     ctx.membershipList = nullptr;
     ctx.adapter = std::move(adapter);
     ctx.page = std::move(trackPage);
-    
+
     bindTrackPage(ctx);
     _trackPages[allTracksListId()] = std::move(ctx);
   }
 
-  void TrackPageGraph::buildPageForStoredList(rs::ListId listId, rs::library::ListView const& view, LibrarySession& session)
+  void TrackPageGraph::buildPageForStoredList(rs::ListId listId,
+                                              rs::library::ListView const& view,
+                                              LibrarySession& session)
   {
     std::string listName = view.name().empty() ? "<Unnamed List>" : std::string(view.name());
 
@@ -140,13 +155,17 @@ namespace app::ui
       auto* sourceList = static_cast<rs::model::TrackIdList*>(session.allTrackIds.get());
       if (!view.isRootParent())
       {
-        if (auto* sourceCtx = find(view.parentId()))
+        if (auto* const sourceCtx = find(view.parentId()))
         {
-          if (sourceCtx->membershipList) sourceList = sourceCtx->membershipList.get();
+          if (sourceCtx->membershipList != nullptr)
+          {
+            sourceList = sourceCtx->membershipList.get();
+          }
         }
       }
 
-      auto filtered = std::make_unique<rs::model::FilteredTrackIdList>(*sourceList, *session.musicLibrary, *session.smartListEngine);
+      auto filtered =
+        std::make_unique<rs::model::FilteredTrackIdList>(*sourceList, *session.musicLibrary, *session.smartListEngine);
       filtered->setExpression(std::string(view.filter()));
       filtered->reload();
       membershipList = std::move(filtered);
@@ -157,7 +176,7 @@ namespace app::ui
       membershipList = std::move(manual);
     }
 
-    auto adapter = std::make_unique<TrackListAdapter>(*membershipList, *session.rowDataProvider);
+    auto adapter = std::make_unique<TrackListAdapter>(*membershipList, *session.musicLibrary, *session.rowDataProvider);
     adapter->onReset();
 
     auto trackPage = std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel);
@@ -165,7 +184,12 @@ namespace app::ui
     _stack.add(*trackPage, pageId, listName);
 
     auto playlistDir = session.musicLibrary->rootPath() / "playlist";
-    if (!std::filesystem::exists(playlistDir)) std::filesystem::create_directories(playlistDir);
+
+    if (!std::filesystem::exists(playlistDir))
+    {
+      std::filesystem::create_directories(playlistDir);
+    }
+
     auto playlistPath = playlistDir / (listName + ".m3u");
     auto exporter = std::make_unique<app::services::PlaylistExporter>(
       *membershipList, *session.rowDataProvider, session.musicLibrary->rootPath(), playlistPath);
@@ -182,22 +206,51 @@ namespace app::ui
 
   void TrackPageGraph::bindTrackPage(TrackPageContext& ctx)
   {
-    auto* page = ctx.page.get();
-    
-    page->signalSelectionChanged().connect([this, page] {
-      if (_callbacks.onSelectionChanged) _callbacks.onSelectionChanged(page->getSelectedTrackIds());
-    });
+    auto* const page = ctx.page.get();
 
-    page->signalContextMenuRequested().connect([this, page](double x, double y) {
-      if (_callbacks.onContextMenuRequested) _callbacks.onContextMenuRequested(*page, x, y);
-    });
+    page->signalSelectionChanged().connect(
+      [this, page]
+      {
+        if (_callbacks.onSelectionChanged != nullptr)
+        {
+          _callbacks.onSelectionChanged(page->getSelectedTrackIds());
+        }
+      });
 
-    page->signalTagEditRequested().connect([this, page](std::vector<rs::TrackId> const& ids, double x, double y) {
-      if (_callbacks.onTagEditRequested) _callbacks.onTagEditRequested(*page, ids, x, y);
-    });
+    page->signalContextMenuRequested().connect(
+      [this, page](double posX, double posY)
+      {
+        if (_callbacks.onContextMenuRequested != nullptr)
+        {
+          _callbacks.onContextMenuRequested(*page, posX, posY);
+        }
+      });
 
-    page->signalTrackActivated().connect([this, page](rs::TrackId id) {
-      if (_callbacks.onTrackActivated) _callbacks.onTrackActivated(*page, id);
-    });
+    page->signalTagEditRequested().connect(
+      [this, page](std::vector<rs::TrackId> const& ids, double posX, double posY)
+      {
+        if (_callbacks.onTagEditRequested != nullptr)
+        {
+          _callbacks.onTagEditRequested(*page, ids, posX, posY);
+        }
+      });
+
+    page->signalTrackActivated().connect(
+      [this, page](rs::TrackId id)
+      {
+        if (_callbacks.onTrackActivated != nullptr)
+        {
+          _callbacks.onTrackActivated(*page, id);
+        }
+      });
+
+    page->signalCreateSmartListRequested().connect(
+      [this, page](std::string const& expression)
+      {
+        if (_callbacks.onCreateSmartListRequested != nullptr)
+        {
+          _callbacks.onCreateSmartListRequested(*page, expression);
+        }
+      });
   }
 } // namespace app::ui

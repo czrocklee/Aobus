@@ -136,8 +136,8 @@ namespace rs::lmdb
     if (other._cursor)
     {
       _cursor = Reader::create(::mdb_cursor_txn(other._cursor.get()), ::mdb_cursor_dbi(other._cursor.get()));
-      auto const key = makeVal(&_value.first, sizeof(std::uint32_t));
-      throwOnError("mdb_cursor_get", ::mdb_cursor_get(_cursor.get(), const_cast<::MDB_val*>(&key), nullptr, MDB_SET));
+      auto key = makeVal(&_value.first, sizeof(std::uint32_t));
+      throwOnError("mdb_cursor_get", ::mdb_cursor_get(_cursor.get(), &key, nullptr, MDB_SET));
     }
   }
 

@@ -4,11 +4,14 @@
 #pragma once
 
 #include <rs/audio/AudioFormat.h>
+#include <rs/audio/DecoderTypes.h>
 #include <rs/audio/IAudioBackend.h>
+#include <rs/audio/IAudioDecoderSession.h>
 #include <rs/audio/PlaybackTypes.h>
 #include <rs/utility/IMainThreadDispatcher.h>
 
 #include <atomic>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -26,6 +29,8 @@ namespace rs::audio
   class PlaybackEngine final
   {
   public:
+    using OnRouteChanged = std::function<void(EngineRouteSnapshot const&)>;
+
     PlaybackEngine(std::unique_ptr<rs::audio::IAudioBackend> backend,
                    rs::audio::AudioDevice const& device,
                    std::shared_ptr<rs::IMainThreadDispatcher> dispatcher = nullptr);
@@ -34,7 +39,6 @@ namespace rs::audio
     void setBackend(std::unique_ptr<rs::audio::IAudioBackend> backend, rs::audio::AudioDevice const& device);
     void setOnTrackEnded(std::function<void()> callback);
 
-    using OnRouteChanged = std::function<void(EngineRouteSnapshot const&)>;
     void setOnRouteChanged(OnRouteChanged callback);
     EngineRouteSnapshot routeSnapshot() const;
 
@@ -66,6 +70,14 @@ namespace rs::audio
     bool openTrack(TrackPlaybackDescriptor const& descriptor,
                    std::shared_ptr<rs::audio::IPcmSource>& source,
                    AudioFormat& backendFormat);
+
+    bool negotiateFormat(std::filesystem::path const& path,
+                         DecodedStreamInfo const& info,
+                         std::unique_ptr<IAudioDecoderSession>& decoder,
+                         AudioFormat& backendFormat);
+
+    std::shared_ptr<IPcmSource> createPcmSource(std::unique_ptr<IAudioDecoderSession> decoder,
+                                                DecodedStreamInfo const& info);
 
     std::unique_ptr<rs::audio::IAudioBackend> _backend;
     std::shared_ptr<rs::IMainThreadDispatcher> _dispatcher;

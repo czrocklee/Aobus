@@ -43,6 +43,7 @@ namespace app::ui
       std::function<void(TrackViewPage&, double, double)> onContextMenuRequested;
       std::function<void(TrackViewPage&, std::vector<rs::TrackId> const&, double, double)> onTagEditRequested;
       std::function<void(TrackViewPage&, rs::TrackId)> onTrackActivated;
+      std::function<void(TrackViewPage&, std::string const&)> onCreateSmartListRequested;
     };
 
     TrackPageGraph(Gtk::Stack& stack, TrackColumnLayoutModel& layoutModel, Callbacks callbacks);

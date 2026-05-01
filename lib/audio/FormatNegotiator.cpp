@@ -24,7 +24,7 @@ namespace rs::audio
         return;
       }
 
-      target = selector();
+      target = std::forward<Selector>(selector)();
       flag = true;
 
       if (!reason.empty())

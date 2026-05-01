@@ -35,7 +35,7 @@ namespace rs::audio
     std::size_t capacity() const noexcept { return kRingBufferCapacity; }
 
   private:
-    boost::lockfree::spsc_queue<std::uint8_t, boost::lockfree::capacity<kRingBufferCapacity>> _queue;
+    boost::lockfree::spsc_queue<std::byte, boost::lockfree::capacity<kRingBufferCapacity>> _queue;
     mutable std::mutex _mutex;
     std::atomic<std::size_t> _writeCount{0};
     std::atomic<std::size_t> _readCount{0};

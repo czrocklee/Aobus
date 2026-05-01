@@ -49,7 +49,7 @@ namespace app::ui
     // Scrolled window for sidebar list
     _listScrolledWindow.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     _listScrolledWindow.set_child(_listView);
-    _listScrolledWindow.set_size_request(200, -1);
+    _listScrolledWindow.set_size_request(kSidebarWidth, -1);
 
     // List view setup
     auto factory = Gtk::SignalListItemFactory::create();
@@ -106,16 +106,31 @@ namespace app::ui
 
   void ListSidebarController::onListSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/)
   {
-    if (!_listSelectionModel) return;
+    if (_listSelectionModel == nullptr)
+    {
+      return;
+    }
 
     auto const selectedPosition = _listSelectionModel->get_selected();
-    if (selectedPosition == GTK_INVALID_LIST_POSITION) return;
+
+    if (selectedPosition == GTK_INVALID_LIST_POSITION)
+    {
+      return;
+    }
 
     auto const treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(_listSelectionModel->get_selected_item());
-    if (!treeListRow) return;
+
+    if (treeListRow == nullptr)
+    {
+      return;
+    }
 
     auto const node = std::dynamic_pointer_cast<ListTreeNode>(treeListRow->get_item());
-    if (!node) return;
+
+    if (node == nullptr)
+    {
+      return;
+    }
 
     auto const listId = node->getListId();
 
@@ -129,9 +144,9 @@ namespace app::ui
     }
   }
 
-  void ListSidebarController::openNewListDialog(rs::ListId parentListId)
+  void ListSidebarController::openNewListDialog(rs::ListId parentListId, std::string initialExpression)
   {
-    if (!_currentSession)
+    if (_currentSession == nullptr)
     {
       return;
     }
@@ -166,6 +181,11 @@ namespace app::ui
                                                       parentListId,
                                                       *_currentSession->rowDataProvider);
 
+    if (!initialExpression.empty())
+    {
+      dialog->setLocalExpression(std::move(initialExpression));
+    }
+
     dialog->signal_response().connect(
       [this, dialog](int responseId)
       {
@@ -186,6 +206,12 @@ namespace app::ui
 
     dialog->present();
   }
+
+  void ListSidebarController::createSmartListFromExpression(rs::ListId parentListId, std::string expression)
+  {
+    openNewListDialog(parentListId, std::move(expression));
+  }
+
   void ListSidebarController::openNewSmartListDialog()
   {
     // Smart selection: if a non-All-Tracks list is selected, use it as parent; otherwise use root
@@ -346,7 +372,9 @@ namespace app::ui
       {
         if (auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(item))
         {
-          if (auto node = std::dynamic_pointer_cast<ListTreeNode>(treeListRow->get_item()))
+          auto const treeListItem = treeListRow->get_item();
+
+          if (auto node = std::dynamic_pointer_cast<ListTreeNode>(treeListItem))
           {
             canDelete = !listHasChildren(node->getListId());
             canEdit = true;
@@ -376,7 +404,7 @@ namespace app::ui
 
   void ListSidebarController::createList(rs::model::ListDraft const& draft)
   {
-    if (!_currentSession)
+    if (_currentSession == nullptr)
     {
       APP_LOG_ERROR("No music library open");
       return;
@@ -453,7 +481,7 @@ namespace app::ui
 
   void ListSidebarController::updateList(rs::model::ListDraft const& draft)
   {
-    if (!_currentSession)
+    if (_currentSession == nullptr)
     {
       APP_LOG_ERROR("No music library open");
       return;
@@ -492,7 +520,7 @@ namespace app::ui
 
   void ListSidebarController::onEditList()
   {
-    if (!_currentSession)
+    if (_currentSession == nullptr)
     {
       return;
     }
@@ -537,7 +565,7 @@ namespace app::ui
 
   void ListSidebarController::openEditListDialog(rs::ListId listId)
   {
-    if (!_currentSession)
+    if (_currentSession == nullptr)
     {
       return;
     }
@@ -602,22 +630,21 @@ namespace app::ui
 
   void ListSidebarController::onDeleteList()
   {
-    if (!_currentSession)
+    if (_currentSession == nullptr)
     {
       return;
     }
 
-    auto position = _listSelectionModel->get_selected();
+    auto const position = _listSelectionModel->get_selected();
 
     if (position == GTK_INVALID_LIST_POSITION)
     {
       return;
     }
 
-    // Don't allow deleting "All Tracks" (position 0)
-
     if (position == 0)
     {
+      // Don't allow deleting "All Tracks" (position 0)
       return;
     }
 

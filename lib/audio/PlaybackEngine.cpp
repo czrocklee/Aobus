@@ -9,7 +9,6 @@
 #include <rs/audio/IAudioDecoderSession.h>
 #include <rs/audio/MemoryPcmSource.h>
 #include <rs/audio/StreamingPcmSource.h>
-#include <rs/utility/Log.h>
 
 #include <algorithm>
 #include <format>
@@ -37,10 +36,12 @@ namespace rs::audio
       }
 
       std::uint32_t bytesPerSample = 2U;
+
       if (format.bitDepth == 24U)
       {
         bytesPerSample = kBytesPer24BitSample;
       }
+
       else if (format.bitDepth > 16U)
       {
         bytesPerSample = 4U;
@@ -65,8 +66,6 @@ namespace rs::audio
       return decodedBytes > 0 && decodedBytes <= kMemoryPcmSourceBudgetBytes;
     }
   } // namespace
-  using namespace rs::audio;
-  using namespace rs::audio;
 
   PlaybackEngine::PlaybackEngine(std::unique_ptr<rs::audio::IAudioBackend> backend,
                                  rs::audio::AudioDevice const& device,
@@ -174,7 +173,7 @@ namespace rs::audio
 
     if (_backend)
     {
-      _backend->reset();
+      (*_backend).reset();
       _backend->stop();
       _backend->close();
     }
@@ -218,9 +217,7 @@ namespace rs::audio
 
     if (_backend)
     {
-      auto const openResult = _backend->open(backendFormat, callbacks);
-
-      if (!openResult)
+      if (auto const openResult = _backend->open(backendFormat, callbacks); !openResult)
       {
         _source.store({}, std::memory_order_release);
         auto lock = std::lock_guard<std::mutex>{_stateMutex};
@@ -331,7 +328,7 @@ namespace rs::audio
 
     if (_backend)
     {
-      _backend->reset();
+      (*_backend).reset();
       _backend->stop();
       _backend->close();
     }
@@ -370,9 +367,7 @@ namespace rs::audio
     _backendStarted = false;
     _playbackDrainPending = false;
 
-    auto const seekResult = source->seek(positionMs);
-
-    if (!seekResult)
+    if (auto const seekResult = source->seek(positionMs); !seekResult)
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _snapshot.state = TransportState::Error;
@@ -455,6 +450,118 @@ namespace rs::audio
     _snapshot.statusText = std::string(message);
   }
 
+  bool PlaybackEngine::negotiateFormat(std::filesystem::path const& path,
+                                       DecodedStreamInfo const& info,
+                                       std::unique_ptr<IAudioDecoderSession>& decoder,
+                                       AudioFormat& backendFormat)
+  {
+    if (!_backend)
+    {
+      return true;
+    }
+
+    auto const backendKind = _backend->kind();
+
+    if (backendKind == BackendKind::PipeWire)
+    {
+      backendFormat = info.outputFormat;
+      PLAYBACK_LOG_INFO("PipeWire shared mode keeps the stream at {}Hz/{}b/{}ch",
+                        backendFormat.sampleRate,
+                        static_cast<int>(backendFormat.bitDepth),
+                        static_cast<int>(backendFormat.channels));
+      return true;
+    }
+
+    auto const plan = FormatNegotiator::buildPlan(info.sourceFormat, _currentDevice.capabilities);
+
+    if (plan.requiresResample)
+    {
+      _snapshot.statusText = std::format("{} does not support {} Hz and RockStudio has no resampler yet",
+                                         backendDisplayName(backendKind),
+                                         info.sourceFormat.sampleRate);
+      return false;
+    }
+
+    if (plan.requiresChannelRemap)
+    {
+      _snapshot.statusText = std::format("{} does not support {} channels and RockStudio has no channel remapper yet",
+                                         backendDisplayName(backendKind),
+                                         static_cast<int>(info.sourceFormat.channels));
+      return false;
+    }
+
+    PLAYBACK_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
+                      static_cast<int>(plan.decoderOutputFormat.bitDepth),
+                      static_cast<int>(plan.decoderOutputFormat.validBits),
+                      plan.deviceFormat.sampleRate,
+                      static_cast<int>(plan.deviceFormat.bitDepth),
+                      plan.reason);
+
+    // Re-open decoder if negotiated format differs
+    if (!(plan.decoderOutputFormat == info.sourceFormat))
+    {
+      decoder->close();
+      decoder = createAudioDecoderSession(path, plan.decoderOutputFormat);
+
+      if (!decoder)
+      {
+        _snapshot.statusText = "Failed to re-open decoder with negotiated format";
+        return false;
+      }
+
+      if (auto const reOpenResult = decoder->open(path); !reOpenResult)
+      {
+        _snapshot.statusText = reOpenResult.error().message;
+        return false;
+      }
+    }
+
+    backendFormat = plan.deviceFormat;
+    return true;
+  }
+
+  std::shared_ptr<IPcmSource> PlaybackEngine::createPcmSource(std::unique_ptr<IAudioDecoderSession> decoder,
+                                                              DecodedStreamInfo const& info)
+  {
+    if (shouldUseMemoryPcmSource(info))
+    {
+      auto memorySource = std::make_shared<rs::audio::MemoryPcmSource>(std::move(decoder), info);
+
+      if (auto const initResult = memorySource->initialize(); !initResult)
+      {
+        _snapshot.statusText = initResult.error().message;
+        return nullptr;
+      }
+
+      return memorySource;
+    }
+
+    auto streamingSource = std::make_shared<rs::audio::StreamingPcmSource>(
+      std::move(decoder),
+      info,
+      [this](rs::Error const& err)
+      {
+        if (_dispatcher)
+        {
+          _dispatcher->dispatch([this, err]() { handleSourceError(err); });
+        }
+        else
+        {
+          handleSourceError(err);
+        }
+      },
+      kPrerollTargetMs,
+      kDecodeHighWatermarkMs);
+
+    if (auto const initResult = streamingSource->initialize(); !initResult)
+    {
+      _snapshot.statusText = initResult.error().message;
+      return nullptr;
+    }
+
+    return streamingSource;
+  }
+
   bool PlaybackEngine::openTrack(TrackPlaybackDescriptor const& descriptor,
                                  std::shared_ptr<rs::audio::IPcmSource>& source,
                                  AudioFormat& backendFormat)
@@ -468,15 +575,13 @@ namespace rs::audio
 
     auto decoder = createAudioDecoderSession(descriptor.filePath, outputFormat);
 
-    if (!decoder)
+    if (decoder == nullptr)
     {
       _snapshot.statusText = "No audio decoder backend is available";
       return false;
     }
 
-    auto const openResult = decoder->open(descriptor.filePath);
-
-    if (!openResult)
+    if (auto const openResult = decoder->open(descriptor.filePath); !openResult)
     {
       _snapshot.statusText = openResult.error().message;
       return false;
@@ -490,121 +595,17 @@ namespace rs::audio
       return false;
     }
 
-    // --- Format Negotiation ---
-    if (_backend)
+    if (!negotiateFormat(descriptor.filePath, info, decoder, backendFormat))
     {
-      auto const backendKind = _backend->kind();
-
-      if (backendKind == BackendKind::PipeWire)
-      {
-        backendFormat = info.outputFormat;
-        PLAYBACK_LOG_INFO("PipeWire shared mode keeps the client stream at {}Hz/{}b/{}ch; the server graph may still "
-                          "resample downstream",
-                          backendFormat.sampleRate,
-                          static_cast<int>(backendFormat.bitDepth),
-                          static_cast<int>(backendFormat.channels));
-      }
-      else
-      {
-        auto const caps = _currentDevice.capabilities;
-        auto const plan = FormatNegotiator::buildPlan(info.sourceFormat, caps);
-
-        if (plan.requiresResample)
-        {
-          _snapshot.statusText = std::format("{} does not support {} Hz and RockStudio has no resampler yet",
-                                             backendDisplayName(backendKind),
-                                             info.sourceFormat.sampleRate);
-          return false;
-        }
-
-        if (plan.requiresChannelRemap)
-        {
-          _snapshot.statusText =
-            std::format("{} does not support {} channels and RockStudio has no channel remapper yet",
-                        backendDisplayName(backendKind),
-                        static_cast<int>(info.sourceFormat.channels));
-          return false;
-        }
-
-        PLAYBACK_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
-                          static_cast<int>(plan.decoderOutputFormat.bitDepth),
-                          static_cast<int>(plan.decoderOutputFormat.validBits),
-                          plan.deviceFormat.sampleRate,
-                          static_cast<int>(plan.deviceFormat.bitDepth),
-                          plan.reason);
-
-        // Re-open decoder with negotiated format if it differs from source.
-        if (!(plan.decoderOutputFormat == info.sourceFormat))
-        {
-          decoder->close();
-          decoder = createAudioDecoderSession(descriptor.filePath, plan.decoderOutputFormat);
-
-          if (!decoder)
-          {
-            _snapshot.statusText = "Failed to re-open decoder with negotiated format";
-            return false;
-          }
-
-          auto const reOpenResult = decoder->open(descriptor.filePath);
-
-          if (!reOpenResult)
-          {
-            _snapshot.statusText = "Failed to re-open decoder with negotiated format";
-            return false;
-          }
-
-          info = decoder->streamInfo();
-        }
-
-        backendFormat = plan.deviceFormat;
-      }
-    }
-    else
-    {
-      backendFormat = info.outputFormat;
+      return false;
     }
 
-    if (shouldUseMemoryPcmSource(info))
+    // Decoder might have been re-opened with a different output format
+    info = decoder->streamInfo();
+
+    if (source = createPcmSource(std::move(decoder), info); source == nullptr)
     {
-      auto const memorySource = std::make_shared<rs::audio::MemoryPcmSource>(std::move(decoder), info);
-      auto const initResult = memorySource->initialize();
-
-      if (!initResult)
-      {
-        _snapshot.statusText = initResult.error().message;
-        return false;
-      }
-
-      source = std::move(memorySource);
-    }
-    else
-    {
-      auto const streamingSource = std::make_shared<rs::audio::StreamingPcmSource>(
-        std::move(decoder),
-        info,
-        [this](rs::Error const& err)
-        {
-          if (_dispatcher)
-          {
-            _dispatcher->dispatch([this, err]() { handleSourceError(err); });
-          }
-          else
-          {
-            handleSourceError(err);
-          }
-        },
-        kPrerollTargetMs,
-        kDecodeHighWatermarkMs);
-
-      auto const initResult = streamingSource->initialize();
-
-      if (!initResult)
-      {
-        _snapshot.statusText = initResult.error().message;
-        return false;
-      }
-
-      source = std::move(streamingSource);
+      return false;
     }
 
     _snapshot.durationMs = info.durationMs;
@@ -612,6 +613,7 @@ namespace rs::audio
     _snapshot.graph = {};
 
     // Add initial Source (Decoder) Node
+    _routeSnapshot.graph.nodes.clear();
     _routeSnapshot.graph.nodes.push_back({.id = "rs-decoder",
                                           .type = AudioNodeType::Decoder,
                                           .name = "File Decoder",
@@ -628,6 +630,7 @@ namespace rs::audio
                                                               .isMuted = false,
                                                               .isLossySource = false});
 
+    _routeSnapshot.graph.links.clear();
     _routeSnapshot.graph.links.push_back(
       rs::audio::AudioLink{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
 

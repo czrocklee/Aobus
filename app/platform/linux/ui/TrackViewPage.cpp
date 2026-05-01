@@ -111,7 +111,8 @@ namespace app::ui
         return nullptr;
       }
 
-      auto* object = Glib::wrap_auto(reinterpret_cast<GObject*>(const_cast<void*>(item)), false);
+      auto* const object = Glib::wrap_auto(
+        static_cast<GObject*>(const_cast<void*>(item)), false); // NOLINT(cppcoreguidelines-pro-type-const-cast)
       return dynamic_cast<TrackRow const*>(object);
     }
 
@@ -133,7 +134,8 @@ namespace app::ui
           return (*compareFn)(*leftRow, *rightRow);
         },
         comparePtr,
-        [](gpointer userData) { delete static_cast<RowCompareFn*>(userData); });
+        [](gpointer userData)
+        { delete static_cast<RowCompareFn*>(userData); }); // NOLINT(cppcoreguidelines-owning-memory)
 
       return Glib::wrap(GTK_SORTER(customSorter), false);
     }
@@ -203,6 +205,7 @@ namespace app::ui
     _selectionModel = Gtk::MultiSelection::create(_sortModel);
 
     setupPresentationControls();
+    setupStatusBar();
 
     setupHeaderFactory();
 
@@ -249,9 +252,11 @@ namespace app::ui
 
     applyPresentationSpec();
     applyColumnLayout();
+    updateFilterUi();
 
-    // Add to box (order: controls, scroll)
+    // Add to box (order: controls, status, scroll)
     append(_controlsBar);
+    append(_statusLabel);
     append(_scrolledWindow);
   }
 
@@ -268,9 +273,28 @@ namespace app::ui
     _controlsBar.set_margin_top(4);
     _controlsBar.set_margin_bottom(4);
 
-    _filterEntry.set_placeholder_text("Filter tracks...");
+    _filterEntry.set_placeholder_text("Quick filter or expression...");
     _filterEntry.set_hexpand(true);
+    _filterEntry.set_icon_from_icon_name("system-search-symbolic", Gtk::Entry::IconPosition::PRIMARY);
+    _filterEntry.set_icon_sensitive(Gtk::Entry::IconPosition::PRIMARY, false);
+    _filterEntry.set_icon_from_icon_name("list-add-symbolic", Gtk::Entry::IconPosition::SECONDARY);
+    _filterEntry.set_icon_activatable(true, Gtk::Entry::IconPosition::SECONDARY);
+    _filterEntry.set_icon_tooltip_text("Create smart list from current filter", Gtk::Entry::IconPosition::SECONDARY);
+    _filterEntry.set_menu_entry_icon_text("Create smart list from current filter", Gtk::Entry::IconPosition::SECONDARY);
     _filterEntry.signal_changed().connect(sigc::mem_fun(*this, &TrackViewPage::onFilterChanged));
+    _filterEntry.signal_icon_press().connect(
+      [this](Gtk::Entry::IconPosition iconPosition)
+      {
+        if (iconPosition != Gtk::Entry::IconPosition::SECONDARY || _adapter.hasFilterError())
+        {
+          return;
+        }
+
+        if (auto const& expression = _adapter.currentSmartFilterExpression(); !expression.empty())
+        {
+          _createSmartListRequested.emit(expression);
+        }
+      });
 
     _groupByLabel.set_text("Group");
     _groupByLabel.set_halign(Gtk::Align::START);
@@ -476,7 +500,7 @@ namespace app::ui
             }
           }
 
-          _columnLayoutModel.setLayout(std::move(layout));
+          _columnLayoutModel.setLayout(layout);
         });
 
       auto* row = Gtk::make_managed<Gtk::ListBoxRow>();
@@ -629,7 +653,7 @@ namespace app::ui
       layout.columns.push_back(state);
     }
 
-    return normalizeTrackColumnLayout(std::move(layout));
+    return normalizeTrackColumnLayout(layout);
   }
 
   void TrackViewPage::updateColumnVisibility()
@@ -659,6 +683,26 @@ namespace app::ui
   {
     auto filterText = _filterEntry.get_text();
     _adapter.setFilter(filterText);
+    updateFilterUi();
+  }
+
+  void TrackViewPage::updateFilterUi()
+  {
+    auto const hasExpressionError = _adapter.filterMode() == TrackFilterMode::Expression && _adapter.hasFilterError();
+
+    if (hasExpressionError)
+    {
+      _filterEntry.add_css_class("error");
+      setStatusMessage("Expression error: " + _adapter.filterErrorMessage());
+    }
+    else
+    {
+      _filterEntry.remove_css_class("error");
+      clearStatusMessage();
+    }
+
+    auto const canCreateSmartList = !_adapter.currentSmartFilterExpression().empty() && !_adapter.hasFilterError();
+    _filterEntry.set_icon_sensitive(Gtk::Entry::IconPosition::SECONDARY, canCreateSmartList);
   }
 
   void TrackViewPage::onSelectionChanged([[maybe_unused]] std::uint32_t position, [[maybe_unused]] std::uint32_t nItems)
@@ -835,6 +879,11 @@ namespace app::ui
   sigc::signal<void(std::vector<TrackViewPage::TrackId>, double, double)>& TrackViewPage::signalTagEditRequested()
   {
     return _tagEditRequested;
+  }
+
+  sigc::signal<void(std::string)>& TrackViewPage::signalCreateSmartListRequested()
+  {
+    return _createSmartListRequested;
   }
 
   void TrackViewPage::showTagPopover(TagPopover& popover, double xPos, double yPos)

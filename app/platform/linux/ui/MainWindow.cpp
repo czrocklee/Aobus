@@ -40,6 +40,19 @@
 namespace app::ui
 {
 
+  namespace
+  {
+    rs::ListId allTracksListId()
+    {
+      return rs::ListId{std::numeric_limits<std::uint32_t>::max()};
+    }
+
+    rs::ListId rootParentId()
+    {
+      return rs::ListId{0};
+    }
+  }
+
   MainWindow::MainWindow()
     : _librarySession{nullptr}, _coverArtWidget{nullptr}
   {
@@ -59,7 +72,7 @@ namespace app::ui
       *this,
       TagEditController::Callbacks{.onStatusMessage = [this](std::string const& msg) { showStatusMessage(msg); },
                                    .onTagsMutated =
-                                     [this]()
+                                     []()
                                    {
                                      // Additional invalidation/update logic if needed
                                    }});
@@ -76,26 +89,44 @@ namespace app::ui
           onTrackSelectionChanged();
         },
         .onContextMenuRequested =
-          [this](TrackViewPage& page, double x, double y)
+          [this](TrackViewPage& page, double posX, double posY)
         {
-          auto listId = page.getListId();
-          auto* ctx = _trackPageGraph->find(listId);
-          TrackSelectionContext selection{.listId = listId,
-                                          .selectedIds = page.getSelectedTrackIds(),
-                                          .membershipList = ctx ? ctx->membershipList.get() : nullptr};
-          _tagEditController->showTrackContextMenu(page, selection, x, y);
+          auto const listId = page.getListId();
+          auto* const ctx = _trackPageGraph->find(listId);
+          TrackSelectionContext const selection{.listId = listId,
+                                                .selectedIds = page.getSelectedTrackIds(),
+                                                .membershipList = ctx != nullptr ? ctx->membershipList.get() : nullptr};
+          _tagEditController->showTrackContextMenu(page, selection, posX, posY);
         },
         .onTagEditRequested =
-          [this](TrackViewPage& page, std::vector<rs::TrackId> const& ids, double x, double y)
+          [this](TrackViewPage& page, std::vector<rs::TrackId> const& ids, double posX, double posY)
         {
-          auto listId = page.getListId();
-          auto* ctx = _trackPageGraph->find(listId);
-          TrackSelectionContext selection{
-            .listId = listId, .selectedIds = ids, .membershipList = ctx ? ctx->membershipList.get() : nullptr};
-          _tagEditController->showTagEditor(page, selection, x, y);
+          auto const listId = page.getListId();
+          auto* const ctx = _trackPageGraph->find(listId);
+          TrackSelectionContext const selection{.listId = listId,
+                                                .selectedIds = ids,
+                                                .membershipList = ctx != nullptr ? ctx->membershipList.get() : nullptr};
+          _tagEditController->showTagEditor(page, selection, posX, posY);
         },
         .onTrackActivated = [this](TrackViewPage& page, rs::TrackId id)
-        { _playbackCoordinator->startPlaybackFromVisiblePage(page, id); }});
+        { _playbackCoordinator->startPlaybackFromVisiblePage(page, id); },
+        .onCreateSmartListRequested =
+          [this](TrackViewPage& page, std::string const& expression)
+        {
+          if (_listSidebarController == nullptr)
+          {
+            return;
+          }
+
+          auto parentListId = page.getListId();
+
+          if (parentListId == allTracksListId())
+          {
+            parentListId = rootParentId();
+          }
+
+          _listSidebarController->createSmartListFromExpression(parentListId, expression);
+        }});
 
     // Initialize playback coordinator
     _playbackCoordinator = std::make_unique<PlaybackCoordinator>(
@@ -168,9 +199,10 @@ namespace app::ui
 
   void MainWindow::showPlaybackMessage(std::string const& message, std::optional<std::chrono::seconds> timeout)
   {
-    if (_statusBar)
+    if (_statusBar != nullptr)
     {
-      _statusBar->showMessage(message, timeout.value_or(std::chrono::seconds{5}));
+      constexpr auto kDefaultStatusTimeout = std::chrono::seconds{5};
+      _statusBar->showMessage(message, timeout.value_or(kDefaultStatusTimeout));
     }
   }
 
@@ -191,12 +223,12 @@ namespace app::ui
 
     rebuildListPages(txn);
 
-    auto const allTracksListId = rs::ListId{std::numeric_limits<std::uint32_t>::max()};
-    _trackPageGraph->show(allTracksListId);
+    auto const activeAllTracksListId = allTracksListId();
+    _trackPageGraph->show(activeAllTracksListId);
 
     if (_listSidebarController)
     {
-      _listSidebarController->select(allTracksListId);
+      _listSidebarController->select(activeAllTracksListId);
     }
 
     saveSession();
@@ -490,7 +522,8 @@ namespace app::ui
   void MainWindow::onOutputChanged(rs::audio::BackendKind kind, std::string const& deviceId)
   {
     auto* controller = _playbackCoordinator->playbackController();
-    if (!controller)
+
+    if (controller == nullptr)
     {
       return;
     }

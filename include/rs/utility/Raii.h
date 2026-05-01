@@ -27,5 +27,4 @@ namespace rs::utility
     return std::unique_ptr<T, Deleter>{p};
   }
 
-
 } // namespace rs::utility

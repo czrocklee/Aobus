@@ -43,6 +43,11 @@ namespace rs::utility
       return {static_cast<std::byte*>(data), size};
     }
 
+    inline std::span<std::byte> view(std::byte* data, std::size_t size) noexcept
+    {
+      return {data, size};
+    }
+
     template<typename T>
     inline std::span<std::byte const> view(T const* ptr, std::size_t count = 1) noexcept
     {
@@ -97,12 +102,48 @@ namespace rs::utility
     }
 
     template<typename T>
+    inline T* viewMutable(std::span<std::byte> span) noexcept
+    {
+      detail::requireTrivialLayout<T>();
+      gsl_Expects(span.size() >= sizeof(T));
+      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
+      return reinterpret_cast<T*>(span.data());
+    }
+
+    template<typename T>
+    inline T const* asPtr(std::span<std::byte const> span) noexcept
+    {
+      detail::requireTrivialLayout<T>();
+      gsl_Expects(span.size() >= sizeof(T));
+      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
+      return reinterpret_cast<T const*>(span.data());
+    }
+
+    template<typename T>
+    inline T* asMutablePtr(std::span<std::byte> span) noexcept
+    {
+      detail::requireTrivialLayout<T>();
+      gsl_Expects(span.size() >= sizeof(T));
+      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
+      return reinterpret_cast<T*>(span.data());
+    }
+
+    template<typename T>
     inline std::span<T const> viewArray(std::span<std::byte const> span) noexcept
     {
       detail::requireTrivialLayout<T>();
       gsl_Expects(span.size() % sizeof(T) == 0);
       gsl_Expects(detail::isAligned(span.data(), alignof(T)));
       return {reinterpret_cast<T const*>(span.data()), span.size() / sizeof(T)};
+    }
+
+    template<typename T>
+    inline std::span<T> viewArrayMutable(std::span<std::byte> span) noexcept
+    {
+      detail::requireTrivialLayout<T>();
+      gsl_Expects(span.size() % sizeof(T) == 0);
+      gsl_Expects(detail::isAligned(span.data(), alignof(T)));
+      return {reinterpret_cast<T*>(span.data()), span.size() / sizeof(T)};
     }
 
     template<typename T, typename Base>

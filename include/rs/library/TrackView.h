@@ -248,7 +248,7 @@ namespace rs::library
     std::span<std::byte const> _coldData;
   };
 
-  class TrackView::CustomProxy::Iterator
+  class TrackView::CustomProxy::Iterator final
   {
   public:
     // Standard iterator traits

@@ -61,6 +61,11 @@ namespace app::ui
 
     Gtk::Widget* createOutputWidget(Glib::RefPtr<Glib::Object> const& item);
 
+    void updateOutputModel(rs::audio::PlaybackSnapshot const& snapshot);
+    void updateOutputLabel(rs::audio::PlaybackSnapshot const& snapshot);
+    void updatePlaybackStatusLabels(rs::audio::PlaybackSnapshot const& snapshot);
+    void updatePlaybackTooltip(rs::audio::PlaybackSnapshot const& snapshot);
+
     // Far Right: Status message
     Gtk::Label _statusLabel;
 

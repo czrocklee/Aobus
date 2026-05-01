@@ -46,9 +46,9 @@ namespace app::ui
     void importLibrary(); // YAML import
     void exportLibrary(); // YAML export
 
-    void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files);
+    void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files) const;
 
-    void openMusicLibrary(std::filesystem::path const& path);
+    void openMusicLibrary(std::filesystem::path const& path) const;
     void importFilesFromPath(std::filesystem::path const& path);
 
   private:
@@ -58,7 +58,11 @@ namespace app::ui
     void executeImportTask(std::vector<std::filesystem::path> const& files,
                            std::shared_ptr<std::unique_ptr<LibrarySession>> pendingSession = nullptr);
     void onImportProgress(std::string const& filePath, int index);
-    void onImportFinished();
+    void onImportFinished() const;
+
+    void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
+    void runLibraryImportTask(std::filesystem::path const& path, LibrarySession* session);
+    void reportImportResult(bool success, std::string const& errorText);
 
     void onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,

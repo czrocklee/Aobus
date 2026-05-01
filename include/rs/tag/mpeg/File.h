@@ -7,11 +7,16 @@
 
 namespace rs::tag::mpeg
 {
+  class FrameView;
+
   class File : public rs::tag::File
   {
   public:
     using rs::tag::File::File;
 
     rs::library::TrackBuilder loadTrack() const override;
+
+  private:
+    std::uint32_t calculateDuration(FrameView const& frame, bool hasId3v1) const;
   };
 }

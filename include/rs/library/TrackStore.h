@@ -24,7 +24,7 @@ namespace rs::library
    * - tracks_cold: TrackColdHeader + custom KV + uri (cold fields)
    * - Key: uint32_t track ID (same ID links hot and cold)
    */
-  class TrackStore
+  class TrackStore final
   {
   public:
     class Reader;
@@ -43,7 +43,7 @@ namespace rs::library
   /**
    * TrackStore::Reader - Read-only access to tracks.
    */
-  class TrackStore::Reader
+  class TrackStore::Reader final
   {
   public:
     class Iterator;
@@ -78,7 +78,7 @@ namespace rs::library
   /**
    * TrackStore::Reader::Iterator - Iterator over tracks.
    */
-  class TrackStore::Reader::Iterator
+  class TrackStore::Reader::Iterator final
   {
   public:
     using value_type = std::pair<TrackId, TrackView>;
@@ -87,8 +87,9 @@ namespace rs::library
     Iterator(Iterator const&) = default;
     // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
     ~Iterator() = default;
-    Iterator& operator=(Iterator const&) = default;
     Iterator(Iterator&&) = default;
+
+    Iterator& operator=(Iterator const&) = default;
     Iterator& operator=(Iterator&&) = default;
 
     bool operator==(Iterator const& other) const;
@@ -109,9 +110,14 @@ namespace rs::library
   /**
    * TrackStore::Writer - Write access to tracks.
    */
-  class TrackStore::Writer
+  class TrackStore::Writer final
   {
   public:
+    /**
+     * Get track by ID with specified load mode.
+     */
+    std::optional<TrackView> get(TrackId id, Reader::LoadMode mode) const;
+
     /**
      * Create a new track with hot and cold data.
      * @param hotData TrackHotHeader + payload
@@ -168,11 +174,6 @@ namespace rs::library
      * Clear all tracks.
      */
     void clear();
-
-    /**
-     * Get track by ID with specified load mode.
-     */
-    std::optional<TrackView> get(TrackId id, Reader::LoadMode mode) const;
 
   private:
     explicit Writer(lmdb::Database::Writer&& hotWriter, lmdb::Database::Writer&& coldWriter);

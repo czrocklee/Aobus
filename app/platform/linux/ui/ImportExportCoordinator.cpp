@@ -83,7 +83,11 @@ namespace app::ui
 
         if (files.empty())
         {
-          if (_callbacks.onStatusMessage) _callbacks.onStatusMessage("No music files found");
+          if (_callbacks.onStatusMessage)
+          {
+            _callbacks.onStatusMessage("No music files found");
+          }
+
           return;
         }
 
@@ -139,10 +143,10 @@ namespace app::ui
             return false;
           });
       },
-      [this, dialogPtr]()
+      [dialogPtr]()
       {
         Glib::MainContext::get_default()->invoke(
-          [this, dialogPtr]()
+          [dialogPtr]()
           {
             dialogPtr->ready();
             return false;
@@ -203,7 +207,7 @@ namespace app::ui
   {
   }
 
-  void ImportExportCoordinator::onImportFinished()
+  void ImportExportCoordinator::onImportFinished() const
   {
     if (_callbacks.onStatusMessage)
     {
@@ -212,7 +216,7 @@ namespace app::ui
   }
 
   void ImportExportCoordinator::scanDirectory(std::filesystem::path const& dir,
-                                              std::vector<std::filesystem::path>& files)
+                                              std::vector<std::filesystem::path>& files) const
   {
     try
     {
@@ -221,7 +225,7 @@ namespace app::ui
         if (entry.is_regular_file())
         {
           auto ext = entry.path().extension().string();
-          std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return std::tolower(c); });
+          std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return std::tolower(ch); });
           if (ext == ".flac" || ext == ".m4a" || ext == ".mp3" || ext == ".wav")
           {
             files.push_back(entry.path());
@@ -235,7 +239,7 @@ namespace app::ui
     }
   }
 
-  void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path)
+  void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path) const
   {
     try
     {
@@ -433,65 +437,78 @@ namespace app::ui
 
     fileDialog->open(_parent,
                      [this, fileDialog](Glib::RefPtr<Gio::AsyncResult>& result)
-                     {
-                       try
-                       {
-                         if (auto const file = fileDialog->open_finish(result); file)
-                         {
-                           auto const path = std::filesystem::path{file->get_path()};
-                           auto* session = currentSession();
+                     { onLibraryImportSelected(result, fileDialog); });
+  }
 
-                           std::thread(
-                             [this, session, path]()
-                             {
-                               rs::setCurrentThreadName("LibraryImport");
+  void ImportExportCoordinator::onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result,
+                                                        Glib::RefPtr<Gtk::FileDialog> const& dialog)
+  {
+    try
+    {
+      if (auto const file = dialog->open_finish(result); file)
+      {
+        auto const path = std::filesystem::path{file->get_path()};
+        auto* session = currentSession();
 
-                               try
-                               {
-                                 auto importer = rs::library::LibraryImporter{*session->musicLibrary};
-                                 importer.importFromYaml(path);
+        if (session == nullptr)
+        {
+          return;
+        }
 
-                                 Glib::MainContext::get_default()->invoke(
-                                   [this]()
-                                   {
-                                     if (_callbacks.onLibraryDataMutated)
-                                     {
-                                       _callbacks.onLibraryDataMutated();
-                                     }
+        std::thread([this, path, session]() { runLibraryImportTask(path, session); }).detach();
+      }
+    }
+    catch (Glib::Error const& e)
+    {
+      APP_LOG_ERROR("Error selecting import file: {}", e.what());
+    }
+  }
 
-                                     if (_callbacks.onStatusMessage)
-                                     {
-                                       _callbacks.onStatusMessage("Library imported successfully");
-                                     }
+  void ImportExportCoordinator::runLibraryImportTask(std::filesystem::path const& path, LibrarySession* session)
+  {
+    rs::setCurrentThreadName("LibraryImport");
 
-                                     return false;
-                                   });
-                               }
-                               catch (std::exception const& e)
-                               {
-                                 auto const errorText = std::string{e.what()};
-                                 Glib::MainContext::get_default()->invoke(
-                                   [this, errorText]()
-                                   {
-                                     APP_LOG_ERROR("Import failed: {}", errorText);
+    try
+    {
+      auto importer = rs::library::LibraryImporter{*session->musicLibrary};
+      importer.importFromYaml(path);
+      reportImportResult(true, "");
+    }
+    catch (std::exception const& e)
+    {
+      reportImportResult(false, e.what());
+    }
+  }
 
-                                     if (_callbacks.onStatusMessage)
-                                     {
-                                       _callbacks.onStatusMessage("Import failed: " + errorText);
-                                     }
+  void ImportExportCoordinator::reportImportResult(bool success, std::string const& errorText)
+  {
+    Glib::MainContext::get_default()->invoke(
+      [this, success, errorText]()
+      {
+        if (success)
+        {
+          if (_callbacks.onLibraryDataMutated)
+          {
+            _callbacks.onLibraryDataMutated();
+          }
 
-                                     return false;
-                                   });
-                               }
-                             })
-                             .detach();
-                         }
-                       }
-                       catch (Glib::Error const& e)
-                       {
-                         APP_LOG_ERROR("Error selecting import file: {}", e.what());
-                       }
-                     });
+          if (_callbacks.onStatusMessage)
+          {
+            _callbacks.onStatusMessage("Library imported successfully");
+          }
+        }
+        else
+        {
+          APP_LOG_ERROR("Import failed: {}", errorText);
+
+          if (_callbacks.onStatusMessage)
+          {
+            _callbacks.onStatusMessage("Import failed: " + errorText);
+          }
+        }
+
+        return false;
+      });
   }
 
 } // namespace app::ui
