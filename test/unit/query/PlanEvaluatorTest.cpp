@@ -95,9 +95,8 @@ namespace
       _coldData = _builder.serializeCold(wtxn, *_dict, *_resources);
 
       // Fix up the header with specific IDs
-      // Note: we serialize then modify, so const_cast is safe
-      auto* header =
-        const_cast<rs::library::TrackHotHeader*>(rs::utility::layout::view<rs::library::TrackHotHeader>(_hotData));
+      // Note: we serialize then modify, so const_cast is no longer needed with asMutablePtr
+      auto* header = rs::utility::layout::asMutablePtr<rs::library::TrackHotHeader>(_hotData);
       header->artistId = DictionaryId{artistId};
       header->albumId = DictionaryId{albumId};
       header->genreId = DictionaryId{genreId};

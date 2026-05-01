@@ -10,10 +10,10 @@ namespace app::ui
     auto session = std::make_unique<LibrarySession>();
 
     session->musicLibrary = std::make_unique<rs::library::MusicLibrary>(rootPath.string());
-    
+
     session->rowDataProvider = std::make_unique<TrackRowDataProvider>(*session->musicLibrary);
     session->rowDataProvider->loadAll();
-    
+
     session->allTrackIds = std::make_unique<rs::model::AllTrackIdsList>(session->musicLibrary->tracks());
     session->smartListEngine = std::make_unique<rs::model::SmartListEngine>(*session->musicLibrary);
 

@@ -331,7 +331,7 @@ namespace app::ui
 
   std::optional<TrackColumn> trackColumnFromId(std::string_view id)
   {
-    auto const it = std::ranges::find(kTrackColumnDefinitions, id, &TrackColumnDefinition::id);
+    auto const* const it = std::ranges::find(kTrackColumnDefinitions, id, &TrackColumnDefinition::id);
 
     if (it == kTrackColumnDefinitions.end())
     {

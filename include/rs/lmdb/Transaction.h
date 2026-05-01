@@ -37,7 +37,7 @@ namespace rs::lmdb
   };
 
   // Read-write transaction (inherits from ReadTransaction for read capabilities)
-  class WriteTransaction : public ReadTransaction
+  class WriteTransaction final : public ReadTransaction
   {
   public:
     WriteTransaction(Environment& env);

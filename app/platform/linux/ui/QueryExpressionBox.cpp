@@ -116,6 +116,7 @@ namespace app::ui
       }
 
       auto const trigger = text[static_cast<std::size_t>(tokenStart - 1)];
+
       if (trigger != '$' && trigger != '@' && trigger != '#' && trigger != '%')
       {
         return std::nullopt;

@@ -36,7 +36,7 @@ namespace app::ui
     Glib::ustring getFilter() const { return _filter; }
 
     static Glib::RefPtr<ListRow> create(ListId id,
-                                        ListId sourceListId,
+                                        ListId parentId,
                                         std::int32_t depth,
                                         bool smart,
                                         Glib::ustring const& name,

@@ -40,29 +40,22 @@ namespace app::ui
     ~TagEditController();
 
     void setLibrarySession(LibrarySession* session);
-    
+
     // Add to action group for menu access
     void addActionsTo(Gio::ActionMap& actionMap);
 
-    void showTrackContextMenu(TrackViewPage& page,
-                              TrackSelectionContext const& selection,
-                              double x,
-                              double y);
+    void showTrackContextMenu(TrackViewPage& page, TrackSelectionContext const& selection, double x, double y);
 
-    void showTagEditor(TrackViewPage& page,
-                       TrackSelectionContext const& selection,
-                       double x,
-                       double y);
+    void showTagEditor(TrackViewPage& page, TrackSelectionContext const& selection, double x, double y);
 
   private:
     void setupActions();
-    
+
     void addTagToCurrentSelection(std::string const& tag);
     void removeTagFromCurrentSelection(std::string const& tag);
     void applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
                                           std::vector<std::string> const& tagsToRemove);
 
-    Gtk::Window& _parent;
     Callbacks _callbacks;
     LibrarySession* _currentSession = nullptr;
 

@@ -38,7 +38,7 @@ if(CLANG_TIDY_EXECUTABLE)
   )
 
   set(_RS_CLANG_TIDY_STRICT_CONFIG
-    "{Checks: '-*,readability-identifier-length,readability-magic-numbers,readability-qualified-auto', CheckOptions: [{key: 'readability-identifier-length.MinimumVariableNameLength', value: 2}, {key: 'readability-identifier-length.MinimumParameterNameLength', value: 2}, {key: 'readability-identifier-length.IgnoredBindingNames', value: '^[_]$'}, {key: 'readability-magic-numbers.IgnorePowersOf2IntegerValues', value: true}, {key: 'readability-magic-numbers.IgnoredIntegerValues', value: '24;1000;1000U;60;100'}, {key: 'readability-qualified-auto.AllowedTypes', value: 'std::array<.*>::(const_)?iterator;std::string_view::(const_)?iterator;.*::iterator;.*Iterator'}]}"
+    "{Checks: '-*,readability-identifier-length,readability-magic-numbers,readability-qualified-auto,readability-function-cognitive-complexity', CheckOptions: [{key: 'readability-identifier-length.MinimumVariableNameLength', value: 2}, {key: 'readability-identifier-length.MinimumParameterNameLength', value: 2}, {key: 'readability-identifier-length.IgnoredBindingNames', value: '^[_]$'}, {key: 'readability-magic-numbers.IgnorePowersOf2IntegerValues', value: true}, {key: 'readability-magic-numbers.IgnoredIntegerValues', value: '24;1000;1000U;60;100'}, {key: 'readability-qualified-auto.AllowedTypes', value: 'std::array<.*>::(const_)?iterator;std::string_view::(const_)?iterator;.*::iterator;.*Iterator'}, {key: 'readability-function-cognitive-complexity.Threshold', value: 30}]}"
   )
 
   # Relaxed checks (test)

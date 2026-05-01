@@ -28,8 +28,9 @@ namespace rs::tag::mp4
     std::span<std::byte const> atomData(AtomView const& view)
     {
       auto const& layout = view.layout<DataAtomLayout>();
-      auto const* data = reinterpret_cast<std::byte const*>(&layout + 1);
+      auto const* const data = utility::layout::viewAt<std::byte>(&layout, sizeof(DataAtomLayout));
       auto const size = layout.common.length.value() - sizeof(DataAtomLayout);
+
       return utility::bytes::view(data, size);
     }
 
@@ -105,7 +106,7 @@ namespace rs::tag::mp4
     {
       // Get mdhd for sample rate and duration
 
-      if (auto const* mdhdNode = root.find(kMdhdPath); mdhdNode != nullptr)
+      if (auto const* const mdhdNode = root.find(kMdhdPath); mdhdNode != nullptr)
       {
         auto const& view = rs::utility::unsafeDowncast<AtomView const>(*mdhdNode);
         auto const& layout = view.layout<MdhdAtomLayout>();
@@ -135,19 +136,20 @@ namespace rs::tag::mp4
 
       // Get stsd for channels and bit depth
 
-      if (auto const* stsdNode = root.find(kStsdPath); stsdNode != nullptr)
+      if (auto const* const stsdNode = root.find(kStsdPath); stsdNode != nullptr)
       {
         auto const& view = rs::utility::unsafeDowncast<AtomView const>(*stsdNode);
-        auto const& stsdLayout = view.layout<AtomLayout>();
 
         // stsd contains a version byte (1), flags (3), and then entry count (4)
         // Entries start after 8 bytes of stsd content
         constexpr std::size_t kStsdContentHeaderSize = 8;
-        auto const* data =
-          reinterpret_cast<std::uint8_t const*>(&stsdLayout) + sizeof(AtomLayout) + kStsdContentHeaderSize;
+        auto const* const stsdBase = utility::layout::asPtr<std::byte>(view.bytes());
+        auto const* const data = stsdBase + sizeof(AtomLayout) + kStsdContentHeaderSize;
 
         // Now data points to the first sample entry (includes length + type)
-        auto const& audioLayout = *reinterpret_cast<AudioSampleEntryLayout const*>(data);
+        auto const& audioLayout =
+          *utility::layout::view<AudioSampleEntryLayout>(utility::bytes::view(data, sizeof(AudioSampleEntryLayout)));
+
         builder.property().channels(audioLayout.channelCount.value()).bitDepth(audioLayout.sampleSize.value());
 
         // Sample rate is a 16.16 fixed point, extract integer part
@@ -166,7 +168,7 @@ namespace rs::tag::mp4
   {
     RootAtom root =
       rs::media::mp4::fromBuffer(utility::bytes::view(_mappedRegion.get_address(), _mappedRegion.get_size()));
-    Atom const* ilstNode = root.find(kIlstPath);
+    Atom const* const ilstNode = root.find(kIlstPath);
 
     clearOwnedStrings();
     auto builder = rs::library::TrackBuilder::createNew();
@@ -177,14 +179,15 @@ namespace rs::tag::mp4
         [&](Atom const& atom)
         {
           auto const& view = rs::utility::unsafeDowncast<AtomView const>(atom);
-          std::string_view type = atom.type();
+          std::string_view const type = atom.type();
 
           if (type == "----")
           {
             return true;
           }
 
-          if (auto const* entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size()); entry != nullptr)
+          if (auto const* const entry = Mp4AtomDispatchTable::lookupAtomField(type.data(), type.size());
+              entry != nullptr)
           {
             entry->handler(builder, view);
             return true;

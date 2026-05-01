@@ -8,15 +8,17 @@
 #include <alac/ALACDecoder.h>
 
 #include <rs/media/mp4/Demuxer.h>
+#include <rs/utility/ByteView.h>
 #include <rs/utility/MappedFile.h>
 
 namespace rs::audio
 {
   using namespace rs::media::mp4;
+  using namespace rs::utility;
 
   namespace
   {
-    constexpr std::uint32_t kSignExtensionMask = 0xFF000000U;
+    constexpr std::int32_t kSignExtensionMask = ~0x00FFFFFF;
     constexpr std::uint8_t kBytesPer24BitSample = 3;
 
     std::uint32_t bytesPerSample(std::uint8_t bitDepth) noexcept
@@ -80,9 +82,8 @@ namespace rs::audio
     }
 
     auto const cookie = _impl->demuxer->magicCookie();
-    auto const initStatus =
-      _impl->decoder->Init(const_cast<std::uint8_t*>(reinterpret_cast<std::uint8_t const*>(cookie.data())),
-                           static_cast<std::uint32_t>(cookie.size()));
+    auto const initStatus = _impl->decoder->Init(
+      const_cast<std::uint8_t*>(layout::asPtr<std::uint8_t>(cookie)), static_cast<std::uint32_t>(cookie.size()));
 
     if (initStatus != ALAC_noErr)
     {
@@ -190,12 +191,11 @@ namespace rs::audio
     {
       std::vector<std::byte> sourcePcm(static_cast<std::size_t>(maxFrames) * sourceBytesPerFrame);
       auto bitBuffer = BitBuffer{};
-      BitBufferInit(&bitBuffer,
-                    const_cast<uint8_t*>(reinterpret_cast<uint8_t const*>(packet.data())),
-                    static_cast<uint32_t>(packet.size()));
+      BitBufferInit(
+        &bitBuffer, const_cast<uint8_t*>(layout::asPtr<std::uint8_t>(packet)), static_cast<uint32_t>(packet.size()));
 
       auto const status = _impl->decoder->Decode(
-        &bitBuffer, reinterpret_cast<uint8_t*>(sourcePcm.data()), maxFrames, channels, &numFrames);
+        &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{sourcePcm}), maxFrames, channels, &numFrames);
       if (status != 0)
       {
         return rs::makeError(rs::Error::Code::DecodeFailed, "ALAC decode failed");
@@ -205,8 +205,8 @@ namespace rs::audio
 
       if (sourceBps == 24 && targetBps == 32)
       {
-        auto* src = reinterpret_cast<std::uint8_t*>(sourcePcm.data());
-        auto* dst = reinterpret_cast<std::int32_t*>(targetPcm.data());
+        auto* src = layout::asPtr<std::uint8_t>(std::span{sourcePcm});
+        auto* dst = layout::asMutablePtr<std::int32_t>(std::span{targetPcm});
         for (std::uint32_t i = 0; i < numFrames * channels; ++i)
         {
           std::int32_t val = static_cast<std::int32_t>(src[0]) | (static_cast<std::int32_t>(src[1]) << 8) |
@@ -233,35 +233,32 @@ namespace rs::audio
       block.endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount());
       return block;
     }
-    else
+
+    // Direct decode
+    std::vector<std::byte> decodedPcm(static_cast<std::size_t>(maxFrames) * targetBytesPerFrame);
+
+    auto bitBuffer = BitBuffer{};
+    BitBufferInit(
+      &bitBuffer, const_cast<uint8_t*>(layout::asPtr<std::uint8_t>(packet)), static_cast<uint32_t>(packet.size()));
+
+    auto const status = _impl->decoder->Decode(
+      &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{decodedPcm}), maxFrames, channels, &numFrames);
+
+    if (status != 0)
     {
-      // Direct decode
-      std::vector<std::byte> decodedPcm(static_cast<std::size_t>(maxFrames) * targetBytesPerFrame);
-
-      auto bitBuffer = BitBuffer{};
-      BitBufferInit(&bitBuffer,
-                    const_cast<uint8_t*>(reinterpret_cast<uint8_t const*>(packet.data())),
-                    static_cast<uint32_t>(packet.size()));
-
-      auto const status = _impl->decoder->Decode(
-        &bitBuffer, reinterpret_cast<uint8_t*>(decodedPcm.data()), maxFrames, channels, &numFrames);
-
-      if (status != 0)
-      {
-        return rs::makeError(rs::Error::Code::DecodeFailed, "ALAC decode failed");
-      }
-
-      auto block = PcmBlock{};
-      decodedPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
-      block.bytes = std::move(decodedPcm);
-      block.frames = numFrames;
-      block.bitDepth = targetBps;
-
-      _impl->currentSampleIndex++;
-      block.endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount());
-
-      return block;
+      return rs::makeError(rs::Error::Code::DecodeFailed, "ALAC decode failed");
     }
+
+    auto block = PcmBlock{};
+    decodedPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
+    block.bytes = std::move(decodedPcm);
+    block.frames = numFrames;
+    block.bitDepth = targetBps;
+
+    _impl->currentSampleIndex++;
+    block.endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount());
+
+    return block;
   }
 
   DecodedStreamInfo AlacDecoderSession::streamInfo() const

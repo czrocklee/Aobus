@@ -50,7 +50,8 @@ namespace app::ui
     std::string formatStream(rs::audio::AudioFormat const& format)
     {
       std::stringstream ss;
-      ss << (format.sampleRate / 1000.0) << " kHz · " << static_cast<int>(format.bitDepth)
+      constexpr auto kKhzMultiplier = 1000.0;
+      ss << (format.sampleRate / kKhzMultiplier) << " kHz · " << static_cast<int>(format.bitDepth)
          << "-bit · "; // NOLINT(readability-magic-numbers)
 
       if (format.channels == 1)
@@ -193,6 +194,21 @@ namespace app::ui
     _outputListBox.set_show_separators(true); // Restore standard separators
     _outputListBox.add_css_class("rich-list");
     _outputListBox.bind_model(_outputStore, sigc::mem_fun(*this, &StatusBar::createOutputWidget));
+
+    _outputListBox.signal_row_activated().connect(
+      [this](Gtk::ListBoxRow* row)
+      {
+        auto const index = row->get_index();
+        if (index >= 0 && static_cast<std::size_t>(index) < _outputStore->get_n_items())
+        {
+          auto item = _outputStore->get_item(index);
+          if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
+          {
+            _outputChanged.emit(deviceItem->kind, deviceItem->id);
+            _outputPopover.popdown();
+          }
+        }
+      });
 
     auto* scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
     scrolled->set_child(_outputListBox);
@@ -414,80 +430,25 @@ namespace app::ui
     return nullptr;
   }
 
-  void StatusBar::setPlaybackDetails(rs::audio::PlaybackSnapshot const& snapshot)
+  void StatusBar::updateOutputModel(rs::audio::PlaybackSnapshot const& snapshot)
   {
-    // Skip update if nothing visible has changed
-    if (snapshot.state == _lastPlaybackState.state && snapshot.backend == _lastPlaybackState.backend &&
-        snapshot.trackTitle == _lastPlaybackState.title && snapshot.trackArtist == _lastPlaybackState.artist &&
-        snapshot.underrunCount == _lastPlaybackState.underrunCount && snapshot.quality == _lastPlaybackState.quality &&
-        snapshot.qualityTooltip == _lastPlaybackState.qualityTooltip && snapshot.graph == _lastPlaybackState.graph &&
-        snapshot.currentDeviceId == _lastPlaybackState.currentDeviceId &&
-        snapshot.availableBackends == _lastPlaybackState.availableBackends)
+    _outputStore->remove_all();
+
+    for (auto const& backend : snapshot.availableBackends)
     {
-      return;
-    }
+      _outputStore->append(BackendItem::create(backend.kind, backend.displayName));
 
-    // Update Output Button Popover only if backends or current device changed
-    bool const backendsChanged = (snapshot.availableBackends != _lastPlaybackState.availableBackends);
-    bool const deviceChanged = (snapshot.currentDeviceId != _lastPlaybackState.currentDeviceId);
-    bool const backendKindChanged = (snapshot.backend != _lastPlaybackState.backend);
-
-    // Update state before building widgets so createOutputWidget sees the new selection
-    _lastPlaybackState = {.state = snapshot.state,
-                          .backend = snapshot.backend,
-                          .title = snapshot.trackTitle,
-                          .artist = snapshot.trackArtist,
-                          .underrunCount = snapshot.underrunCount,
-                          .quality = snapshot.quality,
-                          .qualityTooltip = snapshot.qualityTooltip,
-                          .graph = snapshot.graph,
-                          .currentDeviceId = snapshot.currentDeviceId,
-                          .availableBackends = snapshot.availableBackends};
-
-    if (backendsChanged || deviceChanged || backendKindChanged)
-    {
-      APP_LOG_INFO("StatusBar: Rebuilding output model. backendsChanged={} deviceChanged={} backendKindChanged={}",
-                   backendsChanged,
-                   deviceChanged,
-                   backendKindChanged);
-
-      _outputStore->remove_all();
-
-      for (auto const& backend : snapshot.availableBackends)
+      for (auto const& device : backend.devices)
       {
-        _outputStore->append(BackendItem::create(backend.kind, backend.displayName));
-
-        for (auto const& device : backend.devices)
-        {
-          auto item = DeviceItem::create(backend.kind, device);
-          item->active = (backend.kind == snapshot.backend && device.id == snapshot.currentDeviceId);
-          _outputStore->append(item);
-        }
-      }
-
-      // Handle selection on the ListBox level (needs to be done once)
-      static bool signalConnected = false;
-      if (!signalConnected)
-      {
-        _outputListBox.signal_row_activated().connect(
-          [this](Gtk::ListBoxRow* row)
-          {
-            auto const index = row->get_index();
-            if (index >= 0 && static_cast<std::size_t>(index) < _outputStore->get_n_items())
-            {
-              auto item = _outputStore->get_item(index);
-              if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
-              {
-                _outputChanged.emit(deviceItem->kind, deviceItem->id);
-                _outputPopover.popdown();
-              }
-            }
-          });
-        signalConnected = true;
+        auto item = DeviceItem::create(backend.kind, device);
+        item->active = (backend.kind == snapshot.backend && device.id == snapshot.currentDeviceId);
+        _outputStore->append(item);
       }
     }
+  }
 
-    // Update Button Label to current device
+  void StatusBar::updateOutputLabel(rs::audio::PlaybackSnapshot const& snapshot)
+  {
     bool found = false;
     for (auto const& backend : snapshot.availableBackends)
     {
@@ -512,12 +473,16 @@ namespace app::ui
         break;
       }
     }
+
     if (!found)
     {
       _outputButton.set_label("Output");
       _outputButton.set_tooltip_text("Click to change audio backend or device");
     }
+  }
 
+  void StatusBar::updatePlaybackStatusLabels(rs::audio::PlaybackSnapshot const& snapshot)
+  {
     if (snapshot.state == rs::audio::TransportState::Idle)
     {
       _nowPlayingLabel.set_text("");
@@ -568,6 +533,27 @@ namespace app::ui
 
     _streamInfoLabel.set_text(ss.str());
 
+    updatePlaybackTooltip(snapshot);
+
+    // Update status icon
+    clearSinkStatusClasses(_sinkStatusIcon);
+    _sinkStatusIcon.set_visible(true);
+
+    using AudioQuality = rs::audio::AudioQuality;
+    switch (snapshot.quality)
+    {
+      case AudioQuality::BitwisePerfect: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
+      case AudioQuality::LosslessPadded:
+      case AudioQuality::LosslessFloat: _sinkStatusIcon.add_css_class("sink-status-lossless"); break;
+      case AudioQuality::LinearIntervention: _sinkStatusIcon.add_css_class("sink-status-intervention"); break;
+      case AudioQuality::LossySource: _sinkStatusIcon.add_css_class("sink-status-lossy"); break;
+      case AudioQuality::Clipped: _sinkStatusIcon.add_css_class("sink-status-clipped"); break;
+      case AudioQuality::Unknown: _sinkStatusIcon.set_visible(false); break;
+    }
+  }
+
+  void StatusBar::updatePlaybackTooltip(rs::audio::PlaybackSnapshot const& snapshot)
+  {
     // Tooltip: Build dynamic representation of the path from the graph (TOTAL ORDER)
     std::stringstream tt;
     tt << "Audio Pipeline:\n";
@@ -637,22 +623,47 @@ namespace app::ui
       _sinkStatusIcon.set_tooltip_text(finalTooltip);
       _lastTooltipText = finalTooltip;
     }
+  }
 
-    // Update status icon
-    clearSinkStatusClasses(_sinkStatusIcon);
-    _sinkStatusIcon.set_visible(true);
-
-    using AudioQuality = rs::audio::AudioQuality;
-    switch (snapshot.quality)
+  void StatusBar::setPlaybackDetails(rs::audio::PlaybackSnapshot const& snapshot)
+  {
+    // Skip update if nothing visible has changed
+    if (snapshot.state == _lastPlaybackState.state && snapshot.backend == _lastPlaybackState.backend &&
+        snapshot.trackTitle == _lastPlaybackState.title && snapshot.trackArtist == _lastPlaybackState.artist &&
+        snapshot.underrunCount == _lastPlaybackState.underrunCount && snapshot.quality == _lastPlaybackState.quality &&
+        snapshot.qualityTooltip == _lastPlaybackState.qualityTooltip && snapshot.graph == _lastPlaybackState.graph &&
+        snapshot.currentDeviceId == _lastPlaybackState.currentDeviceId &&
+        snapshot.availableBackends == _lastPlaybackState.availableBackends)
     {
-      case AudioQuality::BitwisePerfect: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
-      case AudioQuality::LosslessPadded:
-      case AudioQuality::LosslessFloat: _sinkStatusIcon.add_css_class("sink-status-lossless"); break;
-      case AudioQuality::LinearIntervention: _sinkStatusIcon.add_css_class("sink-status-intervention"); break;
-      case AudioQuality::LossySource: _sinkStatusIcon.add_css_class("sink-status-lossy"); break;
-      case AudioQuality::Clipped: _sinkStatusIcon.add_css_class("sink-status-clipped"); break;
-      case AudioQuality::Unknown: _sinkStatusIcon.set_visible(false); break;
+      return;
     }
+
+    // Detect significant changes
+    bool const backendsChanged = (snapshot.availableBackends != _lastPlaybackState.availableBackends);
+    bool const deviceChanged = (snapshot.currentDeviceId != _lastPlaybackState.currentDeviceId);
+    bool const backendKindChanged = (snapshot.backend != _lastPlaybackState.backend);
+
+    // Update state cache
+    _lastPlaybackState = {.state = snapshot.state,
+                          .backend = snapshot.backend,
+                          .title = snapshot.trackTitle,
+                          .artist = snapshot.trackArtist,
+                          .underrunCount = snapshot.underrunCount,
+                          .quality = snapshot.quality,
+                          .qualityTooltip = snapshot.qualityTooltip,
+                          .graph = snapshot.graph,
+                          .currentDeviceId = snapshot.currentDeviceId,
+                          .availableBackends = snapshot.availableBackends};
+
+    // Update output model if backends or device changed
+    if (backendsChanged || deviceChanged || backendKindChanged)
+    {
+      updateOutputModel(snapshot);
+    }
+
+    // Always update output label and status labels (they might depend on minor state changes)
+    updateOutputLabel(snapshot);
+    updatePlaybackStatusLabels(snapshot);
   }
 
   void StatusBar::setImportProgress(double fraction, std::string const& info)

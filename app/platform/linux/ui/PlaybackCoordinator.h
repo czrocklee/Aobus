@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include "platform/linux/ui/GtkMainThreadDispatcher.h"
 #include "platform/linux/ui/PlaybackBar.h"
 #include "platform/linux/ui/TrackPageGraph.h"
-#include "platform/linux/ui/GtkMainThreadDispatcher.h"
 #include <rs/audio/PlaybackController.h>
 #include <rs/audio/PlaybackTypes.h>
 
@@ -71,19 +71,19 @@ namespace app::ui
     void jumpToPlayingList();
     void handlePlaybackFinished();
     void clearActivePlaybackSequence();
-    
+
     void setPlaybackController(std::unique_ptr<rs::audio::PlaybackController> controller);
     rs::audio::PlaybackController* playbackController() { return _playbackController.get(); }
 
   private:
     void setupPlayback();
     void refreshPlaybackBar();
-    
+
     void onPlayRequested();
     void onPauseRequested();
     void onStopRequested();
     void onSeekRequested(std::uint32_t positionMs);
-    
+
     bool playTrackAtSequenceIndex(std::size_t index);
 
     IPlaybackHost& _host;

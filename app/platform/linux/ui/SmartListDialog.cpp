@@ -89,6 +89,13 @@ namespace app::ui
     return _editListId.value_or(rs::ListId{0});
   }
 
+  void SmartListDialog::setLocalExpression(std::string expression)
+  {
+    _exprTimeoutConnection.disconnect();
+    _exprBox.entry().set_text(std::move(expression));
+    updatePreview();
+  }
+
   void SmartListDialog::setupUi()
   {
     constexpr std::int32_t kDialogWidth = 800;
@@ -306,7 +313,7 @@ namespace app::ui
         // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
         _previewFilteredList =
           std::make_unique<rs::model::FilteredTrackIdList>(_parentMembershipList, _musicLibrary, *_previewEngine);
-        _previewAdapter = std::make_unique<TrackListAdapter>(*_previewFilteredList, _rowDataProvider);
+        _previewAdapter = std::make_unique<TrackListAdapter>(*_previewFilteredList, _musicLibrary, _rowDataProvider);
 
         auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
         _previewColumnView.set_model(selectionModel);

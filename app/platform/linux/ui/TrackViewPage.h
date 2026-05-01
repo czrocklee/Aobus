@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace app::ui
@@ -26,6 +27,7 @@ namespace app::ui
     using TrackActivatedSignal = sigc::signal<void(TrackId)>;
     using ContextMenuRequestedSignal = sigc::signal<void(double, double)>;
     using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId>, double, double)>;
+    using CreateSmartListRequestedSignal = sigc::signal<void(std::string)>;
 
     explicit TrackViewPage(rs::ListId listId, TrackListAdapter& adapter, TrackColumnLayoutModel& columnLayoutModel);
     ~TrackViewPage() override;
@@ -59,6 +61,9 @@ namespace app::ui
     // Signal for tag edit requests (Ctrl+T or double-click on tags)
     TagEditRequestedSignal& signalTagEditRequested();
 
+    // Signal for creating a smart list from the current filter expression.
+    CreateSmartListRequestedSignal& signalCreateSmartListRequested();
+
     // Show a context menu anchored to the current row coordinates.
     void showTagPopover(TagPopover& popover, double x, double y);
 
@@ -87,6 +92,7 @@ namespace app::ui
     void updateColumnVisibility();
     void onGroupByChanged();
     void onFilterChanged();
+    void updateFilterUi();
     void onSelectionChanged(std::uint32_t position, std::uint32_t nItems);
     void onActivateCurrentSelection();
     std::size_t selectedTrackCount() const;
@@ -143,6 +149,7 @@ namespace app::ui
     TrackActivatedSignal _trackActivated;
     ContextMenuRequestedSignal _contextMenuRequested;
     TagEditRequestedSignal _tagEditRequested;
+    CreateSmartListRequestedSignal _createSmartListRequested;
   };
 
 } // namespace app::ui

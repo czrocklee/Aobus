@@ -512,7 +512,7 @@ namespace rs::library
     size += _uriLen;
     size = (size + kAlignmentMask) & ~kAlignmentMask;
 
-    _uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + entryCount * kEntrySize + totalValueSize);
+    _uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + (entryCount * kEntrySize) + totalValueSize);
     _size = size;
   }
 
@@ -560,7 +560,7 @@ namespace rs::library
       std::uint16_t len = 0;
     };
 
-    auto valueOffset = std::size_t{sizeof(TrackColdHeader) + _resolvedPairs.size() * 8};
+    auto valueOffset = std::size_t{sizeof(TrackColdHeader) + (_resolvedPairs.size() * 8)};
 
     for (auto const& [dictId, value] : _resolvedPairs)
     {

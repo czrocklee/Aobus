@@ -88,7 +88,8 @@ namespace app::ui
 
       if (!snapshot.statusText.empty() && snapshot.state == rs::audio::TransportState::Error)
       {
-        _host.showPlaybackMessage(snapshot.statusText, std::chrono::seconds{10});
+        static constexpr auto errorDisplayDuration = std::chrono::seconds{10};
+        _host.showPlaybackMessage(snapshot.statusText, errorDisplayDuration);
       }
     }
 
@@ -143,7 +144,7 @@ namespace app::ui
 
   void PlaybackCoordinator::pausePlayback()
   {
-    if (_playbackController)
+    if (_playbackController != nullptr)
     {
       _playbackController->pause();
     }
@@ -151,7 +152,7 @@ namespace app::ui
 
   void PlaybackCoordinator::stopPlayback()
   {
-    if (_playbackController)
+    if (_playbackController != nullptr)
     {
       _playbackController->stop();
       clearActivePlaybackSequence();
@@ -161,7 +162,7 @@ namespace app::ui
 
   void PlaybackCoordinator::seekPlayback(std::uint32_t positionMs)
   {
-    if (_playbackController)
+    if (_playbackController != nullptr)
     {
       _playbackController->seek(positionMs);
     }
@@ -211,13 +212,14 @@ namespace app::ui
 
   bool PlaybackCoordinator::playTrackAtSequenceIndex(std::size_t index)
   {
-    if (!_playbackController || !_activePlaybackSequence)
+    if (_playbackController == nullptr || !_activePlaybackSequence)
     {
       return false;
     }
 
-    auto* rowDataProvider = _providerSource();
-    if (!rowDataProvider)
+    auto* const rowDataProvider = _providerSource();
+
+    if (rowDataProvider == nullptr)
     {
       return false;
     }

@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include "platform/linux/ui/TrackRowDataProvider.h"
 #include <rs/library/MusicLibrary.h>
 #include <rs/model/AllTrackIdsList.h>
 #include <rs/model/SmartListEngine.h>
-#include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include <filesystem>
 #include <memory>

@@ -270,7 +270,7 @@ namespace rs::audio
     _cachedEngineRoute = snapshot;
 
     // Check if we have a valid anchor and manager to subscribe to the system graph
-    if (_cachedEngineRoute.anchor.has_value() && _activeManager)
+    if (_cachedEngineRoute.anchor.has_value() && _activeManager != nullptr)
     {
       if (!_graphSubscription)
       {
@@ -361,6 +361,144 @@ namespace rs::audio
     analyzeAudioQuality();
   }
 
+  std::vector<rs::audio::AudioNode const*> PlaybackController::findPlaybackPath(std::string const& startId) const
+  {
+    std::vector<rs::audio::AudioNode const*> path;
+    auto currentId = startId;
+    std::set<std::string> visited;
+
+    while (!currentId.empty() && !visited.contains(currentId))
+    {
+      visited.insert(currentId);
+
+      auto const it = std::ranges::find(_mergedGraph.nodes, currentId, &rs::audio::AudioNode::id);
+
+      if (it == _mergedGraph.nodes.end())
+      {
+        break;
+      }
+
+      path.push_back(&(*it));
+
+      std::string nextId;
+
+      for (auto const& link : _mergedGraph.links)
+      {
+        if (link.isActive && link.sourceId == currentId)
+        {
+          nextId = link.destId;
+          break;
+        }
+      }
+
+      currentId = nextId;
+    }
+
+    return path;
+  }
+
+  void PlaybackController::processInputSources(
+    rs::audio::AudioNode const& node,
+    std::span<rs::audio::AudioNode const* const> path,
+    std::unordered_map<std::string, std::set<std::string>> const& inputSources)
+  {
+    if (inputSources.contains(node.id))
+    {
+      auto const& sources = inputSources.at(node.id);
+      std::vector<std::string> otherAppNames;
+
+      for (auto const& srcId : sources)
+      {
+        if (bool const isInternal = std::ranges::contains(path, srcId, &rs::audio::AudioNode::id); !isInternal)
+        {
+          if (auto const it = std::ranges::find(_mergedGraph.nodes, srcId, &rs::audio::AudioNode::id);
+              it != _mergedGraph.nodes.end())
+          {
+            otherAppNames.push_back(it->name);
+          }
+        }
+      }
+
+      if (!otherAppNames.empty())
+      {
+        std::ranges::sort(otherAppNames);
+        auto const [first, last] = std::ranges::unique(otherAppNames);
+        otherAppNames.erase(first, last);
+        std::string apps;
+
+        for (size_t j = 0; j < otherAppNames.size(); ++j)
+        {
+          apps += otherAppNames[j];
+
+          if (j < otherAppNames.size() - 1)
+          {
+            apps += ", ";
+          }
+        }
+
+        appendLine(_qualityTooltip, std::format("• Mixed: {} shared with {}", node.name, apps));
+        _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+      }
+    }
+  }
+
+  void PlaybackController::assessNodeQuality(rs::audio::AudioNode const& node, rs::audio::AudioNode const* nextNode)
+  {
+    if (node.isLossySource)
+    {
+      appendLine(_qualityTooltip, std::format("• Source: Lossy format ({})", node.name));
+      _quality = std::max(_quality, rs::audio::AudioQuality::LossySource);
+    }
+
+    if (node.volumeNotUnity)
+    {
+      appendLine(_qualityTooltip, std::format("• Volume: Modification at {}", node.name));
+      _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+    }
+
+    if (node.isMuted)
+    {
+      appendLine(_qualityTooltip, std::format("• Status: {} is MUTED", node.name));
+      _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+    }
+
+    if (nextNode != nullptr)
+    {
+      if (node.format && nextNode->format)
+      {
+        auto const& f1 = *node.format;
+        auto const& f2 = *nextNode->format;
+
+        if (f1.sampleRate != f2.sampleRate)
+        {
+          appendLine(_qualityTooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
+          _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+        }
+
+        if (f1.channels != f2.channels)
+        {
+          appendLine(_qualityTooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
+          _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+        }
+        else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
+        {
+          if (isLosslessBitDepthChange(f1, f2))
+          {
+            appendLine(
+              _qualityTooltip, f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
+            _quality = std::max(
+              _quality, f2.isFloat ? rs::audio::AudioQuality::LosslessFloat : rs::audio::AudioQuality::LosslessPadded);
+          }
+          else
+          {
+            appendLine(_qualityTooltip, std::format("• Precision: Truncated {}b → {}b", f1.bitDepth, f2.bitDepth));
+            _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
+          }
+        }
+      }
+    }
+  }
+
   void PlaybackController::analyzeAudioQuality()
   {
     // Now analyze the merged graph
@@ -376,39 +514,7 @@ namespace rs::audio
     appendLine(_qualityTooltip, "Audio Routing Analysis:");
 
     // 1. Build linear path
-    std::vector<rs::audio::AudioNode*> path;
-    {
-      auto currentId = std::string{"rs-decoder"};
-      std::set<std::string> visited;
-
-      while (!currentId.empty() && !visited.contains(currentId))
-      {
-        visited.insert(currentId);
-
-        if (auto it = std::ranges::find(_mergedGraph.nodes, currentId, &rs::audio::AudioNode::id);
-            it == _mergedGraph.nodes.end())
-        {
-          break;
-        }
-        else
-        {
-          path.push_back(&(*it));
-
-          std::string nextId;
-
-          for (auto const& link : _mergedGraph.links)
-          {
-            if (link.isActive && link.sourceId == currentId)
-            {
-              nextId = link.destId;
-              break;
-            }
-          }
-
-          currentId = nextId;
-        }
-      }
-    }
+    auto const path = findPlaybackPath("rs-decoder");
 
     // 2. Identify mixing sources
     auto inputSources = std::unordered_map<std::string, std::set<std::string>>{};
@@ -423,103 +529,11 @@ namespace rs::audio
 
     for (size_t i = 0; i < path.size(); ++i)
     {
-      auto* const node = path[i];
+      auto const* const node = path[i];
+      auto const* const nextNode = (i < path.size() - 1) ? path[i + 1] : nullptr;
 
-      if (node->isLossySource)
-      {
-        appendLine(_qualityTooltip, std::format("• Source: Lossy format ({})", node->name));
-        _quality = std::max(_quality, rs::audio::AudioQuality::LossySource);
-      }
-
-      if (node->volumeNotUnity)
-      {
-        appendLine(_qualityTooltip, std::format("• Volume: Modification at {}", node->name));
-        _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
-      }
-
-      if (node->isMuted)
-      {
-        appendLine(_qualityTooltip, std::format("• Status: {} is MUTED", node->name));
-        _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
-      }
-
-      if (inputSources.contains(node->id))
-      {
-        auto const& sources = inputSources.at(node->id);
-        std::vector<std::string> otherAppNames;
-
-        for (auto const& srcId : sources)
-        {
-          if (bool const isInternal = std::ranges::contains(path, srcId, &rs::audio::AudioNode::id); !isInternal)
-          {
-            if (auto it = std::ranges::find(_mergedGraph.nodes, srcId, &rs::audio::AudioNode::id);
-                it != _mergedGraph.nodes.end())
-            {
-              otherAppNames.push_back(it->name);
-            }
-          }
-        }
-
-        if (!otherAppNames.empty())
-        {
-          std::ranges::sort(otherAppNames);
-          auto [first, last] = std::ranges::unique(otherAppNames);
-          otherAppNames.erase(first, last);
-          std::string apps;
-
-          for (size_t j = 0; j < otherAppNames.size(); ++j)
-          {
-            apps += otherAppNames[j];
-
-            if (j < otherAppNames.size() - 1)
-            {
-              apps += ", ";
-            }
-          }
-
-          appendLine(_qualityTooltip, std::format("• Mixed: {} shared with {}", node->name, apps));
-          _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
-        }
-      }
-
-      if (i < path.size() - 1)
-      {
-        auto* const nextNode = path[i + 1];
-
-        if (node->format && nextNode->format)
-        {
-          auto const& f1 = *node->format;
-          auto const& f2 = *nextNode->format;
-
-          if (f1.sampleRate != f2.sampleRate)
-          {
-            appendLine(_qualityTooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
-            _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
-          }
-
-          if (f1.channels != f2.channels)
-          {
-            appendLine(_qualityTooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
-            _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
-          }
-          else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
-          {
-            if (isLosslessBitDepthChange(f1, f2))
-            {
-              appendLine(_qualityTooltip,
-                         f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
-              _quality =
-                std::max(_quality,
-                         f2.isFloat ? rs::audio::AudioQuality::LosslessFloat : rs::audio::AudioQuality::LosslessPadded);
-            }
-            else
-            {
-              appendLine(_qualityTooltip, std::format("• Precision: Truncated {}b → {}b", f1.bitDepth, f2.bitDepth));
-              _quality = std::max(_quality, rs::audio::AudioQuality::LinearIntervention);
-            }
-          }
-        }
-      }
+      assessNodeQuality(*node, nextNode);
+      processInputSources(*node, path, inputSources);
     }
 
     if (_quality == rs::audio::AudioQuality::BitwisePerfect)

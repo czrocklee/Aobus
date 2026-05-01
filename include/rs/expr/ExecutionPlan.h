@@ -109,7 +109,7 @@ namespace rs::expr
   /**
    * ExecutionPlan - Compiled query ready for fast execution.
    */
-  class ExecutionPlan
+  class ExecutionPlan final
   {
   public:
     std::vector<Instruction> instructions;
@@ -134,7 +134,7 @@ namespace rs::expr
    * Uses Dictionary to resolve string constants to numeric IDs for metadata fields
    * (artist, album, genre) to enable efficient numeric comparison at evaluation time.
    */
-  class QueryCompiler
+  class QueryCompiler final
   {
   public:
     explicit QueryCompiler() = default;

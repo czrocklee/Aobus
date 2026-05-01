@@ -5,6 +5,7 @@
 
 #include <rs/library/MusicLibrary.h>
 
+#include <deque>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -16,6 +17,7 @@ namespace YAML
 
 namespace rs::library
 {
+  class TrackBuilder;
 
   /**
    * LibraryImporter - Logical YAML importer for MusicLibrary.
@@ -39,6 +41,14 @@ namespace rs::library
     void importLists(YAML::Node const& lists,
                      rs::lmdb::WriteTransaction& txn,
                      std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId);
+
+    void overlayMetadata(TrackBuilder& builder,
+                         YAML::Node const& trackNode,
+                         std::deque<std::string>& trackStrings) const;
+    void overlayCustomData(TrackBuilder& builder,
+                           YAML::Node const& trackNode,
+                           std::deque<std::string>& trackStrings) const;
+    void overlayTechnicalProperties(TrackBuilder& builder, YAML::Node const& trackNode) const;
 
     MusicLibrary& _ml;
   };

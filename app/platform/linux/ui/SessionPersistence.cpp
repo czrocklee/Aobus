@@ -4,11 +4,11 @@
 #include "platform/linux/ui/SessionPersistence.h"
 #include <rs/utility/Log.h>
 
+#include <algorithm>
 #include <filesystem>
+#include <optional>
 #include <system_error>
 #include <vector>
-#include <optional>
-#include <algorithm>
 
 namespace app::ui
 {
@@ -196,7 +196,16 @@ namespace app::ui
       _appConfig.setWindowState(windowState);
 
       auto sessionState = _appConfig.sessionState();
-      sessionState.lastLibraryPath = librarySession ? normalizeLibraryPath(librarySession->musicLibrary->rootPath()) : std::string{};
+
+      if (librarySession != nullptr)
+      {
+        sessionState.lastLibraryPath = normalizeLibraryPath(librarySession->musicLibrary->rootPath());
+      }
+      else
+      {
+        sessionState.lastLibraryPath = std::string{};
+      }
+
       _appConfig.setSessionState(std::move(sessionState));
 
       _appConfig.setTrackViewState(trackViewStateFromLayout(trackColumnLayoutModel.layout()));

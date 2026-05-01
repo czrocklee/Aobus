@@ -11,7 +11,7 @@
 
 namespace rs::lmdb
 {
-  class Environment
+  class Environment final
   {
   public:
     struct Options

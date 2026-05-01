@@ -15,6 +15,46 @@ namespace rs::tag::mpeg
     constexpr std::uint8_t kCodecIdMp3 = 0x55;
   }
 
+  std::uint32_t File::calculateDuration(FrameView const& frame, bool hasId3v1) const
+  {
+    constexpr std::uint32_t kMsPerSecond = 1000;
+    constexpr std::uint32_t kBitsPerByte = 8;
+    constexpr std::size_t kId3v1TagSize = 128;
+
+    auto durationMs = std::uint32_t{0};
+
+    // 1. Prefer Xing/Info header if present for accurate duration (especially VBR)
+    if (auto xing = frame.xingInfo())
+    {
+      if (xing->frames > 0 && frame.sampleRate() > 0)
+      {
+        durationMs = static_cast<std::uint32_t>(
+          (static_cast<std::uint64_t>(xing->frames) * frame.samplesPerFrame() * kMsPerSecond) / frame.sampleRate());
+      }
+    }
+
+    // 2. Fallback to estimation from file size if Xing/Info not present or failed
+    if (durationMs == 0 && frame.bitrate() > 0)
+    {
+      auto const* firstFramePtr = static_cast<std::uint8_t const*>(frame.data());
+      auto const* lastBytePtr =
+        static_cast<std::uint8_t const*>(_mappedRegion.get_address()) + _mappedRegion.get_size();
+
+      if (hasId3v1)
+      {
+        lastBytePtr -= kId3v1TagSize;
+      }
+
+      if (lastBytePtr > firstFramePtr)
+      {
+        std::uint64_t const actualAudioBytes = lastBytePtr - firstFramePtr;
+        durationMs = static_cast<std::uint32_t>((actualAudioBytes * kMsPerSecond * kBitsPerByte) / frame.bitrate());
+      }
+    }
+
+    return durationMs;
+  }
+
   rs::library::TrackBuilder File::loadTrack() const
   {
     clearOwnedStrings();
@@ -77,51 +117,17 @@ namespace rs::tag::mpeg
         .bitDepth(16)
         .codecId(kCodecIdMp3);
 
-      // 4. Calculate duration
-      // Prefer Xing/Info header if present for accurate duration (especially VBR)
-      constexpr std::uint32_t kMsPerSecond = 1000;
-      constexpr std::uint32_t kBitsPerByte = 8;
+      durationMs = calculateDuration(*frameView, hasId3v1);
+      builder.property().durationMs(durationMs);
 
-      if (auto xing = frameView->xingInfo())
+      // If Xing/Info provides total bytes, we can refine the bitrate
+      if (auto xing = frameView->xingInfo(); xing && xing->bytes > 0 && durationMs > 0)
       {
-        if (xing->frames > 0 && frameView->sampleRate() > 0)
-        {
-          durationMs = static_cast<std::uint32_t>(
-            (static_cast<std::uint64_t>(xing->frames) * frameView->samplesPerFrame() * kMsPerSecond) /
-            frameView->sampleRate());
-          builder.property().durationMs(durationMs);
-
-          // If Xing/Info provides total bytes, we can refine the bitrate
-
-          if (xing->bytes > 0 && durationMs > 0)
-          {
-            bitrate = static_cast<std::uint32_t>(
-              (static_cast<std::uint64_t>(xing->bytes) * kMsPerSecond * kBitsPerByte) / durationMs);
-            builder.property().bitrate(bitrate);
-          }
-        }
-      }
-
-      // Fallback to estimation from file size if Xing/Info not present or failed
-      constexpr std::size_t kId3v1TagSize = 128;
-
-      if (durationMs == 0 && bitrate > 0)
-      {
-        auto const* firstFramePtr = static_cast<std::uint8_t const*>(frameView->data());
-        auto const* lastBytePtr =
-          static_cast<std::uint8_t const*>(_mappedRegion.get_address()) + _mappedRegion.get_size();
-
-        if (hasId3v1)
-        {
-          lastBytePtr -= kId3v1TagSize;
-        }
-
-        if (lastBytePtr > firstFramePtr)
-        {
-          std::uint64_t const actualAudioBytes = lastBytePtr - firstFramePtr;
-          builder.property().durationMs(
-            static_cast<std::uint32_t>((actualAudioBytes * kMsPerSecond * kBitsPerByte) / bitrate));
-        }
+        constexpr std::uint32_t kMsPerSecond = 1000;
+        constexpr std::uint32_t kBitsPerByte = 8;
+        bitrate = static_cast<std::uint32_t>((static_cast<std::uint64_t>(xing->bytes) * kMsPerSecond * kBitsPerByte) /
+                                             durationMs);
+        builder.property().bitrate(bitrate);
       }
     }
 

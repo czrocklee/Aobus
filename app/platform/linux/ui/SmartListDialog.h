@@ -51,6 +51,8 @@ namespace app::ui
     // Returns a ListDraft populated from the dialog fields
     rs::model::ListDraft draft() const;
 
+    void setLocalExpression(std::string expression);
+
   private:
     void setupUi();
     void setupPreview();
