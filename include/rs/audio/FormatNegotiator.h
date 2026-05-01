@@ -11,7 +11,6 @@
 
 namespace rs::audio
 {
-
   struct RenderPlan final
   {
     AudioFormat sourceFormat = {};
@@ -28,5 +27,4 @@ namespace rs::audio
   public:
     static RenderPlan buildPlan(AudioFormat sourceFormat, rs::audio::DeviceCapabilities const& caps);
   };
-
 } // namespace rs::audio

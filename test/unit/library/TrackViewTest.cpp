@@ -680,5 +680,4 @@ namespace
     auto smallView = rs::library::TrackView{std::span<std::byte const>{}, rs::utility::bytes::view(smallData)};
     CHECK(smallView.isColdValid() == false);
   }
-
 } // anonymous namespace

@@ -30,6 +30,7 @@ extern "C"
 #include <cstring>
 #include <format>
 #include <mutex>
+#include <ranges>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -306,12 +307,13 @@ namespace app::playback
   bool copyFloatArray(::spa_pod const& pod, std::vector<float>& output)
   {
     auto values = std::array<float, 16>{};
-    auto const count = ::spa_pod_copy_array(&pod, SPA_TYPE_Float, values.data(), values.size());
+    auto const count = ::spa_pod_copy_array(
+      &pod, SPA_TYPE_Float, values.data(), values.size()); // NOLINT(readability-simplify-subscript-expr)
     if (count == 0)
     {
       return false;
     }
-    output.assign(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(count));
+    output.assign_range(values | std::views::take(count));
     return true;
   }
 
@@ -508,13 +510,16 @@ namespace app::playback
   {
     void onCoreDone(void* data, [[maybe_unused]] std::uint32_t id, int seq)
     {
-      auto* impl = static_cast<PipeWireMonitor::Impl*>(data);
+      auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
+
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+
         if (seq == impl->coreSyncSeq)
         {
         } // Initial population done
       }
+
       impl->triggerRefresh();
     }
 
@@ -525,9 +530,10 @@ namespace app::playback
                           std::uint32_t version,
                           ::spa_dict const* props)
     {
-      auto* impl = static_cast<PipeWireMonitor::Impl*>(data);
-      bool isNode = (::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
-      bool isLink = (::strcmp(type, PW_TYPE_INTERFACE_Link) == 0);
+      auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
+      auto const isNode = (std::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
+      auto const isLink = (std::strcmp(type, PW_TYPE_INTERFACE_Link) == 0);
+
       if (!isNode && !isLink)
       {
         return;
@@ -540,29 +546,36 @@ namespace app::playback
                                                     {
                                                       return;
                                                     }
-                                                    auto* impl = static_cast<PipeWireMonitor::Impl*>(data);
+
+                                                    auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
+
                                                     {
                                                       auto const lock = std::lock_guard<std::mutex>{impl->mutex};
                                                       auto& link = impl->links[info->id];
+
                                                       link.outputNodeId = info->output_node_id;
                                                       link.inputNodeId = info->input_node_id;
+
                                                       if (info->change_mask & PW_LINK_CHANGE_MASK_STATE)
                                                       {
                                                         link.state = info->state;
                                                       }
                                                     }
+
                                                     impl->triggerRefresh();
                                                   }};
 
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+
         if (isNode)
         {
           impl->nodes[id] = parseNodeRecord(version, props);
         }
         else if (isLink)
         {
-          auto* proxy = ::pw_registry_bind(impl->registry.get(), id, PW_TYPE_INTERFACE_Link, PW_VERSION_LINK, 0);
+          auto* const proxy = ::pw_registry_bind(impl->registry.get(), id, PW_TYPE_INTERFACE_Link, PW_VERSION_LINK, 0);
+
           if (proxy != nullptr)
           {
             auto& binding = impl->linkBindings[id];
@@ -572,10 +585,13 @@ namespace app::playback
           }
         }
       }
+
       impl->triggerRefresh();
+
       if (isNode)
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+
         if (isSinkMediaClass(impl->nodes[id].mediaClass))
         {
           if (impl->onDevicesChanged)
@@ -588,22 +604,26 @@ namespace app::playback
 
     void onRegistryGlobalRemove(void* data, std::uint32_t id)
     {
-      auto* impl = static_cast<PipeWireMonitor::Impl*>(data);
+      auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
       bool needsRefresh = false;
       bool deviceRemoved = false;
+
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
-        if (auto it = impl->linkBindings.find(id); it != impl->linkBindings.end())
+
+        if (auto const it = impl->linkBindings.find(id); it != impl->linkBindings.end())
         {
           impl->linkBindings.erase(it);
         }
-        if (auto it = impl->streamNodeBindings.find(id); it != impl->streamNodeBindings.end())
+
+        if (auto const it = impl->streamNodeBindings.find(id); it != impl->streamNodeBindings.end())
         {
           impl->streamNodeBindings.erase(it);
           impl->nodeFormatMap.erase(id);
           needsRefresh = true;
         }
-        if (auto it = impl->sinkNodeBindings.find(id); it != impl->sinkNodeBindings.end())
+
+        if (auto const it = impl->sinkNodeBindings.find(id); it != impl->sinkNodeBindings.end())
         {
           impl->sinkNodeBindings.erase(it);
           impl->nodeFormatMap.erase(id);
@@ -611,25 +631,30 @@ namespace app::playback
           impl->sinkPropsMap.erase(id);
           needsRefresh = true;
         }
+
         if (impl->nodes.contains(id))
         {
           if (isSinkMediaClass(impl->nodes[id].mediaClass))
           {
             deviceRemoved = true;
           }
+
           impl->nodes.erase(id);
           needsRefresh = true;
         }
+
         if (impl->links.contains(id))
         {
           impl->links.erase(id);
           needsRefresh = true;
         }
       }
+
       if (needsRefresh)
       {
         impl->triggerRefresh();
       }
+
       if (deviceRemoved && impl->onDevicesChanged)
       {
         impl->onDevicesChanged();
@@ -642,20 +667,26 @@ namespace app::playback
       {
         return;
       }
-      auto* binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
-      auto* impl = binding->impl;
+
+      auto* const binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
+      auto* const impl = binding->impl;
+
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+
         if ((info->change_mask & PW_NODE_CHANGE_MASK_PROPS) != 0)
         {
           auto version = static_cast<std::uint32_t>(PW_VERSION_NODE);
-          if (auto it = impl->nodes.find(info->id); it != impl->nodes.end())
+
+          if (auto const it = impl->nodes.find(info->id); it != impl->nodes.end())
           {
             version = it->second.version;
           }
+
           impl->nodes[info->id] = parseNodeRecord(version, info->props);
         }
       }
+
       impl->triggerRefresh();
     }
 
@@ -666,13 +697,15 @@ namespace app::playback
                      [[maybe_unused]] std::uint32_t next,
                      ::spa_pod const* param)
     {
-      auto* binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
-      auto* impl = binding->impl;
+      auto* const binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
+      auto* const impl = binding->impl;
+
       {
         auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+
         if (id == SPA_PARAM_Format)
         {
-          if (auto fmt = detail::parseRawStreamFormat(param))
+          if (auto const fmt = detail::parseRawStreamFormat(param))
           {
             impl->nodeFormatMap[binding->id] = *fmt;
           }
@@ -681,11 +714,12 @@ namespace app::playback
         {
           if (!impl->nodeFormatMap.contains(binding->id))
           {
-            if (auto fmt = detail::parseRawStreamFormat(param))
+            if (auto const fmt = detail::parseRawStreamFormat(param))
             {
               impl->nodeFormatMap[binding->id] = *fmt;
             }
           }
+
           auto& caps = impl->sinkCapabilitiesMap[binding->id];
           parseEnumFormat(param, caps);
         }
@@ -694,6 +728,7 @@ namespace app::playback
           mergeSinkProps(impl->sinkPropsMap[binding->id], param);
         }
       }
+
       impl->triggerRefresh();
     }
 
@@ -753,15 +788,18 @@ namespace app::playback
     {
       return;
     }
+
     _impl->refreshEvent.get_deleter().loop = _impl->threadLoop.get();
     _impl->refreshEvent.reset(
       ::pw_loop_add_event(::pw_thread_loop_get_loop(_impl->threadLoop.get()), onRefreshEvent, _impl.get()));
 
     ::pw_thread_loop_lock(_impl->threadLoop.get());
+
     if (_impl->core)
     {
-      auto* registry = ::pw_core_get_registry(_impl->core.get(), PW_VERSION_REGISTRY, 0);
+      auto* const registry = ::pw_core_get_registry(_impl->core.get(), PW_VERSION_REGISTRY, 0);
       _impl->registry.reset(static_cast<::pw_registry*>(registry));
+
       if (_impl->registry)
       {
         ::pw_registry_add_listener(_impl->registry.get(), _impl->registryListener.get(), &registryEvents, _impl.get());
@@ -769,6 +807,7 @@ namespace app::playback
         _impl->coreSyncSeq = ::pw_core_sync(_impl->core.get(), PW_ID_CORE, 0);
       }
     }
+
     ::pw_thread_loop_unlock(_impl->threadLoop.get());
     _impl->triggerRefresh();
   }
@@ -943,7 +982,8 @@ namespace app::playback
       binding->role = NodeBindingRole::Stream;
       binding->proxy.reset(static_cast<::pw_node*>(node));
       auto params = std::to_array<std::uint32_t>({SPA_PARAM_Format});
-      ::pw_node_subscribe_params(binding->proxy.get(), const_cast<std::uint32_t*>(params.data()), params.size());
+      ::pw_node_subscribe_params(
+        binding->proxy.get(), rs::utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
       ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
       auto* bindingPtr = binding.get();
       ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &streamNodeEvents, bindingPtr);
@@ -969,7 +1009,8 @@ namespace app::playback
           binding->proxy.reset(static_cast<::pw_node*>(proxy));
 
           auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_EnumFormat, SPA_PARAM_Props});
-          ::pw_node_subscribe_params(binding->proxy.get(), const_cast<std::uint32_t*>(params.data()), params.size());
+          ::pw_node_subscribe_params(
+            binding->proxy.get(), rs::utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
           ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
           ::pw_node_enum_params(binding->proxy.get(), 2, SPA_PARAM_EnumFormat, 0, -1, nullptr);
           ::pw_node_enum_params(
@@ -1138,5 +1179,4 @@ namespace app::playback
       }
     }
   }
-
 } // namespace app::playback

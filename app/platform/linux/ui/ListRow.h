@@ -12,7 +12,6 @@
 
 namespace app::ui
 {
-
   class ListRow final : public Glib::Object
   {
   public:
@@ -53,5 +52,4 @@ namespace app::ui
     Glib::ustring _name;
     Glib::ustring _filter;
   };
-
 } // namespace app::ui

@@ -8,7 +8,6 @@
 
 namespace rs::utility
 {
-
   /**
    * Helper to create a std::unique_ptr with a zero-overhead C-style deleter.
    * The deleter is defined locally to ensure minimum exposure of internal types.
@@ -26,5 +25,4 @@ namespace rs::utility
 
     return std::unique_ptr<T, Deleter>{p};
   }
-
 } // namespace rs::utility

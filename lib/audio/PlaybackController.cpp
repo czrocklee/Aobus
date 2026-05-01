@@ -567,5 +567,4 @@ namespace rs::audio
       case rs::audio::AudioQuality::Unknown: break;
     }
   }
-
 } // namespace rs::audio

@@ -6,7 +6,6 @@
 
 namespace rs::library
 {
-
   ListView::ListView(std::span<std::byte const> data)
     : _payload{data}
   {
@@ -85,5 +84,4 @@ namespace rs::library
 
     return _trackIds[index];
   }
-
 } // namespace rs::library

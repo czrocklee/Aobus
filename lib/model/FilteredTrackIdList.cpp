@@ -14,7 +14,6 @@
 
 namespace rs::model
 {
-
   FilteredTrackIdList::FilteredTrackIdList(TrackIdList& source, rs::library::MusicLibrary& ml, SmartListEngine& engine)
     : _source{source}, _ml{ml}, _engine{&engine}
   {
@@ -99,5 +98,4 @@ namespace rs::model
     _plan = std::move(_stagedPlan);
     _dirty = false;
   }
-
 } // namespace rs::model

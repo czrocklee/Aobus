@@ -31,7 +31,7 @@ target_sources(app_linux PRIVATE
 
     platform/linux/services/PlaylistExporter.cpp
 )
-target_link_libraries(app_linux PRIVATE rs rs_model rs_audio PkgGTKMM glibmm-2.68)
+target_link_libraries(app_linux PRIVATE rs rs_model rs_audio PkgGTKMM glibmm-2.68 Boost::headers)
 target_include_directories(app_linux PRIVATE "${CMAKE_SOURCE_DIR}/app")
 
 if(PIPEWIRE_FOUND)

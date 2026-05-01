@@ -16,7 +16,6 @@
 
 namespace rs::library
 {
-
   /**
    * TrackBuilder - Fluent builder for constructing track binary data.
    *
@@ -274,5 +273,4 @@ namespace rs::library
     TagsBuilder _tagsBuilder{};
     CustomBuilder _customBuilder{};
   };
-
 } // namespace rs::library

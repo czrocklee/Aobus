@@ -5,7 +5,6 @@
 
 namespace app::ui
 {
-
   ImportProgressDialog::ImportProgressDialog(std::int32_t maxItems, Gtk::Window& parent)
     : _maxItems{maxItems}
   {
@@ -65,5 +64,4 @@ namespace app::ui
     _progressLabel.set_text("Import complete!");
     _okButton.set_sensitive(true);
   }
-
 } // namespace app::ui

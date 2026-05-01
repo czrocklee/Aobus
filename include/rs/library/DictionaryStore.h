@@ -15,7 +15,6 @@
 
 namespace rs::library
 {
-
   /**
    * DictionaryStore - Stores id → string mappings with in-memory string → id index.
    *
@@ -91,5 +90,4 @@ namespace rs::library
     // Track strings that were reserved but not yet persisted to DB
     std::unordered_set<std::string_view> _reservedStrings;
   };
-
 } // namespace rs::library

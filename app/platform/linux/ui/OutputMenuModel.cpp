@@ -5,7 +5,6 @@
 
 namespace app::ui
 {
-
   void OutputMenuModel::update(std::vector<rs::audio::BackendSnapshot> const& backends,
                                rs::audio::BackendKind currentBackend,
                                std::string_view currentDeviceId)
@@ -23,5 +22,4 @@ namespace app::ui
       _signalChanged.emit();
     }
   }
-
 } // namespace app::ui

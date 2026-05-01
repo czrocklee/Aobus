@@ -12,7 +12,6 @@
 
 namespace rs::audio
 {
-
   /**
    * @brief Interface for an audio decoding session.
    * Handles opening a file, seeking, and reading PCM blocks.
@@ -53,5 +52,4 @@ namespace rs::audio
      */
     virtual DecodedStreamInfo streamInfo() const = 0;
   };
-
 } // namespace rs::audio

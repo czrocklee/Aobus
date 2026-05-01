@@ -15,7 +15,6 @@
 
 namespace rs::library
 {
-
   /**
    * TrackStore - Binary storage for tracks using hot/cold separation.
    *
@@ -220,5 +219,4 @@ namespace rs::library
     auto span = _coldWriter.update(id.value(), size);
     fill(span);
   }
-
 } // namespace rs::library

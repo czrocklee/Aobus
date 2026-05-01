@@ -14,7 +14,6 @@
 
 namespace app::ui
 {
-
   class TagPopover final : public Gtk::Popover
   {
   public:
@@ -62,5 +61,4 @@ namespace app::ui
 
     TagsChangedSignal _tagsChanged;
   };
-
 } // namespace app::ui

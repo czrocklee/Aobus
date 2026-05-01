@@ -78,5 +78,4 @@ namespace
     // 1-byte section
     CHECK(offsetof(TrackColdHeader, channels) == 50);
   }
-
 } // anonymous namespace

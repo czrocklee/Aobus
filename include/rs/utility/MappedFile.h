@@ -13,7 +13,6 @@
 
 namespace rs::utility
 {
-
   /**
    * @brief A safe wrapper around boost::interprocess for memory-mapped file access.
    */
@@ -56,5 +55,4 @@ namespace rs::utility
     boost::interprocess::mapped_region _mappedRegion;
     bool _isMapped = false;
   };
-
 } // namespace rs::utility

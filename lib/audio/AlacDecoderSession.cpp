@@ -82,8 +82,7 @@ namespace rs::audio
     }
 
     auto const cookie = _impl->demuxer->magicCookie();
-    auto const initStatus = _impl->decoder->Init(
-      const_cast<std::uint8_t*>(layout::asPtr<std::uint8_t>(cookie)), static_cast<std::uint32_t>(cookie.size()));
+    auto const initStatus = _impl->decoder->Init(layout::asLegacyPtr<std::uint8_t>(cookie), layout::size32(cookie));
 
     if (initStatus != ALAC_noErr)
     {
@@ -191,8 +190,7 @@ namespace rs::audio
     {
       std::vector<std::byte> sourcePcm(static_cast<std::size_t>(maxFrames) * sourceBytesPerFrame);
       auto bitBuffer = BitBuffer{};
-      BitBufferInit(
-        &bitBuffer, const_cast<uint8_t*>(layout::asPtr<std::uint8_t>(packet)), static_cast<uint32_t>(packet.size()));
+      BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
 
       auto const status = _impl->decoder->Decode(
         &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{sourcePcm}), maxFrames, channels, &numFrames);
@@ -205,7 +203,7 @@ namespace rs::audio
 
       if (sourceBps == 24 && targetBps == 32)
       {
-        auto* src = layout::asPtr<std::uint8_t>(std::span{sourcePcm});
+        auto const* src = layout::asPtr<std::uint8_t>(std::span{sourcePcm});
         auto* dst = layout::asMutablePtr<std::int32_t>(std::span{targetPcm});
         for (std::uint32_t i = 0; i < numFrames * channels; ++i)
         {
@@ -238,8 +236,7 @@ namespace rs::audio
     std::vector<std::byte> decodedPcm(static_cast<std::size_t>(maxFrames) * targetBytesPerFrame);
 
     auto bitBuffer = BitBuffer{};
-    BitBufferInit(
-      &bitBuffer, const_cast<uint8_t*>(layout::asPtr<std::uint8_t>(packet)), static_cast<uint32_t>(packet.size()));
+    ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
 
     auto const status = _impl->decoder->Decode(
       &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{decodedPcm}), maxFrames, channels, &numFrames);
@@ -265,5 +262,4 @@ namespace rs::audio
   {
     return _impl->info;
   }
-
 } // namespace rs::audio

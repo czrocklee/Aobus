@@ -14,7 +14,6 @@ namespace rs::library
 
 namespace rs::model
 {
-
   /**
    * ManualTrackIdList - A TrackIdList that holds a manually curated set of tracks.
    *
@@ -52,5 +51,4 @@ namespace rs::model
     std::vector<TrackId> _trackIds;
     TrackIdList* _source = nullptr;
   };
-
 } // namespace rs::model

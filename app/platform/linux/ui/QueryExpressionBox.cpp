@@ -20,7 +20,6 @@
 
 namespace app::ui
 {
-
   namespace
   {
     struct CompletionQuery
@@ -413,5 +412,4 @@ namespace app::ui
     _availableTags.assign(uniqueTags.begin(), uniqueTags.end());
     _availableCustomKeys.assign(uniqueCustomKeys.begin(), uniqueCustomKeys.end());
   }
-
 } // namespace app::ui

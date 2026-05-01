@@ -165,5 +165,4 @@ namespace rs::lmdb
 
     friend class Database;
   };
-
 }

@@ -18,7 +18,6 @@
 
 namespace rs::model
 {
-
   class FilteredTrackIdList;
   class SmartListEngine;
 
@@ -111,5 +110,4 @@ namespace rs::model
     friend class SourceObserver;
     friend class FilteredTrackIdList;
   };
-
 } // namespace rs::model

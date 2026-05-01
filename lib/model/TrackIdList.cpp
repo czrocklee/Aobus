@@ -7,7 +7,6 @@
 
 namespace rs::model
 {
-
   TrackIdList::~TrackIdList()
   {
     for (auto* obs : _observers)
@@ -89,5 +88,4 @@ namespace rs::model
       obs->onBatchRemoved(ids);
     }
   }
-
 } // namespace rs::model

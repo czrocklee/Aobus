@@ -57,7 +57,6 @@ namespace
 
 namespace app::ui
 {
-
   TrackRowDataProvider::TrackRowDataProvider(rs::library::MusicLibrary& ml)
     : _ml{ml}, _store{ml.tracks()}, _dict{ml.dictionary()}
   {
@@ -233,5 +232,4 @@ namespace app::ui
     auto const insertResult = _stringCache.emplace(id, std::move(result));
     return insertResult.first->second;
   }
-
 } // namespace app::ui

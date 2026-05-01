@@ -11,7 +11,6 @@
 
 namespace app::ui
 {
-
   class CoverArtWidget final : public Gtk::Picture
   {
   public:
@@ -73,5 +72,4 @@ namespace app::ui
     // Clear to empty - GTK4 will show placeholder
     set_pixbuf({});
   }
-
 } // namespace app::ui

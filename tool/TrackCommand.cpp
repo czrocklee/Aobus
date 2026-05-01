@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "TrackCommand.h"
-#include <rs/library/TrackLayout.h>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
 #include <rs/expr/PlanEvaluator.h>
+#include <rs/library/TrackLayout.h>
 #include <rs/tag/File.h>
 
 #include <filesystem>
@@ -19,7 +19,7 @@ namespace rs::tool
     using namespace rs;
 
     std::vector<std::pair<rs::TrackId, rs::library::TrackView>> collectTracks(rs::library::MusicLibrary& ml,
-                                                                         std::string const& filter)
+                                                                              std::string const& filter)
     {
       auto txn = ml.readTransaction();
       auto reader = ml.tracks().reader(txn);

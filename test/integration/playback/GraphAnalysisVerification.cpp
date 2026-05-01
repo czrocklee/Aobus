@@ -15,7 +15,6 @@
 
 namespace rs::audio
 {
-
   TEST_CASE("Graph Analysis Verification", "[playback][graph][debug]")
   {
     Log::init();
@@ -56,5 +55,4 @@ namespace rs::audio
 
     Log::shutdown();
   }
-
 } // namespace rs::audio

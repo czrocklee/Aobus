@@ -59,16 +59,13 @@ namespace rs::tool
       auto txn = ml.writeTransaction();
 
       // Build list payload using ListBuilder
-      auto builder = rs::library::ListBuilder::createNew()
-        .name(name)
-        .description(desc)
-        .parentId(parentListId);
+      auto builder = rs::library::ListBuilder::createNew().name(name).description(desc).parentId(parentListId);
 
       if (!filter.empty())
       {
         builder.filter(filter);
       }
-      
+
       auto data = builder.serialize();
 
       auto [id, view] = ml.lists().writer(txn).create(data);
@@ -108,7 +105,7 @@ namespace rs::tool
         auto txn = ml.writeTransaction();
         auto writer = ml.lists().writer(txn);
         auto const listId = rs::ListId{id->as<std::uint32_t>()};
-        
+
         if (writer.del(listId))
         {
           std::cout << "deleted list: " << listId << "\n";
@@ -118,7 +115,6 @@ namespace rs::tool
         {
           std::cout << "list not found: " << listId << "\n";
         }
-      
       });
   }
 }

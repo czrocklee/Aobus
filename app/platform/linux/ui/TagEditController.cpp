@@ -222,5 +222,4 @@ namespace app::ui
         tagChangeStatusMessage(selection.selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
     }
   }
-
 } // namespace app::ui

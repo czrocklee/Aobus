@@ -306,5 +306,4 @@ namespace rs::tag::mpeg
 
     return info;
   }
-
 } // namespace rs::tag::mpeg

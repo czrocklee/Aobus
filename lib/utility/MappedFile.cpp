@@ -7,7 +7,6 @@
 
 namespace rs::utility
 {
-
   rs::Result<> MappedFile::map(std::filesystem::path const& filePath)
   {
     unmap();
@@ -47,5 +46,4 @@ namespace rs::utility
   {
     return _isMapped;
   }
-
 } // namespace rs::utility

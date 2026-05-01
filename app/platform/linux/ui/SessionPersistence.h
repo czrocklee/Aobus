@@ -38,5 +38,4 @@ namespace app::ui
   private:
     rs::library::AppConfig _appConfig;
   };
-
 } // namespace app::ui

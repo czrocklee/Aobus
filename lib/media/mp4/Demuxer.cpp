@@ -12,7 +12,6 @@
 
 namespace rs::media::mp4
 {
-
   Demuxer::Demuxer(std::span<std::byte const> fileData)
     : _fileData(fileData)
   {
@@ -297,5 +296,4 @@ namespace rs::media::mp4
   {
     return _duration;
   }
-
 } // namespace rs::media::mp4

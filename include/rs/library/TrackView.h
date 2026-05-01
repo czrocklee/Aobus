@@ -21,7 +21,6 @@
 
 namespace rs::library
 {
-
   /**
    * TrackView - Unified view of a track with hot and optional cold data.
    *
@@ -281,5 +280,4 @@ namespace rs::library
     CustomProxy::Entry const* _pos = nullptr;
     std::byte const* _coldDataBase = nullptr;
   };
-
 } // namespace rs::library

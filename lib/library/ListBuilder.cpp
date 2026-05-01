@@ -12,7 +12,6 @@
 
 namespace rs::library
 {
-
   //=============================================================================
   // ListBuilder - factory methods
   //=============================================================================
@@ -159,5 +158,4 @@ namespace rs::library
 
     return result;
   }
-
 } // namespace rs::library

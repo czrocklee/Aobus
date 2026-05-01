@@ -8,7 +8,6 @@
 
 namespace rs::model
 {
-
   AllTrackIdsList::AllTrackIdsList(rs::library::TrackStore& store)
     : _store{store}
   {
@@ -75,5 +74,4 @@ namespace rs::model
 
     return std::nullopt;
   }
-
 } // namespace rs::model

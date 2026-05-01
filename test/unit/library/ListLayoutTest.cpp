@@ -31,5 +31,4 @@ namespace
     CHECK(offsetof(ListHeader, filterLen) == 14);
     CHECK(offsetof(ListHeader, parentId) == 16);
   }
-
 } // anonymous namespace

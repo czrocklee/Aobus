@@ -16,7 +16,6 @@
 
 namespace app::ui
 {
-
   enum class TrackGroupBy : std::uint8_t
   {
     None,
@@ -156,5 +155,4 @@ namespace app::ui
     TrackColumnLayout _layout;
     ChangedSignal _changed;
   };
-
 } // namespace app::ui

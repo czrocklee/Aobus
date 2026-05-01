@@ -7,7 +7,6 @@
 
 namespace app::ui
 {
-
   class ImportProgressDialog final : public Gtk::Dialog
   {
   public:
@@ -25,5 +24,4 @@ namespace app::ui
     Gtk::Button _okButton;
     std::int32_t _maxItems;
   };
-
 } // namespace app::ui

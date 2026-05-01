@@ -18,7 +18,6 @@ extern "C"
 
 namespace app::playback::detail
 {
-
   // --- RAII Deleters (inline implementations) ---
 
   struct PwProxyDeleter final
@@ -97,5 +96,4 @@ namespace app::playback::detail
   void ensurePipeWireInit();
   std::optional<std::uint32_t> parseUintProperty(char const* value);
   std::optional<rs::audio::AudioFormat> parseRawStreamFormat(::spa_pod const* param);
-
 } // namespace app::playback::detail

@@ -293,5 +293,4 @@ namespace rs::audio
 
     return remaining == 0;
   }
-
 } // namespace rs::audio

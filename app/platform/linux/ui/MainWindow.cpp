@@ -39,7 +39,6 @@
 
 namespace app::ui
 {
-
   namespace
   {
     rs::ListId allTracksListId()
@@ -555,5 +554,4 @@ namespace app::ui
     // Get playback descriptor
     return _librarySession->rowDataProvider->getPlaybackDescriptor(*trackId);
   }
-
 } // namespace app::ui

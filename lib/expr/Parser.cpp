@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -48,7 +49,7 @@ namespace
     static constexpr auto value = lexy::callback<VariableExpression>(
       [](VariableType type, auto lexeme)
       {
-        return VariableExpression{type, std::string{lexeme.begin(), lexeme.end()}};
+        return VariableExpression{type, lexeme | std::ranges::to<std::string>()};
       } // NOLINT(readability-named-parameter)
     );
   };
@@ -66,7 +67,7 @@ namespace
 
     static constexpr auto value = lexy::callback<std::string>(
           [](auto lexeme) {  // NOLINT(readability-named-parameter)
-              auto str = std::string{lexeme.begin(), lexeme.end()};
+              auto str = lexeme | std::ranges::to<std::string>();
               
               if (!str.empty() && (str.back() == '\'' || str.back() == '"')) {
                   str.pop_back();
@@ -103,7 +104,7 @@ namespace
                  dsl::identifier(dsl::ascii::alpha).pattern()); // NOLINT(readability-static-accessed-through-instance)
     static constexpr auto rule = dsl::peek(kUnitToken) >> dsl::capture(kUnitToken);
     static constexpr auto value = lexy::callback<UnitConstantExpression>(
-      [](auto lexeme) { return UnitConstantExpression{std::string{lexeme.begin(), lexeme.end()}}; });
+      [](auto lexeme) { return UnitConstantExpression{lexeme | std::ranges::to<std::string>()}; });
   };
 
   struct Constant

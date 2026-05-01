@@ -14,7 +14,6 @@
 
 namespace app::services
 {
-
   PlaylistExporter::PlaylistExporter(rs::model::TrackIdList& list,
                                      app::ui::TrackRowDataProvider const& provider,
                                      std::filesystem::path root,
@@ -110,5 +109,4 @@ namespace app::services
   {
     scheduleForWrite();
   }
-
 } // namespace app::services

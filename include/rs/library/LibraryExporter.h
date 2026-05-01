@@ -16,7 +16,6 @@ namespace YAML
 
 namespace rs::library
 {
-
   /**
    * ExportMode - Controls the verbosity of the library export.
    */
@@ -50,5 +49,4 @@ namespace rs::library
 
     MusicLibrary& _ml;
   };
-
 } // namespace rs::library

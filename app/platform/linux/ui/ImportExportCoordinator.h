@@ -77,5 +77,4 @@ namespace app::ui
     std::jthread _importThread;
     std::unique_ptr<ImportProgressDialog> _importDialog;
   };
-
 } // namespace app::ui

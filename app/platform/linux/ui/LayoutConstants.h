@@ -5,7 +5,6 @@
 
 namespace app::ui::Layout
 {
-
   // Spacing presets
   constexpr int kSpacingSmall = 4;
   constexpr int kSpacingMedium = 6;
@@ -24,5 +23,4 @@ namespace app::ui::Layout
 
   // Transition/animation durations (milliseconds)
   constexpr int kTransitionDurationMs = 250;
-
 } // namespace app::ui::Layout

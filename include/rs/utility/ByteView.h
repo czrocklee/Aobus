@@ -119,6 +119,33 @@ namespace rs::utility
       return reinterpret_cast<T const*>(span.data());
     }
 
+    /**
+     * Adapt a const span for legacy C APIs that take non-const pointers but don't mutate.
+     * Uses const_cast internally. Use with caution.
+     */
+    template<typename T>
+    inline T* asLegacyPtr(std::span<std::byte const> span) noexcept
+    {
+      return const_cast<T*>(asPtr<T>(span)); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+    }
+
+    /**
+     * Adapt a const pointer for legacy C APIs that take non-const pointers.
+     */
+    template<typename T, typename U>
+    inline T* asLegacyPtr(U const* ptr) noexcept
+    {
+      return const_cast<T*>(reinterpret_cast<T const*>(ptr)); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+    }
+
+    /**
+     * Shortcut for static_cast<std::uint32_t>(span.size()) commonly used in C APIs.
+     */
+    inline std::uint32_t size32(std::span<std::byte const> span) noexcept
+    {
+      return static_cast<std::uint32_t>(span.size());
+    }
+
     template<typename T>
     inline T* asMutablePtr(std::span<std::byte> span) noexcept
     {
@@ -150,7 +177,7 @@ namespace rs::utility
     inline T const* viewAt(Base const* base, std::size_t offset) noexcept
     {
       detail::requireTrivialLayout<T>();
-      auto const* data = reinterpret_cast<std::byte const*>(base) + offset;
+      auto const* const data = reinterpret_cast<std::byte const*>(base) + offset;
       gsl_Expects(detail::isAligned(data, alignof(T)));
       return reinterpret_cast<T const*>(data);
     }

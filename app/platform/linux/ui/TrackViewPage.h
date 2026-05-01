@@ -151,5 +151,4 @@ namespace app::ui
     TagEditRequestedSignal _tagEditRequested;
     CreateSmartListRequestedSignal _createSmartListRequested;
   };
-
 } // namespace app::ui

@@ -28,7 +28,6 @@
 
 namespace
 {
-
   using rs::DictionaryId;
   using rs::lmdb::Database;
 
@@ -168,7 +167,6 @@ namespace
     test::appendString(data, "");
     return data;
   }
-
 } // namespace
 
 using rs::DictionaryId;

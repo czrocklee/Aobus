@@ -52,5 +52,4 @@ namespace rs::library
 
     MusicLibrary& _ml;
   };
-
 } // namespace rs::library

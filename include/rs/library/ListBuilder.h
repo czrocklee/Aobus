@@ -12,7 +12,6 @@
 
 namespace rs::library
 {
-
   /**
    * ListBuilder - Fluent builder for constructing list binary data.
    *
@@ -87,5 +86,4 @@ namespace rs::library
     // Sub-builder stored as member
     TracksBuilder _tracksBuilder;
   };
-
 } // namespace rs::library

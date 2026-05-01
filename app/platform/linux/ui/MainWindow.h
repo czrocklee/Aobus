@@ -121,5 +121,4 @@ namespace app::ui
     // Layout constants
     static constexpr int kCoverArtSize = 50;
   };
-
 } // namespace app::ui

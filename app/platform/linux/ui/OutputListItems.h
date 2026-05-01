@@ -9,7 +9,6 @@
 
 namespace app::ui
 {
-
   /**
    * @brief GObject wrapper for a backend section header.
    */
@@ -61,5 +60,4 @@ namespace app::ui
     {
     }
   };
-
 } // namespace app::ui

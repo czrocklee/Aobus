@@ -4,6 +4,7 @@
 #include "platform/linux/ui/TrackViewPage.h"
 #include "platform/linux/ui/LayoutConstants.h"
 #include "platform/linux/ui/TrackRowDataProvider.h"
+#include <rs/utility/ByteView.h>
 
 #include <glibmm/wrap.h>
 #include <gtk/gtk.h>
@@ -27,7 +28,6 @@
 
 namespace app::ui
 {
-
   namespace
   {
     using RowCompareFn = std::move_only_function<int(TrackRow const&, TrackRow const&)>;
@@ -111,8 +111,7 @@ namespace app::ui
         return nullptr;
       }
 
-      auto* const object = Glib::wrap_auto(
-        static_cast<GObject*>(const_cast<void*>(item)), false); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+      auto* const object = Glib::wrap_auto(rs::utility::layout::asLegacyPtr<GObject>(item), false);
       return dynamic_cast<TrackRow const*>(object);
     }
 
@@ -1050,5 +1049,4 @@ namespace app::ui
     auto const it = std::ranges::find(_columns, column, &ColumnBinding::id);
     return it != _columns.end() ? &*it : nullptr;
   }
-
 } // namespace app::ui

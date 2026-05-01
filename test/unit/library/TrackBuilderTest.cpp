@@ -26,7 +26,6 @@ using rs::lmdb::WriteTransaction;
 
 namespace
 {
-
   std::pair<std::vector<std::byte>, std::vector<std::byte>> serializeTestTrack(TrackBuilder& builder)
   {
     auto temp = TempDir{};
@@ -36,7 +35,6 @@ namespace
     auto resources = rs::library::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
     return builder.serialize(wtxn, dict, resources);
   }
-
 } // namespace
 
 TEST_CASE("TrackBuilder - Default Constructor via createNew")

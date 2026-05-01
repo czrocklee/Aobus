@@ -13,7 +13,6 @@
 
 namespace rs::audio
 {
-
   class IPcmSource
   {
   public:
@@ -24,5 +23,4 @@ namespace rs::audio
     virtual bool isDrained() const noexcept = 0;
     virtual std::uint32_t bufferedMs() const noexcept = 0;
   };
-
 } // namespace rs::audio

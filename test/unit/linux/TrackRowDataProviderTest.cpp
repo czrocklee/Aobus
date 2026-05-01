@@ -242,7 +242,6 @@ namespace rs::model
     TempDir _tempDir;
     rs::library::MusicLibrary _library;
   };
-
 } // namespace rs::model
 
 using namespace rs::model;

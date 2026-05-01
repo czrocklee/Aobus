@@ -17,7 +17,6 @@
 
 namespace rs::library
 {
-
   namespace
   {
     std::string modeToString(ExportMode mode)
@@ -236,5 +235,4 @@ namespace rs::library
     }
     out << YAML::EndSeq;
   }
-
 } // namespace rs::library

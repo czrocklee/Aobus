@@ -15,7 +15,6 @@
 
 namespace rs::audio
 {
-
   // Common audio sample type for internal PCM representation
   using AudioSample = float;
 
@@ -96,5 +95,4 @@ namespace rs::audio
     rs::audio::AudioQuality quality = rs::audio::AudioQuality::Unknown;
     std::string qualityTooltip;
   };
-
 } // namespace rs::audio

@@ -13,7 +13,6 @@
 
 namespace app::ui
 {
-
   namespace
   {
     rs::ListId allTracksListId()
@@ -782,5 +781,4 @@ namespace app::ui
       sigc::mem_fun(*this, &ListSidebarController::onListSelectionChanged));
     _listView.set_model(_listSelectionModel);
   }
-
 } // namespace app::ui

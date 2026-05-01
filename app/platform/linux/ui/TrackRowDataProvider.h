@@ -98,5 +98,4 @@ namespace app::ui
     mutable std::unordered_map<TrackId, Glib::RefPtr<TrackRow>> _rowCache;
     mutable std::unordered_map<rs::DictionaryId, Glib::ustring> _stringCache;
   };
-
 } // namespace app::ui

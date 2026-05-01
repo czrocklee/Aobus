@@ -510,5 +510,4 @@ namespace app::ui
         return false;
       });
   }
-
 } // namespace app::ui

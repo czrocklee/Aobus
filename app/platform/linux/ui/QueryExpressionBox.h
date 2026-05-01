@@ -17,7 +17,6 @@ namespace rs::library
 
 namespace app::ui
 {
-
   class QueryExpressionBox final : public Gtk::Box
   {
   public:
@@ -52,5 +51,4 @@ namespace app::ui
     static constexpr int kCompletionWidth = 260;
     static constexpr int kCompletionHeight = 180;
   };
-
 } // namespace app::ui

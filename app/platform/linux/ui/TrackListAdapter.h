@@ -19,7 +19,6 @@
 
 namespace app::ui
 {
-
   enum class TrackFilterMode
   {
     None,
@@ -68,5 +67,4 @@ namespace app::ui
     std::unique_ptr<rs::expr::ExecutionPlan> _filterPlan;
     rs::expr::PlanEvaluator _filterEvaluator;
   };
-
 } // namespace app::ui

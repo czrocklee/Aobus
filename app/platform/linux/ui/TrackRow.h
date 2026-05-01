@@ -82,5 +82,4 @@ namespace app::ui
     std::uint16_t _trackNumber = 0;
     std::optional<std::uint64_t> _resourceId;
   };
-
 } // namespace app::ui

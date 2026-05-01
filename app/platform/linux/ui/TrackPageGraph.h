@@ -71,5 +71,4 @@ namespace app::ui
 
     std::map<rs::ListId, TrackPageContext> _trackPages;
   };
-
 } // namespace app::ui

@@ -13,7 +13,6 @@
 
 namespace rs::audio
 {
-
   /**
    * @brief Callbacks provided by the engine to the backend.
    */
@@ -82,5 +81,4 @@ namespace rs::audio
 
     virtual BackendKind kind() const noexcept = 0;
   };
-
 } // namespace rs::audio

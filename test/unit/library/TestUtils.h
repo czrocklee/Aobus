@@ -32,5 +32,4 @@ namespace test
     payload.insert_range(payload.end(), rs::utility::bytes::view(str));
     payload.push_back(std::byte{'\0'});
   }
-
 } // namespace test

@@ -96,5 +96,4 @@ namespace app::ui
     rs::audio::TransportState _lastPlaybackState = rs::audio::TransportState::Idle;
     std::string _lastPlaybackErrorMessage;
   };
-
 } // namespace app::ui

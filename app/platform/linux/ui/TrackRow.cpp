@@ -13,7 +13,6 @@
 
 namespace app::ui
 {
-
   namespace
   {
     std::string formatDuration(std::chrono::milliseconds duration)
@@ -162,5 +161,4 @@ namespace app::ui
       .trackId = _id,
     };
   }
-
 } // namespace app::ui
