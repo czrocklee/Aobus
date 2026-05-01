@@ -7,7 +7,6 @@
 
 namespace app::ui
 {
-
   ListTreeNode::ListTreeNode()
     : _children{Gio::ListStore<ListTreeNode>::create()}
   {
@@ -30,5 +29,4 @@ namespace app::ui
 
     return _children->get_item(index);
   }
-
 } // namespace app::ui

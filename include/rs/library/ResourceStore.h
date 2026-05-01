@@ -9,7 +9,6 @@
 
 namespace rs::library
 {
-
   class ResourceStore
   {
   public:
@@ -45,5 +44,4 @@ namespace rs::library
     lmdb::Database::Writer _writer;
     friend class ResourceStore;
   };
-
 }

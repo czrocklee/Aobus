@@ -7,7 +7,6 @@
 
 namespace rs::audio
 {
-
   /**
    * @brief Describes the physical format of a PCM audio stream.
    */
@@ -22,5 +21,4 @@ namespace rs::audio
 
     bool operator==(AudioFormat const&) const = default;
   };
-
 } // namespace rs::audio

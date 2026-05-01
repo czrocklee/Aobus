@@ -13,7 +13,6 @@
 
 namespace app::ui
 {
-
   class ListTreeNode final : public Glib::Object
   {
   public:
@@ -45,5 +44,4 @@ namespace app::ui
     Glib::RefPtr<Gio::ListStore<ListTreeNode>> _children;
     ListTreeNode* _parent = nullptr;
   };
-
 } // namespace app::ui

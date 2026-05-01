@@ -284,5 +284,4 @@ namespace app::ui
   {
     _activePlaybackSequence.reset();
   }
-
 } // namespace app::ui

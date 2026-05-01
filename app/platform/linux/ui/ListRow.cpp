@@ -5,7 +5,6 @@
 
 namespace app::ui
 {
-
   ListRow::ListRow()
     : _listId{ListId{0}}, _parentId{ListId{0}}
   {
@@ -27,5 +26,4 @@ namespace app::ui
     obj->_filter = filter;
     return obj;
   }
-
 } // namespace app::ui

@@ -5,6 +5,7 @@
 #include "Frame.h"
 #include "Layout.h"
 #include <rs/tag/mpeg/File.h>
+#include <rs/utility/ByteView.h>
 
 #include <charconv>
 #include <cstring>
@@ -55,7 +56,6 @@ namespace rs::tag::mpeg::id3v2
                       void const* data,
                       std::size_t size)
     {
-
       auto view = V23TextFrameView{data, size};
       if (auto text = view.text(); !text.empty())
       {
@@ -126,7 +126,7 @@ namespace rs::tag::mpeg::id3v2
       ++ptr; // skip null terminator
 
       std::size_t const imageSize = size - (ptr - frameData);
-      builder.metadata().coverArtData(std::span{reinterpret_cast<std::byte const*>(ptr), imageSize});
+      builder.metadata().coverArtData(rs::utility::bytes::view(ptr, imageSize));
     }
 
     void handleTxxx(rs::library::TrackBuilder& builder, rs::tag::File const& owner, void const* data, std::size_t size)
@@ -167,7 +167,6 @@ namespace rs::tag::mpeg::id3v2
     }
 
 #include "tag/mpeg/id3v2/FrameDispatch.h"
-
   } // namespace
 
   rs::library::TrackBuilder loadFrames(rs::tag::File const& owner,

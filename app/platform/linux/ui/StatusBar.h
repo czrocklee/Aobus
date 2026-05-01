@@ -12,7 +12,6 @@
 
 namespace app::ui
 {
-
   class StatusBar final : public Gtk::Box
   {
   public:
@@ -94,5 +93,4 @@ namespace app::ui
     static constexpr int kImportProgressWidth = 200;
     static constexpr int kTransitionDurationMs = 250;
   };
-
 } // namespace app::ui

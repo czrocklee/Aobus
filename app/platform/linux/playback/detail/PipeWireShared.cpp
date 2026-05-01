@@ -11,7 +11,6 @@ extern "C"
 
 namespace app::playback::detail
 {
-
   void ensurePipeWireInit()
   {
     struct PwInitGuard
@@ -107,5 +106,4 @@ namespace app::playback::detail
 
     return format;
   }
-
 } // namespace app::playback::detail

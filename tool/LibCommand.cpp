@@ -2,48 +2,48 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "LibCommand.h"
+#include <chrono>
 #include <rs/library/LibraryExporter.h>
 #include <rs/library/LibraryImporter.h>
 
 #include <array>
-#include <iomanip>
-#include <sstream>
+#include <format>
+#include <ranges>
 
 namespace rs::tool
 {
   namespace
   {
     constexpr std::size_t kUuidByteCount = 16;
-    constexpr std::size_t kUuidDash0 = 3; // NOLINT(readability-magic-numbers)
-    constexpr std::size_t kUuidDash1 = 5; // NOLINT(readability-magic-numbers)
-    constexpr std::size_t kUuidDash2 = 7; // NOLINT(readability-magic-numbers)
-    constexpr std::size_t kUuidDash3 = 9; // NOLINT(readability-magic-numbers)
 
     std::string formatUuid(std::array<std::byte, kUuidByteCount> const& id)
     {
-      auto oss = std::ostringstream{};
-      oss << std::hex << std::setfill('0');
+      constexpr std::size_t kUuidStringLength = 36;
+      constexpr std::size_t kFirstDashPos = 3;
+      constexpr std::size_t kSecondDashPos = 5;
+      constexpr std::size_t kThirdDashPos = 7;
+      constexpr std::size_t kFourthDashPos = 9;
 
-      for (std::size_t i = 0; i < id.size(); ++i)
+      auto result = std::string{};
+      result.reserve(kUuidStringLength);
+
+      for (auto const [idx, byte] : std::views::enumerate(id))
       {
-        oss << std::setw(2) << static_cast<int>(id[i]);
+        result += std::format("{:02x}", static_cast<unsigned char>(byte));
 
-        if (i == kUuidDash0 || i == kUuidDash1 || i == kUuidDash2 || i == kUuidDash3)
+        if (idx == kFirstDashPos || idx == kSecondDashPos || idx == kThirdDashPos || idx == kFourthDashPos)
         {
-          oss << "-";
+          result += "-";
         }
       }
 
-      return oss.str();
+      return result;
     }
 
     std::string formatTimestamp(std::uint64_t unixMs)
     {
-      auto const tp = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds{unixMs});
-      auto const time = std::chrono::system_clock::to_time_t(tp);
-      auto oss = std::ostringstream{};
-      oss << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S");
-      return oss.str();
+      auto const tp = std::chrono::system_clock::time_point{std::chrono::milliseconds{unixMs}};
+      return std::format("{:%Y-%m-%d %H:%M:%S}", tp);
     }
 
     void show(rs::library::MusicLibrary& ml, std::ostream& os)

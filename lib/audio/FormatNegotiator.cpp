@@ -8,7 +8,6 @@
 
 namespace rs::audio
 {
-
   namespace
   {
     template<typename T, typename Collection, typename Selector>
@@ -130,5 +129,4 @@ namespace rs::audio
 
     return plan;
   }
-
 } // namespace rs::audio

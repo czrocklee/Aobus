@@ -39,5 +39,4 @@ namespace app::playback
     std::string _targetDeviceId;
     bool _exclusiveMode = false;
   };
-
 } // namespace app::playback

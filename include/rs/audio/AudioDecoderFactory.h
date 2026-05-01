@@ -10,7 +10,6 @@
 
 namespace rs::audio
 {
-
   /**
    * @brief Global initialization for audio decoders (if needed).
    */
@@ -21,5 +20,4 @@ namespace rs::audio
    */
   std::unique_ptr<IAudioDecoderSession> createAudioDecoderSession(std::filesystem::path const& filePath,
                                                                   AudioFormat outputFormat);
-
 } // namespace rs::audio

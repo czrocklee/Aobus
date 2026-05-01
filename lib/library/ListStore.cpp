@@ -5,7 +5,6 @@
 
 namespace rs::library
 {
-
   ListStore::ListStore(lmdb::Database db)
     : _database{std::move(db)}
   {
@@ -101,5 +100,4 @@ namespace rs::library
   {
     return _writer.get(id.value()).transform([](auto const& buffer) { return ListView{buffer}; });
   }
-
 } // namespace rs::library

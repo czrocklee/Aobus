@@ -18,7 +18,6 @@
 
 namespace rs::model
 {
-
   // SourceObserver implementation
 
   SourceObserver::SourceObserver(SmartListEngine& engine, TrackIdList& source)
@@ -672,5 +671,4 @@ namespace rs::model
 
     return rs::library::TrackStore::Reader::LoadMode::Hot;
   }
-
 } // namespace rs::model

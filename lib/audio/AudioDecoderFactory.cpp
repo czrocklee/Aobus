@@ -8,7 +8,6 @@
 
 namespace rs::audio
 {
-
   void initializeAudioDecoders()
   {
   }
@@ -30,5 +29,4 @@ namespace rs::audio
 
     return {};
   }
-
 } // namespace rs::audio

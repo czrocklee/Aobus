@@ -11,7 +11,6 @@
 
 namespace app::ui
 {
-
   class PlaybackBar final : public Gtk::Box
   {
   public:
@@ -61,5 +60,4 @@ namespace app::ui
     // Layout constants
     static constexpr int kWidthChars = 7;
   };
-
 } // namespace app::ui

@@ -9,7 +9,6 @@
 
 namespace app::ui
 {
-
   PlaybackBar::PlaybackBar()
     : Gtk::Box(Gtk::Orientation::HORIZONTAL)
   {
@@ -229,5 +228,4 @@ namespace app::ui
   {
     return _seekRequested;
   }
-
 } // namespace app::ui

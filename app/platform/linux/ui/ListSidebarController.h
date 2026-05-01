@@ -89,5 +89,4 @@ namespace app::ui
     Glib::RefPtr<Gio::SimpleAction> _deleteListAction;
     Glib::RefPtr<Gio::SimpleAction> _editListAction;
   };
-
 } // namespace app::ui

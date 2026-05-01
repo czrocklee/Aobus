@@ -11,7 +11,6 @@
 
 namespace rs::audio
 {
-
   /**
    * @brief A backend that does nothing. Used as a fallback or for testing.
    */
@@ -79,5 +78,4 @@ namespace rs::audio
 
     BackendKind kind() const noexcept override { return BackendKind::None; }
   };
-
 } // namespace rs::audio

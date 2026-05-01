@@ -10,7 +10,6 @@
 
 namespace rs::library
 {
-
   // TrackView member implementations
   std::string_view TrackView::hotTitle() const
   {
@@ -138,5 +137,4 @@ namespace rs::library
     ++_pos;
     return tmp;
   }
-
 } // namespace rs::library

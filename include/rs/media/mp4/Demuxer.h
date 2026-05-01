@@ -11,7 +11,6 @@
 
 namespace rs::media::mp4
 {
-
   /**
    * @brief Demuxer for extracting specific streams (like ALAC/AAC packets) from an MP4 file container.
    */
@@ -90,5 +89,4 @@ namespace rs::media::mp4
     std::uint32_t _timescale = 0;
     std::uint64_t _duration = 0;
   };
-
 } // namespace rs::media::mp4

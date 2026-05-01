@@ -22,7 +22,6 @@
 
 namespace app::ui
 {
-
   namespace
   {
     std::string formatDuration(std::chrono::milliseconds ms)
@@ -679,5 +678,4 @@ namespace app::ui
     _importBox.set_visible(false);
     _selectionLabel.set_visible(true);
   }
-
 } // namespace app::ui

@@ -13,7 +13,6 @@
 
 namespace rs::model
 {
-
   /**
    * AllTrackIdsList - Authoritative ordered list of all TrackIds in the library.
    * Loaded from TrackStore and maintained in ascending TrackId order.
@@ -40,5 +39,4 @@ namespace rs::model
     rs::library::TrackStore& _store;
     std::flat_set<TrackId> _trackIds;
   };
-
 } // namespace rs::model

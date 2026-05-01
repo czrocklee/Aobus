@@ -13,7 +13,6 @@
 
 namespace app::ui
 {
-
   class TagPromptDialog final : public Gtk::Dialog
   {
   public:
@@ -71,5 +70,4 @@ namespace app::ui
     static constexpr int kTagsScrolledMinHeight = 220;
     static constexpr int kSuggestionsScrolledMinHeight = 96;
   };
-
 } // namespace app::ui

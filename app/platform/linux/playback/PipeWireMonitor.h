@@ -13,7 +13,6 @@
 
 namespace app::playback
 {
-
   class PipeWireMonitor final
   {
   public:
@@ -36,5 +35,4 @@ namespace app::playback
   private:
     std::unique_ptr<Impl> _impl;
   };
-
 } // namespace app::playback

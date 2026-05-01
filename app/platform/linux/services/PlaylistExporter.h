@@ -15,7 +15,6 @@
 
 namespace app::services
 {
-
   class PlaylistExporter final : public rs::model::TrackIdListObserver
   {
   public:
@@ -45,5 +44,4 @@ namespace app::services
     std::filesystem::path const _path;
     std::unique_ptr<sigc::connection> _timeoutConnection;
   };
-
 } // namespace app::services

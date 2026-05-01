@@ -11,7 +11,6 @@
 
 namespace rs::expr
 {
-
   // Number of reserved registers for intermediate values
   constexpr std::size_t kReservedRegisters = 16;
 
@@ -320,7 +319,6 @@ namespace rs::expr
 
     if (plan.tagBloomMask != 0)
     {
-
       if (auto trackBloom = track.tags().bloom(); (trackBloom & plan.tagBloomMask) != plan.tagBloomMask)
       {
         return false;
@@ -411,5 +409,4 @@ namespace rs::expr
 
     return _registers.empty() ? true : (_registers[0] != 0);
   }
-
 } // namespace rs::expr

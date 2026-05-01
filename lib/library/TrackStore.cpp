@@ -7,7 +7,6 @@
 
 namespace rs::library
 {
-
   // TrackStore implementation
   TrackStore::TrackStore(lmdb::Database hotDb, lmdb::Database coldDb)
     : _hotDb{std::move(hotDb)}, _coldDb{std::move(coldDb)}
@@ -214,5 +213,4 @@ namespace rs::library
             .transform([&hotBuffer](auto const& coldBuffer) { return TrackView{hotBuffer, coldBuffer}; });
         });
   }
-
 } // namespace rs::library

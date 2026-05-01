@@ -63,7 +63,7 @@ namespace app::playback
     Impl& operator=(Impl&&) = delete;
 
     // Event Handlers
-    void handleStreamProcess();
+    void handleStreamProcess() const;
     void handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param);
     void handleStreamStateChanged(enum pw_stream_state oldState,
                                   enum pw_stream_state newState,
@@ -119,7 +119,7 @@ namespace app::playback
     }();
   }
 
-  void PipeWireBackend::Impl::handleStreamProcess()
+  void PipeWireBackend::Impl::handleStreamProcess() const
   {
     auto* buffer = ::pw_stream_dequeue_buffer(_stream.get());
     if (buffer == nullptr)
@@ -160,7 +160,7 @@ namespace app::playback
       buffer->buffer->datas[0].chunk->offset = 0;
       buffer->buffer->datas[0].chunk->size = 0;
       ::pw_stream_queue_buffer(_stream.get(), buffer);
-      if (_callbacks.isSourceDrained != nullptr && _callbacks.isSourceDrained(_callbacks.userData) != 0)
+      if (_callbacks.isSourceDrained != nullptr && _callbacks.isSourceDrained(_callbacks.userData))
       {
         ::pw_stream_flush(_stream.get(), true);
       }
@@ -254,7 +254,7 @@ namespace app::playback
     }
 
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
-    ::pw_properties* rawProps = ::pw_properties_new(PW_KEY_MEDIA_TYPE,
+    ::pw_properties* rawProps = ::pw_properties_new(PW_KEY_MEDIA_TYPE, // NOLINT(cppcoreguidelines-pro-type-vararg)
                                                     "Audio",
                                                     PW_KEY_MEDIA_CATEGORY,
                                                     "Playback",
@@ -268,7 +268,8 @@ namespace app::playback
                                                     "RockStudio Playback",
                                                     nullptr);
     auto props = rs::utility::makeUniquePtr<::pw_properties_free>(rawProps);
-    ::pw_properties_setf(props.get(), PW_KEY_NODE_RATE, "1/%u", format.sampleRate);
+    ::pw_properties_setf(
+      props.get(), PW_KEY_NODE_RATE, "1/%u", format.sampleRate); // NOLINT(cppcoreguidelines-pro-type-vararg)
 
     if (!_targetDeviceId.empty())
     {
@@ -303,7 +304,7 @@ namespace app::playback
     ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
     ::spa_pod_frame frame{};
     ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
-    ::spa_pod_builder_add(&builder,
+    ::spa_pod_builder_add(&builder, // NOLINT(cppcoreguidelines-pro-type-vararg)
                           SPA_FORMAT_mediaType,
                           SPA_POD_Id(SPA_MEDIA_TYPE_audio),
                           SPA_FORMAT_mediaSubtype,
@@ -319,7 +320,7 @@ namespace app::playback
     if (format.channels == 2)
     {
       auto position = std::array<std::uint32_t, 2>{SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR};
-      ::spa_pod_builder_add(&builder,
+      ::spa_pod_builder_add(&builder, // NOLINT(cppcoreguidelines-pro-type-vararg)
                             SPA_FORMAT_AUDIO_position,
                             SPA_POD_Array(sizeof(std::uint32_t), SPA_TYPE_Id, position.size(), position.data()),
                             0);

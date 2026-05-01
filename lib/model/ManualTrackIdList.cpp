@@ -9,7 +9,6 @@
 
 namespace rs::model
 {
-
   ManualTrackIdList::ManualTrackIdList(rs::library::ListView const& view, TrackIdList* source)
     : _source{source}
   {
@@ -156,5 +155,4 @@ namespace rs::model
 
     return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
   }
-
 } // namespace rs::model

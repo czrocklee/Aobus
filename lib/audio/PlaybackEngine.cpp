@@ -20,7 +20,6 @@
 
 namespace rs::audio
 {
-
   namespace
   {
     constexpr std::uint32_t kPrerollTargetMs = 200;
@@ -858,5 +857,4 @@ namespace rs::audio
       }
     }
   }
-
 } // namespace rs::audio

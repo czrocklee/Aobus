@@ -8,7 +8,6 @@
 
 namespace app::ui
 {
-
   TagPopover::TagPopover(rs::library::MusicLibrary& musicLibrary, std::vector<TrackId> selectedTrackIds)
     : _musicLibrary{musicLibrary}, _selectedTrackIds{std::move(selectedTrackIds)}
   {
@@ -121,7 +120,6 @@ namespace app::ui
       auto tagsOnTrack = std::set<std::string>{};
       for (auto const tagId : view->tags())
       {
-
         if (auto const tag = std::string(dictionary.get(tagId)); !tag.empty())
         {
           tagsOnTrack.insert(tag);
@@ -423,5 +421,4 @@ namespace app::ui
       chip.add_css_class("flat");
     }
   }
-
 } // namespace app::ui

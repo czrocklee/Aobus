@@ -7,7 +7,6 @@
 
 namespace rs::audio
 {
-
   class AlacDecoderSession final : public IAudioDecoderSession
   {
   public:
@@ -26,5 +25,4 @@ namespace rs::audio
     struct Impl;
     std::unique_ptr<Impl> _impl;
   };
-
 } // namespace rs::audio

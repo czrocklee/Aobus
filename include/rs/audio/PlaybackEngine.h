@@ -25,7 +25,6 @@ namespace rs::audio
 
 namespace rs::audio
 {
-
   class PlaybackEngine final
   {
   public:
@@ -95,5 +94,4 @@ namespace rs::audio
     OnRouteChanged _onRouteChanged;
     EngineRouteSnapshot _routeSnapshot;
   };
-
 } // namespace rs::audio

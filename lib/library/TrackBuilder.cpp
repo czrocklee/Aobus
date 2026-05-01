@@ -10,7 +10,6 @@
 
 namespace rs::library
 {
-
   constexpr std::uint32_t kBloomBitMask = 31;
 
   //=============================================================================
@@ -617,5 +616,4 @@ namespace rs::library
   {
     return PreparedCold{this, txn, dict, resources};
   }
-
 } // namespace rs::library

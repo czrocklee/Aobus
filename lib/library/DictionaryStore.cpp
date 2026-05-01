@@ -104,5 +104,4 @@ namespace rs::library
     _reservedStrings.emplace(_idToStringStorage.back());
     return id;
   }
-
 } // namespace rs::library

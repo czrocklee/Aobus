@@ -323,7 +323,7 @@ namespace rs::audio
     if (outBps == 16)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 2);
-      auto* out = reinterpret_cast<std::int16_t*>(impl->pcmBuffer.data());
+      auto* out = rs::utility::layout::asMutablePtr<std::int16_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
       {
@@ -336,7 +336,7 @@ namespace rs::audio
     else if (outBps == 24)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * kBytesPer24BitSample);
-      auto* out = reinterpret_cast<std::uint8_t*>(impl->pcmBuffer.data());
+      auto* out = rs::utility::layout::asMutablePtr<std::uint8_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
       {
@@ -352,7 +352,7 @@ namespace rs::audio
     else if (outBps == 32)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 4);
-      auto* out = reinterpret_cast<std::int32_t*>(impl->pcmBuffer.data());
+      auto* out = rs::utility::layout::asMutablePtr<std::int32_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
       {
@@ -427,5 +427,4 @@ namespace rs::audio
     [[maybe_unused]] auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
     /* TODO logging */
   }
-
 } // namespace rs::audio

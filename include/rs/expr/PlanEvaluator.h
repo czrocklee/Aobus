@@ -11,7 +11,6 @@
 
 namespace rs::expr
 {
-
   /**
    * PlanEvaluator - Fast execution engine for compiled queries.
    *
@@ -44,5 +43,4 @@ namespace rs::expr
     // Register stack for evaluation
     mutable std::vector<std::int64_t> _registers;
   };
-
 } // namespace rs::expr

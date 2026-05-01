@@ -17,7 +17,6 @@
 
 namespace rs::audio
 {
-
   class StreamingPcmSource final : public IPcmSource
   {
   public:
@@ -56,5 +55,4 @@ namespace rs::audio
     std::uint32_t _prerollTargetMs = 0;
     std::uint32_t _decodeHighWatermarkMs = 0;
   };
-
 } // namespace rs::audio

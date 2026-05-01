@@ -67,5 +67,4 @@ namespace app::ui
     Glib::RefPtr<Gio::SimpleAction> _trackTagRemoveAction;
     Glib::RefPtr<Gio::SimpleAction> _trackTagToggleAction;
   };
-
 } // namespace app::ui

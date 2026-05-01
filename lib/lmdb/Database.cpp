@@ -19,12 +19,12 @@ namespace rs::lmdb
     template<typename T>
     ::MDB_val makeVal(T const& val)
     {
-      return {.mv_size = sizeof(T), .mv_data = const_cast<T*>(&val)};
+      return {.mv_size = sizeof(T), .mv_data = utility::layout::asLegacyPtr<T>(&val)};
     }
 
     inline ::MDB_val makeVal(void const* data = nullptr, std::size_t size = 0)
     {
-      return {.mv_size = size, .mv_data = const_cast<void*>(data)}; // NOLINT(cppcoreguidelines-pro-type-const-cast)
+      return {.mv_size = size, .mv_data = utility::layout::asLegacyPtr<void>(data)};
     }
 
     template<typename T>

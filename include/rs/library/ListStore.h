@@ -14,7 +14,6 @@
 
 namespace rs::library
 {
-
   /**
    * ListStore - Binary storage for lists using ListLayout.
    */
@@ -99,5 +98,4 @@ namespace rs::library
     lmdb::Database::Writer _writer;
     friend class ListStore;
   };
-
 } // namespace rs::library

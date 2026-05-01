@@ -120,5 +120,4 @@ namespace
     auto view = ListView{payload};
     CHECK(view.tracks().size() == 0);
   }
-
 } // anonymous namespace

@@ -142,5 +142,4 @@ namespace rs::audio
     auto const clampedOffset = std::min<std::uint64_t>(byteOffset, _pcmBytes.size());
     return static_cast<std::size_t>(clampedOffset - (clampedOffset % frameByteCount));
   }
-
 } // namespace rs::audio

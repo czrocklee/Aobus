@@ -18,7 +18,6 @@
 
 namespace app::ui
 {
-
   namespace
   {
     std::string composeEffectiveExpression(std::string_view parent, std::string_view local)
@@ -455,5 +454,4 @@ namespace app::ui
     // trackIds remain empty for smart lists
     return draftData;
   }
-
 } // namespace app::ui

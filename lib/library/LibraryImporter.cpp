@@ -22,7 +22,6 @@
 
 namespace rs::library
 {
-
   namespace
   {
     struct ImportedList
@@ -403,5 +402,4 @@ namespace rs::library
       listWriter.update(childIt->second, serializeList(importedList, parentIt->second));
     }
   }
-
 } // namespace rs::library

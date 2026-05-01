@@ -13,7 +13,6 @@
 
 namespace app::ui
 {
-
   class OutputMenuModel final : public sigc::trackable
   {
   public:
@@ -38,5 +37,4 @@ namespace app::ui
 
     ChangedSignal _signalChanged;
   };
-
 } // namespace app::ui

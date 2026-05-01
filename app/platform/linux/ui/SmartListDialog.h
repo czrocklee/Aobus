@@ -91,5 +91,4 @@ namespace app::ui
     // Edit mode state
     std::optional<rs::ListId> _editListId;
   };
-
 } // namespace app::ui

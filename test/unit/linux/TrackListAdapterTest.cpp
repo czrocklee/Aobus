@@ -195,12 +195,10 @@ namespace rs::model::test
   {
     _rowCache.erase(id);
   }
-
 } // namespace rs::model::test
 
 namespace
 {
-
   using rs::TrackId;
   using rs::library::MusicLibrary;
   using rs::library::TrackBuilder;
@@ -409,7 +407,6 @@ namespace
     return check(rowData.artist) || check(rowData.album) || check(rowData.albumArtist) || check(rowData.genre) ||
            check(rowData.title) || check(rowData.tags);
   }
-
 } // namespace
 
 TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")

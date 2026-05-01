@@ -10,7 +10,6 @@
 
 namespace rs::model
 {
-
   /**
    * ListKind - Type of list being created.
    */
@@ -34,5 +33,4 @@ namespace rs::model
     std::string expression;            // Only used for Smart lists
     std::vector<rs::TrackId> trackIds; // Only used for Manual lists
   };
-
 } // namespace rs::model

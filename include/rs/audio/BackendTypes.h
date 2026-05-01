@@ -14,7 +14,6 @@
 
 namespace rs::audio
 {
-
   enum class BackendKind
   {
     None,
@@ -169,5 +168,4 @@ namespace rs::audio
     LossySource,
     Clipped,
   };
-
 } // namespace rs::audio

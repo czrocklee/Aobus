@@ -12,7 +12,6 @@
 
 namespace app::ui
 {
-
   namespace
   {
     constexpr auto kTrackColumnDefinitions = std::to_array<TrackColumnDefinition>({
@@ -32,7 +31,7 @@ namespace app::ui
 
     TrackColumnDefinition const* trackColumnDefinition(TrackColumn column)
     {
-      auto const it = std::ranges::find(kTrackColumnDefinitions, column, &TrackColumnDefinition::column);
+      auto const* const it = std::ranges::find(kTrackColumnDefinitions, column, &TrackColumnDefinition::column);
 
       if (it == kTrackColumnDefinitions.end())
       {
@@ -201,14 +200,6 @@ namespace app::ui
         };
         return spec;
       case TrackGroupBy::Album:
-        spec.sortBy = {
-          {TrackSortField::AlbumArtist},
-          {TrackSortField::Album},
-          {TrackSortField::DiscNumber},
-          {TrackSortField::TrackNumber},
-          {TrackSortField::Title},
-        };
-        return spec;
       case TrackGroupBy::AlbumArtist:
         spec.sortBy = {
           {TrackSortField::AlbumArtist},
@@ -446,5 +437,4 @@ namespace app::ui
   {
     setLayout(defaultTrackColumnLayout());
   }
-
 } // namespace app::ui

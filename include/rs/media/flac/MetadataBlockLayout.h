@@ -50,5 +50,4 @@ namespace rs::media::flac
   static_assert(sizeof(StreamInfoLayout) == 34, "StreamInfoDataLayout should be 34 bytes");
   static_assert(alignof(StreamInfoLayout) == 1);
   static_assert(std::is_trivial_v<StreamInfoLayout>);
-
 } // namespace rs::media::flac

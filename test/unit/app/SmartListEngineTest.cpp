@@ -26,7 +26,6 @@
 
 namespace
 {
-
   using rs::TrackId;
   using rs::library::MusicLibrary;
   using rs::library::TrackBuilder;
@@ -249,7 +248,6 @@ namespace
     TempDir _tempDir;
     MusicLibrary _library;
   };
-
 } // namespace
 
 TEST_CASE("SmartListEngine", "[app][smartlist]")

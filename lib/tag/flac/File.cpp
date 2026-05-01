@@ -55,7 +55,6 @@ namespace rs::tag::flac
     }
 
 #include "tag/flac/VorbisCommentDispatch.h"
-
   } // namespace
 
   rs::library::TrackBuilder File::loadTrack() const
@@ -83,7 +82,6 @@ namespace rs::tag::flac
 
           if (auto const totalSamples = view.totalSamples(); view.sampleRate() > 0 && totalSamples > 0)
           {
-
             if (auto const durationMs = static_cast<std::uint32_t>((totalSamples * kMsPerSecond) / view.sampleRate());
                 durationMs > 0)
             {

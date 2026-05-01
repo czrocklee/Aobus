@@ -78,5 +78,4 @@ namespace rs::library
 
     std::span<std::byte const> _payload;
   };
-
 } // namespace rs::library

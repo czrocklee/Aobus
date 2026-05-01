@@ -31,5 +31,4 @@ namespace app::ui
    * Factory function that builds a ready-to-use session from a library path.
    */
   std::unique_ptr<LibrarySession> makeLibrarySession(std::filesystem::path const& rootPath);
-
 } // namespace app::ui

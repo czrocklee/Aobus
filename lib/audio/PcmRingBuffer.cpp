@@ -7,7 +7,6 @@
 
 namespace rs::audio
 {
-
   PcmRingBuffer::PcmRingBuffer()
   {
   }
@@ -55,5 +54,4 @@ namespace rs::audio
   {
     return _writeCount.load(std::memory_order_acquire) - _readCount.load(std::memory_order_acquire);
   }
-
 } // namespace rs::audio

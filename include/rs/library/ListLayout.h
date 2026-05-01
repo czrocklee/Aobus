@@ -66,5 +66,4 @@ namespace rs::library
 
   static_assert(sizeof(ListHeader) == kListHeaderSize, "ListHeader must be exactly 20 bytes");
   static_assert(alignof(ListHeader) == kListHeaderAlignment, "ListHeader must have 4-byte alignment");
-
 } // namespace rs::library

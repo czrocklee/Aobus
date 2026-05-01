@@ -13,7 +13,6 @@
 
 namespace rs::audio
 {
-
   class MemoryPcmSource final : public IPcmSource
   {
   public:
@@ -35,5 +34,4 @@ namespace rs::audio
     mutable std::mutex _mutex;
     std::size_t _readOffset = 0;
   };
-
 } // namespace rs::audio

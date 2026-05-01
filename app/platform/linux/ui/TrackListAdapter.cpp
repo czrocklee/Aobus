@@ -9,9 +9,7 @@
 #include <rs/library/TrackStore.h>
 
 #include <algorithm>
-#include <cctype>
-#include <cstddef>
-#include <cstdint>
+#include <boost/algorithm/string.hpp>
 #include <format>
 #include <optional>
 #include <string_view>
@@ -19,27 +17,8 @@
 
 namespace app::ui
 {
-
   namespace
   {
-    std::string trimCopy(std::string_view text)
-    {
-      auto begin = text.begin();
-      auto end = text.end();
-
-      while (begin != end && std::isspace(static_cast<unsigned char>(*begin)) != 0)
-      {
-        ++begin;
-      }
-
-      while (begin != end && std::isspace(static_cast<unsigned char>(*(end - 1))) != 0)
-      {
-        --end;
-      }
-
-      return std::string(begin, end);
-    }
-
     bool isQueryableIdentifier(std::string_view value)
     {
       if (value.empty())
@@ -97,7 +76,7 @@ namespace app::ui
     {
       auto result = std::vector<std::string>{};
       auto current = std::string{};
-      auto quote = char{'\0'};
+      char quote = '\0';
 
       for (auto const ch : value)
       {
@@ -177,7 +156,7 @@ namespace app::ui
 
     std::optional<std::pair<TrackFilterMode, std::string>> resolveFilterExpression(std::string_view rawFilter)
     {
-      auto const trimmed = trimCopy(rawFilter);
+      auto const trimmed = boost::algorithm::trim_copy_if(std::string(rawFilter), boost::algorithm::is_space());
 
       if (trimmed.empty())
       {
@@ -198,9 +177,9 @@ namespace app::ui
 
       auto expression = buildQuickTermExpression(terms.front());
 
-      for (auto it = terms.begin() + 1; it != terms.end(); ++it)
+      for (auto const& term : terms | std::views::drop(1))
       {
-        expression = std::format("({}) and ({})", expression, buildQuickTermExpression(*it));
+        expression = std::format("({}) and ({})", expression, buildQuickTermExpression(term));
       }
 
       return std::pair{TrackFilterMode::Quick, std::move(expression)};
@@ -374,5 +353,4 @@ namespace app::ui
       _listModel->remove(uintIdx);
     }
   }
-
 } // namespace app::ui

@@ -11,7 +11,6 @@
 
 namespace rs::audio
 {
-
   class IAudioBackend;
 
   class IGraphSubscription
@@ -55,5 +54,4 @@ namespace rs::audio
     virtual std::unique_ptr<IGraphSubscription> subscribeGraph(std::string_view routeAnchor,
                                                                OnGraphChangedCallback callback) = 0;
   };
-
 } // namespace rs::audio

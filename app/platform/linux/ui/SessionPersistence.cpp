@@ -226,5 +226,4 @@ namespace app::ui
     _appConfig.setSessionState(session);
     _appConfig.save();
   }
-
 } // namespace app::ui

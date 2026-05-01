@@ -78,5 +78,4 @@ namespace rs::audio
     rs::audio::AudioQuality _quality = rs::audio::AudioQuality::Unknown;
     std::string _qualityTooltip;
   };
-
 } // namespace rs::audio

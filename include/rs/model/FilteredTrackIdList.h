@@ -15,7 +15,6 @@
 
 namespace rs::model
 {
-
   class SmartListEngine;
 
   /**
@@ -68,5 +67,4 @@ namespace rs::model
     std::string _stagedErrorMessage;
     bool _dirty = true;
   };
-
 } // namespace rs::model

@@ -5,9 +5,9 @@
 #include "platform/linux/ui/LayoutConstants.h"
 
 #include <algorithm>
+#include <boost/algorithm/string.hpp>
 #include <cctype>
 #include <format>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -15,43 +15,14 @@
 
 namespace app::ui
 {
-
   namespace
   {
-    std::string trim(std::string_view value)
-    {
-      auto const isSpace = [](unsigned char ch) { return std::isspace(ch) != 0; };
-
-      auto const* start = value.begin();
-
-      while (start != value.end() && isSpace(static_cast<unsigned char>(*start)))
-      {
-        ++start;
-      }
-
-      auto const* finish = value.end();
-
-      while (finish != start && isSpace(static_cast<unsigned char>(*(finish - 1))))
-      {
-        --finish;
-      }
-
-      return std::string(start, finish);
-    }
-
     bool startsWithInsensitive(std::string_view candidate, std::string_view prefix)
     {
-      if (prefix.size() > candidate.size())
-      {
-        return false;
-      }
-
-      return std::equal(
-        prefix.begin(),
-        prefix.end(),
-        candidate.begin(),
-        [](char lhs, char rhs)
-        { return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs)); });
+      auto const toLower = [](unsigned char ch) { return std::tolower(ch); };
+      auto const cView = candidate | std::views::transform(toLower);
+      auto const pView = prefix | std::views::transform(toLower);
+      return std::ranges::equal(cView | std::views::take(prefix.size()), pView);
     }
 
     std::string selectionSummary(std::size_t selectionCount)
@@ -97,12 +68,11 @@ namespace app::ui
       tags.erase(uniqueRange.begin(), uniqueRange.end());
       return tags;
     }
-
   }
 
   std::string TagPromptDialog::normalizeTag(std::string_view tag)
   {
-    return trim(tag);
+    return boost::algorithm::trim_copy_if(std::string(tag), boost::algorithm::is_space());
   }
 
   TagPromptDialog::TagPromptDialog(Gtk::Window& parent,
@@ -477,5 +447,4 @@ namespace app::ui
       _suggestionsBox.append(*button);
     }
   }
-
 } // namespace app::ui

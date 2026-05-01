@@ -12,7 +12,6 @@
 
 namespace rs::model
 {
-
   using TrackId = rs::TrackId;
 
   // Forward declaration
@@ -83,5 +82,4 @@ namespace rs::model
 
     friend class SmartListEngine;
   };
-
 } // namespace rs::model

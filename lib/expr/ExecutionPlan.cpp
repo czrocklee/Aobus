@@ -732,5 +732,4 @@ namespace rs::expr
 
     return _plan;
   }
-
 } // namespace rs::expr

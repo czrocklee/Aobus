@@ -24,8 +24,11 @@ namespace rs::tool
         try
         {
           auto tagFile = tag::File::open(path);
-          
-          if (!tagFile) { continue; }
+
+          if (!tagFile)
+          {
+            continue;
+          }
 
           auto builder = tagFile->loadTrack();
           // NOTE: pathStr must outlive builder because PropertyBuilder stores string_view
@@ -37,12 +40,13 @@ namespace rs::tool
 
           auto [preparedHot, preparedCold] = builder.prepare(txn, dict, ml.resources());
           auto [id, trackView] = writer.createHotCold(
-              preparedHot.size(),
-              preparedCold.size(),
-              [&preparedHot, &preparedCold](rs::TrackId, std::span<std::byte> hot, std::span<std::byte> cold) {
-                  preparedHot.writeTo(hot);
-                  preparedCold.writeTo(cold);
-              });
+            preparedHot.size(),
+            preparedCold.size(),
+            [&preparedHot, &preparedCold](rs::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+            {
+              preparedHot.writeTo(hot);
+              preparedCold.writeTo(cold);
+            });
           os << "add track: " << id << " " << trackView.metadata().title() << '\n';
         }
         catch (std::exception const& e)

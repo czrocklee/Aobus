@@ -11,7 +11,6 @@
 
 namespace rs::audio
 {
-
   /**
    * @brief A block of decoded PCM data.
    */
@@ -34,5 +33,4 @@ namespace rs::audio
     std::uint32_t durationMs = 0;
     bool isLossy = false;
   };
-
 } // namespace rs::audio

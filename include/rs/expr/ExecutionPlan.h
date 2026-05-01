@@ -13,7 +13,6 @@
 
 namespace rs::expr
 {
-
   /**
    * Field - Identifies which field to read from a track.
    * Ordered by category: string -> property -> metadata -> tags
@@ -175,5 +174,4 @@ namespace rs::expr
     bool _hasColdAccess = false;        // Track if expression uses cold (custom) variables
     bool _resolveStringConstantsToIds = true;
   };
-
 } // namespace rs::expr

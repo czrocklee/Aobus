@@ -17,7 +17,6 @@ extern "C"
 
 namespace app::playback
 {
-
   /**
    * @brief Audio backend using ALSA in exclusive (hardware) mode.
    */
@@ -63,5 +62,4 @@ namespace app::playback
     std::jthread _thread;
     std::atomic<bool> _paused{false};
   };
-
 } // namespace app::playback
