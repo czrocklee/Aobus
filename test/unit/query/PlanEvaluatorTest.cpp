@@ -6,6 +6,7 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
+#include <array>
 #include <optional>
 #include <rs/expr/ExecutionPlan.h>
 #include <rs/expr/Parser.h>
@@ -142,15 +143,28 @@ namespace
   std::vector<std::byte> makeHotOnlyTrack(rs::DictionaryId artistId = rs::DictionaryId{0},
                                           rs::DictionaryId albumId = rs::DictionaryId{0},
                                           rs::DictionaryId genreId = rs::DictionaryId{0},
-                                          rs::DictionaryId albumArtistId = rs::DictionaryId{0})
+                                          rs::DictionaryId albumArtistId = rs::DictionaryId{0},
+                                          std::span<rs::DictionaryId const> tagIds = {})
   {
     auto header = rs::library::TrackHotHeader{};
     header.artistId = artistId;
     header.albumId = albumId;
     header.genreId = genreId;
     header.albumArtistId = albumArtistId;
+    header.tagLen = static_cast<std::uint16_t>(tagIds.size_bytes());
+
+    for (auto const tagId : tagIds)
+    {
+      header.tagBloom |= std::uint32_t{1} << (tagId.value() & 31U);
+    }
 
     auto data = test::serializeHeader(header);
+
+    for (auto const tagId : tagIds)
+    {
+      data.insert_range(data.end(), rs::utility::bytes::view(tagId));
+    }
+
     test::appendString(data, "");
     return data;
   }
@@ -347,6 +361,37 @@ TEST_CASE("PlanEvaluator - Artist LIKE resolves DictionaryId strings")
   auto missingArtistHotData = makeHotOnlyTrack();
   auto missingArtistTrack = rs::library::TrackView{missingArtistHotData, std::span<std::byte const>{}};
   CHECK(evaluator.evaluateFull(plan, missingArtistTrack) == false);
+}
+
+TEST_CASE("PlanEvaluator - OR between artist LIKE and tag does not over-prune on bloom filter")
+{
+  auto temp = TempDir{};
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+  auto aimerId = dict.put(wtxn, "Aimer");
+  wtxn.commit();
+
+  auto expr = parse(R"($artist ~ "Aimer" or #Aimer)");
+  auto compiler = QueryCompiler{&dict};
+  auto plan = compiler.compile(expr);
+  auto evaluator = PlanEvaluator{};
+
+  CHECK(plan.tagBloomMask == 0);
+
+  auto artistMatchHotData = makeHotOnlyTrack(aimerId);
+  auto artistMatchTrack = rs::library::TrackView{artistMatchHotData, std::span<std::byte const>{}};
+  CHECK(evaluator.matches(plan, artistMatchTrack) == true);
+
+  auto tagIds = std::array<rs::DictionaryId, 1>{aimerId};
+  auto tagMatchHotData =
+    makeHotOnlyTrack(rs::DictionaryId{0}, rs::DictionaryId{0}, rs::DictionaryId{0}, rs::DictionaryId{0}, tagIds);
+  auto tagMatchTrack = rs::library::TrackView{tagMatchHotData, std::span<std::byte const>{}};
+  CHECK(evaluator.matches(plan, tagMatchTrack) == true);
+
+  auto noMatchHotData = makeHotOnlyTrack();
+  auto noMatchTrack = rs::library::TrackView{noMatchHotData, std::span<std::byte const>{}};
+  CHECK(evaluator.matches(plan, noMatchTrack) == false);
 }
 
 TEST_CASE("PlanEvaluator - Title String Equal")

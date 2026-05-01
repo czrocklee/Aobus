@@ -535,3 +535,74 @@ TEST_CASE("ExecutionPlan - Title LIKE chained with AND")
   CHECK_FALSE(plan.instructions.empty());
   CHECK_FALSE(plan.matchesAll);
 }
+
+TEST_CASE("ExecutionPlan - Future matching for tags not yet in dictionary")
+{
+  auto temp = TempDir{};
+  auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  auto wtxn = rs::lmdb::WriteTransaction{env};
+  auto dict = rs::library::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+
+  // Tag "FutureTag" does not exist in dictionary yet
+  auto expr = parse("#FutureTag");
+  auto compiler = QueryCompiler{&dict};
+
+  // Compile the plan. This should use getOrIntern() to allocate a stable ID
+  auto plan = compiler.compile(expr);
+
+  // The ID should now be in the dictionary because of getOrIntern()
+  CHECK(dict.contains("FutureTag"));
+  auto futureTagId = dict.getId("FutureTag");
+
+  // Verify that the instruction uses this ID
+  bool foundTagEq = false;
+  for (auto const& instr : plan.instructions)
+  {
+    if (instr.op == OpCode::Eq)
+    {
+      // The register before Eq should contain the constant we loaded
+      auto const& loadInstr = plan.instructions[&instr - &plan.instructions[0] - 1];
+      if (loadInstr.op == OpCode::LoadConstant)
+      {
+        CHECK(loadInstr.constValue == static_cast<std::int64_t>(futureTagId.value()));
+        foundTagEq = true;
+      }
+    }
+  }
+  CHECK(foundTagEq);
+
+  // Verify Bloom Filter also contains the bit for this getOrInternd ID
+  std::uint32_t expectedBit = std::uint32_t{1} << (futureTagId.value() & 31); // 31 is kBloomBitMask
+  CHECK((plan.tagBloomMask & expectedBit) == expectedBit);
+}
+
+TEST_CASE("ExecutionPlan - Future matching for custom fields not yet in dictionary")
+{
+  auto temp = TempDir{};
+  auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  auto wtxn = rs::lmdb::WriteTransaction{env};
+  auto dict = rs::library::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+
+  // Custom field "FutureKey" does not exist
+  auto expr = parse("%FutureKey = 'Value'");
+  auto compiler = QueryCompiler{&dict};
+
+  auto plan = compiler.compile(expr);
+
+  // ID should have been getOrInternd
+  CHECK(dict.contains("FutureKey"));
+  auto futureKeyId = dict.getId("FutureKey");
+
+  // Verify that the instruction uses this ID
+  bool foundLoadField = false;
+  for (auto const& instr : plan.instructions)
+  {
+    if (instr.op == OpCode::LoadField && instr.field == static_cast<std::uint8_t>(Field::Custom))
+    {
+      CHECK(instr.constValue == static_cast<std::int64_t>(futureKeyId.value()));
+      foundLoadField = true;
+    }
+  }
+  CHECK(foundLoadField);
+}
+

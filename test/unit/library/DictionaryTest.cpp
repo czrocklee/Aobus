@@ -152,7 +152,7 @@ TEST_CASE("Dictionary - get throws on out-of-bounds ID", "[core][dictionary]")
   CHECK_THROWS(dict.get(DictionaryId{2}));
 }
 
-TEST_CASE("Dictionary - reserve returns new ID for non-existent string", "[core][dictionary]")
+TEST_CASE("Dictionary - getOrIntern returns new ID for non-existent string", "[core][dictionary]")
 {
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -162,14 +162,14 @@ TEST_CASE("Dictionary - reserve returns new ID for non-existent string", "[core]
   wtxn.commit();
 
   // Reserve a non-existent string
-  auto id = dict.reserve("new artist");
-  REQUIRE(id.value() == 1); // First reserved ID is 0 (same as put)
+  auto id = dict.getOrIntern("new artist");
+  REQUIRE(id.value() == 1); // First getOrInternd ID is 0 (same as put)
 
   // contains should now return true (in-memory)
   REQUIRE(dict.contains("new artist"));
 }
 
-TEST_CASE("Dictionary - reserve returns existing ID for existent string", "[core][dictionary]")
+TEST_CASE("Dictionary - getOrIntern returns existing ID for existent string", "[core][dictionary]")
 {
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -180,13 +180,13 @@ TEST_CASE("Dictionary - reserve returns existing ID for existent string", "[core
   wtxn.commit();
 
   // Reserve an existing string - should return the existing ID
-  auto id = dict.reserve("existing");
+  auto id = dict.getOrIntern("existing");
   REQUIRE(id.value() == 1); // First put uses ID 0
 
   REQUIRE(dict.contains("existing"));
 }
 
-TEST_CASE("Dictionary - reserve then put returns same ID", "[core][dictionary]")
+TEST_CASE("Dictionary - getOrIntern then put returns same ID", "[core][dictionary]")
 {
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -196,15 +196,15 @@ TEST_CASE("Dictionary - reserve then put returns same ID", "[core][dictionary]")
   wtxn.commit();
 
   // Reserve a string (not persisted)
-  auto reservedId = dict.reserve("Bach");
+  auto getOrInterndId = dict.getOrIntern("Bach");
 
   // put() should return the same ID
   auto wtxn2 = WriteTransaction{env};
   auto putId = dict.put(wtxn2, "Bach");
-  REQUIRE(putId == reservedId);
+  REQUIRE(putId == getOrInterndId);
 }
 
-TEST_CASE("Dictionary - reserve multiple strings", "[core][dictionary]")
+TEST_CASE("Dictionary - getOrIntern multiple strings", "[core][dictionary]")
 {
   auto temp = TempDir{};
   auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
@@ -213,9 +213,9 @@ TEST_CASE("Dictionary - reserve multiple strings", "[core][dictionary]")
   auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
   wtxn.commit();
 
-  auto id1 = dict.reserve("artist1");
-  auto id2 = dict.reserve("artist2");
-  auto id3 = dict.reserve("artist3");
+  auto id1 = dict.getOrIntern("artist1");
+  auto id2 = dict.getOrIntern("artist2");
+  auto id3 = dict.getOrIntern("artist3");
 
   REQUIRE(id1 != id2);
   REQUIRE(id2 != id3);

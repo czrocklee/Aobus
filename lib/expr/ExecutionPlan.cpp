@@ -121,6 +121,85 @@ namespace rs::expr
       }
     }
 
+    std::uint32_t tagBloomBit(rs::library::DictionaryStore* dict, std::string_view tagName)
+    {
+      if (dict == nullptr)
+      {
+        return 0;
+      }
+
+      auto const tagId = dict->getOrIntern(tagName);
+      return std::uint32_t{1} << (tagId.value() & kBloomBitMask);
+    }
+
+    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, rs::library::DictionaryStore* dict);
+
+    std::uint32_t computeRequiredTagBloomMask(BinaryExpression const& binary, rs::library::DictionaryStore* dict)
+    {
+      auto const lhsMask = computeRequiredTagBloomMask(binary.operand, dict);
+
+      if (!binary.operation)
+      {
+        return lhsMask;
+      }
+
+      auto const rhsMask = computeRequiredTagBloomMask(binary.operation->operand, dict);
+
+      switch (binary.operation->op)
+      {
+        case Operator::And: return lhsMask | rhsMask;
+
+        // OR can only require tags that are shared by every matching branch.
+        case Operator::Or: return lhsMask & rhsMask;
+
+        default: return 0;
+      }
+    }
+
+    std::uint32_t computeRequiredTagBloomMask(UnaryExpression const& unary, rs::library::DictionaryStore* dict)
+    {
+      if (unary.op == Operator::Not)
+      {
+        return 0;
+      }
+
+      return computeRequiredTagBloomMask(unary.operand, dict);
+    }
+
+    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, rs::library::DictionaryStore* dict)
+    {
+      return std::visit(utility::makeVisitor(
+                          [dict](VariableExpression const& variable)
+                          {
+                            if (variable.type != VariableType::Tag)
+                            {
+                              return std::uint32_t{0};
+                            }
+
+                            return tagBloomBit(dict, variable.name);
+                          },
+                          [](ConstantExpression const&) { return std::uint32_t{0}; },
+                          [dict](std::unique_ptr<BinaryExpression> const& binary)
+                          {
+                            if (!binary)
+                            {
+                              return std::uint32_t{0};
+                            }
+
+                            return computeRequiredTagBloomMask(*binary, dict);
+                          },
+                          [dict](std::unique_ptr<UnaryExpression> const& unary)
+                          {
+                            if (!unary)
+                            {
+                              return std::uint32_t{0};
+                            }
+
+                            return computeRequiredTagBloomMask(*unary, dict);
+                          }),
+                        expr);
+    }
+
     std::string toLower(std::string_view value)
     {
       return value | std::views::transform([](unsigned char ch) { return static_cast<char>(std::tolower(ch)); }) |
@@ -440,9 +519,7 @@ namespace rs::expr
 
       if (_dict != nullptr)
       {
-        auto tagId = _dict->getId(var.name);
-        // getId throws if not found, so any returned ID is valid (including 0)
-        _plan.tagBloomMask |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask));
+        auto const tagId = _dict->getOrIntern(var.name);
 
         // Generate implicit tag comparison: track.tags().has(tagId)
         // This handles standalone "#tagname" queries like "#rock"
@@ -503,15 +580,8 @@ namespace rs::expr
     {
       if (_dict != nullptr)
       {
-        try
-        {
-          auto dictId = _dict->getId(var.name);
-          constValue = static_cast<std::int64_t>(dictId.value());
-        }
-        catch (std::exception const&)
-        {
-          constValue = 0; // Key not found - will return empty string at evaluation
-        }
+        auto const dictId = _dict->getOrIntern(var.name);
+        constValue = static_cast<std::int64_t>(dictId.value());
       }
       else
       {
@@ -616,7 +686,7 @@ namespace rs::expr
     }
 
     // Reserve in memory - if already exists, returns existing ID; if not, adds to memory only
-    auto id = _dict->reserve(str);
+    auto const id = _dict->getOrIntern(str);
     return static_cast<std::int64_t>(id.value());
   }
 
@@ -624,6 +694,7 @@ namespace rs::expr
   {
     _plan = ExecutionPlan{};
     _plan.dictionary = _dict;
+    _plan.tagBloomMask = computeRequiredTagBloomMask(expr, _dict);
     _nextReg = 0;
     _hasHotAccess = false;
     _hasColdAccess = false;

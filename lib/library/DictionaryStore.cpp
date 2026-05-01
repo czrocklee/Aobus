@@ -88,7 +88,7 @@ namespace rs::library
     return _stringToId.contains(str);
   }
 
-  DictionaryId DictionaryStore::reserve(std::string_view str)
+  DictionaryId DictionaryStore::getOrIntern(std::string_view str)
   {
     // Check if already exists
 
@@ -99,7 +99,7 @@ namespace rs::library
 
     // Add to in-memory storage - ID is 1-indexed (0 = null)
     _idToStringStorage.emplace_back(str);
-    auto id = DictionaryId{static_cast<std::uint32_t>(_idToStringStorage.size())};
+    auto const id = DictionaryId{static_cast<std::uint32_t>(_idToStringStorage.size())};
     _stringToId.emplace(_idToStringStorage.back(), id);
     _reservedStrings.emplace(_idToStringStorage.back());
     return id;
