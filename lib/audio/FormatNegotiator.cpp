@@ -35,7 +35,7 @@ namespace rs::audio
     }
   }
 
-  RenderPlan FormatNegotiator::buildPlan(AudioFormat sourceFormat, rs::audio::DeviceCapabilities const& caps)
+  RenderPlan FormatNegotiator::buildPlan(AudioFormat sourceFormat, DeviceCapabilities const& caps)
   {
     RenderPlan plan = {
       .sourceFormat = sourceFormat,

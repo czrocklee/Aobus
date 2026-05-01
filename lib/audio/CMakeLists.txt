@@ -1,6 +1,6 @@
 # rs_audio
 add_library(rs_audio STATIC
-    AudioDecoderFactory.cpp
+    DecoderFactory.cpp
     FlacDecoderSession.cpp
     AlacDecoderSession.cpp
     PlaybackController.cpp

@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include <rs/audio/IAudioDecoderSession.h>
+#include <rs/audio/IDecoderSession.h>
 
 namespace rs::audio
 {
-  class FlacDecoderSession final : public IAudioDecoderSession
+  class FlacDecoderSession final : public IDecoderSession
   {
   public:
     explicit FlacDecoderSession(AudioFormat outputFormat);

@@ -3,7 +3,7 @@
 
 #include "platform/linux/ui/ImportExportCoordinator.h"
 #include "platform/linux/ui/LayoutConstants.h"
-#include <rs/library/LibraryImporter.h>
+#include <rs/library/Importer.h>
 #include <rs/utility/Log.h>
 #include <rs/utility/ThreadUtils.h>
 
@@ -383,7 +383,7 @@ namespace app::ui
 
         try
         {
-          auto exporter = rs::library::LibraryExporter{*musicLibrary};
+          auto exporter = rs::library::Exporter{*musicLibrary};
           exporter.exportToYaml(path, mode);
 
           Glib::MainContext::get_default()->invoke(
@@ -470,7 +470,7 @@ namespace app::ui
 
     try
     {
-      auto importer = rs::library::LibraryImporter{*session->musicLibrary};
+      auto importer = rs::library::Importer{*session->musicLibrary};
       importer.importFromYaml(path);
       reportImportResult(true, "");
     }

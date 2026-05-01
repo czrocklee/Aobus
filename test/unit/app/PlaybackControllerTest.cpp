@@ -5,7 +5,7 @@
 #include <catch2/matchers/catch_matchers_all.hpp>
 
 #include <rs/audio/BackendTypes.h>
-#include <rs/audio/IAudioBackend.h>
+#include <rs/audio/IBackend.h>
 #include <rs/audio/IBackendManager.h>
 #include <rs/audio/NullBackend.h>
 #include <rs/audio/PlaybackController.h>
@@ -38,7 +38,7 @@ namespace
       _real.setDevicesChangedCallback(callback);
     }
     std::vector<AudioDevice> enumerateDevices() override { return _real.enumerateDevices(); }
-    std::unique_ptr<IAudioBackend> createBackend(AudioDevice const& device) override
+    std::unique_ptr<IBackend> createBackend(AudioDevice const& device) override
     {
       return _real.createBackend(device);
     }
@@ -100,7 +100,7 @@ namespace
 TEST_CASE("PlaybackController - Quality Analysis with FakeIt", "[playback][controller][quality]")
 {
   Mock<IBackendManager> mockManager;
-  Mock<IAudioBackend> mockBackend;
+  Mock<IBackend> mockBackend;
 
   IBackendManager::OnGraphChangedCallback capturedCallback;
 

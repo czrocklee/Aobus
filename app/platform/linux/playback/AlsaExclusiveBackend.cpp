@@ -40,7 +40,7 @@ namespace app::playback
   }
 
   rs::Result<> AlsaExclusiveBackend::open(rs::audio::AudioFormat const& format,
-                                          rs::audio::AudioRenderCallbacks callbacks)
+                                          rs::audio::RenderCallbacks callbacks)
   {
     PLAYBACK_LOG_INFO("AlsaExclusiveBackend: Opening device '{}' with format {}Hz/{}b/{}ch",
                       _deviceName,

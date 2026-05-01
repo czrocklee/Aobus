@@ -18,7 +18,7 @@ namespace rs::library
     Header = 1,
   };
 
-  struct LibraryMetaHeader final
+  struct MetaHeader final
   {
     std::uint32_t magic;
     std::uint32_t libraryVersion;
@@ -28,7 +28,7 @@ namespace rs::library
     std::array<std::byte, 16> libraryId;
   };
 
-  static_assert(sizeof(LibraryMetaHeader) == 48, "LibraryMetaHeader must be exactly 48 bytes");
-  static_assert(std::is_trivially_copyable_v<LibraryMetaHeader>, "LibraryMetaHeader must be trivially copyable");
-  static_assert(std::is_standard_layout_v<LibraryMetaHeader>, "LibraryMetaHeader must have standard layout");
+  static_assert(sizeof(MetaHeader) == 48, "MetaHeader must be exactly 48 bytes");
+  static_assert(std::is_trivially_copyable_v<MetaHeader>, "MetaHeader must be trivially copyable");
+  static_assert(std::is_standard_layout_v<MetaHeader>, "MetaHeader must have standard layout");
 }

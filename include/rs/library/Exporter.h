@@ -27,12 +27,12 @@ namespace rs::library
   };
 
   /**
-   * LibraryExporter - Streaming YAML exporter for MusicLibrary.
+   * Exporter - Streaming YAML exporter for MusicLibrary.
    */
-  class LibraryExporter final
+  class Exporter final
   {
   public:
-    explicit LibraryExporter(MusicLibrary& ml);
+    explicit Exporter(MusicLibrary& ml);
 
     /**
      * Export the library to a YAML file.

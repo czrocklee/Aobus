@@ -16,7 +16,7 @@ namespace rs::audio
   /**
    * @brief Callbacks provided by the engine to the backend.
    */
-  struct AudioRenderCallbacks final
+  struct RenderCallbacks final
   {
     void* userData = nullptr;
 
@@ -48,15 +48,15 @@ namespace rs::audio
   /**
    * @brief Interface for platform-specific audio output backends.
    */
-  class IAudioBackend
+  class IBackend
   {
   public:
-    virtual ~IAudioBackend() = default;
+    virtual ~IBackend() = default;
 
     /**
      * @brief Prepares the backend for playback with the given format.
      */
-    virtual rs::Result<> open(AudioFormat const& format, AudioRenderCallbacks callbacks) = 0;
+    virtual rs::Result<> open(AudioFormat const& format, RenderCallbacks callbacks) = 0;
 
     /**
      * @brief Resets the backend, closing any open streams and detaching callbacks.

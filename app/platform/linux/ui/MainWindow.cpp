@@ -61,10 +61,10 @@ namespace app::ui
     set_default_size(rs::library::kDefaultWindowWidth, rs::library::kDefaultWindowHeight);
 
     // Initialize cover art widget
-    _coverArtWidget = std::make_unique<app::ui::CoverArtWidget>();
+    _coverArtWidget = std::make_unique<CoverArtWidget>();
 
     // Initialize dispatcher
-    _dispatcher = std::make_shared<app::ui::GtkMainThreadDispatcher>();
+    _dispatcher = std::make_shared<GtkMainThreadDispatcher>();
 
     // Initialize TagEditController
     _tagEditController = std::make_unique<TagEditController>(

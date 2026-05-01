@@ -44,8 +44,8 @@ namespace rs::audio
     }
   } // namespace
 
-  StreamingPcmSource::StreamingPcmSource(std::unique_ptr<rs::audio::IAudioDecoderSession> decoder,
-                                         rs::audio::DecodedStreamInfo streamInfo,
+  StreamingPcmSource::StreamingPcmSource(std::unique_ptr<IDecoderSession> decoder,
+                                         DecodedStreamInfo streamInfo,
                                          std::function<void(rs::Error const&)> onError,
                                          std::uint32_t prerollTargetMs,
                                          std::uint32_t decodeHighWatermarkMs)
@@ -242,7 +242,7 @@ namespace rs::audio
 
   rs::Result<bool> StreamingPcmSource::decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken)
   {
-    rs::audio::PcmBlock block;
+    PcmBlock block;
     {
       auto lock = std::lock_guard<std::mutex>{_decoderMutex};
 

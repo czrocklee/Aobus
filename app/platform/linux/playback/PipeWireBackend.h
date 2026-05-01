@@ -4,7 +4,7 @@
 #pragma once
 
 #include <memory>
-#include <rs/audio/IAudioBackend.h>
+#include <rs/audio/IBackend.h>
 #include <string_view>
 
 namespace app::playback
@@ -12,14 +12,14 @@ namespace app::playback
   /**
    * @brief Audio backend using PipeWire.
    */
-  class PipeWireBackend final : public rs::audio::IAudioBackend
+  class PipeWireBackend final : public rs::audio::IBackend
   {
   public:
     struct Impl;
     explicit PipeWireBackend(rs::audio::AudioDevice const& device);
     ~PipeWireBackend() override;
 
-    rs::Result<> open(rs::audio::AudioFormat const& format, rs::audio::AudioRenderCallbacks callbacks) override;
+    rs::Result<> open(rs::audio::AudioFormat const& format, rs::audio::RenderCallbacks callbacks) override;
     void reset() override;
     void start() override;
     void pause() override;

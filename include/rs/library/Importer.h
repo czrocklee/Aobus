@@ -20,12 +20,12 @@ namespace rs::library
   class TrackBuilder;
 
   /**
-   * LibraryImporter - Logical YAML importer for MusicLibrary.
+   * Importer - Logical YAML importer for MusicLibrary.
    */
-  class LibraryImporter final
+  class Importer final
   {
   public:
-    explicit LibraryImporter(MusicLibrary& ml);
+    explicit Importer(MusicLibrary& ml);
 
     /**
      * Import the library from a YAML file.

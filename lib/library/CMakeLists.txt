@@ -1,8 +1,8 @@
 # rs_library
 add_library(rs_library STATIC
-    LibraryMetaStore.cpp
-    LibraryExporter.cpp
-    LibraryImporter.cpp
+    MetaStore.cpp
+    Exporter.cpp
+    Importer.cpp
     MusicLibrary.cpp
     ResourceStore.cpp
     DictionaryStore.cpp

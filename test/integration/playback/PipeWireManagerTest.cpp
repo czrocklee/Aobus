@@ -10,7 +10,7 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
-#include <rs/audio/IAudioBackend.h>
+#include <rs/audio/IBackend.h>
 #include <thread>
 #include <vector>
 

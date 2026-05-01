@@ -30,7 +30,7 @@ namespace rs::library
       std::size_t skippedCount = 0;
     };
 
-    ImportWorker(rs::library::MusicLibrary& ml,
+    ImportWorker(MusicLibrary& ml,
                  std::vector<std::filesystem::path> const& files,
                  ProgressCallback progressCallback,
                  FinishedCallback finishedCallback);
@@ -49,7 +49,7 @@ namespace rs::library
     std::size_t fileCount() const { return _files.size(); }
 
   private:
-    rs::library::MusicLibrary& _ml;
+    MusicLibrary& _ml;
     std::vector<std::filesystem::path> const& _files;
     ProgressCallback _progressCallback;
     FinishedCallback _finishedCallback;

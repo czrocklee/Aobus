@@ -49,18 +49,18 @@ namespace rs::audio
    */
   struct BackendSnapshot final
   {
-    rs::audio::BackendKind kind = rs::audio::BackendKind::None;
+    BackendKind kind = BackendKind::None;
     std::string displayName;
     std::string shortName;
     std::string id;
-    std::vector<rs::audio::AudioDevice> devices;
+    std::vector<AudioDevice> devices;
 
     bool operator==(BackendSnapshot const&) const = default;
   };
 
   struct BackendRouteAnchor final
   {
-    rs::audio::BackendKind backend = rs::audio::BackendKind::None;
+    BackendKind backend = BackendKind::None;
     std::string id;
 
     bool operator==(BackendRouteAnchor const&) const = default;
@@ -68,7 +68,7 @@ namespace rs::audio
 
   struct EngineRouteSnapshot final
   {
-    rs::audio::AudioGraph graph;
+    AudioGraph graph;
     std::optional<BackendRouteAnchor> anchor;
 
     bool operator==(EngineRouteSnapshot const&) const = default;
@@ -77,7 +77,7 @@ namespace rs::audio
   struct PlaybackSnapshot final
   {
     TransportState state = TransportState::Idle;
-    rs::audio::BackendKind backend = rs::audio::BackendKind::None;
+    BackendKind backend = BackendKind::None;
     std::string trackTitle;
     std::string trackArtist;
     std::uint32_t positionMs = 0;
@@ -91,8 +91,8 @@ namespace rs::audio
     std::vector<BackendSnapshot> availableBackends;
 
     // Semantic graph data
-    rs::audio::AudioGraph graph;
-    rs::audio::AudioQuality quality = rs::audio::AudioQuality::Unknown;
+    AudioGraph graph;
+    AudioQuality quality = AudioQuality::Unknown;
     std::string qualityTooltip;
   };
 } // namespace rs::audio

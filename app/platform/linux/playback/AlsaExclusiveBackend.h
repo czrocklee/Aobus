@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/IAudioBackend.h>
+#include <rs/audio/IBackend.h>
 
 #include <atomic>
 #include <memory>
@@ -20,13 +20,13 @@ namespace app::playback
   /**
    * @brief Audio backend using ALSA in exclusive (hardware) mode.
    */
-  class AlsaExclusiveBackend final : public rs::audio::IAudioBackend
+  class AlsaExclusiveBackend final : public rs::audio::IBackend
   {
   public:
     explicit AlsaExclusiveBackend(rs::audio::AudioDevice const& device);
     ~AlsaExclusiveBackend() override;
 
-    rs::Result<> open(rs::audio::AudioFormat const& format, rs::audio::AudioRenderCallbacks callbacks) override;
+    rs::Result<> open(rs::audio::AudioFormat const& format, rs::audio::RenderCallbacks callbacks) override;
     void reset() override;
     void start() override;
     void pause() override;
@@ -56,7 +56,7 @@ namespace app::playback
 
     std::string _deviceName;
     rs::audio::AudioFormat _format;
-    rs::audio::AudioRenderCallbacks _callbacks;
+    rs::audio::RenderCallbacks _callbacks;
 
     AlsaPcmPtr _pcm;
     std::jthread _thread;

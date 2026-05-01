@@ -11,7 +11,7 @@
 
 namespace rs::audio
 {
-  class IAudioBackend;
+  class IBackend;
 
   class IGraphSubscription
   {
@@ -46,7 +46,7 @@ namespace rs::audio
      * @brief Factory method to create a backend instance for the given device.
      * The device object passed here MUST have been previously returned by enumerateDevices().
      */
-    virtual std::unique_ptr<IAudioBackend> createBackend(AudioDevice const& device) = 0;
+    virtual std::unique_ptr<IBackend> createBackend(AudioDevice const& device) = 0;
 
     /**
      * @brief Subscribes to system graph updates rooted at the given anchor.

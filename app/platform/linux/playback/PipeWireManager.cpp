@@ -60,7 +60,7 @@ namespace app::playback
     return devices;
   }
 
-  std::unique_ptr<rs::audio::IAudioBackend> PipeWireManager::createBackend(rs::audio::AudioDevice const& device)
+  std::unique_ptr<rs::audio::IBackend> PipeWireManager::createBackend(rs::audio::AudioDevice const& device)
   {
     return std::make_unique<PipeWireBackend>(device);
   }

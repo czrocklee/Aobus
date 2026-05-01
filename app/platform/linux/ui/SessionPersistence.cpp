@@ -21,15 +21,15 @@ namespace app::ui
       return ec ? path.lexically_normal().string() : canonicalPath.string();
     }
 
-    app::ui::TrackColumnLayout trackColumnLayoutFromState(rs::library::TrackViewState const& state)
+    TrackColumnLayout trackColumnLayoutFromState(rs::library::TrackViewState const& state)
     {
-      auto layout = app::ui::defaultTrackColumnLayout();
-      auto ordered = std::vector<app::ui::TrackColumnState>{};
+      auto layout = defaultTrackColumnLayout();
+      auto ordered = std::vector<TrackColumnState>{};
       ordered.reserve(layout.columns.size());
 
-      auto takeColumn = [&layout](app::ui::TrackColumn column) -> std::optional<app::ui::TrackColumnState>
+      auto takeColumn = [&layout](TrackColumn column) -> std::optional<TrackColumnState>
       {
-        auto const it = std::ranges::find(layout.columns, column, &app::ui::TrackColumnState::column);
+        auto const it = std::ranges::find(layout.columns, column, &TrackColumnState::column);
 
         if (it == layout.columns.end())
         {
@@ -41,14 +41,14 @@ namespace app::ui
 
       for (auto const& id : state.columnOrder)
       {
-        auto const column = app::ui::trackColumnFromId(id);
+        auto const column = trackColumnFromId(id);
 
         if (!column)
         {
           continue;
         }
 
-        auto const existing = std::ranges::find(ordered, *column, &app::ui::TrackColumnState::column);
+        auto const existing = std::ranges::find(ordered, *column, &TrackColumnState::column);
 
         if (existing != ordered.end())
         {
@@ -63,7 +63,7 @@ namespace app::ui
 
       for (auto const& entry : layout.columns)
       {
-        auto const existing = std::ranges::find(ordered, entry.column, &app::ui::TrackColumnState::column);
+        auto const existing = std::ranges::find(ordered, entry.column, &TrackColumnState::column);
 
         if (existing == ordered.end())
         {
@@ -75,7 +75,7 @@ namespace app::ui
 
       for (auto& entry : layout.columns)
       {
-        auto const columnId = std::string{app::ui::trackColumnId(entry.column)};
+        auto const columnId = std::string{trackColumnId(entry.column)};
 
         if (std::ranges::contains(state.hiddenColumns, columnId))
         {
@@ -88,17 +88,17 @@ namespace app::ui
         }
       }
 
-      return app::ui::normalizeTrackColumnLayout(layout);
+      return normalizeTrackColumnLayout(layout);
     }
 
-    rs::library::TrackViewState trackViewStateFromLayout(app::ui::TrackColumnLayout const& layout)
+    rs::library::TrackViewState trackViewStateFromLayout(TrackColumnLayout const& layout)
     {
-      auto normalized = app::ui::normalizeTrackColumnLayout(layout);
+      auto normalized = normalizeTrackColumnLayout(layout);
       auto state = rs::library::TrackViewState{};
 
       for (auto const& entry : normalized.columns)
       {
-        auto const columnId = std::string{app::ui::trackColumnId(entry.column)};
+        auto const columnId = std::string{trackColumnId(entry.column)};
         state.columnOrder.push_back(columnId);
 
         if (!entry.visible)
@@ -107,9 +107,9 @@ namespace app::ui
         }
 
         auto const definitionIt =
-          std::ranges::find(app::ui::trackColumnDefinitions(), entry.column, &app::ui::TrackColumnDefinition::column);
+          std::ranges::find(trackColumnDefinitions(), entry.column, &TrackColumnDefinition::column);
 
-        if (definitionIt != app::ui::trackColumnDefinitions().end() && entry.width != definitionIt->defaultWidth)
+        if (definitionIt != trackColumnDefinitions().end() && entry.width != definitionIt->defaultWidth)
         {
           state.columnWidths.insert_or_assign(columnId, entry.width);
         }

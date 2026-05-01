@@ -198,7 +198,7 @@ namespace app::playback
     return _impl->cachedDevices;
   }
 
-  std::unique_ptr<rs::audio::IAudioBackend> AlsaManager::createBackend(rs::audio::AudioDevice const& device)
+  std::unique_ptr<rs::audio::IBackend> AlsaManager::createBackend(rs::audio::AudioDevice const& device)
   {
     return std::make_unique<AlsaExclusiveBackend>(device);
   }
