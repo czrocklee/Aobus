@@ -5,7 +5,7 @@
 
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
-#include <rs/audio/BackendTypes.h>
+#include <rs/audio/Backend.h>
 
 namespace app::ui
 {
@@ -36,7 +36,7 @@ namespace app::ui
   class DeviceItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<DeviceItem> create(rs::audio::BackendKind kind, rs::audio::AudioDevice const& device)
+    static Glib::RefPtr<DeviceItem> create(rs::audio::BackendKind kind, rs::audio::Device const& device)
     {
       return Glib::make_refptr_for_instance<DeviceItem>(new DeviceItem(kind, device));
     }
@@ -51,7 +51,7 @@ namespace app::ui
     bool matches(rs::audio::BackendKind k, std::string const& devId) const { return kind == k && id == devId; }
 
   protected:
-    DeviceItem(rs::audio::BackendKind kind, rs::audio::AudioDevice const& device)
+    DeviceItem(rs::audio::BackendKind kind, rs::audio::Device const& device)
       : Glib::ObjectBase(typeid(DeviceItem))
       , kind(kind)
       , id(device.id)

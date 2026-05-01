@@ -4,7 +4,7 @@
 #pragma once
 
 #include <rs/audio/IDecoderSession.h>
-#include <rs/audio/IPcmSource.h>
+#include <rs/audio/ISource.h>
 #include <rs/audio/PcmRingBuffer.h>
 
 #include <atomic>
@@ -17,15 +17,15 @@
 
 namespace rs::audio
 {
-  class StreamingPcmSource final : public IPcmSource
+  class StreamingSource final : public ISource
   {
   public:
-    StreamingPcmSource(std::unique_ptr<IDecoderSession> decoder,
+    StreamingSource(std::unique_ptr<IDecoderSession> decoder,
                        DecodedStreamInfo streamInfo,
                        std::function<void(rs::Error const&)> onError,
                        std::uint32_t prerollTargetMs,
                        std::uint32_t decodeHighWatermarkMs);
-    ~StreamingPcmSource() override;
+    ~StreamingSource() override;
 
     rs::Result<> initialize();
     rs::Result<> seek(std::uint32_t positionMs) override;

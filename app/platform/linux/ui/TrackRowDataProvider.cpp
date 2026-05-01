@@ -4,7 +4,7 @@
 #include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include "platform/linux/ui/TrackRow.h"
-#include <rs/audio/PlaybackTypes.h>
+#include <rs/audio/Types.h>
 
 #include <string_view>
 

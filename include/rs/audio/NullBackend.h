@@ -4,7 +4,7 @@
 #pragma once
 
 #include <rs/audio/IBackend.h>
-#include <rs/audio/IBackendManager.h>
+#include <rs/audio/IBackendProvider.h>
 
 #include <memory>
 #include <vector>
@@ -17,48 +17,47 @@ namespace rs::audio
   class NullBackend final : public IBackend
   {
   public:
-    class NullManager final : public IBackendManager
+    class NullManager final : public IBackendProvider
     {
     public:
-      void setDevicesChangedCallback(OnDevicesChangedCallback /*callback*/) override {}
-      std::vector<AudioDevice> enumerateDevices() override
+      Subscription subscribeDevices(OnDevicesChangedCallback callback) override
       {
-        return {{.id = "null",
-                 .displayName = "None",
-                 .description = "No audio output",
-                 .backendKind = BackendKind::None,
-                 .capabilities = {}}};
+        if (callback)
+        {
+          callback({{.id = "null",
+                     .displayName = "None",
+                     .description = "No audio output",
+                     .backendKind = BackendKind::None,
+                     .capabilities = {}}});
+        }
+        return Subscription{};
       }
 
-      std::unique_ptr<IBackend> createBackend(AudioDevice const& /*device*/) override
+      std::unique_ptr<IBackend> createBackend(Device const& /*device*/) override
       {
         return std::make_unique<NullBackend>();
       }
 
-      struct NullSubscription final : public IGraphSubscription
-      {};
-
-      std::unique_ptr<IGraphSubscription> subscribeGraph(std::string_view /*routeAnchor*/,
-                                                         OnGraphChangedCallback callback) override
+      Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback callback) override
       {
         if (callback)
         {
-          AudioGraph graph;
+          flow::Graph graph;
           graph.nodes.push_back(
-            {.id = "null-stream", .type = AudioNodeType::Stream, .name = "Null Stream", .objectPath = ""});
+            {.id = "null-stream", .type = flow::NodeType::Stream, .name = "Null Stream", .objectPath = ""});
           graph.nodes.push_back(
-            {.id = "null-sink", .type = AudioNodeType::Sink, .name = "Null Device", .objectPath = ""});
-          graph.links.push_back({.sourceId = "null-stream", .destId = "null-sink", .isActive = true});
+            {.id = "null-sink", .type = flow::NodeType::Sink, .name = "Null Device", .objectPath = ""});
+          graph.connections.push_back({.sourceId = "null-stream", .destId = "null-sink", .isActive = true});
           callback(graph);
         }
-        return std::make_unique<NullSubscription>();
+        return Subscription{};
       }
     };
 
     NullBackend() = default;
     ~NullBackend() override = default;
 
-    rs::Result<> open(AudioFormat const& /*format*/, RenderCallbacks /*callbacks*/) override { return {}; }
+    rs::Result<> open(Format const& /*format*/, RenderCallbacks /*callbacks*/) override { return {}; }
 
     void reset() override {}
 

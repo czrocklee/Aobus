@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include <rs/audio/AudioFormat.h>
+#include <rs/audio/Format.h>
 #include <rs/audio/DecoderTypes.h>
 #include <rs/audio/IBackend.h>
 #include <rs/audio/IDecoderSession.h>
-#include <rs/audio/PlaybackTypes.h>
+#include <rs/audio/Types.h>
 #include <rs/utility/IMainThreadDispatcher.h>
 
 #include <atomic>
@@ -20,22 +20,22 @@
 
 namespace rs::audio
 {
-  class IPcmSource;
+  class ISource;
 }
 
 namespace rs::audio
 {
-  class PlaybackEngine final
+  class Engine final
   {
   public:
     using OnRouteChanged = std::function<void(EngineRouteSnapshot const&)>;
 
-    PlaybackEngine(std::unique_ptr<IBackend> backend,
-                   AudioDevice const& device,
+    Engine(std::unique_ptr<IBackend> backend,
+                   Device const& device,
                    std::shared_ptr<rs::IMainThreadDispatcher> dispatcher = nullptr);
-    ~PlaybackEngine();
+    ~Engine();
 
-    void setBackend(std::unique_ptr<IBackend> backend, AudioDevice const& device);
+    void setBackend(std::unique_ptr<IBackend> backend, Device const& device);
     void setOnTrackEnded(std::function<void()> callback);
 
     void setOnRouteChanged(OnRouteChanged callback);
@@ -47,7 +47,7 @@ namespace rs::audio
     void stop();
     void seek(std::uint32_t positionMs);
 
-    PlaybackSnapshot snapshot() const;
+    Snapshot snapshot() const;
 
     // Backend callbacks
     static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept;
@@ -56,40 +56,40 @@ namespace rs::audio
     static void onPositionAdvanced(void* userData, std::uint32_t framesRead) noexcept;
     static void onDrainComplete(void* userData) noexcept;
     static void onRouteReady(void* userData, std::string_view routeAnchor) noexcept;
-    static void onFormatChanged(void* userData, AudioFormat const& format) noexcept;
+    static void onFormatChanged(void* userData, Format const& format) noexcept;
     static void onBackendError(void* userData, std::string_view message) noexcept;
 
   private:
     void handleBackendError(std::string_view message);
     void handleSourceError(rs::Error const& error);
-    void handleFormatChanged(AudioFormat const& format);
+    void handleFormatChanged(Format const& format);
     void handleDrainComplete();
     void handleRouteReady(std::string_view routeAnchor);
     void resetToIdle();
     bool openTrack(TrackPlaybackDescriptor const& descriptor,
-                   std::shared_ptr<IPcmSource>& source,
-                   AudioFormat& backendFormat);
+                   std::shared_ptr<ISource>& source,
+                   Format& backendFormat);
 
     bool negotiateFormat(std::filesystem::path const& path,
                          DecodedStreamInfo const& info,
                          std::unique_ptr<IDecoderSession>& decoder,
-                         AudioFormat& backendFormat);
+                         Format& backendFormat);
 
-    std::shared_ptr<IPcmSource> createPcmSource(std::unique_ptr<IDecoderSession> decoder,
+    std::shared_ptr<ISource> createPcmSource(std::unique_ptr<IDecoderSession> decoder,
                                                 DecodedStreamInfo const& info);
 
     std::unique_ptr<IBackend> _backend;
     std::shared_ptr<rs::IMainThreadDispatcher> _dispatcher;
-    AudioDevice _currentDevice;
+    Device _currentDevice;
 
-    std::atomic<std::shared_ptr<IPcmSource>> _source;
+    std::atomic<std::shared_ptr<ISource>> _source;
     std::atomic<bool> _backendStarted{false};
     std::atomic<bool> _playbackDrainPending{false};
     std::atomic<std::uint32_t> _underrunCount{0};
 
     mutable std::mutex _stateMutex;
     std::optional<TrackPlaybackDescriptor> _currentTrack;
-    PlaybackSnapshot _snapshot;
+    Snapshot _snapshot;
     std::function<void()> _onTrackEnded;
     OnRouteChanged _onRouteChanged;
     EngineRouteSnapshot _routeSnapshot;

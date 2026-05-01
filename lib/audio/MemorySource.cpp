@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/MemoryPcmSource.h>
+#include <rs/audio/MemorySource.h>
 
 #include <algorithm>
 #include <cstring>
@@ -13,7 +13,7 @@ namespace rs::audio
   {
     constexpr std::uint8_t kBytesPer24BitSample = 3;
 
-    std::size_t frameBytes(AudioFormat const& format) noexcept
+    std::size_t frameBytes(Format const& format) noexcept
     {
       if (format.channels == 0 || format.bitDepth == 0)
       {
@@ -33,7 +33,7 @@ namespace rs::audio
       return static_cast<std::size_t>(format.channels) * bytesPerSample;
     }
 
-    std::uint64_t bytesPerSecond(AudioFormat const& format) noexcept
+    std::uint64_t bytesPerSecond(Format const& format) noexcept
     {
       if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
       {
@@ -54,12 +54,12 @@ namespace rs::audio
     }
   } // namespace
 
-  MemoryPcmSource::MemoryPcmSource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo streamInfo)
+  MemorySource::MemorySource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo streamInfo)
     : _decoder{std::move(decoder)}, _streamInfo{streamInfo}
   {
   }
 
-  rs::Result<> MemoryPcmSource::initialize()
+  rs::Result<> MemorySource::initialize()
   {
     auto const estimatedBytes =
       (static_cast<std::uint64_t>(_streamInfo.durationMs) * bytesPerSecond(_streamInfo.outputFormat)) / 1000U;
@@ -92,7 +92,7 @@ namespace rs::audio
     return {};
   }
 
-  std::size_t MemoryPcmSource::read(std::span<std::byte> output) noexcept
+  std::size_t MemorySource::read(std::span<std::byte> output) noexcept
   {
     auto lock = std::lock_guard<std::mutex>{_mutex};
     auto const available = _pcmBytes.size() - _readOffset;
@@ -108,26 +108,26 @@ namespace rs::audio
     return toCopy;
   }
 
-  bool MemoryPcmSource::isDrained() const noexcept
+  bool MemorySource::isDrained() const noexcept
   {
     auto lock = std::lock_guard<std::mutex>{_mutex};
     return _readOffset >= _pcmBytes.size();
   }
 
-  std::uint32_t MemoryPcmSource::bufferedMs() const noexcept
+  std::uint32_t MemorySource::bufferedMs() const noexcept
   {
     auto lock = std::lock_guard<std::mutex>{_mutex};
     return bufferedDurationMs(_pcmBytes.size() - _readOffset, bytesPerSecond(_streamInfo.outputFormat));
   }
 
-  rs::Result<> MemoryPcmSource::seek(std::uint32_t positionMs)
+  rs::Result<> MemorySource::seek(std::uint32_t positionMs)
   {
     auto lock = std::lock_guard<std::mutex>{_mutex};
     _readOffset = positionToByteOffset(positionMs);
     return {};
   }
 
-  std::size_t MemoryPcmSource::positionToByteOffset(std::uint32_t positionMs) const noexcept
+  std::size_t MemorySource::positionToByteOffset(std::uint32_t positionMs) const noexcept
   {
     auto const frameByteCount = frameBytes(_streamInfo.outputFormat);
 

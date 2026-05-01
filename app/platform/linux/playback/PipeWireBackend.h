@@ -16,10 +16,10 @@ namespace app::playback
   {
   public:
     struct Impl;
-    explicit PipeWireBackend(rs::audio::AudioDevice const& device);
+    explicit PipeWireBackend(rs::audio::Device const& device);
     ~PipeWireBackend() override;
 
-    rs::Result<> open(rs::audio::AudioFormat const& format, rs::audio::RenderCallbacks callbacks) override;
+    rs::Result<> open(rs::audio::Format const& format, rs::audio::RenderCallbacks callbacks) override;
     void reset() override;
     void start() override;
     void pause() override;

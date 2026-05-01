@@ -4,7 +4,8 @@
 #pragma once
 
 #include <rs/Type.h>
-#include <rs/audio/AudioFormat.h>
+#include <rs/audio/Format.h>
+#include <rs/audio/flow/Graph.h>
 
 #include <cstdint>
 #include <optional>
@@ -90,7 +91,7 @@ namespace rs::audio
   /**
    * @brief Describes an available audio output device.
    */
-  struct AudioDevice final
+  struct Device final
   {
     std::string id;
     std::string displayName;
@@ -99,66 +100,13 @@ namespace rs::audio
     BackendKind backendKind = BackendKind::None;
     DeviceCapabilities capabilities = {};
 
-    bool operator==(AudioDevice const&) const = default;
-  };
-
-  /**
-   * @brief Type of an audio processing node in the playback graph.
-   */
-  enum class AudioNodeType
-  {
-    Decoder,
-    Engine,
-    Stream,
-    Intermediary,
-    Sink,
-    ExternalSource,
-  };
-
-  /**
-   * @brief Represents a semantic component in the audio pipeline.
-   */
-  struct AudioNode final
-  {
-    std::string id = "";
-    AudioNodeType type = AudioNodeType::Intermediary;
-    std::string name = "";
-    std::optional<AudioFormat> format = std::nullopt;
-    bool volumeNotUnity = false;
-    bool isMuted = false;
-    bool isLossySource = false;
-    std::string objectPath = "";
-
-    bool operator==(AudioNode const&) const = default;
-  };
-
-  /**
-   * @brief Represents a connection between two audio nodes.
-   */
-  struct AudioLink final
-  {
-    std::string sourceId = "";
-    std::string destId = "";
-    bool isActive = true;
-
-    bool operator==(AudioLink const&) const = default;
-  };
-
-  /**
-   * @brief Topological representation of the entire playback path.
-   */
-  struct AudioGraph final
-  {
-    std::vector<AudioNode> nodes;
-    std::vector<AudioLink> links;
-
-    bool operator==(AudioGraph const&) const = default;
+    bool operator==(Device const&) const = default;
   };
 
   /**
    * @brief Final conclusion on the quality of the current audio path.
    */
-  enum class AudioQuality
+  enum class Quality
   {
     Unknown,
     BitwisePerfect,

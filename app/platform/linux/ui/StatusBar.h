@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/PlaybackTypes.h>
+#include <rs/audio/Types.h>
 
 #include <gtkmm.h>
 
@@ -23,7 +23,7 @@ namespace app::ui
 
     void setTrackCount(std::size_t count);
     void setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
-    void setPlaybackDetails(rs::audio::PlaybackSnapshot const& snapshot);
+    void setPlaybackDetails(rs::audio::Snapshot const& snapshot);
 
     void setImportProgress(double fraction, std::string const& info);
     void clearImportProgress();
@@ -60,10 +60,10 @@ namespace app::ui
 
     Gtk::Widget* createOutputWidget(Glib::RefPtr<Glib::Object> const& item);
 
-    void updateOutputModel(rs::audio::PlaybackSnapshot const& snapshot);
-    void updateOutputLabel(rs::audio::PlaybackSnapshot const& snapshot);
-    void updatePlaybackStatusLabels(rs::audio::PlaybackSnapshot const& snapshot);
-    void updatePlaybackTooltip(rs::audio::PlaybackSnapshot const& snapshot);
+    void updateOutputModel(rs::audio::Snapshot const& snapshot);
+    void updateOutputLabel(rs::audio::Snapshot const& snapshot);
+    void updatePlaybackStatusLabels(rs::audio::Snapshot const& snapshot);
+    void updatePlaybackTooltip(rs::audio::Snapshot const& snapshot);
 
     // Far Right: Status message
     Gtk::Label _statusLabel;
@@ -74,14 +74,14 @@ namespace app::ui
 
     struct LastPlaybackState final
     {
-      rs::audio::TransportState state = rs::audio::TransportState::Idle;
+      rs::audio::Transport transport = rs::audio::Transport::Idle;
       rs::audio::BackendKind backend = rs::audio::BackendKind::None;
       std::string title;
       std::string artist;
       std::uint32_t underrunCount = 0;
-      rs::audio::AudioQuality quality = rs::audio::AudioQuality::Unknown;
+      rs::audio::Quality quality = rs::audio::Quality::Unknown;
       std::string qualityTooltip;
-      rs::audio::AudioGraph graph;
+      rs::audio::flow::Graph flow;
       std::string currentDeviceId;
       std::vector<rs::audio::BackendSnapshot> availableBackends;
     } _lastPlaybackState;

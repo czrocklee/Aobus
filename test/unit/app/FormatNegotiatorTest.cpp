@@ -10,7 +10,7 @@ using namespace rs::audio;
 
 TEST_CASE("FormatNegotiator - Build Plan", "[playback][format_negotiator]")
 {
-  AudioFormat sourceFormat{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
+  Format sourceFormat{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
   DeviceCapabilities caps;
   caps.sampleRates = {44100, 48000, 96000};
   caps.bitDepths = {16, 24, 32};

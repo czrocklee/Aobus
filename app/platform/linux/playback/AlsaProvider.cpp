@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include "platform/linux/playback/AlsaManager.h"
+#include "platform/linux/playback/AlsaProvider.h"
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
 #include <rs/utility/Log.h>
 #include <rs/utility/Raii.h>
@@ -80,9 +80,9 @@ namespace app::playback
       return caps;
     }
 
-    std::vector<rs::audio::AudioDevice> doAlsaEnumerate()
+    std::vector<rs::audio::Device> doAlsaEnumerate()
     {
-      auto devices = std::vector<rs::audio::AudioDevice>{};
+      auto devices = std::vector<rs::audio::Device>{};
       void** hints_raw = nullptr;
       if (::snd_device_name_hint(-1, "pcm", &hints_raw) < 0)
       {
@@ -120,12 +120,19 @@ namespace app::playback
     }
   } // namespace
 
-  struct AlsaManager::Impl
+  struct AlsaProvider::Impl
   {
-    OnDevicesChangedCallback callback;
     mutable std::mutex mutex;
-    std::vector<rs::audio::AudioDevice> cachedDevices;
+    std::vector<rs::audio::Device> cachedDevices;
     std::jthread monitorThread;
+
+    struct DeviceSub
+    {
+      std::uint64_t id;
+      OnDevicesChangedCallback callback;
+    };
+    std::vector<DeviceSub> deviceSubs;
+    std::uint64_t nextSubId = 1;
 
     Impl()
     {
@@ -167,13 +174,18 @@ namespace app::playback
           if (dev)
           {
             auto newDevices = doAlsaEnumerate();
+            std::vector<DeviceSub> subs;
             {
               std::lock_guard lock(mutex);
               cachedDevices = std::move(newDevices);
+              subs = deviceSubs;
             }
-            if (callback)
+            for (auto const& sub : subs)
             {
-              callback();
+              if (sub.callback)
+              {
+                sub.callback(cachedDevices);
+              }
             }
           }
         }
@@ -181,46 +193,54 @@ namespace app::playback
     }
   };
 
-  AlsaManager::AlsaManager()
+  AlsaProvider::AlsaProvider()
     : _impl(std::make_unique<Impl>())
   {
   }
-  AlsaManager::~AlsaManager() = default;
+  AlsaProvider::~AlsaProvider() = default;
 
-  void AlsaManager::setDevicesChangedCallback(OnDevicesChangedCallback callback)
+  rs::audio::Subscription AlsaProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
-    _impl->callback = std::move(callback);
+    auto const id = _impl->nextSubId++;
+    {
+      std::lock_guard lock(_impl->mutex);
+      _impl->deviceSubs.push_back({id, callback});
+      if (callback)
+      {
+        callback(_impl->cachedDevices);
+      }
+    }
+
+    return rs::audio::Subscription{[this, id]()
+                                   {
+                                     std::lock_guard lock(_impl->mutex);
+                                     auto const it = std::ranges::find(_impl->deviceSubs, id, &Impl::DeviceSub::id);
+                                     if (it != _impl->deviceSubs.end())
+                                     {
+                                       _impl->deviceSubs.erase(it);
+                                     }
+                                   }};
   }
 
-  std::vector<rs::audio::AudioDevice> AlsaManager::enumerateDevices()
-  {
-    std::lock_guard lock(_impl->mutex);
-    return _impl->cachedDevices;
-  }
-
-  std::unique_ptr<rs::audio::IBackend> AlsaManager::createBackend(rs::audio::AudioDevice const& device)
+  std::unique_ptr<rs::audio::IBackend> AlsaProvider::createBackend(rs::audio::Device const& device)
   {
     return std::make_unique<AlsaExclusiveBackend>(device);
   }
 
-  struct AlsaSubscription final : public rs::audio::IGraphSubscription
-  {};
-
-  std::unique_ptr<rs::audio::IGraphSubscription> AlsaManager::subscribeGraph(std::string_view routeAnchor,
-                                                                             OnGraphChangedCallback callback)
+  rs::audio::Subscription AlsaProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
   {
     if (callback)
     {
-      rs::audio::AudioGraph graph;
+      rs::audio::flow::Graph graph;
       graph.nodes.push_back(
-        {.id = "alsa-stream", .type = rs::audio::AudioNodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
+        {.id = "alsa-stream", .type = rs::audio::flow::NodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
       graph.nodes.push_back({.id = "alsa-sink",
-                             .type = rs::audio::AudioNodeType::Sink,
+                             .type = rs::audio::flow::NodeType::Sink,
                              .name = std::string(routeAnchor),
                              .objectPath = std::string(routeAnchor)});
-      graph.links.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});
+      graph.connections.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});
       callback(graph);
     }
-    return std::make_unique<AlsaSubscription>();
+    return rs::audio::Subscription{};
   }
 } // namespace app::playback

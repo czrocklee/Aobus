@@ -4,8 +4,8 @@
 #pragma once
 
 #include <rs/Type.h>
-#include <rs/audio/AudioFormat.h>
-#include <rs/audio/BackendTypes.h>
+#include <rs/audio/Format.h>
+#include <rs/audio/Backend.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -16,9 +16,9 @@
 namespace rs::audio
 {
   // Common audio sample type for internal PCM representation
-  using AudioSample = float;
+  using Sample = float;
 
-  enum class TransportState
+  enum class Transport
   {
     Idle,
     Opening,
@@ -53,7 +53,7 @@ namespace rs::audio
     std::string displayName;
     std::string shortName;
     std::string id;
-    std::vector<AudioDevice> devices;
+    std::vector<Device> devices;
 
     bool operator==(BackendSnapshot const&) const = default;
   };
@@ -68,15 +68,15 @@ namespace rs::audio
 
   struct EngineRouteSnapshot final
   {
-    AudioGraph graph;
+    flow::Graph flow;
     std::optional<BackendRouteAnchor> anchor;
 
     bool operator==(EngineRouteSnapshot const&) const = default;
   };
 
-  struct PlaybackSnapshot final
+  struct Snapshot final
   {
-    TransportState state = TransportState::Idle;
+    Transport transport = Transport::Idle;
     BackendKind backend = BackendKind::None;
     std::string trackTitle;
     std::string trackArtist;
@@ -91,8 +91,8 @@ namespace rs::audio
     std::vector<BackendSnapshot> availableBackends;
 
     // Semantic graph data
-    AudioGraph graph;
-    AudioQuality quality = AudioQuality::Unknown;
+    flow::Graph flow;
+    Quality quality = Quality::Unknown;
     std::string qualityTooltip;
   };
 } // namespace rs::audio

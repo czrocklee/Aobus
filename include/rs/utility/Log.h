@@ -30,11 +30,11 @@ namespace rs::log
     static void shutdown();
 
     static std::shared_ptr<spdlog::logger>& getAppLogger() { return _appLogger; }
-    static std::shared_ptr<spdlog::logger>& getPlaybackLogger() { return _playbackLogger; }
+    static std::shared_ptr<spdlog::logger>& getAudioLogger() { return _audioLogger; }
 
   private:
     static std::shared_ptr<spdlog::logger> _appLogger;
-    static std::shared_ptr<spdlog::logger> _playbackLogger;
+    static std::shared_ptr<spdlog::logger> _audioLogger;
   };
 } // namespace rs::log
 
@@ -54,21 +54,21 @@ namespace rs::log
   rs::log::Log::getAppLogger()->critical(__VA_ARGS__)
 
 // Playback log macros
-#define PLAYBACK_LOG_TRACE(...)                                                                                        \
-  if (rs::log::Log::getPlaybackLogger()->should_log(spdlog::level::trace))                                             \
-  rs::log::Log::getPlaybackLogger()->trace(__VA_ARGS__)
-#define PLAYBACK_LOG_DEBUG(...)                                                                                        \
-  if (rs::log::Log::getPlaybackLogger()->should_log(spdlog::level::debug))                                             \
-  rs::log::Log::getPlaybackLogger()->debug(__VA_ARGS__)
-#define PLAYBACK_LOG_INFO(...)                                                                                         \
-  if (rs::log::Log::getPlaybackLogger()->should_log(spdlog::level::info))                                              \
-  rs::log::Log::getPlaybackLogger()->info(__VA_ARGS__)
-#define PLAYBACK_LOG_WARN(...)                                                                                         \
-  if (rs::log::Log::getPlaybackLogger()->should_log(spdlog::level::warn))                                              \
-  rs::log::Log::getPlaybackLogger()->warn(__VA_ARGS__)
-#define PLAYBACK_LOG_ERROR(...)                                                                                        \
-  if (rs::log::Log::getPlaybackLogger()->should_log(spdlog::level::err))                                               \
-  rs::log::Log::getPlaybackLogger()->error(__VA_ARGS__)
-#define PLAYBACK_LOG_CRITICAL(...)                                                                                     \
-  if (rs::log::Log::getPlaybackLogger()->should_log(spdlog::level::critical))                                          \
-  rs::log::Log::getPlaybackLogger()->critical(__VA_ARGS__)
+#define AUDIO_LOG_TRACE(...)                                                                                        \
+  if (rs::log::Log::getAudioLogger()->should_log(spdlog::level::trace))                                             \
+  rs::log::Log::getAudioLogger()->trace(__VA_ARGS__)
+#define AUDIO_LOG_DEBUG(...)                                                                                        \
+  if (rs::log::Log::getAudioLogger()->should_log(spdlog::level::debug))                                             \
+  rs::log::Log::getAudioLogger()->debug(__VA_ARGS__)
+#define AUDIO_LOG_INFO(...)                                                                                         \
+  if (rs::log::Log::getAudioLogger()->should_log(spdlog::level::info))                                              \
+  rs::log::Log::getAudioLogger()->info(__VA_ARGS__)
+#define AUDIO_LOG_WARN(...)                                                                                         \
+  if (rs::log::Log::getAudioLogger()->should_log(spdlog::level::warn))                                              \
+  rs::log::Log::getAudioLogger()->warn(__VA_ARGS__)
+#define AUDIO_LOG_ERROR(...)                                                                                        \
+  if (rs::log::Log::getAudioLogger()->should_log(spdlog::level::err))                                               \
+  rs::log::Log::getAudioLogger()->error(__VA_ARGS__)
+#define AUDIO_LOG_CRITICAL(...)                                                                                     \
+  if (rs::log::Log::getAudioLogger()->should_log(spdlog::level::critical))                                          \
+  rs::log::Log::getAudioLogger()->critical(__VA_ARGS__)

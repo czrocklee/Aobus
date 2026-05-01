@@ -10,7 +10,7 @@ namespace rs::audio
   /**
    * @brief Describes the physical format of a PCM audio stream.
    */
-  struct AudioFormat final
+  struct Format final
   {
     std::uint32_t sampleRate = 0;
     std::uint8_t channels = 0;
@@ -19,6 +19,6 @@ namespace rs::audio
     bool isFloat = false;
     bool isInterleaved = true;
 
-    bool operator==(AudioFormat const&) const = default;
+    bool operator==(Format const&) const = default;
   };
 } // namespace rs::audio

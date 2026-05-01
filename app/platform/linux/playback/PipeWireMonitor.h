@@ -2,8 +2,9 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 #pragma once
 
-#include <rs/audio/AudioFormat.h>
-#include <rs/audio/BackendTypes.h>
+#include <rs/audio/Backend.h>
+#include <rs/audio/Format.h>
+#include <rs/audio/IBackendProvider.h>
 
 #include <functional>
 #include <memory>
@@ -24,13 +25,14 @@ namespace app::playback
     void stop();
     void refresh();
 
-    void setDevicesChangedCallback(std::function<void()> callback);
-    std::vector<rs::audio::AudioDevice> enumerateSinks() const;
+    using DeviceCallback = std::function<void(std::vector<rs::audio::Device> const&)>;
+    rs::audio::Subscription subscribeDevices(DeviceCallback callback);
+
+    std::vector<rs::audio::Device> enumerateSinks() const;
     std::optional<std::uint32_t> findSinkIdByName(std::string_view name) const;
 
-    std::uint64_t subscribeGraph(std::string_view routeAnchor,
-                                 std::function<void(rs::audio::AudioGraph const&)> callback);
-    void unsubscribeGraph(std::uint64_t id);
+    rs::audio::Subscription subscribeGraph(std::string_view routeAnchor,
+                                           std::function<void(rs::audio::flow::Graph const&)> callback);
 
   private:
     std::unique_ptr<Impl> _impl;

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/PlaybackTypes.h>
+#include <rs/audio/Types.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -13,10 +13,10 @@
 
 namespace rs::audio
 {
-  class IPcmSource
+  class ISource
   {
   public:
-    virtual ~IPcmSource() = default;
+    virtual ~ISource() = default;
 
     virtual rs::Result<> seek(std::uint32_t positionMs) = 0;
     virtual std::size_t read(std::span<std::byte> output) noexcept = 0;

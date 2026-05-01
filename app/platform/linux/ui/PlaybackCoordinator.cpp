@@ -5,10 +5,10 @@
 #include <rs/utility/Log.h>
 
 #ifdef ALSA_FOUND
-#include "platform/linux/playback/AlsaManager.h"
+#include "platform/linux/playback/AlsaProvider.h"
 #endif
 #ifdef PIPEWIRE_FOUND
-#include "platform/linux/playback/PipeWireManager.h"
+#include "platform/linux/playback/PipeWireProvider.h"
 #endif
 
 namespace app::ui
@@ -33,24 +33,24 @@ namespace app::ui
     }
   }
 
-  void PlaybackCoordinator::setPlaybackController(std::unique_ptr<rs::audio::PlaybackController> controller)
+  void PlaybackCoordinator::setPlaybackController(std::unique_ptr<rs::audio::Player> controller)
   {
-    _playbackController = std::move(controller);
-    if (_playbackController)
+    _player = std::move(controller);
+    if (_player)
     {
-      _playbackController->setTrackEndedCallback([this]() { handlePlaybackFinished(); });
+      _player->setTrackEndedCallback([this]() { handlePlaybackFinished(); });
     }
   }
 
   void PlaybackCoordinator::setupPlayback()
   {
-    auto controller = std::make_unique<rs::audio::PlaybackController>(_dispatcher);
+    auto controller = std::make_unique<rs::audio::Player>(_dispatcher);
 
 #ifdef PIPEWIRE_FOUND
-    controller->addManager(std::make_unique<app::playback::PipeWireManager>());
+    controller->addProvider(std::make_unique<app::playback::PipeWireProvider>());
 #endif
 #ifdef ALSA_FOUND
-    controller->addManager(std::make_unique<app::playback::AlsaManager>());
+    controller->addProvider(std::make_unique<app::playback::AlsaProvider>());
 #endif
 
     setPlaybackController(std::move(controller));
@@ -73,20 +73,20 @@ namespace app::ui
 
   void PlaybackCoordinator::refreshPlaybackBar()
   {
-    if (!_playbackController)
+    if (!_player)
     {
       return;
     }
 
-    auto snapshot = _playbackController->snapshot();
-    _lastPlaybackState = snapshot.state;
+    auto snapshot = _player->snapshot();
+    _lastPlaybackState = snapshot.transport;
     _host.updatePlaybackStatus(snapshot);
 
     if (snapshot.statusText != _lastPlaybackErrorMessage)
     {
       _lastPlaybackErrorMessage = snapshot.statusText;
 
-      if (!snapshot.statusText.empty() && snapshot.state == rs::audio::TransportState::Error)
+      if (!snapshot.statusText.empty() && snapshot.transport == rs::audio::Transport::Error)
       {
         static constexpr auto errorDisplayDuration = std::chrono::seconds{10};
         _host.showPlaybackMessage(snapshot.statusText, errorDisplayDuration);
@@ -118,16 +118,16 @@ namespace app::ui
 
   void PlaybackCoordinator::playCurrentSelection()
   {
-    if (!_playbackController)
+    if (!_player)
     {
       return;
     }
 
-    auto const snapshot = _playbackController->snapshot();
+    auto const snapshot = _player->snapshot();
 
-    if (snapshot.state == rs::audio::TransportState::Paused)
+    if (snapshot.transport == rs::audio::Transport::Paused)
     {
-      _playbackController->resume();
+      _player->resume();
       return;
     }
 
@@ -144,27 +144,27 @@ namespace app::ui
 
   void PlaybackCoordinator::pausePlayback()
   {
-    if (_playbackController != nullptr)
+    if (_player != nullptr)
     {
-      _playbackController->pause();
+      _player->pause();
     }
   }
 
   void PlaybackCoordinator::stopPlayback()
   {
-    if (_playbackController != nullptr)
+    if (_player != nullptr)
     {
-      _playbackController->stop();
+      _player->stop();
       clearActivePlaybackSequence();
-      _lastPlaybackState = rs::audio::TransportState::Idle;
+      _lastPlaybackState = rs::audio::Transport::Idle;
     }
   }
 
   void PlaybackCoordinator::seekPlayback(std::uint32_t positionMs)
   {
-    if (_playbackController != nullptr)
+    if (_player != nullptr)
     {
-      _playbackController->seek(positionMs);
+      _player->seek(positionMs);
     }
   }
 
@@ -178,7 +178,7 @@ namespace app::ui
                                                   rs::TrackId startTrackId,
                                                   std::optional<rs::ListId> sourceListId)
   {
-    if (!_playbackController)
+    if (!_player)
     {
       return false;
     }
@@ -212,7 +212,7 @@ namespace app::ui
 
   bool PlaybackCoordinator::playTrackAtSequenceIndex(std::size_t index)
   {
-    if (_playbackController == nullptr || !_activePlaybackSequence)
+    if (_player == nullptr || !_activePlaybackSequence)
     {
       return false;
     }
@@ -231,7 +231,7 @@ namespace app::ui
       if (auto descriptor = rowDataProvider->getPlaybackDescriptor(sequence.trackIds[i]))
       {
         sequence.currentIndex = i;
-        _playbackController->play(*descriptor);
+        _player->play(*descriptor);
         return true;
       }
     }
@@ -273,10 +273,10 @@ namespace app::ui
 
     clearActivePlaybackSequence();
 
-    if (_playbackController)
+    if (_player)
     {
-      _lastPlaybackState = rs::audio::TransportState::Idle;
-      _playbackController->stop();
+      _lastPlaybackState = rs::audio::Transport::Idle;
+      _player->stop();
     }
   }
 

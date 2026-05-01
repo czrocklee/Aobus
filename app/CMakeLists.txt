@@ -38,7 +38,7 @@ if(PIPEWIRE_FOUND)
   target_compile_definitions(app_linux PRIVATE PIPEWIRE_FOUND)
   target_sources(app_linux PRIVATE
     platform/linux/playback/PipeWireBackend.cpp
-    platform/linux/playback/PipeWireManager.cpp
+    platform/linux/playback/PipeWireProvider.cpp
     platform/linux/playback/PipeWireMonitor.cpp
     platform/linux/playback/PipeWireMonitor.h
     platform/linux/playback/detail/PipeWireShared.h
@@ -51,7 +51,7 @@ if(ALSA_FOUND)
   target_compile_definitions(app_linux PRIVATE ALSA_FOUND)
   target_sources(app_linux PRIVATE
     platform/linux/playback/AlsaExclusiveBackend.cpp
-    platform/linux/playback/AlsaManager.cpp
+    platform/linux/playback/AlsaProvider.cpp
   )
   target_link_libraries(app_linux PRIVATE PkgALSA PkgUDEV)
 endif()

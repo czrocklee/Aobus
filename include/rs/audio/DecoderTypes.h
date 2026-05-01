@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/PlaybackTypes.h>
+#include <rs/audio/Types.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -28,8 +28,8 @@ namespace rs::audio
    */
   struct DecodedStreamInfo final
   {
-    AudioFormat sourceFormat;
-    AudioFormat outputFormat;
+    Format sourceFormat;
+    Format outputFormat;
     std::uint32_t durationMs = 0;
     bool isLossy = false;
   };

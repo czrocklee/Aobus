@@ -4,7 +4,7 @@
 #pragma once
 
 #include <rs/audio/IDecoderSession.h>
-#include <rs/audio/IPcmSource.h>
+#include <rs/audio/ISource.h>
 
 #include <cstddef>
 #include <mutex>
@@ -13,10 +13,10 @@
 
 namespace rs::audio
 {
-  class MemoryPcmSource final : public IPcmSource
+  class MemorySource final : public ISource
   {
   public:
-    MemoryPcmSource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo streamInfo);
+    MemorySource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo streamInfo);
 
     rs::Result<> initialize();
     rs::Result<> seek(std::uint32_t positionMs) override;

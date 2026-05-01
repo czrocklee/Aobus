@@ -72,7 +72,7 @@ namespace app::playback
 
     // Members
     rs::audio::RenderCallbacks _callbacks;
-    rs::audio::AudioFormat _format;
+    rs::audio::Format _format;
     std::atomic<bool> _drainPending = false;
     bool _strictFormatRequired = false;
     bool _strictFormatRejected = false;
@@ -176,7 +176,7 @@ namespace app::playback
     if (auto negotiated = parseRawStreamFormat(param))
     {
       _format = *negotiated;
-      PLAYBACK_LOG_INFO(
+      AUDIO_LOG_INFO(
         "Negotiated PipeWire format: {}Hz, {}b, {} channels", _format.sampleRate, _format.bitDepth, _format.channels);
       if (_callbacks.onFormatChanged != nullptr)
       {
@@ -191,7 +191,7 @@ namespace app::playback
   {
     if (newState == PW_STREAM_STATE_ERROR)
     {
-      PLAYBACK_LOG_ERROR("PipeWire error: {}", errorMessage ? errorMessage : "Unknown PipeWire stream error");
+      AUDIO_LOG_ERROR("PipeWire error: {}", errorMessage ? errorMessage : "Unknown PipeWire stream error");
       if (_callbacks.onBackendError != nullptr)
       {
         _callbacks.onBackendError(
@@ -221,7 +221,7 @@ namespace app::playback
     }
   }
 
-  PipeWireBackend::PipeWireBackend(rs::audio::AudioDevice const& device)
+  PipeWireBackend::PipeWireBackend(rs::audio::Device const& device)
     : _impl{std::make_unique<Impl>()}
     , _targetDeviceId{device.id}
     , _exclusiveMode{device.backendKind == rs::audio::BackendKind::PipeWireExclusive}
@@ -242,7 +242,7 @@ namespace app::playback
 
   PipeWireBackend::~PipeWireBackend() = default;
 
-  rs::Result<> PipeWireBackend::open(rs::audio::AudioFormat const& format, rs::audio::RenderCallbacks callbacks)
+  rs::Result<> PipeWireBackend::open(rs::audio::Format const& format, rs::audio::RenderCallbacks callbacks)
   {
     _impl->_callbacks = callbacks;
     _impl->_format = format;
@@ -268,8 +268,7 @@ namespace app::playback
                                                     "RockStudio Playback",
                                                     nullptr);
     auto props = rs::utility::makeUniquePtr<::pw_properties_free>(rawProps);
-    ::pw_properties_setf(
-      props.get(), PW_KEY_NODE_RATE, "1/%u", format.sampleRate); // NOLINT(cppcoreguidelines-pro-type-vararg)
+    ::pw_properties_set(props.get(), PW_KEY_NODE_RATE, std::format("1/{}", format.sampleRate).c_str());
 
     if (!_targetDeviceId.empty())
     {
@@ -431,7 +430,7 @@ namespace app::playback
     {
       if (auto const openResult = open(_impl->_format, _impl->_callbacks); !openResult)
       {
-        PLAYBACK_LOG_ERROR("Failed to reopen stream after exclusive mode change: {}", openResult.error().message);
+        AUDIO_LOG_ERROR("Failed to reopen stream after exclusive mode change: {}", openResult.error().message);
       }
     }
   }

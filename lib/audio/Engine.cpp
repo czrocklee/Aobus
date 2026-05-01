@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/PlaybackEngine.h>
+#include <rs/audio/Engine.h>
 #include <rs/utility/Log.h>
 
 #include <rs/audio/DecoderFactory.h>
 #include <rs/audio/FormatNegotiator.h>
 #include <rs/audio/IDecoderSession.h>
-#include <rs/audio/MemoryPcmSource.h>
-#include <rs/audio/StreamingPcmSource.h>
+#include <rs/audio/MemorySource.h>
+#include <rs/audio/StreamingSource.h>
 
 #include <algorithm>
 #include <format>
@@ -27,7 +27,7 @@ namespace rs::audio
     constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
     constexpr std::uint8_t kBytesPer24BitSample = 3;
 
-    std::uint64_t bytesPerSecond(AudioFormat const& format) noexcept
+    std::uint64_t bytesPerSecond(Format const& format) noexcept
     {
       if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
       {
@@ -66,20 +66,20 @@ namespace rs::audio
     }
   } // namespace
 
-  PlaybackEngine::PlaybackEngine(std::unique_ptr<IBackend> backend,
-                                 AudioDevice const& device,
+  Engine::Engine(std::unique_ptr<IBackend> backend,
+                                 Device const& device,
                                  std::shared_ptr<rs::IMainThreadDispatcher> dispatcher)
     : _backend{std::move(backend)}, _dispatcher{std::move(dispatcher)}, _currentDevice{device}
   {
     _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
   }
 
-  PlaybackEngine::~PlaybackEngine()
+  Engine::~Engine()
   {
     stop();
   }
 
-  void PlaybackEngine::setBackend(std::unique_ptr<IBackend> backend, AudioDevice const& device)
+  void Engine::setBackend(std::unique_ptr<IBackend> backend, Device const& device)
   {
     struct State
     {
@@ -94,7 +94,7 @@ namespace rs::audio
 
       return State{.track = _currentTrack,
                    .positionMs = _snapshot.positionMs,
-                   .wasPlaying = (_snapshot.state == TransportState::Playing)};
+                   .wasPlaying = (_snapshot.transport == Transport::Playing)};
     }();
 
     stop();
@@ -110,7 +110,7 @@ namespace rs::audio
 
     if (state.track)
     {
-      PLAYBACK_LOG_INFO("Resuming track '{}' after backend switch", state.track->title);
+      AUDIO_LOG_INFO("Resuming track '{}' after backend switch", state.track->title);
       play(*state.track);
       seek(state.positionMs);
 
@@ -121,25 +121,25 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::setOnTrackEnded(std::function<void()> callback)
+  void Engine::setOnTrackEnded(std::function<void()> callback)
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
     _onTrackEnded = std::move(callback);
   }
 
-  void PlaybackEngine::setOnRouteChanged(OnRouteChanged callback)
+  void Engine::setOnRouteChanged(OnRouteChanged callback)
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
     _onRouteChanged = std::move(callback);
   }
 
-  EngineRouteSnapshot PlaybackEngine::routeSnapshot() const
+  EngineRouteSnapshot Engine::routeSnapshot() const
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
     return _routeSnapshot;
   }
 
-  void PlaybackEngine::resetToIdle()
+  void Engine::resetToIdle()
   {
     _currentTrack.reset();
     _backendStarted = false;
@@ -164,9 +164,9 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::play(TrackPlaybackDescriptor const& descriptor)
+  void Engine::play(TrackPlaybackDescriptor const& descriptor)
   {
-    PLAYBACK_LOG_INFO(
+    AUDIO_LOG_INFO(
       "Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
 
     if (_backend)
@@ -180,35 +180,35 @@ namespace rs::audio
 
     auto callbacks = RenderCallbacks{};
     callbacks.userData = this;
-    callbacks.readPcm = &PlaybackEngine::onReadPcm;
-    callbacks.isSourceDrained = &PlaybackEngine::isSourceDrained;
-    callbacks.onUnderrun = &PlaybackEngine::onUnderrun;
-    callbacks.onPositionAdvanced = &PlaybackEngine::onPositionAdvanced;
-    callbacks.onDrainComplete = &PlaybackEngine::onDrainComplete;
-    callbacks.onRouteReady = &PlaybackEngine::onRouteReady;
-    callbacks.onFormatChanged = &PlaybackEngine::onFormatChanged;
-    callbacks.onBackendError = &PlaybackEngine::onBackendError;
+    callbacks.readPcm = &Engine::onReadPcm;
+    callbacks.isSourceDrained = &Engine::isSourceDrained;
+    callbacks.onUnderrun = &Engine::onUnderrun;
+    callbacks.onPositionAdvanced = &Engine::onPositionAdvanced;
+    callbacks.onDrainComplete = &Engine::onDrainComplete;
+    callbacks.onRouteReady = &Engine::onRouteReady;
+    callbacks.onFormatChanged = &Engine::onFormatChanged;
+    callbacks.onBackendError = &Engine::onBackendError;
 
-    auto source = std::shared_ptr<IPcmSource>{};
-    auto backendFormat = AudioFormat{};
+    auto source = std::shared_ptr<ISource>{};
+    auto backendFormat = Format{};
 
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
       _underrunCount = 0;
       resetToIdle();
-      _snapshot.state = TransportState::Opening;
+      _snapshot.transport = Transport::Opening;
       _snapshot.trackTitle = descriptor.title;
       _snapshot.trackArtist = descriptor.artist;
       _currentTrack = descriptor;
 
       if (!openTrack(descriptor, source, backendFormat))
       {
-        _snapshot.state = TransportState::Error;
+        _snapshot.transport = Transport::Error;
         _currentTrack.reset();
         return;
       }
 
-      _snapshot.state = TransportState::Buffering;
+      _snapshot.transport = Transport::Buffering;
     }
 
     _source.store(source, std::memory_order_release);
@@ -220,7 +220,7 @@ namespace rs::audio
         _source.store({}, std::memory_order_release);
         auto lock = std::lock_guard<std::mutex>{_stateMutex};
         _currentTrack.reset();
-        _snapshot.state = TransportState::Error;
+        _snapshot.transport = Transport::Error;
         _snapshot.statusText = openResult.error().message;
         return;
       }
@@ -244,7 +244,7 @@ namespace rs::audio
 
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
-      _snapshot.state = TransportState::Playing;
+      _snapshot.transport = Transport::Playing;
       _backendStarted = true;
     }
 
@@ -254,17 +254,17 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::pause()
+  void Engine::pause()
   {
     bool shouldPause = false;
 
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
 
-      if (_snapshot.state == TransportState::Playing || _snapshot.state == TransportState::Buffering)
+      if (_snapshot.transport == Transport::Playing || _snapshot.transport == Transport::Buffering)
       {
-        PLAYBACK_LOG_INFO("Playback paused");
-        _snapshot.state = TransportState::Paused;
+        AUDIO_LOG_INFO("Playback paused");
+        _snapshot.transport = Transport::Paused;
         shouldPause = _backendStarted.load();
       }
     }
@@ -275,21 +275,21 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::resume()
+  void Engine::resume()
   {
     auto const source = _source.load(std::memory_order_acquire);
     auto lock = std::unique_lock<std::mutex>{_stateMutex};
 
-    if (_snapshot.state != TransportState::Paused)
+    if (_snapshot.transport != Transport::Paused)
     {
       return;
     }
 
-    PLAYBACK_LOG_INFO("Playback resumed");
+    AUDIO_LOG_INFO("Playback resumed");
 
     if (_backendStarted)
     {
-      _snapshot.state = TransportState::Playing;
+      _snapshot.transport = Transport::Playing;
       lock.unlock();
 
       if (_backend)
@@ -310,7 +310,7 @@ namespace rs::audio
       return;
     }
 
-    _snapshot.state = TransportState::Playing;
+    _snapshot.transport = Transport::Playing;
     _backendStarted = true;
     lock.unlock();
 
@@ -320,9 +320,9 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::stop()
+  void Engine::stop()
   {
-    PLAYBACK_LOG_INFO("Playback stopped");
+    AUDIO_LOG_INFO("Playback stopped");
 
     if (_backend)
     {
@@ -336,9 +336,9 @@ namespace rs::audio
     resetToIdle();
   }
 
-  void PlaybackEngine::seek(std::uint32_t positionMs)
+  void Engine::seek(std::uint32_t positionMs)
   {
-    PLAYBACK_LOG_INFO("Seek requested: {} ms", positionMs);
+    AUDIO_LOG_INFO("Seek requested: {} ms", positionMs);
     auto const source = _source.load(std::memory_order_acquire);
 
     if (!source)
@@ -350,8 +350,8 @@ namespace rs::audio
 
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
-      wasPaused = (_snapshot.state == TransportState::Paused);
-      _snapshot.state = TransportState::Buffering;
+      wasPaused = (_snapshot.transport == Transport::Paused);
+      _snapshot.transport = Transport::Buffering;
       _snapshot.positionMs = positionMs;
       _snapshot.statusText.clear();
     }
@@ -368,7 +368,7 @@ namespace rs::audio
     if (auto const seekResult = source->seek(positionMs); !seekResult)
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
-      _snapshot.state = TransportState::Error;
+      _snapshot.transport = Transport::Error;
       _snapshot.statusText = seekResult.error().message;
       return;
     }
@@ -393,13 +393,13 @@ namespace rs::audio
     if (wasPaused)
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
-      _snapshot.state = TransportState::Paused;
+      _snapshot.transport = Transport::Paused;
       return;
     }
 
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
-      _snapshot.state = TransportState::Playing;
+      _snapshot.transport = Transport::Playing;
       _backendStarted = true;
     }
 
@@ -409,7 +409,7 @@ namespace rs::audio
     }
   }
 
-  PlaybackSnapshot PlaybackEngine::snapshot() const
+  Snapshot Engine::snapshot() const
   {
     auto const source = _source.load(std::memory_order_acquire);
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
@@ -421,9 +421,9 @@ namespace rs::audio
     return snap;
   }
 
-  void PlaybackEngine::onBackendError(void* userData, std::string_view message) noexcept
+  void Engine::onBackendError(void* userData, std::string_view message) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
     auto msg = std::string(message);
 
     if (self->_dispatcher)
@@ -436,22 +436,22 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::handleBackendError(std::string_view message)
+  void Engine::handleBackendError(std::string_view message)
   {
-    PLAYBACK_LOG_ERROR("Backend error: {}", message);
+    AUDIO_LOG_ERROR("Backend error: {}", message);
 
     // Stop immediately
     stop();
 
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
-    _snapshot.state = TransportState::Error;
+    _snapshot.transport = Transport::Error;
     _snapshot.statusText = std::string(message);
   }
 
-  bool PlaybackEngine::negotiateFormat(std::filesystem::path const& path,
+  bool Engine::negotiateFormat(std::filesystem::path const& path,
                                        DecodedStreamInfo const& info,
                                        std::unique_ptr<IDecoderSession>& decoder,
-                                       AudioFormat& backendFormat)
+                                       Format& backendFormat)
   {
     if (!_backend)
     {
@@ -463,7 +463,7 @@ namespace rs::audio
     if (backendKind == BackendKind::PipeWire)
     {
       backendFormat = info.outputFormat;
-      PLAYBACK_LOG_INFO("PipeWire shared mode keeps the stream at {}Hz/{}b/{}ch",
+      AUDIO_LOG_INFO("PipeWire shared mode keeps the stream at {}Hz/{}b/{}ch",
                         backendFormat.sampleRate,
                         static_cast<int>(backendFormat.bitDepth),
                         static_cast<int>(backendFormat.channels));
@@ -488,7 +488,7 @@ namespace rs::audio
       return false;
     }
 
-    PLAYBACK_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
+    AUDIO_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
                       static_cast<int>(plan.decoderOutputFormat.bitDepth),
                       static_cast<int>(plan.decoderOutputFormat.validBits),
                       plan.deviceFormat.sampleRate,
@@ -518,12 +518,12 @@ namespace rs::audio
     return true;
   }
 
-  std::shared_ptr<IPcmSource> PlaybackEngine::createPcmSource(std::unique_ptr<IDecoderSession> decoder,
+  std::shared_ptr<ISource> Engine::createPcmSource(std::unique_ptr<IDecoderSession> decoder,
                                                               DecodedStreamInfo const& info)
   {
     if (shouldUseMemoryPcmSource(info))
     {
-      auto memorySource = std::make_shared<MemoryPcmSource>(std::move(decoder), info);
+      auto memorySource = std::make_shared<MemorySource>(std::move(decoder), info);
 
       if (auto const initResult = memorySource->initialize(); !initResult)
       {
@@ -534,7 +534,7 @@ namespace rs::audio
       return memorySource;
     }
 
-    auto streamingSource = std::make_shared<StreamingPcmSource>(
+    auto streamingSource = std::make_shared<StreamingSource>(
       std::move(decoder),
       info,
       [this](rs::Error const& err)
@@ -560,11 +560,11 @@ namespace rs::audio
     return streamingSource;
   }
 
-  bool PlaybackEngine::openTrack(TrackPlaybackDescriptor const& descriptor,
-                                 std::shared_ptr<IPcmSource>& source,
-                                 AudioFormat& backendFormat)
+  bool Engine::openTrack(TrackPlaybackDescriptor const& descriptor,
+                                 std::shared_ptr<ISource>& source,
+                                 Format& backendFormat)
   {
-    auto outputFormat = AudioFormat{};
+    auto outputFormat = Format{};
     outputFormat.sampleRate = 0; // Use native
     outputFormat.channels = 0;   // Use native
     outputFormat.bitDepth = 0;   // Use native
@@ -608,30 +608,30 @@ namespace rs::audio
 
     _snapshot.durationMs = info.durationMs;
     _snapshot.positionMs = 0;
-    _snapshot.graph = {};
+    _snapshot.flow = {};
 
     // Add initial Source (Decoder) Node
-    _routeSnapshot.graph.nodes.clear();
-    _routeSnapshot.graph.nodes.push_back({.id = "rs-decoder",
-                                          .type = AudioNodeType::Decoder,
+    _routeSnapshot.flow.nodes.clear();
+    _routeSnapshot.flow.nodes.push_back({.id = "rs-decoder",
+                                          .type = flow::NodeType::Decoder,
                                           .name = "File Decoder",
                                           .format = info.sourceFormat,
                                           .isLossySource = info.isLossy,
                                           .objectPath = ""});
 
     // Add Engine Node
-    _routeSnapshot.graph.nodes.push_back(AudioNode{.id = "rs-engine",
-                                                   .type = AudioNodeType::Engine,
+    _routeSnapshot.flow.nodes.push_back(flow::Node{.id = "rs-engine",
+                                                   .type = flow::NodeType::Engine,
                                                    .name = "RockStudio Engine",
                                                    .format = info.outputFormat,
                                                    .volumeNotUnity = false,
                                                    .isMuted = false,
                                                    .isLossySource = false});
 
-    _routeSnapshot.graph.links.clear();
-    _routeSnapshot.graph.links.push_back(AudioLink{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
+    _routeSnapshot.flow.connections.clear();
+    _routeSnapshot.flow.connections.push_back(flow::Connection{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
 
-    _snapshot.graph = _routeSnapshot.graph;
+    _snapshot.flow = _routeSnapshot.flow;
 
     if (_onRouteChanged)
     {
@@ -650,17 +650,17 @@ namespace rs::audio
     return true;
   }
 
-  std::size_t PlaybackEngine::onReadPcm(void* userData, std::span<std::byte> output) noexcept
+  std::size_t Engine::onReadPcm(void* userData, std::span<std::byte> output) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
     auto const source = self->_source.load(std::memory_order_acquire);
 
     return source ? source->read(output) : 0;
   }
 
-  bool PlaybackEngine::isSourceDrained(void* userData) noexcept
+  bool Engine::isSourceDrained(void* userData) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
     auto const source = self->_source.load(std::memory_order_acquire);
 
     if (!source)
@@ -678,15 +678,15 @@ namespace rs::audio
     return drained;
   }
 
-  void PlaybackEngine::onUnderrun(void* userData) noexcept
+  void Engine::onUnderrun(void* userData) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
     ++self->_underrunCount;
   }
 
-  void PlaybackEngine::onPositionAdvanced(void* userData, std::uint32_t frames) noexcept
+  void Engine::onPositionAdvanced(void* userData, std::uint32_t frames) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
     auto lock = std::unique_lock<std::mutex>{self->_stateMutex, std::try_to_lock};
 
     if (!lock.owns_lock())
@@ -695,9 +695,9 @@ namespace rs::audio
     }
 
     // Use Engine node format for position calculation
-    for (auto const& node : self->_snapshot.graph.nodes)
+    for (auto const& node : self->_snapshot.flow.nodes)
     {
-      if (node.type == AudioNodeType::Engine && node.format && node.format->sampleRate > 0)
+      if (node.type == flow::NodeType::Engine && node.format && node.format->sampleRate > 0)
       {
         auto const ms = (static_cast<std::uint64_t>(frames) * 1000) / node.format->sampleRate;
         self->_snapshot.positionMs += static_cast<std::uint32_t>(ms);
@@ -706,9 +706,9 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::onDrainComplete(void* userData) noexcept
+  void Engine::onDrainComplete(void* userData) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
 
     if (!self->_playbackDrainPending.exchange(false, std::memory_order_relaxed))
     {
@@ -725,7 +725,7 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::handleDrainComplete()
+  void Engine::handleDrainComplete()
   {
     _source.store({}, std::memory_order_release);
 
@@ -744,9 +744,9 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::onRouteReady(void* userData, std::string_view routeAnchor) noexcept
+  void Engine::onRouteReady(void* userData, std::string_view routeAnchor) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
     auto anchor = std::string(routeAnchor);
 
     if (self->_dispatcher)
@@ -759,7 +759,7 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::handleRouteReady(std::string_view routeAnchor)
+  void Engine::handleRouteReady(std::string_view routeAnchor)
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
     _routeSnapshot.anchor =
@@ -780,19 +780,19 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::handleSourceError(rs::Error const& error)
+  void Engine::handleSourceError(rs::Error const& error)
   {
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
 
-      if (_snapshot.state == TransportState::Idle)
+      if (_snapshot.transport == Transport::Idle)
       {
         return;
       }
 
       _backendStarted = false;
       _playbackDrainPending = false;
-      _snapshot.state = TransportState::Error;
+      _snapshot.transport = Transport::Error;
       _snapshot.statusText = error.message.empty() ? "PCM source failed" : error.message;
     }
 
@@ -803,9 +803,9 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::onFormatChanged(void* userData, AudioFormat const& format) noexcept
+  void Engine::onFormatChanged(void* userData, Format const& format) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<PlaybackEngine>(userData);
+    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
 
     if (self->_dispatcher)
     {
@@ -817,12 +817,12 @@ namespace rs::audio
     }
   }
 
-  void PlaybackEngine::handleFormatChanged(AudioFormat const& format)
+  void Engine::handleFormatChanged(Format const& format)
   {
     auto lock = std::lock_guard<std::mutex>{_stateMutex};
 
     // Update engine node in the route snapshot
-    for (auto& node : _routeSnapshot.graph.nodes)
+    for (auto& node : _routeSnapshot.flow.nodes)
     {
       if (node.id == "rs-engine")
       {
@@ -832,7 +832,7 @@ namespace rs::audio
     }
 
     // Update engine node in the public snapshot
-    for (auto& node : _snapshot.graph.nodes)
+    for (auto& node : _snapshot.flow.nodes)
     {
       if (node.id == "rs-engine")
       {

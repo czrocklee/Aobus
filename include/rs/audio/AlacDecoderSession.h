@@ -10,7 +10,7 @@ namespace rs::audio
   class AlacDecoderSession final : public IDecoderSession
   {
   public:
-    explicit AlacDecoderSession(AudioFormat outputFormat);
+    explicit AlacDecoderSession(Format outputFormat);
     ~AlacDecoderSession() override;
 
     rs::Result<> open(std::filesystem::path const& filePath) override;

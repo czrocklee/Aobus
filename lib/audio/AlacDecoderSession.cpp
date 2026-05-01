@@ -39,7 +39,7 @@ namespace rs::audio
 
   struct AlacDecoderSession::Impl
   {
-    AudioFormat requestedOutput;
+    Format requestedOutput;
     DecodedStreamInfo info;
 
     std::unique_ptr<ALACDecoder> decoder;
@@ -50,14 +50,14 @@ namespace rs::audio
     rs::utility::MappedFile mappedFile;
     std::unique_ptr<Demuxer> demuxer;
 
-    Impl(AudioFormat output)
+    Impl(Format output)
       : requestedOutput(output)
     {
       decoder = std::make_unique<ALACDecoder>();
     }
   };
 
-  AlacDecoderSession::AlacDecoderSession(AudioFormat outputFormat)
+  AlacDecoderSession::AlacDecoderSession(Format outputFormat)
     : _impl(std::make_unique<Impl>(outputFormat))
   {
   }

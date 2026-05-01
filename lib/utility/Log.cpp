@@ -16,7 +16,7 @@
 namespace rs::log
 {
   std::shared_ptr<spdlog::logger> Log::_appLogger = spdlog::null_logger_mt("app");
-  std::shared_ptr<spdlog::logger> Log::_playbackLogger = spdlog::null_logger_mt("playback");
+  std::shared_ptr<spdlog::logger> Log::_audioLogger = spdlog::null_logger_mt("audio");
 
   void Log::init(LogLevel level, std::filesystem::path logDir)
   {
@@ -46,7 +46,7 @@ namespace rs::log
 
     // Drop existing loggers to replace them with async versions
     spdlog::drop("app");
-    spdlog::drop("playback");
+    spdlog::drop("audio");
 
     // Create loggers
     _appLogger = std::make_shared<spdlog::async_logger>(
@@ -54,10 +54,10 @@ namespace rs::log
     _appLogger->set_level(spdlog::level::trace); // Keep internal level at trace, sinks will filter
     spdlog::register_logger(_appLogger);
 
-    _playbackLogger = std::make_shared<spdlog::async_logger>(
-      "playback", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::overrun_oldest);
-    _playbackLogger->set_level(spdlog::level::trace);
-    spdlog::register_logger(_playbackLogger);
+    _audioLogger = std::make_shared<spdlog::async_logger>(
+      "audio", sinks.begin(), sinks.end(), spdlog::thread_pool(), spdlog::async_overflow_policy::overrun_oldest);
+    _audioLogger->set_level(spdlog::level::trace);
+    spdlog::register_logger(_audioLogger);
 
     spdlog::set_default_logger(_appLogger);
 

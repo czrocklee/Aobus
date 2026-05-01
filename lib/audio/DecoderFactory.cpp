@@ -13,7 +13,7 @@ namespace rs::audio
   }
 
   std::unique_ptr<IDecoderSession> createDecoderSession(std::filesystem::path const& filePath,
-                                                                  AudioFormat outputFormat)
+                                                                  Format outputFormat)
   {
     auto const ext = filePath.extension().string();
 
