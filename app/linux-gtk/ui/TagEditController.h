@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#pragma once
+
+#include "LibrarySession.h"
+#include "TrackViewPage.h"
+
+#include <ao/library/MusicLibrary.h>
+#include <ao/model/TrackIdList.h>
+#include <gtkmm.h>
+
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace ao::gtk
+{
+  struct TrackSelectionContext final
+  {
+    ao::ListId listId;
+    std::vector<ao::TrackId> selectedIds;
+    ao::model::TrackIdList* membershipList = nullptr;
+  };
+
+  /**
+   * TagEditController handles the track context menu and tag editing dialogs.
+   */
+  class TagEditController final
+  {
+  public:
+    struct Callbacks final
+    {
+      std::function<void(std::string const&)> onStatusMessage;
+      std::function<void()> onTagsMutated;
+    };
+
+    TagEditController(Gtk::Window& parent, Callbacks callbacks);
+    ~TagEditController();
+
+    void setLibrarySession(LibrarySession* session);
+
+    // Add to action group for menu access
+    void addActionsTo(Gio::ActionMap& actionMap);
+
+    void showTrackContextMenu(TrackViewPage& page, TrackSelectionContext const& selection, double x, double y);
+
+    void showTagEditor(TrackViewPage& page, TrackSelectionContext const& selection, double x, double y);
+
+  private:
+    void setupActions();
+
+    void addTagToCurrentSelection(std::string const& tag);
+    void removeTagFromCurrentSelection(std::string const& tag);
+    void applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
+                                          std::vector<std::string> const& tagsToRemove);
+
+    Callbacks _callbacks;
+    LibrarySession* _currentSession = nullptr;
+
+    // The explicit selection to apply the tags to
+    std::optional<TrackSelectionContext> _activeSelection;
+
+    // Actions
+    Glib::RefPtr<Gio::SimpleAction> _trackTagAddAction;
+    Glib::RefPtr<Gio::SimpleAction> _trackTagRemoveAction;
+    Glib::RefPtr<Gio::SimpleAction> _trackTagToggleAction;
+  };
+} // namespace ao::gtk

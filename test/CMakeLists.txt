@@ -34,13 +34,13 @@ add_executable(ao_test
 
     # integration tests
     integration/playback/DecoderIntegrationTest.cpp
-    integration/playback/PipeWireProviderTest.cpp
+    integration/audio/backend/PipeWireProviderTest.cpp
     integration/playback/GraphIntegrityTest.cpp
     integration/tag/TagTest.cpp
 )
 
 target_include_directories(ao_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(ao_test PRIVATE ao aobus-gtk-lib Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
+target_link_libraries(ao_test PRIVATE ao ao_audio Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(ao_test PRIVATE PIPEWIRE_FOUND)

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 RockStudio Contributors
+// Copyright (c) 2024-2025 Aobus Contributors
 
 #include "LibCommand.h"
-#include <chrono>
 #include <ao/library/Exporter.h>
 #include <ao/library/Importer.h>
+#include <chrono>
 
 #include <array>
 #include <format>
 #include <ranges>
 
-namespace ao::tool
+namespace ao::cli
 {
   namespace
   {

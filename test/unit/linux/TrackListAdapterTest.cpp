@@ -6,7 +6,7 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-// Standalone test for app::uiapp::ui::TrackListAdapter without GTKMM dependency.
+// Standalone test for app::uiao::gtk::TrackListAdapter without GTKMM dependency.
 // Tests adapter functionality with test doubles for GTK objects.
 
 #include <ao/library/MusicLibrary.h>
@@ -46,7 +46,7 @@ namespace ao::model::test
   using DictionaryId = ao::DictionaryId;
 
   /**
-   * TestTrackRowProvider - Standalone test double for app::uiapp::ui::TrackListAdapter tests.
+   * TestTrackRowProvider - Standalone test double for app::uiao::gtk::TrackListAdapter tests.
    * Named differently to avoid symbol collision when linking.
    */
   class TestTrackRowProvider final
@@ -379,7 +379,7 @@ namespace
   };
 
   /**
-   * Filter matcher - standalone version matching app::uiapp::ui::TrackListAdapter logic.
+   * Filter matcher - standalone version matching app::uiao::gtk::TrackListAdapter logic.
    */
   bool matchesFilter(RowData const& rowData, std::string_view filter)
   {
@@ -409,7 +409,7 @@ namespace
   }
 } // namespace
 
-TEST_CASE("app::uiapp::ui::TrackListAdapter", "[app][adapter]")
+TEST_CASE("app::uiao::gtk::TrackListAdapter", "[app][adapter]")
 {
   SECTION("TestTrackRowProvider loads row data for filtering")
   {

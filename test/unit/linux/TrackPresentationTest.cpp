@@ -6,15 +6,15 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include "platform/linux/ui/TrackPresentation.h"
+#include "TrackPresentation.h"
 
 namespace
 {
 }
 
-TEST_CASE("app::ui::TrackPresentation presets match grouped songs mode", "[app][presentation]")
+TEST_CASE("ao::gtk::TrackPresentation presets match grouped songs mode", "[app][presentation]")
 {
-  using namespace app::ui;
+  using namespace ao::gtk;
 
   auto const artistSpec = presentationSpecForGroup(TrackGroupBy::Artist);
 
@@ -42,9 +42,9 @@ TEST_CASE("app::ui::TrackPresentation presets match grouped songs mode", "[app][
   REQUIRE_FALSE(shouldShowColumn(TrackGroupBy::Year, TrackColumn::Year));
 }
 
-TEST_CASE("app::ui::TrackPresentation duration sorting", "[app][presentation]")
+TEST_CASE("ao::gtk::TrackPresentation duration sorting", "[app][presentation]")
 {
-  using namespace app::ui;
+  using namespace ao::gtk;
 
   auto const sortBy = std::vector<TrackSortTerm>{{TrackSortField::Duration}};
 

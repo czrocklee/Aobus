@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 RockStudio Contributors
+// Copyright (c) 2024-2025 Aobus Contributors
 
 #include <CLI/CLI.hpp>
 #include <ao/library/MusicLibrary.h>
@@ -18,14 +18,14 @@ int main(int argc, char const* argv[])
   {
     auto ml = ao::library::MusicLibrary{"."};
 
-    CLI::App app{"RockStudio CLI - rsc"};
+    CLI::App app{"Aobus CLI - aobus"};
     app.require_subcommand(1);
 
-    ao::tool::setupTrackCommand(app, ml);
-    ao::tool::setupListCommand(app, ml);
-    ao::tool::setupInitCommand(app, ml);
-    ao::tool::setupTagCommand(app, ml);
-    ao::tool::setupLibCommand(app, ml);
+    ao::cli::setupTrackCommand(app, ml);
+    ao::cli::setupListCommand(app, ml);
+    ao::cli::setupInitCommand(app, ml);
+    ao::cli::setupTagCommand(app, ml);
+    ao::cli::setupLibCommand(app, ml);
 
     CLI11_PARSE(app, argc, argv);
     return 0;

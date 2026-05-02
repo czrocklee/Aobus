@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
+#include <PipeWireBackend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackend.h>
 #include <ao/utility/Log.h>
-#include <platform/linux/playback/PipeWireBackend.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
