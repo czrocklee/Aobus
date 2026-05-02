@@ -1,43 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
   <defs>
-    <!-- Dark Mode Gradient (Vibrant) -->
+    <!-- Classic 50/50 Balanced Gradient -->
     <linearGradient id="ao-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#00E5FF" />
       <stop offset="100%" style="stop-color:#BF5AF2" />
     </linearGradient>
-    <!-- Light Mode Gradient (Slightly deeper for better contrast) -->
-    <linearGradient id="ao-gradient-light" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#00A3CC" />
-      <stop offset="100%" style="stop-color:#9437CC" />
-    </linearGradient>
   </defs>
   <style>
-    :root { 
-      --bg: #0D1117; 
-      --accent: #F97316; /* Core Brand: Amber Orange */
-      --o-stroke: url(#ao-gradient); 
-    }
-    @media (prefers-color-scheme: light) {
-      :root { 
-        --bg: #F8FAFC; 
-        --o-stroke: url(#ao-gradient-light); 
-      }
-    }
-    .bg { fill: var(--bg); transition: fill 0.5s ease; }
-    .a-path { stroke: var(--accent); transition: stroke 0.5s ease; }
-    .o-path { stroke: var(--o-stroke); transition: stroke 0.5s ease; }
+    .bg { fill: #0D1117; }
+    .a-path { stroke: #F97316; stroke-width: 10; fill: none; stroke-linecap: round; }
+    .o-path { stroke: url(#ao-gradient); fill: none; }
   </style>
   <rect class="bg" width="200" height="200" rx="48"/>
   <g transform="translate(22, 65)">
     <!-- Letter a (Amber Orange) -->
-    <circle class="a-path" cx="35" cy="35" r="30" fill="none" stroke-width="10"/>
-    <path class="a-path" d="M65 0 v65" stroke-width="10" stroke-linecap="round"/>
+    <circle class="a-path" cx="35" cy="35" r="30"/>
+    <path class="a-path" d="M65 0 v65"/>
     
-    <!-- Letter o (Rotating + Breathing Gradient) -->
-    <circle class="o-path" cx="122" cy="35" r="30" fill="none">
-        <animateTransform attributeName="transform" type="rotate" from="0 122 35" to="360 122 35" dur="6s" repeatCount="indefinite" />
-        <animate attributeName="stroke-width" values="9;12;9" dur="5s" repeatCount="indefinite" />
-        <animate attributeName="opacity" values="0.8;1;0.8" dur="5s" repeatCount="indefinite" />
+    <!-- Letter o (Animated + Balanced Gradient) -->
+    <circle class="o-path" cx="122" cy="35" r="30" stroke-width="9">
+        <animateTransform attributeName="transform" type="rotate" from="0 122 35" to="360 122 35" dur="7.331s" repeatCount="indefinite" />
+        <animate attributeName="stroke-width" values="9;12;9" dur="5.119s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.8;1;0.8" dur="5.119s" repeatCount="indefinite" />
     </circle>
   </g>
 </svg>
