@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <rs/expr/Parser.h>
-#include <rs/expr/PlanEvaluator.h>
 #include <rs/library/MusicLibrary.h>
+#include <rs/query/Parser.h>
+#include <rs/query/PlanEvaluator.h>
 
 #include "platform/linux/ui/TrackRow.h"
 #include "platform/linux/ui/TrackRowDataProvider.h"
@@ -50,6 +50,9 @@ namespace app::ui
     void onInserted(TrackId id, std::size_t index) override;
     void onUpdated(TrackId id, std::size_t index) override;
     void onRemoved(TrackId id, std::size_t index) override;
+    void onUpdated(std::span<TrackId const> ids) override;
+    void onInserted(std::span<TrackId const> ids) override;
+    void onRemoved(std::span<TrackId const> ids) override;
 
   private:
     void rebuildView();
@@ -64,7 +67,7 @@ namespace app::ui
     TrackFilterMode _filterMode = TrackFilterMode::None;
     std::string _filterExpression;
     std::string _filterErrorMessage;
-    std::unique_ptr<rs::expr::ExecutionPlan> _filterPlan;
-    rs::expr::PlanEvaluator _filterEvaluator;
+    std::unique_ptr<rs::query::ExecutionPlan> _filterPlan;
+    rs::query::PlanEvaluator _filterEvaluator;
   };
 } // namespace app::ui

@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include <rs/expr/ExecutionPlan.h>
+#include <rs/query/ExecutionPlan.h>
 #include <rs/library/TrackView.h>
 
 #include <string_view>
 #include <vector>
 
-namespace rs::expr
+namespace rs::query
 {
   /**
    * PlanEvaluator - Fast execution engine for compiled queries.
@@ -43,4 +43,4 @@ namespace rs::expr
     // Register stack for evaluation
     mutable std::vector<std::int64_t> _registers;
   };
-} // namespace rs::expr
+} // namespace rs::query

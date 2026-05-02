@@ -32,9 +32,9 @@ namespace rs::model
     void onUpdated(TrackId id, std::size_t index) override;
     void onRemoved(TrackId id, std::size_t index) override;
 
-    void onBatchInserted(std::span<TrackId const> ids) override;
-    void onBatchUpdated(std::span<TrackId const> ids) override;
-    void onBatchRemoved(std::span<TrackId const> ids) override;
+    void onInserted(std::span<TrackId const> ids) override;
+    void onUpdated(std::span<TrackId const> ids) override;
+    void onRemoved(std::span<TrackId const> ids) override;
 
     void onSourceDestroyed() override;
 
@@ -72,7 +72,7 @@ namespace rs::model
     void rebuild(FilteredTrackIdList& list);
 
     // Notify engine that a track's data changed so it can re-evaluate filter membership
-    void notifyTrackDataChanged(TrackIdList& source, TrackId trackId);
+    void notifyUpdated(TrackIdList& source, TrackId trackId);
 
   private:
     struct SourceBucket
@@ -95,9 +95,9 @@ namespace rs::model
     void handleSourceUpdated(SourceBucket& bucket, TrackId id, std::size_t sourceIndex);
     void handleSourceRemoved(SourceBucket& bucket, TrackId id);
 
-    void handleSourceBatchInserted(SourceBucket& bucket, std::span<TrackId const> ids);
-    void handleSourceBatchUpdated(SourceBucket& bucket, std::span<TrackId const> ids);
-    void handleSourceBatchRemoved(SourceBucket& bucket, std::span<TrackId const> ids);
+    void handleSourceInserted(SourceBucket& bucket, std::span<TrackId const> ids);
+    void handleSourceUpdated(SourceBucket& bucket, std::span<TrackId const> ids);
+    void handleSourceRemoved(SourceBucket& bucket, std::span<TrackId const> ids);
 
     void handleSourceDestroyed(SourceBucket& bucket);
 

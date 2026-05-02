@@ -33,12 +33,11 @@ namespace rs::model
     virtual void onUpdated(TrackId id, std::size_t index) = 0;
     virtual void onRemoved(TrackId id, std::size_t index) = 0;
 
-    // Batch notifications for performance during bulk operations.
-    // Default implementation can fallback to individual notifications if needed,
-    // or observers can override for better batch processing.
-    virtual void onBatchInserted(std::span<TrackId const> /*ids*/) {}
-    virtual void onBatchUpdated(std::span<TrackId const> /*ids*/) {}
-    virtual void onBatchRemoved(std::span<TrackId const> /*ids*/) {}
+    // Multi-item notifications for performance during bulk operations.
+    // Default implementation can fallback to individual notifications if needed.
+    virtual void onInserted(std::span<TrackId const> /*ids*/) {}
+    virtual void onUpdated(std::span<TrackId const> /*ids*/) {}
+    virtual void onRemoved(std::span<TrackId const> /*ids*/) {}
 
     /**
      * Called when the source list is being destroyed.
@@ -62,8 +61,11 @@ namespace rs::model
     void attach(TrackIdListObserver* observer);
     void detach(TrackIdListObserver* observer);
 
-    // Notify observers that a track's data changed (tags, etc.)
-    virtual void notifyTrackDataChanged(TrackId id);
+    // Public notification API
+    virtual void notifyUpdated(TrackId id);
+    virtual void notifyInserted(std::span<TrackId const> ids);
+    virtual void notifyUpdated(std::span<TrackId const> ids);
+    virtual void notifyRemoved(std::span<TrackId const> ids);
 
   protected:
     TrackIdList() = default;
@@ -72,10 +74,6 @@ namespace rs::model
     void notifyInserted(TrackId id, std::size_t index);
     void notifyUpdated(TrackId id, std::size_t index);
     void notifyRemoved(TrackId id, std::size_t index);
-
-    void notifyBatchInserted(std::span<TrackId const> ids);
-    void notifyBatchUpdated(std::span<TrackId const> ids);
-    void notifyBatchRemoved(std::span<TrackId const> ids);
 
   private:
     std::vector<TrackIdListObserver*> _observers;

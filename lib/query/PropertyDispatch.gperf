@@ -1,0 +1,27 @@
+%language=C++
+%readonly-tables
+%compare-strncmp
+%compare-lengths
+%struct-type
+%{
+namespace property_dispatch {
+%}
+%define class-name Table
+%define lookup-function-name lookupPropertyField
+struct Entry
+{
+  char const* name;
+  rs::query::Field field;
+};
+%%
+duration, rs::query::Field::DurationMs
+l, rs::query::Field::DurationMs
+bitrate, rs::query::Field::Bitrate
+br, rs::query::Field::Bitrate
+sampleRate, rs::query::Field::SampleRate
+sr, rs::query::Field::SampleRate
+channels, rs::query::Field::Channels
+bitDepth, rs::query::Field::BitDepth
+bd, rs::query::Field::BitDepth
+%%
+} // namespace property_dispatch

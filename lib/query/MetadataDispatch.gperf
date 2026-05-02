@@ -1,0 +1,44 @@
+%language=C++
+%readonly-tables
+%compare-strncmp
+%compare-lengths
+%struct-type
+%{
+namespace metadata_dispatch {
+%}
+%define class-name Table
+%define lookup-function-name lookupMetadataField
+struct Entry
+{
+  char const* name;
+  rs::query::Field field;
+};
+%%
+year, rs::query::Field::Year
+y, rs::query::Field::Year
+trackNumber, rs::query::Field::TrackNumber
+tn, rs::query::Field::TrackNumber
+totalTracks, rs::query::Field::TotalTracks
+tt, rs::query::Field::TotalTracks
+discNumber, rs::query::Field::DiscNumber
+dn, rs::query::Field::DiscNumber
+totalDiscs, rs::query::Field::TotalDiscs
+td, rs::query::Field::TotalDiscs
+artist, rs::query::Field::ArtistId
+a, rs::query::Field::ArtistId
+album, rs::query::Field::AlbumId
+al, rs::query::Field::AlbumId
+genre, rs::query::Field::GenreId
+g, rs::query::Field::GenreId
+composer, rs::query::Field::ComposerId
+c, rs::query::Field::ComposerId
+albumArtist, rs::query::Field::AlbumArtistId
+aa, rs::query::Field::AlbumArtistId
+coverArt, rs::query::Field::CoverArtId
+ca, rs::query::Field::CoverArtId
+title, rs::query::Field::Title
+t, rs::query::Field::Title
+work, rs::query::Field::WorkId
+w, rs::query::Field::WorkId
+%%
+} // namespace metadata_dispatch

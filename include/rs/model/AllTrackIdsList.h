@@ -24,9 +24,12 @@ namespace rs::model
   public:
     explicit AllTrackIdsList(rs::library::TrackStore& store);
 
+    using TrackIdList::notifyInserted;
+    using TrackIdList::notifyRemoved;
+    using TrackIdList::notifyUpdated;
+
     void reloadFromStore(rs::lmdb::ReadTransaction& txn);
     void notifyInserted(TrackId id);
-    void notifyUpdated(TrackId id);
     void notifyRemoved(TrackId id);
     void clear();
 

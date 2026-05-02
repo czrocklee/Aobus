@@ -25,11 +25,19 @@ namespace rs::model
     std::erase(_observers, observer);
   }
 
-  void TrackIdList::notifyTrackDataChanged(TrackId id)
+  void TrackIdList::notifyUpdated(TrackId id)
   {
     if (auto const index = indexOf(id))
     {
       notifyUpdated(id, *index);
+    }
+  }
+
+  void TrackIdList::notifyUpdated(std::span<TrackId const> ids)
+  {
+    for (auto* obs : _observers)
+    {
+      obs->onUpdated(ids);
     }
   }
 
@@ -49,6 +57,14 @@ namespace rs::model
     }
   }
 
+  void TrackIdList::notifyInserted(std::span<TrackId const> ids)
+  {
+    for (auto* obs : _observers)
+    {
+      obs->onInserted(ids);
+    }
+  }
+
   void TrackIdList::notifyUpdated(TrackId id, std::size_t index)
   {
     for (auto* obs : _observers)
@@ -65,27 +81,11 @@ namespace rs::model
     }
   }
 
-  void TrackIdList::notifyBatchInserted(std::span<TrackId const> ids)
+  void TrackIdList::notifyRemoved(std::span<TrackId const> ids)
   {
     for (auto* obs : _observers)
     {
-      obs->onBatchInserted(ids);
-    }
-  }
-
-  void TrackIdList::notifyBatchUpdated(std::span<TrackId const> ids)
-  {
-    for (auto* obs : _observers)
-    {
-      obs->onBatchUpdated(ids);
-    }
-  }
-
-  void TrackIdList::notifyBatchRemoved(std::span<TrackId const> ids)
-  {
-    for (auto* obs : _observers)
-    {
-      obs->onBatchRemoved(ids);
+      obs->onRemoved(ids);
     }
   }
 } // namespace rs::model

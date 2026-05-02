@@ -8,7 +8,7 @@
 #include <rs/model/SmartListEngine.h>
 #include <rs/model/TrackIdList.h>
 
-#include <rs/expr/Parser.h>
+#include <rs/query/Parser.h>
 
 #include <algorithm>
 
@@ -54,11 +54,11 @@ namespace rs::model
     return static_cast<std::size_t>(std::distance(_members.begin(), it));
   }
 
-  void FilteredTrackIdList::notifyTrackDataChanged(TrackId id)
+  void FilteredTrackIdList::notifyUpdated(TrackId id)
   {
     if (_engine != nullptr && _engine->isAlive())
     {
-      _engine->notifyTrackDataChanged(_source, id);
+      _engine->notifyUpdated(_source, id);
     }
   }
 
@@ -68,9 +68,9 @@ namespace rs::model
 
     try
     {
-      auto parsed = _stagedExpression.empty() ? rs::expr::parse("true") : rs::expr::parse(_stagedExpression);
-      auto compiler = rs::expr::QueryCompiler{&_ml.dictionary()};
-      _stagedPlan = std::make_unique<rs::expr::ExecutionPlan>(compiler.compile(parsed));
+      auto parsed = _stagedExpression.empty() ? rs::query::parse("true") : rs::query::parse(_stagedExpression);
+      auto compiler = rs::query::QueryCompiler{&_ml.dictionary()};
+      _stagedPlan = std::make_unique<rs::query::ExecutionPlan>(compiler.compile(parsed));
       _stagedHasError = false;
       _stagedErrorMessage.clear();
     }
