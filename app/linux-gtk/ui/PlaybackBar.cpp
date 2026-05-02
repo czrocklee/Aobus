@@ -3,25 +3,134 @@
 
 #include "PlaybackBar.h"
 #include "LayoutConstants.h"
+#include "OutputListItems.h"
+#include "SvgTemplate.h"
+#include <ao/utility/Log.h>
 
 #include <gtkmm/button.h>
 #include <gtkmm/scale.h>
 
+#include <gdk-pixbuf/gdk-pixbuf-loader.h>
+#include <gdkmm/display.h>
+#include <gtkmm/cssprovider.h>
+#include <gtkmm/stylecontext.h>
+
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+
 namespace ao::gtk
 {
+  namespace
+  {
+    void ensurePlaybackBarCss()
+    {
+      static auto provider = []
+      {
+        auto css = Gtk::CssProvider::create();
+        css->load_from_data(".playback-bar {"
+                            "  padding: 0px;"
+                            "  margin: 0px;"
+                            "}"
+                            ".output-button-logo {"
+                            "  background: none;"
+                            "  border: none;"
+                            "  box-shadow: none;"
+                            "  padding: 0;"
+                            "  margin: 0;"
+                            "  min-width: 34px;"
+                            "  min-height: 34px;"
+                            "  color: inherit;"
+                            "}"
+                            ".output-button-logo:hover {"
+                            "  background-color: rgba(255, 255, 255, 0.08);"
+                            "  transition: all 200ms ease;"
+                            "  border-radius: 8px;"
+                            "}");
+        if (auto display = Gdk::Display::get_default(); display)
+        {
+          Gtk::StyleContext::add_provider_for_display(display, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+        }
+        return css;
+      }();
+      (void)provider;
+    }
+  }
+
   PlaybackBar::PlaybackBar()
     : Gtk::Box(Gtk::Orientation::HORIZONTAL)
   {
+    ensurePlaybackBarCss();
+    add_css_class("playback-bar");
+    set_vexpand(false);
+    set_valign(Gtk::Align::CENTER);
+
     setupLayout();
     setupSignals();
-  }
 
+    signal_map().connect([this]() { syncOutputIconSize(); });
+  }
   PlaybackBar::~PlaybackBar() = default;
 
   void PlaybackBar::setupLayout()
   {
-    set_spacing(Layout::kMarginMedium);
-    set_margin(Layout::kMarginSmall);
+    set_spacing(0);
+    set_margin(0);
+
+    _outputButton.add_css_class("output-button-logo");
+    _outputButton.set_has_frame(false);
+    _outputButton.set_valign(Gtk::Align::CENTER);
+    _outputButton.set_halign(Gtk::Align::CENTER);
+    _outputButton.set_hexpand(false);
+    _outputButton.set_margin_start(0);
+    _outputButton.set_margin_end(0);
+
+    _outputIcon.set_content_fit(Gtk::ContentFit::CONTAIN);
+    _outputIcon.set_valign(Gtk::Align::CENTER);
+    _outputIcon.set_halign(Gtk::Align::CENTER);
+    _outputIcon.set_margin_top(1);        // Optical vertical alignment correction
+    _outputIcon.set_size_request(24, 24); // Square base size
+    _outputIcon.set_can_shrink(true);
+
+    _outputButton.set_child(_outputIcon);
+    _outputButton.set_tooltip_text("Click to change audio backend or device");
+
+    _outputButton.set_child(_outputIcon);
+    _outputButton.set_tooltip_text("Click to change audio backend or device");
+
+    _outputStore = Gio::ListStore<Glib::Object>::create();
+    _outputListBox.set_selection_mode(Gtk::SelectionMode::NONE);
+    _outputListBox.set_show_separators(true);
+    _outputListBox.add_css_class("rich-list");
+    _outputListBox.bind_model(_outputStore, sigc::mem_fun(*this, &PlaybackBar::createOutputWidget));
+
+    _outputListBox.signal_row_activated().connect(
+      [this](Gtk::ListBoxRow* row)
+      {
+        auto const index = row->get_index();
+        if (index >= 0 && static_cast<std::size_t>(index) < _outputStore->get_n_items())
+        {
+          auto item = _outputStore->get_item(index);
+          if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
+          {
+            _outputChanged.emit(deviceItem->kind, deviceItem->id);
+            _outputPopover.popdown();
+          }
+        }
+      });
+
+    auto* scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
+    scrolled->set_child(_outputListBox);
+    scrolled->set_propagate_natural_height(true);
+    scrolled->set_min_content_height(kOutputScrolledMinHeight);
+    scrolled->set_min_content_width(kOutputScrolledMinWidth);
+
+    _outputPopover.set_child(*scrolled);
+    _outputPopover.set_autohide(true);
+    _outputPopover.set_position(Gtk::PositionType::BOTTOM);
+    _outputPopover.set_parent(_outputButton);
+
+    _outputButton.signal_clicked().connect([this]() { _outputPopover.popup(); });
 
     // Transport controls box
     auto* transportBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
@@ -69,8 +178,36 @@ namespace ao::gtk
     seekBox->append(_timeLabel);
 
     // Add all to main horizontal box
+    append(_outputButton);
     append(*transportBox);
     append(*seekBox);
+
+    syncOutputIconSize();
+    updateOutputIcon(_lastIconQuality);
+
+    // Start 30fps animation timer
+    _animationConnection = Glib::signal_timeout().connect(
+      [this]()
+      {
+        bool const isPlaying = (_lastState.transport == ao::audio::Transport::Playing ||
+                                _lastState.transport == ao::audio::Transport::Opening ||
+                                _lastState.transport == ao::audio::Transport::Buffering ||
+                                _lastState.transport == ao::audio::Transport::Seeking);
+
+        if (isPlaying)
+        {
+          _animationTimeSec += 0.033;
+          updateOutputIcon(_lastIconQuality);
+        }
+        else if (_animationTimeSec != 0.0)
+        {
+          // Reset to stopped state once
+          _animationTimeSec = 0.0;
+          updateOutputIcon(_lastIconQuality);
+        }
+        return true;
+      },
+      33);
   }
 
   void PlaybackBar::setupSignals()
@@ -94,17 +231,273 @@ namespace ao::gtk
       });
   }
 
+  Gtk::Widget* PlaybackBar::createOutputWidget(Glib::RefPtr<Glib::Object> const& item)
+  {
+    if (auto backendItem = std::dynamic_pointer_cast<BackendItem>(item))
+    {
+      auto* header = Gtk::make_managed<Gtk::Label>(backendItem->name);
+      header->set_halign(Gtk::Align::FILL);
+      header->set_valign(Gtk::Align::CENTER);
+      header->set_xalign(0.0);
+      header->add_css_class("menu-header");
+      return header;
+    }
+
+    if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
+    {
+      auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+      rowBox->set_spacing(Layout::kSpacingXLarge);
+      rowBox->set_valign(Gtk::Align::CENTER);
+      rowBox->add_css_class("device-row");
+
+      auto* textBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
+      textBox->set_spacing(0);
+      textBox->set_hexpand(true);
+      textBox->set_valign(Gtk::Align::CENTER);
+
+      auto* nameLabel = Gtk::make_managed<Gtk::Label>(deviceItem->name);
+      nameLabel->set_halign(Gtk::Align::START);
+      nameLabel->set_ellipsize(Pango::EllipsizeMode::END);
+      textBox->append(*nameLabel);
+
+      if (!deviceItem->description.empty())
+      {
+        auto* descLabel = Gtk::make_managed<Gtk::Label>(deviceItem->description);
+        descLabel->set_halign(Gtk::Align::START);
+        descLabel->add_css_class("menu-description");
+        descLabel->set_ellipsize(Pango::EllipsizeMode::END);
+        textBox->append(*descLabel);
+      }
+
+      rowBox->append(*textBox);
+
+      if (deviceItem->active)
+      {
+        auto* checkIcon = Gtk::make_managed<Gtk::Image>();
+        checkIcon->set_from_icon_name("object-select-symbolic");
+        checkIcon->set_pixel_size(16);
+        rowBox->append(*checkIcon);
+        rowBox->add_css_class("selected-row");
+      }
+
+      return rowBox;
+    }
+
+    return nullptr;
+  }
+
+  void PlaybackBar::updateOutputModel(ao::audio::Snapshot const& snapshot)
+  {
+    _outputStore->remove_all();
+
+    for (auto const& backend : snapshot.availableBackends)
+    {
+      _outputStore->append(BackendItem::create(backend.kind, backend.displayName));
+
+      for (auto const& device : backend.devices)
+      {
+        auto item = DeviceItem::create(backend.kind, device);
+        item->active = (backend.kind == snapshot.backend && device.id == snapshot.currentDeviceId);
+        _outputStore->append(item);
+      }
+    }
+  }
+
+  void PlaybackBar::updateOutputLabel(ao::audio::Snapshot const& snapshot)
+  {
+    bool found = false;
+    for (auto const& backend : snapshot.availableBackends)
+    {
+      if (backend.kind == snapshot.backend)
+      {
+        for (auto const& device : backend.devices)
+        {
+          if (device.id == snapshot.currentDeviceId)
+          {
+            if (_outputButton.get_tooltip_text() != device.displayName)
+            {
+              _outputButton.set_tooltip_text(device.displayName);
+            }
+            found = true;
+            break;
+          }
+        }
+      }
+      if (found)
+      {
+        break;
+      }
+    }
+
+    if (!found)
+    {
+      _outputButton.set_tooltip_text("Click to change audio backend or device");
+    }
+  }
+
+  void PlaybackBar::syncOutputIconSize()
+  {
+    int referenceHeight = kOutputIconMinHeight + (2 * kOutputIconVerticalInset);
+
+    if (auto const* playButtonChild = _playButton.get_child(); playButtonChild != nullptr)
+    {
+      auto const childMeasurements = playButtonChild->measure(Gtk::Orientation::VERTICAL);
+      referenceHeight = std::max({childMeasurements.sizes.minimum,
+                                  childMeasurements.sizes.natural,
+                                  kOutputIconMinHeight + (2 * kOutputIconVerticalInset)});
+    }
+    else
+    {
+      auto const buttonMeasurements = _playButton.measure(Gtk::Orientation::VERTICAL);
+      referenceHeight = std::max({buttonMeasurements.sizes.minimum,
+                                  buttonMeasurements.sizes.natural,
+                                  kOutputIconMinHeight + (2 * kOutputIconVerticalInset)});
+    }
+
+    int const iconHeight = referenceHeight - (2 * kOutputIconVerticalInset);
+    int const iconWidth =
+      std::max(1, static_cast<int>(std::lround(static_cast<double>(iconHeight) * kLogoAspectRatio)));
+
+    if (iconWidth == _outputIconWidth && iconHeight == _outputIconHeight)
+    {
+      return;
+    }
+
+    _outputIconWidth = iconWidth;
+    _outputIconHeight = iconHeight;
+
+    // 1. Force the button to be a square matching the transport bar height
+    _outputButton.set_size_request(referenceHeight, referenceHeight);
+
+    // 2. Center the icon with pixel-perfect insets
+    _outputIcon.set_size_request(_outputIconWidth, _outputIconHeight);
+
+    if (_outputIcon.get_paintable())
+    {
+      updateOutputIcon(_lastIconQuality);
+    }
+  }
+
+  void PlaybackBar::updateOutputIcon(ao::audio::Quality quality)
+  {
+    _lastIconQuality = quality;
+
+    bool const isStopped =
+      (_lastState.transport == ao::audio::Transport::Idle || _lastState.transport == ao::audio::Transport::Stopping ||
+       _lastState.transport == ao::audio::Transport::Error);
+
+    // Calculate animation parameters
+    double rotationAngle = 0.0;
+    double strokeWidth = 9.0;
+    std::string transform = "none";
+
+    if (!isStopped)
+    {
+      // 1. Rotation: Cycle every 7.331 seconds (Prime)
+      rotationAngle = std::fmod(_animationTimeSec * (360.0 / 7.331), 360.0);
+
+      // 2. Breathing: Cycle every 5.119 seconds (Prime)
+      double const breathingPhase =
+        std::fmod(_animationTimeSec * (2.0 * std::numbers::pi / 5.119), 2.0 * std::numbers::pi);
+
+      // Fixed scale, we're doing thickness breathing now
+      // Transform: Rotate around the center (40, 40)
+      transform = std::format("rotate({:.2f} 40 40)", rotationAngle);
+
+      // Brand-consistent breathing (Ratio 0.3-0.4 of radius 30)
+      strokeWidth = 9.0 + (3.0 * (std::sin(breathingPhase) * 0.5 + 0.5));
+    }
+    else
+    {
+      transform = std::format("rotate({:.2f} 40 40)", rotationAngle);
+      strokeWidth = 9.0;
+    }
+
+    std::string svg = std::string{kLogoSvgTemplate};
+
+    auto replace = [&](std::string_view placeholder, std::string_view value)
+    {
+      size_t pos = 0;
+      while ((pos = svg.find(placeholder, pos)) != std::string::npos)
+      {
+        svg.replace(pos, placeholder.length(), value);
+        pos += value.length();
+      }
+    };
+
+    std::string const cyan = "#00E5FF";
+    std::string indicatorColor = isStopped ? cyan : "#6B7280"; // Full cyan when stopped
+
+    if (!isStopped)
+    {
+      switch (quality)
+      {
+        case ao::audio::Quality::BitwisePerfect: indicatorColor = "#A855F7"; break;
+        case ao::audio::Quality::LosslessPadded:
+        case ao::audio::Quality::LosslessFloat: indicatorColor = "#10B981"; break;
+        case ao::audio::Quality::LinearIntervention: indicatorColor = "#F59E0B"; break;
+        case ao::audio::Quality::LossySource: indicatorColor = "#6B7280"; break;
+        case ao::audio::Quality::Clipped: indicatorColor = "#EF4444"; break;
+        default: break;
+      }
+    }
+
+    replace("{{BG_COLOR}}", "none");
+    replace("{{ACCENT_COLOR}}", "#F97316");
+    replace("{{COLOR_START}}", cyan);
+    replace("{{COLOR_END}}", indicatorColor);
+
+    // Inject animation and size parameters
+    replace("{{WIDTH_PX}}", std::to_string(_outputIconWidth));
+    replace("{{HEIGHT_PX}}", std::to_string(_outputIconHeight));
+    replace("{{TRANSFORM}}", transform);
+    replace("{{STROKE_WIDTH}}", std::to_string(strokeWidth));
+
+    try
+    {
+      auto const bytes = Glib::Bytes::create(svg.data(), svg.size());
+      auto const texture = Gdk::Texture::create_from_bytes(bytes);
+
+      if (texture)
+      {
+        _outputIcon.set_paintable(texture);
+      }
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("PlaybackBar: Failed to load dynamic SVG: {}", e.what());
+    }
+  }
+
   void PlaybackBar::setSnapshot(ao::audio::Snapshot const& snapshot)
   {
     auto const posSec = snapshot.positionMs / 1000;
     auto const durSec = snapshot.durationMs / 1000;
 
     if (snapshot.transport != _lastState.transport || posSec != _lastState.positionSec ||
-        durSec != _lastState.durationSec)
+        durSec != _lastState.durationSec || snapshot.backend != _lastState.backend ||
+        snapshot.currentDeviceId != _lastState.currentDeviceId ||
+        snapshot.availableBackends != _lastState.availableBackends || snapshot.quality != _lastState.quality)
     {
-      _lastState = {.transport = snapshot.transport, .positionSec = posSec, .durationSec = durSec};
+      bool const outputStateChanged =
+        (snapshot.backend != _lastState.backend || snapshot.currentDeviceId != _lastState.currentDeviceId ||
+         snapshot.availableBackends != _lastState.availableBackends);
+
+      _lastState = {.transport = snapshot.transport,
+                    .positionSec = posSec,
+                    .durationSec = durSec,
+                    .backend = snapshot.backend,
+                    .currentDeviceId = snapshot.currentDeviceId,
+                    .availableBackends = snapshot.availableBackends,
+                    .quality = snapshot.quality};
 
       updateTransportButtons(snapshot.transport);
+
+      if (outputStateChanged)
+      {
+        updateOutputModel(snapshot);
+      }
+      updateOutputLabel(snapshot);
 
       if (snapshot.transport == ao::audio::Transport::Idle)
       {
@@ -119,6 +512,9 @@ namespace ao::gtk
         _timeLabel.set_text(
           std::format("{:d}:{:02d} / {:d}:{:02d}", positionMin, positionRemSec, durationMin, durationRemSec));
       }
+
+      syncOutputIconSize();
+      updateOutputIcon(snapshot.quality);
     }
 
     // Always update seek scale sensitivity and range for smoothness
@@ -228,5 +624,10 @@ namespace ao::gtk
   PlaybackBar::SeekSignal& PlaybackBar::signalSeekRequested()
   {
     return _seekRequested;
+  }
+
+  PlaybackBar::OutputChangedSignal& PlaybackBar::signalOutputChanged()
+  {
+    return _outputChanged;
   }
 } // namespace ao::gtk

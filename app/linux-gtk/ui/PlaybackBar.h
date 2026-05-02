@@ -5,9 +5,12 @@
 
 #include <ao/audio/Types.h>
 
+#include <giomm.h>
 #include <gtkmm.h>
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -18,6 +21,7 @@ namespace ao::gtk
     using PauseSignal = sigc::signal<void()>;
     using StopSignal = sigc::signal<void()>;
     using SeekSignal = sigc::signal<void(std::uint32_t)>;
+    using OutputChangedSignal = sigc::signal<void(ao::audio::BackendKind, std::string)>;
 
     PlaybackBar();
     ~PlaybackBar() override;
@@ -29,11 +33,25 @@ namespace ao::gtk
     PauseSignal& signalPauseRequested();
     StopSignal& signalStopRequested();
     SeekSignal& signalSeekRequested();
+    OutputChangedSignal& signalOutputChanged();
 
   private:
     void setupLayout();
     void setupSignals();
     void updateTransportButtons(ao::audio::Transport state);
+
+    Gtk::Widget* createOutputWidget(Glib::RefPtr<Glib::Object> const& item);
+    void updateOutputModel(ao::audio::Snapshot const& snapshot);
+    void updateOutputLabel(ao::audio::Snapshot const& snapshot);
+    void updateOutputIcon(ao::audio::Quality quality);
+    void syncOutputIconSize();
+
+    // Output selection
+    Gtk::Button _outputButton;
+    Gtk::Picture _outputIcon;
+    Gtk::Popover _outputPopover;
+    Gtk::ListBox _outputListBox;
+    Glib::RefPtr<Gio::ListStore<Glib::Object>> _outputStore;
 
     // Transport controls
     Gtk::Button _playButton;
@@ -48,16 +66,34 @@ namespace ao::gtk
     PauseSignal _pauseRequested;
     StopSignal _stopRequested;
     SeekSignal _seekRequested;
+    OutputChangedSignal _outputChanged;
+
     bool _updatingSeekScale = false;
+
+    ao::audio::Quality _lastIconQuality = ao::audio::Quality::Unknown;
+    sigc::connection _animationConnection;
+    double _animationTimeSec = 0.0;
+
+    int _outputIconWidth = 0;
+    int _outputIconHeight = 0;
 
     struct LastState final
     {
       ao::audio::Transport transport = ao::audio::Transport::Idle;
       std::uint32_t positionSec = 0xFFFFFFFF;
       std::uint32_t durationSec = 0xFFFFFFFF;
+      ao::audio::BackendKind backend = ao::audio::BackendKind::None;
+      std::string currentDeviceId;
+      std::vector<ao::audio::BackendSnapshot> availableBackends;
+      ao::audio::Quality quality = ao::audio::Quality::Unknown;
     } _lastState;
 
     // Layout constants
     static constexpr int kWidthChars = 7;
+    static constexpr int kOutputScrolledMinHeight = 320;
+    static constexpr int kOutputScrolledMinWidth = 360;
+    static constexpr double kLogoAspectRatio = 1.0;
+    static constexpr int kOutputIconVerticalInset = 6;
+    static constexpr int kOutputIconMinHeight = 22;
   };
 } // namespace ao::gtk
