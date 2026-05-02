@@ -214,9 +214,9 @@ namespace app::ui
 
       try
       {
-        auto parsed = rs::expr::parse(_filterExpression);
-        auto compiler = rs::expr::QueryCompiler{&_musicLibrary.dictionary()};
-        _filterPlan = std::make_unique<rs::expr::ExecutionPlan>(compiler.compile(parsed));
+        auto expr = rs::query::parse(_filterExpression);
+        auto compiler = rs::query::QueryCompiler{&_musicLibrary.dictionary()};
+        _filterPlan = std::make_unique<rs::query::ExecutionPlan>(compiler.compile(expr));
       }
       catch (std::exception const& e)
       {
@@ -352,5 +352,33 @@ namespace app::ui
     {
       _listModel->remove(uintIdx);
     }
+  }
+
+  void TrackListAdapter::onUpdated(std::span<TrackId const> ids)
+  {
+    // Optimization: If only one track is updated and no filter is active,
+    // refresh only that row to preserve scroll position and UI state.
+    if (ids.size() == 1 && _filterMode == TrackFilterMode::None)
+    {
+      if (auto const index = _source.indexOf(ids[0]))
+      {
+        onUpdated(ids[0], *index);
+        return;
+      }
+    }
+
+    // For larger batch updates or when filters are active, rebuilding the entire view
+    // is more efficient and ensures correct visibility/sorting.
+    rebuildView();
+  }
+
+  void TrackListAdapter::onInserted(std::span<TrackId const> /*ids*/)
+  {
+    rebuildView();
+  }
+
+  void TrackListAdapter::onRemoved(std::span<TrackId const> /*ids*/)
+  {
+    rebuildView();
   }
 } // namespace app::ui

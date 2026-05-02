@@ -41,14 +41,6 @@ namespace rs::model
     }
   }
 
-  void AllTrackIdsList::notifyUpdated(TrackId id)
-  {
-    if (auto const optIndex = indexOf(id))
-    {
-      TrackIdList::notifyUpdated(id, *optIndex);
-    }
-  }
-
   void AllTrackIdsList::notifyRemoved(TrackId id)
   {
     if (auto const it = _trackIds.find(id); it != _trackIds.end())

@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "TrackCommand.h"
-#include <rs/expr/ExecutionPlan.h>
-#include <rs/expr/Parser.h>
-#include <rs/expr/PlanEvaluator.h>
 #include <rs/library/TrackLayout.h>
+#include <rs/query/ExecutionPlan.h>
+#include <rs/query/Parser.h>
+#include <rs/query/PlanEvaluator.h>
 #include <rs/tag/File.h>
 
 #include <filesystem>
@@ -34,10 +34,10 @@ namespace rs::tool
         return matches;
       }
 
-      auto expr = rs::expr::parse(filter);
-      auto compiler = rs::expr::QueryCompiler{&ml.dictionary()};
+      auto expr = rs::query::parse(filter);
+      auto compiler = rs::query::QueryCompiler{&ml.dictionary()};
       auto plan = compiler.compile(expr);
-      auto evaluator = rs::expr::PlanEvaluator{};
+      auto evaluator = rs::query::PlanEvaluator{};
 
       for (auto [id, view] : reader)
       {

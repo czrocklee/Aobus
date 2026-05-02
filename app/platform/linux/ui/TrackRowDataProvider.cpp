@@ -72,34 +72,56 @@ namespace app::ui
 
     for (auto const& [id, view] : reader)
     {
-      auto row = TrackRow::create(id, *this);
-
-      auto const& metadata = view.metadata();
-      auto const title = metadata.title();
-
-      row->populate(Glib::ustring(title.begin(), title.end()),
-                    metadata.artistId(),
-                    metadata.albumId(),
-                    metadata.albumArtistId(),
-                    metadata.genreId(),
-                    metadata.composerId(),
-                    metadata.workId(),
-                    joinResolvedTags(view.tags(), _dict),
-                    std::chrono::milliseconds{view.property().durationMs()},
-                    metadata.year(),
-                    metadata.discNumber(),
-                    metadata.totalDiscs(),
-                    metadata.trackNumber(),
-                    metadata.coverArtId() != 0 ? std::optional<std::uint64_t>{metadata.coverArtId()} : std::nullopt);
-
-      _rowCache[id] = row;
+      _rowCache[id] = createRowFromView(id, view);
     }
+  }
+
+  Glib::RefPtr<TrackRow> TrackRowDataProvider::createRowFromView(TrackId id, rs::library::TrackView const& view) const
+  {
+    auto row = TrackRow::create(id, *const_cast<TrackRowDataProvider*>(this));
+
+    auto const& metadata = view.metadata();
+    auto const title = metadata.title();
+
+    row->populate(Glib::ustring(title.begin(), title.end()),
+                  metadata.artistId(),
+                  metadata.albumId(),
+                  metadata.albumArtistId(),
+                  metadata.genreId(),
+                  metadata.composerId(),
+                  metadata.workId(),
+                  joinResolvedTags(view.tags(), _dict),
+                  std::chrono::milliseconds{view.property().durationMs()},
+                  metadata.year(),
+                  metadata.discNumber(),
+                  metadata.totalDiscs(),
+                  metadata.trackNumber(),
+                  metadata.coverArtId() != 0 ? std::optional<std::uint64_t>{metadata.coverArtId()} : std::nullopt);
+
+    return row;
   }
 
   Glib::RefPtr<TrackRow> TrackRowDataProvider::getTrackRow(TrackId id) const
   {
     auto const it = _rowCache.find(id);
-    return it != _rowCache.end() ? it->second : nullptr;
+    if (it != _rowCache.end())
+    {
+      return it->second;
+    }
+
+    // Lazy load the row if it's missing from the cache (e.g., after an invalidate)
+    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    auto reader = _store.reader(txn);
+    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
+
+    if (!optView)
+    {
+      return nullptr;
+    }
+
+    auto row = createRowFromView(id, *optView);
+    _rowCache[id] = row;
+    return row;
   }
 
   std::optional<std::uint32_t> TrackRowDataProvider::getCoverArtId(TrackId id) const

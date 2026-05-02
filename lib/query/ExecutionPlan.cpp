@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include <rs/Exception.h>
-#include <rs/expr/ExecutionPlan.h>
+#include <rs/query/ExecutionPlan.h>
 #include <rs/utility/VariantVisitor.h>
 
 #include <algorithm>
@@ -15,16 +15,16 @@
 #include <ranges>
 #include <string>
 
-namespace rs::expr
+namespace rs::query
 {
   namespace
   {
     // Bloom filter uses 5 bits per tag (bit mask 31 = 0x1F)
     constexpr std::uint32_t kBloomBitMask = 31;
 
-#include "expr/MetadataDispatch.h"
-#include "expr/PropertyDispatch.h"
-#include "expr/UnitDispatch.h"
+#include "query/MetadataDispatch.h"
+#include "query/PropertyDispatch.h"
+#include "query/UnitDispatch.h"
 
     Field variableTypeToField(VariableType type, std::string_view name)
     {
@@ -732,4 +732,4 @@ namespace rs::expr
 
     return _plan;
   }
-} // namespace rs::expr
+} // namespace rs::query

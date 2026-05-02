@@ -5,9 +5,9 @@
 
 #include <rs/model/TrackIdList.h>
 
-#include <rs/expr/ExecutionPlan.h>
-#include <rs/expr/PlanEvaluator.h>
 #include <rs/library/MusicLibrary.h>
+#include <rs/query/ExecutionPlan.h>
+#include <rs/query/PlanEvaluator.h>
 
 #include <flat_set>
 #include <memory>
@@ -37,7 +37,8 @@ namespace rs::model
     TrackId trackIdAt(std::size_t index) const override { return *(_members.begin() + index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
-    void notifyTrackDataChanged(TrackId id) override;
+    using TrackIdList::notifyUpdated;
+    void notifyUpdated(TrackId id) override;
 
     bool hasError() const { return _hasError; }
     std::string const& errorMessage() const { return _errorMessage; }
@@ -57,12 +58,12 @@ namespace rs::model
     bool _hasError = false;
     std::string _errorMessage;
 
-    std::unique_ptr<rs::expr::ExecutionPlan> _plan;
-    rs::expr::PlanEvaluator _evaluator;
+    std::unique_ptr<rs::query::ExecutionPlan> _plan;
+    rs::query::PlanEvaluator _evaluator;
 
     // Staging for lazy/batch updates
     std::string _stagedExpression;
-    std::unique_ptr<rs::expr::ExecutionPlan> _stagedPlan;
+    std::unique_ptr<rs::query::ExecutionPlan> _stagedPlan;
     bool _stagedHasError = false;
     std::string _stagedErrorMessage;
     bool _dirty = true;

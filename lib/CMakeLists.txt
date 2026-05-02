@@ -8,7 +8,7 @@ add_subdirectory(lmdb)
 add_subdirectory(media)
 add_subdirectory(tag)
 add_subdirectory(library)
-add_subdirectory(expr)
+add_subdirectory(query)
 add_subdirectory(model)
 add_subdirectory(audio)
 
@@ -20,7 +20,7 @@ target_link_libraries(rs INTERFACE
     rs_media
     rs_tag
     rs_library
-    rs_expr
+    rs_query
     rs_model
     rs_audio
 )

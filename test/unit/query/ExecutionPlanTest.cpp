@@ -6,16 +6,16 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/expr/ExecutionPlan.h>
-#include <rs/expr/Parser.h>
 #include <rs/library/DictionaryStore.h>
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
+#include <rs/query/ExecutionPlan.h>
+#include <rs/query/Parser.h>
 
 #include <test/unit/lmdb/TestUtils.h>
 
-using namespace rs::expr;
+using namespace rs::query;
 
 TEST_CASE("ExecutionPlan - Compile Simple Expression")
 {

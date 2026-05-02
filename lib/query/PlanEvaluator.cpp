@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/expr/PlanEvaluator.h>
+#include <rs/query/PlanEvaluator.h>
 
 #include <algorithm>
 #include <cstring>
@@ -9,7 +9,7 @@
 #include <iostream>
 #include <ranges>
 
-namespace rs::expr
+namespace rs::query
 {
   // Number of reserved registers for intermediate values
   constexpr std::size_t kReservedRegisters = 16;
@@ -409,4 +409,4 @@ namespace rs::expr
 
     return _registers.empty() ? true : (_registers[0] != 0);
   }
-} // namespace rs::expr
+} // namespace rs::query

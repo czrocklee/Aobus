@@ -10,7 +10,7 @@
 #include <variant>
 #include <vector>
 
-namespace rs::expr
+namespace rs::query
 {
   struct BinaryExpression;
   struct UnaryExpression;

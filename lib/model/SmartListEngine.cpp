@@ -7,9 +7,9 @@
 #include <rs/model/TrackIdList.h>
 #include <rs/utility/Log.h>
 
-#include <rs/expr/ExecutionPlan.h>
-#include <rs/expr/Parser.h>
 #include <rs/lmdb/Transaction.h>
+#include <rs/query/ExecutionPlan.h>
+#include <rs/query/Parser.h>
 
 #include <algorithm>
 #include <flat_set>
@@ -77,7 +77,7 @@ namespace rs::model
     }
   }
 
-  void SourceObserver::onBatchInserted(std::span<TrackId const> ids)
+  void SourceObserver::onInserted(std::span<TrackId const> ids)
   {
     if (!_valid)
     {
@@ -86,11 +86,11 @@ namespace rs::model
 
     if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
-      _engine.handleSourceBatchInserted(*it->second, ids);
+      _engine.handleSourceInserted(*it->second, ids);
     }
   }
 
-  void SourceObserver::onBatchUpdated(std::span<TrackId const> ids)
+  void SourceObserver::onUpdated(std::span<TrackId const> ids)
   {
     if (!_valid)
     {
@@ -99,11 +99,11 @@ namespace rs::model
 
     if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
-      _engine.handleSourceBatchUpdated(*it->second, ids);
+      _engine.handleSourceUpdated(*it->second, ids);
     }
   }
 
-  void SourceObserver::onBatchRemoved(std::span<TrackId const> ids)
+  void SourceObserver::onRemoved(std::span<TrackId const> ids)
   {
     if (!_valid)
     {
@@ -112,7 +112,7 @@ namespace rs::model
 
     if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
     {
-      _engine.handleSourceBatchRemoved(*it->second, ids);
+      _engine.handleSourceRemoved(*it->second, ids);
     }
   }
 
@@ -209,7 +209,7 @@ namespace rs::model
     rebuildDirtyLists(*it->second);
   }
 
-  void SmartListEngine::notifyTrackDataChanged(TrackIdList& source, TrackId trackId)
+  void SmartListEngine::notifyUpdated(TrackIdList& source, TrackId trackId)
   {
     auto it = _buckets.find(&source);
 
@@ -449,7 +449,7 @@ namespace rs::model
     }
   }
 
-  void SmartListEngine::handleSourceBatchInserted(SourceBucket& bucket, std::span<TrackId const> ids)
+  void SmartListEngine::handleSourceInserted(SourceBucket& bucket, std::span<TrackId const> ids)
   {
     if (ids.empty())
     {
@@ -503,12 +503,12 @@ namespace rs::model
       {
         auto& list = *evaluatableLists[i];
         list._members.insert(matchedIds[i].begin(), matchedIds[i].end());
-        list.TrackIdList::notifyBatchInserted(matchedIds[i]);
+        list.TrackIdList::notifyInserted(matchedIds[i]);
       }
     }
   }
 
-  void SmartListEngine::handleSourceBatchUpdated(SourceBucket& bucket, std::span<TrackId const> ids)
+  void SmartListEngine::handleSourceUpdated(SourceBucket& bucket, std::span<TrackId const> ids)
   {
     if (ids.empty())
     {
@@ -583,23 +583,23 @@ namespace rs::model
           list._members.erase(id);
         }
 
-        list.TrackIdList::notifyBatchRemoved(trans.removed);
+        list.TrackIdList::notifyRemoved(trans.removed);
       }
 
       if (!trans.inserted.empty())
       {
         list._members.insert(trans.inserted.begin(), trans.inserted.end());
-        list.TrackIdList::notifyBatchInserted(trans.inserted);
+        list.TrackIdList::notifyInserted(trans.inserted);
       }
 
       if (!trans.updated.empty())
       {
-        list.TrackIdList::notifyBatchUpdated(trans.updated);
+        list.TrackIdList::notifyUpdated(trans.updated);
       }
     }
   }
 
-  void SmartListEngine::handleSourceBatchRemoved(SourceBucket& bucket, std::span<TrackId const> ids)
+  void SmartListEngine::handleSourceRemoved(SourceBucket& bucket, std::span<TrackId const> ids)
   {
     for (auto* list : bucket.lists)
     {
@@ -620,7 +620,7 @@ namespace rs::model
 
       if (!removed.empty())
       {
-        list->notifyBatchRemoved(removed);
+        list->notifyRemoved(removed);
       }
     }
   }
@@ -650,9 +650,9 @@ namespace rs::model
 
       switch (list->_plan->accessProfile)
       {
-        case rs::expr::AccessProfile::HotOnly: needsHot = true; break;
-        case rs::expr::AccessProfile::ColdOnly: needsCold = true; break;
-        case rs::expr::AccessProfile::HotAndCold:
+        case rs::query::AccessProfile::HotOnly: needsHot = true; break;
+        case rs::query::AccessProfile::ColdOnly: needsCold = true; break;
+        case rs::query::AccessProfile::HotAndCold:
           needsHot = true;
           needsCold = true;
           break;

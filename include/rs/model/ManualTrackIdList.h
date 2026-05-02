@@ -42,9 +42,9 @@ namespace rs::model
     void onUpdated(TrackId id, std::size_t index) override;
     void onRemoved(TrackId id, std::size_t index) override;
 
-    void onBatchInserted(std::span<TrackId const> ids) override;
-    void onBatchUpdated(std::span<TrackId const> ids) override;
-    void onBatchRemoved(std::span<TrackId const> ids) override;
+    void onInserted(std::span<TrackId const> ids) override;
+    void onUpdated(std::span<TrackId const> ids) override;
+    void onRemoved(std::span<TrackId const> ids) override;
 
     bool contains(TrackId id) const;
 

@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <rs/expr/Expression.h>
+#include <rs/query/Expression.h>
 
-namespace rs::expr
+namespace rs::query
 {
-  std::string serialize(Expression const& expr);
+  Expression parse(std::string_view const expr);
 }

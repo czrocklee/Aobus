@@ -8,9 +8,6 @@
 
 #include <array>
 #include <optional>
-#include <rs/expr/ExecutionPlan.h>
-#include <rs/expr/Parser.h>
-#include <rs/expr/PlanEvaluator.h>
 #include <rs/library/DictionaryStore.h>
 #include <rs/library/ResourceStore.h>
 #include <rs/library/TrackBuilder.h>
@@ -19,6 +16,9 @@
 #include <rs/lmdb/Database.h>
 #include <rs/lmdb/Environment.h>
 #include <rs/lmdb/Transaction.h>
+#include <rs/query/ExecutionPlan.h>
+#include <rs/query/Parser.h>
+#include <rs/query/PlanEvaluator.h>
 #include <rs/utility/ByteView.h>
 #include <span>
 #include <test/unit/library/TestUtils.h>
@@ -175,7 +175,7 @@ using rs::lmdb::Database;
 using rs::lmdb::Environment;
 using rs::lmdb::ReadTransaction;
 using rs::lmdb::WriteTransaction;
-using namespace rs::expr;
+using namespace rs::query;
 
 TEST_CASE("PlanEvaluator - Simple Equal Match")
 {

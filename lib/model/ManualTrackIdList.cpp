@@ -96,11 +96,11 @@ namespace rs::model
     }
   }
 
-  void ManualTrackIdList::onBatchInserted(std::span<TrackId const> /*ids*/)
+  void ManualTrackIdList::onInserted(std::span<TrackId const> /*ids*/)
   {
   }
 
-  void ManualTrackIdList::onBatchUpdated(std::span<TrackId const> ids)
+  void ManualTrackIdList::onUpdated(std::span<TrackId const> ids)
   {
     std::vector<TrackId> matched;
 
@@ -114,11 +114,11 @@ namespace rs::model
 
     if (!matched.empty())
     {
-      TrackIdList::notifyBatchUpdated(matched);
+      TrackIdList::notifyUpdated(matched);
     }
   }
 
-  void ManualTrackIdList::onBatchRemoved(std::span<TrackId const> ids)
+  void ManualTrackIdList::onRemoved(std::span<TrackId const> ids)
   {
     std::vector<TrackId> removed;
 
@@ -135,7 +135,7 @@ namespace rs::model
 
     if (!removed.empty())
     {
-      TrackIdList::notifyBatchRemoved(removed);
+      TrackIdList::notifyRemoved(removed);
     }
   }
 

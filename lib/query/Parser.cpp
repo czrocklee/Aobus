@@ -7,8 +7,8 @@
 #endif
 
 #include <rs/Exception.h>
-#include <rs/expr/Parser.h>
-#include <rs/expr/Serializer.h>
+#include <rs/query/Parser.h>
+#include <rs/query/Serializer.h>
 
 #include <lexy/action/parse.hpp>
 #include <lexy/callback.hpp>
@@ -26,7 +26,7 @@
 namespace
 {
   namespace dsl = lexy::dsl;
-  using namespace rs::expr;
+  using namespace rs::query;
 
   constexpr auto kVarTypes = lexy::symbol_table<VariableType>
     .map<LEXY_SYMBOL("$")>(VariableType::Metadata)
@@ -210,7 +210,7 @@ namespace
   };
 }
 
-namespace rs::expr
+namespace rs::query
 {
   Expression parse(std::string_view expr)
   {

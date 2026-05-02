@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/expr/Expression.h>
+#include <rs/query/Expression.h>
 #include <rs/library/DictionaryStore.h>
 #include <rs/library/TrackLayout.h>
 
@@ -11,7 +11,7 @@
 #include <optional>
 #include <vector>
 
-namespace rs::expr
+namespace rs::query
 {
   /**
    * Field - Identifies which field to read from a track.
@@ -148,7 +148,7 @@ namespace rs::expr
     /**
      * Compile an expression AST into an execution plan.
      *
-     * @param expr The expression AST to compile
+     * @param query The expression AST to compile
      * @return Compiled execution plan
      */
     ExecutionPlan compile(Expression const& expr);
@@ -174,4 +174,4 @@ namespace rs::expr
     bool _hasColdAccess = false;        // Track if expression uses cold (custom) variables
     bool _resolveStringConstantsToIds = true;
   };
-} // namespace rs::expr
+} // namespace rs::query

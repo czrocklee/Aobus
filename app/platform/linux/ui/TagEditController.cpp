@@ -199,17 +199,11 @@ namespace app::ui
     for (auto const trackId : selection.selectedIds)
     {
       _currentSession->rowDataProvider->invalidate(trackId);
-
-      if (selection.membershipList != nullptr)
-      {
-        selection.membershipList->notifyTrackDataChanged(trackId);
-      }
-      else
-      {
-        // All Tracks page uses _currentSession->allTrackIds directly
-        _currentSession->allTrackIds->notifyTrackDataChanged(trackId);
-      }
     }
+
+    // Notify the master list. This will propagate to all derived lists (Smart Lists, Playlists)
+    // via the SmartListEngine and ManualTrackIdList observer chains.
+    _currentSession->allTrackIds->notifyUpdated(selection.selectedIds);
 
     if (_callbacks.onTagsMutated)
     {

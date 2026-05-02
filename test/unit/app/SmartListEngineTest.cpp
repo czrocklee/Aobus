@@ -84,10 +84,10 @@ namespace
     void batchInsert(std::span<TrackId const> ids)
     {
       _ids.insert(_ids.end(), ids.begin(), ids.end());
-      notifyBatchInserted(ids);
+      notifyInserted(ids);
     }
 
-    void batchUpdate(std::span<TrackId const> ids) { notifyBatchUpdated(ids); }
+    void batchUpdate(std::span<TrackId const> ids) { notifyUpdated(ids); }
 
     void batchRemove(std::span<TrackId const> ids)
     {
@@ -101,7 +101,7 @@ namespace
           actualRemoved.push_back(id);
         }
       }
-      notifyBatchRemoved(actualRemoved);
+      notifyRemoved(actualRemoved);
     }
 
     std::size_t size() const override { return _ids.size(); }
@@ -164,17 +164,17 @@ namespace
       events.push_back({.kind = EventKind::Removed, .id = id, .index = index});
     }
 
-    void onBatchInserted(std::span<TrackId const> ids) override
+    void onInserted(std::span<TrackId const> ids) override
     {
       events.push_back({.kind = EventKind::BatchInserted, .batchIds = {ids.begin(), ids.end()}});
     }
 
-    void onBatchUpdated(std::span<TrackId const> ids) override
+    void onUpdated(std::span<TrackId const> ids) override
     {
       events.push_back({.kind = EventKind::BatchUpdated, .batchIds = {ids.begin(), ids.end()}});
     }
 
-    void onBatchRemoved(std::span<TrackId const> ids) override
+    void onRemoved(std::span<TrackId const> ids) override
     {
       events.push_back({.kind = EventKind::BatchRemoved, .batchIds = {ids.begin(), ids.end()}});
     }

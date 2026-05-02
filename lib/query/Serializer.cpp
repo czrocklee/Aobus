@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/expr/Serializer.h>
+#include <rs/query/Serializer.h>
 #include <rs/utility/VariantVisitor.h>
 
 #include <sstream>
 
 namespace
 {
-  using namespace rs::expr;
+  using namespace rs::query;
 
   struct ParenthesisGuard // NOLINT(cppcoreguidelines-special-member-functions)
   {
@@ -112,7 +112,7 @@ namespace
   };
 }
 
-namespace rs::expr
+namespace rs::query
 {
   std::string serialize(Expression const& expr)
   {
