@@ -4,7 +4,7 @@ Date: 2026-04-29
 
 ## Goal
 
-Refactor RockStudio playback so that:
+Refactor Aobus playback so that:
 
 - the data plane is responsible only for decoding, PCM transport, negotiated playback format, and transport control
 - the control plane is responsible for device discovery, live topology observation, graph assembly, and audio-quality analysis
@@ -184,7 +184,7 @@ struct EngineRouteSnapshot final
 
 Semantics:
 
-- `graph` contains only RockStudio-owned nodes and links
+- `graph` contains only Aobus-owned nodes and links
 - at minimum that includes decoder -> engine
 - `anchor` identifies the backend-side attachment point once playback has a stable route
 
@@ -450,7 +450,7 @@ When the PipeWire registry changes:
 
 Initial version simplification:
 
-- it is acceptable to recompute all active subscriptions on each relevant refresh because RockStudio normally has at most one active playback subscription
+- it is acceptable to recompute all active subscriptions on each relevant refresh because Aobus normally has at most one active playback subscription
 
 ### Stream Route Anchor Format
 

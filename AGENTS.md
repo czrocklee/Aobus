@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Guidance for AI agents working in the RockStudio repository.
+Guidance for AI agents working in the Aobus repository.
 
 ## Project Summary
 
-RockStudio is a C++23 music application with a GTK4 (gtkmm) desktop frontend and a CLI tool, sharing a robust core library.
+Aobus is a C++23 music application with a GTK4 (gtkmm) desktop frontend and a CLI tool, sharing a robust core library.
 
 Build is CMake-based and uses `nix-shell` for dependency management.
 

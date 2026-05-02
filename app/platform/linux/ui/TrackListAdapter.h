@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include <rs/library/MusicLibrary.h>
-#include <rs/query/Parser.h>
-#include <rs/query/PlanEvaluator.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/query/Parser.h>
+#include <ao/query/PlanEvaluator.h>
 
 #include "platform/linux/ui/TrackRow.h"
 #include "platform/linux/ui/TrackRowDataProvider.h"
-#include <rs/model/TrackIdList.h>
+#include <ao/model/TrackIdList.h>
 
 #include <giomm/liststore.h>
 
@@ -26,13 +26,13 @@ namespace app::ui
     Expression,
   };
 
-  class TrackListAdapter final : public rs::model::TrackIdListObserver
+  class TrackListAdapter final : public ao::model::TrackIdListObserver
   {
   public:
-    using TrackId = rs::TrackId;
+    using TrackId = ao::TrackId;
 
-    explicit TrackListAdapter(rs::model::TrackIdList& source,
-                              rs::library::MusicLibrary& musicLibrary,
+    explicit TrackListAdapter(ao::model::TrackIdList& source,
+                              ao::library::MusicLibrary& musicLibrary,
                               TrackRowDataProvider const& provider);
     ~TrackListAdapter() override;
 
@@ -57,17 +57,17 @@ namespace app::ui
   private:
     void rebuildView();
     void createRowForTrack(TrackId id);
-    bool shouldIncludeTrack(TrackId id, rs::library::TrackStore::Reader& reader) const;
+    bool shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader& reader) const;
 
-    rs::model::TrackIdList& _source;
-    rs::library::MusicLibrary& _musicLibrary;
+    ao::model::TrackIdList& _source;
+    ao::library::MusicLibrary& _musicLibrary;
     TrackRowDataProvider const& _provider;
     Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;
     Glib::ustring _filterText;
     TrackFilterMode _filterMode = TrackFilterMode::None;
     std::string _filterExpression;
     std::string _filterErrorMessage;
-    std::unique_ptr<rs::query::ExecutionPlan> _filterPlan;
-    rs::query::PlanEvaluator _filterEvaluator;
+    std::unique_ptr<ao::query::ExecutionPlan> _filterPlan;
+    ao::query::PlanEvaluator _filterEvaluator;
   };
 } // namespace app::ui

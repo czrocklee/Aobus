@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/ImportWorker.h>
-#include <rs/utility/Log.h>
+#include <ao/library/ImportWorker.h>
+#include <ao/utility/Log.h>
 
-#include <rs/library/TrackBuilder.h>
+#include <ao/library/TrackBuilder.h>
 
 #include <chrono>
 
-namespace rs::library
+namespace ao::library
 {
   ImportWorker::ImportWorker(MusicLibrary& ml,
                              std::vector<std::filesystem::path> const& files,
@@ -45,7 +45,7 @@ namespace rs::library
         }
 
         // Open tag file
-        auto tagFile = rs::tag::File::open(path);
+        auto tagFile = ao::tag::File::open(path);
 
         if (!tagFile)
         {
@@ -74,7 +74,7 @@ namespace rs::library
           preparedHot.size(),
           preparedCold.size(),
           [&preparedHot, &preparedCold](
-            [[maybe_unused]] rs::TrackId id, std::span<std::byte> hot, std::span<std::byte> cold)
+            [[maybe_unused]] ao::TrackId id, std::span<std::byte> hot, std::span<std::byte> cold)
           {
             preparedHot.writeTo(hot);
             preparedCold.writeTo(cold);
@@ -111,4 +111,4 @@ namespace rs::library
       _workerThread.join();
     }
   }
-} // namespace rs::library
+} // namespace ao::library

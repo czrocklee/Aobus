@@ -4,13 +4,13 @@
 #include "platform/linux/ui/TrackRowDataProvider.h"
 
 #include "platform/linux/ui/TrackRow.h"
-#include <rs/audio/Types.h>
+#include <ao/audio/Types.h>
 
 #include <string_view>
 
 namespace
 {
-  Glib::ustring joinResolvedTags(rs::library::TrackView::TagProxy tags, rs::library::DictionaryStore const& dictionary)
+  Glib::ustring joinResolvedTags(ao::library::TrackView::TagProxy tags, ao::library::DictionaryStore const& dictionary)
   {
     auto text = Glib::ustring{};
     auto first = true;
@@ -57,7 +57,7 @@ namespace
 
 namespace app::ui
 {
-  TrackRowDataProvider::TrackRowDataProvider(rs::library::MusicLibrary& ml)
+  TrackRowDataProvider::TrackRowDataProvider(ao::library::MusicLibrary& ml)
     : _ml{ml}, _store{ml.tracks()}, _dict{ml.dictionary()}
   {
   }
@@ -67,7 +67,7 @@ namespace app::ui
     _rowCache.clear();
     _stringCache.clear();
 
-    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _store.reader(txn);
 
     for (auto const& [id, view] : reader)
@@ -76,7 +76,7 @@ namespace app::ui
     }
   }
 
-  Glib::RefPtr<TrackRow> TrackRowDataProvider::createRowFromView(TrackId id, rs::library::TrackView const& view) const
+  Glib::RefPtr<TrackRow> TrackRowDataProvider::createRowFromView(TrackId id, ao::library::TrackView const& view) const
   {
     auto row = TrackRow::create(id, *const_cast<TrackRowDataProvider*>(this));
 
@@ -110,9 +110,9 @@ namespace app::ui
     }
 
     // Lazy load the row if it's missing from the cache (e.g., after an invalidate)
-    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _store.reader(txn);
-    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -127,9 +127,9 @@ namespace app::ui
   std::optional<std::uint32_t> TrackRowDataProvider::getCoverArtId(TrackId id) const
   {
     // Need cold data for coverArtId
-    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _store.reader(txn);
-    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -149,10 +149,10 @@ namespace app::ui
   std::optional<std::filesystem::path> TrackRowDataProvider::getUriPath(TrackId id) const
   {
     // Need cold data for URI
-    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _store.reader(txn);
 
-    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -162,13 +162,13 @@ namespace app::ui
     return resolveLibraryPath(_ml.rootPath(), optView->property().uri());
   }
 
-  std::optional<rs::audio::TrackPlaybackDescriptor> TrackRowDataProvider::getPlaybackDescriptor(TrackId id) const
+  std::optional<ao::audio::TrackPlaybackDescriptor> TrackRowDataProvider::getPlaybackDescriptor(TrackId id) const
   {
     // Need cold data for URI and property info
-    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _store.reader(txn);
 
-    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -179,7 +179,7 @@ namespace app::ui
     auto const& metadata = view.metadata();
     auto const& property = view.property();
 
-    rs::audio::TrackPlaybackDescriptor desc;
+    ao::audio::TrackPlaybackDescriptor desc;
     desc.trackId = id;
 
     // File path
@@ -192,13 +192,13 @@ namespace app::ui
     desc.title = std::string{metadata.title()};
 
     // Artist
-    if (auto const artistId = metadata.artistId(); artistId != rs::DictionaryId{0})
+    if (auto const artistId = metadata.artistId(); artistId != ao::DictionaryId{0})
     {
       desc.artist = resolveDictionaryString(artistId).raw();
     }
 
     // Album
-    if (auto const albumId = metadata.albumId(); albumId != rs::DictionaryId{0})
+    if (auto const albumId = metadata.albumId(); albumId != ao::DictionaryId{0})
     {
       desc.album = resolveDictionaryString(albumId).raw();
     }
@@ -206,7 +206,7 @@ namespace app::ui
     // Cover art
     if (auto const coverArtId = metadata.coverArtId(); coverArtId != 0)
     {
-      desc.coverArtId = rs::ResourceId{coverArtId};
+      desc.coverArtId = ao::ResourceId{coverArtId};
     }
 
     // Duration
@@ -230,7 +230,7 @@ namespace app::ui
     _rowCache.erase(id);
   }
 
-  Glib::ustring const& TrackRowDataProvider::resolveDictionaryString(rs::DictionaryId id) const
+  Glib::ustring const& TrackRowDataProvider::resolveDictionaryString(ao::DictionaryId id) const
   {
     // Check cache first
     if (auto const it = _stringCache.find(id); it != _stringCache.end())

@@ -6,13 +6,13 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
+#include <ao/Type.h>
+#include <ao/library/ListLayout.h>
 #include <cstddef>
-#include <rs/Type.h>
-#include <rs/library/ListLayout.h>
 
 namespace
 {
-  using rs::library::ListHeader;
+  using ao::library::ListHeader;
 
   TEST_CASE("ListHeader - Size and Alignment")
   {

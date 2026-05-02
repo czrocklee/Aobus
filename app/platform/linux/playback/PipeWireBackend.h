@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/audio/IBackend.h>
 #include <memory>
-#include <rs/audio/IBackend.h>
 #include <string_view>
 
 namespace app::playback
@@ -12,14 +12,14 @@ namespace app::playback
   /**
    * @brief Audio backend using PipeWire.
    */
-  class PipeWireBackend final : public rs::audio::IBackend
+  class PipeWireBackend final : public ao::audio::IBackend
   {
   public:
     struct Impl;
-    explicit PipeWireBackend(rs::audio::Device const& device);
+    explicit PipeWireBackend(ao::audio::Device const& device);
     ~PipeWireBackend() override;
 
-    rs::Result<> open(rs::audio::Format const& format, rs::audio::RenderCallbacks callbacks) override;
+    ao::Result<> open(ao::audio::Format const& format, ao::audio::RenderCallbacks callbacks) override;
     void reset() override;
     void start() override;
     void pause() override;
@@ -32,7 +32,7 @@ namespace app::playback
     void setExclusiveMode(bool exclusive) override;
     bool isExclusiveMode() const noexcept override;
 
-    rs::audio::BackendKind kind() const noexcept override;
+    ao::audio::BackendKind kind() const noexcept override;
 
   private:
     std::unique_ptr<Impl> _impl;

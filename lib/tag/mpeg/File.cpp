@@ -4,11 +4,11 @@
 #include "Frame.h"
 #include "id3v2/Layout.h"
 #include "id3v2/Reader.h"
-#include <rs/tag/mpeg/File.h>
+#include <ao/tag/mpeg/File.h>
 
 #include <cstring>
 
-namespace rs::tag::mpeg
+namespace ao::tag::mpeg
 {
   namespace
   {
@@ -55,10 +55,10 @@ namespace rs::tag::mpeg
     return durationMs;
   }
 
-  rs::library::TrackBuilder File::loadTrack() const
+  ao::library::TrackBuilder File::loadTrack() const
   {
     clearOwnedStrings();
-    auto builder = rs::library::TrackBuilder::createNew();
+    auto builder = ao::library::TrackBuilder::createNew();
 
     void const* audioStart = _mappedRegion.get_address();
     std::size_t audioSize = _mappedRegion.get_size();
@@ -133,4 +133,4 @@ namespace rs::tag::mpeg
 
     return builder;
   }
-} // namespace rs::tag::mpeg
+} // namespace ao::tag::mpeg

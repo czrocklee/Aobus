@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/AlacDecoderSession.h>
-#include <rs/audio/DecoderFactory.h>
-#include <rs/audio/FlacDecoderSession.h>
-#include <rs/utility/Log.h>
+#include <ao/audio/AlacDecoderSession.h>
+#include <ao/audio/DecoderFactory.h>
+#include <ao/audio/FlacDecoderSession.h>
+#include <ao/utility/Log.h>
 
-namespace rs::audio
+namespace ao::audio
 {
   void initializeDecoders()
   {
   }
 
-  std::unique_ptr<IDecoderSession> createDecoderSession(std::filesystem::path const& filePath,
-                                                                  Format outputFormat)
+  std::unique_ptr<IDecoderSession> createDecoderSession(std::filesystem::path const& filePath, Format outputFormat)
   {
     auto const ext = filePath.extension().string();
 
@@ -29,4 +28,4 @@ namespace rs::audio
 
     return {};
   }
-} // namespace rs::audio
+} // namespace ao::audio

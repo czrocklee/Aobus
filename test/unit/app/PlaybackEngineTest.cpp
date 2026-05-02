@@ -4,20 +4,20 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/audio/IBackend.h>
-#include <rs/audio/Engine.h>
-#include <rs/utility/IMainThreadDispatcher.h>
+#include <ao/audio/Engine.h>
+#include <ao/audio/IBackend.h>
+#include <ao/utility/IMainThreadDispatcher.h>
 
-#include <rs/Error.h>
+#include <ao/Error.h>
 
-using namespace rs::audio;
-using namespace rs::audio;
-using namespace rs::audio;
+using namespace ao::audio;
+using namespace ao::audio;
+using namespace ao::audio;
 using namespace fakeit;
 
 namespace
 {
-  class MockDispatcher : public rs::IMainThreadDispatcher
+  class MockDispatcher : public ao::IMainThreadDispatcher
   {
   public:
     void dispatch(std::function<void()> callback) override { callback(); }
@@ -32,7 +32,7 @@ namespace
       : _real(real)
     {
     }
-    rs::Result<> open(Format const& f, RenderCallbacks c) override { return _real.open(f, c); }
+    ao::Result<> open(Format const& f, RenderCallbacks c) override { return _real.open(f, c); }
     void reset() override { _real.reset(); }
     void start() override { _real.start(); }
     void pause() override { _real.pause(); }
@@ -52,10 +52,10 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
   Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
   Device device{.id = "test-device",
-                     .displayName = "Test",
-                     .description = "Test",
-                     .isDefault = false,
-                     .backendKind = BackendKind::None};
+                .displayName = "Test",
+                .description = "Test",
+                .isDefault = false,
+                .backendKind = BackendKind::None};
 
   Fake(Method(mockBackend, open));
   Fake(Method(mockBackend, reset));
@@ -155,10 +155,10 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
   Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
   Device device{.id = "test-device",
-                     .displayName = "Test",
-                     .description = "Test",
-                     .isDefault = false,
-                     .backendKind = BackendKind::None};
+                .displayName = "Test",
+                .description = "Test",
+                .isDefault = false,
+                .backendKind = BackendKind::None};
 
   Fake(Method(mockBackend, open));
   Fake(Method(mockBackend, reset));
@@ -187,7 +187,7 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
 
   SECTION("rs-decoder is present in the graph")
   {
-    auto it = std::ranges::find(snap.flow.nodes, "rs-decoder", &rs::audio::flow::Node::id);
+    auto it = std::ranges::find(snap.flow.nodes, "rs-decoder", &ao::audio::flow::Node::id);
     REQUIRE(it != snap.flow.nodes.end());
     CHECK(it->type == flow::NodeType::Decoder);
     CHECK(it->format.has_value());
@@ -196,7 +196,7 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
 
   SECTION("rs-engine is present in the graph")
   {
-    auto it = std::ranges::find(snap.flow.nodes, "rs-engine", &rs::audio::flow::Node::id);
+    auto it = std::ranges::find(snap.flow.nodes, "rs-engine", &ao::audio::flow::Node::id);
     REQUIRE(it != snap.flow.nodes.end());
     CHECK(it->type == flow::NodeType::Engine);
   }
@@ -227,11 +227,11 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
   Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
   Device device{.id = "pipewire-shared",
-                     .displayName = "PipeWire",
-                     .description = "PipeWire Shared",
-                     .isDefault = false,
-                     .backendKind = BackendKind::PipeWire,
-                     .capabilities = {.sampleRates = {48000}, .bitDepths = {16}, .channelCounts = {2}}};
+                .displayName = "PipeWire",
+                .description = "PipeWire Shared",
+                .isDefault = false,
+                .backendKind = BackendKind::PipeWire,
+                .capabilities = {.sampleRates = {48000}, .bitDepths = {16}, .channelCounts = {2}}};
 
   auto openedFormats = std::vector<Format>{};
   When(Method(mockBackend, open))
@@ -239,7 +239,7 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
       [&](Format const& format, RenderCallbacks)
       {
         openedFormats.push_back(format);
-        return rs::Result<>();
+        return ao::Result<>();
       });
   Fake(Method(mockBackend, reset));
   Fake(Method(mockBackend, start));
@@ -285,11 +285,11 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
   Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
   Device device{.id = "alsa-exclusive",
-                     .displayName = "ALSA",
-                     .description = "ALSA Exclusive",
-                     .isDefault = false,
-                     .backendKind = BackendKind::AlsaExclusive,
-                     .capabilities = {.sampleRates = {48000}, .bitDepths = {16}, .channelCounts = {2}}};
+                .displayName = "ALSA",
+                .description = "ALSA Exclusive",
+                .isDefault = false,
+                .backendKind = BackendKind::AlsaExclusive,
+                .capabilities = {.sampleRates = {48000}, .bitDepths = {16}, .channelCounts = {2}}};
 
   auto openedFormats = std::vector<Format>{};
   When(Method(mockBackend, open))
@@ -297,7 +297,7 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
       [&](Format const& format, RenderCallbacks)
       {
         openedFormats.push_back(format);
-        return rs::Result<>();
+        return ao::Result<>();
       });
   Fake(Method(mockBackend, reset));
   Fake(Method(mockBackend, start));

@@ -5,7 +5,7 @@
 
 #include "platform/linux/ui/ListRow.h"
 
-#include <rs/library/MusicLibrary.h>
+#include <ao/library/MusicLibrary.h>
 
 #include <gtkmm.h>
 
@@ -16,7 +16,7 @@ namespace app::ui
   class ListTreeNode final : public Glib::Object
   {
   public:
-    using ListId = rs::ListId;
+    using ListId = ao::ListId;
 
     Glib::RefPtr<ListRow> getRow() const { return _row; }
 

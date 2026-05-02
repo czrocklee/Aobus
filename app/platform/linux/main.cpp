@@ -3,9 +3,9 @@
 
 #include "platform/linux/ui/MainWindow.h"
 #include "platform/linux/ui/TrackRowDataProvider.h"
-#include <rs/utility/Log.h>
+#include <ao/utility/Log.h>
 
-#include <rs/AppVersion.h>
+#include <ao/AppVersion.h>
 
 #include <gtkmm.h>
 #include <gtkmm/aboutdialog.h>
@@ -19,16 +19,16 @@ int main(int argc, char* argv[])
   CLI::App cliApp{"RockStudio Music Library"};
   cliApp.allow_extras(); // Allow GTK specific arguments
 
-  auto logLevel = rs::log::LogLevel::Info;
+  auto logLevel = ao::log::LogLevel::Info;
 
   // Map strings to LogLevel enum for CLI11
-  std::map<std::string, rs::log::LogLevel> logMapping{{"trace", rs::log::LogLevel::Trace},
-                                                      {"debug", rs::log::LogLevel::Debug},
-                                                      {"info", rs::log::LogLevel::Info},
-                                                      {"warn", rs::log::LogLevel::Warn},
-                                                      {"error", rs::log::LogLevel::Error},
-                                                      {"critical", rs::log::LogLevel::Critical},
-                                                      {"off", rs::log::LogLevel::Off}};
+  std::map<std::string, ao::log::LogLevel> logMapping{{"trace", ao::log::LogLevel::Trace},
+                                                      {"debug", ao::log::LogLevel::Debug},
+                                                      {"info", ao::log::LogLevel::Info},
+                                                      {"warn", ao::log::LogLevel::Warn},
+                                                      {"error", ao::log::LogLevel::Error},
+                                                      {"critical", ao::log::LogLevel::Critical},
+                                                      {"off", ao::log::LogLevel::Off}};
 
   int verbosity = 0;
   cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");
@@ -40,7 +40,7 @@ int main(int argc, char* argv[])
     "--version",
     []()
     {
-      std::print("RockStudio {}\n", rs::kAppVersion);
+      std::print("RockStudio {}\n", ao::kAppVersion);
       std::exit(0);
     },
     "Show version information");
@@ -58,19 +58,19 @@ int main(int argc, char* argv[])
   if (cliApp.count("-v") > 0)
   {
     if (verbosity == 1)
-      logLevel = rs::log::LogLevel::Debug;
+      logLevel = ao::log::LogLevel::Debug;
     else if (verbosity >= 2)
-      logLevel = rs::log::LogLevel::Trace;
+      logLevel = ao::log::LogLevel::Trace;
   }
 
-  auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "rockstudio" / "logs";
-  rs::log::Log::init(logLevel, logDir);
+  auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "aobus" / "logs";
+  ao::log::Log::init(logLevel, logDir);
   APP_LOG_INFO("========================================================");
-  APP_LOG_INFO("RockStudio {} starting...", rs::kAppVersion);
+  APP_LOG_INFO("RockStudio {} starting...", ao::kAppVersion);
 
   Glib::set_application_name("RockStudio");
 
-  auto app = Gtk::Application::create("com.rockstudio.app");
+  auto app = Gtk::Application::create("com.aobus.app");
 
   // Add about action to application
   auto aboutAction = Gio::SimpleAction::create("about");
@@ -79,7 +79,7 @@ int main(int argc, char* argv[])
     {
       auto dialog = Gtk::AboutDialog{};
       dialog.set_program_name("RockStudio");
-      dialog.set_version(rs::kAppVersion);
+      dialog.set_version(ao::kAppVersion);
       dialog.set_copyright("Copyright 2024 RockStudio");
       dialog.set_license_type(Gtk::License::LGPL_3_0);
 
@@ -123,6 +123,6 @@ int main(int argc, char* argv[])
 
   APP_LOG_INFO("Entering GTK main loop");
   auto const result = app->run(gtkArgc, gtkArgv.data());
-  rs::log::Log::shutdown();
+  ao::log::Log::shutdown();
   return result;
 }

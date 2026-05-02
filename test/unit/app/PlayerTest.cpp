@@ -4,16 +4,16 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/audio/Backend.h>
-#include <rs/audio/Engine.h>
-#include <rs/audio/IBackend.h>
-#include <rs/audio/IBackendProvider.h>
-#include <rs/audio/NullBackend.h>
-#include <rs/audio/Player.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/Engine.h>
+#include <ao/audio/IBackend.h>
+#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/NullBackend.h>
+#include <ao/audio/Player.h>
 
-using namespace rs::audio;
-using namespace rs::audio;
-using namespace rs::audio;
+using namespace ao::audio;
+using namespace ao::audio;
+using namespace ao::audio;
 using namespace fakeit;
 
 namespace
@@ -112,7 +112,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
       });
 
   When(Method(mockProvider, createBackend))
-    .AlwaysDo([&](Device const&) { return std::make_unique<rs::audio::NullBackend>(); });
+    .AlwaysDo([&](Device const&) { return std::make_unique<ao::audio::NullBackend>(); });
   When(Method(mockProvider, subscribeGraph))
     .AlwaysDo(
       [&](std::string_view, IBackendProvider::OnGraphChangedCallback cb)
@@ -231,7 +231,7 @@ TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][player
       });
 
   When(Method(mockProvider, createBackend))
-    .AlwaysDo([&](Device const&) { return std::make_unique<rs::audio::NullBackend>(); });
+    .AlwaysDo([&](Device const&) { return std::make_unique<ao::audio::NullBackend>(); });
   When(Method(mockProvider, subscribeGraph))
     .AlwaysDo([](std::string_view, IBackendProvider::OnGraphChangedCallback) { return Subscription{}; });
 

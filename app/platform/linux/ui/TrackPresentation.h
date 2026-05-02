@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/Type.h>
+#include <ao/Type.h>
 
 #include <sigc++/sigc++.h>
 
@@ -113,7 +113,7 @@ namespace app::ui
     std::uint16_t year = 0;
     std::uint16_t discNumber = 0;
     std::uint16_t trackNumber = 0;
-    rs::TrackId trackId{};
+    ao::TrackId trackId{};
   };
 
   TrackPresentationSpec presentationSpecForGroup(TrackGroupBy groupBy);

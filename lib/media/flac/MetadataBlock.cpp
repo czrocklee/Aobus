@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/media/flac/MetadataBlock.h>
-#include <rs/utility/ByteView.h>
+#include <ao/media/flac/MetadataBlock.h>
+#include <ao/utility/ByteView.h>
 
-namespace rs::media::flac
+namespace ao::media::flac
 {
   std::vector<std::string_view> VorbisCommentBlockView::comments() const
   {
@@ -33,7 +33,7 @@ namespace rs::media::flac
   {
     if (size < StreamInfoBlockSize || _view.type() != MetadataBlockType::StreamInfo)
     {
-      RS_THROW(rs::Exception, "invalid flac metadata blocks, first block must be StreamInfo");
+      AO_THROW(ao::Exception, "invalid flac metadata blocks, first block must be StreamInfo");
     }
   }
 
@@ -50,7 +50,7 @@ namespace rs::media::flac
 
     if (_view.size() > _sizeLeft)
     {
-      RS_THROW(rs::Exception, "invalid flac metadata blocks size, exceeding the file boundary");
+      AO_THROW(ao::Exception, "invalid flac metadata blocks size, exceeding the file boundary");
     }
   }
-} // namespace rs::media::flac
+} // namespace ao::media::flac

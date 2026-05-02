@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace rs::library
+namespace ao::library
 {
   class MusicLibrary;
 }
@@ -20,7 +20,7 @@ namespace app::ui
   class QueryExpressionBox final : public Gtk::Box
   {
   public:
-    explicit QueryExpressionBox(rs::library::MusicLibrary& musicLibrary);
+    explicit QueryExpressionBox(ao::library::MusicLibrary& musicLibrary);
     ~QueryExpressionBox() override;
 
     void refreshCompletionData();
@@ -41,7 +41,7 @@ namespace app::ui
     Gtk::ListView _completionListView;
     Glib::RefPtr<Gtk::StringList> _completionItems;
     Glib::RefPtr<Gtk::SingleSelection> _completionSelection;
-    rs::library::MusicLibrary& _musicLibrary;
+    ao::library::MusicLibrary& _musicLibrary;
     std::vector<std::string> _availableTags;
     std::vector<std::string> _availableCustomKeys;
     std::int32_t _completionTokenStart = -1;

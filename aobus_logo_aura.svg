@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <!-- 紫色强力发光滤镜 (Aura) -->
+    <filter id="purple-aura" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#BF5AF2" flood-opacity="0.6" result="purple-flood"/>
+      <feComposite in="purple-flood" in2="blur" operator="in" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <style>
+    /* 默认：深色主题 (Bach's Night) */
+    :root {
+      --bg-color: #0F1115;
+      --a-color: #FFFFFF;
+      --o-stroke: #00E5FF;
+    }
+
+    /* 浅色主题 (Bach's Morning) */
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg-color: #F5F7FA;
+        --a-color: #1A1C20;
+        --o-stroke: #00A3CC;
+      }
+    }
+
+    .bg { fill: var(--bg-color); transition: fill 0.5s ease; }
+    .letter-a { stroke: var(--a-color); transition: stroke 0.5s ease; }
+    .letter-o { stroke: var(--o-stroke); filter: url(#purple-aura); transition: stroke 0.5s ease; }
+    
+    /* 呼吸光晕动画 */
+    @keyframes pulse-aura {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.7; }
+    }
+    .letter-o {
+      animation: pulse-aura 4s infinite ease-in-out;
+    }
+  </style>
+
+  <!-- 底座 -->
+  <rect class="bg" width="200" height="200" rx="48"/>
+
+  <!-- 字母 a -->
+  <g transform="translate(42, 72)">
+    <circle class="letter-a" cx="28" cy="28" r="24" fill="none" stroke-width="8"/>
+    <path class="letter-a" d="M52 0 v50" stroke-width="8" stroke-linecap="round"/>
+  </g>
+
+  <!-- 字母 o: 纯青色环绕，紫色光晕外溢 -->
+  <g transform="translate(118, 72)">
+    <circle class="letter-o" cx="28" cy="28" r="24" fill="none" stroke-width="8.5"/>
+  </g>
+</svg>

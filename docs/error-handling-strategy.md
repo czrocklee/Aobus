@@ -4,7 +4,7 @@
 
 The codebase has accumulated five distinct error handling idioms with no clear policy.
 This document defines a unified strategy based on **`std::expected`** for recoverable
-fallible operations and **`rs::Exception`** for invariant violations, and lays out a
+fallible operations and **`ao::Exception`** for invariant violations, and lays out a
 phased migration plan.
 
 ---
@@ -50,7 +50,7 @@ check `nullopt` vs `block->endOfStream` to distinguish error from EOF.
 **Problems:** Inverted semantics (empty = success). Callers check `!mapError.empty()`
 which is unintuitive. No type safety.
 
-### Pattern 4 — `rs::Exception` via `RS_THROW` / `RS_THROW_FORMAT`
+### Pattern 4 — `ao::Exception` via `AO_THROW` / `AO_THROW_FORMAT`
 
 Heavily used in `lib/`:
 
@@ -83,12 +83,12 @@ programmer errors, unrecoverable I/O). The `app` layer catches them at boundary 
 
 ## Target Policy
 
-### Layer 1: `rs::Exception` (unchanged) — Invariant violations
+### Layer 1: `ao::Exception` (unchanged) — Invariant violations
 
 **When:** Data corruption, programmer error, impossible states, unrecoverable
 system failures.
 
-Keep `RS_THROW` / `RS_THROW_FORMAT` exactly as they are for:
+Keep `AO_THROW` / `AO_THROW_FORMAT` exactly as they are for:
 - LMDB operation failures (disk corruption, resource exhaustion)
 - Expression parser/evaluator internal errors
 - Tag parsing of malformed files
@@ -98,7 +98,7 @@ Keep `RS_THROW` / `RS_THROW_FORMAT` exactly as they are for:
 These are **not** expected failures in normal operation. The `app` layer already
 catches them at boundary points — that architecture is sound.
 
-### Layer 2: `std::expected<T, rs::Error>` (new) — Recoverable fallible operations
+### Layer 2: `std::expected<T, ao::Error>` (new) — Recoverable fallible operations
 
 **When:** The operation can legitimately fail, the caller is expected to handle
 the failure, and the error carries useful context.
@@ -121,7 +121,7 @@ Keep `std::optional` for lookups where "not found" is a normal outcome, not an e
 
 `std::error_code`/`std::error_category` is designed for **cross-library error interop**
 (e.g., Boost.Asio errors vs POSIX errno vs `std::filesystem` errors flowing through
-a single type-erased `std::error_code`). RockStudio doesn't need this because:
+a single type-erased `std::error_code`). Aobus doesn't need this because:
 
 1. **No cross-library error boundary.** All error producers and consumers are in
    the same codebase.
@@ -145,7 +145,7 @@ A single lightweight value type in `include/rs/Error.h`:
 #include <cstdint>
 #include <string>
 
-namespace rs
+namespace ao
 {
   struct Error final
   {
@@ -164,11 +164,11 @@ namespace rs
     Code code = Code::Generic;
     std::string message;
   };
-} // namespace rs
+} // namespace ao
 ```
 
 This gives programmatic dispatch on `code` plus rich contextual `message`, all
-carried inline in `std::expected<T, rs::Error>` — no side-channel needed.
+carried inline in `std::expected<T, ao::Error>` — no side-channel needed.
 
 If a subsystem later needs finer-grained codes, it can define its own error type
 while staying in the `std::expected` framework.
@@ -184,14 +184,14 @@ patterns live here.
 
 #### 1.1 — New error type
 
-- **[NEW]** `include/rs/Error.h` — the `rs::Error` struct above.
+- **[NEW]** `include/rs/Error.h` — the `ao::Error` struct above.
 
 #### 1.2 — Decoder interface and implementations
 
 - **[MODIFY]** `app/core/decoder/IAudioDecoderSession.h`
-  - `bool open(...)` → `std::expected<void, rs::Error> open(...)`
-  - `bool seek(...)` → `std::expected<void, rs::Error> seek(...)`
-  - `optional<PcmBlock> readNextBlock()` → `std::expected<PcmBlock, rs::Error> readNextBlock()`
+  - `bool open(...)` → `std::expected<void, ao::Error> open(...)`
+  - `bool seek(...)` → `std::expected<void, ao::Error> seek(...)`
+  - `optional<PcmBlock> readNextBlock()` → `std::expected<PcmBlock, ao::Error> readNextBlock()`
   - Remove `lastError()`
 
 - **[MODIFY]** `app/core/decoder/FlacDecoderSession.h` / `.cpp`
@@ -202,7 +202,7 @@ patterns live here.
 #### 1.3 — Backend interface and implementations
 
 - **[MODIFY]** `app/core/backend/IAudioBackend.h`
-  - `bool open(...)` → `std::expected<void, rs::Error> open(...)`
+  - `bool open(...)` → `std::expected<void, ao::Error> open(...)`
   - Remove `lastError()`
 
 - **[MODIFY]** `app/platform/linux/playback/PipeWireBackend.h` / `.cpp`
@@ -215,18 +215,18 @@ patterns live here.
 #### 1.4 — PCM source interface and implementations
 
 - **[MODIFY]** `app/core/source/IPcmSource.h`
-  - `bool seek(...)` → `std::expected<void, rs::Error> seek(...)`
+  - `bool seek(...)` → `std::expected<void, ao::Error> seek(...)`
   - Remove `lastError()`
 
 - **[MODIFY]** `app/core/source/StreamingPcmSource.h` / `.cpp`
 - **[MODIFY]** `app/core/source/MemoryPcmSource.h` / `.cpp`
-  - `bool initialize()` → `std::expected<void, rs::Error> initialize()`
+  - `bool initialize()` → `std::expected<void, ao::Error> initialize()`
   - Remove `_lastError`, `fail()`, `clearError()` — propagate `expected` directly.
 
 #### 1.5 — Engine integration
 
 - **[MODIFY]** `app/core/playback/PlaybackEngine.h` / `.cpp`
-  - `bool openTrack(...)` → `std::expected<void, rs::Error> openTrack(...)`
+  - `bool openTrack(...)` → `std::expected<void, ao::Error> openTrack(...)`
   - Update callers to use `.has_value()` / `.error().message` instead of `lastError()`.
 
 #### 1.6 — Test updates
@@ -247,10 +247,10 @@ patterns live here.
 
 These subsystems already use the correct pattern for their domain:
 
-- **LMDB layer:** Keep `rs::Exception` — invariant violations.
-- **Expression engine:** Keep `rs::Exception` — parse/evaluation errors reported
+- **LMDB layer:** Keep `ao::Exception` — invariant violations.
+- **Expression engine:** Keep `ao::Exception` — parse/evaluation errors reported
   at the expression input boundary.
-- **Tag parsing:** Keep `rs::Exception` — malformed files caught at import boundary.
+- **Tag parsing:** Keep `ao::Exception` — malformed files caught at import boundary.
 - **`std::optional` lookups:** Keep as-is — legitimate absence.
 
 ---

@@ -6,12 +6,12 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/library/ResourceStore.h>
-#include <rs/library/TrackBuilder.h>
-#include <rs/library/TrackView.h>
-#include <rs/lmdb/Environment.h>
-#include <rs/lmdb/Transaction.h>
-#include <rs/utility/ByteView.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackView.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/utility/ByteView.h>
 #include <test/unit/library/TestUtils.h>
 #include <test/unit/lmdb/TestUtils.h>
 
@@ -23,15 +23,15 @@
 namespace
 {
 #if defined(__GNUC__) && !defined(__clang__)
-  static_assert(std::ranges::view<rs::library::TrackView::TagProxy>);
-  static_assert(std::ranges::view<rs::library::TrackView::CustomProxy>);
+  static_assert(std::ranges::view<ao::library::TrackView::TagProxy>);
+  static_assert(std::ranges::view<ao::library::TrackView::CustomProxy>);
 #endif
 
   using namespace test;
-  using rs::DictionaryId;
-  using rs::TrackId;
-  using rs::library::TrackHotHeader;
-  using rs::utility::uint64Parts::split;
+  using ao::DictionaryId;
+  using ao::TrackId;
+  using ao::library::TrackHotHeader;
+  using ao::utility::uint64Parts::split;
 
   // Helper to create a minimal valid hot TrackView for testing
   std::vector<std::byte> createMinimalHotData()
@@ -79,16 +79,16 @@ namespace
     return data;
   }
 
-  using rs::library::TrackColdHeader;
+  using ao::library::TrackColdHeader;
 
   std::vector<std::byte> createColdData(TrackColdHeader const& header = {},
                                         std::vector<std::pair<std::string, std::string>> const& customPairs = {},
                                         std::string_view uri = "")
   {
-    auto builder = rs::library::TrackBuilder::createNew();
+    auto builder = ao::library::TrackBuilder::createNew();
     builder.property().uri(uri);
-    builder.property().fileSize(rs::utility::uint64Parts::combine(header.fileSizeLo, header.fileSizeHi));
-    builder.property().mtime(rs::utility::uint64Parts::combine(header.mtimeLo, header.mtimeHi));
+    builder.property().fileSize(ao::utility::uint64Parts::combine(header.fileSizeLo, header.fileSizeHi));
+    builder.property().mtime(ao::utility::uint64Parts::combine(header.mtimeLo, header.mtimeHi));
     builder.metadata().coverArtId(header.coverArtId);
     builder.metadata().trackNumber(header.trackNumber);
     builder.metadata().totalTracks(header.totalTracks);
@@ -105,16 +105,16 @@ namespace
     }
 
     auto temp = TempDir{};
-    auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-    auto wtxn = rs::lmdb::WriteTransaction{env};
-    auto dict = rs::library::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
-    auto resources = rs::library::ResourceStore{rs::lmdb::Database{wtxn, "resources"}};
+    auto env = ao::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto wtxn = ao::lmdb::WriteTransaction{env};
+    auto dict = ao::library::DictionaryStore{ao::lmdb::Database{wtxn, "dict"}, wtxn};
+    auto resources = ao::library::ResourceStore{ao::lmdb::Database{wtxn, "resources"}};
     return builder.serializeCold(wtxn, dict, resources);
   }
 
-  rs::library::TrackView makeColdView(std::vector<std::byte> const& data)
+  ao::library::TrackView makeColdView(std::vector<std::byte> const& data)
   {
-    return rs::library::TrackView{std::span<std::byte const>{}, data};
+    return ao::library::TrackView{std::span<std::byte const>{}, data};
   }
 
   // === Metadata Tests ===
@@ -122,21 +122,21 @@ namespace
   TEST_CASE("TrackView - Hot Title")
   {
     auto data = createTrackWithStrings("Test Title");
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().title() == "Test Title");
   }
 
   TEST_CASE("TrackView - Hot Title Empty")
   {
     auto data = createMinimalHotData();
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().title().empty());
   }
 
   TEST_CASE("TrackView - Hot Dictionary IDs")
   {
     auto data = createMinimalHotData();
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.metadata().artistId() == DictionaryId{1});
     CHECK(view.metadata().albumId() == DictionaryId{2});
@@ -148,7 +148,7 @@ namespace
   TEST_CASE("TrackView - Hot Year")
   {
     auto data = createMinimalHotData();
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().year() == 2020);
   }
 
@@ -206,7 +206,7 @@ namespace
     h.bitDepth = 24;
     h.rating = 0;
     auto data = serializeHeader(h);
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.property().codecId() == 3);
     CHECK(view.property().bitDepth() == 24);
@@ -215,7 +215,7 @@ namespace
   TEST_CASE("TrackView - Hot Rating")
   {
     auto data = createMinimalHotData();
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.metadata().rating() == 3);
   }
@@ -225,11 +225,11 @@ namespace
     auto h = TrackHotHeader{};
     h.rating = 0;
     auto data = serializeHeader(h);
-    CHECK(rs::library::TrackView{data, std::span<std::byte const>{}}.metadata().rating() == 0);
+    CHECK(ao::library::TrackView{data, std::span<std::byte const>{}}.metadata().rating() == 0);
 
     h.rating = 255;
     data = serializeHeader(h);
-    CHECK(rs::library::TrackView{data, std::span<std::byte const>{}}.metadata().rating() == 255);
+    CHECK(ao::library::TrackView{data, std::span<std::byte const>{}}.metadata().rating() == 255);
   }
 
   TEST_CASE("TrackView - Cold File Size and Mtime")
@@ -270,14 +270,14 @@ namespace
     h.tagBloom = 0xCAFE;
 
     auto data = serializeHeader(h);
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.tags().bloom() == 0xCAFE);
   }
 
   TEST_CASE("TrackView - Tag Count Zero")
   {
     auto data = createTrackWithStrings("Test");
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().count() == 0);
   }
@@ -285,7 +285,7 @@ namespace
   TEST_CASE("TrackView - Tag Iterator Empty")
   {
     auto data = createTrackWithStrings("Test");
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().begin() == view.tags().end());
   }
@@ -312,12 +312,12 @@ namespace
 
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert_range(data.end(), rs::utility::bytes::view(tag1));
-    data.insert_range(data.end(), rs::utility::bytes::view(tag2));
+    data.insert_range(data.end(), ao::utility::bytes::view(tag1));
+    data.insert_range(data.end(), ao::utility::bytes::view(tag2));
 
     appendString(data, title);
 
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.tags().count() == 2);
   }
 
@@ -343,12 +343,12 @@ namespace
 
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert_range(data.end(), rs::utility::bytes::view(tag1));
-    data.insert_range(data.end(), rs::utility::bytes::view(tag2));
+    data.insert_range(data.end(), ao::utility::bytes::view(tag1));
+    data.insert_range(data.end(), ao::utility::bytes::view(tag2));
 
     appendString(data, title);
 
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
 
     std::vector<DictionaryId> ids(view.tags().begin(), view.tags().end());
     CHECK(ids.size() == 2);
@@ -374,10 +374,10 @@ namespace
     auto data = serializeHeader(h);
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert_range(data.end(), rs::utility::bytes::view(tag1));
-    data.insert_range(data.end(), rs::utility::bytes::view(tag2));
+    data.insert_range(data.end(), ao::utility::bytes::view(tag1));
+    data.insert_range(data.end(), ao::utility::bytes::view(tag2));
 
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().has(DictionaryId{10}) == true);
     CHECK(view.tags().has(DictionaryId{20}) == true);
@@ -402,10 +402,10 @@ namespace
     auto data = serializeHeader(h);
     std::uint32_t tag1 = 10;
     std::uint32_t tag2 = 20;
-    data.insert_range(data.end(), rs::utility::bytes::view(tag1));
-    data.insert_range(data.end(), rs::utility::bytes::view(tag2));
+    data.insert_range(data.end(), ao::utility::bytes::view(tag1));
+    data.insert_range(data.end(), ao::utility::bytes::view(tag2));
 
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
 
     CHECK(view.tags().id(0) == DictionaryId{10});
     CHECK(view.tags().id(1) == DictionaryId{20});
@@ -642,42 +642,42 @@ namespace
   TEST_CASE("TrackView - Hot Valid")
   {
     auto data = createMinimalHotData();
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.isHotValid() == true);
   }
 
   TEST_CASE("TrackView - Hot Invalid Null Data")
   {
     auto nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
-    rs::library::TrackView nullView{nullSpan, std::span<std::byte const>{}};
+    ao::library::TrackView nullView{nullSpan, std::span<std::byte const>{}};
     CHECK(nullView.isHotValid() == false);
   }
 
   TEST_CASE("TrackView - Hot Invalid Too Small")
   {
     auto smallData = std::array<char, 10>{};
-    auto smallView = rs::library::TrackView{rs::utility::bytes::view(smallData), std::span<std::byte const>{}};
+    auto smallView = ao::library::TrackView{ao::utility::bytes::view(smallData), std::span<std::byte const>{}};
     CHECK(smallView.isHotValid() == false);
   }
 
   TEST_CASE("TrackView - Cold Valid")
   {
     auto data = createColdData();
-    rs::library::TrackView view{std::span<std::byte const>{}, data};
+    ao::library::TrackView view{std::span<std::byte const>{}, data};
     CHECK(view.isColdValid() == true);
   }
 
   TEST_CASE("TrackView - Cold Invalid Null Data")
   {
     auto nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
-    rs::library::TrackView nullView{std::span<std::byte const>{}, nullSpan};
+    ao::library::TrackView nullView{std::span<std::byte const>{}, nullSpan};
     CHECK(nullView.isColdValid() == false);
   }
 
   TEST_CASE("TrackView - Cold Invalid Too Small")
   {
     auto smallData = std::array<char, 10>{};
-    auto smallView = rs::library::TrackView{std::span<std::byte const>{}, rs::utility::bytes::view(smallData)};
+    auto smallView = ao::library::TrackView{std::span<std::byte const>{}, ao::utility::bytes::view(smallData)};
     CHECK(smallView.isColdValid() == false);
   }
 } // anonymous namespace

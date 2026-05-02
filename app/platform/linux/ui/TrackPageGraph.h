@@ -9,8 +9,8 @@
 #include "platform/linux/ui/TrackPresentation.h"
 #include "platform/linux/ui/TrackViewPage.h"
 
+#include <ao/model/TrackIdList.h>
 #include <gtkmm.h>
-#include <rs/model/TrackIdList.h>
 
 #include <functional>
 #include <map>
@@ -25,7 +25,7 @@ namespace app::ui
    */
   struct TrackPageContext final
   {
-    std::unique_ptr<rs::model::TrackIdList> membershipList;
+    std::unique_ptr<ao::model::TrackIdList> membershipList;
     std::unique_ptr<TrackListAdapter> adapter;
     std::unique_ptr<TrackViewPage> page;
     std::unique_ptr<app::services::PlaylistExporter> exporter;
@@ -39,10 +39,10 @@ namespace app::ui
   public:
     struct Callbacks final
     {
-      std::function<void(std::vector<rs::TrackId> const&)> onSelectionChanged;
+      std::function<void(std::vector<ao::TrackId> const&)> onSelectionChanged;
       std::function<void(TrackViewPage&, double, double)> onContextMenuRequested;
-      std::function<void(TrackViewPage&, std::vector<rs::TrackId> const&, double, double)> onTagEditRequested;
-      std::function<void(TrackViewPage&, rs::TrackId)> onTrackActivated;
+      std::function<void(TrackViewPage&, std::vector<ao::TrackId> const&, double, double)> onTagEditRequested;
+      std::function<void(TrackViewPage&, ao::TrackId)> onTrackActivated;
       std::function<void(TrackViewPage&, std::string const&)> onCreateSmartListRequested;
     };
 
@@ -50,25 +50,25 @@ namespace app::ui
     ~TrackPageGraph();
 
     void clear();
-    void rebuild(LibrarySession& session, rs::lmdb::ReadTransaction& txn);
+    void rebuild(LibrarySession& session, ao::lmdb::ReadTransaction& txn);
 
-    TrackPageContext* find(rs::ListId listId);
-    TrackPageContext const* find(rs::ListId listId) const;
+    TrackPageContext* find(ao::ListId listId);
+    TrackPageContext const* find(ao::ListId listId) const;
 
     TrackPageContext* currentVisible();
     TrackPageContext const* currentVisible() const;
 
-    void show(rs::ListId listId);
+    void show(ao::ListId listId);
 
   private:
     void buildPageForAllTracks(LibrarySession& session);
-    void buildPageForStoredList(rs::ListId listId, rs::library::ListView const& view, LibrarySession& session);
+    void buildPageForStoredList(ao::ListId listId, ao::library::ListView const& view, LibrarySession& session);
     void bindTrackPage(TrackPageContext& ctx);
 
     Gtk::Stack& _stack;
     TrackColumnLayoutModel& _layoutModel;
     Callbacks _callbacks;
 
-    std::map<rs::ListId, TrackPageContext> _trackPages;
+    std::map<ao::ListId, TrackPageContext> _trackPages;
   };
 } // namespace app::ui

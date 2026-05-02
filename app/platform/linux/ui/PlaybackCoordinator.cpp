@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 RockStudio Contributors
 
 #include "platform/linux/ui/PlaybackCoordinator.h"
-#include <rs/utility/Log.h>
+#include <ao/utility/Log.h>
 
 #ifdef ALSA_FOUND
 #include "platform/linux/playback/AlsaProvider.h"
@@ -33,7 +33,7 @@ namespace app::ui
     }
   }
 
-  void PlaybackCoordinator::setPlaybackController(std::unique_ptr<rs::audio::Player> controller)
+  void PlaybackCoordinator::setPlaybackController(std::unique_ptr<ao::audio::Player> controller)
   {
     _player = std::move(controller);
     if (_player)
@@ -44,7 +44,7 @@ namespace app::ui
 
   void PlaybackCoordinator::setupPlayback()
   {
-    auto controller = std::make_unique<rs::audio::Player>(_dispatcher);
+    auto controller = std::make_unique<ao::audio::Player>(_dispatcher);
 
 #ifdef PIPEWIRE_FOUND
     controller->addProvider(std::make_unique<app::playback::PipeWireProvider>());
@@ -86,7 +86,7 @@ namespace app::ui
     {
       _lastPlaybackErrorMessage = snapshot.statusText;
 
-      if (!snapshot.statusText.empty() && snapshot.transport == rs::audio::Transport::Error)
+      if (!snapshot.statusText.empty() && snapshot.transport == ao::audio::Transport::Error)
       {
         static constexpr auto errorDisplayDuration = std::chrono::seconds{10};
         _host.showPlaybackMessage(snapshot.statusText, errorDisplayDuration);
@@ -125,7 +125,7 @@ namespace app::ui
 
     auto const snapshot = _player->snapshot();
 
-    if (snapshot.transport == rs::audio::Transport::Paused)
+    if (snapshot.transport == ao::audio::Transport::Paused)
     {
       _player->resume();
       return;
@@ -156,7 +156,7 @@ namespace app::ui
     {
       _player->stop();
       clearActivePlaybackSequence();
-      _lastPlaybackState = rs::audio::Transport::Idle;
+      _lastPlaybackState = ao::audio::Transport::Idle;
     }
   }
 
@@ -168,15 +168,15 @@ namespace app::ui
     }
   }
 
-  bool PlaybackCoordinator::startPlaybackFromVisiblePage(TrackViewPage const& page, rs::TrackId trackId)
+  bool PlaybackCoordinator::startPlaybackFromVisiblePage(TrackViewPage const& page, ao::TrackId trackId)
   {
     auto trackIds = page.getVisibleTrackIds();
     return startPlaybackSequence(std::move(trackIds), trackId, page.getListId());
   }
 
-  bool PlaybackCoordinator::startPlaybackSequence(std::vector<rs::TrackId> trackIds,
-                                                  rs::TrackId startTrackId,
-                                                  std::optional<rs::ListId> sourceListId)
+  bool PlaybackCoordinator::startPlaybackSequence(std::vector<ao::TrackId> trackIds,
+                                                  ao::TrackId startTrackId,
+                                                  std::optional<ao::ListId> sourceListId)
   {
     if (!_player)
     {
@@ -275,7 +275,7 @@ namespace app::ui
 
     if (_player)
     {
-      _lastPlaybackState = rs::audio::Transport::Idle;
+      _lastPlaybackState = ao::audio::Transport::Idle;
       _player->stop();
     }
   }

@@ -4,7 +4,7 @@
 #include "platform/linux/ui/TrackViewPage.h"
 #include "platform/linux/ui/LayoutConstants.h"
 #include "platform/linux/ui/TrackRowDataProvider.h"
-#include <rs/utility/ByteView.h>
+#include <ao/utility/ByteView.h>
 
 #include <glibmm/wrap.h>
 #include <gtk/gtk.h>
@@ -111,7 +111,7 @@ namespace app::ui
         return nullptr;
       }
 
-      auto* const object = Glib::wrap_auto(rs::utility::layout::asLegacyPtr<GObject>(item), false);
+      auto* const object = Glib::wrap_auto(ao::utility::layout::asLegacyPtr<GObject>(item), false);
       return dynamic_cast<TrackRow const*>(object);
     }
 
@@ -192,7 +192,7 @@ namespace app::ui
     }
   }
 
-  TrackViewPage::TrackViewPage(rs::ListId listId, TrackListAdapter& adapter, TrackColumnLayoutModel& columnLayoutModel)
+  TrackViewPage::TrackViewPage(ao::ListId listId, TrackListAdapter& adapter, TrackColumnLayoutModel& columnLayoutModel)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
     , _adapter{adapter}

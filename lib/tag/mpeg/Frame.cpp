@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace rs::tag::mpeg
+namespace ao::tag::mpeg
 {
   namespace
   {
@@ -306,4 +306,4 @@ namespace rs::tag::mpeg
 
     return info;
   }
-} // namespace rs::tag::mpeg
+} // namespace ao::tag::mpeg

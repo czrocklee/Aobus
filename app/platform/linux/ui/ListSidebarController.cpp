@@ -6,29 +6,29 @@
 #include "platform/linux/ui/ListRow.h"
 #include "platform/linux/ui/ListTreeNode.h"
 #include "platform/linux/ui/SmartListDialog.h"
+#include <ao/library/ListBuilder.h>
+#include <ao/utility/Log.h>
 #include <format>
 #include <limits>
-#include <rs/library/ListBuilder.h>
-#include <rs/utility/Log.h>
 
 namespace app::ui
 {
   namespace
   {
-    rs::ListId allTracksListId()
+    ao::ListId allTracksListId()
     {
-      return rs::ListId{std::numeric_limits<std::uint32_t>::max()};
+      return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
     }
 
-    rs::ListId rootParentId()
+    ao::ListId rootParentId()
     {
-      return rs::ListId{0};
+      return ao::ListId{0};
     }
 
     struct StoredListNode final
     {
-      rs::ListId id = rs::ListId{0};
-      rs::ListId parentId = rootParentId();
+      ao::ListId id = ao::ListId{0};
+      ao::ListId parentId = rootParentId();
       std::string name;
       bool isSmart = false;
       std::string localExpression;
@@ -91,14 +91,14 @@ namespace app::ui
     actionMap.add_action(_editListAction);
   }
 
-  void ListSidebarController::rebuildTree(LibrarySession& session, rs::lmdb::ReadTransaction& txn)
+  void ListSidebarController::rebuildTree(LibrarySession& session, ao::lmdb::ReadTransaction& txn)
   {
     _currentSession = &session;
 
     buildListTree(txn);
   }
 
-  void ListSidebarController::select(rs::ListId listId)
+  void ListSidebarController::select(ao::ListId listId)
   {
     selectSidebarList(listId);
   }
@@ -143,7 +143,7 @@ namespace app::ui
     }
   }
 
-  void ListSidebarController::openNewListDialog(rs::ListId parentListId, std::string initialExpression)
+  void ListSidebarController::openNewListDialog(ao::ListId parentListId, std::string initialExpression)
   {
     if (_currentSession == nullptr)
     {
@@ -151,7 +151,7 @@ namespace app::ui
     }
 
     // Determine the parent membership list
-    rs::model::TrackIdList* parentMembershipList = nullptr;
+    ao::model::TrackIdList* parentMembershipList = nullptr;
 
     if (parentListId == allTracksListId())
     {
@@ -190,7 +190,7 @@ namespace app::ui
       {
         if (responseId == Gtk::ResponseType::OK)
         {
-          if (auto const draft = dialog->draft(); draft.listId != rs::ListId{0})
+          if (auto const draft = dialog->draft(); draft.listId != ao::ListId{0})
           {
             updateList(draft);
           }
@@ -206,7 +206,7 @@ namespace app::ui
     dialog->present();
   }
 
-  void ListSidebarController::createSmartListFromExpression(rs::ListId parentListId, std::string expression)
+  void ListSidebarController::createSmartListFromExpression(ao::ListId parentListId, std::string expression)
   {
     openNewListDialog(parentListId, std::move(expression));
   }
@@ -237,7 +237,7 @@ namespace app::ui
     openNewListDialog(parentListId);
   }
 
-  bool ListSidebarController::listHasChildren(rs::ListId listId) const
+  bool ListSidebarController::listHasChildren(ao::ListId listId) const
   {
     auto it = _nodesById.find(listId);
 
@@ -401,7 +401,7 @@ namespace app::ui
     _listContextMenu.popup();
   }
 
-  void ListSidebarController::createList(rs::model::ListDraft const& draft)
+  void ListSidebarController::createList(ao::model::ListDraft const& draft)
   {
     if (_currentSession == nullptr)
     {
@@ -413,9 +413,9 @@ namespace app::ui
 
     // Build the list payload
     auto builder =
-      rs::library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
+      ao::library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
 
-    if (draft.kind == rs::model::ListKind::Smart)
+    if (draft.kind == ao::model::ListKind::Smart)
     {
       builder.filter(draft.expression);
     }
@@ -441,7 +441,7 @@ namespace app::ui
     }
   }
 
-  void ListSidebarController::selectSidebarList(rs::ListId listId)
+  void ListSidebarController::selectSidebarList(ao::ListId listId)
   {
     if (!_treeListModel)
     {
@@ -478,7 +478,7 @@ namespace app::ui
     }
   }
 
-  void ListSidebarController::updateList(rs::model::ListDraft const& draft)
+  void ListSidebarController::updateList(ao::model::ListDraft const& draft)
   {
     if (_currentSession == nullptr)
     {
@@ -489,9 +489,9 @@ namespace app::ui
     auto txn = _currentSession->musicLibrary->writeTransaction();
 
     auto builder =
-      rs::library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
+      ao::library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
 
-    if (draft.kind == rs::model::ListKind::Smart)
+    if (draft.kind == ao::model::ListKind::Smart)
     {
       builder.filter(draft.expression);
     }
@@ -562,7 +562,7 @@ namespace app::ui
     openEditListDialog(node->getListId());
   }
 
-  void ListSidebarController::openEditListDialog(rs::ListId listId)
+  void ListSidebarController::openEditListDialog(ao::ListId listId)
   {
     if (_currentSession == nullptr)
     {
@@ -579,7 +579,7 @@ namespace app::ui
     }
 
     // Determine the parent membership list for the preview
-    rs::model::TrackIdList* parentMembershipList = nullptr;
+    ao::model::TrackIdList* parentMembershipList = nullptr;
     auto const parentId = view->parentId();
 
     if (parentId == allTracksListId())
@@ -615,7 +615,7 @@ namespace app::ui
         {
           auto const draft = dialog->draft();
 
-          if (draft.listId != rs::ListId{0})
+          if (draft.listId != ao::ListId{0})
           {
             updateList(draft);
           }
@@ -689,7 +689,7 @@ namespace app::ui
     }
   }
 
-  void ListSidebarController::buildListTree(rs::lmdb::ReadTransaction& txn)
+  void ListSidebarController::buildListTree(ao::lmdb::ReadTransaction& txn)
   {
     // Clear existing tree store and lookup map
     _nodesById.clear();
@@ -698,7 +698,7 @@ namespace app::ui
     _listTreeStore = Gio::ListStore<ListTreeNode>::create();
 
     auto reader = _currentSession->musicLibrary->lists().reader(txn);
-    auto nodes = std::map<rs::ListId, StoredListNode>{};
+    auto nodes = std::map<ao::ListId, StoredListNode>{};
 
     for (auto const& [id, listView] : reader)
     {
@@ -713,7 +713,7 @@ namespace app::ui
     }
 
     // Build children map
-    auto children = std::map<rs::ListId, std::vector<rs::ListId>>{};
+    auto children = std::map<ao::ListId, std::vector<ao::ListId>>{};
 
     for (auto const& [id, node] : nodes)
     {

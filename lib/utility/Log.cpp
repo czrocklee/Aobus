@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/utility/Log.h>
+#include <ao/utility/Log.h>
 
-#include <rs/audio/DecoderFactory.h>
+#include <ao/audio/DecoderFactory.h>
 
 #include <spdlog/async.h>
 #include <spdlog/sinks/null_sink.h>
@@ -13,7 +13,7 @@
 #include <filesystem>
 #include <vector>
 
-namespace rs::log
+namespace ao::log
 {
   std::shared_ptr<spdlog::logger> Log::_appLogger = spdlog::null_logger_mt("app");
   std::shared_ptr<spdlog::logger> Log::_audioLogger = spdlog::null_logger_mt("audio");
@@ -61,7 +61,7 @@ namespace rs::log
 
     spdlog::set_default_logger(_appLogger);
 
-    rs::audio::initializeDecoders();
+    ao::audio::initializeDecoders();
 
     APP_LOG_INFO("Logging initialized. Log file: {}", logPath.string());
   }
@@ -71,4 +71,4 @@ namespace rs::log
     APP_LOG_INFO("Shutting down logging...");
     spdlog::shutdown();
   }
-} // namespace rs::log
+} // namespace ao::log

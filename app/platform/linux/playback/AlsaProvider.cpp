@@ -3,9 +3,9 @@
 
 #include "platform/linux/playback/AlsaProvider.h"
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
-#include <rs/utility/Log.h>
-#include <rs/utility/Raii.h>
-#include <rs/utility/ThreadUtils.h>
+#include <ao/utility/Log.h>
+#include <ao/utility/Raii.h>
+#include <ao/utility/ThreadUtils.h>
 
 #include <algorithm>
 #include <array>
@@ -26,9 +26,9 @@ namespace app::playback
   {
     constexpr int kUdevPollTimeoutMs = 500;
 
-    rs::audio::DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
+    ao::audio::DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
     {
-      auto caps = rs::audio::DeviceCapabilities{};
+      auto caps = ao::audio::DeviceCapabilities{};
       ::snd_pcm_t* tempPcm = nullptr;
       if (::snd_pcm_open(&tempPcm, deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK) < 0)
       {
@@ -80,21 +80,21 @@ namespace app::playback
       return caps;
     }
 
-    std::vector<rs::audio::Device> doAlsaEnumerate()
+    std::vector<ao::audio::Device> doAlsaEnumerate()
     {
-      auto devices = std::vector<rs::audio::Device>{};
+      auto devices = std::vector<ao::audio::Device>{};
       void** hints_raw = nullptr;
       if (::snd_device_name_hint(-1, "pcm", &hints_raw) < 0)
       {
         return devices;
       }
-      auto hints = rs::utility::makeUniquePtr<::snd_device_name_free_hint>(hints_raw);
+      auto hints = ao::utility::makeUniquePtr<::snd_device_name_free_hint>(hints_raw);
 
       for (void** hint = hints.get(); *hint != nullptr; ++hint)
       {
-        auto name = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "NAME"));
-        auto desc = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "DESC"));
-        auto ioid = rs::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "IOID"));
+        auto name = ao::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "NAME"));
+        auto desc = ao::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "DESC"));
+        auto ioid = ao::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "IOID"));
 
         if (ioid == nullptr || std::string_view{static_cast<char*>(ioid.get())} == "Output")
         {
@@ -111,7 +111,7 @@ namespace app::playback
                                .displayName = std::move(displayName),
                                .description = idStr,
                                .isDefault = false,
-                               .backendKind = rs::audio::BackendKind::AlsaExclusive,
+                               .backendKind = ao::audio::BackendKind::AlsaExclusive,
                                .capabilities = queryAlsaDeviceCapabilities(idStr)});
           }
         }
@@ -123,7 +123,7 @@ namespace app::playback
   struct AlsaProvider::Impl
   {
     mutable std::mutex mutex;
-    std::vector<rs::audio::Device> cachedDevices;
+    std::vector<ao::audio::Device> cachedDevices;
     std::jthread monitorThread;
 
     struct DeviceSub
@@ -140,20 +140,20 @@ namespace app::playback
       monitorThread = std::jthread(
         [this](std::stop_token const& st)
         {
-          rs::setCurrentThreadName("AlsaDeviceMonitor");
+          ao::setCurrentThreadName("AlsaDeviceMonitor");
           monitorLoop(st);
         });
     }
 
     void monitorLoop(std::stop_token const& stopToken)
     {
-      auto udev = rs::utility::makeUniquePtr<::udev_unref>(::udev_new());
+      auto udev = ao::utility::makeUniquePtr<::udev_unref>(::udev_new());
       if (!udev)
       {
         return;
       }
       auto monitor =
-        rs::utility::makeUniquePtr<::udev_monitor_unref>(::udev_monitor_new_from_netlink(udev.get(), "udev"));
+        ao::utility::makeUniquePtr<::udev_monitor_unref>(::udev_monitor_new_from_netlink(udev.get(), "udev"));
       if (!monitor)
       {
         return;
@@ -170,7 +170,7 @@ namespace app::playback
         if (::poll(fds.data(), static_cast<nfds_t>(fds.size()), kUdevPollTimeoutMs) > 0 &&
             (fds[0].revents & POLLIN) != 0)
         {
-          auto dev = rs::utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitor.get()));
+          auto dev = ao::utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitor.get()));
           if (dev)
           {
             auto newDevices = doAlsaEnumerate();
@@ -199,7 +199,7 @@ namespace app::playback
   }
   AlsaProvider::~AlsaProvider() = default;
 
-  rs::audio::Subscription AlsaProvider::subscribeDevices(OnDevicesChangedCallback callback)
+  ao::audio::Subscription AlsaProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
     auto const id = _impl->nextSubId++;
     {
@@ -211,7 +211,7 @@ namespace app::playback
       }
     }
 
-    return rs::audio::Subscription{[this, id]()
+    return ao::audio::Subscription{[this, id]()
                                    {
                                      std::lock_guard lock(_impl->mutex);
                                      auto const it = std::ranges::find(_impl->deviceSubs, id, &Impl::DeviceSub::id);
@@ -222,25 +222,25 @@ namespace app::playback
                                    }};
   }
 
-  std::unique_ptr<rs::audio::IBackend> AlsaProvider::createBackend(rs::audio::Device const& device)
+  std::unique_ptr<ao::audio::IBackend> AlsaProvider::createBackend(ao::audio::Device const& device)
   {
     return std::make_unique<AlsaExclusiveBackend>(device);
   }
 
-  rs::audio::Subscription AlsaProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
+  ao::audio::Subscription AlsaProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
   {
     if (callback)
     {
-      rs::audio::flow::Graph graph;
+      ao::audio::flow::Graph graph;
       graph.nodes.push_back(
-        {.id = "alsa-stream", .type = rs::audio::flow::NodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
+        {.id = "alsa-stream", .type = ao::audio::flow::NodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
       graph.nodes.push_back({.id = "alsa-sink",
-                             .type = rs::audio::flow::NodeType::Sink,
+                             .type = ao::audio::flow::NodeType::Sink,
                              .name = std::string(routeAnchor),
                              .objectPath = std::string(routeAnchor)});
       graph.connections.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});
       callback(graph);
     }
-    return rs::audio::Subscription{};
+    return ao::audio::Subscription{};
   }
 } // namespace app::playback

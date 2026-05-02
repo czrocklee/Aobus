@@ -31,7 +31,7 @@ target_sources(app_linux PRIVATE
 
     platform/linux/services/PlaylistExporter.cpp
 )
-target_link_libraries(app_linux PRIVATE rs rs_model rs_audio PkgGTKMM glibmm-2.68 Boost::headers)
+target_link_libraries(app_linux PRIVATE ao ao_model ao_audio PkgGTKMM glibmm-2.68 Boost::headers)
 target_include_directories(app_linux PRIVATE "${CMAKE_SOURCE_DIR}/app")
 
 if(PIPEWIRE_FOUND)
@@ -56,16 +56,18 @@ if(ALSA_FOUND)
   target_link_libraries(app_linux PRIVATE PkgALSA PkgUDEV)
 endif()
 
-rockstudio_apply_clang_tidy(app_linux STRICT)
+aobus_apply_clang_tidy(app_linux STRICT)
 
-# RockStudio executable (links app_linux, no direct source compilation)
-add_executable(RockStudio platform/linux/main.cpp)
-target_link_libraries(RockStudio PRIVATE app_linux rs PkgGTKMM glibmm-2.68)
-target_include_directories(RockStudio PRIVATE "${CMAKE_SOURCE_DIR}/app")
+# Aobus executable (links app_linux, no direct source compilation)
+add_executable(Aobus platform/linux/main.cpp)
+target_link_libraries(Aobus PRIVATE app_linux ao PkgGTKMM glibmm-2.68)
+target_include_directories(Aobus PRIVATE "${CMAKE_SOURCE_DIR}/app")
 
-# Configure ASan leak detection to use suppression file for third-party libraries (RockStudio app only)
+# Configure ASan leak detection to use suppression file for third-party libraries (Aobus app only)
 if(CMAKE_CXX_FLAGS MATCHES "fsanitize")
   set(ASAN_SUPPRESSIONS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/.asan_suppressions")
   set(ASAN_ENV "LSAN_OPTIONS=suppressions=${ASAN_SUPPRESSIONS_FILE}")
-  set_target_properties(RockStudio PROPERTIES ENVIRONMENT "${ASAN_ENV}")
+  set_target_properties(Aobus PROPERTIES ENVIRONMENT "${ASAN_ENV}")
 endif()
+
+add_subdirectory(cli)

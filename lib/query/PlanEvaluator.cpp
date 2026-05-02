@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/query/PlanEvaluator.h>
+#include <ao/query/PlanEvaluator.h>
 
 #include <algorithm>
 #include <cstring>
@@ -9,7 +9,7 @@
 #include <iostream>
 #include <ranges>
 
-namespace rs::query
+namespace ao::query
 {
   // Number of reserved registers for intermediate values
   constexpr std::size_t kReservedRegisters = 16;
@@ -26,7 +26,7 @@ namespace rs::query
       return plan.accessProfile != AccessProfile::HotOnly;
     }
 
-    bool hasRequiredTrackData(ExecutionPlan const& plan, rs::library::TrackView const& track)
+    bool hasRequiredTrackData(ExecutionPlan const& plan, ao::library::TrackView const& track)
     {
       if (requiresHotData(plan) && !track.isHotValid())
       {
@@ -105,7 +105,7 @@ namespace rs::query
       return plan->stringConstants[idx];
     }
 
-    std::string_view loadDictionaryFieldValue(rs::library::TrackView const& track,
+    std::string_view loadDictionaryFieldValue(ao::library::TrackView const& track,
                                               Field field,
                                               ExecutionPlan const* plan)
     {
@@ -117,7 +117,7 @@ namespace rs::query
         return {};
       }
 
-      auto dictionaryId = rs::DictionaryId{0};
+      auto dictionaryId = ao::DictionaryId{0};
 
       switch (field)
       {
@@ -130,7 +130,7 @@ namespace rs::query
         default: return {};
       }
 
-      if (dictionaryId == rs::DictionaryId{0})
+      if (dictionaryId == ao::DictionaryId{0})
       {
         return {};
       }
@@ -138,7 +138,7 @@ namespace rs::query
       return plan->dictionary->get(dictionaryId);
     }
 
-    std::string_view loadStringFieldValue(rs::library::TrackView const& track,
+    std::string_view loadStringFieldValue(ao::library::TrackView const& track,
                                           Field field,
                                           Instruction const* instr,
                                           ExecutionPlan const* plan = nullptr)
@@ -151,7 +151,7 @@ namespace rs::query
 
           if (instr != nullptr && instr->constValue > 0)
           {
-            auto dictId = rs::DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
+            auto dictId = ao::DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
             return track.custom().get(dictId).value_or("");
           }
 
@@ -169,7 +169,7 @@ namespace rs::query
     }
 
     // Free function to load field value
-    std::int64_t loadFieldValue(rs::library::TrackView const& track, Field field)
+    std::int64_t loadFieldValue(ao::library::TrackView const& track, Field field)
     {
       switch (field)
       {
@@ -211,7 +211,7 @@ namespace rs::query
     // Execute comparison operation (helper for Ne, Lt, Le, Gt, Ge)
     template<typename Op>
     void executeComparison(std::vector<std::int64_t>& registers,
-                           rs::library::TrackView const& track,
+                           ao::library::TrackView const& track,
                            ExecutionPlan const* plan,
                            Instruction const& instr,
                            Op&& op)
@@ -239,7 +239,7 @@ namespace rs::query
 
     // Execute equality comparison (special case for tag lookups)
     void executeEq(std::vector<std::int64_t>& registers,
-                   rs::library::TrackView const& track,
+                   ao::library::TrackView const& track,
                    ExecutionPlan const* plan,
                    Instruction const& instr,
                    std::vector<Instruction> const& instructions)
@@ -249,7 +249,7 @@ namespace rs::query
 
       if (isTagComparison)
       {
-        auto tagIdToMatch = rs::DictionaryId{static_cast<std::uint32_t>(registers[instr.operand])};
+        auto tagIdToMatch = ao::DictionaryId{static_cast<std::uint32_t>(registers[instr.operand])};
         auto matches = track.tags().has(tagIdToMatch);
         registers[instr.operand - 1] = matches ? 1 : 0;
       }
@@ -274,7 +274,7 @@ namespace rs::query
 
     // Execute LIKE comparison (substring matching for string fields)
     void executeLike(std::vector<std::int64_t>& registers,
-                     rs::library::TrackView const& track,
+                     ao::library::TrackView const& track,
                      ExecutionPlan const* plan,
                      Instruction const& instr,
                      std::vector<Instruction> const& instructions)
@@ -301,7 +301,7 @@ namespace rs::query
     }
   }
 
-  bool PlanEvaluator::matches(ExecutionPlan const& plan, rs::library::TrackView const& track) const
+  bool PlanEvaluator::matches(ExecutionPlan const& plan, ao::library::TrackView const& track) const
   {
     // Fast path: empty query matches all
 
@@ -330,7 +330,7 @@ namespace rs::query
   }
 
   // NOLINTNEXTLINE(readability-function-size,readability-function-cognitive-complexity)
-  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, rs::library::TrackView const& track) const
+  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, ao::library::TrackView const& track) const
   {
     if (plan.matchesAll)
     {
@@ -409,4 +409,4 @@ namespace rs::query
 
     return _registers.empty() ? true : (_registers[0] != 0);
   }
-} // namespace rs::query
+} // namespace ao::query

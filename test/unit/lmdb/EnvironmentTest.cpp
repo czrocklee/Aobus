@@ -6,15 +6,15 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
 #include <lmdb.h>
-#include <rs/lmdb/Database.h>
-#include <rs/lmdb/Environment.h>
-#include <rs/lmdb/Transaction.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <string_view>
 
-using namespace rs::lmdb;
+using namespace ao::lmdb;
 
 // ============================================================================
 // Environment Tests

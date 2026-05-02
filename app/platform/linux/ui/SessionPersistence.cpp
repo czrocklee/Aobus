@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 RockStudio Contributors
 
 #include "platform/linux/ui/SessionPersistence.h"
-#include <rs/utility/Log.h>
+#include <ao/utility/Log.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -21,7 +21,7 @@ namespace app::ui
       return ec ? path.lexically_normal().string() : canonicalPath.string();
     }
 
-    TrackColumnLayout trackColumnLayoutFromState(rs::library::TrackViewState const& state)
+    TrackColumnLayout trackColumnLayoutFromState(ao::library::TrackViewState const& state)
     {
       auto layout = defaultTrackColumnLayout();
       auto ordered = std::vector<TrackColumnState>{};
@@ -91,10 +91,10 @@ namespace app::ui
       return normalizeTrackColumnLayout(layout);
     }
 
-    rs::library::TrackViewState trackViewStateFromLayout(TrackColumnLayout const& layout)
+    ao::library::TrackViewState trackViewStateFromLayout(TrackColumnLayout const& layout)
     {
       auto normalized = normalizeTrackColumnLayout(layout);
-      auto state = rs::library::TrackViewState{};
+      auto state = ao::library::TrackViewState{};
 
       for (auto const& entry : normalized.columns)
       {
@@ -127,12 +127,12 @@ namespace app::ui
                                 Gtk::Paned& paned,
                                 TrackColumnLayoutModel& trackColumnLayoutModel,
                                 std::string& outLibraryPath,
-                                rs::audio::BackendKind& outBackendKind,
+                                ao::audio::BackendKind& outBackendKind,
                                 std::string& outDeviceId)
   {
     try
     {
-      _appConfig = rs::library::AppConfig::load();
+      _appConfig = ao::library::AppConfig::load();
       trackColumnLayoutModel.setLayout(trackColumnLayoutFromState(_appConfig.trackViewState()));
 
       auto const& windowState = _appConfig.windowState();
@@ -152,8 +152,8 @@ namespace app::ui
 
       if (!sessionState.lastBackend.empty())
       {
-        auto const kind = rs::audio::backendKindFromId(sessionState.lastBackend);
-        if (kind != rs::audio::BackendKind::None)
+        auto const kind = ao::audio::backendKindFromId(sessionState.lastBackend);
+        if (kind != ao::audio::BackendKind::None)
         {
           outBackendKind = kind;
           outDeviceId = sessionState.lastOutputDeviceId;
@@ -218,10 +218,10 @@ namespace app::ui
     }
   }
 
-  void SessionPersistence::updateAudioBackend(rs::audio::BackendKind kind, std::string const& deviceId)
+  void SessionPersistence::updateAudioBackend(ao::audio::BackendKind kind, std::string const& deviceId)
   {
     auto session = _appConfig.sessionState();
-    session.lastBackend = std::string(rs::audio::backendKindToId(kind));
+    session.lastBackend = std::string(ao::audio::backendKindToId(kind));
     session.lastOutputDeviceId = deviceId;
     _appConfig.setSessionState(session);
     _appConfig.save();

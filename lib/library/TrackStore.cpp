@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/TrackStore.h>
+#include <ao/library/TrackStore.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
-namespace rs::library
+namespace ao::library
 {
   // TrackStore implementation
   TrackStore::TrackStore(lmdb::Database hotDb, lmdb::Database coldDb)
@@ -213,4 +213,4 @@ namespace rs::library
             .transform([&hotBuffer](auto const& coldBuffer) { return TrackView{hotBuffer, coldBuffer}; });
         });
   }
-} // namespace rs::library
+} // namespace ao::library

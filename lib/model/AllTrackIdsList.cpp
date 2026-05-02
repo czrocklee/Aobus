@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/model/AllTrackIdsList.h>
+#include <ao/model/AllTrackIdsList.h>
 
 #include <algorithm>
 #include <ranges>
 
-namespace rs::model
+namespace ao::model
 {
-  AllTrackIdsList::AllTrackIdsList(rs::library::TrackStore& store)
+  AllTrackIdsList::AllTrackIdsList(ao::library::TrackStore& store)
     : _store{store}
   {
   }
 
-  void AllTrackIdsList::reloadFromStore(rs::lmdb::ReadTransaction& txn)
+  void AllTrackIdsList::reloadFromStore(ao::lmdb::ReadTransaction& txn)
   {
     auto reader = _store.reader(txn);
     std::vector<TrackId> ids;
@@ -66,4 +66,4 @@ namespace rs::model
 
     return std::nullopt;
   }
-} // namespace rs::model
+} // namespace ao::model

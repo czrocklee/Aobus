@@ -8,7 +8,7 @@
 
 namespace app::ui
 {
-  TagPopover::TagPopover(rs::library::MusicLibrary& musicLibrary, std::vector<TrackId> selectedTrackIds)
+  TagPopover::TagPopover(ao::library::MusicLibrary& musicLibrary, std::vector<TrackId> selectedTrackIds)
     : _musicLibrary{musicLibrary}, _selectedTrackIds{std::move(selectedTrackIds)}
   {
     set_autohide(true);
@@ -110,7 +110,7 @@ namespace app::ui
     // First pass: count tags on selected tracks
     for (auto const trackId : _selectedTrackIds)
     {
-      auto const view = reader.get(trackId, rs::library::TrackStore::Reader::LoadMode::Hot);
+      auto const view = reader.get(trackId, ao::library::TrackStore::Reader::LoadMode::Hot);
 
       if (!view)
       {
@@ -144,8 +144,8 @@ namespace app::ui
 
     // Second pass: count all tags in library for frequency
 
-    for (auto it = reader.begin(rs::library::TrackStore::Reader::LoadMode::Hot),
-              end = reader.end(rs::library::TrackStore::Reader::LoadMode::Hot);
+    for (auto it = reader.begin(ao::library::TrackStore::Reader::LoadMode::Hot),
+              end = reader.end(ao::library::TrackStore::Reader::LoadMode::Hot);
          it != end;
          ++it)
     {

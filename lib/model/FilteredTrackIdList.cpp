@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/model/FilteredTrackIdList.h>
-#include <rs/utility/Log.h>
+#include <ao/model/FilteredTrackIdList.h>
+#include <ao/utility/Log.h>
 
+#include <ao/model/SmartListEngine.h>
+#include <ao/model/TrackIdList.h>
 #include <iostream>
-#include <rs/model/SmartListEngine.h>
-#include <rs/model/TrackIdList.h>
 
-#include <rs/query/Parser.h>
+#include <ao/query/Parser.h>
 
 #include <algorithm>
 
-namespace rs::model
+namespace ao::model
 {
-  FilteredTrackIdList::FilteredTrackIdList(TrackIdList& source, rs::library::MusicLibrary& ml, SmartListEngine& engine)
+  FilteredTrackIdList::FilteredTrackIdList(TrackIdList& source, ao::library::MusicLibrary& ml, SmartListEngine& engine)
     : _source{source}, _ml{ml}, _engine{&engine}
   {
     _engine->registerList(_source, *this);
@@ -68,9 +68,9 @@ namespace rs::model
 
     try
     {
-      auto parsed = _stagedExpression.empty() ? rs::query::parse("true") : rs::query::parse(_stagedExpression);
-      auto compiler = rs::query::QueryCompiler{&_ml.dictionary()};
-      _stagedPlan = std::make_unique<rs::query::ExecutionPlan>(compiler.compile(parsed));
+      auto parsed = _stagedExpression.empty() ? ao::query::parse("true") : ao::query::parse(_stagedExpression);
+      auto compiler = ao::query::QueryCompiler{&_ml.dictionary()};
+      _stagedPlan = std::make_unique<ao::query::ExecutionPlan>(compiler.compile(parsed));
       _stagedHasError = false;
       _stagedErrorMessage.clear();
     }
@@ -98,4 +98,4 @@ namespace rs::model
     _plan = std::move(_stagedPlan);
     _dirty = false;
   }
-} // namespace rs::model
+} // namespace ao::model

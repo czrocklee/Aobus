@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/tag/mp4/File.h>
+#include <ao/tag/mp4/File.h>
 
 #include "../Decoder.h"
-#include <rs/media/mp4/Atom.h>
-#include <rs/media/mp4/AtomLayout.h>
-#include <rs/utility/ByteView.h>
+#include <ao/media/mp4/Atom.h>
+#include <ao/media/mp4/AtomLayout.h>
+#include <ao/utility/ByteView.h>
 
 #include <array>
 #include <span>
@@ -14,16 +14,16 @@
 #include <string_view>
 #include <vector>
 
-namespace rs::tag::mp4
+namespace ao::tag::mp4
 {
-  using namespace rs::media::mp4;
+  using namespace ao::media::mp4;
 
   namespace
   {
     using TextSetter =
-      rs::library::TrackBuilder::MetadataBuilder& (rs::library::TrackBuilder::MetadataBuilder::*)(std::string_view);
+      ao::library::TrackBuilder::MetadataBuilder& (ao::library::TrackBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter =
-      rs::library::TrackBuilder::MetadataBuilder& (rs::library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+      ao::library::TrackBuilder::MetadataBuilder& (ao::library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
     std::span<std::byte const> atomData(AtomView const& view)
     {
@@ -39,26 +39,26 @@ namespace rs::tag::mp4
       return utility::bytes::stringView(atomData(view));
     }
 
-    void handleTrackNumbers(rs::library::TrackBuilder& builder, AtomView const& view)
+    void handleTrackNumbers(ao::library::TrackBuilder& builder, AtomView const& view)
     {
       auto const& layout = view.layout<TrknAtomLayout>();
       builder.metadata().trackNumber(layout.trackNumber.value()).totalTracks(layout.totalTracks.value());
     }
 
-    void handleDiscNumbers(rs::library::TrackBuilder& builder, AtomView const& view)
+    void handleDiscNumbers(ao::library::TrackBuilder& builder, AtomView const& view)
     {
       auto const& layout = view.layout<DiskAtomLayout>();
       builder.metadata().discNumber(layout.discNumber.value()).totalDiscs(layout.totalDiscs.value());
     }
 
     template<TextSetter Setter>
-    void handleText(rs::library::TrackBuilder& builder, AtomView const& view)
+    void handleText(ao::library::TrackBuilder& builder, AtomView const& view)
     {
       (builder.metadata().*Setter)(atomTextView(view));
     }
 
     template<NumberSetter Setter>
-    void handleNumber(rs::library::TrackBuilder& builder, AtomView const& view)
+    void handleNumber(ao::library::TrackBuilder& builder, AtomView const& view)
     {
       if (auto year = decodeUint16(atomTextView(view)); year)
       {
@@ -66,12 +66,12 @@ namespace rs::tag::mp4
       }
     }
 
-    void handleCoverArt(rs::library::TrackBuilder& builder, AtomView const& view)
+    void handleCoverArt(ao::library::TrackBuilder& builder, AtomView const& view)
     {
       builder.metadata().coverArtData(atomData(view));
     }
 
-    using AtomHandler = void (*)(rs::library::TrackBuilder&, AtomView const&);
+    using AtomHandler = void (*)(ao::library::TrackBuilder&, AtomView const&);
 
 #include "tag/mp4/AtomDispatch.h"
 
@@ -102,13 +102,13 @@ namespace rs::tag::mp4
     };
 
     // Helper to extract audio properties from mdhd and stsd
-    void extractAudioProperties(rs::library::TrackBuilder& builder, RootAtom const& root, std::size_t fileSize)
+    void extractAudioProperties(ao::library::TrackBuilder& builder, RootAtom const& root, std::size_t fileSize)
     {
       // Get mdhd for sample rate and duration
 
       if (auto const* const mdhdNode = root.find(kMdhdPath); mdhdNode != nullptr)
       {
-        auto const& view = rs::utility::unsafeDowncast<AtomView const>(*mdhdNode);
+        auto const& view = ao::utility::unsafeDowncast<AtomView const>(*mdhdNode);
         auto const& layout = view.layout<MdhdAtomLayout>();
         auto const timescale = layout.timescale.value();
         auto const duration = layout.duration.value();
@@ -138,7 +138,7 @@ namespace rs::tag::mp4
 
       if (auto const* const stsdNode = root.find(kStsdPath); stsdNode != nullptr)
       {
-        auto const& view = rs::utility::unsafeDowncast<AtomView const>(*stsdNode);
+        auto const& view = ao::utility::unsafeDowncast<AtomView const>(*stsdNode);
 
         // stsd contains a version byte (1), flags (3), and then entry count (4)
         // Entries start after 8 bytes of stsd content
@@ -164,21 +164,21 @@ namespace rs::tag::mp4
     }
   } // namespace
 
-  rs::library::TrackBuilder File::loadTrack() const
+  ao::library::TrackBuilder File::loadTrack() const
   {
     RootAtom root =
-      rs::media::mp4::fromBuffer(utility::bytes::view(_mappedRegion.get_address(), _mappedRegion.get_size()));
+      ao::media::mp4::fromBuffer(utility::bytes::view(_mappedRegion.get_address(), _mappedRegion.get_size()));
     Atom const* const ilstNode = root.find(kIlstPath);
 
     clearOwnedStrings();
-    auto builder = rs::library::TrackBuilder::createNew();
+    auto builder = ao::library::TrackBuilder::createNew();
 
     if (ilstNode != nullptr)
     {
       ilstNode->visitChildren(
         [&](Atom const& atom)
         {
-          auto const& view = rs::utility::unsafeDowncast<AtomView const>(atom);
+          auto const& view = ao::utility::unsafeDowncast<AtomView const>(atom);
           std::string_view const type = atom.type();
 
           if (type == "----")
@@ -202,4 +202,4 @@ namespace rs::tag::mp4
 
     return builder;
   }
-} // namespace rs::tag::mp4
+} // namespace ao::tag::mp4

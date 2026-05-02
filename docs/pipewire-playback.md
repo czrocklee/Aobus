@@ -4,7 +4,7 @@ Date: 2026-04-27
 
 ## Goal
 
-Document how PipeWire playback works in RockStudio, how PipeWire exclusive mode is requested through the stream API, and which pitfalls have already caused regressions in this codebase.
+Document how PipeWire playback works in Aobus, how PipeWire exclusive mode is requested through the stream API, and which pitfalls have already caused regressions in this codebase.
 
 This note is about the current Linux playback backend in:
 
@@ -32,14 +32,14 @@ For normal application playback, the app creates a `pw_stream`, advertises the a
 
 ## Shared Playback vs Exclusive Playback
 
-RockStudio exposes two PipeWire modes:
+Aobus exposes two PipeWire modes:
 
 - Shared mode: a normal playback stream that joins the regular graph and can be mixed with other clients.
 - Exclusive mode: a playback stream that targets a specific sink node and requests exclusive access to the resources behind that target.
 
 Exclusive mode is still PipeWire playback. It is not the same thing as bypassing PipeWire and talking to ALSA directly. The backend still uses `pw_stream`; it just uses different target and stream properties.
 
-## RockStudio Architecture
+## Aobus Architecture
 
 The current backend is split into two jobs.
 
@@ -57,7 +57,7 @@ Responsibilities:
 
 Important implementation detail:
 
-- RockStudio currently uses `object.serial` as the runtime device ID exposed to the playback controller for PipeWire devices.
+- Aobus currently uses `object.serial` as the runtime device ID exposed to the playback controller for PipeWire devices.
 
 ### 2. Playback
 
@@ -71,7 +71,7 @@ Responsibilities:
 - connect the stream with `pw_stream_connect()`
 - push PCM in the `process` callback
 
-## Current RockStudio Flow
+## Current Aobus Flow
 
 ```mermaid
 flowchart TD
@@ -88,14 +88,14 @@ Runtime sequence:
 
 1. `PlaybackController` asks discovery providers for available devices.
 2. `PipeWireMonitor` enumerates sink nodes from the registry.
-3. RockStudio builds `AudioDevice` entries from those nodes.
+3. Aobus builds `AudioDevice` entries from those nodes.
 4. When the user selects a PipeWire output, the controller creates a `PipeWireBackend` with the chosen device ID.
 5. `PipeWireBackend::open()` creates a `pw_stream`, sets stream properties, builds a format pod, and calls `pw_stream_connect()`.
 6. Once PipeWire schedules the stream, the `process` callback dequeues a buffer, copies PCM into it, and requeues the buffer.
 
 ## The Relevant PipeWire Stream API
 
-For playback, RockStudio uses a `PW_DIRECTION_OUTPUT` stream.
+For playback, Aobus uses a `PW_DIRECTION_OUTPUT` stream.
 
 High-level sequence:
 
@@ -119,7 +119,7 @@ The most important callbacks for this backend are:
 
 ## How Shared Mode Works
 
-In shared mode, RockStudio:
+In shared mode, Aobus:
 
 - creates a playback stream
 - sets the usual media properties (`media.type`, `media.category`, app name, node name)
@@ -137,11 +137,11 @@ This is the normal desktop-audio path.
 
 ## How Exclusive Mode Works
 
-In RockStudio, exclusive mode adds three important constraints.
+In Aobus, exclusive mode adds three important constraints.
 
 ### 1. It must target a specific sink
 
-Exclusive mode only makes sense when the stream targets a concrete sink node. RockStudio therefore stores the selected PipeWire device identity and sets:
+Exclusive mode only makes sense when the stream targets a concrete sink node. Aobus therefore stores the selected PipeWire device identity and sets:
 
 - `PW_KEY_TARGET_OBJECT = <selected target>`
 
@@ -154,7 +154,7 @@ for `target.object`.
 
 ### 2. It requests exclusive access
 
-RockStudio sets:
+Aobus sets:
 
 - `PW_KEY_NODE_EXCLUSIVE = true`
 
@@ -180,7 +180,7 @@ Exclusive mode is therefore stricter than shared mode, but not lower-level than 
 
 ## Why `pw_stream` Process Callbacks Matter
 
-RockStudio only produces audio when PipeWire calls `process`.
+Aobus only produces audio when PipeWire calls `process`.
 
 That means all of the following can happen without an explicit backend error:
 
@@ -195,7 +195,7 @@ This is the key reason that "connected without error" does not mean "playback is
 
 ## Format Negotiation Notes
 
-RockStudio currently builds a raw-audio format object with `SPA_PARAM_EnumFormat` and connects with `PW_STREAM_FLAG_NO_CONVERT` in exclusive mode.
+Aobus currently builds a raw-audio format object with `SPA_PARAM_EnumFormat` and connects with `PW_STREAM_FLAG_NO_CONVERT` in exclusive mode.
 
 Important consequences:
 
@@ -212,14 +212,14 @@ Practical note:
 
 Using the wrong 24-bit representation can prevent the graph from negotiating the intended path.
 
-## Current RockStudio-Specific Rules
+## Current Aobus-Specific Rules
 
 The current implementation should be treated as having these invariants.
 
 ### Device identity
 
 - PipeWire device IDs exposed by discovery must use the same identity representation that playback later feeds back into `target.object`.
-- RockStudio currently uses `object.serial` for that runtime ID.
+- Aobus currently uses `object.serial` for that runtime ID.
 
 ### System default entry
 
@@ -249,7 +249,7 @@ Rule:
 
 Recommendation:
 
-- keep one canonical runtime identity for PipeWire targets inside RockStudio
+- keep one canonical runtime identity for PipeWire targets inside Aobus
 - if UI labels need `node.name`, keep that separate from the actual device ID
 
 ### 2. `node.passive` can create a silent non-running stream

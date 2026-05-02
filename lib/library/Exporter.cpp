@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/Exporter.h>
+#include <ao/library/Exporter.h>
 
-#include <rs/Exception.h>
-#include <rs/library/DictionaryStore.h>
-#include <rs/library/ListStore.h>
-#include <rs/library/ResourceStore.h>
-#include <rs/library/TrackStore.h>
+#include <ao/Exception.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/TrackStore.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -15,7 +15,7 @@
 #include <map>
 #include <unordered_map>
 
-namespace rs::library
+namespace ao::library
 {
   namespace
   {
@@ -35,22 +35,22 @@ namespace rs::library
       auto const metadata = view.metadata();
       out << YAML::Key << "title" << YAML::Value << std::string(metadata.title());
 
-      if (auto const artistId = metadata.artistId(); artistId != rs::DictionaryId{0})
+      if (auto const artistId = metadata.artistId(); artistId != ao::DictionaryId{0})
       {
         out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
       }
 
-      if (auto const albumId = metadata.albumId(); albumId != rs::DictionaryId{0})
+      if (auto const albumId = metadata.albumId(); albumId != ao::DictionaryId{0})
       {
         out << YAML::Key << "album" << YAML::Value << std::string(dict.get(albumId));
       }
 
-      if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != rs::DictionaryId{0})
+      if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != ao::DictionaryId{0})
       {
         out << YAML::Key << "albumArtist" << YAML::Value << std::string(dict.get(albumArtistId));
       }
 
-      if (auto const genreId = metadata.genreId(); genreId != rs::DictionaryId{0})
+      if (auto const genreId = metadata.genreId(); genreId != ao::DictionaryId{0})
       {
         out << YAML::Key << "genre" << YAML::Value << std::string(dict.get(genreId));
       }
@@ -136,7 +136,7 @@ namespace rs::library
 
     if (!ofs)
     {
-      RS_THROW_FORMAT(rs::Exception, "Failed to open '{}' for writing", path.string());
+      AO_THROW_FORMAT(ao::Exception, "Failed to open '{}' for writing", path.string());
     }
 
     auto out = YAML::Emitter{ofs};
@@ -155,11 +155,11 @@ namespace rs::library
 
     if (!out.good())
     {
-      RS_THROW_FORMAT(rs::Exception, "YAML emitter error while writing '{}': {}", path.string(), out.GetLastError());
+      AO_THROW_FORMAT(ao::Exception, "YAML emitter error while writing '{}': {}", path.string(), out.GetLastError());
     }
   }
 
-  void Exporter::exportTracks(YAML::Emitter& out, rs::lmdb::ReadTransaction& txn, ExportMode mode)
+  void Exporter::exportTracks(YAML::Emitter& out, ao::lmdb::ReadTransaction& txn, ExportMode mode)
   {
     auto trackReader = _ml.tracks().reader(txn);
     out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
@@ -193,7 +193,7 @@ namespace rs::library
     out << YAML::EndMap;
   }
 
-  void Exporter::exportLists(YAML::Emitter& out, rs::lmdb::ReadTransaction& txn)
+  void Exporter::exportLists(YAML::Emitter& out, ao::lmdb::ReadTransaction& txn)
   {
     out << YAML::Key << "lists" << YAML::Value << YAML::BeginSeq;
     auto listReader = _ml.lists().reader(txn);
@@ -232,4 +232,4 @@ namespace rs::library
     }
     out << YAML::EndSeq;
   }
-} // namespace rs::library
+} // namespace ao::library

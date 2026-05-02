@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/media/mp4/Atom.h>
+#include <ao/media/mp4/Atom.h>
 
 #include <cassert>
 #include <iostream>
 #include <map>
 #include <span>
 
-namespace rs::media::mp4
+namespace ao::media::mp4
 {
   Atom const* Atom::find(std::span<std::string_view const> path) const
   {
@@ -94,4 +94,4 @@ namespace rs::media::mp4
     parseAtoms(root, data);
     return root;
   }
-} // namespace rs::media::mp4
+} // namespace ao::media::mp4

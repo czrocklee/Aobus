@@ -1,0 +1,54 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 RockStudio Contributors
+
+#pragma once
+
+#include <ao/model/TrackIdList.h>
+
+#include <vector>
+
+namespace ao::library
+{
+  class ListView;
+}
+
+namespace ao::model
+{
+  /**
+   * ManualTrackIdList - A TrackIdList that holds a manually curated set of tracks.
+   *
+   * It also tracks a source TrackIdList to ensure its members still exist
+   * and are visible in that source.
+   */
+  class ManualTrackIdList final
+    : public TrackIdList
+    , public TrackIdListObserver
+  {
+  public:
+    explicit ManualTrackIdList(ao::library::ListView const& view, TrackIdList* source = nullptr);
+    explicit ManualTrackIdList();
+    ~ManualTrackIdList() override;
+
+    void reloadFromListView(ao::library::ListView const& view);
+
+    // TrackIdList interface
+    std::size_t size() const override { return _trackIds.size(); }
+    TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
+    std::optional<std::size_t> indexOf(TrackId id) const override;
+
+    // TrackIdListObserver interface
+    void onReset() override;
+    void onInserted(TrackId id, std::size_t index) override;
+    void onUpdated(TrackId id, std::size_t index) override;
+    void onRemoved(TrackId id, std::size_t index) override;
+
+    void onInserted(std::span<TrackId const> ids) override;
+    void onUpdated(std::span<TrackId const> ids) override;
+    void onRemoved(std::span<TrackId const> ids) override;
+
+    bool contains(TrackId id) const;
+
+    std::vector<TrackId> _trackIds;
+    TrackIdList* _source = nullptr;
+  };
+} // namespace ao::model

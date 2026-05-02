@@ -3,8 +3,8 @@
 
 #include "platform/linux/ui/MainWindow.h"
 #include "platform/linux/services/PlaylistExporter.h"
-#include <rs/audio/Player.h>
-#include <rs/utility/Log.h>
+#include <ao/audio/Player.h>
+#include <ao/utility/Log.h>
 
 #include "platform/linux/ui/CoverArtWidget.h"
 #include "platform/linux/ui/ImportProgressDialog.h"
@@ -41,14 +41,14 @@ namespace app::ui
 {
   namespace
   {
-    rs::ListId allTracksListId()
+    ao::ListId allTracksListId()
     {
-      return rs::ListId{std::numeric_limits<std::uint32_t>::max()};
+      return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
     }
 
-    rs::ListId rootParentId()
+    ao::ListId rootParentId()
     {
-      return rs::ListId{0};
+      return ao::ListId{0};
     }
   }
 
@@ -58,7 +58,7 @@ namespace app::ui
     set_title("RockStudio");
 
     // Set default window size
-    set_default_size(rs::library::kDefaultWindowWidth, rs::library::kDefaultWindowHeight);
+    set_default_size(ao::library::kDefaultWindowWidth, ao::library::kDefaultWindowHeight);
 
     // Initialize cover art widget
     _coverArtWidget = std::make_unique<CoverArtWidget>();
@@ -82,7 +82,7 @@ namespace app::ui
       _trackColumnLayoutModel,
       TrackPageGraph::Callbacks{
         .onSelectionChanged =
-          [this](std::vector<rs::TrackId> const& ids)
+          [this](std::vector<ao::TrackId> const& ids)
         {
           updateCoverArt(ids);
           onTrackSelectionChanged();
@@ -98,7 +98,7 @@ namespace app::ui
           _tagEditController->showTrackContextMenu(page, selection, posX, posY);
         },
         .onTagEditRequested =
-          [this](TrackViewPage& page, std::vector<rs::TrackId> const& ids, double posX, double posY)
+          [this](TrackViewPage& page, std::vector<ao::TrackId> const& ids, double posX, double posY)
         {
           auto const listId = page.getListId();
           auto* const ctx = _trackPageGraph->find(listId);
@@ -107,7 +107,7 @@ namespace app::ui
                                                 .membershipList = ctx != nullptr ? ctx->membershipList.get() : nullptr};
           _tagEditController->showTagEditor(page, selection, posX, posY);
         },
-        .onTrackActivated = [this](TrackViewPage& page, rs::TrackId id)
+        .onTrackActivated = [this](TrackViewPage& page, ao::TrackId id)
         { _playbackCoordinator->startPlaybackFromVisiblePage(page, id); },
         .onCreateSmartListRequested =
           [this](TrackViewPage& page, std::string const& expression)
@@ -178,17 +178,17 @@ namespace app::ui
     return _trackPageGraph->currentVisible();
   }
 
-  TrackPageContext* MainWindow::findTrackPageContext(rs::ListId listId)
+  TrackPageContext* MainWindow::findTrackPageContext(ao::ListId listId)
   {
     return _trackPageGraph->find(listId);
   }
 
-  void MainWindow::showListPage(rs::ListId listId)
+  void MainWindow::showListPage(ao::ListId listId)
   {
     _trackPageGraph->show(listId);
   }
 
-  void MainWindow::updatePlaybackStatus(rs::audio::Snapshot const& snapshot)
+  void MainWindow::updatePlaybackStatus(ao::audio::Snapshot const& snapshot)
   {
     if (_statusBar)
     {
@@ -290,7 +290,7 @@ namespace app::ui
     // Initialize list sidebar controller
     _listSidebarController = std::make_unique<ListSidebarController>(
       *this,
-      ListSidebarController::Callbacks{.onListSelected = [this](rs::ListId listId) { _trackPageGraph->show(listId); },
+      ListSidebarController::Callbacks{.onListSelected = [this](ao::ListId listId) { _trackPageGraph->show(listId); },
                                        .onListsChanged =
                                          [this]()
                                        {
@@ -301,7 +301,7 @@ namespace app::ui
                                          }
                                        },
                                        .onListCreatedAndSelected =
-                                         [this](rs::ListId listId)
+                                         [this](ao::ListId listId)
                                        {
                                          if (_librarySession)
                                          {
@@ -310,7 +310,7 @@ namespace app::ui
                                            _listSidebarController->select(listId);
                                          }
                                        },
-                                       .getListMembership = [this](rs::ListId listId) -> rs::model::TrackIdList*
+                                       .getListMembership = [this](ao::ListId listId) -> ao::model::TrackIdList*
                                        {
                                          if (auto* ctx = _trackPageGraph->find(listId))
                                          {
@@ -382,7 +382,7 @@ namespace app::ui
     set_child(*mainBox);
   }
 
-  void MainWindow::rebuildListPages(rs::lmdb::ReadTransaction& txn)
+  void MainWindow::rebuildListPages(ao::lmdb::ReadTransaction& txn)
   {
     APP_LOG_DEBUG("rebuildListPages called");
 
@@ -402,7 +402,7 @@ namespace app::ui
     }
   }
 
-  void MainWindow::updateCoverArt(std::vector<rs::TrackId> const& selectedIds)
+  void MainWindow::updateCoverArt(std::vector<ao::TrackId> const& selectedIds)
   {
     if (!_librarySession || selectedIds.empty())
     {
@@ -424,7 +424,7 @@ namespace app::ui
     }
 
     // Load cover art from ResourceStore and display
-    rs::lmdb::ReadTransaction txn(_librarySession->musicLibrary->readTransaction());
+    ao::lmdb::ReadTransaction txn(_librarySession->musicLibrary->readTransaction());
     auto resourceReader = _librarySession->musicLibrary->resources().reader(txn);
     auto optBytes = resourceReader.get(*coverArtId);
 
@@ -490,12 +490,12 @@ namespace app::ui
   void MainWindow::loadSession()
   {
     std::string libraryPath;
-    rs::audio::BackendKind backendKind = rs::audio::BackendKind::None;
+    ao::audio::BackendKind backendKind = ao::audio::BackendKind::None;
     std::string deviceId;
 
     _sessionPersistence.load(*this, _paned, _trackColumnLayoutModel, libraryPath, backendKind, deviceId);
 
-    if (backendKind != rs::audio::BackendKind::None)
+    if (backendKind != ao::audio::BackendKind::None)
     {
       if (auto* controller = _playbackCoordinator->player())
       {
@@ -518,7 +518,7 @@ namespace app::ui
     _playbackCoordinator->jumpToPlayingList();
   }
 
-  void MainWindow::onOutputChanged(rs::audio::BackendKind kind, std::string const& deviceId)
+  void MainWindow::onOutputChanged(ao::audio::BackendKind kind, std::string const& deviceId)
   {
     auto* controller = _playbackCoordinator->player();
 
@@ -528,13 +528,13 @@ namespace app::ui
     }
 
     controller->setOutput(kind, deviceId);
-    _statusBar->showMessage("Switched to " + std::string(rs::audio::backendDisplayName(kind)));
+    _statusBar->showMessage("Switched to " + std::string(ao::audio::backendDisplayName(kind)));
 
     // Persist selection to config
     _sessionPersistence.updateAudioBackend(kind, deviceId);
   }
 
-  std::optional<rs::audio::TrackPlaybackDescriptor> MainWindow::currentSelectionPlaybackDescriptor() const
+  std::optional<ao::audio::TrackPlaybackDescriptor> MainWindow::currentSelectionPlaybackDescriptor() const
   {
     auto const* ctx = _trackPageGraph->currentVisible();
 

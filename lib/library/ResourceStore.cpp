@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/Exception.h>
-#include <rs/library/ResourceStore.h>
+#include <ao/Exception.h>
+#include <ao/library/ResourceStore.h>
 
 #include <cstdint>
 #include <cstring>
 #include <span>
 
-namespace rs::library
+namespace ao::library
 {
   using Writer = ResourceStore::Writer;
 
@@ -60,7 +60,7 @@ namespace rs::library
 
       if (key == std::numeric_limits<std::uint32_t>::max())
       {
-        RS_THROW(Exception, "Hash table full");
+        AO_THROW(Exception, "Hash table full");
       }
     }
   }

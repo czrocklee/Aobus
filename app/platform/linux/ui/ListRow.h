@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/library/MusicLibrary.h>
+#include <ao/library/MusicLibrary.h>
 
 #include <cstdint>
 #include <gtkmm.h>
@@ -15,7 +15,7 @@ namespace app::ui
   class ListRow final : public Glib::Object
   {
   public:
-    using ListId = rs::ListId;
+    using ListId = ao::ListId;
 
     ListId getListId() const { return _listId; }
     void setListId(ListId id) { _listId = id; }

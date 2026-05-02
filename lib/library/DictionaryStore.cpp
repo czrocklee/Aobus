@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/DictionaryStore.h>
+#include <ao/library/DictionaryStore.h>
 
-#include <rs/Exception.h>
-#include <rs/utility/ByteView.h>
+#include <ao/Exception.h>
+#include <ao/utility/ByteView.h>
 #include <span>
 #include <string_view>
 
-namespace rs::library
+namespace ao::library
 {
   // Extra capacity for dictionary entries
   constexpr std::uint32_t kExtraCapacity = 4096;
@@ -62,12 +62,12 @@ namespace rs::library
 
     if (idx == 0)
     {
-      RS_THROW(rs::Exception, "Invalid dictionary ID");
+      AO_THROW(ao::Exception, "Invalid dictionary ID");
     }
 
     if (idx - 1 >= _idToStringStorage.size())
     {
-      RS_THROW(rs::Exception, "Invalid dictionary ID");
+      AO_THROW(ao::Exception, "Invalid dictionary ID");
     }
 
     return _idToStringStorage[idx - 1];
@@ -80,7 +80,7 @@ namespace rs::library
       return it->second;
     }
 
-    RS_THROW(rs::Exception, "String not found in dictionary");
+    AO_THROW(ao::Exception, "String not found in dictionary");
   }
 
   bool DictionaryStore::contains(std::string_view str) const
@@ -104,4 +104,4 @@ namespace rs::library
     _reservedStrings.emplace(_idToStringStorage.back());
     return id;
   }
-} // namespace rs::library
+} // namespace ao::library

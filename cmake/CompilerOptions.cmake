@@ -7,9 +7,9 @@
 set(CMAKE_CXX_STANDARD 23)
 
 # ── Sanitizers ──────────────────────────────────────────────────────────────
-if(ROCKSTUDIO_ENABLE_ASAN)
+if(AOBUS_ENABLE_ASAN)
   if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message(WARNING "ROCKSTUDIO_ENABLE_ASAN is intended for Debug builds; "
+    message(WARNING "AOBUS_ENABLE_ASAN is intended for Debug builds; "
       "${CMAKE_BUILD_TYPE} build type is not recommended")
   endif()
   if(NOT CMAKE_CXX_FLAGS MATCHES "fsanitize")

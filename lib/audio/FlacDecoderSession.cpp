@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/FlacDecoderSession.h>
+#include <ao/audio/FlacDecoderSession.h>
 
 #include <FLAC/stream_decoder.h>
 #include <algorithm>
+#include <ao/utility/ByteView.h>
+#include <ao/utility/MappedFile.h>
 #include <cstring>
-#include <rs/utility/ByteView.h>
-#include <rs/utility/MappedFile.h>
 
-namespace rs::audio
+namespace ao::audio
 {
   namespace
   {
@@ -28,7 +28,7 @@ namespace rs::audio
     Format requestedOutput;
     FLAC__StreamDecoder* decoder = nullptr;
 
-    rs::utility::MappedFile mappedFile;
+    ao::utility::MappedFile mappedFile;
     std::uint64_t currentOffset = 0;
 
     DecodedStreamInfo info;
@@ -98,7 +98,7 @@ namespace rs::audio
 
   FlacDecoderSession::~FlacDecoderSession() = default;
 
-  rs::Result<> FlacDecoderSession::open(std::filesystem::path const& filePath)
+  ao::Result<> FlacDecoderSession::open(std::filesystem::path const& filePath)
   {
     close();
 
@@ -124,13 +124,13 @@ namespace rs::audio
 
     if (initStatus != FLAC__STREAM_DECODER_INIT_STATUS_OK)
     {
-      return rs::makeError(rs::Error::Code::InitFailed, "Failed to initialize FLAC decoder");
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to initialize FLAC decoder");
     }
 
     // Process until metadata is read
     if (::FLAC__stream_decoder_process_until_end_of_metadata(_impl->decoder) == 0)
     {
-      return rs::makeError(rs::Error::Code::DecodeFailed, "Failed to read FLAC metadata");
+      return ao::makeError(ao::Error::Code::DecodeFailed, "Failed to read FLAC metadata");
     }
 
     return {};
@@ -148,7 +148,7 @@ namespace rs::audio
     _impl->bufferedFrames = 0;
   }
 
-  rs::Result<> FlacDecoderSession::seek(std::uint32_t positionMs)
+  ao::Result<> FlacDecoderSession::seek(std::uint32_t positionMs)
   {
     _impl->pcmBuffer.clear();
     _impl->bufferedFrames = 0;
@@ -158,14 +158,14 @@ namespace rs::audio
 
     if (sampleRate == 0)
     {
-      return rs::makeError(rs::Error::Code::SeekFailed, "Sample rate is 0");
+      return ao::makeError(ao::Error::Code::SeekFailed, "Sample rate is 0");
     }
 
     auto const targetSample = static_cast<FLAC__uint64>(positionMs) * sampleRate / 1000;
 
     if (::FLAC__stream_decoder_seek_absolute(_impl->decoder, targetSample) == 0)
     {
-      return rs::makeError(rs::Error::Code::SeekFailed, "FLAC seek failed");
+      return ao::makeError(ao::Error::Code::SeekFailed, "FLAC seek failed");
     }
 
     _impl->nextFrameIndex = targetSample;
@@ -180,7 +180,7 @@ namespace rs::audio
     _impl->bufferedFrames = 0;
   }
 
-  rs::Result<PcmBlock> FlacDecoderSession::readNextBlock()
+  ao::Result<PcmBlock> FlacDecoderSession::readNextBlock()
   {
     if (_impl->eof && _impl->bufferedFrames == 0)
     {
@@ -198,7 +198,7 @@ namespace rs::audio
           break;
         }
 
-        return rs::makeError(rs::Error::Code::DecodeFailed, "FLAC process single failed");
+        return ao::makeError(ao::Error::Code::DecodeFailed, "FLAC process single failed");
       }
 
       if (::FLAC__stream_decoder_get_state(_impl->decoder) == FLAC__STREAM_DECODER_END_OF_STREAM)
@@ -239,7 +239,7 @@ namespace rs::audio
                                                                        size_t* bytes,
                                                                        void* clientData)
   {
-    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
     auto const fileBytes = impl->mappedFile.bytes();
 
     if (*bytes > 0)
@@ -267,7 +267,7 @@ namespace rs::audio
                                                                        FLAC__uint64 absoluteByteOffset,
                                                                        void* clientData)
   {
-    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
     auto const fileBytes = impl->mappedFile.bytes();
 
     if (absoluteByteOffset >= fileBytes.size())
@@ -284,7 +284,7 @@ namespace rs::audio
                                                                        FLAC__uint64* absoluteByteOffset,
                                                                        void* clientData)
   {
-    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
     *absoluteByteOffset = impl->currentOffset;
 
     return FLAC__STREAM_DECODER_TELL_STATUS_OK;
@@ -294,7 +294,7 @@ namespace rs::audio
                                                                            FLAC__uint64* streamLength,
                                                                            void* clientData)
   {
-    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
     *streamLength = impl->mappedFile.bytes().size();
 
     return FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
@@ -302,7 +302,7 @@ namespace rs::audio
 
   FLAC__bool FlacDecoderSession::Impl::eofCallback(FLAC__StreamDecoder const* /*decoder*/, void* clientData)
   {
-    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
 
     return static_cast<FLAC__bool>(impl->currentOffset >= impl->mappedFile.bytes().size());
   }
@@ -312,7 +312,7 @@ namespace rs::audio
                                                                          FLAC__int32 const* const* buffer,
                                                                          void* clientData)
   {
-    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
 
     auto const channels = frame->header.channels;
     auto const bps = frame->header.bits_per_sample;
@@ -323,7 +323,7 @@ namespace rs::audio
     if (outBps == 16)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 2);
-      auto* out = rs::utility::layout::asMutablePtr<std::int16_t>(impl->pcmBuffer);
+      auto* out = ao::utility::layout::asMutablePtr<std::int16_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
       {
@@ -336,7 +336,7 @@ namespace rs::audio
     else if (outBps == 24)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * kBytesPer24BitSample);
-      auto* out = rs::utility::layout::asMutablePtr<std::uint8_t>(impl->pcmBuffer);
+      auto* out = ao::utility::layout::asMutablePtr<std::uint8_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
       {
@@ -352,7 +352,7 @@ namespace rs::audio
     else if (outBps == 32)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 4);
-      auto* out = rs::utility::layout::asMutablePtr<std::int32_t>(impl->pcmBuffer);
+      auto* out = ao::utility::layout::asMutablePtr<std::int32_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
       {
@@ -389,7 +389,7 @@ namespace rs::audio
                                                   FLAC__StreamMetadata const* metadata,
                                                   void* clientData)
   {
-    auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
 
     if (metadata->type == FLAC__METADATA_TYPE_STREAMINFO)
     {
@@ -424,7 +424,7 @@ namespace rs::audio
                                                [[maybe_unused]] FLAC__StreamDecoderErrorStatus status,
                                                [[maybe_unused]] void* clientData)
   {
-    [[maybe_unused]] auto* const impl = rs::utility::unsafeDowncast<Impl>(clientData);
+    [[maybe_unused]] auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
     /* TODO logging */
   }
-} // namespace rs::audio
+} // namespace ao::audio

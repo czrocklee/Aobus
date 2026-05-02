@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#Build script for RockStudio
+#Build script for Aobus
 #Usage :./ build.sh[debug | release | pgo1 | pgo2 | profile][--clean][--tidy][--clang]
 
 set -e
@@ -117,11 +117,11 @@ if ! command -v nix-shell &> /dev/null; then
 fi
 
 #Configure
-echo "Configuring RockStudio with preset '$PRESET' in '$BUILD_DIR'..."
+echo "Configuring Aobus with preset '$PRESET' in '$BUILD_DIR'..."
 CONFIGURE_COMMAND="cmake -S '$SOURCE_DIR' --preset '$PRESET' -B '$BUILD_DIR'"
 BUILD_COMMAND="cmake --build '$BUILD_DIR' --parallel"
-TEST_COMMAND="$BUILD_DIR/test/rs_test"
-TEST_LINUX_COMMAND="$BUILD_DIR/test/rs_test_linux"
+TEST_COMMAND="$BUILD_DIR/test/ao_test"
+TEST_LINUX_COMMAND="$BUILD_DIR/test/ao_test_linux"
 
 if [[ "$VERBOSE" == "true" ]]; then
     CONFIGURE_COMMAND+=" -DCMAKE_VERBOSE_MAKEFILE=ON"
@@ -139,18 +139,18 @@ fi
 
 if [[ "$ENABLE_TIDY" == "true" ]]; then
     echo "clang-tidy enabled for this build (implies clang toolchain)."
-    CONFIGURE_COMMAND+=" -DROCKSTUDIO_ENABLE_CLANG_TIDY=ON"
+    CONFIGURE_COMMAND+=" -DAOBUS_ENABLE_CLANG_TIDY=ON"
 fi
 
 if [[ "$ENABLE_ASAN" == "true" ]]; then
     echo "ASan/UBSan enabled for this build."
-    CONFIGURE_COMMAND+=" -DROCKSTUDIO_ENABLE_ASAN=ON"
+    CONFIGURE_COMMAND+=" -DAOBUS_ENABLE_ASAN=ON"
 fi
 
 nix-shell --run "$CONFIGURE_COMMAND"
 
 #Build
-echo "Building RockStudio..."
+echo "Building Aobus..."
 nix-shell --run "$BUILD_COMMAND"
 
 #Run tests(only for debug and release)
@@ -174,7 +174,7 @@ if [[ "$BUILD_TYPE" == "pgo1" ]]; then
     echo "PGO Step 1 complete."
     echo ""
     echo "Next: Run the app to generate profile data:"
-    echo "  cd $BUILD_DIR && ./RockStudio"
+    echo "  cd $BUILD_DIR && ./Aobus"
     echo "  # Use the app normally, then close it"
     echo ""
     echo "Then run:"
@@ -185,8 +185,8 @@ elif [[ "$BUILD_TYPE" == "pgo2" ]]; then
     echo "============================================"
     echo "PGO Step 2 complete."
     echo ""
-    echo "Optimized binary: $BUILD_DIR/RockStudio"
-    echo "Run: cd $BUILD_DIR && perf record -g -- ./RockStudio"
+    echo "Optimized binary: $BUILD_DIR/Aobus"
+    echo "Run: cd $BUILD_DIR && perf record -g -- ./Aobus"
     echo "============================================"
 fi
 
@@ -198,4 +198,4 @@ echo "  compiler: $COMPILER_NAME"
 echo "  clang-tidy: $ENABLE_TIDY"
 echo "  asan: $ENABLE_ASAN"
 echo "  verbose: $VERBOSE"
-echo "  tests: rs_test + rs_test_linux"
+echo "  tests: ao_test + ao_test_linux"

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/TrackView.h>
+#include <ao/library/TrackView.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstring>
 
-namespace rs::library
+namespace ao::library
 {
   // TrackView member implementations
   std::string_view TrackView::hotTitle() const
@@ -137,4 +137,4 @@ namespace rs::library
     ++_pos;
     return tmp;
   }
-} // namespace rs::library
+} // namespace ao::library

@@ -1,4 +1,4 @@
-# rs_tag
+# ao_tag
 add_gperf_header(
   FLAC_VORBIS_DISPATCH_HEADER
   "${CMAKE_CURRENT_SOURCE_DIR}/flac/VorbisCommentDispatch.gperf"
@@ -15,7 +15,7 @@ add_gperf_header(
   "tag/mpeg/id3v2/FrameDispatch.h"
 )
 
-add_library(rs_tag STATIC
+add_library(ao_tag STATIC
     File.cpp
     Open.cpp
     flac/File.cpp
@@ -27,6 +27,6 @@ add_library(rs_tag STATIC
     "${MP4_ATOM_DISPATCH_HEADER}"
     "${MPEG_FRAME_DISPATCH_HEADER}"
 )
-target_include_directories(rs_tag PUBLIC ${RS_PUBLIC_INCLUDE_DIR} ${RS_GENERATED_INCLUDE_DIR})
-target_link_libraries(rs_tag PUBLIC rs_media rs_utility)
-rockstudio_apply_clang_tidy(rs_tag STRICT)
+target_include_directories(ao_tag PUBLIC ${AO_PUBLIC_INCLUDE_DIR} ${AO_GENERATED_INCLUDE_DIR})
+target_link_libraries(ao_tag PUBLIC ao_media ao_utility)
+aobus_apply_clang_tidy(ao_tag STRICT)

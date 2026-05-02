@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/Engine.h>
-#include <rs/utility/Log.h>
+#include <ao/audio/Engine.h>
+#include <ao/utility/Log.h>
 
-#include <rs/audio/DecoderFactory.h>
-#include <rs/audio/FormatNegotiator.h>
-#include <rs/audio/IDecoderSession.h>
-#include <rs/audio/MemorySource.h>
-#include <rs/audio/StreamingSource.h>
+#include <ao/audio/DecoderFactory.h>
+#include <ao/audio/FormatNegotiator.h>
+#include <ao/audio/IDecoderSession.h>
+#include <ao/audio/MemorySource.h>
+#include <ao/audio/StreamingSource.h>
 
 #include <algorithm>
+#include <ao/utility/ByteView.h>
 #include <format>
 #include <limits>
 #include <ranges>
-#include <rs/utility/ByteView.h>
 #include <set>
 #include <sstream>
 
-namespace rs::audio
+namespace ao::audio
 {
   namespace
   {
@@ -67,8 +67,8 @@ namespace rs::audio
   } // namespace
 
   Engine::Engine(std::unique_ptr<IBackend> backend,
-                                 Device const& device,
-                                 std::shared_ptr<rs::IMainThreadDispatcher> dispatcher)
+                 Device const& device,
+                 std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
     : _backend{std::move(backend)}, _dispatcher{std::move(dispatcher)}, _currentDevice{device}
   {
     _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
@@ -166,8 +166,7 @@ namespace rs::audio
 
   void Engine::play(TrackPlaybackDescriptor const& descriptor)
   {
-    AUDIO_LOG_INFO(
-      "Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
+    AUDIO_LOG_INFO("Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
 
     if (_backend)
     {
@@ -423,7 +422,7 @@ namespace rs::audio
 
   void Engine::onBackendError(void* userData, std::string_view message) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
+    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
     auto msg = std::string(message);
 
     if (self->_dispatcher)
@@ -449,9 +448,9 @@ namespace rs::audio
   }
 
   bool Engine::negotiateFormat(std::filesystem::path const& path,
-                                       DecodedStreamInfo const& info,
-                                       std::unique_ptr<IDecoderSession>& decoder,
-                                       Format& backendFormat)
+                               DecodedStreamInfo const& info,
+                               std::unique_ptr<IDecoderSession>& decoder,
+                               Format& backendFormat)
   {
     if (!_backend)
     {
@@ -464,9 +463,9 @@ namespace rs::audio
     {
       backendFormat = info.outputFormat;
       AUDIO_LOG_INFO("PipeWire shared mode keeps the stream at {}Hz/{}b/{}ch",
-                        backendFormat.sampleRate,
-                        static_cast<int>(backendFormat.bitDepth),
-                        static_cast<int>(backendFormat.channels));
+                     backendFormat.sampleRate,
+                     static_cast<int>(backendFormat.bitDepth),
+                     static_cast<int>(backendFormat.channels));
       return true;
     }
 
@@ -489,11 +488,11 @@ namespace rs::audio
     }
 
     AUDIO_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
-                      static_cast<int>(plan.decoderOutputFormat.bitDepth),
-                      static_cast<int>(plan.decoderOutputFormat.validBits),
-                      plan.deviceFormat.sampleRate,
-                      static_cast<int>(plan.deviceFormat.bitDepth),
-                      plan.reason);
+                   static_cast<int>(plan.decoderOutputFormat.bitDepth),
+                   static_cast<int>(plan.decoderOutputFormat.validBits),
+                   plan.deviceFormat.sampleRate,
+                   static_cast<int>(plan.deviceFormat.bitDepth),
+                   plan.reason);
 
     // Re-open decoder if negotiated format differs
     if (!(plan.decoderOutputFormat == info.sourceFormat))
@@ -519,7 +518,7 @@ namespace rs::audio
   }
 
   std::shared_ptr<ISource> Engine::createPcmSource(std::unique_ptr<IDecoderSession> decoder,
-                                                              DecodedStreamInfo const& info)
+                                                   DecodedStreamInfo const& info)
   {
     if (shouldUseMemoryPcmSource(info))
     {
@@ -537,7 +536,7 @@ namespace rs::audio
     auto streamingSource = std::make_shared<StreamingSource>(
       std::move(decoder),
       info,
-      [this](rs::Error const& err)
+      [this](ao::Error const& err)
       {
         if (_dispatcher)
         {
@@ -561,8 +560,8 @@ namespace rs::audio
   }
 
   bool Engine::openTrack(TrackPlaybackDescriptor const& descriptor,
-                                 std::shared_ptr<ISource>& source,
-                                 Format& backendFormat)
+                         std::shared_ptr<ISource>& source,
+                         Format& backendFormat)
   {
     auto outputFormat = Format{};
     outputFormat.sampleRate = 0; // Use native
@@ -613,11 +612,11 @@ namespace rs::audio
     // Add initial Source (Decoder) Node
     _routeSnapshot.flow.nodes.clear();
     _routeSnapshot.flow.nodes.push_back({.id = "rs-decoder",
-                                          .type = flow::NodeType::Decoder,
-                                          .name = "File Decoder",
-                                          .format = info.sourceFormat,
-                                          .isLossySource = info.isLossy,
-                                          .objectPath = ""});
+                                         .type = flow::NodeType::Decoder,
+                                         .name = "File Decoder",
+                                         .format = info.sourceFormat,
+                                         .isLossySource = info.isLossy,
+                                         .objectPath = ""});
 
     // Add Engine Node
     _routeSnapshot.flow.nodes.push_back(flow::Node{.id = "rs-engine",
@@ -629,7 +628,8 @@ namespace rs::audio
                                                    .isLossySource = false});
 
     _routeSnapshot.flow.connections.clear();
-    _routeSnapshot.flow.connections.push_back(flow::Connection{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
+    _routeSnapshot.flow.connections.push_back(
+      flow::Connection{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
 
     _snapshot.flow = _routeSnapshot.flow;
 
@@ -652,7 +652,7 @@ namespace rs::audio
 
   std::size_t Engine::onReadPcm(void* userData, std::span<std::byte> output) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
+    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
     auto const source = self->_source.load(std::memory_order_acquire);
 
     return source ? source->read(output) : 0;
@@ -660,7 +660,7 @@ namespace rs::audio
 
   bool Engine::isSourceDrained(void* userData) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
+    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
     auto const source = self->_source.load(std::memory_order_acquire);
 
     if (!source)
@@ -680,13 +680,13 @@ namespace rs::audio
 
   void Engine::onUnderrun(void* userData) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
+    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
     ++self->_underrunCount;
   }
 
   void Engine::onPositionAdvanced(void* userData, std::uint32_t frames) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
+    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
     auto lock = std::unique_lock<std::mutex>{self->_stateMutex, std::try_to_lock};
 
     if (!lock.owns_lock())
@@ -708,7 +708,7 @@ namespace rs::audio
 
   void Engine::onDrainComplete(void* userData) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
+    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
 
     if (!self->_playbackDrainPending.exchange(false, std::memory_order_relaxed))
     {
@@ -746,7 +746,7 @@ namespace rs::audio
 
   void Engine::onRouteReady(void* userData, std::string_view routeAnchor) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
+    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
     auto anchor = std::string(routeAnchor);
 
     if (self->_dispatcher)
@@ -780,7 +780,7 @@ namespace rs::audio
     }
   }
 
-  void Engine::handleSourceError(rs::Error const& error)
+  void Engine::handleSourceError(ao::Error const& error)
   {
     {
       auto lock = std::lock_guard<std::mutex>{_stateMutex};
@@ -805,7 +805,7 @@ namespace rs::audio
 
   void Engine::onFormatChanged(void* userData, Format const& format) noexcept
   {
-    auto* const self = rs::utility::unsafeDowncast<Engine>(userData);
+    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
 
     if (self->_dispatcher)
     {
@@ -855,4 +855,4 @@ namespace rs::audio
       }
     }
   }
-} // namespace rs::audio
+} // namespace ao::audio

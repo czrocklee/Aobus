@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/Engine.h>
-#include <rs/audio/IBackendProvider.h>
-#include <rs/audio/NullBackend.h>
-#include <rs/audio/Player.h>
-#include <rs/utility/Log.h>
+#include <ao/audio/Engine.h>
+#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/NullBackend.h>
+#include <ao/audio/Player.h>
+#include <ao/utility/Log.h>
 
 #include <algorithm>
 #include <format>
@@ -14,7 +14,7 @@
 #include <set>
 #include <unordered_map>
 
-namespace rs::audio
+namespace ao::audio
 {
   namespace
   {
@@ -60,7 +60,7 @@ namespace rs::audio
     }
   }
 
-  Player::Player(std::shared_ptr<rs::IMainThreadDispatcher> dispatcher)
+  Player::Player(std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
     : _dispatcher(std::move(dispatcher))
   {
     // Start with a NullBackend until a provider provides something real
@@ -571,4 +571,4 @@ namespace rs::audio
       case Quality::Unknown: break;
     }
   }
-} // namespace rs::audio
+} // namespace ao::audio

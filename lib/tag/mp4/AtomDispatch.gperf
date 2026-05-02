@@ -13,13 +13,13 @@ struct Mp4AtomDispatchEntry
 %%
 trkn, &handleTrackNumbers
 disk, &handleDiscNumbers
-"\251nam", &handleText<&::rs::library::TrackBuilder::MetadataBuilder::title>
-"\251ART", &handleText<&::rs::library::TrackBuilder::MetadataBuilder::artist>
-"\251alb", &handleText<&::rs::library::TrackBuilder::MetadataBuilder::album>
-"\251wrt", &handleText<&::rs::library::TrackBuilder::MetadataBuilder::composer>
-"\251wrk", &handleText<&::rs::library::TrackBuilder::MetadataBuilder::work>
-"\251grp", &handleText<&::rs::library::TrackBuilder::MetadataBuilder::work>
-aART, &handleText<&::rs::library::TrackBuilder::MetadataBuilder::albumArtist>
-"\251gen", &handleText<&::rs::library::TrackBuilder::MetadataBuilder::genre>
-"\251day", &handleNumber<&::rs::library::TrackBuilder::MetadataBuilder::year>
+"\251nam", &handleText<&::ao::library::TrackBuilder::MetadataBuilder::title>
+"\251ART", &handleText<&::ao::library::TrackBuilder::MetadataBuilder::artist>
+"\251alb", &handleText<&::ao::library::TrackBuilder::MetadataBuilder::album>
+"\251wrt", &handleText<&::ao::library::TrackBuilder::MetadataBuilder::composer>
+"\251wrk", &handleText<&::ao::library::TrackBuilder::MetadataBuilder::work>
+"\251grp", &handleText<&::ao::library::TrackBuilder::MetadataBuilder::work>
+aART, &handleText<&::ao::library::TrackBuilder::MetadataBuilder::albumArtist>
+"\251gen", &handleText<&::ao::library::TrackBuilder::MetadataBuilder::genre>
+"\251day", &handleNumber<&::ao::library::TrackBuilder::MetadataBuilder::year>
 covr, &handleCoverArt

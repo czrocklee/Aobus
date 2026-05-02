@@ -94,18 +94,19 @@ namespace app::ui
       });
   }
 
-  void PlaybackBar::setSnapshot(rs::audio::Snapshot const& snapshot)
+  void PlaybackBar::setSnapshot(ao::audio::Snapshot const& snapshot)
   {
     auto const posSec = snapshot.positionMs / 1000;
     auto const durSec = snapshot.durationMs / 1000;
 
-    if (snapshot.transport != _lastState.transport || posSec != _lastState.positionSec || durSec != _lastState.durationSec)
+    if (snapshot.transport != _lastState.transport || posSec != _lastState.positionSec ||
+        durSec != _lastState.durationSec)
     {
       _lastState = {.transport = snapshot.transport, .positionSec = posSec, .durationSec = durSec};
 
       updateTransportButtons(snapshot.transport);
 
-      if (snapshot.transport == rs::audio::Transport::Idle)
+      if (snapshot.transport == ao::audio::Transport::Idle)
       {
         _timeLabel.set_text("00:00 / 00:00");
       }
@@ -121,7 +122,7 @@ namespace app::ui
     }
 
     // Always update seek scale sensitivity and range for smoothness
-    if (snapshot.transport == rs::audio::Transport::Idle)
+    if (snapshot.transport == ao::audio::Transport::Idle)
     {
       _seekScale.set_range(0, 100);
       _seekScale.set_value(0);
@@ -155,23 +156,23 @@ namespace app::ui
     _seekScale.set_sensitive(enabled);
   }
 
-  void PlaybackBar::updateTransportButtons(rs::audio::Transport state)
+  void PlaybackBar::updateTransportButtons(ao::audio::Transport state)
   {
     switch (state)
     {
-      case rs::audio::Transport::Idle:
-      case rs::audio::Transport::Stopping:
-      case rs::audio::Transport::Error:
+      case ao::audio::Transport::Idle:
+      case ao::audio::Transport::Stopping:
+      case ao::audio::Transport::Error:
         _playButton.set_visible(true);
         _pauseButton.set_visible(false);
-        _playButton.set_sensitive(state != rs::audio::Transport::Idle);
+        _playButton.set_sensitive(state != ao::audio::Transport::Idle);
         _pauseButton.set_sensitive(false);
         _stopButton.set_sensitive(false);
         _seekScale.set_sensitive(false);
         break;
 
-      case rs::audio::Transport::Opening:
-      case rs::audio::Transport::Buffering:
+      case ao::audio::Transport::Opening:
+      case ao::audio::Transport::Buffering:
         _playButton.set_visible(true);
         _pauseButton.set_visible(false);
         _playButton.set_sensitive(false);
@@ -180,7 +181,7 @@ namespace app::ui
         _seekScale.set_sensitive(false);
         break;
 
-      case rs::audio::Transport::Playing:
+      case ao::audio::Transport::Playing:
         _playButton.set_visible(false);
         _pauseButton.set_visible(true);
         _playButton.set_sensitive(false);
@@ -189,7 +190,7 @@ namespace app::ui
         _seekScale.set_sensitive(true);
         break;
 
-      case rs::audio::Transport::Paused:
+      case ao::audio::Transport::Paused:
         _playButton.set_visible(true);
         _pauseButton.set_visible(false);
         _playButton.set_sensitive(true);
@@ -198,7 +199,7 @@ namespace app::ui
         _seekScale.set_sensitive(true);
         break;
 
-      case rs::audio::Transport::Seeking:
+      case ao::audio::Transport::Seeking:
         _playButton.set_visible(true);
         _pauseButton.set_visible(false);
         _playButton.set_sensitive(false);

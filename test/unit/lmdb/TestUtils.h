@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include <rs/utility/ByteView.h>
+#include <ao/utility/ByteView.h>
 
 /**
  * RAII temporary directory for LMDB test files.
@@ -66,6 +66,6 @@ inline std::vector<std::byte> createTestData(std::size_t size)
  */
 inline std::vector<std::byte> createStringData(std::string_view str)
 {
-  auto bytes = rs::utility::bytes::view(str);
+  auto bytes = ao::utility::bytes::view(str);
   return {bytes.begin(), bytes.end()};
 }

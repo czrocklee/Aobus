@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/MusicLibrary.h>
+#include <ao/library/MusicLibrary.h>
 
-#include <rs/Exception.h>
+#include <ao/Exception.h>
 
 #include <algorithm>
 #include <chrono>
@@ -32,46 +32,46 @@ namespace
     return bytes;
   }
 
-  rs::library::MetaHeader makeMetaHeader()
+  ao::library::MetaHeader makeMetaHeader()
   {
     auto const timestamp = nowUnixMs();
-    return rs::library::MetaHeader{.magic = rs::library::kLibraryMetaMagic,
-                                          .libraryVersion = rs::library::kLibraryVersion,
-                                          .flags = 0,
-                                          .createdAtUnixMs = timestamp,
-                                          .migratedAtUnixMs = timestamp,
-                                          .libraryId = generateLibraryId()};
+    return ao::library::MetaHeader{.magic = ao::library::kLibraryMetaMagic,
+                                   .libraryVersion = ao::library::kLibraryVersion,
+                                   .flags = 0,
+                                   .createdAtUnixMs = timestamp,
+                                   .migratedAtUnixMs = timestamp,
+                                   .libraryId = generateLibraryId()};
   }
 
-  void validateMetaHeader(rs::library::MetaHeader const& header)
+  void validateMetaHeader(ao::library::MetaHeader const& header)
   {
-    if (header.magic != rs::library::kLibraryMetaMagic)
+    if (header.magic != ao::library::kLibraryMetaMagic)
     {
-      RS_THROW_FORMAT(rs::Exception,
+      AO_THROW_FORMAT(ao::Exception,
                       "Invalid library metadata magic 0x{:08x} (expected 0x{:08x})",
                       header.magic,
-                      rs::library::kLibraryMetaMagic);
+                      ao::library::kLibraryMetaMagic);
     }
 
-    if (header.libraryVersion > rs::library::kLibraryVersion)
+    if (header.libraryVersion > ao::library::kLibraryVersion)
     {
-      RS_THROW_FORMAT(rs::Exception,
+      AO_THROW_FORMAT(ao::Exception,
                       "Unsupported library version {} (maximum supported {})",
                       header.libraryVersion,
-                      rs::library::kLibraryVersion);
+                      ao::library::kLibraryVersion);
     }
 
-    if (header.libraryVersion < rs::library::kLibraryVersion)
+    if (header.libraryVersion < ao::library::kLibraryVersion)
     {
-      RS_THROW_FORMAT(rs::Exception,
+      AO_THROW_FORMAT(ao::Exception,
                       "Library version {} requires migration to version {}",
                       header.libraryVersion,
-                      rs::library::kLibraryVersion);
+                      ao::library::kLibraryVersion);
     }
   }
 }
 
-namespace rs::library
+namespace ao::library
 {
   MusicLibrary::MusicLibrary(std::filesystem::path rootPath)
     : _root{std::move(rootPath)}

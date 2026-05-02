@@ -6,9 +6,9 @@
 #pragma GCC diagnostic ignored "-Wdangling-pointer"
 #endif
 
-#include <rs/Exception.h>
-#include <rs/query/Parser.h>
-#include <rs/query/Serializer.h>
+#include <ao/Exception.h>
+#include <ao/query/Parser.h>
+#include <ao/query/Serializer.h>
 
 #include <lexy/action/parse.hpp>
 #include <lexy/callback.hpp>
@@ -26,7 +26,7 @@
 namespace
 {
   namespace dsl = lexy::dsl;
-  using namespace rs::query;
+  using namespace ao::query;
 
   constexpr auto kVarTypes = lexy::symbol_table<VariableType>
     .map<LEXY_SYMBOL("$")>(VariableType::Metadata)
@@ -210,7 +210,7 @@ namespace
   };
 }
 
-namespace rs::query
+namespace ao::query
 {
   Expression parse(std::string_view expr)
   {
@@ -223,7 +223,7 @@ namespace rs::query
       return root;
     }
 
-    RS_THROW_FORMAT(rs::Exception, "parsing {} error", expr);
+    AO_THROW_FORMAT(ao::Exception, "parsing {} error", expr);
   }
 }
 

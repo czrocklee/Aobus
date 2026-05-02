@@ -1,9 +1,9 @@
-# rs_lmdb
-add_library(rs_lmdb STATIC
+# ao_lmdb
+add_library(ao_lmdb STATIC
     Environment.cpp
     Transaction.cpp
     Database.cpp
 )
-target_include_directories(rs_lmdb PUBLIC ${RS_PUBLIC_INCLUDE_DIR})
-target_link_libraries(rs_lmdb PUBLIC lmdb)
-rockstudio_apply_clang_tidy(rs_lmdb STRICT)
+target_include_directories(ao_lmdb PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
+target_link_libraries(ao_lmdb PUBLIC lmdb)
+aobus_apply_clang_tidy(ao_lmdb STRICT)

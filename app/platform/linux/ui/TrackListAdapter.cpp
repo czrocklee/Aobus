@@ -6,7 +6,7 @@
 #include "platform/linux/ui/TrackRow.h"
 #include "platform/linux/ui/TrackRowDataProvider.h"
 
-#include <rs/library/TrackStore.h>
+#include <ao/library/TrackStore.h>
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
@@ -186,8 +186,8 @@ namespace app::ui
     }
   }
 
-  TrackListAdapter::TrackListAdapter(rs::model::TrackIdList& source,
-                                     rs::library::MusicLibrary& musicLibrary,
+  TrackListAdapter::TrackListAdapter(ao::model::TrackIdList& source,
+                                     ao::library::MusicLibrary& musicLibrary,
                                      TrackRowDataProvider const& provider)
     : _source{source}, _musicLibrary{musicLibrary}, _provider{provider}, _listModel(Gio::ListStore<TrackRow>::create())
   {
@@ -214,9 +214,9 @@ namespace app::ui
 
       try
       {
-        auto expr = rs::query::parse(_filterExpression);
-        auto compiler = rs::query::QueryCompiler{&_musicLibrary.dictionary()};
-        _filterPlan = std::make_unique<rs::query::ExecutionPlan>(compiler.compile(expr));
+        auto expr = ao::query::parse(_filterExpression);
+        auto compiler = ao::query::QueryCompiler{&_musicLibrary.dictionary()};
+        _filterPlan = std::make_unique<ao::query::ExecutionPlan>(compiler.compile(expr));
       }
       catch (std::exception const& e)
       {
@@ -259,14 +259,14 @@ namespace app::ui
     }
   }
 
-  bool TrackListAdapter::shouldIncludeTrack(TrackId id, rs::library::TrackStore::Reader& reader) const
+  bool TrackListAdapter::shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader& reader) const
   {
     if (_filterPlan == nullptr)
     {
       return true;
     }
 
-    auto const view = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
+    auto const view = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
 
     if (!view)
     {

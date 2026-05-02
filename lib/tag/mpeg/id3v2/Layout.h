@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace rs::tag::mpeg::id3v2
+namespace ao::tag::mpeg::id3v2
 {
   struct EncodedSize
   {

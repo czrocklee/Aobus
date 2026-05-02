@@ -5,9 +5,9 @@
 
 #include "platform/linux/ui/LibrarySession.h"
 
+#include <ao/library/MusicLibrary.h>
+#include <ao/model/ListDraft.h>
 #include <gtkmm.h>
-#include <rs/library/MusicLibrary.h>
-#include <rs/model/ListDraft.h>
 
 #include <functional>
 #include <map>
@@ -26,10 +26,10 @@ namespace app::ui
   public:
     struct Callbacks final
     {
-      std::function<void(rs::ListId)> onListSelected;
+      std::function<void(ao::ListId)> onListSelected;
       std::function<void()> onListsChanged;
-      std::function<void(rs::ListId)> onListCreatedAndSelected;
-      std::function<rs::model::TrackIdList*(rs::ListId)> getListMembership;
+      std::function<void(ao::ListId)> onListCreatedAndSelected;
+      std::function<ao::model::TrackIdList*(ao::ListId)> getListMembership;
     };
 
     ListSidebarController(Gtk::Window& parent, Callbacks callbacks);
@@ -37,9 +37,9 @@ namespace app::ui
 
     Gtk::Widget& widget() { return _listScrolledWindow; }
 
-    void rebuildTree(LibrarySession& session, rs::lmdb::ReadTransaction& txn);
-    void select(rs::ListId listId);
-    void createSmartListFromExpression(rs::ListId parentListId, std::string expression);
+    void rebuildTree(LibrarySession& session, ao::lmdb::ReadTransaction& txn);
+    void select(ao::ListId listId);
+    void createSmartListFromExpression(ao::ListId parentListId, std::string expression);
 
     // Add to action group for menu access
     void addActionsTo(Gio::ActionMap& actionMap);
@@ -57,18 +57,18 @@ namespace app::ui
     void showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle const& rect);
 
     // List management - using ListDraft
-    void openNewListDialog(rs::ListId parentListId, std::string initialExpression = {});
+    void openNewListDialog(ao::ListId parentListId, std::string initialExpression = {});
     void openNewSmartListDialog();
-    void openEditListDialog(rs::ListId listId);
-    bool listHasChildren(rs::ListId listId) const;
+    void openEditListDialog(ao::ListId listId);
+    bool listHasChildren(ao::ListId listId) const;
 
-    void createList(rs::model::ListDraft const& draft);
-    void updateList(rs::model::ListDraft const& draft);
+    void createList(ao::model::ListDraft const& draft);
+    void updateList(ao::model::ListDraft const& draft);
     void onDeleteList();
     void onEditList();
 
-    void buildListTree(rs::lmdb::ReadTransaction& txn);
-    void selectSidebarList(rs::ListId listId);
+    void buildListTree(ao::lmdb::ReadTransaction& txn);
+    void selectSidebarList(ao::ListId listId);
 
     Gtk::Window& _parent;
     Callbacks _callbacks;
@@ -82,7 +82,7 @@ namespace app::ui
     Glib::RefPtr<Gio::ListStore<ListTreeNode>> _listTreeStore;
     Glib::RefPtr<Gtk::TreeListModel> _treeListModel;
     Glib::RefPtr<Gtk::SingleSelection> _listSelectionModel;
-    std::map<rs::ListId, Glib::RefPtr<ListTreeNode>> _nodesById;
+    std::map<ao::ListId, Glib::RefPtr<ListTreeNode>> _nodesById;
 
     // Actions
     Glib::RefPtr<Gio::SimpleAction> _newListAction;

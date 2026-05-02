@@ -1,5 +1,5 @@
-# rs_library
-add_library(rs_library STATIC
+# ao_library
+add_library(ao_library STATIC
     MetaStore.cpp
     Exporter.cpp
     Importer.cpp
@@ -14,6 +14,6 @@ add_library(rs_library STATIC
     ListBuilder.cpp
     ImportWorker.cpp
 )
-target_include_directories(rs_library PUBLIC ${RS_PUBLIC_INCLUDE_DIR})
-target_link_libraries(rs_library PUBLIC rs_lmdb yaml-cpp)
-rockstudio_apply_clang_tidy(rs_library STRICT)
+target_include_directories(ao_library PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
+target_link_libraries(ao_library PUBLIC ao_lmdb yaml-cpp)
+aobus_apply_clang_tidy(ao_library STRICT)

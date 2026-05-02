@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/MetaStore.h>
+#include <ao/library/MetaStore.h>
 
-#include <rs/Exception.h>
-#include <rs/utility/ByteView.h>
+#include <ao/Exception.h>
+#include <ao/utility/ByteView.h>
 
 #include <cstring>
 
 namespace
 {
-  constexpr auto kHeaderRecordId = static_cast<std::uint32_t>(rs::library::MetaRecordId::Header);
+  constexpr auto kHeaderRecordId = static_cast<std::uint32_t>(ao::library::MetaRecordId::Header);
 }
 
-namespace rs::library
+namespace ao::library
 {
   std::optional<MetaHeader> MetaStore::load(lmdb::ReadTransaction& txn) const
   {
@@ -26,10 +26,8 @@ namespace rs::library
 
     if (bytes->size() != sizeof(MetaHeader))
     {
-      RS_THROW_FORMAT(rs::Exception,
-                      "Invalid library metadata header size {} (expected {})",
-                      bytes->size(),
-                      sizeof(MetaHeader));
+      AO_THROW_FORMAT(
+        ao::Exception, "Invalid library metadata header size {} (expected {})", bytes->size(), sizeof(MetaHeader));
     }
 
     auto header = MetaHeader{};

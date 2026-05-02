@@ -2,13 +2,13 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/playback/AlsaExclusiveBackend.h"
-#include <rs/audio/Backend.h>
-#include <rs/utility/ByteView.h>
-#include <rs/utility/Log.h>
-#include <rs/utility/ThreadUtils.h>
+#include <ao/audio/Backend.h>
+#include <ao/utility/ByteView.h>
+#include <ao/utility/Log.h>
+#include <ao/utility/ThreadUtils.h>
 
+#include <ao/utility/Raii.h>
 #include <poll.h>
-#include <rs/utility/Raii.h>
 
 extern "C"
 {
@@ -26,7 +26,7 @@ namespace app::playback
   constexpr int kAlsaWaitTimeoutMs = 500;
   constexpr int kPollRetryDelayMs = 10;
 
-  AlsaExclusiveBackend::AlsaExclusiveBackend(rs::audio::Device const& device)
+  AlsaExclusiveBackend::AlsaExclusiveBackend(ao::audio::Device const& device)
     : _deviceName{device.id}
   {
     AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _deviceName);
@@ -39,14 +39,13 @@ namespace app::playback
     close();
   }
 
-  rs::Result<> AlsaExclusiveBackend::open(rs::audio::Format const& format,
-                                          rs::audio::RenderCallbacks callbacks)
+  ao::Result<> AlsaExclusiveBackend::open(ao::audio::Format const& format, ao::audio::RenderCallbacks callbacks)
   {
     AUDIO_LOG_INFO("AlsaExclusiveBackend: Opening device '{}' with format {}Hz/{}b/{}ch",
-                      _deviceName,
-                      format.sampleRate,
-                      static_cast<int>(format.bitDepth),
-                      static_cast<int>(format.channels));
+                   _deviceName,
+                   format.sampleRate,
+                   static_cast<int>(format.bitDepth),
+                   static_cast<int>(format.channels));
 
     close();
     _callbacks = callbacks;
@@ -54,7 +53,7 @@ namespace app::playback
     ::snd_pcm_t* pcm = nullptr;
     if (::snd_pcm_open(&pcm, _deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0) < 0)
     {
-      return rs::makeError(rs::Error::Code::DeviceNotFound, std::format("Failed to open ALSA device: {}", _deviceName));
+      return ao::makeError(ao::Error::Code::DeviceNotFound, std::format("Failed to open ALSA device: {}", _deviceName));
     }
 
     auto safePcm = AlsaPcmPtr(pcm);
@@ -62,11 +61,11 @@ namespace app::playback
     snd_pcm_hw_params_alloca(&params); // macro
     if (::snd_pcm_hw_params_any(safePcm.get(), params) < 0)
     {
-      return rs::makeError(rs::Error::Code::InitFailed, "Failed to init ALSA hw params");
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to init ALSA hw params");
     }
     if (::snd_pcm_hw_params_set_access(safePcm.get(), params, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)
     {
-      return rs::makeError(rs::Error::Code::FormatRejected, "No mmap interleaved support");
+      return ao::makeError(ao::Error::Code::FormatRejected, "No mmap interleaved support");
     }
 
     auto alsaFormat = SND_PCM_FORMAT_S16_LE;
@@ -81,16 +80,16 @@ namespace app::playback
 
     if (::snd_pcm_hw_params_set_format(safePcm.get(), params, alsaFormat) < 0)
     {
-      return rs::makeError(rs::Error::Code::FormatRejected, "Bit depth not supported");
+      return ao::makeError(ao::Error::Code::FormatRejected, "Bit depth not supported");
     }
     std::uint32_t rate = format.sampleRate;
     if (::snd_pcm_hw_params_set_rate_near(safePcm.get(), params, &rate, 0) < 0)
     {
-      return rs::makeError(rs::Error::Code::InitFailed, "Failed to set rate");
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to set rate");
     }
     if (::snd_pcm_hw_params_set_channels(safePcm.get(), params, format.channels) < 0)
     {
-      return rs::makeError(rs::Error::Code::FormatRejected, "Failed to set channels");
+      return ao::makeError(ao::Error::Code::FormatRejected, "Failed to set channels");
     }
 
     std::uint32_t periods = 4;
@@ -99,20 +98,20 @@ namespace app::playback
     ::snd_pcm_hw_params_set_period_size_near(safePcm.get(), params, &periodSize, 0);
     if (::snd_pcm_hw_params(safePcm.get(), params) < 0)
     {
-      return rs::makeError(rs::Error::Code::InitFailed, "Failed to apply hw params");
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to apply hw params");
     }
 
     ::snd_pcm_sw_params_t* swParams = nullptr;
     snd_pcm_sw_params_alloca(&swParams);
     if (::snd_pcm_sw_params_current(safePcm.get(), swParams) < 0)
     {
-      return rs::makeError(rs::Error::Code::InitFailed, "Failed to get sw params");
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to get sw params");
     }
     ::snd_pcm_sw_params_set_start_threshold(safePcm.get(), swParams, periodSize);
     ::snd_pcm_sw_params_set_avail_min(safePcm.get(), swParams, periodSize);
     if (::snd_pcm_sw_params(safePcm.get(), swParams) < 0)
     {
-      return rs::makeError(rs::Error::Code::InitFailed, "Failed to apply sw params");
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to apply sw params");
     }
 
     _format = format;
@@ -163,7 +162,7 @@ namespace app::playback
       auto* const dest = static_cast<std::byte*>(areas[0].addr) + (offset * (areas[0].step / 8));
       std::size_t const bytesToRead = static_cast<std::size_t>(frames) * (_format.bitDepth / 8) * _format.channels;
       std::size_t const bytesRead =
-        _callbacks.readPcm(_callbacks.userData, rs::utility::bytes::view(dest, bytesToRead));
+        _callbacks.readPcm(_callbacks.userData, ao::utility::bytes::view(dest, bytesToRead));
 
       if (bytesRead > 0)
       {
@@ -245,7 +244,7 @@ namespace app::playback
       _thread = std::jthread(
         [this](std::stop_token const& st)
         {
-          rs::setCurrentThreadName("AlsaPlayback");
+          ao::setCurrentThreadName("AlsaPlayback");
           playbackLoop(st);
         });
     }
@@ -317,8 +316,8 @@ namespace app::playback
   {
     return true;
   }
-  rs::audio::BackendKind AlsaExclusiveBackend::kind() const noexcept
+  ao::audio::BackendKind AlsaExclusiveBackend::kind() const noexcept
   {
-    return rs::audio::BackendKind::AlsaExclusive;
+    return ao::audio::BackendKind::AlsaExclusive;
   }
 } // namespace app::playback

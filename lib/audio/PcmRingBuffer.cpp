@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/PcmRingBuffer.h>
+#include <ao/audio/PcmRingBuffer.h>
 
 #include <cstring>
 
-namespace rs::audio
+namespace ao::audio
 {
   PcmRingBuffer::PcmRingBuffer()
   {
@@ -54,4 +54,4 @@ namespace rs::audio
   {
     return _writeCount.load(std::memory_order_acquire) - _readCount.load(std::memory_order_acquire);
   }
-} // namespace rs::audio
+} // namespace ao::audio

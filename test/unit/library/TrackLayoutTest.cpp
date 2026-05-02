@@ -6,17 +6,17 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
+#include <ao/Type.h>
+#include <ao/library/TrackLayout.h>
 #include <cstddef>
-#include <rs/Type.h>
-#include <rs/library/TrackLayout.h>
 
 #include <test/unit/library/TestUtils.h>
 
 namespace
 {
   using namespace test;
-  using rs::library::TrackColdHeader;
-  using rs::library::TrackHotHeader;
+  using ao::library::TrackColdHeader;
+  using ao::library::TrackHotHeader;
 
   TEST_CASE("TrackHotHeader - Size and Alignment")
   {

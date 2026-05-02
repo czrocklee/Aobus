@@ -3,8 +3,8 @@
 
 #include "platform/linux/ui/TagEditController.h"
 #include "platform/linux/ui/TagPopover.h"
+#include <ao/library/TrackBuilder.h>
 #include <format>
-#include <rs/library/TrackBuilder.h>
 
 namespace app::ui
 {
@@ -168,14 +168,14 @@ namespace app::ui
 
     for (auto const trackId : selection.selectedIds)
     {
-      auto const optView = writer.get(trackId, rs::library::TrackStore::Reader::LoadMode::Hot);
+      auto const optView = writer.get(trackId, ao::library::TrackStore::Reader::LoadMode::Hot);
 
       if (!optView)
       {
         continue;
       }
 
-      auto builder = rs::library::TrackBuilder::fromView(*optView, dict);
+      auto builder = ao::library::TrackBuilder::fromView(*optView, dict);
 
       for (auto const& tag : tagsToRemove)
       {

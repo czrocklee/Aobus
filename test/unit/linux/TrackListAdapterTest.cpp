@@ -9,11 +9,11 @@
 // Standalone test for app::uiapp::ui::TrackListAdapter without GTKMM dependency.
 // Tests adapter functionality with test doubles for GTK objects.
 
-#include <rs/library/MusicLibrary.h>
-#include <rs/library/TrackBuilder.h>
-#include <rs/library/TrackStore.h>
-#include <rs/lmdb/Transaction.h>
-#include <rs/model/TrackIdList.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/model/TrackIdList.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <cstdint>
@@ -23,12 +23,12 @@
 #include <utility>
 #include <vector>
 
-namespace rs::model::test
+namespace ao::model::test
 {
   // Test-specific RowData definition
   struct RowData
   {
-    using TrackId = rs::TrackId;
+    using TrackId = ao::TrackId;
     TrackId id;
     std::string artist;
     std::string album;
@@ -43,7 +43,7 @@ namespace rs::model::test
     bool missing = false;
   };
 
-  using DictionaryId = rs::DictionaryId;
+  using DictionaryId = ao::DictionaryId;
 
   /**
    * TestTrackRowProvider - Standalone test double for app::uiapp::ui::TrackListAdapter tests.
@@ -52,21 +52,21 @@ namespace rs::model::test
   class TestTrackRowProvider final
   {
   public:
-    explicit TestTrackRowProvider(rs::library::MusicLibrary& ml);
+    explicit TestTrackRowProvider(ao::library::MusicLibrary& ml);
 
-    std::optional<RowData> getRow(rs::TrackId id);
-    void invalidateHot(rs::TrackId id);
-    void invalidateFull(rs::TrackId id);
-    void remove(rs::TrackId id);
+    std::optional<RowData> getRow(ao::TrackId id);
+    void invalidateHot(ao::TrackId id);
+    void invalidateFull(ao::TrackId id);
+    void remove(ao::TrackId id);
 
   private:
     std::string resolveDictionaryString(DictionaryId id);
 
-    rs::library::MusicLibrary* _ml;
-    rs::library::TrackStore* _store;
-    rs::library::DictionaryStore* _dict;
+    ao::library::MusicLibrary* _ml;
+    ao::library::TrackStore* _store;
+    ao::library::DictionaryStore* _dict;
 
-    std::unordered_map<rs::TrackId, RowData> _rowCache;
+    std::unordered_map<ao::TrackId, RowData> _rowCache;
     std::unordered_map<DictionaryId, std::string> _stringCache;
   };
 
@@ -96,12 +96,12 @@ namespace rs::model::test
     return insertResult.first->second;
   }
 
-  TestTrackRowProvider::TestTrackRowProvider(rs::library::MusicLibrary& ml)
+  TestTrackRowProvider::TestTrackRowProvider(ao::library::MusicLibrary& ml)
     : _ml{&ml}, _store{&ml.tracks()}, _dict{&ml.dictionary()}
   {
   }
 
-  std::optional<RowData> TestTrackRowProvider::getRow(rs::TrackId id)
+  std::optional<RowData> TestTrackRowProvider::getRow(ao::TrackId id)
   {
     auto const it = _rowCache.find(id);
 
@@ -115,10 +115,10 @@ namespace rs::model::test
       return it->second;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml->readTransaction());
     auto reader = _store->reader(txn);
 
-    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -181,32 +181,32 @@ namespace rs::model::test
     return result.first->second;
   }
 
-  void TestTrackRowProvider::invalidateHot(rs::TrackId id)
+  void TestTrackRowProvider::invalidateHot(ao::TrackId id)
   {
     _rowCache.erase(id);
   }
 
-  void TestTrackRowProvider::invalidateFull(rs::TrackId id)
+  void TestTrackRowProvider::invalidateFull(ao::TrackId id)
   {
     _rowCache.erase(id);
   }
 
-  void TestTrackRowProvider::remove(rs::TrackId id)
+  void TestTrackRowProvider::remove(ao::TrackId id)
   {
     _rowCache.erase(id);
   }
-} // namespace rs::model::test
+} // namespace ao::model::test
 
 namespace
 {
-  using rs::TrackId;
-  using rs::library::MusicLibrary;
-  using rs::library::TrackBuilder;
-  using rs::library::TrackStore;
-  using rs::model::TrackIdList;
-  using rs::model::TrackIdListObserver;
-  using rs::model::test::RowData;
-  using rs::model::test::TestTrackRowProvider;
+  using ao::TrackId;
+  using ao::library::MusicLibrary;
+  using ao::library::TrackBuilder;
+  using ao::library::TrackStore;
+  using ao::model::TrackIdList;
+  using ao::model::TrackIdListObserver;
+  using ao::model::test::RowData;
+  using ao::model::test::TestTrackRowProvider;
 
   struct TrackSpec
   {

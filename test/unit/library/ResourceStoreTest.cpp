@@ -6,17 +6,17 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/library/ResourceStore.h>
-#include <rs/lmdb/Database.h>
-#include <rs/lmdb/Environment.h>
-#include <rs/lmdb/Transaction.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
 #include <test/unit/lmdb/TestUtils.h>
 
-using rs::library::ResourceStore;
-using rs::lmdb::Database;
-using rs::lmdb::Environment;
-using rs::lmdb::ReadTransaction;
-using rs::lmdb::WriteTransaction;
+using ao::library::ResourceStore;
+using ao::lmdb::Database;
+using ao::lmdb::Environment;
+using ao::lmdb::ReadTransaction;
+using ao::lmdb::WriteTransaction;
 
 TEST_CASE("ResourceStore - create and read", "[core][resource]")
 {

@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2026 RockStudio Contributors
 
 #include "platform/linux/ui/TrackPageGraph.h"
-#include <rs/model/AllTrackIdsList.h>
-#include <rs/model/FilteredTrackIdList.h>
-#include <rs/model/ManualTrackIdList.h>
-#include <rs/utility/Log.h>
+#include <ao/model/AllTrackIdsList.h>
+#include <ao/model/FilteredTrackIdList.h>
+#include <ao/model/ManualTrackIdList.h>
+#include <ao/utility/Log.h>
 
 #include <format>
 #include <limits>
@@ -14,12 +14,12 @@ namespace app::ui
 {
   namespace
   {
-    rs::ListId allTracksListId()
+    ao::ListId allTracksListId()
     {
-      return rs::ListId{std::numeric_limits<std::uint32_t>::max()};
+      return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
     }
 
-    std::string pageNameForListId(rs::ListId listId)
+    std::string pageNameForListId(ao::ListId listId)
     {
       if (listId == allTracksListId())
       {
@@ -55,7 +55,7 @@ namespace app::ui
     }
   }
 
-  void TrackPageGraph::rebuild(LibrarySession& session, rs::lmdb::ReadTransaction& txn)
+  void TrackPageGraph::rebuild(LibrarySession& session, ao::lmdb::ReadTransaction& txn)
   {
     APP_LOG_DEBUG("TrackPageGraph::rebuild called");
     clear();
@@ -69,13 +69,13 @@ namespace app::ui
     }
   }
 
-  TrackPageContext* TrackPageGraph::find(rs::ListId listId)
+  TrackPageContext* TrackPageGraph::find(ao::ListId listId)
   {
     auto it = _trackPages.find(listId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
   }
 
-  TrackPageContext const* TrackPageGraph::find(rs::ListId listId) const
+  TrackPageContext const* TrackPageGraph::find(ao::ListId listId) const
   {
     auto it = _trackPages.find(listId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
@@ -119,7 +119,7 @@ namespace app::ui
     return nullptr;
   }
 
-  void TrackPageGraph::show(rs::ListId listId)
+  void TrackPageGraph::show(ao::ListId listId)
   {
     _stack.set_visible_child(pageNameForListId(listId));
   }
@@ -143,16 +143,16 @@ namespace app::ui
     _trackPages[allTracksListId()] = std::move(ctx);
   }
 
-  void TrackPageGraph::buildPageForStoredList(rs::ListId listId,
-                                              rs::library::ListView const& view,
+  void TrackPageGraph::buildPageForStoredList(ao::ListId listId,
+                                              ao::library::ListView const& view,
                                               LibrarySession& session)
   {
     std::string listName = view.name().empty() ? "<Unnamed List>" : std::string(view.name());
 
-    std::unique_ptr<rs::model::TrackIdList> membershipList;
+    std::unique_ptr<ao::model::TrackIdList> membershipList;
     if (view.isSmart())
     {
-      auto* sourceList = static_cast<rs::model::TrackIdList*>(session.allTrackIds.get());
+      auto* sourceList = static_cast<ao::model::TrackIdList*>(session.allTrackIds.get());
       if (!view.isRootParent())
       {
         if (auto* const sourceCtx = find(view.parentId()))
@@ -165,14 +165,14 @@ namespace app::ui
       }
 
       auto filtered =
-        std::make_unique<rs::model::FilteredTrackIdList>(*sourceList, *session.musicLibrary, *session.smartListEngine);
+        std::make_unique<ao::model::FilteredTrackIdList>(*sourceList, *session.musicLibrary, *session.smartListEngine);
       filtered->setExpression(std::string(view.filter()));
       filtered->reload();
       membershipList = std::move(filtered);
     }
     else
     {
-      auto manual = std::make_unique<rs::model::ManualTrackIdList>(view, session.allTrackIds.get());
+      auto manual = std::make_unique<ao::model::ManualTrackIdList>(view, session.allTrackIds.get());
       membershipList = std::move(manual);
     }
 
@@ -227,7 +227,7 @@ namespace app::ui
       });
 
     page->signalTagEditRequested().connect(
-      [this, page](std::vector<rs::TrackId> const& ids, double posX, double posY)
+      [this, page](std::vector<ao::TrackId> const& ids, double posX, double posY)
       {
         if (_callbacks.onTagEditRequested != nullptr)
         {
@@ -236,7 +236,7 @@ namespace app::ui
       });
 
     page->signalTrackActivated().connect(
-      [this, page](rs::TrackId id)
+      [this, page](ao::TrackId id)
       {
         if (_callbacks.onTrackActivated != nullptr)
         {

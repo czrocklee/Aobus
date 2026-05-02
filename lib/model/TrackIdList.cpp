@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/model/TrackIdList.h>
+#include <ao/model/TrackIdList.h>
 
 #include <algorithm>
 
-namespace rs::model
+namespace ao::model
 {
   TrackIdList::~TrackIdList()
   {
@@ -88,4 +88,4 @@ namespace rs::model
       obs->onRemoved(ids);
     }
   }
-} // namespace rs::model
+} // namespace ao::model

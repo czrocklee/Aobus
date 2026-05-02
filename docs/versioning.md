@@ -1,10 +1,10 @@
-# RockStudio Versioning
+# Aobus Versioning
 
-RockStudio tracks two independent versions.
+Aobus tracks two independent versions.
 
 ## App Version
 
-- `AppVersion` is the RockStudio release version.
+- `AppVersion` is the Aobus release version.
 - It is defined in `CMakeLists.txt` and generated into `rs/AppVersion.h`.
 - Use semantic versioning for releases.
 - Changing the app version does not require a library format change.

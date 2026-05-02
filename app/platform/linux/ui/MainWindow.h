@@ -13,12 +13,12 @@
 #include "platform/linux/ui/TagEditController.h"
 #include "platform/linux/ui/TrackPageGraph.h"
 #include "platform/linux/ui/TrackViewPage.h"
+#include <ao/audio/Types.h>
 #include <cstdint>
 #include <filesystem>
 #include <gtkmm.h>
 #include <memory>
 #include <optional>
-#include <rs/audio/Types.h>
 #include <vector>
 
 namespace app::services
@@ -26,7 +26,7 @@ namespace app::services
   class PlaylistExporter;
 }
 
-namespace rs::audio
+namespace ao::audio
 {
   class Player;
 }
@@ -53,14 +53,14 @@ namespace app::ui
 
     // IPlaybackHost implementation
     TrackPageContext const* currentVisibleTrackPageContext() const override;
-    TrackPageContext* findTrackPageContext(rs::ListId listId) override;
-    void showListPage(rs::ListId listId) override;
-    void updatePlaybackStatus(rs::audio::Snapshot const& snapshot) override;
+    TrackPageContext* findTrackPageContext(ao::ListId listId) override;
+    void showListPage(ao::ListId listId) override;
+    void updatePlaybackStatus(ao::audio::Snapshot const& snapshot) override;
     void showPlaybackMessage(std::string const& message,
                              std::optional<std::chrono::seconds> timeout = std::nullopt) override;
 
   private:
-    void updateCoverArt(std::vector<rs::TrackId> const& selectedIds);
+    void updateCoverArt(std::vector<ao::TrackId> const& selectedIds);
 
     void showStatusMessage(std::string const& message);
 
@@ -69,7 +69,7 @@ namespace app::ui
     void installLibrarySession(std::unique_ptr<LibrarySession> session);
 
     // Page management helpers
-    void rebuildListPages(rs::lmdb::ReadTransaction& txn);
+    void rebuildListPages(ao::lmdb::ReadTransaction& txn);
 
     void onTrackSelectionChanged();
     void updateImportProgress(double fraction, std::string const& info);
@@ -79,8 +79,8 @@ namespace app::ui
 
     // Playback support
     void jumpToPlayingList();
-    void onOutputChanged(rs::audio::BackendKind kind, std::string const& deviceId);
-    std::optional<rs::audio::TrackPlaybackDescriptor> currentSelectionPlaybackDescriptor() const;
+    void onOutputChanged(ao::audio::BackendKind kind, std::string const& deviceId);
+    std::optional<ao::audio::TrackPlaybackDescriptor> currentSelectionPlaybackDescriptor() const;
 
     // Active library session
     std::unique_ptr<LibrarySession> _librarySession;

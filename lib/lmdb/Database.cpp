@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "ThrowError.h"
-#include <rs/Exception.h>
-#include <rs/lmdb/Database.h>
-#include <rs/utility/ByteView.h>
+#include <ao/Exception.h>
+#include <ao/lmdb/Database.h>
+#include <ao/utility/ByteView.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -12,7 +12,7 @@
 #include <lmdb.h>
 #include <vector>
 
-namespace rs::lmdb
+namespace ao::lmdb
 {
   namespace
   {
@@ -32,7 +32,7 @@ namespace rs::lmdb
     {
       if (val.mv_size != sizeof(T))
       {
-        RS_THROW(rs::Exception, "read: bad value size");
+        AO_THROW(ao::Exception, "read: bad value size");
       }
 
       T value;
