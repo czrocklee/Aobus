@@ -65,7 +65,6 @@ int main(int argc, char* argv[])
 
   auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "aobus" / "logs";
   ao::log::Log::init(logLevel, logDir);
-  APP_LOG_INFO("========================================================");
   APP_LOG_INFO("Aobus {} starting...", ao::kAppVersion);
 
   Glib::set_application_name("Aobus");

@@ -88,6 +88,18 @@ namespace
       flow::Connection{.sourceId = "mock-stream-id", .destId = "mock-sink-id", .isActive = true});
     return graph;
   }
+
+  class TestBackend : public NullBackend
+  {
+    BackendKind _kind;
+
+  public:
+    TestBackend(BackendKind k)
+      : _kind(k)
+    {
+    }
+    BackendKind kind() const noexcept override { return _kind; }
+  };
 } // namespace
 
 TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]")
@@ -252,4 +264,44 @@ TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][player
     auto snap = player.snapshot();
     REQUIRE(snap.flow.nodes.empty());
   }
+}
+
+TEST_CASE("Player - Pending Output", "[playback][player][pending]")
+{
+  Mock<IBackendProvider> mockProvider;
+  IBackendProvider::OnDevicesChangedCallback onDevicesChanged;
+
+  When(Method(mockProvider, subscribeDevices))
+    .AlwaysDo(
+      [&](IBackendProvider::OnDevicesChangedCallback cb)
+      {
+        onDevicesChanged = cb;
+        return Subscription{};
+      });
+
+  When(Method(mockProvider, createBackend))
+    .AlwaysDo([&](Device const& dev) { return std::make_unique<TestBackend>(dev.backendKind); });
+
+  Player player(nullptr);
+  player.addProvider(std::make_unique<MockProviderWrapper>(mockProvider.get()));
+
+  // 1. Call setOutput before devices are available
+  player.setOutput(BackendKind::PipeWire, "system-default");
+
+  // Verify that it's NOT yet active (engine still has null backend/default device)
+  auto snapBefore = player.snapshot();
+  REQUIRE(snapBefore.currentDeviceId == "null");
+
+  // 2. Simulate devices being discovered
+  REQUIRE(onDevicesChanged);
+  onDevicesChanged({{.id = "system-default",
+                     .displayName = "System Default",
+                     .description = "PipeWire",
+                     .isDefault = true,
+                     .backendKind = BackendKind::PipeWire}});
+
+  // 3. Verify that the output was automatically restored
+  auto snapAfter = player.snapshot();
+  REQUIRE(snapAfter.currentDeviceId == "system-default");
+  REQUIRE(snapAfter.backend == BackendKind::PipeWire);
 }

@@ -64,7 +64,14 @@ namespace ao::audio
       std::vector<Device> devices;
     };
 
+    struct PendingOutput
+    {
+      BackendKind kind;
+      std::string deviceId;
+    };
+
     std::vector<std::unique_ptr<ProviderRecord>> _providers;
+    std::optional<PendingOutput> _pendingOutput;
     IBackendProvider* _activeManager = nullptr;
     Subscription _graphSubscription;
 

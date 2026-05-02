@@ -165,6 +165,7 @@ namespace ao::audio
     // 1. Check if we already have this output active
     if (kind == currentSnap.backend && deviceId == currentSnap.currentDeviceId)
     {
+      _pendingOutput.reset();
       return;
     }
 
@@ -174,9 +175,16 @@ namespace ao::audio
 
     if (it == _allDevices.end())
     {
-      AUDIO_LOG_ERROR("Player: Requested unknown output {}:{}", backendKindToId(kind), deviceId);
+      // If we don't have it yet, store it as pending.
+      // This is common during startup as device discovery is asynchronous.
+      _pendingOutput = PendingOutput{kind, std::string(deviceId)};
+      AUDIO_LOG_DEBUG(
+        "Player: Requested output {}:{} not yet available, pending discovery", backendKindToId(kind), deviceId);
       return;
     }
+
+    // Found it! Clear any pending output.
+    _pendingOutput.reset();
 
     auto const& targetDevice = *it;
 
@@ -269,6 +277,19 @@ namespace ao::audio
 
     _cachedBackends = std::move(snapshots);
     _allDevices = std::move(allDevices);
+
+    if (_pendingOutput)
+    {
+      // Try to apply pending output
+      auto const pending = *_pendingOutput;
+      setOutput(pending.kind, pending.deviceId);
+
+      if (!_pendingOutput)
+      {
+        AUDIO_LOG_INFO(
+          "Player: Pending output {}:{} successfully restored", backendKindToId(pending.kind), pending.deviceId);
+      }
+    }
   }
 
   void Player::handleRouteChanged(EngineRouteSnapshot const& snapshot, std::uint64_t generation)
