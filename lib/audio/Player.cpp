@@ -241,7 +241,7 @@ namespace ao::audio
     return snap;
   }
 
-  void Player::handleDevicesChanged(IBackendProvider*, std::vector<Device> const&)
+  void Player::handleDevicesChanged(IBackendProvider* /*provider*/, std::vector<Device> const& /*devices*/)
   {
     // Rebuild global cache from all providers
     auto allDevices = std::vector<Device>{};

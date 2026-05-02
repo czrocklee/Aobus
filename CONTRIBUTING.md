@@ -8,8 +8,9 @@ Rules are numbered for easy reference in reviews and tooling.
 - 2\. Code Style
   - 2.1. Indentation & Formatting
     - 2.1.1. Use `clang-format`
-    - 2.1.2. Use blank lines before and after control blocks, and between distinct statement groups
-      - Example: `auto title = view.getTitle();`, then a blank line, then `if (title)`
+    - 2.1.2. Use blank lines before and after control blocks (`if`, `for`, `while`, `switch`), and between distinct statement groups.
+      - Top-level macros like `TEST_CASE` or `SECTION` MUST be separated by at least one blank line.
+      - Do not put blank lines at the start or end of a block (immediately after `{` or before `}`).
       - Exception: if the previous line is a comment written specifically for an `if`, keep the comment directly above the `if`
       - Exception: if an `if` is the first effective line in a scope, do not add a leading blank line
   - 2.2. Naming Conventions
@@ -79,7 +80,7 @@ Rules are numbered for easy reference in reviews and tooling.
     - 3.2.8. Use `[[maybe_unused]]` for intentionally unused entities instead of warning-suppression casts
   - 3.3. C++23 Features
     - 3.3.1. Use `std::expected<T, E>` for operations that can fail recoverably
-      - Use the project alias `ao::Result<T>` (defaults to `ao::Result<>` for `void`), defined in `include/rs/Error.h`
+      - Use the project alias `ao::Result<T>` (defaults to `ao::Result<>` for `void`), defined in `include/ao/Error.h`
       - The error type is `ao::Error`, a struct with an error `Code` enum and a `message` string
       - Do not use `bool` return + side-channel `lastError()` for new code
       - Do not use `std::optional` to represent failure; reserve it for legitimate absence

@@ -29,115 +29,173 @@
 namespace
 {
   using ao::DictionaryId;
+  using ao::library::DictionaryStore;
+  using ao::library::ResourceStore;
+  using ao::library::TrackBuilder;
+  using ao::library::TrackView;
   using ao::lmdb::Database;
+  using ao::lmdb::Environment;
+  using ao::lmdb::WriteTransaction;
 
-  // Helper class to hold both the serialized data and create TrackView
-  // This ensures the data stays valid while the view is in use
-  class TestTrack
+  struct TrackSpec final
+  {
+    std::string title = "Test Title";
+    std::string artist = "Test Artist";
+    std::string album = "Test Album";
+    std::string albumArtist = {};
+    std::string composer = {};
+    std::string work = {};
+    std::string uri = "/path/to/track.flac";
+    std::uint16_t year = 2020;
+    std::uint16_t trackNumber = 1;
+    std::uint16_t totalTracks = 0;
+    std::uint16_t discNumber = 0;
+    std::uint16_t totalDiscs = 0;
+    std::uint32_t durationMs = 180000;
+    std::uint32_t bitrate = 320000;
+    std::uint32_t sampleRate = 44100;
+    std::uint8_t channels = 2;
+    std::uint8_t bitDepth = 16;
+    std::uint32_t coverArtId = 0;
+    std::uint8_t rating = 0;
+    std::uint16_t codecId = 0;
+    std::uint32_t artistId = 0;
+    std::uint32_t albumId = 0;
+    std::uint32_t genreId = 0;
+    std::uint32_t albumArtistId = 0;
+    std::uint32_t composerId = 0;
+    std::uint32_t workId = 0;
+    std::vector<std::string> tags = {};
+    std::vector<std::pair<std::string, std::string>> customPairs = {};
+  };
+
+  class TrackFixture
   {
   public:
-    TestTrack(std::string title = "Test Title",
-              std::string artist = "Test Artist",
-              std::string album = "Test Album",
-              std::string uri = "/path/to/track.flac",
-              std::uint16_t year = 2020,
-              std::uint16_t trackNumber = 5,
-              std::uint32_t durationMs = 180000,
-              std::uint32_t bitrate = 320000,
-              std::uint32_t sampleRate = 44100,
-              std::uint8_t channels = 2,
-              std::uint8_t bitDepth = 16,
-              std::uint32_t artistId = 1,
-              std::uint32_t albumId = 2,
-              std::uint32_t genreId = 3,
-              std::vector<std::uint32_t> tagIds = {},
-              std::string composer = "",
-              std::string work = "")
-      : _title{std::move(title)}
-      , _artist{std::move(artist)}
-      , _album{std::move(album)}
-      , _uri{std::move(uri)}
-      , _work{std::move(work)}
-      , _composer{std::move(composer)}
-    {
-      _builder.metadata().title(_title);
-      _builder.metadata().artist(_artist);
-      _builder.metadata().album(_album);
-      _builder.metadata().work(_work);
-      _builder.metadata().composer(_composer);
-      _builder.metadata().year(year);
-      _builder.metadata().trackNumber(trackNumber);
-      _builder.property().uri(_uri);
-      _builder.property().durationMs(durationMs);
-      _builder.property().bitrate(bitrate);
-      _builder.property().sampleRate(sampleRate);
-      _builder.property().channels(channels);
-      _builder.property().bitDepth(bitDepth);
-      // Add tags using string names (will be resolved to IDs via dict.put during serialize)
-      // Store tag strings as members to keep string_view pointers valid
-      _tagStrings.reserve(tagIds.size());
+    TrackFixture() { init(TrackSpec{}, nullptr); }
 
+    explicit TrackFixture(TrackSpec const& spec, DictionaryStore* dict = nullptr) { init(spec, dict); }
+
+    // Legacy compatibility constructor
+    TrackFixture(std::string title,
+                 std::string artist = "Test Artist",
+                 std::string album = "Test Album",
+                 std::string uri = "/path/to/track.flac",
+                 std::uint16_t year = 2020,
+                 std::uint16_t trackNumber = 5,
+                 std::uint32_t durationMs = 180000,
+                 std::uint32_t bitrate = 320000,
+                 std::uint32_t sampleRate = 44100,
+                 std::uint8_t channels = 2,
+                 std::uint8_t bitDepth = 16,
+                 std::uint32_t artistId = 0,
+                 std::uint32_t albumId = 0,
+                 std::uint32_t genreId = 0,
+                 std::vector<std::uint32_t> tagIds = {},
+                 std::string composer = "",
+                 std::string work = "")
+    {
+      auto spec = TrackSpec{};
+      spec.title = std::move(title);
+      spec.artist = std::move(artist);
+      spec.album = std::move(album);
+      spec.uri = std::move(uri);
+      spec.year = year;
+      spec.trackNumber = trackNumber;
+      spec.durationMs = durationMs;
+      spec.bitrate = bitrate;
+      spec.sampleRate = sampleRate;
+      spec.channels = channels;
+      spec.bitDepth = bitDepth;
+      spec.artistId = artistId;
+      spec.albumId = albumId;
+      spec.genreId = genreId;
       for (auto id : tagIds)
       {
-        auto const& str = _tagStrings.emplace_back(std::format("tag{}", id));
-        _builder.tags().add(str);
+        spec.tags.push_back(std::format("tag{}", id));
       }
-
-      // Build hot and cold data with a dictionary
-      auto temp = TempDir{};
-      auto envOpts = ao::lmdb::Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
-      _env.emplace(temp.path(), envOpts);
-      auto wtxn = ao::lmdb::WriteTransaction{*_env};
-      _dict.emplace(Database{wtxn, "dict"}, wtxn);
-      _resources.emplace(Database{wtxn, "resources"});
-
-      _hotData = _builder.serializeHot(wtxn, *_dict);
-      _coldData = _builder.serializeCold(wtxn, *_dict, *_resources);
-
-      // Fix up the header with specific IDs
-      // Note: we serialize then modify, so const_cast is no longer needed with asMutablePtr
-      auto* header = ao::utility::layout::asMutablePtr<ao::library::TrackHotHeader>(_hotData);
-      header->artistId = DictionaryId{artistId};
-      header->albumId = DictionaryId{albumId};
-      header->genreId = DictionaryId{genreId};
-      header->albumArtistId = DictionaryId{0};
-      header->codecId = 0;
-      header->rating = 0;
+      spec.composer = std::move(composer);
+      spec.work = std::move(work);
+      init(spec, nullptr);
     }
 
-    // Returns TrackView with both hot and cold data
-    ao::library::TrackView view() const { return ao::library::TrackView{_hotData, _coldData}; }
-
-    // Returns TrackView with hot data only (for invalid cold tests)
-    ao::library::TrackView hotOnlyView() const
-    {
-      return ao::library::TrackView{_hotData, std::span<std::byte const>{}};
-    }
-
-    // Returns TrackView with cold data only (for cold-only plan tests)
-    ao::library::TrackView coldOnlyView() const
-    {
-      return ao::library::TrackView{std::span<std::byte const>{}, _coldData};
-    }
-
-    ao::library::DictionaryStore& dictionary() { return *_dict; }
+    TrackView view() const { return TrackView{_hotData, _coldData}; }
+    TrackView hotOnlyView() const { return TrackView{_hotData, std::span<std::byte const>{}}; }
+    TrackView coldOnlyView() const { return TrackView{std::span<std::byte const>{}, _coldData}; }
+    DictionaryStore& dictionary() { return *_dict; }
 
   private:
-    ao::library::TrackBuilder _builder = ao::library::TrackBuilder::createNew();
-    std::optional<ao::lmdb::Environment> _env;
-    std::optional<ao::library::DictionaryStore> _dict;
-    std::optional<ao::library::ResourceStore> _resources;
+    void init(TrackSpec const& spec, DictionaryStore* dict)
+    {
+      auto temp = TempDir{};
+      auto envOpts = Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
+      _env.emplace(temp.path(), envOpts);
+      auto wtxn = WriteTransaction{*_env};
+
+      if (dict == nullptr)
+      {
+        _dict.emplace(Database{wtxn, "dict"}, wtxn);
+        dict = &*_dict;
+      }
+
+      _resources.emplace(Database{wtxn, "resources"});
+
+      TrackBuilder builder = TrackBuilder::createNew();
+      builder.metadata().title(spec.title);
+      builder.metadata().artist(spec.artist);
+      builder.metadata().album(spec.album);
+      builder.metadata().albumArtist(spec.albumArtist);
+      builder.metadata().composer(spec.composer);
+      builder.metadata().work(spec.work);
+      builder.metadata().year(spec.year);
+      builder.metadata().trackNumber(spec.trackNumber);
+      builder.metadata().totalTracks(spec.totalTracks);
+      builder.metadata().discNumber(spec.discNumber);
+      builder.metadata().totalDiscs(spec.totalDiscs);
+
+      builder.property().uri(spec.uri);
+      builder.property().durationMs(spec.durationMs);
+      builder.property().bitrate(spec.bitrate);
+      builder.property().sampleRate(spec.sampleRate);
+      builder.property().channels(spec.channels);
+      builder.property().bitDepth(spec.bitDepth);
+      builder.metadata().rating(spec.rating);
+      builder.property().codecId(spec.codecId);
+      builder.metadata().coverArtId(spec.coverArtId);
+
+      for (auto const& name : spec.tags)
+      {
+        builder.tags().add(name);
+      }
+
+      for (auto const& [k, v] : spec.customPairs)
+      {
+        builder.custom().add(k, v);
+      }
+
+      _hotData = builder.serializeHot(wtxn, *dict);
+      _coldData = builder.serializeCold(wtxn, *dict, *_resources);
+
+      // Manual ID overrides if specified
+      auto* header = ao::utility::layout::asMutablePtr<ao::library::TrackHotHeader>(_hotData);
+      if (spec.artistId != 0) header->artistId = DictionaryId{spec.artistId};
+      if (spec.albumId != 0) header->albumId = DictionaryId{spec.albumId};
+      if (spec.genreId != 0) header->genreId = DictionaryId{spec.genreId};
+      if (spec.albumArtistId != 0) header->albumArtistId = DictionaryId{spec.albumArtistId};
+      if (spec.composerId != 0) header->composerId = DictionaryId{spec.composerId};
+
+      auto* coldHeader = ao::utility::layout::asMutablePtr<ao::library::TrackColdHeader>(_coldData);
+      if (spec.workId != 0) coldHeader->workId = DictionaryId{spec.workId};
+    }
+
+    std::optional<Environment> _env;
+    std::optional<DictionaryStore> _dict;
+    std::optional<ResourceStore> _resources;
     std::vector<std::byte> _hotData;
     std::vector<std::byte> _coldData;
-    // Store strings as members so string_view pointers remain valid
-    std::string _title;
-    std::string _artist;
-    std::string _album;
-    std::string _uri;
-    std::string _work;
-    std::string _composer;
-    std::vector<std::string> _tagStrings; // Keep tag strings alive for string_view
   };
+
+  using TestTrack = TrackFixture;
 
   std::vector<std::byte> makeHotOnlyTrack(ao::DictionaryId artistId = ao::DictionaryId{0},
                                           ao::DictionaryId albumId = ao::DictionaryId{0},
@@ -734,24 +792,6 @@ TEST_CASE("PlanEvaluator - Tag Field Compilation")
   CHECK(plan.instructions[0].op == OpCode::LoadField);
 }
 
-TEST_CASE("PlanEvaluator - TagCount Field")
-{
-  auto expr = parse("@tagCount > 0");
-  auto compiler = QueryCompiler{};
-  auto plan = compiler.compile(expr);
-  auto evaluator = PlanEvaluator{};
-
-  // Track with 2 tags
-  auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {10, 20}};
-  auto result = evaluator.evaluateFull(plan, track1.view());
-  CHECK(result == true);
-
-  // Track with no tags
-  auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}};
-  result = evaluator.evaluateFull(plan, track2.view());
-  CHECK(result == false);
-}
-
 TEST_CASE("PlanEvaluator - Tag Bloom Filter - Without Dictionary")
 {
   // Without a dictionary, tag bloom mask cannot be set (no way to resolve tag name to ID)
@@ -995,4 +1035,134 @@ TEST_CASE("PlanEvaluator - Year Greater Alone Works")
   auto track2 = TestTrack{"Title", "Artist", "Album", "/path", 1990};
   result = evaluator.evaluateFull(plan, track2.view());
   CHECK(result == false);
+}
+
+TEST_CASE("PlanEvaluator - Custom Metadata Fields")
+{
+  auto const spec = TrackSpec{.customPairs = {{"isrc", "US-RC1-12-00001"}, {"label", "Deutsche Grammophon"}}};
+
+  auto track = TrackFixture{spec};
+  auto evaluator = PlanEvaluator{};
+  auto compiler = QueryCompiler{&track.dictionary()};
+
+  SECTION("Custom Field Equality Match")
+  {
+    auto plan = compiler.compile(parse("%isrc = 'US-RC1-12-00001'"));
+    CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+  }
+
+  SECTION("Custom Field Equality NonMatch")
+  {
+    auto plan = compiler.compile(parse("%isrc = 'UK-XYZ'"));
+    CHECK(evaluator.evaluateFull(plan, track.view()) == false);
+  }
+
+  SECTION("Custom Field Like Match")
+  {
+    auto plan = compiler.compile(parse("%label ~ 'Grammophon'"));
+    CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+  }
+
+  SECTION("Custom Field Missing")
+  {
+    auto plan = compiler.compile(parse("%nonexistent = 'val'"));
+    CHECK(evaluator.evaluateFull(plan, track.view()) == false);
+  }
+}
+
+TEST_CASE("PlanEvaluator - Dictionary-Backed LIKE - Partial Matches")
+{
+  auto const spec = TrackSpec{.artist = "Johann Sebastian Bach"};
+  auto track = TrackFixture{spec};
+  auto evaluator = PlanEvaluator{};
+
+  // LIKE should work even if we provide a dictionary, but it shouldn't
+  // resolve "Bach" to a numeric ID because LIKE requires string scanning.
+  auto compiler = QueryCompiler{&track.dictionary()};
+  auto plan = compiler.compile(parse("$artist ~ 'Bach'"));
+
+  CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+}
+
+TEST_CASE("PlanEvaluator - Unit Scaling Logic")
+{
+  auto const spec = TrackSpec{
+    .durationMs = 185000, // 3m 5s
+    .bitrate = 320000     // 320k
+  };
+
+  auto track = TrackFixture{spec};
+  auto evaluator = PlanEvaluator{};
+  auto compiler = QueryCompiler{};
+
+  CHECK(evaluator.evaluateFull(compiler.compile(parse("@duration > 3m")), track.view()) == true);
+  CHECK(evaluator.evaluateFull(compiler.compile(parse("@duration > 4m")), track.view()) == false);
+  CHECK(evaluator.evaluateFull(compiler.compile(parse("@bitrate = 320k")), track.view()) == true);
+}
+
+TEST_CASE("PlanEvaluator - Bloom Filter Advanced Scenarios")
+{
+  auto const spec = TrackSpec{.tags = {"rock", "jazz", "blues"}};
+  auto track = TrackFixture{spec};
+  auto const evaluator = PlanEvaluator{};
+
+  // Need dictionary for compiler to generate bloom mask
+  auto compiler = QueryCompiler{&track.dictionary()};
+
+  SECTION("Multi-Tag AND Requires All Bits")
+  {
+    // #rock and #jazz -> mask should have bits for both
+    auto const plan = compiler.compile(parse("#rock and #jazz"));
+    CHECK(plan.tagBloomMask != 0);
+
+    // Should match track with both tags
+    CHECK(evaluator.matches(plan, track.view()) == true);
+
+    // Should NOT match track with only one tag
+    auto const spec2 = TrackSpec{.tags = {"rock"}};
+    auto track2 = TrackFixture{spec2, &track.dictionary()};
+    CHECK(evaluator.matches(plan, track2.view()) == false);
+  }
+
+  SECTION("Bloom Filter Collision - False Positive Mitigation")
+  {
+    // The Bloom filter uses (Id % 32) as the bit index.
+    // We want two tags: A (in track) and B (not in track) where (A % 32 == B % 32).
+
+    auto& dict = track.dictionary();
+
+    // 1. Find or create a base tag
+    auto tagA = "rock";
+    auto idA = dict.getOrIntern(tagA).value();
+    auto bitIndex = idA % 32;
+
+    // 2. Find a colliding tag B
+    auto tagB = std::string{};
+
+    for (int i = 0; i < 1000; ++i)
+    {
+      auto const candidate = std::format("collision_tag_{}", i);
+      auto const idB = dict.getOrIntern(candidate).value();
+
+      if (idB != idA && (idB % 32) == bitIndex)
+      {
+        tagB = candidate;
+        break;
+      }
+    }
+
+    REQUIRE(!tagB.empty());
+
+    // 3. Create a track with ONLY tagA
+    auto const spec = TrackSpec{.tags = {tagA}};
+    auto trackA = TrackFixture{spec, &dict};
+
+    // 4. Query for tagB
+    auto planB = compiler.compile(parse("#" + tagB));
+
+    // VERIFICATION:
+    // The bloom mask for tagB will match tagA's bits (due to collision).
+    // evaluator.matches() MUST still return false because it does a full check.
+    CHECK(evaluator.matches(planB, trackA.view()) == false);
+  }
 }

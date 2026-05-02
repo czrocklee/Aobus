@@ -168,6 +168,46 @@ TEST_CASE("Parser - Logical Operators")
   CHECK("[u{!}[v{m}artist]]" == canonicalize(parse("!$artist")));
 }
 
+TEST_CASE("Parser - Precedence And Grouping")
+{
+  SECTION("And Binds Tighter Than Or")
+  {
+    CHECK("[b{or}[b{eq}[v{m}a],[c{s}x]],[b{and}[b{eq}[v{m}b],[c{s}y]],[b{eq}[v{m}c],[c{s}z]]]]" ==
+          canonicalize(parse("$a = x or $b = y and $c = z")));
+  }
+
+  SECTION("Parentheses Override Precedence")
+  {
+    CHECK("[b{and}[b{or}[b{eq}[v{m}a],[c{s}x]],[b{eq}[v{m}b],[c{s}y]]],[b{eq}[v{m}c],[c{s}z]]]" ==
+          canonicalize(parse("($a = x or $b = y) and $c = z")));
+  }
+
+  SECTION("Add Binds Tighter Than Relational")
+  {
+    CHECK("[b{eq}[b{add}[v{m}trackNumber],[c{i}1]],[c{i}12]]" == canonicalize(parse("$trackNumber + 1 = 12")));
+  }
+
+  SECTION("Nested Parentheses Parse Correctly")
+  {
+    CHECK("[b{eq}[v{m}artist],[c{s}Bach]]" == canonicalize(parse("(($artist = Bach))")));
+  }
+}
+
+TEST_CASE("Parser - Keyword Boundaries And Token Rules")
+{
+  SECTION("Bareword CanContainKeywordSubstring")
+  {
+    CHECK("[c{s}Bandroid]" == canonicalize(parse("Bandroid")));
+    CHECK("[c{s}oratorio]" == canonicalize(parse("oratorio")));
+    CHECK("[c{s}notation]" == canonicalize(parse("notation")));
+  }
+
+  SECTION("Custom Identifier Allows Underscore And Digits")
+  {
+    CHECK("[v{c}replaygain_track_gain_db]" == canonicalize(parse("%replaygain_track_gain_db")));
+  }
+}
+
 TEST_CASE("Parser - Arithmetic")
 {
   CHECK("[b{add}[c{s}hello],[v{m}artist]]" == canonicalize(parse("hello + $artist")));
@@ -202,8 +242,32 @@ TEST_CASE("Parser - Empty String")
   CHECK("[c{s}]" == canonicalize(parse("\"\"")));
 }
 
-TEST_CASE("Parser - Invalid Input")
+TEST_CASE("Parser - Invalid Input Matrix")
 {
-  REQUIRE_THROWS(parse(""));
-  REQUIRE_THROWS(parse("   "));
+  SECTION("Empty and Whitespace")
+  {
+    REQUIRE_THROWS(parse(""));
+    REQUIRE_THROWS(parse("   "));
+  }
+
+  SECTION("Variable Token Rules")
+  {
+    REQUIRE_THROWS(parse("$1bad"));
+    REQUIRE_THROWS(parse("$"));
+    REQUIRE_THROWS(parse("@"));
+    REQUIRE_THROWS(parse("#"));
+    REQUIRE_THROWS(parse("%"));
+  }
+
+  SECTION("Unterminated Quotes")
+  {
+    REQUIRE_THROWS(parse("'Bach"));
+    REQUIRE_THROWS(parse("\"Bach"));
+  }
+
+  SECTION("Malformed Parentheses")
+  {
+    REQUIRE_THROWS(parse("()"));
+    REQUIRE_THROWS(parse("($artist = Bach"));
+  }
 }

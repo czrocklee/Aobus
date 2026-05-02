@@ -23,5 +23,7 @@ sr, ao::query::Field::SampleRate
 channels, ao::query::Field::Channels
 bitDepth, ao::query::Field::BitDepth
 bd, ao::query::Field::BitDepth
+rating, ao::query::Field::Rating
+codecId, ao::query::Field::CodecId
 %%
 } // namespace property_dispatch
