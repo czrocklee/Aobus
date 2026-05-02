@@ -97,7 +97,7 @@ namespace ao::gtk
           opacity: 0.7;
         }
         .clickable-label {
-          cursor: pointer;
+          /* No direct cursor property in standard GTK CSS for Label */
         }
         .output-button {
            border: none;
@@ -257,6 +257,7 @@ namespace ao::gtk
     auto clickGesture = Gtk::GestureClick::create();
     clickGesture->signal_pressed().connect([this](int, double, double) { _nowPlayingClicked.emit(); });
     _nowPlayingLabel.add_controller(clickGesture);
+    _nowPlayingLabel.set_cursor(Gdk::Cursor::create("pointer"));
     append(_nowPlayingLabel);
 
     // Spacer to push info to the right

@@ -14,7 +14,7 @@ namespace ao::audio
   /**
    * @brief A backend that does nothing. Used as a fallback or for testing.
    */
-  class NullBackend final : public IBackend
+  class NullBackend : public IBackend
   {
   public:
     class NullManager final : public IBackendProvider

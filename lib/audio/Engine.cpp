@@ -72,6 +72,7 @@ namespace ao::audio
     : _backend{std::move(backend)}, _dispatcher{std::move(dispatcher)}, _currentDevice{device}
   {
     _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
+    _snapshot.currentDeviceId = _currentDevice.id;
   }
 
   Engine::~Engine()
