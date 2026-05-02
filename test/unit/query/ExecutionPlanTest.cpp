@@ -481,14 +481,25 @@ TEST_CASE("ExecutionPlan - LIKE operator works for Title")
   CHECK_FALSE(plan.matchesAll);
 }
 
-TEST_CASE("ExecutionPlan - LIKE operator works for Uri")
+TEST_CASE("ExecutionPlan - Unknown Metadata Field Throws")
 {
-  auto expr = parse(R"($uri ~ "/music/")");
+  auto expr = parse("$uri = 'x'");
   auto compiler = QueryCompiler{};
-  auto plan = compiler.compile(expr);
+  REQUIRE_THROWS(compiler.compile(expr));
+}
 
-  CHECK_FALSE(plan.instructions.empty());
-  CHECK_FALSE(plan.matchesAll);
+TEST_CASE("ExecutionPlan - Unknown Property Field Throws")
+{
+  auto expr = parse("@tagCount > 0");
+  auto compiler = QueryCompiler{};
+  REQUIRE_THROWS(compiler.compile(expr));
+}
+
+TEST_CASE("ExecutionPlan - Add Operator Is Rejected")
+{
+  auto expr = parse("$title + $artist");
+  auto compiler = QueryCompiler{};
+  REQUIRE_THROWS(compiler.compile(expr));
 }
 
 TEST_CASE("ExecutionPlan - Mixed LIKE and EQUAL in OR expression")
@@ -604,4 +615,313 @@ TEST_CASE("ExecutionPlan - Future matching for custom fields not yet in dictiona
     }
   }
   CHECK(foundLoadField);
+}
+TEST_CASE("ExecutionPlan - Metadata Dispatch Maps Every Supported Name")
+{
+  struct Case
+  {
+    std::string name;
+    Field expected;
+  };
+  auto cases = {Case{"year", Field::Year},
+                Case{"y", Field::Year},
+                Case{"trackNumber", Field::TrackNumber},
+                Case{"tn", Field::TrackNumber},
+                Case{"totalTracks", Field::TotalTracks},
+                Case{"tt", Field::TotalTracks},
+                Case{"discNumber", Field::DiscNumber},
+                Case{"dn", Field::DiscNumber},
+                Case{"totalDiscs", Field::TotalDiscs},
+                Case{"td", Field::TotalDiscs},
+                Case{"artist", Field::ArtistId},
+                Case{"a", Field::ArtistId},
+                Case{"album", Field::AlbumId},
+                Case{"al", Field::AlbumId},
+                Case{"genre", Field::GenreId},
+                Case{"g", Field::GenreId},
+                Case{"composer", Field::ComposerId},
+                Case{"c", Field::ComposerId},
+                Case{"albumArtist", Field::AlbumArtistId},
+                Case{"aa", Field::AlbumArtistId},
+                Case{"coverArt", Field::CoverArtId},
+                Case{"ca", Field::CoverArtId},
+                Case{"title", Field::Title},
+                Case{"t", Field::Title},
+                Case{"work", Field::WorkId},
+                Case{"w", Field::WorkId}};
+
+  for (auto const& c : cases)
+  {
+    DYNAMIC_SECTION("Field: " << c.name)
+    {
+      auto expr = parse("$" + c.name + " = 'x'");
+      auto compiler = QueryCompiler{};
+      auto plan = compiler.compile(expr);
+      REQUIRE_FALSE(plan.instructions.empty());
+      CHECK(plan.instructions[0].op == OpCode::LoadField);
+      CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(c.expected));
+    }
+  }
+}
+
+TEST_CASE("ExecutionPlan - Property Dispatch Maps Every Supported Name")
+{
+  struct Case
+  {
+    std::string name;
+    Field expected;
+  };
+  auto cases = {Case{"duration", Field::DurationMs},
+                Case{"l", Field::DurationMs},
+                Case{"bitrate", Field::Bitrate},
+                Case{"br", Field::Bitrate},
+                Case{"sampleRate", Field::SampleRate},
+                Case{"sr", Field::SampleRate},
+                Case{"channels", Field::Channels},
+                Case{"bitDepth", Field::BitDepth},
+                Case{"bd", Field::BitDepth}};
+
+  for (auto const& c : cases)
+  {
+    DYNAMIC_SECTION("Field: " << c.name)
+    {
+      auto expr = parse("@" + c.name + " >= 0");
+      auto compiler = QueryCompiler{};
+      auto plan = compiler.compile(expr);
+      REQUIRE_FALSE(plan.instructions.empty());
+      CHECK(plan.instructions[0].op == OpCode::LoadField);
+      CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(c.expected));
+    }
+  }
+}
+
+TEST_CASE("ExecutionPlan - AccessProfile Exhaustive Classification")
+{
+  auto compiler = QueryCompiler{};
+
+  SECTION("HotOnly")
+  {
+    auto fields = {"$title",
+                   "$artist",
+                   "$album",
+                   "$genre",
+                   "$albumArtist",
+                   "$composer",
+                   "$year",
+                   "#rock",
+                   "true",
+                   "false",
+                   "@bitDepth",
+                   "@rating",
+                   "@codecId"};
+    for (auto const* f : fields)
+    {
+      auto expr = parse(f);
+      if (f[0] != '#' && std::string(f) != "true" && std::string(f) != "false")
+      {
+        expr = parse(std::string(f) + " = 0");
+      }
+      auto plan = compiler.compile(expr);
+      CHECK(plan.accessProfile == AccessProfile::HotOnly);
+    }
+  }
+
+  SECTION("ColdOnly")
+  {
+    auto fields = {"$trackNumber",
+                   "$totalTracks",
+                   "$discNumber",
+                   "$totalDiscs",
+                   "$coverArt",
+                   "$work",
+                   "%isrc",
+                   "@duration",
+                   "@bitrate",
+                   "@sampleRate",
+                   "@channels"};
+    for (auto const* f : fields)
+    {
+      auto expr = parse(std::string(f) + " >= 0");
+      auto plan = compiler.compile(expr);
+      CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+    }
+  }
+
+  SECTION("HotAndCold")
+  {
+    auto expr = parse("$year >= 2020 and @duration >= 3m");
+    auto plan = compiler.compile(expr);
+    CHECK(plan.accessProfile == AccessProfile::HotAndCold);
+  }
+}
+TEST_CASE("ExecutionPlan - Boolean False Compiles To ConstantZero")
+{
+  auto expr = parse("false");
+  auto compiler = QueryCompiler{};
+  auto plan = compiler.compile(expr);
+  REQUIRE(plan.instructions.size() >= 1);
+  CHECK(plan.instructions[0].op == OpCode::LoadConstant);
+  CHECK(plan.instructions[0].constValue == 0);
+  CHECK_FALSE(plan.matchesAll);
+}
+
+TEST_CASE("ExecutionPlan - String Constant Deduplication")
+{
+  SECTION("Reuses Identical String Constants")
+  {
+    auto expr = parse("$title = \"Bach\" or $title != \"Bach\"");
+    auto compiler = QueryCompiler{};
+    auto plan = compiler.compile(expr);
+    CHECK(plan.stringConstants.size() == 1);
+    CHECK(plan.stringConstants[0] == "Bach");
+  }
+
+  SECTION("Stores Different String Constants Separately")
+  {
+    auto expr = parse("$title = \"Bach\" or $title = \"Mozart\"");
+    auto compiler = QueryCompiler{};
+    auto plan = compiler.compile(expr);
+    CHECK(plan.stringConstants.size() == 2);
+  }
+}
+
+TEST_CASE("ExecutionPlan - Unit Literal Scaling")
+{
+  auto compiler = QueryCompiler{};
+
+  SECTION("Duration Supports MsSMMHUnits")
+  {
+    struct Case
+    {
+      std::string unit;
+      std::int64_t expected;
+    };
+    auto cases = {Case{"1ms", 1}, Case{"1s", 1000}, Case{"1m", 60000}, Case{"1h", 3600000}};
+    for (auto const& c : cases)
+    {
+      auto expr = parse("@duration >= " + c.unit);
+      auto plan = compiler.compile(expr);
+      auto const it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
+      CHECK(it->constValue == c.expected);
+    }
+  }
+
+  SECTION("Bitrate and SampleRate Support KAndMUnits")
+  {
+    auto expr1 = parse("@bitrate >= 256k");
+    CHECK(compiler.compile(expr1).instructions[1].constValue == 256000);
+
+    auto expr2 = parse("@sampleRate >= 44.1k");
+    CHECK(compiler.compile(expr2).instructions[1].constValue == 44100);
+  }
+
+  SECTION("Unit Suffix Is CaseInsensitive")
+  {
+    auto expr = parse("@bitrate >= 256K");
+    CHECK(compiler.compile(expr).instructions[1].constValue == 256000);
+  }
+
+  SECTION("Negative Unit Literal Compiles")
+  {
+    auto expr = parse("@bitrate >= -2k");
+    CHECK(compiler.compile(expr).instructions[1].constValue == -2000);
+  }
+}
+
+TEST_CASE("ExecutionPlan - Unit Literal Error Paths")
+{
+  auto compiler = QueryCompiler{};
+
+  SECTION("Rejects UnsupportedSuffixForField")
+  {
+    REQUIRE_THROWS(compiler.compile(parse("@duration >= 10k")));
+    REQUIRE_THROWS(compiler.compile(parse("@bitrate >= 3h")));
+  }
+
+  SECTION("Rejects MissingNumericFieldContext")
+  {
+    // A top-level unit constant expression like "3m" should fail
+    REQUIRE_THROWS(compiler.compile(parse("3m")));
+  }
+}
+
+TEST_CASE("ExecutionPlan - Tag Bloom Mask Compilation")
+{
+  auto temp = TempDir{};
+  auto env = ao::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  auto wtxn = ao::lmdb::WriteTransaction{env};
+  auto dict = ao::library::DictionaryStore{ao::lmdb::Database{wtxn, "dict"}, wtxn};
+
+  auto rockId = dict.put(wtxn, "rock");
+  auto jazzId = dict.put(wtxn, "jazz");
+  wtxn.commit();
+
+  auto rockBit = std::uint32_t{1} << (rockId.value() & 31);
+  auto jazzBit = std::uint32_t{1} << (jazzId.value() & 31);
+
+  SECTION("Tag Bloom Mask For SingleTagWithDictionary")
+  {
+    auto plan = QueryCompiler{&dict}.compile(parse("#rock"));
+    CHECK(plan.tagBloomMask == rockBit);
+  }
+
+  SECTION("Tag Bloom Mask Ors Tags Across And")
+  {
+    auto plan = QueryCompiler{&dict}.compile(parse("#rock and #jazz"));
+    CHECK(plan.tagBloomMask == (rockBit | jazzBit));
+  }
+
+  SECTION("Tag Bloom Mask Intersects Tags Across Or")
+  {
+    auto plan = QueryCompiler{&dict}.compile(parse("#rock or #jazz"));
+    CHECK(plan.tagBloomMask == (rockBit & jazzBit));
+  }
+
+  SECTION("Tag Bloom Mask Clears Under Not")
+  {
+    auto plan = QueryCompiler{&dict}.compile(parse("not #rock"));
+    CHECK(plan.tagBloomMask == 0);
+  }
+}
+
+TEST_CASE("ExecutionPlan - Dictionary-Backed Field Resolution")
+{
+  auto temp = TempDir{};
+  auto env = ao::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  auto wtxn = ao::lmdb::WriteTransaction{env};
+  auto dict = ao::library::DictionaryStore{ao::lmdb::Database{wtxn, "dict"}, wtxn};
+  auto bachId = dict.put(wtxn, "Bach");
+  wtxn.commit();
+
+  SECTION("Dictionary-Backed Equality Resolves To NumericId")
+  {
+    auto expr = parse("$artist = \"Bach\"");
+    auto compiler = QueryCompiler{&dict};
+    auto plan = compiler.compile(expr);
+    REQUIRE(plan.instructions.size() >= 2);
+    CHECK(plan.instructions[1].op == OpCode::LoadConstant);
+    CHECK(plan.instructions[1].constValue == static_cast<std::int64_t>(bachId.value()));
+    CHECK(plan.stringConstants.empty());
+  }
+
+  SECTION("Dictionary-Backed Like Keeps StringConstant")
+  {
+    auto expr = parse("$artist ~ \"Bach\"");
+    auto compiler = QueryCompiler{&dict};
+    auto plan = compiler.compile(expr);
+    REQUIRE(plan.instructions.size() >= 2);
+    CHECK(plan.instructions[1].op == OpCode::LoadConstant);
+    // When using LIKE, we don't resolve to ID, so it should be a string constant index
+    CHECK(plan.stringConstants.size() == 1);
+    CHECK(plan.stringConstants[0] == "Bach");
+  }
+
+  SECTION("No Dictionary Leaves Metadata Equality As StringConstant")
+  {
+    auto expr = parse("$artist = \"Bach\"");
+    auto compiler = QueryCompiler{}; // No dictionary
+    auto plan = compiler.compile(expr);
+    CHECK(plan.stringConstants.size() == 1);
+    CHECK(plan.stringConstants[0] == "Bach");
+  }
 }

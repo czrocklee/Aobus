@@ -38,8 +38,9 @@ Use Aobus's built-in `clang-tidy` integration as part of conformance validation 
 Run the audit in this order.
 
 1. **Rule 2.1.2: Missing blank lines around control blocks**
-   - This is the most common violation in `app/`. Ensure a blank line exists before and after `if`, `for`, `while`, `try`, `switch`.
-   - Exception: Specific comments for the block or start of a scope.
+   - Must have blank lines before and after `if`, `for`, `while`, `switch`.
+   - Top-level macros like `TEST_CASE` and `SECTION` must have blank lines between them.
+   - Exception: Single-line if-statements that are early returns (though even these are preferred with a blank line if followed by logic).
 
 2. **Rule 2.6.3: C functions/types missing `::` prefix**
    - Critical in playback and platform files using FFmpeg (`av_*`, `swr_*`), ALSA (`snd_*`), or PipeWire (`pw_*`, `spa_*`).
@@ -58,11 +59,20 @@ Run the audit in this order.
    - Recurring in UI classes: `StatusBar`, `MainWindow`, `TagPopover`.
    - Do not flag interfaces (`IAudioBackend`) or observer bases.
 
-6. **Rule 2.5.3: Header member ordering**
+6. **Rule 3.4.5: Non-auto initialization for objects**
+   - Prefer `auto x = T{...};` over `T x;` or `T x{...};` for all non-primitive types.
+   - Exception: Primitive types where `auto` would reduce clarity or require a cast.
+   - Exception: When `const` is needed but the object must be `move`d later (standard `unique_ptr` move pattern).
+
+7. **Rule 3.1.7: Missing designated initializers**
+   - Use `.member = value` syntax for struct initialization to improve clarity and safety.
+   - Especially important for configuration objects like `TrackSpec`, `Device`, and test cases.
+
+8. **Rule 2.5.3: Header member ordering**
    - Enforce `using` declarations -> non-static methods -> static functions -> data members.
    - Nested types/structs should appear at the top of their access section.
 
-7. **Rule 3.3.1: RAII and mandatory collaborators**
+9. **Rule 3.3.1: RAII and mandatory collaborators**
    - Prefer references over nullable raw pointers for mandatory services.
    - Use `ao::utility::makeUniquePtr` for C resource RAII in implementations.
 

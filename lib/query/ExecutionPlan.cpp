@@ -38,7 +38,7 @@ namespace ao::query
             return entry->field;
           }
 
-          break;
+          AO_THROW_FORMAT(ao::Exception, "unknown property field '@{}'", name);
         }
         case VariableType::Metadata:
         {
@@ -48,13 +48,14 @@ namespace ao::query
             return entry->field;
           }
 
-          break;
+          AO_THROW_FORMAT(ao::Exception, "unknown metadata field '${}'", name);
         }
         case VariableType::Tag: return Field::Tag;
         case VariableType::Custom: return Field::Custom;
         default: break;
       }
-      return Field::TagBloom;
+
+      AO_THROW_FORMAT(ao::Exception, "unsupported variable type for '{}'", name);
     }
 
     OpCode toOpCode(Operator op)
@@ -71,7 +72,8 @@ namespace ao::query
         case Operator::LessEqual: return OpCode::Le;
         case Operator::Greater: return OpCode::Gt;
         case Operator::GreaterEqual: return OpCode::Ge;
-        default: return OpCode::Nop;
+        case Operator::Add: AO_THROW(ao::Exception, "operator '+' is not yet supported in query execution");
+        default: AO_THROW(ao::Exception, "unsupported operator");
       }
     }
 

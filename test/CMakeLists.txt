@@ -4,6 +4,8 @@ add_executable(ao_test
     unit/query/ParserTest.cpp
     unit/query/ExecutionPlanTest.cpp
     unit/query/PlanEvaluatorTest.cpp
+    unit/query/ExpressionTest.cpp
+    unit/query/SerializerTest.cpp
 
     # library tests
     unit/library/TrackLayoutTest.cpp
@@ -31,7 +33,6 @@ add_executable(ao_test
     unit/app/SmartListEngineTest.cpp
 
     # integration tests
-    unit/query/ParserTest.cpp
     integration/playback/DecoderIntegrationTest.cpp
     integration/playback/PipeWireProviderTest.cpp
     integration/playback/GraphIntegrityTest.cpp
@@ -39,7 +40,7 @@ add_executable(ao_test
 )
 
 target_include_directories(ao_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(ao_test PRIVATE ao app_linux Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
+target_link_libraries(ao_test PRIVATE ao aobus-gtk-lib Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(ao_test PRIVATE PIPEWIRE_FOUND)
@@ -56,7 +57,7 @@ target_compile_options(ao_test PRIVATE -Wno-array-bounds)
 add_test(NAME ao_test COMMAND ao_test)
 aobus_apply_clang_tidy(ao_test RELAXED)
 
-# ao_test_linux: Linux UI tests (require app_linux and GTKMM)
+# ao_test_linux: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_test_linux
     unit/linux/TrackListAdapterTest.cpp
     unit/linux/TrackPresentationTest.cpp
@@ -64,5 +65,5 @@ add_executable(ao_test_linux
 )
 
 target_include_directories(ao_test_linux PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(ao_test_linux PRIVATE ao app_linux PkgGTKMM Catch2 spdlog::spdlog Catch2::Catch2WithMain)
+target_link_libraries(ao_test_linux PRIVATE ao aobus-gtk-lib PkgGTKMM Catch2 spdlog::spdlog Catch2::Catch2WithMain)
 add_test(NAME ao_test_linux COMMAND ao_test_linux)

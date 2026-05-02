@@ -128,6 +128,11 @@ namespace
                                     lexy::callback<Expression>(
                                       [](std::vector<Expression> list)
                                       {
+                                        if (list.empty())
+                                        {
+                                          return Expression{};
+                                        }
+
                                         auto result = Expression{std::move(list.back())};
 
                                         for (auto it = list.rbegin() + 1; it != list.rend(); ++it)

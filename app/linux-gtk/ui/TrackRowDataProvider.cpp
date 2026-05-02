@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 RockStudio Contributors
+// Copyright (c) 2024-2025 Aobus Contributors
 
-#include "platform/linux/ui/TrackRowDataProvider.h"
+#include "TrackRowDataProvider.h"
 
-#include "platform/linux/ui/TrackRow.h"
+#include "TrackRow.h"
 #include <ao/audio/Types.h>
 
 #include <string_view>
@@ -55,7 +55,7 @@ namespace
   }
 }
 
-namespace app::ui
+namespace ao::gtk
 {
   TrackRowDataProvider::TrackRowDataProvider(ao::library::MusicLibrary& ml)
     : _ml{ml}, _store{ml.tracks()}, _dict{ml.dictionary()}
@@ -78,7 +78,7 @@ namespace app::ui
 
   Glib::RefPtr<TrackRow> TrackRowDataProvider::createRowFromView(TrackId id, ao::library::TrackView const& view) const
   {
-    auto row = TrackRow::create(id, *const_cast<TrackRowDataProvider*>(this));
+    auto row = TrackRow::create(id, *this);
 
     auto const& metadata = view.metadata();
     auto const title = metadata.title();
@@ -254,4 +254,4 @@ namespace app::ui
     auto const insertResult = _stringCache.emplace(id, std::move(result));
     return insertResult.first->second;
   }
-} // namespace app::ui
+} // namespace ao::gtk
