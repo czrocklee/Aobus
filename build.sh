@@ -174,7 +174,7 @@ if [[ "$BUILD_TYPE" == "pgo1" ]]; then
     echo "PGO Step 1 complete."
     echo ""
     echo "Next: Run the app to generate profile data:"
-    echo "  cd $BUILD_DIR && ./Aobus"
+    echo "  cd $BUILD_DIR && ./app/linux-gtk/aobus-gtk"
     echo "  # Use the app normally, then close it"
     echo ""
     echo "Then run:"
@@ -185,8 +185,8 @@ elif [[ "$BUILD_TYPE" == "pgo2" ]]; then
     echo "============================================"
     echo "PGO Step 2 complete."
     echo ""
-    echo "Optimized binary: $BUILD_DIR/Aobus"
-    echo "Run: cd $BUILD_DIR && perf record -g -- ./Aobus"
+    echo "Optimized binary: $BUILD_DI./app/linux-gtk/aobus-gtk"
+    echo "Run: cd $BUILD_DIR && perf record -g -- ./app/linux-gtk/aobus-gtk"
     echo "============================================"
 fi
 

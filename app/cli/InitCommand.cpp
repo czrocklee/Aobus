@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 RockStudio Contributors
+// Copyright (c) 2024-2025 Aobus Contributors
 
 #include "InitCommand.h"
 #include <ao/library/MusicLibrary.h>
@@ -8,7 +8,7 @@
 
 #include <iostream>
 
-namespace ao::tool
+namespace ao::cli
 {
   namespace
   {

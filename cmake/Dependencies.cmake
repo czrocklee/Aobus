@@ -29,6 +29,13 @@ target_include_directories(PkgGTKMM INTERFACE ${GTKMM_INCLUDE_DIRS})
 target_link_libraries(PkgGTKMM INTERFACE ${GTKMM_LIBRARIES})
 target_compile_options(PkgGTKMM INTERFACE ${GTKMM_CFLAGS_OTHER})
 
+# ── glibmm ──────────────────────────────────────────────────────────────────
+pkg_check_modules(GLIBMM REQUIRED glibmm-2.68)
+add_library(PkgGLIBMM INTERFACE)
+target_include_directories(PkgGLIBMM INTERFACE ${GLIBMM_INCLUDE_DIRS})
+target_link_libraries(PkgGLIBMM INTERFACE ${GLIBMM_LIBRARIES})
+target_compile_options(PkgGLIBMM INTERFACE ${GLIBMM_CFLAGS_OTHER})
+
 # ── FLAC ────────────────────────────────────────────────────────────────────
 pkg_check_modules(FLAC REQUIRED flac)
 add_library(PkgFLAC INTERFACE)

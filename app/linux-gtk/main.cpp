@@ -1,0 +1,128 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 Aobus Contributors
+
+#include "MainWindow.h"
+#include "TrackRowDataProvider.h"
+#include <ao/utility/Log.h>
+
+#include <ao/AppVersion.h>
+
+#include <gtkmm.h>
+#include <gtkmm/aboutdialog.h>
+
+#include <CLI/CLI.hpp>
+
+#include <print>
+
+int main(int argc, char* argv[])
+{
+  CLI::App cliApp{"Aobus Music Library"};
+  cliApp.allow_extras(); // Allow GTK specific arguments
+
+  auto logLevel = ao::log::LogLevel::Info;
+
+  // Map strings to LogLevel enum for CLI11
+  std::map<std::string, ao::log::LogLevel> logMapping{{"trace", ao::log::LogLevel::Trace},
+                                                      {"debug", ao::log::LogLevel::Debug},
+                                                      {"info", ao::log::LogLevel::Info},
+                                                      {"warn", ao::log::LogLevel::Warn},
+                                                      {"error", ao::log::LogLevel::Error},
+                                                      {"critical", ao::log::LogLevel::Critical},
+                                                      {"off", ao::log::LogLevel::Off}};
+
+  int verbosity = 0;
+  cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");
+
+  cliApp.add_option("--log-level", logLevel, "Set the logging level")
+    ->transform(CLI::CheckedTransformer(logMapping, CLI::ignore_case));
+
+  cliApp.add_flag_callback(
+    "--version",
+    []()
+    {
+      std::print("Aobus {}\n", ao::kAppVersion);
+      std::exit(0);
+    },
+    "Show version information");
+
+  try
+  {
+    cliApp.parse(argc, argv);
+  }
+  catch (CLI::ParseError const& e)
+  {
+    return cliApp.exit(e);
+  }
+
+  // Handle -v shortcuts if --log-level wasn't explicitly provided (or to override)
+  if (cliApp.count("-v") > 0)
+  {
+    if (verbosity == 1)
+      logLevel = ao::log::LogLevel::Debug;
+    else if (verbosity >= 2)
+      logLevel = ao::log::LogLevel::Trace;
+  }
+
+  auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "aobus" / "logs";
+  ao::log::Log::init(logLevel, logDir);
+  APP_LOG_INFO("========================================================");
+  APP_LOG_INFO("Aobus {} starting...", ao::kAppVersion);
+
+  Glib::set_application_name("Aobus");
+
+  auto app = Gtk::Application::create("org.aobus.app");
+
+  // Add about action to application
+  auto aboutAction = Gio::SimpleAction::create("about");
+  aboutAction->signal_activate().connect(
+    [&app]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+    {
+      auto dialog = Gtk::AboutDialog{};
+      dialog.set_program_name("Aobus");
+      dialog.set_version(ao::kAppVersion);
+      dialog.set_copyright("Copyright 2024-2026 Aobus Contributors");
+      dialog.set_license_type(Gtk::License::LGPL_3_0);
+
+      // Get active window to set as transient parent
+      if (auto windows = app->get_windows(); !windows.empty())
+      {
+        dialog.set_transient_for(*windows[0]);
+      }
+
+      dialog.present();
+    });
+  app->add_action(aboutAction);
+
+  // Add quit action
+  auto quitAction = Gio::SimpleAction::create("quit");
+  quitAction->signal_activate().connect([&app]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { app->quit(); });
+  app->add_action(quitAction);
+
+  // Keep window alive - use shared_ptr
+  auto mainWindow = Glib::RefPtr<ao::gtk::MainWindow>{};
+
+  // Connect to activate signal to create window after startup
+  app->signal_activate().connect(
+    [&app, &mainWindow]()
+    {
+      mainWindow = Glib::make_refptr_for_instance<ao::gtk::MainWindow>(new ao::gtk::MainWindow());
+      app->add_window(*mainWindow);
+      mainWindow->present();
+    });
+
+  auto remainingArgs = cliApp.remaining_for_passthrough();
+  remainingArgs.insert(remainingArgs.begin(), argv[0]);
+
+  std::vector<char*> gtkArgv;
+  gtkArgv.reserve(remainingArgs.size());
+  for (auto& arg : remainingArgs)
+  {
+    gtkArgv.push_back(arg.data());
+  }
+  int gtkArgc = static_cast<int>(gtkArgv.size());
+
+  APP_LOG_INFO("Entering GTK main loop");
+  auto const result = app->run(gtkArgc, gtkArgv.data());
+  ao::log::Log::shutdown();
+  return result;
+}

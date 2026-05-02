@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 RockStudio Contributors
+// Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TrackCommand.h"
 #include <ao/library/TrackLayout.h>
@@ -12,7 +12,7 @@
 #include <iomanip>
 #include <iostream>
 
-namespace ao::tool
+namespace ao::cli
 {
   namespace
   {
