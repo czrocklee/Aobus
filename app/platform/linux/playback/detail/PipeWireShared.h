@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/Format.h>
+#include <ao/audio/Format.h>
 
 extern "C"
 {
@@ -95,5 +95,5 @@ namespace app::playback::detail
 
   void ensurePipeWireInit();
   std::optional<std::uint32_t> parseUintProperty(char const* value);
-  std::optional<rs::audio::Format> parseRawStreamFormat(::spa_pod const* param);
+  std::optional<ao::audio::Format> parseRawStreamFormat(::spa_pod const* param);
 } // namespace app::playback::detail

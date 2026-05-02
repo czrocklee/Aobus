@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/audio/Types.h>
+#include <ao/audio/Types.h>
 
 #include <gtkmm.h>
 
@@ -23,7 +23,7 @@ namespace app::ui
 
     void setTrackCount(std::size_t count);
     void setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
-    void setPlaybackDetails(rs::audio::Snapshot const& snapshot);
+    void setPlaybackDetails(ao::audio::Snapshot const& snapshot);
 
     void setImportProgress(double fraction, std::string const& info);
     void clearImportProgress();
@@ -31,7 +31,7 @@ namespace app::ui
     using NowPlayingClickedSignal = sigc::signal<void()>;
     NowPlayingClickedSignal& signalNowPlayingClicked() { return _nowPlayingClicked; }
 
-    using OutputChangedSignal = sigc::signal<void(rs::audio::BackendKind, std::string)>;
+    using OutputChangedSignal = sigc::signal<void(ao::audio::BackendKind, std::string)>;
     OutputChangedSignal& signalOutputChanged() { return _outputChanged; }
 
   private:
@@ -60,10 +60,10 @@ namespace app::ui
 
     Gtk::Widget* createOutputWidget(Glib::RefPtr<Glib::Object> const& item);
 
-    void updateOutputModel(rs::audio::Snapshot const& snapshot);
-    void updateOutputLabel(rs::audio::Snapshot const& snapshot);
-    void updatePlaybackStatusLabels(rs::audio::Snapshot const& snapshot);
-    void updatePlaybackTooltip(rs::audio::Snapshot const& snapshot);
+    void updateOutputModel(ao::audio::Snapshot const& snapshot);
+    void updateOutputLabel(ao::audio::Snapshot const& snapshot);
+    void updatePlaybackStatusLabels(ao::audio::Snapshot const& snapshot);
+    void updatePlaybackTooltip(ao::audio::Snapshot const& snapshot);
 
     // Far Right: Status message
     Gtk::Label _statusLabel;
@@ -74,16 +74,16 @@ namespace app::ui
 
     struct LastPlaybackState final
     {
-      rs::audio::Transport transport = rs::audio::Transport::Idle;
-      rs::audio::BackendKind backend = rs::audio::BackendKind::None;
+      ao::audio::Transport transport = ao::audio::Transport::Idle;
+      ao::audio::BackendKind backend = ao::audio::BackendKind::None;
       std::string title;
       std::string artist;
       std::uint32_t underrunCount = 0;
-      rs::audio::Quality quality = rs::audio::Quality::Unknown;
+      ao::audio::Quality quality = ao::audio::Quality::Unknown;
       std::string qualityTooltip;
-      rs::audio::flow::Graph flow;
+      ao::audio::flow::Graph flow;
       std::string currentDeviceId;
-      std::vector<rs::audio::BackendSnapshot> availableBackends;
+      std::vector<ao::audio::BackendSnapshot> availableBackends;
     } _lastPlaybackState;
     std::string _lastTooltipText;
 

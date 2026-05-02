@@ -6,12 +6,12 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/library/MusicLibrary.h>
-#include <rs/library/TrackBuilder.h>
-#include <rs/library/TrackStore.h>
-#include <rs/model/FilteredTrackIdList.h>
-#include <rs/model/SmartListEngine.h>
-#include <rs/model/TrackIdList.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/model/FilteredTrackIdList.h>
+#include <ao/model/SmartListEngine.h>
+#include <ao/model/TrackIdList.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <algorithm>
@@ -26,14 +26,14 @@
 
 namespace
 {
-  using rs::TrackId;
-  using rs::library::MusicLibrary;
-  using rs::library::TrackBuilder;
-  using rs::library::TrackStore;
-  using rs::model::FilteredTrackIdList;
-  using rs::model::SmartListEngine;
-  using rs::model::TrackIdList;
-  using rs::model::TrackIdListObserver;
+  using ao::TrackId;
+  using ao::library::MusicLibrary;
+  using ao::library::TrackBuilder;
+  using ao::library::TrackStore;
+  using ao::model::FilteredTrackIdList;
+  using ao::model::SmartListEngine;
+  using ao::model::TrackIdList;
+  using ao::model::TrackIdListObserver;
 
   struct TrackSpec
   {

@@ -6,24 +6,24 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/library/ListBuilder.h>
-#include <rs/library/ListLayout.h>
-#include <rs/library/ListStore.h>
-#include <rs/lmdb/Database.h>
-#include <rs/lmdb/Environment.h>
-#include <rs/lmdb/Transaction.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListLayout.h>
+#include <ao/library/ListStore.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <array>
 #include <vector>
 
-using rs::library::ListBuilder;
-using rs::library::ListStore;
-using rs::library::ListView;
-using rs::lmdb::Database;
-using rs::lmdb::Environment;
-using rs::lmdb::ReadTransaction;
-using rs::lmdb::WriteTransaction;
+using ao::library::ListBuilder;
+using ao::library::ListStore;
+using ao::library::ListView;
+using ao::lmdb::Database;
+using ao::lmdb::Environment;
+using ao::lmdb::ReadTransaction;
+using ao::lmdb::WriteTransaction;
 
 TEST_CASE("ListBuilder - smart list")
 {
@@ -31,31 +31,31 @@ TEST_CASE("ListBuilder - smart list")
                    .name("My Smart List")
                    .description("A smart list")
                    .filter("@artist = 'Test'")
-                   .parentId(rs::ListId{17})
+                   .parentId(ao::ListId{17})
                    .serialize();
   auto view = ListView{payload};
 
   CHECK(view.isSmart() == true);
   CHECK(view.name() == "My Smart List");
   CHECK(view.filter() == "@artist = 'Test'");
-  CHECK(view.parentId() == rs::ListId{17});
+  CHECK(view.parentId() == ao::ListId{17});
 }
 
 TEST_CASE("ListBuilder - manual list")
 {
   auto builder = ListBuilder::createNew().name("My Manual List").description("A manual list");
-  builder.tracks().add(rs::TrackId{100});
-  builder.tracks().add(rs::TrackId{200});
-  builder.tracks().add(rs::TrackId{300});
+  builder.tracks().add(ao::TrackId{100});
+  builder.tracks().add(ao::TrackId{200});
+  builder.tracks().add(ao::TrackId{300});
   auto payload = builder.serialize();
   auto view = ListView{payload};
 
   CHECK(view.isSmart() == false);
   CHECK(view.name() == "My Manual List");
   CHECK(view.tracks().size() == 3);
-  CHECK(view.tracks()[0] == rs::TrackId{100});
-  CHECK(view.tracks()[1] == rs::TrackId{200});
-  CHECK(view.tracks()[2] == rs::TrackId{300});
+  CHECK(view.tracks()[0] == ao::TrackId{100});
+  CHECK(view.tracks()[1] == ao::TrackId{200});
+  CHECK(view.tracks()[2] == ao::TrackId{300});
 }
 
 TEST_CASE("ListBuilder - manual list empty trackIds")
@@ -65,7 +65,7 @@ TEST_CASE("ListBuilder - manual list empty trackIds")
 
   CHECK(view.isSmart() == false);
   CHECK(view.tracks().size() == 0);
-  CHECK(view.parentId() == rs::ListId{0});
+  CHECK(view.parentId() == ao::ListId{0});
 }
 
 TEST_CASE("ListBuilder - parentId round-trip through View")
@@ -74,16 +74,16 @@ TEST_CASE("ListBuilder - parentId round-trip through View")
                    .name("Nested Smart List")
                    .description("Child list")
                    .filter("$year >= 2021")
-                   .parentId(rs::ListId{42});
+                   .parentId(ao::ListId{42});
 
   auto payload = builder.serialize();
   auto view = ListView{payload};
 
-  CHECK(view.parentId() == rs::ListId{42});
+  CHECK(view.parentId() == ao::ListId{42});
 
   auto rebuilt = ListBuilder::fromView(view).serialize();
   auto rebuiltView = ListView{rebuilt};
-  CHECK(rebuiltView.parentId() == rs::ListId{42});
+  CHECK(rebuiltView.parentId() == ao::ListId{42});
   CHECK(rebuiltView.name() == "Nested Smart List");
   CHECK(rebuiltView.filter() == "$year >= 2021");
 }
@@ -98,8 +98,8 @@ TEST_CASE("ListBuilder - manual list round-trip through ListStore")
   wtxn.commit();
 
   auto builder = ListBuilder::createNew().name("RoundTrip Test").description("Testing round-trip");
-  builder.tracks().add(rs::TrackId{42});
-  builder.tracks().add(rs::TrackId{99});
+  builder.tracks().add(ao::TrackId{42});
+  builder.tracks().add(ao::TrackId{99});
   auto payload = builder.serialize();
 
   auto wtxn2 = WriteTransaction{env};
@@ -114,8 +114,8 @@ TEST_CASE("ListBuilder - manual list round-trip through ListStore")
   CHECK(found.isSmart() == false);
   CHECK(found.name() == "RoundTrip Test");
   CHECK(found.tracks().size() == 2);
-  CHECK(found.tracks()[0] == rs::TrackId{42});
-  CHECK(found.tracks()[1] == rs::TrackId{99});
+  CHECK(found.tracks()[0] == ao::TrackId{42});
+  CHECK(found.tracks()[1] == ao::TrackId{99});
 }
 
 TEST_CASE("ListBuilder - smart list round-trip through ListStore")

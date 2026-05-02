@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/media/mp4/Atom.h>
-#include <rs/media/mp4/AtomLayout.h>
-#include <rs/media/mp4/Demuxer.h>
-#include <rs/utility/ByteView.h>
+#include <ao/media/mp4/Atom.h>
+#include <ao/media/mp4/AtomLayout.h>
+#include <ao/media/mp4/Demuxer.h>
+#include <ao/utility/ByteView.h>
 
 #include <algorithm>
 #include <array>
 #include <boost/endian/conversion.hpp>
 
-namespace rs::media::mp4
+namespace ao::media::mp4
 {
   Demuxer::Demuxer(std::span<std::byte const> fileData)
     : _fileData(fileData)
@@ -169,7 +169,7 @@ namespace rs::media::mp4
 
     if (auto const* node = root.find(kMdhdPath))
     {
-      auto const& view = rs::utility::unsafeDowncast<AtomView const>(*node);
+      auto const& view = ao::utility::unsafeDowncast<AtomView const>(*node);
       auto const& layout = view.layout<MdhdAtomLayout>();
       _timescale = layout.timescale.value();
       _duration = layout.duration.value();
@@ -190,7 +190,7 @@ namespace rs::media::mp4
 
     if (auto const* node = root.find(kCookiePath))
     {
-      auto const& view = rs::utility::unsafeDowncast<AtomView const>(*node);
+      auto const& view = ao::utility::unsafeDowncast<AtomView const>(*node);
       auto const bytes = view.bytes();
       _magicCookie.assign(bytes.begin(), bytes.end());
     }
@@ -216,7 +216,7 @@ namespace rs::media::mp4
       [this, &chunkOffsets, &sampleToChunk](Atom const& atom)
       {
         auto type = atom.type();
-        auto const& view = rs::utility::unsafeDowncast<AtomView const>(atom);
+        auto const& view = ao::utility::unsafeDowncast<AtomView const>(atom);
         auto const atomBytes = view.bytes();
 
         if (type == "stsz")
@@ -296,4 +296,4 @@ namespace rs::media::mp4
   {
     return _duration;
   }
-} // namespace rs::media::mp4
+} // namespace ao::media::mp4

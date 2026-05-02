@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
+#include <ao/query/Parser.h>
+#include <ao/utility/VariantVisitor.h>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
-#include <rs/query/Parser.h>
-#include <rs/utility/VariantVisitor.h>
 
 #include <sstream>
 #include <string>
 
-using namespace rs::query;
+using namespace ao::query;
 
 char const* toString(Operator op)
 {
@@ -70,7 +70,7 @@ struct Canonicalizer
   void operator()(ConstantExpression const& constant)
   {
     oss << "[c{";
-    std::visit(rs::utility::makeVisitor([this](std::monostate) { oss << "n}"; },
+    std::visit(ao::utility::makeVisitor([this](std::monostate) { oss << "n}"; },
                                         [this](bool val) { oss << "b}" << (val ? "true" : "false"); },
                                         [this](std::int64_t val) { oss << "i}" << val; },
                                         [this](UnitConstantExpression const& val) { oss << "u}" << val.lexeme; },

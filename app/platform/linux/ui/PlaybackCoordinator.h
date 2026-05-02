@@ -6,8 +6,8 @@
 #include "platform/linux/ui/GtkMainThreadDispatcher.h"
 #include "platform/linux/ui/PlaybackBar.h"
 #include "platform/linux/ui/TrackPageGraph.h"
-#include <rs/audio/Player.h>
-#include <rs/audio/Types.h>
+#include <ao/audio/Player.h>
+#include <ao/audio/Types.h>
 
 #include <gtkmm.h>
 
@@ -24,9 +24,9 @@ namespace app::ui
    */
   struct ActivePlaybackSequence final
   {
-    std::vector<rs::TrackId> trackIds;
+    std::vector<ao::TrackId> trackIds;
     std::size_t currentIndex = 0;
-    std::optional<rs::ListId> sourceListId;
+    std::optional<ao::ListId> sourceListId;
   };
 
   /**
@@ -38,9 +38,9 @@ namespace app::ui
   public:
     virtual ~IPlaybackHost() = default;
     virtual TrackPageContext const* currentVisibleTrackPageContext() const = 0;
-    virtual TrackPageContext* findTrackPageContext(rs::ListId listId) = 0;
-    virtual void showListPage(rs::ListId listId) = 0;
-    virtual void updatePlaybackStatus(rs::audio::Snapshot const& snapshot) = 0;
+    virtual TrackPageContext* findTrackPageContext(ao::ListId listId) = 0;
+    virtual void showListPage(ao::ListId listId) = 0;
+    virtual void updatePlaybackStatus(ao::audio::Snapshot const& snapshot) = 0;
     virtual void showPlaybackMessage(std::string const& message,
                                      std::optional<std::chrono::seconds> timeout = std::nullopt) = 0;
   };
@@ -63,17 +63,17 @@ namespace app::ui
     void stopPlayback();
     void seekPlayback(std::uint32_t positionMs);
 
-    bool startPlaybackFromVisiblePage(TrackViewPage const& page, rs::TrackId trackId);
-    bool startPlaybackSequence(std::vector<rs::TrackId> trackIds,
-                               rs::TrackId startTrackId,
-                               std::optional<rs::ListId> sourceListId = std::nullopt);
+    bool startPlaybackFromVisiblePage(TrackViewPage const& page, ao::TrackId trackId);
+    bool startPlaybackSequence(std::vector<ao::TrackId> trackIds,
+                               ao::TrackId startTrackId,
+                               std::optional<ao::ListId> sourceListId = std::nullopt);
 
     void jumpToPlayingList();
     void handlePlaybackFinished();
     void clearActivePlaybackSequence();
 
-    void setPlaybackController(std::unique_ptr<rs::audio::Player> controller);
-    rs::audio::Player* player() { return _player.get(); }
+    void setPlaybackController(std::unique_ptr<ao::audio::Player> controller);
+    ao::audio::Player* player() { return _player.get(); }
 
   private:
     void setupPlayback();
@@ -90,10 +90,10 @@ namespace app::ui
     std::function<TrackRowDataProvider*()> _providerSource;
     std::unique_ptr<PlaybackBar> _playbackBar;
     std::shared_ptr<GtkMainThreadDispatcher> _dispatcher;
-    std::unique_ptr<rs::audio::Player> _player;
+    std::unique_ptr<ao::audio::Player> _player;
     std::uint32_t _playbackTimer = 0;
     std::optional<ActivePlaybackSequence> _activePlaybackSequence;
-    rs::audio::Transport _lastPlaybackState = rs::audio::Transport::Idle;
+    ao::audio::Transport _lastPlaybackState = ao::audio::Transport::Idle;
     std::string _lastPlaybackErrorMessage;
   };
 } // namespace app::ui

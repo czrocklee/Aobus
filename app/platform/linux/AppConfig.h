@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace rs::library
+namespace ao::library
 {
   constexpr std::int32_t kDefaultWindowWidth = 989;
   constexpr std::int32_t kDefaultWindowHeight = 801;

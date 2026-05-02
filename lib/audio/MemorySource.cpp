@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/MemorySource.h>
+#include <ao/audio/MemorySource.h>
 
 #include <algorithm>
 #include <cstring>
 #include <limits>
 
-namespace rs::audio
+namespace ao::audio
 {
   namespace
   {
@@ -59,7 +59,7 @@ namespace rs::audio
   {
   }
 
-  rs::Result<> MemorySource::initialize()
+  ao::Result<> MemorySource::initialize()
   {
     auto const estimatedBytes =
       (static_cast<std::uint64_t>(_streamInfo.durationMs) * bytesPerSecond(_streamInfo.outputFormat)) / 1000U;
@@ -76,7 +76,7 @@ namespace rs::audio
       if (!blockResult)
       {
         return std::unexpected(
-          rs::Error{.code = rs::Error::Code::DecodeFailed, .message = blockResult.error().message});
+          ao::Error{.code = ao::Error::Code::DecodeFailed, .message = blockResult.error().message});
       }
 
       auto const& block = *blockResult;
@@ -120,7 +120,7 @@ namespace rs::audio
     return bufferedDurationMs(_pcmBytes.size() - _readOffset, bytesPerSecond(_streamInfo.outputFormat));
   }
 
-  rs::Result<> MemorySource::seek(std::uint32_t positionMs)
+  ao::Result<> MemorySource::seek(std::uint32_t positionMs)
   {
     auto lock = std::lock_guard<std::mutex>{_mutex};
     _readOffset = positionToByteOffset(positionMs);
@@ -141,4 +141,4 @@ namespace rs::audio
     auto const clampedOffset = std::min<std::uint64_t>(byteOffset, _pcmBytes.size());
     return static_cast<std::size_t>(clampedOffset - (clampedOffset % frameByteCount));
   }
-} // namespace rs::audio
+} // namespace ao::audio

@@ -1,6 +1,6 @@
-# RockStudio C++ Coding Guide
+# Aobus C++ Coding Guide
 
-This guide defines RockStudio's C++ coding conventions.
+This guide defines Aobus's C++ coding conventions.
 Rules are numbered for easy reference in reviews and tooling.
 
 - 1\. C++ Standard
@@ -37,7 +37,7 @@ Rules are numbered for easy reference in reviews and tooling.
       5. static data members
       6. `friend` declarations
   - 2.6. Namespaces
-    - 2.6.1. Use nested namespace syntax: `namespace rs::core { ... }`
+    - 2.6.1. Use nested namespace syntax: `namespace ao::core { ... }`
     - 2.6.2. Prefer anonymous namespaces to `static` for internal linkage
     - 2.6.3. Prefix external C library functions and types with `::`: `::mdb_cursor_open()`, `::pw_core_sync()`, `::snd_pcm_format_t`
     - 2.6.4. For C functions and types also available in the C++ standard library (e.g., from `<cstring>`, `<cmath>`, `<cstddef>`), use the `std::` prefix: `std::memcpy()`, `std::abs()`, `std::size_t`
@@ -79,14 +79,14 @@ Rules are numbered for easy reference in reviews and tooling.
     - 3.2.8. Use `[[maybe_unused]]` for intentionally unused entities instead of warning-suppression casts
   - 3.3. C++23 Features
     - 3.3.1. Use `std::expected<T, E>` for operations that can fail recoverably
-      - Use the project alias `rs::Result<T>` (defaults to `rs::Result<>` for `void`), defined in `include/rs/Error.h`
-      - The error type is `rs::Error`, a struct with an error `Code` enum and a `message` string
+      - Use the project alias `ao::Result<T>` (defaults to `ao::Result<>` for `void`), defined in `include/rs/Error.h`
+      - The error type is `ao::Error`, a struct with an error `Code` enum and a `message` string
       - Do not use `bool` return + side-channel `lastError()` for new code
       - Do not use `std::optional` to represent failure; reserve it for legitimate absence
       - Do not use `std::error_code` / `std::error_category`; the project has no cross-library error interop needs
   - 3.4. General Language Practices
     - 3.4.1. Use RAII. Prefer `std::unique_ptr` for owned resources and add a custom deleter when needed
-      - In `.cpp` files, prefer `rs::utility::makeUniquePtr<::c_func>(ptr)` for local RAII without extra boilerplate
+      - In `.cpp` files, prefer `ao::utility::makeUniquePtr<::c_func>(ptr)` for local RAII without extra boilerplate
       - In headers, wrap C resources with an explicit deleter type, for example `struct PwLoopDeleter { void operator()(::pw_thread_loop* p) const noexcept { ::pw_thread_loop_destroy(p); } };`
     - 3.4.2. Do not repeat `virtual` on overridden functions; use `override`
     - 3.4.3. Prefer brace initialization in member initializer lists
@@ -126,11 +126,11 @@ Rules are numbered for easy reference in reviews and tooling.
     - 4.4.4. Use `std::atomic` for simple flags and counters shared between threads; avoid `volatile`
 - 5\. Error Handling
   - 5.1. Three-Layer Policy
-    - 5.1.1. **`rs::Result<T>`** (alias for `std::expected<T, rs::Error>`) — Recoverable fallible operations
+    - 5.1.1. **`ao::Result<T>`** (alias for `std::expected<T, ao::Error>`) — Recoverable fallible operations
       - Use when the operation can legitimately fail and the caller is expected to handle it
-      - Examples: `rs::Result<> open(path)`, `rs::Result<PcmBlock> readNextBlock()`
+      - Examples: `ao::Result<> open(path)`, `ao::Result<PcmBlock> readNextBlock()`
       - The error value travels with the return — no separate `lastError()` query needed
-    - 5.1.2. **`rs::Exception`** (via `RS_THROW` / `RS_THROW_FORMAT`) — Invariant violations
+    - 5.1.2. **`ao::Exception`** (via `AO_THROW` / `AO_THROW_FORMAT`) — Invariant violations
       - Use for data corruption, programmer errors, impossible states, and unrecoverable system failures
       - Examples: LMDB failures, expression parser errors, malformed tag data, import/export format violations
       - Catch at boundary points only (e.g., UI event handlers, import workers, background threads)
@@ -138,12 +138,12 @@ Rules are numbered for easy reference in reviews and tooling.
       - Use when "not found" is a normal outcome, not an error
       - Examples: database lookups, optional UI state, finding a sink by name
   - 5.2. Error Type
-    - 5.2.1. Use `rs::Result<T>` (alias for `std::expected<T, rs::Error>`) as the return type; use `rs::Result<>` when `T` is `void`
-      - `rs::Error` has a `Code` enum for programmatic dispatch and a `message` string for human context
-      - Use `rs::makeError(code, message)` to construct error results concisely
-    - 5.2.2. Return `{}` for success when the return type is `rs::Result<>` (void expected)
-      - Prefer `return {};` over `return rs::Result<>();` for consistency
-      - Use `return std::unexpected(rs::Error{...})` for explicit error construction
+    - 5.2.1. Use `ao::Result<T>` (alias for `std::expected<T, ao::Error>`) as the return type; use `ao::Result<>` when `T` is `void`
+      - `ao::Error` has a `Code` enum for programmatic dispatch and a `message` string for human context
+      - Use `ao::makeError(code, message)` to construct error results concisely
+    - 5.2.2. Return `{}` for success when the return type is `ao::Result<>` (void expected)
+      - Prefer `return {};` over `return ao::Result<>();` for consistency
+      - Use `return std::unexpected(ao::Error{...})` for explicit error construction
   - 5.3. Anti-Patterns
     - 5.3.1. Do not use `bool` return + `lastError()` getter for error reporting in new code
     - 5.3.2. Do not return an empty `std::string` to indicate success

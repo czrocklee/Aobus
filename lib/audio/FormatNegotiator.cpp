@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/FormatNegotiator.h>
+#include <ao/audio/FormatNegotiator.h>
 
 #include <algorithm>
 #include <ranges>
 
-namespace rs::audio
+namespace ao::audio
 {
   namespace
   {
@@ -129,4 +129,4 @@ namespace rs::audio
 
     return plan;
   }
-} // namespace rs::audio
+} // namespace ao::audio

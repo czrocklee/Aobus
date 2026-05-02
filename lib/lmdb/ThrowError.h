@@ -3,19 +3,19 @@
 
 #pragma once
 
+#include <ao/Exception.h>
 #include <format>
 #include <lmdb.h>
-#include <rs/Exception.h>
 #include <stdexcept>
 #include <string>
 
-namespace rs::lmdb
+namespace ao::lmdb
 {
   inline void throwOnError(char const* origin, int code)
   {
     if (code != MDB_SUCCESS)
     {
-      RS_THROW_FORMAT(rs::Exception, "{}: {}", origin, ::mdb_strerror(code));
+      AO_THROW_FORMAT(ao::Exception, "{}: {}", origin, ::mdb_strerror(code));
     }
   }
 }

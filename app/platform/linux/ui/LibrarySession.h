@@ -4,9 +4,9 @@
 #pragma once
 
 #include "platform/linux/ui/TrackRowDataProvider.h"
-#include <rs/library/MusicLibrary.h>
-#include <rs/model/AllTrackIdsList.h>
-#include <rs/model/SmartListEngine.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/model/AllTrackIdsList.h>
+#include <ao/model/SmartListEngine.h>
 
 #include <filesystem>
 #include <memory>
@@ -21,10 +21,10 @@ namespace app::ui
    */
   struct LibrarySession final
   {
-    std::unique_ptr<rs::library::MusicLibrary> musicLibrary;
+    std::unique_ptr<ao::library::MusicLibrary> musicLibrary;
     std::unique_ptr<TrackRowDataProvider> rowDataProvider;
-    std::unique_ptr<rs::model::AllTrackIdsList> allTrackIds;
-    std::unique_ptr<rs::model::SmartListEngine> smartListEngine;
+    std::unique_ptr<ao::model::AllTrackIdsList> allTrackIds;
+    std::unique_ptr<ao::model::SmartListEngine> smartListEngine;
   };
 
   /**

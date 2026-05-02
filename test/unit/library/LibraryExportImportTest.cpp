@@ -6,13 +6,13 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/library/DictionaryStore.h>
-#include <rs/library/Exporter.h>
-#include <rs/library/Importer.h>
-#include <rs/library/ListBuilder.h>
-#include <rs/library/MusicLibrary.h>
-#include <rs/library/ResourceStore.h>
-#include <rs/library/TrackBuilder.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/Exporter.h>
+#include <ao/library/Importer.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/TrackBuilder.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <algorithm>
@@ -25,7 +25,7 @@
 TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
 {
   auto temp1 = TempDir{};
-  auto ml1 = rs::library::MusicLibrary{temp1.path()};
+  auto ml1 = ao::library::MusicLibrary{temp1.path()};
   auto const smartListName = std::string("Smart List ") + std::string(256, 'S');
   auto const smartFilter = std::string("@duration > 60 and ") + std::string(256, 'x');
   auto const manualListName = std::string("Manual List ") + std::string(256, 'M');
@@ -40,7 +40,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     auto resId = resWriter.create(createTestData(100));
     std::ignore = resWriter.create(createTestData(64));
 
-    auto trackBuilder = rs::library::TrackBuilder::createNew();
+    auto trackBuilder = ao::library::TrackBuilder::createNew();
     trackBuilder.property().uri("song.flac").durationMs(180000);
     trackBuilder.metadata().title("Test Title").artist("Test Artist").coverArtId(resId.value());
     trackBuilder.tags().add("rock").add("favorite");
@@ -51,17 +51,17 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     auto [trackId, view] =
       trackWriter.createHotCold(preparedHot.size(),
                                 preparedCold.size(),
-                                [&](rs::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                [&](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
                                 {
                                   preparedHot.writeTo(hot);
                                   preparedCold.writeTo(cold);
                                 });
 
-    auto smartListBuilder = rs::library::ListBuilder::createNew().name(smartListName).filter(smartFilter);
+    auto smartListBuilder = ao::library::ListBuilder::createNew().name(smartListName).filter(smartFilter);
     ml1.lists().writer(txn).create(smartListBuilder.serialize());
 
     auto manualListBuilder =
-      rs::library::ListBuilder::createNew().name(manualListName).description(manualListDescription);
+      ao::library::ListBuilder::createNew().name(manualListName).description(manualListDescription);
     manualListBuilder.tracks().add(trackId);
     ml1.lists().writer(txn).create(manualListBuilder.serialize());
 
@@ -70,23 +70,23 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
 
   // 2. Export to YAML
   std::filesystem::path yamlPath = std::filesystem::path(temp1.path()) / "backup.yaml";
-  rs::library::Exporter exporter(ml1);
-  REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, rs::library::ExportMode::Full));
+  ao::library::Exporter exporter(ml1);
+  REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, ao::library::ExportMode::Full));
 
   // 3. Import into a new library
   auto temp2 = TempDir{};
-  auto ml2 = rs::library::MusicLibrary{temp2.path()};
+  auto ml2 = ao::library::MusicLibrary{temp2.path()};
 
   // Pre-create the track in ml2 to test overlay (since physical file song.flac doesn't exist)
   {
     auto txn = ml2.writeTransaction();
     auto& dict = ml2.dictionary();
-    auto trackBuilder = rs::library::TrackBuilder::createNew();
+    auto trackBuilder = ao::library::TrackBuilder::createNew();
     trackBuilder.property().uri("song.flac"); // technical properties are missing initially
     auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml2.resources());
     ml2.tracks().writer(txn).createHotCold(preparedHot.size(),
                                            preparedCold.size(),
-                                           [&](rs::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                           [&](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
                                            {
                                              preparedHot.writeTo(hot);
                                              preparedCold.writeTo(cold);
@@ -94,7 +94,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     txn.commit();
   }
 
-  rs::library::Importer importer(ml2);
+  ao::library::Importer importer(ml2);
   REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
 
   // 4. Verify
@@ -105,7 +105,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     auto& dict = ml2.dictionary();
 
     // Check tracks
-    std::vector<std::pair<rs::TrackId, rs::library::TrackView>> tracks;
+    std::vector<std::pair<ao::TrackId, ao::library::TrackView>> tracks;
     for (auto item : trackReader)
     {
       tracks.push_back(std::move(item));
@@ -160,19 +160,19 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
 TEST_CASE("Library import remaps list parents regardless of YAML order", "[core][yaml]")
 {
   auto temp = TempDir{};
-  auto ml = rs::library::MusicLibrary{temp.path()};
+  auto ml = ao::library::MusicLibrary{temp.path()};
 
-  rs::TrackId trackId;
+  ao::TrackId trackId;
   {
     auto txn = ml.writeTransaction();
     auto& dict = ml.dictionary();
-    auto trackBuilder = rs::library::TrackBuilder::createNew();
+    auto trackBuilder = ao::library::TrackBuilder::createNew();
     trackBuilder.property().uri("song.flac");
     auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml.resources());
     std::tie(trackId, std::ignore) =
       ml.tracks().writer(txn).createHotCold(preparedHot.size(),
                                             preparedCold.size(),
-                                            [&](rs::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                            [&](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
                                             {
                                               preparedHot.writeTo(hot);
                                               preparedCold.writeTo(cold);
@@ -200,17 +200,17 @@ library:
 )";
   }
 
-  rs::library::Importer importer(ml);
+  ao::library::Importer importer(ml);
   REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
 
   {
     auto txn = ml.readTransaction();
     auto listReader = ml.lists().reader(txn);
 
-    std::optional<rs::library::ListView> parent;
-    std::optional<rs::library::ListView> child;
-    rs::ListId parentId;
-    rs::ListId childId;
+    std::optional<ao::library::ListView> parent;
+    std::optional<ao::library::ListView> child;
+    ao::ListId parentId;
+    ao::ListId childId;
 
     for (auto const& [listId, view] : listReader)
     {
@@ -228,7 +228,7 @@ library:
 
     REQUIRE(parent.has_value());
     REQUIRE(child.has_value());
-    REQUIRE(parent->parentId() == rs::ListId{0});
+    REQUIRE(parent->parentId() == ao::ListId{0});
     REQUIRE(child->parentId() == parentId);
     REQUIRE(childId != parentId);
     REQUIRE(child->tracks().size() == 1);

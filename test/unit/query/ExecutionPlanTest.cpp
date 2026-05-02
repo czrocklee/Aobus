@@ -6,16 +6,16 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/library/DictionaryStore.h>
-#include <rs/lmdb/Database.h>
-#include <rs/lmdb/Environment.h>
-#include <rs/lmdb/Transaction.h>
-#include <rs/query/ExecutionPlan.h>
-#include <rs/query/Parser.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/query/ExecutionPlan.h>
+#include <ao/query/Parser.h>
 
 #include <test/unit/lmdb/TestUtils.h>
 
-using namespace rs::query;
+using namespace ao::query;
 
 TEST_CASE("ExecutionPlan - Compile Simple Expression")
 {
@@ -414,9 +414,9 @@ TEST_CASE("ExecutionPlan - AccessProfile Custom Field")
 TEST_CASE("ExecutionPlan - LIKE operator works for ArtistId")
 {
   auto temp = TempDir{};
-  auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-  auto wtxn = rs::lmdb::WriteTransaction{env};
-  auto dict = rs::library::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+  auto env = ao::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  auto wtxn = ao::lmdb::WriteTransaction{env};
+  auto dict = ao::library::DictionaryStore{ao::lmdb::Database{wtxn, "dict"}, wtxn};
   dict.put(wtxn, "Johann Sebastian Bach");
 
   auto expr = parse(R"($artist ~ "Bach")");
@@ -539,9 +539,9 @@ TEST_CASE("ExecutionPlan - Title LIKE chained with AND")
 TEST_CASE("ExecutionPlan - Future matching for tags not yet in dictionary")
 {
   auto temp = TempDir{};
-  auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-  auto wtxn = rs::lmdb::WriteTransaction{env};
-  auto dict = rs::library::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+  auto env = ao::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  auto wtxn = ao::lmdb::WriteTransaction{env};
+  auto dict = ao::library::DictionaryStore{ao::lmdb::Database{wtxn, "dict"}, wtxn};
 
   // Tag "FutureTag" does not exist in dictionary yet
   auto expr = parse("#FutureTag");
@@ -579,9 +579,9 @@ TEST_CASE("ExecutionPlan - Future matching for tags not yet in dictionary")
 TEST_CASE("ExecutionPlan - Future matching for custom fields not yet in dictionary")
 {
   auto temp = TempDir{};
-  auto env = rs::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-  auto wtxn = rs::lmdb::WriteTransaction{env};
-  auto dict = rs::library::DictionaryStore{rs::lmdb::Database{wtxn, "dict"}, wtxn};
+  auto env = ao::lmdb::Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  auto wtxn = ao::lmdb::WriteTransaction{env};
+  auto dict = ao::library::DictionaryStore{ao::lmdb::Database{wtxn, "dict"}, wtxn};
 
   // Custom field "FutureKey" does not exist
   auto expr = parse("%FutureKey = 'Value'");

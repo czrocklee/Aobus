@@ -3,9 +3,9 @@
 
 #include "platform/linux/ui/ImportExportCoordinator.h"
 #include "platform/linux/ui/LayoutConstants.h"
-#include <rs/library/Importer.h>
-#include <rs/utility/Log.h>
-#include <rs/utility/ThreadUtils.h>
+#include <ao/library/Importer.h>
+#include <ao/utility/Log.h>
+#include <ao/utility/ThreadUtils.h>
 
 namespace app::ui
 {
@@ -126,7 +126,7 @@ namespace app::ui
     auto* dialogPtr = _importDialog.get();
     _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
 
-    _importWorker = std::make_unique<rs::library::ImportWorker>(
+    _importWorker = std::make_unique<ao::library::ImportWorker>(
       *sessionPtr->musicLibrary,
       files,
       [this, dialogPtr, total = files.size()](std::filesystem::path const& filePath, int index)
@@ -157,7 +157,7 @@ namespace app::ui
     _importThread = std::jthread(
       [this, workerPtr, pendingSession = std::move(pendingSession)]() mutable
       {
-        rs::setCurrentThreadName("FileImport");
+        ao::setCurrentThreadName("FileImport");
         workerPtr->run();
 
         Glib::MainContext::get_default()->invoke(
@@ -320,13 +320,13 @@ namespace app::ui
       return;
     }
 
-    auto mode = rs::library::ExportMode::Metadata;
+    auto mode = ao::library::ExportMode::Metadata;
 
     switch (modeCombo->get_selected())
     {
-      case 0: mode = rs::library::ExportMode::Minimum; break;
-      case 1: mode = rs::library::ExportMode::Metadata; break;
-      case 2: mode = rs::library::ExportMode::Full; break;
+      case 0: mode = ao::library::ExportMode::Minimum; break;
+      case 1: mode = ao::library::ExportMode::Metadata; break;
+      case 2: mode = ao::library::ExportMode::Full; break;
       default: break;
     }
 
@@ -350,7 +350,7 @@ namespace app::ui
   }
 
   void ImportExportCoordinator::onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
-                                                     rs::library::ExportMode mode,
+                                                     ao::library::ExportMode mode,
                                                      Glib::RefPtr<Gtk::FileDialog> const& fileDialog)
   {
     try
@@ -366,7 +366,7 @@ namespace app::ui
     }
   }
 
-  void ImportExportCoordinator::executeExportTask(std::filesystem::path const& path, rs::library::ExportMode mode)
+  void ImportExportCoordinator::executeExportTask(std::filesystem::path const& path, ao::library::ExportMode mode)
   {
     auto* session = currentSession();
 
@@ -379,11 +379,11 @@ namespace app::ui
     std::thread(
       [this, musicLibrary, path, mode]()
       {
-        rs::setCurrentThreadName("LibraryExport");
+        ao::setCurrentThreadName("LibraryExport");
 
         try
         {
-          auto exporter = rs::library::Exporter{*musicLibrary};
+          auto exporter = ao::library::Exporter{*musicLibrary};
           exporter.exportToYaml(path, mode);
 
           Glib::MainContext::get_default()->invoke(
@@ -466,11 +466,11 @@ namespace app::ui
 
   void ImportExportCoordinator::runLibraryImportTask(std::filesystem::path const& path, LibrarySession* session)
   {
-    rs::setCurrentThreadName("LibraryImport");
+    ao::setCurrentThreadName("LibraryImport");
 
     try
     {
-      auto importer = rs::library::Importer{*session->musicLibrary};
+      auto importer = ao::library::Importer{*session->musicLibrary};
       importer.importFromYaml(path);
       reportImportResult(true, "");
     }

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/query/Serializer.h>
-#include <rs/utility/VariantVisitor.h>
+#include <ao/query/Serializer.h>
+#include <ao/utility/VariantVisitor.h>
 
 #include <sstream>
 
 namespace
 {
-  using namespace rs::query;
+  using namespace ao::query;
 
   struct ParenthesisGuard // NOLINT(cppcoreguidelines-special-member-functions)
   {
@@ -79,7 +79,7 @@ namespace
 
     void operator()(ConstantExpression const& constant)
     {
-      std::visit(rs::utility::makeVisitor([](std::monostate) {},
+      std::visit(ao::utility::makeVisitor([](std::monostate) {},
                                           [this](bool val) { oss << (val ? "true" : "false"); },
                                           [this](std::int64_t val) { oss << val; },
                                           [this](UnitConstantExpression const& val) { oss << val.lexeme; },
@@ -112,7 +112,7 @@ namespace
   };
 }
 
-namespace rs::query
+namespace ao::query
 {
   std::string serialize(Expression const& expr)
   {

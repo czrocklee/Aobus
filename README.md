@@ -1,40 +1,67 @@
-# RockStudio
+<p align="center">
+  <img src="aobus_logo.svg" width="200" height="200" alt="Aobus Logo">
+</p>
 
-C++23 music library application with LMDB storage.
+<h1 align="center">Aobus</h1>
 
-## Building
+<p align="center">
+  <strong>A high-performance, Bit-Perfect audio engine and music library built with C++23.</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/C%2B%2B-23-blue.svg" alt="C++23">
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
+  <img src="https://img.shields.io/badge/Status-Active-brightgreen.svg" alt="Status">
+</p>
+
+---
+
+Aobus (pronounced /'eɪ.oʊ.bʌs/) is a modern music application designed for audiophiles who demand uncompromising sound quality and architectural elegance. Combining the robustness of **LMDB** storage with the power of **C++23**, Aobus bridges the gap between low-level audio engineering and high-level library management.
+
+## 🌟 Key Features
+
+- **Bit-Perfect Pipeline**: Ensuring every sample reaches your hardware exactly as intended.
+- **Ultra-Fast Library Indexing**: Powered by LMDB for instantaneous search and filtering.
+- **Reactive Architecture**: Modern C++ patterns for low-latency UI and audio synchronization.
+- **Industrial Minimalist Design**: A UI that respects your music and your desktop.
+
+## 🛠 Building
+
+Aobus uses CMake and Nix-shell for dependency management.
 
 ```bash
-# Debug build (default)
-./build.sh
+# Debug build (with sanitizers)
+./build.sh debug
 
-# Release build
+# Clean rebuild
+./build.sh debug --clean
+
+# Release build for production
 ./build.sh release
-
-# Clean build
-./build.sh debug clean
 ```
 
-## Running Tests
+## 🧪 Running Tests
+
+Aobus takes stability seriously. We maintain a comprehensive suite of unit and integration tests.
 
 ```bash
-/tmp/build/rs_test
+# Run core test suite
+/tmp/build/debug/test/ao_test
+
+# Run Linux-specific tests
+/tmp/build/debug/test/ao_test_linux
 ```
 
-## Static Analysis
+## 🤖 AI Agents
 
-```bash
-clang-tidy -checks='-*,modernize-*,performance-*,readability-*' lib/**/*.cpp
-```
+If you are an AI agent working on this project, please read [AGENTS.md](AGENTS.md) for critical environment setup and coding standards.
 
-## Contributing
+## 📄 License
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for code style guidelines.
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
 
-## Versioning
+---
 
-See [docs/versioning.md](docs/versioning.md) for the app-version and library-version policy.
-
-## AI Agents
-
-If you are an AI agent working on this project, please read [AGENTS.md](AGENTS.md) for environment setup and working rules.
+<p align="center">
+  <i>"Where audio structure meets artistic resonance."</i>
+</p>

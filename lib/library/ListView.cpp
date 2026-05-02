@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/Exception.h>
-#include <rs/library/ListView.h>
+#include <ao/Exception.h>
+#include <ao/library/ListView.h>
 
-namespace rs::library
+namespace ao::library
 {
   ListView::ListView(std::span<std::byte const> data)
     : _payload{data}
   {
     if (_payload.data() == nullptr || _payload.size() < kListHeaderSize)
     {
-      RS_THROW(Exception, "Invalid data for ListView");
+      AO_THROW(Exception, "Invalid data for ListView");
     }
   }
 
@@ -26,7 +26,7 @@ namespace rs::library
 
     if (start + length > _payload.size())
     {
-      RS_THROW(Exception, "Invalid string field");
+      AO_THROW(Exception, "Invalid string field");
     }
 
     return utility::bytes::stringView(_payload.subspan(start, length));
@@ -64,7 +64,7 @@ namespace rs::library
 
     if (offset + (count * sizeof(TrackId)) > _payload.size())
     {
-      RS_THROW(Exception, "Invalid trackIds field");
+      AO_THROW(Exception, "Invalid trackIds field");
     }
 
     return TrackProxy{utility::layout::viewArray<TrackId>(_payload.subspan(offset, count * sizeof(TrackId)))};
@@ -79,9 +79,9 @@ namespace rs::library
   {
     if (index >= _trackIds.size())
     {
-      RS_THROW(Exception, "Index out of range");
+      AO_THROW(Exception, "Index out of range");
     }
 
     return _trackIds[index];
   }
-} // namespace rs::library
+} // namespace ao::library

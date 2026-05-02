@@ -48,9 +48,9 @@ TEST_CASE("app::ui::TrackPresentation duration sorting", "[app][presentation]")
 
   auto const sortBy = std::vector<TrackSortTerm>{{TrackSortField::Duration}};
 
-  TrackPresentationKeysView shortTrack{.durationMs = 1000, .trackId = rs::TrackId{1}};
-  TrackPresentationKeysView longTrack{.durationMs = 5000, .trackId = rs::TrackId{2}};
-  TrackPresentationKeysView noDurationTrack{.durationMs = 0, .trackId = rs::TrackId{3}};
+  TrackPresentationKeysView shortTrack{.durationMs = 1000, .trackId = ao::TrackId{1}};
+  TrackPresentationKeysView longTrack{.durationMs = 5000, .trackId = ao::TrackId{2}};
+  TrackPresentationKeysView noDurationTrack{.durationMs = 0, .trackId = ao::TrackId{3}};
 
   SECTION("shorter duration comes first")
   {
@@ -66,7 +66,7 @@ TEST_CASE("app::ui::TrackPresentation duration sorting", "[app][presentation]")
 
   SECTION("equal duration falls back to track ID")
   {
-    TrackPresentationKeysView shortTrack2{.durationMs = 1000, .trackId = rs::TrackId{4}};
+    TrackPresentationKeysView shortTrack2{.durationMs = 1000, .trackId = ao::TrackId{4}};
     REQUIRE(compareForSort(shortTrack, shortTrack2, sortBy) < 0);
   }
 }

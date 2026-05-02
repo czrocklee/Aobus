@@ -5,8 +5,8 @@
 
 namespace app::ui
 {
-  void OutputMenuModel::update(std::vector<rs::audio::BackendSnapshot> const& backends,
-                               rs::audio::BackendKind currentBackend,
+  void OutputMenuModel::update(std::vector<ao::audio::BackendSnapshot> const& backends,
+                               ao::audio::BackendKind currentBackend,
                                std::string_view currentDeviceId)
   {
     auto const deviceIdStr = std::string{currentDeviceId};

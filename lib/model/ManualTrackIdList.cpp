@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/model/ManualTrackIdList.h>
+#include <ao/model/ManualTrackIdList.h>
 
-#include <rs/library/ListView.h>
+#include <ao/library/ListView.h>
 
 #include <algorithm>
 
-namespace rs::model
+namespace ao::model
 {
-  ManualTrackIdList::ManualTrackIdList(rs::library::ListView const& view, TrackIdList* source)
+  ManualTrackIdList::ManualTrackIdList(ao::library::ListView const& view, TrackIdList* source)
     : _source{source}
   {
     _trackIds.reserve(view.tracks().size());
@@ -35,7 +35,7 @@ namespace rs::model
     }
   }
 
-  void ManualTrackIdList::reloadFromListView(rs::library::ListView const& view)
+  void ManualTrackIdList::reloadFromListView(ao::library::ListView const& view)
   {
     _trackIds.clear();
     _trackIds.reserve(view.tracks().size());
@@ -155,4 +155,4 @@ namespace rs::model
 
     return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
   }
-} // namespace rs::model
+} // namespace ao::model

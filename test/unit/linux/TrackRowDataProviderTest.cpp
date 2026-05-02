@@ -7,12 +7,12 @@
 #include <catch2/matchers/catch_matchers_all.hpp>
 
 // Standalone test for row data loading without GTKMM dependency.
-// Tests rs::model::TrackRowDataProvider functionality in isolation.
+// Tests ao::model::TrackRowDataProvider functionality in isolation.
 
-#include <rs/library/MusicLibrary.h>
-#include <rs/library/TrackBuilder.h>
-#include <rs/library/TrackStore.h>
-#include <rs/lmdb/Transaction.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/lmdb/Transaction.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <cstdint>
@@ -22,20 +22,20 @@
 #include <utility>
 #include <vector>
 
-namespace rs::model
+namespace ao::model
 {
   struct RowData;
-  using TrackId = rs::TrackId;
-  using DictionaryId = rs::DictionaryId;
+  using TrackId = ao::TrackId;
+  using DictionaryId = ao::DictionaryId;
 
   /**
    * Standalone TrackRowDataProvider test double.
-   * Mirrors the real rs::model::TrackRowDataProvider but without GTKMM includes.
+   * Mirrors the real ao::model::TrackRowDataProvider but without GTKMM includes.
    */
   class TrackRowDataProvider final
   {
   public:
-    explicit TrackRowDataProvider(rs::library::MusicLibrary& ml);
+    explicit TrackRowDataProvider(ao::library::MusicLibrary& ml);
 
     std::optional<RowData> getRow(TrackId id);
     void invalidateHot(TrackId id);
@@ -45,9 +45,9 @@ namespace rs::model
   private:
     std::string resolveDictionaryString(DictionaryId id);
 
-    rs::library::MusicLibrary* _ml;
-    rs::library::TrackStore* _store;
-    rs::library::DictionaryStore* _dict;
+    ao::library::MusicLibrary* _ml;
+    ao::library::TrackStore* _store;
+    ao::library::DictionaryStore* _dict;
 
     std::unordered_map<TrackId, RowData> _rowCache;
     std::unordered_map<DictionaryId, std::string> _stringCache;
@@ -93,7 +93,7 @@ namespace rs::model
     return insertResult.first->second;
   }
 
-  std::string joinResolvedTags(rs::library::TrackView::TagProxy tags, rs::library::DictionaryStore const& dictionary)
+  std::string joinResolvedTags(ao::library::TrackView::TagProxy tags, ao::library::DictionaryStore const& dictionary)
   {
     auto text = std::string{};
     auto first = true;
@@ -118,7 +118,7 @@ namespace rs::model
     return text;
   }
 
-  TrackRowDataProvider::TrackRowDataProvider(rs::library::MusicLibrary& ml)
+  TrackRowDataProvider::TrackRowDataProvider(ao::library::MusicLibrary& ml)
     : _ml{&ml}, _store{&ml.tracks()}, _dict{&ml.dictionary()}
   {
   }
@@ -135,10 +135,10 @@ namespace rs::model
       return it->second;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml->readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml->readTransaction());
     auto reader = _store->reader(txn);
 
-    auto const optView = reader.get(id, rs::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
     if (!optView)
     {
       auto row = RowData{};
@@ -205,14 +205,14 @@ namespace rs::model
     {
     }
 
-    rs::library::MusicLibrary& library() { return _library; }
+    ao::library::MusicLibrary& library() { return _library; }
 
     TrackId addTrack(TrackSpec const& spec)
     {
       auto txn = _library.writeTransaction();
       auto writer = _library.tracks().writer(txn);
 
-      auto builder = rs::library::TrackBuilder::createNew();
+      auto builder = ao::library::TrackBuilder::createNew();
       builder.metadata()
         .title(spec.title)
         .artist(spec.artist)
@@ -240,11 +240,11 @@ namespace rs::model
 
   private:
     TempDir _tempDir;
-    rs::library::MusicLibrary _library;
+    ao::library::MusicLibrary _library;
   };
-} // namespace rs::model
+} // namespace ao::model
 
-using namespace rs::model;
+using namespace ao::model;
 
 TEST_CASE("TrackRowDataProvider loads track data correctly", "[app][model]")
 {
@@ -310,7 +310,7 @@ TEST_CASE("TrackRowDataProvider loads track data correctly", "[app][model]")
   SECTION("Non-existent track")
   {
     auto provider = TrackRowDataProvider{testLibrary.library()};
-    auto dummyId = rs::TrackId{9999};
+    auto dummyId = ao::TrackId{9999};
 
     auto row = provider.getRow(dummyId);
     CHECK_FALSE(row.has_value());

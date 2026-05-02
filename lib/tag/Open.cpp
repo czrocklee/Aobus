@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/tag/File.h>
-#include <rs/tag/flac/File.h>
-#include <rs/tag/mp4/File.h>
-#include <rs/tag/mpeg/File.h>
+#include <ao/tag/File.h>
+#include <ao/tag/flac/File.h>
+#include <ao/tag/mp4/File.h>
+#include <ao/tag/mpeg/File.h>
 
 #include <algorithm>
 #include <array>
 #include <string_view>
 #include <utility>
 
-namespace rs::tag
+namespace ao::tag
 {
   // static
   std::unique_ptr<File> File::open(std::filesystem::path const& path, File::Mode mode)
@@ -42,4 +42,4 @@ namespace rs::tag
 
     return nullptr;
   }
-} // namespace rs::tag
+} // namespace ao::tag

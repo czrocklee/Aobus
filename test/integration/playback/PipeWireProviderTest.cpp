@@ -1,6 +1,7 @@
 #include "platform/linux/playback/PipeWireProvider.h"
 #include "platform/linux/playback/PipeWireBackend.h"
 #include "platform/linux/playback/detail/PipeWireShared.h"
+#include <ao/audio/IBackend.h>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_all.hpp>
@@ -10,13 +11,12 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
-#include <rs/audio/IBackend.h>
 #include <thread>
 #include <vector>
 
 using namespace app::playback;
 using namespace app::playback::detail;
-using namespace rs::audio;
+using namespace ao::audio;
 
 namespace
 {

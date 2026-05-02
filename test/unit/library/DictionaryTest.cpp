@@ -6,20 +6,20 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <rs/library/DictionaryStore.h>
-#include <rs/lmdb/Database.h>
-#include <rs/lmdb/Environment.h>
-#include <rs/lmdb/Transaction.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <string_view>
 
-using rs::DictionaryId;
-using rs::library::DictionaryStore;
-using rs::lmdb::Database;
-using rs::lmdb::Environment;
-using rs::lmdb::ReadTransaction;
-using rs::lmdb::WriteTransaction;
+using ao::DictionaryId;
+using ao::library::DictionaryStore;
+using ao::lmdb::Database;
+using ao::lmdb::Environment;
+using ao::lmdb::ReadTransaction;
+using ao::lmdb::WriteTransaction;
 
 TEST_CASE("Dictionary - store and get", "[core][dictionary]")
 {

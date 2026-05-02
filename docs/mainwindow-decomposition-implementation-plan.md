@@ -91,10 +91,10 @@ These are currently declared in `app/platform/linux/ui/MainWindow.h` and are cre
 ```cpp
 struct LibrarySession final
 {
-  std::unique_ptr<rs::library::MusicLibrary> musicLibrary;
+  std::unique_ptr<ao::library::MusicLibrary> musicLibrary;
   std::unique_ptr<TrackRowDataProvider> rowDataProvider;
-  std::unique_ptr<rs::model::AllTrackIdsList> allTrackIds;
-  std::unique_ptr<rs::model::SmartListEngine> smartListEngine;
+  std::unique_ptr<ao::model::AllTrackIdsList> allTrackIds;
+  std::unique_ptr<ao::model::SmartListEngine> smartListEngine;
 };
 ```
 
@@ -164,21 +164,21 @@ class TrackPageGraph final
 public:
   struct Callbacks final
   {
-    std::function<void(std::vector<rs::TrackId> const&)> onSelectionChanged;
+    std::function<void(std::vector<ao::TrackId> const&)> onSelectionChanged;
     std::function<void(TrackViewPage&, double, double)> onContextMenuRequested;
-    std::function<void(TrackViewPage&, std::vector<rs::TrackId> const&, double, double)> onTagEditRequested;
-    std::function<void(TrackViewPage&, rs::TrackId)> onTrackActivated;
+    std::function<void(TrackViewPage&, std::vector<ao::TrackId> const&, double, double)> onTagEditRequested;
+    std::function<void(TrackViewPage&, ao::TrackId)> onTrackActivated;
   };
 
   TrackPageGraph(Gtk::Stack& stack, TrackColumnLayoutModel& layoutModel, Callbacks callbacks);
 
   void clear();
-  void rebuild(LibrarySession& session, rs::lmdb::ReadTransaction& txn);
-  TrackPageContext* find(rs::ListId listId);
-  TrackPageContext const* find(rs::ListId listId) const;
+  void rebuild(LibrarySession& session, ao::lmdb::ReadTransaction& txn);
+  TrackPageContext* find(ao::ListId listId);
+  TrackPageContext const* find(ao::ListId listId) const;
   TrackPageContext* currentVisible();
   TrackPageContext const* currentVisible() const;
-  void show(rs::ListId listId);
+  void show(ao::ListId listId);
 };
 ```
 
@@ -261,9 +261,9 @@ class IPlaybackHost
 public:
   virtual ~IPlaybackHost() = default;
   virtual TrackPageContext const* currentVisibleTrackPageContext() const = 0;
-  virtual TrackPageContext* findTrackPageContext(rs::ListId listId) = 0;
-  virtual void showListPage(rs::ListId listId) = 0;
-  virtual void updatePlaybackStatus(rs::audio::PlaybackSnapshot const& snapshot) = 0;
+  virtual TrackPageContext* findTrackPageContext(ao::ListId listId) = 0;
+  virtual void showListPage(ao::ListId listId) = 0;
+  virtual void updatePlaybackStatus(ao::audio::PlaybackSnapshot const& snapshot) = 0;
   virtual void showPlaybackMessage(std::string const& message,
                                    std::optional<std::chrono::seconds> timeout = std::nullopt) = 0;
 };
@@ -420,14 +420,14 @@ class ListSidebarController final
 public:
   struct Callbacks final
   {
-    std::function<void(rs::ListId)> onListSelected;
+    std::function<void(ao::ListId)> onListSelected;
     std::function<void()> onListsChanged;
-    std::function<void(rs::ListId)> onListCreatedAndSelected;
+    std::function<void(ao::ListId)> onListCreatedAndSelected;
   };
 
   Gtk::Widget& widget();
-  void rebuildTree(LibrarySession& session, rs::lmdb::ReadTransaction& txn);
-  void select(rs::ListId listId);
+  void rebuildTree(LibrarySession& session, ao::lmdb::ReadTransaction& txn);
+  void select(ao::ListId listId);
 };
 ```
 
@@ -490,9 +490,9 @@ Today the flow creates tag UI with explicit selected IDs but later applies chang
 ```cpp
 struct TrackSelectionContext final
 {
-  rs::ListId listId;
-  std::vector<rs::TrackId> selectedIds;
-  rs::model::TrackIdList* membershipList = nullptr;
+  ao::ListId listId;
+  std::vector<ao::TrackId> selectedIds;
+  ao::model::TrackIdList* membershipList = nullptr;
 };
 ```
 

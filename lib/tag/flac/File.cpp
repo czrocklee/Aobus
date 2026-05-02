@@ -2,18 +2,18 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "../Decoder.h"
-#include <rs/Exception.h>
-#include <rs/media/flac/MetadataBlock.h>
-#include <rs/tag/flac/File.h>
-#include <rs/utility/ByteView.h>
+#include <ao/Exception.h>
+#include <ao/media/flac/MetadataBlock.h>
+#include <ao/tag/flac/File.h>
+#include <ao/utility/ByteView.h>
 
 #include <cstring>
 #include <string>
 #include <string_view>
 
-namespace rs::tag::flac
+namespace ao::tag::flac
 {
-  using namespace rs::media::flac;
+  using namespace ao::media::flac;
 
   namespace
   {
@@ -23,18 +23,18 @@ namespace rs::tag::flac
     constexpr std::uint32_t kMsPerSecond = 1000;
 
     using TextSetter =
-      rs::library::TrackBuilder::MetadataBuilder& (rs::library::TrackBuilder::MetadataBuilder::*)(std::string_view);
+      ao::library::TrackBuilder::MetadataBuilder& (ao::library::TrackBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter =
-      rs::library::TrackBuilder::MetadataBuilder& (rs::library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+      ao::library::TrackBuilder::MetadataBuilder& (ao::library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
     template<TextSetter Setter>
-    void handleText(rs::library::TrackBuilder& builder, std::string_view value)
+    void handleText(ao::library::TrackBuilder& builder, std::string_view value)
     {
       (builder.metadata().*Setter)(value);
     }
 
     template<NumberSetter Setter>
-    void handleNumber(rs::library::TrackBuilder& builder, std::string_view value)
+    void handleNumber(ao::library::TrackBuilder& builder, std::string_view value)
     {
       if (auto parsed = decodeUint16(value); parsed)
       {
@@ -43,7 +43,7 @@ namespace rs::tag::flac
     }
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
-    void handleSlashNumber(rs::library::TrackBuilder& builder, std::string_view value)
+    void handleSlashNumber(ao::library::TrackBuilder& builder, std::string_view value)
     {
       auto const separator = value.find('/');
       handleNumber<PrimarySetter>(builder, value.substr(0, separator));
@@ -57,15 +57,15 @@ namespace rs::tag::flac
 #include "tag/flac/VorbisCommentDispatch.h"
   } // namespace
 
-  rs::library::TrackBuilder File::loadTrack() const
+  ao::library::TrackBuilder File::loadTrack() const
   {
     if (_mappedRegion.get_size() < 4 || std::memcmp(_mappedRegion.get_address(), "fLaC", 4) != 0)
     {
-      RS_THROW(rs::Exception, "unrecognized flac file content");
+      AO_THROW(ao::Exception, "unrecognized flac file content");
     }
 
     clearOwnedStrings();
-    auto builder = rs::library::TrackBuilder::createNew();
+    auto builder = ao::library::TrackBuilder::createNew();
 
     auto iter = MetadataBlockViewIterator{
       static_cast<char const*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};
@@ -135,4 +135,4 @@ namespace rs::tag::flac
 
     return builder;
   }
-} // namespace rs::tag::flac
+} // namespace ao::tag::flac

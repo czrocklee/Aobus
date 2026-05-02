@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/model/SmartListEngine.h>
+#include <ao/model/SmartListEngine.h>
 
-#include <rs/model/FilteredTrackIdList.h>
-#include <rs/model/TrackIdList.h>
-#include <rs/utility/Log.h>
+#include <ao/model/FilteredTrackIdList.h>
+#include <ao/model/TrackIdList.h>
+#include <ao/utility/Log.h>
 
-#include <rs/lmdb/Transaction.h>
-#include <rs/query/ExecutionPlan.h>
-#include <rs/query/Parser.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/query/ExecutionPlan.h>
+#include <ao/query/Parser.h>
 
 #include <algorithm>
 #include <flat_set>
 #include <stdexcept>
 #include <utility>
 
-namespace rs::model
+namespace ao::model
 {
   // SourceObserver implementation
 
@@ -131,7 +131,7 @@ namespace rs::model
 
   // SmartListEngine implementation
 
-  SmartListEngine::SmartListEngine(rs::library::MusicLibrary& ml)
+  SmartListEngine::SmartListEngine(ao::library::MusicLibrary& ml)
     : _ml{ml}
   {
   }
@@ -144,7 +144,7 @@ namespace rs::model
     {
       if (bucket->observer)
       {
-        rs::utility::unsafeDowncast<SourceObserver>(bucket->observer.get())->invalidate();
+        ao::utility::unsafeDowncast<SourceObserver>(bucket->observer.get())->invalidate();
 
         if (bucket->sourceAlive)
         {
@@ -291,14 +291,14 @@ namespace rs::model
 
   void SmartListEngine::rebuildGroup(TrackIdList& source,
                                      std::span<FilteredTrackIdList*> lists,
-                                     rs::library::TrackStore::Reader::LoadMode mode)
+                                     ao::library::TrackStore::Reader::LoadMode mode)
   {
     if (lists.empty())
     {
       return;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _ml.tracks().reader(txn);
 
     std::vector<std::vector<TrackId>> nextMembers(lists.size());
@@ -354,7 +354,7 @@ namespace rs::model
       return;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
     auto const view = reader.get(id, mode);
@@ -398,7 +398,7 @@ namespace rs::model
       return;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
     auto const view = reader.get(id, mode);
@@ -473,7 +473,7 @@ namespace rs::model
       return;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
 
@@ -532,7 +532,7 @@ namespace rs::model
       return;
     }
 
-    rs::lmdb::ReadTransaction txn(_ml.readTransaction());
+    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
     auto reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
 
@@ -636,7 +636,7 @@ namespace rs::model
     }
   }
 
-  rs::library::TrackStore::Reader::LoadMode SmartListEngine::getUnionMode(std::span<FilteredTrackIdList*> lists)
+  ao::library::TrackStore::Reader::LoadMode SmartListEngine::getUnionMode(std::span<FilteredTrackIdList*> lists)
   {
     bool needsHot = false;
     bool needsCold = false;
@@ -650,9 +650,9 @@ namespace rs::model
 
       switch (list->_plan->accessProfile)
       {
-        case rs::query::AccessProfile::HotOnly: needsHot = true; break;
-        case rs::query::AccessProfile::ColdOnly: needsCold = true; break;
-        case rs::query::AccessProfile::HotAndCold:
+        case ao::query::AccessProfile::HotOnly: needsHot = true; break;
+        case ao::query::AccessProfile::ColdOnly: needsCold = true; break;
+        case ao::query::AccessProfile::HotAndCold:
           needsHot = true;
           needsCold = true;
           break;
@@ -661,14 +661,14 @@ namespace rs::model
 
     if (needsHot && needsCold)
     {
-      return rs::library::TrackStore::Reader::LoadMode::Both;
+      return ao::library::TrackStore::Reader::LoadMode::Both;
     }
 
     if (needsCold)
     {
-      return rs::library::TrackStore::Reader::LoadMode::Cold;
+      return ao::library::TrackStore::Reader::LoadMode::Cold;
     }
 
-    return rs::library::TrackStore::Reader::LoadMode::Hot;
+    return ao::library::TrackStore::Reader::LoadMode::Hot;
   }
-} // namespace rs::model
+} // namespace ao::model

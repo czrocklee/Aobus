@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/Importer.h>
+#include <ao/library/Importer.h>
 
-#include <rs/Exception.h>
-#include <rs/library/DictionaryStore.h>
-#include <rs/library/ListBuilder.h>
-#include <rs/library/ListStore.h>
-#include <rs/library/ResourceStore.h>
-#include <rs/library/TrackBuilder.h>
-#include <rs/library/TrackStore.h>
-#include <rs/tag/File.h>
+#include <ao/Exception.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/tag/File.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -20,7 +20,7 @@
 #include <deque>
 #include <unordered_map>
 
-namespace rs::library
+namespace ao::library
 {
   namespace
   {
@@ -69,19 +69,19 @@ namespace rs::library
     }
     catch (YAML::Exception const& e)
     {
-      RS_THROW_FORMAT(rs::Exception, "Failed to read '{}': {}", path.string(), e.what());
+      AO_THROW_FORMAT(ao::Exception, "Failed to read '{}': {}", path.string(), e.what());
     }
 
     if (!root["version"] || root["version"].as<int>() != 1)
     {
-      RS_THROW(rs::Exception, "Unsupported YAML version");
+      AO_THROW(ao::Exception, "Unsupported YAML version");
     }
 
     YAML::Node library = root["library"];
 
     if (!library)
     {
-      RS_THROW(rs::Exception, "Missing 'library' section in YAML");
+      AO_THROW(ao::Exception, "Missing 'library' section in YAML");
     }
 
     auto txn = _ml.writeTransaction();
@@ -106,8 +106,8 @@ namespace rs::library
   }
 
   void Importer::importTracks(YAML::Node const& tracks,
-                                     rs::lmdb::WriteTransaction& txn,
-                                     std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
+                              ao::lmdb::WriteTransaction& txn,
+                              std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
   {
     auto trackWriter = _ml.tracks().writer(txn);
     auto& dict = _ml.dictionary();
@@ -124,7 +124,7 @@ namespace rs::library
 
       if (std::filesystem::exists(fullPath))
       {
-        if (auto tagFile = rs::tag::File::open(fullPath); tagFile != nullptr)
+        if (auto tagFile = ao::tag::File::open(fullPath); tagFile != nullptr)
         {
           fileBuilder = tagFile->loadTrack();
           fileBuilder->property().uri(uriStr);
@@ -170,8 +170,8 @@ namespace rs::library
   }
 
   void Importer::overlayMetadata(TrackBuilder& builder,
-                                        YAML::Node const& trackNode,
-                                        std::deque<std::string>& trackStrings) const
+                                 YAML::Node const& trackNode,
+                                 std::deque<std::string>& trackStrings) const
   {
     auto keepAlive = [&](YAML::Node const& node) -> std::string_view
     {
@@ -240,8 +240,8 @@ namespace rs::library
   }
 
   void Importer::overlayCustomData(TrackBuilder& builder,
-                                          YAML::Node const& trackNode,
-                                          std::deque<std::string>& trackStrings) const
+                                   YAML::Node const& trackNode,
+                                   std::deque<std::string>& trackStrings) const
   {
     auto keepAlive = [&](YAML::Node const& node) -> std::string_view
     {
@@ -308,8 +308,8 @@ namespace rs::library
   }
 
   void Importer::importLists(YAML::Node const& lists,
-                                    rs::lmdb::WriteTransaction& txn,
-                                    std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId)
+                             ao::lmdb::WriteTransaction& txn,
+                             std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId)
   {
     auto listWriter = _ml.lists().writer(txn);
     auto importedLists = std::vector<ImportedList>{};
@@ -324,7 +324,7 @@ namespace rs::library
 
       if (importedList.yamlId == 0)
       {
-        RS_THROW(rs::Exception, "List id 0 is reserved for the root");
+        AO_THROW(ao::Exception, "List id 0 is reserved for the root");
       }
 
       if (listNode["description"])
@@ -349,8 +349,8 @@ namespace rs::library
           }
           catch (...)
           {
-            RS_THROW_FORMAT(
-              rs::Exception, "List '{}' contains invalid track reference (expected ID)", importedList.name);
+            AO_THROW_FORMAT(
+              ao::Exception, "List '{}' contains invalid track reference (expected ID)", importedList.name);
           }
 
           if (auto const it = yamlTrackIdToInternalId.find(yamlId); it != yamlTrackIdToInternalId.end())
@@ -359,7 +359,7 @@ namespace rs::library
           }
           else
           {
-            RS_THROW_FORMAT(rs::Exception, "List '{}' references unknown track ID {}", importedList.name, yamlId);
+            AO_THROW_FORMAT(ao::Exception, "List '{}' references unknown track ID {}", importedList.name, yamlId);
           }
         }
       }
@@ -375,7 +375,7 @@ namespace rs::library
 
       if (!inserted)
       {
-        RS_THROW_FORMAT(rs::Exception, "Duplicate list id {} in YAML import", importedList.yamlId);
+        AO_THROW_FORMAT(ao::Exception, "Duplicate list id {} in YAML import", importedList.yamlId);
       }
 
       auto [newListId, view] = listWriter.create(serializeList(importedList, ListId{0}));
@@ -395,11 +395,11 @@ namespace rs::library
 
       if (parentIt == yamlListIdToNewListId.end())
       {
-        RS_THROW_FORMAT(
-          rs::Exception, "List '{}' references missing parent id {}", importedList.name, importedList.yamlParentId);
+        AO_THROW_FORMAT(
+          ao::Exception, "List '{}' references missing parent id {}", importedList.name, importedList.yamlParentId);
       }
 
       listWriter.update(childIt->second, serializeList(importedList, parentIt->second));
     }
   }
-} // namespace rs::library
+} // namespace ao::library

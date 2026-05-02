@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/StreamingSource.h>
-#include <rs/utility/Log.h>
-#include <rs/utility/ThreadUtils.h>
+#include <ao/audio/StreamingSource.h>
+#include <ao/utility/Log.h>
+#include <ao/utility/ThreadUtils.h>
 
 #include <chrono>
 
-namespace rs::audio
+namespace ao::audio
 {
   namespace
   {
@@ -45,10 +45,10 @@ namespace rs::audio
   } // namespace
 
   StreamingSource::StreamingSource(std::unique_ptr<IDecoderSession> decoder,
-                                         DecodedStreamInfo streamInfo,
-                                         std::function<void(rs::Error const&)> onError,
-                                         std::uint32_t prerollTargetMs,
-                                         std::uint32_t decodeHighWatermarkMs)
+                                   DecodedStreamInfo streamInfo,
+                                   std::function<void(ao::Error const&)> onError,
+                                   std::uint32_t prerollTargetMs,
+                                   std::uint32_t decodeHighWatermarkMs)
     : _decoder{std::move(decoder)}
     , _streamInfo{streamInfo}
     , _onError{std::move(onError)}
@@ -63,7 +63,7 @@ namespace rs::audio
     stopDecodeThread();
   }
 
-  rs::Result<> StreamingSource::initialize()
+  ao::Result<> StreamingSource::initialize()
   {
     auto const generation = _generation.load(std::memory_order_relaxed);
 
@@ -80,7 +80,7 @@ namespace rs::audio
     if (_failed.load(std::memory_order_relaxed))
     {
       return std::unexpected(
-        rs::Error{.code = rs::Error::Code::Generic, .message = "Streaming source failed during initialization"});
+        ao::Error{.code = ao::Error::Code::Generic, .message = "Streaming source failed during initialization"});
     }
 
     return {};
@@ -101,7 +101,7 @@ namespace rs::audio
     return bufferedDurationMs(_ringBuffer.size(), _bytesPerSecond);
   }
 
-  rs::Result<> StreamingSource::seek(std::uint32_t positionMs)
+  ao::Result<> StreamingSource::seek(std::uint32_t positionMs)
   {
     stopDecodeThread();
 
@@ -142,7 +142,7 @@ namespace rs::audio
     if (_failed.load(std::memory_order_relaxed))
     {
       return std::unexpected(
-        rs::Error{.code = rs::Error::Code::Generic, .message = "Streaming source is in failed state"});
+        ao::Error{.code = ao::Error::Code::Generic, .message = "Streaming source is in failed state"});
     }
 
     return {};
@@ -155,7 +155,7 @@ namespace rs::audio
     _decodeThread = std::jthread(
       [this](std::stop_token const& token)
       {
-        rs::setCurrentThreadName("StreamingSource-Decode");
+        ao::setCurrentThreadName("StreamingSource-Decode");
         decodeLoop(token);
       });
   }
@@ -205,7 +205,7 @@ namespace rs::audio
     }
   }
 
-  rs::Result<> StreamingSource::fillUntil(std::uint32_t targetBufferedMs, std::uint64_t generation)
+  ao::Result<> StreamingSource::fillUntil(std::uint32_t targetBufferedMs, std::uint64_t generation)
   {
     while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
            _generation.load(std::memory_order_relaxed) == generation && bufferedMs() < targetBufferedMs)
@@ -234,13 +234,13 @@ namespace rs::audio
     if (_failed.load(std::memory_order_relaxed))
     {
       return std::unexpected(
-        rs::Error{.code = rs::Error::Code::Generic, .message = "Streaming source is in failed state"});
+        ao::Error{.code = ao::Error::Code::Generic, .message = "Streaming source is in failed state"});
     }
 
     return {};
   }
 
-  rs::Result<bool> StreamingSource::decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken)
+  ao::Result<bool> StreamingSource::decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken)
   {
     PcmBlock block;
     {
@@ -271,8 +271,8 @@ namespace rs::audio
   }
 
   bool StreamingSource::writeBlock(std::span<std::byte const> bytes,
-                                      std::uint64_t generation,
-                                      std::stop_token const* stopToken)
+                                   std::uint64_t generation,
+                                   std::stop_token const* stopToken)
   {
     auto const stopRequested = [stopToken]() { return stopToken && stopToken->stop_requested(); };
 
@@ -293,4 +293,4 @@ namespace rs::audio
 
     return remaining == 0;
   }
-} // namespace rs::audio
+} // namespace ao::audio

@@ -6,20 +6,20 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackLayout.h>
+#include <ao/library/TrackStore.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/query/ExecutionPlan.h>
+#include <ao/query/Parser.h>
+#include <ao/query/PlanEvaluator.h>
+#include <ao/utility/ByteView.h>
 #include <array>
 #include <optional>
-#include <rs/library/DictionaryStore.h>
-#include <rs/library/ResourceStore.h>
-#include <rs/library/TrackBuilder.h>
-#include <rs/library/TrackLayout.h>
-#include <rs/library/TrackStore.h>
-#include <rs/lmdb/Database.h>
-#include <rs/lmdb/Environment.h>
-#include <rs/lmdb/Transaction.h>
-#include <rs/query/ExecutionPlan.h>
-#include <rs/query/Parser.h>
-#include <rs/query/PlanEvaluator.h>
-#include <rs/utility/ByteView.h>
 #include <span>
 #include <test/unit/library/TestUtils.h>
 #include <test/unit/lmdb/TestUtils.h>
@@ -28,8 +28,8 @@
 
 namespace
 {
-  using rs::DictionaryId;
-  using rs::lmdb::Database;
+  using ao::DictionaryId;
+  using ao::lmdb::Database;
 
   // Helper class to hold both the serialized data and create TrackView
   // This ensures the data stays valid while the view is in use
@@ -85,9 +85,9 @@ namespace
 
       // Build hot and cold data with a dictionary
       auto temp = TempDir{};
-      auto envOpts = rs::lmdb::Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
+      auto envOpts = ao::lmdb::Environment::Options{.flags = MDB_CREATE, .maxDatabases = 20};
       _env.emplace(temp.path(), envOpts);
-      auto wtxn = rs::lmdb::WriteTransaction{*_env};
+      auto wtxn = ao::lmdb::WriteTransaction{*_env};
       _dict.emplace(Database{wtxn, "dict"}, wtxn);
       _resources.emplace(Database{wtxn, "resources"});
 
@@ -96,7 +96,7 @@ namespace
 
       // Fix up the header with specific IDs
       // Note: we serialize then modify, so const_cast is no longer needed with asMutablePtr
-      auto* header = rs::utility::layout::asMutablePtr<rs::library::TrackHotHeader>(_hotData);
+      auto* header = ao::utility::layout::asMutablePtr<ao::library::TrackHotHeader>(_hotData);
       header->artistId = DictionaryId{artistId};
       header->albumId = DictionaryId{albumId};
       header->genreId = DictionaryId{genreId};
@@ -106,27 +106,27 @@ namespace
     }
 
     // Returns TrackView with both hot and cold data
-    rs::library::TrackView view() const { return rs::library::TrackView{_hotData, _coldData}; }
+    ao::library::TrackView view() const { return ao::library::TrackView{_hotData, _coldData}; }
 
     // Returns TrackView with hot data only (for invalid cold tests)
-    rs::library::TrackView hotOnlyView() const
+    ao::library::TrackView hotOnlyView() const
     {
-      return rs::library::TrackView{_hotData, std::span<std::byte const>{}};
+      return ao::library::TrackView{_hotData, std::span<std::byte const>{}};
     }
 
     // Returns TrackView with cold data only (for cold-only plan tests)
-    rs::library::TrackView coldOnlyView() const
+    ao::library::TrackView coldOnlyView() const
     {
-      return rs::library::TrackView{std::span<std::byte const>{}, _coldData};
+      return ao::library::TrackView{std::span<std::byte const>{}, _coldData};
     }
 
-    rs::library::DictionaryStore& dictionary() { return *_dict; }
+    ao::library::DictionaryStore& dictionary() { return *_dict; }
 
   private:
-    rs::library::TrackBuilder _builder = rs::library::TrackBuilder::createNew();
-    std::optional<rs::lmdb::Environment> _env;
-    std::optional<rs::library::DictionaryStore> _dict;
-    std::optional<rs::library::ResourceStore> _resources;
+    ao::library::TrackBuilder _builder = ao::library::TrackBuilder::createNew();
+    std::optional<ao::lmdb::Environment> _env;
+    std::optional<ao::library::DictionaryStore> _dict;
+    std::optional<ao::library::ResourceStore> _resources;
     std::vector<std::byte> _hotData;
     std::vector<std::byte> _coldData;
     // Store strings as members so string_view pointers remain valid
@@ -139,13 +139,13 @@ namespace
     std::vector<std::string> _tagStrings; // Keep tag strings alive for string_view
   };
 
-  std::vector<std::byte> makeHotOnlyTrack(rs::DictionaryId artistId = rs::DictionaryId{0},
-                                          rs::DictionaryId albumId = rs::DictionaryId{0},
-                                          rs::DictionaryId genreId = rs::DictionaryId{0},
-                                          rs::DictionaryId albumArtistId = rs::DictionaryId{0},
-                                          std::span<rs::DictionaryId const> tagIds = {})
+  std::vector<std::byte> makeHotOnlyTrack(ao::DictionaryId artistId = ao::DictionaryId{0},
+                                          ao::DictionaryId albumId = ao::DictionaryId{0},
+                                          ao::DictionaryId genreId = ao::DictionaryId{0},
+                                          ao::DictionaryId albumArtistId = ao::DictionaryId{0},
+                                          std::span<ao::DictionaryId const> tagIds = {})
   {
-    auto header = rs::library::TrackHotHeader{};
+    auto header = ao::library::TrackHotHeader{};
     header.artistId = artistId;
     header.albumId = albumId;
     header.genreId = genreId;
@@ -161,7 +161,7 @@ namespace
 
     for (auto const tagId : tagIds)
     {
-      data.insert_range(data.end(), rs::utility::bytes::view(tagId));
+      data.insert_range(data.end(), ao::utility::bytes::view(tagId));
     }
 
     test::appendString(data, "");
@@ -169,13 +169,13 @@ namespace
   }
 } // namespace
 
-using rs::DictionaryId;
-using rs::library::DictionaryStore;
-using rs::lmdb::Database;
-using rs::lmdb::Environment;
-using rs::lmdb::ReadTransaction;
-using rs::lmdb::WriteTransaction;
-using namespace rs::query;
+using ao::DictionaryId;
+using ao::library::DictionaryStore;
+using ao::lmdb::Database;
+using ao::lmdb::Environment;
+using ao::lmdb::ReadTransaction;
+using ao::lmdb::WriteTransaction;
+using namespace ao::query;
 
 TEST_CASE("PlanEvaluator - Simple Equal Match")
 {
@@ -349,15 +349,15 @@ TEST_CASE("PlanEvaluator - Artist LIKE resolves DictionaryId strings")
   auto evaluator = PlanEvaluator{};
 
   auto matchingHotData = makeHotOnlyTrack(bachId);
-  auto matchingTrack = rs::library::TrackView{matchingHotData, std::span<std::byte const>{}};
+  auto matchingTrack = ao::library::TrackView{matchingHotData, std::span<std::byte const>{}};
   CHECK(evaluator.evaluateFull(plan, matchingTrack) == true);
 
   auto nonMatchingHotData = makeHotOnlyTrack(mozartId);
-  auto nonMatchingTrack = rs::library::TrackView{nonMatchingHotData, std::span<std::byte const>{}};
+  auto nonMatchingTrack = ao::library::TrackView{nonMatchingHotData, std::span<std::byte const>{}};
   CHECK(evaluator.evaluateFull(plan, nonMatchingTrack) == false);
 
   auto missingArtistHotData = makeHotOnlyTrack();
-  auto missingArtistTrack = rs::library::TrackView{missingArtistHotData, std::span<std::byte const>{}};
+  auto missingArtistTrack = ao::library::TrackView{missingArtistHotData, std::span<std::byte const>{}};
   CHECK(evaluator.evaluateFull(plan, missingArtistTrack) == false);
 }
 
@@ -378,17 +378,17 @@ TEST_CASE("PlanEvaluator - OR between artist LIKE and tag does not over-prune on
   CHECK(plan.tagBloomMask == 0);
 
   auto artistMatchHotData = makeHotOnlyTrack(aimerId);
-  auto artistMatchTrack = rs::library::TrackView{artistMatchHotData, std::span<std::byte const>{}};
+  auto artistMatchTrack = ao::library::TrackView{artistMatchHotData, std::span<std::byte const>{}};
   CHECK(evaluator.matches(plan, artistMatchTrack) == true);
 
-  auto tagIds = std::array<rs::DictionaryId, 1>{aimerId};
+  auto tagIds = std::array<ao::DictionaryId, 1>{aimerId};
   auto tagMatchHotData =
-    makeHotOnlyTrack(rs::DictionaryId{0}, rs::DictionaryId{0}, rs::DictionaryId{0}, rs::DictionaryId{0}, tagIds);
-  auto tagMatchTrack = rs::library::TrackView{tagMatchHotData, std::span<std::byte const>{}};
+    makeHotOnlyTrack(ao::DictionaryId{0}, ao::DictionaryId{0}, ao::DictionaryId{0}, ao::DictionaryId{0}, tagIds);
+  auto tagMatchTrack = ao::library::TrackView{tagMatchHotData, std::span<std::byte const>{}};
   CHECK(evaluator.matches(plan, tagMatchTrack) == true);
 
   auto noMatchHotData = makeHotOnlyTrack();
-  auto noMatchTrack = rs::library::TrackView{noMatchHotData, std::span<std::byte const>{}};
+  auto noMatchTrack = ao::library::TrackView{noMatchHotData, std::span<std::byte const>{}};
   CHECK(evaluator.matches(plan, noMatchTrack) == false);
 }
 
@@ -568,7 +568,7 @@ TEST_CASE("PlanEvaluator - Invalid Track View")
   auto evaluator = PlanEvaluator{};
 
   // Empty hot data creates an invalid TrackView
-  auto emptyView = rs::library::TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
+  auto emptyView = ao::library::TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
   auto result = evaluator.evaluateFull(plan, emptyView);
   CHECK(result == false);
 }
@@ -802,31 +802,31 @@ TEST_CASE("PlanEvaluator - Tag Bloom Filter - Track Computation")
   // Using manual header construction.
   // Tag ID 10 -> bit 10 (10 & 31 = 10)
   {
-    auto h = rs::library::TrackHotHeader{};
+    auto h = ao::library::TrackHotHeader{};
     h.tagBloom = (1U << (10 & 31)); // bit 10
     auto data = test::serializeHeader(h);
     data.push_back(static_cast<std::byte>('\0')); // empty title
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.tags().bloom() == (1U << 10));
   }
 
   // Tag ID 32 -> bit 0 (32 & 31 = 0)
   {
-    auto h = rs::library::TrackHotHeader{};
+    auto h = ao::library::TrackHotHeader{};
     h.tagBloom = (1U << (32 & 31)); // bit 0
     auto data = test::serializeHeader(h);
     data.push_back(static_cast<std::byte>('\0')); // empty title
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
     CHECK(view.tags().bloom() == 1U);
   }
 
   // Multiple tags: ID 5 and ID 20
   {
-    auto h = rs::library::TrackHotHeader{};
+    auto h = ao::library::TrackHotHeader{};
     h.tagBloom = (1U << (5 & 31)) | (1U << (20 & 31)); // bits 5 and 20
     auto data = test::serializeHeader(h);
     data.push_back(static_cast<std::byte>('\0')); // empty title
-    auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+    auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
     CHECK((view.tags().bloom() & (1U << 5)) != 0);  // Bit 5 should be set
     CHECK((view.tags().bloom() & (1U << 20)) != 0); // Bit 20 should be set
   }
@@ -840,16 +840,16 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - No Match")
   auto evaluator = PlanEvaluator{};
 
   // Create a track with tag bloom bit 0 set (simulating tag ID 32)
-  auto h = rs::library::TrackHotHeader{};
+  auto h = ao::library::TrackHotHeader{};
   h.tagBloom = 0x00000001U; // Only bit 0 set
 
   auto data = std::vector<std::byte>{};
-  data.insert_range(data.end(), rs::utility::bytes::view(h));
+  data.insert_range(data.end(), ao::utility::bytes::view(h));
 
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+  auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
 
   // Bloom filter rejects because query mask doesn't match track bloom
   auto result = evaluator.matches(plan, view);
@@ -865,16 +865,16 @@ TEST_CASE("PlanEvaluator - Bloom Filter Fast Path - Match")
 
   // Create a track with tag bloom that has some bits set
   // (without dictionary, mask is 0, so this won't actually test fast path)
-  auto h = rs::library::TrackHotHeader{};
+  auto h = ao::library::TrackHotHeader{};
   h.tagBloom = 0xFFFFFFFFU; // All bits set
 
   auto data = std::vector<std::byte>{};
-  data.insert_range(data.end(), rs::utility::bytes::view(h));
+  data.insert_range(data.end(), ao::utility::bytes::view(h));
 
   data.push_back(static_cast<std::byte>('\0')); // empty title
   data.push_back(static_cast<std::byte>('\0')); // empty uri
 
-  auto view = rs::library::TrackView{data, std::span<std::byte const>{}};
+  auto view = ao::library::TrackView{data, std::span<std::byte const>{}};
 
   // With mask 0, bloom check passes (no filtering), falls through to full eval
   auto result = evaluator.matches(plan, view);

@@ -3,23 +3,23 @@
 
 #pragma once
 
+#include <ao/audio/IBackendProvider.h>
 #include <memory>
-#include <rs/audio/IBackendProvider.h>
 
 namespace app::playback
 {
   /**
    * @brief Provider for PipeWire audio backends.
    */
-  class PipeWireProvider final : public rs::audio::IBackendProvider
+  class PipeWireProvider final : public ao::audio::IBackendProvider
   {
   public:
     PipeWireProvider();
     ~PipeWireProvider() override;
 
-    rs::audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
-    std::unique_ptr<rs::audio::IBackend> createBackend(rs::audio::Device const& device) override;
-    rs::audio::Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
+    ao::audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
+    std::unique_ptr<ao::audio::IBackend> createBackend(ao::audio::Device const& device) override;
+    ao::audio::Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
 
   private:
     struct Impl;

@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "ThrowError.h"
-#include <rs/lmdb/Environment.h>
+#include <ao/lmdb/Environment.h>
 
-namespace rs::lmdb
+namespace ao::lmdb
 {
   Environment::Environment(std::string const& path)
     : Environment{path, Options{}}

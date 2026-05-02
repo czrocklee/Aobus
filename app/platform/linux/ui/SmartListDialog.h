@@ -4,7 +4,7 @@
 #pragma once
 
 #include "platform/linux/ui/QueryExpressionBox.h"
-#include <rs/model/ListDraft.h>
+#include <ao/model/ListDraft.h>
 
 #include <gtkmm.h>
 
@@ -12,13 +12,13 @@
 #include <optional>
 #include <string>
 
-namespace rs::library
+namespace ao::library
 {
   class MusicLibrary;
   class ListView;
 }
 
-namespace rs::model
+namespace ao::model
 {
   class AllTrackIdsList;
   class FilteredTrackIdList;
@@ -35,21 +35,21 @@ namespace app::ui
   {
   public:
     SmartListDialog(Gtk::Window& parent,
-                    rs::library::MusicLibrary& musicLibrary,
-                    rs::model::AllTrackIdsList& allTrackIds,
-                    rs::model::TrackIdList& parentMembershipList,
-                    rs::ListId parentListId,
+                    ao::library::MusicLibrary& musicLibrary,
+                    ao::model::AllTrackIdsList& allTrackIds,
+                    ao::model::TrackIdList& parentMembershipList,
+                    ao::ListId parentListId,
                     TrackRowDataProvider const& provider);
     virtual ~SmartListDialog() override;
 
     // Populate dialog fields from an existing list for editing
-    void populate(rs::ListId id, rs::library::ListView const& view);
+    void populate(ao::ListId id, ao::library::ListView const& view);
 
     // Returns the ListId for update (0 if creating a new list)
-    rs::ListId editListId() const;
+    ao::ListId editListId() const;
 
     // Returns a ListDraft populated from the dialog fields
-    rs::model::ListDraft draft() const;
+    ao::model::ListDraft draft() const;
 
     void setLocalExpression(std::string expression);
 
@@ -78,17 +78,17 @@ namespace app::ui
     sigc::connection _exprTimeoutConnection;
 
     // Preview infrastructure
-    rs::library::MusicLibrary& _musicLibrary;
-    rs::model::AllTrackIdsList& _allTrackIds;
-    rs::model::TrackIdList& _parentMembershipList;
-    rs::ListId _parentListId;
+    ao::library::MusicLibrary& _musicLibrary;
+    ao::model::AllTrackIdsList& _allTrackIds;
+    ao::model::TrackIdList& _parentMembershipList;
+    ao::ListId _parentListId;
     TrackRowDataProvider const& _rowDataProvider;
-    std::unique_ptr<rs::model::FilteredTrackIdList> _previewFilteredList;
-    std::unique_ptr<rs::model::SmartListEngine> _previewEngine;
+    std::unique_ptr<ao::model::FilteredTrackIdList> _previewFilteredList;
+    std::unique_ptr<ao::model::SmartListEngine> _previewEngine;
     std::unique_ptr<TrackListAdapter> _previewAdapter;
     bool _expressionValid = true;
 
     // Edit mode state
-    std::optional<rs::ListId> _editListId;
+    std::optional<ao::ListId> _editListId;
   };
 } // namespace app::ui

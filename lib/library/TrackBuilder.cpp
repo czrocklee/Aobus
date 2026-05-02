@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/TrackBuilder.h>
-#include <rs/utility/ByteView.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/utility/ByteView.h>
 
 #include <algorithm>
 #include <cstring>
 #include <gsl-lite/gsl-lite.hpp>
 
-namespace rs::library
+namespace ao::library
 {
   constexpr std::uint32_t kBloomBitMask = 31;
 
@@ -616,4 +616,4 @@ namespace rs::library
   {
     return PreparedCold{this, txn, dict, resources};
   }
-} // namespace rs::library
+} // namespace ao::library

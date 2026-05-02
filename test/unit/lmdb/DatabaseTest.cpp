@@ -6,20 +6,20 @@
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
+#include <ao/Exception.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
 #include <lmdb.h>
-#include <rs/Exception.h>
-#include <rs/lmdb/Database.h>
-#include <rs/lmdb/Environment.h>
-#include <rs/lmdb/Transaction.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <cstring>
 #include <optional>
 #include <string_view>
 
-#include <rs/utility/ByteView.h>
+#include <ao/utility/ByteView.h>
 
-using namespace rs::lmdb;
+using namespace ao::lmdb;
 
 // ============================================================================
 // Database Tests
@@ -103,7 +103,7 @@ TEST_CASE("Database::Reader - get", "[lmdb][database][reader]")
   {
     auto data = reader.get(42);
     REQUIRE(data.has_value());
-    REQUIRE(rs::utility::bytes::stringView(*data) == "answer");
+    REQUIRE(ao::utility::bytes::stringView(*data) == "answer");
   }
 
   SECTION("Missing key returns nullopt")
@@ -170,7 +170,7 @@ TEST_CASE("Database::Reader::Iterator - dereference", "[lmdb][database][reader]"
   auto rtxn = ReadTransaction{env};
   auto reader = db.reader(rtxn);
   auto it = reader.begin();
-  REQUIRE(rs::utility::bytes::stringView(it->second) == "value");
+  REQUIRE(ao::utility::bytes::stringView(it->second) == "value");
 }
 
 // ============================================================================
@@ -193,7 +193,7 @@ TEST_CASE("Database::Writer - create with id and data", "[lmdb][database][writer
   auto reader = db.reader(rtxn);
   auto data = reader.get(1);
   REQUIRE(data.has_value());
-  REQUIRE(rs::utility::bytes::stringView(*data) == "hello");
+  REQUIRE(ao::utility::bytes::stringView(*data) == "hello");
 }
 
 TEST_CASE("Database::Writer - create with id and size", "[lmdb][database][writer]")
@@ -219,7 +219,7 @@ TEST_CASE("Database::Writer - create with id and size", "[lmdb][database][writer
   auto data = reader.get(1);
   REQUIRE(data.has_value());
   REQUIRE(data->size() == 10);
-  REQUIRE(rs::utility::bytes::stringView(*data) == std::string(10, 'x'));
+  REQUIRE(ao::utility::bytes::stringView(*data) == std::string(10, 'x'));
 }
 
 TEST_CASE("Database::Writer - append with data", "[lmdb][database][writer]")
@@ -246,8 +246,8 @@ TEST_CASE("Database::Writer - append with data", "[lmdb][database][writer]")
   auto data2 = reader.get(2);
   REQUIRE(data1.has_value());
   REQUIRE(data2.has_value());
-  REQUIRE(rs::utility::bytes::stringView(*data1) == "first");
-  REQUIRE(rs::utility::bytes::stringView(*data2) == "second");
+  REQUIRE(ao::utility::bytes::stringView(*data1) == "first");
+  REQUIRE(ao::utility::bytes::stringView(*data2) == "second");
 }
 
 TEST_CASE("Database::Writer - append with size", "[lmdb][database][writer]")
@@ -280,8 +280,8 @@ TEST_CASE("Database::Writer - append with size", "[lmdb][database][writer]")
   auto data2 = reader.get(2);
   REQUIRE(data1.has_value());
   REQUIRE(data2.has_value());
-  REQUIRE(rs::utility::bytes::stringView(*data1) == std::string(8, 'a'));
-  REQUIRE(rs::utility::bytes::stringView(*data2) == std::string(12, 'b'));
+  REQUIRE(ao::utility::bytes::stringView(*data1) == std::string(8, 'a'));
+  REQUIRE(ao::utility::bytes::stringView(*data2) == std::string(12, 'b'));
 }
 
 TEST_CASE("Database::Writer - update existing record", "[lmdb][database][writer]")
@@ -309,7 +309,7 @@ TEST_CASE("Database::Writer - update existing record", "[lmdb][database][writer]
   auto data = reader.get(1);
   REQUIRE(data.has_value());
   REQUIRE(data->size() == 7);
-  REQUIRE(rs::utility::bytes::stringView(*data) == "updated");
+  REQUIRE(ao::utility::bytes::stringView(*data) == "updated");
 }
 
 TEST_CASE("Database::Writer - delete record", "[lmdb][database][writer]")
@@ -362,7 +362,7 @@ TEST_CASE("Database::Writer - get within write transaction", "[lmdb][database][w
   auto data = writer.get(42);
   REQUIRE(data.has_value());
   REQUIRE(data->size() == 6);
-  REQUIRE(rs::utility::bytes::stringView(*data) == "answer");
+  REQUIRE(ao::utility::bytes::stringView(*data) == "answer");
 }
 
 TEST_CASE("Database::Writer - move constructor", "[lmdb][database][writer]")
@@ -394,7 +394,7 @@ TEST_CASE("Database::Writer - create throws on duplicate id with data", "[lmdb][
 
   writer.create(1, createStringData("first"));
 
-  REQUIRE_THROWS_AS(writer.create(1, createStringData("duplicate")), rs::Exception);
+  REQUIRE_THROWS_AS(writer.create(1, createStringData("duplicate")), ao::Exception);
   wtxn.commit();
 }
 
@@ -409,7 +409,7 @@ TEST_CASE("Database::Writer - create throws on duplicate id with size", "[lmdb][
 
   writer.create(1, 10);
 
-  REQUIRE_THROWS_AS(writer.create(1, 5), rs::Exception);
+  REQUIRE_THROWS_AS(writer.create(1, 5), ao::Exception);
   wtxn.commit();
 }
 

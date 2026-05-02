@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/Exception.h>
-#include <rs/query/ExecutionPlan.h>
-#include <rs/utility/VariantVisitor.h>
+#include <ao/Exception.h>
+#include <ao/query/ExecutionPlan.h>
+#include <ao/utility/VariantVisitor.h>
 
 #include <algorithm>
 #include <cctype>
@@ -15,7 +15,7 @@
 #include <ranges>
 #include <string>
 
-namespace rs::query
+namespace ao::query
 {
   namespace
   {
@@ -121,7 +121,7 @@ namespace rs::query
       }
     }
 
-    std::uint32_t tagBloomBit(rs::library::DictionaryStore* dict, std::string_view tagName)
+    std::uint32_t tagBloomBit(ao::library::DictionaryStore* dict, std::string_view tagName)
     {
       if (dict == nullptr)
       {
@@ -132,9 +132,9 @@ namespace rs::query
       return std::uint32_t{1} << (tagId.value() & kBloomBitMask);
     }
 
-    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, rs::library::DictionaryStore* dict);
+    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, ao::library::DictionaryStore* dict);
 
-    std::uint32_t computeRequiredTagBloomMask(BinaryExpression const& binary, rs::library::DictionaryStore* dict)
+    std::uint32_t computeRequiredTagBloomMask(BinaryExpression const& binary, ao::library::DictionaryStore* dict)
     {
       auto const lhsMask = computeRequiredTagBloomMask(binary.operand, dict);
 
@@ -156,7 +156,7 @@ namespace rs::query
       }
     }
 
-    std::uint32_t computeRequiredTagBloomMask(UnaryExpression const& unary, rs::library::DictionaryStore* dict)
+    std::uint32_t computeRequiredTagBloomMask(UnaryExpression const& unary, ao::library::DictionaryStore* dict)
     {
       if (unary.op == Operator::Not)
       {
@@ -166,7 +166,7 @@ namespace rs::query
       return computeRequiredTagBloomMask(unary.operand, dict);
     }
 
-    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, rs::library::DictionaryStore* dict)
+    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, ao::library::DictionaryStore* dict)
     {
       return std::visit(utility::makeVisitor(
                           [dict](VariableExpression const& variable)
@@ -311,14 +311,14 @@ namespace rs::query
         default: break;
       }
 
-      RS_THROW_FORMAT(rs::Exception, "unit '{}' is not supported for {} constants", normalized, fieldName(field));
+      AO_THROW_FORMAT(ao::Exception, "unit '{}' is not supported for {} constants", normalized, fieldName(field));
     }
 
     std::int64_t scaleUnitConstant(UnitConstantExpression const& constant, Field field)
     {
       if (field == Field::TagBloom)
       {
-        RS_THROW_FORMAT(rs::Exception, "unit literal '{}' requires a numeric field context", constant.lexeme);
+        AO_THROW_FORMAT(ao::Exception, "unit literal '{}' requires a numeric field context", constant.lexeme);
       }
 
       auto lexeme = std::string_view{constant.lexeme};
@@ -334,7 +334,7 @@ namespace rs::query
 
       if (suffixStart == lexeme.end())
       {
-        RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
+        AO_THROW_FORMAT(ao::Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const suffixOffset = static_cast<std::size_t>(std::distance(lexeme.begin(), suffixStart));
@@ -343,14 +343,14 @@ namespace rs::query
 
       if (numberPart.empty() || suffixPart.empty())
       {
-        RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
+        AO_THROW_FORMAT(ao::Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const dotPos = numberPart.find('.');
 
       if (dotPos != std::string_view::npos && numberPart.find('.', dotPos + 1) != std::string_view::npos)
       {
-        RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
+        AO_THROW_FORMAT(ao::Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const wholePart = numberPart.substr(0, dotPos);
@@ -358,7 +358,7 @@ namespace rs::query
 
       if (wholePart.empty() || (dotPos != std::string_view::npos && fractionPart.empty()))
       {
-        RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
+        AO_THROW_FORMAT(ao::Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const whole = parseUnsigned(wholePart);
@@ -368,7 +368,7 @@ namespace rs::query
 
       if (!whole || !fraction || !denominator)
       {
-        RS_THROW_FORMAT(rs::Exception, "invalid unit literal '{}'", constant.lexeme);
+        AO_THROW_FORMAT(ao::Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const scaledWhole = checkedMul(*whole, *denominator);
@@ -378,12 +378,12 @@ namespace rs::query
 
       if (!scaledNumerator)
       {
-        RS_THROW_FORMAT(rs::Exception, "unit literal '{}' is out of range", constant.lexeme);
+        AO_THROW_FORMAT(ao::Exception, "unit literal '{}' is out of range", constant.lexeme);
       }
 
       if (*scaledNumerator % *denominator != 0)
       {
-        RS_THROW_FORMAT(rs::Exception,
+        AO_THROW_FORMAT(ao::Exception,
                         "unit literal '{}' does not resolve to an integer {} value",
                         constant.lexeme,
                         fieldName(field));
@@ -395,7 +395,7 @@ namespace rs::query
       {
         if (magnitude > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         {
-          RS_THROW_FORMAT(rs::Exception, "unit literal '{}' is out of range", constant.lexeme);
+          AO_THROW_FORMAT(ao::Exception, "unit literal '{}' is out of range", constant.lexeme);
         }
 
         return static_cast<std::int64_t>(magnitude);
@@ -405,7 +405,7 @@ namespace rs::query
 
       if (magnitude > negativeLimit)
       {
-        RS_THROW_FORMAT(rs::Exception, "unit literal '{}' is out of range", constant.lexeme);
+        AO_THROW_FORMAT(ao::Exception, "unit literal '{}' is out of range", constant.lexeme);
       }
 
       if (magnitude == negativeLimit)
@@ -417,7 +417,7 @@ namespace rs::query
     }
   }
 
-  QueryCompiler::QueryCompiler(rs::library::DictionaryStore* dict)
+  QueryCompiler::QueryCompiler(ao::library::DictionaryStore* dict)
     : _dict{dict}
   {
     gsl_Expects(dict != nullptr);
@@ -457,7 +457,7 @@ namespace rs::query
 
       if (opcode == OpCode::Like && isUnsupportedLikeField(leftField))
       {
-        RS_THROW(rs::Exception, "LIKE operator not supported for coverArt or tags");
+        AO_THROW(ao::Exception, "LIKE operator not supported for coverArt or tags");
       }
 
       auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;
@@ -732,4 +732,4 @@ namespace rs::query
 
     return _plan;
   }
-} // namespace rs::query
+} // namespace ao::query

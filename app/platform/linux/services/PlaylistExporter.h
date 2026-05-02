@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include <rs/library/MusicLibrary.h>
+#include <ao/library/MusicLibrary.h>
 
 #include "platform/linux/ui/TrackRowDataProvider.h"
-#include <rs/model/TrackIdList.h>
+#include <ao/model/TrackIdList.h>
 
 #include <sigc++/sigc++.h>
 
@@ -15,12 +15,12 @@
 
 namespace app::services
 {
-  class PlaylistExporter final : public rs::model::TrackIdListObserver
+  class PlaylistExporter final : public ao::model::TrackIdListObserver
   {
   public:
-    using TrackId = rs::TrackId;
+    using TrackId = ao::TrackId;
 
-    PlaylistExporter(rs::model::TrackIdList& list,
+    PlaylistExporter(ao::model::TrackIdList& list,
                      app::ui::TrackRowDataProvider const& provider,
                      std::filesystem::path root,
                      std::filesystem::path path);
@@ -38,7 +38,7 @@ namespace app::services
     void writeFile();
     void scheduleForWrite();
 
-    rs::model::TrackIdList& _list;
+    ao::model::TrackIdList& _list;
     app::ui::TrackRowDataProvider const& _provider;
     std::filesystem::path const _root;
     std::filesystem::path const _path;

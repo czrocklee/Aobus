@@ -3,8 +3,8 @@
 
 #include "platform/linux/playback/PipeWireBackend.h"
 #include "platform/linux/playback/detail/PipeWireShared.h"
-#include <rs/utility/Log.h>
-#include <rs/utility/Raii.h>
+#include <ao/utility/Log.h>
+#include <ao/utility/Raii.h>
 
 extern "C"
 {
@@ -71,8 +71,8 @@ namespace app::playback
     void handleStreamDrained();
 
     // Members
-    rs::audio::RenderCallbacks _callbacks;
-    rs::audio::Format _format;
+    ao::audio::RenderCallbacks _callbacks;
+    ao::audio::Format _format;
     std::atomic<bool> _drainPending = false;
     bool _strictFormatRequired = false;
     bool _strictFormatRejected = false;
@@ -221,10 +221,10 @@ namespace app::playback
     }
   }
 
-  PipeWireBackend::PipeWireBackend(rs::audio::Device const& device)
+  PipeWireBackend::PipeWireBackend(ao::audio::Device const& device)
     : _impl{std::make_unique<Impl>()}
     , _targetDeviceId{device.id}
-    , _exclusiveMode{device.backendKind == rs::audio::BackendKind::PipeWireExclusive}
+    , _exclusiveMode{device.backendKind == ao::audio::BackendKind::PipeWireExclusive}
   {
     _impl->_threadLoop.reset(::pw_thread_loop_new("PipeWireBackend", nullptr));
     if (_impl->_threadLoop)
@@ -242,7 +242,7 @@ namespace app::playback
 
   PipeWireBackend::~PipeWireBackend() = default;
 
-  rs::Result<> PipeWireBackend::open(rs::audio::Format const& format, rs::audio::RenderCallbacks callbacks)
+  ao::Result<> PipeWireBackend::open(ao::audio::Format const& format, ao::audio::RenderCallbacks callbacks)
   {
     _impl->_callbacks = callbacks;
     _impl->_format = format;
@@ -250,7 +250,7 @@ namespace app::playback
     bool useExclusive = _exclusiveMode && !_targetDeviceId.empty();
     if (!_impl->_threadLoop || !_impl->_context || !_impl->_core)
     {
-      return rs::makeError(rs::Error::Code::InitFailed, "PipeWire not initialized");
+      return ao::makeError(ao::Error::Code::InitFailed, "PipeWire not initialized");
     }
 
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
@@ -267,7 +267,7 @@ namespace app::playback
                                                     PW_KEY_NODE_NAME,
                                                     "RockStudio Playback",
                                                     nullptr);
-    auto props = rs::utility::makeUniquePtr<::pw_properties_free>(rawProps);
+    auto props = ao::utility::makeUniquePtr<::pw_properties_free>(rawProps);
     ::pw_properties_set(props.get(), PW_KEY_NODE_RATE, std::format("1/{}", format.sampleRate).c_str());
 
     if (!_targetDeviceId.empty())
@@ -283,7 +283,7 @@ namespace app::playback
     if (!_impl->_stream)
     {
       ::pw_thread_loop_unlock(_impl->_threadLoop.get());
-      return rs::makeError(rs::Error::Code::InitFailed, "Failed to create stream");
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to create stream");
     }
     _impl->_streamListener.reset();
     ::pw_stream_add_listener(_impl->_stream.get(), _impl->_streamListener.get(), &streamEvents, _impl.get());
@@ -336,7 +336,7 @@ namespace app::playback
     if (::pw_stream_connect(_impl->_stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params.data(), 1) < 0)
     {
       ::pw_thread_loop_unlock(_impl->_threadLoop.get());
-      return rs::makeError(rs::Error::Code::InitFailed, "Failed to connect stream");
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to connect stream");
     }
     ::pw_thread_loop_unlock(_impl->_threadLoop.get());
     return {};
@@ -440,8 +440,8 @@ namespace app::playback
     return _exclusiveMode;
   }
 
-  rs::audio::BackendKind PipeWireBackend::kind() const noexcept
+  ao::audio::BackendKind PipeWireBackend::kind() const noexcept
   {
-    return _exclusiveMode ? rs::audio::BackendKind::PipeWireExclusive : rs::audio::BackendKind::PipeWire;
+    return _exclusiveMode ? ao::audio::BackendKind::PipeWireExclusive : ao::audio::BackendKind::PipeWire;
   }
 } // namespace app::playback

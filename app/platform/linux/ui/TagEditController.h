@@ -6,9 +6,9 @@
 #include "platform/linux/ui/LibrarySession.h"
 #include "platform/linux/ui/TrackViewPage.h"
 
+#include <ao/library/MusicLibrary.h>
+#include <ao/model/TrackIdList.h>
 #include <gtkmm.h>
-#include <rs/library/MusicLibrary.h>
-#include <rs/model/TrackIdList.h>
 
 #include <functional>
 #include <memory>
@@ -19,9 +19,9 @@ namespace app::ui
 {
   struct TrackSelectionContext final
   {
-    rs::ListId listId;
-    std::vector<rs::TrackId> selectedIds;
-    rs::model::TrackIdList* membershipList = nullptr;
+    ao::ListId listId;
+    std::vector<ao::TrackId> selectedIds;
+    ao::model::TrackIdList* membershipList = nullptr;
   };
 
   /**

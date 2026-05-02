@@ -4,12 +4,12 @@
 #pragma once
 
 #include "Layout.h"
+#include <ao/Exception.h>
 #include <cstring>
-#include <rs/Exception.h>
 #include <string>
 #include <string_view>
 
-namespace rs::tag::mpeg::id3v2
+namespace ao::tag::mpeg::id3v2
 {
   inline std::string convertToUtf8(char const* begin, char const* end, Encoding encoding)
   {
@@ -106,8 +106,8 @@ namespace rs::tag::mpeg::id3v2
     {
       if (availableSize > 0 && (availableSize < sizeof(CommonFrameLayout) || availableSize < size()))
       {
-        RS_THROW_FORMAT(
-          rs::Exception, "invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
+        AO_THROW_FORMAT(
+          ao::Exception, "invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
       }
     }
 
@@ -126,8 +126,8 @@ namespace rs::tag::mpeg::id3v2
     {
       if (sizeof(Layout) > size())
       {
-        RS_THROW_FORMAT(
-          rs::Exception, "invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
+        AO_THROW_FORMAT(
+          ao::Exception, "invalid id3v2 frame, expect layout size {} > frame size {}", sizeof(Layout), size());
       }
 
       return *static_cast<Layout const*>(_data);

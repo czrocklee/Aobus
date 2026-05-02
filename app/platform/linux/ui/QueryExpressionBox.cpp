@@ -6,8 +6,8 @@
 
 #include <gdk/gdk.h>
 
-#include <rs/library/MusicLibrary.h>
-#include <rs/library/TrackStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 
 #include <algorithm>
 #include <array>
@@ -134,7 +134,7 @@ namespace app::ui
     }
   }
 
-  QueryExpressionBox::QueryExpressionBox(rs::library::MusicLibrary& musicLibrary)
+  QueryExpressionBox::QueryExpressionBox(ao::library::MusicLibrary& musicLibrary)
     : Gtk::Box(Gtk::Orientation::VERTICAL), _musicLibrary(musicLibrary)
   {
     _entry.set_hexpand(true);
@@ -383,8 +383,8 @@ namespace app::ui
     auto reader = _musicLibrary.tracks().reader(txn);
     auto const& dictionary = _musicLibrary.dictionary();
 
-    for (auto iter = reader.begin(rs::library::TrackStore::Reader::LoadMode::Both),
-              end = reader.end(rs::library::TrackStore::Reader::LoadMode::Both);
+    for (auto iter = reader.begin(ao::library::TrackStore::Reader::LoadMode::Both),
+              end = reader.end(ao::library::TrackStore::Reader::LoadMode::Both);
          iter != end;
          ++iter)
     {

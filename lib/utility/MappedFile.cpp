@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/utility/MappedFile.h>
+#include <ao/utility/MappedFile.h>
 
 #include <format>
 
-namespace rs::utility
+namespace ao::utility
 {
-  rs::Result<> MappedFile::map(std::filesystem::path const& filePath)
+  ao::Result<> MappedFile::map(std::filesystem::path const& filePath)
   {
     unmap();
 
@@ -21,7 +21,7 @@ namespace rs::utility
     catch (std::exception const& e)
     {
       return std::unexpected(
-        rs::Error{.code = rs::Error::Code::IoError, .message = std::format("Failed to mmap file: {}", e.what())});
+        ao::Error{.code = ao::Error::Code::IoError, .message = std::format("Failed to mmap file: {}", e.what())});
     }
   }
 
@@ -46,4 +46,4 @@ namespace rs::utility
   {
     return _isMapped;
   }
-} // namespace rs::utility
+} // namespace ao::utility

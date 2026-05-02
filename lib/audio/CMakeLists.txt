@@ -1,5 +1,5 @@
-# rs_audio
-add_library(rs_audio STATIC
+# ao_audio
+add_library(ao_audio STATIC
     DecoderFactory.cpp
     FlacDecoderSession.cpp
     AlacDecoderSession.cpp
@@ -10,6 +10,6 @@ add_library(rs_audio STATIC
     PcmRingBuffer.cpp
     StreamingSource.cpp
 )
-target_include_directories(rs_audio PUBLIC ${RS_PUBLIC_INCLUDE_DIR})
-target_link_libraries(rs_audio PUBLIC rs_model PkgFLAC PkgALAC)
-rockstudio_apply_clang_tidy(rs_audio STRICT)
+target_include_directories(ao_audio PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
+target_link_libraries(ao_audio PUBLIC ao_model PkgFLAC PkgALAC)
+aobus_apply_clang_tidy(ao_audio STRICT)

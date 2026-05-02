@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/audio/AlacDecoderSession.h>
+#include <ao/audio/AlacDecoderSession.h>
 
 #include <alac/ALACAudioTypes.h>
 #include <alac/ALACBitUtilities.h>
 #include <alac/ALACDecoder.h>
 
-#include <rs/media/mp4/Demuxer.h>
-#include <rs/utility/ByteView.h>
-#include <rs/utility/MappedFile.h>
+#include <ao/media/mp4/Demuxer.h>
+#include <ao/utility/ByteView.h>
+#include <ao/utility/MappedFile.h>
 
-namespace rs::audio
+namespace ao::audio
 {
-  using namespace rs::media::mp4;
-  using namespace rs::utility;
+  using namespace ao::media::mp4;
+  using namespace ao::utility;
 
   namespace
   {
@@ -47,7 +47,7 @@ namespace rs::audio
     std::uint32_t currentSampleIndex = 0;
     std::uint32_t timescale = 0;
 
-    rs::utility::MappedFile mappedFile;
+    ao::utility::MappedFile mappedFile;
     std::unique_ptr<Demuxer> demuxer;
 
     Impl(Format output)
@@ -64,7 +64,7 @@ namespace rs::audio
 
   AlacDecoderSession::~AlacDecoderSession() = default;
 
-  rs::Result<> AlacDecoderSession::open(std::filesystem::path const& filePath)
+  ao::Result<> AlacDecoderSession::open(std::filesystem::path const& filePath)
   {
     close();
 
@@ -78,7 +78,7 @@ namespace rs::audio
 
     if (!demuxError.empty())
     {
-      return rs::makeError(rs::Error::Code::InitFailed, demuxError);
+      return ao::makeError(ao::Error::Code::InitFailed, demuxError);
     }
 
     auto const cookie = _impl->demuxer->magicCookie();
@@ -86,14 +86,14 @@ namespace rs::audio
 
     if (initStatus != ALAC_noErr)
     {
-      return rs::makeError(rs::Error::Code::InitFailed, "Failed to initialize ALAC decoder");
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to initialize ALAC decoder");
     }
 
     auto const& config = _impl->decoder->mConfig;
 
     if (config.sampleRate == 0 || config.numChannels == 0 || config.bitDepth == 0)
     {
-      return rs::makeError(rs::Error::Code::InitFailed, "Invalid ALAC stream configuration");
+      return ao::makeError(ao::Error::Code::InitFailed, "Invalid ALAC stream configuration");
     }
 
     _impl->timescale = _impl->demuxer->timescale();
@@ -138,11 +138,11 @@ namespace rs::audio
     _impl->timescale = 0;
   }
 
-  rs::Result<> AlacDecoderSession::seek(std::uint32_t /*positionMs*/)
+  ao::Result<> AlacDecoderSession::seek(std::uint32_t /*positionMs*/)
   {
     if (_impl->timescale == 0)
     {
-      return rs::makeError(rs::Error::Code::SeekFailed, "Timescale is 0");
+      return ao::makeError(ao::Error::Code::SeekFailed, "Timescale is 0");
     }
 
     _impl->currentSampleIndex = 0;
@@ -153,7 +153,7 @@ namespace rs::audio
   {
   }
 
-  rs::Result<PcmBlock> AlacDecoderSession::readNextBlock()
+  ao::Result<PcmBlock> AlacDecoderSession::readNextBlock()
   {
     if (!_impl->demuxer || _impl->currentSampleIndex >= _impl->demuxer->sampleCount())
     {
@@ -164,7 +164,7 @@ namespace rs::audio
 
     if (packet.empty())
     {
-      return rs::makeError(rs::Error::Code::DecodeFailed, "Failed to read ALAC sample payload");
+      return ao::makeError(ao::Error::Code::DecodeFailed, "Failed to read ALAC sample payload");
     }
 
     auto const maxFrames = (_impl->decoder->mConfig.frameLength > 0)
@@ -180,7 +180,7 @@ namespace rs::audio
 
     if (sourceBytesPerFrame == 0 || targetBytesPerFrame == 0)
     {
-      return rs::makeError(rs::Error::Code::DecodeFailed, "Invalid ALAC format calculation");
+      return ao::makeError(ao::Error::Code::DecodeFailed, "Invalid ALAC format calculation");
     }
 
     std::uint32_t numFrames = 0;
@@ -196,7 +196,7 @@ namespace rs::audio
         &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{sourcePcm}), maxFrames, channels, &numFrames);
       if (status != 0)
       {
-        return rs::makeError(rs::Error::Code::DecodeFailed, "ALAC decode failed");
+        return ao::makeError(ao::Error::Code::DecodeFailed, "ALAC decode failed");
       }
 
       std::vector<std::byte> targetPcm(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
@@ -219,8 +219,8 @@ namespace rs::audio
       }
       else
       {
-        return rs::makeError(
-          rs::Error::Code::NotSupported, std::format("Unsupported ALAC conversion: {} -> {}", sourceBps, targetBps));
+        return ao::makeError(
+          ao::Error::Code::NotSupported, std::format("Unsupported ALAC conversion: {} -> {}", sourceBps, targetBps));
       }
 
       auto block = PcmBlock{};
@@ -243,7 +243,7 @@ namespace rs::audio
 
     if (status != 0)
     {
-      return rs::makeError(rs::Error::Code::DecodeFailed, "ALAC decode failed");
+      return ao::makeError(ao::Error::Code::DecodeFailed, "ALAC decode failed");
     }
 
     auto block = PcmBlock{};
@@ -262,4 +262,4 @@ namespace rs::audio
   {
     return _impl->info;
   }
-} // namespace rs::audio
+} // namespace ao::audio

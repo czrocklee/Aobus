@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
+#include <ao/audio/Engine.h>
+#include <ao/audio/NullBackend.h>
+#include <ao/utility/IMainThreadDispatcher.h>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 #include <chrono>
 #include <filesystem>
-#include <rs/audio/NullBackend.h>
-#include <rs/audio/Engine.h>
-#include <rs/utility/IMainThreadDispatcher.h>
 #include <thread>
 
-using namespace rs::audio;
-using namespace rs::audio;
-using namespace rs::audio;
+using namespace ao::audio;
+using namespace ao::audio;
+using namespace ao::audio;
 
 namespace
 {
-  class ImmediateDispatcher : public rs::IMainThreadDispatcher
+  class ImmediateDispatcher : public ao::IMainThreadDispatcher
   {
   public:
     void dispatch(std::function<void()> callback) override { callback(); }
@@ -82,7 +82,7 @@ TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
   SECTION("rs-decoder has valid format")
   {
     auto snap = engine.snapshot();
-    auto it = std::ranges::find(snap.flow.nodes, "rs-decoder", &rs::audio::flow::Node::id);
+    auto it = std::ranges::find(snap.flow.nodes, "rs-decoder", &ao::audio::flow::Node::id);
     if (it != snap.flow.nodes.end())
     {
       REQUIRE(it->format.has_value());

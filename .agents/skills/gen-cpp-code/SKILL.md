@@ -1,11 +1,11 @@
 ---
 name: gen-cpp-code
-description: Expert C++23 code generation and modification for RockStudio. MUST be activated for ANY task that involves writing, editing, or refactoring C++ code (features, bug fixes, architecture changes). Covers all core development across headers, implementations, and gperf files.
+description: Expert C++23 code generation and modification for Aobus. MUST be activated for ANY task that involves writing, editing, or refactoring C++ code (features, bug fixes, architecture changes). Covers all core development across headers, implementations, and gperf files.
 ---
 
-# RockStudio C++ Code Generation
+# Aobus C++ Code Generation
 
-Follow these procedures to ensure architectural consistency and adherence to RockStudio's C++23 standards.
+Follow these procedures to ensure architectural consistency and adherence to Aobus's C++23 standards.
 
 ## Workflow
 

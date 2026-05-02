@@ -7,8 +7,8 @@
 #include "platform/linux/ui/LibrarySession.h"
 #include "platform/linux/ui/TrackPresentation.h"
 
+#include <ao/audio/Backend.h>
 #include <gtkmm.h>
-#include <rs/audio/Backend.h>
 
 #include <memory>
 #include <string>
@@ -25,7 +25,7 @@ namespace app::ui
               Gtk::Paned& paned,
               TrackColumnLayoutModel& trackColumnLayoutModel,
               std::string& outLibraryPath,
-              rs::audio::BackendKind& outBackendKind,
+              ao::audio::BackendKind& outBackendKind,
               std::string& outDeviceId);
 
     void save(Gtk::Window const& window,
@@ -33,9 +33,9 @@ namespace app::ui
               TrackColumnLayoutModel const& trackColumnLayoutModel,
               LibrarySession const* librarySession);
 
-    void updateAudioBackend(rs::audio::BackendKind kind, std::string const& deviceId);
+    void updateAudioBackend(ao::audio::BackendKind kind, std::string const& deviceId);
 
   private:
-    rs::library::AppConfig _appConfig;
+    ao::library::AppConfig _appConfig;
   };
 } // namespace app::ui

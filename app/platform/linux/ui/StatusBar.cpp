@@ -5,7 +5,7 @@
 
 #include "platform/linux/ui/LayoutConstants.h"
 #include "platform/linux/ui/OutputListItems.h"
-#include <rs/utility/Log.h>
+#include <ao/utility/Log.h>
 
 #include <gdkmm/display.h>
 #include <gtkmm/cssprovider.h>
@@ -46,7 +46,7 @@ namespace app::ui
       return ss.str();
     }
 
-    std::string formatStream(rs::audio::Format const& format)
+    std::string formatStream(ao::audio::Format const& format)
     {
       std::stringstream ss;
       constexpr auto kKhzMultiplier = 1000.0;
@@ -429,7 +429,7 @@ namespace app::ui
     return nullptr;
   }
 
-  void StatusBar::updateOutputModel(rs::audio::Snapshot const& snapshot)
+  void StatusBar::updateOutputModel(ao::audio::Snapshot const& snapshot)
   {
     _outputStore->remove_all();
 
@@ -446,7 +446,7 @@ namespace app::ui
     }
   }
 
-  void StatusBar::updateOutputLabel(rs::audio::Snapshot const& snapshot)
+  void StatusBar::updateOutputLabel(ao::audio::Snapshot const& snapshot)
   {
     bool found = false;
     for (auto const& backend : snapshot.availableBackends)
@@ -480,9 +480,9 @@ namespace app::ui
     }
   }
 
-  void StatusBar::updatePlaybackStatusLabels(rs::audio::Snapshot const& snapshot)
+  void StatusBar::updatePlaybackStatusLabels(ao::audio::Snapshot const& snapshot)
   {
-    if (snapshot.transport == rs::audio::Transport::Idle)
+    if (snapshot.transport == ao::audio::Transport::Idle)
     {
       _nowPlayingLabel.set_text("");
       _streamInfoLabel.set_text("");
@@ -513,7 +513,7 @@ namespace app::ui
     bool formatFound = false;
     for (auto const& node : snapshot.flow.nodes)
     {
-      if (node.type == rs::audio::flow::NodeType::Decoder && node.format)
+      if (node.type == ao::audio::flow::NodeType::Decoder && node.format)
       {
         ss << formatStream(*node.format);
         formatFound = true;
@@ -538,7 +538,7 @@ namespace app::ui
     clearSinkStatusClasses(_sinkStatusIcon);
     _sinkStatusIcon.set_visible(true);
 
-    using Quality = rs::audio::Quality;
+    using Quality = ao::audio::Quality;
     switch (snapshot.quality)
     {
       case Quality::BitwisePerfect: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
@@ -551,7 +551,7 @@ namespace app::ui
     }
   }
 
-  void StatusBar::updatePlaybackTooltip(rs::audio::Snapshot const& snapshot)
+  void StatusBar::updatePlaybackTooltip(ao::audio::Snapshot const& snapshot)
   {
     // Tooltip: Build dynamic representation of the path from the graph (TOTAL ORDER)
     std::stringstream tt;
@@ -563,7 +563,7 @@ namespace app::ui
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
-        auto it = std::ranges::find(snapshot.flow.nodes, currentId, &rs::audio::flow::Node::id);
+        auto it = std::ranges::find(snapshot.flow.nodes, currentId, &ao::audio::flow::Node::id);
 
         if (it == snapshot.flow.nodes.end())
         {
@@ -573,12 +573,12 @@ namespace app::ui
         tt << "• ";
         switch (node.type)
         {
-          case rs::audio::flow::NodeType::Decoder: tt << "[Source] "; break;
-          case rs::audio::flow::NodeType::Engine: tt << "[Engine] "; break;
-          case rs::audio::flow::NodeType::Stream: tt << "[Stream] "; break;
-          case rs::audio::flow::NodeType::Intermediary: tt << "[Filter] "; break;
-          case rs::audio::flow::NodeType::Sink: tt << "[Device] "; break;
-          case rs::audio::flow::NodeType::ExternalSource: tt << "[Other Source] "; break;
+          case ao::audio::flow::NodeType::Decoder: tt << "[Source] "; break;
+          case ao::audio::flow::NodeType::Engine: tt << "[Engine] "; break;
+          case ao::audio::flow::NodeType::Stream: tt << "[Stream] "; break;
+          case ao::audio::flow::NodeType::Intermediary: tt << "[Filter] "; break;
+          case ao::audio::flow::NodeType::Sink: tt << "[Device] "; break;
+          case ao::audio::flow::NodeType::ExternalSource: tt << "[Other Source] "; break;
         }
         tt << node.name;
         if (node.format)
@@ -624,7 +624,7 @@ namespace app::ui
     }
   }
 
-  void StatusBar::setPlaybackDetails(rs::audio::Snapshot const& snapshot)
+  void StatusBar::setPlaybackDetails(ao::audio::Snapshot const& snapshot)
   {
     // Skip update if nothing visible has changed
     if (snapshot.transport == _lastPlaybackState.transport && snapshot.backend == _lastPlaybackState.backend &&

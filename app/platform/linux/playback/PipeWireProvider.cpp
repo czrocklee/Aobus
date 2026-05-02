@@ -35,39 +35,39 @@ namespace app::playback
   }
   PipeWireProvider::~PipeWireProvider() = default;
 
-  rs::audio::Subscription PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
+  ao::audio::Subscription PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
     if (!_impl->monitor)
     {
-      return rs::audio::Subscription{};
+      return ao::audio::Subscription{};
     }
 
     // Wrap the callback to add the "System Default" virtual device
-    auto wrappedCallback = [callback = std::move(callback)](std::vector<rs::audio::Device> devices)
+    auto wrappedCallback = [callback = std::move(callback)](std::vector<ao::audio::Device> devices)
     {
       devices.insert(devices.begin(),
                      {.id = "",
                       .displayName = "System Default",
                       .description = "PipeWire",
                       .isDefault = true,
-                      .backendKind = rs::audio::BackendKind::PipeWire});
+                      .backendKind = ao::audio::BackendKind::PipeWire});
       callback(devices);
     };
 
     return _impl->monitor->subscribeDevices(std::move(wrappedCallback));
   }
 
-  std::unique_ptr<rs::audio::IBackend> PipeWireProvider::createBackend(rs::audio::Device const& device)
+  std::unique_ptr<ao::audio::IBackend> PipeWireProvider::createBackend(ao::audio::Device const& device)
   {
     return std::make_unique<PipeWireBackend>(device);
   }
 
-  rs::audio::Subscription PipeWireProvider::subscribeGraph(std::string_view routeAnchor,
+  ao::audio::Subscription PipeWireProvider::subscribeGraph(std::string_view routeAnchor,
                                                            OnGraphChangedCallback callback)
   {
     if (!_impl->monitor)
     {
-      return rs::audio::Subscription{};
+      return ao::audio::Subscription{};
     }
     return _impl->monitor->subscribeGraph(routeAnchor, std::move(callback));
   }

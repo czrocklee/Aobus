@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rs/utility/ByteView.h>
+#include <ao/utility/ByteView.h>
 
 #include <charconv>
 #include <cstdint>
@@ -12,11 +12,11 @@
 #include <string>
 #include <string_view>
 
-namespace rs::tag
+namespace ao::tag
 {
   inline std::string decodeString(std::span<std::byte const> buf)
   {
-    return std::string{rs::utility::bytes::stringView(buf)};
+    return std::string{ao::utility::bytes::stringView(buf)};
   }
 
   inline std::optional<std::uint16_t> decodeUint16(std::string_view text)
@@ -26,4 +26,4 @@ namespace rs::tag
     auto [_, ec] = std::from_chars(data, data + text.size(), result);
     return ec == std::errc() ? std::optional{result} : std::nullopt;
   }
-} // namespace rs::tag
+} // namespace ao::tag

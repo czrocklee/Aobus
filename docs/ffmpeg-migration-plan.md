@@ -4,7 +4,7 @@ Date: 2026-04-26
 
 ## Goal
 
-Replace FFmpeg in RockStudio playback with:
+Replace FFmpeg in Aobus playback with:
 
 - `libFLAC` for FLAC playback
 - `alac` (`macosforge/alac`) for ALAC decoding
@@ -53,15 +53,15 @@ The codebase still references FFmpeg in:
 - `app/CMakeLists.txt`
 - `test/CMakeLists.txt`
 - `shell.nix`
-- `tool/generate_test_library.sh`
+- `app/aobus/generate_test_library.sh`
 - `test/integration/tag/generate_test_files.sh`
-- `test/integration/tool/test_rsc.sh`
+- `test/integration/aobus/test_aobus.sh`
 
 This means the runtime migration and the repo-wide FFmpeg cleanup are related, but not exactly the same task.
 
 ### 4. The existing MP4 parser is useful for ALAC playback
 
-RockStudio already has an MP4 atom parser used for metadata and audio property extraction.
+Aobus already has an MP4 atom parser used for metadata and audio property extraction.
 
 Relevant files:
 
@@ -106,7 +106,7 @@ It expects the caller to provide:
 - one raw ALAC packet at a time
 - packet sizing and seek math derived from MP4 sample tables
 
-In other words, linking `alac` alone is not enough. ALAC playback requires a small MP4 demux layer inside RockStudio.
+In other words, linking `alac` alone is not enough. ALAC playback requires a small MP4 demux layer inside Aobus.
 
 ### 7. Nixpkgs already provides both required libraries
 
@@ -321,7 +321,7 @@ That part needs careful implementation and a small number of strong tests.
 
 Removing FFmpeg in this phase means giving up broad codec support.
 
-After this migration, RockStudio playback would be intentionally focused on:
+After this migration, Aobus playback would be intentionally focused on:
 
 - FLAC
 - ALAC
@@ -341,8 +341,8 @@ The runtime path is the priority. The script cleanup can follow if needed.
 
 Snapshots created before the larger edits:
 
-- `rockstudio-decoder-abstraction-20260426-000918`
-- `rockstudio-flac-alac-20260426-002305`
+- `aobus-decoder-abstraction-20260426-000918`
+- `aobus-flac-alac-20260426-002305`
 
 The decoder abstraction refactor is already present in the working tree and passed the full test binary before the backend replacement started.
 

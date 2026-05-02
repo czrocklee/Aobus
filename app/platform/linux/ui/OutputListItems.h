@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include <ao/audio/Backend.h>
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
-#include <rs/audio/Backend.h>
 
 namespace app::ui
 {
@@ -15,16 +15,16 @@ namespace app::ui
   class BackendItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<BackendItem> create(rs::audio::BackendKind kind, std::string const& name)
+    static Glib::RefPtr<BackendItem> create(ao::audio::BackendKind kind, std::string const& name)
     {
       return Glib::make_refptr_for_instance<BackendItem>(new BackendItem(kind, name));
     }
 
-    rs::audio::BackendKind kind;
+    ao::audio::BackendKind kind;
     std::string name;
 
   protected:
-    BackendItem(rs::audio::BackendKind kind, std::string const& name)
+    BackendItem(ao::audio::BackendKind kind, std::string const& name)
       : Glib::ObjectBase(typeid(BackendItem)), kind(kind), name(name)
     {
     }
@@ -36,22 +36,22 @@ namespace app::ui
   class DeviceItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<DeviceItem> create(rs::audio::BackendKind kind, rs::audio::Device const& device)
+    static Glib::RefPtr<DeviceItem> create(ao::audio::BackendKind kind, ao::audio::Device const& device)
     {
       return Glib::make_refptr_for_instance<DeviceItem>(new DeviceItem(kind, device));
     }
 
-    rs::audio::BackendKind kind;
+    ao::audio::BackendKind kind;
     std::string id;
     std::string name;
     std::string description;
     bool active = false;
 
     // Helper for diffing
-    bool matches(rs::audio::BackendKind k, std::string const& devId) const { return kind == k && id == devId; }
+    bool matches(ao::audio::BackendKind k, std::string const& devId) const { return kind == k && id == devId; }
 
   protected:
-    DeviceItem(rs::audio::BackendKind kind, rs::audio::Device const& device)
+    DeviceItem(ao::audio::BackendKind kind, ao::audio::Device const& device)
       : Glib::ObjectBase(typeid(DeviceItem))
       , kind(kind)
       , id(device.id)

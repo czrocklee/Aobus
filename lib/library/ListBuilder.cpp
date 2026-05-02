@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/library/ListBuilder.h>
+#include <ao/library/ListBuilder.h>
 
-#include <rs/utility/ByteView.h>
+#include <ao/utility/ByteView.h>
 
 #include <algorithm>
 #include <cstring>
 #include <span>
 #include <vector>
 
-namespace rs::library
+namespace ao::library
 {
   //=============================================================================
   // ListBuilder - factory methods
@@ -158,4 +158,4 @@ namespace rs::library
 
     return result;
   }
-} // namespace rs::library
+} // namespace ao::library

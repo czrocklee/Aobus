@@ -5,8 +5,8 @@
 
 #include "platform/linux/ui/ImportProgressDialog.h"
 #include "platform/linux/ui/LibrarySession.h"
-#include <rs/library/ImportWorker.h>
-#include <rs/library/Exporter.h>
+#include <ao/library/Exporter.h>
+#include <ao/library/ImportWorker.h>
 
 #include <gtkmm.h>
 
@@ -66,14 +66,14 @@ namespace app::ui
 
     void onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
-                              rs::library::ExportMode mode,
+                              ao::library::ExportMode mode,
                               Glib::RefPtr<Gtk::FileDialog> const& fileDialog);
-    void executeExportTask(std::filesystem::path const& path, rs::library::ExportMode mode);
+    void executeExportTask(std::filesystem::path const& path, ao::library::ExportMode mode);
 
     Gtk::Window& _parent;
     ImportExportCallbacks _callbacks;
 
-    std::unique_ptr<rs::library::ImportWorker> _importWorker;
+    std::unique_ptr<ao::library::ImportWorker> _importWorker;
     std::jthread _importThread;
     std::unique_ptr<ImportProgressDialog> _importDialog;
   };

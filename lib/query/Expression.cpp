@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <rs/query/Expression.h>
+#include <ao/query/Expression.h>
 
-namespace rs::query
+namespace ao::query
 {
   namespace
   {

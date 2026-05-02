@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 RockStudio Contributors
 
 #include "platform/linux/AppConfig.h"
-#include <rs/utility/Log.h>
+#include <ao/utility/Log.h>
 
 #include <glibmm/keyfile.h>
 #include <glibmm/miscutils.h>
@@ -33,7 +33,7 @@ namespace
 
   std::filesystem::path configPath()
   {
-    return std::filesystem::path{Glib::get_user_config_dir()} / "rockstudio" / "config.ini";
+    return std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.ini";
   }
 
   std::string getString(Glib::RefPtr<Glib::KeyFile> const& kf, char const* group, char const* key)
@@ -106,7 +106,7 @@ namespace
   }
 }
 
-namespace rs::library
+namespace ao::library
 {
   AppConfig AppConfig::load()
   {

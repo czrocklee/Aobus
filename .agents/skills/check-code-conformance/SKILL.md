@@ -1,15 +1,15 @@
 ---
 name: check-code-conformance
-description: Audit and validate C++ code against RockStudio's coding standards. Use when reviewing code, fixing linting issues, running clang-tidy-backed conformance checks, or ensuring new implementations follow project conventions for naming, member ordering, and modern C++ usage as defined in CONTRIBUTING.md.
+description: Audit and validate C++ code against Aobus's coding standards. Use when reviewing code, fixing linting issues, running clang-tidy-backed conformance checks, or ensuring new implementations follow project conventions for naming, member ordering, and modern C++ usage as defined in CONTRIBUTING.md.
 ---
 
-# RockStudio Code Conformance Audit
+# Aobus Code Conformance Audit
 
-Use this skill to systematically audit C++ source files against the RockStudio C++ Coding Guide.
+Use this skill to systematically audit C++ source files against the Aobus C++ Coding Guide.
 
 Focus on concrete rule violations from [CONTRIBUTING.md](../../../CONTRIBUTING.md), not generic style commentary. Prefer reporting a short list of high-confidence violations with precise fixes over a long list of debatable nits.
 
-Use RockStudio's built-in `clang-tidy` integration as part of conformance validation when the task involves changed C++ code, linting cleanup, or pre-commit verification. Combine automated findings with manual review; do not treat raw `clang-tidy` output as the final answer.
+Use Aobus's built-in `clang-tidy` integration as part of conformance validation when the task involves changed C++ code, linting cleanup, or pre-commit verification. Combine automated findings with manual review; do not treat raw `clang-tidy` output as the final answer.
 
 ## Audit Workflow
 
@@ -28,7 +28,7 @@ Use RockStudio's built-in `clang-tidy` integration as part of conformance valida
 ## `clang-tidy` Guidance
 
 - Use the repository entrypoint, not an ad-hoc one-off command, unless the user explicitly wants a custom `clang-tidy` invocation.
-- RockStudio wires `clang-tidy` through `ROCKSTUDIO_ENABLE_CLANG_TIDY`; the standard path is [build.sh](../../../build.sh).
+- Aobus wires `clang-tidy` through `AOBUS_ENABLE_CLANG_TIDY`; the standard path is [build.sh](../../../build.sh).
 - The CMake setup already distinguishes strict checks for `lib/`, `tool/`, and `app/`, with relaxed checks for `test/`. Respect that split when interpreting findings.
 - If a manual rule check and a `clang-tidy` suggestion disagree, follow [CONTRIBUTING.md](../../../CONTRIBUTING.md) and explain the discrepancy briefly.
 - When a task is only a code review and not an implementation or validation pass, you may skip running `clang-tidy` if the likely signal is low; say that you skipped it.
@@ -64,7 +64,7 @@ Run the audit in this order.
 
 7. **Rule 3.3.1: RAII and mandatory collaborators**
    - Prefer references over nullable raw pointers for mandatory services.
-   - Use `rs::utility::makeUniquePtr` for C resource RAII in implementations.
+   - Use `ao::utility::makeUniquePtr` for C resource RAII in implementations.
 
 ## `app/` False Positives To Avoid
 

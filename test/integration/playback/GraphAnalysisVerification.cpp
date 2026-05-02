@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
+#include <ao/audio/Engine.h>
+#include <ao/audio/IBackend.h>
+#include <ao/utility/Log.h>
 #include <platform/linux/playback/PipeWireBackend.h>
-#include <rs/audio/IBackend.h>
-#include <rs/audio/Engine.h>
-#include <rs/utility/Log.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -13,7 +13,7 @@
 #include <chrono>
 #include <thread>
 
-namespace rs::audio
+namespace ao::audio
 {
   TEST_CASE("Graph Analysis Verification", "[playback][graph][debug]")
   {
@@ -21,7 +21,7 @@ namespace rs::audio
     APP_LOG_INFO("Starting Graph Analysis Verification Test");
 
     // Use PipeWire backend
-    auto backend = std::make_unique<app::rs::audio::PipeWireBackend>();
+    auto backend = std::make_unique<app::ao::audio::PipeWireBackend>();
     auto engine = std::make_unique<Engine>(std::move(backend));
 
     // Prepare a track (using a known test file if available, otherwise just use a dummy path to trigger analysis)
@@ -55,4 +55,4 @@ namespace rs::audio
 
     Log::shutdown();
   }
-} // namespace rs::audio
+} // namespace ao::audio

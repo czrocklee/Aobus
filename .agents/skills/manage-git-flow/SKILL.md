@@ -1,11 +1,11 @@
 ---
 name: manage-git-flow
-description: "Manages RockStudio formatting, conformance validation, and commit flow. Use before any git status, diff, staging, or commit work so the required targeted clang-format, delegated standards checks, and history verification steps are followed."
+description: "Manages Aobus formatting, conformance validation, and commit flow. Use before any git status, diff, staging, or commit work so the required targeted clang-format, delegated standards checks, and history verification steps are followed."
 ---
 
 # Manage Git Flow
 
-Use this skill before performing any git operation in RockStudio.
+Use this skill before performing any git operation in Aobus.
 
 ## 1. Targeted Formatting
 When a user asks to commit, you MUST run a targeted `clang-format` pass on modified or created C++ files only. Do NOT use global formatting scripts.

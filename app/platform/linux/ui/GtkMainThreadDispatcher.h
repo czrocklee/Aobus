@@ -3,18 +3,18 @@
 
 #pragma once
 
+#include <ao/utility/IMainThreadDispatcher.h>
 #include <functional>
 #include <glibmm/dispatcher.h>
 #include <mutex>
-#include <rs/utility/IMainThreadDispatcher.h>
 #include <vector>
 
 namespace app::ui
 {
   /**
-   * @brief GTK-based implementation of rs::IMainThreadDispatcher.
+   * @brief GTK-based implementation of ao::IMainThreadDispatcher.
    */
-  class GtkMainThreadDispatcher final : public rs::IMainThreadDispatcher
+  class GtkMainThreadDispatcher final : public ao::IMainThreadDispatcher
   {
   public:
     GtkMainThreadDispatcher();
