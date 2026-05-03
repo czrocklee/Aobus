@@ -36,6 +36,7 @@ namespace ao::audio
     ~Engine();
 
     void setBackend(std::unique_ptr<IBackend> backend, Device const& device);
+    void updateDevice(Device const& device);
     void setOnTrackEnded(std::function<void()> callback);
 
     void setOnRouteChanged(OnRouteChanged callback);

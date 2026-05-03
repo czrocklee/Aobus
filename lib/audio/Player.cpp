@@ -286,6 +286,16 @@ namespace ao::audio
     _cachedBackends = std::move(snapshots);
     _allDevices = std::move(allDevices);
 
+    // Keep the engine's current device capabilities up-to-date
+    auto const currentSnap = _engine->snapshot();
+    auto const activeIt = std::ranges::find_if(
+      _allDevices, [&](Device const& dev) { return dev.backendKind == currentSnap.backend && dev.id == currentSnap.currentDeviceId; });
+
+    if (activeIt != _allDevices.end())
+    {
+      _engine->updateDevice(*activeIt);
+    }
+
     if (_pendingOutput)
     {
       // Try to apply pending output

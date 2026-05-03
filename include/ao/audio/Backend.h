@@ -77,11 +77,24 @@ namespace ao::audio
   }
 
   /**
+   * @brief A concrete PCM sample format supported by a device.
+   */
+  struct SampleFormatCapability final
+  {
+    std::uint8_t bitDepth = 0;
+    std::uint8_t validBits = 0;
+    bool isFloat = false;
+
+    bool operator==(SampleFormatCapability const&) const = default;
+  };
+
+  /**
    * @brief Hardware capabilities of an audio device.
    */
   struct DeviceCapabilities final
   {
     std::vector<std::uint32_t> sampleRates;
+    std::vector<SampleFormatCapability> sampleFormats;
     std::vector<std::uint8_t> bitDepths;
     std::vector<std::uint8_t> channelCounts;
 

@@ -231,7 +231,10 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
                 .description = "PipeWire Shared",
                 .isDefault = false,
                 .backendKind = BackendKind::PipeWire,
-                .capabilities = {.sampleRates = {48000}, .bitDepths = {16}, .channelCounts = {2}}};
+                .capabilities = {.sampleRates = {48000},
+                                 .sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}},
+                                 .bitDepths = {16},
+                                 .channelCounts = {2}}};
 
   auto openedFormats = std::vector<Format>{};
   When(Method(mockBackend, open))
@@ -289,7 +292,10 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
                 .description = "ALSA Exclusive",
                 .isDefault = false,
                 .backendKind = BackendKind::AlsaExclusive,
-                .capabilities = {.sampleRates = {48000}, .bitDepths = {16}, .channelCounts = {2}}};
+                .capabilities = {.sampleRates = {48000},
+                                 .sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}},
+                                 .bitDepths = {16},
+                                 .channelCounts = {2}}};
 
   auto openedFormats = std::vector<Format>{};
   When(Method(mockBackend, open))
