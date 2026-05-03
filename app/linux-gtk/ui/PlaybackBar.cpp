@@ -28,11 +28,7 @@ namespace ao::gtk
       static auto const provider = []
       {
         auto const css = Gtk::CssProvider::create();
-        css->load_from_data(".playback-bar {"
-                            "  padding: 0px;"
-                            "  margin: 0px;"
-                            "}"
-                            ".output-button-logo {"
+        css->load_from_data(".output-button-logo {"
                             "  background: none;"
                             "  border: none;"
                             "  box-shadow: none;"
@@ -75,8 +71,8 @@ namespace ao::gtk
 
   void PlaybackBar::setupLayout()
   {
-    set_spacing(0);
-    set_margin(0);
+    set_spacing(Layout::kSpacingSmall);
+    set_margin(Layout::kMarginSmall);
 
     _outputButton.add_css_class("output-button-logo");
     _outputButton.set_has_frame(false);

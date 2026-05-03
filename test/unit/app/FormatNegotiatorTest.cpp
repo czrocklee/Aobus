@@ -66,16 +66,16 @@ TEST_CASE("FormatNegotiator - Build Plan", "[playback][format_negotiator]")
   {
     sourceFormat.bitDepth = 24;
 
-    // Test 1: Device supports 32-bit, decoder outputs 32/24
+    // Test 1: Device supports 24-bit and 32-bit, decoder outputs 24/24 (preferred over 32)
     caps.bitDepths = {16, 24, 32};
     auto plan1 = FormatNegotiator::buildPlan(sourceFormat, caps);
-    REQUIRE(plan1.decoderOutputFormat.bitDepth == 32);
+    REQUIRE(plan1.decoderOutputFormat.bitDepth == 24);
     REQUIRE(plan1.decoderOutputFormat.validBits == 24);
 
-    // Test 2: Device max 24-bit, decoder outputs 24/24
-    caps.bitDepths = {16, 24};
+    // Test 2: Device max 32-bit (no 24), decoder outputs 32/24
+    caps.bitDepths = {16, 32};
     auto plan2 = FormatNegotiator::buildPlan(sourceFormat, caps);
-    REQUIRE(plan2.decoderOutputFormat.bitDepth == 24);
+    REQUIRE(plan2.decoderOutputFormat.bitDepth == 32);
     REQUIRE(plan2.decoderOutputFormat.validBits == 24);
 
     // Test 3: Device max 16-bit, decoder outputs 16/16
