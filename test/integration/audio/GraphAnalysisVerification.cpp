@@ -1,30 +1,42 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <PipeWireBackend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackend.h>
+#include <ao/audio/backend/PipeWireBackend.h>
+#include <ao/utility/IMainThreadDispatcher.h>
 #include <ao/utility/Log.h>
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+
 #include <chrono>
+#include <memory>
 #include <thread>
 
 namespace ao::audio
 {
-  TEST_CASE("Graph Analysis Verification", "[playback][graph][debug]")
+  namespace
   {
-    Log::init();
-    APP_LOG_INFO("Starting Graph Analysis Verification Test");
+    class ImmediateDispatcher : public ao::IMainThreadDispatcher
+    {
+    public:
+      void dispatch(std::function<void()> callback) override { callback(); }
+    };
+  }
+
+  TEST_CASE("Graph Analysis Verification", "[playback][graph][debug][audio]")
+  {
+    ao::log::Log::init(ao::log::LogLevel::Info);
 
     // Use PipeWire backend
-    auto backend = std::make_unique<app::ao::audio::PipeWireBackend>();
-    auto engine = std::make_unique<Engine>(std::move(backend));
+    ao::audio::Device dummyDevice;
+    ao::audio::ProfileId dummyProfile = kProfileShared;
+    auto backend = std::make_unique<backend::PipeWireBackend>(dummyDevice, dummyProfile);
 
-    // Prepare a track (using a known test file if available, otherwise just use a dummy path to trigger analysis)
+    auto dispatcher = std::make_shared<ImmediateDispatcher>();
+    auto engine = std::make_unique<Engine>(std::move(backend), dummyDevice, dispatcher);
+
+    // Prepare a track
     TrackPlaybackDescriptor descriptor;
     descriptor.title = "Verification Track";
     descriptor.artist = "Debug Artist";
@@ -35,15 +47,15 @@ namespace ao::audio
 
     if (std::filesystem::exists(descriptor.filePath))
     {
-      APP_LOG_INFO("Triggering playback for graph analysis...");
+      AUDIO_LOG_INFO("Triggering playback for graph analysis...");
       engine->play(descriptor);
 
       // Wait a few seconds for PipeWire to renegotiate and the engine to analyze the graph multiple times
       for (int i = 0; i < 5; ++i)
       {
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        auto snap = engine->snapshot();
-        APP_LOG_INFO("Current Quality Conclusion: {} ({})", static_cast<int>(snap.quality), snap.qualityTooltip);
+        auto const snap = engine->status();
+        AUDIO_LOG_INFO("Graph Snapshot: {} nodes", snap.flow.nodes.size());
       }
 
       engine->stop();
@@ -52,7 +64,5 @@ namespace ao::audio
     {
       WARN("Test file not found: " << descriptor.filePath << ". Skipping real analysis.");
     }
-
-    Log::shutdown();
   }
 } // namespace ao::audio

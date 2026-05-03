@@ -13,8 +13,6 @@
 #include <thread>
 
 using namespace ao::audio;
-using namespace ao::audio;
-using namespace ao::audio;
 
 namespace
 {

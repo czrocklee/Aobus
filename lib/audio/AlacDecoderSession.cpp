@@ -7,6 +7,7 @@
 #include <alac/ALACBitUtilities.h>
 #include <alac/ALACDecoder.h>
 
+#include <ao/audio/PcmConverter.h>
 #include <ao/media/mp4/Demuxer.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/MappedFile.h>
@@ -202,22 +203,16 @@ namespace ao::audio
 
       std::vector<std::byte> targetPcm(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
 
-      if (sourceBps == 24 && targetBps == 32)
+      if (sourceBps == 16 && targetBps == 32)
       {
-        auto const* src = layout::asPtr<std::uint8_t>(std::span{sourcePcm});
-        auto* dst = layout::asMutablePtr<std::int32_t>(std::span{targetPcm});
-        for (std::uint32_t i = 0; i < numFrames * channels; ++i)
-        {
-          std::int32_t val = static_cast<std::int32_t>(src[0]) | (static_cast<std::int32_t>(src[1]) << 8) |
-                             (static_cast<std::int32_t>(src[2]) << 16);
-          if ((val & 0x800000) != 0)
-          {
-            val |= kSignExtensionMask;
-          }
-
-          *dst++ = val;
-          src += kBytesPer24BitSample;
-        }
+        auto const src = layout::viewArray<std::int16_t>(std::span{sourcePcm});
+        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{targetPcm});
+        pcm::Converter::pad<std::int16_t, std::int32_t>(src, dst, 16);
+      }
+      else if (sourceBps == 24 && targetBps == 32)
+      {
+        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{targetPcm});
+        pcm::Converter::unpackS24(sourcePcm, dst, 8);
       }
       else
       {

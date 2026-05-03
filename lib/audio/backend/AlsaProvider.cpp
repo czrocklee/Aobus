@@ -33,12 +33,6 @@ namespace ao::audio::backend
       {
         caps.sampleFormats.push_back(capability);
       }
-
-      if (!capability.isFloat && capability.bitDepth == capability.validBits &&
-          !std::ranges::contains(caps.bitDepths, capability.bitDepth))
-      {
-        caps.bitDepths.push_back(capability.bitDepth);
-      }
     }
 
     ao::audio::DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
@@ -115,6 +109,12 @@ namespace ao::audio::backend
         if (::snd_pcm_hw_params_test_format(tempPcm, params, probe.alsaFormat) == 0)
         {
           addSampleFormatCapability(caps, probe.capability);
+
+          if (!probe.capability.isFloat && probe.capability.bitDepth == probe.capability.validBits &&
+              !std::ranges::contains(caps.bitDepths, probe.capability.bitDepth))
+          {
+            caps.bitDepths.push_back(probe.capability.bitDepth);
+          }
         }
       }
 
@@ -133,39 +133,55 @@ namespace ao::audio::backend
     std::vector<ao::audio::Device> doAlsaEnumerate()
     {
       auto devices = std::vector<ao::audio::Device>{};
-      void** hints_raw = nullptr;
-      if (::snd_device_name_hint(-1, "pcm", &hints_raw) < 0)
-      {
-        return devices;
-      }
-      auto hints = ao::utility::makeUniquePtr<::snd_device_name_free_hint>(hints_raw);
 
-      for (void** hint = hints.get(); *hint != nullptr; ++hint)
+      // 1. Enumerate physical hardware cards
+      int card = -1;
+      while (::snd_card_next(&card) == 0 && card >= 0)
       {
-        auto name = ao::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "NAME"));
-        auto desc = ao::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "DESC"));
-        auto ioid = ao::utility::makeUniquePtr<::free>(::snd_device_name_get_hint(*hint, "IOID"));
-
-        if (ioid == nullptr || std::string_view{static_cast<char*>(ioid.get())} == "Output")
+        char* cardName = nullptr;
+        if (::snd_card_get_name(card, &cardName) == 0)
         {
-          auto idStr = std::string{name ? static_cast<char*>(name.get()) : ""};
-          if (idStr != "default" && idStr != "sysdefault" && idStr != "null" && idStr != "pipewire")
+          int device = -1;
+          ::snd_ctl_t* ctl = nullptr;
+          auto const cardId = std::format("hw:{}", card);
+
+          if (::snd_ctl_open(&ctl, cardId.c_str(), 0) >= 0)
           {
-            auto displayName = std::string{desc ? static_cast<char*>(desc.get()) : idStr};
-            std::ranges::replace(displayName, '\n', ' ');
-            if (displayName.starts_with(idStr + " "))
+            while (::snd_ctl_pcm_next_device(ctl, &device) == 0 && device >= 0)
             {
-              displayName = displayName.substr(idStr.length() + 1);
+              ::snd_pcm_info_t* info = nullptr;
+              snd_pcm_info_alloca(&info);
+              ::snd_pcm_info_set_device(info, static_cast<unsigned int>(device));
+              ::snd_pcm_info_set_stream(info, SND_PCM_STREAM_PLAYBACK);
+
+              if (::snd_ctl_pcm_info(ctl, info) == 0)
+              {
+                auto const hwId = std::format("hw:{},{}", card, device);
+                auto const plughwId = std::format("plughw:{},{}", card, device);
+
+                // Add the primary "Standard Exclusive" version (plughw)
+                devices.push_back({.id = DeviceId{plughwId},
+                                   .displayName = std::string{cardName},
+                                   .description = plughwId,
+                                   .isDefault = false,
+                                   .backendId = ao::audio::kBackendAlsa,
+                                   .capabilities = queryAlsaDeviceCapabilities(hwId)});
+
+                // Add the "Raw Bit-perfect" version (hw)
+                devices.push_back({.id = DeviceId{hwId},
+                                   .displayName = std::format("{} (Raw)", cardName),
+                                   .description = hwId,
+                                   .isDefault = false,
+                                   .backendId = ao::audio::kBackendAlsa,
+                                   .capabilities = queryAlsaDeviceCapabilities(hwId)});
+              }
             }
-            devices.push_back({.id = DeviceId{idStr},
-                               .displayName = std::move(displayName),
-                               .description = idStr,
-                               .isDefault = false,
-                               .backendId = ao::audio::kBackendAlsa,
-                               .capabilities = queryAlsaDeviceCapabilities(idStr)});
+            ::snd_ctl_close(ctl);
           }
+          ::free(cardName);
         }
       }
+
       return devices;
     }
   } // namespace

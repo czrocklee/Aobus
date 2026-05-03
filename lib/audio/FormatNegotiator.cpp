@@ -94,8 +94,21 @@ namespace ao::audio
       }
       else if (plan.sourceFormat.bitDepth == 16)
       {
-        plan.decoderOutputFormat.bitDepth = 16;
-        plan.decoderOutputFormat.validBits = 16;
+        if (std::ranges::contains(caps.bitDepths, 16))
+        {
+          plan.decoderOutputFormat.bitDepth = 16;
+          plan.decoderOutputFormat.validBits = 16;
+        }
+        else if (std::ranges::contains(caps.bitDepths, 32))
+        {
+          plan.decoderOutputFormat.bitDepth = 32;
+          plan.decoderOutputFormat.validBits = 16;
+        }
+        else
+        {
+          plan.decoderOutputFormat.bitDepth = 16;
+          plan.decoderOutputFormat.validBits = 16;
+        }
       }
       else if (plan.sourceFormat.bitDepth == 32)
       {

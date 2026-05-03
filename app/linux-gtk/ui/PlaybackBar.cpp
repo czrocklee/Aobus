@@ -294,7 +294,14 @@ namespace ao::gtk
         for (auto const& profileMeta : backend.metadata.supportedProfiles)
         {
           auto const profile = profileMeta.id;
-          auto item = DeviceItem::create(backend.metadata.id, device, profile, profileMeta.name);
+          bool const isExclusive = (profile == ao::audio::kProfileExclusive);
+
+          // Minimalist approach: "Device Name [E]" on top, "Hardware ID" on bottom
+          auto const displayName = isExclusive ? std::format("{} [E]", device.displayName) : device.displayName;
+
+          auto item = DeviceItem::create(backend.metadata.id, device, profile, displayName);
+          item->description = device.id.value(); // Show the raw hw: string on the second line
+
           item->active = (backend.metadata.id == status.engine.backendId && profile == status.engine.profileId &&
                           device.id == status.engine.currentDeviceId);
           _outputStore->append(item);
