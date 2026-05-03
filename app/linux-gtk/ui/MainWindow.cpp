@@ -188,11 +188,11 @@ namespace ao::gtk
     _trackPageGraph->show(listId);
   }
 
-  void MainWindow::updatePlaybackStatus(ao::audio::Snapshot const& snapshot)
+  void MainWindow::updatePlaybackStatus(ao::audio::Player::Status const& status)
   {
     if (_statusBar)
     {
-      _statusBar->setPlaybackDetails(snapshot);
+      _statusBar->setPlaybackDetails(status);
     }
   }
 
@@ -491,16 +491,17 @@ namespace ao::gtk
   void MainWindow::loadSession()
   {
     std::string libraryPath;
-    ao::audio::BackendKind backendKind = ao::audio::BackendKind::None;
-    std::string deviceId;
+    ao::audio::BackendId backend;
+    ao::audio::ProfileId profile;
+    ao::audio::DeviceId deviceId;
 
-    _sessionPersistence.load(*this, _paned, _trackColumnLayoutModel, libraryPath, backendKind, deviceId);
+    _sessionPersistence.load(*this, _paned, _trackColumnLayoutModel, libraryPath, backend, profile, deviceId);
 
-    if (backendKind != ao::audio::BackendKind::None)
+    if (!backend.empty())
     {
       if (auto* controller = _playbackCoordinator->player())
       {
-        controller->setOutput(backendKind, deviceId);
+        controller->setOutput(backend, deviceId, profile);
       }
     }
 
@@ -519,7 +520,9 @@ namespace ao::gtk
     _playbackCoordinator->jumpToPlayingList();
   }
 
-  void MainWindow::onOutputChanged(ao::audio::BackendKind kind, std::string const& deviceId)
+  void MainWindow::onOutputChanged(ao::audio::BackendId const& backend,
+                                   ao::audio::DeviceId const& deviceId,
+                                   ao::audio::ProfileId const& profile)
   {
     auto* controller = _playbackCoordinator->player();
 
@@ -528,11 +531,11 @@ namespace ao::gtk
       return;
     }
 
-    controller->setOutput(kind, deviceId);
-    _statusBar->showMessage("Switched to " + std::string(ao::audio::backendDisplayName(kind)));
+    controller->setOutput(backend, deviceId, profile);
+    _statusBar->showMessage("Switched to " + std::string(backend));
 
     // Persist selection to config
-    _sessionPersistence.updateAudioBackend(kind, deviceId);
+    _sessionPersistence.updateAudioBackend(backend, profile, deviceId);
   }
 
   std::optional<ao::audio::TrackPlaybackDescriptor> MainWindow::currentSelectionPlaybackDescriptor() const

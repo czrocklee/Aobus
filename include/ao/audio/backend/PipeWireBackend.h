@@ -16,7 +16,7 @@ namespace ao::audio::backend
   {
   public:
     struct Impl;
-    explicit PipeWireBackend(ao::audio::Device const& device);
+    explicit PipeWireBackend(ao::audio::Device const& device, ao::audio::ProfileId const& profile);
     ~PipeWireBackend() override;
 
     ao::Result<> open(ao::audio::Format const& format, ao::audio::RenderCallbacks callbacks) override;
@@ -32,7 +32,8 @@ namespace ao::audio::backend
     void setExclusiveMode(bool exclusive) override;
     bool isExclusiveMode() const noexcept override;
 
-    ao::audio::BackendKind kind() const noexcept override;
+    ao::audio::BackendId backendId() const noexcept override;
+    ao::audio::ProfileId profileId() const noexcept override;
 
   private:
     std::unique_ptr<Impl> _impl;

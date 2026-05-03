@@ -23,7 +23,7 @@ namespace ao::audio::backend
   class AlsaExclusiveBackend final : public ao::audio::IBackend
   {
   public:
-    explicit AlsaExclusiveBackend(ao::audio::Device const& device);
+    explicit AlsaExclusiveBackend(ao::audio::Device const& device, ao::audio::ProfileId const& profile);
     ~AlsaExclusiveBackend() override;
 
     ao::Result<> open(ao::audio::Format const& format, ao::audio::RenderCallbacks callbacks) override;
@@ -39,7 +39,8 @@ namespace ao::audio::backend
     void setExclusiveMode(bool exclusive) override;
     bool isExclusiveMode() const noexcept override;
 
-    ao::audio::BackendKind kind() const noexcept override;
+    ao::audio::BackendId backendId() const noexcept override;
+    ao::audio::ProfileId profileId() const noexcept override;
 
   private:
     struct AlsaPcmDeleter

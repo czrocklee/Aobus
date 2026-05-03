@@ -78,22 +78,22 @@ namespace ao::gtk
       return;
     }
 
-    auto snapshot = _player->snapshot();
-    _lastPlaybackState = snapshot.transport;
-    _host.updatePlaybackStatus(snapshot);
+    auto status = _player->status();
+    _lastPlaybackState = status.engine.transport;
+    _host.updatePlaybackStatus(status);
 
-    if (snapshot.statusText != _lastPlaybackErrorMessage)
+    if (status.engine.statusText != _lastPlaybackErrorMessage)
     {
-      _lastPlaybackErrorMessage = snapshot.statusText;
+      _lastPlaybackErrorMessage = status.engine.statusText;
 
-      if (!snapshot.statusText.empty() && snapshot.transport == ao::audio::Transport::Error)
+      if (!status.engine.statusText.empty() && status.engine.transport == ao::audio::Transport::Error)
       {
         static constexpr auto errorDisplayDuration = std::chrono::seconds{10};
-        _host.showPlaybackMessage(snapshot.statusText, errorDisplayDuration);
+        _host.showPlaybackMessage(status.engine.statusText, errorDisplayDuration);
       }
     }
 
-    _playbackBar->setSnapshot(snapshot);
+    _playbackBar->setSnapshot(status);
   }
 
   void PlaybackCoordinator::onPlayRequested()
@@ -123,9 +123,9 @@ namespace ao::gtk
       return;
     }
 
-    auto const snapshot = _player->snapshot();
+    auto const status = _player->status();
 
-    if (snapshot.transport == ao::audio::Transport::Paused)
+    if (status.engine.transport == ao::audio::Transport::Paused)
     {
       _player->resume();
       return;

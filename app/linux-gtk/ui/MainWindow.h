@@ -55,7 +55,7 @@ namespace ao::gtk
     TrackPageContext const* currentVisibleTrackPageContext() const override;
     TrackPageContext* findTrackPageContext(ao::ListId listId) override;
     void showListPage(ao::ListId listId) override;
-    void updatePlaybackStatus(ao::audio::Snapshot const& snapshot) override;
+    void updatePlaybackStatus(ao::audio::Player::Status const& status) override;
     void showPlaybackMessage(std::string const& message,
                              std::optional<std::chrono::seconds> timeout = std::nullopt) override;
 
@@ -79,7 +79,9 @@ namespace ao::gtk
 
     // Playback support
     void jumpToPlayingList();
-    void onOutputChanged(ao::audio::BackendKind kind, std::string const& deviceId);
+    void onOutputChanged(ao::audio::BackendId const& backend,
+                         ao::audio::DeviceId const& deviceId,
+                         ao::audio::ProfileId const& profile);
     std::optional<ao::audio::TrackPlaybackDescriptor> currentSelectionPlaybackDescriptor() const;
 
     // Active library session

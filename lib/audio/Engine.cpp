@@ -71,8 +71,9 @@ namespace ao::audio
                  std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
     : _backend{std::move(backend)}, _dispatcher{std::move(dispatcher)}, _currentDevice{device}
   {
-    _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
-    _snapshot.currentDeviceId = _currentDevice.id;
+    _status.backendId = _backend ? _backend->backendId() : kBackendNone;
+    _status.profileId = _backend ? _backend->profileId() : ProfileId{};
+    _status.currentDeviceId = _currentDevice.id;
   }
 
   Engine::~Engine()
@@ -94,8 +95,8 @@ namespace ao::audio
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
 
       return State{.track = _currentTrack,
-                   .positionMs = _snapshot.positionMs,
-                   .wasPlaying = (_snapshot.transport == Transport::Playing)};
+                   .positionMs = _status.positionMs,
+                   .wasPlaying = (_status.transport == Transport::Playing)};
     }();
 
     stop();
@@ -105,9 +106,10 @@ namespace ao::audio
 
     {
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-
-      _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
-      _snapshot.currentDeviceId = _currentDevice.id;
+      _status = {};
+      _status.backendId = _backend ? _backend->backendId() : kBackendNone;
+      _status.profileId = _backend ? _backend->profileId() : ProfileId{};
+      _status.currentDeviceId = _currentDevice.id;
     }
 
     if (state.track)
@@ -140,10 +142,10 @@ namespace ao::audio
     _onRouteChanged = std::move(callback);
   }
 
-  EngineRouteSnapshot Engine::routeSnapshot() const
+  Engine::RouteStatus Engine::routeStatus() const
   {
     auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    return _routeSnapshot;
+    return _routeStatus;
   }
 
   void Engine::resetToIdle()
@@ -151,15 +153,16 @@ namespace ao::audio
     _currentTrack.reset();
     _backendStarted = false;
     _playbackDrainPending = false;
-    _snapshot = {};
-    _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
-    _snapshot.currentDeviceId = _currentDevice.id;
+    _status = {};
+    _status.backendId = _backend ? _backend->backendId() : kBackendNone;
+    _status.profileId = _backend ? _backend->profileId() : ProfileId{};
+    _status.currentDeviceId = _currentDevice.id;
 
-    _routeSnapshot = {};
+    _routeStatus = {};
 
     if (_onRouteChanged)
     {
-      auto const snap = _routeSnapshot;
+      auto const snap = _routeStatus;
 
       if (_dispatcher)
       {
@@ -203,19 +206,17 @@ namespace ao::audio
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       _underrunCount = 0;
       resetToIdle();
-      _snapshot.transport = Transport::Opening;
-      _snapshot.trackTitle = descriptor.title;
-      _snapshot.trackArtist = descriptor.artist;
+      _status.transport = Transport::Opening;
       _currentTrack = descriptor;
 
       if (!openTrack(descriptor, source, backendFormat))
       {
-        _snapshot.transport = Transport::Error;
+        _status.transport = Transport::Error;
         _currentTrack.reset();
         return;
       }
 
-      _snapshot.transport = Transport::Buffering;
+      _status.transport = Transport::Buffering;
     }
 
     _source.store(source, std::memory_order_release);
@@ -227,8 +228,8 @@ namespace ao::audio
         _source.store({}, std::memory_order_release);
         auto const lock = std::lock_guard<std::mutex>{_stateMutex};
         _currentTrack.reset();
-        _snapshot.transport = Transport::Error;
-        _snapshot.statusText = openResult.error().message;
+        _status.transport = Transport::Error;
+        _status.statusText = openResult.error().message;
         return;
       }
     }
@@ -251,7 +252,7 @@ namespace ao::audio
 
     {
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      _snapshot.transport = Transport::Playing;
+      _status.transport = Transport::Playing;
       _backendStarted = true;
     }
 
@@ -268,10 +269,10 @@ namespace ao::audio
     {
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
 
-      if (_snapshot.transport == Transport::Playing || _snapshot.transport == Transport::Buffering)
+      if (_status.transport == Transport::Playing || _status.transport == Transport::Buffering)
       {
         AUDIO_LOG_INFO("Playback paused");
-        _snapshot.transport = Transport::Paused;
+        _status.transport = Transport::Paused;
         shouldPause = _backendStarted.load();
       }
     }
@@ -287,7 +288,7 @@ namespace ao::audio
     auto const source = _source.load(std::memory_order_acquire);
     auto lock = std::unique_lock<std::mutex>{_stateMutex};
 
-    if (_snapshot.transport != Transport::Paused)
+    if (_status.transport != Transport::Paused)
     {
       return;
     }
@@ -296,7 +297,7 @@ namespace ao::audio
 
     if (_backendStarted)
     {
-      _snapshot.transport = Transport::Playing;
+      _status.transport = Transport::Playing;
       lock.unlock();
 
       if (_backend)
@@ -317,7 +318,7 @@ namespace ao::audio
       return;
     }
 
-    _snapshot.transport = Transport::Playing;
+    _status.transport = Transport::Playing;
     _backendStarted = true;
     lock.unlock();
 
@@ -357,10 +358,10 @@ namespace ao::audio
 
     {
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      wasPaused = (_snapshot.transport == Transport::Paused);
-      _snapshot.transport = Transport::Buffering;
-      _snapshot.positionMs = positionMs;
-      _snapshot.statusText.clear();
+      wasPaused = (_status.transport == Transport::Paused);
+      _status.transport = Transport::Buffering;
+      _status.positionMs = positionMs;
+      _status.statusText.clear();
     }
 
     if (_backend)
@@ -375,8 +376,8 @@ namespace ao::audio
     if (auto const seekResult = source->seek(positionMs); !seekResult)
     {
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      _snapshot.transport = Transport::Error;
-      _snapshot.statusText = seekResult.error().message;
+      _status.transport = Transport::Error;
+      _status.statusText = seekResult.error().message;
       return;
     }
 
@@ -400,13 +401,13 @@ namespace ao::audio
     if (wasPaused)
     {
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      _snapshot.transport = Transport::Paused;
+      _status.transport = Transport::Paused;
       return;
     }
 
     {
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      _snapshot.transport = Transport::Playing;
+      _status.transport = Transport::Playing;
       _backendStarted = true;
     }
 
@@ -416,12 +417,12 @@ namespace ao::audio
     }
   }
 
-  Snapshot Engine::snapshot() const
+  Engine::Status Engine::status() const
   {
     auto const source = _source.load(std::memory_order_acquire);
     auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    auto snap = _snapshot;
-    snap.backend = _backend ? _backend->kind() : BackendKind::None;
+    auto snap = _status;
+    snap.backendId = _backend ? _backend->backendId() : kBackendNone;
     snap.bufferedMs = source ? source->bufferedMs() : 0;
     snap.underrunCount = _underrunCount.load(std::memory_order_relaxed);
 
@@ -451,8 +452,8 @@ namespace ao::audio
     stop();
 
     auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    _snapshot.transport = Transport::Error;
-    _snapshot.statusText = std::string{message};
+    _status.transport = Transport::Error;
+    _status.statusText = std::string{message};
   }
 
   bool Engine::negotiateFormat(std::filesystem::path const& path,
@@ -465,9 +466,9 @@ namespace ao::audio
       return true;
     }
 
-    auto const backendKind = _backend->kind();
+    auto const backendId = _backend->backendId();
 
-    if (backendKind == BackendKind::PipeWire)
+    if (backendId == kBackendPipeWire && _backend->profileId() == kProfileShared)
     {
       backendFormat = info.outputFormat;
       AUDIO_LOG_INFO("PipeWire shared mode keeps the stream at {}Hz/{}b/{}ch",
@@ -481,17 +482,16 @@ namespace ao::audio
 
     if (plan.requiresResample)
     {
-      _snapshot.statusText = std::format("{} does not support {} Hz and RockStudio has no resampler yet",
-                                         backendDisplayName(backendKind),
-                                         info.sourceFormat.sampleRate);
+      _status.statusText = std::format(
+        "{} does not support {} Hz and RockStudio has no resampler yet", backendId, info.sourceFormat.sampleRate);
       return false;
     }
 
     if (plan.requiresChannelRemap)
     {
-      _snapshot.statusText = std::format("{} does not support {} channels and RockStudio has no channel remapper yet",
-                                         backendDisplayName(backendKind),
-                                         static_cast<int>(info.sourceFormat.channels));
+      _status.statusText = std::format("{} does not support {} channels and RockStudio has no channel remapper yet",
+                                       backendId,
+                                       static_cast<int>(info.sourceFormat.channels));
       return false;
     }
 
@@ -510,13 +510,13 @@ namespace ao::audio
 
       if (!decoder)
       {
-        _snapshot.statusText = "Failed to re-open decoder with negotiated format";
+        _status.statusText = "Failed to re-open decoder with negotiated format";
         return false;
       }
 
       if (auto const reOpenResult = decoder->open(path); !reOpenResult)
       {
-        _snapshot.statusText = reOpenResult.error().message;
+        _status.statusText = reOpenResult.error().message;
         return false;
       }
     }
@@ -534,7 +534,7 @@ namespace ao::audio
 
       if (auto const initResult = memorySource->initialize(); !initResult)
       {
-        _snapshot.statusText = initResult.error().message;
+        _status.statusText = initResult.error().message;
         return nullptr;
       }
 
@@ -560,7 +560,7 @@ namespace ao::audio
 
     if (auto const initResult = streamingSource->initialize(); !initResult)
     {
-      _snapshot.statusText = initResult.error().message;
+      _status.statusText = initResult.error().message;
       return nullptr;
     }
 
@@ -586,13 +586,13 @@ namespace ao::audio
 
     if (decoder == nullptr)
     {
-      _snapshot.statusText = "No audio decoder backend is available";
+      _status.statusText = "No audio decoder backend is available";
       return false;
     }
 
     if (auto const openResult = decoder->open(descriptor.filePath); !openResult)
     {
-      _snapshot.statusText = openResult.error().message;
+      _status.statusText = openResult.error().message;
       return false;
     }
 
@@ -600,7 +600,7 @@ namespace ao::audio
 
     if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
     {
-      _snapshot.statusText = "Decoder did not return a valid output format";
+      _status.statusText = "Decoder did not return a valid output format";
       return false;
     }
 
@@ -617,33 +617,33 @@ namespace ao::audio
       return false;
     }
 
-    _snapshot.durationMs = info.durationMs;
-    _snapshot.positionMs = 0;
-    _snapshot.flow = {};
+    _status.durationMs = info.durationMs;
+    _status.positionMs = 0;
+    _status.flow = {};
 
     // Add initial Source (Decoder) Node
-    _routeSnapshot.flow.nodes = {flow::Node{
-                                   .id = "rs-decoder",
-                                   .type = flow::NodeType::Decoder,
-                                   .name = "Decoder",
-                                   .optFormat = info.sourceFormat,
-                                 },
-                                 flow::Node{
-                                   .id = "rs-engine",
-                                   .type = flow::NodeType::Engine,
-                                   .name = "Engine",
-                                   .optFormat = info.outputFormat,
-                                 }};
+    _routeStatus.flow.nodes = {flow::Node{
+                                 .id = "rs-decoder",
+                                 .type = flow::NodeType::Decoder,
+                                 .name = "Decoder",
+                                 .optFormat = info.sourceFormat,
+                               },
+                               flow::Node{
+                                 .id = "rs-engine",
+                                 .type = flow::NodeType::Engine,
+                                 .name = "Engine",
+                                 .optFormat = info.outputFormat,
+                               }};
 
-    _routeSnapshot.flow.connections.clear();
-    _routeSnapshot.flow.connections.push_back(
+    _routeStatus.flow.connections.clear();
+    _routeStatus.flow.connections.push_back(
       flow::Connection{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
 
-    _snapshot.flow = _routeSnapshot.flow;
+    _status.flow = _routeStatus.flow;
 
     if (_onRouteChanged)
     {
-      auto const snap = _routeSnapshot;
+      auto const snap = _routeStatus;
 
       if (_dispatcher)
       {
@@ -703,12 +703,12 @@ namespace ao::audio
     }
 
     // Use Engine node format for position calculation
-    for (auto const& node : self->_snapshot.flow.nodes)
+    for (auto const& node : self->_status.flow.nodes)
     {
       if (node.type == flow::NodeType::Engine && node.optFormat && node.optFormat->sampleRate > 0)
       {
         auto const ms = (static_cast<std::uint64_t>(frames) * 1000) / node.optFormat->sampleRate;
-        self->_snapshot.positionMs += static_cast<std::uint32_t>(ms);
+        self->_status.positionMs += static_cast<std::uint32_t>(ms);
         break;
       }
     }
@@ -770,12 +770,12 @@ namespace ao::audio
   void Engine::handleRouteReady(std::string_view routeAnchor)
   {
     auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    _routeSnapshot.optAnchor =
-      BackendRouteAnchor{.backend = _backend ? _backend->kind() : BackendKind::None, .id = std::string{routeAnchor}};
+    _routeStatus.optAnchor =
+      RouteAnchor{.backend = _backend ? _backend->backendId() : kBackendNone, .id = std::string{routeAnchor}};
 
     if (_onRouteChanged)
     {
-      auto const snap = _routeSnapshot;
+      auto const snap = _routeStatus;
 
       if (_dispatcher)
       {
@@ -793,15 +793,15 @@ namespace ao::audio
     {
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
 
-      if (_snapshot.transport == Transport::Idle)
+      if (_status.transport == Transport::Idle)
       {
         return;
       }
 
       _backendStarted = false;
       _playbackDrainPending = false;
-      _snapshot.transport = Transport::Error;
-      _snapshot.statusText = error.message.empty() ? "PCM source failed" : error.message;
+      _status.transport = Transport::Error;
+      _status.statusText = error.message.empty() ? "PCM source failed" : error.message;
     }
 
     // Backend call OUTSIDE lock to avoid holding _stateMutex during backend operations
@@ -830,7 +830,7 @@ namespace ao::audio
     auto const lock = std::lock_guard<std::mutex>{_stateMutex};
 
     // Update engine node in the route snapshot
-    for (auto& node : _routeSnapshot.flow.nodes)
+    for (auto& node : _routeStatus.flow.nodes)
     {
       if (node.id == "rs-engine")
       {
@@ -839,8 +839,8 @@ namespace ao::audio
       }
     }
 
-    // Update engine node in the public snapshot
-    for (auto& node : _snapshot.flow.nodes)
+    // Update engine node in the public status
+    for (auto& node : _status.flow.nodes)
     {
       if (node.id == "rs-engine")
       {
@@ -851,7 +851,7 @@ namespace ao::audio
 
     if (_onRouteChanged)
     {
-      auto const snap = _routeSnapshot;
+      auto const snap = _routeStatus;
 
       if (_dispatcher)
       {

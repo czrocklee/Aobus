@@ -108,7 +108,7 @@ namespace ao::gtk
 
           if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
           {
-            _outputChanged.emit(deviceItem->kind, deviceItem->id);
+            _outputChanged.emit(deviceItem->backendId, deviceItem->id, deviceItem->profileId);
             _outputPopover.popdown();
           }
         }
@@ -184,10 +184,10 @@ namespace ao::gtk
     _animationConnection = Glib::signal_timeout().connect(
       [this]()
       {
-        bool const isPlaying = (_lastState.transport == ao::audio::Transport::Playing ||
-                                _lastState.transport == ao::audio::Transport::Opening ||
-                                _lastState.transport == ao::audio::Transport::Buffering ||
-                                _lastState.transport == ao::audio::Transport::Seeking);
+        bool const isPlaying = (_lastState.engine.transport == ao::audio::Transport::Playing ||
+                                _lastState.engine.transport == ao::audio::Transport::Opening ||
+                                _lastState.engine.transport == ao::audio::Transport::Buffering ||
+                                _lastState.engine.transport == ao::audio::Transport::Seeking);
 
         if (isPlaying)
         {
@@ -282,37 +282,54 @@ namespace ao::gtk
     return nullptr;
   }
 
-  void PlaybackBar::updateOutputModel(ao::audio::Snapshot const& snapshot)
+  void PlaybackBar::updateOutputModel(ao::audio::Player::Status const& status)
   {
     _outputStore->remove_all();
 
-    for (auto const& backend : snapshot.availableBackends)
+    for (auto const& backend : status.availableBackends)
     {
-      _outputStore->append(BackendItem::create(backend.kind, backend.displayName));
+      _outputStore->append(BackendItem::create(backend.metadata.id, backend.metadata.name));
 
       for (auto const& device : backend.devices)
       {
-        auto item = DeviceItem::create(backend.kind, device);
-        item->active = (backend.kind == snapshot.backend && device.id == snapshot.currentDeviceId);
-        _outputStore->append(item);
+        for (auto const& profileMeta : backend.metadata.supportedProfiles)
+        {
+          auto const profile = profileMeta.id;
+          auto item = DeviceItem::create(backend.metadata.id, device, profile, profileMeta.name);
+          item->active = (backend.metadata.id == status.engine.backendId && profile == status.engine.profileId &&
+                          device.id == status.engine.currentDeviceId);
+          _outputStore->append(item);
+        }
       }
     }
   }
 
-  void PlaybackBar::updateOutputLabel(ao::audio::Snapshot const& snapshot)
+  void PlaybackBar::updateOutputLabel(ao::audio::Player::Status const& status)
   {
     bool found = false;
-    for (auto const& backend : snapshot.availableBackends)
+    for (auto const& backend : status.availableBackends)
     {
-      if (backend.kind == snapshot.backend)
+      if (backend.metadata.id == status.engine.backendId)
       {
         for (auto const& device : backend.devices)
         {
-          if (device.id == snapshot.currentDeviceId)
+          if (device.id == status.engine.currentDeviceId)
           {
-            if (_outputButton.get_tooltip_text() != device.displayName)
+            auto label = device.displayName;
+
+            // Find profile name from metadata
+            for (auto const& pm : backend.metadata.supportedProfiles)
             {
-              _outputButton.set_tooltip_text(device.displayName);
+              if (pm.id == status.engine.profileId && status.engine.profileId == ao::audio::kProfileExclusive)
+              {
+                label += " (Exclusive)";
+                break;
+              }
+            }
+
+            if (_outputButton.get_tooltip_text() != label)
+            {
+              _outputButton.set_tooltip_text(label);
             }
             found = true;
             break;
@@ -378,9 +395,9 @@ namespace ao::gtk
   {
     _lastIconQuality = quality;
 
-    bool const isStopped =
-      (_lastState.transport == ao::audio::Transport::Idle || _lastState.transport == ao::audio::Transport::Stopping ||
-       _lastState.transport == ao::audio::Transport::Error);
+    bool const isStopped = (_lastState.engine.transport == ao::audio::Transport::Idle ||
+                            _lastState.engine.transport == ao::audio::Transport::Stopping ||
+                            _lastState.engine.transport == ao::audio::Transport::Error);
 
     // Calculate animation parameters
     double rotationAngle = 0.0;
@@ -424,7 +441,15 @@ namespace ao::gtk
     std::string const cyan = "#00E5FF";
     std::string indicatorColor = isStopped ? cyan : "#6B7280"; // Full cyan when stopped
 
-    if (!isStopped)
+    if (!_lastState.isReady)
+    {
+      indicatorColor = "#6B7280"; // Gray when not ready
+      if (_outputButton.get_tooltip_text().find("Initializing") == std::string::npos)
+      {
+        _outputButton.set_tooltip_text("Initializing audio backend...");
+      }
+    }
+    else if (!isStopped)
     {
       switch (quality)
       {
@@ -465,37 +490,39 @@ namespace ao::gtk
     }
   }
 
-  void PlaybackBar::setSnapshot(ao::audio::Snapshot const& snapshot)
+  void PlaybackBar::setSnapshot(ao::audio::Player::Status const& status)
   {
-    auto const posSec = snapshot.positionMs / 1000;
-    auto const durSec = snapshot.durationMs / 1000;
+    auto const posSec = status.engine.positionMs / 1000;
+    auto const durSec = status.engine.durationMs / 1000;
 
-    if (snapshot.transport != _lastState.transport || posSec != _lastState.positionSec ||
-        durSec != _lastState.durationSec || snapshot.backend != _lastState.backend ||
-        snapshot.currentDeviceId != _lastState.currentDeviceId ||
-        snapshot.availableBackends != _lastState.availableBackends || snapshot.quality != _lastState.quality)
+    if (status.engine.transport != _lastState.engine.transport || posSec != _lastState.positionSec ||
+        durSec != _lastState.durationSec || status.engine.backendId != _lastState.engine.backendId ||
+        status.engine.profileId != _lastState.engine.profileId ||
+        status.engine.currentDeviceId != _lastState.engine.currentDeviceId ||
+        status.availableBackends != _lastState.availableBackends || status.quality != _lastState.quality ||
+        status.isReady != _lastState.isReady)
     {
-      bool const outputStateChanged =
-        (snapshot.backend != _lastState.backend || snapshot.currentDeviceId != _lastState.currentDeviceId ||
-         snapshot.availableBackends != _lastState.availableBackends);
+      bool const outputStateChanged = (status.engine.backendId != _lastState.engine.backendId ||
+                                       status.engine.profileId != _lastState.engine.profileId ||
+                                       status.engine.currentDeviceId != _lastState.engine.currentDeviceId ||
+                                       status.availableBackends != _lastState.availableBackends);
 
-      _lastState = {.transport = snapshot.transport,
+      _lastState = {.engine = status.engine,
                     .positionSec = posSec,
                     .durationSec = durSec,
-                    .backend = snapshot.backend,
-                    .currentDeviceId = snapshot.currentDeviceId,
-                    .availableBackends = snapshot.availableBackends,
-                    .quality = snapshot.quality};
+                    .availableBackends = status.availableBackends,
+                    .quality = status.quality,
+                    .isReady = status.isReady};
 
-      updateTransportButtons(snapshot.transport);
+      updateTransportButtons(status.engine.transport);
 
       if (outputStateChanged)
       {
-        updateOutputModel(snapshot);
+        updateOutputModel(status);
       }
-      updateOutputLabel(snapshot);
+      updateOutputLabel(status);
 
-      if (snapshot.transport == ao::audio::Transport::Idle)
+      if (status.engine.transport == ao::audio::Transport::Idle)
       {
         _timeLabel.set_text("00:00 / 00:00");
       }
@@ -511,11 +538,11 @@ namespace ao::gtk
       }
 
       syncOutputIconSize();
-      updateOutputIcon(snapshot.quality);
+      updateOutputIcon(status.quality);
     }
 
     // Always update seek scale sensitivity and range for smoothness
-    if (snapshot.transport == ao::audio::Transport::Idle)
+    if (status.engine.transport == ao::audio::Transport::Idle)
     {
       _seekScale.set_range(0, 100);
       _seekScale.set_value(0);
@@ -526,10 +553,10 @@ namespace ao::gtk
     // Update seek scale
     _updatingSeekScale = true;
 
-    if (snapshot.durationMs > 0)
+    if (status.engine.durationMs > 0)
     {
-      _seekScale.set_range(0, static_cast<double>(snapshot.durationMs));
-      _seekScale.set_value(static_cast<double>(snapshot.positionMs));
+      _seekScale.set_range(0, static_cast<double>(status.engine.durationMs));
+      _seekScale.set_value(static_cast<double>(status.engine.positionMs));
       _seekScale.set_sensitive(true);
     }
     else
@@ -551,6 +578,8 @@ namespace ao::gtk
 
   void PlaybackBar::updateTransportButtons(ao::audio::Transport state)
   {
+    bool const isReady = _lastState.isReady;
+
     switch (state)
     {
       case ao::audio::Transport::Idle:
@@ -558,7 +587,7 @@ namespace ao::gtk
       case ao::audio::Transport::Error:
         _playButton.set_visible(true);
         _pauseButton.set_visible(false);
-        _playButton.set_sensitive(state != ao::audio::Transport::Idle);
+        _playButton.set_sensitive(isReady && state != ao::audio::Transport::Idle);
         _pauseButton.set_sensitive(false);
         _stopButton.set_sensitive(false);
         _seekScale.set_sensitive(false);
@@ -570,7 +599,7 @@ namespace ao::gtk
         _pauseButton.set_visible(false);
         _playButton.set_sensitive(false);
         _pauseButton.set_sensitive(false);
-        _stopButton.set_sensitive(true);
+        _stopButton.set_sensitive(isReady);
         _seekScale.set_sensitive(false);
         break;
 
@@ -578,18 +607,18 @@ namespace ao::gtk
         _playButton.set_visible(false);
         _pauseButton.set_visible(true);
         _playButton.set_sensitive(false);
-        _pauseButton.set_sensitive(true);
-        _stopButton.set_sensitive(true);
-        _seekScale.set_sensitive(true);
+        _pauseButton.set_sensitive(isReady);
+        _stopButton.set_sensitive(isReady);
+        _seekScale.set_sensitive(isReady);
         break;
 
       case ao::audio::Transport::Paused:
         _playButton.set_visible(true);
         _pauseButton.set_visible(false);
-        _playButton.set_sensitive(true);
+        _playButton.set_sensitive(isReady);
         _pauseButton.set_sensitive(false);
-        _stopButton.set_sensitive(true);
-        _seekScale.set_sensitive(true);
+        _stopButton.set_sensitive(isReady);
+        _seekScale.set_sensitive(isReady);
         break;
 
       case ao::audio::Transport::Seeking:
@@ -597,7 +626,7 @@ namespace ao::gtk
         _pauseButton.set_visible(false);
         _playButton.set_sensitive(false);
         _pauseButton.set_sensitive(false);
-        _stopButton.set_sensitive(true);
+        _stopButton.set_sensitive(isReady);
         _seekScale.set_sensitive(false);
         break;
     }

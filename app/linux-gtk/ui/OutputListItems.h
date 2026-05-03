@@ -15,47 +15,58 @@ namespace ao::gtk
   class BackendItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<BackendItem> create(ao::audio::BackendKind kind, std::string const& name)
+    static Glib::RefPtr<BackendItem> create(ao::audio::BackendId const& id, std::string const& name)
     {
-      return Glib::make_refptr_for_instance<BackendItem>(new BackendItem(kind, name));
+      return Glib::make_refptr_for_instance<BackendItem>(new BackendItem(id, name));
     }
 
-    ao::audio::BackendKind kind;
+    ao::audio::BackendId id;
     std::string name;
 
   protected:
-    BackendItem(ao::audio::BackendKind kind, std::string const& name)
-      : Glib::ObjectBase(typeid(BackendItem)), kind(kind), name(name)
+    BackendItem(ao::audio::BackendId const& id, std::string const& name)
+      : Glib::ObjectBase(typeid(BackendItem)), id(id), name(name)
     {
     }
   };
 
   /**
-   * @brief GObject wrapper for an individual audio device.
+   * @brief GObject wrapper for an individual audio device/profile combination.
    */
   class DeviceItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<DeviceItem> create(ao::audio::BackendKind kind, ao::audio::Device const& device)
+    static Glib::RefPtr<DeviceItem> create(ao::audio::BackendId const& backend,
+                                           ao::audio::Device const& device,
+                                           ao::audio::ProfileId const& profile,
+                                           std::string const& customName = "")
     {
-      return Glib::make_refptr_for_instance<DeviceItem>(new DeviceItem(kind, device));
+      return Glib::make_refptr_for_instance<DeviceItem>(new DeviceItem(backend, device, profile, customName));
     }
 
-    ao::audio::BackendKind kind;
-    std::string id;
+    ao::audio::BackendId backendId;
+    ao::audio::ProfileId profileId;
+    ao::audio::DeviceId id;
     std::string name;
     std::string description;
     bool active = false;
 
     // Helper for diffing
-    bool matches(ao::audio::BackendKind k, std::string const& devId) const { return kind == k && id == devId; }
+    bool matches(ao::audio::BackendId const& b, ao::audio::DeviceId const& devId, ao::audio::ProfileId const& p) const
+    {
+      return backendId == b && id == devId && profileId == p;
+    }
 
   protected:
-    DeviceItem(ao::audio::BackendKind kind, ao::audio::Device const& device)
+    DeviceItem(ao::audio::BackendId const& backend,
+               ao::audio::Device const& device,
+               ao::audio::ProfileId const& profile,
+               std::string const& customName)
       : Glib::ObjectBase(typeid(DeviceItem))
-      , kind(kind)
+      , backendId(backend)
+      , profileId(profile)
       , id(device.id)
-      , name(device.displayName)
+      , name(customName.empty() ? device.displayName : customName)
       , description(device.description)
     {
     }

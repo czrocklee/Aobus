@@ -127,8 +127,9 @@ namespace ao::gtk
                                 Gtk::Paned& paned,
                                 TrackColumnLayoutModel& trackColumnLayoutModel,
                                 std::string& outLibraryPath,
-                                ao::audio::BackendKind& outBackendKind,
-                                std::string& outDeviceId)
+                                ao::audio::BackendId& outBackend,
+                                ao::audio::ProfileId& outProfile,
+                                ao::audio::DeviceId& outDeviceId)
   {
     try
     {
@@ -150,16 +151,9 @@ namespace ao::gtk
 
       auto const& sessionState = _appConfig.sessionState();
 
-      if (!sessionState.lastBackend.empty())
-      {
-        auto const kind = ao::audio::backendKindFromId(sessionState.lastBackend);
-        if (kind != ao::audio::BackendKind::None)
-        {
-          outBackendKind = kind;
-          outDeviceId = sessionState.lastOutputDeviceId;
-        }
-      }
-
+      outBackend = ao::audio::BackendId{sessionState.lastBackend};
+      outProfile = ao::audio::ProfileId{sessionState.lastProfile};
+      outDeviceId = ao::audio::DeviceId{sessionState.lastOutputDeviceId};
       outLibraryPath = sessionState.lastLibraryPath;
     }
     catch (std::exception const& e)
@@ -218,10 +212,13 @@ namespace ao::gtk
     }
   }
 
-  void SessionPersistence::updateAudioBackend(ao::audio::BackendKind kind, std::string const& deviceId)
+  void SessionPersistence::updateAudioBackend(ao::audio::BackendId const& backend,
+                                              ao::audio::ProfileId const& profile,
+                                              ao::audio::DeviceId const& deviceId)
   {
     auto session = _appConfig.sessionState();
-    session.lastBackend = std::string(ao::audio::backendKindToId(kind));
+    session.lastBackend = backend;
+    session.lastProfile = profile;
     session.lastOutputDeviceId = deviceId;
     _appConfig.setSessionState(session);
     _appConfig.save();

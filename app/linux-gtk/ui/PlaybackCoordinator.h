@@ -40,7 +40,7 @@ namespace ao::gtk
     virtual TrackPageContext const* currentVisibleTrackPageContext() const = 0;
     virtual TrackPageContext* findTrackPageContext(ao::ListId listId) = 0;
     virtual void showListPage(ao::ListId listId) = 0;
-    virtual void updatePlaybackStatus(ao::audio::Snapshot const& snapshot) = 0;
+    virtual void updatePlaybackStatus(ao::audio::Player::Status const& status) = 0;
     virtual void showPlaybackMessage(std::string const& message,
                                      std::optional<std::chrono::seconds> timeout = std::nullopt) = 0;
   };
@@ -58,7 +58,7 @@ namespace ao::gtk
 
     PlaybackBar& playbackBar() { return *_playbackBar; }
 
-    using OutputChangedSignal = sigc::signal<void(ao::audio::BackendKind, std::string)>;
+    using OutputChangedSignal = sigc::signal<void(ao::audio::BackendId, ao::audio::DeviceId, ao::audio::ProfileId)>;
     OutputChangedSignal& signalOutputChanged() { return _playbackBar->signalOutputChanged(); }
 
     void playCurrentSelection();

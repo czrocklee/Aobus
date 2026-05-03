@@ -200,18 +200,14 @@ namespace ao::audio
       {
         requireBitDepthConversion(plan);
 
-        if (supportsSampleFormat(caps, 16, 16))
-        {
-          setSampleFormat(plan.decoderOutputFormat, 16, 16);
-          setSampleFormat(plan.deviceFormat, 16, 16);
-        }
-        else if (supportsSampleFormat(caps, 24, 24))
+        if (supportsSampleFormat(caps, 24, 24))
         {
           setSampleFormat(plan.decoderOutputFormat, 24, 24);
           setSampleFormat(plan.deviceFormat, 24, 24);
         }
         else
         {
+          // Default to 16-bit if 24-bit is also not supported
           setSampleFormat(plan.decoderOutputFormat, 16, 16);
           setSampleFormat(plan.deviceFormat, 16, 16);
         }

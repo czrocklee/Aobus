@@ -25,15 +25,18 @@ namespace ao::gtk
               Gtk::Paned& paned,
               TrackColumnLayoutModel& trackColumnLayoutModel,
               std::string& outLibraryPath,
-              ao::audio::BackendKind& outBackendKind,
-              std::string& outDeviceId);
+              ao::audio::BackendId& outBackend,
+              ao::audio::ProfileId& outProfile,
+              ao::audio::DeviceId& outDeviceId);
 
     void save(Gtk::Window const& window,
               Gtk::Paned const& paned,
               TrackColumnLayoutModel const& trackColumnLayoutModel,
               LibrarySession const* librarySession);
 
-    void updateAudioBackend(ao::audio::BackendKind kind, std::string const& deviceId);
+    void updateAudioBackend(ao::audio::BackendId const& backend,
+                            ao::audio::ProfileId const& profile,
+                            ao::audio::DeviceId const& deviceId);
 
   private:
     ao::app::AppConfig _appConfig;

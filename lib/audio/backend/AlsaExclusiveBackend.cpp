@@ -24,7 +24,7 @@ namespace ao::audio::backend
   constexpr int kAlsaWaitTimeoutMs = 500;
   constexpr int kPollRetryDelayMs = 10;
 
-  AlsaExclusiveBackend::AlsaExclusiveBackend(ao::audio::Device const& device)
+  AlsaExclusiveBackend::AlsaExclusiveBackend(ao::audio::Device const& device, ao::audio::ProfileId const& /*profile*/)
     : _deviceName{device.id}
   {
     AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _deviceName);
@@ -371,8 +371,12 @@ namespace ao::audio::backend
   {
     return true;
   }
-  ao::audio::BackendKind AlsaExclusiveBackend::kind() const noexcept
+  ao::audio::BackendId AlsaExclusiveBackend::backendId() const noexcept
   {
-    return ao::audio::BackendKind::AlsaExclusive;
+    return ao::audio::kBackendAlsa;
+  }
+  ao::audio::ProfileId AlsaExclusiveBackend::profileId() const noexcept
+  {
+    return ao::audio::kProfileExclusive;
   }
 } // namespace ao::audio::backend

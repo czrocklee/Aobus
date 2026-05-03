@@ -299,27 +299,27 @@ namespace ao::gtk
     _selectionLabel.set_text(text);
   }
 
-  void StatusBar::updatePlaybackStatusLabels(ao::audio::Snapshot const& snapshot)
+  void StatusBar::updatePlaybackStatusLabels(ao::audio::Player::Status const& status)
   {
-    if (snapshot.transport == ao::audio::Transport::Idle)
+    if (status.engine.transport == ao::audio::Transport::Idle)
     {
       _nowPlayingLabel.set_text("");
-      _streamInfoLabel.set_text("");
+      _streamInfoLabel.set_text(status.isReady ? "" : "Connecting to audio engine...");
       _sinkStatusIcon.set_visible(false);
       _lastTooltipText.clear();
       return;
     }
 
     // Artist - Title
-    if (!snapshot.trackTitle.empty())
+    if (!status.trackTitle.empty())
     {
-      if (!snapshot.trackArtist.empty())
+      if (!status.trackArtist.empty())
       {
-        _nowPlayingLabel.set_text(std::format("{} - {}", snapshot.trackArtist, snapshot.trackTitle));
+        _nowPlayingLabel.set_text(std::format("{} - {}", status.trackArtist, status.trackTitle));
       }
       else
       {
-        _nowPlayingLabel.set_text(snapshot.trackTitle);
+        _nowPlayingLabel.set_text(status.trackTitle);
       }
     }
     else
@@ -331,7 +331,7 @@ namespace ao::gtk
     auto const statusText = [&]
     {
       auto info = std::string{};
-      for (auto const& node : snapshot.flow.nodes)
+      for (auto const& node : status.flow.nodes)
       {
         if (node.type == ao::audio::flow::NodeType::Decoder && node.optFormat)
         {
@@ -340,29 +340,29 @@ namespace ao::gtk
         }
       }
 
-      if (snapshot.underrunCount == 0)
+      if (status.engine.underrunCount == 0)
       {
         return info;
       }
 
       if (info.empty())
       {
-        return std::format("{} underruns", snapshot.underrunCount);
+        return std::format("{} underruns", status.engine.underrunCount);
       }
 
-      return std::format("{} | {} underruns", info, snapshot.underrunCount);
+      return std::format("{} | {} underruns", info, status.engine.underrunCount);
     }();
 
     _streamInfoLabel.set_text(statusText);
 
-    updatePlaybackTooltip(snapshot);
+    updatePlaybackTooltip(status);
 
     // Update status icon
     clearSinkStatusClasses(_sinkStatusIcon);
     _sinkStatusIcon.set_visible(true);
 
     using Quality = ao::audio::Quality;
-    switch (snapshot.quality)
+    switch (status.quality)
     {
       case Quality::BitwisePerfect: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
       case Quality::LosslessPadded:
@@ -374,7 +374,7 @@ namespace ao::gtk
     }
   }
 
-  void StatusBar::updatePlaybackTooltip(ao::audio::Snapshot const& snapshot)
+  void StatusBar::updatePlaybackTooltip(ao::audio::Player::Status const& status)
   {
     auto ss = std::stringstream{};
     ss << "Audio Pipeline:\n";
@@ -403,9 +403,9 @@ namespace ao::gtk
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
-        auto const it = std::ranges::find(snapshot.flow.nodes, currentId, &ao::audio::flow::Node::id);
+        auto const it = std::ranges::find(status.flow.nodes, currentId, &ao::audio::flow::Node::id);
 
-        if (it == snapshot.flow.nodes.end())
+        if (it == status.flow.nodes.end())
         {
           break;
         }
@@ -431,7 +431,7 @@ namespace ao::gtk
         ss << "\n";
 
         auto nextId = std::string{};
-        for (auto const& link : snapshot.flow.connections)
+        for (auto const& link : status.flow.connections)
         {
           if (link.isActive && link.sourceId == currentId)
           {
@@ -443,9 +443,9 @@ namespace ao::gtk
       }
     }
 
-    if (!snapshot.qualityTooltip.empty())
+    if (!status.qualityTooltip.empty())
     {
-      ss << "\n" << snapshot.qualityTooltip;
+      ss << "\n" << status.qualityTooltip;
     }
 
     auto const tooltip = ss.str();
@@ -459,28 +459,29 @@ namespace ao::gtk
     }
   }
 
-  void StatusBar::setPlaybackDetails(ao::audio::Snapshot const& snapshot)
+  void StatusBar::setPlaybackDetails(ao::audio::Player::Status const& status)
   {
     // Skip update if nothing visible has changed
-    if (snapshot.transport == _lastPlaybackState.transport && snapshot.trackTitle == _lastPlaybackState.title &&
-        snapshot.trackArtist == _lastPlaybackState.artist &&
-        snapshot.underrunCount == _lastPlaybackState.underrunCount && snapshot.quality == _lastPlaybackState.quality &&
-        snapshot.qualityTooltip == _lastPlaybackState.qualityTooltip && snapshot.flow == _lastPlaybackState.flow)
+    if (status.engine.transport == _lastPlaybackState.engine.transport &&
+        status.trackTitle == _lastPlaybackState.title && status.trackArtist == _lastPlaybackState.artist &&
+        status.engine.underrunCount == _lastPlaybackState.underrunCount &&
+        status.quality == _lastPlaybackState.quality && status.qualityTooltip == _lastPlaybackState.qualityTooltip &&
+        status.flow == _lastPlaybackState.flow)
     {
       return;
     }
 
     // Update state cache
-    _lastPlaybackState = {.transport = snapshot.transport,
-                          .title = snapshot.trackTitle,
-                          .artist = snapshot.trackArtist,
-                          .underrunCount = snapshot.underrunCount,
-                          .quality = snapshot.quality,
-                          .qualityTooltip = snapshot.qualityTooltip,
-                          .flow = snapshot.flow};
+    _lastPlaybackState = {.engine = status.engine,
+                          .title = status.trackTitle,
+                          .artist = status.trackArtist,
+                          .underrunCount = status.engine.underrunCount,
+                          .quality = status.quality,
+                          .qualityTooltip = status.qualityTooltip,
+                          .flow = status.flow};
 
     // Always update status labels (they might depend on minor state changes)
-    updatePlaybackStatusLabels(snapshot);
+    updatePlaybackStatusLabels(status);
   }
 
   void StatusBar::setImportProgress(double fraction, std::string const& info)
