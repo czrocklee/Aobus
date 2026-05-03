@@ -125,23 +125,68 @@ namespace ao::audio::backend
     return record;
   }
 
-  std::uint8_t spaFormatToBitDepth(std::uint32_t spaFmt)
+  std::optional<ao::audio::SampleFormatCapability> sampleFormatCapabilityFromSpaFormat(std::uint32_t spaFmt)
   {
     switch (spaFmt)
     {
       case SPA_AUDIO_FORMAT_S16_LE:
-      case SPA_AUDIO_FORMAT_S16_BE: return 16;
+      case SPA_AUDIO_FORMAT_S16_BE:
+        return ao::audio::SampleFormatCapability{
+          .bitDepth = 16,
+          .validBits = 16,
+          .isFloat = false,
+        };
       case SPA_AUDIO_FORMAT_S24_LE:
-      case SPA_AUDIO_FORMAT_S24_BE: return 24;
+      case SPA_AUDIO_FORMAT_S24_BE:
+        return ao::audio::SampleFormatCapability{
+          .bitDepth = 24,
+          .validBits = 24,
+          .isFloat = false,
+        };
       case SPA_AUDIO_FORMAT_S24_32_LE:
       case SPA_AUDIO_FORMAT_S24_32_BE:
+        return ao::audio::SampleFormatCapability{
+          .bitDepth = 32,
+          .validBits = 24,
+          .isFloat = false,
+        };
       case SPA_AUDIO_FORMAT_S32_LE:
       case SPA_AUDIO_FORMAT_S32_BE:
+        return ao::audio::SampleFormatCapability{
+          .bitDepth = 32,
+          .validBits = 32,
+          .isFloat = false,
+        };
       case SPA_AUDIO_FORMAT_F32_LE:
-      case SPA_AUDIO_FORMAT_F32_BE: return 32;
+      case SPA_AUDIO_FORMAT_F32_BE:
+        return ao::audio::SampleFormatCapability{
+          .bitDepth = 32,
+          .validBits = 32,
+          .isFloat = true,
+        };
       case SPA_AUDIO_FORMAT_F64_LE:
-      case SPA_AUDIO_FORMAT_F64_BE: return 64;
-      default: return 0;
+      case SPA_AUDIO_FORMAT_F64_BE:
+        return ao::audio::SampleFormatCapability{
+          .bitDepth = 64,
+          .validBits = 64,
+          .isFloat = true,
+        };
+      default: return std::nullopt;
+    }
+  }
+
+  void addSampleFormatCapability(ao::audio::DeviceCapabilities& caps,
+                                 ao::audio::SampleFormatCapability const& capability)
+  {
+    if (!std::ranges::contains(caps.sampleFormats, capability))
+    {
+      caps.sampleFormats.push_back(capability);
+    }
+
+    if (!capability.isFloat && capability.bitDepth == capability.validBits &&
+        !std::ranges::contains(caps.bitDepths, capability.bitDepth))
+    {
+      caps.bitDepths.push_back(capability.bitDepth);
     }
   }
 
@@ -285,11 +330,9 @@ namespace ao::audio::backend
 
         for (auto fmt : formats)
         {
-          auto const bd = spaFormatToBitDepth(fmt);
-
-          if (bd > 0 && !std::ranges::contains(caps.bitDepths, bd))
+          if (auto const optCapability = sampleFormatCapabilityFromSpaFormat(fmt))
           {
-            caps.bitDepths.push_back(bd);
+            addSampleFormatCapability(caps, *optCapability);
           }
         }
       }

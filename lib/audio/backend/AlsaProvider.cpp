@@ -25,6 +25,22 @@ namespace ao::audio::backend
   namespace
   {
     constexpr int kUdevPollTimeoutMs = 500;
+
+    void addSampleFormatCapability(ao::audio::DeviceCapabilities& caps,
+                                   ao::audio::SampleFormatCapability const& capability)
+    {
+      if (!std::ranges::contains(caps.sampleFormats, capability))
+      {
+        caps.sampleFormats.push_back(capability);
+      }
+
+      if (!capability.isFloat && capability.bitDepth == capability.validBits &&
+          !std::ranges::contains(caps.bitDepths, capability.bitDepth))
+      {
+        caps.bitDepths.push_back(capability.bitDepth);
+      }
+    }
+
     ao::audio::DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
     {
       auto caps = ao::audio::DeviceCapabilities{};
@@ -51,26 +67,54 @@ namespace ao::audio::backend
         }
       }
 
-      for (auto const depth : std::to_array({16, 24, 32}))
+      struct AlsaFormatProbe final
       {
-        bool supported = false;
-        if (depth == 16)
-        {
-          supported = (::snd_pcm_hw_params_test_format(tempPcm, params, SND_PCM_FORMAT_S16_LE) == 0);
-        }
-        else if (depth == 24)
-        {
-          supported = (::snd_pcm_hw_params_test_format(tempPcm, params, SND_PCM_FORMAT_S24_3LE) == 0);
-        }
-        else if (depth == 32)
-        {
-          supported = (::snd_pcm_hw_params_test_format(tempPcm, params, SND_PCM_FORMAT_S32_LE) == 0) ||
-                      (::snd_pcm_hw_params_test_format(tempPcm, params, SND_PCM_FORMAT_S24_LE) == 0);
-        }
+        ::snd_pcm_format_t alsaFormat;
+        ao::audio::SampleFormatCapability capability;
+      };
 
-        if (supported)
+      for (auto const& probe : std::to_array<AlsaFormatProbe>({
+             {
+               .alsaFormat = SND_PCM_FORMAT_S16_LE,
+               .capability =
+                 {
+                   .bitDepth = 16,
+                   .validBits = 16,
+                   .isFloat = false,
+                 },
+             },
+             {
+               .alsaFormat = SND_PCM_FORMAT_S24_3LE,
+               .capability =
+                 {
+                   .bitDepth = 24,
+                   .validBits = 24,
+                   .isFloat = false,
+                 },
+             },
+             {
+               .alsaFormat = SND_PCM_FORMAT_S24_LE,
+               .capability =
+                 {
+                   .bitDepth = 32,
+                   .validBits = 24,
+                   .isFloat = false,
+                 },
+             },
+             {
+               .alsaFormat = SND_PCM_FORMAT_S32_LE,
+               .capability =
+                 {
+                   .bitDepth = 32,
+                   .validBits = 32,
+                   .isFloat = false,
+                 },
+             },
+           }))
+      {
+        if (::snd_pcm_hw_params_test_format(tempPcm, params, probe.alsaFormat) == 0)
         {
-          caps.bitDepths.push_back(static_cast<std::uint8_t>(depth));
+          addSampleFormatCapability(caps, probe.capability);
         }
       }
 

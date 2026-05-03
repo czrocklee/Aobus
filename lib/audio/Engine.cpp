@@ -123,6 +123,11 @@ namespace ao::audio
     }
   }
 
+  void Engine::updateDevice(Device const& device)
+  {
+    _currentDevice = device;
+  }
+
   void Engine::setOnTrackEnded(std::function<void()> callback)
   {
     auto const lock = std::lock_guard<std::mutex>{_stateMutex};
