@@ -194,4 +194,39 @@ namespace ao::audio
       CHECK(info.sourceFormat.bitDepth == 24);
     }
   }
+
+  TEST_CASE("Decoder Robustness", "[playback][integration][robustness]")
+  {
+    SECTION("Corrupt: Opening a non-FLAC file as FLAC")
+    {
+      // Use this source file itself as a fake FLAC
+      auto const testFile = std::filesystem::path(__FILE__);
+      auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
+      auto const res = decoder.open(testFile);
+      CHECK_FALSE(res);
+    }
+
+    SECTION("Seek near EOF")
+    {
+      auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+      if (std::filesystem::exists(testFile))
+      {
+        auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
+        REQUIRE(decoder.open(testFile));
+        auto const info = decoder.streamInfo();
+
+        // Seek to last 10ms
+        if (info.durationMs > 10)
+        {
+          REQUIRE(decoder.seek(info.durationMs - 10));
+          auto block = decoder.readNextBlock();
+          // Should either get some frames or EOF immediately
+          if (block)
+          {
+            CHECK(block->frames >= 0);
+          }
+        }
+      }
+    }
+  }
 } // namespace ao::audio

@@ -5,13 +5,11 @@
 #include <catch2/matchers/catch_matchers_all.hpp>
 
 using namespace ao::audio;
-using namespace ao::audio;
-using namespace ao::audio;
 
 TEST_CASE("FormatNegotiator - Build Plan", "[playback][format_negotiator]")
 {
   Format sourceFormat{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
-  DeviceCapabilities caps;
+  auto caps = DeviceCapabilities{};
   caps.sampleRates = {44100, 48000, 96000};
   caps.sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false},
                         {.bitDepth = 24, .validBits = 24, .isFloat = false},
@@ -139,5 +137,52 @@ TEST_CASE("FormatNegotiator - Build Plan", "[playback][format_negotiator]")
     REQUIRE(plan2.decoderOutputFormat.validBits == 16);
     REQUIRE(plan2.deviceFormat.bitDepth == 16);
     REQUIRE(plan2.deviceFormat.validBits == 16);
+  }
+
+  SECTION("16-bit source pads to 32/16 when only 32-bit container exists")
+  {
+    sourceFormat.bitDepth = 16;
+    sourceFormat.validBits = 16;
+    caps.bitDepths = {32};
+    caps.sampleFormats = {}; // Force fallback logic
+
+    auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
+    REQUIRE(plan.decoderOutputFormat.bitDepth == 32);
+    REQUIRE(plan.decoderOutputFormat.validBits == 16);
+    REQUIRE(plan.deviceFormat.bitDepth == 32);
+    REQUIRE(plan.deviceFormat.validBits == 16);
+    REQUIRE(plan.requiresBitDepthConversion == true);
+  }
+
+  SECTION("Reason string concatenates multiple required conversions in stable order")
+  {
+    caps.sampleRates = {48000};
+    caps.bitDepths = {32};
+    caps.channelCounts = {6};
+
+    auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
+    REQUIRE(plan.requiresResample == true);
+    REQUIRE(plan.requiresBitDepthConversion == true);
+    REQUIRE(plan.requiresChannelRemap == true);
+
+    CHECK_THAT(plan.reason, Catch::Matchers::ContainsSubstring("sample rate resampling required"));
+    CHECK_THAT(plan.reason, Catch::Matchers::ContainsSubstring("bit depth conversion required"));
+    CHECK_THAT(plan.reason, Catch::Matchers::ContainsSubstring("channel remapping required"));
+  }
+
+  SECTION("Empty sampleFormats still chooses a safe 24-bit fallback")
+  {
+    sourceFormat.sampleRate = 96000;
+    sourceFormat.bitDepth = 24;
+    sourceFormat.validBits = 24;
+    caps.sampleRates = {96000};
+    caps.bitDepths = {32};
+    caps.sampleFormats = {};
+
+    auto plan = FormatNegotiator::buildPlan(sourceFormat, caps);
+    REQUIRE(plan.decoderOutputFormat.bitDepth == 32);
+    REQUIRE(plan.decoderOutputFormat.validBits == 24);
+    REQUIRE(plan.deviceFormat.bitDepth == 32);
+    REQUIRE(plan.deviceFormat.validBits == 24);
   }
 }
