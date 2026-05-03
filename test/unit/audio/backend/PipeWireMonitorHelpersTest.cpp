@@ -78,14 +78,14 @@ TEST_CASE("PipeWireMonitorHelpers - Format Capabilities", "[audio][pipewire][mon
 
   SECTION("addSampleFormatCapability")
   {
-    DeviceCapabilities caps;
-    SampleFormatCapability cap{.bitDepth = 32, .validBits = 24, .isFloat = false};
+    auto caps = DeviceCapabilities{};
+    auto cap = SampleFormatCapability{.bitDepth = 32, .validBits = 24, .isFloat = false};
 
     addSampleFormatCapability(caps, cap);
     CHECK(caps.sampleFormats.size() == 1);
     CHECK(caps.bitDepths.empty()); // Not added because validBits != bitDepth
 
-    SampleFormatCapability cap16{.bitDepth = 16, .validBits = 16, .isFloat = false};
+    auto cap16 = SampleFormatCapability{.bitDepth = 16, .validBits = 16, .isFloat = false};
     addSampleFormatCapability(caps, cap16);
     CHECK(caps.sampleFormats.size() == 2);
     CHECK(caps.bitDepths == std::vector<uint8_t>{16});
@@ -99,9 +99,9 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
 
   SECTION("parseEnumFormat - Sample Rates and Channels")
   {
-    struct spa_pod_frame f;
-    spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
-    spa_pod_builder_add(&b,
+    auto f = ::spa_pod_frame{};
+    ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
+    ::spa_pod_builder_add(&b,
                         SPA_FORMAT_mediaType,
                         SPA_POD_Id(SPA_MEDIA_TYPE_audio),
                         SPA_FORMAT_mediaSubtype,
@@ -113,17 +113,17 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
                         0);
 
     // Add rate as a range
-    spa_pod_builder_prop(&b, SPA_FORMAT_AUDIO_rate, 0);
-    struct spa_pod_frame f2;
-    spa_pod_builder_push_choice(&b, &f2, SPA_CHOICE_Range, 0);
-    spa_pod_builder_int(&b, 48000);  // default
-    spa_pod_builder_int(&b, 44100);  // min
-    spa_pod_builder_int(&b, 192000); // max
-    spa_pod_builder_pop(&b, &f2);
+    ::spa_pod_builder_prop(&b, SPA_FORMAT_AUDIO_rate, 0);
+    auto f2 = ::spa_pod_frame{};
+    ::spa_pod_builder_push_choice(&b, &f2, SPA_CHOICE_Range, 0);
+    ::spa_pod_builder_int(&b, 48000);  // default
+    ::spa_pod_builder_int(&b, 44100);  // min
+    ::spa_pod_builder_int(&b, 192000); // max
+    ::spa_pod_builder_pop(&b, &f2);
 
-    struct spa_pod* pod = (struct spa_pod*)spa_pod_builder_pop(&b, &f);
+    auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-    DeviceCapabilities caps;
+    auto caps = DeviceCapabilities{};
     parseEnumFormat(pod, caps);
 
     CHECK_FALSE(caps.sampleRates.empty());
@@ -138,9 +138,9 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
 
   SECTION("parseEnumFormat - Discrete Sample Rates")
   {
-    struct spa_pod_frame f;
-    spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
-    spa_pod_builder_add(&b,
+    auto f = ::spa_pod_frame{};
+    ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
+    ::spa_pod_builder_add(&b,
                         SPA_FORMAT_mediaType,
                         SPA_POD_Id(SPA_MEDIA_TYPE_audio),
                         SPA_FORMAT_mediaSubtype,
@@ -152,17 +152,17 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
                         0);
 
     // Add rate as an enum
-    spa_pod_builder_prop(&b, SPA_FORMAT_AUDIO_rate, 0);
-    struct spa_pod_frame f2;
-    spa_pod_builder_push_choice(&b, &f2, SPA_CHOICE_Enum, 0);
-    spa_pod_builder_int(&b, 44100); // default
-    spa_pod_builder_int(&b, 44100); // choice 1
-    spa_pod_builder_int(&b, 48000); // choice 2
-    spa_pod_builder_pop(&b, &f2);
+    ::spa_pod_builder_prop(&b, SPA_FORMAT_AUDIO_rate, 0);
+    auto f2 = ::spa_pod_frame{};
+    ::spa_pod_builder_push_choice(&b, &f2, SPA_CHOICE_Enum, 0);
+    ::spa_pod_builder_int(&b, 44100); // default
+    ::spa_pod_builder_int(&b, 44100); // choice 1
+    ::spa_pod_builder_int(&b, 48000); // choice 2
+    ::spa_pod_builder_pop(&b, &f2);
 
-    struct spa_pod* pod = (struct spa_pod*)spa_pod_builder_pop(&b, &f);
+    auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-    DeviceCapabilities caps;
+    auto caps = DeviceCapabilities{};
     parseEnumFormat(pod, caps);
 
     CHECK(caps.sampleRates.size() == 2);
@@ -173,12 +173,12 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
 
   SECTION("mergeSinkProps - volume and mute")
   {
-    struct spa_pod_frame f;
-    spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
-    spa_pod_builder_add(&b, SPA_PROP_volume, SPA_POD_Float(0.5F), SPA_PROP_mute, SPA_POD_Bool(true), 0);
-    struct spa_pod* pod = (struct spa_pod*)spa_pod_builder_pop(&b, &f);
+    auto f = ::spa_pod_frame{};
+    ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+    ::spa_pod_builder_add(&b, SPA_PROP_volume, SPA_POD_Float(0.5F), SPA_PROP_mute, SPA_POD_Bool(true), 0);
+    auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-    SinkProps props;
+    auto props = SinkProps{};
     mergeSinkProps(props, pod);
     CHECK(std::abs(props.volume - 0.5F) < 1e-4F);
     CHECK(props.isMuted == true);
@@ -188,13 +188,13 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
   SECTION("mergeSinkProps - channel volumes")
   {
     float vols[] = {1.0F, 0.8F};
-    struct spa_pod_frame f;
-    spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
-    spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
-    spa_pod_builder_array(&b, sizeof(float), SPA_TYPE_Float, 2, vols);
-    struct spa_pod* pod = (struct spa_pod*)spa_pod_builder_pop(&b, &f);
+    auto f = ::spa_pod_frame{};
+    ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+    ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+    ::spa_pod_builder_array(&b, sizeof(float), SPA_TYPE_Float, 2, vols);
+    auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-    SinkProps props;
+    auto props = SinkProps{};
     mergeSinkProps(props, pod);
     REQUIRE(props.channelVolumes.size() == 2);
     CHECK(props.channelVolumes[0] == 1.0F);
@@ -204,7 +204,7 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
 
   SECTION("SinkProps::isUnity - corner cases")
   {
-    SinkProps props;
+    auto props = SinkProps{};
     CHECK(props.isUnity()); // Default is 1.0
 
     props.volume = 0.99999F;
@@ -225,4 +225,3 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
     CHECK_FALSE(props.isUnity());
   }
 }
-

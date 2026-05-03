@@ -65,8 +65,8 @@ namespace ao::audio::backend
     // Event Handlers
     void handleStreamProcess() const;
     void handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param);
-    void handleStreamStateChanged(enum pw_stream_state oldState,
-                                  enum pw_stream_state newState,
+    void handleStreamStateChanged(::pw_stream_state oldState,
+                                  ::pw_stream_state newState,
                                   char const* errorMessage);
     void handleStreamDrained();
 
@@ -96,8 +96,8 @@ namespace ao::audio::backend
       static_cast<PipeWireBackend::Impl*>(data)->handleStreamParamChanged(id, param);
     }
     void onStreamStateChanged(void* data,
-                              enum pw_stream_state oldState,
-                              enum pw_stream_state newState,
+                              ::pw_stream_state oldState,
+                              ::pw_stream_state newState,
                               char const* errorMessage)
     {
       static_cast<PipeWireBackend::Impl*>(data)->handleStreamStateChanged(oldState, newState, errorMessage);
@@ -185,8 +185,8 @@ namespace ao::audio::backend
     }
   }
 
-  void PipeWireBackend::Impl::handleStreamStateChanged([[maybe_unused]] enum pw_stream_state oldState,
-                                                       enum pw_stream_state newState,
+  void PipeWireBackend::Impl::handleStreamStateChanged([[maybe_unused]] ::pw_stream_state oldState,
+                                                       ::pw_stream_state newState,
                                                        char const* errorMessage)
   {
     if (newState == PW_STREAM_STATE_ERROR)
@@ -254,7 +254,7 @@ namespace ao::audio::backend
     }
 
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
-    ::pw_properties* rawProps = ::pw_properties_new(PW_KEY_MEDIA_TYPE, // NOLINT(cppcoreguidelines-pro-type-vararg)
+    auto* rawProps = ::pw_properties_new(PW_KEY_MEDIA_TYPE, // NOLINT(cppcoreguidelines-pro-type-vararg)
                                                     "Audio",
                                                     PW_KEY_MEDIA_CATEGORY,
                                                     "Playback",
@@ -299,9 +299,9 @@ namespace ao::audio::backend
     }
 
     auto buffer = std::array<std::uint8_t, 1024>{};
-    ::spa_pod_builder builder = {};
+    auto builder = ::spa_pod_builder{};
     ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
-    ::spa_pod_frame frame{};
+    auto frame = ::spa_pod_frame{};
     ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
     ::spa_pod_builder_add(&builder, // NOLINT(cppcoreguidelines-pro-type-vararg)
                           SPA_FORMAT_mediaType,
@@ -324,7 +324,7 @@ namespace ao::audio::backend
                             SPA_POD_Array(sizeof(std::uint32_t), SPA_TYPE_Id, position.size(), position.data()),
                             0);
     }
-    ::spa_pod const* param = static_cast<::spa_pod*>(::spa_pod_builder_pop(&builder, &frame));
+    auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
     std::array<::spa_pod const*, 1> params = {param};
     auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
                                                 PW_STREAM_FLAG_RT_PROCESS);
