@@ -47,6 +47,11 @@ namespace ao::audio::backend::detail
     std::vector<float> channelVolumes;
     bool isSoftMuted = false;
     std::vector<float> softVolumes;
+
+    /**
+     * @brief Checks if all volume components are at unity (1.0).
+     */
+    bool isUnity() const noexcept;
   };
 
   /**

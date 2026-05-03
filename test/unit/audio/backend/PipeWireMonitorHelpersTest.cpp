@@ -10,6 +10,7 @@ extern "C"
 #include <pipewire/keys.h>
 #include <spa/param/audio/raw.h>
 #include <spa/param/format.h>
+#include <spa/param/props.h>
 #include <spa/pod/builder.h>
 #include <spa/utils/dict.h>
 }
@@ -167,5 +168,65 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
     CHECK(caps.sampleRates.size() == 2);
     CHECK(std::ranges::contains(caps.sampleRates, 44100u));
     CHECK(std::ranges::contains(caps.sampleRates, 48000u));
+  }
+}
+
+TEST_CASE("PipeWireMonitorHelpers - Props Parsing", "[audio][pipewire][monitor]")
+{
+  uint8_t buffer[1024];
+  struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
+
+  SECTION("mergeSinkProps - volume and mute")
+  {
+    struct spa_pod_frame f;
+    spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+    spa_pod_builder_add(&b, SPA_PROP_volume, SPA_POD_Float(0.5F), SPA_PROP_mute, SPA_POD_Bool(true), 0);
+    struct spa_pod* pod = (struct spa_pod*)spa_pod_builder_pop(&b, &f);
+
+    SinkProps props;
+    mergeSinkProps(props, pod);
+    CHECK(std::abs(props.volume - 0.5F) < 1e-4F);
+    CHECK(props.isMuted == true);
+    CHECK_FALSE(props.isUnity());
+  }
+
+  SECTION("mergeSinkProps - channel volumes")
+  {
+    float vols[] = {1.0F, 0.8F};
+    struct spa_pod_frame f;
+    spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+    spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+    spa_pod_builder_array(&b, sizeof(float), SPA_TYPE_Float, 2, vols);
+    struct spa_pod* pod = (struct spa_pod*)spa_pod_builder_pop(&b, &f);
+
+    SinkProps props;
+    mergeSinkProps(props, pod);
+    REQUIRE(props.channelVolumes.size() == 2);
+    CHECK(props.channelVolumes[0] == 1.0F);
+    CHECK(props.channelVolumes[1] == 0.8F);
+    CHECK_FALSE(props.isUnity());
+  }
+
+  SECTION("SinkProps::isUnity - corner cases")
+  {
+    SinkProps props;
+    CHECK(props.isUnity()); // Default is 1.0
+
+    props.volume = 0.99999F;
+    CHECK(props.isUnity()); // Within tolerance
+
+    props.volume = 0.999F;
+    CHECK_FALSE(props.isUnity());
+
+    props.volume = 1.0F;
+    props.channelVolumes = {1.0F, 1.0F, 0.99999F};
+    CHECK(props.isUnity());
+
+    props.channelVolumes[2] = 0.99F;
+    CHECK_FALSE(props.isUnity());
+
+    props.channelVolumes.clear();
+    props.softVolumes = {1.0F, 0.5F};
+    CHECK_FALSE(props.isUnity());
   }
 }
