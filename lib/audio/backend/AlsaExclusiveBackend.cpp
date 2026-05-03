@@ -39,6 +39,7 @@ namespace ao::audio::backend
         }
       }
     };
+
     using AlsaPcmPtr = std::unique_ptr<::snd_pcm_t, AlsaPcmDeleter>;
 
     std::string deviceName;
@@ -64,12 +65,16 @@ namespace ao::audio::backend
     ::snd_pcm_uframes_t periodSize = 0;
     ::snd_pcm_hw_params_t* params = nullptr;
     snd_pcm_hw_params_alloca(&params);
+
     if (::snd_pcm_hw_params_current(pcm.get(), params) == 0)
     {
       ::snd_pcm_hw_params_get_period_size(params, &periodSize, nullptr);
     }
 
-    if (periodSize == 0) periodSize = 1024;
+    if (periodSize == 0)
+    {
+      periodSize = 1024;
+    }
 
     std::size_t const bytesPerFrame = (format.bitDepth / 8) * format.channels;
 
@@ -106,8 +111,14 @@ namespace ao::audio::backend
         continue;
       }
 
-      // Calculate destination address in the MMAP buffer
-      auto* const dst = static_cast<std::byte*>(areas[0].addr) + (offset * bytesPerFrame);
+      if (areas == nullptr || areas[0].addr == nullptr)
+      {
+        continue;
+      }
+
+      // Use the ALSA areas formula to compute the correct destination pointer,
+      // respecting any hardware-specific first/step values.
+      auto* const dst = static_cast<std::byte*>(areas[0].addr) + (areas[0].first + offset * areas[0].step) / 8;
       auto const bytesToRead = static_cast<std::size_t>(frames) * bytesPerFrame;
 
       std::size_t const bytesRead = callbacks.readPcm(callbacks.userData, {dst, bytesToRead});
@@ -132,7 +143,12 @@ namespace ao::audio::backend
         if (callbacks.isSourceDrained(callbacks.userData))
         {
           ::snd_pcm_drain(pcm.get());
-          if (callbacks.onDrainComplete != nullptr) callbacks.onDrainComplete(callbacks.userData);
+
+          if (callbacks.onDrainComplete != nullptr)
+          {
+            callbacks.onDrainComplete(callbacks.userData);
+          }
+
           break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -231,6 +247,7 @@ namespace ao::audio::backend
       if (format.bitDepth == 16)
       {
         alsaFormat = SND_PCM_FORMAT_S32_LE;
+
         if (::snd_pcm_hw_params_set_format(safePcm.get(), params, alsaFormat) < 0)
         {
           return ao::makeError(ao::Error::Code::FormatRejected, "Hardware supports neither S16_LE nor S32_LE");
@@ -243,6 +260,7 @@ namespace ao::audio::backend
     }
 
     std::uint32_t rate = format.sampleRate;
+
     if (::snd_pcm_hw_params_set_rate_near(safePcm.get(), params, &rate, 0) < 0)
     {
       return ao::makeError(ao::Error::Code::InitFailed, "Failed to set rate");
@@ -293,6 +311,18 @@ namespace ao::audio::backend
 
     _impl->format = format;
     _impl->format.sampleRate = rate;
+
+    // Reflect the actually negotiated ALSA format so that bytesPerFrame in
+    // the playback loop matches the hardware buffer layout.
+    if (alsaFormat == SND_PCM_FORMAT_S32_LE || alsaFormat == SND_PCM_FORMAT_S24_LE)
+    {
+      _impl->format.bitDepth = 32;
+    }
+    else if (alsaFormat == SND_PCM_FORMAT_S24_3LE)
+    {
+      _impl->format.bitDepth = 24;
+    }
+
     _impl->pcm = std::move(safePcm);
 
     if (_impl->callbacks.onRouteReady != nullptr)
