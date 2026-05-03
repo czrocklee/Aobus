@@ -25,8 +25,7 @@ namespace ao::audio::backend::detail
   bool isSinkMediaClass(std::string_view mediaClass) noexcept
   {
     if (!mediaClass.contains("Audio")) return false;
-    return mediaClass.ends_with("/Sink") || mediaClass.ends_with("/Duplex") || mediaClass == "Audio/Sink" ||
-           mediaClass == "Audio/Duplex";
+    return mediaClass.ends_with("/Sink") || mediaClass.ends_with("/Duplex");
   }
 
   std::string lookupProperty(::spa_dict const* props, char const* key) noexcept

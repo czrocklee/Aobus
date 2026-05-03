@@ -313,11 +313,6 @@ namespace ao::gtk
   {
     ensureTrackPageCss();
 
-    // Theme auto-refresh logic: Watch for system-level theme changes
-    auto settings = Gtk::Settings::get_default();
-    settings->property_gtk_theme_name().signal_changed().connect([]() { ensureTrackPageCss(true); });
-    settings->property_gtk_application_prefer_dark_theme().signal_changed().connect([]() { ensureTrackPageCss(true); });
-
     // Subscribe to global theme refresh signal (e.g. triggered by SIGUSR1 or DBus in main.cpp)
     signalThemeRefresh().connect(
       [this]()

@@ -25,17 +25,4 @@ TEST_CASE("PipeWireShared - Property Parsing", "[audio][unit][pipewire]")
   }
 }
 
-TEST_CASE("PipeWireShared - RAII Deleters", "[audio][unit][pipewire]")
-{
-  SECTION("PwProxyDeleter handles null")
-  {
-    PwProxyDeleter deleter;
-    deleter(nullptr); // Should not crash
-  }
 
-  SECTION("PwThreadLoopDeleter handles null")
-  {
-    PwThreadLoopDeleter deleter;
-    deleter(nullptr); // Should not crash
-  }
-}

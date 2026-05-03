@@ -11,8 +11,8 @@ TEST_CASE("AlsaProviderHelpers - Logic", "[audio][alsa][monitor]")
 {
   SECTION("addSampleFormatCapability - Unique")
   {
-    DeviceCapabilities caps;
-    SampleFormatCapability cap{.bitDepth = 16, .validBits = 16, .isFloat = false};
+    auto caps = DeviceCapabilities{};
+    auto cap = SampleFormatCapability{.bitDepth = 16, .validBits = 16, .isFloat = false};
 
     addSampleFormatCapability(caps, cap);
     CHECK(caps.sampleFormats.size() == 1);
