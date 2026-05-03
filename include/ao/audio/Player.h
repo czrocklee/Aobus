@@ -52,11 +52,6 @@ namespace ao::audio
     void handleRouteChanged(EngineRouteSnapshot const& snapshot, std::uint64_t generation);
 
   private:
-    void handleDevicesChanged(IBackendProvider* provider, std::vector<Device> const& devices);
-    void handleSystemGraphChanged(flow::Graph const& graph, std::uint64_t generation);
-    void updateMergedGraph();
-    void analyzeAudioQuality();
-
     struct ProviderRecord
     {
       std::unique_ptr<IBackendProvider> provider;
@@ -69,6 +64,11 @@ namespace ao::audio
       BackendKind kind;
       std::string deviceId;
     };
+
+    void handleDevicesChanged(IBackendProvider* provider, std::vector<Device> const& devices);
+    void handleSystemGraphChanged(flow::Graph const& graph, std::uint64_t generation);
+    void updateMergedGraph();
+    void analyzeAudioQuality();
 
     std::vector<std::unique_ptr<ProviderRecord>> _providers;
     std::optional<PendingOutput> _pendingOutput;

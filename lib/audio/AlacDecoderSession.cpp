@@ -50,15 +50,15 @@ namespace ao::audio
     ao::utility::MappedFile mappedFile;
     std::unique_ptr<Demuxer> demuxer;
 
-    Impl(Format output)
-      : requestedOutput(output)
+    Impl(Format const& output)
+      : requestedOutput{output}
     {
       decoder = std::make_unique<ALACDecoder>();
     }
   };
 
   AlacDecoderSession::AlacDecoderSession(Format outputFormat)
-    : _impl(std::make_unique<Impl>(outputFormat))
+    : _impl{std::make_unique<Impl>(outputFormat)}
   {
   }
 
@@ -190,10 +190,11 @@ namespace ao::audio
     {
       std::vector<std::byte> sourcePcm(static_cast<std::size_t>(maxFrames) * sourceBytesPerFrame);
       auto bitBuffer = BitBuffer{};
-      BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
+      ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
 
       auto const status = _impl->decoder->Decode(
         &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{sourcePcm}), maxFrames, channels, &numFrames);
+
       if (status != 0)
       {
         return ao::makeError(ao::Error::Code::DecodeFailed, "ALAC decode failed");
@@ -213,6 +214,7 @@ namespace ao::audio
           {
             val |= kSignExtensionMask;
           }
+
           *dst++ = val;
           src += kBytesPer24BitSample;
         }

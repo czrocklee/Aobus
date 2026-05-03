@@ -19,7 +19,7 @@ namespace ao::library
     auto const reader = _database.reader(txn);
     _idToStringStorage.reserve(reader.maxKey() + kExtraCapacity);
 
-    for (auto [id, buf] : reader)
+    for (auto const& [id, buf] : reader)
     {
       auto const& str = _idToStringStorage.emplace_back(utility::bytes::stringView(buf));
       _stringToId.emplace(str, DictionaryId{id});

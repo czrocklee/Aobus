@@ -18,6 +18,5 @@ namespace ao::audio
   /**
    * @brief Factory function to create a decoder session for a given file.
    */
-  std::unique_ptr<IDecoderSession> createDecoderSession(std::filesystem::path const& filePath,
-                                                                  Format outputFormat);
+  std::unique_ptr<IDecoderSession> createDecoderSession(std::filesystem::path const& filePath, Format outputFormat);
 } // namespace ao::audio

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/PipeWireProvider.h>
 #include <ao/audio/backend/PipeWireBackend.h>
 #include <ao/audio/backend/PipeWireMonitor.h>
+#include <ao/audio/backend/PipeWireProvider.h>
 #include <ao/audio/backend/detail/PipeWireShared.h>
 
 namespace ao::audio::backend
@@ -30,7 +30,7 @@ namespace ao::audio::backend
   };
 
   PipeWireProvider::PipeWireProvider()
-    : _impl(std::make_unique<Impl>())
+    : _impl{std::make_unique<Impl>()}
   {
   }
   PipeWireProvider::~PipeWireProvider() = default;

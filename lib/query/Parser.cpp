@@ -38,7 +38,8 @@ namespace
 
   constexpr auto kBarewordIdentifier = []
   {
-    auto id = dsl::identifier(dsl::ascii::alpha_digit_underscore);
+    auto const id = dsl::identifier(dsl::ascii::alpha_digit_underscore);
+
     return id.reserve(LEXY_KEYWORD("and", id), LEXY_KEYWORD("or", id), LEXY_KEYWORD("not", id));
   }();
 
@@ -69,7 +70,8 @@ namespace
           [](auto lexeme) {  // NOLINT(readability-named-parameter)
               auto str = lexeme | std::ranges::to<std::string>();
               
-              if (!str.empty() && (str.back() == '\'' || str.back() == '"')) {
+              if (!str.empty() && (str.back() == '\'' || str.back() == '"'))
+              {
                   str.pop_back();
               }
               
@@ -219,12 +221,14 @@ namespace ao::query
 {
   Expression parse(std::string_view expr)
   {
-    auto input = lexy::string_input<lexy::utf8_char_encoding>{expr};
+    auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr};
 
-    if (auto result = lexy::parse<Stmt>(input, lexy::noop); result.has_value())
+    if (auto optResult = lexy::parse<Stmt>(input, lexy::noop); optResult)
     {
-      auto root = Expression{std::move(result).value()};
+      auto root = Expression{std::move(optResult).value()};
+
       normalize(root);
+
       return root;
     }
 

@@ -59,10 +59,10 @@ namespace ao::audio::backend
 
   struct SinkProps final
   {
-    std::optional<float> volume;
-    std::optional<bool> mute;
+    float volume = 1.0F;
+    bool isMuted = false;
     std::vector<float> channelVolumes;
-    std::optional<bool> softMute;
+    bool isSoftMuted = false;
     std::vector<float> softVolumes;
   };
 
@@ -87,12 +87,14 @@ namespace ao::audio::backend
   std::string lookupProperty(::spa_dict const* props, char const* key)
   {
     auto const* value = props != nullptr ? ::spa_dict_lookup(props, key) : nullptr;
-    return value != nullptr ? std::string(value) : std::string{};
+
+    return value != nullptr ? std::string{value} : std::string{};
   }
 
   std::string formatStreamFormat(ao::audio::Format const& format)
   {
     auto const* const sampleType = format.isFloat ? "float" : "pcm";
+
     return std::format("{}Hz/{}-bit/{}ch {}", format.sampleRate, format.bitDepth, format.channels, sampleType);
   }
 
@@ -155,6 +157,7 @@ namespace ao::audio::backend
   {
     auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
     auto const type = SPA_POD_CHOICE_VALUE_TYPE(choice);
+
     if (n_vals == 0 || type != SPA_TYPE_Int)
     {
       return;
@@ -172,11 +175,12 @@ namespace ao::audio::backend
     }
     else if (choice_type == SPA_CHOICE_Range)
     {
-      std::int32_t min = (n_vals > 1) ? vals[1] : vals[0];
-      std::int32_t max = (n_vals > 2) ? vals[2] : min;
+      auto const min = (n_vals > 1) ? vals[1] : vals[0];
+      auto const max = (n_vals > 2) ? vals[2] : min;
 
       static constexpr auto commonRates =
         std::array<std::uint32_t, 8>{44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
+
       for (auto rate : commonRates)
       {
         if (rate >= static_cast<std::uint32_t>(min) && rate <= static_cast<std::uint32_t>(max))
@@ -184,6 +188,7 @@ namespace ao::audio::backend
           addUnique(output, rate);
         }
       }
+
       addUnique(output, static_cast<std::uint32_t>(vals[0]));
     }
   }
@@ -194,9 +199,11 @@ namespace ao::audio::backend
     {
       return;
     }
+
     if (::spa_pod_is_int(pod) != 0)
     {
       std::int32_t val = 0;
+
       if (::spa_pod_get_int(pod, &val) == 0)
       {
         addUnique(output, static_cast<std::uint32_t>(val));
@@ -216,9 +223,11 @@ namespace ao::audio::backend
     {
       return;
     }
+
     if (::spa_pod_is_id(pod) != 0)
     {
       std::uint32_t val = 0;
+
       if (::spa_pod_get_id(pod, &val) == 0)
       {
         if (!std::ranges::contains(output, val))
@@ -233,6 +242,7 @@ namespace ao::audio::backend
       auto const* choice = ao::utility::layout::view<::spa_pod_choice>(podSpan);
       auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
       auto const type = SPA_POD_CHOICE_VALUE_TYPE(choice);
+
       if (n_vals == 0 || type != SPA_TYPE_Id)
       {
         return;
@@ -272,9 +282,11 @@ namespace ao::audio::backend
       {
         std::vector<std::uint32_t> formats;
         collectIdValues(&prop->value, formats);
+
         for (auto fmt : formats)
         {
-          auto bd = spaFormatToBitDepth(fmt);
+          auto const bd = spaFormatToBitDepth(fmt);
+
           if (bd > 0 && !std::ranges::contains(caps.bitDepths, bd))
           {
             caps.bitDepths.push_back(bd);
@@ -289,11 +301,13 @@ namespace ao::audio::backend
       {
         std::vector<std::uint32_t> channels;
         collectIntValues(&prop->value, channels);
+
         for (auto ch : channels)
         {
           if (ch > 0 && ch <= 255) // NOLINT(readability-magic-numbers)
           {
             auto c8 = static_cast<std::uint8_t>(ch);
+
             if (!std::ranges::contains(caps.channelCounts, c8))
             {
               caps.channelCounts.push_back(c8);
@@ -323,6 +337,7 @@ namespace ao::audio::backend
     {
       return;
     }
+
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
     {
       float val = 0.0F;
@@ -331,26 +346,30 @@ namespace ao::audio::backend
         sinkProps.volume = val;
       }
     }
+
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
     {
       bool val = false;
       if (::spa_pod_get_bool(&prop->value, &val) == 0)
       {
-        sinkProps.mute = val;
+        sinkProps.isMuted = val;
       }
     }
+
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_channelVolumes))
     {
       copyFloatArray(prop->value, sinkProps.channelVolumes);
     }
+
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softMute))
     {
       bool val = false;
       if (::spa_pod_get_bool(&prop->value, &val) == 0)
       {
-        sinkProps.softMute = val;
+        sinkProps.isSoftMuted = val;
       }
     }
+
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softVolumes))
     {
       copyFloatArray(prop->value, sinkProps.softVolumes);
@@ -408,6 +427,7 @@ namespace ao::audio::backend
     {
       detail::ensurePipeWireInit();
       threadLoop.reset(::pw_thread_loop_new("PipeWireMonitor", nullptr));
+
       if (!threadLoop)
       {
         return;
@@ -435,6 +455,7 @@ namespace ao::audio::backend
       {
         ::pw_thread_loop_stop(threadLoop.get());
       }
+
       refreshEvent.reset();
       linkBindings.clear();
       streamNodeBindings.clear();
@@ -544,8 +565,8 @@ namespace ao::audio::backend
                           ::spa_dict const* props)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
-      auto const isNode = (std::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
-      auto const isLink = (std::strcmp(type, PW_TYPE_INTERFACE_Link) == 0);
+      auto const isNode = (::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
+      auto const isLink = (::strcmp(type, PW_TYPE_INTERFACE_Link) == 0);
 
       if (!isNode && !isLink)
       {
@@ -1138,7 +1159,7 @@ namespace ao::audio::backend
         return ao::audio::flow::Node{.id = std::format("{}", id),
                                      .type = ao::audio::flow::NodeType::Stream,
                                      .name = "RockStudio Playback",
-                                     .format = std::nullopt};
+                                     .optFormat = std::nullopt};
       }
 
       return ao::audio::flow::Node{};
@@ -1171,9 +1192,9 @@ namespace ao::audio::backend
     ao::audio::flow::Node node{
       .id = std::format("{}", id), .type = type, .name = name, .objectPath = it->second.objectPath};
 
-    if (auto const formatIt = nodeFormatMap.find(id); formatIt != nodeFormatMap.end())
+    if (auto const optFormatIt = nodeFormatMap.find(id); optFormatIt != nodeFormatMap.end())
     {
-      node.format = formatIt->second;
+      node.optFormat = optFormatIt->second;
     }
 
     if (isSink)
@@ -1184,12 +1205,12 @@ namespace ao::audio::backend
         auto const isUnity = [](float value)
         { return std::abs(value - 1.0F) < 1e-4F; }; // NOLINT(readability-magic-numbers)
 
-        bool const volumeAtUnity = (!sinkProps.volume || isUnity(*sinkProps.volume)) &&
-                                   std::ranges::all_of(sinkProps.channelVolumes, isUnity) &&
-                                   std::ranges::all_of(sinkProps.softVolumes, isUnity);
+        bool const volumeAtUnity = isUnity(sinkProps.volume) && (sinkProps.softVolumes.empty() ||
+                                                                 std::ranges::all_of(sinkProps.softVolumes, isUnity));
+        bool const isMuted = sinkProps.isMuted || sinkProps.isSoftMuted;
 
         node.volumeNotUnity = !volumeAtUnity;
-        node.isMuted = (sinkProps.mute && *sinkProps.mute) || (sinkProps.softMute && *sinkProps.softMute);
+        node.isMuted = isMuted;
       }
     }
 

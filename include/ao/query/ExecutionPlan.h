@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <ao/query/Expression.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackLayout.h>
+#include <ao/query/Expression.h>
 
 #include <cstdint>
 #include <optional>

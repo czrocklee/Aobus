@@ -36,6 +36,32 @@ namespace ao::gtk
     OutputChangedSignal& signalOutputChanged();
 
   private:
+    struct LastState final
+    {
+      ao::audio::Transport transport = ao::audio::Transport::Idle;
+      std::uint32_t positionSec = 0xFFFFFFFF;
+      std::uint32_t durationSec = 0xFFFFFFFF;
+      ao::audio::BackendKind backend = ao::audio::BackendKind::None;
+      std::string currentDeviceId;
+      std::vector<ao::audio::BackendSnapshot> availableBackends;
+      ao::audio::Quality quality = ao::audio::Quality::Unknown;
+    };
+
+    // Layout constants
+    static constexpr int kWidthChars = 7;
+    static constexpr int kOutputScrolledMinHeight = 320;
+    static constexpr int kOutputScrolledMinWidth = 360;
+    static constexpr double kLogoAspectRatio = 1.0;
+    static constexpr int kOutputIconVerticalInset = 6;
+    static constexpr int kOutputIconMinHeight = 22;
+    static constexpr double kFullCircleDegrees = 360.0;
+    static constexpr double kRotationPeriodSec = 7.331;
+    static constexpr double kStrokeWidthBase = 9.0;
+    static constexpr double kStrokeWidthVariance = 3.0;
+    static constexpr double kBreathingPeriodSec = 5.119;
+    static constexpr double kAnimationStepSec = 0.033;
+    static constexpr int kAnimationTimerMs = 33;
+
     void setupLayout();
     void setupSignals();
     void updateTransportButtons(ao::audio::Transport state);
@@ -77,23 +103,6 @@ namespace ao::gtk
     int _outputIconWidth = 0;
     int _outputIconHeight = 0;
 
-    struct LastState final
-    {
-      ao::audio::Transport transport = ao::audio::Transport::Idle;
-      std::uint32_t positionSec = 0xFFFFFFFF;
-      std::uint32_t durationSec = 0xFFFFFFFF;
-      ao::audio::BackendKind backend = ao::audio::BackendKind::None;
-      std::string currentDeviceId;
-      std::vector<ao::audio::BackendSnapshot> availableBackends;
-      ao::audio::Quality quality = ao::audio::Quality::Unknown;
-    } _lastState;
-
-    // Layout constants
-    static constexpr int kWidthChars = 7;
-    static constexpr int kOutputScrolledMinHeight = 320;
-    static constexpr int kOutputScrolledMinWidth = 360;
-    static constexpr double kLogoAspectRatio = 1.0;
-    static constexpr int kOutputIconVerticalInset = 6;
-    static constexpr int kOutputIconMinHeight = 22;
+    LastState _lastState;
   };
 } // namespace ao::gtk

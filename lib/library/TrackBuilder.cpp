@@ -55,7 +55,7 @@ namespace ao::library
         builder.metadata().genre(dict.get(genreId));
       }
 
-      for (auto tagId : view.tags())
+      for (auto const tagId : view.tags())
       {
         builder.tags().add(dict.get(tagId));
       }
@@ -318,9 +318,9 @@ namespace ao::library
 
   std::uint32_t TrackBuilder::computeBloomFilter(std::span<DictionaryId const> tagIds)
   {
-    std::uint32_t bloom = 0;
+    auto bloom = std::uint32_t{0};
 
-    for (auto tagId : tagIds)
+    for (auto const tagId : tagIds)
     {
       bloom |= (std::uint32_t{1} << (tagId.value() & kBloomBitMask));
     }
@@ -330,8 +330,9 @@ namespace ao::library
 
   std::vector<std::byte> TrackBuilder::serializeHot(lmdb::WriteTransaction& txn, DictionaryStore& dict)
   {
-    auto prepared = PreparedHot{this, txn, dict};
+    auto const prepared = PreparedHot{this, txn, dict};
     auto result = std::vector<std::byte>(prepared.size());
+
     prepared.writeTo(result);
     return result;
   }

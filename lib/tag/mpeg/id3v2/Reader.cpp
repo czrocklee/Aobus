@@ -56,12 +56,13 @@ namespace ao::tag::mpeg::id3v2
                       void const* data,
                       std::size_t size)
     {
-      auto view = V23TextFrameView{data, size};
-      if (auto text = view.text(); !text.empty())
+      auto const view = V23TextFrameView{data, size};
+
+      if (auto const text = view.text(); !text.empty())
       {
-        if (auto value = parseUnsigned<std::uint16_t>(text))
+        if (auto const optValue = parseUnsigned<std::uint16_t>(text); optValue)
         {
-          (builder.metadata().*Setter)(*value);
+          (builder.metadata().*Setter)(*optValue);
         }
       }
     }
@@ -72,20 +73,20 @@ namespace ao::tag::mpeg::id3v2
                            void const* data,
                            std::size_t size)
     {
-      auto view = V23TextFrameView{data, size};
-      auto text = view.text();
-      auto slashPos = text.find('/');
+      auto const view = V23TextFrameView{data, size};
+      auto const text = view.text();
+      auto const slashPos = text.find('/');
 
-      if (auto value = parseUnsigned<std::uint16_t>(text.substr(0, slashPos)))
+      if (auto const optValue = parseUnsigned<std::uint16_t>(text.substr(0, slashPos)); optValue)
       {
-        (builder.metadata().*PrimarySetter)(*value);
+        (builder.metadata().*PrimarySetter)(*optValue);
       }
 
       if (slashPos != std::string_view::npos)
       {
-        if (auto value = parseUnsigned<std::uint16_t>(text.substr(slashPos + 1)))
+        if (auto const optValue = parseUnsigned<std::uint16_t>(text.substr(slashPos + 1)); optValue)
         {
-          (builder.metadata().*SecondarySetter)(*value);
+          (builder.metadata().*SecondarySetter)(*optValue);
         }
       }
     }
@@ -140,16 +141,16 @@ namespace ao::tag::mpeg::id3v2
 
       // TXXX format is "description\0value"
 
-      if (auto nullPos = text.find('\0'); nullPos != std::string_view::npos)
+      if (auto const nullPos = text.find('\0'); nullPos != std::string_view::npos)
       {
-        auto key = text.substr(0, nullPos);
-        auto value = text.substr(nullPos + 1);
+        auto const key = text.substr(0, nullPos);
+        auto const value = text.substr(nullPos + 1);
 
         if (key == "rating")
         {
-          if (auto rating = parseUnsigned<std::uint8_t>(value))
+          if (auto const optRating = parseUnsigned<std::uint8_t>(value); optRating)
           {
-            builder.metadata().rating(*rating);
+            builder.metadata().rating(*optRating);
           }
         }
         else if (key == "work" || key == "WORK" || key == "grouping" || key == "GROUPING")

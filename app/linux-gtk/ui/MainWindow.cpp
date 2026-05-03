@@ -372,7 +372,8 @@ namespace ao::gtk
     // Status bar at bottom
     _statusBar = std::make_unique<StatusBar>();
     _statusBar->signalNowPlayingClicked().connect(sigc::mem_fun(*this, &MainWindow::jumpToPlayingList));
-    _statusBar->signalOutputChanged().connect(sigc::mem_fun(*this, &MainWindow::onOutputChanged));
+
+    _playbackCoordinator->signalOutputChanged().connect(sigc::mem_fun(*this, &MainWindow::onOutputChanged));
 
     auto* statusSeparator = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
     mainBox->append(*statusSeparator);

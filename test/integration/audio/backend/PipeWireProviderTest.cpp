@@ -1,7 +1,7 @@
-#include <ao/audio/backend/PipeWireProvider.h>
-#include <ao/audio/backend/PipeWireBackend.h>
-#include <ao/audio/backend/detail/PipeWireShared.h>
 #include <ao/audio/IBackend.h>
+#include <ao/audio/backend/PipeWireBackend.h>
+#include <ao/audio/backend/PipeWireProvider.h>
+#include <ao/audio/backend/detail/PipeWireShared.h>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_all.hpp>

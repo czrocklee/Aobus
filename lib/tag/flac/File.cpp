@@ -36,9 +36,9 @@ namespace ao::tag::flac
     template<NumberSetter Setter>
     void handleNumber(ao::library::TrackBuilder& builder, std::string_view value)
     {
-      if (auto parsed = decodeUint16(value); parsed)
+      if (auto const optParsed = decodeUint16(value); optParsed)
       {
-        (builder.metadata().*Setter)(*parsed);
+        (builder.metadata().*Setter)(*optParsed);
       }
     }
 
@@ -69,7 +69,7 @@ namespace ao::tag::flac
 
     auto iter = MetadataBlockViewIterator{
       static_cast<char const*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};
-    auto end = MetadataBlockViewIterator{};
+    auto const end = MetadataBlockViewIterator{};
 
     for (; iter != end; ++iter)
     {
@@ -107,8 +107,8 @@ namespace ao::tag::flac
                 return;
               }
 
-              std::string_view key = comment.substr(0, pos);
-              std::string_view value = comment.substr(pos + 1);
+              auto const key = comment.substr(0, pos);
+              auto const value = comment.substr(pos + 1);
 
               if (auto const* entry = FlacVorbisDispatchTable::lookupVorbisField(key.data(), key.size()))
               {

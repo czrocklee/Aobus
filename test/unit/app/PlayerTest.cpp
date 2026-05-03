@@ -43,12 +43,12 @@ namespace
   EngineRouteSnapshot createBaseEngineRoute()
   {
     EngineRouteSnapshot engineSnap;
-    engineSnap.anchor = BackendRouteAnchor{.backend = BackendKind::None, .id = "mock-stream-id"};
+    engineSnap.optAnchor = BackendRouteAnchor{.backend = BackendKind::None, .id = "mock-stream-id"};
     engineSnap.flow.nodes.push_back(
       flow::Node{.id = "rs-decoder",
                  .type = flow::NodeType::Decoder,
                  .name = "Decoder",
-                 .format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
+                 .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
                  .volumeNotUnity = false,
                  .isMuted = false,
                  .isLossySource = false});
@@ -56,7 +56,7 @@ namespace
       flow::Node{.id = "rs-engine",
                  .type = flow::NodeType::Engine,
                  .name = "Engine",
-                 .format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
+                 .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
                  .volumeNotUnity = false,
                  .isMuted = false,
                  .isLossySource = false});
@@ -72,7 +72,7 @@ namespace
       flow::Node{.id = "mock-stream-id",
                  .type = flow::NodeType::Stream,
                  .name = "Mock Stream",
-                 .format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
+                 .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
                  .volumeNotUnity = false,
                  .isMuted = false,
                  .isLossySource = false});
@@ -80,7 +80,7 @@ namespace
       flow::Node{.id = "mock-sink-id",
                  .type = flow::NodeType::Sink,
                  .name = "Mock Sink",
-                 .format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
+                 .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
                  .volumeNotUnity = false,
                  .isMuted = false,
                  .isLossySource = false});
@@ -163,7 +163,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
 
   SECTION("Resampling Detected")
   {
-    systemGraph.nodes[1].format->sampleRate = 48000;
+    systemGraph.nodes[1].optFormat->sampleRate = 48000;
     player.handleRouteChanged(engineSnap, player._playbackGeneration);
     onGraphChanged(systemGraph);
 
@@ -215,7 +215,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
 
   SECTION("Lossless Bit-Depth Extension")
   {
-    systemGraph.nodes[1].format->bitDepth = 24;
+    systemGraph.nodes[1].optFormat->bitDepth = 24;
     player.handleRouteChanged(engineSnap, player._playbackGeneration);
     onGraphChanged(systemGraph);
 

@@ -5,8 +5,8 @@
 
 #include <lmdb.h>
 
-#include <memory>
 #include <ao/lmdb/Environment.h>
+#include <memory>
 
 namespace ao::lmdb
 {

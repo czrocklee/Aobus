@@ -5,9 +5,9 @@
 
 #include <ao/audio/Types.h>
 
+#include <ao/Error.h>
 #include <cstddef>
 #include <cstdint>
-#include <ao/Error.h>
 #include <span>
 #include <string>
 

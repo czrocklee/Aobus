@@ -61,5 +61,6 @@ namespace ao::audio::backend
     AlsaPcmPtr _pcm;
     std::jthread _thread;
     std::atomic<bool> _paused{false};
+    bool _canPause = false;
   };
 } // namespace ao::audio::backend

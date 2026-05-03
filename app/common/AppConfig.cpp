@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <ranges>
 #include <vector>
 
 namespace
@@ -38,8 +39,7 @@ namespace
 
   std::string getString(Glib::RefPtr<Glib::KeyFile> const& kf, char const* group, char const* key)
   {
-    return (kf->has_group(group) && kf->has_key(group, key)) ? static_cast<std::string>(kf->get_string(group, key))
-                                                             : std::string{};
+    return (kf->has_group(group) && kf->has_key(group, key)) ? std::string{kf->get_string(group, key)} : std::string{};
   }
 
   std::int32_t getInt(Glib::RefPtr<Glib::KeyFile> const& kf, char const* group, char const* key, std::int32_t def)
@@ -59,26 +59,15 @@ namespace
       return {};
     }
 
-    auto result = std::vector<std::string>{};
-    for (auto const& value : kf->get_string_list(group, key))
-    {
-      result.emplace_back(value);
-    }
-
-    return result;
+    return kf->get_string_list(group, key) |
+           std::ranges::views::transform([](auto const& value) { return std::string{value}; }) |
+           std::ranges::to<std::vector<std::string>>();
   }
 
   std::vector<Glib::ustring> toUstrings(std::vector<std::string> const& values)
   {
-    auto result = std::vector<Glib::ustring>{};
-    result.reserve(values.size());
-
-    for (auto const& value : values)
-    {
-      result.emplace_back(value);
-    }
-
-    return result;
+    return values | std::ranges::views::transform([](auto const& value) { return Glib::ustring{value}; }) |
+           std::ranges::to<std::vector<Glib::ustring>>();
   }
 
   std::string encodeColumnWidth(std::pair<std::string, std::int32_t> const& width)
@@ -118,7 +107,7 @@ namespace ao::app
       return config;
     }
 
-    auto keyFile = Glib::KeyFile::create();
+    auto const keyFile = Glib::KeyFile::create();
     keyFile->load_from_file(path.string());
 
     auto& ss = config._sessionState;
@@ -137,9 +126,9 @@ namespace ao::app
 
     for (auto const& entry : getStringList(keyFile, kTrackViewGroup, kColumnWidthsKey))
     {
-      if (auto width = decodeColumnWidth(entry))
+      if (auto const optWidth = decodeColumnWidth(entry); optWidth)
       {
-        tvs.columnWidths.insert_or_assign(width->first, width->second);
+        tvs.columnWidths.insert_or_assign(optWidth->first, optWidth->second);
       }
     }
 

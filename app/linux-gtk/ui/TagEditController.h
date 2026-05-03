@@ -60,11 +60,13 @@ namespace ao::gtk
     LibrarySession* _currentSession = nullptr;
 
     // The explicit selection to apply the tags to
-    std::optional<TrackSelectionContext> _activeSelection;
+    std::optional<TrackSelectionContext> _optActiveSelection;
 
     // Actions
     Glib::RefPtr<Gio::SimpleAction> _trackTagAddAction;
     Glib::RefPtr<Gio::SimpleAction> _trackTagRemoveAction;
     Glib::RefPtr<Gio::SimpleAction> _trackTagToggleAction;
+
+    std::unique_ptr<TagPopover> _tagPopover;
   };
 } // namespace ao::gtk

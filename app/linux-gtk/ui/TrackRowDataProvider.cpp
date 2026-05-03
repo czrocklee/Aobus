@@ -206,7 +206,7 @@ namespace ao::gtk
     // Cover art
     if (auto const coverArtId = metadata.coverArtId(); coverArtId != 0)
     {
-      desc.coverArtId = ao::ResourceId{coverArtId};
+      desc.optCoverArtId = ao::ResourceId{coverArtId};
     }
 
     // Duration

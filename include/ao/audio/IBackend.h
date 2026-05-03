@@ -5,9 +5,9 @@
 
 #include <ao/audio/Backend.h>
 
+#include <ao/Error.h>
 #include <cstddef>
 #include <cstdint>
-#include <ao/Error.h>
 #include <span>
 #include <string_view>
 

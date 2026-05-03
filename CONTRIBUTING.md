@@ -71,6 +71,7 @@ Rules are numbered for easy reference in reviews and tooling.
     - 3.1.8. Use `std::jthread` and `std::stop_token` for background threads that need cooperative cancellation
   - 3.2. C++17 Features and Attributes
     - 3.2.1. Use `std::optional` for nullable return values where absence is not an error (e.g., lookups, optional fields); do not use it to report failures — use `std::expected` instead (see 3.3.1)
+      - 3.2.1.1. Optional Mandatory Naming: All `std::optional` variables (locals, members, and parameters) MUST use an `opt` prefix (e.g., `optUri`, `optView`). Existence checks MUST use the concise `if (optVar)` or `if (!optVar)` form; do not use `.has_value()`.
     - 3.2.2. Use `std::variant` for type-safe unions
     - 3.2.3. Use `std::string_view` for non-owning string parameters
     - 3.2.4. Use `if constexpr` to remove compile-time branches
