@@ -42,7 +42,14 @@ namespace ao::audio
     /**
      * @brief Manually trigger unsubscription.
      */
-    void reset() { _unsub = nullptr; }
+    void reset()
+    {
+      if (_unsub)
+      {
+        auto unsub = std::move(_unsub);
+        unsub();
+      }
+    }
 
     /**
      * @brief Returns true if the subscription is active.

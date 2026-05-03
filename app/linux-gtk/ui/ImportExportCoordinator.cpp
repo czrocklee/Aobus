@@ -9,8 +9,10 @@
 
 namespace ao::gtk
 {
-  ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent, ImportExportCallbacks callbacks)
-    : _parent{parent}, _callbacks{std::move(callbacks)}
+  ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
+                                                   ImportExportCallbacks callbacks,
+                                                   std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
+    : _parent{parent}, _callbacks{std::move(callbacks)}, _dispatcher{std::move(dispatcher)}
   {
   }
 
@@ -131,7 +133,7 @@ namespace ao::gtk
       files,
       [this, dialogPtr, total = files.size()](std::filesystem::path const& filePath, int index)
       {
-        Glib::MainContext::get_default()->invoke(
+        _dispatcher->dispatch(
           [this, dialogPtr, filePath, index, total]()
           {
             dialogPtr->onNewTrack(filePath.string(), index);
@@ -140,18 +142,9 @@ namespace ao::gtk
               double fraction = static_cast<double>(index) / static_cast<double>(total);
               _callbacks.onProgressUpdated(fraction, "Importing: " + filePath.filename().string());
             }
-            return false;
           });
       },
-      [dialogPtr]()
-      {
-        Glib::MainContext::get_default()->invoke(
-          [dialogPtr]()
-          {
-            dialogPtr->ready();
-            return false;
-          });
-      });
+      [this, dialogPtr]() { _dispatcher->dispatch([dialogPtr]() { dialogPtr->ready(); }); });
 
     auto* workerPtr = _importWorker.get();
     _importThread = std::jthread(
@@ -160,7 +153,7 @@ namespace ao::gtk
         ao::setCurrentThreadName("FileImport");
         workerPtr->run();
 
-        Glib::MainContext::get_default()->invoke(
+        _dispatcher->dispatch(
           [this, pendingSession = std::move(pendingSession)]() mutable
           {
             auto importedLibraryTitle = std::string{};
@@ -195,8 +188,6 @@ namespace ao::gtk
             {
               _callbacks.onTitleChanged("RockStudio [" + importedLibraryTitle + "]");
             }
-
-            return false;
           });
       });
 
@@ -375,8 +366,13 @@ namespace ao::gtk
       return;
     }
 
+    if (_exportThread.joinable())
+    {
+      return;
+    }
+
     auto* musicLibrary = session->musicLibrary.get();
-    std::thread(
+    _exportThread = std::jthread(
       [this, musicLibrary, path, mode]()
       {
         ao::setCurrentThreadName("LibraryExport");
@@ -386,21 +382,19 @@ namespace ao::gtk
           auto exporter = ao::library::Exporter{*musicLibrary};
           exporter.exportToYaml(path, mode);
 
-          Glib::MainContext::get_default()->invoke(
+          _dispatcher->dispatch(
             [this]()
             {
               if (_callbacks.onStatusMessage)
               {
                 _callbacks.onStatusMessage("Library exported successfully");
               }
-
-              return false;
             });
         }
         catch (std::exception const& e)
         {
           auto const errorText = std::string{e.what()};
-          Glib::MainContext::get_default()->invoke(
+          _dispatcher->dispatch(
             [this, errorText]()
             {
               APP_LOG_ERROR("Export failed: {}", errorText);
@@ -409,12 +403,9 @@ namespace ao::gtk
               {
                 _callbacks.onStatusMessage("Export failed: " + errorText);
               }
-
-              return false;
             });
         }
-      })
-      .detach();
+      });
   }
 
   void ImportExportCoordinator::importLibrary()
@@ -455,7 +446,12 @@ namespace ao::gtk
           return;
         }
 
-        std::thread([this, path, session]() { runLibraryImportTask(path, session); }).detach();
+        if (_importTaskThread.joinable())
+        {
+          return;
+        }
+
+        _importTaskThread = std::jthread([this, path, session]() { runLibraryImportTask(path, session); });
       }
     }
     catch (Glib::Error const& e)
@@ -482,7 +478,7 @@ namespace ao::gtk
 
   void ImportExportCoordinator::reportImportResult(bool success, std::string const& errorText)
   {
-    Glib::MainContext::get_default()->invoke(
+    _dispatcher->dispatch(
       [this, success, errorText]()
       {
         if (success)
@@ -506,8 +502,6 @@ namespace ao::gtk
             _callbacks.onStatusMessage("Import failed: " + errorText);
           }
         }
-
-        return false;
       });
   }
 } // namespace ao::gtk

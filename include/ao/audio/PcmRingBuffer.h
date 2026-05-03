@@ -8,7 +8,6 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <mutex>
 #include <span>
 
 namespace ao::audio
@@ -38,7 +37,6 @@ namespace ao::audio
 
   private:
     boost::lockfree::spsc_queue<std::byte, boost::lockfree::capacity<kRingBufferCapacity>> _queue;
-    mutable std::mutex _mutex;
     std::atomic<std::size_t> _writeCount{0};
     std::atomic<std::size_t> _readCount{0};
   };

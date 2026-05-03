@@ -7,6 +7,7 @@
 #include "LibrarySession.h"
 #include <ao/library/Exporter.h>
 #include <ao/library/ImportWorker.h>
+#include <ao/utility/IMainThreadDispatcher.h>
 
 #include <gtkmm.h>
 
@@ -38,7 +39,9 @@ namespace ao::gtk
   class ImportExportCoordinator final
   {
   public:
-    ImportExportCoordinator(Gtk::Window& parent, ImportExportCallbacks callbacks);
+    ImportExportCoordinator(Gtk::Window& parent,
+                            ImportExportCallbacks callbacks,
+                            std::shared_ptr<ao::IMainThreadDispatcher> dispatcher);
     ~ImportExportCoordinator();
 
     void openLibrary();
@@ -72,9 +75,12 @@ namespace ao::gtk
 
     Gtk::Window& _parent;
     ImportExportCallbacks _callbacks;
+    std::shared_ptr<ao::IMainThreadDispatcher> _dispatcher;
 
     std::unique_ptr<ao::library::ImportWorker> _importWorker;
     std::jthread _importThread;
+    std::jthread _exportThread;
+    std::jthread _importTaskThread;
     std::unique_ptr<ImportProgressDialog> _importDialog;
   };
 } // namespace ao::gtk

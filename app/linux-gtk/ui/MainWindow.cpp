@@ -157,7 +157,8 @@ namespace ao::gtk
         },
         .onProgressUpdated = [this](double fraction, std::string const& info) { updateImportProgress(fraction, info); },
         .onStatusMessage = [this](std::string const& msg) { showStatusMessage(msg); },
-        .onTitleChanged = [this](std::string const& title) { set_title(title); }});
+        .onTitleChanged = [this](std::string const& title) { set_title(title); }},
+      _dispatcher);
 
     setupMenu();
     setupLayout();

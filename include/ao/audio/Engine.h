@@ -108,6 +108,8 @@ namespace ao::audio
     std::atomic<bool> _backendStarted{false};
     std::atomic<bool> _playbackDrainPending{false};
     std::atomic<std::uint32_t> _underrunCount{0};
+    std::atomic<std::uint64_t> _accumulatedFrames{0};
+    std::atomic<std::uint32_t> _engineSampleRate{0};
 
     mutable std::mutex _stateMutex;
     std::optional<TrackPlaybackDescriptor> _currentTrack;

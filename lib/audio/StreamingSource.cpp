@@ -65,9 +65,9 @@ namespace ao::audio
 
   ao::Result<> StreamingSource::initialize()
   {
-    auto const generation = _generation.load(std::memory_order_relaxed);
+    auto const seekToken = _seekStopSource.get_token();
 
-    if (auto const fillResult = fillUntil(_prerollTargetMs, generation); !fillResult)
+    if (auto const fillResult = fillUntil(_prerollTargetMs, seekToken); !fillResult)
     {
       return fillResult;
     }
@@ -105,7 +105,10 @@ namespace ao::audio
   {
     stopDecodeThread();
 
-    auto const generation = _generation.fetch_add(1, std::memory_order_relaxed) + 1;
+    _seekStopSource.request_stop();
+    _seekStopSource = std::stop_source{};
+    auto const seekToken = _seekStopSource.get_token();
+
     _failed = false;
     _decoderReachedEof = false;
     _ringBuffer.clear();
@@ -129,7 +132,7 @@ namespace ao::audio
       }
     }
 
-    if (auto const fillResult = fillUntil(_prerollTargetMs, generation); !fillResult)
+    if (auto const fillResult = fillUntil(_prerollTargetMs, seekToken); !fillResult)
     {
       return fillResult;
     }
@@ -169,13 +172,12 @@ namespace ao::audio
     }
   }
 
-  void StreamingSource::decodeLoop(std::stop_token const& stopToken)
+  void StreamingSource::decodeLoop(std::stop_token const& threadStopToken)
   {
-    auto const generation = _generation.load(std::memory_order_relaxed);
+    auto const seekToken = _seekStopSource.get_token();
 
-    while (!stopToken.stop_requested() && !_failed.load(std::memory_order_relaxed) &&
-           !_decoderReachedEof.load(std::memory_order_relaxed) &&
-           _generation.load(std::memory_order_relaxed) == generation)
+    while (!threadStopToken.stop_requested() && !_failed.load(std::memory_order_relaxed) &&
+           !_decoderReachedEof.load(std::memory_order_relaxed) && !seekToken.stop_requested())
     {
       if (bufferedMs() >= _decodeHighWatermarkMs)
       {
@@ -183,7 +185,7 @@ namespace ao::audio
         continue;
       }
 
-      auto const result = decodeNextBlock(generation, &stopToken);
+      auto const result = decodeNextBlock(seekToken, &threadStopToken);
 
       if (!result)
       {
@@ -205,12 +207,12 @@ namespace ao::audio
     }
   }
 
-  ao::Result<> StreamingSource::fillUntil(std::uint32_t targetBufferedMs, std::uint64_t generation)
+  ao::Result<> StreamingSource::fillUntil(std::uint32_t targetBufferedMs, std::stop_token const& seekToken)
   {
     while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
-           _generation.load(std::memory_order_relaxed) == generation && bufferedMs() < targetBufferedMs)
+           !seekToken.stop_requested() && bufferedMs() < targetBufferedMs)
     {
-      auto const result = decodeNextBlock(generation, nullptr);
+      auto const result = decodeNextBlock(seekToken, nullptr);
 
       if (!result)
       {
@@ -240,13 +242,19 @@ namespace ao::audio
     return {};
   }
 
-  ao::Result<bool> StreamingSource::decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken)
+  ao::Result<bool> StreamingSource::decodeNextBlock(std::stop_token const& seekToken,
+                                                    std::stop_token const* threadStopToken)
   {
-    PcmBlock block;
+    if (seekToken.stop_requested())
+    {
+      return false;
+    }
+
+    auto block = PcmBlock{};
     {
       auto lock = std::lock_guard<std::mutex>{_decoderMutex};
 
-      if (_generation.load(std::memory_order_relaxed) != generation)
+      if (seekToken.stop_requested())
       {
         return false;
       }
@@ -267,19 +275,20 @@ namespace ao::audio
       return false;
     }
 
-    return writeBlock(std::span<std::byte const>(block.bytes.data(), block.bytes.size()), generation, stopToken);
+    return writeBlock(std::span<std::byte const>(block.bytes.data(), block.bytes.size()), seekToken, threadStopToken);
   }
 
   bool StreamingSource::writeBlock(std::span<std::byte const> bytes,
-                                   std::uint64_t generation,
-                                   std::stop_token const* stopToken)
+                                   std::stop_token const& seekToken,
+                                   std::stop_token const* threadStopToken)
   {
-    auto const stopRequested = [stopToken]() { return stopToken && stopToken->stop_requested(); };
+    auto const stopRequested = [&]()
+    { return seekToken.stop_requested() || (threadStopToken && threadStopToken->stop_requested()); };
 
     auto const* current = bytes.data();
     auto remaining = bytes.size();
 
-    while (remaining > 0 && !stopRequested() && _generation.load(std::memory_order_relaxed) == generation)
+    while (remaining > 0 && !stopRequested())
     {
       auto const written = _ringBuffer.write(std::span<std::byte const>(current, remaining));
       remaining -= written;
