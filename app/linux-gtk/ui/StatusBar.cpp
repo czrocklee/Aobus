@@ -130,22 +130,11 @@ namespace ao::gtk
            color: @theme_selected_bg_color;
            font-weight: bold;
         }
-        .sink-status-perfect { color: #A855F7; animation: breathe 3s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-        .sink-status-lossless { color: #10B981; animation: breathe 3s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-        .sink-status-intervention { color: #F59E0B; animation: breathe 3s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-        .sink-status-lossy { color: #6B7280; opacity: 0.6; }
-        .sink-status-clipped { color: #EF4444; animation: pulse 0.5s ease-in-out infinite; }
-
-        @keyframes breathe {
-          0%, 100% { opacity: 0.4; transform: scale(0.9); }
-          50% { opacity: 1.0; transform: scale(1.1); }
-        }
-
-        @keyframes pulse {
-          0% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.3); opacity: 0.8; }
-          100% { transform: scale(1); opacity: 1; }
-        }
+        .sink-status-perfect { color: #A855F7; }
+        .sink-status-lossless { color: #10B981; }
+        .sink-status-intervention { color: #F59E0B; }
+        .sink-status-lossy { color: #6B7280; }
+        .sink-status-clipped { color: #EF4444; }
       )");
 
         if (!initialized || force)
@@ -166,39 +155,6 @@ namespace ao::gtk
       image.remove_css_class("sink-status-intervention");
       image.remove_css_class("sink-status-lossy");
       image.remove_css_class("sink-status-clipped");
-    }
-
-    Glib::RefPtr<Gdk::Texture> renderLogoTexture(std::string_view startColor, std::string_view endColor)
-    {
-      auto svg = std::string{kLogoSvgTemplate};
-      auto const replaceAll = [&](std::string_view search, std::string_view replace)
-      {
-        std::size_t pos = 0;
-        while ((pos = svg.find(search, pos)) != std::string::npos)
-        {
-          svg.replace(pos, search.length(), replace);
-          pos += replace.length();
-        }
-      };
-
-      replaceAll("{{WIDTH_PX}}", "34");
-      replaceAll("{{HEIGHT_PX}}", "34");
-      replaceAll("{{COLOR_START}}", startColor);
-      replaceAll("{{COLOR_END}}", endColor);
-      replaceAll("{{STROKE_WIDTH}}", "6");
-      replaceAll("{{TRANSFORM}}", "");
-
-      try
-      {
-        auto const bytes = Glib::Bytes::create(svg.data(), svg.size());
-        auto const file = Gio::File::create_for_memory(bytes);
-        return Gdk::Texture::create_from_file(file);
-      }
-      catch (Glib::Error const& e)
-      {
-        APP_LOG_ERROR("StatusBar: Failed to render SVG logo: {}", e.what());
-        return {};
-      }
     }
   }
 
@@ -426,49 +382,15 @@ namespace ao::gtk
     _sinkStatusIcon.set_visible(true);
 
     using Quality = ao::audio::Quality;
-    auto startColor = std::string{"currentColor"};
-    auto endColor = std::string{"currentColor"};
-
     switch (status.quality)
     {
       case Quality::BitwisePerfect:
-      case Quality::LosslessPadded:
-        _sinkStatusIcon.add_css_class("sink-status-perfect");
-        startColor = "#C084FC"; // Lighter purple
-        endColor = "#A855F7";   // Deep purple
-        break;
-      case Quality::LosslessFloat:
-        _sinkStatusIcon.add_css_class("sink-status-lossless");
-        startColor = "#34D399"; // Lighter green
-        endColor = "#10B981";   // Emerald green
-        break;
-      case Quality::LinearIntervention:
-        _sinkStatusIcon.add_css_class("sink-status-intervention");
-        startColor = "#FBBF24"; // Amber 400
-        endColor = "#F59E0B";   // Amber 600
-        break;
-      case Quality::LossySource:
-        _sinkStatusIcon.add_css_class("sink-status-lossy");
-        startColor = "#9CA3AF"; // Gray 400
-        endColor = "#6B7280";   // Gray 600
-        break;
-      case Quality::Clipped:
-        _sinkStatusIcon.add_css_class("sink-status-clipped");
-        startColor = "#F87171"; // Red 400
-        endColor = "#EF4444";   // Red 600
-        break;
-      case Quality::Unknown: _sinkStatusIcon.set_visible(false); return;
-    }
-
-    if (auto texture = renderLogoTexture(startColor, endColor))
-    {
-      _sinkStatusIcon.set_from_paintable(texture);
-      _sinkStatusIcon.set_pixel_size(34);
-    }
-    else
-    {
-      _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
-      _sinkStatusIcon.set_pixel_size(Layout::kIconSizeXSmall);
+      case Quality::LosslessPadded: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
+      case Quality::LosslessFloat: _sinkStatusIcon.add_css_class("sink-status-lossless"); break;
+      case Quality::LinearIntervention: _sinkStatusIcon.add_css_class("sink-status-intervention"); break;
+      case Quality::LossySource: _sinkStatusIcon.add_css_class("sink-status-lossy"); break;
+      case Quality::Clipped: _sinkStatusIcon.add_css_class("sink-status-clipped"); break;
+      case Quality::Unknown: _sinkStatusIcon.set_visible(false); break;
     }
   }
 

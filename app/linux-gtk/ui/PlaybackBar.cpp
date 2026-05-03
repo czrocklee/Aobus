@@ -23,6 +23,13 @@ namespace ao::gtk
 {
   namespace
   {
+    static constexpr double kFullCircleDegrees = 360.0;
+    static constexpr double kRotationPeriodSec = 7.331;
+    static constexpr double kStrokeWidthBase = 9.0;
+    static constexpr double kStrokeWidthVariance = 3.0;
+    static constexpr double kBreathingPeriodSec = 5.119;
+    static constexpr std::int64_t kMicrosecondsPerSecond = 1'000'000;
+
     void ensurePlaybackBarCss(bool force = false)
     {
       static auto const provider = Gtk::CssProvider::create();
@@ -89,7 +96,13 @@ namespace ao::gtk
 
     signal_map().connect([this]() { syncOutputIconSize(); });
   }
-  PlaybackBar::~PlaybackBar() = default;
+  PlaybackBar::~PlaybackBar()
+  {
+    if (_tickCallbackId != 0)
+    {
+      remove_tick_callback(_tickCallbackId);
+    }
+  }
 
   void PlaybackBar::setupLayout()
   {
@@ -202,9 +215,9 @@ namespace ao::gtk
     syncOutputIconSize();
     updateOutputIcon(_lastIconQuality);
 
-    // Start 30fps animation timer
-    _animationConnection = Glib::signal_timeout().connect(
-      [this]()
+    // Tick-based animation for 60fps+ smooth visuals
+    _tickCallbackId = add_tick_callback(
+      [this](const Glib::RefPtr<Gdk::FrameClock>& clock) -> bool
       {
         bool const isPlaying = (_lastState.engine.transport == ao::audio::Transport::Playing ||
                                 _lastState.engine.transport == ao::audio::Transport::Opening ||
@@ -213,19 +226,26 @@ namespace ao::gtk
 
         if (isPlaying)
         {
-          _animationTimeSec += kAnimationStepSec;
-          updateOutputIcon(_lastIconQuality);
-        }
-        else if (_animationTimeSec != 0.0)
-        {
-          // Reset to stopped state once
-          _animationTimeSec = 0.0;
-          updateOutputIcon(_lastIconQuality);
-        }
+          auto const frameTime = clock->get_frame_time();
+          if (_firstFrameTime == 0)
+          {
+            _firstFrameTime = frameTime;
+          }
 
+          _animationTimeSec = static_cast<double>(frameTime - _firstFrameTime) / kMicrosecondsPerSecond;
+          updateOutputIcon(_lastIconQuality);
+        }
+        else
+        {
+          _firstFrameTime = 0; // Reset for next play
+          if (_animationTimeSec != 0.0)
+          {
+            _animationTimeSec = 0.0;
+            updateOutputIcon(_lastIconQuality);
+          }
+        }
         return true;
-      },
-      kAnimationTimerMs);
+      });
   }
 
   void PlaybackBar::setupSignals()
