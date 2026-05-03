@@ -54,13 +54,7 @@ namespace ao::gtk
     static constexpr double kLogoAspectRatio = 1.0;
     static constexpr int kOutputIconVerticalInset = 6;
     static constexpr int kOutputIconMinHeight = 22;
-    static constexpr double kFullCircleDegrees = 360.0;
-    static constexpr double kRotationPeriodSec = 7.331;
-    static constexpr double kStrokeWidthBase = 9.0;
-    static constexpr double kStrokeWidthVariance = 3.0;
     static constexpr double kBreathingPeriodSec = 5.119;
-    static constexpr double kAnimationStepSec = 0.033;
-    static constexpr int kAnimationTimerMs = 33;
 
     void setupLayout();
     void setupSignals();
@@ -97,7 +91,8 @@ namespace ao::gtk
     bool _updatingSeekScale = false;
 
     ao::audio::Quality _lastIconQuality = ao::audio::Quality::Unknown;
-    sigc::connection _animationConnection;
+    std::uint32_t _tickCallbackId = 0;
+    std::int64_t _firstFrameTime = 0;
     double _animationTimeSec = 0.0;
 
     int _outputIconWidth = 0;
