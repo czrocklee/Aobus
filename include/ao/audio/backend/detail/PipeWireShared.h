@@ -24,7 +24,7 @@ namespace ao::audio::backend::detail
   {
     void operator()(void* p) const noexcept
     {
-      if (p) ::pw_proxy_destroy(static_cast<::pw_proxy*>(p));
+      ::pw_proxy_destroy(static_cast<::pw_proxy*>(p));
     }
   };
   template<typename T>
@@ -34,7 +34,7 @@ namespace ao::audio::backend::detail
   {
     void operator()(::pw_thread_loop* p) const noexcept
     {
-      if (p) ::pw_thread_loop_destroy(p);
+      ::pw_thread_loop_destroy(p);
     }
   };
   using PwThreadLoopPtr = std::unique_ptr<::pw_thread_loop, PwThreadLoopDeleter>;
@@ -43,7 +43,7 @@ namespace ao::audio::backend::detail
   {
     void operator()(::pw_context* p) const noexcept
     {
-      if (p) ::pw_context_destroy(p);
+      ::pw_context_destroy(p);
     }
   };
   using PwContextPtr = std::unique_ptr<::pw_context, PwContextDeleter>;
@@ -52,7 +52,7 @@ namespace ao::audio::backend::detail
   {
     void operator()(::pw_core* p) const noexcept
     {
-      if (p) ::pw_core_disconnect(p);
+      ::pw_core_disconnect(p);
     }
   };
   using PwCorePtr = std::unique_ptr<::pw_core, PwCoreDeleter>;
@@ -61,20 +61,26 @@ namespace ao::audio::backend::detail
   {
     void operator()(::pw_stream* p) const noexcept
     {
-      if (p) ::pw_stream_destroy(p);
+      ::pw_stream_destroy(p);
     }
   };
   using PwStreamPtr = std::unique_ptr<::pw_stream, PwStreamDeleter>;
 
   struct PwRegistryDeleter final
   {
-    void operator()(::pw_registry* p) const noexcept { ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p)); }
+    void operator()(::pw_registry* p) const noexcept
+    {
+      ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p));
+    }
   };
   using PwRegistryPtr = std::unique_ptr<::pw_registry, PwRegistryDeleter>;
 
   struct PwLinkDeleter final
   {
-    void operator()(::pw_link* p) const noexcept { ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p)); }
+    void operator()(::pw_link* p) const noexcept
+    {
+      ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p));
+    }
   };
   using PwLinkPtr = std::unique_ptr<::pw_link, PwLinkDeleter>;
 
@@ -83,7 +89,7 @@ namespace ao::audio::backend::detail
     ::pw_thread_loop* loop = nullptr;
     void operator()(::spa_source* p) const noexcept
     {
-      if (p && loop) ::pw_loop_destroy_source(::pw_thread_loop_get_loop(loop), p);
+      if (loop) ::pw_loop_destroy_source(::pw_thread_loop_get_loop(loop), p);
     }
   };
   using SpaSourcePtr = std::unique_ptr<::spa_source, SpaSourceDeleter>;
