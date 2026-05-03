@@ -167,14 +167,9 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
 
     CHECK(caps.sampleRates.size() == 2);
     CHECK(std::ranges::contains(caps.sampleRates, 44100u));
+    CHECK(std::ranges::contains(caps.sampleRates, 44100u));
     CHECK(std::ranges::contains(caps.sampleRates, 48000u));
   }
-}
-
-TEST_CASE("PipeWireMonitorHelpers - Props Parsing", "[audio][pipewire][monitor]")
-{
-  uint8_t buffer[1024];
-  struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
 
   SECTION("mergeSinkProps - volume and mute")
   {
@@ -230,3 +225,4 @@ TEST_CASE("PipeWireMonitorHelpers - Props Parsing", "[audio][pipewire][monitor]"
     CHECK_FALSE(props.isUnity());
   }
 }
+
