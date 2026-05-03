@@ -28,7 +28,7 @@ namespace ao::gtk
   {
     if (_playbackTimer != 0)
     {
-      g_source_remove(_playbackTimer);
+      ::g_source_remove(_playbackTimer);
       _playbackTimer = 0;
     }
   }
@@ -60,11 +60,11 @@ namespace ao::gtk
     _playbackBar->signalStopRequested().connect(sigc::mem_fun(*this, &PlaybackCoordinator::onStopRequested));
     _playbackBar->signalSeekRequested().connect(sigc::mem_fun(*this, &PlaybackCoordinator::onSeekRequested));
 
-    _playbackTimer = g_timeout_add(
+    _playbackTimer = ::g_timeout_add(
       100,
       [](void* data) -> int
       {
-        auto* self = static_cast<PlaybackCoordinator*>(data);
+        auto* const self = static_cast<PlaybackCoordinator*>(data);
         self->refreshPlaybackBar();
         return true;
       },
@@ -78,7 +78,7 @@ namespace ao::gtk
       return;
     }
 
-    auto status = _player->status();
+    auto const status = _player->status();
     _lastPlaybackState = status.engine.transport;
     _host.updatePlaybackStatus(status);
 

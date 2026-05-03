@@ -4,7 +4,6 @@
 #include "PlaybackBar.h"
 #include "LayoutConstants.h"
 #include "OutputListItems.h"
-#include "SvgTemplate.h"
 #include <ao/utility/Log.h>
 
 #include "ui/ThemeBus.h"
@@ -23,12 +22,12 @@ namespace ao::gtk
 {
   namespace
   {
-    static constexpr double kFullCircleDegrees = 360.0;
-    static constexpr double kRotationPeriodSec = 7.331;
-    static constexpr double kStrokeWidthBase = 9.0;
-    static constexpr double kStrokeWidthVariance = 3.0;
-    static constexpr double kBreathingPeriodSec = 5.119;
-    static constexpr std::int64_t kMicrosecondsPerSecond = 1'000'000;
+    constexpr double kFullCircleDegrees = 360.0;
+    constexpr double kRotationPeriodSec = 7.331;
+    constexpr double kStrokeWidthBase = 9.0;
+    constexpr double kStrokeWidthVariance = 3.0;
+    constexpr double kBreathingPeriodSec = 5.119;
+    constexpr std::int64_t kMicrosecondsPerSecond = 1'000'000;
 
     void ensurePlaybackBarCss(bool force = false)
     {
@@ -71,6 +70,111 @@ namespace ao::gtk
         }
       }
     }
+  }
+
+  PlaybackBar::Indicator::Indicator()
+  {
+    set_can_focus(false);
+    set_focusable(false);
+  }
+
+  void PlaybackBar::Indicator::update(double timeSec, ao::audio::Quality quality, bool isStopped, bool isReady)
+  {
+    if (_timeSec == timeSec && _quality == quality && _isStopped == isStopped && _isReady == isReady)
+    {
+      return;
+    }
+
+    _timeSec = timeSec;
+    _quality = quality;
+    _isStopped = isStopped;
+    _isReady = isReady;
+    queue_draw();
+  }
+
+  Gtk::SizeRequestMode PlaybackBar::Indicator::get_request_mode_vfunc() const
+  {
+    return Gtk::SizeRequestMode::CONSTANT_SIZE;
+  }
+
+  void PlaybackBar::Indicator::measure_vfunc(Gtk::Orientation, int, int& minimum, int& natural, int&, int&) const
+  {
+    minimum = 24;
+    natural = 24;
+  }
+
+  void PlaybackBar::Indicator::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot)
+  {
+    auto const width = get_width();
+    auto const height = get_height();
+    if (width <= 0 || height <= 0)
+    {
+      return;
+    }
+
+    // Colors
+    auto const cyan = Gdk::RGBA{"#00E5FF"};
+    auto indicatorColor = _isStopped ? cyan : Gdk::RGBA{"#6B7280"};
+
+    if (!_isReady)
+    {
+      indicatorColor = Gdk::RGBA{"#6B7280"};
+    }
+    else if (!_isStopped)
+    {
+      switch (_quality)
+      {
+        case ao::audio::Quality::BitwisePerfect:
+        case ao::audio::Quality::LosslessPadded: indicatorColor = Gdk::RGBA{"#A855F7"}; break;
+        case ao::audio::Quality::LosslessFloat: indicatorColor = Gdk::RGBA{"#10B981"}; break;
+        case ao::audio::Quality::LinearIntervention: indicatorColor = Gdk::RGBA{"#F59E0B"}; break;
+        case ao::audio::Quality::LossySource: indicatorColor = Gdk::RGBA{"#6B7280"}; break;
+        case ao::audio::Quality::Clipped: indicatorColor = Gdk::RGBA{"#EF4444"}; break;
+        default: break;
+      }
+    }
+
+    auto const cr = snapshot->append_cairo(Gdk::Graphene::Rect{0, 0, static_cast<float>(width), static_cast<float>(height)});
+
+    double const centerX = width / 2.0;
+    double const centerY = height / 2.0;
+    double const radius = std::min(width, height) * 0.375;
+
+    // Animation values
+    double rotationAngle = 0.0;
+    double strokeWidth = kStrokeWidthBase;
+
+    if (!_isStopped)
+    {
+      rotationAngle = std::fmod(_timeSec * (kFullCircleDegrees / kRotationPeriodSec), kFullCircleDegrees);
+      double const breathingPhase = std::fmod(_timeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
+      constexpr double kPhaseShift = 0.5;
+      strokeWidth = kStrokeWidthBase + (kStrokeWidthVariance * (std::sin(breathingPhase) * kPhaseShift + kPhaseShift));
+    }
+
+    // Scale stroke to actual widget size (template was 80x80)
+    double const scale = std::min(width, height) / 80.0;
+    double const actualStrokeWidth = strokeWidth * scale;
+
+    cr->save();
+    cr->translate(centerX, centerY);
+    cr->rotate(rotationAngle * (std::numbers::pi / 180.0));
+
+    // Draw the "O" arc
+    auto const gradient = Cairo::LinearGradient::create(-radius, -radius, radius, radius);
+    gradient->add_color_stop_rgba(0.0, cyan.get_red(), cyan.get_green(), cyan.get_blue(), 1.0);
+    gradient->add_color_stop_rgba(0.33, indicatorColor.get_red(), indicatorColor.get_green(), indicatorColor.get_blue(), 1.0);
+    gradient->add_color_stop_rgba(1.0, indicatorColor.get_red(), indicatorColor.get_green(), indicatorColor.get_blue(), 1.0);
+
+    cr->set_source(gradient);
+    cr->set_line_width(actualStrokeWidth);
+    cr->set_line_cap(Cairo::Context::LineCap::ROUND);
+
+    // Nearly full circle arc
+    cr->arc(0, 0, radius, -std::numbers::pi / 2.0, 1.49 * std::numbers::pi);
+    cr->stroke();
+
+    cr->restore();
   }
 
   PlaybackBar::PlaybackBar()
@@ -117,14 +221,12 @@ namespace ao::gtk
     _outputButton.set_margin_start(0);
     _outputButton.set_margin_end(0);
 
-    _outputIcon.set_content_fit(Gtk::ContentFit::CONTAIN);
-    _outputIcon.set_valign(Gtk::Align::CENTER);
-    _outputIcon.set_halign(Gtk::Align::CENTER);
-    _outputIcon.set_margin_top(1);        // Optical vertical alignment correction
-    _outputIcon.set_size_request(24, 24); // Square base size
-    _outputIcon.set_can_shrink(true);
+    _outputIndicator.set_valign(Gtk::Align::CENTER);
+    _outputIndicator.set_halign(Gtk::Align::CENTER);
+    _outputIndicator.set_margin_top(1);        // Optical vertical alignment correction
+    _outputIndicator.set_size_request(24, 24); // Square base size
 
-    _outputButton.set_child(_outputIcon);
+    _outputButton.set_child(_outputIndicator);
     _outputButton.set_tooltip_text("Click to change audio backend or device");
 
     _outputStore = Gio::ListStore<Glib::Object>::create();
@@ -217,7 +319,7 @@ namespace ao::gtk
 
     // Tick-based animation for 60fps+ smooth visuals
     _tickCallbackId = add_tick_callback(
-      [this](const Glib::RefPtr<Gdk::FrameClock>& clock) -> bool
+      [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
       {
         bool const isPlaying = (_lastState.engine.transport == ao::audio::Transport::Playing ||
                                 _lastState.engine.transport == ao::audio::Transport::Opening ||
@@ -431,13 +533,10 @@ namespace ao::gtk
     // 1. Force the button to be a square matching the transport bar height
     _outputButton.set_size_request(referenceHeight, referenceHeight);
 
-    // 2. Center the icon with pixel-perfect insets
-    _outputIcon.set_size_request(_outputIconWidth, _outputIconHeight);
+    // 2. Center the indicator with pixel-perfect insets
+    _outputIndicator.set_size_request(_outputIconWidth, _outputIconHeight);
 
-    if (_outputIcon.get_paintable())
-    {
-      updateOutputIcon(_lastIconQuality);
-    }
+    updateOutputIcon(_lastIconQuality);
   }
 
   void PlaybackBar::updateOutputIcon(ao::audio::Quality quality)
@@ -448,95 +547,15 @@ namespace ao::gtk
                             _lastState.engine.transport == ao::audio::Transport::Stopping ||
                             _lastState.engine.transport == ao::audio::Transport::Error);
 
-    // Calculate animation parameters
-    double rotationAngle = 0.0;
-    double strokeWidth = kStrokeWidthBase;
-    std::string transform = "none";
-
-    if (!isStopped)
-    {
-      // 1. Rotation
-      rotationAngle = std::fmod(_animationTimeSec * (kFullCircleDegrees / kRotationPeriodSec), kFullCircleDegrees);
-
-      // 2. Breathing
-      double const breathingPhase =
-        std::fmod(_animationTimeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
-
-      // Transform: Rotate around the center (40, 40)
-      transform = std::format("rotate({:.2f} 40 40)", rotationAngle);
-
-      // Brand-consistent breathing
-      constexpr double kPhaseShift = 0.5;
-      strokeWidth = kStrokeWidthBase + (kStrokeWidthVariance * (std::sin(breathingPhase) * kPhaseShift + kPhaseShift));
-    }
-    else
-    {
-      transform = std::format("rotate({:.2f} 40 40)", rotationAngle);
-      strokeWidth = kStrokeWidthBase;
-    }
-
-    std::string svg = std::string{kLogoSvgTemplate};
-
-    auto replace = [&](std::string_view placeholder, std::string_view value)
-    {
-      size_t pos = 0;
-      while ((pos = svg.find(placeholder, pos)) != std::string::npos)
-      {
-        svg.replace(pos, placeholder.length(), value);
-        pos += value.length();
-      }
-    };
-
-    std::string const cyan = "#00E5FF";
-    std::string indicatorColor = isStopped ? cyan : "#6B7280"; // Full cyan when stopped
-
     if (!_lastState.isReady)
     {
-      indicatorColor = "#6B7280"; // Gray when not ready
       if (_outputButton.get_tooltip_text().find("Initializing") == std::string::npos)
       {
         _outputButton.set_tooltip_text("Initializing audio backend...");
       }
     }
-    else if (!isStopped)
-    {
-      switch (quality)
-      {
-        case ao::audio::Quality::BitwisePerfect:
-        case ao::audio::Quality::LosslessPadded: indicatorColor = "#A855F7"; break;
-        case ao::audio::Quality::LosslessFloat: indicatorColor = "#10B981"; break;
-        case ao::audio::Quality::LinearIntervention: indicatorColor = "#F59E0B"; break;
-        case ao::audio::Quality::LossySource: indicatorColor = "#6B7280"; break;
-        case ao::audio::Quality::Clipped: indicatorColor = "#EF4444"; break;
-        default: break;
-      }
-    }
 
-    replace("{{BG_COLOR}}", "none");
-    replace("{{ACCENT_COLOR}}", "#F97316");
-    replace("{{COLOR_START}}", cyan);
-    replace("{{COLOR_END}}", indicatorColor);
-
-    // Inject animation and size parameters
-    replace("{{WIDTH_PX}}", std::format("{}", _outputIconWidth));
-    replace("{{HEIGHT_PX}}", std::format("{}", _outputIconHeight));
-    replace("{{TRANSFORM}}", transform);
-    replace("{{STROKE_WIDTH}}", std::format("{:.1f}", strokeWidth));
-
-    try
-    {
-      auto const bytes = Glib::Bytes::create(svg.data(), svg.size());
-      auto const texture = Gdk::Texture::create_from_bytes(bytes);
-
-      if (texture)
-      {
-        _outputIcon.set_paintable(texture);
-      }
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_ERROR("PlaybackBar: Failed to load dynamic SVG: {}", e.what());
-    }
+    _outputIndicator.update(_animationTimeSec, quality, isStopped, _lastState.isReady);
   }
 
   void PlaybackBar::setSnapshot(ao::audio::Player::Status const& status)

@@ -192,7 +192,7 @@ namespace ao::gtk
     append(_playbackDetailsBox);
 
     // Spacer to push now playing to the center
-    auto* spacer1 = Gtk::make_managed<Gtk::Box>();
+    auto* const spacer1 = Gtk::make_managed<Gtk::Box>();
     spacer1->set_hexpand(true);
     append(*spacer1);
 
@@ -209,7 +209,7 @@ namespace ao::gtk
     append(_nowPlayingLabel);
 
     // Spacer to push info to the right
-    auto* spacer2 = Gtk::make_managed<Gtk::Box>();
+    auto* const spacer2 = Gtk::make_managed<Gtk::Box>();
     spacer2->set_hexpand(true);
     append(*spacer2);
 
@@ -227,7 +227,7 @@ namespace ao::gtk
     append(_importBox);
 
     // Info Stack: Toggle between Selection Info and Status Messages
-    auto* infoStack = Gtk::make_managed<Gtk::Stack>();
+    auto* const infoStack = Gtk::make_managed<Gtk::Stack>();
     infoStack->set_transition_type(Gtk::StackTransitionType::SLIDE_UP_DOWN);
     infoStack->set_transition_duration(kTransitionDurationMs);
 
@@ -242,7 +242,7 @@ namespace ao::gtk
     append(*infoStack);
 
     // Separator
-    auto* sep1 = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
+    auto* const sep1 = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
     sep1->set_margin_start(Layout::kMarginMedium);
     sep1->set_margin_end(Layout::kMarginMedium);
     append(*sep1);
