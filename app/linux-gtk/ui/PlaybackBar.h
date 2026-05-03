@@ -54,6 +54,16 @@ namespace ao::gtk
                          int& natural_baseline) const override;
 
     private:
+      struct ColorCache
+      {
+        Gdk::RGBA cyan;
+        Gdk::RGBA gray;
+        Gdk::RGBA purple;
+        Gdk::RGBA green;
+        Gdk::RGBA orange;
+        Gdk::RGBA red;
+      } _colors;
+
       double _timeSec = 0.0;
       ao::audio::Quality _quality = ao::audio::Quality::Unknown;
       bool _isStopped = true;

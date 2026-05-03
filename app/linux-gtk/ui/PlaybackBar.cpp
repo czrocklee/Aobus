@@ -76,6 +76,13 @@ namespace ao::gtk
   {
     set_can_focus(false);
     set_focusable(false);
+
+    _colors.cyan = Gdk::RGBA{"#00E5FF"};
+    _colors.gray = Gdk::RGBA{"#6B7280"};
+    _colors.purple = Gdk::RGBA{"#A855F7"};
+    _colors.green = Gdk::RGBA{"#10B981"};
+    _colors.orange = Gdk::RGBA{"#F59E0B"};
+    _colors.red = Gdk::RGBA{"#EF4444"};
   }
 
   void PlaybackBar::Indicator::update(double timeSec, ao::audio::Quality quality, bool isStopped, bool isReady)
@@ -113,23 +120,22 @@ namespace ao::gtk
     }
 
     // Colors
-    auto const cyan = Gdk::RGBA{"#00E5FF"};
-    auto indicatorColor = _isStopped ? cyan : Gdk::RGBA{"#6B7280"};
+    auto indicatorColor = _isStopped ? _colors.cyan : _colors.gray;
 
     if (!_isReady)
     {
-      indicatorColor = Gdk::RGBA{"#6B7280"};
+      indicatorColor = _colors.gray;
     }
     else if (!_isStopped)
     {
       switch (_quality)
       {
         case ao::audio::Quality::BitwisePerfect:
-        case ao::audio::Quality::LosslessPadded: indicatorColor = Gdk::RGBA{"#A855F7"}; break;
-        case ao::audio::Quality::LosslessFloat: indicatorColor = Gdk::RGBA{"#10B981"}; break;
-        case ao::audio::Quality::LinearIntervention: indicatorColor = Gdk::RGBA{"#F59E0B"}; break;
-        case ao::audio::Quality::LossySource: indicatorColor = Gdk::RGBA{"#6B7280"}; break;
-        case ao::audio::Quality::Clipped: indicatorColor = Gdk::RGBA{"#EF4444"}; break;
+        case ao::audio::Quality::LosslessPadded: indicatorColor = _colors.purple; break;
+        case ao::audio::Quality::LosslessFloat: indicatorColor = _colors.green; break;
+        case ao::audio::Quality::LinearIntervention: indicatorColor = _colors.orange; break;
+        case ao::audio::Quality::LossySource: indicatorColor = _colors.gray; break;
+        case ao::audio::Quality::Clipped: indicatorColor = _colors.red; break;
         default: break;
       }
     }
@@ -162,7 +168,7 @@ namespace ao::gtk
 
     // Draw the "O" arc
     auto const gradient = Cairo::LinearGradient::create(-radius, -radius, radius, radius);
-    gradient->add_color_stop_rgba(0.0, cyan.get_red(), cyan.get_green(), cyan.get_blue(), 1.0);
+    gradient->add_color_stop_rgba(0.0, _colors.cyan.get_red(), _colors.cyan.get_green(), _colors.cyan.get_blue(), 1.0);
     gradient->add_color_stop_rgba(0.33, indicatorColor.get_red(), indicatorColor.get_green(), indicatorColor.get_blue(), 1.0);
     gradient->add_color_stop_rgba(1.0, indicatorColor.get_red(), indicatorColor.get_green(), indicatorColor.get_blue(), 1.0);
 
