@@ -37,6 +37,28 @@ namespace ao::gtk
     OutputChangedSignal& signalOutputChanged();
 
   private:
+    class Indicator final : public Gtk::Widget
+    {
+    public:
+      Indicator();
+      void update(double timeSec, ao::audio::Quality quality, bool isStopped, bool isReady);
+
+    protected:
+      void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
+      Gtk::SizeRequestMode get_request_mode_vfunc() const override;
+      void measure_vfunc(Gtk::Orientation orientation,
+                         int for_size,
+                         int& minimum,
+                         int& natural,
+                         int& minimum_baseline,
+                         int& natural_baseline) const override;
+
+    private:
+      double _timeSec = 0.0;
+      ao::audio::Quality _quality = ao::audio::Quality::Unknown;
+      bool _isStopped = true;
+      bool _isReady = false;
+    };
     struct LastState final
     {
       ao::audio::Engine::Status engine;
@@ -68,7 +90,7 @@ namespace ao::gtk
 
     // Output selection
     Gtk::Button _outputButton;
-    Gtk::Picture _outputIcon;
+    Indicator _outputIndicator;
     Gtk::Popover _outputPopover;
     Gtk::ListBox _outputListBox;
     Glib::RefPtr<Gio::ListStore<Glib::Object>> _outputStore;
