@@ -73,6 +73,14 @@ namespace ao::audio::backend
     if (format.bitDepth == 32)
     {
       alsaFormat = (format.validBits == 24) ? SND_PCM_FORMAT_S24_LE : SND_PCM_FORMAT_S32_LE;
+      if (::snd_pcm_hw_params_test_format(safePcm.get(), params, alsaFormat) != 0)
+      {
+        if (alsaFormat == SND_PCM_FORMAT_S32_LE &&
+            ::snd_pcm_hw_params_test_format(safePcm.get(), params, SND_PCM_FORMAT_S24_LE) == 0)
+        {
+          alsaFormat = SND_PCM_FORMAT_S24_LE;
+        }
+      }
     }
     else if (format.bitDepth == 24)
     {

@@ -53,16 +53,22 @@ namespace ao::audio::backend
 
       for (auto const depth : std::to_array({16, 24, 32}))
       {
-        auto fmt = SND_PCM_FORMAT_S32_LE;
+        bool supported = false;
         if (depth == 16)
         {
-          fmt = SND_PCM_FORMAT_S16_LE;
+          supported = (::snd_pcm_hw_params_test_format(tempPcm, params, SND_PCM_FORMAT_S16_LE) == 0);
         }
         else if (depth == 24)
         {
-          fmt = SND_PCM_FORMAT_S24_3LE;
+          supported = (::snd_pcm_hw_params_test_format(tempPcm, params, SND_PCM_FORMAT_S24_3LE) == 0);
         }
-        if (::snd_pcm_hw_params_test_format(tempPcm, params, fmt) == 0)
+        else if (depth == 32)
+        {
+          supported = (::snd_pcm_hw_params_test_format(tempPcm, params, SND_PCM_FORMAT_S32_LE) == 0) ||
+                      (::snd_pcm_hw_params_test_format(tempPcm, params, SND_PCM_FORMAT_S24_LE) == 0);
+        }
+
+        if (supported)
         {
           caps.bitDepths.push_back(static_cast<std::uint8_t>(depth));
         }
