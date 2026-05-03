@@ -126,6 +126,24 @@ namespace ao::gtk
     _stack.set_visible_child(pageNameForListId(listId));
   }
 
+  void TrackPageGraph::setPlayingTrack(std::optional<ao::TrackId> trackId)
+  {
+    if (_playingTrackId == trackId)
+    {
+      return;
+    }
+
+    _playingTrackId = trackId;
+
+    for (auto& [id, ctx] : _trackPages)
+    {
+      if (ctx.page)
+      {
+        ctx.page->setPlayingTrackId(trackId);
+      }
+    }
+  }
+
   void TrackPageGraph::buildPageForAllTracks(LibrarySession& session)
   {
     auto adapter =
@@ -254,5 +272,11 @@ namespace ao::gtk
           _callbacks.onCreateSmartListRequested(*page, expression);
         }
       });
+
+    // Set initial playing track state
+    if (_playingTrackId)
+    {
+      page->setPlayingTrackId(_playingTrackId);
+    }
   }
 } // namespace ao::gtk

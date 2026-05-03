@@ -24,6 +24,7 @@ add_library(aobus-gtk-lib STATIC
     ui/TrackRowDataProvider.cpp
     ui/PlaybackBar.cpp
     ui/OutputMenuModel.cpp
+    ui/ThemeBus.cpp
 
     services/PlaylistExporter.cpp
 )

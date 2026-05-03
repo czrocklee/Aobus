@@ -5,15 +5,19 @@
 #include "LayoutConstants.h"
 #include "TrackRowDataProvider.h"
 #include <ao/utility/ByteView.h>
+#include <ao/utility/Log.h>
 
+#include "ui/ThemeBus.h"
 #include <gdk/gdk.h>
 #include <glibmm/wrap.h>
 #include <gtk/gtk.h>
 #include <gtkmm/columnviewcolumn.h>
+#include <gtkmm/cssprovider.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listheader.h>
 #include <gtkmm/listitem.h>
 #include <gtkmm/signallistitemfactory.h>
+#include <gtkmm/stylecontext.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -30,6 +34,59 @@ namespace ao::gtk
   {
     using RowCompareFn = std::move_only_function<int(TrackRow const&, TrackRow const&)>;
     constexpr auto kTagsCellWidgetName = "track-tags-cell";
+
+    void ensureTrackPageCss(bool force = false)
+    {
+      static auto const provider = Gtk::CssProvider::create();
+      static bool initialized = false;
+
+      if (!initialized || force)
+      {
+        if (force)
+        {
+          if (auto display = Gdk::Display::get_default(); display)
+          {
+            Gtk::StyleContext::remove_provider_for_display(display, provider);
+          }
+        }
+
+        provider->load_from_data(R"(
+          /* 1. The Dynamic Beam: Seamlessly following the Title column via CSS variables */
+          columnview row.playing-row {
+            /* We use var(--ao-title-x) which is updated in real-time by C++ */
+            background-image: linear-gradient(to right, 
+              transparent 0%, 
+              alpha(@warning_bg_color, 0.2) var(--ao-title-x, 35%), 
+              transparent 100%
+            );
+            background-color: transparent;
+            border-color: transparent;
+            transition: background-image 1.0s ease-out; /* Smooth sliding of the beam */
+          }
+
+          /* 2. Sharp Title Text */
+          .playing-title {
+            color: @theme_fg_color;
+            font-weight: bold;
+          }
+
+          /* Sophisticated transition */
+          columnview row {
+            transition: all 450ms cubic-bezier(0.16, 1, 0.3, 1);
+          }
+        )");
+
+        if (!initialized || force)
+        {
+          if (auto display = Gdk::Display::get_default(); display)
+          {
+            // Use USER priority to override potential theme/stylix overrides
+            Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
+          }
+          initialized = true;
+        }
+      }
+    }
 
     Glib::RefPtr<Gtk::SignalListItemFactory> createTextColumnFactory(TrackColumnDefinition const& definition)
     {
@@ -97,6 +154,62 @@ namespace ao::gtk
           {
             label->set_text(row->getColumnText(definition.column));
           }
+
+          // Apply playing styles
+          auto const updateStyles = [listItem, row, definition]()
+          {
+            auto* child = listItem->get_child();
+            if (row->isPlaying())
+            {
+              // Find the row widget by traversing up from the cell child
+              // Hierarchy: Child -> Cell -> Row
+              if (auto* cell = child->get_parent())
+              {
+                if (auto* rowWidget = cell->get_parent())
+                {
+                  rowWidget->add_css_class("playing-row");
+                }
+
+                if (definition.column == TrackColumn::Title)
+                {
+                  cell->add_css_class("playing-title");
+                }
+                else
+                {
+                  child->add_css_class("playing-dim");
+                }
+              }
+            }
+            else
+            {
+              if (auto* cell = child->get_parent())
+              {
+                if (auto* rowWidget = cell->get_parent())
+                {
+                  rowWidget->remove_css_class("playing-row");
+                }
+
+                cell->remove_css_class("playing-title");
+              }
+
+              child->remove_css_class("playing-dim");
+            }
+          };
+
+          updateStyles();
+          auto connection = row->property_playing().signal_changed().connect(updateStyles);
+
+          // Store connection to disconnect on unbind
+          listItem->set_data("playing-connection",
+                             new sigc::connection(std::move(connection)),
+                             [](void* data) { delete static_cast<sigc::connection*>(data); });
+        });
+
+      factory->signal_unbind().connect(
+        [](Glib::RefPtr<Gtk::ListItem> const& listItem)
+        {
+          // Connection is automatically deleted and disconnected by the GObject data destroy notify
+          listItem->set_data("playing-connection", nullptr);
         });
 
       return factory;
@@ -198,6 +311,28 @@ namespace ao::gtk
     , _columnLayoutModel{columnLayoutModel}
     , _presentationSpec{presentationSpecForGroup(TrackGroupBy::None)}
   {
+    ensureTrackPageCss();
+
+    // Theme auto-refresh logic: Watch for system-level theme changes
+    auto settings = Gtk::Settings::get_default();
+    settings->property_gtk_theme_name().signal_changed().connect([]() { ensureTrackPageCss(true); });
+    settings->property_gtk_application_prefer_dark_theme().signal_changed().connect([]() { ensureTrackPageCss(true); });
+
+    // Subscribe to global theme refresh signal (e.g. triggered by SIGUSR1 or DBus in main.cpp)
+    signalThemeRefresh().connect(
+      [this]()
+      {
+        APP_LOG_INFO("Executing theme refresh for TrackViewPage...");
+
+        // Now reload our custom CSS and update UI
+        ensureTrackPageCss(true);
+        updateTitlePositionVariable();
+        _columnView.queue_draw();
+      });
+
+    _dynamicCssProvider = Gtk::CssProvider::create();
+    _columnView.get_style_context()->add_provider(_dynamicCssProvider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
     // Create multi-selection model to allow bulk operations
     _selectionModel = Gtk::MultiSelection::create(_sortModel);
 
@@ -233,6 +368,7 @@ namespace ao::gtk
           }
 
           queueSharedColumnLayoutUpdate();
+          updateTitlePositionVariable();
         });
     }
 
@@ -255,6 +391,7 @@ namespace ao::gtk
     append(_controlsBar);
     append(_statusLabel);
     append(_scrolledWindow);
+    updateTitlePositionVariable();
   }
 
   TrackViewPage::~TrackViewPage()
@@ -476,6 +613,10 @@ namespace ao::gtk
 
           queueSharedColumnLayoutUpdate();
         });
+
+      _columnNotifyConnections.push_back(column->property_fixed_width().signal_changed().connect(
+        sigc::mem_fun(*this, &TrackViewPage::updateTitlePositionVariable)));
+
       _columnView.append_column(column);
 
       auto* toggle = Gtk::make_managed<Gtk::CheckButton>(title);
@@ -776,6 +917,33 @@ namespace ao::gtk
     }
   }
 
+  void TrackViewPage::setPlayingTrackId(std::optional<TrackId> trackId)
+  {
+    auto model = _selectionModel->get_model();
+
+    if (!model)
+    {
+      return;
+    }
+
+    auto const nItems = model->get_n_items();
+
+    for (std::uint32_t i = 0; i < nItems; ++i)
+    {
+      auto item = model->get_object(i);
+      auto row = std::dynamic_pointer_cast<TrackRow>(item);
+
+      if (row)
+      {
+        bool const isPlaying = trackId && row->getTrackId() == *trackId;
+        if (row->isPlaying() != isPlaying)
+        {
+          row->setPlaying(isPlaying);
+        }
+      }
+    }
+  }
+
   std::vector<TrackListAdapter::TrackId> TrackViewPage::getVisibleTrackIds() const
   {
     auto result = std::vector<TrackListAdapter::TrackId>{};
@@ -1046,5 +1214,34 @@ namespace ao::gtk
   {
     auto const it = std::ranges::find(_columns, column, &ColumnBinding::id);
     return it != _columns.end() ? &*it : nullptr;
+  }
+
+  void TrackViewPage::updateTitlePositionVariable()
+  {
+    double x = 0;
+    bool found = false;
+
+    auto const columns = _columnView.get_columns();
+    if (!columns) return;
+
+    for (std::uint32_t i = 0; i < columns->get_n_items(); ++i)
+    {
+      auto col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(i));
+      if (!col || !col->get_visible()) continue;
+
+      if (col->get_title() == "Title")
+      {
+        x += col->get_fixed_width() / 2.0;
+        found = true;
+        break;
+      }
+      x += col->get_fixed_width();
+    }
+
+    if (found)
+    {
+      auto const css = std::format("columnview {{ --ao-title-x: {:.1f}px; }}", x);
+      _dynamicCssProvider->load_from_data(css);
+    }
   }
 } // namespace ao::gtk

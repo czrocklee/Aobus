@@ -421,9 +421,9 @@ namespace ao::audio
 
     switch (quality)
     {
-      case Quality::BitwisePerfect: appendLine(qualityTooltip, "\nConclusion: Bit-perfect output"); break;
+      case Quality::BitwisePerfect:
+      case Quality::LosslessPadded: appendLine(qualityTooltip, "\nConclusion: Bit-perfect output"); break;
 
-      case Quality::LosslessPadded:
       case Quality::LosslessFloat: appendLine(qualityTooltip, "\nConclusion: Lossless Conversion"); break;
 
       case Quality::LinearIntervention:

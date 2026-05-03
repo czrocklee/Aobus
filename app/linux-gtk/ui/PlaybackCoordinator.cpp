@@ -94,6 +94,13 @@ namespace ao::gtk
     }
 
     _playbackBar->setSnapshot(status);
+
+    auto playingTrackId = std::optional<ao::TrackId>{};
+    if (_activePlaybackSequence && status.engine.transport != ao::audio::Transport::Idle)
+    {
+      playingTrackId = _activePlaybackSequence->trackIds[_activePlaybackSequence->currentIndex];
+    }
+    _host.updatePlayingTrack(playingTrackId);
   }
 
   void PlaybackCoordinator::onPlayRequested()

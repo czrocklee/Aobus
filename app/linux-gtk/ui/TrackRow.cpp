@@ -37,7 +37,23 @@ namespace ao::gtk
   }
 
   TrackRow::TrackRow()
+    : Glib::ObjectBase{"TrackRow"}, _propertyPlaying{*this, "playing", false}
   {
+  }
+
+  Glib::PropertyProxy<bool> TrackRow::property_playing()
+  {
+    return _propertyPlaying.get_proxy();
+  }
+
+  bool TrackRow::isPlaying() const
+  {
+    return _propertyPlaying.get_value();
+  }
+
+  void TrackRow::setPlaying(bool playing)
+  {
+    _propertyPlaying.set_value(playing);
   }
 
   Glib::RefPtr<TrackRow> TrackRow::create(TrackId id, TrackRowDataProvider const& provider)

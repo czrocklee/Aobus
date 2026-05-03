@@ -41,6 +41,7 @@ namespace ao::gtk
     virtual TrackPageContext* findTrackPageContext(ao::ListId listId) = 0;
     virtual void showListPage(ao::ListId listId) = 0;
     virtual void updatePlaybackStatus(ao::audio::Player::Status const& status) = 0;
+    virtual void updatePlayingTrack(std::optional<ao::TrackId> trackId) = 0;
     virtual void showPlaybackMessage(std::string const& message,
                                      std::optional<std::chrono::seconds> timeout = std::nullopt) = 0;
   };

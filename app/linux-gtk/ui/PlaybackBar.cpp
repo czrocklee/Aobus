@@ -7,6 +7,7 @@
 #include "SvgTemplate.h"
 #include <ao/utility/Log.h>
 
+#include "ui/ThemeBus.h"
 #include <gdk-pixbuf/gdk-pixbuf-loader.h>
 #include <gdkmm/display.h>
 #include <gtkmm/button.h>
@@ -22,34 +23,46 @@ namespace ao::gtk
 {
   namespace
   {
-    void ensurePlaybackBarCss()
+    void ensurePlaybackBarCss(bool force = false)
     {
-      static auto const provider = []
+      static auto const provider = Gtk::CssProvider::create();
+      static bool initialized = false;
+
+      if (!initialized || force)
       {
-        auto const css = Gtk::CssProvider::create();
-        css->load_from_data(".output-button-logo {"
-                            "  background: none;"
-                            "  border: none;"
-                            "  box-shadow: none;"
-                            "  padding: 0;"
-                            "  margin: 0;"
-                            "  min-width: 34px;"
-                            "  min-height: 34px;"
-                            "  color: inherit;"
-                            "}"
-                            ".output-button-logo:hover {"
-                            "  background-color: rgba(255, 255, 255, 0.08);"
-                            "  transition: all 200ms ease;"
-                            "  border-radius: 8px;"
-                            "}");
-        if (auto const display = Gdk::Display::get_default(); display)
+        if (force)
         {
-          Gtk::StyleContext::add_provider_for_display(display, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+          if (auto const display = Gdk::Display::get_default(); display)
+          {
+            Gtk::StyleContext::remove_provider_for_display(display, provider);
+          }
         }
 
-        return css;
-      }();
-      (void)provider;
+        provider->load_from_data(".output-button-logo {"
+                                 "  background: none;"
+                                 "  border: none;"
+                                 "  box-shadow: none;"
+                                 "  padding: 0;"
+                                 "  margin: 0;"
+                                 "  min-width: 34px;"
+                                 "  min-height: 34px;"
+                                 "  color: inherit;"
+                                 "}"
+                                 ".output-button-logo:hover {"
+                                 "  background-color: rgba(255, 255, 255, 0.08);"
+                                 "  transition: all 200ms ease;"
+                                 "  border-radius: 8px;"
+                                 "}");
+
+        if (!initialized || force)
+        {
+          if (auto const display = Gdk::Display::get_default(); display)
+          {
+            Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
+          }
+          initialized = true;
+        }
+      }
     }
   }
 
@@ -57,6 +70,16 @@ namespace ao::gtk
     : Gtk::Box(Gtk::Orientation::HORIZONTAL)
   {
     ensurePlaybackBarCss();
+
+    // Subscribe to global theme refresh signal
+    signalThemeRefresh().connect(
+      [this]()
+      {
+        APP_LOG_INFO("Executing theme refresh for PlaybackBar...");
+        ensurePlaybackBarCss(true);
+        queue_draw();
+      });
+
     add_css_class("playback-bar");
     set_vexpand(false);
     set_valign(Gtk::Align::CENTER);
@@ -459,8 +482,8 @@ namespace ao::gtk
     {
       switch (quality)
       {
-        case ao::audio::Quality::BitwisePerfect: indicatorColor = "#A855F7"; break;
-        case ao::audio::Quality::LosslessPadded:
+        case ao::audio::Quality::BitwisePerfect:
+        case ao::audio::Quality::LosslessPadded: indicatorColor = "#A855F7"; break;
         case ao::audio::Quality::LosslessFloat: indicatorColor = "#10B981"; break;
         case ao::audio::Quality::LinearIntervention: indicatorColor = "#F59E0B"; break;
         case ao::audio::Quality::LossySource: indicatorColor = "#6B7280"; break;

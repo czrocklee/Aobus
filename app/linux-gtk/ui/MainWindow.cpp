@@ -197,6 +197,14 @@ namespace ao::gtk
     }
   }
 
+  void MainWindow::updatePlayingTrack(std::optional<ao::TrackId> trackId)
+  {
+    if (_trackPageGraph)
+    {
+      _trackPageGraph->setPlayingTrack(trackId);
+    }
+  }
+
   void MainWindow::showPlaybackMessage(std::string const& message, std::optional<std::chrono::seconds> timeout)
   {
     if (_statusBar != nullptr)
