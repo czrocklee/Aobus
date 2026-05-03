@@ -30,7 +30,10 @@ namespace ao::audio
 
     void clear() noexcept;
 
-    std::size_t size() const noexcept;
+    std::size_t size() const noexcept
+    {
+      return _writeCount.load(std::memory_order_acquire) - _readCount.load(std::memory_order_acquire);
+    }
     std::size_t capacity() const noexcept { return kRingBufferCapacity; }
 
   private:

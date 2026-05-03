@@ -6,11 +6,9 @@
 #include "TrackRowDataProvider.h"
 #include <ao/utility/ByteView.h>
 
+#include <gdk/gdk.h>
 #include <glibmm/wrap.h>
 #include <gtk/gtk.h>
-
-#include <gdk/gdk.h>
-
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listheader.h>
@@ -933,7 +931,7 @@ namespace ao::gtk
 
         if (keyval == GDK_KEY_t || keyval == GDK_KEY_T)
         {
-          if (bool(modifiers & Gdk::ModifierType::CONTROL_MASK))
+          if (static_cast<bool>(modifiers & Gdk::ModifierType::CONTROL_MASK))
           {
             if (auto selectedIds = getSelectedTrackIds(); !selectedIds.empty())
             {

@@ -8,22 +8,19 @@
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
-#include <ao/utility/IMainThreadDispatcher.h>
 
-#include <atomic>
 #include <functional>
 #include <memory>
-#include <set>
-#include <span>
 #include <string>
-#include <unordered_map>
 #include <vector>
+
+namespace ao
+{
+  class IMainThreadDispatcher;
+}
 
 namespace ao::audio
 {
-  class Engine;
-  struct EngineRouteSnapshot;
-
   /**
    * @brief High-level player that coordinates multiple backends and tracks playback state.
    * Manages audio routing graphs and quality analysis.
@@ -57,61 +54,17 @@ namespace ao::audio
     void stop();
     void seek(std::uint32_t positionMs);
 
-    [[nodiscard]] Status status() const;
-    [[nodiscard]] bool isReady() const;
+    Status status() const;
+    bool isReady() const;
 
     void setTrackEndedCallback(std::function<void()> callback);
 
     // Internal visibility for tests
-    uint64_t _playbackGeneration = 1;
     void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);
+    std::uint64_t playbackGeneration() const noexcept;
 
   private:
-    struct ProviderRecord
-    {
-      std::unique_ptr<IBackendProvider> provider;
-      Subscription subscription;
-      std::vector<Device> devices;
-    };
-
-    struct PendingOutput
-    {
-      BackendId backend;
-      DeviceId deviceId;
-      ProfileId profile;
-    };
-
-    void handleDevicesChanged(IBackendProvider* provider, std::vector<Device> const& devices);
-    void handleSystemGraphChanged(flow::Graph const& graph, std::uint64_t generation);
-    void updateMergedGraph();
-    void analyzeAudioQuality();
-
-    std::vector<std::unique_ptr<ProviderRecord>> _providers;
-    std::optional<PendingOutput> _pendingOutput;
-    IBackendProvider* _activeManager = nullptr;
-    Subscription _graphSubscription;
-
-    std::shared_ptr<ao::IMainThreadDispatcher> _dispatcher;
-    std::unique_ptr<Engine> _engine;
-
-    mutable std::vector<IBackendProvider::Status> _cachedBackends;
-    mutable std::vector<Device> _allDevices;
-
-    Engine::RouteStatus _cachedRouteStatus;
-    flow::Graph _cachedSystemGraph;
-    flow::Graph _mergedGraph;
-
-    Quality _quality = Quality::Unknown;
-    std::string _qualityTooltip;
-    std::optional<TrackPlaybackDescriptor> _currentTrack;
-
-    std::function<void()> _onTrackEnded;
-
-    // Quality analysis helpers
-    std::vector<flow::Node const*> findPlaybackPath(std::string const& startId) const;
-    void assessNodeQuality(flow::Node const& node, flow::Node const* nextNode);
-    void processInputSources(flow::Node const& node,
-                             std::span<flow::Node const* const> path,
-                             std::unordered_map<std::string, std::set<std::string>> const& inputSources);
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
   };
 } // namespace ao::audio

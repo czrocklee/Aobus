@@ -6,7 +6,6 @@
 
 #include <ao/model/SmartListEngine.h>
 #include <ao/model/TrackIdList.h>
-#include <iostream>
 
 #include <ao/query/Parser.h>
 
@@ -70,13 +69,15 @@ namespace ao::model
     {
       auto parsed = _stagedExpression.empty() ? ao::query::parse("true") : ao::query::parse(_stagedExpression);
       auto compiler = ao::query::QueryCompiler{&_ml.dictionary()};
+
       _stagedPlan = std::make_unique<ao::query::ExecutionPlan>(compiler.compile(parsed));
       _stagedHasError = false;
       _stagedErrorMessage.clear();
     }
     catch (std::exception const& e)
     {
-      std::cerr << "Smart list expression error for '" << _stagedExpression << "': " << e.what() << '\n';
+      APP_LOG_ERROR("Smart list expression error for '{}': {}", _stagedExpression, e.what());
+
       _stagedHasError = true;
       _stagedErrorMessage = e.what();
       _stagedPlan.reset();

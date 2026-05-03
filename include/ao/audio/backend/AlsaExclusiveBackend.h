@@ -5,15 +5,7 @@
 
 #include <ao/audio/IBackend.h>
 
-#include <atomic>
 #include <memory>
-#include <string>
-#include <thread>
-
-extern "C"
-{
-#include <alsa/asoundlib.h>
-}
 
 namespace ao::audio::backend
 {
@@ -43,25 +35,7 @@ namespace ao::audio::backend
     ao::audio::ProfileId profileId() const noexcept override;
 
   private:
-    struct AlsaPcmDeleter
-    {
-      void operator()(::snd_pcm_t* p) const noexcept
-      {
-        if (p) ::snd_pcm_close(p);
-      }
-    };
-    using AlsaPcmPtr = std::unique_ptr<::snd_pcm_t, AlsaPcmDeleter>;
-
-    void playbackLoop(std::stop_token const& stopToken);
-    void recoverFromXrun(int err);
-
-    std::string _deviceName;
-    ao::audio::Format _format;
-    ao::audio::RenderCallbacks _callbacks;
-
-    AlsaPcmPtr _pcm;
-    std::jthread _thread;
-    std::atomic<bool> _paused{false};
-    bool _canPause = false;
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
   };
 } // namespace ao::audio::backend

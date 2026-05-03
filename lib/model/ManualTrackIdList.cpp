@@ -124,9 +124,7 @@ namespace ao::model
 
     for (auto id : ids)
     {
-      auto it = std::ranges::find(_trackIds, id);
-
-      if (it != _trackIds.end())
+      if (auto it = std::ranges::find(_trackIds, id); it != _trackIds.end())
       {
         _trackIds.erase(it);
         removed.push_back(id);

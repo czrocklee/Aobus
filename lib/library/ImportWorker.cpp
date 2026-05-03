@@ -4,7 +4,11 @@
 #include <ao/library/ImportWorker.h>
 #include <ao/utility/Log.h>
 
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/tag/File.h>
 
 #include <chrono>
 

@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackView.h>
 
 #include <filesystem>
 #include <map>

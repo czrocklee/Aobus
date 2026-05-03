@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <CLI/CLI.hpp>
-#include <ao/library/MusicLibrary.h>
-
 #include "InitCommand.h"
 #include "LibCommand.h"
 #include "ListCommand.h"
 #include "TagCommand.h"
 #include "TrackCommand.h"
+
+#include <CLI/CLI.hpp>
+#include <ao/library/MusicLibrary.h>
 
 #include <iostream>
 

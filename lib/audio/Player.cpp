@@ -5,9 +5,11 @@
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Player.h>
+#include <ao/utility/IMainThreadDispatcher.h>
 #include <ao/utility/Log.h>
 
 #include <algorithm>
+#include <atomic>
 #include <format>
 #include <map>
 #include <ranges>
@@ -62,259 +64,108 @@ namespace ao::audio
     }
   }
 
-  Player::Player(std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
-    : _dispatcher{std::move(dispatcher)}
+  struct Player::Impl final
   {
-    // Start with a NullBackend until a provider provides something real
-    _engine = std::make_unique<Engine>(std::make_unique<NullBackend>(),
-                                       Device{.id = DeviceId{"null"},
-                                              .displayName = "None",
-                                              .description = "No audio output selected",
-                                              .backendId = kBackendNone,
-                                              .capabilities = {}},
-                                       _dispatcher);
-
-    _engine->setOnTrackEnded(
-      [this]()
-      {
-        if (_onTrackEnded)
-        {
-          _onTrackEnded();
-        }
-      });
-
-    _engine->setOnRouteChanged(
-      [this](Engine::RouteStatus const& snapshot)
-      {
-        // Capture generation to prevent stale updates
-        auto const generation = _playbackGeneration;
-
-        if (_dispatcher)
-        {
-          _dispatcher->dispatch([this, snapshot, generation]() { handleRouteChanged(snapshot, generation); });
-        }
-        else
-        {
-          handleRouteChanged(snapshot, generation);
-        }
-      });
-  }
-
-  void Player::setTrackEndedCallback(std::function<void()> callback)
-  {
-    _onTrackEnded = std::move(callback);
-  }
-
-  Player::~Player()
-  {
-    if (_engine)
+    struct ProviderRecord
     {
-      _engine->setOnRouteChanged(nullptr);
-    }
-  }
+      std::unique_ptr<IBackendProvider> provider;
+      Subscription subscription;
+      std::vector<Device> devices;
+    };
 
-  void Player::addProvider(std::unique_ptr<IBackendProvider> provider)
-  {
-    if (!provider)
+    struct PendingOutput
     {
-      return;
+      BackendId backend;
+      DeviceId deviceId;
+      ProfileId profile;
+    };
+
+    explicit Impl(std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
+      : dispatcher{std::move(dispatcher)}
+    {
     }
 
-    auto record = std::make_unique<ProviderRecord>();
-    record->provider = std::move(provider);
+    std::uint64_t playbackGeneration = 1;
+    std::vector<std::unique_ptr<ProviderRecord>> providers;
+    std::optional<PendingOutput> pendingOutput;
+    IBackendProvider* activeManager = nullptr;
+    Subscription graphSubscription;
 
-    auto* const providerPtr = record->provider.get();
-    auto* const recordPtr = record.get();
+    std::shared_ptr<ao::IMainThreadDispatcher> dispatcher;
+    std::unique_ptr<Engine> engine;
 
-    _providers.push_back(std::move(record));
+    mutable std::vector<IBackendProvider::Status> cachedBackends;
+    mutable std::vector<Device> allDevices;
 
-    recordPtr->subscription = providerPtr->subscribeDevices(
-      [this, providerPtr, recordPtr](std::vector<Device> const& devices)
-      {
-        if (_dispatcher)
-        {
-          _dispatcher->dispatch(
-            [this, providerPtr, recordPtr, devices]()
-            {
-              recordPtr->devices = devices;
-              handleDevicesChanged(providerPtr, devices);
-            });
-        }
-        else
-        {
-          recordPtr->devices = devices;
-          handleDevicesChanged(providerPtr, devices);
-        }
+    Engine::RouteStatus cachedRouteStatus;
+    flow::Graph cachedSystemGraph;
+    flow::Graph mergedGraph;
 
-        return true; // Wait, this is a lambda return, but still a block.
-      });
-  }
+    Quality quality = Quality::Unknown;
+    std::string qualityTooltip;
+    std::optional<TrackPlaybackDescriptor> currentTrack;
 
-  void Player::play(TrackPlaybackDescriptor const& descriptor)
-  {
-    if (!isReady())
-    {
-      AUDIO_LOG_WARN("Player: Playback ignored because audio backend is not ready (pending discovery)");
-      return;
-    }
+    std::function<void()> onTrackEnded;
 
-    _playbackGeneration++;
-    _cachedRouteStatus = {};
-    _cachedSystemGraph = {};
-    _mergedGraph = {};
-    _quality = Quality::Unknown;
-    _qualityTooltip.clear();
-    _graphSubscription.reset();
-    _currentTrack = descriptor;
-    _engine->play(descriptor);
-  }
+    // Quality analysis helpers
+    std::vector<flow::Node const*> findPlaybackPath(std::string const& startId) const;
+    void assessNodeQuality(flow::Node const& node, flow::Node const* nextNode);
+    void processInputSources(flow::Node const& node,
+                             std::span<flow::Node const* const> path,
+                             std::unordered_map<std::string, std::set<std::string>> const& inputSources);
 
-  void Player::setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
-  {
-    auto const currentSnap = _engine->status();
+    void handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices);
+    void handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation);
+    void updateMergedGraph();
+    void analyzeAudioQuality();
+  };
 
-    // 1. Check if we already have this output active
-    if (backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
-    {
-      _pendingOutput.reset();
-      return;
-    }
-
-    // 2. Find the Device matching the kind and id from our cache
-    auto const it = std::ranges::find_if(
-      _allDevices, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
-
-    if (it == _allDevices.end())
-    {
-      // If we don't have it yet, store it as pending.
-      _pendingOutput = PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
-      AUDIO_LOG_DEBUG("Player: Requested output {}:{} not yet available, pending discovery", backend, deviceId);
-      return;
-    }
-
-    // Found it! Clear any pending output.
-    _pendingOutput.reset();
-
-    // 3. Find the provider object that can handle this BackendId
-    auto const recordIt = std::ranges::find_if(
-      _providers, [&](auto const& record) { return record->provider->status().metadata.id == backend; });
-
-    if (recordIt == _providers.end())
-    {
-      AUDIO_LOG_ERROR("Player: No provider found for backend {}", backend);
-      return;
-    }
-
-    // 4. Create the backend and swap it in the engine
-    auto const& device = *it;
-    auto newBackend = (*recordIt)->provider->createBackend(device, profile);
-    _activeManager = (*recordIt)->provider.get();
-    _playbackGeneration++;
-    _engine->setBackend(std::move(newBackend), device);
-  }
-
-  void Player::pause()
-  {
-    _engine->pause();
-  }
-
-  void Player::resume()
-  {
-    _engine->resume();
-  }
-
-  void Player::stop()
-  {
-    _playbackGeneration++;
-    _cachedRouteStatus = {};
-    _cachedSystemGraph = {};
-    _mergedGraph = {};
-    _quality = Quality::Unknown;
-    _qualityTooltip.clear();
-    _graphSubscription.reset();
-    _currentTrack.reset();
-    _engine->stop();
-  }
-
-  void Player::seek(std::uint32_t positionMs)
-  {
-    _engine->seek(positionMs);
-  }
-
-  Player::Status Player::status() const
-  {
-    auto engineStatus = _engine->status();
-
-    auto status = Player::Status{};
-    status.engine = std::move(engineStatus);
-    if (_currentTrack)
-    {
-      status.trackTitle = _currentTrack->title;
-      status.trackArtist = _currentTrack->artist;
-    }
-    status.availableBackends = _cachedBackends;
-    status.flow = _mergedGraph;
-    status.isReady = isReady();
-
-    // Inject controller-owned fields into the snapshot returned to the UI
-    status.quality = _quality;
-    status.qualityTooltip = _qualityTooltip;
-
-    return status;
-  }
-
-  bool Player::isReady() const
-  {
-    auto const engineStatus = _engine->status();
-    return engineStatus.backendId != kBackendNone && !_pendingOutput.has_value();
-  }
-
-  void Player::handleDevicesChanged(IBackendProvider* provider, std::vector<Device> const& devices)
+  void Player::Impl::handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices)
   {
     // Update individual provider cache
     auto const it =
-      std::ranges::find_if(_providers, [&](auto const& record) { return record->provider.get() == provider; });
-    if (it != _providers.end())
+      std::ranges::find_if(providers, [&](auto const& record) { return record->provider.get() == provider; });
+    if (it != providers.end())
     {
       (*it)->devices = devices;
     }
 
     // Rebuild global cache from all providers
-    auto allDevices = std::vector<Device>{};
+    auto allDevicesList = std::vector<Device>{};
     auto snapshots = std::vector<IBackendProvider::Status>{};
 
-    for (auto const& record : _providers)
+    for (auto const& record : providers)
     {
       auto status = record->provider->status();
       // The provider status might have its own internal device list, but we use the one from the subscription for
       // consistency
       status.devices = record->devices;
       snapshots.push_back(std::move(status));
-      allDevices.insert(allDevices.end(), record->devices.begin(), record->devices.end());
+      allDevicesList.insert(allDevicesList.end(), record->devices.begin(), record->devices.end());
     }
 
-    _cachedBackends = std::move(snapshots);
-    _allDevices = std::move(allDevices);
+    cachedBackends = std::move(snapshots);
+    allDevices = std::move(allDevicesList);
 
     // Keep the engine's current device capabilities up-to-date
-    auto const currentSnap = _engine->status();
+    auto const currentSnap = engine->status();
     auto const activeIt =
-      std::ranges::find_if(_allDevices,
+      std::ranges::find_if(allDevices,
                            [&](Device const& dev)
                            { return dev.backendId == currentSnap.backendId && dev.id == currentSnap.currentDeviceId; });
 
-    if (activeIt != _allDevices.end())
+    if (activeIt != allDevices.end())
     {
-      _engine->updateDevice(*activeIt);
+      engine->updateDevice(*activeIt);
     }
 
-    if (_pendingOutput)
+    if (pendingOutput)
     {
       // Try to apply pending output
-      auto const pending = *_pendingOutput;
-      setOutput(pending.backend, pending.deviceId, pending.profile);
+      auto const pending = *pendingOutput;
+      owner->setOutput(pending.backend, pending.deviceId, pending.profile);
 
-      if (!_pendingOutput)
+      if (!pendingOutput)
       {
         AUDIO_LOG_INFO("Player: Pending output {}:{} ({}) successfully restored",
                        pending.backend,
@@ -324,63 +175,25 @@ namespace ao::audio
     }
   }
 
-  void Player::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)
+  void Player::Impl::handleSystemGraphChanged(Player* /*owner*/, flow::Graph const& graph, std::uint64_t generation)
   {
-    if (generation != _playbackGeneration)
+    if (generation != playbackGeneration)
     {
       return;
     }
 
-    _cachedRouteStatus = status;
-
-    // Check if we have a valid anchor and manager to subscribe to the system graph
-    if (_cachedRouteStatus.optAnchor && _activeManager != nullptr)
-    {
-      if (!_graphSubscription)
-      {
-        _graphSubscription = _activeManager->subscribeGraph(
-          _cachedRouteStatus.optAnchor->id,
-          [this, generation](flow::Graph const& graph)
-          {
-            if (_dispatcher)
-            {
-              _dispatcher->dispatch([this, graph, generation]() { handleSystemGraphChanged(graph, generation); });
-            }
-            else
-            {
-              handleSystemGraphChanged(graph, generation);
-            }
-          });
-      }
-    }
-    else
-    {
-      _graphSubscription.reset();
-      _cachedSystemGraph = {};
-    }
-
+    cachedSystemGraph = graph;
     updateMergedGraph();
   }
 
-  void Player::handleSystemGraphChanged(flow::Graph const& graph, std::uint64_t generation)
+  void Player::Impl::updateMergedGraph()
   {
-    if (generation != _playbackGeneration)
-    {
-      return;
-    }
-
-    _cachedSystemGraph = graph;
-    updateMergedGraph();
-  }
-
-  void Player::updateMergedGraph()
-  {
-    _mergedGraph = _cachedRouteStatus.flow;
+    mergedGraph = cachedRouteStatus.flow;
 
     // Find the engine output format to enrich system nodes that might be missing it (like ALSA)
     auto optEngineFormat = std::optional<Format>{};
 
-    for (auto const& node : _cachedRouteStatus.flow.nodes)
+    for (auto const& node : cachedRouteStatus.flow.nodes)
     {
       if (node.id == "rs-engine")
       {
@@ -390,25 +203,25 @@ namespace ao::audio
     }
 
     // Add system graph nodes and links
-    for (auto node : _cachedSystemGraph.nodes)
+    for (auto node : cachedSystemGraph.nodes)
     {
       if (!node.optFormat && optEngineFormat)
       {
         node.optFormat = optEngineFormat;
       }
 
-      _mergedGraph.nodes.push_back(node);
+      mergedGraph.nodes.push_back(node);
     }
 
-    for (auto const& link : _cachedSystemGraph.connections)
+    for (auto const& link : cachedSystemGraph.connections)
     {
-      _mergedGraph.connections.push_back(link);
+      mergedGraph.connections.push_back(link);
     }
 
     // Find the backend stream node to bridge the engine to
     std::string streamNodeId;
 
-    for (auto const& node : _cachedSystemGraph.nodes)
+    for (auto const& node : cachedSystemGraph.nodes)
     {
       if (node.type == flow::NodeType::Stream)
       {
@@ -419,13 +232,13 @@ namespace ao::audio
 
     if (!streamNodeId.empty())
     {
-      _mergedGraph.connections.push_back({.sourceId = "rs-engine", .destId = streamNodeId, .isActive = true});
+      mergedGraph.connections.push_back({.sourceId = "rs-engine", .destId = streamNodeId, .isActive = true});
     }
 
     analyzeAudioQuality();
   }
 
-  std::vector<flow::Node const*> Player::findPlaybackPath(std::string const& startId) const
+  std::vector<flow::Node const*> Player::Impl::findPlaybackPath(std::string const& startId) const
   {
     std::vector<flow::Node const*> path;
     auto currentId = startId;
@@ -435,9 +248,9 @@ namespace ao::audio
     {
       visited.insert(currentId);
 
-      auto const it = std::ranges::find(_mergedGraph.nodes, currentId, &flow::Node::id);
+      auto const it = std::ranges::find(mergedGraph.nodes, currentId, &flow::Node::id);
 
-      if (it == _mergedGraph.nodes.end())
+      if (it == mergedGraph.nodes.end())
       {
         break;
       }
@@ -446,7 +259,7 @@ namespace ao::audio
 
       std::string nextId;
 
-      for (auto const& link : _mergedGraph.connections)
+      for (auto const& link : mergedGraph.connections)
       {
         if (link.isActive && link.sourceId == currentId)
         {
@@ -461,9 +274,9 @@ namespace ao::audio
     return path;
   }
 
-  void Player::processInputSources(flow::Node const& node,
-                                   std::span<flow::Node const* const> path,
-                                   std::unordered_map<std::string, std::set<std::string>> const& inputSources)
+  void Player::Impl::processInputSources(flow::Node const& node,
+                                         std::span<flow::Node const* const> path,
+                                         std::unordered_map<std::string, std::set<std::string>> const& inputSources)
   {
     if (inputSources.contains(node.id))
     {
@@ -476,9 +289,9 @@ namespace ao::audio
 
         if (!isInternal)
         {
-          auto const it = std::ranges::find(_mergedGraph.nodes, srcId, &flow::Node::id);
+          auto const it = std::ranges::find(mergedGraph.nodes, srcId, &flow::Node::id);
 
-          if (it != _mergedGraph.nodes.end())
+          if (it != mergedGraph.nodes.end())
           {
             otherAppNames.push_back(it->name);
           }
@@ -502,30 +315,30 @@ namespace ao::audio
           }
         }
 
-        appendLine(_qualityTooltip, std::format("• Mixed: {} shared with {}", node.name, apps));
-        _quality = std::max(_quality, Quality::LinearIntervention);
+        appendLine(qualityTooltip, std::format("• Mixed: {} shared with {}", node.name, apps));
+        quality = std::max(quality, Quality::LinearIntervention);
       }
     }
   }
 
-  void Player::assessNodeQuality(flow::Node const& node, flow::Node const* nextNode)
+  void Player::Impl::assessNodeQuality(flow::Node const& node, flow::Node const* nextNode)
   {
     if (node.isLossySource)
     {
-      appendLine(_qualityTooltip, std::format("• Source: Lossy format ({})", node.name));
-      _quality = std::max(_quality, Quality::LossySource);
+      appendLine(qualityTooltip, std::format("• Source: Lossy format ({})", node.name));
+      quality = std::max(quality, Quality::LossySource);
     }
 
     if (node.volumeNotUnity)
     {
-      appendLine(_qualityTooltip, std::format("• Volume: Modification at {}", node.name));
-      _quality = std::max(_quality, Quality::LinearIntervention);
+      appendLine(qualityTooltip, std::format("• Volume: Modification at {}", node.name));
+      quality = std::max(quality, Quality::LinearIntervention);
     }
 
     if (node.isMuted)
     {
-      appendLine(_qualityTooltip, std::format("• Status: {} is MUTED", node.name));
-      _quality = std::max(_quality, Quality::LinearIntervention);
+      appendLine(qualityTooltip, std::format("• Status: {} is MUTED", node.name));
+      quality = std::max(quality, Quality::LinearIntervention);
     }
 
     if (nextNode != nullptr)
@@ -537,46 +350,46 @@ namespace ao::audio
 
         if (f1.sampleRate != f2.sampleRate)
         {
-          appendLine(_qualityTooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
-          _quality = std::max(_quality, Quality::LinearIntervention);
+          appendLine(qualityTooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
+          quality = std::max(quality, Quality::LinearIntervention);
         }
 
         if (f1.channels != f2.channels)
         {
-          appendLine(_qualityTooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
-          _quality = std::max(_quality, Quality::LinearIntervention);
+          appendLine(qualityTooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
+          quality = std::max(quality, Quality::LinearIntervention);
         }
         else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
         {
           if (isLosslessBitDepthChange(f1, f2))
           {
             appendLine(
-              _qualityTooltip, f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
-            _quality = std::max(_quality, f2.isFloat ? Quality::LosslessFloat : Quality::LosslessPadded);
+              qualityTooltip, f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
+            quality = std::max(quality, f2.isFloat ? Quality::LosslessFloat : Quality::LosslessPadded);
           }
           else
           {
-            appendLine(_qualityTooltip, std::format("• Precision: Truncated {}b → {}b", f1.bitDepth, f2.bitDepth));
-            _quality = std::max(_quality, Quality::LinearIntervention);
+            appendLine(qualityTooltip, std::format("• Precision: Truncated {}b → {}b", f1.bitDepth, f2.bitDepth));
+            quality = std::max(quality, Quality::LinearIntervention);
           }
         }
       }
     }
   }
 
-  void Player::analyzeAudioQuality()
+  void Player::Impl::analyzeAudioQuality()
   {
     // Now analyze the merged graph
-    _quality = Quality::BitwisePerfect;
-    _qualityTooltip.clear();
+    quality = Quality::BitwisePerfect;
+    qualityTooltip.clear();
 
-    if (_mergedGraph.nodes.empty())
+    if (mergedGraph.nodes.empty())
     {
-      _quality = Quality::Unknown;
+      quality = Quality::Unknown;
       return;
     }
 
-    appendLine(_qualityTooltip, "Audio Routing Analysis:");
+    appendLine(qualityTooltip, "Audio Routing Analysis:");
 
     // 1. Build linear path
     auto const path = findPlaybackPath("rs-decoder");
@@ -584,7 +397,7 @@ namespace ao::audio
     // 2. Identify mixing sources
     auto inputSources = std::unordered_map<std::string, std::set<std::string>>{};
 
-    for (auto const& link : _mergedGraph.connections)
+    for (auto const& link : mergedGraph.connections)
     {
       if (link.isActive)
       {
@@ -601,27 +414,278 @@ namespace ao::audio
       processInputSources(*node, path, inputSources);
     }
 
-    if (_quality == Quality::BitwisePerfect)
+    if (quality == Quality::BitwisePerfect)
     {
-      appendLine(_qualityTooltip, "• Signal Path: Byte-perfect from decoder to device");
+      appendLine(qualityTooltip, "• Signal Path: Byte-perfect from decoder to device");
     }
 
-    switch (_quality)
+    switch (quality)
     {
-      case Quality::BitwisePerfect: appendLine(_qualityTooltip, "\nConclusion: Bit-perfect output"); break;
+      case Quality::BitwisePerfect: appendLine(qualityTooltip, "\nConclusion: Bit-perfect output"); break;
 
       case Quality::LosslessPadded:
-      case Quality::LosslessFloat: appendLine(_qualityTooltip, "\nConclusion: Lossless Conversion"); break;
+      case Quality::LosslessFloat: appendLine(qualityTooltip, "\nConclusion: Lossless Conversion"); break;
 
       case Quality::LinearIntervention:
-        appendLine(_qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
+        appendLine(qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
         break;
 
-      case Quality::LossySource: appendLine(_qualityTooltip, "\nConclusion: Lossy source format"); break;
+      case Quality::LossySource: appendLine(qualityTooltip, "\nConclusion: Lossy source format"); break;
 
-      case Quality::Clipped: appendLine(_qualityTooltip, "\nConclusion: Signal clipping detected"); break;
+      case Quality::Clipped: appendLine(qualityTooltip, "\nConclusion: Signal clipping detected"); break;
 
       case Quality::Unknown: break;
     }
+  }
+
+  Player::Player(std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
+    : _impl{std::make_unique<Impl>(std::move(dispatcher))}
+  {
+    // Start with a NullBackend until a provider provides something real
+    _impl->engine = std::make_unique<Engine>(std::make_unique<NullBackend>(),
+                                             Device{.id = DeviceId{"null"},
+                                                    .displayName = "None",
+                                                    .description = "No audio output selected",
+                                                    .backendId = kBackendNone,
+                                                    .capabilities = {}},
+                                             _impl->dispatcher);
+
+    _impl->engine->setOnTrackEnded(
+      [this]()
+      {
+        if (_impl->onTrackEnded)
+        {
+          _impl->onTrackEnded();
+        }
+      });
+
+    _impl->engine->setOnRouteChanged(
+      [this](Engine::RouteStatus const& status)
+      {
+        // Capture generation to prevent stale updates
+        auto const generation = _impl->playbackGeneration;
+
+        if (_impl->dispatcher)
+        {
+          _impl->dispatcher->dispatch([this, status, generation]() { handleRouteChanged(status, generation); });
+        }
+        else
+        {
+          handleRouteChanged(status, generation);
+        }
+      });
+  }
+
+  void Player::setTrackEndedCallback(std::function<void()> callback)
+  {
+    _impl->onTrackEnded = std::move(callback);
+  }
+
+  Player::~Player()
+  {
+    if (_impl && _impl->engine)
+    {
+      _impl->engine->setOnRouteChanged(nullptr);
+    }
+  }
+
+  void Player::addProvider(std::unique_ptr<IBackendProvider> provider)
+  {
+    if (!provider)
+    {
+      return;
+    }
+
+    auto record = std::make_unique<Impl::ProviderRecord>();
+    record->provider = std::move(provider);
+
+    auto* const providerPtr = record->provider.get();
+    auto* const recordPtr = record.get();
+
+    _impl->providers.push_back(std::move(record));
+
+    recordPtr->subscription = providerPtr->subscribeDevices(
+      [this, providerPtr, recordPtr](std::vector<Device> const& devices)
+      {
+        if (_impl->dispatcher)
+        {
+          _impl->dispatcher->dispatch(
+            [this, providerPtr, recordPtr, devices]()
+            {
+              recordPtr->devices = devices;
+              _impl->handleDevicesChanged(this, providerPtr, devices);
+            });
+        }
+        else
+        {
+          recordPtr->devices = devices;
+          _impl->handleDevicesChanged(this, providerPtr, devices);
+        }
+
+        return true;
+      });
+  }
+
+  void Player::play(TrackPlaybackDescriptor const& descriptor)
+  {
+    if (!isReady())
+    {
+      AUDIO_LOG_WARN("Player: Playback ignored because audio backend is not ready (pending discovery)");
+      return;
+    }
+
+    _impl->playbackGeneration++;
+    _impl->cachedRouteStatus = {};
+    _impl->cachedSystemGraph = {};
+    _impl->mergedGraph = {};
+    _impl->quality = Quality::Unknown;
+    _impl->qualityTooltip.clear();
+    _impl->graphSubscription.reset();
+    _impl->currentTrack = descriptor;
+    _impl->engine->play(descriptor);
+  }
+
+  void Player::setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
+  {
+    auto const currentSnap = _impl->engine->status();
+
+    // 1. Check if we already have this output active
+    if (backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
+    {
+      _impl->pendingOutput.reset();
+      return;
+    }
+
+    // 2. Find the Device matching the kind and id from our cache
+    auto const it = std::ranges::find_if(
+      _impl->allDevices, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
+
+    if (it == _impl->allDevices.end())
+    {
+      // If we don't have it yet, store it as pending.
+      _impl->pendingOutput = Impl::PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
+      AUDIO_LOG_DEBUG("Player: Requested output {}:{} not yet available, pending discovery", backend, deviceId);
+      return;
+    }
+
+    // Found it! Clear any pending output.
+    _impl->pendingOutput.reset();
+
+    // 3. Find the provider object that can handle this BackendId
+    auto const recordIt = std::ranges::find_if(
+      _impl->providers, [&](auto const& record) { return record->provider->status().metadata.id == backend; });
+
+    if (recordIt == _impl->providers.end())
+    {
+      AUDIO_LOG_ERROR("Player: No provider found for backend {}", backend);
+      return;
+    }
+
+    // 4. Create the backend and swap it in the engine
+    auto const& device = *it;
+    auto newBackend = (*recordIt)->provider->createBackend(device, profile);
+    _impl->activeManager = (*recordIt)->provider.get();
+    _impl->playbackGeneration++;
+    _impl->engine->setBackend(std::move(newBackend), device);
+  }
+
+  void Player::pause()
+  {
+    _impl->engine->pause();
+  }
+
+  void Player::resume()
+  {
+    _impl->engine->resume();
+  }
+
+  void Player::stop()
+  {
+    _impl->playbackGeneration++;
+    _impl->cachedRouteStatus = {};
+    _impl->cachedSystemGraph = {};
+    _impl->mergedGraph = {};
+    _impl->quality = Quality::Unknown;
+    _impl->qualityTooltip.clear();
+    _impl->graphSubscription.reset();
+    _impl->currentTrack.reset();
+    _impl->engine->stop();
+  }
+
+  void Player::seek(std::uint32_t positionMs)
+  {
+    _impl->engine->seek(positionMs);
+  }
+
+  Player::Status Player::status() const
+  {
+    auto engineStatus = _impl->engine->status();
+
+    auto status = Player::Status{};
+    status.engine = std::move(engineStatus);
+    if (_impl->currentTrack)
+    {
+      status.trackTitle = _impl->currentTrack->title;
+      status.trackArtist = _impl->currentTrack->artist;
+    }
+    status.availableBackends = _impl->cachedBackends;
+    status.flow = _impl->mergedGraph;
+    status.isReady = isReady();
+
+    // Inject controller-owned fields into the snapshot returned to the UI
+    status.quality = _impl->quality;
+    status.qualityTooltip = _impl->qualityTooltip;
+
+    return status;
+  }
+
+  bool Player::isReady() const
+  {
+    auto const engineStatus = _impl->engine->status();
+    return engineStatus.backendId != kBackendNone && !_impl->pendingOutput.has_value();
+  }
+
+  void Player::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)
+  {
+    if (generation != _impl->playbackGeneration)
+    {
+      return;
+    }
+
+    _impl->cachedRouteStatus = status;
+
+    // Check if we have a valid anchor and manager to subscribe to the system graph
+    if (_impl->cachedRouteStatus.optAnchor && _impl->activeManager != nullptr)
+    {
+      if (!_impl->graphSubscription)
+      {
+        _impl->graphSubscription = _impl->activeManager->subscribeGraph(
+          _impl->cachedRouteStatus.optAnchor->id,
+          [this, generation](flow::Graph const& graph)
+          {
+            if (_impl->dispatcher)
+            {
+              _impl->dispatcher->dispatch([this, graph, generation]()
+                                          { _impl->handleSystemGraphChanged(this, graph, generation); });
+            }
+            else
+            {
+              _impl->handleSystemGraphChanged(this, graph, generation);
+            }
+          });
+      }
+    }
+    else
+    {
+      _impl->graphSubscription.reset();
+      _impl->cachedSystemGraph = {};
+    }
+
+    _impl->updateMergedGraph();
+  }
+
+  std::uint64_t Player::playbackGeneration() const noexcept
+  {
+    return _impl->playbackGeneration;
   }
 } // namespace ao::audio

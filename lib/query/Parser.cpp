@@ -141,7 +141,7 @@ namespace
                                         {
                                           auto bin = std::make_unique<BinaryExpression>();
                                           bin->operand = std::move(*it);
-                                          bin->operation =
+                                          bin->optOperation =
                                             BinaryExpression::Operation{Operator::Add, std::move(result)};
                                           result = Expression{std::move(bin)};
                                         }
@@ -203,7 +203,7 @@ namespace
                                                              {
                                                                auto bin = std::make_unique<BinaryExpression>();
                                                                bin->operand = std::move(lhs);
-                                                               bin->operation =
+                                                               bin->optOperation =
                                                                  BinaryExpression::Operation{op, std::move(rhs)};
                                                                return Expression{std::move(bin)};
                                                              });

@@ -4,10 +4,10 @@
 #include "QueryExpressionBox.h"
 #include "LayoutConstants.h"
 
-#include <gdk/gdk.h>
-
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+
+#include <gdk/gdk.h>
 
 #include <algorithm>
 #include <array>
@@ -258,9 +258,9 @@ namespace ao::gtk
   {
     auto const expr = std::string{_entry.get_text()};
     auto const cursor = _entry.get_position();
-    auto const query = completionQueryForCursor(expr, cursor);
+    auto const optQuery = completionQueryForCursor(expr, cursor);
 
-    if (!query.has_value())
+    if (!optQuery)
     {
       hideCompletion();
       return;
@@ -271,21 +271,21 @@ namespace ao::gtk
     {
       for (auto const value : values)
       {
-        if (startsWithInsensitive(value, query->prefix))
+        if (startsWithInsensitive(value, optQuery->prefix))
         {
           suggestions.emplace_back(std::string(1, trigger) + std::string(value));
         }
       }
     };
 
-    switch (query->trigger)
+    switch (optQuery->trigger)
     {
       case '$': appendPrefixedMatches('$', std::span{kMetadataFields}); break;
       case '@': appendPrefixedMatches('@', std::span{kPropertyFields}); break;
       case '#':
         for (auto const& tag : _availableTags)
         {
-          if (startsWithInsensitive(tag, query->prefix))
+          if (startsWithInsensitive(tag, optQuery->prefix))
           {
             suggestions.emplace_back("#" + tag);
           }
@@ -294,7 +294,7 @@ namespace ao::gtk
       case '%':
         for (auto const& key : _availableCustomKeys)
         {
-          if (startsWithInsensitive(key, query->prefix))
+          if (startsWithInsensitive(key, optQuery->prefix))
           {
             suggestions.emplace_back("%" + key);
           }
@@ -309,7 +309,7 @@ namespace ao::gtk
       return;
     }
 
-    _completionTokenStart = query->tokenStart;
+    _completionTokenStart = optQuery->tokenStart;
     _completionItems->splice(0, _completionItems->get_n_items(), suggestions);
     _completionSelection->set_selected(0);
     _completionListView.scroll_to(0);

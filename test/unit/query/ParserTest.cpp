@@ -37,10 +37,10 @@ struct Canonicalizer
   void operator()(std::unique_ptr<BinaryExpression> const& binary)
   {
     if (!binary) return;
-    oss << "[b{" << toString(binary->operation->op) << "}";
+    oss << "[b{" << toString(binary->optOperation->op) << "}";
     std::visit(*this, binary->operand);
     oss << ",";
-    std::visit(*this, binary->operation->operand);
+    std::visit(*this, binary->optOperation->operand);
     oss << "]";
   }
 

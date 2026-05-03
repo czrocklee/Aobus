@@ -7,6 +7,8 @@
 #include "ListTreeNode.h"
 #include "SmartListDialog.h"
 #include <ao/library/ListBuilder.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
 #include <ao/utility/Log.h>
 #include <format>
 #include <limits>

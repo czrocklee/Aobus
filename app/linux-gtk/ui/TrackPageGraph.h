@@ -9,6 +9,7 @@
 #include "TrackPresentation.h"
 #include "TrackViewPage.h"
 
+#include <ao/library/ListView.h>
 #include <ao/model/TrackIdList.h>
 #include <gtkmm.h>
 

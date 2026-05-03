@@ -23,9 +23,9 @@ namespace
       }
       oss << "(";
       std::visit(*this, binary->operand);
-      if (binary->operation)
+      if (binary->optOperation)
       {
-        switch (binary->operation->op)
+        switch (binary->optOperation->op)
         {
           case Operator::Add: oss << " + "; break;
           case Operator::And: oss << " and "; break;
@@ -40,7 +40,7 @@ namespace
           default: oss << " op "; break;
         }
 
-        std::visit(*this, binary->operation->operand);
+        std::visit(*this, binary->optOperation->operand);
       }
       oss << ")";
     }
@@ -80,10 +80,10 @@ namespace
 
 TEST_CASE("Expression - Normalize Collapses Binary Node Without Operation")
 {
-  // Input: (a) where (a) is a BinaryExpression with no operation
+  // Input: (a) where (a) is a BinaryExpression with no optOperation
   auto binary = std::make_unique<BinaryExpression>();
   binary->operand = VariableExpression{VariableType::Metadata, "a"};
-  binary->operation = std::nullopt;
+  binary->optOperation = std::nullopt;
 
   Expression expr = std::move(binary);
 
@@ -111,11 +111,11 @@ TEST_CASE("Expression - Normalize Reassociates Right Nested Add Chain")
   // Input: a + (b + c)
   auto inner = std::make_unique<BinaryExpression>();
   inner->operand = VariableExpression{VariableType::Metadata, "b"};
-  inner->operation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "c"}};
+  inner->optOperation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "c"}};
 
   auto root = std::make_unique<BinaryExpression>();
   root->operand = VariableExpression{VariableType::Metadata, "a"};
-  root->operation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+  root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
 
   Expression expr = std::move(root);
   normalize(expr);
@@ -129,15 +129,15 @@ TEST_CASE("Expression - Normalize Reassociates Four Term Add Chain")
   // Input: a + (b + (c + d))
   auto innermost = std::make_unique<BinaryExpression>();
   innermost->operand = VariableExpression{VariableType::Metadata, "c"};
-  innermost->operation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "d"}};
+  innermost->optOperation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "d"}};
 
   auto inner = std::make_unique<BinaryExpression>();
   inner->operand = VariableExpression{VariableType::Metadata, "b"};
-  inner->operation = BinaryExpression::Operation{Operator::Add, std::move(innermost)};
+  inner->optOperation = BinaryExpression::Operation{Operator::Add, std::move(innermost)};
 
   auto root = std::make_unique<BinaryExpression>();
   root->operand = VariableExpression{VariableType::Metadata, "a"};
-  root->operation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+  root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
 
   Expression expr = std::move(root);
   normalize(expr);
@@ -151,11 +151,11 @@ TEST_CASE("Expression - Normalize Does Not Touch NonAdd Binary")
   // Input: a and (b and c)
   auto inner = std::make_unique<BinaryExpression>();
   inner->operand = VariableExpression{VariableType::Metadata, "b"};
-  inner->operation = BinaryExpression::Operation{Operator::And, VariableExpression{VariableType::Metadata, "c"}};
+  inner->optOperation = BinaryExpression::Operation{Operator::And, VariableExpression{VariableType::Metadata, "c"}};
 
   auto root = std::make_unique<BinaryExpression>();
   root->operand = VariableExpression{VariableType::Metadata, "a"};
-  root->operation = BinaryExpression::Operation{Operator::And, std::move(inner)};
+  root->optOperation = BinaryExpression::Operation{Operator::And, std::move(inner)};
 
   Expression expr = std::move(root);
   normalize(expr);
@@ -168,7 +168,7 @@ TEST_CASE("Expression - Normalize Stops When Right Operand Is Not Binary")
   // Input: a + 1
   auto root = std::make_unique<BinaryExpression>();
   root->operand = VariableExpression{VariableType::Metadata, "a"};
-  root->operation = BinaryExpression::Operation{Operator::Add, ConstantExpression{std::int64_t{1}}};
+  root->optOperation = BinaryExpression::Operation{Operator::Add, ConstantExpression{std::int64_t{1}}};
 
   Expression expr = std::move(root);
   normalize(expr);
@@ -181,11 +181,11 @@ TEST_CASE("Expression - Normalize Stops When Right Binary Is Not Add")
   // Input: a + (b and c)
   auto inner = std::make_unique<BinaryExpression>();
   inner->operand = VariableExpression{VariableType::Metadata, "b"};
-  inner->operation = BinaryExpression::Operation{Operator::And, VariableExpression{VariableType::Metadata, "c"}};
+  inner->optOperation = BinaryExpression::Operation{Operator::And, VariableExpression{VariableType::Metadata, "c"}};
 
   auto root = std::make_unique<BinaryExpression>();
   root->operand = VariableExpression{VariableType::Metadata, "a"};
-  root->operation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+  root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
 
   Expression expr = std::move(root);
   normalize(expr);
@@ -198,11 +198,11 @@ TEST_CASE("Expression - Normalize Unary Recurses Into Operand")
   // Input: not (a + (b + c))
   auto inner = std::make_unique<BinaryExpression>();
   inner->operand = VariableExpression{VariableType::Metadata, "b"};
-  inner->operation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "c"}};
+  inner->optOperation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "c"}};
 
   auto binary = std::make_unique<BinaryExpression>();
   binary->operand = VariableExpression{VariableType::Metadata, "a"};
-  binary->operation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+  binary->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
 
   auto unary = std::make_unique<UnaryExpression>();
   unary->op = Operator::Not;

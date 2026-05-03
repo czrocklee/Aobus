@@ -65,7 +65,7 @@ namespace ao::query
     };
 
     Expression operand;
-    std::optional<Operation> operation;
+    std::optional<Operation> optOperation;
   };
 
   struct UnaryExpression

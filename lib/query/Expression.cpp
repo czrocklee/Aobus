@@ -18,13 +18,13 @@ namespace ao::query
 
         normalize(binary->operand);
 
-        if (!binary->operation)
+        if (!binary->optOperation)
         {
           std::swap(root, binary->operand);
           return;
         }
 
-        normalize(binary->operation->operand);
+        normalize(binary->optOperation->operand);
         shiftAdd(*binary);
       }
 
@@ -43,12 +43,12 @@ namespace ao::query
 
       void shiftAdd(BinaryExpression& binary)
       {
-        if (!binary.operation || binary.operation->op != Operator::Add)
+        if (!binary.optOperation || binary.optOperation->op != Operator::Add)
         {
           return;
         }
 
-        auto* op = &binary.operation->operand;
+        auto* op = &binary.optOperation->operand;
         auto* rhs = std::get_if<std::unique_ptr<BinaryExpression>>(op);
 
         if (rhs == nullptr || !*rhs)
@@ -56,13 +56,13 @@ namespace ao::query
           return;
         }
 
-        if (!(*rhs)->operation || (*rhs)->operation->op != Operator::Add)
+        if (!(*rhs)->optOperation || (*rhs)->optOperation->op != Operator::Add)
         {
           return;
         }
 
-        std::swap(binary.operand, (*rhs)->operation->operand);
-        std::swap((*rhs)->operand, (*rhs)->operation->operand);
+        std::swap(binary.operand, (*rhs)->optOperation->operand);
+        std::swap((*rhs)->operand, (*rhs)->optOperation->operand);
         std::swap(binary.operand, *op);
         shiftAdd(**std::get_if<std::unique_ptr<BinaryExpression>>(&binary.operand));
       }

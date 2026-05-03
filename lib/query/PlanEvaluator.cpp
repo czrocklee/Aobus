@@ -245,9 +245,8 @@ namespace ao::query
                    std::vector<Instruction> const& instructions)
     {
       auto const* prevLoadField = findPrevLoadField(instructions, &instr);
-      bool isTagComparison = prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag;
-
-      if (isTagComparison)
+      if (bool isTagComparison = prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag;
+          isTagComparison)
       {
         auto tagIdToMatch = ao::DictionaryId{static_cast<std::uint32_t>(registers[instr.operand])};
         auto matches = track.tags().has(tagIdToMatch);

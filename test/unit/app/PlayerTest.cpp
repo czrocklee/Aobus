@@ -152,7 +152,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
 
   SECTION("Bitwise Perfect")
   {
-    player.handleRouteChanged(engineSnap, player._playbackGeneration);
+    player.handleRouteChanged(engineSnap, player.playbackGeneration());
     REQUIRE(onGraphChanged);
     onGraphChanged(systemGraph);
 
@@ -163,7 +163,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
   SECTION("Lossy Source")
   {
     engineSnap.flow.nodes[0].isLossySource = true;
-    player.handleRouteChanged(engineSnap, player._playbackGeneration);
+    player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
     auto snap = player.status();
@@ -173,7 +173,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
   SECTION("Resampling Detected")
   {
     systemGraph.nodes[1].optFormat->sampleRate = 48000;
-    player.handleRouteChanged(engineSnap, player._playbackGeneration);
+    player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
     auto snap = player.status();
@@ -184,7 +184,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
   SECTION("Volume Modification Detected")
   {
     systemGraph.nodes[1].volumeNotUnity = true;
-    player.handleRouteChanged(engineSnap, player._playbackGeneration);
+    player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
     auto snap = player.status();
@@ -195,7 +195,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
   SECTION("Mute Detected")
   {
     systemGraph.nodes[1].isMuted = true;
-    player.handleRouteChanged(engineSnap, player._playbackGeneration);
+    player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
     auto snap = player.status();
@@ -214,7 +214,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
     systemGraph.connections.push_back(
       flow::Connection{.sourceId = "firefox-stream", .destId = "mock-sink-id", .isActive = true});
 
-    player.handleRouteChanged(engineSnap, player._playbackGeneration);
+    player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
     auto snap = player.status();
@@ -225,7 +225,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
   SECTION("Lossless Bit-Depth Extension")
   {
     systemGraph.nodes[1].optFormat->bitDepth = 24;
-    player.handleRouteChanged(engineSnap, player._playbackGeneration);
+    player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
     auto snap = player.status();
@@ -268,9 +268,9 @@ TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][player
   SECTION("Stale callbacks are ignored via generation counter")
   {
     auto engineSnap = createBaseEngineRoute();
-    auto initialGeneration = player._playbackGeneration;
+    auto initialGeneration = player.playbackGeneration();
 
-    player._playbackGeneration++; // Increment to simulate new playback session
+    player.stop(); // Increment to simulate new playback session
 
     player.handleRouteChanged(engineSnap, initialGeneration);
 

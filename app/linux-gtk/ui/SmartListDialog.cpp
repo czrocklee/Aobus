@@ -7,12 +7,13 @@
 #include "TrackRowDataProvider.h"
 #include "TrackViewPage.h"
 
+#include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/model/AllTrackIdsList.h>
 #include <ao/model/FilteredTrackIdList.h>
 #include <ao/model/SmartListEngine.h>
 #include <ao/model/TrackIdList.h>
-
-#include <ao/library/MusicLibrary.h>
 
 #include <algorithm>
 
@@ -74,7 +75,7 @@ namespace ao::gtk
 
   void SmartListDialog::populate(ao::ListId id, ao::library::ListView const& view)
   {
-    _editListId = id;
+    _optEditListId = id;
     _nameEntry.set_text(std::string(view.name()));
     _descEntry.set_text(std::string(view.description()));
     _exprBox.entry().set_text(std::string(view.filter()));
@@ -85,7 +86,7 @@ namespace ao::gtk
 
   ao::ListId SmartListDialog::editListId() const
   {
-    return _editListId.value_or(ao::ListId{0});
+    return _optEditListId.value_or(ao::ListId{0});
   }
 
   void SmartListDialog::setLocalExpression(std::string expression)
