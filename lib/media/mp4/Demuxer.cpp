@@ -9,11 +9,12 @@
 #include <algorithm>
 #include <array>
 #include <boost/endian/conversion.hpp>
+#include <ranges>
 
 namespace ao::media::mp4
 {
   Demuxer::Demuxer(std::span<std::byte const> fileData)
-    : _fileData(fileData)
+    : _fileData{fileData}
   {
   }
 
@@ -89,10 +90,11 @@ namespace ao::media::mp4
 
     if (sampleSize == 0)
     {
-      auto entries = utility::layout::viewArray<StszAtomLayout::Entry>(bytes.subspan(sizeof(StszAtomLayout)));
-      for (std::size_t i = 0; i < entries.size(); ++i)
+      auto const entries = utility::layout::viewArray<StszAtomLayout::Entry>(bytes.subspan(sizeof(StszAtomLayout)));
+
+      for (auto const& [index, entry] : std::ranges::views::enumerate(entries))
       {
-        _samples[i].size = entries[i].size.value();
+        _samples[index].size = entry.size.value();
       }
     }
     else
@@ -110,12 +112,12 @@ namespace ao::media::mp4
     auto const count = header->entryCount.value();
 
     out.resize(count);
-    auto entries = utility::layout::viewArray<StscAtomLayout::Entry>(bytes.subspan(sizeof(StscAtomLayout)));
+    auto const entries = utility::layout::viewArray<StscAtomLayout::Entry>(bytes.subspan(sizeof(StscAtomLayout)));
 
-    for (std::size_t i = 0; i < entries.size(); ++i)
+    for (auto const& [index, entry] : std::ranges::views::enumerate(entries))
     {
-      out[i].firstChunk = entries[i].firstChunk.value();
-      out[i].samplesPerChunk = entries[i].samplesPerChunk.value();
+      out[index].firstChunk = entry.firstChunk.value();
+      out[index].samplesPerChunk = entry.samplesPerChunk.value();
     }
   }
 
@@ -125,11 +127,11 @@ namespace ao::media::mp4
     auto const count = header->entryCount.value();
 
     out.resize(count);
-    auto entries = utility::layout::viewArray<StcoAtomLayout::Entry>(bytes.subspan(sizeof(StcoAtomLayout)));
+    auto const entries = utility::layout::viewArray<StcoAtomLayout::Entry>(bytes.subspan(sizeof(StcoAtomLayout)));
 
-    for (std::size_t i = 0; i < entries.size(); ++i)
+    for (auto const& [index, entry] : std::ranges::views::enumerate(entries))
     {
-      out[i] = entries[i].chunkOffset.value();
+      out[index] = entry.chunkOffset.value();
     }
   }
 
@@ -139,11 +141,11 @@ namespace ao::media::mp4
     auto const count = header->entryCount.value();
 
     out.resize(count);
-    auto entries = utility::layout::viewArray<Co64AtomLayout::Entry>(bytes.subspan(sizeof(Co64AtomLayout)));
+    auto const entries = utility::layout::viewArray<Co64AtomLayout::Entry>(bytes.subspan(sizeof(Co64AtomLayout)));
 
-    for (std::size_t i = 0; i < entries.size(); ++i)
+    for (auto const& [index, entry] : std::ranges::views::enumerate(entries))
     {
-      out[i] = entries[i].chunkOffset.value();
+      out[index] = entry.chunkOffset.value();
     }
   }
 

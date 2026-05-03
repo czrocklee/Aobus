@@ -5,9 +5,9 @@
 
 #include <ao/audio/DecoderTypes.h>
 
+#include <ao/Error.h>
 #include <filesystem>
 #include <optional>
-#include <ao/Error.h>
 #include <string_view>
 
 namespace ao::audio

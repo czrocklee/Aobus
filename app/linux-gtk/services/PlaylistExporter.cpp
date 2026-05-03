@@ -89,12 +89,12 @@ namespace ao::gtk::services
     // Export playlist from TrackId membership
     for (std::size_t i = 0; i < _list.size(); ++i)
     {
-      auto id = _list.trackIdAt(i);
+      auto const id = _list.trackIdAt(i);
 
-      if (auto optUri = _provider.getUriPath(id); optUri)
+      if (auto const optUri = _provider.getUriPath(id); optUri)
       {
         // Write path relative to playlist location
-        auto relativePath = std::filesystem::relative(*optUri, _path.parent_path());
+        auto const relativePath = std::filesystem::relative(*optUri, _path.parent_path());
         ofs << relativePath.string() << '\n';
       }
       else

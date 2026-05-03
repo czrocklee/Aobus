@@ -427,12 +427,13 @@ namespace ao::query
 
   std::uint32_t QueryCompiler::addStringConstant(std::string_view str)
   {
-    if (auto it = std::ranges::find(_plan.stringConstants, str); it != _plan.stringConstants.end())
+    if (auto const it = std::ranges::find(_plan.stringConstants, str); it != _plan.stringConstants.end())
     {
       return static_cast<std::uint32_t>(std::distance(_plan.stringConstants.begin(), it));
     }
 
     _plan.stringConstants.emplace_back(str);
+
     return static_cast<std::uint32_t>(_plan.stringConstants.size() - 1);
   }
 
@@ -455,7 +456,7 @@ namespace ao::query
 
     if (binary.operation)
     {
-      auto opcode = toOpCode(binary.operation->op);
+      auto const opcode = toOpCode(binary.operation->op);
 
       if (opcode == OpCode::Like && isUnsupportedLikeField(leftField))
       {
@@ -475,10 +476,10 @@ namespace ao::query
 
       // Right operand result is in _nextReg - 1
       // Binary op will store result in operand - 1 = (_nextReg - 1) - 1 = _nextReg - 2
-      auto rightReg = _nextReg - 1;
+      auto const rightReg = _nextReg - 1;
 
       // Store leftField in field for LIKE instructions so executeLike can use it directly
-      auto instrField = (opcode == OpCode::Like) ? static_cast<std::uint8_t>(leftField) : std::uint8_t{0};
+      auto const instrField = (opcode == OpCode::Like) ? static_cast<std::uint8_t>(leftField) : std::uint8_t{0};
 
       _plan.instructions.push_back(Instruction{
         .op = opcode,
@@ -499,7 +500,7 @@ namespace ao::query
   {
     compileExpression(unary.operand);
 
-    auto opcode = toOpCode(unary.op);
+    auto const opcode = toOpCode(unary.op);
     _plan.instructions.push_back(Instruction{
       .op = opcode,
       .field = 0,
@@ -560,7 +561,7 @@ namespace ao::query
       }
     }
 
-    auto field = variableTypeToField(var.type, var.name);
+    auto const field = variableTypeToField(var.type, var.name);
     _lastField = field; // Track for string resolution context
 
     // Track access profile for hot/cold determination based on field storage location
@@ -576,7 +577,7 @@ namespace ao::query
 
     // For custom fields, pre-resolve dictId and store as constant (Option B)
     // If resolution fails (key not in dictionary), store 0 - evaluator will return empty string
-    std::int64_t constValue = 0;
+    auto constValue = std::int64_t{0};
 
     if (var.type == VariableType::Custom)
     {
@@ -642,7 +643,7 @@ namespace ao::query
                  {
                    // Check if we should resolve this string via dictionary
                    // For metadata ID fields (artist, album, genre), resolve to numeric ID
-                   auto resolvedId = resolveStringConstant(val, _lastField);
+                   auto const resolvedId = resolveStringConstant(val, _lastField);
 
                    if (resolvedId >= 0)
                    {
@@ -659,7 +660,7 @@ namespace ao::query
                    else
                    {
                      // Not resolved (no dictionary or not a metadata ID field) - store as string constant
-                     auto idx = addStringConstant(val);
+                     auto const idx = addStringConstant(val);
                      _plan.instructions.push_back(Instruction{
                        .op = OpCode::LoadConstant,
                        .field = 0,

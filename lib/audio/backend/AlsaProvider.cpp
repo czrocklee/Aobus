@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/AlsaProvider.h>
 #include <ao/audio/backend/AlsaExclusiveBackend.h>
+#include <ao/audio/backend/AlsaProvider.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/Raii.h>
 #include <ao/utility/ThreadUtils.h>
@@ -194,7 +194,7 @@ namespace ao::audio::backend
   };
 
   AlsaProvider::AlsaProvider()
-    : _impl(std::make_unique<Impl>())
+    : _impl{std::make_unique<Impl>()}
   {
   }
   AlsaProvider::~AlsaProvider() = default;
@@ -202,13 +202,16 @@ namespace ao::audio::backend
   ao::audio::Subscription AlsaProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
     auto const id = _impl->nextSubId++;
+    auto const devices = [this, id, callback]()
     {
-      std::lock_guard lock(_impl->mutex);
-      _impl->deviceSubs.push_back({id, callback});
-      if (callback)
-      {
-        callback(_impl->cachedDevices);
-      }
+      auto const lock = std::lock_guard{_impl->mutex};
+      _impl->deviceSubs.push_back({.id = id, .callback = callback});
+      return _impl->cachedDevices;
+    }();
+
+    if (callback)
+    {
+      callback(devices);
     }
 
     return ao::audio::Subscription{[this, id]()
@@ -236,8 +239,8 @@ namespace ao::audio::backend
         {.id = "alsa-stream", .type = ao::audio::flow::NodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
       graph.nodes.push_back({.id = "alsa-sink",
                              .type = ao::audio::flow::NodeType::Sink,
-                             .name = std::string(routeAnchor),
-                             .objectPath = std::string(routeAnchor)});
+                             .name = std::string{routeAnchor},
+                             .objectPath = std::string{routeAnchor}});
       graph.connections.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});
       callback(graph);
     }

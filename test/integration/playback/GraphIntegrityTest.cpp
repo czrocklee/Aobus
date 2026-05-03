@@ -85,10 +85,10 @@ TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
     auto it = std::ranges::find(snap.flow.nodes, "rs-decoder", &ao::audio::flow::Node::id);
     if (it != snap.flow.nodes.end())
     {
-      REQUIRE(it->format.has_value());
-      CHECK(it->format->sampleRate == 44100);
-      CHECK(it->format->channels == 2);
-      CHECK(it->format->bitDepth == 16);
+      REQUIRE(it->optFormat);
+      CHECK(it->optFormat->sampleRate == 44100);
+      CHECK(it->optFormat->channels == 2);
+      CHECK(it->optFormat->bitDepth == 16);
     }
   }
 

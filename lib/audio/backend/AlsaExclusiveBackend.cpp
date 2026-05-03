@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/backend/AlsaExclusiveBackend.h>
 #include <ao/audio/Backend.h>
+#include <ao/audio/backend/AlsaExclusiveBackend.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/ThreadUtils.h>
@@ -16,8 +16,6 @@ extern "C"
 }
 
 #include <algorithm>
-#include <cstring>
-#include <iostream>
 #include <mutex>
 #include <vector>
 
@@ -65,6 +63,7 @@ namespace ao::audio::backend
     {
       return ao::makeError(ao::Error::Code::InitFailed, "Failed to init ALSA hw params");
     }
+
     if (::snd_pcm_hw_params_set_access(safePcm.get(), params, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)
     {
       return ao::makeError(ao::Error::Code::FormatRejected, "No mmap interleaved support");
@@ -94,14 +93,19 @@ namespace ao::audio::backend
       return ao::makeError(ao::Error::Code::FormatRejected, "Failed to set channels");
     }
 
-    std::uint32_t periods = 4;
-    snd_pcm_uframes_t periodSize = 1024;
+    auto periods = std::uint32_t{4};
+    auto periodSize = ::snd_pcm_uframes_t{1024};
+
     ::snd_pcm_hw_params_set_periods_near(safePcm.get(), params, &periods, 0);
     ::snd_pcm_hw_params_set_period_size_near(safePcm.get(), params, &periodSize, 0);
+
     if (::snd_pcm_hw_params(safePcm.get(), params) < 0)
     {
       return ao::makeError(ao::Error::Code::InitFailed, "Failed to apply hw params");
     }
+
+    _canPause = (::snd_pcm_hw_params_can_pause(params) == 1);
+    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Device pause support: {}", _canPause);
 
     ::snd_pcm_sw_params_t* swParams = nullptr;
     snd_pcm_sw_params_alloca(&swParams);
@@ -136,12 +140,28 @@ namespace ao::audio::backend
         std::this_thread::sleep_for(std::chrono::milliseconds(kPollRetryDelayMs));
         continue;
       }
-      if (::snd_pcm_wait(_pcm.get(), kAlsaWaitTimeoutMs) < 0)
+
+      auto const state = ::snd_pcm_state(_pcm.get());
+
+      if (state == SND_PCM_STATE_XRUN || state == SND_PCM_STATE_SUSPENDED)
       {
-        recoverFromXrun(-EPIPE);
+        recoverFromXrun(state == SND_PCM_STATE_XRUN ? -EPIPE : -ESTRPIPE);
         continue;
       }
+
+      // Only wait if the device is actually running.
+      // In PREPARED state, wait might hang or fail on some drivers.
+      if (state == SND_PCM_STATE_RUNNING)
+      {
+        if (::snd_pcm_wait(_pcm.get(), kAlsaWaitTimeoutMs) < 0)
+        {
+          recoverFromXrun(-EPIPE);
+          continue;
+        }
+      }
+
       ::snd_pcm_sframes_t avail = ::snd_pcm_avail_update(_pcm.get());
+
       if (avail < 0)
       {
         recoverFromXrun(static_cast<int>(avail));
@@ -149,12 +169,21 @@ namespace ao::audio::backend
       }
       if (avail == 0)
       {
+        if (state != SND_PCM_STATE_RUNNING && state != SND_PCM_STATE_PREPARED)
+        {
+          recoverFromXrun(-EPIPE);
+        }
+        else
+        {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         continue;
       }
 
       ::snd_pcm_uframes_t frames = static_cast<::snd_pcm_uframes_t>(avail);
       ::snd_pcm_channel_area_t const* areas = nullptr;
       ::snd_pcm_uframes_t offset = 0;
+
       if (::snd_pcm_mmap_begin(_pcm.get(), &areas, &offset, &frames) < 0)
       {
         recoverFromXrun(-EPIPE);
@@ -168,7 +197,7 @@ namespace ao::audio::backend
 
       if (bytesRead > 0)
       {
-        auto committed = ::snd_pcm_mmap_commit(
+        auto const committed = ::snd_pcm_mmap_commit(
           _pcm.get(), offset, bytesRead / static_cast<std::size_t>((_format.bitDepth / 8) * _format.channels));
 
         if (committed < 0)
@@ -221,7 +250,8 @@ namespace ao::audio::backend
     }
     else if (err == -ENODEV || err == -EBADF)
     {
-      auto errorMsg = std::format("ALSA Device Lost: {}", ::snd_strerror(err));
+      auto const errorMsg = std::format("ALSA Device Lost: {}", ::snd_strerror(err));
+
       if (_callbacks.onBackendError != nullptr)
       {
         _callbacks.onBackendError(_callbacks.userData, errorMsg);
@@ -258,7 +288,14 @@ namespace ao::audio::backend
     if (_pcm)
     {
       _paused = true;
-      ::snd_pcm_pause(_pcm.get(), 1);
+      if (_canPause)
+      {
+        ::snd_pcm_pause(_pcm.get(), 1);
+      }
+      else
+      {
+        ::snd_pcm_drop(_pcm.get());
+      }
     }
   }
   void AlsaExclusiveBackend::resume()
@@ -266,7 +303,17 @@ namespace ao::audio::backend
     if (_pcm)
     {
       _paused = false;
-      ::snd_pcm_pause(_pcm.get(), 0);
+      int err = 0;
+      if (_canPause)
+      {
+        err = ::snd_pcm_pause(_pcm.get(), 0);
+      }
+
+      if (!_canPause || err < 0)
+      {
+        ::snd_pcm_prepare(_pcm.get());
+        ::snd_pcm_start(_pcm.get());
+      }
     }
   }
   void AlsaExclusiveBackend::flush()

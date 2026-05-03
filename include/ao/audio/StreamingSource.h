@@ -21,10 +21,10 @@ namespace ao::audio
   {
   public:
     StreamingSource(std::unique_ptr<IDecoderSession> decoder,
-                       DecodedStreamInfo streamInfo,
-                       std::function<void(ao::Error const&)> onError,
-                       std::uint32_t prerollTargetMs,
-                       std::uint32_t decodeHighWatermarkMs);
+                    DecodedStreamInfo streamInfo,
+                    std::function<void(ao::Error const&)> onError,
+                    std::uint32_t prerollTargetMs,
+                    std::uint32_t decodeHighWatermarkMs);
     ~StreamingSource() override;
 
     ao::Result<> initialize();

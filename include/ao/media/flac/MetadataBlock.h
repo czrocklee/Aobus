@@ -4,10 +4,10 @@
 #pragma once
 
 #include "MetadataBlockLayout.h"
+#include <ao/Exception.h>
 #include <boost/endian/conversion.hpp>
 #include <cstring>
 #include <gsl-lite/gsl-lite.hpp>
-#include <ao/Exception.h>
 #include <span>
 #include <string_view>
 #include <vector>

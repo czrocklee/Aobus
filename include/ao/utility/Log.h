@@ -54,21 +54,18 @@ namespace ao::log
   ao::log::Log::getAppLogger()->critical(__VA_ARGS__)
 
 // Playback log macros
-#define AUDIO_LOG_TRACE(...)                                                                                        \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::trace))                                             \
+#define AUDIO_LOG_TRACE(...)                                                                                           \
+  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::trace))                                                \
   ao::log::Log::getAudioLogger()->trace(__VA_ARGS__)
-#define AUDIO_LOG_DEBUG(...)                                                                                        \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::debug))                                             \
+#define AUDIO_LOG_DEBUG(...)                                                                                           \
+  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::debug))                                                \
   ao::log::Log::getAudioLogger()->debug(__VA_ARGS__)
-#define AUDIO_LOG_INFO(...)                                                                                         \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::info))                                              \
-  ao::log::Log::getAudioLogger()->info(__VA_ARGS__)
-#define AUDIO_LOG_WARN(...)                                                                                         \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::warn))                                              \
-  ao::log::Log::getAudioLogger()->warn(__VA_ARGS__)
-#define AUDIO_LOG_ERROR(...)                                                                                        \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::err))                                               \
-  ao::log::Log::getAudioLogger()->error(__VA_ARGS__)
-#define AUDIO_LOG_CRITICAL(...)                                                                                     \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::critical))                                          \
+#define AUDIO_LOG_INFO(...)                                                                                            \
+  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::info)) ao::log::Log::getAudioLogger()->info(__VA_ARGS__)
+#define AUDIO_LOG_WARN(...)                                                                                            \
+  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::warn)) ao::log::Log::getAudioLogger()->warn(__VA_ARGS__)
+#define AUDIO_LOG_ERROR(...)                                                                                           \
+  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::err)) ao::log::Log::getAudioLogger()->error(__VA_ARGS__)
+#define AUDIO_LOG_CRITICAL(...)                                                                                        \
+  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::critical))                                             \
   ao::log::Log::getAudioLogger()->critical(__VA_ARGS__)

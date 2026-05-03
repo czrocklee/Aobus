@@ -24,22 +24,22 @@ namespace ao::log
     {
       logDir = std::filesystem::current_path() / "logs";
     }
+
     std::filesystem::create_directories(logDir);
     auto const logPath = logDir / "app.log";
-
     auto const spdLevel = static_cast<spdlog::level::level_enum>(level);
 
     // Setup sinks
-    auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    auto const consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     consoleSink->set_pattern("%^[%T] %n: %v%$");
     consoleSink->set_level(spdLevel);
 
-    auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+    auto const fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
       logPath.string(), 1024 * 1024 * 5, 3); // NOLINT(readability-magic-numbers)
     fileSink->set_pattern("[%Y-%m-%d %T.%e] [%l] %n: %v");
     fileSink->set_level(spdlog::level::trace);
 
-    auto sinks = std::vector<spdlog::sink_ptr>{consoleSink, fileSink};
+    auto const sinks = std::vector<spdlog::sink_ptr>{consoleSink, fileSink};
 
     // Initialize async registry
     spdlog::init_thread_pool(8192, 1);
@@ -63,12 +63,24 @@ namespace ao::log
 
     ao::audio::initializeDecoders();
 
+    APP_LOG_INFO("========================================================");
     APP_LOG_INFO("Logging initialized. Log file: {}", logPath.string());
   }
 
   void Log::shutdown()
   {
     APP_LOG_INFO("Shutting down logging...");
+
+    if (_appLogger)
+    {
+      _appLogger->flush();
+    }
+
+    if (_audioLogger)
+    {
+      _audioLogger->flush();
+    }
+
     spdlog::shutdown();
   }
 } // namespace ao::log

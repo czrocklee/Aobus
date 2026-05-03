@@ -7,8 +7,11 @@
 
 #include <ao/AppVersion.h>
 
+#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm.h>
 #include <gtkmm/aboutdialog.h>
+
+#include <glib-unix.h>
 
 #include <CLI/CLI.hpp>
 
@@ -58,21 +61,38 @@ int main(int argc, char* argv[])
   if (cliApp.count("-v") > 0)
   {
     if (verbosity == 1)
+    {
       logLevel = ao::log::LogLevel::Debug;
+    }
     else if (verbosity >= 2)
+    {
       logLevel = ao::log::LogLevel::Trace;
+    }
   }
 
   auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "aobus" / "logs";
   ao::log::Log::init(logLevel, logDir);
+  auto const logGuard = gsl_lite::finally([]() { ao::log::Log::shutdown(); });
+
   APP_LOG_INFO("Aobus {} starting...", ao::kAppVersion);
 
   Glib::set_application_name("Aobus");
 
   auto app = Gtk::Application::create("org.aobus.app");
 
+  // Handle Ctrl-C and SIGTERM gracefully via GLib main loop
+  auto const signal_handler = [](void* data) -> gboolean
+  {
+    auto* app_ptr = static_cast<Glib::RefPtr<Gtk::Application>*>(data);
+    APP_LOG_INFO("Received termination signal, shutting down...");
+    (*app_ptr)->quit();
+    return FALSE; // Remove source
+  };
+  g_unix_signal_add(SIGINT, signal_handler, &app);
+  g_unix_signal_add(SIGTERM, signal_handler, &app);
+
   // Add about action to application
-  auto aboutAction = Gio::SimpleAction::create("about");
+  auto const aboutAction = Gio::SimpleAction::create("about");
   aboutAction->signal_activate().connect(
     [&app]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
     {
@@ -83,7 +103,7 @@ int main(int argc, char* argv[])
       dialog.set_license_type(Gtk::License::LGPL_3_0);
 
       // Get active window to set as transient parent
-      if (auto windows = app->get_windows(); !windows.empty())
+      if (auto const windows = app->get_windows(); !windows.empty())
       {
         dialog.set_transient_for(*windows[0]);
       }
@@ -93,7 +113,7 @@ int main(int argc, char* argv[])
   app->add_action(aboutAction);
 
   // Add quit action
-  auto quitAction = Gio::SimpleAction::create("quit");
+  auto const quitAction = Gio::SimpleAction::create("quit");
   quitAction->signal_activate().connect([&app]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { app->quit(); });
   app->add_action(quitAction);
 
@@ -122,6 +142,5 @@ int main(int argc, char* argv[])
 
   APP_LOG_INFO("Entering GTK main loop");
   auto const result = app->run(gtkArgc, gtkArgv.data());
-  ao::log::Log::shutdown();
   return result;
 }

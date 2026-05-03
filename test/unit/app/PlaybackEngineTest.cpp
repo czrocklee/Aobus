@@ -99,8 +99,8 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
     Engine::onRouteReady(&engine, "anchor-123");
 
     auto route = engine.routeSnapshot();
-    REQUIRE(route.anchor.has_value());
-    REQUIRE(route.anchor->id == "anchor-123");
+    REQUIRE(route.optAnchor);
+    REQUIRE(route.optAnchor->id == "anchor-123");
   }
 }
 
@@ -190,8 +190,8 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
     auto it = std::ranges::find(snap.flow.nodes, "rs-decoder", &ao::audio::flow::Node::id);
     REQUIRE(it != snap.flow.nodes.end());
     CHECK(it->type == flow::NodeType::Decoder);
-    CHECK(it->format.has_value());
-    CHECK(it->format->sampleRate == 44100);
+    CHECK(it->optFormat);
+    CHECK(it->optFormat->sampleRate == 44100);
   }
 
   SECTION("rs-engine is present in the graph")

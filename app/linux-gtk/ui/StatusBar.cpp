@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "StatusBar.h"
-
 #include "LayoutConstants.h"
 #include "OutputListItems.h"
+#include "SvgTemplate.h"
 #include <ao/utility/Log.h>
 
 #include <gdkmm/display.h>
@@ -19,6 +19,7 @@
 #include <iomanip>
 #include <ranges>
 #include <sstream>
+#include <unordered_set>
 
 namespace ao::gtk
 {
@@ -26,54 +27,45 @@ namespace ao::gtk
   {
     std::string formatDuration(std::chrono::milliseconds ms)
     {
-      auto totalSeconds = std::chrono::duration_cast<std::chrono::seconds>(ms).count();
-      auto minutes = totalSeconds / 60;
-      auto seconds = totalSeconds % 60;
-      auto hours = minutes / 60;
-      minutes %= 60;
-
-      std::stringstream ss;
+      auto const totalSeconds = std::chrono::duration_cast<std::chrono::seconds>(ms).count();
+      auto const hours = totalSeconds / 3600;
+      auto const minutes = (totalSeconds % 3600) / 60;
+      auto const seconds = totalSeconds % 60;
 
       if (hours > 0)
       {
-        ss << hours << ":" << std::setfill('0') << std::setw(2) << minutes << ":" << std::setw(2) << seconds;
-      }
-      else
-      {
-        ss << minutes << ":" << std::setfill('0') << std::setw(2) << seconds;
+        return std::format("{}:{:02}:{:02}", hours, minutes, seconds);
       }
 
-      return ss.str();
+      return std::format("{}:{:02}", minutes, seconds);
     }
 
     std::string formatStream(ao::audio::Format const& format)
     {
-      std::stringstream ss;
       constexpr auto kKhzMultiplier = 1000.0;
-      ss << (format.sampleRate / kKhzMultiplier) << " kHz · " << static_cast<int>(format.bitDepth)
-         << "-bit · "; // NOLINT(readability-magic-numbers)
+      auto const channelsText = [&]
+      {
+        if (format.channels == 1)
+        {
+          return std::string{"Mono"};
+        }
 
-      if (format.channels == 1)
-      {
-        ss << "Mono";
-      }
-      else if (format.channels == 2)
-      {
-        ss << "Stereo";
-      }
-      else
-      {
-        ss << static_cast<int>(format.channels) << " ch";
-      }
+        if (format.channels == 2)
+        {
+          return std::string{"Stereo"};
+        }
 
-      return ss.str();
+        return std::format("{} ch", format.channels);
+      }();
+
+      return std::format("{:.1f} kHz · {}-bit · {}", format.sampleRate / kKhzMultiplier, format.bitDepth, channelsText);
     }
 
     void ensureStatusBarCss()
     {
-      static auto provider = []
+      static auto const provider = []
       {
-        auto css = Gtk::CssProvider::create();
+        auto const css = Gtk::CssProvider::create();
         css->load_from_data(R"(
         .status-bar {
           min-height: 24px;
@@ -98,20 +90,6 @@ namespace ao::gtk
         }
         .clickable-label {
           /* No direct cursor property in standard GTK CSS for Label */
-        }
-        .output-button {
-           border: none;
-           background: none;
-           box-shadow: none;
-           padding: 2px 8px;
-           color: @theme_fg_color;
-           opacity: 0.8;
-           font-weight: bold;
-           border-radius: 6px;
-        }
-        .output-button:hover {
-           opacity: 1.0;
-           background-color: alpha(@theme_fg_color, 0.1);
         }
         .device-row {
            padding: 6px 16px;
@@ -184,63 +162,11 @@ namespace ao::gtk
     _playbackDetailsBox.set_margin_start(Layout::kMarginMedium);
     _playbackDetailsBox.set_margin_end(Layout::kMarginMedium);
 
-    _outputButton.add_css_class("output-button");
-    _outputButton.set_label("Output");
-    _outputButton.set_tooltip_text("Click to change audio backend or device");
-
-    _outputStore = Gio::ListStore<Glib::Object>::create();
-    _outputListBox.set_selection_mode(Gtk::SelectionMode::NONE);
-    _outputListBox.set_show_separators(true); // Restore standard separators
-    _outputListBox.add_css_class("rich-list");
-    _outputListBox.bind_model(_outputStore, sigc::mem_fun(*this, &StatusBar::createOutputWidget));
-
-    _outputListBox.signal_row_activated().connect(
-      [this](Gtk::ListBoxRow* row)
-      {
-        auto const index = row->get_index();
-        if (index >= 0 && static_cast<std::size_t>(index) < _outputStore->get_n_items())
-        {
-          auto item = _outputStore->get_item(index);
-          if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
-          {
-            _outputChanged.emit(deviceItem->kind, deviceItem->id);
-            _outputPopover.popdown();
-          }
-        }
-      });
-
-    auto* scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
-    scrolled->set_child(_outputListBox);
-    scrolled->set_propagate_natural_height(true);
-    scrolled->set_min_content_height(kOutputScrolledMinHeight);
-    scrolled->set_min_content_width(kOutputScrolledMinWidth);
-
-    _outputPopover.set_child(*scrolled);
-    _outputPopover.set_parent(_outputButton);
-    _outputPopover.set_autohide(true);
-    _outputPopover.set_position(Gtk::PositionType::TOP);
-
-    _outputButton.signal_toggled().connect(
-      [this]()
-      {
-        if (_outputButton.get_active())
-        {
-          _outputPopover.popup();
-        }
-        else
-        {
-          _outputPopover.popdown();
-        }
-      });
-
-    _outputPopover.signal_closed().connect([this]() { _outputButton.set_active(false); });
-
     _streamInfoLabel.add_css_class("dim-label");
     _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
     _sinkStatusIcon.set_pixel_size(Layout::kIconSizeXSmall);
     _sinkStatusIcon.set_visible(false);
 
-    _playbackDetailsBox.append(_outputButton);
     _playbackDetailsBox.append(_streamInfoLabel);
     _playbackDetailsBox.append(_sinkStatusIcon);
     append(_playbackDetailsBox);
@@ -254,8 +180,10 @@ namespace ao::gtk
     _nowPlayingLabel.add_css_class("now-playing-label");
     _nowPlayingLabel.add_css_class("clickable-label");
     _nowPlayingLabel.set_tooltip_text("Click to show playing list");
-    auto clickGesture = Gtk::GestureClick::create();
+
+    auto const clickGesture = Gtk::GestureClick::create();
     clickGesture->signal_pressed().connect([this](int, double, double) { _nowPlayingClicked.emit(); });
+
     _nowPlayingLabel.add_controller(clickGesture);
     _nowPlayingLabel.set_cursor(Gdk::Cursor::create("pointer"));
     append(_nowPlayingLabel);
@@ -361,124 +289,14 @@ namespace ao::gtk
       return;
     }
 
-    std::string text = std::format("{} {}", count, count == 1 ? "item selected" : "items selected");
+    auto text = std::format("{} {}", count, count == 1 ? "item selected" : "items selected");
 
     if (totalDuration && totalDuration->count() > 0)
     {
-      text += " (" + formatDuration(*totalDuration) + ")";
+      text += std::format(" ({})", formatDuration(*totalDuration));
     }
 
     _selectionLabel.set_text(text);
-  }
-
-  Gtk::Widget* StatusBar::createOutputWidget(Glib::RefPtr<Glib::Object> const& item)
-  {
-    if (auto backendItem = std::dynamic_pointer_cast<BackendItem>(item))
-    {
-      auto* header = Gtk::make_managed<Gtk::Label>(backendItem->name);
-      header->set_halign(Gtk::Align::FILL);
-      header->set_valign(Gtk::Align::CENTER);
-      header->set_xalign(0.0); // Left align text while background fills width
-      header->add_css_class("menu-header");
-      return header;
-    }
-
-    if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
-    {
-      auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-      rowBox->set_spacing(Layout::kSpacingXLarge);
-      rowBox->set_valign(Gtk::Align::CENTER);
-      rowBox->add_css_class("device-row");
-
-      auto* textBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
-      textBox->set_spacing(0); // Explicitly remove gap between lines
-      textBox->set_hexpand(true);
-      textBox->set_valign(Gtk::Align::CENTER);
-
-      auto* nameLabel = Gtk::make_managed<Gtk::Label>(deviceItem->name);
-      nameLabel->set_halign(Gtk::Align::START);
-      nameLabel->set_ellipsize(Pango::EllipsizeMode::END);
-      textBox->append(*nameLabel);
-
-      if (!deviceItem->description.empty())
-      {
-        auto* descLabel = Gtk::make_managed<Gtk::Label>(deviceItem->description);
-        descLabel->set_halign(Gtk::Align::START);
-        descLabel->add_css_class("menu-description");
-        descLabel->set_ellipsize(Pango::EllipsizeMode::END);
-        textBox->append(*descLabel);
-      }
-
-      rowBox->append(*textBox);
-
-      // Mark current device if it matches
-      if (deviceItem->active)
-      {
-        auto* checkIcon = Gtk::make_managed<Gtk::Image>();
-        checkIcon->set_from_icon_name("object-select-symbolic");
-        checkIcon->set_pixel_size(16);
-        rowBox->append(*checkIcon);
-
-        // We can't easily add a CSS class to the ListBoxRow here because we return the child.
-        // But we can style the rowBox itself or use a helper.
-        rowBox->add_css_class("selected-row");
-      }
-
-      return rowBox;
-    }
-
-    return nullptr;
-  }
-
-  void StatusBar::updateOutputModel(ao::audio::Snapshot const& snapshot)
-  {
-    _outputStore->remove_all();
-
-    for (auto const& backend : snapshot.availableBackends)
-    {
-      _outputStore->append(BackendItem::create(backend.kind, backend.displayName));
-
-      for (auto const& device : backend.devices)
-      {
-        auto item = DeviceItem::create(backend.kind, device);
-        item->active = (backend.kind == snapshot.backend && device.id == snapshot.currentDeviceId);
-        _outputStore->append(item);
-      }
-    }
-  }
-
-  void StatusBar::updateOutputLabel(ao::audio::Snapshot const& snapshot)
-  {
-    bool found = false;
-    for (auto const& backend : snapshot.availableBackends)
-    {
-      if (backend.kind == snapshot.backend)
-      {
-        for (auto const& device : backend.devices)
-        {
-          if (device.id == snapshot.currentDeviceId)
-          {
-            _outputButton.set_label(backend.shortName);
-            if (_outputButton.get_tooltip_text() != device.displayName)
-            {
-              _outputButton.set_tooltip_text(device.displayName);
-            }
-            found = true;
-            break;
-          }
-        }
-      }
-      if (found)
-      {
-        break;
-      }
-    }
-
-    if (!found)
-    {
-      _outputButton.set_label("Output");
-      _outputButton.set_tooltip_text("Click to change audio backend or device");
-    }
   }
 
   void StatusBar::updatePlaybackStatusLabels(ao::audio::Snapshot const& snapshot)
@@ -497,7 +315,7 @@ namespace ao::gtk
     {
       if (!snapshot.trackArtist.empty())
       {
-        _nowPlayingLabel.set_text(snapshot.trackArtist + " - " + snapshot.trackTitle);
+        _nowPlayingLabel.set_text(std::format("{} - {}", snapshot.trackArtist, snapshot.trackTitle));
       }
       else
       {
@@ -510,28 +328,32 @@ namespace ao::gtk
     }
 
     // Source Format from Decoder Node
-    std::stringstream ss;
-    bool formatFound = false;
-    for (auto const& node : snapshot.flow.nodes)
+    auto const statusText = [&]
     {
-      if (node.type == ao::audio::flow::NodeType::Decoder && node.format)
+      auto info = std::string{};
+      for (auto const& node : snapshot.flow.nodes)
       {
-        ss << formatStream(*node.format);
-        formatFound = true;
-        break;
+        if (node.type == ao::audio::flow::NodeType::Decoder && node.optFormat)
+        {
+          info = formatStream(*node.optFormat);
+          break;
+        }
       }
-    }
 
-    if (snapshot.underrunCount > 0)
-    {
-      if (formatFound)
+      if (snapshot.underrunCount == 0)
       {
-        ss << " | ";
+        return info;
       }
-      ss << snapshot.underrunCount << " underruns";
-    }
 
-    _streamInfoLabel.set_text(ss.str());
+      if (info.empty())
+      {
+        return std::format("{} underruns", snapshot.underrunCount);
+      }
+
+      return std::format("{} | {} underruns", info, snapshot.underrunCount);
+    }();
+
+    _streamInfoLabel.set_text(statusText);
 
     updatePlaybackTooltip(snapshot);
 
@@ -554,49 +376,61 @@ namespace ao::gtk
 
   void StatusBar::updatePlaybackTooltip(ao::audio::Snapshot const& snapshot)
   {
-    // Tooltip: Build dynamic representation of the path from the graph (TOTAL ORDER)
-    std::stringstream tt;
-    tt << "Audio Pipeline:\n";
+    auto ss = std::stringstream{};
+    ss << "Audio Pipeline:\n";
+
+    auto const nodeTypeString = [](ao::audio::flow::NodeType type)
+    {
+      using Type = ao::audio::flow::NodeType;
+
+      switch (type)
+      {
+        case Type::Decoder: return "[Source]";
+        case Type::Engine: return "[Engine]";
+        case Type::Stream: return "[Stream]";
+        case Type::Intermediary: return "[Filter]";
+        case Type::Sink: return "[Device]";
+        case Type::ExternalSource: return "[Other Source]";
+      }
+
+      return "[Unknown]";
+    };
 
     {
-      std::string currentId = "rs-decoder";
-      std::set<std::string> visited;
+      auto currentId = std::string{"rs-decoder"};
+      auto visited = std::unordered_set<std::string>{};
+
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
-        auto it = std::ranges::find(snapshot.flow.nodes, currentId, &ao::audio::flow::Node::id);
+        auto const it = std::ranges::find(snapshot.flow.nodes, currentId, &ao::audio::flow::Node::id);
 
         if (it == snapshot.flow.nodes.end())
         {
           break;
         }
+
         auto const& node = *it;
-        tt << "• ";
-        switch (node.type)
+        ss << std::format("• {} {}", nodeTypeString(node.type), node.name);
+
+        if (node.optFormat)
         {
-          case ao::audio::flow::NodeType::Decoder: tt << "[Source] "; break;
-          case ao::audio::flow::NodeType::Engine: tt << "[Engine] "; break;
-          case ao::audio::flow::NodeType::Stream: tt << "[Stream] "; break;
-          case ao::audio::flow::NodeType::Intermediary: tt << "[Filter] "; break;
-          case ao::audio::flow::NodeType::Sink: tt << "[Device] "; break;
-          case ao::audio::flow::NodeType::ExternalSource: tt << "[Other Source] "; break;
+          ss << std::format(" ({})", formatStream(*node.optFormat));
         }
-        tt << node.name;
-        if (node.format)
-        {
-          tt << " (" << formatStream(*node.format) << ")";
-        }
+
         if (node.volumeNotUnity)
         {
-          tt << " [Vol Control]";
+          ss << " [Vol Control]";
         }
+
         if (node.isMuted)
         {
-          tt << " [Muted]";
+          ss << " [Muted]";
         }
-        tt << "\n";
 
-        std::string nextId;
+        ss << "\n";
+
+        auto nextId = std::string{};
         for (auto const& link : snapshot.flow.connections)
         {
           if (link.isActive && link.sourceId == currentId)
@@ -611,58 +445,41 @@ namespace ao::gtk
 
     if (!snapshot.qualityTooltip.empty())
     {
-      tt << "\n" << snapshot.qualityTooltip;
+      ss << "\n" << snapshot.qualityTooltip;
     }
 
-    auto const finalTooltip = tt.str();
-    if (finalTooltip != _lastTooltipText)
+    auto const tooltip = ss.str();
+    if (tooltip != _lastTooltipText)
     {
-      APP_LOG_DEBUG("StatusBar: Updating tooltip (length={})", finalTooltip.length());
-      _playbackDetailsBox.set_tooltip_text(finalTooltip);
-      _streamInfoLabel.set_tooltip_text(finalTooltip);
-      _sinkStatusIcon.set_tooltip_text(finalTooltip);
-      _lastTooltipText = finalTooltip;
+      APP_LOG_DEBUG("StatusBar: Updating tooltip (length={})", tooltip.length());
+      _playbackDetailsBox.set_tooltip_text(tooltip);
+      _streamInfoLabel.set_tooltip_text(tooltip);
+      _sinkStatusIcon.set_tooltip_text(tooltip);
+      _lastTooltipText = tooltip;
     }
   }
 
   void StatusBar::setPlaybackDetails(ao::audio::Snapshot const& snapshot)
   {
     // Skip update if nothing visible has changed
-    if (snapshot.transport == _lastPlaybackState.transport && snapshot.backend == _lastPlaybackState.backend &&
-        snapshot.trackTitle == _lastPlaybackState.title && snapshot.trackArtist == _lastPlaybackState.artist &&
+    if (snapshot.transport == _lastPlaybackState.transport && snapshot.trackTitle == _lastPlaybackState.title &&
+        snapshot.trackArtist == _lastPlaybackState.artist &&
         snapshot.underrunCount == _lastPlaybackState.underrunCount && snapshot.quality == _lastPlaybackState.quality &&
-        snapshot.qualityTooltip == _lastPlaybackState.qualityTooltip && snapshot.flow == _lastPlaybackState.flow &&
-        snapshot.currentDeviceId == _lastPlaybackState.currentDeviceId &&
-        snapshot.availableBackends == _lastPlaybackState.availableBackends)
+        snapshot.qualityTooltip == _lastPlaybackState.qualityTooltip && snapshot.flow == _lastPlaybackState.flow)
     {
       return;
     }
 
-    // Detect significant changes
-    bool const backendsChanged = (snapshot.availableBackends != _lastPlaybackState.availableBackends);
-    bool const deviceChanged = (snapshot.currentDeviceId != _lastPlaybackState.currentDeviceId);
-    bool const backendKindChanged = (snapshot.backend != _lastPlaybackState.backend);
-
     // Update state cache
     _lastPlaybackState = {.transport = snapshot.transport,
-                          .backend = snapshot.backend,
                           .title = snapshot.trackTitle,
                           .artist = snapshot.trackArtist,
                           .underrunCount = snapshot.underrunCount,
                           .quality = snapshot.quality,
                           .qualityTooltip = snapshot.qualityTooltip,
-                          .flow = snapshot.flow,
-                          .currentDeviceId = snapshot.currentDeviceId,
-                          .availableBackends = snapshot.availableBackends};
+                          .flow = snapshot.flow};
 
-    // Update output model if backends or device changed
-    if (backendsChanged || deviceChanged || backendKindChanged)
-    {
-      updateOutputModel(snapshot);
-    }
-
-    // Always update output label and status labels (they might depend on minor state changes)
-    updateOutputLabel(snapshot);
+    // Always update status labels (they might depend on minor state changes)
     updatePlaybackStatusLabels(snapshot);
   }
 

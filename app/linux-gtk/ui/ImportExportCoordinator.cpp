@@ -10,7 +10,7 @@
 namespace ao::gtk
 {
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent, ImportExportCallbacks callbacks)
-    : _parent(parent), _callbacks(std::move(callbacks))
+    : _parent{parent}, _callbacks{std::move(callbacks)}
   {
   }
 

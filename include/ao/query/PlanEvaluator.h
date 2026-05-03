@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/query/ExecutionPlan.h>
 #include <ao/library/TrackView.h>
+#include <ao/query/ExecutionPlan.h>
 
 #include <string_view>
 #include <vector>

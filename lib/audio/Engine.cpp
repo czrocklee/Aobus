@@ -34,7 +34,7 @@ namespace ao::audio
         return 0;
       }
 
-      std::uint32_t bytesPerSample = 2U;
+      auto bytesPerSample = 2U;
 
       if (format.bitDepth == 24U)
       {
@@ -91,7 +91,7 @@ namespace ao::audio
 
     auto const state = [this]()
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
 
       return State{.track = _currentTrack,
                    .positionMs = _snapshot.positionMs,
@@ -104,7 +104,8 @@ namespace ao::audio
     _currentDevice = device;
 
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+
       _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
       _snapshot.currentDeviceId = _currentDevice.id;
     }
@@ -124,19 +125,19 @@ namespace ao::audio
 
   void Engine::setOnTrackEnded(std::function<void()> callback)
   {
-    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
     _onTrackEnded = std::move(callback);
   }
 
   void Engine::setOnRouteChanged(OnRouteChanged callback)
   {
-    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
     _onRouteChanged = std::move(callback);
   }
 
   EngineRouteSnapshot Engine::routeSnapshot() const
   {
-    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
     return _routeSnapshot;
   }
 
@@ -147,6 +148,7 @@ namespace ao::audio
     _playbackDrainPending = false;
     _snapshot = {};
     _snapshot.backend = _backend ? _backend->kind() : BackendKind::None;
+    _snapshot.currentDeviceId = _currentDevice.id;
 
     _routeSnapshot = {};
 
@@ -193,7 +195,7 @@ namespace ao::audio
     auto backendFormat = Format{};
 
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       _underrunCount = 0;
       resetToIdle();
       _snapshot.transport = Transport::Opening;
@@ -218,7 +220,7 @@ namespace ao::audio
       if (auto const openResult = _backend->open(backendFormat, callbacks); !openResult)
       {
         _source.store({}, std::memory_order_release);
-        auto lock = std::lock_guard<std::mutex>{_stateMutex};
+        auto const lock = std::lock_guard<std::mutex>{_stateMutex};
         _currentTrack.reset();
         _snapshot.transport = Transport::Error;
         _snapshot.statusText = openResult.error().message;
@@ -237,13 +239,13 @@ namespace ao::audio
       }
 
       _source.store({}, std::memory_order_release);
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       resetToIdle();
       return;
     }
 
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       _snapshot.transport = Transport::Playing;
       _backendStarted = true;
     }
@@ -259,7 +261,7 @@ namespace ao::audio
     bool shouldPause = false;
 
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
 
       if (_snapshot.transport == Transport::Playing || _snapshot.transport == Transport::Buffering)
       {
@@ -332,7 +334,7 @@ namespace ao::audio
     }
 
     _source.store({}, std::memory_order_release);
-    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
     resetToIdle();
   }
 
@@ -349,7 +351,7 @@ namespace ao::audio
     bool wasPaused = false;
 
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       wasPaused = (_snapshot.transport == Transport::Paused);
       _snapshot.transport = Transport::Buffering;
       _snapshot.positionMs = positionMs;
@@ -367,7 +369,7 @@ namespace ao::audio
 
     if (auto const seekResult = source->seek(positionMs); !seekResult)
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       _snapshot.transport = Transport::Error;
       _snapshot.statusText = seekResult.error().message;
       return;
@@ -385,20 +387,20 @@ namespace ao::audio
       }
 
       _source.store({}, std::memory_order_release);
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       resetToIdle();
       return;
     }
 
     if (wasPaused)
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       _snapshot.transport = Transport::Paused;
       return;
     }
 
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       _snapshot.transport = Transport::Playing;
       _backendStarted = true;
     }
@@ -412,7 +414,7 @@ namespace ao::audio
   Snapshot Engine::snapshot() const
   {
     auto const source = _source.load(std::memory_order_acquire);
-    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
     auto snap = _snapshot;
     snap.backend = _backend ? _backend->kind() : BackendKind::None;
     snap.bufferedMs = source ? source->bufferedMs() : 0;
@@ -424,7 +426,7 @@ namespace ao::audio
   void Engine::onBackendError(void* userData, std::string_view message) noexcept
   {
     auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-    auto msg = std::string(message);
+    auto msg = std::string{message};
 
     if (self->_dispatcher)
     {
@@ -443,9 +445,9 @@ namespace ao::audio
     // Stop immediately
     stop();
 
-    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
     _snapshot.transport = Transport::Error;
-    _snapshot.statusText = std::string(message);
+    _snapshot.statusText = std::string{message};
   }
 
   bool Engine::negotiateFormat(std::filesystem::path const& path,
@@ -523,7 +525,7 @@ namespace ao::audio
   {
     if (shouldUseMemoryPcmSource(info))
     {
-      auto memorySource = std::make_shared<MemorySource>(std::move(decoder), info);
+      auto const memorySource = std::make_shared<MemorySource>(std::move(decoder), info);
 
       if (auto const initResult = memorySource->initialize(); !initResult)
       {
@@ -534,7 +536,7 @@ namespace ao::audio
       return memorySource;
     }
 
-    auto streamingSource = std::make_shared<StreamingSource>(
+    auto const streamingSource = std::make_shared<StreamingSource>(
       std::move(decoder),
       info,
       [this](ao::Error const& err)
@@ -564,12 +566,16 @@ namespace ao::audio
                          std::shared_ptr<ISource>& source,
                          Format& backendFormat)
   {
-    auto outputFormat = Format{};
-    outputFormat.sampleRate = 0; // Use native
-    outputFormat.channels = 0;   // Use native
-    outputFormat.bitDepth = 0;   // Use native
-    outputFormat.isFloat = false;
-    outputFormat.isInterleaved = true;
+    auto const outputFormat = [&]
+    {
+      auto fmt = Format{};
+      fmt.sampleRate = 0; // Use native
+      fmt.channels = 0;   // Use native
+      fmt.bitDepth = 0;   // Use native
+      fmt.isFloat = false;
+      fmt.isInterleaved = true;
+      return fmt;
+    }();
 
     auto decoder = createDecoderSession(descriptor.filePath, outputFormat);
 
@@ -611,22 +617,18 @@ namespace ao::audio
     _snapshot.flow = {};
 
     // Add initial Source (Decoder) Node
-    _routeSnapshot.flow.nodes.clear();
-    _routeSnapshot.flow.nodes.push_back({.id = "rs-decoder",
-                                         .type = flow::NodeType::Decoder,
-                                         .name = "File Decoder",
-                                         .format = info.sourceFormat,
-                                         .isLossySource = info.isLossy,
-                                         .objectPath = ""});
-
-    // Add Engine Node
-    _routeSnapshot.flow.nodes.push_back(flow::Node{.id = "rs-engine",
-                                                   .type = flow::NodeType::Engine,
-                                                   .name = "RockStudio Engine",
-                                                   .format = info.outputFormat,
-                                                   .volumeNotUnity = false,
-                                                   .isMuted = false,
-                                                   .isLossySource = false});
+    _routeSnapshot.flow.nodes = {flow::Node{
+                                   .id = "rs-decoder",
+                                   .type = flow::NodeType::Decoder,
+                                   .name = "Decoder",
+                                   .optFormat = info.sourceFormat,
+                                 },
+                                 flow::Node{
+                                   .id = "rs-engine",
+                                   .type = flow::NodeType::Engine,
+                                   .name = "Engine",
+                                   .optFormat = info.outputFormat,
+                                 }};
 
     _routeSnapshot.flow.connections.clear();
     _routeSnapshot.flow.connections.push_back(
@@ -698,9 +700,9 @@ namespace ao::audio
     // Use Engine node format for position calculation
     for (auto const& node : self->_snapshot.flow.nodes)
     {
-      if (node.type == flow::NodeType::Engine && node.format && node.format->sampleRate > 0)
+      if (node.type == flow::NodeType::Engine && node.optFormat && node.optFormat->sampleRate > 0)
       {
-        auto const ms = (static_cast<std::uint64_t>(frames) * 1000) / node.format->sampleRate;
+        auto const ms = (static_cast<std::uint64_t>(frames) * 1000) / node.optFormat->sampleRate;
         self->_snapshot.positionMs += static_cast<std::uint32_t>(ms);
         break;
       }
@@ -733,7 +735,7 @@ namespace ao::audio
     std::function<void()> cb;
 
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       resetToIdle();
       cb = _onTrackEnded;
     }
@@ -748,7 +750,7 @@ namespace ao::audio
   void Engine::onRouteReady(void* userData, std::string_view routeAnchor) noexcept
   {
     auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-    auto anchor = std::string(routeAnchor);
+    auto anchor = std::string{routeAnchor};
 
     if (self->_dispatcher)
     {
@@ -762,9 +764,9 @@ namespace ao::audio
 
   void Engine::handleRouteReady(std::string_view routeAnchor)
   {
-    auto lock = std::lock_guard<std::mutex>{_stateMutex};
-    _routeSnapshot.anchor =
-      BackendRouteAnchor{.backend = _backend ? _backend->kind() : BackendKind::None, .id = std::string(routeAnchor)};
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+    _routeSnapshot.optAnchor =
+      BackendRouteAnchor{.backend = _backend ? _backend->kind() : BackendKind::None, .id = std::string{routeAnchor}};
 
     if (_onRouteChanged)
     {
@@ -784,7 +786,7 @@ namespace ao::audio
   void Engine::handleSourceError(ao::Error const& error)
   {
     {
-      auto lock = std::lock_guard<std::mutex>{_stateMutex};
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
 
       if (_snapshot.transport == Transport::Idle)
       {
@@ -820,14 +822,14 @@ namespace ao::audio
 
   void Engine::handleFormatChanged(Format const& format)
   {
-    auto lock = std::lock_guard<std::mutex>{_stateMutex};
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
 
     // Update engine node in the route snapshot
     for (auto& node : _routeSnapshot.flow.nodes)
     {
       if (node.id == "rs-engine")
       {
-        node.format = format;
+        node.optFormat = format;
         break;
       }
     }
@@ -837,7 +839,7 @@ namespace ao::audio
     {
       if (node.id == "rs-engine")
       {
-        node.format = format;
+        node.optFormat = format;
         break;
       }
     }

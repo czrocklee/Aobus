@@ -16,7 +16,7 @@ namespace ao::gtk
   PlaybackCoordinator::PlaybackCoordinator(IPlaybackHost& host,
                                            std::shared_ptr<GtkMainThreadDispatcher> dispatcher,
                                            std::function<TrackRowDataProvider*()> providerSource)
-    : _host(host)
+    : _host{host}
     , _providerSource(std::move(providerSource))
     , _playbackBar(std::make_unique<PlaybackBar>())
     , _dispatcher(std::move(dispatcher))

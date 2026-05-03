@@ -58,6 +58,9 @@ namespace ao::gtk
 
     PlaybackBar& playbackBar() { return *_playbackBar; }
 
+    using OutputChangedSignal = sigc::signal<void(ao::audio::BackendKind, std::string)>;
+    OutputChangedSignal& signalOutputChanged() { return _playbackBar->signalOutputChanged(); }
+
     void playCurrentSelection();
     void pausePlayback();
     void stopPlayback();

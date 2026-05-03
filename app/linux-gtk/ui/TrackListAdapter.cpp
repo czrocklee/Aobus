@@ -207,10 +207,10 @@ namespace ao::gtk
     _filterErrorMessage.clear();
     _filterPlan.reset();
 
-    if (auto const resolved = resolveFilterExpression(_filterText.raw()); resolved.has_value())
+    if (auto const optResolved = resolveFilterExpression(_filterText.raw()); optResolved)
     {
-      _filterMode = resolved->first;
-      _filterExpression = resolved->second;
+      _filterMode = optResolved->first;
+      _filterExpression = optResolved->second;
 
       try
       {
@@ -360,9 +360,9 @@ namespace ao::gtk
     // refresh only that row to preserve scroll position and UI state.
     if (ids.size() == 1 && _filterMode == TrackFilterMode::None)
     {
-      if (auto const index = _source.indexOf(ids[0]))
+      if (auto const optIndex = _source.indexOf(ids[0]); optIndex)
       {
-        onUpdated(ids[0], *index);
+        onUpdated(ids[0], *optIndex);
         return;
       }
     }

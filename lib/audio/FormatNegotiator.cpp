@@ -37,7 +37,7 @@ namespace ao::audio
 
   RenderPlan FormatNegotiator::buildPlan(Format sourceFormat, DeviceCapabilities const& caps)
   {
-    RenderPlan plan = {
+    auto plan = RenderPlan{
       .sourceFormat = sourceFormat,
       .deviceFormat = sourceFormat,
       .decoderOutputFormat = {},
@@ -78,6 +78,7 @@ namespace ao::audio
     plan.decoderOutputFormat.isFloat = false;
 
     // Determine best decoder output format based on device capabilities
+
     if (plan.sourceFormat.bitDepth == 24)
     {
       if (std::ranges::contains(caps.bitDepths, 32))
@@ -116,6 +117,7 @@ namespace ao::audio
     }
 
     // Ensure deviceFormat matches decoderOutputFormat if no other conversion is needed
+
     if (!plan.requiresBitDepthConversion)
     {
       plan.deviceFormat.bitDepth = plan.decoderOutputFormat.bitDepth;

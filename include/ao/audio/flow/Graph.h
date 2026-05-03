@@ -32,7 +32,7 @@ namespace ao::audio::flow
     std::string id = "";
     NodeType type = NodeType::Intermediary;
     std::string name = "";
-    std::optional<Format> format = std::nullopt;
+    std::optional<Format> optFormat = std::nullopt;
     bool volumeNotUnity = false;
     bool isMuted = false;
     bool isLossySource = false;

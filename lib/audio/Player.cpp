@@ -24,10 +24,12 @@ namespace ao::audio
       {
         return;
       }
+
       if (!text.empty())
       {
         text += '\n';
       }
+
       text += line;
     }
 
@@ -61,7 +63,7 @@ namespace ao::audio
   }
 
   Player::Player(std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
-    : _dispatcher(std::move(dispatcher))
+    : _dispatcher{std::move(dispatcher)}
   {
     // Start with a NullBackend until a provider provides something real
     _engine = std::make_unique<Engine>(std::make_unique<NullBackend>(),
@@ -121,8 +123,8 @@ namespace ao::audio
     auto record = std::make_unique<ProviderRecord>();
     record->provider = std::move(provider);
 
-    auto* providerPtr = record->provider.get();
-    auto* recordPtr = record.get();
+    auto* const providerPtr = record->provider.get();
+    auto* const recordPtr = record.get();
 
     _providers.push_back(std::move(record));
 
@@ -143,6 +145,8 @@ namespace ao::audio
           recordPtr->devices = devices;
           handleDevicesChanged(providerPtr, devices);
         }
+
+        return true; // Wait, this is a lambda return, but still a block.
       });
   }
 
@@ -180,6 +184,7 @@ namespace ao::audio
       _pendingOutput = PendingOutput{kind, std::string(deviceId)};
       AUDIO_LOG_DEBUG(
         "Player: Requested output {}:{} not yet available, pending discovery", backendKindToId(kind), deviceId);
+
       return;
     }
 
@@ -192,6 +197,7 @@ namespace ao::audio
     for (auto const& record : _providers)
     {
       auto const found = std::ranges::contains(record->devices, targetDevice);
+
       if (found)
       {
         if (auto backend = record->provider->createBackend(targetDevice))
@@ -253,13 +259,15 @@ namespace ao::audio
   {
     // Rebuild global cache from all providers
     auto allDevices = std::vector<Device>{};
+
     for (auto const& record : _providers)
     {
       allDevices.insert(allDevices.end(), record->devices.begin(), record->devices.end());
     }
 
     // Group devices by BackendKind
-    std::map<BackendKind, std::vector<Device>> groups;
+    auto groups = std::map<BackendKind, std::vector<Device>>{};
+
     for (auto const& dev : allDevices)
     {
       groups[dev.backendKind].push_back(dev);
@@ -269,9 +277,9 @@ namespace ao::audio
     for (auto& [kind, devices] : groups)
     {
       snapshots.push_back({.kind = kind,
-                           .displayName = std::string(backendDisplayName(kind)),
-                           .shortName = std::string(backendShortName(kind)),
-                           .id = std::string(backendKindToId(kind)),
+                           .displayName = std::string{backendDisplayName(kind)},
+                           .shortName = std::string{backendShortName(kind)},
+                           .id = std::string{backendKindToId(kind)},
                            .devices = std::move(devices)});
     }
 
@@ -302,12 +310,12 @@ namespace ao::audio
     _cachedEngineRoute = snapshot;
 
     // Check if we have a valid anchor and manager to subscribe to the system graph
-    if (_cachedEngineRoute.anchor.has_value() && _activeManager != nullptr)
+    if (_cachedEngineRoute.optAnchor && _activeManager != nullptr)
     {
       if (!_graphSubscription)
       {
         _graphSubscription = _activeManager->subscribeGraph(
-          _cachedEngineRoute.anchor->id,
+          _cachedEngineRoute.optAnchor->id,
           [this, generation](flow::Graph const& graph)
           {
             if (_dispatcher)
@@ -346,13 +354,13 @@ namespace ao::audio
     _mergedGraph = _cachedEngineRoute.flow;
 
     // Find the engine output format to enrich system nodes that might be missing it (like ALSA)
-    std::optional<Format> engineFormat;
+    auto optEngineFormat = std::optional<Format>{};
 
     for (auto const& node : _cachedEngineRoute.flow.nodes)
     {
       if (node.id == "rs-engine")
       {
-        engineFormat = node.format;
+        optEngineFormat = node.optFormat;
         break;
       }
     }
@@ -360,9 +368,9 @@ namespace ao::audio
     // Add system graph nodes and links
     for (auto node : _cachedSystemGraph.nodes)
     {
-      if (!node.format.has_value() && engineFormat.has_value())
+      if (!node.optFormat && optEngineFormat)
       {
-        node.format = engineFormat;
+        node.optFormat = optEngineFormat;
       }
 
       _mergedGraph.nodes.push_back(node);
@@ -498,10 +506,10 @@ namespace ao::audio
 
     if (nextNode != nullptr)
     {
-      if (node.format && nextNode->format)
+      if (node.optFormat && nextNode->optFormat)
       {
-        auto const& f1 = *node.format;
-        auto const& f2 = *nextNode->format;
+        auto const& f1 = *node.optFormat;
+        auto const& f2 = *nextNode->optFormat;
 
         if (f1.sampleRate != f2.sampleRate)
         {

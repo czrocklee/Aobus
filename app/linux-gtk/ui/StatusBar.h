@@ -31,10 +31,25 @@ namespace ao::gtk
     using NowPlayingClickedSignal = sigc::signal<void()>;
     NowPlayingClickedSignal& signalNowPlayingClicked() { return _nowPlayingClicked; }
 
-    using OutputChangedSignal = sigc::signal<void(ao::audio::BackendKind, std::string)>;
-    OutputChangedSignal& signalOutputChanged() { return _outputChanged; }
-
   private:
+    struct LastPlaybackState final
+    {
+      ao::audio::Transport transport = ao::audio::Transport::Idle;
+      std::string title;
+      std::string artist;
+      std::uint32_t underrunCount = 0;
+      ao::audio::Quality quality = ao::audio::Quality::Unknown;
+      std::string qualityTooltip;
+      ao::audio::flow::Graph flow;
+    };
+
+    // Layout constants
+    static constexpr int kImportProgressWidth = 200;
+    static constexpr int kTransitionDurationMs = 250;
+
+    void updatePlaybackStatusLabels(ao::audio::Snapshot const& snapshot);
+    void updatePlaybackTooltip(ao::audio::Snapshot const& snapshot);
+
     // Left: Library info
     Gtk::Label _libraryLabel;
 
@@ -51,46 +66,16 @@ namespace ao::gtk
 
     // Right: Playback details
     Gtk::Box _playbackDetailsBox{Gtk::Orientation::HORIZONTAL};
-    Gtk::ToggleButton _outputButton;
-    Gtk::Popover _outputPopover;
-    Gtk::ListBox _outputListBox;
-    Glib::RefPtr<Gio::ListStore<Glib::Object>> _outputStore;
     Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;
-
-    Gtk::Widget* createOutputWidget(Glib::RefPtr<Glib::Object> const& item);
-
-    void updateOutputModel(ao::audio::Snapshot const& snapshot);
-    void updateOutputLabel(ao::audio::Snapshot const& snapshot);
-    void updatePlaybackStatusLabels(ao::audio::Snapshot const& snapshot);
-    void updatePlaybackTooltip(ao::audio::Snapshot const& snapshot);
 
     // Far Right: Status message
     Gtk::Label _statusLabel;
 
     sigc::connection _timerConnection;
     NowPlayingClickedSignal _nowPlayingClicked;
-    OutputChangedSignal _outputChanged;
 
-    struct LastPlaybackState final
-    {
-      ao::audio::Transport transport = ao::audio::Transport::Idle;
-      ao::audio::BackendKind backend = ao::audio::BackendKind::None;
-      std::string title;
-      std::string artist;
-      std::uint32_t underrunCount = 0;
-      ao::audio::Quality quality = ao::audio::Quality::Unknown;
-      std::string qualityTooltip;
-      ao::audio::flow::Graph flow;
-      std::string currentDeviceId;
-      std::vector<ao::audio::BackendSnapshot> availableBackends;
-    } _lastPlaybackState;
+    LastPlaybackState _lastPlaybackState;
     std::string _lastTooltipText;
-
-    // Layout constants
-    static constexpr int kOutputScrolledMinHeight = 320;
-    static constexpr int kOutputScrolledMinWidth = 360;
-    static constexpr int kImportProgressWidth = 200;
-    static constexpr int kTransitionDurationMs = 250;
   };
 } // namespace ao::gtk

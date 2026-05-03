@@ -46,7 +46,7 @@ namespace ao::gtk
   }
 
   TagEditController::TagEditController(Gtk::Window& /*parent*/, Callbacks callbacks)
-    : _callbacks(std::move(callbacks))
+    : _callbacks{std::move(callbacks)}
   {
     setupActions();
   }
@@ -96,18 +96,18 @@ namespace ao::gtk
       return;
     }
 
-    _activeSelection = selection;
+    _optActiveSelection = selection;
 
     // Create TagPopover with the selected track IDs
-    auto* tagPopover = new TagPopover(*_currentSession->musicLibrary, selection.selectedIds);
+    _tagPopover = std::make_unique<TagPopover>(*_currentSession->musicLibrary, selection.selectedIds);
 
     // Connect signal to apply tag changes
-    tagPopover->signalTagsChanged().connect(
+    _tagPopover->signalTagsChanged().connect(
       [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
     // Show the popover anchored to the right-click position
-    page.showTagPopover(*tagPopover, posX, posY);
+    page.showTagPopover(*_tagPopover, posX, posY);
   }
 
   void TagEditController::showTagEditor(TrackViewPage& page,
@@ -120,21 +120,21 @@ namespace ao::gtk
       return;
     }
 
-    _activeSelection = selection;
+    _optActiveSelection = selection;
 
     // Create TagPopover with the selected track IDs
-    auto* tagPopover = new TagPopover(*_currentSession->musicLibrary, selection.selectedIds);
+    _tagPopover = std::make_unique<TagPopover>(*_currentSession->musicLibrary, selection.selectedIds);
 
     // Connect signal to apply tag changes
-    tagPopover->signalTagsChanged().connect(
+    _tagPopover->signalTagsChanged().connect(
       [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
     // Show popover at mouse position
-    tagPopover->set_parent(page.getColumnView());
+    _tagPopover->set_parent(page.getColumnView());
     auto rect = Gdk::Rectangle{static_cast<int>(posX), static_cast<int>(posY), 1, 1};
-    tagPopover->set_pointing_to(rect);
-    tagPopover->popup();
+    _tagPopover->set_pointing_to(rect);
+    _tagPopover->popup();
   }
 
   void TagEditController::addTagToCurrentSelection(std::string const& tag)
@@ -150,12 +150,12 @@ namespace ao::gtk
   void TagEditController::applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
                                                            std::vector<std::string> const& tagsToRemove)
   {
-    if (_currentSession == nullptr || !_activeSelection)
+    if (_currentSession == nullptr || !_optActiveSelection)
     {
       return;
     }
 
-    auto& selection = *_activeSelection;
+    auto& selection = *_optActiveSelection;
 
     if (selection.selectedIds.empty() || (tagsToAdd.empty() && tagsToRemove.empty()))
     {

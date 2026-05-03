@@ -39,8 +39,8 @@ namespace ao::audio
     std::uint64_t nextFrameIndex = 0;
     bool eof = false;
 
-    Impl(Format output)
-      : requestedOutput(output), decoder(::FLAC__stream_decoder_new())
+    Impl(Format const& output)
+      : requestedOutput{output}, decoder{::FLAC__stream_decoder_new()}
     {
     }
 
@@ -92,7 +92,7 @@ namespace ao::audio
   };
 
   FlacDecoderSession::FlacDecoderSession(Format outputFormat)
-    : _impl(std::make_unique<Impl>(outputFormat))
+    : _impl{std::make_unique<Impl>(outputFormat)}
   {
   }
 

@@ -76,6 +76,19 @@ Run the audit in this order.
    - Prefer references over nullable raw pointers for mandatory services.
    - Use `ao::utility::makeUniquePtr` for C resource RAII in implementations.
 
+## Common Audit Gotchas
+
+These are subtle patterns that are frequently missed but are required for full conformance:
+
+- **The Move-from-Const Trap**: Rule 4.3.1 (`const` everywhere) has a vital exception: never make a `std::unique_ptr` `const` if it is intended to be `std::move`d later. `std::move` on a `const` object does not move; it triggers a copy (which unique_ptr prohibits).
+- **C API Interop & Const**: Many C-based APIs (GLib, ALSA, FFmpeg) take a `void*` (gpointer) for user data. In C++, you cannot implicitly convert a `const T*` to `void*` as it drops const. For objects passed to C callbacks, keep the local variable non-const.
+- **Efficient String Building**: While `std::format` is preferred for simple formatting (Rule 3.1.2), building complex multi-line strings in a loop should use `auto ss = std::stringstream{}` as a builder, with `ss << std::format(...)` for content. This avoids O(N²) allocation overhead of naive `s += a + b`.
+- **Modern Ranges Hygiene**: The use of `std::ranges::to` and `std::views` requires an explicit `#include <ranges>` even if other range-like headers are present.
+- **Lambda Parameter Naming**: Strict `readability-identifier-length` checks are enforced in the `app/` and `lib/` modules. Avoid one-letter names like `s`, `i`, or `it` in lambdas; prefer `value`, `index`, or `item`.
+- **Functional Casts vs. Braced Init**: Always prefer `std::string{view}` or `T{args}` over functional style `std::string(view)` or `T(args)` (Rule 3.4.5).
+- **Const Pointers to Managed Objects**: When initializing managed widgets with `Gtk::make_managed<T>()`, the pointer itself is typically immutable. Use `auto* const p = ...` instead of `auto* p = ...`.
+- **Spacing After Block Closure**: Rule 2.1.2 requires a blank line *after* a closing brace `}` if another statement follows in the same scope.
+
 ## `app/` False Positives To Avoid
 
 - `main(int argc, char* argv[])` and toolkit entrypoints are API-shaped and should not be flagged.
@@ -89,6 +102,26 @@ Run the audit in this order.
 - Distinguish manual standards violations from `clang-tidy` findings when that helps clarity.
 - For each finding, include the file, line, violated rule, why it is a violation, and the smallest conforming fix.
 - If no violations are found, say so explicitly.
+
+## The Braced Initialization ({}) Audit (Rule 3.4.5)
+
+The project is migrating to **Uniform Initialization**. This is one of the most pervasive violations in legacy files.
+
+- **Prefer Braces for Construction**: Replace `T x(a, b);` with `auto x = T{a, b};` or `T x{a, b};`.
+- **Member Initializer Lists**: Modernize `Constructor() : member(val)` to `Constructor() : member{val}`.
+- **Empty Initialization**: Use `auto s = std::string{};` instead of `std::string s;`.
+- **The Vector Pitfall**:
+    - `std::vector<int> v(10);` creates 10 elements (correct for size allocation).
+    - `std::vector<int> v{10};` creates 1 element with value 10.
+    - **Rule**: Keep `()` for size-based allocation; use `{}` for value lists or default construction.
+- **Avoiding Most Vexing Parse**: Braces prevent the compiler from interpreting a variable declaration as a function declaration.
+
+## Technical Lessons Learned (Summary)
+
+- **C API User Data**: User data pointers (`void*`) in C callbacks MUST be passed from non-const local variables.
+- **Move-from-Const**: Never mark `std::unique_ptr` as `const` if it is destined for `std::move`.
+- **Descriptive Lambdas**: No one-letter variables in lambdas (e.g., `item` instead of `i`).
+- **Include Hygiene**: `#include <ranges>` is mandatory for `std::views` and `std::ranges::to`.
 
 ## References
 

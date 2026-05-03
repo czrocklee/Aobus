@@ -36,7 +36,7 @@ namespace ao::gtk
   }
 
   ListSidebarController::ListSidebarController(Gtk::Window& parent, Callbacks callbacks)
-    : _parent(parent), _callbacks(std::move(callbacks))
+    : _parent{parent}, _callbacks{std::move(callbacks)}
   {
     setupLayout();
   }

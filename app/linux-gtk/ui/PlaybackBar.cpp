@@ -25,9 +25,9 @@ namespace ao::gtk
   {
     void ensurePlaybackBarCss()
     {
-      static auto provider = []
+      static auto const provider = []
       {
-        auto css = Gtk::CssProvider::create();
+        auto const css = Gtk::CssProvider::create();
         css->load_from_data(".playback-bar {"
                             "  padding: 0px;"
                             "  margin: 0px;"
@@ -47,10 +47,11 @@ namespace ao::gtk
                             "  transition: all 200ms ease;"
                             "  border-radius: 8px;"
                             "}");
-        if (auto display = Gdk::Display::get_default(); display)
+        if (auto const display = Gdk::Display::get_default(); display)
         {
           Gtk::StyleContext::add_provider_for_display(display, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
         }
+
         return css;
       }();
       (void)provider;
@@ -95,9 +96,6 @@ namespace ao::gtk
     _outputButton.set_child(_outputIcon);
     _outputButton.set_tooltip_text("Click to change audio backend or device");
 
-    _outputButton.set_child(_outputIcon);
-    _outputButton.set_tooltip_text("Click to change audio backend or device");
-
     _outputStore = Gio::ListStore<Glib::Object>::create();
     _outputListBox.set_selection_mode(Gtk::SelectionMode::NONE);
     _outputListBox.set_show_separators(true);
@@ -110,8 +108,9 @@ namespace ao::gtk
         auto const index = row->get_index();
         if (index >= 0 && static_cast<std::size_t>(index) < _outputStore->get_n_items())
         {
-          auto item = _outputStore->get_item(index);
-          if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
+          auto const item = _outputStore->get_item(index);
+
+          if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
           {
             _outputChanged.emit(deviceItem->kind, deviceItem->id);
             _outputPopover.popdown();
@@ -119,7 +118,7 @@ namespace ao::gtk
         }
       });
 
-    auto* scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
+    auto* const scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
     scrolled->set_child(_outputListBox);
     scrolled->set_propagate_natural_height(true);
     scrolled->set_min_content_height(kOutputScrolledMinHeight);
@@ -133,7 +132,7 @@ namespace ao::gtk
     _outputButton.signal_clicked().connect([this]() { _outputPopover.popup(); });
 
     // Transport controls box
-    auto* transportBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    auto* const transportBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
     transportBox->set_spacing(0); // 0 because we use 'linked' class
     transportBox->set_halign(Gtk::Align::CENTER);
     transportBox->set_valign(Gtk::Align::CENTER);
@@ -157,7 +156,7 @@ namespace ao::gtk
     transportBox->append(_stopButton);
 
     // Seek and time box
-    auto* seekBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    auto* const seekBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
     seekBox->set_spacing(Layout::kSpacingXLarge);
     seekBox->set_hexpand(true);
     seekBox->set_halign(Gtk::Align::FILL);
@@ -196,7 +195,7 @@ namespace ao::gtk
 
         if (isPlaying)
         {
-          _animationTimeSec += 0.033;
+          _animationTimeSec += kAnimationStepSec;
           updateOutputIcon(_lastIconQuality);
         }
         else if (_animationTimeSec != 0.0)
@@ -205,9 +204,10 @@ namespace ao::gtk
           _animationTimeSec = 0.0;
           updateOutputIcon(_lastIconQuality);
         }
+
         return true;
       },
-      33);
+      kAnimationTimerMs);
   }
 
   void PlaybackBar::setupSignals()
@@ -226,7 +226,7 @@ namespace ao::gtk
           return;
         }
 
-        auto position = static_cast<std::uint32_t>(_seekScale.get_value());
+        auto const position = static_cast<std::uint32_t>(_seekScale.get_value());
         _seekRequested.emit(position);
       });
   }
@@ -235,7 +235,7 @@ namespace ao::gtk
   {
     if (auto backendItem = std::dynamic_pointer_cast<BackendItem>(item))
     {
-      auto* header = Gtk::make_managed<Gtk::Label>(backendItem->name);
+      auto* const header = Gtk::make_managed<Gtk::Label>(backendItem->name);
       header->set_halign(Gtk::Align::FILL);
       header->set_valign(Gtk::Align::CENTER);
       header->set_xalign(0.0);
@@ -245,24 +245,24 @@ namespace ao::gtk
 
     if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
     {
-      auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+      auto* const rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
       rowBox->set_spacing(Layout::kSpacingXLarge);
       rowBox->set_valign(Gtk::Align::CENTER);
       rowBox->add_css_class("device-row");
 
-      auto* textBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
+      auto* const textBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
       textBox->set_spacing(0);
       textBox->set_hexpand(true);
       textBox->set_valign(Gtk::Align::CENTER);
 
-      auto* nameLabel = Gtk::make_managed<Gtk::Label>(deviceItem->name);
+      auto* const nameLabel = Gtk::make_managed<Gtk::Label>(deviceItem->name);
       nameLabel->set_halign(Gtk::Align::START);
       nameLabel->set_ellipsize(Pango::EllipsizeMode::END);
       textBox->append(*nameLabel);
 
       if (!deviceItem->description.empty())
       {
-        auto* descLabel = Gtk::make_managed<Gtk::Label>(deviceItem->description);
+        auto* const descLabel = Gtk::make_managed<Gtk::Label>(deviceItem->description);
         descLabel->set_halign(Gtk::Align::START);
         descLabel->add_css_class("menu-description");
         descLabel->set_ellipsize(Pango::EllipsizeMode::END);
@@ -273,7 +273,7 @@ namespace ao::gtk
 
       if (deviceItem->active)
       {
-        auto* checkIcon = Gtk::make_managed<Gtk::Image>();
+        auto* const checkIcon = Gtk::make_managed<Gtk::Image>();
         checkIcon->set_from_icon_name("object-select-symbolic");
         checkIcon->set_pixel_size(16);
         rowBox->append(*checkIcon);
@@ -388,29 +388,29 @@ namespace ao::gtk
 
     // Calculate animation parameters
     double rotationAngle = 0.0;
-    double strokeWidth = 9.0;
+    double strokeWidth = kStrokeWidthBase;
     std::string transform = "none";
 
     if (!isStopped)
     {
-      // 1. Rotation: Cycle every 7.331 seconds (Prime)
-      rotationAngle = std::fmod(_animationTimeSec * (360.0 / 7.331), 360.0);
+      // 1. Rotation
+      rotationAngle = std::fmod(_animationTimeSec * (kFullCircleDegrees / kRotationPeriodSec), kFullCircleDegrees);
 
-      // 2. Breathing: Cycle every 5.119 seconds (Prime)
+      // 2. Breathing
       double const breathingPhase =
-        std::fmod(_animationTimeSec * (2.0 * std::numbers::pi / 5.119), 2.0 * std::numbers::pi);
+        std::fmod(_animationTimeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
 
-      // Fixed scale, we're doing thickness breathing now
       // Transform: Rotate around the center (40, 40)
       transform = std::format("rotate({:.2f} 40 40)", rotationAngle);
 
-      // Brand-consistent breathing (Ratio 0.3-0.4 of radius 30)
-      strokeWidth = 9.0 + (3.0 * (std::sin(breathingPhase) * 0.5 + 0.5));
+      // Brand-consistent breathing
+      constexpr double kPhaseShift = 0.5;
+      strokeWidth = kStrokeWidthBase + (kStrokeWidthVariance * (std::sin(breathingPhase) * kPhaseShift + kPhaseShift));
     }
     else
     {
       transform = std::format("rotate({:.2f} 40 40)", rotationAngle);
-      strokeWidth = 9.0;
+      strokeWidth = kStrokeWidthBase;
     }
 
     std::string svg = std::string{kLogoSvgTemplate};
@@ -448,10 +448,10 @@ namespace ao::gtk
     replace("{{COLOR_END}}", indicatorColor);
 
     // Inject animation and size parameters
-    replace("{{WIDTH_PX}}", std::to_string(_outputIconWidth));
-    replace("{{HEIGHT_PX}}", std::to_string(_outputIconHeight));
+    replace("{{WIDTH_PX}}", std::format("{}", _outputIconWidth));
+    replace("{{HEIGHT_PX}}", std::format("{}", _outputIconHeight));
     replace("{{TRANSFORM}}", transform);
-    replace("{{STROKE_WIDTH}}", std::to_string(strokeWidth));
+    replace("{{STROKE_WIDTH}}", std::format("{:.1f}", strokeWidth));
 
     try
     {
@@ -505,10 +505,11 @@ namespace ao::gtk
       }
       else
       {
-        auto durationMin = durSec / 60;
-        auto durationRemSec = durSec % 60;
-        auto positionMin = posSec / 60;
-        auto positionRemSec = posSec % 60;
+        auto const durationMin = durSec / 60;
+        auto const durationRemSec = durSec % 60;
+        auto const positionMin = posSec / 60;
+        auto const positionRemSec = posSec % 60;
+
         _timeLabel.set_text(
           std::format("{:d}:{:02d} / {:d}:{:02d}", positionMin, positionRemSec, durationMin, durationRemSec));
       }

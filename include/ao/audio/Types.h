@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -37,7 +37,7 @@ namespace ao::audio
     std::string title;
     std::string artist;
     std::string album;
-    std::optional<ao::ResourceId> coverArtId;
+    std::optional<ao::ResourceId> optCoverArtId;
     std::uint32_t durationMs = 0;
     std::uint32_t sampleRateHint = 0;
     std::uint8_t channelsHint = 0;
@@ -69,7 +69,7 @@ namespace ao::audio
   struct EngineRouteSnapshot final
   {
     flow::Graph flow;
-    std::optional<BackendRouteAnchor> anchor;
+    std::optional<BackendRouteAnchor> optAnchor;
 
     bool operator==(EngineRouteSnapshot const&) const = default;
   };

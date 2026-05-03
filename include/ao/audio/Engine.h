@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/audio/Format.h>
 #include <ao/audio/DecoderTypes.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/Types.h>
@@ -31,8 +31,8 @@ namespace ao::audio
     using OnRouteChanged = std::function<void(EngineRouteSnapshot const&)>;
 
     Engine(std::unique_ptr<IBackend> backend,
-                   Device const& device,
-                   std::shared_ptr<ao::IMainThreadDispatcher> dispatcher = nullptr);
+           Device const& device,
+           std::shared_ptr<ao::IMainThreadDispatcher> dispatcher = nullptr);
     ~Engine();
 
     void setBackend(std::unique_ptr<IBackend> backend, Device const& device);
@@ -66,17 +66,14 @@ namespace ao::audio
     void handleDrainComplete();
     void handleRouteReady(std::string_view routeAnchor);
     void resetToIdle();
-    bool openTrack(TrackPlaybackDescriptor const& descriptor,
-                   std::shared_ptr<ISource>& source,
-                   Format& backendFormat);
+    bool openTrack(TrackPlaybackDescriptor const& descriptor, std::shared_ptr<ISource>& source, Format& backendFormat);
 
     bool negotiateFormat(std::filesystem::path const& path,
                          DecodedStreamInfo const& info,
                          std::unique_ptr<IDecoderSession>& decoder,
                          Format& backendFormat);
 
-    std::shared_ptr<ISource> createPcmSource(std::unique_ptr<IDecoderSession> decoder,
-                                                DecodedStreamInfo const& info);
+    std::shared_ptr<ISource> createPcmSource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo const& info);
 
     std::unique_ptr<IBackend> _backend;
     std::shared_ptr<ao::IMainThreadDispatcher> _dispatcher;

@@ -48,6 +48,7 @@ pkgs.mkShell {
         dontStrip = true;
       }))
       gtkmm4
+      librsvg
       glib.dev
       gobject-introspection
       adwaita-icon-theme

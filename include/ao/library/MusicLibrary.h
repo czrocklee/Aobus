@@ -4,9 +4,9 @@
 #pragma once
 
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/ListStore.h>
 #include <ao/library/Meta.h>
 #include <ao/library/MetaStore.h>
-#include <ao/library/ListStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Database.h>
