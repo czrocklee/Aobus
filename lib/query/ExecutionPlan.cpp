@@ -140,14 +140,14 @@ namespace ao::query
     {
       auto const lhsMask = computeRequiredTagBloomMask(binary.operand, dict);
 
-      if (!binary.operation)
+      if (!binary.optOperation)
       {
         return lhsMask;
       }
 
-      auto const rhsMask = computeRequiredTagBloomMask(binary.operation->operand, dict);
+      auto const rhsMask = computeRequiredTagBloomMask(binary.optOperation->operand, dict);
 
-      switch (binary.operation->op)
+      switch (binary.optOperation->op)
       {
         case Operator::And: return lhsMask | rhsMask;
 
@@ -454,9 +454,9 @@ namespace ao::query
     // Save left field before compiling right operand (which will overwrite _lastField)
     auto const leftField = _lastField;
 
-    if (binary.operation)
+    if (binary.optOperation)
     {
-      auto const opcode = toOpCode(binary.operation->op);
+      auto const opcode = toOpCode(binary.optOperation->op);
 
       if (opcode == OpCode::Like && isUnsupportedLikeField(leftField))
       {
@@ -471,7 +471,7 @@ namespace ao::query
       }
 
       // Compile right operand
-      compileExpression(binary.operation->operand);
+      compileExpression(binary.optOperation->operand);
       _resolveStringConstantsToIds = previousResolveStringConstantsToIds;
 
       // Right operand result is in _nextReg - 1

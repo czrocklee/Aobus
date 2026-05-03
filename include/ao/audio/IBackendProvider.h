@@ -16,7 +16,7 @@ namespace ao::audio
   /**
    * @brief A move-only handle that unsubscribes a listener when destroyed.
    */
-  class [[nodiscard]] Subscription final
+  class Subscription final
   {
   public:
     Subscription() = default;

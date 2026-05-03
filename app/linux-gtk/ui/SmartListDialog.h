@@ -89,6 +89,6 @@ namespace ao::gtk
     bool _expressionValid = true;
 
     // Edit mode state
-    std::optional<ao::ListId> _editListId;
+    std::optional<ao::ListId> _optEditListId;
   };
 } // namespace ao::gtk

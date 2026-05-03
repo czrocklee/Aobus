@@ -7,12 +7,11 @@
 #include "SvgTemplate.h"
 #include <ao/utility/Log.h>
 
-#include <gtkmm/button.h>
-#include <gtkmm/scale.h>
-
 #include <gdk-pixbuf/gdk-pixbuf-loader.h>
 #include <gdkmm/display.h>
+#include <gtkmm/button.h>
 #include <gtkmm/cssprovider.h>
+#include <gtkmm/scale.h>
 #include <gtkmm/stylecontext.h>
 
 #include <algorithm>

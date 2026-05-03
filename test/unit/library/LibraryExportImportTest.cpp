@@ -10,9 +10,11 @@
 #include <ao/library/Exporter.h>
 #include <ao/library/Importer.h>
 #include <ao/library/ListBuilder.h>
+#include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <algorithm>

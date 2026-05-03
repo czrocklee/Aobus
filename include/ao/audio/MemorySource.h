@@ -18,6 +18,9 @@ namespace ao::audio
   public:
     MemorySource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo streamInfo);
 
+    MemorySource(MemorySource const&) = delete;
+    MemorySource& operator=(MemorySource const&) = delete;
+
     ao::Result<> initialize();
     ao::Result<> seek(std::uint32_t positionMs) override;
 

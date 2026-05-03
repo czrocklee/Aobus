@@ -44,12 +44,12 @@ namespace
         return;
       }
 
-      auto guard = ParenthesisGuard{oss, (counter++ > 0) && binary->operation};
+      auto guard = ParenthesisGuard{oss, (counter++ > 0) && binary->optOperation};
       std::visit(*this, binary->operand);
 
-      if (binary->operation)
+      if (binary->optOperation)
       {
-        serializeBinary(binary->operation->op, binary->operation->operand);
+        serializeBinary(binary->optOperation->op, binary->optOperation->operand);
       }
     }
 

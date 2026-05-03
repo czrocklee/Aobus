@@ -49,9 +49,4 @@ namespace ao::audio
     _writeCount.store(0, std::memory_order_relaxed);
     _readCount.store(0, std::memory_order_relaxed);
   }
-
-  std::size_t PcmRingBuffer::size() const noexcept
-  {
-    return _writeCount.load(std::memory_order_acquire) - _readCount.load(std::memory_order_acquire);
-  }
 } // namespace ao::audio

@@ -157,6 +157,7 @@ namespace ao::app
 
     auto widthEntries = std::vector<std::string>{};
     widthEntries.reserve(_trackViewState.columnWidths.size());
+
     for (auto const& width : _trackViewState.columnWidths)
     {
       widthEntries.push_back(encodeColumnWidth(width));

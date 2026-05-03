@@ -8,12 +8,13 @@
 
 #include <ao/library/TrackStore.h>
 
-#include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <format>
 #include <optional>
 #include <string_view>
 #include <vector>
+
+#include <algorithm>
 
 namespace ao::gtk
 {

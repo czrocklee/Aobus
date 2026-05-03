@@ -3,6 +3,8 @@
 
 #include "TagPopover.h"
 #include "LayoutConstants.h"
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/TrackStore.h>
 
 #include <algorithm>
 

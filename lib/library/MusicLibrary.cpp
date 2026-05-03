@@ -3,6 +3,14 @@
 
 #include <ao/library/MusicLibrary.h>
 
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/MetaStore.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/TrackStore.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+
 #include <ao/Exception.h>
 
 #include <algorithm>
@@ -73,32 +81,108 @@ namespace
 
 namespace ao::library
 {
-  MusicLibrary::MusicLibrary(std::filesystem::path rootPath)
-    : _root{std::move(rootPath)}
-    , _env{_root.string(),
-           lmdb::Environment::Options{.flags = MDB_NOTLS,
-                                      .mode = kLmdbFileMode,
-                                      .maxDatabases = kLmdbMaxDatabases,
-                                      .mapSize = kLmdbMapSize}}
-    , _txn{_env}
-    , _metaStore{lmdb::Database{_txn, "meta"}}
-    , _tracks{lmdb::Database{_txn, "tracks_hot"}, lmdb::Database{_txn, "tracks_cold"}}
-    , _lists{lmdb::Database{_txn, "lists"}}
-    , _resources{lmdb::Database{_txn, "resources"}}
-    , _dictionary{lmdb::Database{_txn, "dictionary"}, _txn}
+  struct MusicLibrary::Impl final
   {
-    if (auto const header = _metaStore.load(_txn))
+    std::filesystem::path const root;
+    ao::lmdb::Environment env;
+    ao::lmdb::WriteTransaction setupTxn;
+    MetaStore metaStore;
+    MetaHeader metaHeader{};
+    TrackStore tracks;
+    ListStore lists;
+    ResourceStore resources;
+    DictionaryStore dictionary;
+
+    explicit Impl(std::filesystem::path rootPath)
+      : root{std::move(rootPath)}
+      , env{root.string(),
+            lmdb::Environment::Options{.flags = MDB_NOTLS,
+                                       .mode = kLmdbFileMode,
+                                       .maxDatabases = kLmdbMaxDatabases,
+                                       .mapSize = kLmdbMapSize}}
+      , setupTxn{env}
+      , metaStore{lmdb::Database{setupTxn, "meta"}}
+      , tracks{lmdb::Database{setupTxn, "tracks_hot"}, lmdb::Database{setupTxn, "tracks_cold"}}
+      , lists{lmdb::Database{setupTxn, "lists"}}
+      , resources{lmdb::Database{setupTxn, "resources"}}
+      , dictionary{lmdb::Database{setupTxn, "dictionary"}, setupTxn}
+    {
+    }
+  };
+
+  MusicLibrary::MusicLibrary(std::filesystem::path rootPath)
+    : _impl{std::make_unique<Impl>(std::move(rootPath))}
+  {
+    if (auto const header = _impl->metaStore.load(_impl->setupTxn))
     {
       validateMetaHeader(*header);
-      _metaHeader = *header;
+      _impl->metaHeader = *header;
     }
     else
     {
-      _metaHeader = makeMetaHeader();
-      _metaStore.create(_txn, _metaHeader);
+      _impl->metaHeader = makeMetaHeader();
+      _impl->metaStore.create(_impl->setupTxn, _impl->metaHeader);
     }
 
     // Load dictionary entries before first commit
-    _txn.commit();
+    _impl->setupTxn.commit();
+  }
+
+  MusicLibrary::~MusicLibrary() = default;
+
+  ao::lmdb::ReadTransaction MusicLibrary::readTransaction() const
+  {
+    return ao::lmdb::ReadTransaction{_impl->env};
+  }
+
+  ao::lmdb::WriteTransaction MusicLibrary::writeTransaction()
+  {
+    return ao::lmdb::WriteTransaction{_impl->env};
+  }
+
+  TrackStore& MusicLibrary::tracks()
+  {
+    return _impl->tracks;
+  }
+  TrackStore const& MusicLibrary::tracks() const
+  {
+    return _impl->tracks;
+  }
+
+  ListStore& MusicLibrary::lists()
+  {
+    return _impl->lists;
+  }
+  ListStore const& MusicLibrary::lists() const
+  {
+    return _impl->lists;
+  }
+
+  ResourceStore& MusicLibrary::resources()
+  {
+    return _impl->resources;
+  }
+  ResourceStore const& MusicLibrary::resources() const
+  {
+    return _impl->resources;
+  }
+
+  DictionaryStore& MusicLibrary::dictionary()
+  {
+    return _impl->dictionary;
+  }
+  DictionaryStore const& MusicLibrary::dictionary() const
+  {
+    return _impl->dictionary;
+  }
+
+  MetaHeader const& MusicLibrary::metaHeader() const
+  {
+    return _impl->metaHeader;
+  }
+
+  std::filesystem::path const& MusicLibrary::rootPath() const
+  {
+    return _impl->root;
   }
 }

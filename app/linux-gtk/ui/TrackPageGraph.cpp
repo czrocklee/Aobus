@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackPageGraph.h"
+#include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
 #include <ao/model/AllTrackIdsList.h>
 #include <ao/model/FilteredTrackIdList.h>
 #include <ao/model/ManualTrackIdList.h>
@@ -31,7 +33,7 @@ namespace ao::gtk
   }
 
   TrackPageGraph::TrackPageGraph(Gtk::Stack& stack, TrackColumnLayoutModel& layoutModel, Callbacks callbacks)
-    : _stack(stack), _layoutModel(layoutModel), _callbacks(std::move(callbacks))
+    : _stack{stack}, _layoutModel{layoutModel}, _callbacks{std::move(callbacks)}
   {
   }
 

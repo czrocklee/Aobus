@@ -3,6 +3,7 @@
 
 #include "InitCommand.h"
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 #include <ao/tag/File.h>
 #include <ao/utility/Finder.h>
 

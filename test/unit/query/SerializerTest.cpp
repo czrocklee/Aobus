@@ -84,7 +84,7 @@ TEST_CASE("Serializer - Serializes Each Binary Operator Token")
   {
     auto bin = std::make_unique<BinaryExpression>();
     bin->operand = VariableExpression{VariableType::Metadata, "a"};
-    bin->operation = BinaryExpression::Operation{c.op, VariableExpression{VariableType::Metadata, "b"}};
+    bin->optOperation = BinaryExpression::Operation{c.op, VariableExpression{VariableType::Metadata, "b"}};
 
     CHECK(serialize(Expression{std::move(bin)}).find(c.expected) != std::string::npos);
   }
@@ -95,15 +95,15 @@ TEST_CASE("Serializer - Parenthesizes Nested Binary Expressions")
   // ($artist = "Bach") and ($year >= 2020)
   auto lhs = std::make_unique<BinaryExpression>();
   lhs->operand = VariableExpression{VariableType::Metadata, "artist"};
-  lhs->operation = BinaryExpression::Operation{Operator::Equal, std::string{"Bach"}};
+  lhs->optOperation = BinaryExpression::Operation{Operator::Equal, std::string{"Bach"}};
 
   auto rhs = std::make_unique<BinaryExpression>();
   rhs->operand = VariableExpression{VariableType::Metadata, "year"};
-  rhs->operation = BinaryExpression::Operation{Operator::GreaterEqual, std::int64_t{2020}};
+  rhs->optOperation = BinaryExpression::Operation{Operator::GreaterEqual, std::int64_t{2020}};
 
   auto root = std::make_unique<BinaryExpression>();
   root->operand = std::move(lhs);
-  root->operation = BinaryExpression::Operation{Operator::And, std::move(rhs)};
+  root->optOperation = BinaryExpression::Operation{Operator::And, std::move(rhs)};
 
   auto result = serialize(Expression{std::move(root)});
   CHECK(result == "($artist = \"Bach\") and ($year >= 2020)");
@@ -113,7 +113,7 @@ TEST_CASE("Serializer - Does Not Parenthesize Root Binary Expression")
 {
   auto bin = std::make_unique<BinaryExpression>();
   bin->operand = VariableExpression{VariableType::Metadata, "a"};
-  bin->operation = BinaryExpression::Operation{Operator::Equal, std::int64_t{1}};
+  bin->optOperation = BinaryExpression::Operation{Operator::Equal, std::int64_t{1}};
   CHECK(serialize(Expression{std::move(bin)}) == "$a = 1");
 }
 
@@ -155,7 +155,7 @@ TEST_CASE("Serializer - Handles Empty Or Incomplete Expressions Defensively")
   {
     auto bin = std::make_unique<BinaryExpression>();
     // bin->operand is default-constructed ($)
-    bin->operation = BinaryExpression::Operation{Operator::And, ConstantExpression{true}};
+    bin->optOperation = BinaryExpression::Operation{Operator::And, ConstantExpression{true}};
     CHECK(serialize(Expression{std::move(bin)}) == "$ and true");
   }
 
@@ -163,7 +163,7 @@ TEST_CASE("Serializer - Handles Empty Or Incomplete Expressions Defensively")
   {
     auto bin = std::make_unique<BinaryExpression>();
     bin->operand = ConstantExpression{true};
-    // bin->operation is nullopt
+    // bin->optOperation is nullopt
     CHECK(serialize(Expression{std::move(bin)}) == "true");
   }
 }
