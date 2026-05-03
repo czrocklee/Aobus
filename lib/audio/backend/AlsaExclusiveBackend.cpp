@@ -61,8 +61,6 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::Impl::playbackLoop(std::stop_token const& stopToken)
   {
-    std::vector<std::byte> buffer;
-
     ::snd_pcm_uframes_t periodSize = 0;
     ::snd_pcm_hw_params_t* params = nullptr;
     snd_pcm_hw_params_alloca(&params);
@@ -74,8 +72,6 @@ namespace ao::audio::backend
     if (periodSize == 0) periodSize = 1024;
 
     std::size_t const bytesPerFrame = (format.bitDepth / 8) * format.channels;
-    std::size_t const bytesToRead = static_cast<std::size_t>(periodSize) * bytesPerFrame;
-    buffer.resize(bytesToRead);
 
     while (!stopToken.stop_requested())
     {
@@ -85,29 +81,54 @@ namespace ao::audio::backend
         continue;
       }
 
-      std::size_t const bytesRead =
-        callbacks.readPcm(callbacks.userData, ao::utility::bytes::view(buffer.data(), bytesToRead));
+      auto avail = ::snd_pcm_avail_update(pcm.get());
+      if (avail < 0)
+      {
+        recoverFromXrun(static_cast<int>(avail));
+        continue;
+      }
+
+      if (static_cast<::snd_pcm_uframes_t>(avail) < periodSize)
+      {
+        // Wait for device to be ready for more data
+        ::snd_pcm_wait(pcm.get(), kAlsaWaitTimeoutMs);
+        continue;
+      }
+
+      ::snd_pcm_uframes_t frames = periodSize;
+      ::snd_pcm_uframes_t offset = 0;
+      ::snd_pcm_channel_area_t const* areas = nullptr;
+
+      auto const err = ::snd_pcm_mmap_begin(pcm.get(), &areas, &offset, &frames);
+      if (err < 0)
+      {
+        recoverFromXrun(err);
+        continue;
+      }
+
+      // Calculate destination address in the MMAP buffer
+      auto* const dst = static_cast<std::byte*>(areas[0].addr) + (offset * bytesPerFrame);
+      auto const bytesToRead = static_cast<std::size_t>(frames) * bytesPerFrame;
+
+      std::size_t const bytesRead = callbacks.readPcm(callbacks.userData, {dst, bytesToRead});
 
       if (bytesRead > 0)
       {
-        auto const framesToWrite = bytesRead / bytesPerFrame;
-        auto written = ::snd_pcm_writei(pcm.get(), buffer.data(), framesToWrite);
+        auto const framesRead = static_cast<::snd_pcm_uframes_t>(bytesRead / bytesPerFrame);
+        auto const committed = ::snd_pcm_mmap_commit(pcm.get(), offset, framesRead);
 
-        if (written == -EPIPE)
+        if (committed < 0)
         {
-          ::snd_pcm_prepare(pcm.get());
-        }
-        else if (written < 0)
-        {
-          recoverFromXrun(static_cast<int>(written));
+          recoverFromXrun(static_cast<int>(committed));
         }
         else if (callbacks.onPositionAdvanced != nullptr)
         {
-          callbacks.onPositionAdvanced(callbacks.userData, static_cast<std::uint32_t>(written));
+          callbacks.onPositionAdvanced(callbacks.userData, static_cast<std::uint32_t>(committed));
         }
       }
       else
       {
+        ::snd_pcm_mmap_commit(pcm.get(), offset, 0); // Release back to ALSA
         if (callbacks.isSourceDrained(callbacks.userData))
         {
           ::snd_pcm_drain(pcm.get());
@@ -189,9 +210,9 @@ namespace ao::audio::backend
       return ao::makeError(ao::Error::Code::InitFailed, "Failed to init ALSA hw params");
     }
 
-    if (::snd_pcm_hw_params_set_access(safePcm.get(), params, SND_PCM_ACCESS_RW_INTERLEAVED) < 0)
+    if (::snd_pcm_hw_params_set_access(safePcm.get(), params, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)
     {
-      return ao::makeError(ao::Error::Code::FormatRejected, "No RW interleaved support");
+      return ao::makeError(ao::Error::Code::FormatRejected, "No MMAP interleaved support");
     }
 
     auto alsaFormat = SND_PCM_FORMAT_S16_LE;
