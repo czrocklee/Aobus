@@ -7,6 +7,7 @@
 #include "SvgTemplate.h"
 #include <ao/utility/Log.h>
 
+#include "ui/ThemeBus.h"
 #include <gdkmm/display.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/stylecontext.h>
@@ -61,12 +62,22 @@ namespace ao::gtk
       return std::format("{:.1f} kHz · {}-bit · {}", format.sampleRate / kKhzMultiplier, format.bitDepth, channelsText);
     }
 
-    void ensureStatusBarCss()
+    void ensureStatusBarCss(bool force = false)
     {
-      static auto const provider = []
+      static auto const provider = Gtk::CssProvider::create();
+      static bool initialized = false;
+
+      if (!initialized || force)
       {
-        auto const css = Gtk::CssProvider::create();
-        css->load_from_data(R"(
+        if (force)
+        {
+          if (auto display = Gdk::Display::get_default(); display)
+          {
+            Gtk::StyleContext::remove_provider_for_display(display, provider);
+          }
+        }
+
+        provider->load_from_data(R"(
         .status-bar {
           min-height: 24px;
           padding-top: 1px;
@@ -126,15 +137,15 @@ namespace ao::gtk
         .sink-status-clipped { color: #EF4444; }
       )");
 
-        if (auto display = Gdk::Display::get_default(); display)
+        if (!initialized || force)
         {
-          Gtk::StyleContext::add_provider_for_display(display, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+          if (auto display = Gdk::Display::get_default(); display)
+          {
+            Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
+          }
+          initialized = true;
         }
-
-        return css;
-      }();
-
-      (void)provider;
+      }
     }
 
     void clearSinkStatusClasses(Gtk::Image& image)
@@ -151,6 +162,15 @@ namespace ao::gtk
     : Gtk::Box{Gtk::Orientation::HORIZONTAL}
   {
     ensureStatusBarCss();
+
+    // Subscribe to global theme refresh signal
+    signalThemeRefresh().connect(
+      [this]()
+      {
+        APP_LOG_INFO("Executing theme refresh for StatusBar...");
+        ensureStatusBarCss(true);
+        queue_draw();
+      });
 
     set_hexpand(true);
     set_valign(Gtk::Align::END);
@@ -364,8 +384,8 @@ namespace ao::gtk
     using Quality = ao::audio::Quality;
     switch (status.quality)
     {
-      case Quality::BitwisePerfect: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
-      case Quality::LosslessPadded:
+      case Quality::BitwisePerfect:
+      case Quality::LosslessPadded: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
       case Quality::LosslessFloat: _sinkStatusIcon.add_css_class("sink-status-lossless"); break;
       case Quality::LinearIntervention: _sinkStatusIcon.add_css_class("sink-status-intervention"); break;
       case Quality::LossySource: _sinkStatusIcon.add_css_class("sink-status-lossy"); break;

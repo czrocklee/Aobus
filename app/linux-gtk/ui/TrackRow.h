@@ -36,6 +36,10 @@ namespace ao::gtk
     TrackPresentationKeysView getPresentationKeys() const;
     std::uint64_t getResourceId() const { return _resourceId.value_or(0); }
 
+    Glib::PropertyProxy<bool> property_playing();
+    bool isPlaying() const;
+    void setPlaying(bool playing);
+
     static Glib::RefPtr<TrackRow> create(TrackId id, TrackRowDataProvider const& provider);
 
     void populate(Glib::ustring title,
@@ -81,5 +85,7 @@ namespace ao::gtk
     std::uint16_t _totalDiscs = 0;
     std::uint16_t _trackNumber = 0;
     std::optional<std::uint64_t> _resourceId;
+
+    Glib::Property<bool> _propertyPlaying;
   };
 } // namespace ao::gtk

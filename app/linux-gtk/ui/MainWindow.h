@@ -56,6 +56,7 @@ namespace ao::gtk
     TrackPageContext* findTrackPageContext(ao::ListId listId) override;
     void showListPage(ao::ListId listId) override;
     void updatePlaybackStatus(ao::audio::Player::Status const& status) override;
+    void updatePlayingTrack(std::optional<ao::TrackId> trackId) override;
     void showPlaybackMessage(std::string const& message,
                              std::optional<std::chrono::seconds> timeout = std::nullopt) override;
 

@@ -416,7 +416,7 @@ namespace ao::audio::backend
           auto& caps = impl->sinkCapabilitiesMap[binding->id];
           parseEnumFormat(param, caps);
         }
-        else if (binding->role == NodeBindingRole::Sink && id == SPA_PARAM_Props)
+        else if (id == SPA_PARAM_Props)
         {
           mergeSinkProps(impl->sinkPropsMap[binding->id], param);
         }
@@ -426,39 +426,39 @@ namespace ao::audio::backend
     }
 
     auto const coreEvents = ::pw_core_events{[]
-    {
-      ::pw_core_events ev = {};
-      ev.version = PW_VERSION_CORE_EVENTS;
-      ev.done = onCoreDone;
-      return ev;
-    }()};
+                                             {
+                                               ::pw_core_events ev = {};
+                                               ev.version = PW_VERSION_CORE_EVENTS;
+                                               ev.done = onCoreDone;
+                                               return ev;
+                                             }()};
 
     auto const registryEvents = ::pw_registry_events{[]
-    {
-      ::pw_registry_events ev = {};
-      ev.version = PW_VERSION_REGISTRY_EVENTS;
-      ev.global = onRegistryGlobal;
-      ev.global_remove = onRegistryGlobalRemove;
-      return ev;
-    }()};
+                                                     {
+                                                       ::pw_registry_events ev = {};
+                                                       ev.version = PW_VERSION_REGISTRY_EVENTS;
+                                                       ev.global = onRegistryGlobal;
+                                                       ev.global_remove = onRegistryGlobalRemove;
+                                                       return ev;
+                                                     }()};
 
     auto const streamNodeEvents = ::pw_node_events{[]
-    {
-      ::pw_node_events ev = {};
-      ev.version = PW_VERSION_NODE_EVENTS;
-      ev.info = onNodeInfo;
-      ev.param = onNodeParam;
-      return ev;
-    }()};
+                                                   {
+                                                     ::pw_node_events ev = {};
+                                                     ev.version = PW_VERSION_NODE_EVENTS;
+                                                     ev.info = onNodeInfo;
+                                                     ev.param = onNodeParam;
+                                                     return ev;
+                                                   }()};
 
     auto const sinkNodeEvents = ::pw_node_events{[]
-    {
-      ::pw_node_events ev = {};
-      ev.version = PW_VERSION_NODE_EVENTS;
-      ev.info = onNodeInfo;
-      ev.param = onNodeParam;
-      return ev;
-    }()};
+                                                 {
+                                                   ::pw_node_events ev = {};
+                                                   ev.version = PW_VERSION_NODE_EVENTS;
+                                                   ev.info = onNodeInfo;
+                                                   ev.param = onNodeParam;
+                                                   return ev;
+                                                 }()};
 
     void onRefreshEvent(void* data, [[maybe_unused]] std::uint64_t expiry)
     {
@@ -483,8 +483,8 @@ namespace ao::audio::backend
     }
 
     _impl->refreshEvent.get_deleter().loop = _impl->threadLoop.get();
-    auto* const event = ::pw_loop_add_event(
-      ::pw_thread_loop_get_loop(_impl->threadLoop.get()), onRefreshEvent, _impl.get());
+    auto* const event =
+      ::pw_loop_add_event(::pw_thread_loop_get_loop(_impl->threadLoop.get()), onRefreshEvent, _impl.get());
     if (!event)
     {
       AUDIO_LOG_ERROR("Failed to add PipeWire refresh event - periodic refresh disabled");
@@ -767,10 +767,11 @@ namespace ao::audio::backend
       binding->impl = this;
       binding->role = NodeBindingRole::Stream;
       binding->proxy.reset(static_cast<::pw_node*>(node));
-      auto params = std::to_array<std::uint32_t>({SPA_PARAM_Format});
+      auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_Props});
       ::pw_node_subscribe_params(
         binding->proxy.get(), ao::utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
       ::pw_node_enum_params(binding->proxy.get(), 1, SPA_PARAM_Format, 0, -1, nullptr);
+      ::pw_node_enum_params(binding->proxy.get(), 2, SPA_PARAM_Props, 0, -1, nullptr);
       auto* bindingPtr = binding.get();
       ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &streamNodeEvents, bindingPtr);
       streamNodeBindings[streamId] = std::move(binding);
@@ -906,21 +907,20 @@ namespace ao::audio::backend
       node.optFormat = optFormatIt->second;
     }
 
-    if (isSink)
+    if (auto const propsIt = sinkPropsMap.find(id); propsIt != sinkPropsMap.end())
     {
-      if (auto const propsIt = sinkPropsMap.find(id); propsIt != sinkPropsMap.end())
-      {
-        auto const& sinkProps = propsIt->second;
-        auto const isUnity = [](float value)
-        { return std::abs(value - 1.0F) < 1e-4F; }; // NOLINT(readability-magic-numbers)
+      auto const& sinkProps = propsIt->second;
+      auto const isUnity = [](float value)
+      { return std::abs(value - 1.0F) < 1e-4F; }; // NOLINT(readability-magic-numbers)
 
-        bool const volumeAtUnity = isUnity(sinkProps.volume) && (sinkProps.softVolumes.empty() ||
-                                                                 std::ranges::all_of(sinkProps.softVolumes, isUnity));
-        bool const isMuted = sinkProps.isMuted || sinkProps.isSoftMuted;
+      bool const volumeAtUnity =
+        isUnity(sinkProps.volume) &&
+        (sinkProps.channelVolumes.empty() || std::ranges::all_of(sinkProps.channelVolumes, isUnity)) &&
+        (sinkProps.softVolumes.empty() || std::ranges::all_of(sinkProps.softVolumes, isUnity));
+      bool const isMuted = sinkProps.isMuted || sinkProps.isSoftMuted;
 
-        node.volumeNotUnity = !volumeAtUnity;
-        node.isMuted = isMuted;
-      }
+      node.volumeNotUnity = !volumeAtUnity;
+      node.isMuted = isMuted;
     }
 
     return node;

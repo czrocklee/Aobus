@@ -73,6 +73,7 @@ namespace ao::gtk
 
     // Navigation and Selection
     void selectTrack(TrackId trackId);
+    void setPlayingTrackId(std::optional<TrackId> trackId);
 
   private:
     // Setup methods
@@ -143,6 +144,10 @@ namespace ao::gtk
     bool _syncingColumnLayout = false;
     bool _capturingColumnLayout = false;
     bool _suppressNextTrackActivation = false;
+    Glib::RefPtr<Gtk::CssProvider> _dynamicCssProvider;
+    std::vector<sigc::connection> _columnNotifyConnections;
+
+    void updateTitlePositionVariable();
 
     // Signals
     SelectionChangedSignal _selectionChanged;

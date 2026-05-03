@@ -60,6 +60,7 @@ namespace ao::gtk
     TrackPageContext const* currentVisible() const;
 
     void show(ao::ListId listId);
+    void setPlayingTrack(std::optional<ao::TrackId> trackId);
 
   private:
     void buildPageForAllTracks(LibrarySession& session);
@@ -71,5 +72,6 @@ namespace ao::gtk
     Callbacks _callbacks;
 
     std::map<ao::ListId, TrackPageContext> _trackPages;
+    std::optional<ao::TrackId> _playingTrackId;
   };
 } // namespace ao::gtk
