@@ -128,14 +128,14 @@ namespace ao::audio::backend
 
       // Use the ALSA areas formula to compute the correct destination pointer,
       // respecting any hardware-specific first/step values.
-      auto* const dst = static_cast<std::byte*>(areas[0].addr) + (areas[0].first + offset * areas[0].step) / 8;
+      auto* const dst = static_cast<std::byte*>(areas[0].addr) + ((areas[0].first + offset * areas[0].step) / 8);
       auto const bytesToRead = static_cast<std::size_t>(frames) * bytesPerFrame;
 
       std::size_t const bytesRead = callbacks.readPcm(callbacks.userData, {dst, bytesToRead});
 
       if (bytesRead > 0)
       {
-        auto const framesRead = static_cast<::snd_pcm_uframes_t>(bytesRead / bytesPerFrame);
+        auto const framesRead = static_cast<::snd_pcm_uframes_t>(bytesRead / (bytesPerFrame));
         auto const committed = ::snd_pcm_mmap_commit(pcm.get(), offset, framesRead);
 
         if (committed < 0)
@@ -345,8 +345,8 @@ namespace ao::audio::backend
 
       if (alsaFormat == SND_PCM_FORMAT_S24_3LE)
       {
-        return 24
-      };
+        return 24;
+      }
 
       return 16;
     }();

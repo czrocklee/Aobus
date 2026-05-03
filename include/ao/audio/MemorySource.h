@@ -6,8 +6,8 @@
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/ISource.h>
 
+#include <atomic>
 #include <cstddef>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -34,7 +34,6 @@ namespace ao::audio
     std::unique_ptr<IDecoderSession> _decoder;
     DecodedStreamInfo _streamInfo;
     std::vector<std::byte> _pcmBytes;
-    mutable std::mutex _mutex;
-    std::size_t _readOffset = 0;
+    std::atomic<std::size_t> _readOffset{0};
   };
 } // namespace ao::audio

@@ -37,10 +37,12 @@ namespace ao::audio
   private:
     void startDecodeThread();
     void stopDecodeThread();
-    void decodeLoop(std::stop_token const& stopToken);
-    ao::Result<> fillUntil(std::uint32_t targetBufferedMs, std::uint64_t generation);
-    ao::Result<bool> decodeNextBlock(std::uint64_t generation, std::stop_token const* stopToken);
-    bool writeBlock(std::span<std::byte const> bytes, std::uint64_t generation, std::stop_token const* stopToken);
+    void decodeLoop(std::stop_token const& threadStopToken);
+    ao::Result<> fillUntil(std::uint32_t targetBufferedMs, std::stop_token const& seekToken);
+    ao::Result<bool> decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
+    bool writeBlock(std::span<std::byte const> bytes,
+                    std::stop_token const& seekToken,
+                    std::stop_token const* threadStopToken);
 
     std::unique_ptr<IDecoderSession> _decoder;
     DecodedStreamInfo _streamInfo;
@@ -48,7 +50,7 @@ namespace ao::audio
     PcmRingBuffer _ringBuffer;
     std::jthread _decodeThread;
     mutable std::mutex _decoderMutex;
-    std::atomic<std::uint64_t> _generation = 1;
+    std::stop_source _seekStopSource;
     std::atomic<bool> _decoderReachedEof = false;
     std::atomic<bool> _failed = false;
     std::uint64_t _bytesPerSecond = 0;

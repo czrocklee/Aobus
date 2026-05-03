@@ -94,8 +94,8 @@ namespace ao::audio
 
   std::size_t MemorySource::read(std::span<std::byte> output) noexcept
   {
-    auto lock = std::lock_guard<std::mutex>{_mutex};
-    auto const available = _pcmBytes.size() - _readOffset;
+    auto const offset = _readOffset.load(std::memory_order_acquire);
+    auto const available = _pcmBytes.size() - offset;
     auto const toCopy = std::min(available, output.size());
 
     if (toCopy == 0)
@@ -103,27 +103,25 @@ namespace ao::audio
       return 0;
     }
 
-    std::memcpy(output.data(), _pcmBytes.data() + _readOffset, toCopy);
-    _readOffset += toCopy;
+    std::memcpy(output.data(), _pcmBytes.data() + offset, toCopy);
+    _readOffset.store(offset + toCopy, std::memory_order_release);
     return toCopy;
   }
 
   bool MemorySource::isDrained() const noexcept
   {
-    auto lock = std::lock_guard<std::mutex>{_mutex};
-    return _readOffset >= _pcmBytes.size();
+    return _readOffset.load(std::memory_order_acquire) >= _pcmBytes.size();
   }
 
   std::uint32_t MemorySource::bufferedMs() const noexcept
   {
-    auto lock = std::lock_guard<std::mutex>{_mutex};
-    return bufferedDurationMs(_pcmBytes.size() - _readOffset, bytesPerSecond(_streamInfo.outputFormat));
+    auto const remaining = _pcmBytes.size() - _readOffset.load(std::memory_order_acquire);
+    return bufferedDurationMs(remaining, bytesPerSecond(_streamInfo.outputFormat));
   }
 
   ao::Result<> MemorySource::seek(std::uint32_t positionMs)
   {
-    auto lock = std::lock_guard<std::mutex>{_mutex};
-    _readOffset = positionToByteOffset(positionMs);
+    _readOffset.store(positionToByteOffset(positionMs), std::memory_order_release);
     return {};
   }
 

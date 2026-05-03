@@ -95,7 +95,13 @@ namespace ao::audio
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
 
       return State{.track = _currentTrack,
-                   .positionMs = _status.positionMs,
+                   .positionMs =
+                     [this]()
+                   {
+                     auto const frames = _accumulatedFrames.load(std::memory_order_relaxed);
+                     auto const sampleRate = _engineSampleRate.load(std::memory_order_relaxed);
+                     return sampleRate > 0 ? static_cast<std::uint32_t>((frames * 1000) / sampleRate) : 0;
+                   }(),
                    .wasPlaying = (_status.transport == Transport::Playing)};
     }();
 
@@ -157,22 +163,9 @@ namespace ao::audio
     _status.backendId = _backend ? _backend->backendId() : kBackendNone;
     _status.profileId = _backend ? _backend->profileId() : ProfileId{};
     _status.currentDeviceId = _currentDevice.id;
+    _accumulatedFrames.store(0, std::memory_order_relaxed);
 
     _routeStatus = {};
-
-    if (_onRouteChanged)
-    {
-      auto const snap = _routeStatus;
-
-      if (_dispatcher)
-      {
-        _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
-      }
-      else
-      {
-        _onRouteChanged(snap);
-      }
-    }
   }
 
   void Engine::play(TrackPlaybackDescriptor const& descriptor)
@@ -361,6 +354,9 @@ namespace ao::audio
       wasPaused = (_status.transport == Transport::Paused);
       _status.transport = Transport::Buffering;
       _status.positionMs = positionMs;
+      auto const sr = _engineSampleRate.load(std::memory_order_relaxed);
+      _accumulatedFrames.store(
+        sr > 0 ? (static_cast<std::uint64_t>(positionMs) * sr) / 1000 : 0, std::memory_order_relaxed);
       _status.statusText.clear();
     }
 
@@ -422,6 +418,9 @@ namespace ao::audio
     auto const source = _source.load(std::memory_order_acquire);
     auto const lock = std::lock_guard<std::mutex>{_stateMutex};
     auto snap = _status;
+    auto const totalFrames = _accumulatedFrames.load(std::memory_order_relaxed);
+    auto const sampleRate = _engineSampleRate.load(std::memory_order_relaxed);
+    snap.positionMs = sampleRate > 0 ? static_cast<std::uint32_t>((totalFrames * 1000) / sampleRate) : 0;
     snap.backendId = _backend ? _backend->backendId() : kBackendNone;
     snap.bufferedMs = source ? source->bufferedMs() : 0;
     snap.underrunCount = _underrunCount.load(std::memory_order_relaxed);
@@ -619,6 +618,7 @@ namespace ao::audio
 
     _status.durationMs = info.durationMs;
     _status.positionMs = 0;
+    _accumulatedFrames.store(0, std::memory_order_relaxed);
     _status.flow = {};
 
     // Add initial Source (Decoder) Node
@@ -639,21 +639,9 @@ namespace ao::audio
     _routeStatus.flow.connections.push_back(
       flow::Connection{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
 
+    _engineSampleRate.store(info.outputFormat.sampleRate, std::memory_order_relaxed);
+
     _status.flow = _routeStatus.flow;
-
-    if (_onRouteChanged)
-    {
-      auto const snap = _routeStatus;
-
-      if (_dispatcher)
-      {
-        _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
-      }
-      else
-      {
-        _onRouteChanged(snap);
-      }
-    }
 
     return true;
   }
@@ -695,23 +683,7 @@ namespace ao::audio
   void Engine::onPositionAdvanced(void* userData, std::uint32_t frames) noexcept
   {
     auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-    auto lock = std::unique_lock<std::mutex>{self->_stateMutex, std::try_to_lock};
-
-    if (!lock.owns_lock())
-    {
-      return;
-    }
-
-    // Use Engine node format for position calculation
-    for (auto const& node : self->_status.flow.nodes)
-    {
-      if (node.type == flow::NodeType::Engine && node.optFormat && node.optFormat->sampleRate > 0)
-      {
-        auto const ms = (static_cast<std::uint64_t>(frames) * 1000) / node.optFormat->sampleRate;
-        self->_status.positionMs += static_cast<std::uint32_t>(ms);
-        break;
-      }
-    }
+    self->_accumulatedFrames.fetch_add(frames, std::memory_order_relaxed);
   }
 
   void Engine::onDrainComplete(void* userData) noexcept
@@ -737,18 +709,32 @@ namespace ao::audio
   {
     _source.store({}, std::memory_order_release);
 
-    std::function<void()> cb;
+    auto onTrackEnded = std::function<void()>{};
+    auto onRouteChanged = OnRouteChanged{};
 
     {
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+      onRouteChanged = _onRouteChanged;
       resetToIdle();
-      cb = _onTrackEnded;
+      onTrackEnded = _onTrackEnded;
+    }
+
+    if (onRouteChanged)
+    {
+      if (_dispatcher)
+      {
+        _dispatcher->dispatch([cb = std::move(onRouteChanged)]() { cb({}); });
+      }
+      else
+      {
+        onRouteChanged({});
+      }
     }
 
     // Callback OUTSIDE lock — allows play() to re-acquire _stateMutex
-    if (cb)
+    if (onTrackEnded)
     {
-      cb();
+      onTrackEnded();
     }
   }
 
@@ -769,21 +755,28 @@ namespace ao::audio
 
   void Engine::handleRouteReady(std::string_view routeAnchor)
   {
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    _routeStatus.optAnchor =
-      RouteAnchor{.backend = _backend ? _backend->backendId() : kBackendNone, .id = std::string{routeAnchor}};
+    auto cb = OnRouteChanged{};
+    auto snap = RouteStatus{};
 
-    if (_onRouteChanged)
     {
-      auto const snap = _routeStatus;
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
 
+      _routeStatus.optAnchor =
+        RouteAnchor{.backend = _backend ? _backend->backendId() : kBackendNone, .id = std::string{routeAnchor}};
+
+      cb = _onRouteChanged;
+      snap = _routeStatus;
+    }
+
+    if (cb)
+    {
       if (_dispatcher)
       {
-        _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+        _dispatcher->dispatch([cb = std::move(cb), snap]() { cb(snap); });
       }
       else
       {
-        _onRouteChanged(snap);
+        cb(snap);
       }
     }
   }
@@ -827,39 +820,45 @@ namespace ao::audio
 
   void Engine::handleFormatChanged(Format const& format)
   {
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+    auto cb = OnRouteChanged{};
+    auto snap = RouteStatus{};
 
-    // Update engine node in the route snapshot
-    for (auto& node : _routeStatus.flow.nodes)
     {
-      if (node.id == "rs-engine")
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+
+      // Update engine node in the route snapshot
+      for (auto& node : _routeStatus.flow.nodes)
       {
-        node.optFormat = format;
-        break;
+        if (node.id == "rs-engine")
+        {
+          node.optFormat = format;
+          break;
+        }
       }
+
+      // Update engine node in the public status
+      for (auto& node : _status.flow.nodes)
+      {
+        if (node.id == "rs-engine")
+        {
+          node.optFormat = format;
+          break;
+        }
+      }
+
+      cb = _onRouteChanged;
+      snap = _routeStatus;
     }
 
-    // Update engine node in the public status
-    for (auto& node : _status.flow.nodes)
+    if (cb)
     {
-      if (node.id == "rs-engine")
-      {
-        node.optFormat = format;
-        break;
-      }
-    }
-
-    if (_onRouteChanged)
-    {
-      auto const snap = _routeStatus;
-
       if (_dispatcher)
       {
-        _dispatcher->dispatch([this, snap]() { _onRouteChanged(snap); });
+        _dispatcher->dispatch([cb = std::move(cb), snap]() { cb(snap); });
       }
       else
       {
-        _onRouteChanged(snap);
+        cb(snap);
       }
     }
   }

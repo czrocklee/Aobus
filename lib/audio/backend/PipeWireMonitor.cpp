@@ -564,8 +564,6 @@ namespace ao::audio::backend
   private:
     void syncStreamBindings(std::unordered_set<std::uint32_t> const& subscribedStreamIds);
     void syncSinkBindings();
-    void processGraphSubscribers();
-    void processDeviceSubscribers();
 
     struct ReachableContext
     {
@@ -921,13 +919,19 @@ namespace ao::audio::backend
   ao::audio::Subscription PipeWireMonitor::Impl::subscribeDevices(DeviceCallback callback)
   {
     auto const id = nextSubscriptionId++;
-    auto const lock = std::lock_guard<std::mutex>{mutex};
-    deviceSubscriptions.push_back({id, std::move(callback)});
+    auto devices = std::vector<Device>{};
+    auto cb = DeviceCallback{};
 
-    // Trigger immediate update
-    if (deviceSubscriptions.back().callback)
     {
-      deviceSubscriptions.back().callback(enumerateSinks());
+      auto const lock = std::lock_guard<std::mutex>{mutex};
+      deviceSubscriptions.push_back({id, callback});
+      cb = std::move(callback);
+      devices = enumerateSinks();
+    }
+
+    if (cb)
+    {
+      cb(devices);
     }
 
     return ao::audio::Subscription{[this, id]()
@@ -947,18 +951,22 @@ namespace ao::audio::backend
     std::function<void(ao::audio::flow::Graph const&)> callback)
   {
     auto const id = nextSubscriptionId++;
-    auto const lock = std::lock_guard<std::mutex>{mutex};
-    graphSubscriptions.push_back({id, std::string(routeAnchor), std::move(callback)});
-
+    {
+      auto const lock = std::lock_guard<std::mutex>{mutex};
+      graphSubscriptions.push_back({id, std::string(routeAnchor), std::move(callback)});
+    }
     triggerRefresh();
 
     return ao::audio::Subscription{[this, id]()
                                    {
-                                     auto const lock = std::lock_guard<std::mutex>{mutex};
-                                     auto const it = std::ranges::find(graphSubscriptions, id, &GraphSubscription::id);
-                                     if (it != graphSubscriptions.end())
                                      {
-                                       graphSubscriptions.erase(it);
+                                       auto const lock = std::lock_guard<std::mutex>{mutex};
+                                       auto const it =
+                                         std::ranges::find(graphSubscriptions, id, &GraphSubscription::id);
+                                       if (it != graphSubscriptions.end())
+                                       {
+                                         graphSubscriptions.erase(it);
+                                       }
                                      }
                                      triggerRefresh();
                                    }};
@@ -1004,8 +1012,10 @@ namespace ao::audio::backend
   void PipeWireMonitor::Impl::refresh()
   {
     ::pw_thread_loop_lock(threadLoop.get());
+
+    // Phase 1: sync bindings under mutex
     {
-      auto lock = std::unique_lock<std::mutex>{mutex};
+      auto const lock = std::lock_guard<std::mutex>{mutex};
       auto subscribedStreamIds = std::unordered_set<std::uint32_t>{};
 
       for (auto const& sub : graphSubscriptions)
@@ -1018,11 +1028,49 @@ namespace ao::audio::backend
 
       syncStreamBindings(subscribedStreamIds);
       syncSinkBindings();
-      processGraphSubscribers();
-      processDeviceSubscribers();
-
-      lock.unlock();
     }
+
+    // Phase 2: build graphs and collect callbacks under mutex
+    auto pendingGraphCbs =
+      std::vector<std::pair<std::function<void(ao::audio::flow::Graph const&)>, ao::audio::flow::Graph>>{};
+    auto pendingDeviceCbs = std::vector<DeviceCallback>{};
+    auto deviceSnapshot = std::vector<ao::audio::Device>{};
+
+    {
+      auto const lock = std::lock_guard<std::mutex>{mutex};
+      for (auto const& sub : graphSubscriptions)
+      {
+        auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
+        if (parsedId && *parsedId != PW_ID_ANY && sub.callback)
+        {
+          auto graph = ao::audio::flow::Graph{};
+          populateGraph(graph, *parsedId);
+          pendingGraphCbs.emplace_back(sub.callback, std::move(graph));
+        }
+      }
+      if (!deviceSubscriptions.empty())
+      {
+        deviceSnapshot = enumerateSinks();
+        for (auto const& sub : deviceSubscriptions)
+        {
+          if (sub.callback)
+          {
+            pendingDeviceCbs.push_back(sub.callback);
+          }
+        }
+      }
+    }
+
+    // Phase 3: invoke all callbacks outside ALL locks
+    for (auto& [cb, graph] : pendingGraphCbs)
+    {
+      cb(graph);
+    }
+    for (auto& cb : pendingDeviceCbs)
+    {
+      cb(deviceSnapshot);
+    }
+
     ::pw_thread_loop_unlock(threadLoop.get());
   }
 
@@ -1110,37 +1158,6 @@ namespace ao::audio::backend
           ::pw_node_add_listener(bindingPtr->proxy.get(), bindingPtr->listener.get(), &sinkNodeEvents, bindingPtr);
           sinkNodeBindings[id] = std::move(binding);
         }
-      }
-    }
-  }
-
-  void PipeWireMonitor::Impl::processGraphSubscribers()
-  {
-    for (auto const& sub : graphSubscriptions)
-    {
-      auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
-
-      if (parsedId && *parsedId != PW_ID_ANY && sub.callback)
-      {
-        ao::audio::flow::Graph graph;
-        populateGraph(graph, *parsedId);
-        sub.callback(graph);
-      }
-    }
-  }
-
-  void PipeWireMonitor::Impl::processDeviceSubscribers()
-  {
-    if (deviceSubscriptions.empty())
-    {
-      return;
-    }
-    auto const devices = enumerateSinks();
-    for (auto const& sub : deviceSubscriptions)
-    {
-      if (sub.callback)
-      {
-        sub.callback(devices);
       }
     }
   }
