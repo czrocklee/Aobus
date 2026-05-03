@@ -9,9 +9,9 @@
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/MemorySource.h>
 #include <ao/audio/StreamingSource.h>
+#include <ao/utility/ByteView.h>
 
 #include <algorithm>
-#include <ao/utility/ByteView.h>
 #include <format>
 #include <limits>
 #include <ranges>
@@ -68,8 +68,12 @@ namespace ao::audio
 
   Engine::Engine(std::unique_ptr<IBackend> backend,
                  Device const& device,
-                 std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
-    : _backend{std::move(backend)}, _dispatcher{std::move(dispatcher)}, _currentDevice{device}
+                 std::shared_ptr<ao::IMainThreadDispatcher> dispatcher,
+                 DecoderFactoryFn decoderFactory)
+    : _backend{std::move(backend)}
+    , _dispatcher{std::move(dispatcher)}
+    , _currentDevice{device}
+    , _decoderFactory{std::move(decoderFactory)}
   {
     _status.backendId = _backend ? _backend->backendId() : kBackendNone;
     _status.profileId = _backend ? _backend->profileId() : ProfileId{};
@@ -505,7 +509,8 @@ namespace ao::audio
     if (!(plan.decoderOutputFormat == info.sourceFormat))
     {
       decoder->close();
-      decoder = createDecoderSession(path, plan.decoderOutputFormat);
+      decoder = _decoderFactory ? _decoderFactory(path, plan.decoderOutputFormat)
+                                : createDecoderSession(path, plan.decoderOutputFormat);
 
       if (!decoder)
       {
@@ -581,7 +586,8 @@ namespace ao::audio
       return fmt;
     }();
 
-    auto decoder = createDecoderSession(descriptor.filePath, outputFormat);
+    auto decoder = _decoderFactory ? _decoderFactory(descriptor.filePath, outputFormat)
+                                   : createDecoderSession(descriptor.filePath, outputFormat);
 
     if (decoder == nullptr)
     {

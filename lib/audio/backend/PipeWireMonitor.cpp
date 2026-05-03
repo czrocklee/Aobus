@@ -34,37 +34,11 @@ extern "C"
 #include <unordered_map>
 #include <unordered_set>
 
+#include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>
+
 namespace ao::audio::backend
 {
-  // --- Internal Types (Monitor only) ---
-
-  struct NodeRecord final
-  {
-    std::uint32_t version = 0;
-    std::string mediaClass;
-    std::string nodeName;
-    std::string nodeNick;
-    std::string nodeDescription;
-    std::string objectPath;
-    std::optional<std::uint32_t> objectSerial;
-    std::optional<std::uint32_t> driverId;
-  };
-
-  struct LinkRecord final
-  {
-    std::uint32_t outputNodeId = PW_ID_ANY;
-    std::uint32_t inputNodeId = PW_ID_ANY;
-    ::pw_link_state state = PW_LINK_STATE_INIT;
-  };
-
-  struct SinkProps final
-  {
-    float volume = 1.0F;
-    bool isMuted = false;
-    std::vector<float> channelVolumes;
-    bool isSoftMuted = false;
-    std::vector<float> softVolumes;
-  };
+  using namespace detail;
 
   enum class NodeBindingRole : std::uint8_t
   {
@@ -74,21 +48,9 @@ namespace ao::audio::backend
 
   // --- Internal Helpers (Monitor only) ---
 
-  bool isSinkMediaClass(std::string const& mediaClass)
-  {
-    return mediaClass == "Audio/Sink" || mediaClass == "Audio/Duplex" || mediaClass.ends_with("/Sink");
-  }
-
   bool isActiveLink(::pw_link_state state) noexcept
   {
     return state == PW_LINK_STATE_PAUSED || state == PW_LINK_STATE_ACTIVE;
-  }
-
-  std::string lookupProperty(::spa_dict const* props, char const* key)
-  {
-    auto const* value = props != nullptr ? ::spa_dict_lookup(props, key) : nullptr;
-
-    return value != nullptr ? std::string{value} : std::string{};
   }
 
   std::string formatStreamFormat(ao::audio::Format const& format)
@@ -96,327 +58,6 @@ namespace ao::audio::backend
     auto const* const sampleType = format.isFloat ? "float" : "pcm";
 
     return std::format("{}Hz/{}-bit/{}ch {}", format.sampleRate, format.bitDepth, format.channels, sampleType);
-  }
-
-  NodeRecord parseNodeRecord(std::uint32_t version, ::spa_dict const* props)
-  {
-    auto record = NodeRecord{};
-    record.version = version;
-    record.mediaClass = lookupProperty(props, PW_KEY_MEDIA_CLASS);
-    record.nodeName = lookupProperty(props, PW_KEY_NODE_NAME);
-    record.nodeNick = lookupProperty(props, PW_KEY_NODE_NICK);
-    record.nodeDescription = lookupProperty(props, PW_KEY_NODE_DESCRIPTION);
-    record.objectPath = lookupProperty(props, PW_KEY_OBJECT_PATH);
-
-    if (auto const serial = detail::parseUintProperty(::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL)))
-    {
-      record.objectSerial = serial;
-    }
-
-    if (auto const id = detail::parseUintProperty(::spa_dict_lookup(props, "node.driver-id")))
-    {
-      record.driverId = id;
-    }
-    else if (auto const id = detail::parseUintProperty(::spa_dict_lookup(props, "node.driver")))
-    {
-      record.driverId = id;
-    }
-
-    return record;
-  }
-
-  std::optional<ao::audio::SampleFormatCapability> sampleFormatCapabilityFromSpaFormat(std::uint32_t spaFmt)
-  {
-    switch (spaFmt)
-    {
-      case SPA_AUDIO_FORMAT_S16_LE:
-      case SPA_AUDIO_FORMAT_S16_BE:
-        return ao::audio::SampleFormatCapability{
-          .bitDepth = 16,
-          .validBits = 16,
-          .isFloat = false,
-        };
-      case SPA_AUDIO_FORMAT_S24_LE:
-      case SPA_AUDIO_FORMAT_S24_BE:
-        return ao::audio::SampleFormatCapability{
-          .bitDepth = 24,
-          .validBits = 24,
-          .isFloat = false,
-        };
-      case SPA_AUDIO_FORMAT_S24_32_LE:
-      case SPA_AUDIO_FORMAT_S24_32_BE:
-        return ao::audio::SampleFormatCapability{
-          .bitDepth = 32,
-          .validBits = 24,
-          .isFloat = false,
-        };
-      case SPA_AUDIO_FORMAT_S32_LE:
-      case SPA_AUDIO_FORMAT_S32_BE:
-        return ao::audio::SampleFormatCapability{
-          .bitDepth = 32,
-          .validBits = 32,
-          .isFloat = false,
-        };
-      case SPA_AUDIO_FORMAT_F32_LE:
-      case SPA_AUDIO_FORMAT_F32_BE:
-        return ao::audio::SampleFormatCapability{
-          .bitDepth = 32,
-          .validBits = 32,
-          .isFloat = true,
-        };
-      case SPA_AUDIO_FORMAT_F64_LE:
-      case SPA_AUDIO_FORMAT_F64_BE:
-        return ao::audio::SampleFormatCapability{
-          .bitDepth = 64,
-          .validBits = 64,
-          .isFloat = true,
-        };
-      default: return std::nullopt;
-    }
-  }
-
-  void addSampleFormatCapability(ao::audio::DeviceCapabilities& caps,
-                                 ao::audio::SampleFormatCapability const& capability)
-  {
-    if (!std::ranges::contains(caps.sampleFormats, capability))
-    {
-      caps.sampleFormats.push_back(capability);
-    }
-
-    if (!capability.isFloat && capability.bitDepth == capability.validBits &&
-        !std::ranges::contains(caps.bitDepths, capability.bitDepth))
-    {
-      caps.bitDepths.push_back(capability.bitDepth);
-    }
-  }
-
-  void addUnique(std::vector<std::uint32_t>& output, std::uint32_t value)
-  {
-    if (!std::ranges::contains(output, value))
-    {
-      output.push_back(value);
-    }
-  }
-
-  void processChoiceIntValues(::spa_pod_choice const* choice, std::vector<std::uint32_t>& output)
-  {
-    auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
-    auto const type = SPA_POD_CHOICE_VALUE_TYPE(choice);
-
-    if (n_vals == 0 || type != SPA_TYPE_Int)
-    {
-      return;
-    }
-
-    auto const* vals = static_cast<std::int32_t const*>(SPA_POD_CHOICE_VALUES(choice));
-    auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
-
-    if (choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
-    {
-      for (std::uint32_t i = 0; i < n_vals; ++i)
-      {
-        addUnique(output, static_cast<std::uint32_t>(vals[i]));
-      }
-    }
-    else if (choice_type == SPA_CHOICE_Range)
-    {
-      auto const min = (n_vals > 1) ? vals[1] : vals[0];
-      auto const max = (n_vals > 2) ? vals[2] : min;
-
-      static constexpr auto commonRates =
-        std::array<std::uint32_t, 8>{44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
-
-      for (auto rate : commonRates)
-      {
-        if (rate >= static_cast<std::uint32_t>(min) && rate <= static_cast<std::uint32_t>(max))
-        {
-          addUnique(output, rate);
-        }
-      }
-
-      addUnique(output, static_cast<std::uint32_t>(vals[0]));
-    }
-  }
-
-  void collectIntValues(::spa_pod const* pod, std::vector<std::uint32_t>& output)
-  {
-    if (pod == nullptr)
-    {
-      return;
-    }
-
-    if (::spa_pod_is_int(pod) != 0)
-    {
-      std::int32_t val = 0;
-
-      if (::spa_pod_get_int(pod, &val) == 0)
-      {
-        addUnique(output, static_cast<std::uint32_t>(val));
-      }
-    }
-    else if (::spa_pod_is_choice(pod) != 0)
-    {
-      auto const podSpan = ao::utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
-      auto const* choice = ao::utility::layout::view<::spa_pod_choice>(podSpan);
-      processChoiceIntValues(choice, output);
-    }
-  }
-
-  void collectIdValues(::spa_pod const* pod, std::vector<std::uint32_t>& output)
-  {
-    if (pod == nullptr)
-    {
-      return;
-    }
-
-    if (::spa_pod_is_id(pod) != 0)
-    {
-      std::uint32_t val = 0;
-
-      if (::spa_pod_get_id(pod, &val) == 0)
-      {
-        if (!std::ranges::contains(output, val))
-        {
-          output.push_back(val);
-        }
-      }
-    }
-    else if (::spa_pod_is_choice(pod) != 0)
-    {
-      auto const podSpan = ao::utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
-      auto const* choice = ao::utility::layout::view<::spa_pod_choice>(podSpan);
-      auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
-      auto const type = SPA_POD_CHOICE_VALUE_TYPE(choice);
-
-      if (n_vals == 0 || type != SPA_TYPE_Id)
-      {
-        return;
-      }
-
-      auto const* vals = static_cast<std::uint32_t const*>(SPA_POD_CHOICE_VALUES(choice));
-      auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
-
-      if (choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
-      {
-        for (std::uint32_t i = 0; i < n_vals; ++i)
-        {
-          std::uint32_t val = vals[i];
-          if (!std::ranges::contains(output, val))
-          {
-            output.push_back(val);
-          }
-        }
-      }
-    }
-  }
-
-  void parseEnumFormat(::spa_pod const* param, ao::audio::DeviceCapabilities& caps)
-  {
-    if (param == nullptr || ::spa_pod_is_object(param) == 0)
-    {
-      return;
-    }
-
-    ::spa_pod_prop const* prop = nullptr;
-    auto const podSpan = ao::utility::bytes::view(param, param->size + sizeof(::spa_pod));
-    auto const* obj = ao::utility::layout::view<::spa_pod_object>(podSpan);
-
-    SPA_POD_OBJECT_FOREACH(obj, prop)
-    {
-      if (prop->key == SPA_FORMAT_AUDIO_format)
-      {
-        std::vector<std::uint32_t> formats;
-        collectIdValues(&prop->value, formats);
-
-        for (auto fmt : formats)
-        {
-          if (auto const optCapability = sampleFormatCapabilityFromSpaFormat(fmt))
-          {
-            addSampleFormatCapability(caps, *optCapability);
-          }
-        }
-      }
-      else if (prop->key == SPA_FORMAT_AUDIO_rate)
-      {
-        collectIntValues(&prop->value, caps.sampleRates);
-      }
-      else if (prop->key == SPA_FORMAT_AUDIO_channels)
-      {
-        std::vector<std::uint32_t> channels;
-        collectIntValues(&prop->value, channels);
-
-        for (auto ch : channels)
-        {
-          if (ch > 0 && ch <= 255) // NOLINT(readability-magic-numbers)
-          {
-            auto c8 = static_cast<std::uint8_t>(ch);
-
-            if (!std::ranges::contains(caps.channelCounts, c8))
-            {
-              caps.channelCounts.push_back(c8);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  bool copyFloatArray(::spa_pod const& pod, std::vector<float>& output)
-  {
-    auto values = std::array<float, 16>{};
-    auto const count = ::spa_pod_copy_array(
-      &pod, SPA_TYPE_Float, values.data(), values.size()); // NOLINT(readability-simplify-subscript-expr)
-    if (count == 0)
-    {
-      return false;
-    }
-    output.assign_range(values | std::views::take(count));
-    return true;
-  }
-
-  void mergeSinkProps(SinkProps& sinkProps, ::spa_pod const* param)
-  {
-    if (param == nullptr)
-    {
-      return;
-    }
-
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
-    {
-      float val = 0.0F;
-      if (::spa_pod_get_float(&prop->value, &val) == 0)
-      {
-        sinkProps.volume = val;
-      }
-    }
-
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
-    {
-      bool val = false;
-      if (::spa_pod_get_bool(&prop->value, &val) == 0)
-      {
-        sinkProps.isMuted = val;
-      }
-    }
-
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_channelVolumes))
-    {
-      copyFloatArray(prop->value, sinkProps.channelVolumes);
-    }
-
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softMute))
-    {
-      bool val = false;
-      if (::spa_pod_get_bool(&prop->value, &val) == 0)
-      {
-        sinkProps.isSoftMuted = val;
-      }
-    }
-
-    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softVolumes))
-    {
-      copyFloatArray(prop->value, sinkProps.softVolumes);
-    }
   }
 
   // --- PipeWireMonitor Impl ---
@@ -484,6 +125,7 @@ namespace ao::audio::backend
 
       if (::pw_thread_loop_start(threadLoop.get()) < 0)
       {
+        AUDIO_LOG_ERROR("Failed to start PipeWire thread loop");
         return;
       }
 
@@ -783,40 +425,40 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    ::pw_core_events const coreEvents = []
+    auto const coreEvents = ::pw_core_events{[]
     {
       ::pw_core_events ev = {};
       ev.version = PW_VERSION_CORE_EVENTS;
       ev.done = onCoreDone;
       return ev;
-    }();
+    }()};
 
-    ::pw_registry_events const registryEvents = []
+    auto const registryEvents = ::pw_registry_events{[]
     {
       ::pw_registry_events ev = {};
       ev.version = PW_VERSION_REGISTRY_EVENTS;
       ev.global = onRegistryGlobal;
       ev.global_remove = onRegistryGlobalRemove;
       return ev;
-    }();
+    }()};
 
-    ::pw_node_events const streamNodeEvents = []
+    auto const streamNodeEvents = ::pw_node_events{[]
     {
       ::pw_node_events ev = {};
       ev.version = PW_VERSION_NODE_EVENTS;
       ev.info = onNodeInfo;
       ev.param = onNodeParam;
       return ev;
-    }();
+    }()};
 
-    ::pw_node_events const sinkNodeEvents = []
+    auto const sinkNodeEvents = ::pw_node_events{[]
     {
       ::pw_node_events ev = {};
       ev.version = PW_VERSION_NODE_EVENTS;
       ev.info = onNodeInfo;
       ev.param = onNodeParam;
       return ev;
-    }();
+    }()};
 
     void onRefreshEvent(void* data, [[maybe_unused]] std::uint64_t expiry)
     {
@@ -841,8 +483,14 @@ namespace ao::audio::backend
     }
 
     _impl->refreshEvent.get_deleter().loop = _impl->threadLoop.get();
-    _impl->refreshEvent.reset(
-      ::pw_loop_add_event(::pw_thread_loop_get_loop(_impl->threadLoop.get()), onRefreshEvent, _impl.get()));
+    auto* const event = ::pw_loop_add_event(
+      ::pw_thread_loop_get_loop(_impl->threadLoop.get()), onRefreshEvent, _impl.get());
+    if (!event)
+    {
+      AUDIO_LOG_ERROR("Failed to add PipeWire refresh event - periodic refresh disabled");
+      return;
+    }
+    _impl->refreshEvent.reset(event);
 
     ::pw_thread_loop_lock(_impl->threadLoop.get());
 
@@ -1179,7 +827,8 @@ namespace ao::audio::backend
       // NOLINTNEXTLINE(readability-identifier-length)
       for (auto const& [_, link] : links)
       {
-        if (!isActiveLink(link.state) || link.outputNodeId != curr || link.inputNodeId == PW_ID_ANY)
+        if (!isActiveLink(static_cast<::pw_link_state>(link.state)) || link.outputNodeId != curr ||
+            link.inputNodeId == PW_ID_ANY)
         {
           continue;
         }
@@ -1196,7 +845,7 @@ namespace ao::audio::backend
     // NOLINTNEXTLINE(readability-identifier-length)
     for (auto const& [_, link] : links)
     {
-      if (isActiveLink(link.state) && ctx.reachableSet.contains(link.inputNodeId))
+      if (isActiveLink(static_cast<::pw_link_state>(link.state)) && ctx.reachableSet.contains(link.inputNodeId))
       {
         ctx.fullSet.insert(link.outputNodeId);
       }
@@ -1294,7 +943,8 @@ namespace ao::audio::backend
     // NOLINTNEXTLINE(readability-identifier-length)
     for (auto const& [_, link] : links)
     {
-      if (isActiveLink(link.state) && ctx.fullSet.contains(link.outputNodeId) && ctx.fullSet.contains(link.inputNodeId))
+      if (isActiveLink(static_cast<::pw_link_state>(link.state)) && ctx.fullSet.contains(link.outputNodeId) &&
+          ctx.fullSet.contains(link.inputNodeId))
       {
         graph.connections.push_back({.sourceId = std::format("{}", link.outputNodeId),
                                      .destId = std::format("{}", link.inputNodeId),

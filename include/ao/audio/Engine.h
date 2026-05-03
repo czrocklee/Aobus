@@ -21,6 +21,7 @@
 namespace ao::audio
 {
   class ISource;
+  using DecoderFactoryFn = std::function<std::unique_ptr<IDecoderSession>(std::filesystem::path const&, Format)>;
 }
 
 namespace ao::audio
@@ -56,8 +57,9 @@ namespace ao::audio
 
     Engine(std::unique_ptr<IBackend> backend,
            Device const& device,
-           std::shared_ptr<ao::IMainThreadDispatcher> dispatcher = nullptr);
-    ~Engine();
+           std::shared_ptr<ao::IMainThreadDispatcher> dispatcher = nullptr,
+           DecoderFactoryFn decoderFactory = nullptr);
+    ~Engine() noexcept;
 
     void setBackend(std::unique_ptr<IBackend> backend, Device const& device);
     void updateDevice(Device const& device);
@@ -117,5 +119,6 @@ namespace ao::audio
     std::function<void()> _onTrackEnded;
     OnRouteChanged _onRouteChanged;
     RouteStatus _routeStatus;
+    DecoderFactoryFn _decoderFactory;
   };
 } // namespace ao::audio

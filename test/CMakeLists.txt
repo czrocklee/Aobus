@@ -27,10 +27,17 @@ add_executable(ao_test
     unit/lmdb/DatabaseTest.cpp
 
     # audio unit tests
+    unit/audio/DecoderFactoryTest.cpp
     unit/audio/FormatNegotiatorTest.cpp
+    unit/audio/MemorySourceTest.cpp
+    unit/audio/StreamingSourceTest.cpp
+    unit/audio/PcmRingBufferTest.cpp
+    unit/audio/backend/PipeWireSharedTest.cpp
     unit/audio/PcmConverterTest.cpp
     unit/audio/PlayerTest.cpp
     unit/audio/PlaybackEngineTest.cpp
+    unit/audio/backend/PipeWireMonitorHelpersTest.cpp
+    unit/audio/backend/AlsaProviderHelpersTest.cpp
 
     # app unit tests (no platform deps)
     unit/app/SmartListEngineTest.cpp
@@ -38,7 +45,6 @@ add_executable(ao_test
     # integration tests
     integration/audio/DecoderIntegrationTest.cpp
     integration/audio/GraphIntegrityTest.cpp
-    integration/audio/GraphAnalysisVerification.cpp
     integration/audio/backend/PipeWireProviderTest.cpp
     integration/tag/TagTest.cpp
 )

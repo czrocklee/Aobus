@@ -16,7 +16,7 @@ namespace ao::audio::backend::detail
     struct PwInitGuard
     {
       PwInitGuard() { ::pw_init(nullptr, nullptr); }
-      ~PwInitGuard() { ::pw_deinit(); }
+      ~PwInitGuard() noexcept { ::pw_deinit(); }
 
       PwInitGuard(PwInitGuard const&) = delete;
       PwInitGuard& operator=(PwInitGuard const&) = delete;
@@ -26,22 +26,22 @@ namespace ao::audio::backend::detail
     static PwInitGuard guard;
   }
 
-  std::optional<std::uint32_t> parseUintProperty(char const* value)
+  std::optional<std::uint32_t> parseUintProperty(char const* value) noexcept
   {
-    if (value == nullptr || *value == '\0')
+    if (value == nullptr || *value == '\0' || ::isspace(static_cast<unsigned char>(*value)))
     {
       return std::nullopt;
     }
     char* end = nullptr;
     auto const parsed = ::strtoul(value, &end, 10);
-    if (end == value)
+    if (end == value || *end != '\0')
     {
       return std::nullopt;
     }
     return static_cast<std::uint32_t>(parsed);
   }
 
-  std::optional<ao::audio::Format> parseRawStreamFormat(::spa_pod const* param)
+  std::optional<ao::audio::Format> parseRawStreamFormat(::spa_pod const* param) noexcept
   {
     if (param == nullptr)
     {
