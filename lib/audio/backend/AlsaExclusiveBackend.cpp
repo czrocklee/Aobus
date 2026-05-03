@@ -87,6 +87,7 @@ namespace ao::audio::backend
       }
 
       auto avail = ::snd_pcm_avail_update(pcm.get());
+
       if (avail < 0)
       {
         recoverFromXrun(static_cast<int>(avail));
@@ -95,8 +96,18 @@ namespace ao::audio::backend
 
       if (static_cast<::snd_pcm_uframes_t>(avail) < periodSize)
       {
-        // Wait for device to be ready for more data
-        ::snd_pcm_wait(pcm.get(), kAlsaWaitTimeoutMs);
+        // Only block on the pollfd when the device is truly running.
+        // In PREPARED / XRUN / SUSPENDED states the fd may never signal,
+        // so we fall back to a short sleep to keep the loop responsive.
+        if (::snd_pcm_state(pcm.get()) == SND_PCM_STATE_RUNNING)
+        {
+          ::snd_pcm_wait(pcm.get(), kAlsaWaitTimeoutMs);
+        }
+        else
+        {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
         continue;
       }
 
@@ -104,8 +115,7 @@ namespace ao::audio::backend
       ::snd_pcm_uframes_t offset = 0;
       ::snd_pcm_channel_area_t const* areas = nullptr;
 
-      auto const err = ::snd_pcm_mmap_begin(pcm.get(), &areas, &offset, &frames);
-      if (err < 0)
+      if (auto const err = ::snd_pcm_mmap_begin(pcm.get(), &areas, &offset, &frames); err < 0)
       {
         recoverFromXrun(err);
         continue;
@@ -132,9 +142,20 @@ namespace ao::audio::backend
         {
           recoverFromXrun(static_cast<int>(committed));
         }
-        else if (callbacks.onPositionAdvanced != nullptr)
+        else
         {
-          callbacks.onPositionAdvanced(callbacks.userData, static_cast<std::uint32_t>(committed));
+          // XRUN recovery via snd_pcm_prepare leaves the device in
+          // PREPARED state. If the auto-start threshold has been met
+          // by now, explicitly kick the device into RUNNING.
+          if (::snd_pcm_state(pcm.get()) == SND_PCM_STATE_PREPARED)
+          {
+            ::snd_pcm_start(pcm.get());
+          }
+
+          if (callbacks.onPositionAdvanced != nullptr)
+          {
+            callbacks.onPositionAdvanced(callbacks.userData, static_cast<std::uint32_t>(committed));
+          }
         }
       }
       else
@@ -312,15 +333,33 @@ namespace ao::audio::backend
     _impl->format = format;
     _impl->format.sampleRate = rate;
 
-    // Reflect the actually negotiated ALSA format so that bytesPerFrame in
-    // the playback loop matches the hardware buffer layout.
-    if (alsaFormat == SND_PCM_FORMAT_S32_LE || alsaFormat == SND_PCM_FORMAT_S24_LE)
+    // When the ALSA hardware forces a wider sample container (e.g. S16_LE
+    // rejected in favour of S32_LE), the Engine must be told so its PCM
+    // converter produces data that matches the MMAP buffer layout.
+    auto const hwBitDepth = [&] -> std::uint8_t
     {
-      _impl->format.bitDepth = 32;
-    }
-    else if (alsaFormat == SND_PCM_FORMAT_S24_3LE)
+      if (alsaFormat == SND_PCM_FORMAT_S32_LE || alsaFormat == SND_PCM_FORMAT_S24_LE)
+      {
+        return 32;
+      }
+
+      if (alsaFormat == SND_PCM_FORMAT_S24_3LE)
+      {
+        return 24
+      };
+
+      return 16;
+    }();
+
+    if (hwBitDepth != format.bitDepth)
     {
-      _impl->format.bitDepth = 24;
+      _impl->format.bitDepth = hwBitDepth;
+      _impl->format.validBits = format.bitDepth;
+
+      if (_impl->callbacks.onFormatChanged != nullptr)
+      {
+        _impl->callbacks.onFormatChanged(_impl->callbacks.userData, _impl->format);
+      }
     }
 
     _impl->pcm = std::move(safePcm);
