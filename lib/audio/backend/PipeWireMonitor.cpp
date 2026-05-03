@@ -910,17 +910,8 @@ namespace ao::audio::backend
     if (auto const propsIt = sinkPropsMap.find(id); propsIt != sinkPropsMap.end())
     {
       auto const& sinkProps = propsIt->second;
-      auto const isUnity = [](float value)
-      { return std::abs(value - 1.0F) < 1e-4F; }; // NOLINT(readability-magic-numbers)
-
-      bool const volumeAtUnity =
-        isUnity(sinkProps.volume) &&
-        (sinkProps.channelVolumes.empty() || std::ranges::all_of(sinkProps.channelVolumes, isUnity)) &&
-        (sinkProps.softVolumes.empty() || std::ranges::all_of(sinkProps.softVolumes, isUnity));
-      bool const isMuted = sinkProps.isMuted || sinkProps.isSoftMuted;
-
-      node.volumeNotUnity = !volumeAtUnity;
-      node.isMuted = isMuted;
+      node.volumeNotUnity = !sinkProps.isUnity();
+      node.isMuted = sinkProps.isMuted || sinkProps.isSoftMuted;
     }
 
     return node;

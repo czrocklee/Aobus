@@ -275,4 +275,26 @@ namespace ao::audio::backend::detail
       copyFloatArray(prop->value, sinkProps.softVolumes);
     }
   }
+
+  bool SinkProps::isUnity() const noexcept
+  {
+    auto const checkUnity = [](float val) { return std::abs(val - 1.0F) < 1e-4F; }; // NOLINT(readability-magic-numbers)
+
+    if (!checkUnity(volume))
+    {
+      return false;
+    }
+
+    if (!channelVolumes.empty() && !std::ranges::all_of(channelVolumes, checkUnity))
+    {
+      return false;
+    }
+
+    if (!softVolumes.empty() && !std::ranges::all_of(softVolumes, checkUnity))
+    {
+      return false;
+    }
+
+    return true;
+  }
 } // namespace ao::audio::backend::detail

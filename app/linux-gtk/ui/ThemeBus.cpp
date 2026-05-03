@@ -1,4 +1,5 @@
 #include "ThemeBus.h"
+#include <ao/utility/Log.h>
 #include <gdkmm/display.h>
 #include <gio/gio.h>
 #include <giomm/settings.h>
