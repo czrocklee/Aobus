@@ -5,6 +5,7 @@
 
 #include <FLAC/stream_decoder.h>
 #include <algorithm>
+#include <ao/audio/PcmConverter.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/MappedFile.h>
 #include <cstring>
@@ -352,25 +353,16 @@ namespace ao::audio
     else if (outBps == 32)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 4);
-      auto* out = ao::utility::layout::asMutablePtr<std::int32_t>(impl->pcmBuffer);
+      auto const dst = ao::utility::layout::viewArrayMutable<std::int32_t>(impl->pcmBuffer);
 
-      for (std::uint32_t i = 0; i < blockSize; ++i)
+      std::vector<std::span<std::int32_t const>> channelSpans;
+      for (std::uint32_t ch = 0; ch < channels; ++ch)
       {
-        for (std::uint32_t ch = 0; channels > 0 && ch < channels; ++ch)
-        {
-          auto const val = static_cast<std::int32_t>(buffer[ch][i]);
-
-          // If we are padding 24-bit into 32-bit, ensure it's properly shifted if needed.
-          // libFLAC gives us signed 32-bit integers.
-          // S24_32_LE usually expects the 24 bits in the most significant bytes OR just as a 32-bit int.
-          // Actually, PipeWire's S24_32_LE is "24 bits in 32 bit, LSB aligned, padded with 0".
-          // Wait, let's check PipeWire/ALSA S24_32_LE definition.
-          // ALSA SND_PCM_FORMAT_S24_32_LE: "Signed 24 bit Little Endian in 32 bit, LSB justified".
-          // That means it's just a 32-bit integer where the top 8 bits are zero/ignored.
-
-          *out++ = val;
-        }
+        channelSpans.emplace_back(buffer[ch], blockSize);
       }
+
+      pcm::Converter::interleaveAndPad<std::int32_t, std::int32_t>(
+        channelSpans, dst, static_cast<std::uint8_t>(32 - bps));
     }
     else
     {

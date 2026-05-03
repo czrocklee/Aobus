@@ -26,16 +26,20 @@ add_executable(ao_test
     unit/lmdb/TransactionTest.cpp
     unit/lmdb/DatabaseTest.cpp
 
+    # audio unit tests
+    unit/audio/FormatNegotiatorTest.cpp
+    unit/audio/PcmConverterTest.cpp
+    unit/audio/PlayerTest.cpp
+    unit/audio/PlaybackEngineTest.cpp
+
     # app unit tests (no platform deps)
-    unit/app/FormatNegotiatorTest.cpp
-    unit/app/PlayerTest.cpp
-    unit/app/PlaybackEngineTest.cpp
     unit/app/SmartListEngineTest.cpp
 
     # integration tests
-    integration/playback/DecoderIntegrationTest.cpp
+    integration/audio/DecoderIntegrationTest.cpp
+    integration/audio/GraphIntegrityTest.cpp
+    integration/audio/GraphAnalysisVerification.cpp
     integration/audio/backend/PipeWireProviderTest.cpp
-    integration/playback/GraphIntegrityTest.cpp
     integration/tag/TagTest.cpp
 )
 

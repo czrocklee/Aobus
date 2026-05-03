@@ -61,6 +61,22 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::Impl::playbackLoop(std::stop_token const& stopToken)
   {
+    std::vector<std::byte> buffer;
+
+    ::snd_pcm_uframes_t periodSize = 0;
+    ::snd_pcm_hw_params_t* params = nullptr;
+    snd_pcm_hw_params_alloca(&params);
+    if (::snd_pcm_hw_params_current(pcm.get(), params) == 0)
+    {
+      ::snd_pcm_hw_params_get_period_size(params, &periodSize, nullptr);
+    }
+
+    if (periodSize == 0) periodSize = 1024;
+
+    std::size_t const bytesPerFrame = (format.bitDepth / 8) * format.channels;
+    std::size_t const bytesToRead = static_cast<std::size_t>(periodSize) * bytesPerFrame;
+    buffer.resize(bytesToRead);
+
     while (!stopToken.stop_requested())
     {
       if (paused.load(std::memory_order_relaxed))
@@ -69,91 +85,35 @@ namespace ao::audio::backend
         continue;
       }
 
-      auto const state = ::snd_pcm_state(pcm.get());
-
-      if (state == SND_PCM_STATE_XRUN || state == SND_PCM_STATE_SUSPENDED)
-      {
-        recoverFromXrun(state == SND_PCM_STATE_XRUN ? -EPIPE : -ESTRPIPE);
-        continue;
-      }
-
-      // Only wait if the device is actually running.
-      // In PREPARED state, wait might hang or fail on some drivers.
-      if (state == SND_PCM_STATE_RUNNING)
-      {
-        if (::snd_pcm_wait(pcm.get(), kAlsaWaitTimeoutMs) < 0)
-        {
-          recoverFromXrun(-EPIPE);
-          continue;
-        }
-      }
-
-      ::snd_pcm_sframes_t avail = ::snd_pcm_avail_update(pcm.get());
-
-      if (avail < 0)
-      {
-        recoverFromXrun(static_cast<int>(avail));
-        continue;
-      }
-
-      if (avail == 0)
-      {
-        if (state != SND_PCM_STATE_RUNNING && state != SND_PCM_STATE_PREPARED)
-        {
-          recoverFromXrun(-EPIPE);
-        }
-        else
-        {
-          std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-
-        continue;
-      }
-
-      ::snd_pcm_uframes_t frames = static_cast<::snd_pcm_uframes_t>(avail);
-      ::snd_pcm_channel_area_t const* areas = nullptr;
-      ::snd_pcm_uframes_t offset = 0;
-
-      if (::snd_pcm_mmap_begin(pcm.get(), &areas, &offset, &frames) < 0)
-      {
-        recoverFromXrun(-EPIPE);
-        continue;
-      }
-
-      auto* const dest = static_cast<std::byte*>(areas[0].addr) + (offset * (areas[0].step / 8));
-      std::size_t const bytesToRead = static_cast<std::size_t>(frames) * (format.bitDepth / 8) * format.channels;
-      std::size_t const bytesRead = callbacks.readPcm(callbacks.userData, ao::utility::bytes::view(dest, bytesToRead));
+      std::size_t const bytesRead =
+        callbacks.readPcm(callbacks.userData, ao::utility::bytes::view(buffer.data(), bytesToRead));
 
       if (bytesRead > 0)
       {
-        auto const committed = ::snd_pcm_mmap_commit(
-          pcm.get(), offset, bytesRead / static_cast<std::size_t>((format.bitDepth / 8) * format.channels));
+        auto const framesToWrite = bytesRead / bytesPerFrame;
+        auto written = ::snd_pcm_writei(pcm.get(), buffer.data(), framesToWrite);
 
-        if (committed < 0)
+        if (written == -EPIPE)
         {
-          recoverFromXrun(static_cast<int>(committed));
+          ::snd_pcm_prepare(pcm.get());
+        }
+        else if (written < 0)
+        {
+          recoverFromXrun(static_cast<int>(written));
         }
         else if (callbacks.onPositionAdvanced != nullptr)
         {
-          callbacks.onPositionAdvanced(callbacks.userData, static_cast<std::uint32_t>(committed));
+          callbacks.onPositionAdvanced(callbacks.userData, static_cast<std::uint32_t>(written));
         }
       }
       else
       {
-        ::snd_pcm_mmap_commit(pcm.get(), offset, 0);
-
         if (callbacks.isSourceDrained(callbacks.userData))
         {
           ::snd_pcm_drain(pcm.get());
-
-          if (callbacks.onDrainComplete != nullptr)
-          {
-            callbacks.onDrainComplete(callbacks.userData);
-          }
-
+          if (callbacks.onDrainComplete != nullptr) callbacks.onDrainComplete(callbacks.userData);
           break;
         }
-
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
     }
@@ -229,9 +189,9 @@ namespace ao::audio::backend
       return ao::makeError(ao::Error::Code::InitFailed, "Failed to init ALSA hw params");
     }
 
-    if (::snd_pcm_hw_params_set_access(safePcm.get(), params, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)
+    if (::snd_pcm_hw_params_set_access(safePcm.get(), params, SND_PCM_ACCESS_RW_INTERLEAVED) < 0)
     {
-      return ao::makeError(ao::Error::Code::FormatRejected, "No mmap interleaved support");
+      return ao::makeError(ao::Error::Code::FormatRejected, "No RW interleaved support");
     }
 
     auto alsaFormat = SND_PCM_FORMAT_S16_LE;
@@ -239,12 +199,6 @@ namespace ao::audio::backend
     if (format.bitDepth == 32)
     {
       alsaFormat = (format.validBits == 24) ? SND_PCM_FORMAT_S24_LE : SND_PCM_FORMAT_S32_LE;
-
-      if (format.validBits == 24 && ::snd_pcm_hw_params_test_format(safePcm.get(), params, alsaFormat) != 0 &&
-          ::snd_pcm_hw_params_test_format(safePcm.get(), params, SND_PCM_FORMAT_S32_LE) == 0)
-      {
-        alsaFormat = SND_PCM_FORMAT_S32_LE;
-      }
     }
     else if (format.bitDepth == 24)
     {
@@ -253,14 +207,32 @@ namespace ao::audio::backend
 
     if (::snd_pcm_hw_params_set_format(safePcm.get(), params, alsaFormat) < 0)
     {
-      return ao::makeError(ao::Error::Code::FormatRejected, "Bit depth not supported");
+      if (format.bitDepth == 16)
+      {
+        alsaFormat = SND_PCM_FORMAT_S32_LE;
+        if (::snd_pcm_hw_params_set_format(safePcm.get(), params, alsaFormat) < 0)
+        {
+          return ao::makeError(ao::Error::Code::FormatRejected, "Hardware supports neither S16_LE nor S32_LE");
+        }
+      }
+      else
+      {
+        return ao::makeError(ao::Error::Code::FormatRejected, "Format not supported by hardware");
+      }
     }
 
     std::uint32_t rate = format.sampleRate;
-
     if (::snd_pcm_hw_params_set_rate_near(safePcm.get(), params, &rate, 0) < 0)
     {
       return ao::makeError(ao::Error::Code::InitFailed, "Failed to set rate");
+    }
+
+    if (rate != format.sampleRate)
+    {
+      AUDIO_LOG_INFO("AlsaExclusiveBackend: Rate mismatch! Requested: {}Hz, Got: {}Hz. Pitch shift expected if engine "
+                     "is not notified.",
+                     format.sampleRate,
+                     rate);
     }
 
     if (::snd_pcm_hw_params_set_channels(safePcm.get(), params, format.channels) < 0)
@@ -269,9 +241,9 @@ namespace ao::audio::backend
     }
 
     auto periods = std::uint32_t{4};
-    auto periodSize = ::snd_pcm_uframes_t{1024};
-
     ::snd_pcm_hw_params_set_periods_near(safePcm.get(), params, &periods, 0);
+
+    ::snd_pcm_uframes_t periodSize = 1024;
     ::snd_pcm_hw_params_set_period_size_near(safePcm.get(), params, &periodSize, 0);
 
     if (::snd_pcm_hw_params(safePcm.get(), params) < 0)
@@ -280,7 +252,7 @@ namespace ao::audio::backend
     }
 
     _impl->canPause = (::snd_pcm_hw_params_can_pause(params) == 1);
-    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Device pause support: {}", _impl->canPause);
+    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Device pause support: {}, Negotiated Rate: {}Hz", _impl->canPause, rate);
 
     ::snd_pcm_sw_params_t* swParams = nullptr;
     snd_pcm_sw_params_alloca(&swParams);
