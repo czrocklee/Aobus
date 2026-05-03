@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/audio/Player.h>
 #include <ao/audio/Types.h>
 
 #include <giomm.h>
@@ -21,12 +22,12 @@ namespace ao::gtk
     using PauseSignal = sigc::signal<void()>;
     using StopSignal = sigc::signal<void()>;
     using SeekSignal = sigc::signal<void(std::uint32_t)>;
-    using OutputChangedSignal = sigc::signal<void(ao::audio::BackendKind, std::string)>;
+    using OutputChangedSignal = sigc::signal<void(ao::audio::BackendId, ao::audio::DeviceId, ao::audio::ProfileId)>;
 
     PlaybackBar();
     ~PlaybackBar() override;
 
-    void setSnapshot(ao::audio::Snapshot const& snapshot);
+    void setSnapshot(ao::audio::Player::Status const& status);
     void setInteractive(bool enabled);
 
     PlaySignal& signalPlayRequested();
@@ -38,13 +39,12 @@ namespace ao::gtk
   private:
     struct LastState final
     {
-      ao::audio::Transport transport = ao::audio::Transport::Idle;
+      ao::audio::Engine::Status engine;
       std::uint32_t positionSec = 0xFFFFFFFF;
       std::uint32_t durationSec = 0xFFFFFFFF;
-      ao::audio::BackendKind backend = ao::audio::BackendKind::None;
-      std::string currentDeviceId;
-      std::vector<ao::audio::BackendSnapshot> availableBackends;
+      std::vector<ao::audio::IBackendProvider::Status> availableBackends;
       ao::audio::Quality quality = ao::audio::Quality::Unknown;
+      bool isReady = false;
     };
 
     // Layout constants
@@ -67,8 +67,8 @@ namespace ao::gtk
     void updateTransportButtons(ao::audio::Transport state);
 
     Gtk::Widget* createOutputWidget(Glib::RefPtr<Glib::Object> const& item);
-    void updateOutputModel(ao::audio::Snapshot const& snapshot);
-    void updateOutputLabel(ao::audio::Snapshot const& snapshot);
+    void updateOutputModel(ao::audio::Player::Status const& status);
+    void updateOutputLabel(ao::audio::Player::Status const& status);
     void updateOutputIcon(ao::audio::Quality quality);
     void syncOutputIconSize();
 

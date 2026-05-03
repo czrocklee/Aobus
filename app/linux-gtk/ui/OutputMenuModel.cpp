@@ -5,19 +5,21 @@
 
 namespace ao::gtk
 {
-  void OutputMenuModel::update(std::vector<ao::audio::BackendSnapshot> const& backends,
-                               ao::audio::BackendKind currentBackend,
+  void OutputMenuModel::update(std::vector<ao::audio::IBackendProvider::Status> const& backends,
+                               ao::audio::BackendId const& currentBackend,
+                               ao::audio::ProfileId const& currentProfile,
                                std::string_view currentDeviceId)
   {
     auto const deviceIdStr = std::string{currentDeviceId};
 
-    bool const changed =
-      (_backends != backends) || (_currentBackend != currentBackend) || (_currentDeviceId != deviceIdStr);
+    bool const changed = (_backends != backends) || (_currentBackend != currentBackend) ||
+                         (_currentProfile != currentProfile) || (_currentDeviceId != deviceIdStr);
 
     if (changed)
     {
       _backends = backends;
       _currentBackend = currentBackend;
+      _currentProfile = currentProfile;
       _currentDeviceId = deviceIdStr;
       _signalChanged.emit();
     }

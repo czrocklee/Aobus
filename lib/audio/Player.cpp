@@ -67,10 +67,10 @@ namespace ao::audio
   {
     // Start with a NullBackend until a provider provides something real
     _engine = std::make_unique<Engine>(std::make_unique<NullBackend>(),
-                                       Device{.id = "null",
+                                       Device{.id = DeviceId{"null"},
                                               .displayName = "None",
                                               .description = "No audio output selected",
-                                              .backendKind = BackendKind::None,
+                                              .backendId = kBackendNone,
                                               .capabilities = {}},
                                        _dispatcher);
 
@@ -84,7 +84,7 @@ namespace ao::audio
       });
 
     _engine->setOnRouteChanged(
-      [this](EngineRouteSnapshot const& snapshot)
+      [this](Engine::RouteStatus const& snapshot)
       {
         // Capture generation to prevent stale updates
         auto const generation = _playbackGeneration;
@@ -152,22 +152,29 @@ namespace ao::audio
 
   void Player::play(TrackPlaybackDescriptor const& descriptor)
   {
+    if (!isReady())
+    {
+      AUDIO_LOG_WARN("Player: Playback ignored because audio backend is not ready (pending discovery)");
+      return;
+    }
+
     _playbackGeneration++;
-    _cachedEngineRoute = {};
+    _cachedRouteStatus = {};
     _cachedSystemGraph = {};
     _mergedGraph = {};
     _quality = Quality::Unknown;
     _qualityTooltip.clear();
     _graphSubscription.reset();
+    _currentTrack = descriptor;
     _engine->play(descriptor);
   }
 
-  void Player::setOutput(BackendKind kind, std::string_view deviceId)
+  void Player::setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
   {
-    auto const currentSnap = _engine->snapshot();
+    auto const currentSnap = _engine->status();
 
     // 1. Check if we already have this output active
-    if (kind == currentSnap.backend && deviceId == currentSnap.currentDeviceId)
+    if (backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
     {
       _pendingOutput.reset();
       return;
@@ -175,43 +182,35 @@ namespace ao::audio
 
     // 2. Find the Device matching the kind and id from our cache
     auto const it = std::ranges::find_if(
-      _allDevices, [&](Device const& dev) { return dev.backendKind == kind && dev.id == deviceId; });
+      _allDevices, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
 
     if (it == _allDevices.end())
     {
       // If we don't have it yet, store it as pending.
-      // This is common during startup as device discovery is asynchronous.
-      _pendingOutput = PendingOutput{kind, std::string(deviceId)};
-      AUDIO_LOG_DEBUG(
-        "Player: Requested output {}:{} not yet available, pending discovery", backendKindToId(kind), deviceId);
-
+      _pendingOutput = PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
+      AUDIO_LOG_DEBUG("Player: Requested output {}:{} not yet available, pending discovery", backend, deviceId);
       return;
     }
 
     // Found it! Clear any pending output.
     _pendingOutput.reset();
 
-    auto const& targetDevice = *it;
+    // 3. Find the provider object that can handle this BackendId
+    auto const recordIt = std::ranges::find_if(
+      _providers, [&](auto const& record) { return record->provider->status().metadata.id == backend; });
 
-    // 3. Find the provider object that can handle this BackendKind
-    for (auto const& record : _providers)
+    if (recordIt == _providers.end())
     {
-      auto const found = std::ranges::contains(record->devices, targetDevice);
-
-      if (found)
-      {
-        if (auto backend = record->provider->createBackend(targetDevice))
-        {
-          _activeManager = record->provider.get();
-          _playbackGeneration++;
-          _engine->setBackend(std::move(backend), targetDevice);
-
-          return;
-        }
-      }
+      AUDIO_LOG_ERROR("Player: No provider found for backend {}", backend);
+      return;
     }
 
-    AUDIO_LOG_ERROR("Player: Failed to create backend for output {}:{}", backendKindToId(kind), deviceId);
+    // 4. Create the backend and swap it in the engine
+    auto const& device = *it;
+    auto newBackend = (*recordIt)->provider->createBackend(device, profile);
+    _activeManager = (*recordIt)->provider.get();
+    _playbackGeneration++;
+    _engine->setBackend(std::move(newBackend), device);
   }
 
   void Player::pause()
@@ -227,12 +226,13 @@ namespace ao::audio
   void Player::stop()
   {
     _playbackGeneration++;
-    _cachedEngineRoute = {};
+    _cachedRouteStatus = {};
     _cachedSystemGraph = {};
     _mergedGraph = {};
     _quality = Quality::Unknown;
     _qualityTooltip.clear();
     _graphSubscription.reset();
+    _currentTrack.reset();
     _engine->stop();
   }
 
@@ -241,55 +241,67 @@ namespace ao::audio
     _engine->seek(positionMs);
   }
 
-  Snapshot Player::snapshot() const
+  Player::Status Player::status() const
   {
-    auto snap = _engine->snapshot();
+    auto engineStatus = _engine->status();
 
-    snap.availableBackends = _cachedBackends;
+    auto status = Player::Status{};
+    status.engine = std::move(engineStatus);
+    if (_currentTrack)
+    {
+      status.trackTitle = _currentTrack->title;
+      status.trackArtist = _currentTrack->artist;
+    }
+    status.availableBackends = _cachedBackends;
+    status.flow = _mergedGraph;
+    status.isReady = isReady();
 
     // Inject controller-owned fields into the snapshot returned to the UI
-    snap.flow = _mergedGraph;
-    snap.quality = _quality;
-    snap.qualityTooltip = _qualityTooltip;
+    status.quality = _quality;
+    status.qualityTooltip = _qualityTooltip;
 
-    return snap;
+    return status;
   }
 
-  void Player::handleDevicesChanged(IBackendProvider* /*provider*/, std::vector<Device> const& /*devices*/)
+  bool Player::isReady() const
   {
+    auto const engineStatus = _engine->status();
+    return engineStatus.backendId != kBackendNone && !_pendingOutput.has_value();
+  }
+
+  void Player::handleDevicesChanged(IBackendProvider* provider, std::vector<Device> const& devices)
+  {
+    // Update individual provider cache
+    auto const it =
+      std::ranges::find_if(_providers, [&](auto const& record) { return record->provider.get() == provider; });
+    if (it != _providers.end())
+    {
+      (*it)->devices = devices;
+    }
+
     // Rebuild global cache from all providers
     auto allDevices = std::vector<Device>{};
+    auto snapshots = std::vector<IBackendProvider::Status>{};
 
     for (auto const& record : _providers)
     {
+      auto status = record->provider->status();
+      // The provider status might have its own internal device list, but we use the one from the subscription for
+      // consistency
+      status.devices = record->devices;
+      snapshots.push_back(std::move(status));
       allDevices.insert(allDevices.end(), record->devices.begin(), record->devices.end());
-    }
-
-    // Group devices by BackendKind
-    auto groups = std::map<BackendKind, std::vector<Device>>{};
-
-    for (auto const& dev : allDevices)
-    {
-      groups[dev.backendKind].push_back(dev);
-    }
-
-    auto snapshots = std::vector<BackendSnapshot>{};
-    for (auto& [kind, devices] : groups)
-    {
-      snapshots.push_back({.kind = kind,
-                           .displayName = std::string{backendDisplayName(kind)},
-                           .shortName = std::string{backendShortName(kind)},
-                           .id = std::string{backendKindToId(kind)},
-                           .devices = std::move(devices)});
     }
 
     _cachedBackends = std::move(snapshots);
     _allDevices = std::move(allDevices);
 
     // Keep the engine's current device capabilities up-to-date
-    auto const currentSnap = _engine->snapshot();
-    auto const activeIt = std::ranges::find_if(
-      _allDevices, [&](Device const& dev) { return dev.backendKind == currentSnap.backend && dev.id == currentSnap.currentDeviceId; });
+    auto const currentSnap = _engine->status();
+    auto const activeIt =
+      std::ranges::find_if(_allDevices,
+                           [&](Device const& dev)
+                           { return dev.backendId == currentSnap.backendId && dev.id == currentSnap.currentDeviceId; });
 
     if (activeIt != _allDevices.end())
     {
@@ -300,32 +312,34 @@ namespace ao::audio
     {
       // Try to apply pending output
       auto const pending = *_pendingOutput;
-      setOutput(pending.kind, pending.deviceId);
+      setOutput(pending.backend, pending.deviceId, pending.profile);
 
       if (!_pendingOutput)
       {
-        AUDIO_LOG_INFO(
-          "Player: Pending output {}:{} successfully restored", backendKindToId(pending.kind), pending.deviceId);
+        AUDIO_LOG_INFO("Player: Pending output {}:{} ({}) successfully restored",
+                       pending.backend,
+                       pending.deviceId,
+                       pending.profile);
       }
     }
   }
 
-  void Player::handleRouteChanged(EngineRouteSnapshot const& snapshot, std::uint64_t generation)
+  void Player::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)
   {
     if (generation != _playbackGeneration)
     {
       return;
     }
 
-    _cachedEngineRoute = snapshot;
+    _cachedRouteStatus = status;
 
     // Check if we have a valid anchor and manager to subscribe to the system graph
-    if (_cachedEngineRoute.optAnchor && _activeManager != nullptr)
+    if (_cachedRouteStatus.optAnchor && _activeManager != nullptr)
     {
       if (!_graphSubscription)
       {
         _graphSubscription = _activeManager->subscribeGraph(
-          _cachedEngineRoute.optAnchor->id,
+          _cachedRouteStatus.optAnchor->id,
           [this, generation](flow::Graph const& graph)
           {
             if (_dispatcher)
@@ -361,12 +375,12 @@ namespace ao::audio
 
   void Player::updateMergedGraph()
   {
-    _mergedGraph = _cachedEngineRoute.flow;
+    _mergedGraph = _cachedRouteStatus.flow;
 
     // Find the engine output format to enrich system nodes that might be missing it (like ALSA)
     auto optEngineFormat = std::optional<Format>{};
 
-    for (auto const& node : _cachedEngineRoute.flow.nodes)
+    for (auto const& node : _cachedRouteStatus.flow.nodes)
     {
       if (node.id == "rs-engine")
       {

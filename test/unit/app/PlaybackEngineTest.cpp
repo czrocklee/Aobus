@@ -11,8 +11,6 @@
 #include <ao/Error.h>
 
 using namespace ao::audio;
-using namespace ao::audio;
-using namespace ao::audio;
 using namespace fakeit;
 
 namespace
@@ -43,7 +41,8 @@ namespace
     void close() override { _real.close(); }
     void setExclusiveMode(bool e) override { _real.setExclusiveMode(e); }
     bool isExclusiveMode() const noexcept override { return _real.isExclusiveMode(); }
-    BackendKind kind() const noexcept override { return _real.kind(); }
+    BackendId backendId() const noexcept override { return _real.backendId(); }
+    ProfileId profileId() const noexcept override { return _real.profileId(); }
   };
 }
 
@@ -51,11 +50,11 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
 {
   Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = "test-device",
+  Device device{.id = DeviceId{"test-device"},
                 .displayName = "Test",
                 .description = "Test",
                 .isDefault = false,
-                .backendKind = BackendKind::None};
+                .backendId = kBackendNone};
 
   Fake(Method(mockBackend, open));
   Fake(Method(mockBackend, reset));
@@ -68,7 +67,8 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
   Fake(Method(mockBackend, close));
   Fake(Method(mockBackend, setExclusiveMode));
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
-  When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::None);
+  When(Method(mockBackend, backendId)).AlwaysReturn(kBackendNone);
+  When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
 
@@ -81,7 +81,7 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
     Verify(Method(mockBackend, stop)).AtLeastOnce();
     Verify(Method(mockBackend, close)).AtLeastOnce();
 
-    auto snap = engine.snapshot();
+    auto snap = engine.status();
     REQUIRE(snap.transport == Transport::Idle);
   }
 
@@ -89,7 +89,7 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
   {
     Engine::onBackendError(&engine, "Hardware failure");
 
-    auto snap = engine.snapshot();
+    auto snap = engine.status();
     REQUIRE(snap.transport == Transport::Error);
     REQUIRE(snap.statusText == "Hardware failure");
   }
@@ -98,7 +98,7 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
   {
     Engine::onRouteReady(&engine, "anchor-123");
 
-    auto route = engine.routeSnapshot();
+    auto route = engine.routeStatus();
     REQUIRE(route.optAnchor);
     REQUIRE(route.optAnchor->id == "anchor-123");
   }
@@ -114,31 +114,35 @@ TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
     Method(mockBackend1, open), Method(mockBackend1, reset), Method(mockBackend1, stop), Method(mockBackend1, close));
   Fake(
     Method(mockBackend2, open), Method(mockBackend2, reset), Method(mockBackend2, stop), Method(mockBackend2, close));
-  When(Method(mockBackend1, kind)).AlwaysReturn(BackendKind::None);
-  When(Method(mockBackend2, kind)).AlwaysReturn(BackendKind::AlsaExclusive);
+
+  When(Method(mockBackend1, backendId)).AlwaysReturn(kBackendNone);
+  When(Method(mockBackend1, profileId)).AlwaysReturn(kProfileShared);
+
+  When(Method(mockBackend2, backendId)).AlwaysReturn(kBackendAlsa);
+  When(Method(mockBackend2, profileId)).AlwaysReturn(kProfileExclusive);
 
   auto backend1 = std::make_unique<MockBackendProxy>(mockBackend1.get());
   Engine engine(
     std::move(backend1),
-    {.id = "dev1", .displayName = "D1", .description = "D1", .isDefault = false, .backendKind = BackendKind::None},
+    {.id = DeviceId{"dev1"}, .displayName = "D1", .description = "D1", .isDefault = false, .backendId = kBackendNone},
     dispatcher);
 
   SECTION("Switching backend while idle")
   {
     auto backend2 = std::make_unique<MockBackendProxy>(mockBackend2.get());
     engine.setBackend(std::move(backend2),
-                      {.id = "dev2",
+                      {.id = DeviceId{"dev2"},
                        .displayName = "D2",
                        .description = "D2",
                        .isDefault = false,
-                       .backendKind = BackendKind::AlsaExclusive});
+                       .backendId = kBackendAlsa});
 
     Verify(Method(mockBackend1, reset)).Once();
     Verify(Method(mockBackend1, stop)).Once();
     Verify(Method(mockBackend1, close)).Once();
 
-    auto snap = engine.snapshot();
-    REQUIRE(snap.backend == BackendKind::AlsaExclusive);
+    auto snap = engine.status();
+    REQUIRE(snap.backendId == kBackendAlsa);
     REQUIRE(snap.currentDeviceId == "dev2");
   }
 }
@@ -154,11 +158,11 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
 
   Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = "test-device",
+  Device device{.id = DeviceId{"test-device"},
                 .displayName = "Test",
                 .description = "Test",
                 .isDefault = false,
-                .backendKind = BackendKind::None};
+                .backendId = kBackendNone};
 
   Fake(Method(mockBackend, open));
   Fake(Method(mockBackend, reset));
@@ -171,7 +175,8 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
   Fake(Method(mockBackend, close));
   Fake(Method(mockBackend, setExclusiveMode));
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
-  When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::None);
+  When(Method(mockBackend, backendId)).AlwaysReturn(kBackendNone);
+  When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
   Engine engine(std::move(backendPtr), device, dispatcher);
@@ -183,7 +188,7 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
 
   engine.play(descriptor);
 
-  auto snap = engine.snapshot();
+  auto snap = engine.status();
 
   SECTION("rs-decoder is present in the graph")
   {
@@ -226,11 +231,11 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
 
   Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = "pipewire-shared",
+  Device device{.id = DeviceId{"pipewire-shared"},
                 .displayName = "PipeWire",
                 .description = "PipeWire Shared",
                 .isDefault = false,
-                .backendKind = BackendKind::PipeWire,
+                .backendId = kBackendPipeWire,
                 .capabilities = {.sampleRates = {48000},
                                  .sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}},
                                  .bitDepths = {16},
@@ -254,7 +259,8 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
   Fake(Method(mockBackend, close));
   Fake(Method(mockBackend, setExclusiveMode));
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
-  When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::PipeWire);
+  When(Method(mockBackend, backendId)).AlwaysReturn(kBackendPipeWire);
+  When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
   auto engine = Engine(std::move(backendPtr), device, dispatcher);
@@ -271,7 +277,7 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
   CHECK(openedFormats.back().sampleRate == 44100);
   CHECK(openedFormats.back().channels == 2);
   CHECK(openedFormats.back().bitDepth == 16);
-  CHECK(engine.snapshot().transport == Transport::Playing);
+  CHECK(engine.status().transport == Transport::Playing);
 
   engine.stop();
 }
@@ -287,11 +293,11 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
 
   Mock<IBackend> mockBackend;
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = "alsa-exclusive",
+  Device device{.id = DeviceId{"alsa-exclusive"},
                 .displayName = "ALSA",
                 .description = "ALSA Exclusive",
                 .isDefault = false,
-                .backendKind = BackendKind::AlsaExclusive,
+                .backendId = kBackendAlsa,
                 .capabilities = {.sampleRates = {48000},
                                  .sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}},
                                  .bitDepths = {16},
@@ -315,7 +321,8 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
   Fake(Method(mockBackend, close));
   Fake(Method(mockBackend, setExclusiveMode));
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(true);
-  When(Method(mockBackend, kind)).AlwaysReturn(BackendKind::AlsaExclusive);
+  When(Method(mockBackend, backendId)).AlwaysReturn(kBackendAlsa);
+  When(Method(mockBackend, profileId)).AlwaysReturn(kProfileExclusive);
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
   auto engine = Engine(std::move(backendPtr), device, dispatcher);
@@ -328,7 +335,7 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
   engine.play(descriptor);
 
   Verify(Method(mockBackend, reset)).AtLeastOnce();
-  auto const snap = engine.snapshot();
+  auto const snap = engine.status();
   REQUIRE(snap.transport == Transport::Error);
   CHECK(snap.statusText.find("no resampler yet") != std::string::npos);
   REQUIRE(openedFormats.size() == 0);

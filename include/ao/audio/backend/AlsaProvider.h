@@ -18,7 +18,9 @@ namespace ao::audio::backend
     ~AlsaProvider() override;
 
     ao::audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
-    std::unique_ptr<ao::audio::IBackend> createBackend(ao::audio::Device const& device) override;
+    ao::audio::IBackendProvider::Status status() const override;
+    std::unique_ptr<ao::audio::IBackend> createBackend(ao::audio::Device const& device,
+                                                       ao::audio::ProfileId const& profile) override;
     ao::audio::Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
 
   private:

@@ -28,7 +28,31 @@ namespace ao::audio
   class Engine final
   {
   public:
-    using OnRouteChanged = std::function<void(EngineRouteSnapshot const&)>;
+    struct Status final
+    {
+      Transport transport = Transport::Idle;
+      BackendId backendId;
+      ProfileId profileId;
+      std::uint32_t positionMs = 0;
+      std::uint32_t durationMs = 0;
+      std::uint32_t bufferedMs = 0;
+      std::uint32_t underrunCount = 0;
+      std::string statusText;
+      DeviceId currentDeviceId;
+      flow::Graph flow;
+
+      bool operator==(Status const&) const = default;
+    };
+
+    struct RouteStatus final
+    {
+      flow::Graph flow;
+      std::optional<RouteAnchor> optAnchor;
+
+      bool operator==(RouteStatus const&) const = default;
+    };
+
+    using OnRouteChanged = std::function<void(RouteStatus const&)>;
 
     Engine(std::unique_ptr<IBackend> backend,
            Device const& device,
@@ -40,7 +64,7 @@ namespace ao::audio
     void setOnTrackEnded(std::function<void()> callback);
 
     void setOnRouteChanged(OnRouteChanged callback);
-    EngineRouteSnapshot routeSnapshot() const;
+    RouteStatus routeStatus() const;
 
     void play(TrackPlaybackDescriptor const& descriptor);
     void pause();
@@ -48,7 +72,7 @@ namespace ao::audio
     void stop();
     void seek(std::uint32_t positionMs);
 
-    Snapshot snapshot() const;
+    Status status() const;
 
     // Backend callbacks
     static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept;
@@ -87,9 +111,9 @@ namespace ao::audio
 
     mutable std::mutex _stateMutex;
     std::optional<TrackPlaybackDescriptor> _currentTrack;
-    Snapshot _snapshot;
+    Status _status;
     std::function<void()> _onTrackEnded;
     OnRouteChanged _onRouteChanged;
-    EngineRouteSnapshot _routeSnapshot;
+    RouteStatus _routeStatus;
   };
 } // namespace ao::audio

@@ -60,6 +60,40 @@ namespace ao::audio
   class IBackendProvider
   {
   public:
+    /**
+     * @brief Human-readable description of an audio profile.
+     */
+    struct ProfileMetadata final
+    {
+      ProfileId id;
+      std::string name;
+      std::string description;
+
+      bool operator==(ProfileMetadata const&) const = default;
+    };
+
+    /**
+     * @brief Static description of an audio backend.
+     */
+    struct BackendMetadata final
+    {
+      BackendId id;
+      std::string name;
+      std::string description;
+      std::string iconName;
+      std::vector<ProfileMetadata> supportedProfiles;
+
+      bool operator==(BackendMetadata const&) const = default;
+    };
+
+    struct Status final
+    {
+      BackendMetadata metadata;
+      std::vector<Device> devices;
+
+      bool operator==(Status const&) const = default;
+    };
+
     using OnDevicesChangedCallback = std::function<void(std::vector<Device> const&)>;
     using OnGraphChangedCallback = std::function<void(flow::Graph const&)>;
 
@@ -73,9 +107,14 @@ namespace ao::audio
     virtual Subscription subscribeDevices(OnDevicesChangedCallback callback) = 0;
 
     /**
-     * @brief Creates a backend instance for a specific device.
+     * @brief Gets the current status of the provider, including supported profiles and devices.
      */
-    virtual std::unique_ptr<IBackend> createBackend(Device const& device) = 0;
+    virtual Status status() const = 0;
+
+    /**
+     * @brief Creates a backend instance for a specific device and profile.
+     */
+    virtual std::unique_ptr<IBackend> createBackend(Device const& device, ProfileId const& profile) = 0;
 
     /**
      * @brief Subscribe to the system routing graph for a specific node.

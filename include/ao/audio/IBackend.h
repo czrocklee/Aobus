@@ -79,6 +79,7 @@ namespace ao::audio
     virtual void setExclusiveMode(bool exclusive) = 0;
     virtual bool isExclusiveMode() const noexcept = 0;
 
-    virtual BackendKind kind() const noexcept = 0;
+    virtual BackendId backendId() const noexcept = 0;
+    virtual ProfileId profileId() const noexcept = 0;
   };
 } // namespace ao::audio

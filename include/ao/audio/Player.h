@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/audio/Backend.h>
+#include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
@@ -21,7 +22,6 @@
 namespace ao::audio
 {
   class Engine;
-  struct Snapshot;
   struct EngineRouteSnapshot;
 
   /**
@@ -31,25 +31,40 @@ namespace ao::audio
   class Player final
   {
   public:
+    struct Status final
+    {
+      Engine::Status engine;
+      std::string trackTitle;
+      std::string trackArtist;
+      std::vector<IBackendProvider::Status> availableBackends;
+      flow::Graph flow;
+      Quality quality = Quality::Unknown;
+      std::string qualityTooltip;
+      bool isReady = false;
+
+      bool operator==(Status const&) const = default;
+    };
+
     explicit Player(std::shared_ptr<ao::IMainThreadDispatcher> dispatcher);
     ~Player();
 
     void addProvider(std::unique_ptr<IBackendProvider> provider);
 
     void play(TrackPlaybackDescriptor const& descriptor);
-    void setOutput(BackendKind kind, std::string_view deviceId);
+    void setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
     void pause();
     void resume();
     void stop();
     void seek(std::uint32_t positionMs);
 
-    [[nodiscard]] Snapshot snapshot() const;
+    [[nodiscard]] Status status() const;
+    [[nodiscard]] bool isReady() const;
 
     void setTrackEndedCallback(std::function<void()> callback);
 
     // Internal visibility for tests
     uint64_t _playbackGeneration = 1;
-    void handleRouteChanged(EngineRouteSnapshot const& snapshot, std::uint64_t generation);
+    void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);
 
   private:
     struct ProviderRecord
@@ -61,8 +76,9 @@ namespace ao::audio
 
     struct PendingOutput
     {
-      BackendKind kind;
-      std::string deviceId;
+      BackendId backend;
+      DeviceId deviceId;
+      ProfileId profile;
     };
 
     void handleDevicesChanged(IBackendProvider* provider, std::vector<Device> const& devices);
@@ -78,15 +94,16 @@ namespace ao::audio
     std::shared_ptr<ao::IMainThreadDispatcher> _dispatcher;
     std::unique_ptr<Engine> _engine;
 
-    mutable std::vector<BackendSnapshot> _cachedBackends;
+    mutable std::vector<IBackendProvider::Status> _cachedBackends;
     mutable std::vector<Device> _allDevices;
 
-    EngineRouteSnapshot _cachedEngineRoute;
+    Engine::RouteStatus _cachedRouteStatus;
     flow::Graph _cachedSystemGraph;
     flow::Graph _mergedGraph;
 
     Quality _quality = Quality::Unknown;
     std::string _qualityTooltip;
+    std::optional<TrackPlaybackDescriptor> _currentTrack;
 
     std::function<void()> _onTrackEnded;
 

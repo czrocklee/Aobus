@@ -46,20 +46,33 @@ namespace ao::audio::backend
     auto wrappedCallback = [callback = std::move(callback)](std::vector<ao::audio::Device> devices)
     {
       devices.insert(devices.begin(),
-                     {.id = "",
+                     {.id = DeviceId{""},
                       .displayName = "System Default",
                       .description = "PipeWire",
                       .isDefault = true,
-                      .backendKind = ao::audio::BackendKind::PipeWire});
+                      .backendId = ao::audio::kBackendPipeWire});
       callback(devices);
     };
 
     return _impl->monitor->subscribeDevices(std::move(wrappedCallback));
   }
 
-  std::unique_ptr<ao::audio::IBackend> PipeWireProvider::createBackend(ao::audio::Device const& device)
+  std::unique_ptr<ao::audio::IBackend> PipeWireProvider::createBackend(ao::audio::Device const& device,
+                                                                       ao::audio::ProfileId const& profile)
   {
-    return std::make_unique<PipeWireBackend>(device);
+    return std::make_unique<PipeWireBackend>(device, profile);
+  }
+
+  ao::audio::IBackendProvider::Status PipeWireProvider::status() const
+  {
+    return {.metadata =
+              {.id = kBackendPipeWire,
+               .name = "PipeWire",
+               .description = "Modern Linux audio server with low latency",
+               .iconName = "media-playback-start-symbolic",
+               .supportedProfiles = {{kProfileShared, "Shared Mode", "System-level mixing with other applications"},
+                                     {kProfileExclusive, "Exclusive Mode", "Direct access to the hardware device"}}},
+            .devices = _impl->monitor ? _impl->monitor->enumerateSinks() : std::vector<Device>{}};
   }
 
   ao::audio::Subscription PipeWireProvider::subscribeGraph(std::string_view routeAnchor,

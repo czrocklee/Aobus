@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/audio/Engine.h>
+#include <ao/audio/Player.h>
 #include <ao/audio/Types.h>
 
 #include <gtkmm.h>
@@ -23,7 +25,7 @@ namespace ao::gtk
 
     void setTrackCount(std::size_t count);
     void setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
-    void setPlaybackDetails(ao::audio::Snapshot const& snapshot);
+    void setPlaybackDetails(ao::audio::Player::Status const& status);
 
     void setImportProgress(double fraction, std::string const& info);
     void clearImportProgress();
@@ -34,7 +36,7 @@ namespace ao::gtk
   private:
     struct LastPlaybackState final
     {
-      ao::audio::Transport transport = ao::audio::Transport::Idle;
+      ao::audio::Engine::Status engine;
       std::string title;
       std::string artist;
       std::uint32_t underrunCount = 0;
@@ -47,8 +49,8 @@ namespace ao::gtk
     static constexpr int kImportProgressWidth = 200;
     static constexpr int kTransitionDurationMs = 250;
 
-    void updatePlaybackStatusLabels(ao::audio::Snapshot const& snapshot);
-    void updatePlaybackTooltip(ao::audio::Snapshot const& snapshot);
+    void updatePlaybackStatusLabels(ao::audio::Player::Status const& status);
+    void updatePlaybackTooltip(ao::audio::Player::Status const& status);
 
     // Left: Library info
     Gtk::Label _libraryLabel;

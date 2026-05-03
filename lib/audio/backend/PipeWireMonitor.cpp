@@ -984,17 +984,17 @@ namespace ao::audio::backend
           caps = it->second;
         }
 
-        devices.push_back({.id = deviceId,
+        devices.push_back({.id = DeviceId{deviceId},
                            .displayName = displayName,
                            .description = description,
                            .isDefault = false,
-                           .backendKind = ao::audio::BackendKind::PipeWire,
+                           .backendId = ao::audio::kBackendPipeWire,
                            .capabilities = {}});
-        devices.push_back({.id = deviceId,
+        devices.push_back({.id = DeviceId{deviceId},
                            .displayName = std::format("{} (Exclusive)", displayName),
                            .description = description,
                            .isDefault = false,
-                           .backendKind = ao::audio::BackendKind::PipeWireExclusive,
+                           .backendId = ao::audio::kBackendPipeWire,
                            .capabilities = caps});
       }
     }

@@ -36,8 +36,11 @@ TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
 
   auto dispatcher = std::make_shared<ImmediateDispatcher>();
   auto backend = std::make_unique<NullBackend>();
-  Device device{
-    .id = "null", .displayName = "Null", .description = "Null", .isDefault = false, .backendKind = BackendKind::None};
+  Device device{.id = DeviceId{"null"},
+                .displayName = "Null",
+                .description = "Null",
+                .isDefault = false,
+                .backendId = kBackendNone};
 
   Engine engine(std::move(backend), device, dispatcher);
 
@@ -55,7 +58,7 @@ TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
 
   for (int i = 0; i < 50; ++i)
   {
-    auto snap = engine.snapshot();
+    auto snap = engine.status();
     decoderFound = false;
     engineFound = false;
 
@@ -81,7 +84,7 @@ TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
 
   SECTION("rs-decoder has valid format")
   {
-    auto snap = engine.snapshot();
+    auto snap = engine.status();
     auto it = std::ranges::find(snap.flow.nodes, "rs-decoder", &ao::audio::flow::Node::id);
     if (it != snap.flow.nodes.end())
     {

@@ -221,10 +221,10 @@ namespace ao::audio::backend
     }
   }
 
-  PipeWireBackend::PipeWireBackend(ao::audio::Device const& device)
+  PipeWireBackend::PipeWireBackend(ao::audio::Device const& device, ao::audio::ProfileId const& profile)
     : _impl{std::make_unique<Impl>()}
     , _targetDeviceId{device.id}
-    , _exclusiveMode{device.backendKind == ao::audio::BackendKind::PipeWireExclusive}
+    , _exclusiveMode{profile == ao::audio::kProfileExclusive}
   {
     _impl->_threadLoop.reset(::pw_thread_loop_new("PipeWireBackend", nullptr));
     if (_impl->_threadLoop)
@@ -258,7 +258,7 @@ namespace ao::audio::backend
                                                     "Audio",
                                                     PW_KEY_MEDIA_CATEGORY,
                                                     "Playback",
-                                                    PW_KEY_MEDIA_ROLE,
+                                                    PW_KEY_MEDIA_CATEGORY,
                                                     "Music",
                                                     PW_KEY_APP_NAME,
                                                     "RockStudio",
@@ -440,8 +440,13 @@ namespace ao::audio::backend
     return _exclusiveMode;
   }
 
-  ao::audio::BackendKind PipeWireBackend::kind() const noexcept
+  ao::audio::BackendId PipeWireBackend::backendId() const noexcept
   {
-    return _exclusiveMode ? ao::audio::BackendKind::PipeWireExclusive : ao::audio::BackendKind::PipeWire;
+    return ao::audio::kBackendPipeWire;
+  }
+
+  ao::audio::ProfileId PipeWireBackend::profileId() const noexcept
+  {
+    return _exclusiveMode ? ao::audio::kProfileExclusive : ao::audio::kProfileShared;
   }
 } // namespace ao::audio::backend

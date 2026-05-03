@@ -157,11 +157,11 @@ namespace ao::audio::backend
             {
               displayName = displayName.substr(idStr.length() + 1);
             }
-            devices.push_back({.id = idStr,
+            devices.push_back({.id = DeviceId{idStr},
                                .displayName = std::move(displayName),
                                .description = idStr,
                                .isDefault = false,
-                               .backendKind = ao::audio::BackendKind::AlsaExclusive,
+                               .backendId = ao::audio::kBackendAlsa,
                                .capabilities = queryAlsaDeviceCapabilities(idStr)});
           }
         }
@@ -275,9 +275,23 @@ namespace ao::audio::backend
                                    }};
   }
 
-  std::unique_ptr<ao::audio::IBackend> AlsaProvider::createBackend(ao::audio::Device const& device)
+  ao::audio::IBackendProvider::Status AlsaProvider::status() const
   {
-    return std::make_unique<AlsaExclusiveBackend>(device);
+    auto const lock = std::lock_guard{_impl->mutex};
+    return {.metadata = {.id = kBackendAlsa,
+                         .name = "ALSA",
+                         .description = "Advanced Linux Sound Architecture (Direct Hardware Access)",
+                         .iconName = "audio-card-symbolic",
+                         .supportedProfiles = {{kProfileExclusive,
+                                                "Exclusive Mode",
+                                                "Direct hardware access for low-latency, bit-perfect playback"}}},
+            .devices = _impl->cachedDevices};
+  }
+
+  std::unique_ptr<ao::audio::IBackend> AlsaProvider::createBackend(ao::audio::Device const& device,
+                                                                   ao::audio::ProfileId const& /*profile*/)
+  {
+    return std::make_unique<AlsaExclusiveBackend>(device, kProfileExclusive);
   }
 
   ao::audio::Subscription AlsaProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)

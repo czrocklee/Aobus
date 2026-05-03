@@ -27,6 +27,7 @@ namespace ao::app
   {
     std::string lastLibraryPath;
     std::string lastBackend;
+    std::string lastProfile;
     std::string lastOutputDeviceId;
   };
 
