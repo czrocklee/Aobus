@@ -1,6 +1,6 @@
 <p align="center">
-  <a href="Soul.md">
-    <img src="Soul.svg" width="200" height="200" alt="Aobus Soul Logo">
+  <a href="assets/brand/Soul.md">
+    <img src="assets/brand/Soul.svg" width="240" alt="Aobus Soul Logo">
   </a>
 </p>
 
@@ -60,7 +60,10 @@ If you are an AI agent working on this project, please read [AGENTS.md](AGENTS.m
 
 ## 📄 License
 
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
+The Aobus source code is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
+
+**Brand Assets Exception:**
+The Aobus logo and its associated design documentation located in the `assets/brand/` directory are the personal intellectual property of YANG LI and are **NOT** covered by the MIT License. All rights are reserved. Usage of these brand assets in derivative works or third-party products requires explicit written permission.
 
 ---
 

@@ -1,7 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!--
+    Copyright (c) 2026 YANG LI. All Rights Reserved.
+    The "Aobus Soul" logo is a proprietary brand asset and is NOT licensed under the MIT License.
+    Unauthorized use, reproduction, or modification is prohibited.
+  -->
   <defs>
     <!-- Ultimate Golden Ratio Gradient (Reversed: Quality as Core 38.2%) -->
-    <linearGradient id="soulGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="soulGradient" x1="100%" y1="100%" x2="0%" y2="0%">
       <stop offset="0%" stop-color="#A855F7" /> <!-- Purple (Hi-Res Core) -->
       <stop offset="38.2%" stop-color="#06B6D4" /> <!-- Cyan (Primary Body) -->
       <stop offset="100%" stop-color="#06B6D4" />

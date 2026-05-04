@@ -29,13 +29,13 @@ namespace ao::gtk
     void ensurePlaybackBarCss(bool force = false)
     {
       static auto const provider = Gtk::CssProvider::create();
-      static bool initialized = false;
+      static auto initialized = false;
 
       if (!initialized || force)
       {
         if (force)
         {
-          if (auto const display = Gdk::Display::get_default(); display)
+          if (auto const display = Gdk::Display::get_default(); display != nullptr)
           {
             Gtk::StyleContext::remove_provider_for_display(display, provider);
           }
@@ -59,10 +59,11 @@ namespace ao::gtk
 
         if (!initialized || force)
         {
-          if (auto const display = Gdk::Display::get_default(); display)
+          if (auto const display = Gdk::Display::get_default(); display != nullptr)
           {
             Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
           }
+
           initialized = true;
         }
       }
@@ -123,20 +124,22 @@ namespace ao::gtk
     _outputButton.set_tooltip_text("Click for devices, hold right-click for Soul");
 
     // Native Long-Press Gesture for Easter Egg (Right Click)
-    auto soulGesture = Gtk::GestureClick::create();
-    soulGesture->set_button(3); // Right click
+    auto const soulGesture = Gtk::GestureClick::create();
+    static constexpr int kRightButton = 3;
+    soulGesture->set_button(kRightButton); // Right click
 
     soulGesture->signal_pressed().connect(
       [this](int, double, double)
       {
         _soulLongPressTimer.disconnect();
+        static constexpr int kLongPressMs = 1000;
         _soulLongPressTimer = Glib::signal_timeout().connect(
           [this]()
           {
             triggerSoulEasterEgg();
             return false; // Run once
           },
-          1000);
+          kLongPressMs);
       });
 
     soulGesture->signal_released().connect([this](int, double, double) { _soulLongPressTimer.disconnect(); });
@@ -260,6 +263,7 @@ namespace ao::gtk
             updateOutputIcon(_lastIconQuality);
           }
         }
+
         return true;
       });
   }
@@ -285,7 +289,7 @@ namespace ao::gtk
 
   Gtk::Widget* PlaybackBar::createOutputWidget(Glib::RefPtr<Glib::Object> const& item)
   {
-    if (auto backendItem = std::dynamic_pointer_cast<BackendItem>(item))
+    if (auto const backendItem = std::dynamic_pointer_cast<BackendItem>(item))
     {
       auto* const header = Gtk::make_managed<Gtk::Label>(backendItem->name);
       header->set_halign(Gtk::Align::FILL);
@@ -295,7 +299,7 @@ namespace ao::gtk
       return header;
     }
 
-    if (auto deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
+    if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
     {
       auto* const rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
       rowBox->set_spacing(Layout::kSpacingXLarge);
@@ -354,7 +358,7 @@ namespace ao::gtk
           bool const isExclusive = (profile == ao::audio::kProfileExclusive);
           auto const displayName = isExclusive ? std::format("{} [E]", device.displayName) : device.displayName;
 
-          auto item = DeviceItem::create(backend.metadata.id, device, profile, displayName);
+          auto const item = DeviceItem::create(backend.metadata.id, device, profile, displayName);
           item->description = device.id.value();
 
           item->active = (backend.metadata.id == status.engine.backendId && profile == status.engine.profileId &&
@@ -390,12 +394,17 @@ namespace ao::gtk
             {
               _outputButton.set_tooltip_text(label);
             }
+
             found = true;
             break;
           }
         }
       }
-      if (found) break;
+
+      if (found)
+      {
+        break;
+      }
     }
 
     if (!found)
@@ -486,7 +495,11 @@ namespace ao::gtk
 
       updateTransportButtons(status.engine.transport);
 
-      if (outputStateChanged) updateOutputModel(status);
+      if (outputStateChanged)
+      {
+        updateOutputModel(status);
+      }
+
       updateOutputLabel(status);
 
       if (status.engine.transport == ao::audio::Transport::Idle)
@@ -533,6 +546,7 @@ namespace ao::gtk
       _seekScale.set_value(0);
       _seekScale.set_sensitive(false);
     }
+
     _updatingSeekScale = false;
   }
 
@@ -612,8 +626,11 @@ namespace ao::gtk
                             _lastState.engine.transport == ao::audio::Transport::Seeking);
 
     _soulWindow->updateState(_lastState.quality, isPlaying);
-    _soulWindow->set_transient_for(*dynamic_cast<Gtk::Window*>(get_root()));
-    _soulWindow->present();
+    if (auto* rootWindow = dynamic_cast<Gtk::Window*>(get_root()))
+    {
+      _soulWindow->set_transient_for(*rootWindow);
+      _soulWindow->present();
+    }
   }
 
   PlaybackBar::PlaySignal& PlaybackBar::signalPlayRequested()

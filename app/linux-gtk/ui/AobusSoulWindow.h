@@ -24,8 +24,7 @@ namespace ao::gtk
     void updateState(ao::audio::Quality quality, bool isPlaying);
 
   protected:
-    // Close on any key or button press
-    bool on_key_pressed(guint keyval, guint keycode, Gdk::ModifierType state);
+    // Close on any key or button press - handled via Gtk::ShortcutController
 
   private:
     void ensureCss();
@@ -37,5 +36,7 @@ namespace ao::gtk
 
     ao::audio::Quality _currentQuality = ao::audio::Quality::Unknown;
     bool _isPlaying = false;
+
+    static constexpr int kDefaultLogoHeight = 400;
   };
 } // namespace ao::gtk

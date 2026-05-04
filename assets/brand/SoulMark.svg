@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 163 75">
+  <!--
+    Copyright (c) 2026 YANG LI. All Rights Reserved.
+    The "Aobus Soul" logo is a proprietary brand asset and is NOT licensed under the MIT License.
+    Unauthorized use, reproduction, or modification is prohibited.
+  -->
+  <defs>
+    <linearGradient id="soulGradient" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#A855F7" />
+      <stop offset="38.2%" stop-color="#06B6D4" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(5 5)">
+    <circle cx="35" cy="35" r="30" stroke="#F97316" stroke-width="10" fill="none" stroke-linecap="round" />
+    <path d="M65 0 v65" stroke="#F97316" stroke-width="10" fill="none" stroke-linecap="round" />
+    <circle cx="122" cy="35" r="30" stroke="url(#soulGradient)" stroke-width="9" fill="none" />
+  </g>
+</svg>
