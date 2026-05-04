@@ -81,9 +81,16 @@ namespace ao::audio
 
     if (_backend)
     {
-      _status.volume = _backend->getVolume();
-      _status.muted = _backend->isMuted();
-      _status.volumeAvailable = _backend->isVolumeAvailable();
+      if (auto const vol = _backend->get(props::Volume))
+      {
+        _status.volume = *vol;
+      }
+
+      if (auto const mute = _backend->get(props::Muted))
+      {
+        _status.muted = *mute;
+      }
+      _status.volumeAvailable = _backend->queryProperty(PropertyId::Volume).isAvailable;
     }
   }
 
@@ -130,9 +137,15 @@ namespace ao::audio
 
       if (_backend)
       {
-        _status.volume = _backend->getVolume();
-        _status.muted = _backend->isMuted();
-        _status.volumeAvailable = _backend->isVolumeAvailable();
+        if (auto const vol = _backend->get(props::Volume))
+        {
+          _status.volume = *vol;
+        }
+        if (auto const mute = _backend->get(props::Muted))
+        {
+          _status.muted = *mute;
+        }
+        _status.volumeAvailable = _backend->queryProperty(PropertyId::Volume).isAvailable;
       }
     }
 
@@ -184,9 +197,16 @@ namespace ao::audio
 
     if (_backend)
     {
-      _status.volume = _backend->getVolume();
-      _status.muted = _backend->isMuted();
-      _status.volumeAvailable = _backend->isVolumeAvailable();
+      if (auto const vol = _backend->get(props::Volume))
+      {
+        _status.volume = *vol;
+      }
+
+      if (auto const mute = _backend->get(props::Muted))
+      {
+        _status.muted = *mute;
+      }
+      _status.volumeAvailable = _backend->queryProperty(PropertyId::Volume).isAvailable;
     }
 
     _accumulatedFrames.store(0, std::memory_order_relaxed);
@@ -216,7 +236,7 @@ namespace ao::audio
     callbacks.onDrainComplete = &Engine::onDrainComplete;
     callbacks.onRouteReady = &Engine::onRouteReady;
     callbacks.onFormatChanged = &Engine::onFormatChanged;
-    callbacks.onVolumeChanged = &Engine::onVolumeChanged;
+    callbacks.onPropertyChanged = &Engine::onPropertyChanged;
     callbacks.onBackendError = &Engine::onBackendError;
 
     auto source = std::shared_ptr<ISource>{};
@@ -255,9 +275,15 @@ namespace ao::audio
 
       {
         auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-        _status.volume = _backend->getVolume();
-        _status.muted = _backend->isMuted();
-        _status.volumeAvailable = _backend->isVolumeAvailable();
+        if (auto const vol = _backend->get(props::Volume))
+        {
+          _status.volume = *vol;
+        }
+        if (auto const mute = _backend->get(props::Muted))
+        {
+          _status.muted = *mute;
+        }
+        _status.volumeAvailable = _backend->queryProperty(PropertyId::Volume).isAvailable;
       }
     }
 
@@ -451,7 +477,7 @@ namespace ao::audio
   {
     if (_backend)
     {
-      _backend->setVolume(volume);
+      _backend->set(props::Volume, volume);
     }
 
     auto const lock = std::lock_guard<std::mutex>{_stateMutex};
@@ -468,7 +494,7 @@ namespace ao::audio
   {
     if (_backend)
     {
-      _backend->setMuted(muted);
+      _backend->set(props::Muted, muted);
     }
 
     auto const lock = std::lock_guard<std::mutex>{_stateMutex};
@@ -894,21 +920,21 @@ namespace ao::audio
     }
   }
 
-  void Engine::onVolumeChanged(void* userData) noexcept
+  void Engine::onPropertyChanged(void* userData, PropertyId id) noexcept
   {
     auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
 
     if (self->_dispatcher)
     {
-      self->_dispatcher->dispatch([self]() { self->handleVolumeChanged(); });
+      self->_dispatcher->dispatch([self, id]() { self->handlePropertyChanged(id); });
     }
     else
     {
-      self->handleVolumeChanged();
+      self->handlePropertyChanged(id);
     }
   }
 
-  void Engine::handleVolumeChanged()
+  void Engine::handlePropertyChanged(PropertyId id)
   {
     auto cb = OnRouteChanged{};
     auto snap = RouteStatus{};
@@ -917,9 +943,22 @@ namespace ao::audio
       auto const lock = std::lock_guard<std::mutex>{_stateMutex};
       if (_backend)
       {
-        _status.volume = _backend->getVolume();
-        _status.muted = _backend->isMuted();
-        _status.volumeAvailable = _backend->isVolumeAvailable();
+        if (id == PropertyId::Volume)
+        {
+          if (auto const vol = _backend->get(props::Volume))
+          {
+            _status.volume = *vol;
+          }
+        }
+        else if (id == PropertyId::Muted)
+        {
+          if (auto const mute = _backend->get(props::Muted))
+          {
+            _status.muted = *mute;
+          }
+        }
+
+        _status.volumeAvailable = _backend->queryProperty(PropertyId::Volume).isAvailable;
       }
 
       cb = _onRouteChanged;

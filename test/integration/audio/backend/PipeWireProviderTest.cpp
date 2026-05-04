@@ -31,12 +31,21 @@ namespace
     {
       ensurePipeWireInit();
       threadLoop.reset(::pw_thread_loop_new("TestSinkLoop", nullptr));
-      if (!threadLoop) return;
+      if (!threadLoop)
+      {
+        return;
+      }
 
       context.reset(::pw_context_new(::pw_thread_loop_get_loop(threadLoop.get()), nullptr, 0));
-      if (!context) return;
+      if (!context)
+      {
+        return;
+      }
 
-      if (::pw_thread_loop_start(threadLoop.get()) < 0) return;
+      if (::pw_thread_loop_start(threadLoop.get()) < 0)
+      {
+        return;
+      }
 
       ::pw_thread_loop_lock(threadLoop.get());
       core.reset(::pw_context_connect(context.get(), nullptr, 0));
@@ -127,7 +136,10 @@ TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integrati
           break;
         }
       }
-      if (found) break;
+      if (found)
+      {
+        break;
+      }
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
     REQUIRE(found);
@@ -181,7 +193,10 @@ TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integrati
             break;
           }
         }
-        if (found) break;
+        if (found)
+      {
+        break;
+      }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
       }
       CHECK(found);

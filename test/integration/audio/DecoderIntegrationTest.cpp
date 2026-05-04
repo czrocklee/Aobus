@@ -29,7 +29,7 @@ namespace ao::audio
         return {};
       }
 
-      auto const available = std::min<std::size_t>(count, block->frames * 2); // Assume Stereo
+      auto const available = std::min<std::size_t>(count, static_cast<std::size_t>(block->frames) * 2); // Assume Stereo
       auto const* data = reinterpret_cast<T const*>(block->bytes.data());
 
       return {data, data + available};
@@ -68,7 +68,7 @@ namespace ao::audio
         // Sign extend from 24 to 32 bits
         if (val & 0x800000)
         {
-          val |= 0xFF000000;
+          val |= static_cast<std::int32_t>(0xFF000000);
         }
 
         samples.push_back(val);

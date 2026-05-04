@@ -34,11 +34,9 @@ namespace ao::audio::backend
     ao::audio::BackendId backendId() const noexcept override;
     ao::audio::ProfileId profileId() const noexcept override;
 
-    void setVolume(float volume) override;
-    float getVolume() const override;
-    void setMuted(bool muted) override;
-    bool isMuted() const override;
-    bool isVolumeAvailable() const override;
+    ao::Result<> setProperty(ao::audio::PropertyId id, ao::audio::PropertyValue const& value) override;
+    ao::Result<ao::audio::PropertyValue> getProperty(ao::audio::PropertyId id) const override;
+    ao::audio::PropertyInfo queryProperty(ao::audio::PropertyId id) const noexcept override;
 
   private:
     struct Impl;

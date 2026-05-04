@@ -94,14 +94,14 @@ namespace ao::audio
     static void onDrainComplete(void* userData) noexcept;
     static void onRouteReady(void* userData, std::string_view routeAnchor) noexcept;
     static void onFormatChanged(void* userData, Format const& format) noexcept;
-    static void onVolumeChanged(void* userData) noexcept;
+    static void onPropertyChanged(void* userData, PropertyId id) noexcept;
     static void onBackendError(void* userData, std::string_view message) noexcept;
 
   private:
     void handleBackendError(std::string_view message);
     void handleSourceError(ao::Error const& error);
     void handleFormatChanged(Format const& format);
-    void handleVolumeChanged();
+    void handlePropertyChanged(PropertyId id);
     void handleDrainComplete();
     void handleRouteReady(std::string_view routeAnchor);
     void resetToIdle();

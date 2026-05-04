@@ -21,7 +21,7 @@ namespace ao
     };
 
     Code code = Code::Generic;
-    std::string message;
+    std::string message{};
   };
 
   template<typename T = void>

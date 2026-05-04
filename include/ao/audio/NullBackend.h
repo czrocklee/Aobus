@@ -9,6 +9,8 @@ namespace ao::audio
 {
   /**
    * @brief A backend that does nothing (used when no hardware is selected).
+   *
+   * Not marked final — TestBackend (in PlayerTest.cpp) inherits from it.
    */
   class NullBackend : public IBackend
   {
@@ -29,13 +31,52 @@ namespace ao::audio
     void setExclusiveMode(bool /*exclusive*/) override {}
     bool isExclusiveMode() const noexcept override { return false; }
 
+    Result<> setProperty(PropertyId id, PropertyValue const& value) override
+    {
+      if (id == PropertyId::Volume)
+      {
+        _volume = std::get<float>(value);
+        return {};
+      }
+
+      if (id == PropertyId::Muted)
+      {
+        _muted = std::get<bool>(value);
+        return {};
+      }
+
+      return std::unexpected(Error{.code = Error::Code::NotSupported});
+    }
+
+    Result<PropertyValue> getProperty(PropertyId id) const override
+    {
+      if (id == PropertyId::Volume)
+      {
+        return _volume;
+      }
+
+      if (id == PropertyId::Muted)
+      {
+        return _muted;
+      }
+      return std::unexpected(Error{.code = Error::Code::NotSupported});
+    }
+
+    PropertyInfo queryProperty(PropertyId id) const noexcept override
+    {
+      if (id == PropertyId::Volume || id == PropertyId::Muted)
+      {
+        return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
+      }
+
+      return {};
+    }
+
     BackendId backendId() const noexcept override { return BackendId{kBackendNone}; }
     ProfileId profileId() const noexcept override { return ProfileId{kProfileShared}; }
 
-    void setVolume(float /*volume*/) override {}
-    float getVolume() const override { return 1.0f; }
-    void setMuted(bool /*muted*/) override {}
-    bool isMuted() const override { return false; }
-    bool isVolumeAvailable() const override { return true; }
+  private:
+    float _volume = 1.0f;
+    bool _muted = false;
   };
 } // namespace ao::audio

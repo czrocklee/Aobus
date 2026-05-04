@@ -47,7 +47,7 @@ TEST_CASE("MemorySource - Core Logic", "[audio][unit][memory_source]")
     decoder->setReadScript({{allData, false}, {{}, true}});
 
     MemorySource source(std::move(decoder), info);
-    source.initialize();
+    REQUIRE(source.initialize());
 
     REQUIRE_FALSE(source.isDrained());
 
@@ -77,7 +77,7 @@ TEST_CASE("MemorySource - Core Logic", "[audio][unit][memory_source]")
     decoder->setReadScript({{data, false}, {{}, true}});
 
     MemorySource source(std::move(decoder), info24);
-    source.initialize();
+    REQUIRE(source.initialize());
 
     // Seek to 1 ms = offset 6
     REQUIRE(source.seek(1));
@@ -98,7 +98,7 @@ TEST_CASE("MemorySource - Core Logic", "[audio][unit][memory_source]")
     decoder->setReadScript({{{}, true}});
 
     MemorySource source(std::move(decoder), zeroInfo);
-    source.initialize();
+    REQUIRE(source.initialize());
 
     REQUIRE(source.bufferedMs() == 0);
     REQUIRE(source.seek(100));

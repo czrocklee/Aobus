@@ -41,11 +41,44 @@ namespace ao::audio
     BackendId backendId() const noexcept override { return BackendId{"capturing"}; }
     ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
 
-    void setVolume(float volume) override { _volume = volume; }
-    float getVolume() const override { return _volume; }
-    void setMuted(bool muted) override { _muted = muted; }
-    bool isMuted() const override { return _muted; }
-    bool isVolumeAvailable() const override { return true; }
+    Result<> setProperty(PropertyId id, PropertyValue const& value) override
+    {
+      if (id == PropertyId::Volume)
+      {
+        _volume = std::get<float>(value);
+        return {};
+      }
+
+      if (id == PropertyId::Muted)
+      {
+        _muted = std::get<bool>(value);
+        return {};
+      }
+      return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
+    }
+
+    Result<PropertyValue> getProperty(PropertyId id) const override
+    {
+      if (id == PropertyId::Volume)
+      {
+        return _volume;
+      }
+
+      if (id == PropertyId::Muted)
+      {
+        return _muted;
+      }
+      return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
+    }
+
+    PropertyInfo queryProperty(PropertyId id) const noexcept override
+    {
+      if (id == PropertyId::Volume || id == PropertyId::Muted)
+      {
+        return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
+      }
+      return {};
+    }
 
     // Helpers for tests
     void setOpenResult(ao::Result<> res) { _openResult = res; }
@@ -57,20 +90,39 @@ namespace ao::audio
     // Trigger callbacks
     void fireRouteReady(std::string_view anchor)
     {
-      if (_callbacks.onRouteReady) _callbacks.onRouteReady(_callbacks.userData, anchor);
+      if (_callbacks.onRouteReady)
+      {
+        _callbacks.onRouteReady(_callbacks.userData, anchor);
+      }
     }
     void fireFormatChanged(Format const& fmt)
     {
       _format = fmt;
-      if (_callbacks.onFormatChanged) _callbacks.onFormatChanged(_callbacks.userData, fmt);
+      if (_callbacks.onFormatChanged)
+      {
+        _callbacks.onFormatChanged(_callbacks.userData, fmt);
+      }
     }
     void fireBackendError(std::string_view msg)
     {
-      if (_callbacks.onBackendError) _callbacks.onBackendError(_callbacks.userData, msg);
+      if (_callbacks.onBackendError)
+      {
+        _callbacks.onBackendError(_callbacks.userData, msg);
+      }
     }
     void fireDrainComplete()
     {
-      if (_callbacks.onDrainComplete) _callbacks.onDrainComplete(_callbacks.userData);
+      if (_callbacks.onDrainComplete)
+      {
+        _callbacks.onDrainComplete(_callbacks.userData);
+      }
+    }
+    void firePropertyChanged(PropertyId id)
+    {
+      if (_callbacks.onPropertyChanged && _callbacks.userData)
+      {
+        _callbacks.onPropertyChanged(_callbacks.userData, id);
+      }
     }
 
   private:

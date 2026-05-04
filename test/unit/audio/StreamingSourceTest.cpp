@@ -68,7 +68,7 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
     decoder->setReadScript({{block, false}, {block, false}, {{}, true}});
 
     StreamingSource source(std::move(decoder), info, onError, 100, 500);
-    source.initialize();
+    REQUIRE(source.initialize());
 
     SECTION("Successful seek clears and re-prerolls")
     {
@@ -84,7 +84,7 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
       decoder2->setReadScript({{block, false}});
 
       StreamingSource source2(std::move(decoder2), info, onError, 100, 500);
-      source2.initialize();
+      REQUIRE(source2.initialize());
 
       auto result = source2.seek(50);
       REQUIRE_FALSE(result);
@@ -122,7 +122,7 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
     decoder->setReadScript({{block, false}, {{}, true}});
 
     StreamingSource source(std::move(decoder), info, onError, 5, 500);
-    source.initialize();
+    REQUIRE(source.initialize());
 
     // Consume data
     std::vector<std::byte> out(20);
