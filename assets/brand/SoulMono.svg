@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 163 75" color="#111827">
+  <!--
+    Copyright (c) 2026 YANG LI. All Rights Reserved.
+    The "Aobus Soul" logo is a proprietary brand asset and is NOT licensed under the MIT License.
+    Unauthorized use, reproduction, or modification is prohibited.
+  -->
+  <g transform="translate(5 5)">
+    <circle cx="35" cy="35" r="30" stroke="currentColor" stroke-width="10" fill="none" stroke-linecap="round" />
+    <path d="M65 0 v65" stroke="currentColor" stroke-width="10" fill="none" stroke-linecap="round" />
+    <circle cx="122" cy="35" r="30" stroke="currentColor" stroke-width="9" fill="none" />
+  </g>
+</svg>

@@ -1,0 +1,7 @@
+Copyright (c) 2026 YANG LI. All Rights Reserved.
+
+The brand assets in this directory (including but not limited to the "Aobus Soul" logo, Soul.svg, and associated design documentation, Soul.md) are the exclusive personal intellectual property of YANG LI.
+
+Unlike the software source code in this repository, the files in this directory are NOT licensed under the MIT License or any other open-source license.
+
+Unauthorized use, reproduction, modification, distribution, or commercial use of these brand assets is strictly prohibited without explicit written permission from the copyright holder.

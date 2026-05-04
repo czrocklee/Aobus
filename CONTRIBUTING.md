@@ -78,7 +78,7 @@ Rules are numbered for easy reference in reviews and tooling.
     - 3.2.5. Use structured bindings when they improve clarity: `for (auto& [key, value] : map)`
     - 3.2.6. Use init-statements in `if` and `switch` when they keep temporary scope local: `if (auto var = get(); condition)`
     - 3.2.7. Do not use `[[nodiscard]]`; rely on `clang-tidy` to catch ignored return values
-    - 3.2.8. Use `[[maybe_unused]]` for intentionally unused entities instead of warning-suppression casts
+    - 3.2.8. Use `[[maybe_unused]]` for intentionally unused entities instead of C-style warning-suppression casts (e.g., do not use `(void)var;`)
   - 3.3. C++23 Features
     - 3.3.1. Use `std::expected<T, E>` for operations that can fail recoverably
       - Use the project alias `ao::Result<T>` (defaults to `ao::Result<>` for `void`), defined in `include/ao/Error.h`

@@ -45,9 +45,9 @@ Do not duplicate coding-standard rules in this skill. `check-code-conformance` i
 
 ## 3. Commit Procedure
 1. Review the repo state with `git status`, `git diff HEAD`, and `git log -n 3`.
-2. Format changed `.cpp` and `.h` files with the targeted `clang-format` command above and report its output.
-3. Run the `check-code-conformance` skill for the relevant changed code and report the result.
-4. Use an imperative commit message such as `perf: optimize TrackRow memory usage`.
+2. Run the `check-code-conformance` skill for the relevant changed code and report the result.
+3. Format changed `.cpp` and `.h` files with the targeted `clang-format` command above and report its output.
+4. Use an imperative commit message such as `perf: optimize TrackRow memory usage`. Do NOT append "Co-Authored-By" or any AI signatures to the commit message.
 5. Run `git status` after the commit and do not conclude until the working tree is clean.
 
 ## 4. Scope And Safety

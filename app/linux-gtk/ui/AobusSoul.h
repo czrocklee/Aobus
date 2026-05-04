@@ -6,6 +6,7 @@
 #include <ao/audio/Types.h>
 #include <gdkmm/rgba.h>
 #include <gtkmm/widget.h>
+#include <memory>
 
 namespace ao::gtk
 {
@@ -23,6 +24,9 @@ namespace ao::gtk
     AobusSoul();
     ~AobusSoul() override;
 
+    AobusSoul(AobusSoul const&) = delete;
+    AobusSoul& operator=(AobusSoul const&) = delete;
+
     /**
      * @brief Update the visual state of the soul.
      * @param timeSec Current animation time in seconds.
@@ -39,13 +43,19 @@ namespace ao::gtk
     void set_show_full_logo(bool show);
 
     // Animation constants
+    static constexpr double kGoldenRatio = 1.61803398875;
     static constexpr double kFullCircleDegrees = 360.0;
     static constexpr double kBreathingPeriodSec = 5.119;
-    static constexpr double kRotationPeriodSec = kBreathingPeriodSec * 1.61803398875;
-    static constexpr double kOpacityPeriodSec = kRotationPeriodSec * 1.61803398875;
-    static constexpr double kHuePeriodSec = kOpacityPeriodSec * 1.61803398875; // Aura Flow!
+    static constexpr double kRotationPeriodSec = kBreathingPeriodSec * kGoldenRatio;
+    static constexpr double kOpacityPeriodSec = kRotationPeriodSec * kGoldenRatio;
+    static constexpr double kHuePeriodSec = kOpacityPeriodSec * kGoldenRatio; // Aura Flow!
     static constexpr double kStrokeWidthBase = 9.0;
-    static constexpr double kStrokeWidthVariance = kStrokeWidthBase * (1.61803398875 - 1.0); // Golden Expansion!
+    static constexpr double kStrokeWidthVariance = kStrokeWidthBase * (kGoldenRatio - 1.0); // Golden Expansion!
+    static constexpr double kPhaseShift = 0.5;
+
+    // Size constants
+    static constexpr int kFullLogoMinSize = 54;
+    static constexpr int kSoulMinSize = 24;
 
   protected:
     void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
@@ -58,6 +68,8 @@ namespace ao::gtk
                        int& natural_baseline) const override;
 
   private:
+    static Gdk::RGBA shiftColor(Gdk::RGBA const& color, float shift) noexcept;
+
     struct ColorCache
     {
       Gdk::RGBA cyan;
@@ -67,7 +79,19 @@ namespace ao::gtk
       Gdk::RGBA orange;
       Gdk::RGBA red;
       Gdk::RGBA amber;
-    } _colors;
+    };
+
+    struct PathDeleter
+    {
+      void operator()(::GskPath* path) const noexcept;
+    };
+
+    struct StrokeDeleter
+    {
+      void operator()(::GskStroke* stroke) const noexcept;
+    };
+
+    ColorCache _colors;
 
     double _timeSec = 0.0;
     ao::audio::Quality _quality = ao::audio::Quality::Unknown;
@@ -75,9 +99,10 @@ namespace ao::gtk
     bool _isReady = false;
     bool _showFullLogo = false;
 
-    // GSK Rendering Cache
-    struct _GskPath* _cachedPath = nullptr;
-    struct _GskStroke* _cachedStroke = nullptr;
-    float _cachedRadius = 0.0f;
+    // GSK Rendering Cache (Normalized unit paths)
+    std::unique_ptr<::GskPath, PathDeleter> _unitPathO;
+    std::unique_ptr<::GskPath, PathDeleter> _unitPathA;
+    std::unique_ptr<::GskStroke, StrokeDeleter> _cachedStroke;
+    std::unique_ptr<::GskStroke, StrokeDeleter> _cachedStrokeA;
   };
 } // namespace ao::gtk

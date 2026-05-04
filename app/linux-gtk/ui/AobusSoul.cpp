@@ -4,45 +4,63 @@
 #include "AobusSoul.h"
 #include <algorithm>
 #include <cmath>
-#include <format>
 #include <gdkmm/graphene_point.h>
 #include <gdkmm/graphene_rect.h>
 #include <gtk/gtk.h>
 #include <gtkmm/snapshot.h>
 #include <numbers>
-#include <string>
 
 namespace ao::gtk
 {
+  void AobusSoul::PathDeleter::operator()(::GskPath* path) const noexcept
+  {
+    ::gsk_path_unref(path);
+  }
+
+  void AobusSoul::StrokeDeleter::operator()(::GskStroke* stroke) const noexcept
+  {
+    ::gsk_stroke_free(stroke);
+  }
+
   AobusSoul::AobusSoul()
+    : _cachedStroke{::gsk_stroke_new(1.0F)}, _cachedStrokeA{::gsk_stroke_new(10.0F / 65.0F)}
   {
     set_can_focus(false);
     set_focusable(false);
 
-    _colors.cyan = Gdk::RGBA{"#00E5FF"};
-    _colors.gray = Gdk::RGBA{"#6B7280"};
-    _colors.purple = Gdk::RGBA{"#A855F7"};
-    _colors.green = Gdk::RGBA{"#10B981"};
-    _colors.orange = Gdk::RGBA{"#F59E0B"};
-    _colors.red = Gdk::RGBA{"#EF4444"};
-    _colors.amber = Gdk::RGBA{"#F97316"};
+    _colors = {.cyan = Gdk::RGBA{"#00E5FF"},
+               .gray = Gdk::RGBA{"#6B7280"},
+               .purple = Gdk::RGBA{"#A855F7"},
+               .green = Gdk::RGBA{"#10B981"},
+               .orange = Gdk::RGBA{"#F59E0B"},
+               .red = Gdk::RGBA{"#EF4444"},
+               .amber = Gdk::RGBA{"#F97316"}};
 
-    // Initialize stroke once
-    _cachedStroke = reinterpret_cast<_GskStroke*>(gsk_stroke_new(1.0f));
-    gsk_stroke_set_line_cap(reinterpret_cast<GskStroke*>(_cachedStroke), GSK_LINE_CAP_ROUND);
+    ::gsk_stroke_set_line_cap(_cachedStroke.get(), GSK_LINE_CAP_ROUND);
+    ::gsk_stroke_set_line_cap(_cachedStrokeA.get(), GSK_LINE_CAP_ROUND);
+
+    static constexpr float kRefHeight = 65.0F;
+    static constexpr float kRefRadius = 30.0F;
+    static constexpr float kNormalizedRadius = kRefRadius / kRefHeight;
+
+    // 1. Pre-bake unit path for 'o' (Soul)
+    auto* const oBuilder = ::gsk_path_builder_new();
+    ::graphene_point_t const origin = {0.0F, 0.0F};
+    ::gsk_path_builder_add_circle(oBuilder, &origin, kNormalizedRadius);
+    _unitPathO.reset(::gsk_path_builder_free_to_path(oBuilder));
+
+    // 2. Pre-bake unit path for 'a' (Circle + Stem)
+    auto* const aBuilder = ::gsk_path_builder_new();
+    ::gsk_path_builder_add_circle(aBuilder, &origin, kNormalizedRadius);
+
+    static constexpr float kRefStemY1 = -35.0F / kRefHeight;
+    static constexpr float kRefStemY2 = 30.0F / kRefHeight;
+    ::gsk_path_builder_move_to(aBuilder, kNormalizedRadius, kRefStemY1);
+    ::gsk_path_builder_line_to(aBuilder, kNormalizedRadius, kRefStemY2);
+    _unitPathA.reset(::gsk_path_builder_free_to_path(aBuilder));
   }
 
-  AobusSoul::~AobusSoul()
-  {
-    if (_cachedPath)
-    {
-      gsk_path_unref(reinterpret_cast<GskPath*>(_cachedPath));
-    }
-    if (_cachedStroke)
-    {
-      gsk_stroke_free(reinterpret_cast<GskStroke*>(_cachedStroke));
-    }
-  }
+  AobusSoul::~AobusSoul() = default;
 
   void AobusSoul::update(double timeSec, ao::audio::Quality quality, bool isStopped, bool isReady)
   {
@@ -60,7 +78,11 @@ namespace ao::gtk
 
   void AobusSoul::set_show_full_logo(bool show)
   {
-    if (_showFullLogo == show) return;
+    if (_showFullLogo == show)
+    {
+      return;
+    }
+
     _showFullLogo = show;
     queue_draw();
   }
@@ -70,26 +92,131 @@ namespace ao::gtk
     return Gtk::SizeRequestMode::CONSTANT_SIZE;
   }
 
-  void AobusSoul::measure_vfunc(Gtk::Orientation orientation, int, int& minimum, int& natural, int&, int&) const
+  void AobusSoul::measure_vfunc(Gtk::Orientation orientation,
+                                [[maybe_unused]] int for_size,
+                                int& minimum,
+                                int& natural,
+                                [[maybe_unused]] int& minimum_baseline,
+                                [[maybe_unused]] int& natural_baseline) const
   {
     if (orientation == Gtk::Orientation::HORIZONTAL && _showFullLogo)
     {
       // Aspect ratio from SVG: 147 / 65 approx 2.26
-      minimum = 54;
-      natural = 54;
+      minimum = kFullLogoMinSize;
+      natural = kFullLogoMinSize;
     }
     else
     {
-      minimum = 24;
-      natural = 24;
+      minimum = kSoulMinSize;
+      natural = kSoulMinSize;
     }
+  }
+
+  Gdk::RGBA AobusSoul::shiftColor(Gdk::RGBA const& color, float shift) noexcept
+  {
+    static constexpr float kMinShift = 0.01F;
+    if (std::abs(shift) < kMinShift)
+    {
+      return color;
+    }
+
+    float const red = color.get_red();
+    float const green = color.get_green();
+    float const blue = color.get_blue();
+    float const maxValue = std::max({red, green, blue});
+    float const minValue = std::min({red, green, blue});
+    float const delta = maxValue - minValue;
+    float const saturation = (maxValue == 0.0F) ? 0.0F : (delta / maxValue);
+    float hue = 0.0F;
+
+    if (maxValue == minValue)
+    {
+      hue = 0.0F;
+    }
+    else
+    {
+      static constexpr float kSectorOffset6 = 6.0F;
+      static constexpr float kSectorOffset2 = 2.0F;
+      static constexpr float kSectorOffset4 = 4.0F;
+
+      if (maxValue == red)
+      {
+        hue = ((green - blue) / delta) + (green < blue ? kSectorOffset6 : 0.0F);
+      }
+      else if (maxValue == green)
+      {
+        hue = ((blue - red) / delta) + kSectorOffset2;
+      }
+      else
+      {
+        hue = ((red - green) / delta) + kSectorOffset4;
+      }
+
+      hue /= kSectorOffset6;
+    }
+
+    static constexpr float kDegreesFullCircle = 360.0F;
+    hue = std::fmod(hue + (shift / kDegreesFullCircle), 1.0F);
+    if (hue < 0.0F)
+    {
+      hue += 1.0F;
+    }
+
+    static constexpr float kSectorCountF = 6.0F;
+    static constexpr int kSectorCount = 6;
+    int const sector = static_cast<int>(hue * kSectorCountF);
+    float const fraction = (hue * kSectorCountF) - static_cast<float>(sector);
+    float const pValue = maxValue * (1.0F - saturation);
+    float const qValue = maxValue * (1.0F - (fraction * saturation));
+    float const tValue = maxValue * (1.0F - ((1.0F - fraction) * saturation));
+
+    float resultRed = 0.0F;
+    float resultGreen = 0.0F;
+    float resultBlue = 0.0F;
+
+    switch (sector % kSectorCount)
+    {
+      case 0:
+        resultRed = maxValue;
+        resultGreen = tValue;
+        resultBlue = pValue;
+        break;
+      case 1:
+        resultRed = qValue;
+        resultGreen = maxValue;
+        resultBlue = pValue;
+        break;
+      case 2:
+        resultRed = pValue;
+        resultGreen = maxValue;
+        resultBlue = tValue;
+        break;
+      case 3:
+        resultRed = pValue;
+        resultGreen = qValue;
+        resultBlue = maxValue;
+        break; // NOLINT(readability-magic-numbers)
+      case 4:
+        resultRed = tValue;
+        resultGreen = pValue;
+        resultBlue = maxValue;
+        break;
+      case 5: // NOLINT(readability-magic-numbers)
+      default:
+        resultRed = maxValue;
+        resultGreen = pValue;
+        resultBlue = qValue;
+        break;
+    }
+
+    return Gdk::RGBA(resultRed, resultGreen, resultBlue, color.get_alpha());
   }
 
   void AobusSoul::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot)
   {
-    auto const width = get_width();
-    auto const height = get_height();
-    if (width <= 0 || height <= 0)
+    auto const width = static_cast<float>(get_width());
+    auto const height = static_cast<float>(get_height());
+    if (width <= 0.0F || height <= 0.0F)
     {
       return;
     }
@@ -115,52 +242,43 @@ namespace ao::gtk
       }
     }
 
-    float const centerX = width / 2.0f;
-    float const centerY = height / 2.0f;
+    float const centerX = width / 2.0F;
+    float const centerY = height / 2.0F;
 
-    // SVG Proportions (Reference Height = 65, Radius = 30)
-    float const H = static_cast<float>(height);
-    float const radius = H * (30.0f / 65.0f);
+    // SVG Proportions (Reference Height = 65)
+    static constexpr float kRefHeight = 65.0F;
+    static constexpr float kRefXOffset = 43.5F;
+    static constexpr float kNormalizedXOffset = kRefXOffset / kRefHeight;
 
-    float const oCenterX = _showFullLogo ? centerX + (43.5f / 65.0f) * H : centerX;
-    float const aCenterX = centerX - (43.5f / 65.0f) * H;
+    float const oCenterX = _showFullLogo ? (centerX + (kNormalizedXOffset * height)) : centerX;
+    float const aCenterX = centerX - (kNormalizedXOffset * height);
 
     // 1. Draw 'a' if requested
     if (_showFullLogo)
     {
       snapshot->save();
+      snapshot->translate({aCenterX, centerY});
+      snapshot->scale(height, height);
 
-      auto* const builder = gsk_path_builder_new();
-      graphene_point_t aCenter = {aCenterX, centerY};
-      gsk_path_builder_add_circle(builder, &aCenter, radius);
+      ::gtk_snapshot_push_stroke(snapshot->gobj(), _unitPathA.get(), _cachedStrokeA.get());
 
-      float const stemX = aCenterX + radius;
-      float const stemY1 = centerY - (35.0f / 65.0f) * H;
-      float const stemY2 = centerY + (30.0f / 65.0f) * H;
+      static constexpr float kRefR = 30.0F / 65.0F;
+      static constexpr float kRefBoundsX = -kRefR * 2.0F;
+      static constexpr float kRefBoundsY = -kRefR * 2.0F;
+      static constexpr float kRefBoundsW = kRefR * 4.5F;
+      static constexpr float kRefBoundsH = kRefR * 4.0F;
+      ::graphene_rect_t const aBounds = {{kRefBoundsX, kRefBoundsY}, {kRefBoundsW, kRefBoundsH}};
 
-      gsk_path_builder_move_to(builder, stemX, stemY1);
-      gsk_path_builder_line_to(builder, stemX, stemY2);
-
-      auto* const aPath = gsk_path_builder_free_to_path(builder);
-      float const aStrokeWidth = (10.0f / 65.0f) * H;
-      auto* const aStroke = gsk_stroke_new(aStrokeWidth);
-      gsk_stroke_set_line_cap(aStroke, GSK_LINE_CAP_ROUND);
-
-      gtk_snapshot_push_stroke(snapshot->gobj(), aPath, aStroke);
-      graphene_rect_t aBounds = {aCenterX - radius * 2.0f, centerY - radius * 2.0f, radius * 4.5f, radius * 4.0f};
-      gtk_snapshot_append_color(snapshot->gobj(), _colors.amber.gobj(), &aBounds);
-      gtk_snapshot_pop(snapshot->gobj());
-
-      gsk_stroke_free(aStroke);
-      gsk_path_unref(aPath);
+      ::gtk_snapshot_append_color(snapshot->gobj(), _colors.amber.gobj(), &aBounds);
+      ::gtk_snapshot_pop(snapshot->gobj());
 
       snapshot->restore();
     }
 
     // 2. Draw 'o' (Soul)
-    float rotationAngle = 0.0f;
-    float currentStrokeBase = 9.0f;
-    float currentOpacity = 1.0f;
+    float rotationAngle = 0.0F;
+    float currentStrokeBase = static_cast<float>(kStrokeWidthBase);
+    float currentOpacity = 1.0F;
 
     if (!_isStopped)
     {
@@ -168,116 +286,72 @@ namespace ao::gtk
         static_cast<float>(std::fmod(_timeSec * (kFullCircleDegrees / kRotationPeriodSec), kFullCircleDegrees));
       double const breathingPhase =
         std::fmod(_timeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
-      constexpr double kPhaseShift = 0.5;
       currentStrokeBase = static_cast<float>(
-        kStrokeWidthBase + (kStrokeWidthVariance * (std::sin(breathingPhase) * kPhaseShift + kPhaseShift)));
+        kStrokeWidthBase + (kStrokeWidthVariance * ((std::sin(breathingPhase) * kPhaseShift) + kPhaseShift)));
 
       double const opacityPhase =
         std::fmod(_timeSec * (2.0 * std::numbers::pi / kOpacityPeriodSec), 2.0 * std::numbers::pi);
       // Golden Ratio Opacity: range [0.618, 1.0]
-      currentOpacity = static_cast<float>(0.809 + (0.191 * std::sin(opacityPhase)));
+      static constexpr double kOpacityBase = 0.809;
+      static constexpr double kOpacityVariance = 0.191;
+      currentOpacity = static_cast<float>(kOpacityBase + (kOpacityVariance * std::sin(opacityPhase)));
     }
 
-    float const oStrokeWidth = (currentStrokeBase / 65.0f) * H;
+    ::gsk_stroke_set_line_width(_cachedStroke.get(), currentStrokeBase / kRefHeight);
 
     snapshot->save();
     snapshot->translate({oCenterX, centerY});
     snapshot->rotate(rotationAngle);
+    snapshot->scale(height, height);
 
-    if (currentOpacity < 0.999f)
+    static constexpr float kOpacityThreshold = 0.999F;
+    if (currentOpacity < kOpacityThreshold)
     {
-      gtk_snapshot_push_opacity(snapshot->gobj(), currentOpacity);
+      ::gtk_snapshot_push_opacity(snapshot->gobj(), currentOpacity);
     }
 
-    // Manage Cached Path (Full circle for 'o' as per SVG)
-    if (!_cachedPath || std::abs(_cachedRadius - radius) > 0.001f)
-    {
-      if (_cachedPath) gsk_path_unref(reinterpret_cast<GskPath*>(_cachedPath));
-      _cachedRadius = radius;
-
-      auto* const oBuilder = gsk_path_builder_new();
-      graphene_point_t oCenter = {0, 0};
-      gsk_path_builder_add_circle(oBuilder, &oCenter, radius);
-      _cachedPath = reinterpret_cast<_GskPath*>(gsk_path_builder_free_to_path(oBuilder));
-    }
-
-    gsk_stroke_set_line_width(reinterpret_cast<GskStroke*>(_cachedStroke), oStrokeWidth);
-
-    gtk_snapshot_push_stroke(
-      snapshot->gobj(), reinterpret_cast<GskPath*>(_cachedPath), reinterpret_cast<GskStroke*>(_cachedStroke));
+    ::gtk_snapshot_push_stroke(snapshot->gobj(), _unitPathO.get(), _cachedStroke.get());
 
     // Calculate Aura Flow (Hue Shift)
-    float hueShift = 0.0f;
+    float hueShift = 0.0F;
     if (!_isStopped)
     {
       float const huePhase =
-        std::fmod(static_cast<float>(_timeSec) * (2.0f * std::numbers::pi_v<float> / static_cast<float>(kHuePeriodSec)),
-                  2.0f * std::numbers::pi_v<float>);
-      hueShift = 10.0f * std::sin(huePhase); // Subtle ±10 degree shift
+        std::fmod(static_cast<float>(_timeSec) * (2.0F * std::numbers::pi_v<float> / static_cast<float>(kHuePeriodSec)),
+                  2.0F * std::numbers::pi_v<float>);
+      static constexpr float kMaxHueShift = 10.0F;
+      hueShift = kMaxHueShift * std::sin(huePhase); // Subtle ±10 degree shift
     }
 
-    auto const shiftColor = [](Gdk::RGBA const& color, float shift) -> Gdk::RGBA
-    {
-      if (std::abs(shift) < 0.01f) return color;
-
-      float r = color.get_red();
-      float g = color.get_green();
-      float b = color.get_blue();
-      float max = std::max({r, g, b}), min = std::min({r, g, b});
-      float h, s, v = max, d = max - min;
-      s = max == 0 ? 0 : d / max;
-      if (max == min)
-        h = 0;
-      else
-      {
-        if (max == r)
-          h = (g - b) / d + (g < b ? 6 : 0);
-        else if (max == g)
-          h = (b - r) / d + 2;
-        else
-          h = (r - g) / d + 4;
-        h /= 6;
-      }
-      h = std::fmod(h + shift / 360.0f, 1.0f);
-      if (h < 0) h += 1.0f;
-      int i = static_cast<int>(h * 6);
-      float f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
-      switch (i % 6)
-      {
-        case 0: r = v, g = t, b = p; break;
-        case 1: r = q, g = v, b = p; break;
-        case 2: r = p, g = v, b = t; break;
-        case 3: r = p, g = q, b = v; break;
-        case 4: r = t, g = p, b = v; break;
-        case 5: r = v, g = p, b = q; break;
-      }
-      return Gdk::RGBA(r, g, b, color.get_alpha());
-    };
-
-    GskColorStop stops[3];
+    static constexpr std::size_t kStopCount = 3;
+    auto stops = std::array<::GskColorStop, kStopCount>{};
     // Color Antagonism: Cyan shifts forward, Indicator shifts backward
     auto const shiftedCyan = shiftColor(_colors.cyan, hueShift);
     auto const shiftedIndicator = shiftColor(indicatorColor, -hueShift);
 
-    // Reversed Gradient: Indicator (Quality) as the core (38.2%), Cyan as the dominant body (61.8%)
-    stops[0].offset = 0.0f;
-    stops[0].color = *(shiftedIndicator.gobj());
-    stops[1].offset = 0.382f;
-    stops[1].color = *(shiftedCyan.gobj());
-    stops[2].offset = 1.0f;
-    stops[2].color = *(shiftedCyan.gobj());
+    // Player UI: Cyan as the core (38.2%), Indicator (Quality) as the dominant body (61.8%)
+    static constexpr float kCoreOffset = 0.382F;
+    stops[0].offset = 0.0F;
+    stops[0].color = *(shiftedCyan.gobj());
+    stops[1].offset = kCoreOffset;
+    stops[1].color = *(shiftedIndicator.gobj());
+    stops[2].offset = 1.0F;
+    stops[2].color = *(shiftedIndicator.gobj());
 
-    float const outerRadius = radius + oStrokeWidth;
-    graphene_rect_t gradientBounds = {{-outerRadius, -outerRadius}, {outerRadius * 2.0f, outerRadius * 2.0f}};
-    graphene_point_t startPoint = {-radius, -radius};
-    graphene_point_t endPoint = {radius, radius};
+    static constexpr float kUnitR = 30.0F / 65.0F;
+    float const normalizedStrokeWidth = currentStrokeBase / kRefHeight;
+    float const outerRadius = kUnitR + normalizedStrokeWidth;
+    ::graphene_rect_t const gradientBounds = {{-outerRadius, -outerRadius}, {outerRadius * 2.0F, outerRadius * 2.0F}};
+    ::graphene_point_t const startPoint = {kUnitR, kUnitR};
+    ::graphene_point_t const endPoint = {-kUnitR, -kUnitR};
 
-    gtk_snapshot_append_linear_gradient(snapshot->gobj(), &gradientBounds, &startPoint, &endPoint, stops, 3);
-    gtk_snapshot_pop(snapshot->gobj());
+    ::gtk_snapshot_append_linear_gradient(
+      snapshot->gobj(), &gradientBounds, &startPoint, &endPoint, stops.data(), stops.size());
+    ::gtk_snapshot_pop(snapshot->gobj());
 
-    if (currentOpacity < 0.999f)
+    if (currentOpacity < kOpacityThreshold)
     {
-      gtk_snapshot_pop(snapshot->gobj());
+      ::gtk_snapshot_pop(snapshot->gobj());
     }
 
     snapshot->restore();

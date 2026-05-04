@@ -80,7 +80,12 @@ namespace ao::gtk
 
     auto const status = _player->status();
     _lastPlaybackState = status.engine.transport;
-    _host.updatePlaybackStatus(status);
+
+    // Marshal to main thread for GTK widget updates
+    _dispatcher->dispatch([this, status]() {
+      _host.updatePlaybackStatus(status);
+      _playbackBar->setSnapshot(status);
+    });
 
     if (status.engine.statusText != _lastPlaybackErrorMessage)
     {
@@ -92,8 +97,6 @@ namespace ao::gtk
         _host.showPlaybackMessage(status.engine.statusText, errorDisplayDuration);
       }
     }
-
-    _playbackBar->setSnapshot(status);
 
     auto playingTrackId = std::optional<ao::TrackId>{};
     if (_activePlaybackSequence && status.engine.transport != ao::audio::Transport::Idle)
