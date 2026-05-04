@@ -10,8 +10,12 @@
 #include <gtkmm.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
+
+#include "AobusSoul.h"
+#include "AobusSoulWindow.h"
 
 namespace ao::gtk
 {
@@ -37,38 +41,6 @@ namespace ao::gtk
     OutputChangedSignal& signalOutputChanged();
 
   private:
-    class Indicator final : public Gtk::Widget
-    {
-    public:
-      Indicator();
-      void update(double timeSec, ao::audio::Quality quality, bool isStopped, bool isReady);
-
-    protected:
-      void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
-      Gtk::SizeRequestMode get_request_mode_vfunc() const override;
-      void measure_vfunc(Gtk::Orientation orientation,
-                         int for_size,
-                         int& minimum,
-                         int& natural,
-                         int& minimum_baseline,
-                         int& natural_baseline) const override;
-
-    private:
-      struct ColorCache
-      {
-        Gdk::RGBA cyan;
-        Gdk::RGBA gray;
-        Gdk::RGBA purple;
-        Gdk::RGBA green;
-        Gdk::RGBA orange;
-        Gdk::RGBA red;
-      } _colors;
-
-      double _timeSec = 0.0;
-      ao::audio::Quality _quality = ao::audio::Quality::Unknown;
-      bool _isStopped = true;
-      bool _isReady = false;
-    };
     struct LastState final
     {
       ao::audio::Engine::Status engine;
@@ -86,7 +58,6 @@ namespace ao::gtk
     static constexpr double kLogoAspectRatio = 1.0;
     static constexpr int kOutputIconVerticalInset = 6;
     static constexpr int kOutputIconMinHeight = 22;
-    static constexpr double kBreathingPeriodSec = 5.119;
 
     void setupLayout();
     void setupSignals();
@@ -97,10 +68,13 @@ namespace ao::gtk
     void updateOutputLabel(ao::audio::Player::Status const& status);
     void updateOutputIcon(ao::audio::Quality quality);
     void syncOutputIconSize();
+    void triggerSoulEasterEgg();
 
     // Output selection
     Gtk::Button _outputButton;
-    Indicator _outputIndicator;
+    AobusSoul _outputSoul;
+    std::unique_ptr<AobusSoulWindow> _soulWindow;
+
     Gtk::Popover _outputPopover;
     Gtk::ListBox _outputListBox;
     Glib::RefPtr<Gio::ListStore<Glib::Object>> _outputStore;
@@ -123,6 +97,7 @@ namespace ao::gtk
     bool _updatingSeekScale = false;
 
     ao::audio::Quality _lastIconQuality = ao::audio::Quality::Unknown;
+    sigc::connection _soulLongPressTimer;
     std::uint32_t _tickCallbackId = 0;
     std::int64_t _firstFrameTime = 0;
     double _animationTimeSec = 0.0;

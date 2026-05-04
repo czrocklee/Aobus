@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <!-- Ultimate Golden Ratio Gradient (Reversed: Quality as Core 38.2%) -->
+    <linearGradient id="soulGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A855F7" /> <!-- Purple (Hi-Res Core) -->
+      <stop offset="38.2%" stop-color="#06B6D4" /> <!-- Cyan (Primary Body) -->
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+
+    <!-- Aura Flow Filter with Expanded Region to prevent capping -->
+    <filter id="auraFlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feColorMatrix type="hueRotate" values="0">
+        <animate attributeName="values" 
+                 values="-10;10;-10" 
+                 dur="21.683s" 
+                 repeatCount="indefinite" />
+      </feColorMatrix>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="200" height="200" rx="48" fill="#111827" />
+
+  <!-- The Aobus Soul Mark (Centered with extra padding) -->
+  <g transform="translate(26, 67)">
+    
+    <!-- Letter 'a' (Static Amber Anchor) -->
+    <g>
+      <circle cx="35" cy="35" r="30" stroke="#F97316" stroke-width="10" fill="none" stroke-linecap="round" />
+      <path d="M65 0 v65" stroke="#F97316" stroke-width="10" fill="none" stroke-linecap="round" />
+    </g>
+
+    <!-- Letter 'o' (The Triple Golden Soul) -->
+    <g filter="url(#auraFlow)">
+      <g>
+        <!-- Rotation (8.282s) -->
+        <animateTransform attributeName="transform" 
+                          type="rotate" 
+                          from="0 122 35" 
+                          to="360 122 35" 
+                          dur="8.282s" 
+                          repeatCount="indefinite" />
+        
+        <g>
+          <!-- Opacity Pulse (13.401s) -->
+          <animate attributeName="opacity" 
+                   values="1;0.618;1" 
+                   dur="13.401s" 
+                   repeatCount="indefinite" />
+          
+          <!-- Breathing Stroke (5.119s) with Golden Expansion (14.56) -->
+          <circle cx="122" cy="35" r="30" 
+                  stroke="url(#soulGradient)" 
+                  fill="none">
+            <animate attributeName="stroke-width" 
+                     values="9;14.56;9" 
+                     dur="5.119s" 
+                     repeatCount="indefinite" />
+          </circle>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

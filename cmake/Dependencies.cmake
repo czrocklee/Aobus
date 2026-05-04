@@ -77,3 +77,6 @@ message(STATUS "libudev found and enabled")
 
 # ── lmdb ────────────────────────────────────────────────────────────────────
 pkg_check_modules(LMDB REQUIRED lmdb)
+
+# ── mimalloc ────────────────────────────────────────────────────────────────
+find_package(mimalloc REQUIRED)

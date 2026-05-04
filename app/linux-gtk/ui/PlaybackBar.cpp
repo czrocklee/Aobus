@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "PlaybackBar.h"
 #include "LayoutConstants.h"
@@ -7,7 +7,6 @@
 #include <ao/utility/Log.h>
 
 #include "ui/ThemeBus.h"
-#include <gdk-pixbuf/gdk-pixbuf-loader.h>
 #include <gdkmm/display.h>
 #include <gtkmm/button.h>
 #include <gtkmm/cssprovider.h>
@@ -16,17 +15,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
+#include <gtk/gtk.h>
+#include <gtkmm/gestureclick.h>
 #include <numbers>
 
 namespace ao::gtk
 {
   namespace
   {
-    constexpr double kFullCircleDegrees = 360.0;
-    constexpr double kRotationPeriodSec = 7.331;
-    constexpr double kStrokeWidthBase = 9.0;
-    constexpr double kStrokeWidthVariance = 3.0;
-    constexpr double kBreathingPeriodSec = 5.119;
     constexpr std::int64_t kMicrosecondsPerSecond = 1'000'000;
 
     void ensurePlaybackBarCss(bool force = false)
@@ -72,117 +69,6 @@ namespace ao::gtk
     }
   }
 
-  PlaybackBar::Indicator::Indicator()
-  {
-    set_can_focus(false);
-    set_focusable(false);
-
-    _colors.cyan = Gdk::RGBA{"#00E5FF"};
-    _colors.gray = Gdk::RGBA{"#6B7280"};
-    _colors.purple = Gdk::RGBA{"#A855F7"};
-    _colors.green = Gdk::RGBA{"#10B981"};
-    _colors.orange = Gdk::RGBA{"#F59E0B"};
-    _colors.red = Gdk::RGBA{"#EF4444"};
-  }
-
-  void PlaybackBar::Indicator::update(double timeSec, ao::audio::Quality quality, bool isStopped, bool isReady)
-  {
-    if (_timeSec == timeSec && _quality == quality && _isStopped == isStopped && _isReady == isReady)
-    {
-      return;
-    }
-
-    _timeSec = timeSec;
-    _quality = quality;
-    _isStopped = isStopped;
-    _isReady = isReady;
-    queue_draw();
-  }
-
-  Gtk::SizeRequestMode PlaybackBar::Indicator::get_request_mode_vfunc() const
-  {
-    return Gtk::SizeRequestMode::CONSTANT_SIZE;
-  }
-
-  void PlaybackBar::Indicator::measure_vfunc(Gtk::Orientation, int, int& minimum, int& natural, int&, int&) const
-  {
-    minimum = 24;
-    natural = 24;
-  }
-
-  void PlaybackBar::Indicator::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot)
-  {
-    auto const width = get_width();
-    auto const height = get_height();
-    if (width <= 0 || height <= 0)
-    {
-      return;
-    }
-
-    // Colors
-    auto indicatorColor = _isStopped ? _colors.cyan : _colors.gray;
-
-    if (!_isReady)
-    {
-      indicatorColor = _colors.gray;
-    }
-    else if (!_isStopped)
-    {
-      switch (_quality)
-      {
-        case ao::audio::Quality::BitwisePerfect:
-        case ao::audio::Quality::LosslessPadded: indicatorColor = _colors.purple; break;
-        case ao::audio::Quality::LosslessFloat: indicatorColor = _colors.green; break;
-        case ao::audio::Quality::LinearIntervention: indicatorColor = _colors.orange; break;
-        case ao::audio::Quality::LossySource: indicatorColor = _colors.gray; break;
-        case ao::audio::Quality::Clipped: indicatorColor = _colors.red; break;
-        default: break;
-      }
-    }
-
-    auto const cr = snapshot->append_cairo(Gdk::Graphene::Rect{0, 0, static_cast<float>(width), static_cast<float>(height)});
-
-    double const centerX = width / 2.0;
-    double const centerY = height / 2.0;
-    double const radius = std::min(width, height) * 0.375;
-
-    // Animation values
-    double rotationAngle = 0.0;
-    double strokeWidth = kStrokeWidthBase;
-
-    if (!_isStopped)
-    {
-      rotationAngle = std::fmod(_timeSec * (kFullCircleDegrees / kRotationPeriodSec), kFullCircleDegrees);
-      double const breathingPhase = std::fmod(_timeSec * (2.0 * std::numbers::pi / kBreathingPeriodSec), 2.0 * std::numbers::pi);
-      constexpr double kPhaseShift = 0.5;
-      strokeWidth = kStrokeWidthBase + (kStrokeWidthVariance * (std::sin(breathingPhase) * kPhaseShift + kPhaseShift));
-    }
-
-    // Scale stroke to actual widget size (template was 80x80)
-    double const scale = std::min(width, height) / 80.0;
-    double const actualStrokeWidth = strokeWidth * scale;
-
-    cr->save();
-    cr->translate(centerX, centerY);
-    cr->rotate(rotationAngle * (std::numbers::pi / 180.0));
-
-    // Draw the "O" arc
-    auto const gradient = Cairo::LinearGradient::create(-radius, -radius, radius, radius);
-    gradient->add_color_stop_rgba(0.0, _colors.cyan.get_red(), _colors.cyan.get_green(), _colors.cyan.get_blue(), 1.0);
-    gradient->add_color_stop_rgba(0.33, indicatorColor.get_red(), indicatorColor.get_green(), indicatorColor.get_blue(), 1.0);
-    gradient->add_color_stop_rgba(1.0, indicatorColor.get_red(), indicatorColor.get_green(), indicatorColor.get_blue(), 1.0);
-
-    cr->set_source(gradient);
-    cr->set_line_width(actualStrokeWidth);
-    cr->set_line_cap(Cairo::Context::LineCap::ROUND);
-
-    // Nearly full circle arc
-    cr->arc(0, 0, radius, -std::numbers::pi / 2.0, 1.49 * std::numbers::pi);
-    cr->stroke();
-
-    cr->restore();
-  }
-
   PlaybackBar::PlaybackBar()
     : Gtk::Box(Gtk::Orientation::HORIZONTAL)
   {
@@ -206,6 +92,7 @@ namespace ao::gtk
 
     signal_map().connect([this]() { syncOutputIconSize(); });
   }
+
   PlaybackBar::~PlaybackBar()
   {
     if (_tickCallbackId != 0)
@@ -227,13 +114,36 @@ namespace ao::gtk
     _outputButton.set_margin_start(0);
     _outputButton.set_margin_end(0);
 
-    _outputIndicator.set_valign(Gtk::Align::CENTER);
-    _outputIndicator.set_halign(Gtk::Align::CENTER);
-    _outputIndicator.set_margin_top(1);        // Optical vertical alignment correction
-    _outputIndicator.set_size_request(24, 24); // Square base size
+    _outputSoul.set_valign(Gtk::Align::CENTER);
+    _outputSoul.set_halign(Gtk::Align::CENTER);
+    _outputSoul.set_margin_top(1);        // Optical vertical alignment correction
+    _outputSoul.set_size_request(24, 24); // Square base size
 
-    _outputButton.set_child(_outputIndicator);
-    _outputButton.set_tooltip_text("Click to change audio backend or device");
+    _outputButton.set_child(_outputSoul);
+    _outputButton.set_tooltip_text("Click for devices, hold right-click for Soul");
+
+    // Native Long-Press Gesture for Easter Egg (Right Click)
+    auto soulGesture = Gtk::GestureClick::create();
+    soulGesture->set_button(3); // Right click
+
+    soulGesture->signal_pressed().connect(
+      [this](int, double, double)
+      {
+        _soulLongPressTimer.disconnect();
+        _soulLongPressTimer = Glib::signal_timeout().connect(
+          [this]()
+          {
+            triggerSoulEasterEgg();
+            return false; // Run once
+          },
+          1000);
+      });
+
+    soulGesture->signal_released().connect([this](int, double, double) { _soulLongPressTimer.disconnect(); });
+
+    _outputButton.add_controller(soulGesture);
+
+    _outputButton.signal_clicked().connect([this]() { _outputPopover.popup(); });
 
     _outputStore = Gio::ListStore<Glib::Object>::create();
     _outputListBox.set_selection_mode(Gtk::SelectionMode::NONE);
@@ -267,8 +177,6 @@ namespace ao::gtk
     _outputPopover.set_autohide(true);
     _outputPopover.set_position(Gtk::PositionType::BOTTOM);
     _outputPopover.set_parent(_outputButton);
-
-    _outputButton.signal_clicked().connect([this]() { _outputPopover.popup(); });
 
     // Transport controls box
     auto* const transportBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
@@ -323,7 +231,7 @@ namespace ao::gtk
     syncOutputIconSize();
     updateOutputIcon(_lastIconQuality);
 
-    // Tick-based animation for 60fps+ smooth visuals
+    // Tick-based animation for 120Hz smooth visuals
     _tickCallbackId = add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
       {
@@ -359,9 +267,7 @@ namespace ao::gtk
   void PlaybackBar::setupSignals()
   {
     _playButton.signal_clicked().connect([this]() { _playRequested.emit(); });
-
     _pauseButton.signal_clicked().connect([this]() { _pauseRequested.emit(); });
-
     _stopButton.signal_clicked().connect([this]() { _stopRequested.emit(); });
 
     _seekScale.signal_value_changed().connect(
@@ -446,12 +352,10 @@ namespace ao::gtk
         {
           auto const profile = profileMeta.id;
           bool const isExclusive = (profile == ao::audio::kProfileExclusive);
-
-          // Minimalist approach: "Device Name [E]" on top, "Hardware ID" on bottom
           auto const displayName = isExclusive ? std::format("{} [E]", device.displayName) : device.displayName;
 
           auto item = DeviceItem::create(backend.metadata.id, device, profile, displayName);
-          item->description = device.id.value(); // Show the raw hw: string on the second line
+          item->description = device.id.value();
 
           item->active = (backend.metadata.id == status.engine.backendId && profile == status.engine.profileId &&
                           device.id == status.engine.currentDeviceId);
@@ -473,8 +377,6 @@ namespace ao::gtk
           if (device.id == status.engine.currentDeviceId)
           {
             auto label = device.displayName;
-
-            // Find profile name from metadata
             for (auto const& pm : backend.metadata.supportedProfiles)
             {
               if (pm.id == status.engine.profileId && status.engine.profileId == ao::audio::kProfileExclusive)
@@ -493,10 +395,7 @@ namespace ao::gtk
           }
         }
       }
-      if (found)
-      {
-        break;
-      }
+      if (found) break;
     }
 
     if (!found)
@@ -536,11 +435,8 @@ namespace ao::gtk
     _outputIconWidth = iconWidth;
     _outputIconHeight = iconHeight;
 
-    // 1. Force the button to be a square matching the transport bar height
     _outputButton.set_size_request(referenceHeight, referenceHeight);
-
-    // 2. Center the indicator with pixel-perfect insets
-    _outputIndicator.set_size_request(_outputIconWidth, _outputIconHeight);
+    _outputSoul.set_size_request(_outputIconWidth, _outputIconHeight);
 
     updateOutputIcon(_lastIconQuality);
   }
@@ -561,7 +457,7 @@ namespace ao::gtk
       }
     }
 
-    _outputIndicator.update(_animationTimeSec, quality, isStopped, _lastState.isReady);
+    _outputSoul.update(_animationTimeSec, quality, isStopped, _lastState.isReady);
   }
 
   void PlaybackBar::setSnapshot(ao::audio::Player::Status const& status)
@@ -590,10 +486,7 @@ namespace ao::gtk
 
       updateTransportButtons(status.engine.transport);
 
-      if (outputStateChanged)
-      {
-        updateOutputModel(status);
-      }
+      if (outputStateChanged) updateOutputModel(status);
       updateOutputLabel(status);
 
       if (status.engine.transport == ao::audio::Transport::Idle)
@@ -602,20 +495,23 @@ namespace ao::gtk
       }
       else
       {
-        auto const durationMin = durSec / 60;
-        auto const durationRemSec = durSec % 60;
-        auto const positionMin = posSec / 60;
-        auto const positionRemSec = posSec % 60;
-
         _timeLabel.set_text(
-          std::format("{:d}:{:02d} / {:d}:{:02d}", positionMin, positionRemSec, durationMin, durationRemSec));
+          std::format("{:d}:{:02d} / {:d}:{:02d}", posSec / 60, posSec % 60, durSec / 60, durSec % 60));
       }
 
       syncOutputIconSize();
       updateOutputIcon(status.quality);
+
+      if (_soulWindow && _soulWindow->is_visible())
+      {
+        _soulWindow->updateState(status.quality,
+                                 status.engine.transport == ao::audio::Transport::Playing ||
+                                   status.engine.transport == ao::audio::Transport::Opening ||
+                                   status.engine.transport == ao::audio::Transport::Buffering ||
+                                   status.engine.transport == ao::audio::Transport::Seeking);
+      }
     }
 
-    // Always update seek scale sensitivity and range for smoothness
     if (status.engine.transport == ao::audio::Transport::Idle)
     {
       _seekScale.set_range(0, 100);
@@ -624,9 +520,7 @@ namespace ao::gtk
       return;
     }
 
-    // Update seek scale
     _updatingSeekScale = true;
-
     if (status.engine.durationMs > 0)
     {
       _seekScale.set_range(0, static_cast<double>(status.engine.durationMs));
@@ -639,7 +533,6 @@ namespace ao::gtk
       _seekScale.set_value(0);
       _seekScale.set_sensitive(false);
     }
-
     _updatingSeekScale = false;
   }
 
@@ -706,26 +599,39 @@ namespace ao::gtk
     }
   }
 
+  void PlaybackBar::triggerSoulEasterEgg()
+  {
+    if (!_soulWindow)
+    {
+      _soulWindow = std::make_unique<AobusSoulWindow>();
+    }
+
+    bool const isPlaying = (_lastState.engine.transport == ao::audio::Transport::Playing ||
+                            _lastState.engine.transport == ao::audio::Transport::Opening ||
+                            _lastState.engine.transport == ao::audio::Transport::Buffering ||
+                            _lastState.engine.transport == ao::audio::Transport::Seeking);
+
+    _soulWindow->updateState(_lastState.quality, isPlaying);
+    _soulWindow->set_transient_for(*dynamic_cast<Gtk::Window*>(get_root()));
+    _soulWindow->present();
+  }
+
   PlaybackBar::PlaySignal& PlaybackBar::signalPlayRequested()
   {
     return _playRequested;
   }
-
   PlaybackBar::PauseSignal& PlaybackBar::signalPauseRequested()
   {
     return _pauseRequested;
   }
-
   PlaybackBar::StopSignal& PlaybackBar::signalStopRequested()
   {
     return _stopRequested;
   }
-
   PlaybackBar::SeekSignal& PlaybackBar::signalSeekRequested()
   {
     return _seekRequested;
   }
-
   PlaybackBar::OutputChangedSignal& PlaybackBar::signalOutputChanged()
   {
     return _outputChanged;
