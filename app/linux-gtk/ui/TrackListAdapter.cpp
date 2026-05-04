@@ -337,7 +337,7 @@ namespace ao::gtk
     _listModel->splice(uintIdx, 1, additions);
   }
 
-  void TrackListAdapter::onRemoved([[maybe_unused]] TrackId id, std::size_t index)
+  void TrackListAdapter::onRemoved(TrackId /*id*/, std::size_t index)
   {
     // If filter is active, rebuild
 

@@ -42,6 +42,10 @@ namespace ao::audio
       DeviceId currentDeviceId;
       flow::Graph flow;
 
+      float volume = 1.0f;
+      bool muted = false;
+      bool volumeAvailable = false;
+
       bool operator==(Status const&) const = default;
     };
 
@@ -74,6 +78,12 @@ namespace ao::audio
     void stop();
     void seek(std::uint32_t positionMs);
 
+    void setVolume(float volume);
+    float getVolume() const;
+    void setMuted(bool muted);
+    bool isMuted() const;
+    bool isVolumeAvailable() const;
+
     Status status() const;
 
     // Backend callbacks
@@ -84,12 +94,14 @@ namespace ao::audio
     static void onDrainComplete(void* userData) noexcept;
     static void onRouteReady(void* userData, std::string_view routeAnchor) noexcept;
     static void onFormatChanged(void* userData, Format const& format) noexcept;
+    static void onVolumeChanged(void* userData) noexcept;
     static void onBackendError(void* userData, std::string_view message) noexcept;
 
   private:
     void handleBackendError(std::string_view message);
     void handleSourceError(ao::Error const& error);
     void handleFormatChanged(Format const& format);
+    void handleVolumeChanged();
     void handleDrainComplete();
     void handleRouteReady(std::string_view routeAnchor);
     void resetToIdle();

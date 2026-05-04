@@ -24,5 +24,3 @@ TEST_CASE("PipeWireShared - Property Parsing", "[audio][unit][pipewire]")
     REQUIRE(parseUintProperty("4294967295") == 4294967295U);
   }
 }
-
-

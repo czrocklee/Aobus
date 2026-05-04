@@ -617,12 +617,28 @@ namespace ao::audio
     _impl->engine->seek(positionMs);
   }
 
+  void Player::setVolume(float vol)
+  {
+    _impl->engine->setVolume(vol);
+  }
+
+  void Player::setMuted(bool muted)
+  {
+    _impl->engine->setMuted(muted);
+  }
+
+  void Player::toggleMute()
+  {
+    auto const engineStatus = _impl->engine->status();
+    setMuted(!engineStatus.muted);
+  }
+
   Player::Status Player::status() const
   {
     auto engineStatus = _impl->engine->status();
 
     auto status = Player::Status{};
-    status.engine = std::move(engineStatus);
+    status.engine = engineStatus;
     if (_impl->currentTrack)
     {
       status.trackTitle = _impl->currentTrack->title;
@@ -631,6 +647,10 @@ namespace ao::audio
     status.availableBackends = _impl->cachedBackends;
     status.flow = _impl->mergedGraph;
     status.isReady = isReady();
+
+    status.volume = status.engine.volume;
+    status.muted = status.engine.muted;
+    status.volumeAvailable = status.engine.volumeAvailable;
 
     // Inject controller-owned fields into the snapshot returned to the UI
     status.quality = _impl->quality;

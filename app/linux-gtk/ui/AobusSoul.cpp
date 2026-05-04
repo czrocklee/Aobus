@@ -93,11 +93,11 @@ namespace ao::gtk
   }
 
   void AobusSoul::measure_vfunc(Gtk::Orientation orientation,
-                                [[maybe_unused]] int for_size,
+                                int /*for_size*/,
                                 int& minimum,
                                 int& natural,
-                                [[maybe_unused]] int& minimum_baseline,
-                                [[maybe_unused]] int& natural_baseline) const
+                                int& /*minimum_baseline*/,
+                                int& /*natural_baseline*/) const
   {
     if (orientation == Gtk::Orientation::HORIZONTAL && _showFullLogo)
     {

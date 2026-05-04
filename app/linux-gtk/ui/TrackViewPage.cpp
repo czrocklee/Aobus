@@ -838,7 +838,7 @@ namespace ao::gtk
     _filterEntry.set_icon_sensitive(Gtk::Entry::IconPosition::SECONDARY, canCreateSmartList);
   }
 
-  void TrackViewPage::onSelectionChanged([[maybe_unused]] std::uint32_t position, [[maybe_unused]] std::uint32_t nItems)
+  void TrackViewPage::onSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/)
   {
     _selectionChanged.emit();
   }

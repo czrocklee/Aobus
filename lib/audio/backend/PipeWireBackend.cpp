@@ -10,6 +10,8 @@ extern "C"
 {
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/raw-utils.h>
+#include <spa/param/param.h>
+#include <spa/param/props.h>
 #include <spa/pod/builder.h>
 }
 
@@ -22,6 +24,12 @@ extern "C"
 namespace ao::audio::backend
 {
   using namespace detail;
+
+  namespace
+  {
+    constexpr float kVolumeEpsilon = 0.0001F;
+    constexpr std::size_t kPodBufferSize = 1024;
+  }
 
   /**
    * @brief Implementation of PipeWireBackend.
@@ -65,9 +73,7 @@ namespace ao::audio::backend
     // Event Handlers
     void handleStreamProcess() const;
     void handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param);
-    void handleStreamStateChanged(::pw_stream_state oldState,
-                                  ::pw_stream_state newState,
-                                  char const* errorMessage);
+    void handleStreamStateChanged(::pw_stream_state oldState, ::pw_stream_state newState, char const* errorMessage);
     void handleStreamDrained();
 
     // Members
@@ -83,6 +89,10 @@ namespace ao::audio::backend
     PwCorePtr _core;
     PwStreamPtr _stream;
     SpaHookGuard _streamListener;
+
+    std::atomic<float> _volume{1.0F};
+    std::atomic<bool> _muted{false};
+    bool _volumeAvailable = true;
   };
 
   namespace
@@ -169,23 +179,63 @@ namespace ao::audio::backend
 
   void PipeWireBackend::Impl::handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param)
   {
-    if (param == nullptr || id != SPA_PARAM_Format)
+    if (param == nullptr)
     {
       return;
     }
-    if (auto negotiated = parseRawStreamFormat(param))
+
+    if (id == SPA_PARAM_Format)
     {
-      _format = *negotiated;
-      AUDIO_LOG_INFO(
-        "Negotiated PipeWire format: {}Hz, {}b, {} channels", _format.sampleRate, _format.bitDepth, _format.channels);
-      if (_callbacks.onFormatChanged != nullptr)
+      if (auto negotiated = parseRawStreamFormat(param))
       {
-        _callbacks.onFormatChanged(_callbacks.userData, _format);
+        _format = *negotiated;
+        AUDIO_LOG_INFO(
+          "Negotiated PipeWire format: {}Hz, {}b, {} channels", _format.sampleRate, _format.bitDepth, _format.channels);
+        if (_callbacks.onFormatChanged != nullptr)
+        {
+          _callbacks.onFormatChanged(_callbacks.userData, _format);
+        }
+      }
+    }
+    else if (id == SPA_PARAM_Props)
+    {
+      bool changed = false;
+
+      // Parse SPA_PROP_volume and SPA_PROP_mute from the Props pod
+      // For simplicity in this implementation, we fire the callback if Props changed.
+      // A more robust implementation would parse the pod to see if volume/mute actually changed.
+      if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
+      {
+        float volFloat = 0.0F;
+        if (::spa_pod_get_float(&prop->value, &volFloat) == 0)
+        {
+          if (std::abs(volFloat - _volume.exchange(volFloat)) > kVolumeEpsilon)
+          {
+            changed = true;
+          }
+        }
+      }
+
+      if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
+      {
+        bool muteBool = false;
+        if (::spa_pod_get_bool(&prop->value, &muteBool) == 0)
+        {
+          if (muteBool != _muted.exchange(muteBool))
+          {
+            changed = true;
+          }
+        }
+      }
+
+      if (changed && _callbacks.onVolumeChanged != nullptr)
+      {
+        _callbacks.onVolumeChanged(_callbacks.userData);
       }
     }
   }
 
-  void PipeWireBackend::Impl::handleStreamStateChanged([[maybe_unused]] ::pw_stream_state oldState,
+  void PipeWireBackend::Impl::handleStreamStateChanged(::pw_stream_state /*oldState*/,
                                                        ::pw_stream_state newState,
                                                        char const* errorMessage)
   {
@@ -255,18 +305,18 @@ namespace ao::audio::backend
 
     ::pw_thread_loop_lock(_impl->_threadLoop.get());
     auto* rawProps = ::pw_properties_new(PW_KEY_MEDIA_TYPE, // NOLINT(cppcoreguidelines-pro-type-vararg)
-                                                    "Audio",
-                                                    PW_KEY_MEDIA_CATEGORY,
-                                                    "Playback",
-                                                    PW_KEY_MEDIA_CATEGORY,
-                                                    "Music",
-                                                    PW_KEY_APP_NAME,
-                                                    "RockStudio",
-                                                    PW_KEY_APP_ID,
-                                                    "io.github.RockStudio",
-                                                    PW_KEY_NODE_NAME,
-                                                    "RockStudio Playback",
-                                                    nullptr);
+                                         "Audio",
+                                         PW_KEY_MEDIA_CATEGORY,
+                                         "Playback",
+                                         PW_KEY_MEDIA_CATEGORY,
+                                         "Music",
+                                         PW_KEY_APP_NAME,
+                                         "RockStudio",
+                                         PW_KEY_APP_ID,
+                                         "io.github.RockStudio",
+                                         PW_KEY_NODE_NAME,
+                                         "RockStudio Playback",
+                                         nullptr);
     auto props = ao::utility::makeUniquePtr<::pw_properties_free>(rawProps);
     ::pw_properties_set(props.get(), PW_KEY_NODE_RATE, std::format("1/{}", format.sampleRate).c_str());
 
@@ -298,7 +348,7 @@ namespace ao::audio::backend
       spaFmt = SPA_AUDIO_FORMAT_S24_LE;
     }
 
-    auto buffer = std::array<std::uint8_t, 1024>{};
+    auto buffer = std::array<std::uint8_t, kPodBufferSize>{};
     auto builder = ::spa_pod_builder{};
     ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
     auto frame = ::spa_pod_frame{};
@@ -338,6 +388,9 @@ namespace ao::audio::backend
       ::pw_thread_loop_unlock(_impl->_threadLoop.get());
       return ao::makeError(ao::Error::Code::InitFailed, "Failed to connect stream");
     }
+
+    _impl->_volumeAvailable = !useExclusive; // Default to available in shared mode
+
     ::pw_thread_loop_unlock(_impl->_threadLoop.get());
     return {};
   }
@@ -448,5 +501,70 @@ namespace ao::audio::backend
   ao::audio::ProfileId PipeWireBackend::profileId() const noexcept
   {
     return _exclusiveMode ? ao::audio::kProfileExclusive : ao::audio::kProfileShared;
+  }
+
+  void PipeWireBackend::setVolume(float volume)
+  {
+    auto const clamped = std::clamp(volume, 0.0F, 1.0F);
+    _impl->_volume.store(clamped, std::memory_order_relaxed);
+    if (!_impl->_threadLoop || !_impl->_stream)
+    {
+      return;
+    }
+
+    auto vol = static_cast<float>(clamped);
+
+    std::array<std::uint8_t, 128> buf{};
+    auto builder = ::spa_pod_builder{};
+    ::spa_pod_builder_init(&builder, buf.data(), buf.size());
+
+    auto frame = ::spa_pod_frame{};
+    ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+    ::spa_pod_builder_add(&builder, SPA_PROP_volume, SPA_POD_Float(clamped), 0);
+    auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
+
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_stream_set_control(_impl->_stream.get(), SPA_PROP_volume, 1, &vol);
+    ::pw_stream_update_params(_impl->_stream.get(), &param, 1);
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+  }
+
+  float PipeWireBackend::getVolume() const
+  {
+    return _impl->_volume.load(std::memory_order_relaxed);
+  }
+
+  void PipeWireBackend::setMuted(bool muted)
+  {
+    _impl->_muted.store(muted, std::memory_order_relaxed);
+    if (!_impl->_threadLoop || !_impl->_stream)
+    {
+      return;
+    }
+
+    std::array<std::uint8_t, 128> buf{};
+    auto builder = ::spa_pod_builder{};
+    ::spa_pod_builder_init(&builder, buf.data(), buf.size());
+
+    auto frame = ::spa_pod_frame{};
+    ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+    ::spa_pod_builder_add(&builder, SPA_PROP_mute, SPA_POD_Bool(muted), 0);
+    auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
+
+    ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_stream_update_params(_impl->_stream.get(), &param, 1);
+    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+  }
+
+  bool PipeWireBackend::isMuted() const
+  {
+    return _impl->_muted.load(std::memory_order_relaxed);
+  }
+
+  bool PipeWireBackend::isVolumeAvailable() const
+  {
+    return _impl && _impl->_volumeAvailable;
   }
 } // namespace ao::audio::backend

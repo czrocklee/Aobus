@@ -31,5 +31,11 @@ namespace ao::audio
 
     BackendId backendId() const noexcept override { return BackendId{kBackendNone}; }
     ProfileId profileId() const noexcept override { return ProfileId{kProfileShared}; }
+
+    void setVolume(float /*volume*/) override {}
+    float getVolume() const override { return 1.0f; }
+    void setMuted(bool /*muted*/) override {}
+    bool isMuted() const override { return false; }
+    bool isVolumeAvailable() const override { return true; }
   };
 } // namespace ao::audio

@@ -60,6 +60,24 @@ namespace ao::gtk
     _playbackBar->signalStopRequested().connect(sigc::mem_fun(*this, &PlaybackCoordinator::onStopRequested));
     _playbackBar->signalSeekRequested().connect(sigc::mem_fun(*this, &PlaybackCoordinator::onSeekRequested));
 
+    _playbackBar->signalVolumeChanged().connect(
+      [this](float vol)
+      {
+        if (_player)
+        {
+          _player->setVolume(vol);
+        }
+      });
+
+    _playbackBar->signalMuteToggled().connect(
+      [this]()
+      {
+        if (_player)
+        {
+          _player->toggleMute();
+        }
+      });
+
     _playbackTimer = ::g_timeout_add(
       100,
       [](void* data) -> int
@@ -82,10 +100,12 @@ namespace ao::gtk
     _lastPlaybackState = status.engine.transport;
 
     // Marshal to main thread for GTK widget updates
-    _dispatcher->dispatch([this, status]() {
-      _host.updatePlaybackStatus(status);
-      _playbackBar->setSnapshot(status);
-    });
+    _dispatcher->dispatch(
+      [this, status]()
+      {
+        _host.updatePlaybackStatus(status);
+        _playbackBar->setSnapshot(status);
+      });
 
     if (status.engine.statusText != _lastPlaybackErrorMessage)
     {

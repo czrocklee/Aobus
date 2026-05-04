@@ -19,9 +19,8 @@ namespace ao::model
     std::vector<TrackId> ids;
     ids.reserve(1000);
 
-    for (auto const& [id, view] : reader)
+    for (auto const& [id, _] : reader)
     {
-      (void)view;
       ids.push_back(id);
     }
 

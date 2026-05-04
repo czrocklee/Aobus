@@ -165,7 +165,7 @@ int main(int argc, char* argv[])
   // Add about action to application
   auto const aboutAction = Gio::SimpleAction::create("about");
   aboutAction->signal_activate().connect(
-    [&app]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+    [&app](Glib::VariantBase const& /*variant*/)
     {
       auto dialog = Gtk::AboutDialog{};
       dialog.set_program_name("Aobus");
@@ -185,7 +185,7 @@ int main(int argc, char* argv[])
 
   // Add quit action
   auto const quitAction = Gio::SimpleAction::create("quit");
-  quitAction->signal_activate().connect([&app]([[maybe_unused]] Glib::VariantBase const& /*variant*/) { app->quit(); });
+  quitAction->signal_activate().connect([&app](Glib::VariantBase const& /*variant*/) { app->quit(); });
   app->add_action(quitAction);
 
   // Keep window alive - use shared_ptr

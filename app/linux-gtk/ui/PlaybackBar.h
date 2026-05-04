@@ -17,6 +17,7 @@
 
 #include "AobusSoul.h"
 #include "AobusSoulWindow.h"
+#include "VolumeBar.h"
 
 namespace ao::gtk
 {
@@ -28,6 +29,8 @@ namespace ao::gtk
     using StopSignal = sigc::signal<void()>;
     using SeekSignal = sigc::signal<void(std::uint32_t)>;
     using OutputChangedSignal = sigc::signal<void(ao::audio::BackendId, ao::audio::DeviceId, ao::audio::ProfileId)>;
+    using VolumeChangedSignal = sigc::signal<void(float)>;
+    using MuteToggledSignal = sigc::signal<void()>;
 
     PlaybackBar();
     ~PlaybackBar() override;
@@ -40,6 +43,8 @@ namespace ao::gtk
     StopSignal& signalStopRequested();
     SeekSignal& signalSeekRequested();
     OutputChangedSignal& signalOutputChanged();
+    VolumeChangedSignal& signalVolumeChanged();
+    MuteToggledSignal& signalMuteToggled();
 
   private:
     struct LastState final
@@ -89,13 +94,20 @@ namespace ao::gtk
     Gtk::Scale _seekScale;
     Gtk::Label _timeLabel;
 
+    // Volume and mute
+    Gtk::ToggleButton _muteButton;
+    VolumeBar _volumeScale;
+
     PlaySignal _playRequested;
     PauseSignal _pauseRequested;
     StopSignal _stopRequested;
     SeekSignal _seekRequested;
     OutputChangedSignal _outputChanged;
+    VolumeChangedSignal _volumeChanged;
+    MuteToggledSignal _muteToggled;
 
     bool _updatingSeekScale = false;
+    bool _updatingVolumeScale = false;
 
     ao::audio::Quality _lastIconQuality = ao::audio::Quality::Unknown;
     sigc::connection _soulLongPressTimer;

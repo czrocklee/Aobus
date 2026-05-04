@@ -270,8 +270,7 @@ namespace
 
       auto hotData = builder.serializeHot(txn, _library.dictionary());
       auto coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
-      auto [id, _view] = writer.createHotCold(hotData, coldData);
-      (void)_view;
+      auto [id, _] = writer.createHotCold(hotData, coldData);
       txn.commit();
 
       return id;

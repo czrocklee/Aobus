@@ -13,10 +13,10 @@ When a user asks to commit, you MUST run a targeted `clang-format` pass on modif
 Run this command before performing any commit:
 ```bash
 while IFS= read -r -d '' entry; do
-  status="${entry:0:2}"
+  st="${entry:0:2}"
   f="${entry:3}"
 
-  if [[ "$status" =~ ^[RC] ]]; then
+  if [[ "$st" =~ ^[RC] ]]; then
     IFS= read -r -d '' f || break
   fi
 

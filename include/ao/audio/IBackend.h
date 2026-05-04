@@ -41,6 +41,9 @@ namespace ao::audio
     /// Called by the backend when its input stream format is negotiated or changes.
     void (*onFormatChanged)(void* userData, Format const& format) noexcept = nullptr;
 
+    /// Called by the backend when the system volume or mute state changes externally.
+    void (*onVolumeChanged)(void* userData) noexcept = nullptr;
+
     /// Called by the backend when a terminal error occurs (e.g. device lost).
     void (*onBackendError)(void* userData, std::string_view message) noexcept = nullptr;
   };
@@ -78,6 +81,12 @@ namespace ao::audio
      */
     virtual void setExclusiveMode(bool exclusive) = 0;
     virtual bool isExclusiveMode() const noexcept = 0;
+
+    virtual void setVolume(float volume) = 0;
+    virtual float getVolume() const = 0;
+    virtual void setMuted(bool muted) = 0;
+    virtual bool isMuted() const = 0;
+    virtual bool isVolumeAvailable() const = 0;
 
     virtual BackendId backendId() const noexcept = 0;
     virtual ProfileId profileId() const noexcept = 0;
