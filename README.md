@@ -1,5 +1,7 @@
 <p align="center">
-  <img src="aobus_logo.svg" width="200" height="200" alt="Aobus Logo">
+  <a href="Soul.md">
+    <img src="Soul.svg" width="200" height="200" alt="Aobus Soul Logo">
+  </a>
 </p>
 
 <h1 align="center">Aobus</h1>

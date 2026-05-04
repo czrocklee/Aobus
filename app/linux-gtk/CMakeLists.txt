@@ -23,6 +23,8 @@ add_library(aobus-gtk-lib STATIC
     ui/StatusBar.cpp
     ui/TrackRowDataProvider.cpp
     ui/PlaybackBar.cpp
+    ui/AobusSoul.cpp
+    ui/AobusSoulWindow.cpp
     ui/OutputMenuModel.cpp
     ui/ThemeBus.cpp
 
@@ -39,7 +41,7 @@ aobus_apply_clang_tidy(aobus-gtk-lib STRICT)
 
 # aobus-gtk executable
 add_executable(aobus-gtk main.cpp)
-target_link_libraries(aobus-gtk PRIVATE aobus-gtk-lib ao PkgGTKMM glibmm-2.68)
+target_link_libraries(aobus-gtk PRIVATE aobus-gtk-lib ao PkgGTKMM glibmm-2.68 mimalloc)
 target_include_directories(aobus-gtk PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # Configure ASan leak detection
