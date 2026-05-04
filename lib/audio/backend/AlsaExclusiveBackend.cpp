@@ -187,6 +187,7 @@ namespace ao::audio::backend
       else
       {
         ::snd_pcm_mmap_commit(pcm.get(), offset, 0); // Release back to ALSA
+
         if (callbacks.isSourceDrained(callbacks.userData))
         {
           ::snd_pcm_drain(pcm.get());
@@ -236,6 +237,7 @@ namespace ao::audio::backend
   {
     ::snd_pcm_info_t* info = nullptr;
     snd_pcm_info_alloca(&info); // stack-alloc macro
+
     if (::snd_pcm_info(pcm, info) < 0)
     {
       return false;
@@ -243,6 +245,7 @@ namespace ao::audio::backend
     int card = ::snd_pcm_info_get_card(info);
 
     ::snd_mixer_t* raw = nullptr;
+
     if (::snd_mixer_open(&raw, 0) < 0)
     {
       return false;
@@ -250,14 +253,17 @@ namespace ao::audio::backend
     mixer.reset(raw);
 
     auto const cardStr = std::format("hw:{}", card);
+
     if (::snd_mixer_attach(raw, cardStr.c_str()) < 0)
     {
       return false;
     }
+
     if (::snd_mixer_selem_register(raw, nullptr, nullptr) < 0)
     {
       return false;
     }
+
     if (::snd_mixer_load(raw) < 0)
     {
       return false;
@@ -265,6 +271,7 @@ namespace ao::audio::backend
 
     // Heuristic search — first match wins
     static constexpr auto kSelemNames = std::array<std::string_view, 4>{"Master", "PCM", "Digital", "Main"};
+
     for (auto const& name : kSelemNames)
     {
       auto* elem = ::snd_mixer_first_elem(raw);
@@ -278,11 +285,13 @@ namespace ao::audio::backend
         }
         elem = ::snd_mixer_elem_next(elem);
       }
+
       if (mixerElem)
       {
         break;
       }
     }
+
     if (!mixerElem)
     {
       return false;
@@ -300,6 +309,7 @@ namespace ao::audio::backend
       return;
     }
     float clamped = std::clamp(vol, 0.0F, 1.0F);
+
     if (hasDB)
     {
       long db = dbMin + static_cast<long>((dbMax - dbMin) * clamped);
@@ -328,16 +338,19 @@ namespace ao::audio::backend
       return 1.0F;
     }
     long val = 0;
+
     if (hasDB)
     {
       long db = 0;
       ::snd_mixer_selem_get_playback_dB(mixerElem, SND_MIXER_SCHN_MONO, &db);
+
       if (dbMax != dbMin)
       {
         return std::clamp(static_cast<float>(db - dbMin) / (dbMax - dbMin), 0.0F, 1.0F);
       }
     }
     ::snd_mixer_selem_get_playback_volume(mixerElem, SND_MIXER_SCHN_MONO, &val);
+
     if (volMax != volMin)
     {
       return std::clamp(static_cast<float>(val - volMin) / (volMax - volMin), 0.0F, 1.0F);
@@ -641,35 +654,52 @@ namespace ao::audio::backend
     return true;
   }
 
-  void AlsaExclusiveBackend::setVolume(float volume)
+  ao::Result<> AlsaExclusiveBackend::setProperty(ao::audio::PropertyId id, ao::audio::PropertyValue const& value)
   {
-    _impl->applyVolume(volume);
-  }
-
-  float AlsaExclusiveBackend::getVolume() const
-  {
-    return _impl->readVolume();
-  }
-
-  void AlsaExclusiveBackend::setMuted(bool muted)
-  {
-    _impl->applyMute(muted);
-  }
-
-  bool AlsaExclusiveBackend::isMuted() const
-  {
-    if (!_impl->mixerElem)
+    if (id == ao::audio::PropertyId::Volume)
     {
-      return false;
+      _impl->applyVolume(std::get<float>(value));
+      return {};
     }
-    int val = 0;
-    ::snd_mixer_selem_get_playback_switch(_impl->mixerElem, SND_MIXER_SCHN_MONO, &val);
-    return val == 0;
+
+    if (id == ao::audio::PropertyId::Muted)
+    {
+      _impl->applyMute(std::get<bool>(value));
+      return {};
+    }
+    return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
   }
 
-  bool AlsaExclusiveBackend::isVolumeAvailable() const
+  ao::Result<ao::audio::PropertyValue> AlsaExclusiveBackend::getProperty(ao::audio::PropertyId id) const
   {
-    return _impl && _impl->mixerElem != nullptr;
+    if (id == ao::audio::PropertyId::Volume)
+    {
+      return _impl->readVolume();
+    }
+
+    if (id == ao::audio::PropertyId::Muted)
+    {
+      if (!_impl->mixerElem)
+      {
+        return false;
+      }
+
+      int val = 0;
+      ::snd_mixer_selem_get_playback_switch(_impl->mixerElem, SND_MIXER_SCHN_MONO, &val);
+      return val == 0;
+    }
+    return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
+  }
+
+  ao::audio::PropertyInfo AlsaExclusiveBackend::queryProperty(ao::audio::PropertyId id) const noexcept
+  {
+    if (id == ao::audio::PropertyId::Volume || id == ao::audio::PropertyId::Muted)
+    {
+      bool const available = _impl && _impl->mixerElem != nullptr;
+      return {.canRead = true, .canWrite = true, .isAvailable = available, .emitsChangeNotifications = false};
+    }
+
+    return {};
   }
 
   ao::audio::BackendId AlsaExclusiveBackend::backendId() const noexcept

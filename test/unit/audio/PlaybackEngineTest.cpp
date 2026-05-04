@@ -1,90 +1,30 @@
 #include "CapturingBackend.h"
 #include "ScriptedDecoderSession.h"
-#include "fakeit.hpp"
-
+#include "TestUtility.h"
+#include <ao/Error.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackend.h>
 #include <ao/utility/IMainThreadDispatcher.h>
-
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
-#include <ao/Error.h>
-
 using namespace ao::audio;
+using namespace ao::audio::test;
 using namespace fakeit;
-
-namespace
-{
-  class MockDispatcher : public ao::IMainThreadDispatcher
-  {
-  public:
-    void dispatch(std::function<void()> callback) override { callback(); }
-  };
-
-  class MockBackendProxy final : public IBackend
-  {
-    IBackend& _real;
-
-  public:
-    MockBackendProxy(IBackend& real)
-      : _real(real)
-    {
-    }
-    ao::Result<> open(Format const& f, RenderCallbacks c) override { return _real.open(f, c); }
-    void reset() override { _real.reset(); }
-    void start() override { _real.start(); }
-    void pause() override { _real.pause(); }
-    void resume() override { _real.resume(); }
-    void flush() override { _real.flush(); }
-    void drain() override { _real.drain(); }
-    void stop() override { _real.stop(); }
-    void close() override { _real.close(); }
-    void setExclusiveMode(bool e) override { _real.setExclusiveMode(e); }
-    bool isExclusiveMode() const noexcept override { return _real.isExclusiveMode(); }
-    BackendId backendId() const noexcept override { return _real.backendId(); }
-    ProfileId profileId() const noexcept override { return _real.profileId(); }
-    void setVolume(float v) override { _real.setVolume(v); }
-    float getVolume() const override { return _real.getVolume(); }
-    void setMuted(bool m) override { _real.setMuted(m); }
-    bool isMuted() const override { return _real.isMuted(); }
-    bool isVolumeAvailable() const override { return _real.isVolumeAvailable(); }
-  };
-}
 
 TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
 {
-  Mock<IBackend> mockBackend;
+  SpyBackend spy;
+  auto& mockBackend = spy.mock();
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = DeviceId{"test-device"},
+  auto device = Device{.id = DeviceId{"test-device"},
                 .displayName = "Test",
                 .description = "Test",
                 .isDefault = false,
                 .backendId = kBackendNone};
 
-  Fake(Method(mockBackend, open));
-  Fake(Method(mockBackend, reset));
-  Fake(Method(mockBackend, start));
-  Fake(Method(mockBackend, pause));
-  Fake(Method(mockBackend, resume));
-  Fake(Method(mockBackend, flush));
-  Fake(Method(mockBackend, drain));
-  Fake(Method(mockBackend, stop));
-  Fake(Method(mockBackend, close));
-  Fake(Method(mockBackend, setExclusiveMode));
-  When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
-  When(Method(mockBackend, backendId)).AlwaysReturn(kBackendNone);
-  When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
-  Fake(Method(mockBackend, setVolume), Method(mockBackend, setMuted));
-  When(Method(mockBackend, getVolume)).AlwaysReturn(1.0F);
-  When(Method(mockBackend, isMuted)).AlwaysReturn(false);
-  When(Method(mockBackend, isVolumeAvailable)).AlwaysReturn(true);
-
-  auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
-
-  auto engine = Engine{std::move(backendPtr), device, dispatcher};
+  auto engine = Engine{spy.make_proxy(), device, dispatcher};
 
   SECTION("Stop correctly cleans up backend")
   {
@@ -117,13 +57,27 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
 
   SECTION("Volume and mute controls pass through to backend and update status")
   {
+    PropertyId lastSetPropertyId{};
+    auto lastSetPropertyValue = PropertyValue{false};
+
+    When(Method(mockBackend, setProperty))
+      .AlwaysDo(
+        [&](PropertyId id, PropertyValue const& value) -> ao::Result<>
+        {
+          lastSetPropertyId = id;
+          lastSetPropertyValue = value;
+          return ao::Result<>{};
+        });
+
     engine.setVolume(0.75F);
-    Verify(Method(mockBackend, setVolume).Using(0.75F)).Once();
+    REQUIRE(lastSetPropertyId == PropertyId::Volume);
+    REQUIRE(std::get<float>(lastSetPropertyValue) == Catch::Approx(0.75F));
     REQUIRE(engine.getVolume() == Catch::Approx(0.75F));
     REQUIRE(engine.status().volume == Catch::Approx(0.75F));
 
     engine.setMuted(true);
-    Verify(Method(mockBackend, setMuted).Using(true)).Once();
+    REQUIRE(lastSetPropertyId == PropertyId::Muted);
+    REQUIRE(std::get<bool>(lastSetPropertyValue) == true);
     REQUIRE(engine.isMuted() == true);
     REQUIRE(engine.status().muted == true);
 
@@ -134,14 +88,11 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
 
 TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
 {
-  Mock<IBackend> mockBackend1;
-  Mock<IBackend> mockBackend2;
+  SpyBackend spy1;
+  SpyBackend spy2;
+  auto& mockBackend1 = spy1.mock();
+  auto& mockBackend2 = spy2.mock();
   auto dispatcher = std::make_shared<MockDispatcher>();
-
-  Fake(
-    Method(mockBackend1, open), Method(mockBackend1, reset), Method(mockBackend1, stop), Method(mockBackend1, close));
-  Fake(
-    Method(mockBackend2, open), Method(mockBackend2, reset), Method(mockBackend2, stop), Method(mockBackend2, close));
 
   When(Method(mockBackend1, backendId)).AlwaysReturn(kBackendNone);
   When(Method(mockBackend1, profileId)).AlwaysReturn(kProfileShared);
@@ -149,26 +100,14 @@ TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
   When(Method(mockBackend2, backendId)).AlwaysReturn(kBackendAlsa);
   When(Method(mockBackend2, profileId)).AlwaysReturn(kProfileExclusive);
 
-  Fake(Method(mockBackend1, setVolume), Method(mockBackend1, setMuted));
-  When(Method(mockBackend1, getVolume)).AlwaysReturn(1.0F);
-  When(Method(mockBackend1, isMuted)).AlwaysReturn(false);
-  When(Method(mockBackend1, isVolumeAvailable)).AlwaysReturn(true);
-
-  Fake(Method(mockBackend2, setVolume), Method(mockBackend2, setMuted));
-  When(Method(mockBackend2, getVolume)).AlwaysReturn(1.0F);
-  When(Method(mockBackend2, isMuted)).AlwaysReturn(false);
-  When(Method(mockBackend2, isVolumeAvailable)).AlwaysReturn(true);
-
-  auto backend1 = std::make_unique<MockBackendProxy>(mockBackend1.get());
   auto engine = Engine{
-    std::move(backend1),
+    spy1.make_proxy(),
     {.id = DeviceId{"dev1"}, .displayName = "D1", .description = "D1", .isDefault = false, .backendId = kBackendNone},
     dispatcher};
 
   SECTION("Switching backend while idle")
   {
-    auto backend2 = std::make_unique<MockBackendProxy>(mockBackend2.get());
-    engine.setBackend(std::move(backend2),
+    engine.setBackend(spy2.make_proxy(),
                       {.id = DeviceId{"dev2"},
                        .displayName = "D2",
                        .description = "D2",
@@ -194,34 +133,15 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
     return;
   }
 
-  Mock<IBackend> mockBackend;
+  SpyBackend spy;
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = DeviceId{"test-device"},
+  auto device = Device{.id = DeviceId{"test-device"},
                 .displayName = "Test",
                 .description = "Test",
                 .isDefault = false,
                 .backendId = kBackendNone};
 
-  Fake(Method(mockBackend, open));
-  Fake(Method(mockBackend, reset));
-  Fake(Method(mockBackend, start));
-  Fake(Method(mockBackend, pause));
-  Fake(Method(mockBackend, resume));
-  Fake(Method(mockBackend, flush));
-  Fake(Method(mockBackend, drain));
-  Fake(Method(mockBackend, stop));
-  Fake(Method(mockBackend, close));
-  Fake(Method(mockBackend, setExclusiveMode));
-  When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
-  When(Method(mockBackend, backendId)).AlwaysReturn(kBackendNone);
-  When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
-  Fake(Method(mockBackend, setVolume), Method(mockBackend, setMuted));
-  When(Method(mockBackend, getVolume)).AlwaysReturn(1.0F);
-  When(Method(mockBackend, isMuted)).AlwaysReturn(false);
-  When(Method(mockBackend, isVolumeAvailable)).AlwaysReturn(true);
-
-  auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
-  auto engine = Engine{std::move(backendPtr), device, dispatcher};
+  auto engine = Engine{spy.make_proxy(), device, dispatcher};
 
   auto const descriptor =
     TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Test Title", .artist = "Test Artist"};
@@ -235,7 +155,6 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
     auto it = std::ranges::find(snap.flow.nodes, "rs-decoder", &ao::audio::flow::Node::id);
     REQUIRE(it != snap.flow.nodes.end());
     CHECK(it->type == flow::NodeType::Decoder);
-    CHECK(it->optFormat);
     CHECK(it->optFormat->sampleRate == 44100);
   }
 
@@ -270,9 +189,10 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
     return;
   }
 
-  Mock<IBackend> mockBackend;
+  SpyBackend spy;
+  auto& mockBackend = spy.mock();
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = DeviceId{"pipewire-shared"},
+  auto device = Device{.id = DeviceId{"pipewire-shared"},
                 .displayName = "PipeWire",
                 .description = "PipeWire Shared",
                 .isDefault = false,
@@ -288,29 +208,11 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
       [&](Format const& format, RenderCallbacks)
       {
         openedFormats.push_back(format);
-        return ao::Result<>();
+        return ao::Result<>{};
       });
-  Fake(Method(mockBackend, reset));
-  Fake(Method(mockBackend, start));
-  Fake(Method(mockBackend, pause));
-  Fake(Method(mockBackend, resume));
-  Fake(Method(mockBackend, flush));
-  Fake(Method(mockBackend, drain));
-  Fake(Method(mockBackend, stop));
-  Fake(Method(mockBackend, close));
-  Fake(Method(mockBackend, setExclusiveMode));
-  When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
   When(Method(mockBackend, backendId)).AlwaysReturn(kBackendPipeWire);
-  When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
 
-  Fake(Method(mockBackend, setVolume));
-  When(Method(mockBackend, getVolume)).AlwaysReturn(1.0F);
-  Fake(Method(mockBackend, setMuted));
-  When(Method(mockBackend, isMuted)).AlwaysReturn(false);
-  When(Method(mockBackend, isVolumeAvailable)).AlwaysReturn(true);
-
-  auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
-  auto engine = Engine{std::move(backendPtr), device, dispatcher};
+  auto engine = Engine{spy.make_proxy(), device, dispatcher};
 
   auto const descriptor =
     TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "PipeWire Shared", .artist = "Test Artist"};
@@ -318,7 +220,7 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
   engine.play(descriptor);
 
   Verify(Method(mockBackend, reset)).AtLeastOnce();
-  REQUIRE(openedFormats.size() >= 1);
+  REQUIRE(!openedFormats.empty());
   CHECK(openedFormats.back().sampleRate == 44100);
   CHECK(openedFormats.back().channels == 2);
   CHECK(openedFormats.back().bitDepth == 16);
@@ -336,9 +238,10 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
     return;
   }
 
-  Mock<IBackend> mockBackend;
+  SpyBackend spy;
+  auto& mockBackend = spy.mock();
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = DeviceId{"alsa-exclusive"},
+  auto device = Device{.id = DeviceId{"alsa-exclusive"},
                 .displayName = "ALSA",
                 .description = "ALSA Exclusive",
                 .isDefault = false,
@@ -354,29 +257,13 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
       [&](Format const& format, RenderCallbacks)
       {
         openedFormats.push_back(format);
-        return ao::Result<>();
+        return ao::Result<>{};
       });
-  Fake(Method(mockBackend, reset));
-  Fake(Method(mockBackend, start));
-  Fake(Method(mockBackend, pause));
-  Fake(Method(mockBackend, resume));
-  Fake(Method(mockBackend, flush));
-  Fake(Method(mockBackend, drain));
-  Fake(Method(mockBackend, stop));
-  Fake(Method(mockBackend, close));
-  Fake(Method(mockBackend, setExclusiveMode));
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(true);
   When(Method(mockBackend, backendId)).AlwaysReturn(kBackendAlsa);
   When(Method(mockBackend, profileId)).AlwaysReturn(kProfileExclusive);
 
-  Fake(Method(mockBackend, setVolume));
-  When(Method(mockBackend, getVolume)).AlwaysReturn(1.0F);
-  Fake(Method(mockBackend, setMuted));
-  When(Method(mockBackend, isMuted)).AlwaysReturn(false);
-  When(Method(mockBackend, isVolumeAvailable)).AlwaysReturn(true);
-
-  auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
-  auto engine = Engine{std::move(backendPtr), device, dispatcher};
+  auto engine = Engine{spy.make_proxy(), device, dispatcher};
 
   auto const descriptor =
     TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Unsupported Sample Rate", .artist = "Test Artist"};
@@ -387,13 +274,13 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
   auto const snap = engine.status();
   REQUIRE(snap.transport == Transport::Error);
   CHECK(snap.statusText.find("no resampler yet") != std::string::npos);
-  REQUIRE(openedFormats.size() == 0);
+  REQUIRE(openedFormats.empty());
 }
 
 TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
 {
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = DeviceId{"test-device"},
+  auto device = Device{.id = DeviceId{"test-device"},
                 .displayName = "Test",
                 .description = "Test",
                 .isDefault = false,
@@ -458,7 +345,7 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
 TEST_CASE("Engine - Pause and resume matrix", "[playback][engine][transport]")
 {
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = DeviceId{"test-device"},
+  auto device = Device{.id = DeviceId{"test-device"},
                 .displayName = "Test",
                 .description = "Test",
                 .isDefault = false,
@@ -466,7 +353,7 @@ TEST_CASE("Engine - Pause and resume matrix", "[playback][engine][transport]")
   auto backend = std::make_unique<CapturingBackend>();
   auto* backendPtr = backend.get();
 
-  Format fmt{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
+  auto fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
   auto factory = [fmt](auto const&, auto const&)
   {
     auto dec = std::make_unique<ScriptedDecoderSession>(
@@ -504,14 +391,14 @@ TEST_CASE("Engine - Pause and resume matrix", "[playback][engine][transport]")
 TEST_CASE("Engine - Seek matrix", "[playback][engine][seek]")
 {
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = DeviceId{"test-device"},
+  auto device = Device{.id = DeviceId{"test-device"},
                 .displayName = "Test",
                 .description = "Test",
                 .isDefault = false,
                 .backendId = kBackendNone};
   auto backend = std::make_unique<CapturingBackend>();
 
-  Format fmt{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true}; // 2 bytes = 1ms
+  auto fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true}; // 2 bytes = 1ms
   auto factory = [fmt](auto const&, auto const&)
   {
     auto dec = std::make_unique<ScriptedDecoderSession>(
@@ -543,14 +430,14 @@ TEST_CASE("Engine - Seek matrix", "[playback][engine][seek]")
 TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
 {
   auto dispatcher = std::make_shared<MockDispatcher>();
-  Device device{.id = DeviceId{"test-device"},
+  auto device = Device{.id = DeviceId{"test-device"},
                 .displayName = "Test",
                 .description = "Test",
                 .isDefault = false,
                 .backendId = kBackendNone};
   auto backend = std::make_unique<CapturingBackend>();
 
-  Format fmt{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+  auto fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
   auto factory = [fmt](auto const&, auto const&)
   {
     auto dec = std::make_unique<ScriptedDecoderSession>(
@@ -588,5 +475,93 @@ TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
     trackEnded = false;
     Engine::onDrainComplete(&engine);
     REQUIRE(trackEnded == false);
+  }
+}
+
+TEST_CASE("Engine - Property API", "[playback][engine][property]")
+{
+  auto dispatcher = std::make_shared<MockDispatcher>();
+  auto device = Device{.id = DeviceId{"test-device"},
+                .displayName = "Test",
+                .description = "Test",
+                .isDefault = false,
+                .backendId = kBackendNone};
+  auto backend = std::make_unique<CapturingBackend>();
+  auto* backendPtr = backend.get();
+
+  auto engine = Engine{std::move(backend), device, dispatcher};
+
+  SECTION("queryProperty returns all-false for unknown PropertyId")
+  {
+    // Cast to an out-of-range value to simulate an unknown property
+    auto constexpr kUnknownId = static_cast<PropertyId>(999);
+    auto const info = backendPtr->queryProperty(kUnknownId);
+    REQUIRE(info.canRead == false);
+    REQUIRE(info.canWrite == false);
+    REQUIRE(info.isAvailable == false);
+    REQUIRE(info.emitsChangeNotifications == false);
+  }
+
+  SECTION("queryProperty returns valid info for Volume")
+  {
+    auto const info = backendPtr->queryProperty(PropertyId::Volume);
+    REQUIRE(info.canRead == true);
+    REQUIRE(info.canWrite == true);
+    REQUIRE(info.isAvailable == true);
+  }
+
+  SECTION("setProperty returns error for unknown PropertyId")
+  {
+    auto constexpr kUnknownId = static_cast<PropertyId>(999);
+    auto const result = backendPtr->setProperty(kUnknownId, PropertyValue{0.5f});
+    REQUIRE(!result);
+    REQUIRE(result.error().code == ao::Error::Code::NotSupported);
+  }
+
+  SECTION("getProperty returns error for unknown PropertyId")
+  {
+    auto constexpr kUnknownId = static_cast<PropertyId>(999);
+    auto const result = backendPtr->getProperty(kUnknownId);
+    REQUIRE(!result);
+    REQUIRE(result.error().code == ao::Error::Code::NotSupported);
+  }
+
+  SECTION("onPropertyChanged callback updates engine volume status")
+  {
+    backendPtr->firePropertyChanged(PropertyId::Volume);
+
+    REQUIRE(engine.status().volume == Catch::Approx(1.0f));
+    REQUIRE(engine.getVolume() == Catch::Approx(1.0f));
+    REQUIRE(engine.status().volumeAvailable == true);
+  }
+
+  SECTION("onPropertyChanged callback updates engine mute status")
+  {
+    backendPtr->firePropertyChanged(PropertyId::Muted);
+
+    REQUIRE(engine.status().muted == false);
+    REQUIRE(engine.isMuted() == false);
+  }
+
+  SECTION("setVolume round-trips through engine and backend")
+  {
+    engine.setVolume(0.42F);
+    REQUIRE(engine.getVolume() == Catch::Approx(0.42F));
+    REQUIRE(engine.status().volume == Catch::Approx(0.42F));
+
+    auto const backendVol = backendPtr->getProperty(PropertyId::Volume);
+    REQUIRE(backendVol);
+    REQUIRE(std::get<float>(*backendVol) == Catch::Approx(0.42F));
+  }
+
+  SECTION("setMuted round-trips through engine and backend")
+  {
+    engine.setMuted(true);
+    REQUIRE(engine.isMuted() == true);
+    REQUIRE(engine.status().muted == true);
+
+    auto const backendMuted = backendPtr->getProperty(PropertyId::Muted);
+    REQUIRE(backendMuted);
+    REQUIRE(std::get<bool>(*backendMuted) == true);
   }
 }

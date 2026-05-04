@@ -62,11 +62,20 @@ TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
 
     for (auto const& node : snap.flow.nodes)
     {
-      if (node.id == "rs-decoder") decoderFound = true;
-      if (node.id == "rs-engine") engineFound = true;
+      if (node.id == "rs-decoder")
+      {
+        decoderFound = true;
+      }
+      if (node.id == "rs-engine")
+      {
+        engineFound = true;
+      }
     }
 
-    if (decoderFound && engineFound) break;
+    if (decoderFound && engineFound)
+    {
+      break;
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 

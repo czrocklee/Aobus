@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/audio/Backend.h>
+#include <ao/audio/Property.h>
 
 #include <ao/Error.h>
 #include <cstddef>
@@ -41,8 +42,8 @@ namespace ao::audio
     /// Called by the backend when its input stream format is negotiated or changes.
     void (*onFormatChanged)(void* userData, Format const& format) noexcept = nullptr;
 
-    /// Called by the backend when the system volume or mute state changes externally.
-    void (*onVolumeChanged)(void* userData) noexcept = nullptr;
+    /// Called by the backend when a runtime property changes externally.
+    void (*onPropertyChanged)(void* userData, PropertyId id) noexcept = nullptr;
 
     /// Called by the backend when a terminal error occurs (e.g. device lost).
     void (*onBackendError)(void* userData, std::string_view message) noexcept = nullptr;
@@ -82,11 +83,29 @@ namespace ao::audio
     virtual void setExclusiveMode(bool exclusive) = 0;
     virtual bool isExclusiveMode() const noexcept = 0;
 
-    virtual void setVolume(float volume) = 0;
-    virtual float getVolume() const = 0;
-    virtual void setMuted(bool muted) = 0;
-    virtual bool isMuted() const = 0;
-    virtual bool isVolumeAvailable() const = 0;
+    // Runtime control surface
+    virtual Result<> setProperty(PropertyId id, PropertyValue const& value) = 0;
+    virtual Result<PropertyValue> getProperty(PropertyId id) const = 0;
+    virtual PropertyInfo queryProperty(PropertyId id) const noexcept = 0;
+
+    template<typename T, PropertyId Id>
+    Result<> set(TypedProperty<T, Id>, T value)
+    {
+      return setProperty(Id, PropertyValue{value});
+    }
+
+    template<typename T, PropertyId Id>
+    Result<T> get(TypedProperty<T, Id>) const
+    {
+      auto const result = getProperty(Id);
+
+      if (!result)
+      {
+        return std::unexpected(result.error());
+      }
+
+      return std::get<T>(*result);
+    }
 
     virtual BackendId backendId() const noexcept = 0;
     virtual ProfileId profileId() const noexcept = 0;

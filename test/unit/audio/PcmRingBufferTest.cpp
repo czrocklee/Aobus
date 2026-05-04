@@ -93,7 +93,9 @@ TEST_CASE("PcmRingBuffer - Capacity Limits", "[audio][unit][ring_buffer]")
 
     // Fill remaining if any
     std::byte b{0xDD};
-    while (buffer.write(std::span<std::byte const>(&b, 1)) == 1);
+    while (buffer.write(std::span<std::byte const>(&b, 1)) == 1)
+    {
+    }
 
     REQUIRE(buffer.write(std::span<std::byte const>(&b, 1)) == 0);
   }

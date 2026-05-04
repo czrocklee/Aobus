@@ -1,48 +1,19 @@
-#include "fakeit.hpp"
-
-#include <ao/audio/Backend.h>
+#include "TestUtility.h"
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Player.h>
-
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
 
 using namespace ao::audio;
+using namespace ao::audio::test;
 using namespace fakeit;
 
 namespace
 {
-  class MockProviderWrapper : public IBackendProvider
-  {
-    IBackendProvider& _real;
-
-  public:
-    MockProviderWrapper(IBackendProvider& real)
-      : _real(real)
-    {
-    }
-
-    Subscription subscribeDevices(OnDevicesChangedCallback callback) override
-    {
-      return _real.subscribeDevices(callback);
-    }
-
-    std::unique_ptr<IBackend> createBackend(Device const& device, ProfileId const& profile) override
-    {
-      return _real.createBackend(device, profile);
-    }
-    Status status() const override { return _real.status(); }
-    Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override
-    {
-      return _real.subscribeGraph(routeAnchor, callback);
-    }
-  };
-
   Engine::RouteStatus createBaseEngineRoute()
   {
     auto engineSnap = Engine::RouteStatus{};
@@ -105,12 +76,6 @@ namespace
     BackendId backendId() const noexcept override { return _backendId; }
     ProfileId profileId() const noexcept override { return _profileId; }
   };
-
-  class MockDispatcher : public ao::IMainThreadDispatcher
-  {
-  public:
-    void dispatch(std::function<void()> callback) override { callback(); }
-  };
 } // namespace
 
 TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]")
@@ -125,12 +90,14 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
       [&](IBackendProvider::OnDevicesChangedCallback cb)
       {
         if (cb)
+        {
           cb(std::vector<Device>{Device{.id = DeviceId{"mock-sink"},
                                         .displayName = "Mock Sink",
                                         .description = "Mock",
                                         .isDefault = true,
                                         .backendId = kBackendNone,
                                         .capabilities = {}}});
+        }
         return Subscription{};
       });
 
@@ -150,7 +117,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
       .devices = {}});
 
   Player player(nullptr);
-  player.addProvider(std::make_unique<MockProviderWrapper>(mockProvider.get()));
+  player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
   player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared);
 
@@ -249,12 +216,14 @@ TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][player
       [&](IBackendProvider::OnDevicesChangedCallback cb)
       {
         if (cb)
+        {
           cb(std::vector<Device>{Device{.id = DeviceId{"mock-sink"},
                                         .displayName = "Mock Sink",
                                         .description = "Mock",
                                         .isDefault = true,
                                         .backendId = kBackendNone,
                                         .capabilities = {}}});
+        }
         return Subscription{};
       });
 
@@ -269,7 +238,7 @@ TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][player
       .devices = {}});
 
   Player player(nullptr);
-  player.addProvider(std::make_unique<MockProviderWrapper>(mockProvider.get()));
+  player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
   player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared);
 
   SECTION("Stale callbacks are ignored via generation counter")
@@ -311,7 +280,7 @@ TEST_CASE("Player - Pending Output", "[playback][player][pending]")
                                            .devices = {}});
 
   Player player(nullptr);
-  player.addProvider(std::make_unique<MockProviderWrapper>(mockProvider.get()));
+  player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
   // 1. Call setOutput before devices are available
   player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared);

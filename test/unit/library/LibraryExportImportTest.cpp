@@ -53,6 +53,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     auto [trackId, view] =
       trackWriter.createHotCold(preparedHot.size(),
                                 preparedCold.size(),
+                                // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                 [&](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
                                 {
                                   preparedHot.writeTo(hot);
@@ -88,6 +89,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml2.resources());
     ml2.tracks().writer(txn).createHotCold(preparedHot.size(),
                                            preparedCold.size(),
+                                           // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                            [&](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
                                            {
                                              preparedHot.writeTo(hot);
@@ -121,7 +123,10 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     // Check tags
     auto tags = view.tags();
     std::vector<std::string> tagNames;
-    for (auto tid : tags) tagNames.push_back(std::string(dict.get(tid)));
+    for (auto tid : tags)
+    {
+      tagNames.push_back(std::string(dict.get(tid)));
+    }
     REQUIRE(std::ranges::contains(tagNames, "rock"));
     REQUIRE(std::ranges::contains(tagNames, "favorite"));
 
@@ -130,7 +135,10 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     bool foundMood = false;
     for (auto [k, v] : custom)
     {
-      if (std::string(dict.get(k)) == "mood" && std::string(v) == "happy") foundMood = true;
+      if (std::string(dict.get(k)) == "mood" && std::string(v) == "happy")
+      {
+        foundMood = true;
+      }
     }
     REQUIRE(foundMood);
 
@@ -174,6 +182,7 @@ TEST_CASE("Library import remaps list parents regardless of YAML order", "[core]
     std::tie(trackId, std::ignore) =
       ml.tracks().writer(txn).createHotCold(preparedHot.size(),
                                             preparedCold.size(),
+                                            // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                             [&](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
                                             {
                                               preparedHot.writeTo(hot);
@@ -228,8 +237,8 @@ library:
       }
     }
 
-    REQUIRE(parent.has_value());
-    REQUIRE(child.has_value());
+    REQUIRE(parent);
+    REQUIRE(child);
     REQUIRE(parent->parentId() == ao::ListId{0});
     REQUIRE(child->parentId() == parentId);
     REQUIRE(childId != parentId);

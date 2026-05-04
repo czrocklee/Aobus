@@ -42,7 +42,9 @@ if(CLANG_TIDY_EXECUTABLE)
   )
 
   # Relaxed checks (test)
-  set(_AO_CLANG_TIDY_RELAXED_CHECKS "-checks=-*,performance-avoid-endl")
+  set(_AO_CLANG_TIDY_RELAXED_CHECKS
+    "-checks=-*,bugprone-*,-bugprone-unchecked-optional-access,readability-braces-around-statements,readability-container-size-empty,readability-redundant-*,performance-avoid-endl,-clang-diagnostic-*"
+  )
 
   # Header filters (portable — uses CMAKE_SOURCE_DIR instead of hardcoded path)
   set(_AO_CLANG_TIDY_STRICT_FILTER "'${CMAKE_SOURCE_DIR}/(lib|app)/.*'")
