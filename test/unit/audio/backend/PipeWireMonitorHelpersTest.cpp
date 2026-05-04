@@ -102,15 +102,15 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
     auto f = ::spa_pod_frame{};
     ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
     ::spa_pod_builder_add(&b,
-                        SPA_FORMAT_mediaType,
-                        SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                        SPA_FORMAT_mediaSubtype,
-                        SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                        SPA_FORMAT_AUDIO_format,
-                        SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
-                        SPA_FORMAT_AUDIO_channels,
-                        SPA_POD_Int(2),
-                        0);
+                          SPA_FORMAT_mediaType,
+                          SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                          SPA_FORMAT_mediaSubtype,
+                          SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                          SPA_FORMAT_AUDIO_format,
+                          SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
+                          SPA_FORMAT_AUDIO_channels,
+                          SPA_POD_Int(2),
+                          0);
 
     // Add rate as a range
     ::spa_pod_builder_prop(&b, SPA_FORMAT_AUDIO_rate, 0);
@@ -141,15 +141,15 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
     auto f = ::spa_pod_frame{};
     ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
     ::spa_pod_builder_add(&b,
-                        SPA_FORMAT_mediaType,
-                        SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                        SPA_FORMAT_mediaSubtype,
-                        SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                        SPA_FORMAT_AUDIO_format,
-                        SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
-                        SPA_FORMAT_AUDIO_channels,
-                        SPA_POD_Int(2),
-                        0);
+                          SPA_FORMAT_mediaType,
+                          SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                          SPA_FORMAT_mediaSubtype,
+                          SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                          SPA_FORMAT_AUDIO_format,
+                          SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
+                          SPA_FORMAT_AUDIO_channels,
+                          SPA_POD_Int(2),
+                          0);
 
     // Add rate as an enum
     ::spa_pod_builder_prop(&b, SPA_FORMAT_AUDIO_rate, 0);

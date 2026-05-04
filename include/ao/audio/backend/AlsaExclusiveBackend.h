@@ -34,6 +34,12 @@ namespace ao::audio::backend
     ao::audio::BackendId backendId() const noexcept override;
     ao::audio::ProfileId profileId() const noexcept override;
 
+    void setVolume(float volume) override;
+    float getVolume() const override;
+    void setMuted(bool muted) override;
+    bool isMuted() const override;
+    bool isVolumeAvailable() const override;
+
   private:
     struct Impl;
     std::unique_ptr<Impl> _impl;

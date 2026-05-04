@@ -73,9 +73,8 @@ namespace ao::model
     TrackIdList::notifyReset();
   }
 
-  void ManualTrackIdList::onInserted(TrackId id, std::size_t /*index*/)
+  void ManualTrackIdList::onInserted(TrackId /*id*/, std::size_t /*index*/)
   {
-    (void)id;
   }
 
   void ManualTrackIdList::onUpdated(TrackId id, std::size_t /*index*/)

@@ -16,7 +16,7 @@ namespace ao::gtk
 
   ImportProgressDialog::~ImportProgressDialog() = default;
 
-  void ImportProgressDialog::setupUi([[maybe_unused]] std::int32_t maxItems)
+  void ImportProgressDialog::setupUi(std::int32_t /*maxItems*/)
   {
     constexpr std::int32_t kDialogWidth = 400;
     constexpr std::int32_t kDialogHeight = 150;

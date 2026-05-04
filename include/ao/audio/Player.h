@@ -37,6 +37,9 @@ namespace ao::audio
       flow::Graph flow;
       Quality quality = Quality::Unknown;
       std::string qualityTooltip;
+      float volume = 1.0f;
+      bool muted = false;
+      bool volumeAvailable = false;
       bool isReady = false;
 
       bool operator==(Status const&) const = default;
@@ -53,6 +56,10 @@ namespace ao::audio
     void resume();
     void stop();
     void seek(std::uint32_t positionMs);
+
+    void setVolume(float vol);
+    void setMuted(bool muted);
+    void toggleMute();
 
     Status status() const;
     bool isReady() const;

@@ -77,8 +77,7 @@ namespace ao::library
         auto [trackId, view] = trackWriter.createHotCold(
           preparedHot.size(),
           preparedCold.size(),
-          [&preparedHot, &preparedCold](
-            [[maybe_unused]] ao::TrackId id, std::span<std::byte> hot, std::span<std::byte> cold)
+          [&preparedHot, &preparedCold](ao::TrackId /*id*/, std::span<std::byte> hot, std::span<std::byte> cold)
           {
             preparedHot.writeTo(hot);
             preparedCold.writeTo(cold);

@@ -9,7 +9,7 @@
 
 namespace ao::audio
 {
-  class CapturingBackend : public IBackend
+  class CapturingBackend final : public IBackend
   {
   public:
     struct Event
@@ -41,6 +41,12 @@ namespace ao::audio
     BackendId backendId() const noexcept override { return BackendId{"capturing"}; }
     ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
 
+    void setVolume(float volume) override { _volume = volume; }
+    float getVolume() const override { return _volume; }
+    void setMuted(bool muted) override { _muted = muted; }
+    bool isMuted() const override { return _muted; }
+    bool isVolumeAvailable() const override { return true; }
+
     // Helpers for tests
     void setOpenResult(ao::Result<> res) { _openResult = res; }
     std::vector<Event> const& events() const { return _events; }
@@ -69,9 +75,11 @@ namespace ao::audio
 
   private:
     std::vector<Event> _events;
-    RenderCallbacks _callbacks = {};
-    Format _format = {};
-    ao::Result<> _openResult = {};
+    RenderCallbacks _callbacks{};
+    Format _format{};
+    ao::Result<> _openResult{};
     bool _exclusive = false;
+    float _volume = 1.0f;
+    bool _muted = false;
   };
 } // namespace ao::audio

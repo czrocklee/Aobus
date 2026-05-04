@@ -16,7 +16,8 @@ using namespace std::chrono_literals;
 
 TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
 {
-  auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
+  auto const format =
+    Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
   auto const info = DecodedStreamInfo{.sourceFormat = format, .outputFormat = format, .durationMs = 1000};
 
   std::atomic<int> errorCount{0};

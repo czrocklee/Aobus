@@ -346,4 +346,17 @@ TEST_CASE("Player - Basic Control Propagation", "[playback][player][control]")
     player.seek(1000);
     REQUIRE(player.status().engine.positionMs == 0);
   }
+
+  SECTION("Volume and mute are propagated to engine and status")
+  {
+    player.setVolume(0.6f);
+    REQUIRE(player.status().volume == Catch::Approx(0.6f));
+    REQUIRE(player.status().engine.volume == Catch::Approx(0.6f));
+
+    player.setMuted(true);
+    REQUIRE(player.status().muted == true);
+
+    player.toggleMute();
+    REQUIRE(player.status().muted == false);
+  }
 }

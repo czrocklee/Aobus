@@ -26,6 +26,7 @@ namespace ao::audio::backend
 {
   constexpr int kAlsaWaitTimeoutMs = 500;
   constexpr int kPollRetryDelayMs = 10;
+  constexpr std::size_t kDefaultPeriodSize = 1024;
 
   struct AlsaExclusiveBackend::Impl final
   {
@@ -51,6 +52,26 @@ namespace ao::audio::backend
     std::atomic<bool> paused{false};
     bool canPause = false;
 
+    // --- Mixer members ---
+    struct AlsaMixerDeleter
+    {
+      void operator()(::snd_mixer_t* h) const noexcept
+      {
+        if (h)
+        {
+          ::snd_mixer_close(h);
+        }
+      }
+    };
+    using AlsaMixerPtr = std::unique_ptr<::snd_mixer_t, AlsaMixerDeleter>;
+
+    AlsaMixerPtr mixer;
+    ::snd_mixer_elem_t* mixerElem = nullptr; // non-owning
+    std::string mixerElemName;               // debug/log
+    long volMin = 0, volMax = 100;
+    bool hasDB = false;
+    long dbMin = 0, dbMax = 0;
+
     explicit Impl(std::string const& name)
       : deviceName{name}
     {
@@ -58,6 +79,11 @@ namespace ao::audio::backend
 
     void playbackLoop(std::stop_token const& stopToken);
     void recoverFromXrun(int err) const;
+
+    bool initMixer(::snd_pcm_t* pcm);
+    void applyVolume(float vol);
+    void applyMute(bool mute);
+    float readVolume() const;
   };
 
   void AlsaExclusiveBackend::Impl::playbackLoop(std::stop_token const& stopToken)
@@ -73,7 +99,7 @@ namespace ao::audio::backend
 
     if (periodSize == 0)
     {
-      periodSize = 1024;
+      periodSize = kDefaultPeriodSize;
     }
 
     std::size_t const bytesPerFrame = (format.bitDepth / 8) * format.channels;
@@ -206,6 +232,119 @@ namespace ao::audio::backend
     }
   }
 
+  bool AlsaExclusiveBackend::Impl::initMixer(::snd_pcm_t* pcm)
+  {
+    ::snd_pcm_info_t* info = nullptr;
+    snd_pcm_info_alloca(&info); // stack-alloc macro
+    if (::snd_pcm_info(pcm, info) < 0)
+    {
+      return false;
+    }
+    int card = ::snd_pcm_info_get_card(info);
+
+    ::snd_mixer_t* raw = nullptr;
+    if (::snd_mixer_open(&raw, 0) < 0)
+    {
+      return false;
+    }
+    mixer.reset(raw);
+
+    auto const cardStr = std::format("hw:{}", card);
+    if (::snd_mixer_attach(raw, cardStr.c_str()) < 0)
+    {
+      return false;
+    }
+    if (::snd_mixer_selem_register(raw, nullptr, nullptr) < 0)
+    {
+      return false;
+    }
+    if (::snd_mixer_load(raw) < 0)
+    {
+      return false;
+    }
+
+    // Heuristic search — first match wins
+    static constexpr auto kSelemNames = std::array<std::string_view, 4>{"Master", "PCM", "Digital", "Main"};
+    for (auto const& name : kSelemNames)
+    {
+      auto* elem = ::snd_mixer_first_elem(raw);
+      while (elem)
+      {
+        if (::snd_mixer_selem_get_name(elem) == std::string_view{name})
+        {
+          mixerElem = elem;
+          mixerElemName = name.data();
+          break;
+        }
+        elem = ::snd_mixer_elem_next(elem);
+      }
+      if (mixerElem)
+      {
+        break;
+      }
+    }
+    if (!mixerElem)
+    {
+      return false;
+    }
+
+    ::snd_mixer_selem_get_playback_volume_range(mixerElem, &volMin, &volMax);
+    hasDB = (::snd_mixer_selem_get_playback_dB_range(mixerElem, &dbMin, &dbMax) == 0);
+    return true;
+  }
+
+  void AlsaExclusiveBackend::Impl::applyVolume(float vol)
+  {
+    if (!mixerElem)
+    {
+      return;
+    }
+    float clamped = std::clamp(vol, 0.0F, 1.0F);
+    if (hasDB)
+    {
+      long db = dbMin + static_cast<long>((dbMax - dbMin) * clamped);
+      ::snd_mixer_selem_set_playback_dB_all(mixerElem, db, 0);
+    }
+    else
+    {
+      long val = volMin + static_cast<long>((volMax - volMin) * clamped);
+      ::snd_mixer_selem_set_playback_volume_all(mixerElem, val);
+    }
+  }
+
+  void AlsaExclusiveBackend::Impl::applyMute(bool mute)
+  {
+    if (!mixerElem)
+    {
+      return;
+    }
+    ::snd_mixer_selem_set_playback_switch_all(mixerElem, mute ? 0 : 1);
+  }
+
+  float AlsaExclusiveBackend::Impl::readVolume() const
+  {
+    if (!mixerElem)
+    {
+      return 1.0F;
+    }
+    long val = 0;
+    if (hasDB)
+    {
+      long db = 0;
+      ::snd_mixer_selem_get_playback_dB(mixerElem, SND_MIXER_SCHN_MONO, &db);
+      if (dbMax != dbMin)
+      {
+        return std::clamp(static_cast<float>(db - dbMin) / (dbMax - dbMin), 0.0F, 1.0F);
+      }
+    }
+    ::snd_mixer_selem_get_playback_volume(mixerElem, SND_MIXER_SCHN_MONO, &val);
+    if (volMax != volMin)
+    {
+      return std::clamp(static_cast<float>(val - volMin) / (volMax - volMin), 0.0F, 1.0F);
+    }
+    return 1.0F;
+  }
+
   AlsaExclusiveBackend::AlsaExclusiveBackend(ao::audio::Device const& device, ao::audio::ProfileId const& /*profile*/)
     : _impl{std::make_unique<Impl>(device.id.value())}
   {
@@ -303,7 +442,7 @@ namespace ao::audio::backend
     auto periods = std::uint32_t{4};
     ::snd_pcm_hw_params_set_periods_near(safePcm.get(), params, &periods, 0);
 
-    ::snd_pcm_uframes_t periodSize = 1024;
+    ::snd_pcm_uframes_t periodSize = kDefaultPeriodSize;
     ::snd_pcm_hw_params_set_period_size_near(safePcm.get(), params, &periodSize, 0);
 
     if (::snd_pcm_hw_params(safePcm.get(), params) < 0)
@@ -367,6 +506,11 @@ namespace ao::audio::backend
     if (_impl->callbacks.onRouteReady != nullptr)
     {
       _impl->callbacks.onRouteReady(_impl->callbacks.userData, _impl->deviceName);
+    }
+
+    if (!_impl->initMixer(_impl->pcm.get()))
+    {
+      AUDIO_LOG_DEBUG("AlsaExclusiveBackend: No hardware mixer found for device '{}'", _impl->deviceName);
     }
 
     return {};
@@ -484,15 +628,48 @@ namespace ao::audio::backend
   {
     stop();
     _impl->pcm.reset();
+    _impl->mixer.reset();
+    _impl->mixerElem = nullptr;
   }
 
-  void AlsaExclusiveBackend::setExclusiveMode([[maybe_unused]] bool exclusive)
+  void AlsaExclusiveBackend::setExclusiveMode(bool /*exclusive*/)
   {
   }
 
   bool AlsaExclusiveBackend::isExclusiveMode() const noexcept
   {
     return true;
+  }
+
+  void AlsaExclusiveBackend::setVolume(float volume)
+  {
+    _impl->applyVolume(volume);
+  }
+
+  float AlsaExclusiveBackend::getVolume() const
+  {
+    return _impl->readVolume();
+  }
+
+  void AlsaExclusiveBackend::setMuted(bool muted)
+  {
+    _impl->applyMute(muted);
+  }
+
+  bool AlsaExclusiveBackend::isMuted() const
+  {
+    if (!_impl->mixerElem)
+    {
+      return false;
+    }
+    int val = 0;
+    ::snd_mixer_selem_get_playback_switch(_impl->mixerElem, SND_MIXER_SCHN_MONO, &val);
+    return val == 0;
+  }
+
+  bool AlsaExclusiveBackend::isVolumeAvailable() const
+  {
+    return _impl && _impl->mixerElem != nullptr;
   }
 
   ao::audio::BackendId AlsaExclusiveBackend::backendId() const noexcept

@@ -225,7 +225,7 @@ namespace ao::audio::backend
 
   namespace
   {
-    void onCoreDone(void* data, [[maybe_unused]] std::uint32_t id, int seq)
+    void onCoreDone(void* data, std::uint32_t /*id*/, int seq)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
 
@@ -242,7 +242,7 @@ namespace ao::audio::backend
 
     void onRegistryGlobal(void* data,
                           std::uint32_t id,
-                          [[maybe_unused]] std::uint32_t permissions,
+                          std::uint32_t /*permissions*/,
                           char const* type,
                           std::uint32_t version,
                           ::spa_dict const* props)
@@ -384,10 +384,10 @@ namespace ao::audio::backend
     }
 
     void onNodeParam(void* data,
-                     [[maybe_unused]] int seq,
+                     int /*seq*/,
                      std::uint32_t id,
-                     [[maybe_unused]] std::uint32_t index,
-                     [[maybe_unused]] std::uint32_t next,
+                     std::uint32_t /*index*/,
+                     std::uint32_t /*next*/,
                      ::spa_pod const* param)
     {
       auto* const binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
@@ -460,7 +460,7 @@ namespace ao::audio::backend
                                                    return ev;
                                                  }()};
 
-    void onRefreshEvent(void* data, [[maybe_unused]] std::uint64_t expiry)
+    void onRefreshEvent(void* data, std::uint64_t /*expiry*/)
     {
       static_cast<PipeWireMonitor::Impl*>(data)->refresh();
     }

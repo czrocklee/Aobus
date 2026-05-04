@@ -413,8 +413,8 @@ namespace ao::audio
   }
 
   void FlacDecoderSession::Impl::errorCallback(FLAC__StreamDecoder const* /*decoder*/,
-                                               [[maybe_unused]] FLAC__StreamDecoderErrorStatus status,
-                                               [[maybe_unused]] void* clientData)
+                                               FLAC__StreamDecoderErrorStatus /*status*/,
+                                               void* clientData)
   {
     [[maybe_unused]] auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
     /* TODO logging */

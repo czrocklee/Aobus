@@ -130,7 +130,6 @@ namespace ao::audio::backend::detail
       }
     }
 
-
     return devices;
   }
 } // namespace ao::audio::backend::detail

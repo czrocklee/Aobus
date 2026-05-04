@@ -71,18 +71,16 @@ namespace ao::gtk
 
     // Actions
     _newListAction = Gio::SimpleAction::create("new");
-    _newListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+    _newListAction->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
                                               { openNewSmartListDialog(); });
     _newListAction->set_enabled(false);
 
     _deleteListAction = Gio::SimpleAction::create("delete");
-    _deleteListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
-                                                 { onDeleteList(); });
+    _deleteListAction->signal_activate().connect([this](Glib::VariantBase const& /*variant*/) { onDeleteList(); });
     _deleteListAction->set_enabled(false);
 
     _editListAction = Gio::SimpleAction::create("edit");
-    _editListAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
-                                               { onEditList(); });
+    _editListAction->signal_activate().connect([this](Glib::VariantBase const& /*variant*/) { onEditList(); });
     _editListAction->set_enabled(false);
   }
 
@@ -357,10 +355,8 @@ namespace ao::gtk
     }
   }
 
-  void ListSidebarController::showListContextMenu(Gtk::ListView& listView, Gdk::Rectangle const& rect)
+  void ListSidebarController::showListContextMenu(Gtk::ListView& /*listView*/, Gdk::Rectangle const& rect)
   {
-    (void)listView;
-
     auto const hasLibrary = static_cast<bool>(_currentSession);
 
     auto canDelete = false;

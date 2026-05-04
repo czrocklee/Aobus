@@ -22,65 +22,44 @@ namespace ao::audio::backend::detail
 
   struct PwProxyDeleter final
   {
-    void operator()(void* p) const noexcept
-    {
-      ::pw_proxy_destroy(static_cast<::pw_proxy*>(p));
-    }
+    void operator()(void* p) const noexcept { ::pw_proxy_destroy(static_cast<::pw_proxy*>(p)); }
   };
   template<typename T>
   using PwProxyPtr = std::unique_ptr<T, PwProxyDeleter>;
 
   struct PwThreadLoopDeleter final
   {
-    void operator()(::pw_thread_loop* p) const noexcept
-    {
-      ::pw_thread_loop_destroy(p);
-    }
+    void operator()(::pw_thread_loop* p) const noexcept { ::pw_thread_loop_destroy(p); }
   };
   using PwThreadLoopPtr = std::unique_ptr<::pw_thread_loop, PwThreadLoopDeleter>;
 
   struct PwContextDeleter final
   {
-    void operator()(::pw_context* p) const noexcept
-    {
-      ::pw_context_destroy(p);
-    }
+    void operator()(::pw_context* p) const noexcept { ::pw_context_destroy(p); }
   };
   using PwContextPtr = std::unique_ptr<::pw_context, PwContextDeleter>;
 
   struct PwCoreDeleter final
   {
-    void operator()(::pw_core* p) const noexcept
-    {
-      ::pw_core_disconnect(p);
-    }
+    void operator()(::pw_core* p) const noexcept { ::pw_core_disconnect(p); }
   };
   using PwCorePtr = std::unique_ptr<::pw_core, PwCoreDeleter>;
 
   struct PwStreamDeleter final
   {
-    void operator()(::pw_stream* p) const noexcept
-    {
-      ::pw_stream_destroy(p);
-    }
+    void operator()(::pw_stream* p) const noexcept { ::pw_stream_destroy(p); }
   };
   using PwStreamPtr = std::unique_ptr<::pw_stream, PwStreamDeleter>;
 
   struct PwRegistryDeleter final
   {
-    void operator()(::pw_registry* p) const noexcept
-    {
-      ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p));
-    }
+    void operator()(::pw_registry* p) const noexcept { ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p)); }
   };
   using PwRegistryPtr = std::unique_ptr<::pw_registry, PwRegistryDeleter>;
 
   struct PwLinkDeleter final
   {
-    void operator()(::pw_link* p) const noexcept
-    {
-      ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p));
-    }
+    void operator()(::pw_link* p) const noexcept { ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p)); }
   };
   using PwLinkPtr = std::unique_ptr<::pw_link, PwLinkDeleter>;
 

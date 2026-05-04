@@ -51,7 +51,6 @@ TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][transaction]")
   // Read transaction - destructor should abort
   {
     auto txn = ReadTransaction{env};
-    (void)db;
     // Destructor should abort
   }
   // Should be able to start new transaction
@@ -89,8 +88,7 @@ TEST_CASE("WriteTransaction - constructor starts transaction", "[lmdb][transacti
   auto txn = WriteTransaction{env};
   // Verify transaction is valid by using it to create a database
   auto db = Database{txn, "test"};
-  auto writer = db.writer(txn);
-  (void)writer;
+  [[maybe_unused]] auto writer = db.writer(txn);
 }
 
 TEST_CASE("WriteTransaction - commit", "[lmdb][transaction]")

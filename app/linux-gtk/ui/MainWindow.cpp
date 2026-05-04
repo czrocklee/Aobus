@@ -264,22 +264,22 @@ namespace ao::gtk
 
     // Create actions
     auto openAction = Gio::SimpleAction::create("open-library");
-    openAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+    openAction->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
                                           { _importExportCoordinator->openLibrary(); });
     add_action(openAction);
 
     auto importAction = Gio::SimpleAction::create("import-files");
-    importAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+    importAction->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
                                             { _importExportCoordinator->importFiles(); });
     add_action(importAction);
 
     auto exportLibAction = Gio::SimpleAction::create("export-library");
-    exportLibAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+    exportLibAction->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
                                                { _importExportCoordinator->exportLibrary(); });
     add_action(exportLibAction);
 
     auto importLibAction = Gio::SimpleAction::create("import-library");
-    importLibAction->signal_activate().connect([this]([[maybe_unused]] Glib::VariantBase const& /*variant*/)
+    importLibAction->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
                                                { _importExportCoordinator->importLibrary(); });
     add_action(importLibAction);
   }

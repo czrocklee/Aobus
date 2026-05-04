@@ -52,7 +52,7 @@ namespace ao::tag::mpeg::id3v2
 
     template<NumberSetter Setter>
     void handleNumber(ao::library::TrackBuilder& builder,
-                      [[maybe_unused]] ao::tag::File const& owner,
+                      ao::tag::File const& /*owner*/,
                       void const* data,
                       std::size_t size)
     {
@@ -69,7 +69,7 @@ namespace ao::tag::mpeg::id3v2
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
     void handleSlashNumber(ao::library::TrackBuilder& builder,
-                           [[maybe_unused]] ao::tag::File const& owner,
+                           ao::tag::File const& /*owner*/,
                            void const* data,
                            std::size_t size)
     {
@@ -92,7 +92,7 @@ namespace ao::tag::mpeg::id3v2
     }
 
     void handlePicture(ao::library::TrackBuilder& builder,
-                       [[maybe_unused]] ao::tag::File const& owner,
+                       ao::tag::File const& /*owner*/,
                        void const* data,
                        std::size_t size)
     {

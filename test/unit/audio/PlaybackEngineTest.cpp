@@ -24,7 +24,7 @@ namespace
     void dispatch(std::function<void()> callback) override { callback(); }
   };
 
-  class MockBackendProxy : public IBackend
+  class MockBackendProxy final : public IBackend
   {
     IBackend& _real;
 
@@ -46,6 +46,11 @@ namespace
     bool isExclusiveMode() const noexcept override { return _real.isExclusiveMode(); }
     BackendId backendId() const noexcept override { return _real.backendId(); }
     ProfileId profileId() const noexcept override { return _real.profileId(); }
+    void setVolume(float v) override { _real.setVolume(v); }
+    float getVolume() const override { return _real.getVolume(); }
+    void setMuted(bool m) override { _real.setMuted(m); }
+    bool isMuted() const override { return _real.isMuted(); }
+    bool isVolumeAvailable() const override { return _real.isVolumeAvailable(); }
   };
 }
 
@@ -72,6 +77,10 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
   When(Method(mockBackend, backendId)).AlwaysReturn(kBackendNone);
   When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
+  Fake(Method(mockBackend, setVolume), Method(mockBackend, setMuted));
+  When(Method(mockBackend, getVolume)).AlwaysReturn(1.0F);
+  When(Method(mockBackend, isMuted)).AlwaysReturn(false);
+  When(Method(mockBackend, isVolumeAvailable)).AlwaysReturn(true);
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
 
@@ -105,6 +114,22 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
     REQUIRE(route.optAnchor);
     REQUIRE(route.optAnchor->id == "anchor-123");
   }
+
+  SECTION("Volume and mute controls pass through to backend and update status")
+  {
+    engine.setVolume(0.75F);
+    Verify(Method(mockBackend, setVolume).Using(0.75F)).Once();
+    REQUIRE(engine.getVolume() == Catch::Approx(0.75F));
+    REQUIRE(engine.status().volume == Catch::Approx(0.75F));
+
+    engine.setMuted(true);
+    Verify(Method(mockBackend, setMuted).Using(true)).Once();
+    REQUIRE(engine.isMuted() == true);
+    REQUIRE(engine.status().muted == true);
+
+    REQUIRE(engine.isVolumeAvailable() == true);
+    REQUIRE(engine.status().volumeAvailable == true);
+  }
 }
 
 TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
@@ -123,6 +148,16 @@ TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
 
   When(Method(mockBackend2, backendId)).AlwaysReturn(kBackendAlsa);
   When(Method(mockBackend2, profileId)).AlwaysReturn(kProfileExclusive);
+
+  Fake(Method(mockBackend1, setVolume), Method(mockBackend1, setMuted));
+  When(Method(mockBackend1, getVolume)).AlwaysReturn(1.0F);
+  When(Method(mockBackend1, isMuted)).AlwaysReturn(false);
+  When(Method(mockBackend1, isVolumeAvailable)).AlwaysReturn(true);
+
+  Fake(Method(mockBackend2, setVolume), Method(mockBackend2, setMuted));
+  When(Method(mockBackend2, getVolume)).AlwaysReturn(1.0F);
+  When(Method(mockBackend2, isMuted)).AlwaysReturn(false);
+  When(Method(mockBackend2, isVolumeAvailable)).AlwaysReturn(true);
 
   auto backend1 = std::make_unique<MockBackendProxy>(mockBackend1.get());
   auto engine = Engine{
@@ -180,13 +215,16 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
   When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(false);
   When(Method(mockBackend, backendId)).AlwaysReturn(kBackendNone);
   When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
+  Fake(Method(mockBackend, setVolume), Method(mockBackend, setMuted));
+  When(Method(mockBackend, getVolume)).AlwaysReturn(1.0F);
+  When(Method(mockBackend, isMuted)).AlwaysReturn(false);
+  When(Method(mockBackend, isVolumeAvailable)).AlwaysReturn(true);
 
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
   auto engine = Engine{std::move(backendPtr), device, dispatcher};
 
-  auto const descriptor = TrackPlaybackDescriptor{.filePath = testFile.string(),
-                                                  .title = "Test Title",
-                                                  .artist = "Test Artist"};
+  auto const descriptor =
+    TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Test Title", .artist = "Test Artist"};
 
   engine.play(descriptor);
 
@@ -210,8 +248,9 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
 
   SECTION("rs-decoder is linked to rs-engine")
   {
-    auto it = std::ranges::find_if(
-      snap.flow.connections, [](auto const& connection) { return connection.sourceId == "rs-decoder" && connection.destId == "rs-engine"; });
+    auto it = std::ranges::find_if(snap.flow.connections,
+                                   [](auto const& connection)
+                                   { return connection.sourceId == "rs-decoder" && connection.destId == "rs-engine"; });
     CHECK(it != snap.flow.connections.end());
     if (it != snap.flow.connections.end())
     {
@@ -264,12 +303,17 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
   When(Method(mockBackend, backendId)).AlwaysReturn(kBackendPipeWire);
   When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
 
+  Fake(Method(mockBackend, setVolume));
+  When(Method(mockBackend, getVolume)).AlwaysReturn(1.0F);
+  Fake(Method(mockBackend, setMuted));
+  When(Method(mockBackend, isMuted)).AlwaysReturn(false);
+  When(Method(mockBackend, isVolumeAvailable)).AlwaysReturn(true);
+
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
   auto engine = Engine{std::move(backendPtr), device, dispatcher};
 
-  auto const descriptor = TrackPlaybackDescriptor{.filePath = testFile.string(),
-                                                  .title = "PipeWire Shared",
-                                                  .artist = "Test Artist"};
+  auto const descriptor =
+    TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "PipeWire Shared", .artist = "Test Artist"};
 
   engine.play(descriptor);
 
@@ -325,12 +369,17 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
   When(Method(mockBackend, backendId)).AlwaysReturn(kBackendAlsa);
   When(Method(mockBackend, profileId)).AlwaysReturn(kProfileExclusive);
 
+  Fake(Method(mockBackend, setVolume));
+  When(Method(mockBackend, getVolume)).AlwaysReturn(1.0F);
+  Fake(Method(mockBackend, setMuted));
+  When(Method(mockBackend, isMuted)).AlwaysReturn(false);
+  When(Method(mockBackend, isVolumeAvailable)).AlwaysReturn(true);
+
   auto backendPtr = std::make_unique<MockBackendProxy>(mockBackend.get());
   auto engine = Engine{std::move(backendPtr), device, dispatcher};
 
-  auto const descriptor = TrackPlaybackDescriptor{.filePath = testFile.string(),
-                                                  .title = "Unsupported Sample Rate",
-                                                  .artist = "Test Artist"};
+  auto const descriptor =
+    TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Unsupported Sample Rate", .artist = "Test Artist"};
 
   engine.play(descriptor);
 
@@ -353,8 +402,8 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
   SECTION("Unsupported extension")
   {
     auto engine = Engine{std::make_unique<CapturingBackend>(), device, dispatcher};
-    auto const desc =
-      TrackPlaybackDescriptor{.filePath = "song.txt", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+    auto const desc = TrackPlaybackDescriptor{
+      .filePath = "song.txt", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
     engine.play(desc);
 
     REQUIRE(engine.status().transport == Transport::Error);
@@ -372,8 +421,8 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
     };
 
     auto engine = Engine{std::make_unique<CapturingBackend>(), device, dispatcher, factory};
-    auto const desc =
-      TrackPlaybackDescriptor{.filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+    auto const desc = TrackPlaybackDescriptor{
+      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
     engine.play(desc);
 
     REQUIRE(engine.status().transport == Transport::Error);
@@ -397,8 +446,8 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
     };
 
     auto engine = Engine{std::move(backend), device, dispatcher, factory};
-    auto const desc =
-      TrackPlaybackDescriptor{.filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+    auto const desc = TrackPlaybackDescriptor{
+      .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
     engine.play(desc);
 
     REQUIRE(engine.status().transport == Transport::Error);
@@ -429,8 +478,8 @@ TEST_CASE("Engine - Pause and resume matrix", "[playback][engine][transport]")
   };
 
   auto engine = Engine{std::move(backend), device, dispatcher, factory};
-  auto const desc =
-    TrackPlaybackDescriptor{.filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+  auto const desc = TrackPlaybackDescriptor{
+    .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
   engine.play(desc);
   REQUIRE(engine.status().transport == Transport::Playing);
@@ -473,8 +522,8 @@ TEST_CASE("Engine - Seek matrix", "[playback][engine][seek]")
   };
 
   auto engine = Engine{std::move(backend), device, dispatcher, factory};
-  auto const desc =
-    TrackPlaybackDescriptor{.filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+  auto const desc = TrackPlaybackDescriptor{
+    .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
   SECTION("Seek before play is no-op")
   {
@@ -512,8 +561,8 @@ TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
   };
 
   auto engine = Engine{std::move(backend), device, dispatcher, factory};
-  auto const desc =
-    TrackPlaybackDescriptor{.filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+  auto const desc = TrackPlaybackDescriptor{
+    .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
   bool trackEnded = false;
   engine.setOnTrackEnded([&]() { trackEnded = true; });

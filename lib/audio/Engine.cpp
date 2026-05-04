@@ -78,6 +78,13 @@ namespace ao::audio
     _status.backendId = _backend ? _backend->backendId() : kBackendNone;
     _status.profileId = _backend ? _backend->profileId() : ProfileId{};
     _status.currentDeviceId = _currentDevice.id;
+
+    if (_backend)
+    {
+      _status.volume = _backend->getVolume();
+      _status.muted = _backend->isMuted();
+      _status.volumeAvailable = _backend->isVolumeAvailable();
+    }
   }
 
   Engine::~Engine()
@@ -120,6 +127,13 @@ namespace ao::audio
       _status.backendId = _backend ? _backend->backendId() : kBackendNone;
       _status.profileId = _backend ? _backend->profileId() : ProfileId{};
       _status.currentDeviceId = _currentDevice.id;
+
+      if (_backend)
+      {
+        _status.volume = _backend->getVolume();
+        _status.muted = _backend->isMuted();
+        _status.volumeAvailable = _backend->isVolumeAvailable();
+      }
     }
 
     if (state.track)
@@ -167,6 +181,14 @@ namespace ao::audio
     _status.backendId = _backend ? _backend->backendId() : kBackendNone;
     _status.profileId = _backend ? _backend->profileId() : ProfileId{};
     _status.currentDeviceId = _currentDevice.id;
+
+    if (_backend)
+    {
+      _status.volume = _backend->getVolume();
+      _status.muted = _backend->isMuted();
+      _status.volumeAvailable = _backend->isVolumeAvailable();
+    }
+
     _accumulatedFrames.store(0, std::memory_order_relaxed);
 
     _routeStatus = {};
@@ -194,6 +216,7 @@ namespace ao::audio
     callbacks.onDrainComplete = &Engine::onDrainComplete;
     callbacks.onRouteReady = &Engine::onRouteReady;
     callbacks.onFormatChanged = &Engine::onFormatChanged;
+    callbacks.onVolumeChanged = &Engine::onVolumeChanged;
     callbacks.onBackendError = &Engine::onBackendError;
 
     auto source = std::shared_ptr<ISource>{};
@@ -228,6 +251,13 @@ namespace ao::audio
         _status.transport = Transport::Error;
         _status.statusText = openResult.error().message;
         return;
+      }
+
+      {
+        auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+        _status.volume = _backend->getVolume();
+        _status.muted = _backend->isMuted();
+        _status.volumeAvailable = _backend->isVolumeAvailable();
       }
     }
 
@@ -415,6 +445,46 @@ namespace ao::audio
     {
       _backend->start();
     }
+  }
+
+  void Engine::setVolume(float volume)
+  {
+    if (_backend)
+    {
+      _backend->setVolume(volume);
+    }
+
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+    _status.volume = volume;
+  }
+
+  float Engine::getVolume() const
+  {
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+    return _status.volume;
+  }
+
+  void Engine::setMuted(bool muted)
+  {
+    if (_backend)
+    {
+      _backend->setMuted(muted);
+    }
+
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+    _status.muted = muted;
+  }
+
+  bool Engine::isMuted() const
+  {
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+    return _status.muted;
+  }
+
+  bool Engine::isVolumeAvailable() const
+  {
+    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+    return _status.volumeAvailable;
   }
 
   Engine::Status Engine::status() const
@@ -821,6 +891,51 @@ namespace ao::audio
     else
     {
       self->handleFormatChanged(format);
+    }
+  }
+
+  void Engine::onVolumeChanged(void* userData) noexcept
+  {
+    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
+
+    if (self->_dispatcher)
+    {
+      self->_dispatcher->dispatch([self]() { self->handleVolumeChanged(); });
+    }
+    else
+    {
+      self->handleVolumeChanged();
+    }
+  }
+
+  void Engine::handleVolumeChanged()
+  {
+    auto cb = OnRouteChanged{};
+    auto snap = RouteStatus{};
+
+    {
+      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
+      if (_backend)
+      {
+        _status.volume = _backend->getVolume();
+        _status.muted = _backend->isMuted();
+        _status.volumeAvailable = _backend->isVolumeAvailable();
+      }
+
+      cb = _onRouteChanged;
+      snap = _routeStatus;
+    }
+
+    if (cb)
+    {
+      if (_dispatcher)
+      {
+        _dispatcher->dispatch([cb = std::move(cb), snap]() { cb(snap); });
+      }
+      else
+      {
+        cb(snap);
+      }
     }
   }
 

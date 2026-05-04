@@ -25,6 +25,7 @@ add_library(aobus-gtk-lib STATIC
     ui/PlaybackBar.cpp
     ui/AobusSoul.cpp
     ui/AobusSoulWindow.cpp
+    ui/VolumeBar.cpp
     ui/OutputMenuModel.cpp
     ui/ThemeBus.cpp
 

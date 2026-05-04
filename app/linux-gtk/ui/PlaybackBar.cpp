@@ -223,8 +223,16 @@ namespace ao::gtk
     _timeLabel.set_valign(Gtk::Align::CENTER);
     _timeLabel.set_width_chars(kWidthChars);
 
+    _volumeScale.setVolume(1.0F);
+    _volumeScale.set_size_request(32, 24);
+    _volumeScale.set_valign(Gtk::Align::CENTER);
+    _volumeScale.set_tooltip_text("Volume");
+    _volumeScale.set_margin_start(Layout::kSpacingMedium);
+    _volumeScale.set_margin_end(Layout::kSpacingMedium);
+
     seekBox->append(_seekScale);
     seekBox->append(_timeLabel);
+    seekBox->append(_volumeScale);
 
     // Add all to main horizontal box
     append(_outputButton);
@@ -285,6 +293,19 @@ namespace ao::gtk
         auto const position = static_cast<std::uint32_t>(_seekScale.get_value());
         _seekRequested.emit(position);
       });
+
+    _volumeScale.signalVolumeChanged().connect(
+      [this](float volume)
+      {
+        if (_updatingVolumeScale)
+        {
+          return;
+        }
+
+        _volumeChanged.emit(volume);
+      });
+
+    _muteButton.signal_toggled().connect([this]() { _muteToggled.emit(); });
   }
 
   Gtk::Widget* PlaybackBar::createOutputWidget(Glib::RefPtr<Glib::Object> const& item)
@@ -525,6 +546,17 @@ namespace ao::gtk
       }
     }
 
+    // Hide volume controls when unavailable
+    bool const volAvailable = status.volumeAvailable;
+    _volumeScale.set_visible(volAvailable);
+
+    if (volAvailable)
+    {
+      _updatingVolumeScale = true;
+      _volumeScale.setVolume(status.volume);
+      _updatingVolumeScale = false;
+    }
+
     if (status.engine.transport == ao::audio::Transport::Idle)
     {
       _seekScale.set_range(0, 100);
@@ -560,56 +592,35 @@ namespace ao::gtk
   void PlaybackBar::updateTransportButtons(ao::audio::Transport state)
   {
     bool const isReady = _lastState.isReady;
+    bool const isPlaying = (state == ao::audio::Transport::Playing || state == ao::audio::Transport::Buffering ||
+                            state == ao::audio::Transport::Opening);
 
-    switch (state)
+    if (isPlaying)
     {
-      case ao::audio::Transport::Idle:
-      case ao::audio::Transport::Stopping:
-      case ao::audio::Transport::Error:
-        _playButton.set_visible(true);
-        _pauseButton.set_visible(false);
-        _playButton.set_sensitive(isReady && state != ao::audio::Transport::Idle);
-        _pauseButton.set_sensitive(false);
-        _stopButton.set_sensitive(false);
-        _seekScale.set_sensitive(false);
-        break;
-
-      case ao::audio::Transport::Opening:
-      case ao::audio::Transport::Buffering:
-        _playButton.set_visible(true);
-        _pauseButton.set_visible(false);
-        _playButton.set_sensitive(false);
-        _pauseButton.set_sensitive(false);
-        _stopButton.set_sensitive(isReady);
-        _seekScale.set_sensitive(false);
-        break;
-
-      case ao::audio::Transport::Playing:
-        _playButton.set_visible(false);
-        _pauseButton.set_visible(true);
-        _playButton.set_sensitive(false);
-        _pauseButton.set_sensitive(isReady);
-        _stopButton.set_sensitive(isReady);
-        _seekScale.set_sensitive(isReady);
-        break;
-
-      case ao::audio::Transport::Paused:
-        _playButton.set_visible(true);
-        _pauseButton.set_visible(false);
-        _playButton.set_sensitive(isReady);
-        _pauseButton.set_sensitive(false);
-        _stopButton.set_sensitive(isReady);
-        _seekScale.set_sensitive(isReady);
-        break;
-
-      case ao::audio::Transport::Seeking:
-        _playButton.set_visible(true);
-        _pauseButton.set_visible(false);
-        _playButton.set_sensitive(false);
-        _pauseButton.set_sensitive(false);
-        _stopButton.set_sensitive(isReady);
-        _seekScale.set_sensitive(false);
-        break;
+      _playButton.set_visible(false);
+      _pauseButton.set_visible(true);
+      _playButton.set_sensitive(false);
+      _pauseButton.set_sensitive(state == ao::audio::Transport::Playing); // Disable pause while buffering/opening
+      _stopButton.set_sensitive(true);
+      _seekScale.set_sensitive(state == ao::audio::Transport::Playing);
+    }
+    else if (state == ao::audio::Transport::Paused)
+    {
+      _playButton.set_visible(true);
+      _pauseButton.set_visible(false);
+      _playButton.set_sensitive(isReady);
+      _pauseButton.set_sensitive(false);
+      _stopButton.set_sensitive(isReady);
+      _seekScale.set_sensitive(isReady);
+    }
+    else // Idle, Error, Stopping
+    {
+      _playButton.set_visible(true);
+      _pauseButton.set_visible(false);
+      _playButton.set_sensitive(isReady && state != ao::audio::Transport::Stopping);
+      _pauseButton.set_sensitive(false);
+      _stopButton.set_sensitive(false);
+      _seekScale.set_sensitive(false);
     }
   }
 
@@ -652,5 +663,13 @@ namespace ao::gtk
   PlaybackBar::OutputChangedSignal& PlaybackBar::signalOutputChanged()
   {
     return _outputChanged;
+  }
+  PlaybackBar::VolumeChangedSignal& PlaybackBar::signalVolumeChanged()
+  {
+    return _volumeChanged;
+  }
+  PlaybackBar::MuteToggledSignal& PlaybackBar::signalMuteToggled()
+  {
+    return _muteToggled;
   }
 } // namespace ao::gtk
