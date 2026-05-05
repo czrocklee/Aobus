@@ -4,6 +4,7 @@
 #pragma once
 
 #include "LibrarySession.h"
+#include "MetadataCoordinator.h"
 #include "PlaylistExporter.h"
 #include "TrackListAdapter.h"
 #include "TrackPresentation.h"
@@ -42,12 +43,15 @@ namespace ao::gtk
     {
       std::function<void(std::vector<ao::TrackId> const&)> onSelectionChanged;
       std::function<void(TrackViewPage&, double, double)> onContextMenuRequested;
-      std::function<void(TrackViewPage&, std::vector<ao::TrackId> const&, double, double)> onTagEditRequested;
+      std::function<void(TrackViewPage&, std::vector<ao::TrackId> const&, Gtk::Widget*)> onTagEditRequested;
       std::function<void(TrackViewPage&, ao::TrackId)> onTrackActivated;
       std::function<void(TrackViewPage&, std::string const&)> onCreateSmartListRequested;
     };
 
-    TrackPageGraph(Gtk::Stack& stack, TrackColumnLayoutModel& layoutModel, Callbacks callbacks);
+    TrackPageGraph(Gtk::Stack& stack,
+                   TrackColumnLayoutModel& layoutModel,
+                   MetadataCoordinator& metadataCoordinator,
+                   Callbacks callbacks);
     ~TrackPageGraph();
 
     void clear();
@@ -69,6 +73,7 @@ namespace ao::gtk
 
     Gtk::Stack& _stack;
     TrackColumnLayoutModel& _layoutModel;
+    MetadataCoordinator& _metadataCoordinator;
     Callbacks _callbacks;
 
     std::map<ao::ListId, TrackPageContext> _trackPages;

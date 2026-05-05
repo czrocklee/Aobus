@@ -197,6 +197,7 @@ namespace ao::gtk
 
   TrackListAdapter::~TrackListAdapter()
   {
+    _rebuildConnection.disconnect();
     _source.detach(this);
   }
 
@@ -239,6 +240,22 @@ namespace ao::gtk
 
   void TrackListAdapter::rebuildView()
   {
+    if (_rebuildConnection)
+    {
+      return;
+    }
+
+    _rebuildConnection = Glib::signal_idle().connect(
+      [this]()
+      {
+        rebuildViewInternal();
+        return false; // Run once
+      });
+  }
+
+  void TrackListAdapter::rebuildViewInternal()
+  {
+    _rebuildConnection.disconnect();
     _listModel->remove_all();
 
     if (_filterMode != TrackFilterMode::None && (_filterPlan == nullptr || !_filterErrorMessage.empty()))

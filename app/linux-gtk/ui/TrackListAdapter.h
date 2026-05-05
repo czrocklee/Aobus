@@ -37,6 +37,7 @@ namespace ao::gtk
     ~TrackListAdapter() override;
 
     Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
+    ao::library::MusicLibrary& getMusicLibrary() { return _musicLibrary; }
 
     // Set filter text - filters by common display metadata containing the text.
     void setFilter(Glib::ustring const& filterText);
@@ -56,6 +57,7 @@ namespace ao::gtk
 
   private:
     void rebuildView();
+    void rebuildViewInternal();
     void createRowForTrack(TrackId id);
     bool shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader& reader) const;
 
@@ -69,5 +71,6 @@ namespace ao::gtk
     std::string _filterErrorMessage;
     std::unique_ptr<ao::query::ExecutionPlan> _filterPlan;
     ao::query::PlanEvaluator _filterEvaluator;
+    sigc::connection _rebuildConnection;
   };
 } // namespace ao::gtk

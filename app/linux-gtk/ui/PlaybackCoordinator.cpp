@@ -153,9 +153,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const status = _player->status();
-
-    if (status.engine.transport == ao::audio::Transport::Paused)
+    if (_player->transport() == ao::audio::Transport::Paused)
     {
       _player->resume();
       return;

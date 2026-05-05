@@ -66,6 +66,9 @@ namespace ao::gtk
     // Initialize dispatcher
     _dispatcher = std::make_shared<GtkMainThreadDispatcher>();
 
+    // Initialize cover art cache (LRU 100 entries)
+    _coverArtCache = std::make_unique<CoverArtCache>(100);
+
     // Initialize TagEditController
     _tagEditController = std::make_unique<TagEditController>(
       *this,
@@ -76,10 +79,13 @@ namespace ao::gtk
                                      // Additional invalidation/update logic if needed
                                    }});
 
+    _metadataCoordinator = std::make_unique<MetadataCoordinator>(_dispatcher);
+
     // Initialize track page graph
     _trackPageGraph = std::make_unique<TrackPageGraph>(
       _stack,
       _trackColumnLayoutModel,
+      *_metadataCoordinator,
       TrackPageGraph::Callbacks{
         .onSelectionChanged =
           [this](std::vector<ao::TrackId> const& ids)
@@ -98,14 +104,19 @@ namespace ao::gtk
           _tagEditController->showTrackContextMenu(page, selection, posX, posY);
         },
         .onTagEditRequested =
-          [this](TrackViewPage& page, std::vector<ao::TrackId> const& ids, double posX, double posY)
+          [this](TrackViewPage& page, std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
         {
+          if (relativeTo == nullptr)
+          {
+            return;
+          }
+
           auto const listId = page.getListId();
           auto* const ctx = _trackPageGraph->find(listId);
           TrackSelectionContext const selection{.listId = listId,
                                                 .selectedIds = ids,
                                                 .membershipList = ctx != nullptr ? ctx->membershipList.get() : nullptr};
-          _tagEditController->showTagEditor(page, selection, posX, posY);
+          _tagEditController->showTagEditor(selection, *relativeTo);
         },
         .onTrackActivated = [this](TrackViewPage& page, ao::TrackId id)
         { _playbackCoordinator->startPlaybackFromVisiblePage(page, id); },
@@ -126,6 +137,23 @@ namespace ao::gtk
 
           _listSidebarController->createSmartListFromExpression(parentListId, expression);
         }});
+
+    // Initialize inspector sidebar
+    _inspectorSidebar = std::make_unique<InspectorSidebar>(*_metadataCoordinator, *_coverArtCache);
+    _inspectorSidebar->signalTagEditRequested().connect(
+      [this](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
+      {
+        if (!_librarySession || relativeTo == nullptr)
+        {
+          return;
+        }
+
+        auto const selection = TrackSelectionContext{.listId = allTracksListId(), // Sidebar edit is global
+                                                     .selectedIds = ids,
+                                                     .membershipList = nullptr};
+
+        _tagEditController->showTagEditor(selection, *relativeTo);
+      });
 
     // Initialize playback coordinator
     _playbackCoordinator = std::make_unique<PlaybackCoordinator>(
@@ -165,6 +193,11 @@ namespace ao::gtk
 
     // Try to restore previous session
     loadSession();
+
+    // Default sidebar state
+    _inspectorHandle.set_active(false);
+    _inspectorRevealer.set_reveal_child(false);
+    _inspectorSidebar->set_visible(false);
   }
 
   MainWindow::~MainWindow()
@@ -346,9 +379,121 @@ namespace ao::gtk
     _leftBox.append(_listSidebarController->widget());
     _leftBox.append(*_coverArtWidget);
 
-    // Right side: stack for pages
+    // Right side: stack for pages and inspector
     _stack.set_hexpand(true);
     _stack.set_vexpand(true);
+
+    // Inspector container
+    auto* inspectorBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    inspectorBox->set_hexpand(true);
+    inspectorBox->set_vexpand(true);
+
+    _inspectorRevealer.set_transition_type(Gtk::RevealerTransitionType::SLIDE_LEFT);
+    _inspectorRevealer.set_child(*_inspectorSidebar);
+    _inspectorRevealer.set_reveal_child(false);
+    _inspectorRevealer.set_hexpand(false);
+    _inspectorRevealer.set_vexpand(true);
+    _inspectorSidebar->set_vexpand(true);
+
+    // Inspector handle (sidebar trigger)
+    _inspectorHandle.set_icon_name("pan-start-symbolic");
+    _inspectorHandle.add_css_class("inspector-handle");
+    _inspectorHandle.set_valign(Gtk::Align::CENTER);
+    _inspectorHandle.set_hexpand(false);
+    _inspectorHandle.set_focus_on_click(false);
+
+    _inspectorHandle.signal_toggled().connect(
+      [this]()
+      {
+        bool const active = _inspectorHandle.get_active();
+        _inspectorRevealer.set_reveal_child(active);
+
+        // Ensure the sidebar doesn't take space when collapsed
+        _inspectorSidebar->set_visible(active);
+
+        _inspectorHandle.set_icon_name(active ? "pan-end-symbolic" : "pan-start-symbolic");
+        _inspectorHandle.set_tooltip_text(active ? "Hide Inspector" : "Show Inspector");
+      });
+
+    // Style the handle with CSS
+    auto const cssProvider = Gtk::CssProvider::create();
+    cssProvider->load_from_data(".inspector-handle {"
+                                "  min-width: 14px;"
+                                "  padding: 0;"
+                                "  margin: 0;"
+                                "  border: none;"
+                                "  border-radius: 0;"
+                                "  background: transparent;"
+                                "  transition: background 0.2s;"
+                                "}"
+                                ".inspector-handle:hover {"
+                                "  background: alpha(currentColor, 0.08);"
+                                "}"
+                                ".inspector-handle image {"
+                                "  opacity: 0.4;"
+                                "  transition: opacity 0.2s;"
+                                "}"
+                                ".inspector-handle:hover image {"
+                                "  opacity: 1.0;"
+                                "}"
+                                ".tags-section {"
+                                "  margin-top: 4px;"
+                                "}"
+                                ".tag-chip {"
+                                "  border-radius: 100px;"
+                                "  padding: 4px 10px;"
+                                "  font-size: 0.85rem;"
+                                "  font-weight: 500;"
+                                "  transition: all 0.2s ease;"
+                                "}"
+                                "togglebutton.tag-chip {"
+                                "  background: alpha(currentColor, 0.05);"
+                                "  border: 1px solid transparent;"
+                                "  color: alpha(currentColor, 0.7);"
+                                "}"
+                                "togglebutton.tag-chip:checked {"
+                                "  background: alpha(currentColor, 0.15);"
+                                "  color: currentColor;"
+                                "  border-color: alpha(currentColor, 0.1);"
+                                "}"
+                                "togglebutton.tag-chip:hover {"
+                                "  background: alpha(currentColor, 0.2);"
+                                "}"
+                                ".tag-remove-button {"
+                                "  min-width: 18px;"
+                                "  min-height: 18px;"
+                                "  padding: 0;"
+                                "  margin-left: 4px;"
+                                "  border-radius: 100px;"
+                                "  background: transparent;"
+                                "  border: none;"
+                                "  opacity: 0.4;"
+                                "  transition: opacity 0.2s;"
+                                "}"
+                                ".tag-remove-button:hover {"
+                                "  opacity: 1.0;"
+                                "  background: alpha(@error_color, 0.1);"
+                                "}"
+                                ".tags-entry {"
+                                "  background: alpha(currentColor, 0.05);"
+                                "  border: 1px solid transparent;"
+                                "  border-radius: 8px;"
+                                "  padding: 6px 12px;"
+                                "  margin-top: 8px;"
+                                "  transition: all 0.2s;"
+                                "  font-size: 0.9rem;"
+                                "}"
+                                ".tags-entry:focus {"
+                                "  border-color: alpha(@accent_color, 0.5);"
+                                "  background: alpha(currentColor, 0.08);"
+                                "  box-shadow: none;"
+                                "}");
+    Gtk::StyleContext::add_provider_for_display(
+      Gdk::Display::get_default(), cssProvider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+    inspectorBox->append(_stack);
+    inspectorBox->append(_inspectorHandle);
+    inspectorBox->append(_inspectorRevealer);
 
     // Add placeholder page
     auto* placeholderLabel = Gtk::make_managed<Gtk::Label>("Select a library or import tracks");
@@ -358,10 +503,9 @@ namespace ao::gtk
 
     // Add to paned
     _paned.set_start_child(_leftBox);
-    _paned.set_end_child(_stack);
+    _paned.set_end_child(*inspectorBox);
 
     // Set paned behavior
-    // Left side (list) can resize but not shrink, right side gets more space
     _paned.set_resize_start_child(true);
     _paned.set_shrink_start_child(false);
     _paned.set_resize_end_child(true);
@@ -465,6 +609,11 @@ namespace ao::gtk
 
     auto const count = ctx->page->getSelectedTrackIds().size();
     auto const duration = ctx->page->getSelectedTracksDuration();
+
+    if (_inspectorSidebar)
+    {
+      _inspectorSidebar->updateSelection(_librarySession.get(), ctx->page->getSelectedRows());
+    }
 
     if (_statusBar)
     {

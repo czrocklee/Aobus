@@ -10,6 +10,26 @@ namespace ao::gtk
   namespace
   {
     constexpr float kVolumeEpsilon = 0.001F;
+    constexpr int kMinHorizontalWidth = 32;
+    constexpr int kNaturalHorizontalWidth = 42;
+    constexpr int kMinVerticalHeight = 20;
+    constexpr int kNaturalVerticalHeight = 26;
+    constexpr float kVerticalPadding = 4.0F;
+    constexpr float kMinDrawHeight = 2.0F;
+    constexpr float kBackgroundOpacity = 0.15F;
+    constexpr float kMinHeightFactor = 0.1F;
+    constexpr float kMaxHeightFactor = 0.9F;
+
+    // Fallback accent color (Nice Blue)
+    constexpr double kFallbackRed = 0.208;
+    constexpr double kFallbackGreen = 0.518;
+    constexpr double kFallbackBlue = 0.894;
+    constexpr double kFallbackAlpha = 1.0;
+
+    constexpr double kAngle90 = 0.5 * M_PI;
+    constexpr double kAngle180 = M_PI;
+    constexpr double kAngle270 = 1.5 * M_PI;
+    constexpr double kAngle360 = 2.0 * M_PI;
   }
 
   VolumeBar::VolumeBar()
@@ -20,21 +40,21 @@ namespace ao::gtk
     // Drag: Uses offsets relative to start
     auto const drag = Gtk::GestureDrag::create();
     drag->signal_drag_begin().connect([this](double, double) { _dragStartVolume = _volume; });
-    drag->signal_drag_update().connect([this](double x, double) { handleDragUpdate(x); });
+    drag->signal_drag_update().connect([this](double offsetX, double) { handleDragUpdate(offsetX); });
     add_controller(drag);
 
     // Click: Immediate jump to position
     auto const click = Gtk::GestureClick::create();
-    click->signal_pressed().connect([this](int, double x, double) { handleAbsoluteClick(x); });
+    click->signal_pressed().connect([this](int, double offsetX, double) { handleAbsoluteClick(offsetX); });
     add_controller(click);
 
     // Scroll
     auto const scroll = Gtk::EventControllerScroll::create();
     scroll->set_flags(Gtk::EventControllerScroll::Flags::VERTICAL);
     scroll->signal_scroll().connect(
-      [this](double dx, double dy)
+      [this](double /*dx*/, double dy)
       {
-        handleScroll(dx, dy);
+        handleScroll(0.0, dy);
         return true;
       },
       false);
@@ -77,13 +97,13 @@ namespace ao::gtk
   {
     if (orientation == Gtk::Orientation::HORIZONTAL)
     {
-      minimum = 32;
-      natural = 42; // Golden ratio width
+      minimum = kMinHorizontalWidth;
+      natural = kNaturalHorizontalWidth; // Golden ratio width
     }
     else
     {
-      minimum = 20;
-      natural = 26; // Golden ratio height
+      minimum = kMinVerticalHeight;
+      natural = kNaturalVerticalHeight; // Golden ratio height
     }
   }
 
@@ -95,23 +115,25 @@ namespace ao::gtk
     auto const cr =
       snapshot->append_cairo(Gdk::Graphene::Rect(0, 0, static_cast<float>(width), static_cast<float>(height)));
 
-    float const segmentWidth = (static_cast<float>(width) - (kNumSegments - 1) * kSegmentGap) / kNumSegments;
+    float const segmentWidth =
+      (static_cast<float>(width) - (static_cast<float>(kNumSegments) - 1.0F) * static_cast<float>(kSegmentGap)) /
+      static_cast<float>(kNumSegments);
     auto const context = get_style_context();
     auto const color = context->get_color();
 
     // Internal Padding for "Breathing Room"
-    float const vPadding = 4.0f;
-    float const drawHeight = std::max(2.0f, static_cast<float>(height) - 2.0f * vPadding);
+    float const vPadding = kVerticalPadding;
+    float const drawHeight = std::max(kMinDrawHeight, static_cast<float>(height) - (2.0F * vPadding));
     float const yOffset = vPadding;
 
     // Dynamically lookup the theme's accent/selection color
-    Gdk::RGBA activeColor{};
+    auto activeColor = Gdk::RGBA{};
     if (!context->lookup_color("accent_color", activeColor))
     {
       if (!context->lookup_color("theme_selected_bg_color", activeColor))
       {
         // Fallback to a nice blue if theme doesn't provide named colors
-        activeColor.set_rgba(0.208, 0.518, 0.894, 1.0);
+        activeColor.set_rgba(kFallbackRed, kFallbackGreen, kFallbackBlue, kFallbackAlpha);
       }
     }
 
@@ -121,32 +143,34 @@ namespace ao::gtk
     cr->begin_new_path();
     for (int i = 0; i < kNumSegments; ++i)
     {
-      float const x = i * (segmentWidth + kSegmentGap);
+      float const segmentX = static_cast<float>(i) * (segmentWidth + static_cast<float>(kSegmentGap));
       // We add independent sub-paths for each rounded rect segment
       cr->begin_new_sub_path();
-      cr->arc(x + kSegmentRadius, yOffset + kSegmentRadius, kSegmentRadius, M_PI, 1.5 * M_PI);
-      cr->arc(x + segmentWidth - kSegmentRadius, yOffset + kSegmentRadius, kSegmentRadius, 1.5 * M_PI, 2.0 * M_PI);
-      cr->arc(x + segmentWidth - kSegmentRadius, yOffset + drawHeight - kSegmentRadius, kSegmentRadius, 0, 0.5 * M_PI);
-      cr->arc(x + kSegmentRadius, yOffset + drawHeight - kSegmentRadius, kSegmentRadius, 0.5 * M_PI, M_PI);
+      cr->arc(segmentX + kSegmentRadius, yOffset + kSegmentRadius, kSegmentRadius, kAngle180, kAngle270);
+      cr->arc(segmentX + segmentWidth - kSegmentRadius, yOffset + kSegmentRadius, kSegmentRadius, kAngle270, kAngle360);
+      cr->arc(
+        segmentX + segmentWidth - kSegmentRadius, yOffset + drawHeight - kSegmentRadius, kSegmentRadius, 0, kAngle90);
+      cr->arc(segmentX + kSegmentRadius, yOffset + drawHeight - kSegmentRadius, kSegmentRadius, kAngle90, kAngle180);
       cr->close_path();
     }
     cr->clip();
 
     // 2. Define the "Perfect Triangle" path (a trapezoid from 10% to 100% height)
-    auto const drawTrapezoid = [&](float w)
+    auto const drawTrapezoid = [&](float currentWidth)
     {
       cr->begin_new_path();
-      cr->move_to(0, yOffset + drawHeight); // Bottom Left
-      cr->line_to(w, yOffset + drawHeight); // Bottom Right
-      float const hAtW = drawHeight * (0.1f + 0.9f * (w / width));
-      cr->line_to(w, yOffset + drawHeight - hAtW);
-      cr->line_to(0, yOffset + drawHeight - (drawHeight * 0.1f));
+      cr->move_to(0, yOffset + drawHeight);            // Bottom Left
+      cr->line_to(currentWidth, yOffset + drawHeight); // Bottom Right
+      float const hAtW =
+        drawHeight * (kMinHeightFactor + kMaxHeightFactor * (currentWidth / static_cast<float>(width)));
+      cr->line_to(currentWidth, yOffset + drawHeight - hAtW);
+      cr->line_to(0, yOffset + drawHeight - (drawHeight * kMinHeightFactor));
       cr->close_path();
     };
 
     // 3. Draw Background (Inactive)
     drawTrapezoid(static_cast<float>(width));
-    cr->set_source_rgba(color.get_red(), color.get_green(), color.get_blue(), 0.15);
+    cr->set_source_rgba(color.get_red(), color.get_green(), color.get_blue(), kBackgroundOpacity);
     cr->fill();
 
     // 4. Draw Foreground (Active) - Clipped horizontally by volume
@@ -161,12 +185,15 @@ namespace ao::gtk
     cr->restore();
   }
 
-  void VolumeBar::handleAbsoluteClick(double x)
+  void VolumeBar::handleAbsoluteClick(double offsetX)
   {
     auto const width = get_width();
-    if (width <= 0) return;
+    if (width <= 0)
+    {
+      return;
+    }
 
-    float const vol = std::clamp(static_cast<float>(x / width), 0.0F, 1.0F);
+    float const vol = std::clamp(static_cast<float>(offsetX / static_cast<double>(width)), 0.0F, 1.0F);
     setVolume(vol);
     _volumeChanged.emit(_volume);
   }
@@ -174,9 +201,12 @@ namespace ao::gtk
   void VolumeBar::handleDragUpdate(double offsetX)
   {
     auto const width = get_width();
-    if (width <= 0) return;
+    if (width <= 0)
+    {
+      return;
+    }
 
-    float const delta = static_cast<float>(offsetX / width);
+    float const delta = static_cast<float>(offsetX / static_cast<double>(width));
     float const vol = std::clamp(_dragStartVolume + delta, 0.0F, 1.0F);
     setVolume(vol);
     _volumeChanged.emit(_volume);

@@ -32,8 +32,14 @@ namespace ao::gtk
     }
   }
 
-  TrackPageGraph::TrackPageGraph(Gtk::Stack& stack, TrackColumnLayoutModel& layoutModel, Callbacks callbacks)
-    : _stack{stack}, _layoutModel{layoutModel}, _callbacks{std::move(callbacks)}
+  TrackPageGraph::TrackPageGraph(Gtk::Stack& stack,
+                                 TrackColumnLayoutModel& layoutModel,
+                                 MetadataCoordinator& metadataCoordinator,
+                                 Callbacks callbacks)
+    : _stack{stack}
+    , _layoutModel{layoutModel}
+    , _metadataCoordinator{metadataCoordinator}
+    , _callbacks{std::move(callbacks)}
   {
   }
 
@@ -149,7 +155,7 @@ namespace ao::gtk
     auto adapter =
       std::make_unique<TrackListAdapter>(*session.allTrackIds, *session.musicLibrary, *session.rowDataProvider);
     adapter->onReset();
-    auto trackPage = std::make_unique<TrackViewPage>(allTracksListId(), *adapter, _layoutModel);
+    auto trackPage = std::make_unique<TrackViewPage>(allTracksListId(), *adapter, _layoutModel, _metadataCoordinator);
 
     auto pageId = pageNameForListId(allTracksListId());
     _stack.add(*trackPage, pageId, "All Tracks");
@@ -199,7 +205,7 @@ namespace ao::gtk
     auto adapter = std::make_unique<TrackListAdapter>(*membershipList, *session.musicLibrary, *session.rowDataProvider);
     adapter->onReset();
 
-    auto trackPage = std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel);
+    auto trackPage = std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _metadataCoordinator);
     auto pageId = pageNameForListId(listId);
     _stack.add(*trackPage, pageId, listName);
 
@@ -247,11 +253,11 @@ namespace ao::gtk
       });
 
     page->signalTagEditRequested().connect(
-      [this, page](std::vector<ao::TrackId> const& ids, double posX, double posY)
+      [this, page](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
       {
         if (_callbacks.onTagEditRequested != nullptr)
         {
-          _callbacks.onTagEditRequested(*page, ids, posX, posY);
+          _callbacks.onTagEditRequested(*page, ids, relativeTo);
         }
       });
 

@@ -4,6 +4,9 @@ add_library(aobus-gtk-lib STATIC
     ui/LibrarySession.cpp
     ui/TrackPageGraph.cpp
     ui/PlaybackCoordinator.cpp
+    ui/MetadataCoordinator.cpp
+    ui/InspectorSidebar.cpp
+    ui/CoverArtCache.cpp
     ui/ImportExportCoordinator.cpp
     ui/ListSidebarController.cpp
     ui/TagEditController.cpp
@@ -19,6 +22,7 @@ add_library(aobus-gtk-lib STATIC
     ui/QueryExpressionBox.cpp
     ui/TagPromptDialog.cpp
     ui/TagPopover.cpp
+    ui/TagEditor.cpp
     ui/ImportProgressDialog.cpp
     ui/StatusBar.cpp
     ui/TrackRowDataProvider.cpp

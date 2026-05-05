@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TrackRow.h"
-
 #include "TrackRowDataProvider.h"
 
 #include <chrono>
@@ -37,7 +36,11 @@ namespace ao::gtk
   }
 
   TrackRow::TrackRow()
-    : Glib::ObjectBase{"TrackRow"}, _propertyPlaying{*this, "playing", false}
+    : Glib::ObjectBase{"TrackRow"}
+    , _propertyPlaying{*this, "playing", false}
+    , _propertyTitle{*this, "title", ""}
+    , _propertyArtist{*this, "artist", ""}
+    , _propertyAlbum{*this, "album", ""}
   {
   }
 
@@ -54,6 +57,36 @@ namespace ao::gtk
   void TrackRow::setPlaying(bool playing)
   {
     _propertyPlaying.set_value(playing);
+  }
+
+  Glib::PropertyProxy<Glib::ustring> TrackRow::property_title()
+  {
+    return _propertyTitle.get_proxy();
+  }
+
+  void TrackRow::setTitle(Glib::ustring const& title)
+  {
+    _propertyTitle.set_value(title);
+  }
+
+  Glib::PropertyProxy<Glib::ustring> TrackRow::property_artist()
+  {
+    return _propertyArtist.get_proxy();
+  }
+
+  void TrackRow::setArtist(Glib::ustring const& artist)
+  {
+    _propertyArtist.set_value(artist);
+  }
+
+  Glib::PropertyProxy<Glib::ustring> TrackRow::property_album()
+  {
+    return _propertyAlbum.get_proxy();
+  }
+
+  void TrackRow::setAlbum(Glib::ustring const& album)
+  {
+    _propertyAlbum.set_value(album);
   }
 
   Glib::RefPtr<TrackRow> TrackRow::create(TrackId id, TrackRowDataProvider const& provider)
@@ -77,11 +110,16 @@ namespace ao::gtk
                           std::uint16_t discNumber,
                           std::uint16_t totalDiscs,
                           std::uint16_t trackNumber,
-                          std::optional<std::uint64_t> resourceId)
+                          std::optional<std::uint64_t> resourceId,
+                          std::uint32_t sampleRate,
+                          std::uint8_t channels,
+                          std::uint8_t bitDepth,
+                          std::uint16_t codecId)
   {
-    _title = std::move(title);
-    _artistId = artist;
-    _albumId = album;
+    _propertyTitle.set_value(std::move(title));
+    _propertyArtist.set_value(_provider->resolveDictionaryString(artist));
+    _propertyAlbum.set_value(_provider->resolveDictionaryString(album));
+
     _albumArtistId = albumArtist;
     _genreId = genre;
     _composerId = composer;
@@ -94,6 +132,11 @@ namespace ao::gtk
     _totalDiscs = totalDiscs;
     _trackNumber = trackNumber;
     _resourceId = resourceId;
+
+    _sampleRate = sampleRate;
+    _channels = channels;
+    _bitDepth = bitDepth;
+    _codecId = codecId;
 
     // Pre-format numeric strings
     _yearStr = _year == 0 ? Glib::ustring{} : Glib::ustring{std::format("{}", _year)};
@@ -118,17 +161,7 @@ namespace ao::gtk
     }
   }
 
-  Glib::ustring const& TrackRow::getArtist() const
-  {
-    return _provider->resolveDictionaryString(_artistId);
-  }
-
-  Glib::ustring const& TrackRow::getAlbum() const
-  {
-    return _provider->resolveDictionaryString(_albumId);
-  }
-
-  Glib::ustring const& TrackRow::getColumnText(TrackColumn column) const
+  Glib::ustring TrackRow::getColumnText(TrackColumn column) const
   {
     switch (column)
     {
@@ -141,7 +174,7 @@ namespace ao::gtk
       case TrackColumn::Year: return _yearStr;
       case TrackColumn::DiscNumber: return _discNumberStr;
       case TrackColumn::TrackNumber: return _trackNumberStr;
-      case TrackColumn::Title: return _title;
+      case TrackColumn::Title: return _propertyTitle.get_value();
       case TrackColumn::Duration: return _durationStr;
       case TrackColumn::Tags: return _tags;
     }
@@ -153,6 +186,11 @@ namespace ao::gtk
   Glib::ustring const& TrackRow::getDisplayNumber() const
   {
     return _displayNumberStr;
+  }
+
+  void TrackRow::setTags(Glib::ustring const& tags)
+  {
+    _tags = tags;
   }
 
   Glib::ustring const& TrackRow::getTags() const
@@ -169,7 +207,7 @@ namespace ao::gtk
       .genre = _provider->resolveDictionaryString(_genreId).raw(),
       .composer = _provider->resolveDictionaryString(_composerId).raw(),
       .work = _provider->resolveDictionaryString(_workId).raw(),
-      .title = _title.raw(),
+      .title = _propertyTitle.get_value().raw(),
       .durationMs = static_cast<std::uint32_t>(_duration.count()),
       .year = _year,
       .discNumber = _discNumber,

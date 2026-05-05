@@ -18,6 +18,7 @@
 namespace ao::gtk
 {
   class TrackRowDataProvider;
+  class MetadataCoordinator;
 
   class TrackViewPage final : public Gtk::Box
   {
@@ -26,16 +27,20 @@ namespace ao::gtk
     using SelectionChangedSignal = sigc::signal<void()>;
     using TrackActivatedSignal = sigc::signal<void(TrackId)>;
     using ContextMenuRequestedSignal = sigc::signal<void(double, double)>;
-    using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId>, double, double)>;
+    using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId> const&, Gtk::Widget*)>;
     using CreateSmartListRequestedSignal = sigc::signal<void(std::string)>;
 
-    explicit TrackViewPage(ao::ListId listId, TrackListAdapter& adapter, TrackColumnLayoutModel& columnLayoutModel);
+    explicit TrackViewPage(ao::ListId listId,
+                           TrackListAdapter& adapter,
+                           TrackColumnLayoutModel& columnLayoutModel,
+                           MetadataCoordinator& metadataCoordinator);
     ~TrackViewPage() override;
 
     ao::ListId getListId() const { return _listId; }
 
     // Get the selected track IDs
     std::vector<TrackId> getSelectedTrackIds() const;
+    std::vector<Glib::RefPtr<TrackRow>> getSelectedRows() const;
 
     // Get total duration of selected tracks
     std::chrono::milliseconds getSelectedTracksDuration() const;
@@ -74,6 +79,7 @@ namespace ao::gtk
     // Navigation and Selection
     void selectTrack(TrackId trackId);
     void setPlayingTrackId(std::optional<TrackId> trackId);
+    void setFilterExpression(std::string const& expression);
 
   private:
     // Setup methods
@@ -130,6 +136,7 @@ namespace ao::gtk
     // Models
     ao::ListId _listId;
     TrackListAdapter& _adapter;
+    MetadataCoordinator& _metadataCoordinator;
     Glib::RefPtr<Gtk::SortListModel> _sortModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
     TrackColumnLayoutModel& _columnLayoutModel;
@@ -148,6 +155,7 @@ namespace ao::gtk
     std::vector<sigc::connection> _columnNotifyConnections;
 
     void updateTitlePositionVariable();
+    Glib::RefPtr<Gtk::SignalListItemFactory> createTextColumnFactory(TrackColumnDefinition const& definition);
 
     // Signals
     SelectionChangedSignal _selectionChanged;
