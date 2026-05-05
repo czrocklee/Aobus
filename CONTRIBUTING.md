@@ -96,12 +96,11 @@ Rules are numbered for easy reference in reviews and tooling.
     - 3.4.3. Prefer brace initialization in member initializer lists
       - Prefer `T() : _mem{a}` over `T() : _mem(a)`
     - 3.4.4. Mark functions `noexcept` when they cannot throw
-    - 3.4.5. Prefer `auto` for non-primitive object construction
-      - Prefer `auto x = T{a, b};` over `T x{a, b};`
-      - Prefer `auto x = T{};` over `T x;`
-      - Avoid `auto` for primitive types (e.g., `int`, `unsigned int`, `double`) if it requires a `static_cast` or reduces clarity
-      - Interfacing with C APIs: Use explicit types when an API requires a pointer to a specific C type (e.g., `unsigned int*`) to ensure strict type compatibility
-      - Exception: for simple null pointer initialization, use `T* ptr = nullptr;` instead of `auto* ptr = static_cast<T*>(nullptr);`
+    - 3.4.5. Initialization style
+      - **Non-primitive types**: prefer `auto x = T{args};` or `auto x = T{};`. The `auto` + braces avoids implicit narrowing and most-vexing-parse.
+      - **Primitive types** (`int`, `std::size_t`, `float`, etc.): use `T x = val;` (e.g., `std::size_t pos = 0;`, `auto count = 0;`). Do not use brace initialization for primitives.
+      - Interfacing with C APIs: use explicit types when an API requires a pointer to a specific C type (e.g., `unsigned int*`).
+      - Exception: for null pointer initialization, use `T* ptr = nullptr;`.
 - 4\. Best Practices
   - 4.1. Getters and Accessors
     - 4.1.1. Keep trivial one-line getters and setters inline in headers

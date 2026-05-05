@@ -17,27 +17,30 @@ Aubus is a GTK4 music application with a sidebar navigation, track list display,
 ## 2. Main Window Layout
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│ File Menu                                                     │
-├───────────────────────────────────────────────────────────────┤
-│ Playback Bar (transport controls, seek, volume)               │
-├────────────┬──────────────────────────────────────────────────┤
-│            │                                                  │
-│  Sidebar   │         Content Area                             │
-│  (Lists)   │     (Track list per selected list)               │
-│            │                                                  │
-│ ─ ─ ─ ─ ─ │                                                  │
-│ Cover Art  │                                                  │
-└────────────┴──────────────────────────────────────────────────┘
-│ Status Bar (global, persistent across all views)              │
-└───────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│ File Menu                                                         │
+├──────────────────────────────────────────────────────────────────┤
+│ Playback Bar (transport controls, seek, volume)                   │
+├──────────┬───────────────────────────────┬────────────────────────┤
+│          │                               │                        │
+│ Sidebar  │         Content Area          │  Inspector Sidebar     │
+│ (Lists)  │    (Track list per selected   │  (collapsible)         │
+│          │     list, inline editable)    │                        │
+│          │                               │  Hero · Metadata       │
+│          │                               │  Audio Props · Tags    │
+│ ─ ─ ─ ─ │                               │                        │
+│Cover Art │                               │                        │
+└──────────┴───────────────────────────────┴────────────────────────┘
+│ Status Bar (global, persistent across all views)                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-- **Sidebar**: Fixed width (330px), contains list tree navigation
-- **Cover Art**: 50x50px thumbnail anchored at bottom of left sidebar, shows cover for first selected track
-- **Content Area**: Stack-based pages, switches based on sidebar selection
-- **Playback Bar**: Always visible at top, below menu
-- **Status Bar**: Always visible at bottom, global throughout app
+- **Sidebar**: List tree navigation, fixed width 330px (see Section 3)
+- **Content Area**: Stack-based track list pages, switches on sidebar selection (see Section 4)
+- **Inspector Sidebar**: Collapsible right panel for track details and metadata editing (see Section 6)
+- **Cover Art**: 50x50px thumbnail at bottom of left sidebar (see Section 5)
+- **Playback Bar**: Transport controls, always visible at top (see Section 7)
+- **Status Bar**: Global status, always visible at bottom (see Section 8)
 
 ---
 
@@ -60,14 +63,15 @@ Left panel displays library lists in a **TreeView** structure:
 
 Each list displays its tracks in a **ColumnView** (sortable, multi-select):
 
-| Column | Description |
-|--------|-------------|
-| Title | Track name |
-| Artist | Artist name |
-| Album | Album name |
-| Duration | Track length |
-| Tags | User tags |
-| ... | Other metadata |
+| Column | Description | Editable |
+|--------|-------------|----------|
+| Title | Track name | Long-press |
+| Artist | Artist name | Long-press |
+| Album | Album name | Long-press |
+| Genre | Genre name | — |
+| Duration | Track length | — |
+| Tags | User tags | — |
+| ... | Other metadata | — |
 
 **Controls Bar (above list):**
 - Filter input field (text search / expression)
@@ -77,6 +81,8 @@ Each list displays its tracks in a **ColumnView** (sortable, multi-select):
 **Interactions:**
 - Click row → Select track
 - Double-click row / Enter → Start playback
+- Long-press Title/Artist/Album cell → Inline edit (see Inline Editing below)
+- Drag Artist/Album/Genre value onto filter entry → Populate filter expression (see Drag-to-Filter below)
 - Right-click row → Tag editing popover
 - Double-click Tags cell / Ctrl+T → Open tag editor
 - Click column header → Sort by that column
@@ -87,6 +93,19 @@ Each list displays its tracks in a **ColumnView** (sortable, multi-select):
 - Filter error display (below controls bar)
 - Grouped sections when Group-by is active
 - Playing track highlight (beam effect)
+
+### Inline Editing
+
+Title, Artist, and Album cells switch to an edit field on **long-press** (~600ms):
+
+- **Activate**: Long-press a cell → the label crossfades into a text entry with all text selected
+- **Commit**: Press Enter or move focus away → value written to the model and dispatched to a background worker for database update
+- **Cancel**: Press Escape → reverts to the original value, no write occurs
+- **Optimistic update**: The UI updates immediately; if the database write fails, the cell reverts to its pre-edit value
+
+### Drag-to-Filter
+
+Artist, Album, and Genre columns support drag-and-drop onto the filter entry. Dragging a cell value onto the filter entry creates a corresponding filter expression (e.g., dragging "The Beatles" from the Artist column sets `artist:"The Beatles"` in the filter).
 
 ---
 
@@ -130,9 +149,101 @@ Cover art is extracted from audio files during import (FLAC, MP4, MP3 formats) a
 
 Cover art is not currently shown in the Playback Bar or Status Bar during playback.
 
+The Inspector Sidebar (see Section 6) displays a larger 280x280 hero cover art for the selected track, backed by an in-memory LRU cache.
+
 ---
 
-## 6. Playback Bar & Status Bar
+## 6. Inspector Sidebar
+
+A collapsible right panel that displays detailed information and provides editing capabilities for the currently selected track(s). It slides in from the right via a `Gtk::Revealer` with a slide animation.
+
+The sidebar is toggled by a narrow handle button between the content area and the sidebar. It is hidden by default.
+
+### Sections
+
+```
+┌─────────────────────┐
+│                     │
+│    ┌───────────┐    │  ◀ Hero
+│    │ Cover Art │    │    280x280 dominant image
+│    │           │    │
+│    │"No Artwork"│   │    Placeholder when no art
+│    └───────────┘    │
+│                     │
+│  TITLE              │  ◀ Metadata (editable)
+│  Track Title        │    Click to edit
+│  ARTIST             │    Enter / click-away to commit
+│  Artist Name        │
+│  ALBUM              │
+│  Album Name         │
+│                     │
+│  AUDIO PROPERTIES   │  ◀ Audio (read-only)
+│  Format      FLAC   │
+│  Sample Rate 48 kHz │
+│  Channels    2 Ch   │
+│  Duration    3:45   │
+│                     │
+│  ┌─ TAGS ─────────┐ │  ◀ Tags (chip editor)
+│  │ Search or add..│ │    Toggle chips to add/remove
+│  │ ┌──┐ ┌──┐ ┌──┐ │ │
+│  │ │Rock│ │Jazz│ │..││
+│  │ └──┘ └──┘ └──┘ │ │
+│  │ ────────────── │ │
+│  │ Available tags  │ │
+│  │ ┌──┐ ┌──┐     │ │
+│  │ │Pop│ │Live│   │ │
+│  │ └──┘ └──┘     │ │
+│  └────────────────┘ │
+│                     │
+└─────────────────────┘
+```
+
+### Behavior by Selection State
+
+| Selection | Hero | Metadata | Audio | Tags |
+|-----------|------|----------|-------|------|
+| None | Hidden | Hidden | Hidden | Hidden |
+| Single track | Cover art (280x280) or "No Artwork" placeholder | Populated with track values, ready to edit | Format, sample rate, channels, duration | Current tags shown as chips |
+| Multiple tracks | "No Artwork" placeholder | Aggregated: matching values displayed, differing fields show `<Multiple Values>` | Hidden | Common tags shown, batch edit enabled |
+
+### Hero Cover Art
+
+- **Size**: 280x280px target, constrained by sidebar width
+- **Cache**: In-memory LRU cache (100 entries) avoids repeated disk reads when switching selections
+- **Single selection with art**: Decoded from LMDB resource store, scaled to fit via `Gdk::Pixbuf`
+- **Single selection without art**: "No Artwork" label displayed
+- **Multi-selection**: Placeholder shown (future: stacked-cards motif)
+
+### Metadata Editing
+
+Title, Artist, and Album fields are rendered as editable labels. Editing flow:
+
+1. Click the label → enters editing mode
+2. Type new value, then click away or press Enter → commits
+3. The UI updates optimistically; the write is dispatched to a background worker
+4. If the write fails, the field reverts to its previous value
+
+### Audio Properties
+
+Read-only display of technical audio properties derived from the track's stored property data:
+
+- **Format**: Codec name (FLAC, MP3, etc.)
+- **Sample Rate**: Formatted as kHz (e.g., "48 kHz", "44.1 kHz")
+- **Channels**: Channel count with "Ch" suffix (e.g., "2 Ch" for stereo)
+- **Duration**: Formatted as `m:ss` or `h:mm:ss`
+
+### Tags
+
+Tags are managed through an embedded chip-based editor:
+
+- **Current tags** (highlighted chips): Tags present on ALL selected tracks. Click to remove.
+- **Available tags** (dimmed chips): Top 50 most frequent tags across the library. Click to add.
+- **Search/Add entry**: Type + Enter to create and add a new tag.
+- Changes are committed immediately on each chip toggle. There is no separate "Apply" step.
+
+---
+
+## 7. Playback Bar & Status Bar
 
 Transport controls always visible below the menu:
 
@@ -161,7 +272,7 @@ Transport controls always visible below the menu:
 
 ---
 
-## 7. Status Bar
+## 8. Status Bar
 
 Global status bar persistent across all views:
 
@@ -216,20 +327,22 @@ Conclusion: Bit-perfect output
 
 ---
 
-## 8. Dialogs and Popovers
+## 9. Dialogs and Popovers
 
 ### TagPopover
 
-**Trigger:** Right-click on track row
+**Trigger:** Right-click on track row, or Ctrl+T / double-click Tags cell
 
-**Appearance:** Small popover anchored to cursor
+**Appearance:** Small popover anchored to the triggering widget
 
 **Content:**
 - Search/add tags field
-- Current tags (on selected tracks)
-- Available tags (suggestions)
+- Current tags (highlighted chips — tags on all selected tracks)
+- Available tags (dimmed chips — top suggestions from library)
 
-**Interaction:** Click tag to toggle, Enter to add new tag
+**Interaction:** Click tag chip to toggle (add/remove), Enter in search field to create and add a new tag. Changes are committed immediately after each toggle; there is no separate "Apply" step.
+
+The same tag editing UI is also used inline in the Inspector Sidebar (see Section 6).
 
 ---
 
@@ -374,7 +487,7 @@ Conclusion: Bit-perfect output                      <-- final verdict
 
 ---
 
-## 9. Context Menus
+## 10. Context Menus
 
 ### Track Context Menu
 
@@ -398,7 +511,7 @@ Conclusion: Bit-perfect output                      <-- final verdict
 
 ---
 
-## 10. Keyboard Shortcuts
+## 11. Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
@@ -407,7 +520,7 @@ Conclusion: Bit-perfect output                      <-- final verdict
 
 ---
 
-## 11. File Menu
+## 12. File Menu
 
 | Item | Action |
 |------|--------|
@@ -417,7 +530,7 @@ Conclusion: Bit-perfect output                      <-- final verdict
 
 ---
 
-## 12. State Persistence
+## 13. State Persistence
 
 Application saves and restores on restart:
 - Window size and position
@@ -427,7 +540,7 @@ Application saves and restores on restart:
 
 ---
 
-## 13. Visual Design
+## 14. Visual Design
 
 ### Styling
 - Inline CSS for custom styling (playing beam effect)

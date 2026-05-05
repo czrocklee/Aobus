@@ -41,6 +41,13 @@ add_executable(ao_test
 
     # app unit tests (no platform deps)
     unit/app/SmartListEngineTest.cpp
+    unit/app/CommandBusTest.cpp
+    unit/app/EventBusTest.cpp
+    unit/app/ObservableStoreTest.cpp
+    unit/app/TrackListProjectionTest.cpp
+    unit/app/LibraryMutationServiceTest.cpp
+    unit/app/NotificationServiceTest.cpp
+    unit/app/ViewRegistryTest.cpp
 
     # integration tests
     integration/audio/DecoderIntegrationTest.cpp
@@ -50,7 +57,7 @@ add_executable(ao_test
 )
 
 target_include_directories(ao_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(ao_test PRIVATE ao ao_audio Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
+target_link_libraries(ao_test PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
   target_compile_definitions(ao_test PRIVATE PIPEWIRE_FOUND)
