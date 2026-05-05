@@ -16,32 +16,20 @@ namespace
 {
   Engine::RouteStatus createBaseEngineRoute()
   {
-    auto engineSnap = Engine::RouteStatus{};
-    engineSnap.optAnchor = RouteAnchor{.backend = kBackendNone, .id = "mock-stream-id"};
-    engineSnap.flow.nodes.push_back(
-      flow::Node{.id = "rs-decoder",
-                 .type = flow::NodeType::Decoder,
-                 .name = "Decoder",
-                 .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
-                 .volumeNotUnity = false,
-                 .isMuted = false,
-                 .isLossySource = false});
-    engineSnap.flow.nodes.push_back(
-      flow::Node{.id = "rs-engine",
-                 .type = flow::NodeType::Engine,
-                 .name = "Engine",
-                 .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
-                 .volumeNotUnity = false,
-                 .isMuted = false,
-                 .isLossySource = false});
-    engineSnap.flow.connections.push_back(
-      flow::Connection{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
-    return engineSnap;
+    return Engine::RouteStatus{
+      .state =
+        {
+          .sourceFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
+          .decoderOutputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
+          .engineOutputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
+        },
+      .optAnchor = RouteAnchor{.backend = kBackendNone, .id = "mock-stream-id"},
+    };
   }
 
   flow::Graph createBaseSystemGraph()
   {
-    flow::Graph graph;
+    auto graph = flow::Graph{};
     graph.nodes.push_back(
       flow::Node{.id = "mock-stream-id",
                  .type = flow::NodeType::Stream,
@@ -70,7 +58,7 @@ namespace
 
   public:
     TestBackend(BackendId b, ProfileId p)
-      : _backendId(b), _profileId(p)
+      : _backendId{std::move(b)}, _profileId{std::move(p)}
     {
     }
     BackendId backendId() const noexcept override { return _backendId; }
@@ -80,14 +68,14 @@ namespace
 
 TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]")
 {
-  Mock<IBackendProvider> mockProvider;
-  Mock<IBackend> mockEngine;
+  auto mockProvider = Mock<IBackendProvider>{};
+  auto mockEngine = Mock<IBackend>{};
 
-  IBackendProvider::OnGraphChangedCallback onGraphChanged;
+  auto onGraphChanged = IBackendProvider::OnGraphChangedCallback{};
 
   When(Method(mockProvider, subscribeDevices))
     .AlwaysDo(
-      [&](IBackendProvider::OnDevicesChangedCallback cb)
+      [&](IBackendProvider::OnDevicesChangedCallback const& cb)
       {
         if (cb)
         {
@@ -105,7 +93,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
     .AlwaysDo([&](Device const& b, ProfileId const& p) { return std::make_unique<TestBackend>(b.backendId, p); });
   When(Method(mockProvider, subscribeGraph))
     .AlwaysDo(
-      [&](std::string_view, IBackendProvider::OnGraphChangedCallback cb)
+      [&](std::string_view, IBackendProvider::OnGraphChangedCallback const& cb)
       {
         onGraphChanged = cb;
         return Subscription{};
@@ -116,7 +104,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
         {.id = kBackendNone, .name = "Mock", .description = "Mock", .iconName = "audio-card", .supportedProfiles = {}},
       .devices = {}});
 
-  Player player(nullptr);
+  auto player = Player{nullptr};
   player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
   player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared);
@@ -130,17 +118,17 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
     REQUIRE(onGraphChanged);
     onGraphChanged(systemGraph);
 
-    auto snap = player.status();
+    auto const snap = player.status();
     REQUIRE(snap.quality == Quality::BitwisePerfect);
   }
 
   SECTION("Lossy Source")
   {
-    engineSnap.flow.nodes[0].isLossySource = true;
+    engineSnap.state.isLossySource = true;
     player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
-    auto snap = player.status();
+    auto const snap = player.status();
     REQUIRE(snap.quality == Quality::LossySource);
   }
 
@@ -150,7 +138,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
     player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
-    auto snap = player.status();
+    auto const snap = player.status();
     REQUIRE(snap.quality == Quality::LinearIntervention);
     REQUIRE(snap.qualityTooltip.find("Resampling") != std::string::npos);
   }
@@ -161,7 +149,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
     player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
-    auto snap = player.status();
+    auto const snap = player.status();
     REQUIRE(snap.quality == Quality::LinearIntervention);
     REQUIRE(snap.qualityTooltip.find("Volume") != std::string::npos);
   }
@@ -172,7 +160,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
     player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
-    auto snap = player.status();
+    auto const snap = player.status();
     REQUIRE(snap.quality == Quality::LinearIntervention);
     REQUIRE(snap.qualityTooltip.find("MUTED") != std::string::npos);
   }
@@ -191,7 +179,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
     player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
-    auto snap = player.status();
+    auto const snap = player.status();
     REQUIRE(snap.quality == Quality::LinearIntervention);
     REQUIRE(snap.qualityTooltip.find("shared with Firefox") != std::string::npos);
   }
@@ -202,18 +190,18 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
     player.handleRouteChanged(engineSnap, player.playbackGeneration());
     onGraphChanged(systemGraph);
 
-    auto snap = player.status();
+    auto const snap = player.status();
     REQUIRE(snap.quality == Quality::LosslessPadded);
   }
 }
 
 TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][player][lifecycle]")
 {
-  Mock<IBackendProvider> mockProvider;
+  auto mockProvider = Mock<IBackendProvider>{};
 
   When(Method(mockProvider, subscribeDevices))
     .AlwaysDo(
-      [&](IBackendProvider::OnDevicesChangedCallback cb)
+      [&](IBackendProvider::OnDevicesChangedCallback const& cb)
       {
         if (cb)
         {
@@ -224,20 +212,21 @@ TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][player
                                         .backendId = kBackendNone,
                                         .capabilities = {}}});
         }
+
         return Subscription{};
       });
 
   When(Method(mockProvider, createBackend))
     .AlwaysDo([&](Device const& b, ProfileId const& p) { return std::make_unique<TestBackend>(b.backendId, p); });
   When(Method(mockProvider, subscribeGraph))
-    .AlwaysDo([](std::string_view, IBackendProvider::OnGraphChangedCallback) { return Subscription{}; });
+    .AlwaysDo([](std::string_view, IBackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
   When(Method(mockProvider, status))
     .AlwaysReturn(IBackendProvider::Status{
       .metadata =
         {.id = kBackendNone, .name = "Mock", .description = "Mock", .iconName = "audio-card", .supportedProfiles = {}},
       .devices = {}});
 
-  Player player(nullptr);
+  auto player = Player{nullptr};
   player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
   player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared);
 
@@ -251,21 +240,22 @@ TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][player
     player.handleRouteChanged(engineSnap, initialGeneration);
 
     // If it was ignored, status should be empty or default (because _cachedEngineRoute wasn't updated)
-    auto snap = player.status();
+    auto const snap = player.status();
     REQUIRE(snap.flow.nodes.empty());
   }
 }
 
 TEST_CASE("Player - Pending Output", "[playback][player][pending]")
 {
-  Mock<IBackendProvider> mockProvider;
-  IBackendProvider::OnDevicesChangedCallback onDevicesChanged;
+  auto mockProvider = Mock<IBackendProvider>{};
+  auto onDevicesChanged = IBackendProvider::OnDevicesChangedCallback{};
 
   When(Method(mockProvider, subscribeDevices))
     .AlwaysDo(
-      [&](IBackendProvider::OnDevicesChangedCallback cb)
+      [&](IBackendProvider::OnDevicesChangedCallback const& cb)
       {
         onDevicesChanged = cb;
+
         return Subscription{};
       });
 
@@ -279,14 +269,14 @@ TEST_CASE("Player - Pending Output", "[playback][player][pending]")
                                                         .supportedProfiles = {}},
                                            .devices = {}});
 
-  Player player(nullptr);
+  auto player = Player{nullptr};
   player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
   // 1. Call setOutput before devices are available
   player.setOutput(kBackendPipeWire, DeviceId{"system-default"}, kProfileShared);
 
   // Verify that it's NOT yet active (engine still has null backend/default device)
-  auto snapBefore = player.status();
+  auto const snapBefore = player.status();
   REQUIRE(snapBefore.engine.currentDeviceId == "null");
 
   // 2. Simulate devices being discovered
@@ -298,15 +288,15 @@ TEST_CASE("Player - Pending Output", "[playback][player][pending]")
                            .backendId = kBackendPipeWire}});
 
   // 3. Verify that the output was automatically restored
-  auto snapAfter = player.status();
+  auto const snapAfter = player.status();
   REQUIRE(snapAfter.engine.currentDeviceId == "system-default");
   REQUIRE(snapAfter.engine.backendId == kBackendPipeWire);
 }
 
 TEST_CASE("Player - Basic Control Propagation", "[playback][player][control]")
 {
-  auto dispatcher = std::make_shared<MockDispatcher>();
-  Player player(dispatcher);
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto player = Player{dispatcher};
 
   SECTION("Seek is propagated to engine")
   {
@@ -318,9 +308,9 @@ TEST_CASE("Player - Basic Control Propagation", "[playback][player][control]")
 
   SECTION("Volume and mute are propagated to engine and status")
   {
-    player.setVolume(0.6f);
-    REQUIRE(player.status().volume == Catch::Approx(0.6f));
-    REQUIRE(player.status().engine.volume == Catch::Approx(0.6f));
+    player.setVolume(0.6F);
+    REQUIRE(player.status().volume == Catch::Approx(0.6F));
+    REQUIRE(player.status().engine.volume == Catch::Approx(0.6F));
 
     player.setMuted(true);
     REQUIRE(player.status().muted == true);

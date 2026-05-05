@@ -188,24 +188,30 @@ namespace ao::audio
 
   void Player::Impl::updateMergedGraph()
   {
-    mergedGraph = cachedRouteStatus.flow;
+    auto const& rs = cachedRouteStatus.state;
 
-    // Find the engine output format to enrich system nodes that might be missing it (like ALSA)
-    auto optEngineFormat = std::optional<Format>{};
+    mergedGraph = flow::Graph{
+      .nodes =
+        {
+          flow::Node{.id = "rs-decoder",
+                     .type = flow::NodeType::Decoder,
+                     .name = "Decoder",
+                     .optFormat = rs.decoderOutputFormat,
+                     .isLossySource = rs.isLossySource},
+          flow::Node{
+            .id = "rs-engine", .type = flow::NodeType::Engine, .name = "Engine", .optFormat = rs.engineOutputFormat},
+        },
+      .connections =
+        {
+          flow::Connection{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true},
+        },
+    };
 
-    for (auto const& node : cachedRouteStatus.flow.nodes)
-    {
-      if (node.id == "rs-engine")
-      {
-        optEngineFormat = node.optFormat;
-        break;
-      }
-    }
+    auto const optEngineFormat = rs.engineOutputFormat;
 
-    // Add system graph nodes and links
     for (auto node : cachedSystemGraph.nodes)
     {
-      if (!node.optFormat && optEngineFormat)
+      if (!node.optFormat && optEngineFormat.sampleRate > 0)
       {
         node.optFormat = optEngineFormat;
       }
@@ -218,8 +224,7 @@ namespace ao::audio
       mergedGraph.connections.push_back(link);
     }
 
-    // Find the backend stream node to bridge the engine to
-    std::string streamNodeId;
+    auto streamNodeId = std::string{};
 
     for (auto const& node : cachedSystemGraph.nodes)
     {
@@ -241,8 +246,8 @@ namespace ao::audio
   std::vector<flow::Node const*> Player::Impl::findPlaybackPath(std::string const& startId) const
   {
     std::vector<flow::Node const*> path;
-    auto currentId = startId;
-    std::set<std::string> visited;
+    auto currentId = std::string_view{startId};
+    std::set<std::string_view> visited;
 
     while (!currentId.empty() && !visited.contains(currentId))
     {
@@ -257,7 +262,7 @@ namespace ao::audio
 
       path.push_back(&(*it));
 
-      std::string nextId;
+      auto nextId = std::string_view{};
 
       for (auto const& link : mergedGraph.connections)
       {
@@ -281,7 +286,7 @@ namespace ao::audio
     if (inputSources.contains(node.id))
     {
       auto const& sources = inputSources.at(node.id);
-      std::vector<std::string> otherAppNames;
+      auto otherAppNames = std::vector<std::string>{};
 
       for (auto const& srcId : sources)
       {
@@ -303,7 +308,7 @@ namespace ao::audio
         std::ranges::sort(otherAppNames);
         auto const [first, last] = std::ranges::unique(otherAppNames);
         otherAppNames.erase(first, last);
-        std::string apps;
+        auto apps = std::string{};
 
         for (size_t j = 0; j < otherAppNames.size(); ++j)
         {
@@ -483,10 +488,7 @@ namespace ao::audio
 
   Player::~Player()
   {
-    if (_impl && _impl->engine)
-    {
-      _impl->engine->setOnRouteChanged(nullptr);
-    }
+    _impl->engine->setOnRouteChanged(nullptr);
   }
 
   void Player::addProvider(std::unique_ptr<IBackendProvider> provider)
@@ -635,15 +637,15 @@ namespace ao::audio
 
   Player::Status Player::status() const
   {
-    auto engineStatus = _impl->engine->status();
-
     auto status = Player::Status{};
-    status.engine = engineStatus;
+    status.engine = _impl->engine->status();
+
     if (_impl->currentTrack)
     {
       status.trackTitle = _impl->currentTrack->title;
       status.trackArtist = _impl->currentTrack->artist;
     }
+
     status.availableBackends = _impl->cachedBackends;
     status.flow = _impl->mergedGraph;
     status.isReady = isReady();
@@ -652,17 +654,20 @@ namespace ao::audio
     status.muted = status.engine.muted;
     status.volumeAvailable = status.engine.volumeAvailable;
 
-    // Inject controller-owned fields into the snapshot returned to the UI
     status.quality = _impl->quality;
     status.qualityTooltip = _impl->qualityTooltip;
 
     return status;
   }
 
+  Transport Player::transport() const
+  {
+    return _impl->engine->transport();
+  }
+
   bool Player::isReady() const
   {
-    auto const engineStatus = _impl->engine->status();
-    return engineStatus.backendId != kBackendNone && !_impl->pendingOutput.has_value();
+    return _impl->engine->backendId() != kBackendNone && !_impl->pendingOutput.has_value();
   }
 
   void Player::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)

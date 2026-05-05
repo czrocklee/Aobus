@@ -202,7 +202,7 @@ TEST_CASE("TrackBuilder - Serialize With Strings")
   CHECK(header->year == 2021);
 
   // Verify strings are in the payload
-  auto payloadStart = reinterpret_cast<char const*>(hotData.data()) + sizeof(TrackHotHeader);
+  auto const* payloadStart = reinterpret_cast<char const*>(hotData.data()) + sizeof(TrackHotHeader);
   CHECK(std::strncmp(payloadStart, "Hello World", 11) == 0);
 }
 
@@ -229,7 +229,7 @@ TEST_CASE("TrackBuilder - buildHotHeader Method")
 TEST_CASE("TrackBuilder - Serialize With Special Characters")
 {
   auto builder = TrackBuilder::createNew();
-  auto title = "Test: \"Quotes\" & 'Apostrophes'";
+  auto const* title = "Test: \"Quotes\" & 'Apostrophes'";
   builder.metadata().title(title);
 
   auto [hotData, coldData] = serializeTestTrack(builder);

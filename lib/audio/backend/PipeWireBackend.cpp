@@ -79,6 +79,31 @@ namespace ao::audio::backend
     void handleStreamStateChanged(::pw_stream_state oldState, ::pw_stream_state newState, char const* errorMessage);
     void handleStreamDrained();
 
+  private:
+    void handleFormatParam(::spa_pod const* param);
+    void handlePropsParam(::spa_pod const* param);
+
+  public:
+    // Static C callback thunks for PipeWire
+    static void onStreamProcess(void* data);
+    static void onStreamParamChanged(void* data, std::uint32_t id, ::spa_pod const* param);
+    static void onStreamStateChanged(void* data,
+                                     ::pw_stream_state oldState,
+                                     ::pw_stream_state newState,
+                                     char const* errorMessage);
+    static void onStreamDrained(void* data);
+
+    static inline ::pw_stream_events const streamEvents = []
+    {
+      auto ev = ::pw_stream_events{};
+      ev.version = PW_VERSION_STREAM_EVENTS;
+      ev.state_changed = onStreamStateChanged;
+      ev.param_changed = onStreamParamChanged;
+      ev.process = onStreamProcess;
+      ev.drained = onStreamDrained;
+      return ev;
+    }();
+
     // Members
     ao::audio::RenderCallbacks _callbacks;
     ao::audio::Format _format;
@@ -98,38 +123,27 @@ namespace ao::audio::backend
     bool _volumeAvailable = true;
   };
 
-  namespace
+  void PipeWireBackend::Impl::onStreamProcess(void* data)
   {
-    void onStreamProcess(void* data)
-    {
-      static_cast<PipeWireBackend::Impl*>(data)->handleStreamProcess();
-    }
-    void onStreamParamChanged(void* data, std::uint32_t id, ::spa_pod const* param)
-    {
-      static_cast<PipeWireBackend::Impl*>(data)->handleStreamParamChanged(id, param);
-    }
-    void onStreamStateChanged(void* data,
-                              ::pw_stream_state oldState,
-                              ::pw_stream_state newState,
-                              char const* errorMessage)
-    {
-      static_cast<PipeWireBackend::Impl*>(data)->handleStreamStateChanged(oldState, newState, errorMessage);
-    }
-    void onStreamDrained(void* data)
-    {
-      static_cast<PipeWireBackend::Impl*>(data)->handleStreamDrained();
-    }
+    static_cast<Impl*>(data)->handleStreamProcess();
+  }
 
-    ::pw_stream_events const streamEvents = []
-    {
-      auto ev = ::pw_stream_events{};
-      ev.version = PW_VERSION_STREAM_EVENTS;
-      ev.state_changed = onStreamStateChanged;
-      ev.param_changed = onStreamParamChanged;
-      ev.process = onStreamProcess;
-      ev.drained = onStreamDrained;
-      return ev;
-    }();
+  void PipeWireBackend::Impl::onStreamParamChanged(void* data, std::uint32_t id, ::spa_pod const* param)
+  {
+    static_cast<Impl*>(data)->handleStreamParamChanged(id, param);
+  }
+
+  void PipeWireBackend::Impl::onStreamStateChanged(void* data,
+                                                   ::pw_stream_state oldState,
+                                                   ::pw_stream_state newState,
+                                                   char const* errorMessage)
+  {
+    static_cast<Impl*>(data)->handleStreamStateChanged(oldState, newState, errorMessage);
+  }
+
+  void PipeWireBackend::Impl::onStreamDrained(void* data)
+  {
+    static_cast<Impl*>(data)->handleStreamDrained();
   }
 
   void PipeWireBackend::Impl::handleStreamProcess() const
@@ -172,13 +186,14 @@ namespace ao::audio::backend
       ::pw_stream_queue_buffer(_stream.get(), buffer);
       _callbacks.onPositionAdvanced(_callbacks.userData, static_cast<std::uint32_t>(bytesRead / stride));
     }
+
     else
     {
       buffer->buffer->datas[0].chunk->offset = 0;
       buffer->buffer->datas[0].chunk->size = 0;
       ::pw_stream_queue_buffer(_stream.get(), buffer);
 
-      if (_callbacks.isSourceDrained != nullptr && _callbacks.isSourceDrained(_callbacks.userData))
+      if (_callbacks.isSourceDrained(_callbacks.userData))
       {
         ::pw_stream_flush(_stream.get(), true);
       }
@@ -194,49 +209,53 @@ namespace ao::audio::backend
 
     if (id == SPA_PARAM_Format)
     {
-      if (auto negotiated = parseRawStreamFormat(param))
-      {
-        _format = *negotiated;
-        AUDIO_LOG_INFO(
-          "Negotiated PipeWire format: {}Hz, {}b, {} channels", _format.sampleRate, _format.bitDepth, _format.channels);
-
-        if (_callbacks.onFormatChanged != nullptr)
-        {
-          _callbacks.onFormatChanged(_callbacks.userData, _format);
-        }
-      }
+      handleFormatParam(param);
     }
     else if (id == SPA_PARAM_Props)
     {
-      // Parse SPA_PROP_volume and SPA_PROP_mute from the Props pod
-      if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
-      {
-        float volFloat = 0.0F;
+      handlePropsParam(param);
+    }
+  }
 
-        if (::spa_pod_get_float(&prop->value, &volFloat) == 0)
+  void PipeWireBackend::Impl::handleFormatParam(::spa_pod const* param)
+  {
+    if (auto negotiated = parseRawStreamFormat(param))
+    {
+      _format = *negotiated;
+      AUDIO_LOG_INFO(
+        "Negotiated PipeWire format: {}Hz, {}b, {} channels", _format.sampleRate, _format.bitDepth, _format.channels);
+
+      _callbacks.onFormatChanged(_callbacks.userData, _format);
+    }
+  }
+
+  void PipeWireBackend::Impl::handlePropsParam(::spa_pod const* param)
+  {
+    // Parse SPA_PROP_volume and SPA_PROP_mute from the Props pod
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
+    {
+      float volFloat = 0.0F;
+
+      if (::spa_pod_get_float(&prop->value, &volFloat) == 0)
+      {
+        if (std::abs(volFloat - _volume.exchange(volFloat)) > kVolumeEpsilon)
         {
-          if (std::abs(volFloat - _volume.exchange(volFloat)) > kVolumeEpsilon)
-          {
-            if (_callbacks.onPropertyChanged != nullptr)
-            {
-              _callbacks.onPropertyChanged(_callbacks.userData, ao::audio::PropertyId::Volume);
-            }
-          }
+          _callbacks.onPropertyChanged(_callbacks.userData, ao::audio::PropertyId::Volume);
         }
       }
+    }
 
-      if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
+    if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
+    {
+      bool muteBool = false;
+
+      if (::spa_pod_get_bool(&prop->value, &muteBool) == 0)
       {
-        bool muteBool = false;
-
-        if (::spa_pod_get_bool(&prop->value, &muteBool) == 0)
+        if (muteBool != _muted.exchange(muteBool))
         {
-          if (muteBool != _muted.exchange(muteBool))
+          if (_callbacks.onPropertyChanged != nullptr)
           {
-            if (_callbacks.onPropertyChanged != nullptr)
-            {
-              _callbacks.onPropertyChanged(_callbacks.userData, ao::audio::PropertyId::Muted);
-            }
+            _callbacks.onPropertyChanged(_callbacks.userData, ao::audio::PropertyId::Muted);
           }
         }
       }
@@ -251,15 +270,12 @@ namespace ao::audio::backend
     {
       AUDIO_LOG_ERROR("PipeWire error: {}", errorMessage ? errorMessage : "Unknown PipeWire stream error");
 
-      if (_callbacks.onBackendError != nullptr)
-      {
-        _callbacks.onBackendError(
-          _callbacks.userData, errorMessage != nullptr ? errorMessage : "Unknown PipeWire stream error");
-      }
+      _callbacks.onBackendError(
+        _callbacks.userData, errorMessage != nullptr ? errorMessage : "Unknown PipeWire stream error");
     }
     else if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
     {
-      if (!_routeAnchorReported && _callbacks.onRouteReady != nullptr && _stream)
+      if (!_routeAnchorReported && _stream)
       {
         auto id = ::pw_stream_get_node_id(_stream.get());
         if (id != PW_ID_ANY)
@@ -275,10 +291,7 @@ namespace ao::audio::backend
   {
     _drainPending = false;
 
-    if (_callbacks.onDrainComplete != nullptr)
-    {
-      _callbacks.onDrainComplete(_callbacks.userData);
-    }
+    _callbacks.onDrainComplete(_callbacks.userData);
   }
 
   PipeWireBackend::PipeWireBackend(ao::audio::Device const& device, ao::audio::ProfileId const& profile)
@@ -311,7 +324,7 @@ namespace ao::audio::backend
     _impl->_routeAnchorReported = false;
     bool useExclusive = _exclusiveMode && !_targetDeviceId.empty();
 
-    if (!_impl->_threadLoop || !_impl->_context || !_impl->_core)
+    if (!_impl->_threadLoop)
     {
       return ao::makeError(ao::Error::Code::InitFailed, "PipeWire not initialized");
     }
@@ -336,6 +349,7 @@ namespace ao::audio::backend
     if (!_targetDeviceId.empty())
     {
       ::pw_properties_set(props.get(), PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
+
       if (useExclusive)
       {
         ::pw_properties_set(props.get(), PW_KEY_NODE_EXCLUSIVE, "true");
@@ -350,7 +364,7 @@ namespace ao::audio::backend
     }
 
     _impl->_streamListener.reset();
-    ::pw_stream_add_listener(_impl->_stream.get(), _impl->_streamListener.get(), &streamEvents, _impl.get());
+    ::pw_stream_add_listener(_impl->_stream.get(), _impl->_streamListener.get(), &Impl::streamEvents, _impl.get());
 
     auto spaFmt = SPA_AUDIO_FORMAT_S16_LE;
 
@@ -394,6 +408,7 @@ namespace ao::audio::backend
     auto params = std::array<::spa_pod const*, 1>{param};
     auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
                                                 PW_STREAM_FLAG_RT_PROCESS);
+
     if (useExclusive)
     {
       flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
@@ -411,15 +426,9 @@ namespace ao::audio::backend
     return {};
   }
 
-  void PipeWireBackend::reset()
-  {
-    _impl->_callbacks = {};
-    _impl->destroyStream();
-  }
-
   void PipeWireBackend::start()
   {
-    if (!_impl || !_impl->_stream || !_impl->_threadLoop)
+    if (!_impl->_stream)
     {
       return;
     }
@@ -431,7 +440,7 @@ namespace ao::audio::backend
 
   void PipeWireBackend::pause()
   {
-    if (!_impl || !_impl->_stream || !_impl->_threadLoop)
+    if (!_impl->_stream)
     {
       return;
     }
@@ -448,7 +457,7 @@ namespace ao::audio::backend
 
   void PipeWireBackend::flush()
   {
-    if (!_impl || !_impl->_stream || !_impl->_threadLoop)
+    if (!_impl->_stream)
     {
       return;
     }
@@ -459,22 +468,9 @@ namespace ao::audio::backend
     ::pw_thread_loop_unlock(_impl->_threadLoop.get());
   }
 
-  void PipeWireBackend::drain()
-  {
-    if (!_impl || !_impl->_stream || !_impl->_threadLoop || _impl->_drainPending)
-    {
-      return;
-    }
-
-    _impl->_drainPending = true;
-    ::pw_thread_loop_lock(_impl->_threadLoop.get());
-    ::pw_stream_flush(_impl->_stream.get(), true);
-    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
-  }
-
   void PipeWireBackend::stop()
   {
-    if (!_impl || !_impl->_stream || !_impl->_threadLoop)
+    if (!_impl->_stream)
     {
       return;
     }
@@ -487,10 +483,7 @@ namespace ao::audio::backend
 
   void PipeWireBackend::close()
   {
-    if (_impl)
-    {
-      _impl->destroyStream();
-    }
+    _impl->destroyStream();
   }
 
   void PipeWireBackend::setExclusiveMode(bool exclusive)
@@ -502,7 +495,7 @@ namespace ao::audio::backend
 
     _exclusiveMode = exclusive;
 
-    if (_impl && _impl->_stream && !_targetDeviceId.empty())
+    if (_impl->_stream && !_targetDeviceId.empty())
     {
       if (auto const openResult = open(_impl->_format, _impl->_callbacks); !openResult)
       {
@@ -534,7 +527,7 @@ namespace ao::audio::backend
       auto const clamped = std::clamp(volume, 0.0F, 1.0F);
       _impl->_volume.store(clamped, std::memory_order_relaxed);
 
-      if (!_impl->_threadLoop || !_impl->_stream)
+      if (!_impl->_stream)
       {
         return {};
       }
@@ -552,18 +545,19 @@ namespace ao::audio::backend
       auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
 
       ::pw_thread_loop_lock(_impl->_threadLoop.get());
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
       ::pw_stream_set_control(_impl->_stream.get(), SPA_PROP_volume, 1, &vol);
       ::pw_stream_update_params(_impl->_stream.get(), &param, 1);
       ::pw_thread_loop_unlock(_impl->_threadLoop.get());
       return {};
     }
 
-    else if (id == ao::audio::PropertyId::Muted)
+    if (id == ao::audio::PropertyId::Muted)
     {
       auto const muted = std::get<bool>(value);
       _impl->_muted.store(muted, std::memory_order_relaxed);
 
-      if (!_impl->_threadLoop || !_impl->_stream)
+      if (!_impl->_stream)
       {
         return {};
       }

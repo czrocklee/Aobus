@@ -21,6 +21,7 @@ namespace ao::audio
       }
 
       std::uint32_t bytesPerSample = 2U;
+
       if (format.bitDepth == 24U)
       {
         bytesPerSample = kBytesPer24BitSample;
@@ -251,6 +252,7 @@ namespace ao::audio
     }
 
     auto block = PcmBlock{};
+
     {
       auto lock = std::lock_guard<std::mutex>{_decoderMutex};
 

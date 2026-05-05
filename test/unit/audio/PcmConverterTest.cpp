@@ -23,7 +23,7 @@ TEST_CASE("PcmConverter: pad (Linear)", "[audio][pcm]")
     CHECK(destination[1] == -0x56780000);
     CHECK(destination[2] == 0x00000000);
     CHECK(destination[3] == 0x7FFF0000);
-    CHECK(destination[4] == -0x80000000);
+    CHECK(destination[4] == static_cast<std::int32_t>(-0x80000000));
   }
 
   SECTION("24-bit to 32-bit padding")

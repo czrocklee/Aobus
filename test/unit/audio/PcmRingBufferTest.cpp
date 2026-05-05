@@ -127,7 +127,7 @@ TEST_CASE("PcmRingBuffer - Concurrency", "[audio][unit][ring_buffer]")
       int count = 0;
       while (!done || buffer.size() > 0)
       {
-        std::byte b;
+        std::byte b{};
         if (buffer.read(std::span(&b, 1)) == 1)
         {
           REQUIRE(b == static_cast<std::byte>(count % 256));

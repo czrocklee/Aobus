@@ -91,7 +91,7 @@ namespace
                  std::uint32_t artistId = 0,
                  std::uint32_t albumId = 0,
                  std::uint32_t genreId = 0,
-                 std::vector<std::uint32_t> tagIds = {},
+                 std::vector<std::uint32_t> const& tagIds = {},
                  std::string composer = "",
                  std::string work = "")
     {
@@ -178,14 +178,32 @@ namespace
 
       // Manual ID overrides if specified
       auto* header = ao::utility::layout::asMutablePtr<ao::library::TrackHotHeader>(_hotData);
-      if (spec.artistId != 0) header->artistId = DictionaryId{spec.artistId};
-      if (spec.albumId != 0) header->albumId = DictionaryId{spec.albumId};
-      if (spec.genreId != 0) header->genreId = DictionaryId{spec.genreId};
-      if (spec.albumArtistId != 0) header->albumArtistId = DictionaryId{spec.albumArtistId};
-      if (spec.composerId != 0) header->composerId = DictionaryId{spec.composerId};
+      if (spec.artistId != 0)
+      {
+        header->artistId = DictionaryId{spec.artistId};
+      }
+      if (spec.albumId != 0)
+      {
+        header->albumId = DictionaryId{spec.albumId};
+      }
+      if (spec.genreId != 0)
+      {
+        header->genreId = DictionaryId{spec.genreId};
+      }
+      if (spec.albumArtistId != 0)
+      {
+        header->albumArtistId = DictionaryId{spec.albumArtistId};
+      }
+      if (spec.composerId != 0)
+      {
+        header->composerId = DictionaryId{spec.composerId};
+      }
 
       auto* coldHeader = ao::utility::layout::asMutablePtr<ao::library::TrackColdHeader>(_coldData);
-      if (spec.workId != 0) coldHeader->workId = DictionaryId{spec.workId};
+      if (spec.workId != 0)
+      {
+        coldHeader->workId = DictionaryId{spec.workId};
+      }
     }
 
     std::optional<Environment> _env;
@@ -788,7 +806,7 @@ TEST_CASE("PlanEvaluator - Tag Field Compilation")
   auto plan = compiler.compile(expr);
 
   // Check that instructions contain LoadField with Field::Tag (16)
-  CHECK(plan.instructions.size() > 0);
+  CHECK(!plan.instructions.empty());
   CHECK(plan.instructions[0].op == OpCode::LoadField);
 }
 
@@ -1132,7 +1150,7 @@ TEST_CASE("PlanEvaluator - Bloom Filter Advanced Scenarios")
     auto& dict = track.dictionary();
 
     // 1. Find or create a base tag
-    auto tagA = "rock";
+    auto const* tagA = "rock";
     auto idA = dict.getOrIntern(tagA).value();
     auto bitIndex = idA % 32;
 

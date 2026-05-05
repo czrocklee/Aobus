@@ -7,16 +7,13 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <vector>
+#include <span>
 
 namespace ao::audio
 {
-  /**
-   * @brief A block of decoded PCM data.
-   */
   struct PcmBlock final
   {
-    std::vector<std::byte> bytes;
+    std::span<std::byte const> bytes;
     std::uint8_t bitDepth = 16;
     std::uint32_t frames = 0;
     std::uint64_t firstFrameIndex = 0;

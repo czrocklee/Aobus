@@ -15,44 +15,25 @@ using namespace fakeit;
 
 TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
 {
-  SpyBackend spy;
+  auto spy = SpyBackend<>{};
   auto& mockBackend = spy.mock();
-  auto dispatcher = std::make_shared<MockDispatcher>();
-  auto device = Device{.id = DeviceId{"test-device"},
-                .displayName = "Test",
-                .description = "Test",
-                .isDefault = false,
-                .backendId = kBackendNone};
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto const device = Device{.id = DeviceId{"test-device"},
+                             .displayName = "Test",
+                             .description = "Test",
+                             .isDefault = false,
+                             .backendId = kBackendNone};
 
   auto engine = Engine{spy.make_proxy(), device, dispatcher};
 
   SECTION("Stop correctly cleans up backend")
   {
     engine.stop();
-    Verify(Method(mockBackend, reset)).AtLeastOnce();
     Verify(Method(mockBackend, stop)).AtLeastOnce();
     Verify(Method(mockBackend, close)).AtLeastOnce();
 
     auto snap = engine.status();
     REQUIRE(snap.transport == Transport::Idle);
-  }
-
-  SECTION("Backend error transitions to Error state")
-  {
-    Engine::onBackendError(&engine, "Hardware failure");
-
-    auto snap = engine.status();
-    REQUIRE(snap.transport == Transport::Error);
-    REQUIRE(snap.statusText == "Hardware failure");
-  }
-
-  SECTION("Route ready updates snapshot")
-  {
-    Engine::onRouteReady(&engine, "anchor-123");
-
-    auto route = engine.routeStatus();
-    REQUIRE(route.optAnchor);
-    REQUIRE(route.optAnchor->id == "anchor-123");
   }
 
   SECTION("Volume and mute controls pass through to backend and update status")
@@ -88,11 +69,11 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
 
 TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
 {
-  SpyBackend spy1;
-  SpyBackend spy2;
+  auto spy1 = SpyBackend<>{};
+  auto spy2 = SpyBackend<>{};
   auto& mockBackend1 = spy1.mock();
   auto& mockBackend2 = spy2.mock();
-  auto dispatcher = std::make_shared<MockDispatcher>();
+  auto const dispatcher = std::make_shared<MockDispatcher>();
 
   When(Method(mockBackend1, backendId)).AlwaysReturn(kBackendNone);
   When(Method(mockBackend1, profileId)).AlwaysReturn(kProfileShared);
@@ -114,11 +95,10 @@ TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
                        .isDefault = false,
                        .backendId = kBackendAlsa});
 
-    Verify(Method(mockBackend1, reset)).Once();
     Verify(Method(mockBackend1, stop)).Once();
     Verify(Method(mockBackend1, close)).Once();
 
-    auto snap = engine.status();
+    auto const snap = engine.status();
     REQUIRE(snap.backendId == kBackendAlsa);
     REQUIRE(snap.currentDeviceId == "dev2");
   }
@@ -127,19 +107,20 @@ TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
 TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
 {
   auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+
   if (!std::filesystem::exists(testFile))
   {
     WARN("Test file not found, skipping Graph Integrity test");
     return;
   }
 
-  SpyBackend spy;
-  auto dispatcher = std::make_shared<MockDispatcher>();
-  auto device = Device{.id = DeviceId{"test-device"},
-                .displayName = "Test",
-                .description = "Test",
-                .isDefault = false,
-                .backendId = kBackendNone};
+  auto spy = SpyBackend<>{};
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto const device = Device{.id = DeviceId{"test-device"},
+                             .displayName = "Test",
+                             .description = "Test",
+                             .isDefault = false,
+                             .backendId = kBackendNone};
 
   auto engine = Engine{spy.make_proxy(), device, dispatcher};
 
@@ -148,33 +129,24 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
 
   engine.play(descriptor);
 
-  auto snap = engine.status();
+  auto const snap = engine.status();
 
-  SECTION("rs-decoder is present in the graph")
+  SECTION("RouteState reports decoder source format")
   {
-    auto it = std::ranges::find(snap.flow.nodes, "rs-decoder", &ao::audio::flow::Node::id);
-    REQUIRE(it != snap.flow.nodes.end());
-    CHECK(it->type == flow::NodeType::Decoder);
-    CHECK(it->optFormat->sampleRate == 44100);
+    CHECK(snap.routeState.sourceFormat.sampleRate == 44100);
+    CHECK(snap.routeState.sourceFormat.channels == 2);
+    CHECK(snap.routeState.sourceFormat.bitDepth == 16);
   }
 
-  SECTION("rs-engine is present in the graph")
+  SECTION("RouteState reports engine output format")
   {
-    auto it = std::ranges::find(snap.flow.nodes, "rs-engine", &ao::audio::flow::Node::id);
-    REQUIRE(it != snap.flow.nodes.end());
-    CHECK(it->type == flow::NodeType::Engine);
+    CHECK(snap.routeState.engineOutputFormat.sampleRate == 44100);
+    CHECK(snap.routeState.engineOutputFormat.channels == 2);
   }
 
-  SECTION("rs-decoder is linked to rs-engine")
+  SECTION("RouteState reports lossless source")
   {
-    auto it = std::ranges::find_if(snap.flow.connections,
-                                   [](auto const& connection)
-                                   { return connection.sourceId == "rs-decoder" && connection.destId == "rs-engine"; });
-    CHECK(it != snap.flow.connections.end());
-    if (it != snap.flow.connections.end())
-    {
-      CHECK(it->isActive);
-    }
+    CHECK(snap.routeState.isLossySource == false);
   }
 
   engine.stop();
@@ -183,26 +155,28 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
 TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][engine][pipewire]")
 {
   auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+
   if (!std::filesystem::exists(testFile))
   {
     WARN("Test file not found, skipping PipeWire shared format test");
     return;
   }
 
-  SpyBackend spy;
+  auto spy = SpyBackend<>{};
   auto& mockBackend = spy.mock();
-  auto dispatcher = std::make_shared<MockDispatcher>();
-  auto device = Device{.id = DeviceId{"pipewire-shared"},
-                .displayName = "PipeWire",
-                .description = "PipeWire Shared",
-                .isDefault = false,
-                .backendId = kBackendPipeWire,
-                .capabilities = {.sampleRates = {48000},
-                                 .sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}},
-                                 .bitDepths = {16},
-                                 .channelCounts = {2}}};
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto const device = Device{.id = DeviceId{"pipewire-shared"},
+                             .displayName = "PipeWire",
+                             .description = "PipeWire Shared",
+                             .isDefault = false,
+                             .backendId = kBackendPipeWire,
+                             .capabilities = {.sampleRates = {48000},
+                                              .sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}},
+                                              .bitDepths = {16},
+                                              .channelCounts = {2}}};
 
   auto openedFormats = std::vector<Format>{};
+
   When(Method(mockBackend, open))
     .AlwaysDo(
       [&](Format const& format, RenderCallbacks)
@@ -219,7 +193,6 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
 
   engine.play(descriptor);
 
-  Verify(Method(mockBackend, reset)).AtLeastOnce();
   REQUIRE(!openedFormats.empty());
   CHECK(openedFormats.back().sampleRate == 44100);
   CHECK(openedFormats.back().channels == 2);
@@ -232,26 +205,28 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
 TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[playback][engine][format]")
 {
   auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+
   if (!std::filesystem::exists(testFile))
   {
     WARN("Test file not found, skipping backend sample-rate validation test");
     return;
   }
 
-  SpyBackend spy;
+  auto spy = SpyBackend<>{};
   auto& mockBackend = spy.mock();
-  auto dispatcher = std::make_shared<MockDispatcher>();
-  auto device = Device{.id = DeviceId{"alsa-exclusive"},
-                .displayName = "ALSA",
-                .description = "ALSA Exclusive",
-                .isDefault = false,
-                .backendId = kBackendAlsa,
-                .capabilities = {.sampleRates = {48000},
-                                 .sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}},
-                                 .bitDepths = {16},
-                                 .channelCounts = {2}}};
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto const device = Device{.id = DeviceId{"alsa-exclusive"},
+                             .displayName = "ALSA",
+                             .description = "ALSA Exclusive",
+                             .isDefault = false,
+                             .backendId = kBackendAlsa,
+                             .capabilities = {.sampleRates = {48000},
+                                              .sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}},
+                                              .bitDepths = {16},
+                                              .channelCounts = {2}}};
 
   auto openedFormats = std::vector<Format>{};
+
   When(Method(mockBackend, open))
     .AlwaysDo(
       [&](Format const& format, RenderCallbacks)
@@ -259,7 +234,6 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
         openedFormats.push_back(format);
         return ao::Result<>{};
       });
-  When(Method(mockBackend, isExclusiveMode)).AlwaysReturn(true);
   When(Method(mockBackend, backendId)).AlwaysReturn(kBackendAlsa);
   When(Method(mockBackend, profileId)).AlwaysReturn(kProfileExclusive);
 
@@ -270,7 +244,6 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
 
   engine.play(descriptor);
 
-  Verify(Method(mockBackend, reset)).AtLeastOnce();
   auto const snap = engine.status();
   REQUIRE(snap.transport == Transport::Error);
   CHECK(snap.statusText.find("no resampler yet") != std::string::npos);
@@ -279,18 +252,19 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
 
 TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
 {
-  auto dispatcher = std::make_shared<MockDispatcher>();
-  auto device = Device{.id = DeviceId{"test-device"},
-                .displayName = "Test",
-                .description = "Test",
-                .isDefault = false,
-                .backendId = kBackendNone};
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto const device = Device{.id = DeviceId{"test-device"},
+                             .displayName = "Test",
+                             .description = "Test",
+                             .isDefault = false,
+                             .backendId = kBackendNone};
 
   SECTION("Unsupported extension")
   {
     auto engine = Engine{std::make_unique<CapturingBackend>(), device, dispatcher};
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "song.txt", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+
     engine.play(desc);
 
     REQUIRE(engine.status().transport == Transport::Error);
@@ -299,10 +273,11 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
 
   SECTION("Decoder open failure")
   {
-    auto factory = [](auto const&, auto const& fmt)
+    auto const factory = [](auto const&, auto const& fmt)
     {
       auto dec = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
+
       dec->setOpenResult(std::unexpected(ao::Error{.message = "open failed"}));
       return dec;
     };
@@ -310,6 +285,7 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
     auto engine = Engine{std::make_unique<CapturingBackend>(), device, dispatcher, factory};
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+
     engine.play(desc);
 
     REQUIRE(engine.status().transport == Transport::Error);
@@ -319,15 +295,17 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
   SECTION("Backend open failure")
   {
     auto backend = std::make_unique<CapturingBackend>();
+
     backend->setOpenResult(std::unexpected(ao::Error{.message = "hw init failed"}));
 
-    auto factory = [](auto const&, auto const& fmt)
+    auto const factory = [](auto const&, auto const& fmt)
     {
       auto dec = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
         .sourceFormat = fmt,
         .outputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true},
         .durationMs = 0,
         .isLossy = false});
+
       dec->setReadScript({{{}, true}});
       return dec;
     };
@@ -335,6 +313,7 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
     auto engine = Engine{std::move(backend), device, dispatcher, factory};
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
+
     engine.play(desc);
 
     REQUIRE(engine.status().transport == Transport::Error);
@@ -344,22 +323,24 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
 
 TEST_CASE("Engine - Pause and resume matrix", "[playback][engine][transport]")
 {
-  auto dispatcher = std::make_shared<MockDispatcher>();
-  auto device = Device{.id = DeviceId{"test-device"},
-                .displayName = "Test",
-                .description = "Test",
-                .isDefault = false,
-                .backendId = kBackendNone};
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto const device = Device{.id = DeviceId{"test-device"},
+                             .displayName = "Test",
+                             .description = "Test",
+                             .isDefault = false,
+                             .backendId = kBackendNone};
   auto backend = std::make_unique<CapturingBackend>();
-  auto* backendPtr = backend.get();
+  auto* const backendPtr = backend.get();
 
-  auto fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-  auto factory = [fmt](auto const&, auto const&)
+  auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
+  auto const factory = [fmt](auto const&, auto const&)
   {
     auto dec = std::make_unique<ScriptedDecoderSession>(
       DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
+
     // provide some data for preroll
     std::vector<std::byte> data(100, std::byte{0});
+
     dec->setReadScript({{data, false}, {{}, true}});
     return dec;
   };
@@ -390,20 +371,21 @@ TEST_CASE("Engine - Pause and resume matrix", "[playback][engine][transport]")
 
 TEST_CASE("Engine - Seek matrix", "[playback][engine][seek]")
 {
-  auto dispatcher = std::make_shared<MockDispatcher>();
-  auto device = Device{.id = DeviceId{"test-device"},
-                .displayName = "Test",
-                .description = "Test",
-                .isDefault = false,
-                .backendId = kBackendNone};
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto const device = Device{.id = DeviceId{"test-device"},
+                             .displayName = "Test",
+                             .description = "Test",
+                             .isDefault = false,
+                             .backendId = kBackendNone};
   auto backend = std::make_unique<CapturingBackend>();
 
-  auto fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true}; // 2 bytes = 1ms
-  auto factory = [fmt](auto const&, auto const&)
+  auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true}; // 2 bytes = 1ms
+  auto const factory = [fmt](auto const&, auto const&)
   {
     auto dec = std::make_unique<ScriptedDecoderSession>(
       DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
     std::vector<std::byte> data(200, std::byte{0}); // 100ms
+
     dec->setReadScript({{data, false}, {data, false}, {{}, true}});
     return dec;
   };
@@ -429,20 +411,22 @@ TEST_CASE("Engine - Seek matrix", "[playback][engine][seek]")
 
 TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
 {
-  auto dispatcher = std::make_shared<MockDispatcher>();
-  auto device = Device{.id = DeviceId{"test-device"},
-                .displayName = "Test",
-                .description = "Test",
-                .isDefault = false,
-                .backendId = kBackendNone};
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto const device = Device{.id = DeviceId{"test-device"},
+                             .displayName = "Test",
+                             .description = "Test",
+                             .isDefault = false,
+                             .backendId = kBackendNone};
   auto backend = std::make_unique<CapturingBackend>();
+  auto* const backendPtr = backend.get();
 
-  auto fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
-  auto factory = [fmt](auto const&, auto const&)
+  auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+  auto const factory = [fmt](auto const&, auto const&)
   {
     auto dec = std::make_unique<ScriptedDecoderSession>(
       DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
     std::vector<std::byte> data(20, std::byte{0}); // 10ms
+
     dec->setReadScript({{data, false}, {{}, true}});
     return dec;
   };
@@ -456,15 +440,17 @@ TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
 
   engine.play(desc);
 
-  // Simulate playback loop
+  // Simulate playback loop via backend callbacks
+  auto const& cb = backendPtr->callbacks();
   auto buffer = std::array<std::byte, 100>{};
-  Engine::onReadPcm(&engine, buffer); // Read all 20 bytes
 
-  REQUIRE(Engine::isSourceDrained(&engine));
+  cb.readPcm(cb.userData, buffer); // Read all 20 bytes
+
+  REQUIRE(cb.isSourceDrained(cb.userData));
 
   SECTION("onDrainComplete resets to idle and fires track ended")
   {
-    Engine::onDrainComplete(&engine);
+    cb.onDrainComplete(cb.userData);
     REQUIRE(engine.status().transport == Transport::Idle);
     REQUIRE(trackEnded == true);
   }
@@ -473,21 +459,21 @@ TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
   {
     engine.stop(); // resets everything
     trackEnded = false;
-    Engine::onDrainComplete(&engine);
+    cb.onDrainComplete(cb.userData);
     REQUIRE(trackEnded == false);
   }
 }
 
 TEST_CASE("Engine - Property API", "[playback][engine][property]")
 {
-  auto dispatcher = std::make_shared<MockDispatcher>();
-  auto device = Device{.id = DeviceId{"test-device"},
-                .displayName = "Test",
-                .description = "Test",
-                .isDefault = false,
-                .backendId = kBackendNone};
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto const device = Device{.id = DeviceId{"test-device"},
+                             .displayName = "Test",
+                             .description = "Test",
+                             .isDefault = false,
+                             .backendId = kBackendNone};
   auto backend = std::make_unique<CapturingBackend>();
-  auto* backendPtr = backend.get();
+  auto* const backendPtr = backend.get();
 
   auto engine = Engine{std::move(backend), device, dispatcher};
 
@@ -496,6 +482,7 @@ TEST_CASE("Engine - Property API", "[playback][engine][property]")
     // Cast to an out-of-range value to simulate an unknown property
     auto constexpr kUnknownId = static_cast<PropertyId>(999);
     auto const info = backendPtr->queryProperty(kUnknownId);
+
     REQUIRE(info.canRead == false);
     REQUIRE(info.canWrite == false);
     REQUIRE(info.isAvailable == false);
@@ -505,6 +492,7 @@ TEST_CASE("Engine - Property API", "[playback][engine][property]")
   SECTION("queryProperty returns valid info for Volume")
   {
     auto const info = backendPtr->queryProperty(PropertyId::Volume);
+
     REQUIRE(info.canRead == true);
     REQUIRE(info.canWrite == true);
     REQUIRE(info.isAvailable == true);
@@ -513,7 +501,8 @@ TEST_CASE("Engine - Property API", "[playback][engine][property]")
   SECTION("setProperty returns error for unknown PropertyId")
   {
     auto constexpr kUnknownId = static_cast<PropertyId>(999);
-    auto const result = backendPtr->setProperty(kUnknownId, PropertyValue{0.5f});
+    auto const result = backendPtr->setProperty(kUnknownId, PropertyValue{0.5F});
+
     REQUIRE(!result);
     REQUIRE(result.error().code == ao::Error::Code::NotSupported);
   }
@@ -522,6 +511,7 @@ TEST_CASE("Engine - Property API", "[playback][engine][property]")
   {
     auto constexpr kUnknownId = static_cast<PropertyId>(999);
     auto const result = backendPtr->getProperty(kUnknownId);
+
     REQUIRE(!result);
     REQUIRE(result.error().code == ao::Error::Code::NotSupported);
   }
@@ -530,8 +520,8 @@ TEST_CASE("Engine - Property API", "[playback][engine][property]")
   {
     backendPtr->firePropertyChanged(PropertyId::Volume);
 
-    REQUIRE(engine.status().volume == Catch::Approx(1.0f));
-    REQUIRE(engine.getVolume() == Catch::Approx(1.0f));
+    REQUIRE(engine.status().volume == Catch::Approx(1.0F));
+    REQUIRE(engine.getVolume() == Catch::Approx(1.0F));
     REQUIRE(engine.status().volumeAvailable == true);
   }
 
@@ -550,6 +540,7 @@ TEST_CASE("Engine - Property API", "[playback][engine][property]")
     REQUIRE(engine.status().volume == Catch::Approx(0.42F));
 
     auto const backendVol = backendPtr->getProperty(PropertyId::Volume);
+
     REQUIRE(backendVol);
     REQUIRE(std::get<float>(*backendVol) == Catch::Approx(0.42F));
   }
@@ -561,7 +552,67 @@ TEST_CASE("Engine - Property API", "[playback][engine][property]")
     REQUIRE(engine.status().muted == true);
 
     auto const backendMuted = backendPtr->getProperty(PropertyId::Muted);
+
     REQUIRE(backendMuted);
     REQUIRE(std::get<bool>(*backendMuted) == true);
+  }
+}
+
+TEST_CASE("Engine - Backend callback simulation", "[playback][engine][callback]")
+{
+  auto const dispatcher = std::make_shared<MockDispatcher>();
+  auto const device = Device{.id = DeviceId{"test-device"},
+                             .displayName = "Test",
+                             .description = "Test",
+                             .isDefault = false,
+                             .backendId = kBackendNone};
+  auto backend = std::make_unique<CapturingBackend>();
+  auto* const backendPtr = backend.get();
+
+  auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
+  auto const factory = [fmt](auto const&, auto const&)
+  {
+    auto dec = std::make_unique<ScriptedDecoderSession>(
+      DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
+    std::vector<std::byte> data(100, std::byte{0});
+
+    dec->setReadScript({{data, false}, {{}, true}});
+    return dec;
+  };
+
+  auto engine = Engine{std::move(backend), device, dispatcher, factory};
+
+  SECTION("Backend error transitions to Error state")
+  {
+    auto const desc = TrackPlaybackDescriptor{
+      .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .optCoverArtId = std::nullopt};
+
+    engine.play(desc);
+
+    auto const& cb = backendPtr->callbacks();
+
+    cb.onBackendError(cb.userData, "Hardware failure");
+
+    auto const snap = engine.status();
+
+    REQUIRE(snap.transport == Transport::Error);
+    REQUIRE(snap.statusText == "Hardware failure");
+  }
+
+  SECTION("Route ready updates snapshot")
+  {
+    auto const desc = TrackPlaybackDescriptor{
+      .filePath = "song.flac", .title = "T", .artist = "A", .album = "", .optCoverArtId = std::nullopt};
+
+    engine.play(desc);
+
+    auto const& cb = backendPtr->callbacks();
+
+    cb.onRouteReady(cb.userData, "anchor-123");
+
+    auto const route = engine.routeStatus();
+
+    REQUIRE(route.optAnchor);
+    REQUIRE(route.optAnchor->id == "anchor-123");
   }
 }

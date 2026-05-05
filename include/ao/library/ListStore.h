@@ -17,7 +17,7 @@ namespace ao::library
   /**
    * ListStore - Binary storage for lists using ListLayout.
    */
-  class ListStore
+  class ListStore final
   {
   public:
     class Reader;
@@ -35,7 +35,7 @@ namespace ao::library
   /**
    * ListStore::Reader - Read-only access to lists.
    */
-  class ListStore::Reader
+  class ListStore::Reader final
   {
   public:
     class Iterator;
@@ -82,7 +82,7 @@ namespace ao::library
   /**
    * ListStore::Writer - Write access to lists.
    */
-  class ListStore::Writer
+  class ListStore::Writer final
   {
   public:
     std::pair<ListId, ListView> create(std::span<std::byte const> data);

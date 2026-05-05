@@ -17,7 +17,6 @@ namespace ao::audio::backend
   class PipeWireMonitor final
   {
   public:
-    struct Impl;
     PipeWireMonitor();
     ~PipeWireMonitor();
 
@@ -35,6 +34,7 @@ namespace ao::audio::backend
                                            std::function<void(ao::audio::flow::Graph const&)> callback);
 
   private:
+    struct Impl;
     std::unique_ptr<Impl> _impl;
   };
 } // namespace ao::audio::backend

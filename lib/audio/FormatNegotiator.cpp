@@ -74,55 +74,41 @@ namespace ao::audio
 
     void applyLegacyDecoderNegotiation(RenderPlan& plan, DeviceCapabilities const& caps)
     {
+      auto bitDepth = std::uint8_t{16};
+      auto validBits = std::uint8_t{16};
+
       if (plan.sourceFormat.bitDepth == 24)
       {
         if (std::ranges::contains(caps.bitDepths, 24))
         {
-          plan.decoderOutputFormat.bitDepth = 24;
-          plan.decoderOutputFormat.validBits = 24;
+          bitDepth = 24;
+          validBits = 24;
         }
         else if (std::ranges::contains(caps.bitDepths, 32))
         {
-          plan.decoderOutputFormat.bitDepth = 32;
-          plan.decoderOutputFormat.validBits = 24;
-        }
-        else
-        {
-          plan.decoderOutputFormat.bitDepth = 16;
-          plan.decoderOutputFormat.validBits = 16;
+          bitDepth = 32;
+          validBits = 24;
         }
       }
       else if (plan.sourceFormat.bitDepth == 16)
       {
-        if (std::ranges::contains(caps.bitDepths, 16))
+        if (!std::ranges::contains(caps.bitDepths, 16) && std::ranges::contains(caps.bitDepths, 32))
         {
-          plan.decoderOutputFormat.bitDepth = 16;
-          plan.decoderOutputFormat.validBits = 16;
-        }
-        else if (std::ranges::contains(caps.bitDepths, 32))
-        {
-          plan.decoderOutputFormat.bitDepth = 32;
-          plan.decoderOutputFormat.validBits = 16;
-        }
-        else
-        {
-          plan.decoderOutputFormat.bitDepth = 16;
-          plan.decoderOutputFormat.validBits = 16;
+          bitDepth = 32;
+          validBits = 16;
         }
       }
       else if (plan.sourceFormat.bitDepth == 32)
       {
         if (std::ranges::contains(caps.bitDepths, 32))
         {
-          plan.decoderOutputFormat.bitDepth = 32;
-          plan.decoderOutputFormat.validBits = 32;
-        }
-        else
-        {
-          plan.decoderOutputFormat.bitDepth = 16;
-          plan.decoderOutputFormat.validBits = 16;
+          bitDepth = 32;
+          validBits = 32;
         }
       }
+
+      plan.decoderOutputFormat.bitDepth = bitDepth;
+      plan.decoderOutputFormat.validBits = validBits;
     }
   }
 

@@ -59,9 +59,9 @@ namespace ao::model
     }
 
     // Filter existing members against new source state
-    std::vector<TrackId> next;
+    auto next = std::vector<TrackId>{};
 
-    for (auto id : _trackIds)
+    for (auto const& id : _trackIds)
     {
       if (_source->indexOf(id))
       {
@@ -101,9 +101,9 @@ namespace ao::model
 
   void ManualTrackIdList::onUpdated(std::span<TrackId const> ids)
   {
-    std::vector<TrackId> matched;
+    auto matched = std::vector<TrackId>{};
 
-    for (auto id : ids)
+    for (auto const id : ids)
     {
       if (contains(id))
       {

@@ -1,22 +1,17 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 RockStudio Contributors
-
-#include <ao/audio/Engine.h>
-#include <ao/utility/Log.h>
+// Copyright (c) 2024-2026 RockStudio Contributors
 
 #include <ao/audio/DecoderFactory.h>
+#include <ao/audio/Engine.h>
 #include <ao/audio/FormatNegotiator.h>
+#include <ao/audio/IBackend.h>
 #include <ao/audio/IDecoderSession.h>
+#include <ao/audio/ISource.h>
 #include <ao/audio/MemorySource.h>
 #include <ao/audio/StreamingSource.h>
-#include <ao/utility/ByteView.h>
+#include <ao/utility/Log.h>
 
-#include <algorithm>
 #include <format>
-#include <limits>
-#include <ranges>
-#include <set>
-#include <sstream>
 
 namespace ao::audio
 {
@@ -40,7 +35,6 @@ namespace ao::audio
       {
         bytesPerSample = kBytesPer24BitSample;
       }
-
       else if (format.bitDepth > 16U)
       {
         bytesPerSample = 4U;
@@ -52,10 +46,12 @@ namespace ao::audio
     std::uint64_t estimatedDecodedBytes(DecodedStreamInfo const& info) noexcept
     {
       auto const rate = bytesPerSecond(info.outputFormat);
+
       if (rate == 0 || info.durationMs == 0)
       {
         return 0;
       }
+
       return (static_cast<std::uint64_t>(info.durationMs) * rate) / 1000U;
     }
 
@@ -66,38 +62,464 @@ namespace ao::audio
     }
   } // namespace
 
+  // ── Engine::Impl: data bucket + callbacks + handlers ────────────
+
+  struct Engine::Impl final
+  {
+    std::unique_ptr<IBackend> backend;
+    std::shared_ptr<IMainThreadDispatcher> dispatcher;
+    Device currentDevice;
+
+    std::atomic<std::shared_ptr<ISource>> source;
+    std::atomic<bool> backendStarted{false};
+    std::atomic<bool> playbackDrainPending{false};
+    std::atomic<std::uint32_t> underrunCount{0};
+    std::atomic<std::uint64_t> accumulatedFrames{0};
+    std::atomic<std::uint32_t> engineSampleRate{0};
+
+    mutable std::mutex stateMutex;
+    std::optional<TrackPlaybackDescriptor> currentTrack;
+    Engine::Status status;
+    std::function<void()> onTrackEnded;
+    Engine::OnRouteChanged onRouteChanged;
+    detail::RouteTracker routeTracker;
+    DecoderFactoryFn decoderFactory;
+
+    RenderCallbacks renderCallbacks;
+
+    // ── Construction ──────────────────────────────────────────────
+    Impl(std::unique_ptr<IBackend> backend,
+         Device const& device,
+         std::shared_ptr<IMainThreadDispatcher> dispatcher,
+         DecoderFactoryFn decoderFactory)
+      : backend{std::move(backend)}
+      , dispatcher{std::move(dispatcher)}
+      , currentDevice{device}
+      , decoderFactory{std::move(decoderFactory)}
+    {
+      syncBackendIdentity();
+      renderCallbacks = RenderCallbacks{.userData = this,
+                                        .readPcm = &Impl::onReadPcm,
+                                        .isSourceDrained = &Impl::isSourceDrained,
+                                        .onUnderrun = &Impl::onUnderrun,
+                                        .onPositionAdvanced = &Impl::onPositionAdvanced,
+                                        .onDrainComplete = &Impl::onDrainComplete,
+                                        .onRouteReady = &Impl::onRouteReady,
+                                        .onFormatChanged = &Impl::onFormatChanged,
+                                        .onPropertyChanged = &Impl::onPropertyChanged,
+                                        .onBackendError = &Impl::onBackendError};
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────
+    void syncBackendIdentity()
+    {
+      status.backendId = backend->backendId();
+      status.profileId = backend->profileId();
+      status.currentDeviceId = currentDevice.id;
+    }
+
+    void syncBackendStatus()
+    {
+      if (auto const vol = backend->get(props::Volume))
+      {
+        status.volume = *vol;
+      }
+
+      if (auto const mute = backend->get(props::Muted))
+      {
+        status.muted = *mute;
+      }
+
+      status.volumeAvailable = backend->queryProperty(PropertyId::Volume).isAvailable;
+    }
+
+    void resetEngine()
+    {
+      currentTrack.reset();
+      backendStarted = false;
+      playbackDrainPending = false;
+      status = {};
+      syncBackendIdentity();
+      syncBackendStatus();
+      accumulatedFrames.store(0, std::memory_order_relaxed);
+      routeTracker.clear();
+    }
+
+    void dispatchOrCall(std::function<void()>&& fn)
+    {
+      if (dispatcher)
+      {
+        dispatcher->dispatch(std::move(fn));
+      }
+      else
+      {
+        fn();
+      }
+    }
+
+    // ── Callbacks ──────────────────────────────────────────────────
+    static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept
+    {
+      auto* const impl = static_cast<Impl*>(userData);
+      auto const source = impl->source.load(std::memory_order_acquire);
+      return source ? source->read(output) : 0;
+    }
+
+    static bool isSourceDrained(void* userData) noexcept
+    {
+      auto* const impl = static_cast<Impl*>(userData);
+      auto const source = impl->source.load(std::memory_order_acquire);
+
+      if (!source)
+      {
+        return true;
+      }
+
+      if (source->isDrained())
+      {
+        impl->playbackDrainPending = true;
+        return true;
+      }
+
+      return false;
+    }
+
+    static void onUnderrun(void* userData) noexcept { ++static_cast<Impl*>(userData)->underrunCount; }
+
+    static void onPositionAdvanced(void* userData, std::uint32_t frames) noexcept
+    {
+      static_cast<Impl*>(userData)->accumulatedFrames.fetch_add(frames, std::memory_order_relaxed);
+    }
+
+    static void onDrainComplete(void* userData) noexcept
+    {
+      auto* const impl = static_cast<Impl*>(userData);
+
+      if (!impl->playbackDrainPending.exchange(false, std::memory_order_relaxed))
+      {
+        return;
+      }
+
+      impl->dispatchOrCall([impl]() { impl->handleDrainComplete(); });
+    }
+
+    static void onRouteReady(void* userData, std::string_view routeAnchor) noexcept
+    {
+      auto* const impl = static_cast<Impl*>(userData);
+      auto anchor = std::string{routeAnchor};
+      impl->dispatchOrCall([impl, anchor = std::move(anchor)]() { impl->handleRouteReady(anchor); });
+    }
+
+    static void onFormatChanged(void* userData, Format const& format) noexcept
+    {
+      auto* const impl = static_cast<Impl*>(userData);
+      impl->dispatchOrCall([impl, format]() { impl->handleFormatChanged(format); });
+    }
+
+    static void onPropertyChanged(void* userData, PropertyId id) noexcept
+    {
+      auto* const impl = static_cast<Impl*>(userData);
+      impl->dispatchOrCall([impl, id]() { impl->handlePropertyChanged(id); });
+    }
+
+    static void onBackendError(void* userData, std::string_view message) noexcept
+    {
+      auto* const impl = static_cast<Impl*>(userData);
+      auto msg = std::string{message};
+      impl->dispatchOrCall([impl, msg = std::move(msg)]() { impl->handleBackendError(msg); });
+    }
+
+    // ── Handlers ───────────────────────────────────────────────────
+    void handleBackendError(std::string_view message)
+    {
+      AUDIO_LOG_ERROR("Backend error: {}", message);
+      backend->stop();
+      backend->close();
+      source.store({}, std::memory_order_release);
+      auto const lock = std::lock_guard{stateMutex};
+      resetEngine();
+      status.transport = Transport::Error;
+      status.statusText = std::string{message};
+    }
+
+    void handleSourceError(ao::Error const& error)
+    {
+      {
+        auto const lock = std::lock_guard{stateMutex};
+
+        if (status.transport == Transport::Idle)
+        {
+          return;
+        }
+
+        backendStarted = false;
+        playbackDrainPending = false;
+        status.transport = Transport::Error;
+        status.statusText = error.message.empty() ? "PCM source failed" : error.message;
+      }
+
+      backend->stop();
+    }
+
+    void handleRouteReady(std::string_view routeAnchor)
+    {
+      routeTracker.setAnchor(backend->backendId(), std::string{routeAnchor});
+
+      auto callback = Engine::OnRouteChanged{};
+      auto statusSnapshot = Engine::RouteStatus{};
+
+      {
+        auto const lock = std::lock_guard{stateMutex};
+        callback = onRouteChanged;
+        statusSnapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
+      }
+
+      if (callback)
+      {
+        dispatchOrCall([callback = std::move(callback), statusSnapshot]() { callback(statusSnapshot); });
+      }
+    }
+
+    void handleFormatChanged(Format const& format)
+    {
+      auto callback = Engine::OnRouteChanged{};
+      auto statusSnapshot = Engine::RouteStatus{};
+
+      {
+        auto const lock = std::lock_guard{stateMutex};
+        routeTracker.setEngineFormat(format);
+        status.routeState.engineOutputFormat = format;
+        callback = onRouteChanged;
+        statusSnapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
+      }
+
+      if (callback)
+      {
+        dispatchOrCall([callback = std::move(callback), statusSnapshot]() { callback(statusSnapshot); });
+      }
+    }
+
+    void handlePropertyChanged(PropertyId id)
+    {
+      auto callback = Engine::OnRouteChanged{};
+      auto statusSnapshot = Engine::RouteStatus{};
+
+      {
+        auto const lock = std::lock_guard{stateMutex};
+
+        if (id == PropertyId::Volume)
+        {
+          if (auto const vol = backend->get(props::Volume))
+          {
+            status.volume = *vol;
+          }
+        }
+        else if (id == PropertyId::Muted)
+        {
+          if (auto const mute = backend->get(props::Muted))
+          {
+            status.muted = *mute;
+          }
+        }
+
+        status.volumeAvailable = backend->queryProperty(PropertyId::Volume).isAvailable;
+        callback = onRouteChanged;
+        statusSnapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
+      }
+
+      if (callback)
+      {
+        dispatchOrCall([callback = std::move(callback), statusSnapshot]() { callback(statusSnapshot); });
+      }
+    }
+
+    void handleDrainComplete()
+    {
+      source.store({}, std::memory_order_release);
+
+      auto onTrackEndedCallback = std::function<void()>{};
+      auto onRouteChangedCallback = Engine::OnRouteChanged{};
+
+      {
+        auto const lock = std::lock_guard{stateMutex};
+        onRouteChangedCallback = onRouteChanged;
+        resetEngine();
+        onTrackEndedCallback = onTrackEnded;
+      }
+
+      if (onRouteChangedCallback)
+      {
+        dispatchOrCall([callback = std::move(onRouteChangedCallback)]() { callback({}); });
+      }
+
+      if (onTrackEndedCallback)
+      {
+        onTrackEndedCallback();
+      }
+    }
+
+    // ── Track opening ──────────────────────────────────────────────
+    bool negotiateFormat(std::filesystem::path const& path,
+                         DecodedStreamInfo const& info,
+                         std::unique_ptr<IDecoderSession>& decoder,
+                         Format& backendFormat)
+    {
+      auto const backendId = backend->backendId();
+
+      if (backendId == kBackendPipeWire && backend->profileId() == kProfileShared)
+      {
+        backendFormat = info.outputFormat;
+        AUDIO_LOG_INFO("PipeWire shared mode keeps the stream at {}Hz/{}b/{}ch",
+                       backendFormat.sampleRate,
+                       static_cast<int>(backendFormat.bitDepth),
+                       static_cast<int>(backendFormat.channels));
+
+        return true;
+      }
+
+      auto const plan = FormatNegotiator::buildPlan(info.sourceFormat, currentDevice.capabilities);
+
+      if (plan.requiresResample)
+      {
+        status.statusText = std::format(
+          "{} does not support {} Hz and RockStudio has no resampler yet", backendId, info.sourceFormat.sampleRate);
+
+        return false;
+      }
+
+      if (plan.requiresChannelRemap)
+      {
+        status.statusText = std::format("{} does not support {} channels and RockStudio has no channel remapper yet",
+                                        backendId,
+                                        static_cast<int>(info.sourceFormat.channels));
+
+        return false;
+      }
+
+      AUDIO_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
+                     static_cast<int>(plan.decoderOutputFormat.bitDepth),
+                     static_cast<int>(plan.decoderOutputFormat.validBits),
+                     plan.deviceFormat.sampleRate,
+                     static_cast<int>(plan.deviceFormat.bitDepth),
+                     plan.reason);
+
+      if (!(plan.decoderOutputFormat == info.sourceFormat))
+      {
+        decoder->close();
+        decoder = decoderFactory ? decoderFactory(path, plan.decoderOutputFormat)
+                                 : createDecoderSession(path, plan.decoderOutputFormat);
+
+        if (!decoder)
+        {
+          status.statusText = "Failed to re-open decoder with negotiated format";
+          return false;
+        }
+
+        if (auto const reOpenResult = decoder->open(path); !reOpenResult)
+        {
+          status.statusText = reOpenResult.error().message;
+          return false;
+        }
+      }
+
+      backendFormat = plan.deviceFormat;
+      return true;
+    }
+
+    std::shared_ptr<ISource> createPcmSource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo const& info)
+    {
+      if (shouldUseMemoryPcmSource(info))
+      {
+        auto const memorySource = std::make_shared<MemorySource>(std::move(decoder), info);
+
+        if (auto const initResult = memorySource->initialize(); !initResult)
+        {
+          status.statusText = initResult.error().message;
+          return nullptr;
+        }
+
+        return memorySource;
+      }
+
+      auto const streamingSource = std::make_shared<StreamingSource>(
+        std::move(decoder),
+        info,
+        [this](ao::Error const& err) { dispatchOrCall([this, err]() { handleSourceError(err); }); },
+        kPrerollTargetMs,
+        kDecodeHighWatermarkMs);
+
+      if (auto const initResult = streamingSource->initialize(); !initResult)
+      {
+        status.statusText = initResult.error().message;
+        return nullptr;
+      }
+
+      return streamingSource;
+    }
+
+    bool openTrack(TrackPlaybackDescriptor const& descriptor, std::shared_ptr<ISource>& source, Format& backendFormat)
+    {
+      auto const outputFormat = []() { return Format{.isInterleaved = true}; }();
+
+      auto decoder = decoderFactory ? decoderFactory(descriptor.filePath, outputFormat)
+                                    : createDecoderSession(descriptor.filePath, outputFormat);
+
+      if (decoder == nullptr)
+      {
+        status.statusText = "No audio decoder backend is available";
+        return false;
+      }
+
+      if (auto const openResult = decoder->open(descriptor.filePath); !openResult)
+      {
+        status.statusText = openResult.error().message;
+        return false;
+      }
+
+      auto info = decoder->streamInfo();
+
+      if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
+      {
+        status.statusText = "Decoder did not return a valid output format";
+        return false;
+      }
+
+      if (!negotiateFormat(descriptor.filePath, info, decoder, backendFormat))
+      {
+        return false;
+      }
+
+      info = decoder->streamInfo();
+
+      if (source = createPcmSource(std::move(decoder), info); source == nullptr)
+      {
+        return false;
+      }
+
+      status.durationMs = info.durationMs;
+      status.positionMs = 0;
+      accumulatedFrames.store(0, std::memory_order_relaxed);
+      routeTracker.setDecoder(info.sourceFormat, info.outputFormat, info.isLossy);
+      routeTracker.setEngineFormat(info.outputFormat);
+      status.routeState = routeTracker.state();
+      engineSampleRate.store(info.outputFormat.sampleRate, std::memory_order_relaxed);
+
+      return true;
+    }
+  };
+
+  // ── Engine ──────────────────────────────────────────────────────
+
   Engine::Engine(std::unique_ptr<IBackend> backend,
                  Device const& device,
-                 std::shared_ptr<ao::IMainThreadDispatcher> dispatcher,
+                 std::shared_ptr<IMainThreadDispatcher> dispatcher,
                  DecoderFactoryFn decoderFactory)
-    : _backend{std::move(backend)}
-    , _dispatcher{std::move(dispatcher)}
-    , _currentDevice{device}
-    , _decoderFactory{std::move(decoderFactory)}
+    : _impl{std::make_unique<Impl>(std::move(backend), device, std::move(dispatcher), std::move(decoderFactory))}
   {
-    _status.backendId = _backend ? _backend->backendId() : kBackendNone;
-    _status.profileId = _backend ? _backend->profileId() : ProfileId{};
-    _status.currentDeviceId = _currentDevice.id;
-
-    if (_backend)
-    {
-      if (auto const vol = _backend->get(props::Volume))
-      {
-        _status.volume = *vol;
-      }
-
-      if (auto const mute = _backend->get(props::Muted))
-      {
-        _status.muted = *mute;
-      }
-      _status.volumeAvailable = _backend->queryProperty(PropertyId::Volume).isAvailable;
-    }
+    _impl->syncBackendStatus();
   }
 
-  Engine::~Engine()
-  {
-    stop();
-  }
+  Engine::~Engine() = default;
 
   void Engine::setBackend(std::unique_ptr<IBackend> backend, Device const& device)
   {
@@ -110,43 +532,28 @@ namespace ao::audio
 
     auto const state = [this]()
     {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-
-      return State{.track = _currentTrack,
-                   .positionMs =
-                     [this]()
-                   {
-                     auto const frames = _accumulatedFrames.load(std::memory_order_relaxed);
-                     auto const sampleRate = _engineSampleRate.load(std::memory_order_relaxed);
-                     return sampleRate > 0 ? static_cast<std::uint32_t>((frames * 1000) / sampleRate) : 0;
-                   }(),
-                   .wasPlaying = (_status.transport == Transport::Playing)};
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      return State{
+        .track = _impl->currentTrack,
+        .positionMs =
+          [this]()
+        {
+          auto const frames = _impl->accumulatedFrames.load(std::memory_order_relaxed);
+          auto const sr = _impl->engineSampleRate.load(std::memory_order_relaxed);
+          return sr > 0 ? static_cast<std::uint32_t>((frames * 1000) / sr) : 0;
+        }(),
+        .wasPlaying = (_impl->status.transport == Transport::Playing),
+      };
     }();
 
     stop();
-
-    _backend = std::move(backend);
-    _currentDevice = device;
-
+    _impl->backend = std::move(backend);
+    _impl->currentDevice = device;
     {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      _status = {};
-      _status.backendId = _backend ? _backend->backendId() : kBackendNone;
-      _status.profileId = _backend ? _backend->profileId() : ProfileId{};
-      _status.currentDeviceId = _currentDevice.id;
-
-      if (_backend)
-      {
-        if (auto const vol = _backend->get(props::Volume))
-        {
-          _status.volume = *vol;
-        }
-        if (auto const mute = _backend->get(props::Muted))
-        {
-          _status.muted = *mute;
-        }
-        _status.volumeAvailable = _backend->queryProperty(PropertyId::Volume).isAvailable;
-      }
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      _impl->status = {};
+      _impl->syncBackendIdentity();
+      _impl->syncBackendStatus();
     }
 
     if (state.track)
@@ -164,862 +571,276 @@ namespace ao::audio
 
   void Engine::updateDevice(Device const& device)
   {
-    _currentDevice = device;
+    _impl->currentDevice = device;
   }
 
   void Engine::setOnTrackEnded(std::function<void()> callback)
   {
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    _onTrackEnded = std::move(callback);
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    _impl->onTrackEnded = std::move(callback);
   }
 
   void Engine::setOnRouteChanged(OnRouteChanged callback)
   {
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    _onRouteChanged = std::move(callback);
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    _impl->onRouteChanged = std::move(callback);
   }
 
   Engine::RouteStatus Engine::routeStatus() const
   {
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    return _routeStatus;
+    return RouteStatus{.state = _impl->routeTracker.state(), .optAnchor = _impl->routeTracker.anchor()};
   }
 
-  void Engine::resetToIdle()
+  Transport Engine::transport() const
   {
-    _currentTrack.reset();
-    _backendStarted = false;
-    _playbackDrainPending = false;
-    _status = {};
-    _status.backendId = _backend ? _backend->backendId() : kBackendNone;
-    _status.profileId = _backend ? _backend->profileId() : ProfileId{};
-    _status.currentDeviceId = _currentDevice.id;
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    return _impl->status.transport;
+  }
 
-    if (_backend)
-    {
-      if (auto const vol = _backend->get(props::Volume))
-      {
-        _status.volume = *vol;
-      }
+  BackendId Engine::backendId() const
+  {
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    return _impl->status.backendId;
+  }
 
-      if (auto const mute = _backend->get(props::Muted))
-      {
-        _status.muted = *mute;
-      }
-      _status.volumeAvailable = _backend->queryProperty(PropertyId::Volume).isAvailable;
-    }
-
-    _accumulatedFrames.store(0, std::memory_order_relaxed);
-
-    _routeStatus = {};
+  Engine::Status Engine::status() const
+  {
+    auto const source = _impl->source.load(std::memory_order_acquire);
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    auto snap = _impl->status;
+    auto const totalFrames = _impl->accumulatedFrames.load(std::memory_order_relaxed);
+    auto const sampleRate = _impl->engineSampleRate.load(std::memory_order_relaxed);
+    snap.positionMs = sampleRate > 0 ? static_cast<std::uint32_t>((totalFrames * 1000) / sampleRate) : 0;
+    snap.routeState = _impl->routeTracker.state();
+    snap.backendId = _impl->backend->backendId();
+    snap.bufferedMs = source ? source->bufferedMs() : 0;
+    snap.underrunCount = _impl->underrunCount.load(std::memory_order_relaxed);
+    return snap;
   }
 
   void Engine::play(TrackPlaybackDescriptor const& descriptor)
   {
     AUDIO_LOG_INFO("Play requested: {} - {} [{}]", descriptor.artist, descriptor.title, descriptor.filePath.string());
 
-    if (_backend)
-    {
-      (*_backend).reset();
-      _backend->stop();
-      _backend->close();
-    }
-
-    _source.store({}, std::memory_order_release);
-
-    auto callbacks = RenderCallbacks{};
-    callbacks.userData = this;
-    callbacks.readPcm = &Engine::onReadPcm;
-    callbacks.isSourceDrained = &Engine::isSourceDrained;
-    callbacks.onUnderrun = &Engine::onUnderrun;
-    callbacks.onPositionAdvanced = &Engine::onPositionAdvanced;
-    callbacks.onDrainComplete = &Engine::onDrainComplete;
-    callbacks.onRouteReady = &Engine::onRouteReady;
-    callbacks.onFormatChanged = &Engine::onFormatChanged;
-    callbacks.onPropertyChanged = &Engine::onPropertyChanged;
-    callbacks.onBackendError = &Engine::onBackendError;
+    _impl->backend->stop();
+    _impl->backend->close();
+    _impl->source.store({}, std::memory_order_release);
 
     auto source = std::shared_ptr<ISource>{};
     auto backendFormat = Format{};
 
     {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      _underrunCount = 0;
-      resetToIdle();
-      _status.transport = Transport::Opening;
-      _currentTrack = descriptor;
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      _impl->underrunCount = 0;
+      _impl->routeTracker.clear();
+      _impl->backendStarted = false;
+      _impl->playbackDrainPending = false;
+      _impl->status.transport = Transport::Opening;
+      _impl->currentTrack = descriptor;
+      _impl->syncBackendIdentity();
 
-      if (!openTrack(descriptor, source, backendFormat))
+      if (!_impl->openTrack(descriptor, source, backendFormat))
       {
-        _status.transport = Transport::Error;
-        _currentTrack.reset();
+        _impl->status.transport = Transport::Error;
+        _impl->currentTrack.reset();
         return;
       }
 
-      _status.transport = Transport::Buffering;
+      _impl->status.transport = Transport::Buffering;
     }
 
-    _source.store(source, std::memory_order_release);
+    _impl->source.store(source, std::memory_order_release);
 
-    if (_backend)
+    if (auto const openResult = _impl->backend->open(backendFormat, _impl->renderCallbacks); !openResult)
     {
-      if (auto const openResult = _backend->open(backendFormat, callbacks); !openResult)
-      {
-        _source.store({}, std::memory_order_release);
-        auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-        _currentTrack.reset();
-        _status.transport = Transport::Error;
-        _status.statusText = openResult.error().message;
-        return;
-      }
-
-      {
-        auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-        if (auto const vol = _backend->get(props::Volume))
-        {
-          _status.volume = *vol;
-        }
-        if (auto const mute = _backend->get(props::Muted))
-        {
-          _status.muted = *mute;
-        }
-        _status.volumeAvailable = _backend->queryProperty(PropertyId::Volume).isAvailable;
-      }
-    }
-
-    auto const bufferedMs = source ? source->bufferedMs() : 0;
-
-    if (auto const drained = !source || source->isDrained(); drained && bufferedMs == 0)
-    {
-      if (_backend)
-      {
-        _backend->stop();
-        _backend->close();
-      }
-
-      _source.store({}, std::memory_order_release);
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      resetToIdle();
+      _impl->source.store({}, std::memory_order_release);
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      _impl->currentTrack.reset();
+      _impl->status.transport = Transport::Error;
+      _impl->status.statusText = openResult.error().message;
       return;
     }
 
     {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      _status.transport = Transport::Playing;
-      _backendStarted = true;
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      _impl->syncBackendStatus();
     }
 
-    if (_backend)
+    auto const bufferedMs = source ? source->bufferedMs() : 0;
+    if (auto const drained = !source || source->isDrained(); drained && bufferedMs == 0)
     {
-      _backend->start();
+      _impl->backend->stop();
+      _impl->backend->close();
+      _impl->source.store({}, std::memory_order_release);
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      _impl->resetEngine();
+      return;
     }
+
+    {
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      _impl->status.transport = Transport::Playing;
+      _impl->backendStarted = true;
+    }
+    _impl->backend->start();
   }
 
   void Engine::pause()
   {
     bool shouldPause = false;
-
     {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-
-      if (_status.transport == Transport::Playing || _status.transport == Transport::Buffering)
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      if (_impl->status.transport == Transport::Playing || _impl->status.transport == Transport::Buffering)
       {
         AUDIO_LOG_INFO("Playback paused");
-        _status.transport = Transport::Paused;
-        shouldPause = _backendStarted.load();
+        _impl->status.transport = Transport::Paused;
+        shouldPause = _impl->backendStarted.load();
       }
     }
-
-    if (shouldPause && _backend)
+    if (shouldPause)
     {
-      _backend->pause();
+      _impl->backend->pause();
     }
   }
 
   void Engine::resume()
   {
-    auto const source = _source.load(std::memory_order_acquire);
-    auto lock = std::unique_lock<std::mutex>{_stateMutex};
+    auto const src = _impl->source.load(std::memory_order_acquire);
+    auto lock = std::unique_lock{_impl->stateMutex};
 
-    if (_status.transport != Transport::Paused)
+    if (_impl->status.transport != Transport::Paused)
     {
       return;
     }
 
     AUDIO_LOG_INFO("Playback resumed");
 
-    if (_backendStarted)
+    if (_impl->backendStarted)
     {
-      _status.transport = Transport::Playing;
+      _impl->status.transport = Transport::Playing;
       lock.unlock();
-
-      if (_backend)
-      {
-        _backend->resume();
-      }
-
+      _impl->backend->resume();
       return;
     }
 
-    auto const bufferedMs = source ? source->bufferedMs() : 0;
-    auto const drained = !source || source->isDrained();
-
-    if (drained && bufferedMs == 0)
+    if (auto const drained = !src || src->isDrained(); drained && (src ? src->bufferedMs() : 0) == 0)
     {
-      _source.store({}, std::memory_order_release);
-      resetToIdle();
+      _impl->source.store({}, std::memory_order_release);
+      _impl->resetEngine();
       return;
     }
 
-    _status.transport = Transport::Playing;
-    _backendStarted = true;
+    _impl->status.transport = Transport::Playing;
+    _impl->backendStarted = true;
     lock.unlock();
-
-    if (_backend)
-    {
-      _backend->start();
-    }
+    _impl->backend->start();
   }
 
   void Engine::stop()
   {
     AUDIO_LOG_INFO("Playback stopped");
-
-    if (_backend)
-    {
-      (*_backend).reset();
-      _backend->stop();
-      _backend->close();
-    }
-
-    _source.store({}, std::memory_order_release);
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    resetToIdle();
+    _impl->backend->stop();
+    _impl->backend->close();
+    _impl->source.store({}, std::memory_order_release);
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    _impl->resetEngine();
   }
 
   void Engine::seek(std::uint32_t positionMs)
   {
     AUDIO_LOG_INFO("Seek requested: {} ms", positionMs);
-    auto const source = _source.load(std::memory_order_acquire);
-
+    auto const source = _impl->source.load(std::memory_order_acquire);
     if (!source)
     {
       return;
     }
 
     bool wasPaused = false;
-
     {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      wasPaused = (_status.transport == Transport::Paused);
-      _status.transport = Transport::Buffering;
-      _status.positionMs = positionMs;
-      auto const sr = _engineSampleRate.load(std::memory_order_relaxed);
-      _accumulatedFrames.store(
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      wasPaused = (_impl->status.transport == Transport::Paused);
+      _impl->status.transport = Transport::Buffering;
+      _impl->status.positionMs = positionMs;
+      auto const sr = _impl->engineSampleRate.load(std::memory_order_relaxed);
+      _impl->accumulatedFrames.store(
         sr > 0 ? (static_cast<std::uint64_t>(positionMs) * sr) / 1000 : 0, std::memory_order_relaxed);
-      _status.statusText.clear();
+      _impl->status.statusText.clear();
     }
 
-    if (_backend)
-    {
-      _backend->stop();
-      _backend->flush();
-    }
-
-    _backendStarted = false;
-    _playbackDrainPending = false;
+    _impl->backend->stop();
+    _impl->backend->flush();
+    _impl->backendStarted = false;
+    _impl->playbackDrainPending = false;
 
     if (auto const seekResult = source->seek(positionMs); !seekResult)
     {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      _status.transport = Transport::Error;
-      _status.statusText = seekResult.error().message;
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      _impl->status.transport = Transport::Error;
+      _impl->status.statusText = seekResult.error().message;
       return;
     }
 
     auto const bufferedMs = source->bufferedMs();
-    auto const drained = source->isDrained();
-
-    if (drained && bufferedMs == 0)
+    if (auto const drained = source->isDrained(); drained && bufferedMs == 0)
     {
-      if (_backend)
-      {
-        _backend->stop();
-        _backend->close();
-      }
-
-      _source.store({}, std::memory_order_release);
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      resetToIdle();
+      _impl->backend->stop();
+      _impl->backend->close();
+      _impl->source.store({}, std::memory_order_release);
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      _impl->resetEngine();
       return;
     }
 
     if (wasPaused)
     {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      _status.transport = Transport::Paused;
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      _impl->status.transport = Transport::Paused;
       return;
     }
 
     {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      _status.transport = Transport::Playing;
-      _backendStarted = true;
+      auto const lock = std::lock_guard{_impl->stateMutex};
+      _impl->status.transport = Transport::Playing;
+      _impl->backendStarted = true;
     }
-
-    if (_backend)
-    {
-      _backend->start();
-    }
+    _impl->backend->start();
   }
 
   void Engine::setVolume(float volume)
   {
-    if (_backend)
+    if (auto const result = _impl->backend->set(props::Volume, volume); !result)
     {
-      _backend->set(props::Volume, volume);
+      AUDIO_LOG_ERROR("Failed to set volume: {}", result.error().message);
     }
-
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    _status.volume = volume;
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    _impl->status.volume = volume;
   }
 
   float Engine::getVolume() const
   {
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    return _status.volume;
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    return _impl->status.volume;
   }
 
   void Engine::setMuted(bool muted)
   {
-    if (_backend)
+    if (auto const result = _impl->backend->set(props::Muted, muted); !result)
     {
-      _backend->set(props::Muted, muted);
+      AUDIO_LOG_ERROR("Failed to set muted state: {}", result.error().message);
     }
-
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    _status.muted = muted;
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    _impl->status.muted = muted;
   }
 
   bool Engine::isMuted() const
   {
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    return _status.muted;
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    return _impl->status.muted;
   }
 
   bool Engine::isVolumeAvailable() const
   {
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    return _status.volumeAvailable;
-  }
-
-  Engine::Status Engine::status() const
-  {
-    auto const source = _source.load(std::memory_order_acquire);
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    auto snap = _status;
-    auto const totalFrames = _accumulatedFrames.load(std::memory_order_relaxed);
-    auto const sampleRate = _engineSampleRate.load(std::memory_order_relaxed);
-    snap.positionMs = sampleRate > 0 ? static_cast<std::uint32_t>((totalFrames * 1000) / sampleRate) : 0;
-    snap.backendId = _backend ? _backend->backendId() : kBackendNone;
-    snap.bufferedMs = source ? source->bufferedMs() : 0;
-    snap.underrunCount = _underrunCount.load(std::memory_order_relaxed);
-
-    return snap;
-  }
-
-  void Engine::onBackendError(void* userData, std::string_view message) noexcept
-  {
-    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-    auto msg = std::string{message};
-
-    if (self->_dispatcher)
-    {
-      self->_dispatcher->dispatch([self, msg = std::move(msg)]() { self->handleBackendError(msg); });
-    }
-    else
-    {
-      self->handleBackendError(msg);
-    }
-  }
-
-  void Engine::handleBackendError(std::string_view message)
-  {
-    AUDIO_LOG_ERROR("Backend error: {}", message);
-
-    // Stop immediately
-    stop();
-
-    auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-    _status.transport = Transport::Error;
-    _status.statusText = std::string{message};
-  }
-
-  bool Engine::negotiateFormat(std::filesystem::path const& path,
-                               DecodedStreamInfo const& info,
-                               std::unique_ptr<IDecoderSession>& decoder,
-                               Format& backendFormat)
-  {
-    if (!_backend)
-    {
-      return true;
-    }
-
-    auto const backendId = _backend->backendId();
-
-    if (backendId == kBackendPipeWire && _backend->profileId() == kProfileShared)
-    {
-      backendFormat = info.outputFormat;
-      AUDIO_LOG_INFO("PipeWire shared mode keeps the stream at {}Hz/{}b/{}ch",
-                     backendFormat.sampleRate,
-                     static_cast<int>(backendFormat.bitDepth),
-                     static_cast<int>(backendFormat.channels));
-      return true;
-    }
-
-    auto const plan = FormatNegotiator::buildPlan(info.sourceFormat, _currentDevice.capabilities);
-
-    if (plan.requiresResample)
-    {
-      _status.statusText = std::format(
-        "{} does not support {} Hz and RockStudio has no resampler yet", backendId, info.sourceFormat.sampleRate);
-      return false;
-    }
-
-    if (plan.requiresChannelRemap)
-    {
-      _status.statusText = std::format("{} does not support {} channels and RockStudio has no channel remapper yet",
-                                       backendId,
-                                       static_cast<int>(info.sourceFormat.channels));
-      return false;
-    }
-
-    AUDIO_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
-                   static_cast<int>(plan.decoderOutputFormat.bitDepth),
-                   static_cast<int>(plan.decoderOutputFormat.validBits),
-                   plan.deviceFormat.sampleRate,
-                   static_cast<int>(plan.deviceFormat.bitDepth),
-                   plan.reason);
-
-    // Re-open decoder if negotiated format differs
-    if (!(plan.decoderOutputFormat == info.sourceFormat))
-    {
-      decoder->close();
-      decoder = _decoderFactory ? _decoderFactory(path, plan.decoderOutputFormat)
-                                : createDecoderSession(path, plan.decoderOutputFormat);
-
-      if (!decoder)
-      {
-        _status.statusText = "Failed to re-open decoder with negotiated format";
-        return false;
-      }
-
-      if (auto const reOpenResult = decoder->open(path); !reOpenResult)
-      {
-        _status.statusText = reOpenResult.error().message;
-        return false;
-      }
-    }
-
-    backendFormat = plan.deviceFormat;
-    return true;
-  }
-
-  std::shared_ptr<ISource> Engine::createPcmSource(std::unique_ptr<IDecoderSession> decoder,
-                                                   DecodedStreamInfo const& info)
-  {
-    if (shouldUseMemoryPcmSource(info))
-    {
-      auto const memorySource = std::make_shared<MemorySource>(std::move(decoder), info);
-
-      if (auto const initResult = memorySource->initialize(); !initResult)
-      {
-        _status.statusText = initResult.error().message;
-        return nullptr;
-      }
-
-      return memorySource;
-    }
-
-    auto const streamingSource = std::make_shared<StreamingSource>(
-      std::move(decoder),
-      info,
-      [this](ao::Error const& err)
-      {
-        if (_dispatcher)
-        {
-          _dispatcher->dispatch([this, err]() { handleSourceError(err); });
-        }
-        else
-        {
-          handleSourceError(err);
-        }
-      },
-      kPrerollTargetMs,
-      kDecodeHighWatermarkMs);
-
-    if (auto const initResult = streamingSource->initialize(); !initResult)
-    {
-      _status.statusText = initResult.error().message;
-      return nullptr;
-    }
-
-    return streamingSource;
-  }
-
-  bool Engine::openTrack(TrackPlaybackDescriptor const& descriptor,
-                         std::shared_ptr<ISource>& source,
-                         Format& backendFormat)
-  {
-    auto const outputFormat = [&]
-    {
-      auto fmt = Format{};
-      fmt.sampleRate = 0; // Use native
-      fmt.channels = 0;   // Use native
-      fmt.bitDepth = 0;   // Use native
-      fmt.isFloat = false;
-      fmt.isInterleaved = true;
-      return fmt;
-    }();
-
-    auto decoder = _decoderFactory ? _decoderFactory(descriptor.filePath, outputFormat)
-                                   : createDecoderSession(descriptor.filePath, outputFormat);
-
-    if (decoder == nullptr)
-    {
-      _status.statusText = "No audio decoder backend is available";
-      return false;
-    }
-
-    if (auto const openResult = decoder->open(descriptor.filePath); !openResult)
-    {
-      _status.statusText = openResult.error().message;
-      return false;
-    }
-
-    auto info = decoder->streamInfo();
-
-    if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
-    {
-      _status.statusText = "Decoder did not return a valid output format";
-      return false;
-    }
-
-    if (!negotiateFormat(descriptor.filePath, info, decoder, backendFormat))
-    {
-      return false;
-    }
-
-    // Decoder might have been re-opened with a different output format
-    info = decoder->streamInfo();
-
-    if (source = createPcmSource(std::move(decoder), info); source == nullptr)
-    {
-      return false;
-    }
-
-    _status.durationMs = info.durationMs;
-    _status.positionMs = 0;
-    _accumulatedFrames.store(0, std::memory_order_relaxed);
-    _status.flow = {};
-
-    // Add initial Source (Decoder) Node
-    _routeStatus.flow.nodes = {flow::Node{
-                                 .id = "rs-decoder",
-                                 .type = flow::NodeType::Decoder,
-                                 .name = "Decoder",
-                                 .optFormat = info.sourceFormat,
-                               },
-                               flow::Node{
-                                 .id = "rs-engine",
-                                 .type = flow::NodeType::Engine,
-                                 .name = "Engine",
-                                 .optFormat = info.outputFormat,
-                               }};
-
-    _routeStatus.flow.connections.clear();
-    _routeStatus.flow.connections.push_back(
-      flow::Connection{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true});
-
-    _engineSampleRate.store(info.outputFormat.sampleRate, std::memory_order_relaxed);
-
-    _status.flow = _routeStatus.flow;
-
-    return true;
-  }
-
-  std::size_t Engine::onReadPcm(void* userData, std::span<std::byte> output) noexcept
-  {
-    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-    auto const source = self->_source.load(std::memory_order_acquire);
-
-    return source ? source->read(output) : 0;
-  }
-
-  bool Engine::isSourceDrained(void* userData) noexcept
-  {
-    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-    auto const source = self->_source.load(std::memory_order_acquire);
-
-    if (!source)
-    {
-      return true;
-    }
-
-    auto const drained = source->isDrained();
-
-    if (drained)
-    {
-      self->_playbackDrainPending = true;
-    }
-
-    return drained;
-  }
-
-  void Engine::onUnderrun(void* userData) noexcept
-  {
-    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-    ++self->_underrunCount;
-  }
-
-  void Engine::onPositionAdvanced(void* userData, std::uint32_t frames) noexcept
-  {
-    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-    self->_accumulatedFrames.fetch_add(frames, std::memory_order_relaxed);
-  }
-
-  void Engine::onDrainComplete(void* userData) noexcept
-  {
-    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-
-    if (!self->_playbackDrainPending.exchange(false, std::memory_order_relaxed))
-    {
-      return;
-    }
-
-    if (self->_dispatcher)
-    {
-      self->_dispatcher->dispatch([self]() { self->handleDrainComplete(); });
-    }
-    else
-    {
-      self->handleDrainComplete();
-    }
-  }
-
-  void Engine::handleDrainComplete()
-  {
-    _source.store({}, std::memory_order_release);
-
-    auto onTrackEnded = std::function<void()>{};
-    auto onRouteChanged = OnRouteChanged{};
-
-    {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      onRouteChanged = _onRouteChanged;
-      resetToIdle();
-      onTrackEnded = _onTrackEnded;
-    }
-
-    if (onRouteChanged)
-    {
-      if (_dispatcher)
-      {
-        _dispatcher->dispatch([cb = std::move(onRouteChanged)]() { cb({}); });
-      }
-      else
-      {
-        onRouteChanged({});
-      }
-    }
-
-    // Callback OUTSIDE lock — allows play() to re-acquire _stateMutex
-    if (onTrackEnded)
-    {
-      onTrackEnded();
-    }
-  }
-
-  void Engine::onRouteReady(void* userData, std::string_view routeAnchor) noexcept
-  {
-    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-    auto anchor = std::string{routeAnchor};
-
-    if (self->_dispatcher)
-    {
-      self->_dispatcher->dispatch([self, anchorCopy = std::move(anchor)]() { self->handleRouteReady(anchorCopy); });
-    }
-    else
-    {
-      self->handleRouteReady(anchor);
-    }
-  }
-
-  void Engine::handleRouteReady(std::string_view routeAnchor)
-  {
-    auto cb = OnRouteChanged{};
-    auto snap = RouteStatus{};
-
-    {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-
-      _routeStatus.optAnchor =
-        RouteAnchor{.backend = _backend ? _backend->backendId() : kBackendNone, .id = std::string{routeAnchor}};
-
-      cb = _onRouteChanged;
-      snap = _routeStatus;
-    }
-
-    if (cb)
-    {
-      if (_dispatcher)
-      {
-        _dispatcher->dispatch([cb = std::move(cb), snap]() { cb(snap); });
-      }
-      else
-      {
-        cb(snap);
-      }
-    }
-  }
-
-  void Engine::handleSourceError(ao::Error const& error)
-  {
-    {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-
-      if (_status.transport == Transport::Idle)
-      {
-        return;
-      }
-
-      _backendStarted = false;
-      _playbackDrainPending = false;
-      _status.transport = Transport::Error;
-      _status.statusText = error.message.empty() ? "PCM source failed" : error.message;
-    }
-
-    // Backend call OUTSIDE lock to avoid holding _stateMutex during backend operations
-    if (_backend)
-    {
-      _backend->stop();
-    }
-  }
-
-  void Engine::onFormatChanged(void* userData, Format const& format) noexcept
-  {
-    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-
-    if (self->_dispatcher)
-    {
-      self->_dispatcher->dispatch([self, format]() { self->handleFormatChanged(format); });
-    }
-    else
-    {
-      self->handleFormatChanged(format);
-    }
-  }
-
-  void Engine::onPropertyChanged(void* userData, PropertyId id) noexcept
-  {
-    auto* const self = ao::utility::unsafeDowncast<Engine>(userData);
-
-    if (self->_dispatcher)
-    {
-      self->_dispatcher->dispatch([self, id]() { self->handlePropertyChanged(id); });
-    }
-    else
-    {
-      self->handlePropertyChanged(id);
-    }
-  }
-
-  void Engine::handlePropertyChanged(PropertyId id)
-  {
-    auto cb = OnRouteChanged{};
-    auto snap = RouteStatus{};
-
-    {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-      if (_backend)
-      {
-        if (id == PropertyId::Volume)
-        {
-          if (auto const vol = _backend->get(props::Volume))
-          {
-            _status.volume = *vol;
-          }
-        }
-        else if (id == PropertyId::Muted)
-        {
-          if (auto const mute = _backend->get(props::Muted))
-          {
-            _status.muted = *mute;
-          }
-        }
-
-        _status.volumeAvailable = _backend->queryProperty(PropertyId::Volume).isAvailable;
-      }
-
-      cb = _onRouteChanged;
-      snap = _routeStatus;
-    }
-
-    if (cb)
-    {
-      if (_dispatcher)
-      {
-        _dispatcher->dispatch([cb = std::move(cb), snap]() { cb(snap); });
-      }
-      else
-      {
-        cb(snap);
-      }
-    }
-  }
-
-  void Engine::handleFormatChanged(Format const& format)
-  {
-    auto cb = OnRouteChanged{};
-    auto snap = RouteStatus{};
-
-    {
-      auto const lock = std::lock_guard<std::mutex>{_stateMutex};
-
-      // Update engine node in the route snapshot
-      for (auto& node : _routeStatus.flow.nodes)
-      {
-        if (node.id == "rs-engine")
-        {
-          node.optFormat = format;
-          break;
-        }
-      }
-
-      // Update engine node in the public status
-      for (auto& node : _status.flow.nodes)
-      {
-        if (node.id == "rs-engine")
-        {
-          node.optFormat = format;
-          break;
-        }
-      }
-
-      cb = _onRouteChanged;
-      snap = _routeStatus;
-    }
-
-    if (cb)
-    {
-      if (_dispatcher)
-      {
-        _dispatcher->dispatch([cb = std::move(cb), snap]() { cb(snap); });
-      }
-      else
-      {
-        cb(snap);
-      }
-    }
+    auto const lock = std::lock_guard{_impl->stateMutex};
+    return _impl->status.volumeAvailable;
   }
 } // namespace ao::audio

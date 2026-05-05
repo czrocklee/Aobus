@@ -62,7 +62,7 @@ namespace ao::audio::backend
 
   // --- PipeWireMonitor Impl ---
 
-  struct PipeWireMonitor::Impl
+  struct PipeWireMonitor::Impl final
   {
     struct LinkBinding final
     {
@@ -203,7 +203,6 @@ namespace ao::audio::backend
 
     std::vector<ao::audio::Device> enumerateSinks() const;
 
-  private:
     void syncStreamBindings(std::unordered_set<std::uint32_t> const& subscribedStreamIds);
     void syncSinkBindings();
 
@@ -219,13 +218,8 @@ namespace ao::audio::backend
                                              std::uint32_t streamId,
                                              std::unordered_set<std::uint32_t> const& reachableSet) const;
     void populateGraph(ao::audio::flow::Graph& graph, std::uint32_t streamId) const;
-  };
 
-  // --- Anonymous Namespace for Callbacks ---
-
-  namespace
-  {
-    void onCoreDone(void* data, std::uint32_t /*id*/, int seq)
+    static void onCoreDone(void* data, std::uint32_t /*id*/, int seq)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
 
@@ -240,12 +234,12 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    void onRegistryGlobal(void* data,
-                          std::uint32_t id,
-                          std::uint32_t /*permissions*/,
-                          char const* type,
-                          std::uint32_t version,
-                          ::spa_dict const* props)
+    static void onRegistryGlobal(void* data,
+                                 std::uint32_t id,
+                                 std::uint32_t /*permissions*/,
+                                 char const* type,
+                                 std::uint32_t version,
+                                 ::spa_dict const* props)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
       auto const isNode = (::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
@@ -306,7 +300,7 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    void onRegistryGlobalRemove(void* data, std::uint32_t id)
+    static void onRegistryGlobalRemove(void* data, std::uint32_t id)
     {
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
       bool needsRefresh = false;
@@ -354,7 +348,7 @@ namespace ao::audio::backend
       }
     }
 
-    void onNodeInfo(void* data, ::pw_node_info const* info)
+    static void onNodeInfo(void* data, ::pw_node_info const* info)
     {
       if (info == nullptr)
       {
@@ -383,12 +377,12 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    void onNodeParam(void* data,
-                     int /*seq*/,
-                     std::uint32_t id,
-                     std::uint32_t /*index*/,
-                     std::uint32_t /*next*/,
-                     ::spa_pod const* param)
+    static void onNodeParam(void* data,
+                            int /*seq*/,
+                            std::uint32_t id,
+                            std::uint32_t /*index*/,
+                            std::uint32_t /*next*/,
+                            ::spa_pod const* param)
     {
       auto* const binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
       auto* const impl = binding->impl;
@@ -425,46 +419,46 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    auto const coreEvents = ::pw_core_events{[]
-                                             {
-                                               ::pw_core_events ev = {};
-                                               ev.version = PW_VERSION_CORE_EVENTS;
-                                               ev.done = onCoreDone;
-                                               return ev;
-                                             }()};
-
-    auto const registryEvents = ::pw_registry_events{[]
-                                                     {
-                                                       ::pw_registry_events ev = {};
-                                                       ev.version = PW_VERSION_REGISTRY_EVENTS;
-                                                       ev.global = onRegistryGlobal;
-                                                       ev.global_remove = onRegistryGlobalRemove;
-                                                       return ev;
-                                                     }()};
-
-    auto const streamNodeEvents = ::pw_node_events{[]
-                                                   {
-                                                     ::pw_node_events ev = {};
-                                                     ev.version = PW_VERSION_NODE_EVENTS;
-                                                     ev.info = onNodeInfo;
-                                                     ev.param = onNodeParam;
-                                                     return ev;
-                                                   }()};
-
-    auto const sinkNodeEvents = ::pw_node_events{[]
-                                                 {
-                                                   ::pw_node_events ev = {};
-                                                   ev.version = PW_VERSION_NODE_EVENTS;
-                                                   ev.info = onNodeInfo;
-                                                   ev.param = onNodeParam;
-                                                   return ev;
-                                                 }()};
-
-    void onRefreshEvent(void* data, std::uint64_t /*expiry*/)
+    static void onRefreshEvent(void* data, std::uint64_t /*expiry*/)
     {
       static_cast<PipeWireMonitor::Impl*>(data)->refresh();
     }
-  }
+
+    static inline ::pw_core_events const coreEvents = []
+    {
+      ::pw_core_events ev = {};
+      ev.version = PW_VERSION_CORE_EVENTS;
+      ev.done = onCoreDone;
+      return ev;
+    }();
+
+    static inline ::pw_registry_events const registryEvents = []
+    {
+      ::pw_registry_events ev = {};
+      ev.version = PW_VERSION_REGISTRY_EVENTS;
+      ev.global = onRegistryGlobal;
+      ev.global_remove = onRegistryGlobalRemove;
+      return ev;
+    }();
+
+    static inline ::pw_node_events const streamNodeEvents = []
+    {
+      ::pw_node_events ev = {};
+      ev.version = PW_VERSION_NODE_EVENTS;
+      ev.info = onNodeInfo;
+      ev.param = onNodeParam;
+      return ev;
+    }();
+
+    static inline ::pw_node_events const sinkNodeEvents = []
+    {
+      ::pw_node_events ev = {};
+      ev.version = PW_VERSION_NODE_EVENTS;
+      ev.info = onNodeInfo;
+      ev.param = onNodeParam;
+      return ev;
+    }();
+  };
 
   // --- PipeWireMonitor Implementation ---
 
@@ -484,8 +478,8 @@ namespace ao::audio::backend
 
     _impl->refreshEvent.get_deleter().loop = _impl->threadLoop.get();
     auto* const event =
-      ::pw_loop_add_event(::pw_thread_loop_get_loop(_impl->threadLoop.get()), onRefreshEvent, _impl.get());
-    if (!event)
+      ::pw_loop_add_event(::pw_thread_loop_get_loop(_impl->threadLoop.get()), &Impl::onRefreshEvent, _impl.get());
+    if (event == nullptr)
     {
       AUDIO_LOG_ERROR("Failed to add PipeWire refresh event - periodic refresh disabled");
       return;
@@ -501,8 +495,9 @@ namespace ao::audio::backend
 
       if (_impl->registry)
       {
-        ::pw_registry_add_listener(_impl->registry.get(), _impl->registryListener.get(), &registryEvents, _impl.get());
-        ::pw_core_add_listener(_impl->core.get(), _impl->coreListener.get(), &coreEvents, _impl.get());
+        ::pw_registry_add_listener(
+          _impl->registry.get(), _impl->registryListener.get(), &Impl::registryEvents, _impl.get());
+        ::pw_core_add_listener(_impl->core.get(), _impl->coreListener.get(), &Impl::coreEvents, _impl.get());
         _impl->coreSyncSeq = ::pw_core_sync(_impl->core.get(), PW_ID_CORE, 0);
       }
     }
@@ -541,6 +536,7 @@ namespace ao::audio::backend
   std::optional<std::uint32_t> PipeWireMonitor::findSinkIdByName(std::string_view name) const
   {
     auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
+
     for (auto const& [id, node] : _impl->nodes)
     {
       if (isSinkMediaClass(node.mediaClass) && node.nodeName == name)
@@ -635,6 +631,7 @@ namespace ao::audio::backend
         }
         auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
         auto caps = ao::audio::DeviceCapabilities{};
+
         if (auto const it = sinkCapabilitiesMap.find(id); it != sinkCapabilitiesMap.end())
         {
           caps = it->second;
@@ -686,6 +683,7 @@ namespace ao::audio::backend
 
     {
       auto const lock = std::lock_guard<std::mutex>{mutex};
+
       for (auto const& sub : graphSubscriptions)
       {
         auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
@@ -696,6 +694,7 @@ namespace ao::audio::backend
           pendingGraphCbs.emplace_back(sub.callback, std::move(graph));
         }
       }
+
       if (!deviceSubscriptions.empty())
       {
         deviceSnapshot = enumerateSinks();
@@ -714,6 +713,7 @@ namespace ao::audio::backend
     {
       cb(graph);
     }
+
     for (auto& cb : pendingDeviceCbs)
     {
       cb(deviceSnapshot);

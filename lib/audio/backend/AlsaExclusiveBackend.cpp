@@ -55,11 +55,11 @@ namespace ao::audio::backend
     // --- Mixer members ---
     struct AlsaMixerDeleter
     {
-      void operator()(::snd_mixer_t* h) const noexcept
+      void operator()(::snd_mixer_t* handle) const noexcept
       {
-        if (h)
+        if (handle != nullptr)
         {
-          ::snd_mixer_close(h);
+          ::snd_mixer_close(handle);
         }
       }
     };
@@ -77,16 +77,26 @@ namespace ao::audio::backend
     {
     }
 
-    void playbackLoop(std::stop_token const& stopToken);
+    void playbackLoop(std::stop_token const& stopToken) const;
     void recoverFromXrun(int err) const;
 
     bool initMixer(::snd_pcm_t* pcm);
-    void applyVolume(float vol);
-    void applyMute(bool mute);
+    void applyVolume(float vol) const;
+    void applyMute(bool mute) const;
     float readVolume() const;
+
+    ao::Result<> configureHwParams(::snd_pcm_t* pcm,
+                                   ao::audio::Format& format,
+                                   ::snd_pcm_format_t& alsaFormat,
+                                   ::snd_pcm_uframes_t& periodSize);
+    ao::Result<> configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize);
+
+    bool waitForFrames(::snd_pcm_uframes_t periodSize) const;
+    void handleXrun(int err) const;
+    void commitFrames(::snd_pcm_uframes_t offset, ::snd_pcm_uframes_t framesRead) const;
   };
 
-  void AlsaExclusiveBackend::Impl::playbackLoop(std::stop_token const& stopToken)
+  void AlsaExclusiveBackend::Impl::playbackLoop(std::stop_token const& stopToken) const
   {
     ::snd_pcm_uframes_t periodSize = 0;
     ::snd_pcm_hw_params_t* params = nullptr;
@@ -102,7 +112,7 @@ namespace ao::audio::backend
       periodSize = kDefaultPeriodSize;
     }
 
-    std::size_t const bytesPerFrame = (format.bitDepth / 8) * format.channels;
+    std::size_t const bytesPerFrame = (static_cast<std::size_t>(format.bitDepth) / 8) * format.channels;
 
     while (!stopToken.stop_requested())
     {
@@ -112,28 +122,8 @@ namespace ao::audio::backend
         continue;
       }
 
-      auto avail = ::snd_pcm_avail_update(pcm.get());
-
-      if (avail < 0)
+      if (!waitForFrames(periodSize))
       {
-        recoverFromXrun(static_cast<int>(avail));
-        continue;
-      }
-
-      if (static_cast<::snd_pcm_uframes_t>(avail) < periodSize)
-      {
-        // Only block on the pollfd when the device is truly running.
-        // In PREPARED / XRUN / SUSPENDED states the fd may never signal,
-        // so we fall back to a short sleep to keep the loop responsive.
-        if (::snd_pcm_state(pcm.get()) == SND_PCM_STATE_RUNNING)
-        {
-          ::snd_pcm_wait(pcm.get(), kAlsaWaitTimeoutMs);
-        }
-        else
-        {
-          std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-
         continue;
       }
 
@@ -143,7 +133,7 @@ namespace ao::audio::backend
 
       if (auto const err = ::snd_pcm_mmap_begin(pcm.get(), &areas, &offset, &frames); err < 0)
       {
-        recoverFromXrun(err);
+        handleXrun(err);
         continue;
       }
 
@@ -162,27 +152,7 @@ namespace ao::audio::backend
       if (bytesRead > 0)
       {
         auto const framesRead = static_cast<::snd_pcm_uframes_t>(bytesRead / (bytesPerFrame));
-        auto const committed = ::snd_pcm_mmap_commit(pcm.get(), offset, framesRead);
-
-        if (committed < 0)
-        {
-          recoverFromXrun(static_cast<int>(committed));
-        }
-        else
-        {
-          // XRUN recovery via snd_pcm_prepare leaves the device in
-          // PREPARED state. If the auto-start threshold has been met
-          // by now, explicitly kick the device into RUNNING.
-          if (::snd_pcm_state(pcm.get()) == SND_PCM_STATE_PREPARED)
-          {
-            ::snd_pcm_start(pcm.get());
-          }
-
-          if (callbacks.onPositionAdvanced != nullptr)
-          {
-            callbacks.onPositionAdvanced(callbacks.userData, static_cast<std::uint32_t>(committed));
-          }
-        }
+        commitFrames(offset, framesRead);
       }
       else
       {
@@ -202,6 +172,66 @@ namespace ao::audio::backend
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
     }
+  }
+
+  void AlsaExclusiveBackend::Impl::commitFrames(::snd_pcm_uframes_t offset, ::snd_pcm_uframes_t framesRead) const
+  {
+    auto const committed = ::snd_pcm_mmap_commit(pcm.get(), offset, framesRead);
+
+    if (committed < 0)
+    {
+      handleXrun(static_cast<int>(committed));
+    }
+    else
+    {
+      // XRUN recovery via snd_pcm_prepare leaves the device in
+      // PREPARED state. If the auto-start threshold has been met
+      // by now, explicitly kick the device into RUNNING.
+      if (::snd_pcm_state(pcm.get()) == SND_PCM_STATE_PREPARED)
+      {
+        ::snd_pcm_start(pcm.get());
+      }
+
+      if (callbacks.onPositionAdvanced != nullptr)
+      {
+        callbacks.onPositionAdvanced(callbacks.userData, static_cast<std::uint32_t>(committed));
+      }
+    }
+  }
+
+  bool AlsaExclusiveBackend::Impl::waitForFrames(::snd_pcm_uframes_t periodSize) const
+  {
+    auto avail = ::snd_pcm_avail_update(pcm.get());
+
+    if (avail < 0)
+    {
+      handleXrun(static_cast<int>(avail));
+      return false;
+    }
+
+    if (static_cast<::snd_pcm_uframes_t>(avail) < periodSize)
+    {
+      // Only block on the pollfd when the device is truly running.
+      // In PREPARED / XRUN / SUSPENDED states the fd may never signal,
+      // so we fall back to a short sleep to keep the loop responsive.
+      if (::snd_pcm_state(pcm.get()) == SND_PCM_STATE_RUNNING)
+      {
+        ::snd_pcm_wait(pcm.get(), kAlsaWaitTimeoutMs);
+      }
+      else
+      {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+
+      return false;
+    }
+
+    return true;
+  }
+
+  void AlsaExclusiveBackend::Impl::handleXrun(int err) const
+  {
+    recoverFromXrun(err);
   }
 
   void AlsaExclusiveBackend::Impl::recoverFromXrun(int err) const
@@ -275,7 +305,7 @@ namespace ao::audio::backend
     for (auto const& name : kSelemNames)
     {
       auto* elem = ::snd_mixer_first_elem(raw);
-      while (elem)
+      while (elem != nullptr)
       {
         if (::snd_mixer_selem_get_name(elem) == std::string_view{name})
         {
@@ -286,13 +316,13 @@ namespace ao::audio::backend
         elem = ::snd_mixer_elem_next(elem);
       }
 
-      if (mixerElem)
+      if (mixerElem != nullptr)
       {
         break;
       }
     }
 
-    if (!mixerElem)
+    if (mixerElem == nullptr)
     {
       return false;
     }
@@ -302,9 +332,9 @@ namespace ao::audio::backend
     return true;
   }
 
-  void AlsaExclusiveBackend::Impl::applyVolume(float vol)
+  void AlsaExclusiveBackend::Impl::applyVolume(float vol) const
   {
-    if (!mixerElem)
+    if (mixerElem == nullptr)
     {
       return;
     }
@@ -312,28 +342,30 @@ namespace ao::audio::backend
 
     if (hasDB)
     {
-      long db = dbMin + static_cast<long>((dbMax - dbMin) * clamped);
+      long db = dbMin + static_cast<long>(static_cast<float>(dbMax - dbMin) * clamped);
       ::snd_mixer_selem_set_playback_dB_all(mixerElem, db, 0);
     }
+
     else
     {
-      long val = volMin + static_cast<long>((volMax - volMin) * clamped);
+      long val = volMin + static_cast<long>(static_cast<float>(volMax - volMin) * clamped);
       ::snd_mixer_selem_set_playback_volume_all(mixerElem, val);
     }
   }
 
-  void AlsaExclusiveBackend::Impl::applyMute(bool mute)
+  void AlsaExclusiveBackend::Impl::applyMute(bool mute) const
   {
-    if (!mixerElem)
+    if (mixerElem == nullptr)
     {
       return;
     }
+
     ::snd_mixer_selem_set_playback_switch_all(mixerElem, mute ? 0 : 1);
   }
 
   float AlsaExclusiveBackend::Impl::readVolume() const
   {
-    if (!mixerElem)
+    if (mixerElem == nullptr)
     {
       return 1.0F;
     }
@@ -346,16 +378,120 @@ namespace ao::audio::backend
 
       if (dbMax != dbMin)
       {
-        return std::clamp(static_cast<float>(db - dbMin) / (dbMax - dbMin), 0.0F, 1.0F);
+        return std::clamp(static_cast<float>(db - dbMin) / static_cast<float>(dbMax - dbMin), 0.0F, 1.0F);
       }
     }
+
     ::snd_mixer_selem_get_playback_volume(mixerElem, SND_MIXER_SCHN_MONO, &val);
 
     if (volMax != volMin)
     {
-      return std::clamp(static_cast<float>(val - volMin) / (volMax - volMin), 0.0F, 1.0F);
+      return std::clamp(static_cast<float>(val - volMin) / static_cast<float>(volMax - volMin), 0.0F, 1.0F);
     }
+
     return 1.0F;
+  }
+
+  ao::Result<> AlsaExclusiveBackend::Impl::configureHwParams(::snd_pcm_t* pcm,
+                                                             ao::audio::Format& format,
+                                                             ::snd_pcm_format_t& alsaFormat,
+                                                             ::snd_pcm_uframes_t& periodSize)
+  {
+    ::snd_pcm_hw_params_t* params = nullptr;
+    snd_pcm_hw_params_alloca(&params); // macro
+
+    if (::snd_pcm_hw_params_any(pcm, params) < 0)
+    {
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to init ALSA hw params");
+    }
+
+    if (::snd_pcm_hw_params_set_access(pcm, params, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)
+    {
+      return ao::makeError(ao::Error::Code::FormatRejected, "No MMAP interleaved support");
+    }
+
+    alsaFormat = SND_PCM_FORMAT_S16_LE;
+
+    if (format.bitDepth == 32)
+    {
+      alsaFormat = (format.validBits == 24) ? SND_PCM_FORMAT_S24_LE : SND_PCM_FORMAT_S32_LE;
+    }
+    else if (format.bitDepth == 24)
+    {
+      alsaFormat = SND_PCM_FORMAT_S24_3LE;
+    }
+
+    if (::snd_pcm_hw_params_set_format(pcm, params, alsaFormat) < 0)
+    {
+      if (format.bitDepth == 16)
+      {
+        alsaFormat = SND_PCM_FORMAT_S32_LE;
+
+        if (::snd_pcm_hw_params_set_format(pcm, params, alsaFormat) < 0)
+        {
+          return ao::makeError(ao::Error::Code::FormatRejected, "Hardware supports neither S16_LE nor S32_LE");
+        }
+      }
+      else
+      {
+        return ao::makeError(ao::Error::Code::FormatRejected, "Format not supported by hardware");
+      }
+    }
+
+    std::uint32_t rate = format.sampleRate;
+
+    if (::snd_pcm_hw_params_set_rate_near(pcm, params, &rate, 0) < 0)
+    {
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to set rate");
+    }
+
+    if (rate != format.sampleRate)
+    {
+      AUDIO_LOG_INFO("AlsaExclusiveBackend: Rate mismatch! Requested: {}Hz, Got: {}Hz. Pitch shift expected if engine "
+                     "is not notified.",
+                     format.sampleRate,
+                     rate);
+    }
+
+    if (::snd_pcm_hw_params_set_channels(pcm, params, format.channels) < 0)
+    {
+      return ao::makeError(ao::Error::Code::FormatRejected, "Failed to set channels");
+    }
+
+    auto periods = std::uint32_t{4};
+    ::snd_pcm_hw_params_set_periods_near(pcm, params, &periods, 0);
+
+    periodSize = kDefaultPeriodSize;
+    ::snd_pcm_hw_params_set_period_size_near(pcm, params, &periodSize, 0);
+
+    if (::snd_pcm_hw_params(pcm, params) < 0)
+    {
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to apply hw params");
+    }
+
+    canPause = (::snd_pcm_hw_params_can_pause(params) == 1);
+    format.sampleRate = rate;
+    return {};
+  }
+
+  ao::Result<> AlsaExclusiveBackend::Impl::configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize)
+  {
+    ::snd_pcm_sw_params_t* swParams = nullptr;
+    snd_pcm_sw_params_alloca(&swParams);
+
+    if (::snd_pcm_sw_params_current(pcm, swParams) < 0)
+    {
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to get sw params");
+    }
+
+    ::snd_pcm_sw_params_set_start_threshold(pcm, swParams, periodSize);
+    ::snd_pcm_sw_params_set_avail_min(pcm, swParams, periodSize);
+
+    if (::snd_pcm_sw_params(pcm, swParams) < 0)
+    {
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to apply sw params");
+    }
+    return {};
   }
 
   AlsaExclusiveBackend::AlsaExclusiveBackend(ao::audio::Device const& device, ao::audio::ProfileId const& /*profile*/)
@@ -391,99 +527,24 @@ namespace ao::audio::backend
     }
 
     auto safePcm = Impl::AlsaPcmPtr(pcm);
-    ::snd_pcm_hw_params_t* params = nullptr;
-    snd_pcm_hw_params_alloca(&params); // macro
-
-    if (::snd_pcm_hw_params_any(safePcm.get(), params) < 0)
-    {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to init ALSA hw params");
-    }
-
-    if (::snd_pcm_hw_params_set_access(safePcm.get(), params, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)
-    {
-      return ao::makeError(ao::Error::Code::FormatRejected, "No MMAP interleaved support");
-    }
-
+    auto currentFormat = format;
     auto alsaFormat = SND_PCM_FORMAT_S16_LE;
+    ::snd_pcm_uframes_t periodSize = 0;
 
-    if (format.bitDepth == 32)
+    if (auto const res = _impl->configureHwParams(safePcm.get(), currentFormat, alsaFormat, periodSize); !res)
     {
-      alsaFormat = (format.validBits == 24) ? SND_PCM_FORMAT_S24_LE : SND_PCM_FORMAT_S32_LE;
-    }
-    else if (format.bitDepth == 24)
-    {
-      alsaFormat = SND_PCM_FORMAT_S24_3LE;
+      return res;
     }
 
-    if (::snd_pcm_hw_params_set_format(safePcm.get(), params, alsaFormat) < 0)
+    if (auto const res = _impl->configureSwParams(safePcm.get(), periodSize); !res)
     {
-      if (format.bitDepth == 16)
-      {
-        alsaFormat = SND_PCM_FORMAT_S32_LE;
-
-        if (::snd_pcm_hw_params_set_format(safePcm.get(), params, alsaFormat) < 0)
-        {
-          return ao::makeError(ao::Error::Code::FormatRejected, "Hardware supports neither S16_LE nor S32_LE");
-        }
-      }
-      else
-      {
-        return ao::makeError(ao::Error::Code::FormatRejected, "Format not supported by hardware");
-      }
+      return res;
     }
 
-    std::uint32_t rate = format.sampleRate;
-
-    if (::snd_pcm_hw_params_set_rate_near(safePcm.get(), params, &rate, 0) < 0)
-    {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to set rate");
-    }
-
-    if (rate != format.sampleRate)
-    {
-      AUDIO_LOG_INFO("AlsaExclusiveBackend: Rate mismatch! Requested: {}Hz, Got: {}Hz. Pitch shift expected if engine "
-                     "is not notified.",
-                     format.sampleRate,
-                     rate);
-    }
-
-    if (::snd_pcm_hw_params_set_channels(safePcm.get(), params, format.channels) < 0)
-    {
-      return ao::makeError(ao::Error::Code::FormatRejected, "Failed to set channels");
-    }
-
-    auto periods = std::uint32_t{4};
-    ::snd_pcm_hw_params_set_periods_near(safePcm.get(), params, &periods, 0);
-
-    ::snd_pcm_uframes_t periodSize = kDefaultPeriodSize;
-    ::snd_pcm_hw_params_set_period_size_near(safePcm.get(), params, &periodSize, 0);
-
-    if (::snd_pcm_hw_params(safePcm.get(), params) < 0)
-    {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to apply hw params");
-    }
-
-    _impl->canPause = (::snd_pcm_hw_params_can_pause(params) == 1);
-    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Device pause support: {}, Negotiated Rate: {}Hz", _impl->canPause, rate);
-
-    ::snd_pcm_sw_params_t* swParams = nullptr;
-    snd_pcm_sw_params_alloca(&swParams);
-
-    if (::snd_pcm_sw_params_current(safePcm.get(), swParams) < 0)
-    {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to get sw params");
-    }
-
-    ::snd_pcm_sw_params_set_start_threshold(safePcm.get(), swParams, periodSize);
-    ::snd_pcm_sw_params_set_avail_min(safePcm.get(), swParams, periodSize);
-
-    if (::snd_pcm_sw_params(safePcm.get(), swParams) < 0)
-    {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to apply sw params");
-    }
-
-    _impl->format = format;
-    _impl->format.sampleRate = rate;
+    _impl->format = currentFormat;
+    AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Device pause support: {}, Negotiated Rate: {}Hz",
+                    _impl->canPause,
+                    _impl->format.sampleRate);
 
     // When the ALSA hardware forces a wider sample container (e.g. S16_LE
     // rejected in favour of S32_LE), the Engine must be told so its PCM
@@ -527,12 +588,6 @@ namespace ao::audio::backend
     }
 
     return {};
-  }
-
-  void AlsaExclusiveBackend::reset()
-  {
-    close();
-    _impl->callbacks = {};
   }
 
   void AlsaExclusiveBackend::start()
@@ -601,26 +656,6 @@ namespace ao::audio::backend
     }
   }
 
-  void AlsaExclusiveBackend::drain()
-  {
-    if (!_impl->pcm)
-    {
-      if (_impl->callbacks.onDrainComplete != nullptr)
-      {
-        _impl->callbacks.onDrainComplete(_impl->callbacks.userData);
-      }
-
-      return;
-    }
-
-    ::snd_pcm_drain(_impl->pcm.get());
-
-    if (_impl->callbacks.onDrainComplete != nullptr)
-    {
-      _impl->callbacks.onDrainComplete(_impl->callbacks.userData);
-    }
-  }
-
   void AlsaExclusiveBackend::stop()
   {
     _impl->thread.request_stop();
@@ -645,15 +680,6 @@ namespace ao::audio::backend
     _impl->mixerElem = nullptr;
   }
 
-  void AlsaExclusiveBackend::setExclusiveMode(bool /*exclusive*/)
-  {
-  }
-
-  bool AlsaExclusiveBackend::isExclusiveMode() const noexcept
-  {
-    return true;
-  }
-
   ao::Result<> AlsaExclusiveBackend::setProperty(ao::audio::PropertyId id, ao::audio::PropertyValue const& value)
   {
     if (id == ao::audio::PropertyId::Volume)
@@ -667,6 +693,7 @@ namespace ao::audio::backend
       _impl->applyMute(std::get<bool>(value));
       return {};
     }
+
     return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
   }
 
@@ -679,7 +706,7 @@ namespace ao::audio::backend
 
     if (id == ao::audio::PropertyId::Muted)
     {
-      if (!_impl->mixerElem)
+      if (_impl->mixerElem == nullptr)
       {
         return false;
       }
@@ -688,6 +715,7 @@ namespace ao::audio::backend
       ::snd_mixer_selem_get_playback_switch(_impl->mixerElem, SND_MIXER_SCHN_MONO, &val);
       return val == 0;
     }
+
     return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
   }
 
@@ -695,7 +723,7 @@ namespace ao::audio::backend
   {
     if (id == ao::audio::PropertyId::Volume || id == ao::audio::PropertyId::Muted)
     {
-      bool const available = _impl && _impl->mixerElem != nullptr;
+      bool const available = _impl != nullptr && _impl->mixerElem != nullptr;
       return {.canRead = true, .canWrite = true, .isAvailable = available, .emitsChangeNotifications = false};
     }
 
