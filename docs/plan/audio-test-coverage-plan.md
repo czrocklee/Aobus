@@ -369,7 +369,7 @@ Target file: `test/unit/audio/PlaybackEngineTest.cpp`
 | --- | --- | --- | --- | --- |
 | Keep | `Engine - Basic Orchestration` | preserve stop cleanup, backend error, and route-ready snapshot behavior | current mocked backend and dispatcher | existing assertions remain the baseline contract |
 | Keep | `Engine - Backend Swapping` | preserve idle backend swap behavior | current two-backend setup | old backend is reset/stopped/closed and status reflects the new device/backend |
-| Keep | `Engine - Graph Initialization` | preserve internal graph population | `basic_metadata.flac` with mocked backend | `rs-decoder`, `rs-engine`, and their connection remain present |
+| Keep | `Engine - Graph Initialization` | preserve internal graph population | `basic_metadata.flac` with mocked backend | `ao-decoder`, `ao-engine`, and their connection remain present |
 | Keep | `Engine - PipeWire shared mode keeps native sample rate` | preserve shared-mode bypass of device caps | `basic_metadata.flac`, PipeWire shared backend caps at 48 kHz only | backend still opens at native 44.1 kHz |
 | Keep | `Engine - Unsupported backend sample rate fails without resampler` | preserve current hard-fail branch | `basic_metadata.flac`, exclusive backend caps only 48 kHz | transport becomes `Error`, message mentions missing resampler |
 | Keep | `Engine - Graph Integrity` | preserve real engine + `NullBackend` graph smoke | `basic_metadata.flac` | decoder and engine nodes remain observable |

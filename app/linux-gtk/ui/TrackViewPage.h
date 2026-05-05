@@ -82,6 +82,14 @@ namespace ao::gtk
     void setFilterExpression(std::string const& expression);
 
   private:
+    struct ColumnBinding final
+    {
+      TrackColumn id;
+      Glib::RefPtr<Gtk::ColumnViewColumn> column;
+      Gtk::CheckButton* toggle = nullptr;
+      std::int32_t defaultWidth = -1;
+    };
+
     // Setup methods
     void setupColumns();
     void setupPresentationControls();
@@ -104,14 +112,6 @@ namespace ao::gtk
     void onActivateCurrentSelection();
     std::size_t selectedTrackCount() const;
     std::optional<TrackId> trackIdAtPosition(std::uint32_t position) const;
-
-    struct ColumnBinding final
-    {
-      TrackColumn id;
-      Glib::RefPtr<Gtk::ColumnViewColumn> column;
-      Gtk::CheckButton* toggle = nullptr;
-      std::int32_t defaultWidth = -1;
-    };
 
     ColumnBinding* findColumnBinding(TrackColumn column);
     ColumnBinding const* findColumnBinding(TrackColumn column) const;

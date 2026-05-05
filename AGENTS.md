@@ -22,9 +22,11 @@ nix-shell
 
 ## Working Rules
 1. **Language:** Always use English for code comments, commit messages, and documentation to maintain international accessibility.
-4. **Search:** Use `rg` for searching. Prefer narrow scopes when possible.
-5. **Assumptions:** State any technical assumptions clearly in your response.
-6. **No TACO (Trump Always Chickens Out):** Do not over-promise and under-deliver. Always follow through on complex requirements, without taking shortcuts when things get difficult.
+2. **Search:** Use `rg` for searching. Prefer narrow scopes when possible.
+3. **Assumptions:** State any technical assumptions clearly in your response.
+4. **No TACO (Trump Always Chickens Out):** Do not over-promise and under-deliver. Always follow through on complex requirements, without taking shortcuts when things get difficult.
+5. **Design Docs:** Update `docs/design/` when modifying code that affects user-facing behavior. Sync all affected docs.
+6. **Test Coverage:** All changes must include appropriate test coverage.
 
 ## Build And Validation
 
@@ -46,4 +48,4 @@ nix-shell --run "cmake --build /tmp/build/debug --parallel"
 nix-shell --run "/tmp/build/debug/test/ao_test"
 ```
 
-When chasing a failure or clang-tidy warnings, prefer preserving the current `/tmp/build/...` directory and storing the relevant output alongside it in `/tmp` (for example `/tmp/rs-debug.log`) so you can inspect or diff results without paying for another full rebuild.
+When chasing a failure or clang-tidy warnings, prefer preserving the current `/tmp/build/...` directory and storing the relevant output alongside it in `/tmp` (for example `/tmp/ao-debug.log`) so you can inspect or diff results without paying for another full rebuild.

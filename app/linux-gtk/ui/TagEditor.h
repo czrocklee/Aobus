@@ -16,16 +16,17 @@ namespace ao::gtk
   /**
    * @brief TagEditor is a reusable widget for viewing and editing track tags.
    */
-  class TagEditor : public Gtk::Box
+  class TagEditor final : public Gtk::Box
   {
   public:
+    using TagsChangedSignal = sigc::signal<void(std::vector<std::string> const&, std::vector<std::string> const&)>;
+
     TagEditor();
-    virtual ~TagEditor();
+    ~TagEditor() override;
 
     void setup(ao::library::MusicLibrary& library, std::vector<ao::TrackId> selectedTrackIds);
 
     // Signals
-    using TagsChangedSignal = sigc::signal<void(std::vector<std::string> const&, std::vector<std::string> const&)>;
     TagsChangedSignal& signal_tags_changed() { return _tagsChanged; }
 
   private:

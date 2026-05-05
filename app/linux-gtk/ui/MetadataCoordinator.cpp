@@ -32,9 +32,11 @@ namespace ao::gtk
   {
     {
       auto const lock = std::lock_guard{_queueMutex};
+
       _taskQueue.push(
         Task{.library = library, .trackIds = std::move(ids), .spec = std::move(spec), .onResult = std::move(onResult)});
     }
+
     _queueCv.notify_one();
   }
 
@@ -44,7 +46,8 @@ namespace ao::gtk
 
     while (!stopToken.stop_requested())
     {
-      Task task;
+      auto task = Task{};
+
       {
         auto lock = std::unique_lock{_queueMutex};
         _queueCv.wait(lock, [&] { return stopToken.stop_requested() || !_taskQueue.empty(); });
@@ -58,10 +61,12 @@ namespace ao::gtk
         _taskQueue.pop();
       }
 
-      if (!task.library)
+      if (task.library == nullptr)
       {
-        _dispatcher->dispatch([callback = std::move(task.onResult)]
-                              { callback(std::unexpected(ao::Error{ao::Error::Code::Generic, "No active library"})); });
+        _dispatcher->dispatch(
+          [callback = std::move(task.onResult)]
+          { callback(std::unexpected(ao::Error{.code = ao::Error::Code::Generic, .message = "No active library"})); });
+
         continue;
       }
 
@@ -76,9 +81,11 @@ namespace ao::gtk
         for (auto const& trackId : task.trackIds)
         {
           auto const optView = store.get(trackId, ao::library::TrackStore::Reader::LoadMode::Both);
+
           if (!optView)
           {
             APP_LOG_WARN("MetadataCoordinator: Track {} not found, skipping", trackId.value());
+
             continue;
           }
 
@@ -86,31 +93,37 @@ namespace ao::gtk
           bool changedHot = false;
           bool changedCold = false;
 
+          auto const applyIfPresent = [&](auto const& setter)
+          {
+            setter();
+            changedHot = true;
+          };
+
           if (task.spec.title)
           {
-            builder.metadata().title(*task.spec.title);
-            changedHot = true;
+            applyIfPresent([&]() { builder.metadata().title(*task.spec.title); });
           }
+
           if (task.spec.artist)
           {
-            builder.metadata().artist(*task.spec.artist);
-            changedHot = true;
+            applyIfPresent([&]() { builder.metadata().artist(*task.spec.artist); });
           }
+
           if (task.spec.album)
           {
-            builder.metadata().album(*task.spec.album);
-            changedHot = true;
+            applyIfPresent([&]() { builder.metadata().album(*task.spec.album); });
           }
+
           if (task.spec.genre)
           {
-            builder.metadata().genre(*task.spec.genre);
-            changedHot = true;
+            applyIfPresent([&]() { builder.metadata().genre(*task.spec.genre); });
           }
+
           if (task.spec.composer)
           {
-            builder.metadata().composer(*task.spec.composer);
-            changedHot = true;
+            applyIfPresent([&]() { builder.metadata().composer(*task.spec.composer); });
           }
+
           if (task.spec.work)
           {
             builder.metadata().work(*task.spec.work);
@@ -149,8 +162,10 @@ namespace ao::gtk
       catch (std::exception const& e)
       {
         APP_LOG_ERROR("MetadataCoordinator: Update failed: {}", e.what());
-        _dispatcher->dispatch([callback = std::move(task.onResult), msg = std::string{e.what()}]
-                              { callback(std::unexpected(ao::Error{ao::Error::Code::Generic, msg})); });
+
+        _dispatcher->dispatch(
+          [callback = std::move(task.onResult), msg = std::string{e.what()}]
+          { callback(std::unexpected(ao::Error{.code = ao::Error::Code::Generic, .message = msg})); });
       }
     }
   }

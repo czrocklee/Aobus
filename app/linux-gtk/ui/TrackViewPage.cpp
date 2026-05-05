@@ -40,6 +40,43 @@ namespace ao::gtk
   {
     using RowCompareFn = std::move_only_function<int(TrackRow const&, TrackRow const&)>;
     constexpr auto kTagsCellWidgetName = "track-tags-cell";
+    constexpr double kTitlePositionDivisor = 2.0;
+    constexpr double kLongPressDelayFactor = 1.03;
+
+    std::shared_ptr<Gdk::ContentProvider> createDragContentProvider(Gtk::Label* label, TrackColumn column)
+    {
+      auto const value = label->get_text().raw();
+
+      if (value.empty())
+      {
+        return {};
+      }
+
+      auto prefix = std::string{};
+
+      if (column == TrackColumn::Artist)
+      {
+        prefix = "$a=";
+      }
+      else if (column == TrackColumn::Album)
+      {
+        prefix = "$al=";
+      }
+      else if (column == TrackColumn::Genre)
+      {
+        prefix = "$g=";
+      }
+
+      if (prefix.empty())
+      {
+        return {};
+      }
+
+      auto const expr = prefix + "\"" + value + "\"";
+      auto const bytes = Glib::Bytes::create(expr.data(), expr.size());
+
+      return Gdk::ContentProvider::create("text/plain", bytes);
+    }
 
     void ensureTrackPageCss(bool force = false)
     {
@@ -50,7 +87,7 @@ namespace ao::gtk
       {
         if (force)
         {
-          if (auto display = Gdk::Display::get_default(); display)
+          if (auto const display = Gdk::Display::get_default(); display)
           {
             Gtk::StyleContext::remove_provider_for_display(display, provider);
           }
@@ -98,38 +135,39 @@ namespace ao::gtk
 
         if (!initialized || force)
         {
-          if (auto display = Gdk::Display::get_default(); display)
+          if (auto const display = Gdk::Display::get_default(); display)
           {
             // Use USER priority to override potential theme/stylix overrides
             Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
           }
+
           initialized = true;
         }
       }
     }
 
-    // createTextColumnFactory removed from anonymous namespace
-
-    TrackRow const* trackRowFromItem(gconstpointer item)
+    TrackRow const* trackRowFromItem(::gconstpointer item)
     {
       if (item == nullptr)
       {
         return nullptr;
       }
 
-      auto* const object = Glib::wrap_auto(ao::utility::layout::asLegacyPtr<GObject>(item), false);
+      auto* const object = Glib::wrap_auto(ao::utility::layout::asLegacyPtr<::GObject>(item), false);
+
       return dynamic_cast<TrackRow const*>(object);
     }
 
     Glib::RefPtr<Gtk::Sorter> createRowSorter(RowCompareFn compare)
     {
-      auto* comparePtr = new RowCompareFn{std::move(compare)}; // NOLINT(cppcoreguidelines-owning-memory)
-      auto* customSorter = gtk_custom_sorter_new(
-        [](gconstpointer lhs, gconstpointer rhs, gpointer userData) -> int
+      auto* const comparePtr = new RowCompareFn{std::move(compare)}; // NOLINT(cppcoreguidelines-owning-memory)
+
+      auto* const customSorter = ::gtk_custom_sorter_new(
+        [](::gconstpointer lhs, ::gconstpointer rhs, ::gpointer userData) -> int
         {
-          auto* compareFn = static_cast<RowCompareFn*>(userData);
-          auto const* leftRow = trackRowFromItem(lhs);
-          auto const* rightRow = trackRowFromItem(rhs);
+          auto* const compareFn = static_cast<RowCompareFn*>(userData);
+          auto const* const leftRow = trackRowFromItem(lhs);
+          auto const* const rightRow = trackRowFromItem(rhs);
 
           if (!compareFn || !leftRow || !rightRow)
           {
@@ -139,7 +177,7 @@ namespace ao::gtk
           return (*compareFn)(*leftRow, *rightRow);
         },
         comparePtr,
-        [](gpointer userData)
+        [](::gpointer userData)
         { delete static_cast<RowCompareFn*>(userData); }); // NOLINT(cppcoreguidelines-owning-memory)
 
       return Glib::wrap(GTK_SORTER(customSorter), false);
@@ -190,10 +228,12 @@ namespace ao::gtk
       }
     }
 
-    std::string trackCountLabel(guint count)
+    std::string trackCountLabel(::guint count)
     {
       auto label = std::format("{}", count);
+
       label += count == 1 ? " track" : " tracks";
+
       return label;
     }
   }
@@ -232,7 +272,6 @@ namespace ao::gtk
 
     setupPresentationControls();
     setupStatusBar();
-
     setupHeaderFactory();
 
     // Set up column view
@@ -254,7 +293,7 @@ namespace ao::gtk
     if (_columnModel)
     {
       _columnModelChangedConnection = _columnModel->signal_items_changed().connect(
-        [this](guint, guint, guint)
+        [this](::guint, ::guint, ::guint)
         {
           if (_syncingColumnLayout)
           {
@@ -285,6 +324,7 @@ namespace ao::gtk
     append(_controlsBar);
     append(_statusLabel);
     append(_scrolledWindow);
+
     updateTitlePositionVariable();
   }
 
@@ -310,6 +350,7 @@ namespace ao::gtk
     _filterEntry.set_icon_tooltip_text("Create smart list from current filter", Gtk::Entry::IconPosition::SECONDARY);
     _filterEntry.set_menu_entry_icon_text("Create smart list from current filter", Gtk::Entry::IconPosition::SECONDARY);
     _filterEntry.signal_changed().connect(sigc::mem_fun(*this, &TrackViewPage::onFilterChanged));
+
     _filterEntry.signal_icon_press().connect(
       [this](Gtk::Entry::IconPosition iconPosition)
       {
@@ -325,20 +366,27 @@ namespace ao::gtk
       });
 
     // Add drop target to support dragging attributes from the list
-    auto dropTarget = Gtk::DropTarget::create(Glib::Value<std::string>::value_type(), Gdk::DragAction::COPY);
+    auto const dropTarget = Gtk::DropTarget::create(Glib::Value<std::string>::value_type(), Gdk::DragAction::COPY);
+
     dropTarget->signal_drop().connect(
       [this](Glib::ValueBase const& value, double, double)
       {
-        if (G_VALUE_HOLDS_STRING(value.gobj()))
+        auto const holdsString = G_VALUE_HOLDS_STRING(value.gobj());
+
+        if (holdsString)
         {
-          Glib::Value<std::string> val;
+          auto val = Glib::Value<std::string>{};
+
           val.init(value.gobj());
           setFilterExpression(val.get());
+
           return true;
         }
+
         return false;
       },
       false);
+
     _filterEntry.add_controller(dropTarget);
 
     _groupByLabel.set_text("Group");
@@ -383,6 +431,7 @@ namespace ao::gtk
     _columnsPopoverBox.append(_columnToggleList);
     _columnsPopoverBox.append(_columnsPopoverSeparator);
     _columnsPopoverBox.append(_resetColumnsButton);
+
     _columnsPopover.set_child(_columnsPopoverBox);
   }
 
@@ -393,36 +442,38 @@ namespace ao::gtk
     _sectionHeaderFactory->signal_setup_obj().connect(
       [](Glib::RefPtr<Glib::Object> const& object)
       {
-        auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+        auto const header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
 
         if (!header)
         {
           return;
         }
 
-        auto* label = Gtk::make_managed<Gtk::Label>("");
+        auto* const label = Gtk::make_managed<Gtk::Label>("");
+
         label->set_halign(Gtk::Align::START);
         label->set_margin_start(Layout::kSpacingLarge);
         label->set_margin_end(Layout::kSpacingLarge);
         label->set_margin_top(Layout::kSpacingLarge);
         label->set_margin_bottom(Layout::kMarginSmall);
         label->set_xalign(0.0F);
+
         header->set_child(*label);
       });
 
     _sectionHeaderFactory->signal_bind_obj().connect(
       [this](Glib::RefPtr<Glib::Object> const& object)
       {
-        auto header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
-        auto* label = header ? dynamic_cast<Gtk::Label*>(header->get_child()) : nullptr;
+        auto const header = std::dynamic_pointer_cast<Gtk::ListHeader>(object);
+        auto* const label = header ? dynamic_cast<Gtk::Label*>(header->get_child()) : nullptr;
 
         if (!header || !label)
         {
           return;
         }
 
-        auto item = header->get_item();
-        auto row = std::dynamic_pointer_cast<TrackRow>(item);
+        auto const item = header->get_item();
+        auto const row = std::dynamic_pointer_cast<TrackRow>(item);
 
         if (!row)
         {
@@ -438,6 +489,7 @@ namespace ao::gtk
         }
 
         text += "(" + trackCountLabel(header->get_n_items()) + ")";
+
         label->set_text(text);
       });
   }
@@ -451,8 +503,10 @@ namespace ao::gtk
     _statusLabel.set_margin_end(4);
     _statusLabel.set_margin_top(2);
     _statusLabel.set_margin_bottom(2);
+
     // Style for error/info messages
-    auto context = _statusLabel.get_style_context();
+    auto const context = _statusLabel.get_style_context();
+
     context->add_class("dim-label");
   }
 
@@ -475,12 +529,14 @@ namespace ao::gtk
     {
       _sortModel->set_section_sorter(Glib::RefPtr<Gtk::Sorter>{});
       _columnView.set_header_factory(Glib::RefPtr<Gtk::ListItemFactory>{});
+
       return;
     }
 
     _sortModel->set_section_sorter(
       createRowSorter([groupBy = _presentationSpec.groupBy](TrackRow const& lhs, TrackRow const& rhs)
                       { return compareForGrouping(lhs.getPresentationKeys(), rhs.getPresentationKeys(), groupBy); }));
+
     _columnView.set_header_factory(_sectionHeaderFactory);
   }
 
@@ -508,12 +564,14 @@ namespace ao::gtk
 
     for (auto const& definition : trackColumnDefinitions())
     {
-      auto title = Glib::ustring{std::string{definition.title}};
-      auto column = Gtk::ColumnViewColumn::create(title, createTextColumnFactory(definition));
+      auto const title = Glib::ustring{std::string{definition.title}};
+      auto const column = Gtk::ColumnViewColumn::create(title, createTextColumnFactory(definition));
+
       column->set_id(Glib::ustring{std::string{definition.id}});
       column->set_expand(definition.expands);
       column->set_resizable(true);
       column->set_fixed_width(definition.defaultWidth);
+
       column->property_fixed_width().signal_changed().connect(
         [this]()
         {
@@ -530,7 +588,8 @@ namespace ao::gtk
 
       _columnView.append_column(column);
 
-      auto* toggle = Gtk::make_managed<Gtk::CheckButton>(title);
+      auto* const toggle = Gtk::make_managed<Gtk::CheckButton>(title);
+
       toggle->signal_toggled().connect(
         [this, columnId = definition.column, toggleButton = toggle]()
         {
@@ -540,6 +599,7 @@ namespace ao::gtk
           }
 
           auto layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
+
           for (auto& state : layout.columns)
           {
             if (state.column == columnId)
@@ -552,16 +612,15 @@ namespace ao::gtk
           _columnLayoutModel.setLayout(layout);
         });
 
-      auto* row = Gtk::make_managed<Gtk::ListBoxRow>();
+      auto* const row = Gtk::make_managed<Gtk::ListBoxRow>();
+
       row->set_child(*toggle);
       row->set_activatable(false);
       _columnToggleList.append(*row);
 
-      auto binding = ColumnBinding{};
-      binding.id = definition.column;
-      binding.column = column;
-      binding.toggle = toggle;
-      binding.defaultWidth = definition.defaultWidth;
+      auto binding = ColumnBinding{
+        .id = definition.column, .column = column, .toggle = toggle, .defaultWidth = definition.defaultWidth};
+
       _columns.push_back(std::move(binding));
     }
   }
@@ -569,12 +628,13 @@ namespace ao::gtk
   void TrackViewPage::applyColumnLayout()
   {
     auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
+
     _syncingColumnLayout = true;
 
     for (std::size_t index = 0; index < layout.columns.size(); ++index)
     {
       auto const& state = layout.columns[index];
-      auto* binding = findColumnBinding(state.column);
+      auto* const binding = findColumnBinding(state.column);
 
       if (binding == nullptr)
       {
@@ -585,9 +645,9 @@ namespace ao::gtk
 
       if (_columnModel && _columnModel->get_n_items() > index)
       {
-        auto object = _columnModel->get_object(static_cast<guint>(index));
+        auto const object = _columnModel->get_object(static_cast<::guint>(index));
 
-        if (auto currentColumn = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
+        if (auto const currentColumn = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
             currentColumn && currentColumn->get_id() == binding->column->get_id())
         {
           needsInsertion = false;
@@ -596,7 +656,7 @@ namespace ao::gtk
 
       if (needsInsertion)
       {
-        _columnView.insert_column(static_cast<guint>(index), binding->column);
+        _columnView.insert_column(static_cast<::guint>(index), binding->column);
       }
 
       auto const width = state.width == -1 ? binding->defaultWidth : state.width;
@@ -609,15 +669,17 @@ namespace ao::gtk
 
     syncColumnToggleStates();
     updateColumnVisibility();
+
     _syncingColumnLayout = false;
   }
 
   void TrackViewPage::syncColumnToggleStates()
   {
     auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
+
     for (auto const& state : layout.columns)
     {
-      auto* binding = findColumnBinding(state.column);
+      auto* const binding = findColumnBinding(state.column);
 
       if (binding == nullptr || binding->toggle == nullptr)
       {
@@ -651,6 +713,7 @@ namespace ao::gtk
     }
 
     updateSharedColumnLayout();
+
     return false;
   }
 
@@ -664,11 +727,12 @@ namespace ao::gtk
   TrackColumnLayout TrackViewPage::captureCurrentColumnLayout() const
   {
     auto layout = TrackColumnLayout{};
-    auto currentLayout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
+    auto const currentLayout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
 
-    auto currentStateFor = [&currentLayout](TrackColumn column)
+    auto const currentStateFor = [&currentLayout](TrackColumn column)
     {
       auto const it = std::ranges::find(currentLayout.columns, column, &TrackColumnState::column);
+
       return it != currentLayout.columns.end() ? *it : TrackColumnState{.column = column};
     };
 
@@ -678,12 +742,13 @@ namespace ao::gtk
     }
 
     auto const nItems = _columnModel->get_n_items();
+
     layout.columns.reserve(nItems);
 
-    for (guint i = 0; i < nItems; ++i)
+    for (::guint i = 0; i < nItems; ++i)
     {
-      auto object = _columnModel->get_object(i);
-      auto column = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
+      auto const object = _columnModel->get_object(i);
+      auto const column = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
 
       if (!column)
       {
@@ -698,6 +763,7 @@ namespace ao::gtk
       }
 
       auto state = currentStateFor(*columnId);
+
       state.width = column->get_fixed_width();
       layout.columns.push_back(state);
     }
@@ -711,7 +777,7 @@ namespace ao::gtk
 
     for (auto const& state : layout.columns)
     {
-      auto* binding = findColumnBinding(state.column);
+      auto* const binding = findColumnBinding(state.column);
 
       if (binding == nullptr)
       {
@@ -725,12 +791,14 @@ namespace ao::gtk
   void TrackViewPage::onGroupByChanged()
   {
     _presentationSpec = presentationSpecForGroup(groupByFromDropdownPosition(_groupByDropdown.get_selected()));
+
     applyPresentationSpec();
   }
 
   void TrackViewPage::onFilterChanged()
   {
-    auto filterText = _filterEntry.get_text();
+    auto const filterText = _filterEntry.get_text();
+
     _adapter.setFilter(filterText);
     updateFilterUi();
   }
@@ -756,6 +824,7 @@ namespace ao::gtk
     }
 
     auto const canCreateSmartList = !_adapter.currentSmartFilterExpression().empty() && !_adapter.hasFilterError();
+
     _filterEntry.set_icon_sensitive(Gtk::Entry::IconPosition::SECONDARY, canCreateSmartList);
   }
 
@@ -767,7 +836,7 @@ namespace ao::gtk
   std::size_t TrackViewPage::selectedTrackCount() const
   {
     auto count = std::size_t{0};
-    auto model = _selectionModel->get_model();
+    auto const model = _selectionModel->get_model();
 
     if (!model)
     {
@@ -794,14 +863,14 @@ namespace ao::gtk
       return std::nullopt;
     }
 
-    auto item = _selectionModel->get_object(position);
+    auto const item = _selectionModel->get_object(position);
 
     if (!item)
     {
       return std::nullopt;
     }
 
-    auto row = std::dynamic_pointer_cast<TrackRow>(item);
+    auto const row = std::dynamic_pointer_cast<TrackRow>(item);
 
     if (!row)
     {
@@ -813,7 +882,7 @@ namespace ao::gtk
 
   void TrackViewPage::selectTrack(TrackId trackId)
   {
-    auto model = _selectionModel->get_model();
+    auto const model = _selectionModel->get_model();
 
     if (!model)
     {
@@ -828,6 +897,7 @@ namespace ao::gtk
       {
         _selectionModel->select_item(i, true);
         _columnView.scroll_to(i, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
+
         break;
       }
     }
@@ -835,7 +905,7 @@ namespace ao::gtk
 
   void TrackViewPage::setPlayingTrackId(std::optional<TrackId> trackId)
   {
-    auto model = _selectionModel->get_model();
+    auto const model = _selectionModel->get_model();
 
     if (!model)
     {
@@ -846,12 +916,13 @@ namespace ao::gtk
 
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
-      auto item = model->get_object(i);
-      auto row = std::dynamic_pointer_cast<TrackRow>(item);
+      auto const item = model->get_object(i);
+      auto const row = std::dynamic_pointer_cast<TrackRow>(item);
 
       if (row)
       {
         bool const isPlaying = trackId && row->getTrackId() == *trackId;
+
         if (row->isPlaying() != isPlaying)
         {
           row->setPlaying(isPlaying);
@@ -863,8 +934,7 @@ namespace ao::gtk
   std::vector<TrackListAdapter::TrackId> TrackViewPage::getVisibleTrackIds() const
   {
     auto result = std::vector<TrackListAdapter::TrackId>{};
-
-    auto model = _selectionModel->get_model();
+    auto const model = _selectionModel->get_model();
 
     if (!model)
     {
@@ -872,11 +942,12 @@ namespace ao::gtk
     }
 
     auto const nItems = model->get_n_items();
+
     result.reserve(nItems);
 
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
-      if (auto trackId = trackIdAtPosition(i))
+      if (auto const trackId = trackIdAtPosition(i))
       {
         result.push_back(*trackId);
       }
@@ -888,8 +959,7 @@ namespace ao::gtk
   std::vector<TrackListAdapter::TrackId> TrackViewPage::getSelectedTrackIds() const
   {
     auto result = std::vector<TrackListAdapter::TrackId>{};
-
-    auto model = _selectionModel->get_model();
+    auto const model = _selectionModel->get_model();
 
     if (!model)
     {
@@ -897,13 +967,13 @@ namespace ao::gtk
     }
 
     // Iterate through all items and check if selected
-    auto nItems = model->get_n_items();
+    auto const nItems = model->get_n_items();
 
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
       if (_selectionModel->is_selected(i))
       {
-        if (auto trackId = trackIdAtPosition(i))
+        if (auto const trackId = trackIdAtPosition(i))
         {
           result.push_back(*trackId);
         }
@@ -916,7 +986,7 @@ namespace ao::gtk
   std::vector<Glib::RefPtr<TrackRow>> TrackViewPage::getSelectedRows() const
   {
     auto result = std::vector<Glib::RefPtr<TrackRow>>{};
-    auto model = _selectionModel->get_model();
+    auto const model = _selectionModel->get_model();
 
     if (!model)
     {
@@ -930,6 +1000,7 @@ namespace ao::gtk
       if (_selectionModel->is_selected(i))
       {
         auto item = model->get_object(i);
+
         if (auto row = std::dynamic_pointer_cast<TrackRow>(item))
         {
           result.push_back(std::move(row));
@@ -943,23 +1014,22 @@ namespace ao::gtk
   std::chrono::milliseconds TrackViewPage::getSelectedTracksDuration() const
   {
     auto totalDuration = std::chrono::milliseconds{0};
-
-    auto model = _selectionModel->get_model();
+    auto const model = _selectionModel->get_model();
 
     if (!model)
     {
       return std::chrono::milliseconds{0};
     }
 
-    auto nItems = model->get_n_items();
+    auto const nItems = model->get_n_items();
 
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
       if (_selectionModel->is_selected(i))
       {
-        auto item = _selectionModel->get_object(i);
+        auto const item = _selectionModel->get_object(i);
 
-        if (auto row = std::dynamic_pointer_cast<TrackRow>(item))
+        if (auto const row = std::dynamic_pointer_cast<TrackRow>(item))
         {
           totalDuration += row->getDuration();
         }
@@ -996,7 +1066,8 @@ namespace ao::gtk
 
   void TrackViewPage::showTagPopover(TagPopover& popover, double xPos, double yPos)
   {
-    auto rect = Gdk::Rectangle{static_cast<int>(xPos), static_cast<int>(yPos), 1, 1};
+    auto const rect = Gdk::Rectangle{static_cast<int>(xPos), static_cast<int>(yPos), 1, 1};
+
     popover.set_parent(_columnView);
     popover.set_pointing_to(rect);
     popover.popup();
@@ -1017,7 +1088,7 @@ namespace ao::gtk
           return;
         }
 
-        if (auto trackId = trackIdAtPosition(position))
+        if (auto const trackId = trackIdAtPosition(position))
         {
           _trackActivated.emit(*trackId);
           return;
@@ -1028,7 +1099,8 @@ namespace ao::gtk
 
     // Keep an explicit Enter handler so activation still works when GTK focus is
     // on the view but no activate action is emitted automatically.
-    auto keyController = Gtk::EventControllerKey::create();
+    auto const keyController = Gtk::EventControllerKey::create();
+
     keyController->signal_key_pressed().connect(
       [this](guint keyval, guint, Gdk::ModifierType modifiers)
       {
@@ -1039,12 +1111,11 @@ namespace ao::gtk
         }
 
         // Ctrl+T opens tag edit popover
-
         if (keyval == GDK_KEY_t || keyval == GDK_KEY_T)
         {
           if (static_cast<bool>(modifiers & Gdk::ModifierType::CONTROL_MASK))
           {
-            if (auto selectedIds = getSelectedTrackIds(); !selectedIds.empty())
+            if (auto const selectedIds = getSelectedTrackIds(); !selectedIds.empty())
             {
               _tagEditRequested.emit(selectedIds, nullptr);
             }
@@ -1056,11 +1127,14 @@ namespace ao::gtk
         return false;
       },
       false);
+
     _columnView.add_controller(keyController);
 
-    auto primaryClickController = Gtk::GestureClick::create();
+    auto const primaryClickController = Gtk::GestureClick::create();
+
     primaryClickController->set_button(GDK_BUTTON_PRIMARY);
     primaryClickController->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+
     primaryClickController->signal_pressed().connect(
       [this, primaryClickController](int nPress, double xPos, double yPos)
       {
@@ -1070,12 +1144,13 @@ namespace ao::gtk
         }
 
         auto* const target = _columnView.pick(xPos, yPos, Gtk::PickFlags::NON_TARGETABLE);
+
         if (!isTagsCellWidget(target))
         {
           return;
         }
 
-        auto selectedIds = getSelectedTrackIds();
+        auto const selectedIds = getSelectedTrackIds();
 
         if (selectedIds.empty())
         {
@@ -1089,8 +1164,10 @@ namespace ao::gtk
 
     _columnView.add_controller(primaryClickController);
 
-    auto secondaryClickController = Gtk::GestureClick::create();
+    auto const secondaryClickController = Gtk::GestureClick::create();
+
     secondaryClickController->set_button(GDK_BUTTON_SECONDARY);
+
     secondaryClickController->signal_released().connect(
       [this, secondaryClickController](int, double xPos, double yPos)
       {
@@ -1113,7 +1190,7 @@ namespace ao::gtk
       return;
     }
 
-    if (auto trackId = getPrimarySelectedTrackId(); trackId)
+    if (auto const trackId = getPrimarySelectedTrackId(); trackId)
     {
       _trackActivated.emit(*trackId);
     }
@@ -1121,7 +1198,7 @@ namespace ao::gtk
 
   std::optional<TrackViewPage::TrackId> TrackViewPage::getPrimarySelectedTrackId() const
   {
-    auto model = _selectionModel->get_model();
+    auto const model = _selectionModel->get_model();
 
     if (!model)
     {
@@ -1129,13 +1206,13 @@ namespace ao::gtk
     }
 
     // Find first selected item
-    auto nItems = model->get_n_items();
+    auto const nItems = model->get_n_items();
 
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
       if (_selectionModel->is_selected(i))
       {
-        if (auto trackId = trackIdAtPosition(i))
+        if (auto const trackId = trackIdAtPosition(i))
         {
           return trackId;
         }
@@ -1151,43 +1228,56 @@ namespace ao::gtk
   TrackViewPage::ColumnBinding* TrackViewPage::findColumnBinding(TrackColumn column)
   {
     auto const it = std::ranges::find(_columns, column, &ColumnBinding::id);
+
     return it != _columns.end() ? &*it : nullptr;
   }
 
   TrackViewPage::ColumnBinding const* TrackViewPage::findColumnBinding(TrackColumn column) const
   {
     auto const it = std::ranges::find(_columns, column, &ColumnBinding::id);
+
     return it != _columns.end() ? &*it : nullptr;
   }
 
   void TrackViewPage::updateTitlePositionVariable()
   {
-    double x = 0;
+    double titleX = 0;
     bool found = false;
 
     auto const columns = _columnView.get_columns();
-    if (!columns) return;
+
+    if (!columns)
+    {
+      return;
+    }
 
     for (std::uint32_t i = 0; i < columns->get_n_items(); ++i)
     {
-      auto col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(i));
-      if (!col || !col->get_visible()) continue;
+      auto const col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(i));
+
+      if (!col || !col->get_visible())
+      {
+        continue;
+      }
 
       if (col->get_title() == "Title")
       {
-        x += col->get_fixed_width() / 2.0;
+        titleX += col->get_fixed_width() / kTitlePositionDivisor;
         found = true;
         break;
       }
-      x += col->get_fixed_width();
+
+      titleX += col->get_fixed_width();
     }
 
     if (found)
     {
-      auto const css = std::format("columnview {{ --ao-title-x: {:.1f}px; }}", x);
+      auto const css = std::format("columnview {{ --ao-title-x: {:.1f}px; }}", titleX);
+
       _dynamicCssProvider->load_from_data(css);
     }
   }
+
   Glib::RefPtr<Gtk::SignalListItemFactory> TrackViewPage::createTextColumnFactory(
     TrackColumnDefinition const& definition)
   {
@@ -1196,7 +1286,7 @@ namespace ao::gtk
     auto const isHyperlink = definition.column == TrackColumn::Artist || definition.column == TrackColumn::Album ||
                              definition.column == TrackColumn::Genre;
 
-    auto factory = Gtk::SignalListItemFactory::create();
+    auto const factory = Gtk::SignalListItemFactory::create();
 
     factory->signal_setup().connect(
       [definition, isEditable, isHyperlink](Glib::RefPtr<Gtk::ListItem> const& listItem)
@@ -1204,21 +1294,27 @@ namespace ao::gtk
         if (definition.tagsCell)
         {
           auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 0);
+
           box->set_halign(Gtk::Align::FILL);
           box->set_hexpand(true);
           box->add_css_class(kTagsCellWidgetName);
+
           auto* const label = Gtk::make_managed<Gtk::Label>("");
+
           label->set_halign(Gtk::Align::START);
           label->set_ellipsize(Pango::EllipsizeMode::END);
           label->set_hexpand(true);
+
           box->append(*label);
           listItem->set_child(*box);
+
           return;
         }
 
         if (isEditable)
         {
           auto* const stack = Gtk::make_managed<Gtk::Stack>();
+
           stack->add_css_class("inline-editor-stack");
           stack->set_transition_type(Gtk::StackTransitionType::CROSSFADE);
           stack->set_vhomogeneous(false);
@@ -1228,6 +1324,7 @@ namespace ao::gtk
           stack->set_valign(Gtk::Align::FILL);
 
           auto* const label = Gtk::make_managed<Gtk::Label>("");
+
           label->set_halign(Gtk::Align::START);
           label->set_ellipsize(Pango::EllipsizeMode::END);
           label->set_hexpand(true);
@@ -1235,89 +1332,67 @@ namespace ao::gtk
 
           if (isHyperlink)
           {
-            // Add Drag Source for "Geek" users (no visual clutter as requested)
-            auto source = Gtk::DragSource::create();
+            auto const source = Gtk::DragSource::create();
+
             source->signal_prepare().connect(
               sigc::slot<std::shared_ptr<Gdk::ContentProvider>(double, double)>(
                 [label, column = definition.column](double, double) -> std::shared_ptr<Gdk::ContentProvider>
-                {
-                  auto value = label->get_text().raw();
-                  if (value.empty()) return {};
-
-                  std::string prefix;
-                  if (column == TrackColumn::Artist)
-                    prefix = "$a=";
-                  else if (column == TrackColumn::Album)
-                    prefix = "$al=";
-                  else if (column == TrackColumn::Genre)
-                    prefix = "$g=";
-
-                  if (prefix.empty()) return {};
-
-                  auto const expr = prefix + "\"" + value + "\"";
-                  auto bytes = Glib::Bytes::create(expr.data(), expr.size());
-                  return Gdk::ContentProvider::create("text/plain", bytes);
-                }),
+                { return createDragContentProvider(label, column); }),
               false);
+
             label->add_controller(source);
           }
 
           stack->add(*label, "display");
 
           auto* const entry = Gtk::make_managed<Gtk::Entry>();
+
           entry->add_css_class("inline-editor-entry");
           entry->set_hexpand(true);
           entry->set_vexpand(true);
           entry->set_halign(Gtk::Align::FILL);
           entry->set_valign(Gtk::Align::FILL);
+
           stack->add(*entry, "edit");
 
-          auto longPress = Gtk::GestureLongPress::create();
-          longPress->set_delay_factor(1.03); // 600ms * 1.03 approx 0.618s
+          auto const longPress = Gtk::GestureLongPress::create();
+
+          longPress->set_delay_factor(kLongPressDelayFactor);
           longPress->signal_pressed().connect(
             [stack, entry](double, double)
             {
               stack->set_visible_child("edit");
               entry->grab_focus();
-              entry->select_region(0, -1); // Highlight all text for easy replacement
+              entry->select_region(0, -1);
             });
+
           stack->add_controller(longPress);
 
           listItem->set_child(*stack);
+
           return;
         }
 
         auto* const label = Gtk::make_managed<Gtk::Label>("");
+
         label->set_halign(definition.numeric ? Gtk::Align::END : Gtk::Align::START);
         label->set_xalign(definition.numeric ? 1.0F : 0.0F);
-        if (!definition.numeric) label->set_ellipsize(Pango::EllipsizeMode::END);
+
+        if (!definition.numeric)
+        {
+          label->set_ellipsize(Pango::EllipsizeMode::END);
+        }
 
         if (isHyperlink)
         {
-          // Add Drag Source for "Geek" users (no visual clutter as requested)
-          auto source = Gtk::DragSource::create();
+          auto const source = Gtk::DragSource::create();
+
           source->signal_prepare().connect(
             sigc::slot<std::shared_ptr<Gdk::ContentProvider>(double, double)>(
               [label, column = definition.column](double, double) -> std::shared_ptr<Gdk::ContentProvider>
-              {
-                auto value = label->get_text().raw();
-                if (value.empty()) return {};
-
-                std::string prefix;
-                if (column == TrackColumn::Artist)
-                  prefix = "$a=";
-                else if (column == TrackColumn::Album)
-                  prefix = "$al=";
-                else if (column == TrackColumn::Genre)
-                  prefix = "$g=";
-
-                if (prefix.empty()) return {};
-
-                auto const expr = prefix + "\"" + value + "\"";
-                auto bytes = Glib::Bytes::create(expr.data(), expr.size());
-                return Gdk::ContentProvider::create("text/plain", bytes);
-              }),
+              { return createDragContentProvider(label, column); }),
             false);
+
           label->add_controller(source);
         }
 
@@ -1329,13 +1404,22 @@ namespace ao::gtk
       {
         auto const item = listItem->get_item();
         auto const row = std::dynamic_pointer_cast<TrackRow>(item);
-        if (!row) return;
+
+        if (!row)
+        {
+          return;
+        }
 
         if (definition.tagsCell)
         {
           auto* const box = dynamic_cast<Gtk::Box*>(listItem->get_child());
           auto* const label = box ? dynamic_cast<Gtk::Label*>(box->get_first_child()) : nullptr;
-          if (label) label->set_text(row->getColumnText(definition.column));
+
+          if (label)
+          {
+            label->set_text(row->getColumnText(definition.column));
+          }
+
           return;
         }
 
@@ -1352,16 +1436,23 @@ namespace ao::gtk
 
             auto const commitChange = [this, stack, entry, row, column = definition.column]()
             {
-              if (stack->get_visible_child_name() != "edit") return;
+              if (stack->get_visible_child_name() != "edit")
+              {
+                return;
+              }
 
               auto const newValue = entry->get_text().raw();
               auto const oldValue = row->getColumnText(column).raw();
 
               stack->set_visible_child("display");
 
-              if (newValue == oldValue) return;
+              if (newValue == oldValue)
+              {
+                return;
+              }
 
-              MetadataCoordinator::MetadataUpdateSpec spec;
+              auto spec = MetadataCoordinator::MetadataUpdateSpec{};
+
               if (column == TrackColumn::Title)
               {
                 spec.title = newValue;
@@ -1387,12 +1478,19 @@ namespace ao::gtk
                                                     {
                                                       APP_LOG_ERROR(
                                                         "Metadata update failed: {}", result.error().message);
+
                                                       if (column == TrackColumn::Title)
+                                                      {
                                                         row->setTitle(oldValue);
+                                                      }
                                                       else if (column == TrackColumn::Artist)
+                                                      {
                                                         row->setArtist(oldValue);
+                                                      }
                                                       else if (column == TrackColumn::Album)
+                                                      {
                                                         row->setAlbum(oldValue);
+                                                      }
                                                     }
                                                   });
             };
@@ -1403,13 +1501,14 @@ namespace ao::gtk
               entry->set_text(row->getColumnText(definition.column));
             };
 
-            auto activateConn = entry->signal_activate().connect(commitChange);
+            auto const activateConn = entry->signal_activate().connect(commitChange);
+            auto const focusController = Gtk::EventControllerFocus::create();
 
-            auto focusController = Gtk::EventControllerFocus::create();
             focusController->signal_leave().connect([commitChange]() { commitChange(); });
             entry->add_controller(focusController);
 
-            auto keyController = Gtk::EventControllerKey::create();
+            auto const keyController = Gtk::EventControllerKey::create();
+
             keyController->signal_key_pressed().connect(
               [cancelChange](guint keyval, guint, Gdk::ModifierType) -> bool
               {
@@ -1418,68 +1517,91 @@ namespace ao::gtk
                   cancelChange();
                   return true;
                 }
+
                 return false;
               },
               false);
+
             entry->add_controller(keyController);
 
-            sigc::connection modelConnection;
+            auto modelConnection = sigc::connection{};
+
             if (definition.column == TrackColumn::Title)
+            {
               modelConnection = row->property_title().signal_changed().connect(
                 [label, entry, row]()
                 {
                   label->set_text(row->getTitle());
                   entry->set_text(row->getTitle());
                 });
+            }
             else if (definition.column == TrackColumn::Artist)
+            {
               modelConnection = row->property_artist().signal_changed().connect(
                 [label, entry, row]()
                 {
                   label->set_text(row->getArtist());
                   entry->set_text(row->getArtist());
                 });
+            }
             else if (definition.column == TrackColumn::Album)
+            {
               modelConnection = row->property_album().signal_changed().connect(
                 [label, entry, row]()
                 {
                   label->set_text(row->getAlbum());
                   entry->set_text(row->getAlbum());
                 });
+            }
 
             listItem->set_data("model-connection",
-                               new sigc::connection{std::move(modelConnection)},
-                               [](void* d)
+                               new sigc::connection{modelConnection},
+                               [](::gpointer data)
                                {
-                                 auto* c = static_cast<sigc::connection*>(d);
-                                 c->disconnect();
-                                 delete c;
+                                 auto* const conn = static_cast<sigc::connection*>(data);
+
+                                 conn->disconnect();
+                                 delete conn;
                                });
+
             listItem->set_data("activate-connection",
-                               new sigc::connection{std::move(activateConn)},
-                               [](void* d)
+                               new sigc::connection{activateConn},
+                               [](::gpointer data)
                                {
-                                 auto* c = static_cast<sigc::connection*>(d);
-                                 c->disconnect();
-                                 delete c;
+                                 auto* const conn = static_cast<sigc::connection*>(data);
+
+                                 conn->disconnect();
+                                 delete conn;
                                });
           }
         }
         else
         {
           auto* const label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-          if (label) label->set_text(row->getColumnText(definition.column));
+
+          if (label)
+          {
+            label->set_text(row->getColumnText(definition.column));
+          }
         }
 
         auto const updateStyles = [listItem, row, definition]()
         {
           auto* const child = listItem->get_child();
+
           if (row->isPlaying())
           {
             if (auto* const cell = child->get_parent())
             {
-              if (auto* const rowWidget = cell->get_parent()) rowWidget->add_css_class("playing-row");
+              if (auto* const rowWidget = cell->get_parent())
+              {
+                rowWidget->add_css_class("playing-row");
+              }
+
               if (definition.column == TrackColumn::Title)
+              {
                 cell->add_css_class("playing-title");
+              }
               else
               {
                 child->add_css_class("playing-dim");
@@ -1494,19 +1616,24 @@ namespace ao::gtk
               {
                 rowWidget->remove_css_class("playing-row");
               }
+
               cell->remove_css_class("playing-title");
             }
+
             child->remove_css_class("playing-dim");
           }
         };
 
         updateStyles();
+
         auto const connection = row->property_playing().signal_changed().connect(updateStyles);
+
         listItem->set_data("playing-connection",
                            new sigc::connection{connection},
-                           [](void* data)
+                           [](::gpointer data)
                            {
                              auto* const conn = static_cast<sigc::connection*>(data);
+
                              conn->disconnect();
                              delete conn;
                            });

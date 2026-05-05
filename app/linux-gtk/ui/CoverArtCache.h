@@ -17,7 +17,7 @@ namespace ao::gtk
    * @brief CoverArtCache provides an LRU cache for track cover art Pixbufs.
    * Keyed by ResourceId (the ID of the image blob in the database).
    */
-  class CoverArtCache
+  class CoverArtCache final
   {
   public:
     explicit CoverArtCache(size_t maxSize = 50);
@@ -43,7 +43,7 @@ namespace ao::gtk
     void clear();
 
   private:
-    struct CacheEntry
+    struct CacheEntry final
     {
       std::uint64_t resourceId;
       Glib::RefPtr<Gdk::Pixbuf> pixbuf;

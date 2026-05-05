@@ -337,11 +337,11 @@ namespace ao::audio::backend
                                          PW_KEY_MEDIA_CATEGORY,
                                          "Music",
                                          PW_KEY_APP_NAME,
-                                         "RockStudio",
+                                         "Aobus",
                                          PW_KEY_APP_ID,
-                                         "io.github.RockStudio",
+                                         "io.github.Aobus",
                                          PW_KEY_NODE_NAME,
-                                         "RockStudio Playback",
+                                         "Aobus Playback",
                                          nullptr);
     auto props = ao::utility::makeUniquePtr<::pw_properties_free>(rawProps);
     ::pw_properties_set(props.get(), PW_KEY_NODE_RATE, std::format("1/{}", format.sampleRate).c_str());
@@ -356,7 +356,7 @@ namespace ao::audio::backend
       }
     }
 
-    _impl->_stream.reset(::pw_stream_new(_impl->_core.get(), "RockStudio Playback", props.release()));
+    _impl->_stream.reset(::pw_stream_new(_impl->_core.get(), "Aobus Playback", props.release()));
     if (!_impl->_stream)
     {
       ::pw_thread_loop_unlock(_impl->_threadLoop.get());

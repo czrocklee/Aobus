@@ -9,6 +9,8 @@ Use this skill to systematically audit C++ source files against the Aobus C++ Co
 
 Focus on concrete rule violations from [CONTRIBUTING.md](../../../CONTRIBUTING.md), not generic style commentary. Prefer reporting a short list of high-confidence violations with precise fixes over a long list of debatable nits.
 
+Do not use this skill as a full correctness review. For regression, design-risk, or patch-level code review, load `reviewing-code` first and use this skill only for standards and tooling validation.
+
 Use Aobus's built-in `clang-tidy` integration as part of conformance validation when the task involves changed C++ code, linting cleanup, or pre-commit verification. Combine automated findings with manual review; do not treat raw `clang-tidy` output as the final answer.
 
 ## Audit Workflow
@@ -19,7 +21,7 @@ Use Aobus's built-in `clang-tidy` integration as part of conformance validation 
    - Prefer `./build.sh debug --tidy` for normal validation because it uses the repository's configured checks and now automatically selects the Clang toolchain.
    - **For targeted audits**: Always `touch` the specific C++ source files (implementation files and/or headers) you wish to audit immediately before running the build. This forces the build system to re-analyze them even if they haven't changed.
    - **For full-project audits**: Use `./build.sh debug --tidy --clean`. A clean build is the only reliable way to ensure a comprehensive analysis of every file in the project.
-   - Save reusable output to `/tmp`, for example `/tmp/rs-clang-tidy.log`, when you need to inspect or compare findings across iterations.
+   - Save reusable output to `/tmp`, for example `/tmp/ao-clang-tidy.log`, when you need to inspect or compare findings across iterations.
    - Treat diagnostics in untouched files as background noise unless the user asked for a broader cleanup.
 4. **Prioritize repeated project violations first**, especially under `app/`, before hunting for marginal style issues.
 5. **Separate real violations from framework constraints**. GTK, GLib, PipeWire, ALSA, FFmpeg, and CLI callback signatures often justify plain `int`, raw C pointers, or fixed callback spellings.

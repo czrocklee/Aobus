@@ -868,7 +868,7 @@ namespace ao::audio::backend
       {
         return ao::audio::flow::Node{.id = std::format("{}", id),
                                      .type = ao::audio::flow::NodeType::Stream,
-                                     .name = "RockStudio Playback",
+                                     .name = "Aobus Playback",
                                      .optFormat = std::nullopt};
       }
 

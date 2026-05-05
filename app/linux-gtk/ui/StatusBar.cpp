@@ -417,7 +417,7 @@ namespace ao::gtk
     };
 
     {
-      auto currentId = std::string{"rs-decoder"};
+      auto currentId = std::string{"ao-decoder"};
       auto visited = std::unordered_set<std::string>{};
 
       while (!currentId.empty() && !visited.contains(currentId))

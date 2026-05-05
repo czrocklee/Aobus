@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2024-2025 RockStudio Contributors
+# Copyright (c) 2024-2025 Aobus Contributors
 #
-# Compiler and linker configuration for the RockStudio project.
+# Compiler and linker configuration for the Aobus project.
 
 # ── C++ Standard ────────────────────────────────────────────────────────────
 set(CMAKE_CXX_STANDARD 23)

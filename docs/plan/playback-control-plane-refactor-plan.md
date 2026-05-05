@@ -337,7 +337,7 @@ After the refactor, `PlaybackEngine` should:
 
 - keep opening decoder sessions and PCM sources
 - keep negotiating backend format
-- keep producing `rs-decoder` and `rs-engine` nodes
+- keep producing `ao-decoder` and `ao-engine` nodes
 - optionally keep position calculation based on the engine output format
 - publish internal route snapshots and route anchors
 - stop owning graph merge logic
@@ -346,7 +346,7 @@ After the refactor, `PlaybackEngine` should:
 `PlaybackEngine` should no longer:
 
 - receive full backend graph snapshots
-- bridge `rs-engine` to a backend stream node itself
+- bridge `ao-engine` to a backend stream node itself
 - assign final `AudioQuality`
 - synthesize the quality tooltip
 
@@ -515,7 +515,7 @@ The final graph is:
 
 1. all internal graph nodes and links
 2. all system graph nodes and links
-3. one bridge link from `rs-engine` to the manager-reported stream node, if a stream node exists
+3. one bridge link from `ao-engine` to the manager-reported stream node, if a stream node exists
 
 ### Required Normalization Rule
 
@@ -523,7 +523,7 @@ The manager must always expose exactly one stream node for the active route subs
 
 Reason:
 
-- the UI tooltip and current analysis algorithm assume there is a clear linear playback path starting at `rs-decoder`
+- the UI tooltip and current analysis algorithm assume there is a clear linear playback path starting at `ao-decoder`
 
 If the manager cannot identify a stream node, the controller should keep the internal graph only and mark quality as `Unknown` or preserve a degraded intermediate result.
 
@@ -545,7 +545,7 @@ It should only recompute when one of the inputs changes.
 
 Move from `PlaybackEngine` into `PlaybackController`:
 
-- path building from `rs-decoder`
+- path building from `ao-decoder`
 - active-link traversal for the total-order path
 - mixing detection using input-source sets
 - node-state checks such as lossy source, mute, volume modification

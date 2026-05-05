@@ -182,7 +182,7 @@ TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integrati
       ::pw_properties* const props = ::pw_properties_new("factory.name",
                                                          "support.null-audio-sink",
                                                          "node.name",
-                                                         "rs-test-duplex-sink",
+                                                         "ao-test-duplex-sink",
                                                          "media.class",
                                                          "Audio/Duplex",
                                                          "object.linger",
@@ -205,7 +205,7 @@ TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integrati
       {
         for (auto const& d : currentDevices)
         {
-          if (d.displayName == "rs-test-duplex-sink" || d.id == "rs-test-duplex-sink")
+          if (d.displayName == "ao-test-duplex-sink" || d.id == "ao-test-duplex-sink")
           {
             found = true;
             break;
