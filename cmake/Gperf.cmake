@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2024-2025 RockStudio Contributors
+# Copyright (c) 2024-2025 Aobus Contributors
 
 # Gperf header generation function.
 # Generates a header file from a gperf input file.

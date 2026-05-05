@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 RockStudio Contributors
+// Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/tag/File.h>
 #include <ao/tag/flac/File.h>

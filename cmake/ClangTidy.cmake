@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2024-2025 RockStudio Contributors
+# Copyright (c) 2024-2025 Aobus Contributors
 #
 # Clang-tidy discovery, configuration, and per-target application helper.
 #

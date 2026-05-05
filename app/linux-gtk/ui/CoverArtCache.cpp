@@ -14,7 +14,8 @@ namespace ao::gtk
 
   Glib::RefPtr<Gdk::Pixbuf> CoverArtCache::get(std::uint64_t resourceId)
   {
-    auto it = _cacheMap.find(resourceId);
+    auto const it = _cacheMap.find(resourceId);
+
     if (it == _cacheMap.end())
     {
       return {};
@@ -27,9 +28,13 @@ namespace ao::gtk
 
   void CoverArtCache::put(std::uint64_t resourceId, Glib::RefPtr<Gdk::Pixbuf> const& pixbuf)
   {
-    if (!pixbuf) return;
+    if (!pixbuf)
+    {
+      return;
+    }
 
-    auto it = _cacheMap.find(resourceId);
+    auto const it = _cacheMap.find(resourceId);
+
     if (it != _cacheMap.end())
     {
       // Update existing entry and move to front
@@ -39,13 +44,13 @@ namespace ao::gtk
     }
 
     // Add new entry to front
-    _entries.push_front({resourceId, pixbuf});
+    _entries.push_front({.resourceId = resourceId, .pixbuf = pixbuf});
     _cacheMap[resourceId] = _entries.begin();
 
     // Evict least recently used if over capacity
     if (_entries.size() > _maxSize)
     {
-      auto last = _entries.back();
+      auto const last = _entries.back();
       _cacheMap.erase(last.resourceId);
       _entries.pop_back();
     }

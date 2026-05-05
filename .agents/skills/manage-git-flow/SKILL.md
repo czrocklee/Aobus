@@ -34,6 +34,8 @@ Action required: report the command output in your response so the user can see 
 ## 2. Conformance Validation
 After formatting and before staging or committing, use the `check-code-conformance` skill instead of maintaining a separate inline checklist here.
 
+If the user asks whether a change is ready, safe, or worth merging, load `reviewing-code` before the conformance pass. Keep that review focused on correctness and regressions; do not duplicate the standards checklist here.
+
 Required behavior:
 
 1. Load `check-code-conformance`.

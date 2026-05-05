@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 RockStudio Contributors
+// Copyright (c) 2024-2025 Aobus Contributors
 
 // Precompiled Header for stable, frequently-included headers
 // This file should be included in all translation units for faster compilation

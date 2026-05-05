@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2026 RockStudio Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 RockStudio Contributors
+// Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
@@ -193,17 +193,17 @@ namespace ao::audio
     mergedGraph = flow::Graph{
       .nodes =
         {
-          flow::Node{.id = "rs-decoder",
+          flow::Node{.id = "ao-decoder",
                      .type = flow::NodeType::Decoder,
                      .name = "Decoder",
                      .optFormat = rs.decoderOutputFormat,
                      .isLossySource = rs.isLossySource},
           flow::Node{
-            .id = "rs-engine", .type = flow::NodeType::Engine, .name = "Engine", .optFormat = rs.engineOutputFormat},
+            .id = "ao-engine", .type = flow::NodeType::Engine, .name = "Engine", .optFormat = rs.engineOutputFormat},
         },
       .connections =
         {
-          flow::Connection{.sourceId = "rs-decoder", .destId = "rs-engine", .isActive = true},
+          flow::Connection{.sourceId = "ao-decoder", .destId = "ao-engine", .isActive = true},
         },
     };
 
@@ -237,7 +237,7 @@ namespace ao::audio
 
     if (!streamNodeId.empty())
     {
-      mergedGraph.connections.push_back({.sourceId = "rs-engine", .destId = streamNodeId, .isActive = true});
+      mergedGraph.connections.push_back({.sourceId = "ao-engine", .destId = streamNodeId, .isActive = true});
     }
 
     analyzeAudioQuality();
@@ -397,7 +397,7 @@ namespace ao::audio
     appendLine(qualityTooltip, "Audio Routing Analysis:");
 
     // 1. Build linear path
-    auto const path = findPlaybackPath("rs-decoder");
+    auto const path = findPlaybackPath("ao-decoder");
 
     // 2. Identify mixing sources
     auto inputSources = std::unordered_map<std::string, std::set<std::string>>{};

@@ -186,7 +186,7 @@ namespace ao::gtk
 
             if (pendingSession && _callbacks.onTitleChanged)
             {
-              _callbacks.onTitleChanged("RockStudio [" + importedLibraryTitle + "]");
+              _callbacks.onTitleChanged("Aobus [" + importedLibraryTitle + "]");
             }
           });
       });
@@ -241,7 +241,7 @@ namespace ao::gtk
       }
       if (_callbacks.onTitleChanged)
       {
-        _callbacks.onTitleChanged("RockStudio [" + path.string() + "]");
+        _callbacks.onTitleChanged("Aobus [" + path.string() + "]");
       }
     }
     catch (std::exception const& e)

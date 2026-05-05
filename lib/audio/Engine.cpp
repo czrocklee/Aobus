@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2026 RockStudio Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/DecoderFactory.h>
 #include <ao/audio/Engine.h>
@@ -382,14 +382,14 @@ namespace ao::audio
       if (plan.requiresResample)
       {
         status.statusText = std::format(
-          "{} does not support {} Hz and RockStudio has no resampler yet", backendId, info.sourceFormat.sampleRate);
+          "{} does not support {} Hz and Aobus has no resampler yet", backendId, info.sourceFormat.sampleRate);
 
         return false;
       }
 
       if (plan.requiresChannelRemap)
       {
-        status.statusText = std::format("{} does not support {} channels and RockStudio has no channel remapper yet",
+        status.statusText = std::format("{} does not support {} channels and Aobus has no channel remapper yet",
                                         backendId,
                                         static_cast<int>(info.sourceFormat.channels));
 
