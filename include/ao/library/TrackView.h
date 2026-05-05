@@ -30,12 +30,6 @@ namespace ao::library
    */
   class TrackView final
   {
-    // Friend declarations for proxy classes
-    friend class MetadataProxy;
-    friend class PropertyProxy;
-    friend class TagProxy;
-    friend class CustomProxy;
-
   public:
     /**
      * MetadataProxy - Accessors for track metadata ($ prefix).

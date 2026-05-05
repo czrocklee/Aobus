@@ -30,7 +30,6 @@ namespace
     auto payload = ao::library::ListBuilder::createNew().serialize();
     auto view = ListView{payload};
     CHECK(view.tracks().empty());
-    CHECK(view.tracks().size() == 0);
   }
 
   TEST_CASE("ListView - Field Accessors")
@@ -39,7 +38,7 @@ namespace
       ao::library::ListBuilder::createNew().name("Test").description("Desc").parentId(ao::ListId{9}).serialize();
     auto view = ListView{payload};
 
-    CHECK(view.tracks().size() == 0);
+    CHECK(view.tracks().empty());
     CHECK(view.name() == "Test");
     CHECK(view.description() == "Desc");
     CHECK(view.filter().empty());
@@ -76,7 +75,7 @@ namespace
                      .serialize();
     auto view = ListView{payload};
 
-    CHECK(view.tracks().size() == 0);
+    CHECK(view.tracks().empty());
     CHECK(view.name() == "Smart List");
     CHECK(view.description() == "A smart list");
     CHECK(view.filter() == "@year > 2020");
@@ -118,6 +117,6 @@ namespace
   {
     auto payload = ao::library::ListBuilder::createNew().name("Test").serialize();
     auto view = ListView{payload};
-    CHECK(view.tracks().size() == 0);
+    CHECK(view.tracks().empty());
   }
 } // anonymous namespace

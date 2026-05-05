@@ -1,22 +1,25 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 RockStudio Contributors
 
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-
 #include <ao/library/ResourceStore.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/tag/File.h>
 
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators_all.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
+
 #include <filesystem>
 
 namespace fs = std::filesystem;
 
-// TagTestDataDir is passed via CMake compile definition
-static fs::path const kTestDataDir = fs::path{TAG_TEST_DATA_DIR};
+namespace
+{
+  // TagTestDataDir is passed via CMake compile definition
+  fs::path const kTestDataDir = fs::path{TAG_TEST_DATA_DIR};
+}
 
 // ============================================================================
 // Tag Reading Tests - Basic Metadata
@@ -24,10 +27,10 @@ static fs::path const kTestDataDir = fs::path{TAG_TEST_DATA_DIR};
 
 TEST_CASE("Tag reading - basic metadata", "[tag][integration]")
 {
-  auto format = GENERATE("flac", "m4a", "mp3");
-  auto path = kTestDataDir / ("basic_metadata." + std::string{format});
+  auto const* const format = GENERATE("flac", "m4a", "mp3");
+  auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
-  auto file = ao::tag::File::open(path);
+  auto const file = ao::tag::File::open(path);
   REQUIRE(file != nullptr);
 
   auto builder = file->loadTrack();
@@ -49,10 +52,10 @@ TEST_CASE("Tag reading - basic metadata", "[tag][integration]")
 
 TEST_CASE("Tag reading - hires metadata", "[tag][integration]")
 {
-  auto format = GENERATE("flac", "m4a", "mp3");
-  auto path = kTestDataDir / ("hires." + std::string{format});
+  auto const* const format = GENERATE("flac", "m4a", "mp3");
+  auto const path = kTestDataDir / ("hires." + std::string{format});
 
-  auto file = ao::tag::File::open(path);
+  auto const file = ao::tag::File::open(path);
   REQUIRE(file != nullptr);
 
   auto builder = file->loadTrack();
@@ -74,10 +77,10 @@ TEST_CASE("Tag reading - hires metadata", "[tag][integration]")
 
 TEST_CASE("Tag reading - audio properties", "[tag][integration]")
 {
-  auto format = GENERATE("flac", "m4a", "mp3");
-  auto path = kTestDataDir / ("basic_metadata." + std::string{format});
+  auto const* const format = GENERATE("flac", "m4a", "mp3");
+  auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
-  auto file = ao::tag::File::open(path);
+  auto const file = ao::tag::File::open(path);
   auto builder = file->loadTrack();
   auto& prop = builder.property();
 
@@ -100,10 +103,10 @@ TEST_CASE("Tag reading - audio properties", "[tag][integration]")
 
 TEST_CASE("Tag reading - hires audio properties", "[tag][integration]")
 {
-  auto format = GENERATE("flac", "m4a", "mp3");
-  auto path = kTestDataDir / ("hires." + std::string{format});
+  auto const* const format = GENERATE("flac", "m4a", "mp3");
+  auto const path = kTestDataDir / ("hires." + std::string{format});
 
-  auto file = ao::tag::File::open(path);
+  auto const file = ao::tag::File::open(path);
   auto builder = file->loadTrack();
   auto& prop = builder.property();
 
@@ -149,29 +152,29 @@ TEST_CASE("Tag reading - hires audio properties", "[tag][integration]")
 
 TEST_CASE("Cover art extraction", "[tag][integration]")
 {
-  auto format = GENERATE("flac", "m4a", "mp3");
-  auto path = kTestDataDir / ("with_cover." + std::string{format});
+  auto const* const format = GENERATE("flac", "m4a", "mp3");
+  auto const path = kTestDataDir / ("with_cover." + std::string{format});
 
-  auto file = ao::tag::File::open(path);
+  auto const file = ao::tag::File::open(path);
   REQUIRE(file != nullptr);
 
   auto builder = file->loadTrack();
 
   // Create temp LMDB environment to test cover art serialization
-  auto tempDir = fs::temp_directory_path() / "rs_tag_test_XXXXXX";
+  auto const tempDir = fs::temp_directory_path() / "rs_tag_test_XXXXXX";
   fs::create_directories(tempDir);
   auto env = ao::lmdb::Environment{tempDir, {.flags = MDB_CREATE, .maxDatabases = 20}};
   auto wtxn = ao::lmdb::WriteTransaction{env};
   auto dict = ao::library::DictionaryStore{ao::lmdb::Database{wtxn, "dict"}, wtxn};
   auto resources = ao::library::ResourceStore{ao::lmdb::Database{wtxn, "resources"}};
 
-  auto [hotData, coldData] = builder.serialize(wtxn, dict, resources);
+  auto const [hotData, coldData] = builder.serialize(wtxn, dict, resources);
 
   CHECK(!hotData.empty());
   CHECK(!coldData.empty());
 
   // Check cover art ID directly from serialized cold header
-  auto* coldHdr = reinterpret_cast<ao::library::TrackColdHeader const*>(coldData.data());
+  auto const* const coldHdr = reinterpret_cast<ao::library::TrackColdHeader const*>(coldData.data());
   CHECK(coldHdr->coverArtId > 0);
 
   // Cleanup - transaction will abort if not committed
@@ -184,10 +187,10 @@ TEST_CASE("Cover art extraction", "[tag][integration]")
 
 TEST_CASE("Tag reading - empty metadata", "[tag][integration]")
 {
-  auto format = GENERATE("flac", "m4a", "mp3");
-  auto path = kTestDataDir / ("empty." + std::string{format});
+  auto const* const format = GENERATE("flac", "m4a", "mp3");
+  auto const path = kTestDataDir / ("empty." + std::string{format});
 
-  auto file = ao::tag::File::open(path);
+  auto const file = ao::tag::File::open(path);
   REQUIRE(file != nullptr);
 
   auto builder = file->loadTrack();

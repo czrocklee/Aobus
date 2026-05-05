@@ -35,5 +35,6 @@ namespace ao::audio
     DecodedStreamInfo _streamInfo;
     std::vector<std::byte> _pcmBytes;
     std::atomic<std::size_t> _readOffset{0};
+    std::uint64_t _bytesPerSecond{0};
   };
 } // namespace ao::audio

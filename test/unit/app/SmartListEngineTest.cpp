@@ -128,7 +128,7 @@ namespace
   class ObserverSpy final : public TrackIdListObserver
   {
   public:
-    enum class EventKind
+    enum class EventKind : std::uint8_t
     {
       Reset,
       Inserted,
@@ -506,14 +506,14 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     auto testLibrary = TestMusicLibrary{};
     auto engine = SmartListEngine{testLibrary.library()};
 
-    auto* source = new MutableTrackIdList();
+    auto source = std::make_unique<MutableTrackIdList>();
     auto filtered = std::make_unique<FilteredTrackIdList>(*source, testLibrary.library(), engine);
 
     auto spy = ObserverSpy{};
     filtered->attach(&spy);
 
     // Destroy source while filtered list is still alive
-    delete source;
+    source.reset();
 
     // Filtered list should be notified of reset (source is gone)
     REQUIRE(spy.events.size() == 1);

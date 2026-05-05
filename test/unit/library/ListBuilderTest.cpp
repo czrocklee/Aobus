@@ -64,7 +64,7 @@ TEST_CASE("ListBuilder - manual list empty trackIds")
   auto view = ListView{payload};
 
   CHECK(view.isSmart() == false);
-  CHECK(view.tracks().size() == 0);
+  CHECK(view.tracks().empty());
   CHECK(view.parentId() == ao::ListId{0});
 }
 
@@ -145,7 +145,7 @@ TEST_CASE("ListBuilder - smart list round-trip through ListStore")
   CHECK(found.isSmart() == true);
   CHECK(found.name() == "Smart RoundTrip");
   CHECK(found.filter() == "@year > 2020");
-  CHECK(found.tracks().size() == 0);
+  CHECK(found.tracks().empty());
 }
 
 TEST_CASE("ListBuilder - name and description offsets")

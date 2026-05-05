@@ -55,7 +55,7 @@ namespace ao::audio
   } // namespace
 
   MemorySource::MemorySource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo streamInfo)
-    : _decoder{std::move(decoder)}, _streamInfo{streamInfo}
+    : _decoder{std::move(decoder)}, _streamInfo{streamInfo}, _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
   {
   }
 
@@ -116,7 +116,7 @@ namespace ao::audio
   std::uint32_t MemorySource::bufferedMs() const noexcept
   {
     auto const remaining = _pcmBytes.size() - _readOffset.load(std::memory_order_acquire);
-    return bufferedDurationMs(remaining, bytesPerSecond(_streamInfo.outputFormat));
+    return bufferedDurationMs(remaining, _bytesPerSecond);
   }
 
   ao::Result<> MemorySource::seek(std::uint32_t positionMs)

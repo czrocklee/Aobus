@@ -13,7 +13,7 @@ namespace ao::lmdb
 
   Environment::Environment(std::string const& path, Environment::Options const& options)
   {
-    MDB_env* handle = nullptr;
+    ::MDB_env* handle = nullptr;
     throwOnError("mdb_env_create", ::mdb_env_create(&handle));
     _handle.reset(handle);
 

@@ -9,6 +9,7 @@ add_library(ao_audio STATIC
     MemorySource.cpp
     PcmRingBuffer.cpp
     StreamingSource.cpp
+    detail/RouteTracker.cpp
 )
 target_include_directories(ao_audio PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
 target_link_libraries(ao_audio PUBLIC ao_model PkgFLAC PkgALAC)

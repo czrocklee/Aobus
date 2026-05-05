@@ -207,7 +207,7 @@ namespace ao::lmdb
 
   namespace
   {
-    void put(MDB_cursor* cursor, std::uint32_t id, std::span<std::byte const> data, unsigned int flags)
+    void put(::MDB_cursor* cursor, std::uint32_t id, std::span<std::byte const> data, unsigned int flags)
     {
       gsl_Expects(cursor != nullptr);
 
@@ -217,7 +217,7 @@ namespace ao::lmdb
       throwOnError("mdb_cursor_put", rc);
     }
 
-    std::span<std::byte> reserve(MDB_cursor* cursor, std::uint32_t id, std::size_t size, unsigned int flags)
+    std::span<std::byte> reserve(::MDB_cursor* cursor, std::uint32_t id, std::size_t size, unsigned int flags)
     {
       gsl_Expects(cursor != nullptr);
 

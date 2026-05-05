@@ -24,7 +24,11 @@ namespace ao::audio::backend::detail
 {
   bool isSinkMediaClass(std::string_view mediaClass) noexcept
   {
-    if (!mediaClass.contains("Audio")) return false;
+    if (!mediaClass.contains("Audio"))
+    {
+      return false;
+    }
+
     return mediaClass.ends_with("/Sink") || mediaClass.ends_with("/Duplex");
   }
 
@@ -127,17 +131,25 @@ namespace ao::audio::backend::detail
             addUnique(output, rate);
           }
         }
+
         addUnique(output, static_cast<std::uint32_t>(vals[0]));
       }
     }
 
     void collectIntValues(::spa_pod const* pod, std::vector<std::uint32_t>& output)
     {
-      if (pod == nullptr) return;
+      if (pod == nullptr)
+      {
+        return;
+      }
+
       if (::spa_pod_is_int(pod) != 0)
       {
         std::int32_t val = 0;
-        if (::spa_pod_get_int(pod, &val) == 0) addUnique(output, static_cast<std::uint32_t>(val));
+        if (::spa_pod_get_int(pod, &val) == 0)
+        {
+          addUnique(output, static_cast<std::uint32_t>(val));
+        }
       }
       else if (::spa_pod_is_choice(pod) != 0)
       {
@@ -149,23 +161,39 @@ namespace ao::audio::backend::detail
 
     void collectIdValues(::spa_pod const* pod, std::vector<std::uint32_t>& output)
     {
-      if (pod == nullptr) return;
+      if (pod == nullptr)
+      {
+        return;
+      }
+
       if (::spa_pod_is_id(pod) != 0)
       {
         std::uint32_t val = 0;
-        if (::spa_pod_get_id(pod, &val) == 0) addUnique(output, val);
+        if (::spa_pod_get_id(pod, &val) == 0)
+        {
+          addUnique(output, val);
+        }
       }
       else if (::spa_pod_is_choice(pod) != 0)
       {
         auto const podSpan = ao::utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
         auto const* choice = ao::utility::layout::view<::spa_pod_choice>(podSpan);
         auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
-        if (n_vals == 0 || SPA_POD_CHOICE_VALUE_TYPE(choice) != SPA_TYPE_Id) return;
+
+        if (n_vals == 0 || SPA_POD_CHOICE_VALUE_TYPE(choice) != SPA_TYPE_Id)
+        {
+          return;
+        }
+
         auto const* vals = static_cast<std::uint32_t const*>(SPA_POD_CHOICE_VALUES(choice));
         auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
+
         if (choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
         {
-          for (std::uint32_t i = 0; i < n_vals; ++i) addUnique(output, vals[i]);
+          for (std::uint32_t i = 0; i < n_vals; ++i)
+          {
+            addUnique(output, vals[i]);
+          }
         }
       }
     }
@@ -173,7 +201,11 @@ namespace ao::audio::backend::detail
 
   void parseEnumFormat(::spa_pod const* param, DeviceCapabilities& caps)
   {
-    if (param == nullptr || ::spa_pod_is_object(param) == 0) return;
+    if (param == nullptr || ::spa_pod_is_object(param) == 0)
+    {
+      return;
+    }
+
     ::spa_pod_prop const* prop = nullptr;
     auto const podSpan = ao::utility::bytes::view(param, param->size + sizeof(::spa_pod));
     auto const* obj = ao::utility::layout::view<::spa_pod_object>(podSpan);
@@ -184,6 +216,7 @@ namespace ao::audio::backend::detail
       {
         std::vector<std::uint32_t> formats;
         collectIdValues(&prop->value, formats);
+
         for (auto const format : formats)
         {
           if (auto const optCapability = sampleFormatCapabilityFromSpaFormat(format))
@@ -200,9 +233,12 @@ namespace ao::audio::backend::detail
       {
         std::vector<std::uint32_t> channels;
         collectIntValues(&prop->value, channels);
+
         for (auto const channelCount : channels)
         {
-          if (channelCount > 0 && channelCount <= 255)
+          static constexpr std::uint32_t kMaxChannelCount = 255;
+
+          if (channelCount > 0 && channelCount <= kMaxChannelCount)
           {
             auto const c8 = static_cast<std::uint8_t>(channelCount);
 
@@ -219,7 +255,8 @@ namespace ao::audio::backend::detail
   bool copyFloatArray(::spa_pod const& pod, std::vector<float>& output)
   {
     auto values = std::array<float, 16>{};
-    auto const count = ::spa_pod_copy_array(&pod, SPA_TYPE_Float, values.data(), values.size());
+    auto const count = ::spa_pod_copy_array(
+      &pod, SPA_TYPE_Float, values.data(), values.size()); // NOLINT(readability-simplify-subscript-expr)
 
     if (count == 0)
     {

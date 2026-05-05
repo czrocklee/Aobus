@@ -19,7 +19,7 @@ namespace ao::audio
 
   namespace
   {
-    constexpr std::int32_t kSignExtensionMask = ~0x00FFFFFF;
+    [[maybe_unused]] constexpr std::int32_t kSignExtensionMask = ~0x00FFFFFF;
     constexpr std::uint8_t kBytesPer24BitSample = 3;
 
     std::uint32_t bytesPerSample(std::uint8_t bitDepth) noexcept
@@ -31,14 +31,14 @@ namespace ao::audio
 
       if (bitDepth == 32U)
       {
-        return 4;
+        return 4U;
       }
 
       return (bitDepth > 16U) ? 4U : 2U;
     }
   } // namespace
 
-  struct AlacDecoderSession::Impl
+  struct AlacDecoderSession::Impl final
   {
     Format requestedOutput;
     DecodedStreamInfo info;
@@ -50,6 +50,9 @@ namespace ao::audio
 
     ao::utility::MappedFile mappedFile;
     std::unique_ptr<Demuxer> demuxer;
+
+    std::vector<std::byte> sourcePcm;
+    std::vector<std::byte> targetPcm;
 
     Impl(Format const& output)
       : requestedOutput{output}
@@ -108,7 +111,7 @@ namespace ao::audio
     if (_impl->timescale > 0)
     {
       _impl->info.durationMs =
-        static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000) / _impl->timescale);
+        static_cast<std::uint32_t>((static_cast<std::uint64_t>(duration) * 1000U) / _impl->timescale);
     }
 
     _impl->info.sourceFormat.channels = config.numChannels;
@@ -186,33 +189,33 @@ namespace ao::audio
 
     std::uint32_t numFrames = 0;
 
-    // If we need conversion (e.g. 24 -> 32), decode to temp buffer first
+    // Reuse member buffers to avoid per-block allocations
     if (sourceBps != targetBps)
     {
-      std::vector<std::byte> sourcePcm(static_cast<std::size_t>(maxFrames) * sourceBytesPerFrame);
+      _impl->sourcePcm.resize(static_cast<std::size_t>(maxFrames) * sourceBytesPerFrame);
       auto bitBuffer = BitBuffer{};
       ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
 
       auto const status = _impl->decoder->Decode(
-        &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{sourcePcm}), maxFrames, channels, &numFrames);
+        &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_impl->sourcePcm}), maxFrames, channels, &numFrames);
 
       if (status != 0)
       {
         return ao::makeError(ao::Error::Code::DecodeFailed, "ALAC decode failed");
       }
 
-      std::vector<std::byte> targetPcm(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
+      _impl->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
 
       if (sourceBps == 16 && targetBps == 32)
       {
-        auto const src = layout::viewArray<std::int16_t>(std::span{sourcePcm});
-        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{targetPcm});
+        auto const src = layout::viewArray<std::int16_t>(std::span{_impl->sourcePcm});
+        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_impl->targetPcm});
         pcm::Converter::pad<std::int16_t, std::int32_t>(src, dst, 16);
       }
       else if (sourceBps == 24 && targetBps == 32)
       {
-        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{targetPcm});
-        pcm::Converter::unpackS24(sourcePcm, dst, 8);
+        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_impl->targetPcm});
+        pcm::Converter::unpackS24(_impl->sourcePcm, dst, 8);
       }
       else
       {
@@ -220,39 +223,39 @@ namespace ao::audio
           ao::Error::Code::NotSupported, std::format("Unsupported ALAC conversion: {} -> {}", sourceBps, targetBps));
       }
 
-      auto block = PcmBlock{};
-      block.bytes = std::move(targetPcm);
-      block.frames = numFrames;
-      block.bitDepth = targetBps;
       _impl->currentSampleIndex++;
-      block.endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount());
-      return block;
+
+      return PcmBlock{
+        .bytes = _impl->targetPcm,
+        .bitDepth = targetBps,
+        .frames = numFrames,
+        .endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount()),
+      };
     }
 
     // Direct decode
-    std::vector<std::byte> decodedPcm(static_cast<std::size_t>(maxFrames) * targetBytesPerFrame);
+    _impl->targetPcm.resize(static_cast<std::size_t>(maxFrames) * targetBytesPerFrame);
 
     auto bitBuffer = BitBuffer{};
     ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
 
     auto const status = _impl->decoder->Decode(
-      &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{decodedPcm}), maxFrames, channels, &numFrames);
+      &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_impl->targetPcm}), maxFrames, channels, &numFrames);
 
     if (status != 0)
     {
       return ao::makeError(ao::Error::Code::DecodeFailed, "ALAC decode failed");
     }
 
-    auto block = PcmBlock{};
-    decodedPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
-    block.bytes = std::move(decodedPcm);
-    block.frames = numFrames;
-    block.bitDepth = targetBps;
-
+    _impl->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
     _impl->currentSampleIndex++;
-    block.endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount());
 
-    return block;
+    return PcmBlock{
+      .bytes = _impl->targetPcm,
+      .bitDepth = targetBps,
+      .frames = numFrames,
+      .endOfStream = (_impl->currentSampleIndex >= _impl->demuxer->sampleCount()),
+    };
   }
 
   DecodedStreamInfo AlacDecoderSession::streamInfo() const

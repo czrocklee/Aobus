@@ -38,7 +38,7 @@ namespace ao::library
    *   auto [hot, cold] = builder.serialize(txn, dict, resources);
    *   writer.createHotCold(hot, cold);
    */
-  class TrackBuilder
+  class TrackBuilder final
   {
   public:
     // Factory methods

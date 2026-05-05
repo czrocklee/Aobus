@@ -16,7 +16,7 @@ namespace ao::model
   void AllTrackIdsList::reloadFromStore(ao::lmdb::ReadTransaction& txn)
   {
     auto reader = _store.reader(txn);
-    std::vector<TrackId> ids;
+    auto ids = std::vector<TrackId>{};
     ids.reserve(1000);
 
     for (auto const& [id, _] : reader)

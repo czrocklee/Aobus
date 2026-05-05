@@ -617,7 +617,7 @@ namespace
     for (auto const& [k, v] : view.custom())
     {
       CHECK(k == DictionaryId{1});
-      CHECK(v.size() == 0);
+      CHECK(v.empty());
       ++count;
     }
     CHECK(count == 1);

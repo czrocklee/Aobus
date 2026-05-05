@@ -173,7 +173,7 @@ namespace ao::library
                                  YAML::Node const& trackNode,
                                  std::deque<std::string>& trackStrings) const
   {
-    auto keepAlive = [&](YAML::Node const& node) -> std::string_view
+    auto const keepAlive = [&](YAML::Node const& node) -> std::string_view
     {
       if (!node)
       {
@@ -243,7 +243,7 @@ namespace ao::library
                                    YAML::Node const& trackNode,
                                    std::deque<std::string>& trackStrings) const
   {
-    auto keepAlive = [&](YAML::Node const& node) -> std::string_view
+    auto const keepAlive = [&](YAML::Node const& node) -> std::string_view
     {
       if (!node)
       {

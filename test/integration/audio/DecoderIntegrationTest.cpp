@@ -23,7 +23,8 @@ namespace ao::audio
     template<typename T>
     auto extractSamples(IDecoderSession& decoder, std::size_t count) -> std::vector<T>
     {
-      auto block = decoder.readNextBlock();
+      auto const block = decoder.readNextBlock();
+
       if (!block || block->bytes.empty())
       {
         return {};
@@ -60,19 +61,21 @@ namespace ao::audio
     auto unpackS24(std::span<std::byte const> bytes) -> std::vector<std::int32_t>
     {
       std::vector<std::int32_t> samples;
+
       for (std::size_t i = 0; i + 2 < bytes.size(); i += 3)
       {
         std::int32_t val = static_cast<std::uint8_t>(bytes[i]) | (static_cast<std::uint8_t>(bytes[i + 1]) << 8) |
                            (static_cast<std::uint8_t>(bytes[i + 2]) << 16);
 
         // Sign extend from 24 to 32 bits
-        if (val & 0x800000)
+        if ((val & 0x800000) != 0)
         {
           val |= static_cast<std::int32_t>(0xFF000000);
         }
 
         samples.push_back(val);
       }
+
       return samples;
     }
   } // namespace
@@ -84,6 +87,7 @@ namespace ao::audio
     SECTION("FLAC: 16-bit to 32-bit padding alignment")
     {
       auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+
       if (!std::filesystem::exists(testFile))
       {
         SKIP("Test file 'basic_metadata.flac' missing");
@@ -92,7 +96,7 @@ namespace ao::audio
       // 1. Acquire reference 16-bit samples
       auto samples16 = std::vector<std::int16_t>{};
       {
-        auto format = Format{.bitDepth = 16, .isInterleaved = true};
+        auto const format = Format{.bitDepth = 16, .isInterleaved = true};
         auto decoder = FlacDecoderSession{format};
         REQUIRE(decoder.open(testFile));
         samples16 = extractSamples<std::int16_t>(decoder, 100);
@@ -101,7 +105,7 @@ namespace ao::audio
       // 2. Acquire target 32-bit padded samples
       auto samples32 = std::vector<std::int32_t>{};
       {
-        auto format = Format{.bitDepth = 32, .isInterleaved = true};
+        auto const format = Format{.bitDepth = 32, .isInterleaved = true};
         auto decoder = FlacDecoderSession{format};
         REQUIRE(decoder.open(testFile));
         samples32 = extractSamples<std::int32_t>(decoder, 100);
@@ -114,6 +118,7 @@ namespace ao::audio
     SECTION("ALAC: 24-bit to 32-bit padding alignment")
     {
       auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "hires.m4a";
+
       if (!std::filesystem::exists(testFile))
       {
         SKIP("Test file 'hires.m4a' missing");
@@ -122,10 +127,11 @@ namespace ao::audio
       // 1. Acquire reference 24-bit (packed) samples
       auto samples24 = std::vector<std::int32_t>{};
       {
-        auto format = Format{.bitDepth = 24, .isInterleaved = true};
+        auto const format = Format{.bitDepth = 24, .isInterleaved = true};
         auto decoder = AlacDecoderSession{format};
         REQUIRE(decoder.open(testFile));
         auto const block = decoder.readNextBlock();
+
         REQUIRE(block);
         samples24 = unpackS24(block->bytes);
       }
@@ -133,7 +139,7 @@ namespace ao::audio
       // 2. Acquire target 32-bit padded samples
       auto samples32 = std::vector<std::int32_t>{};
       {
-        auto format = Format{.bitDepth = 32, .isInterleaved = true};
+        auto const format = Format{.bitDepth = 32, .isInterleaved = true};
         auto decoder = AlacDecoderSession{format};
         REQUIRE(decoder.open(testFile));
         samples32 = extractSamples<std::int32_t>(decoder, samples24.size());
@@ -147,6 +153,7 @@ namespace ao::audio
   TEST_CASE("FLAC Decoder Integrity", "[playback][integration][flac]")
   {
     auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+
     if (!std::filesystem::exists(testFile))
     {
       return;
@@ -170,6 +177,7 @@ namespace ao::audio
 
       REQUIRE(decoder.seek(100)); // Seek to 100ms
       auto const block = decoder.readNextBlock();
+
       REQUIRE(block);
       CHECK(block->frames > 0);
     }
@@ -178,6 +186,7 @@ namespace ao::audio
   TEST_CASE("ALAC Decoder Integrity", "[playback][integration][alac]")
   {
     auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "hires.m4a";
+
     if (!std::filesystem::exists(testFile))
     {
       return;
@@ -203,12 +212,14 @@ namespace ao::audio
       auto const testFile = std::filesystem::path(__FILE__);
       auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
       auto const res = decoder.open(testFile);
+
       CHECK_FALSE(res);
     }
 
     SECTION("Seek near EOF")
     {
       auto const testFile = std::filesystem::path(TAG_TEST_DATA_DIR) / "basic_metadata.flac";
+
       if (std::filesystem::exists(testFile))
       {
         auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
@@ -219,11 +230,12 @@ namespace ao::audio
         if (info.durationMs > 10)
         {
           REQUIRE(decoder.seek(info.durationMs - 10));
-          auto block = decoder.readNextBlock();
+          auto const block = decoder.readNextBlock();
+
           // Should either get some frames or EOF immediately
           if (block)
           {
-            CHECK(block->frames >= 0);
+            CHECK(block->frames > 0);
           }
         }
       }

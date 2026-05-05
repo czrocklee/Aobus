@@ -19,17 +19,12 @@ namespace ao::audio
     ~NullBackend() override = default;
 
     ao::Result<> open(Format const& /*format*/, RenderCallbacks /*callbacks*/) override { return {}; }
-    void reset() override {}
     void start() override {}
     void pause() override {}
     void resume() override {}
     void flush() override {}
-    void drain() override {}
     void stop() override {}
     void close() override {}
-
-    void setExclusiveMode(bool /*exclusive*/) override {}
-    bool isExclusiveMode() const noexcept override { return false; }
 
     Result<> setProperty(PropertyId id, PropertyValue const& value) override
     {

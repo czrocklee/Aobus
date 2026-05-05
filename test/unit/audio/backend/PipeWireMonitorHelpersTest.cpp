@@ -17,6 +17,9 @@ extern "C"
 
 #include <algorithm>
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc99-extensions"
+
 using namespace ao::audio;
 using namespace ao::audio::backend::detail;
 
@@ -33,8 +36,8 @@ TEST_CASE("PipeWireMonitorHelpers - Property Parsing", "[audio][pipewire][monito
 
   SECTION("lookupProperty")
   {
-    struct spa_dict_item items[] = {SPA_DICT_ITEM_INIT("key1", "val1"), SPA_DICT_ITEM_INIT("key2", "val2")};
-    struct spa_dict dict = SPA_DICT_INIT(items, 2);
+    struct spa_dict_item items[] = {SPA_DICT_ITEM_INIT("key1", "val1"), SPA_DICT_ITEM_INIT("key2", "val2")}; // NOLINT
+    struct spa_dict dict = SPA_DICT_INIT(items, 2);                                                          // NOLINT
 
     CHECK(lookupProperty(&dict, "key1") == "val1");
     CHECK(lookupProperty(&dict, "key2") == "val2");
@@ -44,11 +47,11 @@ TEST_CASE("PipeWireMonitorHelpers - Property Parsing", "[audio][pipewire][monito
 
   SECTION("parseNodeRecord")
   {
-    struct spa_dict_item items[] = {SPA_DICT_ITEM_INIT(PW_KEY_MEDIA_CLASS, "Audio/Sink"),
-                                    SPA_DICT_ITEM_INIT(PW_KEY_NODE_NAME, "test-node"),
-                                    SPA_DICT_ITEM_INIT(PW_KEY_OBJECT_SERIAL, "1234"),
-                                    SPA_DICT_ITEM_INIT("node.driver-id", "5678")};
-    struct spa_dict dict = SPA_DICT_INIT(items, 4);
+    struct spa_dict_item items[] = {SPA_DICT_ITEM_INIT(PW_KEY_MEDIA_CLASS, "Audio/Sink"), // NOLINT
+                                    SPA_DICT_ITEM_INIT(PW_KEY_NODE_NAME, "test-node"),    // NOLINT
+                                    SPA_DICT_ITEM_INIT(PW_KEY_OBJECT_SERIAL, "1234"),     // NOLINT
+                                    SPA_DICT_ITEM_INIT("node.driver-id", "5678")};        // NOLINT
+    struct spa_dict dict = SPA_DICT_INIT(items, 4);                                       // NOLINT
 
     auto record = parseNodeRecord(1, &dict);
     CHECK(record.version == 1);
@@ -94,8 +97,8 @@ TEST_CASE("PipeWireMonitorHelpers - Format Capabilities", "[audio][pipewire][mon
 
 TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor]")
 {
-  uint8_t buffer[1024];
-  struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
+  std::byte buffer[1024];
+  struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer)); // NOLINT
 
   SECTION("parseEnumFormat - Sample Rates and Channels")
   {
@@ -127,9 +130,9 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
     parseEnumFormat(pod, caps);
 
     CHECK_FALSE(caps.sampleRates.empty());
-    CHECK(std::ranges::contains(caps.sampleRates, 48000u));
-    CHECK(std::ranges::contains(caps.sampleRates, 44100u));
-    CHECK(std::ranges::contains(caps.sampleRates, 192000u));
+    CHECK(std::ranges::contains(caps.sampleRates, 48000U));
+    CHECK(std::ranges::contains(caps.sampleRates, 44100U));
+    CHECK(std::ranges::contains(caps.sampleRates, 192000U));
     REQUIRE(caps.channelCounts.size() == 1);
     CHECK(caps.channelCounts[0] == 2);
     REQUIRE(caps.bitDepths.size() == 1);
@@ -166,9 +169,9 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
     parseEnumFormat(pod, caps);
 
     CHECK(caps.sampleRates.size() == 2);
-    CHECK(std::ranges::contains(caps.sampleRates, 44100u));
-    CHECK(std::ranges::contains(caps.sampleRates, 44100u));
-    CHECK(std::ranges::contains(caps.sampleRates, 48000u));
+    CHECK(std::ranges::contains(caps.sampleRates, 44100U));
+    CHECK(std::ranges::contains(caps.sampleRates, 44100U));
+    CHECK(std::ranges::contains(caps.sampleRates, 48000U));
   }
 
   SECTION("mergeSinkProps - volume and mute")
@@ -191,7 +194,8 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
     auto f = ::spa_pod_frame{};
     ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
     ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
-    ::spa_pod_builder_array(&b, sizeof(float), SPA_TYPE_Float, 2, vols);
+    ::spa_pod_builder_array(
+      &b, sizeof(float), SPA_TYPE_Float, 2, vols); // NOLINT(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
     auto props = SinkProps{};
@@ -225,3 +229,5 @@ TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor
     CHECK_FALSE(props.isUnity());
   }
 }
+
+#pragma clang diagnostic pop

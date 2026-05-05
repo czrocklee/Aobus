@@ -10,7 +10,7 @@ namespace ao::audio::backend
 {
   using namespace detail;
 
-  struct PipeWireProvider::Impl
+  struct PipeWireProvider::Impl final
   {
     std::unique_ptr<PipeWireMonitor> monitor;
 

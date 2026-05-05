@@ -612,7 +612,7 @@ TEST_CASE("TrackStore - LoadMode::Cold multi-record iteration", "[core][track]")
     auto coldHeader = TrackColdHeader{};
     coldHeader.fileSizeLo = static_cast<std::uint32_t>((1000 + i) & 0xFFFFFFFF);
     coldHeader.fileSizeHi = static_cast<std::uint32_t>(static_cast<std::uint64_t>(1000 + i) >> 32);
-    coldHeader.durationMs = static_cast<std::uint32_t>(180000 + i * 10000);
+    coldHeader.durationMs = static_cast<std::uint32_t>(180000 + (i * 10000));
     coldHeader.trackNumber = i + 1;
     auto coldData = std::vector<std::byte>{sizeof(TrackColdHeader)};
     std::memcpy(coldData.data(), &coldHeader, sizeof(TrackColdHeader));

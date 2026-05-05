@@ -62,6 +62,7 @@ namespace ao::audio
     void toggleMute();
 
     Status status() const;
+    Transport transport() const;
     bool isReady() const;
 
     void setTrackEndedCallback(std::function<void()> callback);

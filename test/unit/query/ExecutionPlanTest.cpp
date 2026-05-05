@@ -36,7 +36,7 @@ TEST_CASE("ExecutionPlan - Compile Empty Expression")
   auto plan = compiler.compile(expr);
 
   // The plan should have at least one instruction (LoadConstant)
-  CHECK(plan.instructions.size() >= 1);
+  CHECK_FALSE(plan.instructions.empty());
 }
 
 TEST_CASE("ExecutionPlan - Compile Metadata Field")
@@ -572,7 +572,7 @@ TEST_CASE("ExecutionPlan - Future matching for tags not yet in dictionary")
     if (instr.op == OpCode::Eq)
     {
       // The register before Eq should contain the constant we loaded
-      auto const& loadInstr = plan.instructions[&instr - &plan.instructions[0] - 1];
+      auto const& loadInstr = plan.instructions[&instr - plan.instructions.data() - 1];
       if (loadInstr.op == OpCode::LoadConstant)
       {
         CHECK(loadInstr.constValue == static_cast<std::int64_t>(futureTagId.value()));
@@ -616,6 +616,7 @@ TEST_CASE("ExecutionPlan - Future matching for custom fields not yet in dictiona
   }
   CHECK(foundLoadField);
 }
+
 TEST_CASE("ExecutionPlan - Metadata Dispatch Maps Every Supported Name")
 {
   struct Case
@@ -754,12 +755,13 @@ TEST_CASE("ExecutionPlan - AccessProfile Exhaustive Classification")
     CHECK(plan.accessProfile == AccessProfile::HotAndCold);
   }
 }
+
 TEST_CASE("ExecutionPlan - Boolean False Compiles To ConstantZero")
 {
   auto expr = parse("false");
   auto compiler = QueryCompiler{};
   auto plan = compiler.compile(expr);
-  REQUIRE(plan.instructions.size() >= 1);
+  REQUIRE_FALSE(plan.instructions.empty());
   CHECK(plan.instructions[0].op == OpCode::LoadConstant);
   CHECK(plan.instructions[0].constValue == 0);
   CHECK_FALSE(plan.matchesAll);

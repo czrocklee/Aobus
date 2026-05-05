@@ -62,26 +62,12 @@ namespace ao::audio
      */
     virtual ao::Result<> open(Format const& format, RenderCallbacks callbacks) = 0;
 
-    /**
-     * @brief Resets the backend, closing any open streams and detaching callbacks.
-     */
-    virtual void reset() = 0;
-
     virtual void start() = 0;
     virtual void pause() = 0;
     virtual void resume() = 0;
     virtual void flush() = 0;
-    virtual void drain() = 0;
     virtual void stop() = 0;
     virtual void close() = 0;
-
-    /**
-     * @brief Enables or disables exclusive mode (for PipeWire backend).
-     * In exclusive mode, the stream connects directly to the hardware node,
-     * bypassing the mixer for bit-perfect output.
-     */
-    virtual void setExclusiveMode(bool exclusive) = 0;
-    virtual bool isExclusiveMode() const noexcept = 0;
 
     // Runtime control surface
     virtual Result<> setProperty(PropertyId id, PropertyValue const& value) = 0;

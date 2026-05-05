@@ -89,6 +89,7 @@ namespace ao::audio::backend::detail
       char* cardName = nullptr;
       if (::snd_card_get_name(card, &cardName) == 0)
       {
+        auto const safeCardName = std::unique_ptr<char, void (*)(void*)>(cardName, ::free);
         auto const cardId = std::format("hw:{}", card);
 
         ::snd_ctl_t* rawCtl = nullptr;
@@ -110,14 +111,14 @@ namespace ao::audio::backend::detail
               auto const plughwId = std::format("plughw:{},{}", card, device);
 
               devices.push_back({.id = DeviceId{plughwId},
-                                 .displayName = std::string{cardName},
+                                 .displayName = std::string{safeCardName.get()},
                                  .description = plughwId,
                                  .isDefault = false,
                                  .backendId = ao::audio::kBackendAlsa,
                                  .capabilities = queryAlsaDeviceCapabilities(hwId)});
 
               devices.push_back({.id = DeviceId{hwId},
-                                 .displayName = std::format("{} (Raw)", cardName),
+                                 .displayName = std::format("{} (Raw)", safeCardName.get()),
                                  .description = hwId,
                                  .isDefault = false,
                                  .backendId = ao::audio::kBackendAlsa,
@@ -125,8 +126,6 @@ namespace ao::audio::backend::detail
             }
           }
         }
-
-        ::free(cardName);
       }
     }
 

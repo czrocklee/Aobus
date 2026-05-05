@@ -31,7 +31,7 @@ namespace ao::audio::backend
     constexpr int kUdevPollTimeoutMs = 500;
   }
 
-  struct AlsaProvider::Impl
+  struct AlsaProvider::Impl final
   {
     mutable std::mutex mutex;
     std::vector<ao::audio::Device> cachedDevices;

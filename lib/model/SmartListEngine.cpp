@@ -194,7 +194,7 @@ namespace ao::model
 
   void SmartListEngine::rebuild(FilteredTrackIdList& list)
   {
-    auto it = _buckets.find(&list._source);
+    auto const it = _buckets.find(&list._source);
 
     if (it == _buckets.end())
     {
@@ -211,7 +211,7 @@ namespace ao::model
 
   void SmartListEngine::notifyUpdated(TrackIdList& source, TrackId trackId)
   {
-    auto it = _buckets.find(&source);
+    auto const it = _buckets.find(&source);
 
     if (it == _buckets.end())
     {
@@ -238,7 +238,7 @@ namespace ao::model
 
   void SmartListEngine::rebuildDirtyLists(SourceBucket& bucket)
   {
-    std::vector<FilteredTrackIdList*> dirtyLists;
+    auto dirtyLists = std::vector<FilteredTrackIdList*>{};
     for (auto* list : bucket.lists)
     {
       if (list->_dirty)
@@ -263,7 +263,7 @@ namespace ao::model
       return;
     }
 
-    std::vector<FilteredTrackIdList*> evaluatableLists;
+    auto evaluatableLists = std::vector<FilteredTrackIdList*>{};
     for (auto* list : lists)
     {
       if (list->_hasError || !list->_plan)
@@ -327,7 +327,7 @@ namespace ao::model
     for (std::size_t i = 0; i < lists.size(); ++i)
     {
       std::ranges::sort(nextMembers[i]);
-      lists[i]->_members = std::flat_set<TrackId>(std::move(nextMembers[i]));
+      lists[i]->_members = std::flat_set<TrackId>(std::sorted_unique, std::move(nextMembers[i]));
     }
   }
 

@@ -26,17 +26,12 @@ namespace ao::audio
       return _openResult;
     }
 
-    void reset() override { _events.push_back({"reset", {}}); }
     void start() override { _events.push_back({"start", {}}); }
     void pause() override { _events.push_back({"pause", {}}); }
     void resume() override { _events.push_back({"resume", {}}); }
     void flush() override { _events.push_back({"flush", {}}); }
-    void drain() override { _events.push_back({"drain", {}}); }
     void stop() override { _events.push_back({"stop", {}}); }
     void close() override { _events.push_back({"close", {}}); }
-
-    void setExclusiveMode(bool exclusive) override { _exclusive = exclusive; }
-    bool isExclusiveMode() const noexcept override { return _exclusive; }
 
     BackendId backendId() const noexcept override { return BackendId{"capturing"}; }
     ProfileId profileId() const noexcept override { return ProfileId{"test"}; }
@@ -98,6 +93,7 @@ namespace ao::audio
     void fireFormatChanged(Format const& fmt)
     {
       _format = fmt;
+
       if (_callbacks.onFormatChanged)
       {
         _callbacks.onFormatChanged(_callbacks.userData, fmt);
@@ -130,7 +126,6 @@ namespace ao::audio
     RenderCallbacks _callbacks{};
     Format _format{};
     ao::Result<> _openResult{};
-    bool _exclusive = false;
     float _volume = 1.0f;
     bool _muted = false;
   };

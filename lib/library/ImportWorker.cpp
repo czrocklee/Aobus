@@ -49,7 +49,7 @@ namespace ao::library
         }
 
         // Open tag file
-        auto tagFile = ao::tag::File::open(path);
+        auto const tagFile = ao::tag::File::open(path);
 
         if (!tagFile)
         {

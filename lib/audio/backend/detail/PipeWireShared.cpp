@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/backend/detail/PipeWireShared.h>
+#include <cctype>
 
 extern "C"
 {
@@ -28,7 +29,7 @@ namespace ao::audio::backend::detail
 
   std::optional<std::uint32_t> parseUintProperty(char const* value) noexcept
   {
-    if (value == nullptr || *value == '\0' || ::isspace(static_cast<unsigned char>(*value)))
+    if (value == nullptr || *value == '\0' || (std::isspace(static_cast<unsigned char>(*value)) != 0))
     {
       return std::nullopt;
     }

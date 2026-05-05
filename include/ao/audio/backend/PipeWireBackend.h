@@ -20,20 +20,18 @@ namespace ao::audio::backend
     ~PipeWireBackend() override;
 
     ao::Result<> open(ao::audio::Format const& format, ao::audio::RenderCallbacks callbacks) override;
-    void reset() override;
     void start() override;
     void pause() override;
     void resume() override;
     void flush() override;
-    void drain() override;
     void stop() override;
     void close() override;
 
-    void setExclusiveMode(bool exclusive) override;
-    bool isExclusiveMode() const noexcept override;
-
     ao::audio::BackendId backendId() const noexcept override;
     ao::audio::ProfileId profileId() const noexcept override;
+
+    void setExclusiveMode(bool exclusive);
+    bool isExclusiveMode() const noexcept;
 
     ao::Result<> setProperty(ao::audio::PropertyId id, ao::audio::PropertyValue const& value) override;
     ao::Result<ao::audio::PropertyValue> getProperty(ao::audio::PropertyId id) const override;
