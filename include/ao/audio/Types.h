@@ -33,9 +33,9 @@ namespace ao::audio
   struct TrackPlaybackDescriptor final
   {
     ao::TrackId trackId{};
-    std::filesystem::path filePath;
-    std::string title;
-    std::string artist;
+    std::filesystem::path filePath{};
+    std::string title{};
+    std::string artist{};
     std::string album{};
     std::optional<ao::ResourceId> optCoverArtId{};
     std::uint32_t durationMs = 0;

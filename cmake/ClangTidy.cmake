@@ -58,6 +58,9 @@ if(CLANG_TIDY_EXECUTABLE)
   # Allow short variable names (e.g., i, j, b) common in isolated test cases
   string(APPEND _AO_CLANG_TIDY_RELAXED_CHECKS ",-readability-identifier-length")
 
+  # Allow ignored return values in tests (common for command bus execution)
+  string(APPEND _AO_CLANG_TIDY_RELAXED_CHECKS ",-bugprone-unused-return-value")
+
   # Allow Catch2/FakeIt internal C-style casts, variadic macros, and C-arrays
   string(APPEND _AO_CLANG_TIDY_RELAXED_CHECKS ",-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-avoid-c-arrays")
 
