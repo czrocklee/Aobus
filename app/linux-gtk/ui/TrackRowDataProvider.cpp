@@ -96,7 +96,11 @@ namespace ao::gtk
                   metadata.discNumber(),
                   metadata.totalDiscs(),
                   metadata.trackNumber(),
-                  metadata.coverArtId() != 0 ? std::optional<std::uint64_t>{metadata.coverArtId()} : std::nullopt);
+                  metadata.coverArtId() != 0 ? std::optional<std::uint64_t>{metadata.coverArtId()} : std::nullopt,
+                  view.property().sampleRate(),
+                  view.property().channels(),
+                  view.property().bitDepth(),
+                  view.property().codecId());
 
     return row;
   }

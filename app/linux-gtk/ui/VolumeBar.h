@@ -39,12 +39,12 @@ namespace ao::gtk
     void handleDragUpdate(double offsetX);
     void handleScroll(double dx, double dy);
 
-    float _volume = 1.0f;
-    float _dragStartVolume = 0.0f;
+    float _volume = 1.0F;
+    float _dragStartVolume = 0.0F;
     VolumeChangedSignal _volumeChanged;
 
     static constexpr int kNumSegments = 10;
     static constexpr int kSegmentGap = 1;
-    static constexpr float kSegmentRadius = 0.8f;
+    static constexpr float kSegmentRadius = 0.8F;
   };
 } // namespace ao::gtk

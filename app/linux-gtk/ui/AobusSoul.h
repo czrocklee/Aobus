@@ -53,6 +53,9 @@ namespace ao::gtk
     static constexpr double kStrokeWidthVariance = kStrokeWidthBase * (kGoldenRatio - 1.0); // Golden Expansion!
     static constexpr double kPhaseShift = 0.5;
 
+    static constexpr float kRefHeight = 65.0F;
+    static constexpr float kStrokeWidthA = 10.0F;
+
     // Size constants
     static constexpr int kFullLogoMinSize = 54;
     static constexpr int kSoulMinSize = 24;

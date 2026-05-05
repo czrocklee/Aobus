@@ -46,7 +46,7 @@ namespace ao::gtk
 
     void showTrackContextMenu(TrackViewPage& page, TrackSelectionContext const& selection, double x, double y);
 
-    void showTagEditor(TrackViewPage& page, TrackSelectionContext const& selection, double x, double y);
+    void showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo);
 
   private:
     void setupActions();

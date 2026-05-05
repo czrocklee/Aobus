@@ -23,7 +23,7 @@ namespace ao::gtk
   }
 
   AobusSoul::AobusSoul()
-    : _cachedStroke{::gsk_stroke_new(1.0F)}, _cachedStrokeA{::gsk_stroke_new(10.0F / 65.0F)}
+    : _cachedStroke{::gsk_stroke_new(1.0F)}, _cachedStrokeA{::gsk_stroke_new(kStrokeWidthA / kRefHeight)}
   {
     set_can_focus(false);
     set_focusable(false);
@@ -39,7 +39,6 @@ namespace ao::gtk
     ::gsk_stroke_set_line_cap(_cachedStroke.get(), GSK_LINE_CAP_ROUND);
     ::gsk_stroke_set_line_cap(_cachedStrokeA.get(), GSK_LINE_CAP_ROUND);
 
-    static constexpr float kRefHeight = 65.0F;
     static constexpr float kRefRadius = 30.0F;
     static constexpr float kNormalizedRadius = kRefRadius / kRefHeight;
 
@@ -191,12 +190,12 @@ namespace ao::gtk
         resultGreen = maxValue;
         resultBlue = tValue;
         break;
-      case 3:
+      case 3: // NOLINT(readability-magic-numbers)
         resultRed = pValue;
         resultGreen = qValue;
         resultBlue = maxValue;
-        break; // NOLINT(readability-magic-numbers)
-      case 4:
+        break;
+      case 4: // NOLINT(readability-magic-numbers)
         resultRed = tValue;
         resultGreen = pValue;
         resultBlue = maxValue;

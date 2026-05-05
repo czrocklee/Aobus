@@ -3,10 +3,13 @@
 
 #pragma once
 
+#include "CoverArtCache.h"
 #include "GtkMainThreadDispatcher.h"
 #include "ImportExportCoordinator.h"
+#include "InspectorSidebar.h"
 #include "LibrarySession.h"
 #include "ListSidebarController.h"
+#include "MetadataCoordinator.h"
 #include "PlaybackCoordinator.h"
 #include "SessionPersistence.h"
 #include "StatusBar.h"
@@ -104,7 +107,7 @@ namespace ao::gtk
     // Right side: stack for pages
     Gtk::Stack _stack;
 
-    // Menu (placeholder)
+    // Menu
     Gtk::PopoverMenuBar _menuBar;
 
     // Track pages graph
@@ -117,9 +120,17 @@ namespace ao::gtk
     // Playback support
     std::shared_ptr<GtkMainThreadDispatcher> _dispatcher;
     std::unique_ptr<PlaybackCoordinator> _playbackCoordinator;
+    std::unique_ptr<MetadataCoordinator> _metadataCoordinator;
 
     // Status bar
     std::unique_ptr<StatusBar> _statusBar;
+
+    // Inspector
+    std::unique_ptr<InspectorSidebar> _inspectorSidebar;
+    Gtk::Revealer _inspectorRevealer;
+    Gtk::ToggleButton _inspectorHandle;
+
+    std::unique_ptr<CoverArtCache> _coverArtCache;
 
     // Layout constants
     static constexpr int kCoverArtSize = 50;

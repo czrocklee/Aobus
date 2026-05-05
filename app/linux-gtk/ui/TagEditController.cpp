@@ -110,10 +110,7 @@ namespace ao::gtk
     page.showTagPopover(*_tagPopover, posX, posY);
   }
 
-  void TagEditController::showTagEditor(TrackViewPage& page,
-                                        TrackSelectionContext const& selection,
-                                        double posX,
-                                        double posY)
+  void TagEditController::showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo)
   {
     if (_currentSession == nullptr || selection.selectedIds.empty())
     {
@@ -130,10 +127,8 @@ namespace ao::gtk
       [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
-    // Show popover at mouse position
-    _tagPopover->set_parent(page.getColumnView());
-    auto rect = Gdk::Rectangle{static_cast<int>(posX), static_cast<int>(posY), 1, 1};
-    _tagPopover->set_pointing_to(rect);
+    // Show popover anchored to the relativeTo widget
+    _tagPopover->set_parent(relativeTo);
     _tagPopover->popup();
   }
 
