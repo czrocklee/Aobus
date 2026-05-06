@@ -121,14 +121,15 @@ namespace ao::app
     ws.height = getInt(keyFile, kWindowGroup, kHeightKey, kDefaultWindowHeight);
     ws.maximized = getBool(keyFile, kWindowGroup, kMaximizedKey, false);
     ws.panedPosition = getInt(keyFile, kWindowGroup, kPanedPositionKey, kDefaultPanedPosition);
+
     tvs.columnOrder = getStringList(keyFile, kTrackViewGroup, kColumnOrderKey);
     tvs.hiddenColumns = getStringList(keyFile, kTrackViewGroup, kHiddenColumnsKey);
 
     for (auto const& entry : getStringList(keyFile, kTrackViewGroup, kColumnWidthsKey))
     {
-      if (auto const optWidth = decodeColumnWidth(entry); optWidth)
+      if (auto const optColumnWidth = decodeColumnWidth(entry); optColumnWidth)
       {
-        tvs.columnWidths.insert_or_assign(optWidth->first, optWidth->second);
+        tvs.columnWidths.insert_or_assign(optColumnWidth->first, optColumnWidth->second);
       }
     }
 

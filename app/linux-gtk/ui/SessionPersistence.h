@@ -10,34 +10,28 @@
 
 #include <ao/audio/Backend.h>
 #include <gtkmm.h>
+#include <runtime/ISessionPersistence.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace ao::gtk
 {
-  class SessionPersistence final
+  class SessionPersistence final : public ao::app::ISessionPersistence
   {
   public:
     SessionPersistence();
-    ~SessionPersistence() = default;
+    ~SessionPersistence() override = default;
 
-    void load(Gtk::Window& window,
-              Gtk::Paned& paned,
-              TrackColumnLayoutModel& trackColumnLayoutModel,
-              std::string& outLibraryPath,
-              ao::audio::BackendId& outBackend,
-              ao::audio::ProfileId& outProfile,
-              ao::audio::DeviceId& outDeviceId);
+    std::optional<ao::app::SessionSnapshot> loadSnapshot() override;
+    void saveSnapshot(ao::app::SessionSnapshot const& snapshot) override;
 
-    void save(Gtk::Window const& window,
-              Gtk::Paned const& paned,
-              TrackColumnLayoutModel const& trackColumnLayoutModel,
-              std::filesystem::path const& libraryPath);
+    void loadUi(Gtk::Window& window, Gtk::Paned& paned, TrackColumnLayoutModel& trackColumnLayoutModel);
 
-    void updateAudioBackend(ao::audio::BackendId const& backend,
-                            ao::audio::ProfileId const& profile,
-                            ao::audio::DeviceId const& deviceId);
+    void saveUi(Gtk::Window const& window,
+                Gtk::Paned const& paned,
+                TrackColumnLayoutModel const& trackColumnLayoutModel);
 
   private:
     ao::app::AppConfig _appConfig;

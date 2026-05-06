@@ -73,6 +73,8 @@ namespace ao::gtk
     void onArtistEdited();
     void onAlbumEdited();
 
+    void onTrackDetailSnapshot(ao::app::TrackDetailSnapshot const& snap);
+
     ao::app::AppSession& _session;
     CoverArtCache& _coverArtCache;
 

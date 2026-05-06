@@ -11,7 +11,8 @@
 #include <ao/model/FilteredTrackIdList.h>
 #include <ao/model/SmartListEngine.h>
 #include <ao/model/TrackIdList.h>
-#include <test/unit/lmdb/TestUtils.h>
+
+#include "TestUtils.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -33,22 +34,6 @@ namespace ao::app::test
     using ao::model::SmartListEngine;
     using ao::model::TrackIdList;
 
-    struct TrackSpec final
-    {
-      std::string title = "Track";
-      std::string artist = "Artist";
-      std::string album = "Album";
-      std::uint16_t year = 2020;
-      std::uint16_t discNumber = 1;
-      std::uint16_t trackNumber = 1;
-      std::uint32_t durationMs = 200000;
-    };
-
-    auto makeSpec(std::string_view title, std::uint16_t year) -> TrackSpec
-    {
-      return TrackSpec{.title = std::string{title}, .year = year};
-    }
-
     class MutableTrackIdList final : public TrackIdList
     {
     public:
@@ -69,47 +54,6 @@ namespace ao::app::test
 
     private:
       std::vector<TrackId> _ids;
-    };
-
-    class TestMusicLibrary final
-    {
-    public:
-      TestMusicLibrary()
-        : _tempDir{}, _library{_tempDir.path()}
-      {
-      }
-
-      MusicLibrary& library() { return _library; }
-
-      auto addTrack(TrackSpec const& spec) -> TrackId
-      {
-        auto txn = _library.writeTransaction();
-        auto writer = _library.tracks().writer(txn);
-        auto builder = TrackBuilder::createNew();
-        builder.metadata()
-          .title(spec.title)
-          .artist(spec.artist)
-          .album(spec.album)
-          .year(spec.year)
-          .discNumber(spec.discNumber)
-          .trackNumber(spec.trackNumber);
-        builder.property()
-          .uri("/tmp/test.flac")
-          .durationMs(spec.durationMs)
-          .bitrate(320000)
-          .sampleRate(44100)
-          .channels(2)
-          .bitDepth(16);
-        auto hotData = builder.serializeHot(txn, _library.dictionary());
-        auto coldData = builder.serializeCold(txn, _library.dictionary(), _library.resources());
-        auto [id, _] = writer.createHotCold(hotData, coldData);
-        txn.commit();
-        return id;
-      }
-
-    private:
-      TempDir _tempDir;
-      MusicLibrary _library;
     };
 
     struct TestEnv final

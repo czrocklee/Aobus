@@ -4,10 +4,11 @@
 #include "PlaybackController.h"
 #include "TrackRowDataProvider.h"
 #include "TrackViewPage.h"
-
 #include <runtime/AppSession.h>
-#include <runtime/CommandTypes.h>
+#include <runtime/EventBus.h>
 #include <runtime/EventTypes.h>
+#include <runtime/PlaybackService.h>
+#include <runtime/StateTypes.h>
 
 #include <algorithm>
 #include <ranges>
@@ -49,10 +50,7 @@ namespace ao::gtk
       .sourceListId = page.getListId(),
     });
 
-    _session.commands().execute<ao::app::PlayTrack>(ao::app::PlayTrack{
-      .descriptor = *desc,
-      .sourceListId = page.getListId(),
-    });
+    _session.playback().play(*desc, page.getListId());
 
     subscribeEvents();
     return true;
@@ -60,7 +58,7 @@ namespace ao::gtk
 
   void PlaybackController::resume()
   {
-    _session.commands().execute<ao::app::ResumePlayback>(ao::app::ResumePlayback{});
+    _session.playback().resume();
   }
 
   bool PlaybackController::isActive() const
@@ -107,17 +105,14 @@ namespace ao::gtk
       {
         _sequence->currentIndex = i;
 
-        _session.commands().execute<ao::app::PlayTrack>(ao::app::PlayTrack{
-          .descriptor = *desc,
-          .sourceListId = _sequence->sourceListId.value_or(ao::ListId{}),
-        });
+        _session.playback().play(*desc, _sequence->sourceListId.value_or(ao::ListId{}));
         return;
       }
     }
 
     clear();
 
-    _session.commands().execute<ao::app::StopPlayback>(ao::app::StopPlayback{});
+    _session.playback().stop();
   }
 
   void PlaybackController::subscribeEvents()

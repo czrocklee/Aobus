@@ -54,6 +54,7 @@ namespace ao::gtk
     static constexpr int kImportProgressWidth = 200;
     static constexpr int kTransitionDurationMs = 250;
 
+    void applyInitialState();
     void updatePlaybackStatusLabels(ao::audio::Player::Status const& status);
     void updatePlaybackTooltip(ao::audio::Player::Status const& status);
 
@@ -81,9 +82,10 @@ namespace ao::gtk
 
     sigc::connection _timerConnection;
     ao::app::AppSession& _session;
-    ao::app::Subscription _stateSub;
-    ao::app::Subscription _notificationSub;
+    ao::app::Subscription _transportChangedSub;
     ao::app::Subscription _outputChangedSub;
+    ao::app::Subscription _qualityChangedSub;
+    ao::app::Subscription _notificationPostedSub;
 
     LastPlaybackState _lastPlaybackState;
     std::string _lastTooltipText;

@@ -11,22 +11,25 @@ aobus_apply_clang_tidy(app_common STRICT)
 add_library(app_runtime STATIC
     runtime/AppSession.cpp
     runtime/AppSession.h
-    runtime/CommandBus.h
-    runtime/CommandTypes.h
     runtime/CorePrimitives.h
     runtime/EventBus.h
-    runtime/ObservableStore.h
     runtime/EventTypes.h
     runtime/ProjectionTypes.h
-    runtime/Services.cpp
-    runtime/Services.h
+    runtime/PlaybackService.cpp
+    runtime/PlaybackService.h
+    runtime/LibraryMutationService.cpp
+    runtime/LibraryMutationService.h
+    runtime/WorkspaceService.cpp
+    runtime/WorkspaceService.h
+    runtime/NotificationService.cpp
+    runtime/NotificationService.h
     runtime/StateTypes.h
     runtime/TrackListProjection.cpp
     runtime/TrackListProjection.h
     runtime/TrackDetailProjection.cpp
     runtime/TrackDetailProjection.h
-    runtime/ViewRegistry.cpp
-    runtime/ViewRegistry.h
+    runtime/ViewService.cpp
+    runtime/ViewService.h
 )
 target_include_directories(app_runtime PUBLIC "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(app_runtime PRIVATE ao)

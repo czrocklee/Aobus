@@ -410,6 +410,7 @@ TEST_CASE("PlanEvaluator - Composer Metadata")
     CHECK(evaluator.evaluateFull(plan, trackWithComposer.view()) == true);
   }
 }
+
 TEST_CASE("PlanEvaluator - Artist LIKE resolves DictionaryId strings")
 {
   auto temp = TempDir{};

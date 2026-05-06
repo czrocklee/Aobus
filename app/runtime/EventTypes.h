@@ -93,6 +93,35 @@ namespace ao::app
     ViewId viewId{};
   };
 
+  struct ViewFilterChanged final
+  {
+    ViewId viewId{};
+    std::string filterExpression{};
+  };
+
+  struct ViewSortChanged final
+  {
+    ViewId viewId{};
+    std::vector<TrackSortTerm> sortBy{};
+  };
+
+  struct ViewGroupingChanged final
+  {
+    ViewId viewId{};
+    TrackGroupKey groupBy = TrackGroupKey::None;
+  };
+
+  struct ViewListChanged final
+  {
+    ViewId viewId{};
+    ao::ListId listId{};
+  };
+
+  struct SessionRestored final
+  {
+    std::string libraryPath{};
+  };
+
   struct RevealTrackRequested final
   {
     ao::TrackId trackId{};

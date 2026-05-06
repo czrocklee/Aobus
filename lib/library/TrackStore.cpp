@@ -75,8 +75,8 @@ namespace ao::library
   TrackStore::Reader::Iterator::Iterator(lmdb::Database::Reader::Iterator&& hotIter,
                                          lmdb::Database::Reader::Iterator&& coldIter,
                                          Reader::LoadMode mode)
-    : _hotIter{mode != LoadMode::Cold ? std::make_optional(std::move(hotIter)) : std::nullopt}
-    , _coldIter{mode != LoadMode::Hot ? std::make_optional(std::move(coldIter)) : std::nullopt}
+    : _optHotIter{mode != LoadMode::Cold ? std::make_optional(std::move(hotIter)) : std::nullopt}
+    , _optColdIter{mode != LoadMode::Hot ? std::make_optional(std::move(coldIter)) : std::nullopt}
     , _mode{mode}
   {
   }
@@ -90,9 +90,9 @@ namespace ao::library
 
     switch (_mode)
     {
-      case LoadMode::Cold: return _coldIter == other._coldIter;
+      case LoadMode::Cold: return _optColdIter == other._optColdIter;
       case LoadMode::Hot:
-      case LoadMode::Both: return _hotIter == other._hotIter;
+      case LoadMode::Both: return _optHotIter == other._optHotIter;
     }
 
     return false;
@@ -100,14 +100,14 @@ namespace ao::library
 
   TrackStore::Reader::Iterator& TrackStore::Reader::Iterator::operator++()
   {
-    if (_hotIter)
+    if (_optHotIter)
     {
-      ++(*_hotIter);
+      ++(*_optHotIter);
     }
 
-    if (_coldIter)
+    if (_optColdIter)
     {
-      ++(*_coldIter);
+      ++(*_optColdIter);
     }
 
     return *this;
@@ -120,18 +120,18 @@ namespace ao::library
     std::span<std::byte const> hotData;
     std::span<std::byte const> coldData;
 
-    if (_hotIter)
+    if (_optHotIter)
     {
-      auto&& [id, hotBuffer] = **_hotIter;
+      auto&& [id, hotBuffer] = **_optHotIter;
       trackId = TrackId{id};
       hotData = hotBuffer;
     }
 
-    if (_coldIter)
+    if (_optColdIter)
     {
-      auto&& [coldId, coldBuffer] = **_coldIter;
+      auto&& [coldId, coldBuffer] = **_optColdIter;
 
-      if (!_hotIter)
+      if (!_optHotIter)
       {
         trackId = TrackId{coldId};
       }

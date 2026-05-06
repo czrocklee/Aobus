@@ -53,7 +53,7 @@ namespace ao::gtk
 
     void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files) const;
 
-    void openMusicLibrary(std::filesystem::path const& path);
+    void openMusicLibrary(std::filesystem::path const& path) const;
     void importFilesFromPath(std::filesystem::path const& path);
 
   private:

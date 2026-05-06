@@ -7,10 +7,12 @@
 #include "TrackRowDataProvider.h"
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Log.h>
-#include <runtime/CommandBus.h>
-#include <runtime/CommandTypes.h>
+#include <runtime/ViewService.h>
 
 #include "ui/ThemeBus.h"
+#include <cstdint>
+#include <format>
+#include <functional>
 #include <gdk/gdk.h>
 #include <gdkmm/contentprovider.h>
 #include <gdkmm/cursor.h>
@@ -25,13 +27,14 @@
 #include <gtkmm/listitem.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/stylecontext.h>
-
-#include <algorithm>
-#include <cstdint>
-#include <format>
-#include <functional>
 #include <memory>
 #include <ranges>
+#include <runtime/AppSession.h>
+#include <runtime/EventBus.h>
+#include <runtime/LibraryMutationService.h>
+#include <runtime/PlaybackService.h>
+#include <runtime/StateTypes.h>
+#include <runtime/WorkspaceService.h>
 #include <string>
 #include <vector>
 
@@ -147,43 +150,6 @@ namespace ao::gtk
       }
     }
 
-    TrackRow const* trackRowFromItem(::gconstpointer item)
-    {
-      if (item == nullptr)
-      {
-        return nullptr;
-      }
-
-      auto* const object = Glib::wrap_auto(ao::utility::layout::asLegacyPtr<::GObject>(item), false);
-
-      return dynamic_cast<TrackRow const*>(object);
-    }
-
-    Glib::RefPtr<Gtk::Sorter> createRowSorter(RowCompareFn compare)
-    {
-      auto* const comparePtr = new RowCompareFn{std::move(compare)}; // NOLINT(cppcoreguidelines-owning-memory)
-
-      auto* const customSorter = ::gtk_custom_sorter_new(
-        [](::gconstpointer lhs, ::gconstpointer rhs, ::gpointer userData) -> int
-        {
-          auto* const compareFn = static_cast<RowCompareFn*>(userData);
-          auto const* const leftRow = trackRowFromItem(lhs);
-          auto const* const rightRow = trackRowFromItem(rhs);
-
-          if (!compareFn || !leftRow || !rightRow)
-          {
-            return 0;
-          }
-
-          return (*compareFn)(*leftRow, *rightRow);
-        },
-        comparePtr,
-        [](::gpointer userData)
-        { delete static_cast<RowCompareFn*>(userData); }); // NOLINT(cppcoreguidelines-owning-memory)
-
-      return Glib::wrap(GTK_SORTER(customSorter), false);
-    }
-
     bool isTagsCellWidget(Gtk::Widget const* widget)
     {
       for (auto const* current = widget; current != nullptr; current = current->get_parent())
@@ -242,13 +208,13 @@ namespace ao::gtk
   TrackViewPage::TrackViewPage(ao::ListId listId,
                                TrackListAdapter& adapter,
                                TrackColumnLayoutModel& columnLayoutModel,
-                               ao::app::CommandBus& commands,
+                               ao::app::AppSession& session,
                                ao::app::ViewId viewId)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
     , _viewId{viewId}
     , _adapter{adapter}
-    , _commands{commands}
+    , _session{session}
     , _groupModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
     , _columnLayoutModel{columnLayoutModel}
     , _presentationSpec{presentationSpecForGroup(TrackGroupBy::None)}
@@ -523,18 +489,15 @@ namespace ao::gtk
     }
 
     auto sortBy = std::vector<ao::app::TrackSortTerm>{};
-    for (auto const& t : _presentationSpec.sortBy)
+    for (auto const& term : _presentationSpec.sortBy)
     {
       sortBy.push_back(ao::app::TrackSortTerm{
-        .field = static_cast<ao::app::TrackSortField>(t.field),
+        .field = static_cast<ao::app::TrackSortField>(term.field),
         .ascending = true,
       });
     }
 
-    _commands.execute<ao::app::SetViewSort>(ao::app::SetViewSort{
-      .viewId = _viewId,
-      .sortBy = std::move(sortBy),
-    });
+    _session.views().setSort(_viewId, sortBy);
 
     auto runtimeGroup = ao::app::TrackGroupKey::None;
     switch (_presentationSpec.groupBy)
@@ -548,10 +511,7 @@ namespace ao::gtk
       case TrackGroupBy::Year: runtimeGroup = ao::app::TrackGroupKey::Year; break;
       default: break;
     }
-    _commands.execute<ao::app::SetViewGrouping>(ao::app::SetViewGrouping{
-      .viewId = _viewId,
-      .groupBy = runtimeGroup,
-    });
+    _session.views().setGrouping(_viewId, runtimeGroup);
   }
 
   void TrackViewPage::setStatusMessage(std::string const& message)
@@ -741,7 +701,7 @@ namespace ao::gtk
   TrackColumnLayout TrackViewPage::captureCurrentColumnLayout() const
   {
     auto layout = TrackColumnLayout{};
-    auto const currentLayout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
+    auto currentLayout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
 
     auto const currentStateFor = [&currentLayout](TrackColumn column)
     {
@@ -1292,6 +1252,375 @@ namespace ao::gtk
     }
   }
 
+  void TrackViewPage::onTextColumnSetup(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                                        TrackColumnDefinition const& definition,
+                                        bool isEditable,
+                                        bool isHyperlink)
+  {
+    if (definition.tagsCell)
+    {
+      auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 0);
+
+      box->set_halign(Gtk::Align::FILL);
+      box->set_hexpand(true);
+      box->add_css_class(kTagsCellWidgetName);
+
+      auto* const label = Gtk::make_managed<Gtk::Label>("");
+
+      label->set_halign(Gtk::Align::START);
+      label->set_ellipsize(Pango::EllipsizeMode::END);
+      label->set_hexpand(true);
+
+      box->append(*label);
+      listItem->set_child(*box);
+
+      return;
+    }
+
+    if (isEditable)
+    {
+      auto* const stack = Gtk::make_managed<Gtk::Stack>();
+
+      stack->add_css_class("inline-editor-stack");
+      stack->set_transition_type(Gtk::StackTransitionType::CROSSFADE);
+      stack->set_vhomogeneous(false);
+      stack->set_hexpand(true);
+      stack->set_vexpand(true);
+      stack->set_halign(Gtk::Align::FILL);
+      stack->set_valign(Gtk::Align::FILL);
+
+      auto* const label = Gtk::make_managed<Gtk::Label>("");
+
+      label->set_halign(Gtk::Align::START);
+      label->set_ellipsize(Pango::EllipsizeMode::END);
+      label->set_hexpand(true);
+      label->add_css_class("inline-editor-label");
+
+      if (isHyperlink)
+      {
+        auto const source = Gtk::DragSource::create();
+
+        source->signal_prepare().connect(
+          sigc::slot<std::shared_ptr<Gdk::ContentProvider>(double, double)>(
+            [label, column = definition.column](double, double) -> std::shared_ptr<Gdk::ContentProvider>
+            { return createDragContentProvider(label, column); }),
+          false);
+
+        label->add_controller(source);
+      }
+
+      stack->add(*label, "display");
+
+      auto* const entry = Gtk::make_managed<Gtk::Entry>();
+
+      entry->add_css_class("inline-editor-entry");
+      entry->set_hexpand(true);
+      entry->set_vexpand(true);
+      entry->set_halign(Gtk::Align::FILL);
+      entry->set_valign(Gtk::Align::FILL);
+
+      stack->add(*entry, "edit");
+
+      auto const longPress = Gtk::GestureLongPress::create();
+
+      longPress->set_delay_factor(kLongPressDelayFactor);
+      longPress->signal_pressed().connect(
+        [stack, entry](double, double)
+        {
+          stack->set_visible_child("edit");
+          entry->grab_focus();
+          entry->select_region(0, -1);
+        });
+
+      stack->add_controller(longPress);
+
+      listItem->set_child(*stack);
+
+      return;
+    }
+
+    auto* const label = Gtk::make_managed<Gtk::Label>("");
+
+    label->set_halign(definition.numeric ? Gtk::Align::END : Gtk::Align::START);
+    label->set_xalign(definition.numeric ? 1.0F : 0.0F);
+
+    if (!definition.numeric)
+    {
+      label->set_ellipsize(Pango::EllipsizeMode::END);
+    }
+
+    if (isHyperlink)
+    {
+      auto const source = Gtk::DragSource::create();
+
+      source->signal_prepare().connect(
+        sigc::slot<std::shared_ptr<Gdk::ContentProvider>(double, double)>(
+          [label, column = definition.column](double, double) -> std::shared_ptr<Gdk::ContentProvider>
+          { return createDragContentProvider(label, column); }),
+        false);
+
+      label->add_controller(source);
+    }
+
+    listItem->set_child(*label);
+  }
+
+  void TrackViewPage::onTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                                       TrackColumnDefinition const& definition,
+                                       bool isEditable)
+  {
+    auto const item = listItem->get_item();
+    auto const row = std::dynamic_pointer_cast<TrackRow>(item);
+
+    if (row == nullptr)
+    {
+      return;
+    }
+
+    if (definition.tagsCell)
+    {
+      auto* const box = dynamic_cast<Gtk::Box*>(listItem->get_child());
+      auto* const label = (box != nullptr) ? dynamic_cast<Gtk::Label*>(box->get_first_child()) : nullptr;
+
+      if (label != nullptr)
+      {
+        label->set_text(row->getColumnText(definition.column));
+      }
+
+      // Fall through to updateStyles
+    }
+    else if (isEditable)
+    {
+      onTextColumnBindEditable(listItem, definition, row);
+    }
+    else
+    {
+      onTextColumnBindStatic(listItem, definition, row);
+    }
+
+    auto const updateStyles = [listItem, row, definition]()
+    {
+      auto* const child = listItem->get_child();
+
+      if (row->isPlaying())
+      {
+        if (auto* const cell = child->get_parent())
+        {
+          if (auto* const rowWidget = cell->get_parent())
+          {
+            rowWidget->add_css_class("playing-row");
+          }
+
+          if (definition.column == TrackColumn::Title)
+          {
+            cell->add_css_class("playing-title");
+          }
+          else
+          {
+            child->add_css_class("playing-dim");
+          }
+        }
+      }
+      else
+      {
+        if (auto* const cell = child->get_parent())
+        {
+          if (auto* const rowWidget = cell->get_parent())
+          {
+            rowWidget->remove_css_class("playing-row");
+          }
+
+          cell->remove_css_class("playing-title");
+        }
+
+        child->remove_css_class("playing-dim");
+      }
+    };
+
+    updateStyles();
+
+    auto const connection = row->property_playing().signal_changed().connect(updateStyles);
+
+    listItem->set_data("playing-connection",
+                       new sigc::connection{connection}, // NOLINT(cppcoreguidelines-owning-memory)
+                       [](::gpointer data)
+                       {
+                         auto* const conn =
+                           static_cast<sigc::connection*>(data); // NOLINT(cppcoreguidelines-owning-memory)
+
+                         conn->disconnect();
+                         delete conn; // NOLINT(cppcoreguidelines-owning-memory)
+                       });
+  }
+
+  void TrackViewPage::onTextColumnBindEditable(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                                               TrackColumnDefinition const& definition,
+                                               Glib::RefPtr<TrackRow> const& row)
+  {
+    auto* const stack = dynamic_cast<Gtk::Stack*>(listItem->get_child());
+    auto* const label = (stack != nullptr) ? dynamic_cast<Gtk::Label*>(stack->get_child_by_name("display")) : nullptr;
+    auto* const entry = (stack != nullptr) ? dynamic_cast<Gtk::Entry*>(stack->get_child_by_name("edit")) : nullptr;
+
+    if (label != nullptr && entry != nullptr)
+    {
+      label->set_text(row->getColumnText(definition.column));
+      entry->set_text(row->getColumnText(definition.column));
+
+      auto const commitChange = [this, stack, entry, row, column = definition.column]()
+      { commitMetadataChange(stack, entry, row, column); };
+
+      auto const cancelChange = [stack, row, definition, entry]()
+      {
+        stack->set_visible_child("display");
+        entry->set_text(row->getColumnText(definition.column));
+      };
+
+      auto const activateConn = entry->signal_activate().connect(commitChange);
+      auto const focusController = Gtk::EventControllerFocus::create();
+
+      focusController->signal_leave().connect([commitChange]() { commitChange(); });
+      entry->add_controller(focusController);
+
+      auto const keyController = Gtk::EventControllerKey::create();
+
+      keyController->signal_key_pressed().connect(
+        [cancelChange](guint keyval, guint, Gdk::ModifierType) -> bool
+        {
+          if (keyval == GDK_KEY_Escape)
+          {
+            cancelChange();
+            return true;
+          }
+          return false;
+        },
+        false);
+      entry->add_controller(keyController);
+
+      auto modelConnection = sigc::connection{};
+
+      if (definition.column == TrackColumn::Title)
+      {
+        modelConnection = row->property_title().signal_changed().connect(
+          [label, entry, row]()
+          {
+            label->set_text(row->getTitle());
+            entry->set_text(row->getTitle());
+          });
+      }
+      else if (definition.column == TrackColumn::Artist)
+      {
+        modelConnection = row->property_artist().signal_changed().connect(
+          [label, entry, row]()
+          {
+            label->set_text(row->getArtist());
+            entry->set_text(row->getArtist());
+          });
+      }
+      else if (definition.column == TrackColumn::Album)
+      {
+        modelConnection = row->property_album().signal_changed().connect(
+          [label, entry, row]()
+          {
+            label->set_text(row->getAlbum());
+            entry->set_text(row->getAlbum());
+          });
+      }
+
+      listItem->set_data("model-connection",
+                         new sigc::connection{modelConnection}, // NOLINT(cppcoreguidelines-owning-memory)
+                         [](::gpointer data)
+                         {
+                           auto* const conn =
+                             static_cast<sigc::connection*>(data); // NOLINT(cppcoreguidelines-owning-memory)
+
+                           conn->disconnect();
+                           delete conn; // NOLINT(cppcoreguidelines-owning-memory)
+                         });
+
+      listItem->set_data("activate-connection",
+                         new sigc::connection{activateConn}, // NOLINT(cppcoreguidelines-owning-memory)
+                         [](::gpointer data)
+                         {
+                           auto* const conn =
+                             static_cast<sigc::connection*>(data); // NOLINT(cppcoreguidelines-owning-memory)
+
+                           conn->disconnect();
+                           delete conn; // NOLINT(cppcoreguidelines-owning-memory)
+                         });
+    }
+  }
+
+  void TrackViewPage::onTextColumnBindStatic(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                                             TrackColumnDefinition const& definition,
+                                             Glib::RefPtr<TrackRow> const& row)
+  {
+    auto* const label = dynamic_cast<Gtk::Label*>(listItem->get_child());
+
+    if (label != nullptr)
+    {
+      label->set_text(row->getColumnText(definition.column));
+    }
+  }
+
+  void TrackViewPage::commitMetadataChange(Gtk::Stack* stack,
+                                           Gtk::Entry* entry,
+                                           Glib::RefPtr<TrackRow> const& row,
+                                           TrackColumn column)
+  {
+    if (stack->get_visible_child_name() != "edit")
+    {
+      return;
+    }
+
+    auto const newValue = entry->get_text().raw();
+    auto const oldValue = row->getColumnText(column).raw();
+
+    stack->set_visible_child("display");
+
+    if (newValue == oldValue)
+    {
+      return;
+    }
+
+    auto patch = ao::app::MetadataPatch{};
+
+    if (column == TrackColumn::Title)
+    {
+      patch.optTitle = newValue;
+      row->setTitle(newValue);
+    }
+    else if (column == TrackColumn::Artist)
+    {
+      patch.optArtist = newValue;
+      row->setArtist(newValue);
+    }
+    else if (column == TrackColumn::Album)
+    {
+      patch.optAlbum = newValue;
+      row->setAlbum(newValue);
+    }
+
+    auto const result = _session.mutation().updateMetadata({row->getTrackId()}, patch);
+
+    if (!result)
+    {
+      APP_LOG_ERROR("Metadata update failed: {}", result.error().message);
+
+      if (column == TrackColumn::Title)
+      {
+        row->setTitle(oldValue);
+      }
+      else if (column == TrackColumn::Artist)
+      {
+        row->setArtist(oldValue);
+      }
+      else if (column == TrackColumn::Album)
+      {
+        row->setAlbum(oldValue);
+      }
+    }
+  }
+
   Glib::RefPtr<Gtk::SignalListItemFactory> TrackViewPage::createTextColumnFactory(
     TrackColumnDefinition const& definition)
   {
@@ -1303,351 +1632,11 @@ namespace ao::gtk
     auto const factory = Gtk::SignalListItemFactory::create();
 
     factory->signal_setup().connect(
-      [definition, isEditable, isHyperlink](Glib::RefPtr<Gtk::ListItem> const& listItem)
-      {
-        if (definition.tagsCell)
-        {
-          auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 0);
-
-          box->set_halign(Gtk::Align::FILL);
-          box->set_hexpand(true);
-          box->add_css_class(kTagsCellWidgetName);
-
-          auto* const label = Gtk::make_managed<Gtk::Label>("");
-
-          label->set_halign(Gtk::Align::START);
-          label->set_ellipsize(Pango::EllipsizeMode::END);
-          label->set_hexpand(true);
-
-          box->append(*label);
-          listItem->set_child(*box);
-
-          return;
-        }
-
-        if (isEditable)
-        {
-          auto* const stack = Gtk::make_managed<Gtk::Stack>();
-
-          stack->add_css_class("inline-editor-stack");
-          stack->set_transition_type(Gtk::StackTransitionType::CROSSFADE);
-          stack->set_vhomogeneous(false);
-          stack->set_hexpand(true);
-          stack->set_vexpand(true);
-          stack->set_halign(Gtk::Align::FILL);
-          stack->set_valign(Gtk::Align::FILL);
-
-          auto* const label = Gtk::make_managed<Gtk::Label>("");
-
-          label->set_halign(Gtk::Align::START);
-          label->set_ellipsize(Pango::EllipsizeMode::END);
-          label->set_hexpand(true);
-          label->add_css_class("inline-editor-label");
-
-          if (isHyperlink)
-          {
-            auto const source = Gtk::DragSource::create();
-
-            source->signal_prepare().connect(
-              sigc::slot<std::shared_ptr<Gdk::ContentProvider>(double, double)>(
-                [label, column = definition.column](double, double) -> std::shared_ptr<Gdk::ContentProvider>
-                { return createDragContentProvider(label, column); }),
-              false);
-
-            label->add_controller(source);
-          }
-
-          stack->add(*label, "display");
-
-          auto* const entry = Gtk::make_managed<Gtk::Entry>();
-
-          entry->add_css_class("inline-editor-entry");
-          entry->set_hexpand(true);
-          entry->set_vexpand(true);
-          entry->set_halign(Gtk::Align::FILL);
-          entry->set_valign(Gtk::Align::FILL);
-
-          stack->add(*entry, "edit");
-
-          auto const longPress = Gtk::GestureLongPress::create();
-
-          longPress->set_delay_factor(kLongPressDelayFactor);
-          longPress->signal_pressed().connect(
-            [stack, entry](double, double)
-            {
-              stack->set_visible_child("edit");
-              entry->grab_focus();
-              entry->select_region(0, -1);
-            });
-
-          stack->add_controller(longPress);
-
-          listItem->set_child(*stack);
-
-          return;
-        }
-
-        auto* const label = Gtk::make_managed<Gtk::Label>("");
-
-        label->set_halign(definition.numeric ? Gtk::Align::END : Gtk::Align::START);
-        label->set_xalign(definition.numeric ? 1.0F : 0.0F);
-
-        if (!definition.numeric)
-        {
-          label->set_ellipsize(Pango::EllipsizeMode::END);
-        }
-
-        if (isHyperlink)
-        {
-          auto const source = Gtk::DragSource::create();
-
-          source->signal_prepare().connect(
-            sigc::slot<std::shared_ptr<Gdk::ContentProvider>(double, double)>(
-              [label, column = definition.column](double, double) -> std::shared_ptr<Gdk::ContentProvider>
-              { return createDragContentProvider(label, column); }),
-            false);
-
-          label->add_controller(source);
-        }
-
-        listItem->set_child(*label);
-      });
-
-    factory->signal_bind().connect(
-      [this, definition, isEditable](Glib::RefPtr<Gtk::ListItem> const& listItem)
-      {
-        auto const item = listItem->get_item();
-        auto const row = std::dynamic_pointer_cast<TrackRow>(item);
-
-        if (!row)
-        {
-          return;
-        }
-
-        if (definition.tagsCell)
-        {
-          auto* const box = dynamic_cast<Gtk::Box*>(listItem->get_child());
-          auto* const label = box ? dynamic_cast<Gtk::Label*>(box->get_first_child()) : nullptr;
-
-          if (label)
-          {
-            label->set_text(row->getColumnText(definition.column));
-          }
-
-          return;
-        }
-
-        if (isEditable)
-        {
-          auto* const stack = dynamic_cast<Gtk::Stack*>(listItem->get_child());
-          auto* const label = stack ? dynamic_cast<Gtk::Label*>(stack->get_child_by_name("display")) : nullptr;
-          auto* const entry = stack ? dynamic_cast<Gtk::Entry*>(stack->get_child_by_name("edit")) : nullptr;
-
-          if (label && entry)
-          {
-            label->set_text(row->getColumnText(definition.column));
-            entry->set_text(row->getColumnText(definition.column));
-
-            auto const commitChange = [this, stack, entry, row, column = definition.column]()
-            {
-              if (stack->get_visible_child_name() != "edit")
-              {
-                return;
-              }
-
-              auto const newValue = entry->get_text().raw();
-              auto const oldValue = row->getColumnText(column).raw();
-
-              stack->set_visible_child("display");
-
-              if (newValue == oldValue)
-              {
-                return;
-              }
-
-              auto patch = ao::app::MetadataPatch{};
-
-              if (column == TrackColumn::Title)
-              {
-                patch.optTitle = newValue;
-                row->setTitle(newValue);
-              }
-              else if (column == TrackColumn::Artist)
-              {
-                patch.optArtist = newValue;
-                row->setArtist(newValue);
-              }
-              else if (column == TrackColumn::Album)
-              {
-                patch.optAlbum = newValue;
-                row->setAlbum(newValue);
-              }
-
-              auto const result = _commands.execute<ao::app::UpdateTrackMetadata>(
-                ao::app::UpdateTrackMetadata{.trackIds = {row->getTrackId()}, .patch = patch});
-
-              if (!result)
-              {
-                APP_LOG_ERROR("Metadata update failed: {}", result.error().message);
-
-                if (column == TrackColumn::Title)
-                {
-                  row->setTitle(oldValue);
-                }
-                else if (column == TrackColumn::Artist)
-                {
-                  row->setArtist(oldValue);
-                }
-                else if (column == TrackColumn::Album)
-                {
-                  row->setAlbum(oldValue);
-                }
-              }
-            };
-
-            auto const cancelChange = [stack, row, definition, entry]()
-            {
-              stack->set_visible_child("display");
-              entry->set_text(row->getColumnText(definition.column));
-            };
-
-            auto const activateConn = entry->signal_activate().connect(commitChange);
-            auto const focusController = Gtk::EventControllerFocus::create();
-
-            focusController->signal_leave().connect([commitChange]() { commitChange(); });
-            entry->add_controller(focusController);
-
-            auto const keyController = Gtk::EventControllerKey::create();
-
-            keyController->signal_key_pressed().connect(
-              [cancelChange](guint keyval, guint, Gdk::ModifierType) -> bool
-              {
-                if (keyval == GDK_KEY_Escape)
-                {
-                  cancelChange();
-                  return true;
-                }
-
-                return false;
-              },
-              false);
-
-            entry->add_controller(keyController);
-
-            auto modelConnection = sigc::connection{};
-
-            if (definition.column == TrackColumn::Title)
-            {
-              modelConnection = row->property_title().signal_changed().connect(
-                [label, entry, row]()
-                {
-                  label->set_text(row->getTitle());
-                  entry->set_text(row->getTitle());
-                });
-            }
-            else if (definition.column == TrackColumn::Artist)
-            {
-              modelConnection = row->property_artist().signal_changed().connect(
-                [label, entry, row]()
-                {
-                  label->set_text(row->getArtist());
-                  entry->set_text(row->getArtist());
-                });
-            }
-            else if (definition.column == TrackColumn::Album)
-            {
-              modelConnection = row->property_album().signal_changed().connect(
-                [label, entry, row]()
-                {
-                  label->set_text(row->getAlbum());
-                  entry->set_text(row->getAlbum());
-                });
-            }
-
-            listItem->set_data("model-connection",
-                               new sigc::connection{modelConnection},
-                               [](::gpointer data)
-                               {
-                                 auto* const conn = static_cast<sigc::connection*>(data);
-
-                                 conn->disconnect();
-                                 delete conn;
-                               });
-
-            listItem->set_data("activate-connection",
-                               new sigc::connection{activateConn},
-                               [](::gpointer data)
-                               {
-                                 auto* const conn = static_cast<sigc::connection*>(data);
-
-                                 conn->disconnect();
-                                 delete conn;
-                               });
-          }
-        }
-        else
-        {
-          auto* const label = dynamic_cast<Gtk::Label*>(listItem->get_child());
-
-          if (label)
-          {
-            label->set_text(row->getColumnText(definition.column));
-          }
-        }
-
-        auto const updateStyles = [listItem, row, definition]()
-        {
-          auto* const child = listItem->get_child();
-
-          if (row->isPlaying())
-          {
-            if (auto* const cell = child->get_parent())
-            {
-              if (auto* const rowWidget = cell->get_parent())
-              {
-                rowWidget->add_css_class("playing-row");
-              }
-
-              if (definition.column == TrackColumn::Title)
-              {
-                cell->add_css_class("playing-title");
-              }
-              else
-              {
-                child->add_css_class("playing-dim");
-              }
-            }
-          }
-          else
-          {
-            if (auto* const cell = child->get_parent())
-            {
-              if (auto* const rowWidget = cell->get_parent())
-              {
-                rowWidget->remove_css_class("playing-row");
-              }
-
-              cell->remove_css_class("playing-title");
-            }
-
-            child->remove_css_class("playing-dim");
-          }
-        };
-
-        updateStyles();
-
-        auto const connection = row->property_playing().signal_changed().connect(updateStyles);
-
-        listItem->set_data("playing-connection",
-                           new sigc::connection{connection},
-                           [](::gpointer data)
-                           {
-                             auto* const conn = static_cast<sigc::connection*>(data);
-
-                             conn->disconnect();
-                             delete conn;
-                           });
-      });
+      [this, definition, isEditable, isHyperlink](Glib::RefPtr<Gtk::ListItem> const& listItem)
+      { onTextColumnSetup(listItem, definition, isEditable, isHyperlink); });
+
+    factory->signal_bind().connect([this, definition, isEditable](Glib::RefPtr<Gtk::ListItem> const& listItem)
+                                   { onTextColumnBind(listItem, definition, isEditable); });
 
     factory->signal_unbind().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItem)

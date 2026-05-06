@@ -14,6 +14,10 @@
 #include <format>
 #include <limits>
 #include <runtime/AppSession.h>
+#include <runtime/EventBus.h>
+#include <runtime/StateTypes.h>
+#include <runtime/ViewService.h>
+#include <runtime/WorkspaceService.h>
 
 namespace ao::gtk
 {

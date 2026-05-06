@@ -100,8 +100,8 @@ namespace ao::library
              lmdb::Database::Reader::Iterator&& coldIter,
              Reader::LoadMode mode);
 
-    std::optional<lmdb::Database::Reader::Iterator> _hotIter;
-    std::optional<lmdb::Database::Reader::Iterator> _coldIter;
+    std::optional<lmdb::Database::Reader::Iterator> _optHotIter;
+    std::optional<lmdb::Database::Reader::Iterator> _optColdIter;
     Reader::LoadMode _mode = Reader::LoadMode::Both;
     friend class Reader;
   };

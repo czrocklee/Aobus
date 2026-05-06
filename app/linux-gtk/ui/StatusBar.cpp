@@ -7,8 +7,10 @@
 #include "SvgTemplate.h"
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
-#include <runtime/CommandTypes.h>
+#include <runtime/EventBus.h>
 #include <runtime/EventTypes.h>
+#include <runtime/NotificationService.h>
+#include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
 
 #include "ui/ThemeBus.h"
@@ -180,29 +182,30 @@ namespace ao::gtk
     set_margin(Layout::kMarginSmall);
     add_css_class("status-bar");
 
-    // Self-wire to playback state
-    _stateSub = _session.playback().subscribe([this](ao::app::PlaybackState const& state) { setPlaybackState(state); });
+    // Self-wire: events drive state reads from store snapshot
+    _transportChangedSub = _session.events().subscribe<ao::app::PlaybackTransportChanged>(
+      [this](ao::app::PlaybackTransportChanged const&) { setPlaybackState(_session.playback().state()); });
 
-    // Self-wire to notification feed
-    _notificationSub = _session.notifications().subscribe(
-      [this](ao::app::NotificationFeedState const& feed)
-      {
-        if (feed.entries.empty())
-        {
-          return;
-        }
-        auto const& latest = feed.entries.back();
-        auto const duration = latest.optTimeout.value_or(std::chrono::seconds{5});
-        showMessage(latest.message, std::chrono::duration_cast<std::chrono::seconds>(duration));
-      });
-
-    // Self-wire to output changes for tooltip/status updates
     _outputChangedSub = _session.events().subscribe<ao::app::PlaybackOutputChanged>(
-      [this](ao::app::PlaybackOutputChanged const&)
+      [this](ao::app::PlaybackOutputChanged const&) { setPlaybackState(_session.playback().state()); });
+
+    _qualityChangedSub = _session.events().subscribe<ao::app::PlaybackQualityChanged>(
+      [this](ao::app::PlaybackQualityChanged const&) { setPlaybackState(_session.playback().state()); });
+
+    _notificationPostedSub = _session.events().subscribe<ao::app::NotificationPosted>(
+      [this](ao::app::NotificationPosted const&)
       {
-        auto const state = _session.playback().snapshot();
-        setPlaybackState(state);
+        auto const feed = _session.notifications().feed();
+        if (!feed.entries.empty())
+        {
+          auto const& latest = feed.entries.back();
+          auto const duration = latest.optTimeout.value_or(std::chrono::seconds{5});
+          showMessage(latest.message, std::chrono::duration_cast<std::chrono::seconds>(duration));
+        }
       });
+
+    // Populate initial state from snapshot (one-shot, no subscription)
+    applyInitialState();
 
     // Playback details (Left)
     _playbackDetailsBox.set_spacing(Layout::kSpacingLarge);
@@ -229,9 +232,7 @@ namespace ao::gtk
     _nowPlayingLabel.set_tooltip_text("Click to show playing list");
 
     auto const clickGesture = Gtk::GestureClick::create();
-    clickGesture->signal_pressed().connect(
-      [this](int, double, double)
-      { _session.commands().execute<ao::app::RevealPlayingTrack>(ao::app::RevealPlayingTrack{}); });
+    clickGesture->signal_pressed().connect([this](int, double, double) { _session.playback().revealPlayingTrack(); });
 
     _nowPlayingLabel.add_controller(clickGesture);
     _nowPlayingLabel.set_cursor(Gdk::Cursor::create("pointer"));
@@ -535,18 +536,23 @@ namespace ao::gtk
 
   void StatusBar::setPlaybackState(ao::app::PlaybackState const& state)
   {
-    ao::audio::Player::Status s;
-    s.engine.transport = state.transport;
-    s.engine.backendId = state.selectedOutput.backendId;
-    s.engine.profileId = state.selectedOutput.profileId;
-    s.engine.currentDeviceId = state.selectedOutput.deviceId;
-    s.flow = state.flow;
-    s.quality = state.quality;
-    s.isReady = state.ready;
-    s.trackTitle = state.trackTitle;
-    s.trackArtist = state.trackArtist;
+    ao::audio::Player::Status status;
+    status.engine.transport = state.transport;
+    status.engine.backendId = state.selectedOutput.backendId;
+    status.engine.profileId = state.selectedOutput.profileId;
+    status.engine.currentDeviceId = state.selectedOutput.deviceId;
+    status.flow = state.flow;
+    status.quality = state.quality;
+    status.isReady = state.ready;
+    status.trackTitle = state.trackTitle;
+    status.trackArtist = state.trackArtist;
 
-    updatePlaybackStatusLabels(s);
+    updatePlaybackStatusLabels(status);
+  }
+
+  void StatusBar::applyInitialState()
+  {
+    setPlaybackState(_session.playback().state());
   }
 
   void StatusBar::setImportProgress(double fraction, std::string const& info)

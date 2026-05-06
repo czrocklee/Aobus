@@ -179,7 +179,7 @@ namespace ao::gtk
     }
   }
 
-  void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path)
+  void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path) const
   {
     if (_callbacks.onOpenNewLibrary)
     {
@@ -209,16 +209,16 @@ namespace ao::gtk
 
   void ImportExportCoordinator::exportLibrary()
   {
-    auto* dialog = Gtk::make_managed<Gtk::Dialog>();
+    auto* const dialog = Gtk::make_managed<Gtk::Dialog>();
     dialog->set_title("Select Export Mode");
     dialog->set_transient_for(_parent);
     dialog->set_modal(true);
 
-    auto* contentArea = dialog->get_content_area();
-    auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, Layout::kMarginMedium);
+    auto* const contentArea = dialog->get_content_area();
+    auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, Layout::kMarginMedium);
     box->set_margin(Layout::kMarginMedium);
 
-    auto* label = Gtk::make_managed<Gtk::Label>("Choose what to include in the backup:");
+    auto* const label = Gtk::make_managed<Gtk::Label>("Choose what to include in the backup:");
     label->set_halign(Gtk::Align::START);
     box->append(*label);
 

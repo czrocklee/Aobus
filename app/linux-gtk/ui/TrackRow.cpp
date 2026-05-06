@@ -97,14 +97,14 @@ namespace ao::gtk
     return obj;
   }
 
-  void TrackRow::populate(Glib::ustring title,
+  void TrackRow::populate(Glib::ustring const& title,
                           ao::DictionaryId artist,
                           ao::DictionaryId album,
                           ao::DictionaryId albumArtist,
                           ao::DictionaryId genre,
                           ao::DictionaryId composer,
                           ao::DictionaryId work,
-                          Glib::ustring tags,
+                          Glib::ustring const& tags,
                           std::chrono::milliseconds duration,
                           std::uint16_t year,
                           std::uint16_t discNumber,
@@ -116,7 +116,7 @@ namespace ao::gtk
                           std::uint8_t bitDepth,
                           std::uint16_t codecId)
   {
-    _propertyTitle.set_value(std::move(title));
+    _propertyTitle.set_value(title);
     _propertyArtist.set_value(_provider->resolveDictionaryString(artist));
     _propertyAlbum.set_value(_provider->resolveDictionaryString(album));
 
@@ -125,7 +125,7 @@ namespace ao::gtk
     _composerId = composer;
     _workId = work;
 
-    _tags = std::move(tags);
+    _tags = tags;
     _duration = duration;
     _year = year;
     _discNumber = discNumber;

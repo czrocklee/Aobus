@@ -5,18 +5,15 @@
 #include "TagPopover.h"
 #include "TrackRowDataProvider.h"
 #include <ao/library/TrackBuilder.h>
-#include <format>
 #include <runtime/AppSession.h>
+#include <runtime/EventBus.h>
+#include <runtime/EventTypes.h>
+#include <runtime/LibraryMutationService.h>
 
 namespace ao::gtk
 {
   namespace
   {
-    bool hasTagName(std::vector<std::string_view> const& tagNames, std::string_view tag)
-    {
-      return std::ranges::contains(tagNames, tag);
-    }
-
     std::string tagChangeStatusMessage(std::size_t trackCount, std::size_t addedCount, std::size_t removedCount)
     {
       auto parts = std::vector<std::string>{};
@@ -153,49 +150,19 @@ namespace ao::gtk
       return;
     }
 
-    auto txn = _session.musicLibrary().writeTransaction();
-    auto writer = _session.musicLibrary().tracks().writer(txn);
-    auto& dict = _session.musicLibrary().dictionary();
+    auto const result = _session.mutation().editTags(selection.selectedIds, tagsToAdd, tagsToRemove);
 
-    for (auto const trackId : selection.selectedIds)
+    if (!result)
     {
-      auto const optView = writer.get(trackId, ao::library::TrackStore::Reader::LoadMode::Hot);
+      APP_LOG_ERROR("Failed to edit tags: {}", result.error().message);
 
-      if (!optView)
+      if (_callbacks.onStatusMessage)
       {
-        continue;
+        _callbacks.onStatusMessage(std::format("Failed to edit tags: {}", result.error().message));
       }
 
-      auto builder = ao::library::TrackBuilder::fromView(*optView, dict);
-
-      for (auto const& tag : tagsToRemove)
-      {
-        builder.tags().remove(tag);
-      }
-
-      for (auto const& tag : tagsToAdd)
-      {
-        if (!hasTagName(builder.tags().names(), tag))
-        {
-          builder.tags().add(tag);
-        }
-      }
-
-      auto hotData = builder.serializeHot(txn, dict);
-      writer.updateHot(trackId, hotData);
+      return;
     }
-
-    txn.commit();
-
-    if (_dataProvider)
-    {
-      for (auto const trackId : selection.selectedIds)
-      {
-        _dataProvider->invalidate(trackId);
-      }
-    }
-
-    _session.allTracks().notifyUpdated(selection.selectedIds);
 
     if (_callbacks.onTagsMutated)
     {
