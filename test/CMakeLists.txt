@@ -28,6 +28,7 @@ add_executable(ao_test
 
     # audio unit tests
     unit/audio/DecoderFactoryTest.cpp
+    unit/audio/QualityAnalyzerTest.cpp
     unit/audio/FormatNegotiatorTest.cpp
     unit/audio/MemorySourceTest.cpp
     unit/audio/StreamingSourceTest.cpp

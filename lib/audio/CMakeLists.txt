@@ -4,6 +4,7 @@ add_library(ao_audio STATIC
     FlacDecoderSession.cpp
     AlacDecoderSession.cpp
     Player.cpp
+    QualityAnalyzer.cpp
     Engine.cpp
     FormatNegotiator.cpp
     MemorySource.cpp
