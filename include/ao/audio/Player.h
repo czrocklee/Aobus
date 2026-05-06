@@ -60,13 +60,14 @@ namespace ao::audio
     Transport transport() const;
     bool isReady() const;
 
-    void setTrackEndedCallback(std::function<void()> callback);
+    [[nodiscard]] Subscription onTrackEnded(std::function<void()> callback);
 
     /// Called when available output devices change; receives per-provider status snapshots.
-    void setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback);
+    [[nodiscard]] Subscription onDevicesChanged(
+      std::function<void(std::vector<IBackendProvider::Status> const&)> callback);
 
     /// Called when playback quality or readiness changes.
-    void setOnQualityChanged(std::function<void(ao::audio::Quality quality, bool ready)> callback);
+    [[nodiscard]] Subscription onQualityChanged(std::function<void(ao::audio::Quality quality, bool ready)> callback);
 
     // Internal visibility for tests
     void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);

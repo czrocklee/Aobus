@@ -534,16 +534,26 @@ namespace ao::audio
     _impl->currentDevice = device;
   }
 
-  void Engine::setOnTrackEnded(std::function<void()> callback)
+  Subscription Engine::onTrackEnded(std::function<void()> callback)
   {
-    auto const lock = std::lock_guard{_impl->stateMutex};
+    std::lock_guard<std::mutex> lock(_impl->stateMutex);
     _impl->onTrackEnded = std::move(callback);
+    return Subscription{[this]()
+                        {
+                          std::lock_guard<std::mutex> lock(_impl->stateMutex);
+                          _impl->onTrackEnded = nullptr;
+                        }};
   }
 
-  void Engine::setOnRouteChanged(OnRouteChanged callback)
+  Subscription Engine::onRouteChanged(OnRouteChanged callback)
   {
-    auto const lock = std::lock_guard{_impl->stateMutex};
+    std::lock_guard<std::mutex> lock(_impl->stateMutex);
     _impl->onRouteChanged = std::move(callback);
+    return Subscription{[this]()
+                        {
+                          std::lock_guard<std::mutex> lock(_impl->stateMutex);
+                          _impl->onRouteChanged = nullptr;
+                        }};
   }
 
   Engine::RouteStatus Engine::routeStatus() const
