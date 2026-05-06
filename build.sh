@@ -1,4 +1,4 @@
-#!/ usr / bin / env bash
+#!/usr/bin/env bash
 #Build script for Aobus
 #Usage :./ build.sh[debug | release | pgo1 | pgo2 | profile][--clean][--tidy][--clang]
 

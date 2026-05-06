@@ -6,8 +6,9 @@
 #include "OutputListItems.h"
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
-#include <runtime/CommandTypes.h>
+#include <runtime/EventBus.h>
 #include <runtime/EventTypes.h>
+#include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
 
 #include "ui/ThemeBus.h"
@@ -100,7 +101,7 @@ namespace ao::gtk
     _transportChangedSub = _session.events().subscribe<ao::app::PlaybackTransportChanged>(
       [this](ao::app::PlaybackTransportChanged const& ev)
       {
-        auto const state = _session.playback().snapshot();
+        auto const state = _session.playback().state();
 
         _lastState.engine.transport = ev.transport;
         updateTransportButtons(ev.transport, state.ready);
@@ -232,11 +233,7 @@ namespace ao::gtk
 
           if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
           {
-            _session.commands().execute<ao::app::SetPlaybackOutput>(ao::app::SetPlaybackOutput{
-              .backendId = deviceItem->backendId,
-              .deviceId = deviceItem->id,
-              .profileId = deviceItem->profileId,
-            });
+            _session.playback().setOutput(deviceItem->backendId, deviceItem->id, deviceItem->profileId);
             _outputPopover.popdown();
           }
         }
@@ -338,7 +335,7 @@ namespace ao::gtk
           auto const displayPos = _lastPositionMs + elapsedMs;
 
           _updatingSeekScale = true;
-          if (displayPos <= _lastDurationMs)
+          if (displayPos <= _lastDurationMs && !_isDraggingSeek)
           {
             _seekScale.set_value(static_cast<double>(displayPos));
           }
@@ -371,31 +368,52 @@ namespace ao::gtk
     _playButton.signal_clicked().connect(
       [this]()
       {
-        auto const& state = _session.playback().snapshot();
+        auto const& state = _session.playback().state();
         if (state.transport == ao::audio::Transport::Paused)
         {
-          _session.commands().execute<ao::app::ResumePlayback>(ao::app::ResumePlayback{});
+          _session.playback().resume();
         }
         else
         {
-          _session.commands().execute<ao::app::PlaySelectionInFocusedView>(ao::app::PlaySelectionInFocusedView{});
+          _session.playSelectionInFocusedView();
         }
       });
-    _pauseButton.signal_clicked().connect(
-      [this]() { _session.commands().execute<ao::app::PausePlayback>(ao::app::PausePlayback{}); });
-    _stopButton.signal_clicked().connect(
-      [this]() { _session.commands().execute<ao::app::StopPlayback>(ao::app::StopPlayback{}); });
+    _pauseButton.signal_clicked().connect([this]() { _session.playback().pause(); });
+    _stopButton.signal_clicked().connect([this]() { _session.playback().stop(); });
 
-    _seekScale.signal_value_changed().connect(
-      [this]()
+    // Seek Scale Interaction: Warp-to-click and Drag Handling
+    auto const seekGesture = Gtk::GestureClick::create();
+    seekGesture->set_button(1); // Left click
+
+    seekGesture->signal_pressed().connect(
+      [this](int, double xPosition, double)
       {
-        if (_updatingSeekScale)
+        _isDraggingSeek = true;
+
+        // Manual warp-to-click calculation to solve "mouse offset" and "scanty feel"
+        // Gtk::Scale's default behavior can be sluggish or require settings tweak.
+        auto const width = _seekScale.get_width();
+        if (width > 0)
         {
-          return;
+          auto const range = _seekScale.get_adjustment()->get_upper() - _seekScale.get_adjustment()->get_lower();
+          auto const newValue =
+            _seekScale.get_adjustment()->get_lower() + ((xPosition / static_cast<double>(width)) * range);
+          _seekScale.set_value(newValue);
+
+          // Immediate seek for responsiveness
+          _session.playback().seek(static_cast<std::uint32_t>(newValue));
         }
-        _session.commands().execute<ao::app::SeekPlayback>(
-          ao::app::SeekPlayback{.positionMs = static_cast<std::uint32_t>(_seekScale.get_value())});
       });
+
+    seekGesture->signal_released().connect(
+      [this](int, double, double)
+      {
+        _isDraggingSeek = false;
+        // One final sync to ensure we are precisely where the mouse ended up
+        _session.playback().seek(static_cast<std::uint32_t>(_seekScale.get_value()));
+      });
+
+    _seekScale.add_controller(seekGesture);
 
     _volumeScale.signalVolumeChanged().connect(
       [this](float volume)
@@ -404,14 +422,14 @@ namespace ao::gtk
         {
           return;
         }
-        _session.commands().execute<ao::app::SetPlaybackVolume>(ao::app::SetPlaybackVolume{.volume = volume});
+        _session.playback().setVolume(volume);
       });
 
     _muteButton.signal_toggled().connect(
       [this]()
       {
-        bool const muted = _session.playback().snapshot().muted;
-        _session.commands().execute<ao::app::SetPlaybackMuted>(ao::app::SetPlaybackMuted{.muted = !muted});
+        bool const muted = _session.playback().state().muted;
+        _session.playback().setMuted(!muted);
       });
   }
 
@@ -599,7 +617,7 @@ namespace ao::gtk
 
   void PlaybackBar::applyInitialState()
   {
-    auto const state = _session.playback().snapshot();
+    auto const state = _session.playback().state();
 
     updateTransportButtons(state.transport, state.ready);
 
@@ -651,7 +669,7 @@ namespace ao::gtk
 
   void PlaybackBar::rebuildOutputList()
   {
-    auto const state = _session.playback().snapshot();
+    auto const state = _session.playback().state();
 
     _outputStore->remove_all();
     for (auto const& backend : state.availableOutputs)
@@ -683,7 +701,11 @@ namespace ao::gtk
       }
     }
 
-    // Update tooltip
+    updateOutputTooltip(state);
+  }
+
+  void PlaybackBar::updateOutputTooltip(ao::app::PlaybackState const& state)
+  {
     bool found = false;
     for (auto const& backend : state.availableOutputs)
     {
@@ -727,7 +749,7 @@ namespace ao::gtk
     _seekScale.set_sensitive(enabled);
   }
 
-  void PlaybackBar::updateTransportButtons(ao::audio::Transport state, bool isReady)
+  void PlaybackBar::updateTransportButtons(ao::audio::Transport state, bool /*isReady*/)
   {
     bool const isPlaying = (state == ao::audio::Transport::Playing || state == ao::audio::Transport::Buffering ||
                             state == ao::audio::Transport::Opening);

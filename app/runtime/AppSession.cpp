@@ -2,9 +2,14 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "AppSession.h"
-#include "CommandTypes.h"
+#include "EventBus.h"
 #include "EventTypes.h"
-#include "ObservableStore.h"
+#include "ISessionPersistence.h"
+#include "LibraryMutationService.h"
+#include "NotificationService.h"
+#include "PlaybackService.h"
+#include "ViewService.h"
+#include "WorkspaceService.h"
 
 #include <ao/library/MusicLibrary.h>
 #include <ao/model/AllTrackIdsList.h>
@@ -18,59 +23,38 @@ namespace ao::app
   {
     std::shared_ptr<IControlExecutor> executor;
 
-    CommandBus commandBus;
     EventBus eventBus;
 
     ao::library::MusicLibrary musicLibrary;
     ao::model::AllTrackIdsList allTracksSource;
     ao::model::SmartListEngine smartListEngine;
+
+    ViewService viewService;
     PlaybackService playbackService;
     LibraryMutationService mutationService;
-
-    ObservableStore<FocusState> focusStore;
-    ViewRegistry viewRegistry;
     NotificationService notificationService;
-    LibraryQueryService queryService;
+    WorkspaceService workspaceService;
 
-    Impl(std::shared_ptr<IControlExecutor> exec, std::filesystem::path libraryRoot)
+    Impl(std::shared_ptr<IControlExecutor> exec,
+         std::filesystem::path libraryRoot,
+         std::shared_ptr<ISessionPersistence> persistence)
       : executor{std::move(exec)}
       , musicLibrary{std::move(libraryRoot)}
       , allTracksSource{musicLibrary.tracks()}
       , smartListEngine{musicLibrary}
-      , playbackService{commandBus, eventBus, *this->executor, viewRegistry, musicLibrary}
-      , mutationService{commandBus, eventBus, *this->executor, musicLibrary}
-      , viewRegistry{musicLibrary, smartListEngine, allTracksSource, eventBus}
-      , notificationService{commandBus, eventBus}
-      , queryService{viewRegistry, eventBus, musicLibrary}
+      , viewService{musicLibrary, smartListEngine, allTracksSource, eventBus}
+      , playbackService{eventBus, *this->executor, viewService, musicLibrary}
+      , mutationService{eventBus, *this->executor, musicLibrary}
+      , notificationService{eventBus}
+      , workspaceService{eventBus, viewService, playbackService, musicLibrary, std::move(persistence)}
     {
-      viewRegistry.registerCommandHandlers(commandBus);
-
-      commandBus.registerHandler<SetFocusedView>(
-        [this](SetFocusedView const& cmd) -> ao::Result<void>
-        {
-          focusStore.update(FocusState{
-            .focusedView = cmd.viewId,
-            .revision = focusStore.snapshot().revision + 1,
-          });
-          eventBus.publish(FocusedViewChanged{.viewId = cmd.viewId});
-          return {};
-        });
-
-      commandBus.registerHandler<PlaySelectionInFocusedView>(
-        [this](PlaySelectionInFocusedView const&) -> ao::Result<ao::TrackId>
-        {
-          auto const focus = focusStore.snapshot();
-          if (focus.focusedView == ViewId{})
-          {
-            return ao::TrackId{};
-          }
-          return commandBus.execute<PlaySelectionInView>(PlaySelectionInView{.viewId = focus.focusedView});
-        });
     }
   };
 
   AppSession::AppSession(AppSessionDependencies dependencies)
-    : _impl{std::make_unique<Impl>(std::move(dependencies.executor), std::move(dependencies.libraryRoot))}
+    : _impl{std::make_unique<Impl>(std::move(dependencies.executor),
+                                   std::move(dependencies.libraryRoot),
+                                   std::move(dependencies.persistence))}
   {
   }
 
@@ -81,44 +65,34 @@ namespace ao::app
     return *_impl->executor;
   }
 
-  CommandBus& AppSession::commands() noexcept
-  {
-    return _impl->commandBus;
-  }
-
   EventBus& AppSession::events() noexcept
   {
     return _impl->eventBus;
   }
 
-  IReadOnlyStore<PlaybackState>& AppSession::playback() noexcept
+  PlaybackService& AppSession::playback() noexcept
   {
-    return _impl->playbackService.state();
+    return _impl->playbackService;
   }
 
-  IReadOnlyStore<FocusState>& AppSession::focus() noexcept
+  WorkspaceService& AppSession::workspace() noexcept
   {
-    return _impl->focusStore;
+    return _impl->workspaceService;
   }
 
-  IReadOnlyStore<NotificationFeedState>& AppSession::notifications() noexcept
+  LibraryMutationService& AppSession::mutation() noexcept
   {
-    return _impl->notificationService.feed();
+    return _impl->mutationService;
   }
 
-  ViewRegistry& AppSession::views() noexcept
-  {
-    return _impl->viewRegistry;
-  }
-
-  LibraryQueryService& AppSession::queries() noexcept
-  {
-    return _impl->queryService;
-  }
-
-  NotificationService& AppSession::notificationService() noexcept
+  NotificationService& AppSession::notifications() noexcept
   {
     return _impl->notificationService;
+  }
+
+  ViewService& AppSession::views() noexcept
+  {
+    return _impl->viewService;
   }
 
   ao::library::MusicLibrary& AppSession::musicLibrary() noexcept
@@ -145,6 +119,16 @@ namespace ao::app
   {
     auto txn = _impl->musicLibrary.readTransaction();
     _impl->allTracksSource.reloadFromStore(txn);
+  }
+
+  ao::TrackId AppSession::playSelectionInFocusedView()
+  {
+    auto const focus = _impl->workspaceService.layoutState();
+    if (focus.activeViewId == ViewId{})
+    {
+      return ao::TrackId{};
+    }
+    return _impl->playbackService.playSelectionInView(focus.activeViewId);
   }
 
   void AppSession::addAudioProvider(std::unique_ptr<ao::audio::IBackendProvider> provider)

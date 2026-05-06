@@ -83,9 +83,11 @@ namespace ao::app
     std::uint64_t revision = 0;
   };
 
-  struct FocusState final
+  struct LayoutState final
   {
-    ViewId focusedView{};
+    ViewId activeViewId{};
+    std::vector<ViewId> openViews{};
+    std::vector<ViewId> navigationStack{};
     std::uint64_t revision = 0;
   };
 
@@ -184,5 +186,42 @@ namespace ao::app
     ViewId id{};
     ViewKind kind = ViewKind::TrackList;
     ViewLifecycleState lifecycle = ViewLifecycleState::Detached;
+  };
+
+  enum class GlobalViewKind : std::uint8_t
+  {
+    AllTracks,
+    Playlists,
+    History,
+  };
+
+  struct MetadataPatch final
+  {
+    std::optional<std::string> optTitle{};
+    std::optional<std::string> optArtist{};
+    std::optional<std::string> optAlbum{};
+    std::optional<std::string> optGenre{};
+    std::optional<std::string> optComposer{};
+    std::optional<std::string> optWork{};
+  };
+
+  struct UpdateTrackMetadataReply final
+  {
+    std::vector<ao::TrackId> mutatedIds;
+  };
+
+  struct EditTrackTagsReply final
+  {
+    std::vector<ao::TrackId> mutatedIds;
+  };
+
+  struct ImportFilesReply final
+  {
+    std::size_t importedTrackCount = 0;
+  };
+
+  struct CreateTrackListViewReply final
+  {
+    ViewId viewId{};
   };
 }

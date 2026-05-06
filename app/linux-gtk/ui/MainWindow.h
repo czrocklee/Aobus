@@ -48,11 +48,10 @@ namespace ao::gtk
   class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
-    explicit MainWindow(ao::app::AppSession& session);
+    explicit MainWindow(ao::app::AppSession& session, std::shared_ptr<SessionPersistence> persistence);
     ~MainWindow() override;
+    void on_hide() override;
 
-    TrackPageContext const* currentVisibleTrackPageContext() const;
-    TrackPageContext* findTrackPageContext(ao::ListId listId);
     void showListPage(ao::ListId listId);
     ImportExportCoordinator& importExportCoordinator() { return *_importExportCoordinator; }
 
@@ -80,7 +79,7 @@ namespace ao::gtk
     // GTK-side row data cache
     std::unique_ptr<TrackRowDataProvider> _rowDataProvider;
 
-    SessionPersistence _sessionPersistence;
+    std::shared_ptr<SessionPersistence> _sessionPersistence;
 
     ao::app::AppSession& _session;
 
@@ -112,11 +111,6 @@ namespace ao::gtk
     std::shared_ptr<GtkMainThreadDispatcher> _dispatcher;
     std::unique_ptr<PlaybackBar> _playbackBar;
     std::unique_ptr<PlaybackController> _playbackController;
-
-    // Pending output selection from session restore (applied when runtime is ready)
-    ao::audio::BackendId _pendingOutputBackend{};
-    ao::audio::DeviceId _pendingOutputDevice{};
-    ao::audio::ProfileId _pendingOutputProfile{};
 
     ao::app::Subscription _tracksMutatedSubscription;
     ao::app::Subscription _importProgressSubscription;

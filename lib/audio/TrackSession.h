@@ -3,12 +3,12 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/ISource.h>
 #include <ao/audio/Types.h>
-#include <ao/Error.h>
 #include <functional>
 #include <memory>
 
@@ -20,7 +20,8 @@ namespace ao::audio
   class TrackSession final
   {
   public:
-    using DecoderFactoryFn = std::function<std::unique_ptr<IDecoderSession>(std::filesystem::path const&, Format const&)>;
+    using DecoderFactoryFn =
+      std::function<std::unique_ptr<IDecoderSession>(std::filesystem::path const&, Format const&)>;
     using OnSourceErrorFn = std::function<void(ao::Error const&)>;
 
     struct Result
@@ -38,8 +39,8 @@ namespace ao::audio
      */
     static Result create(TrackPlaybackDescriptor const& descriptor,
                          Device const& device,
-                         BackendId backendId,
-                         ProfileId profileId,
+                         BackendId const& backendId,
+                         ProfileId const& profileId,
                          DecoderFactoryFn const& decoderFactory,
                          OnSourceErrorFn onSourceError);
 
@@ -49,15 +50,15 @@ namespace ao::audio
                                 std::unique_ptr<IDecoderSession>& decoder,
                                 Format& backendFormat,
                                 Device const& device,
-                                BackendId backendId,
-                                ProfileId profileId,
+                                BackendId const& backendId,
+                                ProfileId const& profileId,
                                 DecoderFactoryFn const& decoderFactory,
                                 std::string& errorMsg);
 
     static std::shared_ptr<ISource> createPcmSource(std::unique_ptr<IDecoderSession> decoder,
-                                                   DecodedStreamInfo const& info,
-                                                   OnSourceErrorFn onSourceError,
-                                                   std::string& errorMsg);
+                                                    DecodedStreamInfo const& info,
+                                                    OnSourceErrorFn onSourceError,
+                                                    std::string& errorMsg);
 
     static bool shouldUseMemoryPcmSource(DecodedStreamInfo const& info);
   };

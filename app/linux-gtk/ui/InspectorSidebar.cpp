@@ -8,8 +8,12 @@
 #include <ao/model/TrackIdList.h>
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
-#include <runtime/CommandTypes.h>
+#include <runtime/EventBus.h>
+#include <runtime/EventTypes.h>
+#include <runtime/LibraryMutationService.h>
 #include <runtime/ProjectionTypes.h>
+#include <runtime/StateTypes.h>
+#include <runtime/ViewService.h>
 
 #include <giomm/memoryinputstream.h>
 
@@ -31,6 +35,8 @@ namespace ao::gtk
     constexpr std::uint16_t kCodecIdFlac = 3;
     constexpr std::uint16_t kCodecIdMp3 = 0x55;
     constexpr double kKhzMultiplier = 1000.0;
+    constexpr int kSecondsPerHour = 3600;
+    constexpr int kSecondsPerMinute = 60;
 
     Glib::ustring formatCodecId(std::uint16_t codecId)
     {
@@ -62,11 +68,11 @@ namespace ao::gtk
     std::string formatDuration(std::chrono::milliseconds ms)
     {
       auto const totalSeconds = std::chrono::duration_cast<std::chrono::seconds>(ms).count();
-      auto const minutes = (totalSeconds % 3600) / 60;
-      auto const seconds = totalSeconds % 60;
-      if (totalSeconds >= 3600)
+      auto const minutes = (totalSeconds % kSecondsPerHour) / kSecondsPerMinute;
+      auto const seconds = totalSeconds % kSecondsPerMinute;
+      if (totalSeconds >= kSecondsPerHour)
       {
-        return std::format("{}:{:02}:{:02}", totalSeconds / 3600, minutes, seconds);
+        return std::format("{}:{:02}:{:02}", totalSeconds / kSecondsPerHour, minutes, seconds);
       }
       return std::format("{}:{:02}", minutes, seconds);
     }
@@ -124,11 +130,7 @@ namespace ao::gtk
         auto ids = _currentSelection | std::views::transform([](auto const& row) { return row->getTrackId(); }) |
                    std::ranges::to<std::vector>();
 
-        auto const result = _session.commands().execute<ao::app::EditTrackTags>(ao::app::EditTrackTags{
-          .trackIds = ids,
-          .tagsToAdd = toAdd,
-          .tagsToRemove = toRemove,
-        });
+        auto const result = _session.mutation().editTags(ids, toAdd, toRemove);
 
         if (result)
         {
@@ -249,7 +251,8 @@ namespace ao::gtk
     _tagEditor.set_visible(false);
   }
 
-  void InspectorSidebar::updateSingleSelection(TrackRowDataProvider* dataProvider, Glib::RefPtr<TrackRow> const& row)
+  void InspectorSidebar::updateSingleSelection(TrackRowDataProvider* /*dataProvider*/,
+                                               Glib::RefPtr<TrackRow> const& row)
   {
     _heroBox.set_visible(true);
     _metadataBox.set_visible(true);
@@ -396,10 +399,7 @@ namespace ao::gtk
       row->setTitle(newValue);
     }
 
-    auto const result = _session.commands().execute<ao::app::UpdateTrackMetadata>(ao::app::UpdateTrackMetadata{
-      .trackIds = ids,
-      .patch = ao::app::MetadataPatch{.optTitle = newValue},
-    });
+    auto const result = _session.mutation().updateMetadata(ids, ao::app::MetadataPatch{.optTitle = newValue});
 
     if (!result)
     {
@@ -440,10 +440,7 @@ namespace ao::gtk
       row->setArtist(newValue);
     }
 
-    auto const result = _session.commands().execute<ao::app::UpdateTrackMetadata>(ao::app::UpdateTrackMetadata{
-      .trackIds = ids,
-      .patch = ao::app::MetadataPatch{.optArtist = newValue},
-    });
+    auto const result = _session.mutation().updateMetadata(ids, ao::app::MetadataPatch{.optArtist = newValue});
 
     if (!result)
     {
@@ -484,10 +481,7 @@ namespace ao::gtk
       row->setAlbum(newValue);
     }
 
-    auto const result = _session.commands().execute<ao::app::UpdateTrackMetadata>(ao::app::UpdateTrackMetadata{
-      .trackIds = ids,
-      .patch = ao::app::MetadataPatch{.optAlbum = newValue},
-    });
+    auto const result = _session.mutation().updateMetadata(ids, ao::app::MetadataPatch{.optAlbum = newValue});
 
     if (!result)
     {
@@ -501,67 +495,69 @@ namespace ao::gtk
   void InspectorSidebar::bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection)
   {
     _detailProjection = std::move(projection);
-    _detailSub = _detailProjection->subscribe(
-      [this](ao::app::TrackDetailSnapshot const& snap)
+    _detailSub =
+      _detailProjection->subscribe([this](ao::app::TrackDetailSnapshot const& snap) { onTrackDetailSnapshot(snap); });
+  }
+
+  void InspectorSidebar::onTrackDetailSnapshot(ao::app::TrackDetailSnapshot const& snap)
+  {
+    if (snap.selectionKind == ao::app::SelectionKind::None)
+    {
+      updateEmptyState();
+      return;
+    }
+
+    _heroBox.set_visible(true);
+    _audioBox.set_visible(true);
+
+    // Cover art from projection
+    if (snap.singleCoverArtId != ao::ResourceId{0})
+    {
+      auto pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
+      if (pixbuf)
       {
-        if (snap.selectionKind == ao::app::SelectionKind::None)
-        {
-          updateEmptyState();
-          return;
-        }
+        _coverImage.set_pixbuf(pixbuf);
+        _coverImage.set_visible(true);
+        _noCoverLabel.set_visible(false);
+      }
+    }
 
-        _heroBox.set_visible(true);
-        _audioBox.set_visible(true);
+    // Audio properties from projection
+    if (snap.audio.codecId.optValue && !snap.audio.codecId.mixed)
+    {
+      _formatLabel.set_text(formatCodecId(*snap.audio.codecId.optValue));
+    }
+    else
+    {
+      _formatLabel.set_text(snap.audio.codecId.mixed ? "Mixed" : "Unknown");
+    }
 
-        // Cover art from projection
-        if (snap.singleCoverArtId != ao::ResourceId{0})
-        {
-          auto pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
-          if (pixbuf)
-          {
-            _coverImage.set_pixbuf(pixbuf);
-            _coverImage.set_visible(true);
-            _noCoverLabel.set_visible(false);
-          }
-        }
+    if (snap.audio.sampleRate.optValue && !snap.audio.sampleRate.mixed)
+    {
+      _sampleRateLabel.set_text(formatSampleRate(*snap.audio.sampleRate.optValue));
+    }
+    else
+    {
+      _sampleRateLabel.set_text(snap.audio.sampleRate.mixed ? "Mixed" : "Unknown");
+    }
 
-        // Audio properties from projection
-        if (snap.audio.codecId.optValue && !snap.audio.codecId.mixed)
-        {
-          _formatLabel.set_text(formatCodecId(*snap.audio.codecId.optValue));
-        }
-        else
-        {
-          _formatLabel.set_text(snap.audio.codecId.mixed ? "Mixed" : "Unknown");
-        }
+    if (snap.audio.channels.optValue && !snap.audio.channels.mixed)
+    {
+      _channelsLabel.set_text(std::format("{} Ch", *snap.audio.channels.optValue));
+    }
+    else
+    {
+      _channelsLabel.set_text(snap.audio.channels.mixed ? "Mixed" : "Unknown");
+    }
 
-        if (snap.audio.sampleRate.optValue && !snap.audio.sampleRate.mixed)
-        {
-          _sampleRateLabel.set_text(formatSampleRate(*snap.audio.sampleRate.optValue));
-        }
-        else
-        {
-          _sampleRateLabel.set_text(snap.audio.sampleRate.mixed ? "Mixed" : "Unknown");
-        }
-
-        if (snap.audio.channels.optValue && !snap.audio.channels.mixed)
-        {
-          _channelsLabel.set_text(std::format("{} Ch", *snap.audio.channels.optValue));
-        }
-        else
-        {
-          _channelsLabel.set_text(snap.audio.channels.mixed ? "Mixed" : "Unknown");
-        }
-
-        if (snap.audio.durationMs.optValue && !snap.audio.durationMs.mixed)
-        {
-          auto const durationMs = std::chrono::milliseconds{*snap.audio.durationMs.optValue};
-          _durationLabel.set_text(formatDuration(durationMs));
-        }
-        else
-        {
-          _durationLabel.set_text(snap.audio.durationMs.mixed ? "Mixed" : "Unknown");
-        }
-      });
+    if (snap.audio.durationMs.optValue && !snap.audio.durationMs.mixed)
+    {
+      auto const durationMs = std::chrono::milliseconds{*snap.audio.durationMs.optValue};
+      _durationLabel.set_text(formatDuration(durationMs));
+    }
+    else
+    {
+      _durationLabel.set_text(snap.audio.durationMs.mixed ? "Mixed" : "Unknown");
+    }
   }
 } // namespace ao::gtk

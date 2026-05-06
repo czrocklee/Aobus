@@ -8,6 +8,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <runtime/AppSession.h>
+#include <runtime/EventBus.h>
 #include <runtime/EventTypes.h>
 
 namespace ao::gtk
@@ -68,7 +69,7 @@ namespace ao::gtk
       try
       {
         auto memStream = Gio::MemoryInputStream::create();
-        memStream->add_data(optData->data(), optData->size(), nullptr);
+        memStream->add_data(optData->data(), static_cast<gssize>(optData->size()), nullptr);
         auto pixbuf = Gdk::Pixbuf::create_from_stream(memStream);
         _cache.put(rid, pixbuf);
         return pixbuf;
@@ -91,7 +92,7 @@ namespace ao::gtk
     try
     {
       auto memStream = Gio::MemoryInputStream::create();
-      memStream->add_data(bytes.data(), bytes.size(), nullptr);
+      memStream->add_data(bytes.data(), static_cast<gssize>(bytes.size()), nullptr);
       set_pixbuf(Gdk::Pixbuf::create_from_stream(memStream));
     }
     catch (Glib::Error const&)

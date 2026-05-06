@@ -4,7 +4,7 @@
 #include "TrackDetailProjection.h"
 #include "EventBus.h"
 #include "EventTypes.h"
-#include "ViewRegistry.h"
+#include "ViewService.h"
 
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -52,7 +52,7 @@ namespace ao::app
   struct TrackDetailProjection::Impl final
   {
     DetailTarget target;
-    ViewRegistry& views;
+    ViewService& views;
     EventBus& events;
     ao::library::MusicLibrary& library;
     TrackDetailSnapshot cachedSnapshot;
@@ -60,53 +60,58 @@ namespace ao::app
     std::vector<std::move_only_function<void(TrackDetailSnapshot const&)>> subscribers;
     Subscription focusSub;
     Subscription selectionSub;
+    ViewId trackedViewId{};
   };
 
   TrackDetailProjection::TrackDetailProjection(DetailTarget target,
-                                               ViewRegistry& views,
+                                               ViewService& views,
                                                EventBus& events,
                                                ao::library::MusicLibrary& library)
     : _impl{std::make_unique<Impl>(std::move(target), views, events, library)}
   {
     std::visit(
-      [this](auto const& t)
+      [this](auto const& target)
       {
-        using T = std::decay_t<decltype(t)>;
+        using T = std::decay_t<decltype(target)>;
         if constexpr (std::is_same_v<T, FocusedViewTarget>)
         {
           _impl->focusSub = _impl->events.subscribe<FocusedViewChanged>(
             [this](FocusedViewChanged const& ev)
             {
-              _impl->selectionSub.reset();
+              _impl->trackedViewId = ev.viewId;
               if (ev.viewId == ViewId{})
               {
                 return;
               }
-              auto& state = _impl->views.trackListState(ev.viewId);
-              _impl->selectionSub = state.subscribe(
-                [this](TrackListViewState const& s)
-                {
-                  _impl->cachedSnapshot = buildSnapshot(s.selection);
-                  publishSnapshot();
-                });
+              auto const state = _impl->views.trackListState(ev.viewId);
+              _impl->cachedSnapshot = buildSnapshot(state.selection);
+              publishSnapshot();
             });
         }
         else if constexpr (std::is_same_v<T, ExplicitViewTarget>)
         {
-          auto& state = _impl->views.trackListState(t.viewId);
-          _impl->selectionSub = state.subscribe(
-            [this](TrackListViewState const& s)
-            {
-              _impl->cachedSnapshot = buildSnapshot(s.selection);
-              publishSnapshot();
-            });
+          _impl->trackedViewId = target.viewId;
+          auto const state = _impl->views.trackListState(target.viewId);
+          _impl->cachedSnapshot = buildSnapshot(state.selection);
         }
         else if constexpr (std::is_same_v<T, ExplicitSelectionTarget>)
         {
-          _impl->cachedSnapshot = buildSnapshot(t.trackIds);
+          _impl->cachedSnapshot = buildSnapshot(target.trackIds);
         }
       },
       _impl->target);
+
+    // Shared subscriber: ViewSelectionChanged, filtered by trackedViewId
+    _impl->selectionSub = _impl->events.subscribe<ViewSelectionChanged>(
+      [this](ViewSelectionChanged const& ev)
+      {
+        if (ev.viewId != _impl->trackedViewId)
+        {
+          return;
+        }
+        _impl->cachedSnapshot = buildSnapshot(ev.selection);
+        publishSnapshot();
+      });
   }
 
   TrackDetailProjection::~TrackDetailProjection() = default;
@@ -116,13 +121,9 @@ namespace ao::app
     return _impl->cachedSnapshot;
   }
 
-  Subscription TrackDetailProjection::subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler,
-                                                StoreDeliveryMode mode)
+  Subscription TrackDetailProjection::subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler)
   {
-    if (mode == StoreDeliveryMode::ReplayCurrent)
-    {
-      handler(_impl->cachedSnapshot);
-    }
+    handler(_impl->cachedSnapshot);
 
     auto index = _impl->subscribers.size();
     _impl->subscribers.push_back(std::move(handler));
@@ -179,7 +180,7 @@ namespace ao::app
 
       if (ids.size() == 1)
       {
-        snap.singleCoverArtId = ao::ResourceId{static_cast<std::uint32_t>(optView->metadata().coverArtId())};
+        snap.singleCoverArtId = ao::ResourceId{optView->metadata().coverArtId()};
         for (auto const tagId : optView->tags())
         {
           snap.commonTagIds.push_back(tagId);

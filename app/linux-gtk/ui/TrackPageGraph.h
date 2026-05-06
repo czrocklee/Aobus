@@ -8,7 +8,6 @@
 #include "TrackPresentation.h"
 #include "TrackViewPage.h"
 #include <runtime/AppSession.h>
-#include <runtime/CommandTypes.h>
 #include <runtime/CorePrimitives.h>
 
 #include <ao/library/ListView.h>
@@ -69,20 +68,16 @@ namespace ao::gtk
     void clear();
     void rebuild(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction& txn);
 
-    TrackPageContext* find(ao::ListId listId);
-    TrackPageContext const* find(ao::ListId listId) const;
+    TrackPageContext* find(ao::app::ViewId viewId);
+    TrackPageContext const* find(ao::app::ViewId viewId) const;
 
     TrackPageContext* currentVisible();
     TrackPageContext const* currentVisible() const;
 
-    void show(ao::ListId listId);
     void setPlayingTrack(std::optional<ao::TrackId> trackId);
 
   private:
-    void buildPageForAllTracks(TrackRowDataProvider& dataProvider);
-    void buildPageForStoredList(ao::ListId listId,
-                                ao::library::ListView const& view,
-                                TrackRowDataProvider& dataProvider);
+    void ensureViewPage(ao::app::ViewId viewId, TrackRowDataProvider& dataProvider);
     void bindTrackPage(TrackPageContext& ctx);
 
     Gtk::Stack& _stack;
@@ -93,9 +88,12 @@ namespace ao::gtk
     ListSidebarController& _listSidebar;
     ao::app::Subscription _revealSub;
     ao::app::Subscription _nowPlayingSub;
+    ao::app::Subscription _focusSub;
+    ao::app::Subscription _viewDestroyedSub;
     Callbacks _callbacks;
 
-    std::map<ao::ListId, TrackPageContext> _trackPages;
-    std::optional<ao::TrackId> _playingTrackId;
+    std::map<ao::app::ViewId, TrackPageContext> _trackPages;
+    std::optional<ao::TrackId> _optPlayingTrackId;
+    TrackRowDataProvider* _activeDataProvider = nullptr;
   };
 } // namespace ao::gtk

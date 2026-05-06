@@ -24,15 +24,28 @@ namespace ao::audio
         return 0;
       }
 
-      auto const bytesPerSample = format.bitDepth <= 16 ? 2 : (format.bitDepth == 24 ? 3 : 4);
+      constexpr std::uint32_t kBytesPerSample16 = 2;
+      constexpr std::uint32_t kBytesPerSample24 = 3;
+      constexpr std::uint32_t kBytesPerSample32 = 4;
+
+      std::uint32_t bytesPerSample = kBytesPerSample32;
+      if (format.bitDepth <= 16)
+      {
+        bytesPerSample = kBytesPerSample16;
+      }
+      else if (format.bitDepth == 24)
+      {
+        bytesPerSample = kBytesPerSample24;
+      }
+
       return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
     }
   }
 
   TrackSession::Result TrackSession::create(TrackPlaybackDescriptor const& descriptor,
                                             Device const& device,
-                                            BackendId backendId,
-                                            ProfileId profileId,
+                                            BackendId const& backendId,
+                                            ProfileId const& profileId,
                                             DecoderFactoryFn const& decoderFactory,
                                             OnSourceErrorFn onSourceError)
   {
@@ -60,13 +73,14 @@ namespace ao::audio
 
     Format backendFormat;
     std::string errorMsg;
-    if (!negotiateFormat(descriptor.filePath, info, decoder, backendFormat, device, backendId, profileId, decoderFactory, errorMsg))
+    if (!negotiateFormat(
+          descriptor.filePath, info, decoder, backendFormat, device, backendId, profileId, decoderFactory, errorMsg))
     {
       return {.error = {.message = errorMsg}};
     }
 
     info = decoder->streamInfo();
-    auto source = createPcmSource(std::move(decoder), info, onSourceError, errorMsg);
+    auto source = createPcmSource(std::move(decoder), info, std::move(onSourceError), errorMsg);
     if (!source)
     {
       return {.error = {.message = errorMsg}};
@@ -80,8 +94,8 @@ namespace ao::audio
                                      std::unique_ptr<IDecoderSession>& decoder,
                                      Format& backendFormat,
                                      Device const& device,
-                                     BackendId backendId,
-                                     ProfileId profileId,
+                                     BackendId const& backendId,
+                                     ProfileId const& profileId,
                                      DecoderFactoryFn const& decoderFactory,
                                      std::string& errorMsg)
   {
@@ -99,7 +113,8 @@ namespace ao::audio
 
     if (plan.requiresResample)
     {
-      errorMsg = std::format("{} does not support {} Hz and Aobus has no resampler yet", backendId, info.sourceFormat.sampleRate);
+      errorMsg = std::format(
+        "{} does not support {} Hz and Aobus has no resampler yet", backendId, info.sourceFormat.sampleRate);
       return false;
     }
 
@@ -142,9 +157,9 @@ namespace ao::audio
   }
 
   std::shared_ptr<ISource> TrackSession::createPcmSource(std::unique_ptr<IDecoderSession> decoder,
-                                                        DecodedStreamInfo const& info,
-                                                        OnSourceErrorFn onSourceError,
-                                                        std::string& errorMsg)
+                                                         DecodedStreamInfo const& info,
+                                                         OnSourceErrorFn onSourceError,
+                                                         std::string& errorMsg)
   {
     if (shouldUseMemoryPcmSource(info))
     {
@@ -160,11 +175,7 @@ namespace ao::audio
     }
 
     auto const streamingSource = std::make_shared<StreamingSource>(
-      std::move(decoder),
-      info,
-      onSourceError,
-      kPrerollTargetMs,
-      kDecodeHighWatermarkMs);
+      std::move(decoder), info, std::move(onSourceError), kPrerollTargetMs, kDecodeHighWatermarkMs);
 
     if (auto const initResult = streamingSource->initialize(); !initResult)
     {
@@ -177,7 +188,7 @@ namespace ao::audio
 
   bool TrackSession::shouldUseMemoryPcmSource(DecodedStreamInfo const& info)
   {
-    auto const estimatedBytes = bytesPerSecond(info.outputFormat) * (info.durationMs / 1000.0);
+    auto const estimatedBytes = static_cast<double>(bytesPerSecond(info.outputFormat)) * (info.durationMs / 1000.0);
     return estimatedBytes > 0 && estimatedBytes <= kMemoryPcmSourceBudgetBytes;
   }
 } // namespace ao::audio

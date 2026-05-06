@@ -13,7 +13,7 @@
 namespace ao::app
 {
   class EventBus;
-  class ViewRegistry;
+  class ViewService;
 }
 
 namespace ao::library
@@ -27,7 +27,7 @@ namespace ao::app
   {
   public:
     TrackDetailProjection(DetailTarget target,
-                          ViewRegistry& views,
+                          ViewService& views,
                           EventBus& events,
                           ao::library::MusicLibrary& library);
     ~TrackDetailProjection() override;
@@ -38,8 +38,7 @@ namespace ao::app
     TrackDetailProjection& operator=(TrackDetailProjection&&) = delete;
 
     TrackDetailSnapshot snapshot() const override;
-    Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler,
-                           StoreDeliveryMode mode = StoreDeliveryMode::ReplayCurrent) override;
+    Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) override;
 
   private:
     void onSelectionChanged();

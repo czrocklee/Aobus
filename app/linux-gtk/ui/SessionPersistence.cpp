@@ -123,13 +123,9 @@ namespace ao::gtk
   {
   }
 
-  void SessionPersistence::load(Gtk::Window& window,
-                                Gtk::Paned& paned,
-                                TrackColumnLayoutModel& trackColumnLayoutModel,
-                                std::string& outLibraryPath,
-                                ao::audio::BackendId& outBackend,
-                                ao::audio::ProfileId& outProfile,
-                                ao::audio::DeviceId& outDeviceId)
+  void SessionPersistence::loadUi(Gtk::Window& window,
+                                  Gtk::Paned& paned,
+                                  TrackColumnLayoutModel& trackColumnLayoutModel)
   {
     try
     {
@@ -148,24 +144,16 @@ namespace ao::gtk
       {
         window.maximize();
       }
-
-      auto const& sessionState = _appConfig.sessionState();
-
-      outBackend = ao::audio::BackendId{sessionState.lastBackend};
-      outProfile = ao::audio::ProfileId{sessionState.lastProfile};
-      outDeviceId = ao::audio::DeviceId{sessionState.lastOutputDeviceId};
-      outLibraryPath = sessionState.lastLibraryPath;
     }
     catch (std::exception const& e)
     {
-      APP_LOG_ERROR("Failed to load app session: {}", e.what());
+      APP_LOG_ERROR("Failed to load ui session: {}", e.what());
     }
   }
 
-  void SessionPersistence::save(Gtk::Window const& window,
-                                Gtk::Paned const& paned,
-                                TrackColumnLayoutModel const& trackColumnLayoutModel,
-                                std::filesystem::path const& libraryPath)
+  void SessionPersistence::saveUi(Gtk::Window const& window,
+                                  Gtk::Paned const& paned,
+                                  TrackColumnLayoutModel const& trackColumnLayoutModel)
   {
     try
     {
@@ -189,38 +177,67 @@ namespace ao::gtk
       windowState.maximized = window.is_maximized();
       _appConfig.setWindowState(windowState);
 
-      auto sessionState = _appConfig.sessionState();
-
-      if (!libraryPath.empty())
-      {
-        sessionState.lastLibraryPath = normalizeLibraryPath(libraryPath);
-      }
-      else
-      {
-        sessionState.lastLibraryPath = std::string{};
-      }
-
-      _appConfig.setSessionState(std::move(sessionState));
-
       _appConfig.setTrackViewState(trackViewStateFromLayout(trackColumnLayoutModel.layout()));
 
       _appConfig.save();
     }
     catch (std::exception const& e)
     {
-      APP_LOG_ERROR("Failed to save app session: {}", e.what());
+      APP_LOG_ERROR("Failed to save ui session: {}", e.what());
     }
   }
 
-  void SessionPersistence::updateAudioBackend(ao::audio::BackendId const& backend,
-                                              ao::audio::ProfileId const& profile,
-                                              ao::audio::DeviceId const& deviceId)
+  std::optional<ao::app::SessionSnapshot> SessionPersistence::loadSnapshot()
   {
-    auto session = _appConfig.sessionState();
-    session.lastBackend = backend;
-    session.lastProfile = profile;
-    session.lastOutputDeviceId = deviceId;
-    _appConfig.setSessionState(session);
-    _appConfig.save();
+    try
+    {
+      _appConfig = ao::app::AppConfig::load();
+      auto const& sessionState = _appConfig.sessionState();
+
+      auto snapshot = ao::app::SessionSnapshot{};
+      snapshot.lastBackend = sessionState.lastBackend;
+      snapshot.lastProfile = sessionState.lastProfile;
+      snapshot.lastOutputDeviceId = sessionState.lastOutputDeviceId;
+      snapshot.lastLibraryPath = sessionState.lastLibraryPath;
+
+      // Note: in a fully neutral shell, AppConfig would map view configs directly.
+      // For now, GTK relies on its MainWindow loadSession to reconstruct views.
+      // We will slowly move that logic here.
+
+      return snapshot;
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("Failed to load session snapshot: {}", e.what());
+      return std::nullopt;
+    }
+  }
+
+  void SessionPersistence::saveSnapshot(ao::app::SessionSnapshot const& snapshot)
+  {
+    try
+    {
+      auto sessionState = _appConfig.sessionState();
+
+      if (!snapshot.lastLibraryPath.empty())
+      {
+        sessionState.lastLibraryPath = normalizeLibraryPath(std::filesystem::path{snapshot.lastLibraryPath});
+      }
+      else
+      {
+        sessionState.lastLibraryPath = std::string{};
+      }
+
+      sessionState.lastBackend = snapshot.lastBackend;
+      sessionState.lastProfile = snapshot.lastProfile;
+      sessionState.lastOutputDeviceId = snapshot.lastOutputDeviceId;
+
+      _appConfig.setSessionState(std::move(sessionState));
+      _appConfig.save();
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("Failed to save session snapshot: {}", e.what());
+    }
   }
 } // namespace ao::gtk

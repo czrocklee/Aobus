@@ -42,13 +42,12 @@ add_executable(ao_test
 
     # app unit tests (no platform deps)
     unit/app/SmartListEngineTest.cpp
-    unit/app/CommandBusTest.cpp
     unit/app/EventBusTest.cpp
-    unit/app/ObservableStoreTest.cpp
     unit/app/TrackListProjectionTest.cpp
     unit/app/LibraryMutationServiceTest.cpp
     unit/app/NotificationServiceTest.cpp
-    unit/app/ViewRegistryTest.cpp
+    unit/app/ViewServiceTest.cpp
+    unit/app/HeadlessShellTest.cpp
 
     # integration tests
     integration/audio/DecoderIntegrationTest.cpp

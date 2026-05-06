@@ -119,26 +119,26 @@ namespace ao::library
       std::string const uriStr = trackNode["uri"].as<std::string>();
 
       // 1. Try load from physical file (availability fallback)
-      std::optional<TrackBuilder> fileBuilder;
+      std::optional<TrackBuilder> optFileBuilder;
       auto const fullPath = _ml.rootPath() / uriStr;
 
       if (std::filesystem::exists(fullPath))
       {
         if (auto tagFile = ao::tag::File::open(fullPath); tagFile != nullptr)
         {
-          fileBuilder = tagFile->loadTrack();
-          fileBuilder->property().uri(uriStr);
-          fileBuilder->property().fileSize(std::filesystem::file_size(fullPath));
-          fileBuilder->property().mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                          std::filesystem::last_write_time(fullPath).time_since_epoch())
-                                          .count());
+          optFileBuilder = tagFile->loadTrack();
+          optFileBuilder->property().uri(uriStr);
+          optFileBuilder->property().fileSize(std::filesystem::file_size(fullPath));
+          optFileBuilder->property().mtime(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                             std::filesystem::last_write_time(fullPath).time_since_epoch())
+                                             .count());
         }
       }
 
       // 2. Initialize builder
-      auto builder = fileBuilder ? *fileBuilder : TrackBuilder::createNew();
+      auto builder = optFileBuilder ? *optFileBuilder : TrackBuilder::createNew();
 
-      if (!fileBuilder)
+      if (!optFileBuilder)
       {
         builder.property().uri(uriStr);
         // If no file exists, we still try to import metadata from YAML,

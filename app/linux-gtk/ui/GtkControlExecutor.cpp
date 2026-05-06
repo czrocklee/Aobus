@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "GtkControlExecutor.h"
+#include <ao/utility/Log.h>
 
 namespace ao::gtk
 {
@@ -46,9 +47,13 @@ namespace ao::gtk
         {
           task();
         }
+        catch (std::exception const& e)
+        {
+          APP_LOG_ERROR("GtkControlExecutor: Task threw an exception: {}", e.what());
+        }
         catch (...)
         {
-          // Continue processing remaining tasks
+          APP_LOG_ERROR("GtkControlExecutor: Task threw an unknown exception");
         }
       }
     }

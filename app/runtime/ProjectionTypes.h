@@ -111,7 +111,6 @@ namespace ao::app
     virtual ~ITrackDetailProjection() = default;
 
     virtual TrackDetailSnapshot snapshot() const = 0;
-    virtual Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler,
-                                   StoreDeliveryMode mode = StoreDeliveryMode::ReplayCurrent) = 0;
+    virtual Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) = 0;
   };
 }

@@ -17,7 +17,7 @@
 
 namespace ao::app
 {
-  class CommandBus;
+  class AppSession;
 }
 
 namespace ao::gtk
@@ -37,7 +37,7 @@ namespace ao::gtk
     explicit TrackViewPage(ao::ListId listId,
                            TrackListAdapter& adapter,
                            TrackColumnLayoutModel& columnLayoutModel,
-                           ao::app::CommandBus& commands,
+                           ao::app::AppSession& session,
                            ao::app::ViewId viewId = ao::app::ViewId{});
     ~TrackViewPage() override;
 
@@ -142,7 +142,7 @@ namespace ao::gtk
     ao::ListId _listId;
     ao::app::ViewId _viewId{};
     TrackListAdapter& _adapter;
-    ao::app::CommandBus& _commands;
+    ao::app::AppSession& _session;
     Glib::RefPtr<Gtk::SortListModel> _groupModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
     TrackColumnLayoutModel& _columnLayoutModel;
@@ -162,6 +162,23 @@ namespace ao::gtk
 
     void updateTitlePositionVariable();
     Glib::RefPtr<Gtk::SignalListItemFactory> createTextColumnFactory(TrackColumnDefinition const& definition);
+    void onTextColumnSetup(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                           TrackColumnDefinition const& definition,
+                           bool isEditable,
+                           bool isHyperlink);
+    void onTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                          TrackColumnDefinition const& definition,
+                          bool isEditable);
+    void onTextColumnBindEditable(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                                  TrackColumnDefinition const& definition,
+                                  Glib::RefPtr<TrackRow> const& row);
+    void onTextColumnBindStatic(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                                TrackColumnDefinition const& definition,
+                                Glib::RefPtr<TrackRow> const& row);
+    void commitMetadataChange(Gtk::Stack* stack,
+                              Gtk::Entry* entry,
+                              Glib::RefPtr<TrackRow> const& row,
+                              TrackColumn column);
 
     // Signals
     SelectionChangedSignal _selectionChanged;

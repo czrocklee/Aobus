@@ -372,7 +372,7 @@ namespace ao::model
 
         if (inserted)
         {
-          auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
+          auto const index = static_cast<std::size_t>(std::ranges::distance(list->_members.begin(), it));
           list->TrackIdList::notifyInserted(id, index);
         }
       }

@@ -27,30 +27,6 @@ namespace
     };
   }
 
-  flow::Graph createBaseSystemGraph()
-  {
-    auto graph = flow::Graph{};
-    graph.nodes.push_back(
-      flow::Node{.id = "mock-stream-id",
-                 .type = flow::NodeType::Stream,
-                 .name = "Mock Stream",
-                 .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
-                 .volumeNotUnity = false,
-                 .isMuted = false,
-                 .isLossySource = false});
-    graph.nodes.push_back(
-      flow::Node{.id = "mock-sink-id",
-                 .type = flow::NodeType::Sink,
-                 .name = "Mock Sink",
-                 .optFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
-                 .volumeNotUnity = false,
-                 .isMuted = false,
-                 .isLossySource = false});
-    graph.connections.push_back(
-      flow::Connection{.sourceId = "mock-stream-id", .destId = "mock-sink-id", .isActive = true});
-    return graph;
-  }
-
   class TestBackend : public NullBackend
   {
     BackendId _backendId;

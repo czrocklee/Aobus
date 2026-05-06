@@ -97,6 +97,7 @@ namespace ao::gtk
     ao::app::Subscription _qualityChangedSub;
 
     bool _updatingSeekScale = false;
+    bool _isDraggingSeek = false;
     bool _updatingVolumeScale = false;
 
     ao::audio::Quality _lastIconQuality = ao::audio::Quality::Unknown;
@@ -116,5 +117,6 @@ namespace ao::gtk
     ao::audio::Transport _lastTransport = ao::audio::Transport::Idle;
 
     void rebuildOutputList();
+    void updateOutputTooltip(ao::app::PlaybackState const& state);
   };
 } // namespace ao::gtk

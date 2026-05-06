@@ -58,14 +58,14 @@ namespace ao::gtk
 
     static Glib::RefPtr<TrackRow> create(TrackId id, TrackRowDataProvider const& provider);
 
-    void populate(Glib::ustring title,
+    void populate(Glib::ustring const& title,
                   ao::DictionaryId artist,
                   ao::DictionaryId album,
                   ao::DictionaryId albumArtist,
                   ao::DictionaryId genre,
                   ao::DictionaryId composer,
                   ao::DictionaryId work,
-                  Glib::ustring tags,
+                  Glib::ustring const& tags,
                   std::chrono::milliseconds duration,
                   std::uint16_t year,
                   std::uint16_t discNumber,

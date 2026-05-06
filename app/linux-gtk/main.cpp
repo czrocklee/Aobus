@@ -23,7 +23,7 @@
 
 #include <CLI/CLI.hpp>
 
-#include <print>
+#include "ui/SessionPersistence.h"
 
 namespace
 {
@@ -50,11 +50,13 @@ namespace
   Glib::RefPtr<ao::gtk::MainWindow> createWindow(Gtk::Application& app, std::filesystem::path libraryPath)
   {
     auto executor = std::make_shared<ao::gtk::GtkControlExecutor>();
+    auto persistence = std::make_shared<ao::gtk::SessionPersistence>();
 
-    auto appSession = std::make_unique<ao::app::AppSession>(
-      ao::app::AppSessionDependencies{.executor = std::move(executor), .libraryRoot = std::move(libraryPath)});
+    auto appSession = std::make_unique<ao::app::AppSession>(ao::app::AppSessionDependencies{
+      .executor = std::move(executor), .libraryRoot = std::move(libraryPath), .persistence = persistence});
 
-    auto window = Glib::make_refptr_for_instance<ao::gtk::MainWindow>(new ao::gtk::MainWindow(*appSession));
+    auto window =
+      Glib::make_refptr_for_instance<ao::gtk::MainWindow>(new ao::gtk::MainWindow(*appSession, persistence));
 
     // Store AppSession alongside window (lifetime tied to window via pointer)
     window->set_data("app-session",
@@ -96,7 +98,7 @@ int main(int argc, char* argv[])
     "--version",
     []()
     {
-      std::print("Aobus {}\n", ao::kAppVersion);
+      std::cout << "Aobus " << ao::kAppVersion << '\n';
       std::exit(0);
     },
     "Show version information");
@@ -248,8 +250,8 @@ int main(int argc, char* argv[])
       auto window = createWindow(*app, libraryPath);
 
       // Wire up the "Open Library" → new window callback
-      window->importExportCoordinator().callbacks().onOpenNewLibrary =
-        [&app, &windows](std::filesystem::path const& path) { createWindow(*app, path); };
+      window->importExportCoordinator().callbacks().onOpenNewLibrary = [&app](std::filesystem::path const& path)
+      { createWindow(*app, path); };
 
       windows.push_back(std::move(window));
     });

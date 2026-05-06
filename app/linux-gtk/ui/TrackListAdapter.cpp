@@ -211,9 +211,9 @@ namespace ao::gtk
         for (auto const& delta : batch.deltas)
         {
           std::visit(
-            [this](auto const& d)
+            [this](auto const& delta)
             {
-              using T = std::decay_t<decltype(d)>;
+              using T = std::decay_t<decltype(delta)>;
               if constexpr (std::is_same_v<T, ao::app::ProjectionReset>)
               {
                 _listModel->remove_all();
@@ -224,9 +224,9 @@ namespace ao::gtk
               }
               else if constexpr (std::is_same_v<T, ao::app::ProjectionInsertRange>)
               {
-                for (std::size_t i = 0; i < d.range.count; ++i)
+                for (std::size_t i = 0; i < delta.range.count; ++i)
                 {
-                  auto const idx = d.range.start + i;
+                  auto const idx = delta.range.start + i;
                   auto const trackId = _projection->trackIdAt(idx);
                   auto const row = _provider.getTrackRow(trackId);
                   _listModel->insert(idx, row);
@@ -234,16 +234,16 @@ namespace ao::gtk
               }
               else if constexpr (std::is_same_v<T, ao::app::ProjectionRemoveRange>)
               {
-                for (std::size_t i = 0; i < d.range.count; ++i)
+                for (std::size_t i = 0; i < delta.range.count; ++i)
                 {
-                  _listModel->remove(d.range.start);
+                  _listModel->remove(delta.range.start);
                 }
               }
               else if constexpr (std::is_same_v<T, ao::app::ProjectionUpdateRange>)
               {
-                for (std::size_t i = 0; i < d.range.count; ++i)
+                for (std::size_t i = 0; i < delta.range.count; ++i)
                 {
-                  auto const idx = d.range.start + i;
+                  auto const idx = delta.range.start + i;
                   auto const trackId = _projection->trackIdAt(idx);
                   auto const row = _provider.getTrackRow(trackId);
                   _listModel->splice(idx, 1, std::vector<Glib::RefPtr<TrackRow>>{row});

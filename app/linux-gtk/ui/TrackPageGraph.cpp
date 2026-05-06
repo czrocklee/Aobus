@@ -12,8 +12,13 @@
 #include <ao/model/FilteredTrackIdList.h>
 #include <ao/model/ManualTrackIdList.h>
 #include <ao/utility/Log.h>
-#include <runtime/CommandBus.h>
+#include <runtime/AppSession.h>
+#include <runtime/EventBus.h>
 #include <runtime/EventTypes.h>
+#include <runtime/PlaybackService.h>
+#include <runtime/StateTypes.h>
+#include <runtime/ViewService.h>
+#include <runtime/WorkspaceService.h>
 
 #include <format>
 #include <limits>
@@ -30,16 +35,6 @@ namespace ao::gtk
     ao::ListId rootParentId()
     {
       return ao::ListId{0};
-    }
-
-    std::string pageNameForListId(ao::ListId listId)
-    {
-      if (listId == allTracksListId())
-      {
-        return "all-tracks";
-      }
-
-      return "list-" + std::format("{}", listId.value());
     }
   }
 
@@ -61,12 +56,12 @@ namespace ao::gtk
     _revealSub = _session.events().subscribe<ao::app::RevealTrackRequested>(
       [this](ao::app::RevealTrackRequested const& ev)
       {
-        if (ev.preferredListId != ao::ListId{})
+        if (ev.preferredViewId != ao::app::ViewId{})
         {
-          show(ev.preferredListId);
+          _session.workspace().setFocusedView(ev.preferredViewId);
           if (ev.trackId != ao::TrackId{})
           {
-            if (auto* ctx = find(ev.preferredListId))
+            if (auto* ctx = find(ev.preferredViewId))
             {
               ctx->page->selectTrack(ev.trackId);
             }
@@ -77,6 +72,51 @@ namespace ao::gtk
     _nowPlayingSub = _session.events().subscribe<ao::app::NowPlayingTrackChanged>(
       [this](ao::app::NowPlayingTrackChanged const& ev)
       { setPlayingTrack(ev.trackId != ao::TrackId{} ? std::optional{ev.trackId} : std::nullopt); });
+
+    auto const syncLayout = [this]
+    {
+      if (!_activeDataProvider)
+      {
+        return;
+      }
+
+      auto const state = _session.workspace().layoutState();
+
+      // Remove closed views
+      for (auto it = _trackPages.begin(); it != _trackPages.end();)
+      {
+        if (std::ranges::find(state.openViews, it->first) == state.openViews.end())
+        {
+          if (it->second.page)
+          {
+            _stack.remove(*it->second.page);
+          }
+          it = _trackPages.erase(it);
+        }
+        else
+        {
+          ++it;
+        }
+      }
+
+      // Add new views
+      for (auto const viewId : state.openViews)
+      {
+        ensureViewPage(viewId, *_activeDataProvider);
+      }
+
+      // Set active
+      if (state.activeViewId != ao::app::ViewId{})
+      {
+        _stack.set_visible_child(std::format("view-{}", state.activeViewId.value()));
+      }
+    };
+
+    _focusSub = _session.events().subscribe<ao::app::FocusedViewChanged>(
+      [syncLayout](ao::app::FocusedViewChanged const&) { syncLayout(); });
+
+    _viewDestroyedSub = _session.events().subscribe<ao::app::ViewDestroyed>([syncLayout](ao::app::ViewDestroyed const&)
+                                                                            { syncLayout(); });
   }
 
   TrackPageGraph::~TrackPageGraph()
@@ -90,11 +130,6 @@ namespace ao::gtk
     {
       auto it = std::prev(_trackPages.end());
 
-      if (it->second.viewId != ao::app::ViewId{})
-      {
-        _session.commands().execute<ao::app::DestroyView>(ao::app::DestroyView{.viewId = it->second.viewId});
-      }
-
       if (it->second.page)
       {
         _stack.remove(*it->second.page);
@@ -104,29 +139,33 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageGraph::rebuild(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction& txn)
+  void TrackPageGraph::rebuild(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction& /*txn*/)
   {
     APP_LOG_DEBUG("TrackPageGraph::rebuild called");
     clear();
+    _activeDataProvider = &dataProvider;
 
-    buildPageForAllTracks(dataProvider);
-
-    auto reader = _session.musicLibrary().lists().reader(txn);
-    for (auto const& [id, listView] : reader)
+    // Force layout state re-evaluation now that dataProvider is ready
+    auto layout = _session.workspace().layoutState();
+    for (auto const viewId : layout.openViews)
     {
-      buildPageForStoredList(id, listView, dataProvider);
+      ensureViewPage(viewId, *_activeDataProvider);
+    }
+    if (layout.activeViewId != ao::app::ViewId{})
+    {
+      _stack.set_visible_child(std::format("view-{}", layout.activeViewId.value()));
     }
   }
 
-  TrackPageContext* TrackPageGraph::find(ao::ListId listId)
+  TrackPageContext* TrackPageGraph::find(ao::app::ViewId viewId)
   {
-    auto it = _trackPages.find(listId);
+    auto it = _trackPages.find(viewId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
   }
 
-  TrackPageContext const* TrackPageGraph::find(ao::ListId listId) const
+  TrackPageContext const* TrackPageGraph::find(ao::app::ViewId viewId) const
   {
-    auto it = _trackPages.find(listId);
+    auto it = _trackPages.find(viewId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
   }
 
@@ -168,23 +207,14 @@ namespace ao::gtk
     return nullptr;
   }
 
-  void TrackPageGraph::show(ao::ListId listId)
-  {
-    _stack.set_visible_child(pageNameForListId(listId));
-    if (auto* ctx = find(listId); ctx && ctx->viewId != ao::app::ViewId{})
-    {
-      _session.commands().execute<ao::app::SetFocusedView>(ao::app::SetFocusedView{.viewId = ctx->viewId});
-    }
-  }
-
   void TrackPageGraph::setPlayingTrack(std::optional<ao::TrackId> trackId)
   {
-    if (_playingTrackId == trackId)
+    if (_optPlayingTrackId == trackId)
     {
       return;
     }
 
-    _playingTrackId = trackId;
+    _optPlayingTrackId = trackId;
 
     for (auto& [id, ctx] : _trackPages)
     {
@@ -195,27 +225,45 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageGraph::buildPageForAllTracks(TrackRowDataProvider& dataProvider)
+  void TrackPageGraph::ensureViewPage(ao::app::ViewId viewId, TrackRowDataProvider& dataProvider)
   {
-    auto cvResult = _session.commands().execute<ao::app::CreateTrackListView>(
-      ao::app::CreateTrackListView{.initial = {.listId = allTracksListId()}, .attached = true});
-    auto const viewId = cvResult ? cvResult->viewId : ao::app::ViewId{};
-
-    auto adapter = std::make_unique<TrackListAdapter>(_session.allTracks(), _session.musicLibrary(), dataProvider);
-    adapter->onReset();
-    if (viewId != ao::app::ViewId{})
+    if (_trackPages.contains(viewId))
     {
-      if (auto proj = _session.views().trackListProjection(viewId))
-      {
-        adapter->bindProjection(*proj);
-      }
+      return; // Already exists
     }
 
-    auto trackPage =
-      std::make_unique<TrackViewPage>(allTracksListId(), *adapter, _layoutModel, _session.commands(), viewId);
+    auto proj = _session.views().trackListProjection(viewId);
+    if (!proj)
+    {
+      return;
+    }
 
-    auto pageId = pageNameForListId(allTracksListId());
-    _stack.add(*trackPage, pageId, "All Tracks");
+    auto const state = _session.views().trackListState(viewId);
+    auto const listId = state.listId;
+
+    // Provide dummy source, bindProjection takes over
+    auto adapter = std::make_unique<TrackListAdapter>(_session.allTracks(), _session.musicLibrary(), dataProvider);
+    adapter->bindProjection(*proj);
+
+    auto trackPage = std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _session, viewId);
+    auto pageId = std::format("view-{}", viewId.value());
+
+    std::string listName = "List";
+    if (listId != allTracksListId() && listId != ao::ListId{})
+    {
+      auto txn = _session.musicLibrary().readTransaction();
+      auto lists = _session.musicLibrary().lists().reader(txn);
+      if (auto optView = lists.get(listId))
+      {
+        listName = optView->name().empty() ? "<Unnamed List>" : std::string(optView->name());
+      }
+    }
+    else if (listId == allTracksListId())
+    {
+      listName = "All Tracks";
+    }
+
+    _stack.add(*trackPage, pageId, listName);
 
     TrackPageContext ctx;
     ctx.viewId = viewId;
@@ -224,80 +272,7 @@ namespace ao::gtk
     ctx.page = std::move(trackPage);
 
     bindTrackPage(ctx);
-    _trackPages[allTracksListId()] = std::move(ctx);
-  }
-
-  void TrackPageGraph::buildPageForStoredList(ao::ListId listId,
-                                              ao::library::ListView const& view,
-                                              TrackRowDataProvider& dataProvider)
-  {
-    std::string listName = view.name().empty() ? "<Unnamed List>" : std::string(view.name());
-
-    std::shared_ptr<ao::model::TrackIdList> membershipList;
-    if (view.isSmart())
-    {
-      auto* sourceList = &_session.allTracks();
-      if (!view.isRootParent())
-      {
-        if (auto* const sourceCtx = find(view.parentId()))
-        {
-          if (sourceCtx->membershipList != nullptr)
-          {
-            sourceList = sourceCtx->membershipList.get();
-          }
-        }
-      }
-
-      auto filtered = std::make_shared<ao::model::FilteredTrackIdList>(
-        *sourceList, _session.musicLibrary(), _session.smartListEngine());
-      filtered->setExpression(std::string(view.filter()));
-      filtered->reload();
-      membershipList = std::move(filtered);
-    }
-    else
-    {
-      auto manual = std::make_shared<ao::model::ManualTrackIdList>(view, &_session.allTracks());
-      membershipList = std::move(manual);
-    }
-
-    auto cvResult = _session.commands().execute<ao::app::CreateTrackListView>(
-      ao::app::CreateTrackListView{.initial = {.listId = listId}, .attached = true, .source = membershipList});
-    auto const viewId = cvResult ? cvResult->viewId : ao::app::ViewId{};
-
-    auto adapter = std::make_unique<TrackListAdapter>(*membershipList, _session.musicLibrary(), dataProvider);
-    adapter->onReset();
-    if (viewId != ao::app::ViewId{})
-    {
-      if (auto proj = _session.views().trackListProjection(viewId))
-      {
-        adapter->bindProjection(*proj);
-      }
-    }
-
-    auto trackPage = std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _session.commands(), viewId);
-    auto pageId = pageNameForListId(listId);
-    _stack.add(*trackPage, pageId, listName);
-
-    auto playlistDir = _session.musicLibrary().rootPath() / "playlist";
-
-    if (!std::filesystem::exists(playlistDir))
-    {
-      std::filesystem::create_directories(playlistDir);
-    }
-
-    auto playlistPath = playlistDir / (listName + ".m3u");
-    auto exporter = std::make_unique<ao::gtk::services::PlaylistExporter>(
-      *membershipList, dataProvider, _session.musicLibrary().rootPath(), playlistPath);
-
-    TrackPageContext ctx;
-    ctx.viewId = viewId;
-    ctx.membershipList = std::move(membershipList);
-    ctx.adapter = std::move(adapter);
-    ctx.page = std::move(trackPage);
-    ctx.exporter = std::move(exporter);
-
-    bindTrackPage(ctx);
-    _trackPages[listId] = std::move(ctx);
+    _trackPages[viewId] = std::move(ctx);
   }
 
   void TrackPageGraph::bindTrackPage(TrackPageContext& ctx)
@@ -311,9 +286,8 @@ namespace ao::gtk
         auto const ids = page->getSelectedTrackIds();
         if (viewId != ao::app::ViewId{})
         {
-          _session.commands().execute<ao::app::SetViewSelection>(
-            ao::app::SetViewSelection{.viewId = viewId, .selection = ids});
-          _session.commands().execute<ao::app::SetFocusedView>(ao::app::SetFocusedView{.viewId = viewId});
+          _session.views().setSelection(viewId, ids);
+          _session.workspace().setFocusedView(viewId);
         }
         if (_callbacks.onSelectionChanged)
         {
@@ -322,9 +296,9 @@ namespace ao::gtk
       });
 
     page->signalContextMenuRequested().connect(
-      [this, page](double posX, double posY)
+      [this, page, viewId](double posX, double posY)
       {
-        auto* const self = find(page->getListId());
+        auto* const self = find(viewId);
         TrackSelectionContext sel{.listId = page->getListId(),
                                   .selectedIds = page->getSelectedTrackIds(),
                                   .membershipList = self ? self->membershipList.get() : nullptr};
@@ -332,13 +306,13 @@ namespace ao::gtk
       });
 
     page->signalTagEditRequested().connect(
-      [this, page](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
+      [this, page, viewId](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
       {
         if (!relativeTo)
         {
           return;
         }
-        auto* const self = find(page->getListId());
+        auto* const self = find(viewId);
         TrackSelectionContext sel{.listId = page->getListId(),
                                   .selectedIds = ids,
                                   .membershipList = self ? self->membershipList.get() : nullptr};
@@ -348,7 +322,10 @@ namespace ao::gtk
     page->signalTrackActivated().connect(
       [this, page](ao::TrackId id)
       {
-        if (_playbackController) _playbackController->playFromPage(*page, id);
+        if (_playbackController)
+        {
+          _playbackController->playFromPage(*page, id);
+        }
       });
 
     page->signalCreateSmartListRequested().connect(
@@ -363,9 +340,9 @@ namespace ao::gtk
       });
 
     // Set initial playing track state
-    if (_playingTrackId)
+    if (_optPlayingTrackId)
     {
-      page->setPlayingTrackId(_playingTrackId);
+      page->setPlayingTrackId(_optPlayingTrackId);
     }
   }
 } // namespace ao::gtk

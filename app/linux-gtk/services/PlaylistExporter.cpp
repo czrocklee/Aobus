@@ -10,7 +10,6 @@
 #include <glibmm.h>
 
 #include <fstream>
-#include <iostream>
 
 namespace ao::gtk::services
 {

@@ -74,8 +74,8 @@ namespace ao::audio
 
     void applyLegacyDecoderNegotiation(RenderPlan& plan, DeviceCapabilities const& caps)
     {
-      auto bitDepth = std::uint8_t{16};
-      auto validBits = std::uint8_t{16};
+      std::uint8_t bitDepth = 16;
+      std::uint8_t validBits = 16;
 
       if (plan.sourceFormat.bitDepth == 24)
       {

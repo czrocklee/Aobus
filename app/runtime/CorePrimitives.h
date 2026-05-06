@@ -88,23 +88,4 @@ namespace ao::app
     ao::Error error{};
     bool transient = false;
   };
-
-  enum class StoreDeliveryMode : std::uint8_t
-  {
-    ReplayCurrent,
-    FutureOnly,
-  };
-
-  template<class State>
-  class IReadOnlyStore
-  {
-  public:
-    virtual ~IReadOnlyStore() = default;
-
-    // NOLINTNEXTLINE(portability-template-virtual-member-function)
-    virtual State snapshot() const = 0;
-    // NOLINTNEXTLINE(portability-template-virtual-member-function)
-    virtual Subscription subscribe(std::move_only_function<void(State const&)> handler,
-                                   StoreDeliveryMode mode = StoreDeliveryMode::ReplayCurrent) = 0;
-  };
 }
