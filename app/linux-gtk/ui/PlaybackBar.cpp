@@ -7,6 +7,7 @@
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
 #include <runtime/CommandTypes.h>
+#include <runtime/EventTypes.h>
 #include <runtime/StateTypes.h>
 
 #include "ui/ThemeBus.h"
@@ -95,8 +96,70 @@ namespace ao::gtk
 
     signal_map().connect([this]() { syncOutputIconSize(); });
 
-    // Self-wire: subscribe to playback state store
-    _session.playback().subscribe([this](ao::app::PlaybackState const& state) { setPlaybackState(state); });
+    // Self-wire: transport changes → buttons, time label, position tracking, soul
+    _transportChangedSub = _session.events().subscribe<ao::app::PlaybackTransportChanged>(
+      [this](ao::app::PlaybackTransportChanged const& ev)
+      {
+        auto const state = _session.playback().snapshot();
+
+        _lastState.engine.transport = ev.transport;
+        updateTransportButtons(ev.transport, state.ready);
+
+        // Time label + seek scale
+        auto const posSec = state.positionMs / 1000;
+        auto const durSec = state.durationMs / 1000;
+        if (ev.transport == ao::audio::Transport::Idle || durSec == 0)
+        {
+          _timeLabel.set_text("00:00 / 00:00");
+          _seekScale.set_range(0, 100);
+          _seekScale.set_value(0);
+          _seekScale.set_sensitive(false);
+        }
+        else
+        {
+          _timeLabel.set_text(
+            std::format("{:d}:{:02d} / {:d}:{:02d}", posSec / 60, posSec % 60, durSec / 60, durSec % 60));
+          _updatingSeekScale = true;
+          _seekScale.set_range(0, static_cast<double>(state.durationMs));
+          _seekScale.set_value(static_cast<double>(state.positionMs));
+          _updatingSeekScale = false;
+          _seekScale.set_sensitive(true);
+        }
+
+        // Position tracking for tick-based animation
+        _lastPositionMs = state.positionMs;
+        _lastDurationMs = state.durationMs;
+        _lastTransport = ev.transport;
+
+        // Soul animation
+        if (_soulWindow && _soulWindow->is_visible())
+        {
+          bool const active =
+            ev.transport == ao::audio::Transport::Playing || ev.transport == ao::audio::Transport::Opening ||
+            ev.transport == ao::audio::Transport::Buffering || ev.transport == ao::audio::Transport::Seeking;
+          _soulWindow->updateState(state.quality, active);
+        }
+
+        syncOutputIconSize();
+      });
+
+    // Output/device/quality changes
+    _outputChangedSub = _session.events().subscribe<ao::app::PlaybackOutputChanged>(
+      [this](ao::app::PlaybackOutputChanged const&) { rebuildOutputList(); });
+
+    _devicesChangedSub = _session.events().subscribe<ao::app::PlaybackDevicesChanged>(
+      [this](ao::app::PlaybackDevicesChanged const&) { rebuildOutputList(); });
+
+    _qualityChangedSub = _session.events().subscribe<ao::app::PlaybackQualityChanged>(
+      [this](ao::app::PlaybackQualityChanged const& ev)
+      {
+        _lastState.quality = ev.quality;
+        _lastState.isReady = ev.ready;
+        updateOutputIcon(ev.quality);
+      });
+
+    // Populate initial state from snapshot (one-shot, no subscription)
+    applyInitialState();
   }
 
   PlaybackBar::~PlaybackBar()
@@ -534,11 +597,13 @@ namespace ao::gtk
     _outputSoul.update(_animationTimeSec, quality, isStopped, _lastState.isReady);
   }
 
-  void PlaybackBar::setPlaybackState(ao::app::PlaybackState const& state)
+  void PlaybackBar::applyInitialState()
   {
+    auto const state = _session.playback().snapshot();
+
     updateTransportButtons(state.transport, state.ready);
 
-    // Time label
+    // Time label + seek scale
     auto const posSec = state.positionMs / 1000;
     auto const durSec = state.durationMs / 1000;
     if (state.transport == ao::audio::Transport::Idle || durSec == 0)
@@ -558,7 +623,7 @@ namespace ao::gtk
       _seekScale.set_sensitive(true);
     }
 
-    // Volume
+    // Volume (initial only — slider is self-updating after this)
     bool const volAvailable = state.volumeAvailable;
     _volumeScale.set_visible(volAvailable);
     if (volAvailable)
@@ -568,107 +633,91 @@ namespace ao::gtk
       _updatingVolumeScale = false;
     }
 
-    // Sync legacy _lastState for updateOutputIcon
-    _lastState.isReady = state.ready;
+    // Sync for updateOutputIcon()
     _lastState.engine.transport = state.transport;
-    _lastState.quality = state.quality;
 
-    // Store for tick-based position tracking
+    // Position tracking
     _lastPositionMs = state.positionMs;
     _lastDurationMs = state.durationMs;
     _lastTransport = state.transport;
 
-    // Output model — only rebuild when outputs or selection changed
-    if (state.availableOutputs != _lastAvailableOutputs || state.selectedOutput != _lastSelectedOutput)
+    // Initial state for quality handler (won't fire until change)
+    _lastState.quality = state.quality;
+    _lastState.isReady = state.ready;
+
+    updateOutputIcon(state.quality);
+    syncOutputIconSize();
+  }
+
+  void PlaybackBar::rebuildOutputList()
+  {
+    auto const state = _session.playback().snapshot();
+
+    _outputStore->remove_all();
+    for (auto const& backend : state.availableOutputs)
     {
-      _lastAvailableOutputs = state.availableOutputs;
-      _lastSelectedOutput = state.selectedOutput;
-      _outputStore->remove_all();
-      for (auto const& backend : state.availableOutputs)
+      _outputStore->append(BackendItem::create(backend.id, backend.name));
+
+      for (auto const& device : backend.devices)
       {
-        _outputStore->append(BackendItem::create(backend.id, backend.name));
-
-        for (auto const& device : backend.devices)
+        for (auto const& profileMeta : backend.supportedProfiles)
         {
-          for (auto const& profileMeta : backend.supportedProfiles)
-          {
-            auto const profile = profileMeta.id;
-            auto const displayName = (profile == ao::audio::kProfileExclusive)
-                                       ? std::format("{} [E]", device.displayName)
-                                       : device.displayName;
+          auto const profile = profileMeta.id;
+          auto const displayName =
+            (profile == ao::audio::kProfileExclusive) ? std::format("{} [E]", device.displayName) : device.displayName;
 
-            auto audioDevice = ao::audio::Device{
-              .id = device.id,
-              .displayName = device.displayName,
-              .description = device.description,
-              .isDefault = device.isDefault,
-              .backendId = device.backendId,
-              .capabilities = device.capabilities,
-            };
+          auto audioDevice = ao::audio::Device{
+            .id = device.id,
+            .displayName = device.displayName,
+            .description = device.description,
+            .isDefault = device.isDefault,
+            .backendId = device.backendId,
+            .capabilities = device.capabilities,
+          };
 
-            auto const item = DeviceItem::create(backend.id, audioDevice, profile, displayName);
-            item->active = (backend.id == state.selectedOutput.backendId && profile == state.selectedOutput.profileId &&
-                            device.id == state.selectedOutput.deviceId);
-            _outputStore->append(item);
-          }
+          auto const item = DeviceItem::create(backend.id, audioDevice, profile, displayName);
+          item->active = (backend.id == state.selectedOutput.backendId && profile == state.selectedOutput.profileId &&
+                          device.id == state.selectedOutput.deviceId);
+          _outputStore->append(item);
         }
       }
+    }
 
-      // Output label
+    // Update tooltip
+    bool found = false;
+    for (auto const& backend : state.availableOutputs)
+    {
+      if (backend.id == state.selectedOutput.backendId)
       {
-        bool found = false;
-        for (auto const& backend : state.availableOutputs)
+        for (auto const& device : backend.devices)
         {
-          if (backend.id == state.selectedOutput.backendId)
+          if (device.id == state.selectedOutput.deviceId)
           {
-            for (auto const& device : backend.devices)
+            auto label = device.displayName;
+            for (auto const& pm : backend.supportedProfiles)
             {
-              if (device.id == state.selectedOutput.deviceId)
+              if (pm.id == state.selectedOutput.profileId &&
+                  state.selectedOutput.profileId == ao::audio::kProfileExclusive)
               {
-                auto label = device.displayName;
-                for (auto const& pm : backend.supportedProfiles)
-                {
-                  if (pm.id == state.selectedOutput.profileId &&
-                      state.selectedOutput.profileId == ao::audio::kProfileExclusive)
-                  {
-                    label += " (Exclusive)";
-                    break;
-                  }
-                }
-                if (_outputButton.get_tooltip_text() != label)
-                {
-                  _outputButton.set_tooltip_text(label);
-                }
-                found = true;
+                label += " (Exclusive)";
                 break;
               }
             }
-          }
-          if (found)
-          {
+            _outputButton.set_tooltip_text(label);
+            found = true;
             break;
           }
         }
-        if (!found)
-        {
-          _outputButton.set_tooltip_text("No Output");
-        }
       }
-    } // end output diff check
-
-    // Output icon
-    updateOutputIcon(state.quality);
-
-    // AobusSoul animation
-    if (_soulWindow && _soulWindow->is_visible())
-    {
-      bool const active =
-        state.transport == ao::audio::Transport::Playing || state.transport == ao::audio::Transport::Opening ||
-        state.transport == ao::audio::Transport::Buffering || state.transport == ao::audio::Transport::Seeking;
-      _soulWindow->updateState(state.quality, active);
+      if (found)
+      {
+        break;
+      }
     }
-
-    syncOutputIconSize();
+    if (!found)
+    {
+      _outputButton.set_tooltip_text("No Output");
+    }
   }
 
   void PlaybackBar::setInteractive(bool enabled)

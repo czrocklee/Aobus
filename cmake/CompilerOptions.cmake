@@ -20,6 +20,19 @@ if(AOBUS_ENABLE_ASAN)
     "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined")
 endif()
 
+if(AOBUS_ENABLE_TSAN)
+  if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(WARNING "AOBUS_ENABLE_TSAN is intended for Debug builds; "
+      "${CMAKE_BUILD_TYPE} build type is not recommended")
+  endif()
+  if(NOT CMAKE_CXX_FLAGS MATCHES "fsanitize")
+    set(CMAKE_CXX_FLAGS
+      "${CMAKE_CXX_FLAGS} -fsanitize=thread -fno-omit-frame-pointer")
+  endif()
+  set(CMAKE_EXE_LINKER_FLAGS
+    "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+endif()
+
 # ── Warnings ────────────────────────────────────────────────────────────────
 # Disable -Werror when using sanitizers to avoid noise from third-party headers.
 if(CMAKE_CXX_FLAGS MATCHES "fsanitize")

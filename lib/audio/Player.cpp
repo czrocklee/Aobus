@@ -63,9 +63,6 @@ namespace ao::audio
     std::function<void(std::vector<IBackendProvider::Status> const&)> onDevicesChanged;
     std::function<void(ao::audio::Quality, bool)> onQualityChanged;
 
-    Subscription trackEndedSub;
-    Subscription routeChangedSub;
-
     void handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices);
     void handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation);
     void updateMergedGraph();
@@ -222,7 +219,7 @@ namespace ao::audio
                                                     .backendId = kBackendNone,
                                                     .capabilities = {}});
 
-    _impl->trackEndedSub = _impl->engine->onTrackEnded(
+    _impl->engine->setOnTrackEnded(
       [this]()
       {
         if (_impl->onTrackEnded)
@@ -231,7 +228,7 @@ namespace ao::audio
         }
       });
 
-    _impl->routeChangedSub = _impl->engine->onRouteChanged(
+    _impl->engine->setOnRouteChanged(
       [this](Engine::RouteStatus const& status)
       {
         // Capture generation to prevent stale updates
@@ -241,22 +238,19 @@ namespace ao::audio
       });
   }
 
-  Subscription Player::onTrackEnded(std::function<void()> callback)
+  void Player::setOnTrackEnded(std::function<void()> callback)
   {
     _impl->onTrackEnded = std::move(callback);
-    return Subscription{[this]() { _impl->onTrackEnded = nullptr; }};
   }
 
-  Subscription Player::onDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback)
+  void Player::setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback)
   {
     _impl->onDevicesChanged = std::move(callback);
-    return Subscription{[this]() { _impl->onDevicesChanged = nullptr; }};
   }
 
-  Subscription Player::onQualityChanged(std::function<void(ao::audio::Quality quality, bool ready)> callback)
+  void Player::setOnQualityChanged(std::function<void(ao::audio::Quality quality, bool ready)> callback)
   {
     _impl->onQualityChanged = std::move(callback);
-    return Subscription{[this]() { _impl->onQualityChanged = nullptr; }};
   }
 
   Player::~Player() = default;

@@ -83,6 +83,7 @@ namespace ao::gtk
     ao::app::AppSession& _session;
     ao::app::Subscription _stateSub;
     ao::app::Subscription _notificationSub;
+    ao::app::Subscription _outputChangedSub;
 
     LastPlaybackState _lastPlaybackState;
     std::string _lastTooltipText;

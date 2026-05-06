@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "TrackSession.h"
 #include <ao/audio/DecoderFactory.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/FormatNegotiator.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/ISource.h>
-#include "TrackSession.h"
 #include <ao/utility/Log.h>
 
 #include <format>
@@ -345,26 +345,16 @@ namespace ao::audio
     _impl->currentDevice = device;
   }
 
-  Subscription Engine::onTrackEnded(std::function<void()> callback)
+  void Engine::setOnTrackEnded(std::function<void()> callback)
   {
     std::lock_guard<std::mutex> lock(_impl->stateMutex);
     _impl->onTrackEnded = std::move(callback);
-    return Subscription{[this]()
-                        {
-                          std::lock_guard<std::mutex> lock(_impl->stateMutex);
-                          _impl->onTrackEnded = nullptr;
-                        }};
   }
 
-  Subscription Engine::onRouteChanged(OnRouteChanged callback)
+  void Engine::setOnRouteChanged(OnRouteChanged callback)
   {
     std::lock_guard<std::mutex> lock(_impl->stateMutex);
     _impl->onRouteChanged = std::move(callback);
-    return Subscription{[this]()
-                        {
-                          std::lock_guard<std::mutex> lock(_impl->stateMutex);
-                          _impl->onRouteChanged = nullptr;
-                        }};
   }
 
   Engine::RouteStatus Engine::routeStatus() const

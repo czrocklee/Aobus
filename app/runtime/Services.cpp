@@ -102,9 +102,6 @@ namespace ao::app
     EventBus& events;
     ObservableStore<PlaybackState> store;
     std::unique_ptr<ao::audio::Player> player;
-    ao::audio::Subscription trackEndedSub;
-    ao::audio::Subscription devicesChangedSub;
-    ao::audio::Subscription qualityChangedSub;
     ViewRegistry& views;
     ao::library::MusicLibrary& library;
     ao::TrackId currentTrackId{};
@@ -152,7 +149,7 @@ namespace ao::app
     explicit Impl(IControlExecutor& exec, EventBus& ev, ViewRegistry& v, ao::library::MusicLibrary& lib)
       : executor{exec}, events{ev}, player{std::make_unique<ao::audio::Player>()}, views{v}, library{lib}
     {
-      trackEndedSub = player->onTrackEnded(
+      player->setOnTrackEnded(
         [this]()
         {
           executor.dispatch(
@@ -164,7 +161,7 @@ namespace ao::app
             });
         });
 
-      devicesChangedSub = player->onDevicesChanged(
+      player->setOnDevicesChanged(
         [this](std::vector<ao::audio::IBackendProvider::Status> const&)
         {
           executor.dispatch(
@@ -194,7 +191,7 @@ namespace ao::app
             });
         });
 
-      qualityChangedSub = player->onQualityChanged(
+      player->setOnQualityChanged(
         [this](ao::audio::Quality quality, bool ready)
         {
           executor.dispatch(
@@ -324,6 +321,10 @@ namespace ao::app
       [this](SeekPlayback const& cmd) -> ao::Result<void>
       {
         _impl->player->seek(cmd.positionMs);
+        auto state = _impl->buildState(*_impl->player);
+        auto const transport = state.transport;
+        _impl->store.update(std::move(state));
+        _impl->events.publish(PlaybackTransportChanged{.transport = transport});
         return {};
       });
 

@@ -5,6 +5,7 @@
 
 #include <ao/audio/Player.h>
 #include <ao/audio/Types.h>
+#include <runtime/EventTypes.h>
 #include <runtime/StateTypes.h>
 
 namespace ao::app
@@ -33,7 +34,7 @@ namespace ao::gtk
     explicit PlaybackBar(ao::app::AppSession& session);
     ~PlaybackBar() override;
 
-    void setPlaybackState(ao::app::PlaybackState const& state);
+    void applyInitialState();
     void setInteractive(bool enabled);
 
   private:
@@ -90,6 +91,11 @@ namespace ao::gtk
 
     ao::app::AppSession& _session;
 
+    ao::app::Subscription _transportChangedSub;
+    ao::app::Subscription _outputChangedSub;
+    ao::app::Subscription _devicesChangedSub;
+    ao::app::Subscription _qualityChangedSub;
+
     bool _updatingSeekScale = false;
     bool _updatingVolumeScale = false;
 
@@ -109,8 +115,6 @@ namespace ao::gtk
     std::uint32_t _lastDurationMs = 0;
     ao::audio::Transport _lastTransport = ao::audio::Transport::Idle;
 
-    // Output state for diff detection
-    ao::app::OutputSelection _lastSelectedOutput;
-    std::vector<ao::app::OutputBackendSnapshot> _lastAvailableOutputs;
+    void rebuildOutputList();
   };
 } // namespace ao::gtk
