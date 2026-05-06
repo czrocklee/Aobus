@@ -7,8 +7,7 @@
 #include <ao/audio/IBackend.h>
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/ISource.h>
-#include <ao/audio/MemorySource.h>
-#include <ao/audio/StreamingSource.h>
+#include "TrackSession.h"
 #include <ao/utility/Log.h>
 
 #include <format>
@@ -17,49 +16,6 @@ namespace ao::audio
 {
   namespace
   {
-    constexpr std::uint32_t kPrerollTargetMs = 200;
-    constexpr std::uint32_t kDecodeHighWatermarkMs = 750;
-    constexpr std::uint64_t kMemoryPcmSourceBudgetBytes = 64ULL * 1024ULL * 1024ULL;
-    constexpr std::uint8_t kBytesPer24BitSample = 3;
-
-    std::uint64_t bytesPerSecond(Format const& format) noexcept
-    {
-      if (format.sampleRate == 0 || format.channels == 0 || format.bitDepth == 0)
-      {
-        return 0;
-      }
-
-      auto bytesPerSample = 2U;
-
-      if (format.bitDepth == 24U)
-      {
-        bytesPerSample = kBytesPer24BitSample;
-      }
-      else if (format.bitDepth > 16U)
-      {
-        bytesPerSample = 4U;
-      }
-
-      return static_cast<std::uint64_t>(format.sampleRate) * format.channels * bytesPerSample;
-    }
-
-    std::uint64_t estimatedDecodedBytes(DecodedStreamInfo const& info) noexcept
-    {
-      auto const rate = bytesPerSecond(info.outputFormat);
-
-      if (rate == 0 || info.durationMs == 0)
-      {
-        return 0;
-      }
-
-      return (static_cast<std::uint64_t>(info.durationMs) * rate) / 1000U;
-    }
-
-    bool shouldUseMemoryPcmSource(DecodedStreamInfo const& info) noexcept
-    {
-      auto const decodedBytes = estimatedDecodedBytes(info);
-      return decodedBytes > 0 && decodedBytes <= kMemoryPcmSourceBudgetBytes;
-    }
   } // namespace
 
   // ── Engine::Impl: data bucket + callbacks + handlers ────────────
@@ -296,150 +252,31 @@ namespace ao::audio
     }
 
     // ── Track opening ──────────────────────────────────────────────
-    bool negotiateFormat(std::filesystem::path const& path,
-                         DecodedStreamInfo const& info,
-                         std::unique_ptr<IDecoderSession>& decoder,
-                         Format& backendFormat)
-    {
-      auto const backendId = backend->backendId();
-
-      if (backendId == kBackendPipeWire && backend->profileId() == kProfileShared)
-      {
-        backendFormat = info.outputFormat;
-        AUDIO_LOG_INFO("PipeWire shared mode keeps the stream at {}Hz/{}b/{}ch",
-                       backendFormat.sampleRate,
-                       static_cast<int>(backendFormat.bitDepth),
-                       static_cast<int>(backendFormat.channels));
-
-        return true;
-      }
-
-      auto const plan = FormatNegotiator::buildPlan(info.sourceFormat, currentDevice.capabilities);
-
-      if (plan.requiresResample)
-      {
-        status.statusText = std::format(
-          "{} does not support {} Hz and Aobus has no resampler yet", backendId, info.sourceFormat.sampleRate);
-
-        return false;
-      }
-
-      if (plan.requiresChannelRemap)
-      {
-        status.statusText = std::format("{} does not support {} channels and Aobus has no channel remapper yet",
-                                        backendId,
-                                        static_cast<int>(info.sourceFormat.channels));
-
-        return false;
-      }
-
-      AUDIO_LOG_INFO("Negotiated Plan: decoder={}b/{}bits, device={}Hz/{}b, reason: {}",
-                     static_cast<int>(plan.decoderOutputFormat.bitDepth),
-                     static_cast<int>(plan.decoderOutputFormat.validBits),
-                     plan.deviceFormat.sampleRate,
-                     static_cast<int>(plan.deviceFormat.bitDepth),
-                     plan.reason);
-
-      if (!(plan.decoderOutputFormat == info.sourceFormat))
-      {
-        decoder->close();
-        decoder = decoderFactory ? decoderFactory(path, plan.decoderOutputFormat)
-                                 : createDecoderSession(path, plan.decoderOutputFormat);
-
-        if (!decoder)
-        {
-          status.statusText = "Failed to re-open decoder with negotiated format";
-          return false;
-        }
-
-        if (auto const reOpenResult = decoder->open(path); !reOpenResult)
-        {
-          status.statusText = reOpenResult.error().message;
-          return false;
-        }
-      }
-
-      backendFormat = plan.deviceFormat;
-      return true;
-    }
-
-    std::shared_ptr<ISource> createPcmSource(std::unique_ptr<IDecoderSession> decoder, DecodedStreamInfo const& info)
-    {
-      if (shouldUseMemoryPcmSource(info))
-      {
-        auto const memorySource = std::make_shared<MemorySource>(std::move(decoder), info);
-
-        if (auto const initResult = memorySource->initialize(); !initResult)
-        {
-          status.statusText = initResult.error().message;
-          return nullptr;
-        }
-
-        return memorySource;
-      }
-
-      auto const streamingSource = std::make_shared<StreamingSource>(
-        std::move(decoder),
-        info,
-        [this](ao::Error const& err) { handleSourceError(err); },
-        kPrerollTargetMs,
-        kDecodeHighWatermarkMs);
-
-      if (auto const initResult = streamingSource->initialize(); !initResult)
-      {
-        status.statusText = initResult.error().message;
-        return nullptr;
-      }
-
-      return streamingSource;
-    }
-
     bool openTrack(TrackPlaybackDescriptor const& descriptor, std::shared_ptr<ISource>& source, Format& backendFormat)
     {
-      auto const outputFormat = []() { return Format{.isInterleaved = true}; }();
+      auto session = TrackSession::create(descriptor,
+                                          currentDevice,
+                                          backend->backendId(),
+                                          backend->profileId(),
+                                          decoderFactory,
+                                          [this](ao::Error const& err) { handleSourceError(err); });
 
-      auto decoder = decoderFactory ? decoderFactory(descriptor.filePath, outputFormat)
-                                    : createDecoderSession(descriptor.filePath, outputFormat);
-
-      if (decoder == nullptr)
+      if (!session)
       {
-        status.statusText = "No audio decoder backend is available";
+        status.statusText = session.error.message;
         return false;
       }
 
-      if (auto const openResult = decoder->open(descriptor.filePath); !openResult)
-      {
-        status.statusText = openResult.error().message;
-        return false;
-      }
+      source = std::move(session.source);
+      backendFormat = session.backendFormat;
 
-      auto info = decoder->streamInfo();
-
-      if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
-      {
-        status.statusText = "Decoder did not return a valid output format";
-        return false;
-      }
-
-      if (!negotiateFormat(descriptor.filePath, info, decoder, backendFormat))
-      {
-        return false;
-      }
-
-      info = decoder->streamInfo();
-
-      if (source = createPcmSource(std::move(decoder), info); source == nullptr)
-      {
-        return false;
-      }
-
-      status.durationMs = info.durationMs;
+      status.durationMs = session.info.durationMs;
       status.positionMs = 0;
       accumulatedFrames.store(0, std::memory_order_relaxed);
-      routeTracker.setDecoder(info.sourceFormat, info.outputFormat, info.isLossy);
-      routeTracker.setEngineFormat(info.outputFormat);
+      routeTracker.setDecoder(session.info.sourceFormat, session.info.outputFormat, session.info.isLossy);
+      routeTracker.setEngineFormat(session.info.outputFormat);
       status.routeState = routeTracker.state();
-      engineSampleRate.store(info.outputFormat.sampleRate, std::memory_order_relaxed);
+      engineSampleRate.store(session.info.outputFormat.sampleRate, std::memory_order_relaxed);
 
       return true;
     }
