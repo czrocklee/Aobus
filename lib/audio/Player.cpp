@@ -41,9 +41,6 @@ namespace ao::audio
 
     Impl() = default;
 
-    std::function<void(std::vector<IBackendProvider::Status> const&)> onDevicesChanged;
-    std::function<void(ao::audio::Quality, bool)> onQualityChanged;
-
     std::uint64_t playbackGeneration = 1;
     std::vector<std::unique_ptr<ProviderRecord>> providers;
     std::optional<PendingOutput> pendingOutput;
@@ -63,6 +60,11 @@ namespace ao::audio
     std::optional<TrackPlaybackDescriptor> currentTrack;
 
     std::function<void()> onTrackEnded;
+    std::function<void(std::vector<IBackendProvider::Status> const&)> onDevicesChanged;
+    std::function<void(ao::audio::Quality, bool)> onQualityChanged;
+
+    Subscription trackEndedSub;
+    Subscription routeChangedSub;
 
     void handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices);
     void handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation);
@@ -220,7 +222,7 @@ namespace ao::audio
                                                     .backendId = kBackendNone,
                                                     .capabilities = {}});
 
-    _impl->engine->setOnTrackEnded(
+    _impl->trackEndedSub = _impl->engine->onTrackEnded(
       [this]()
       {
         if (_impl->onTrackEnded)
@@ -229,7 +231,7 @@ namespace ao::audio
         }
       });
 
-    _impl->engine->setOnRouteChanged(
+    _impl->routeChangedSub = _impl->engine->onRouteChanged(
       [this](Engine::RouteStatus const& status)
       {
         // Capture generation to prevent stale updates
@@ -239,25 +241,25 @@ namespace ao::audio
       });
   }
 
-  void Player::setTrackEndedCallback(std::function<void()> callback)
+  Subscription Player::onTrackEnded(std::function<void()> callback)
   {
     _impl->onTrackEnded = std::move(callback);
+    return Subscription{[this]() { _impl->onTrackEnded = nullptr; }};
   }
 
-  void Player::setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback)
+  Subscription Player::onDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback)
   {
     _impl->onDevicesChanged = std::move(callback);
+    return Subscription{[this]() { _impl->onDevicesChanged = nullptr; }};
   }
 
-  void Player::setOnQualityChanged(std::function<void(ao::audio::Quality, bool)> callback)
+  Subscription Player::onQualityChanged(std::function<void(ao::audio::Quality quality, bool ready)> callback)
   {
     _impl->onQualityChanged = std::move(callback);
+    return Subscription{[this]() { _impl->onQualityChanged = nullptr; }};
   }
 
-  Player::~Player()
-  {
-    _impl->engine->setOnRouteChanged(nullptr);
-  }
+  Player::~Player() = default;
 
   void Player::addProvider(std::unique_ptr<IBackendProvider> provider)
   {
