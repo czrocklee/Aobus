@@ -85,20 +85,20 @@ namespace ao::audio
     // ── IRenderTarget Overrides ───────────────────────────────────
     std::size_t readPcm(std::span<std::byte> output) noexcept override
     {
-      auto const s = source.load(std::memory_order_acquire);
-      return s ? s->read(output) : 0;
+      auto const src = source.load(std::memory_order_acquire);
+      return src ? src->read(output) : 0;
     }
 
     bool isSourceDrained() noexcept override
     {
-      auto const s = source.load(std::memory_order_acquire);
+      auto const src = source.load(std::memory_order_acquire);
 
-      if (!s)
+      if (!src)
       {
         return true;
       }
 
-      if (s->isDrained())
+      if (src->isDrained())
       {
         playbackDrainPending = true;
         return true;

@@ -74,7 +74,7 @@ namespace ao::audio::backend
     Impl& operator=(Impl&&) = delete;
 
     // Event Handlers
-    void handleStreamProcess();
+    void handleStreamProcess() const;
     void handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param);
     void handleStreamStateChanged(::pw_stream_state oldState, ::pw_stream_state newState, char const* errorMessage);
     void handleStreamDrained();
@@ -146,7 +146,7 @@ namespace ao::audio::backend
     static_cast<Impl*>(data)->handleStreamDrained();
   }
 
-  void PipeWireBackend::Impl::handleStreamProcess()
+  void PipeWireBackend::Impl::handleStreamProcess() const
   {
     auto* buffer = ::pw_stream_dequeue_buffer(_stream.get());
     if (buffer == nullptr)
@@ -265,7 +265,7 @@ namespace ao::audio::backend
   {
     if (newState == PW_STREAM_STATE_ERROR)
     {
-      _renderTarget->onBackendError(errorMessage ? errorMessage : "Unknown PipeWire error");
+      _renderTarget->onBackendError(errorMessage != nullptr ? errorMessage : "Unknown PipeWire error");
     }
     else if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
     {
