@@ -18,7 +18,7 @@ namespace ao::audio
     NullBackend() = default;
     ~NullBackend() override = default;
 
-    ao::Result<> open(Format const& /*format*/, RenderCallbacks /*callbacks*/) override { return {}; }
+    ao::Result<> open(Format const& /*format*/, IRenderTarget* /*target*/) override { return {}; }
     void start() override {}
     void pause() override {}
     void resume() override {}

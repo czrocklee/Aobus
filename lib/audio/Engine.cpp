@@ -64,7 +64,7 @@ namespace ao::audio
 
   // ── Engine::Impl: data bucket + callbacks + handlers ────────────
 
-  struct Engine::Impl final
+  struct Engine::Impl final : public IRenderTarget
   {
     std::unique_ptr<IBackend> backend;
     Device currentDevice;
@@ -84,23 +84,11 @@ namespace ao::audio
     detail::RouteTracker routeTracker;
     DecoderFactoryFn decoderFactory;
 
-    RenderCallbacks renderCallbacks;
-
     // ── Construction ──────────────────────────────────────────────
     Impl(std::unique_ptr<IBackend> backend, Device const& device, DecoderFactoryFn decoderFactory)
       : backend{std::move(backend)}, currentDevice{device}, decoderFactory{std::move(decoderFactory)}
     {
       syncBackendIdentity();
-      renderCallbacks = RenderCallbacks{.userData = this,
-                                        .readPcm = &Impl::onReadPcm,
-                                        .isSourceDrained = &Impl::isSourceDrained,
-                                        .onUnderrun = &Impl::onUnderrun,
-                                        .onPositionAdvanced = &Impl::onPositionAdvanced,
-                                        .onDrainComplete = &Impl::onDrainComplete,
-                                        .onRouteReady = &Impl::onRouteReady,
-                                        .onFormatChanged = &Impl::onFormatChanged,
-                                        .onPropertyChanged = &Impl::onPropertyChanged,
-                                        .onBackendError = &Impl::onBackendError};
     }
 
     // ── Helpers ────────────────────────────────────────────────────
@@ -138,76 +126,62 @@ namespace ao::audio
       routeTracker.clear();
     }
 
-    // ── Callbacks ──────────────────────────────────────────────────
-    static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept
+    // ── IRenderTarget Overrides ───────────────────────────────────
+    std::size_t readPcm(std::span<std::byte> output) noexcept override
     {
-      auto* const impl = static_cast<Impl*>(userData);
-      auto const source = impl->source.load(std::memory_order_acquire);
-      return source ? source->read(output) : 0;
+      auto const s = source.load(std::memory_order_acquire);
+      return s ? s->read(output) : 0;
     }
 
-    static bool isSourceDrained(void* userData) noexcept
+    bool isSourceDrained() noexcept override
     {
-      auto* const impl = static_cast<Impl*>(userData);
-      auto const source = impl->source.load(std::memory_order_acquire);
+      auto const s = source.load(std::memory_order_acquire);
 
-      if (!source)
+      if (!s)
       {
         return true;
       }
 
-      if (source->isDrained())
+      if (s->isDrained())
       {
-        impl->playbackDrainPending = true;
+        playbackDrainPending = true;
         return true;
       }
 
       return false;
     }
 
-    static void onUnderrun(void* userData) noexcept { ++static_cast<Impl*>(userData)->underrunCount; }
+    void onUnderrun() noexcept override { ++underrunCount; }
 
-    static void onPositionAdvanced(void* userData, std::uint32_t frames) noexcept
+    void onPositionAdvanced(std::uint32_t frames) noexcept override
     {
-      static_cast<Impl*>(userData)->accumulatedFrames.fetch_add(frames, std::memory_order_relaxed);
+      accumulatedFrames.fetch_add(frames, std::memory_order_relaxed);
     }
 
-    static void onDrainComplete(void* userData) noexcept
+    void onDrainComplete() noexcept override
     {
-      auto* const impl = static_cast<Impl*>(userData);
-
-      if (!impl->playbackDrainPending.exchange(false, std::memory_order_relaxed))
+      if (!playbackDrainPending.exchange(false, std::memory_order_relaxed))
       {
         return;
       }
 
-      impl->handleDrainComplete();
+      handleDrainComplete();
     }
 
-    static void onRouteReady(void* userData, std::string_view routeAnchor) noexcept
+    void onRouteReady(std::string_view routeAnchor) noexcept override
     {
-      auto* const impl = static_cast<Impl*>(userData);
       auto anchor = std::string{routeAnchor};
-      impl->handleRouteReady(anchor);
+      handleRouteReady(anchor);
     }
 
-    static void onFormatChanged(void* userData, Format const& format) noexcept
-    {
-      auto* const impl = static_cast<Impl*>(userData);
-      impl->handleFormatChanged(format);
-    }
+    void onFormatChanged(Format const& format) noexcept override { handleFormatChanged(format); }
 
-    static void onPropertyChanged(void* userData, PropertyId id) noexcept
-    {
-      auto* const impl = static_cast<Impl*>(userData);
-      impl->handlePropertyChanged(id);
-    }
+    void onPropertyChanged(PropertyId id) noexcept override { handlePropertyChanged(id); }
 
-    static void onBackendError(void* userData, std::string_view message) noexcept
+    void onBackendError(std::string_view message) noexcept override
     {
-      auto* const impl = static_cast<Impl*>(userData);
       auto msg = std::string{message};
-      impl->handleBackendError(msg);
+      handleBackendError(msg);
     }
 
     // ── Handlers ───────────────────────────────────────────────────
@@ -621,7 +595,7 @@ namespace ao::audio
 
     _impl->source.store(source, std::memory_order_release);
 
-    if (auto const openResult = _impl->backend->open(backendFormat, _impl->renderCallbacks); !openResult)
+    if (auto const openResult = _impl->backend->open(backendFormat, _impl.get()); !openResult)
     {
       _impl->source.store({}, std::memory_order_release);
       auto const lock = std::lock_guard{_impl->stateMutex};
