@@ -33,7 +33,7 @@ namespace ao::audio::test
     {
     }
 
-    ao::Result<> open(Format const& f, RenderCallbacks c) override { return _real.open(f, c); }
+    ao::Result<> open(Format const& f, IRenderTarget* t) override { return _real.open(f, t); }
     void start() override { _real.start(); }
     void pause() override { _real.pause(); }
     void resume() override { _real.resume(); }

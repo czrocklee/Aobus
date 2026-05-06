@@ -173,7 +173,7 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
 
   When(Method(mockBackend, open))
     .AlwaysDo(
-      [&](Format const& format, RenderCallbacks)
+      [&](Format const& format, IRenderTarget*)
       {
         openedFormats.push_back(format);
         return ao::Result<>{};
@@ -222,7 +222,7 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
 
   When(Method(mockBackend, open))
     .AlwaysDo(
-      [&](Format const& format, RenderCallbacks)
+      [&](Format const& format, IRenderTarget*)
       {
         openedFormats.push_back(format);
         return ao::Result<>{};
@@ -430,16 +430,16 @@ TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
   engine.play(desc);
 
   // Simulate playback loop via backend callbacks
-  auto const& cb = backendPtr->callbacks();
+  auto* const target = backendPtr->target();
   auto buffer = std::array<std::byte, 100>{};
 
-  cb.readPcm(cb.userData, buffer); // Read all 20 bytes
+  target->readPcm(buffer); // Read all 20 bytes
 
-  REQUIRE(cb.isSourceDrained(cb.userData));
+  REQUIRE(target->isSourceDrained());
 
   SECTION("onDrainComplete resets to idle and fires track ended")
   {
-    cb.onDrainComplete(cb.userData);
+    backendPtr->fireDrainComplete();
     REQUIRE(engine.status().transport == Transport::Idle);
     REQUIRE(trackEnded == true);
   }
@@ -448,8 +448,15 @@ TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
   {
     engine.stop(); // resets everything
     trackEnded = false;
-    cb.onDrainComplete(cb.userData);
+    backendPtr->fireDrainComplete();
     REQUIRE(trackEnded == false);
+  }
+
+  SECTION("onBackendError stops playback")
+  {
+    backendPtr->fireBackendError("lost device");
+    REQUIRE(engine.status().transport == Transport::Error);
+    CHECK(engine.status().statusText == "lost device");
   }
 }
 
@@ -576,9 +583,9 @@ TEST_CASE("Engine - Backend callback simulation", "[playback][engine][callback]"
 
     engine.play(desc);
 
-    auto const& cb = backendPtr->callbacks();
+    auto* const target = backendPtr->target();
 
-    cb.onBackendError(cb.userData, "Hardware failure");
+    target->onBackendError("Hardware failure");
 
     auto const snap = engine.status();
 
@@ -593,9 +600,9 @@ TEST_CASE("Engine - Backend callback simulation", "[playback][engine][callback]"
 
     engine.play(desc);
 
-    auto const& cb = backendPtr->callbacks();
+    auto* const target = backendPtr->target();
 
-    cb.onRouteReady(cb.userData, "anchor-123");
+    target->onRouteReady("anchor-123");
 
     auto const route = engine.routeStatus();
 

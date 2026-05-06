@@ -18,10 +18,10 @@ namespace ao::audio
       Format format;
     };
 
-    ao::Result<> open(Format const& format, RenderCallbacks callbacks) override
+    ao::Result<> open(Format const& format, IRenderTarget* target) override
     {
       _events.push_back({"open", format});
-      _callbacks = callbacks;
+      _target = target;
       _format = format;
       return _openResult;
     }
@@ -79,51 +79,51 @@ namespace ao::audio
     void setOpenResult(ao::Result<> res) { _openResult = res; }
     std::vector<Event> const& events() const { return _events; }
     void clearEvents() { _events.clear(); }
-    RenderCallbacks const& callbacks() const { return _callbacks; }
+    IRenderTarget* target() const { return _target; }
     Format currentFormat() const { return _format; }
 
     // Trigger callbacks
     void fireRouteReady(std::string_view anchor)
     {
-      if (_callbacks.onRouteReady)
+      if (_target)
       {
-        _callbacks.onRouteReady(_callbacks.userData, anchor);
+        _target->onRouteReady(anchor);
       }
     }
     void fireFormatChanged(Format const& fmt)
     {
       _format = fmt;
 
-      if (_callbacks.onFormatChanged)
+      if (_target)
       {
-        _callbacks.onFormatChanged(_callbacks.userData, fmt);
+        _target->onFormatChanged(fmt);
       }
     }
     void fireBackendError(std::string_view msg)
     {
-      if (_callbacks.onBackendError)
+      if (_target)
       {
-        _callbacks.onBackendError(_callbacks.userData, msg);
+        _target->onBackendError(msg);
       }
     }
     void fireDrainComplete()
     {
-      if (_callbacks.onDrainComplete)
+      if (_target)
       {
-        _callbacks.onDrainComplete(_callbacks.userData);
+        _target->onDrainComplete();
       }
     }
     void firePropertyChanged(PropertyId id)
     {
-      if (_callbacks.onPropertyChanged && _callbacks.userData)
+      if (_target)
       {
-        _callbacks.onPropertyChanged(_callbacks.userData, id);
+        _target->onPropertyChanged(id);
       }
     }
 
   private:
     std::vector<Event> _events;
-    RenderCallbacks _callbacks{};
+    IRenderTarget* _target = nullptr;
     Format _format{};
     ao::Result<> _openResult{};
     float _volume = 1.0f;

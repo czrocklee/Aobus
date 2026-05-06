@@ -19,7 +19,7 @@ namespace ao::audio::backend
     explicit PipeWireBackend(ao::audio::Device const& device, ao::audio::ProfileId const& profile);
     ~PipeWireBackend() override;
 
-    ao::Result<> open(ao::audio::Format const& format, ao::audio::RenderCallbacks callbacks) override;
+    ao::Result<> open(ao::audio::Format const& format, ao::audio::IRenderTarget* target) override;
     void start() override;
     void pause() override;
     void resume() override;

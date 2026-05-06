@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/audio/Backend.h>
+#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/Property.h>
 
 #include <ao/Error.h>
@@ -15,41 +16,6 @@
 namespace ao::audio
 {
   /**
-   * @brief Callbacks provided by the engine to the backend.
-   */
-  struct RenderCallbacks final
-  {
-    void* userData = nullptr;
-
-    /// Called by the backend when it needs more PCM data.
-    std::size_t (*readPcm)(void* userData, std::span<std::byte> output) noexcept = nullptr;
-
-    /// Called by the backend to check if the source has finished sending data.
-    bool (*isSourceDrained)(void* userData) noexcept = nullptr;
-
-    /// Called by the backend when an underrun occurs.
-    void (*onUnderrun)(void* userData) noexcept = nullptr;
-
-    /// Called by the backend to report playback progress.
-    void (*onPositionAdvanced)(void* userData, std::uint32_t frames) noexcept = nullptr;
-
-    /// Called by the backend when a drain operation has completed.
-    void (*onDrainComplete)(void* userData) noexcept = nullptr;
-
-    /// Called by the backend when the stream's runtime node ID or route anchor is stable.
-    void (*onRouteReady)(void* userData, std::string_view routeAnchor) noexcept = nullptr;
-
-    /// Called by the backend when its input stream format is negotiated or changes.
-    void (*onFormatChanged)(void* userData, Format const& format) noexcept = nullptr;
-
-    /// Called by the backend when a runtime property changes externally.
-    void (*onPropertyChanged)(void* userData, PropertyId id) noexcept = nullptr;
-
-    /// Called by the backend when a terminal error occurs (e.g. device lost).
-    void (*onBackendError)(void* userData, std::string_view message) noexcept = nullptr;
-  };
-
-  /**
    * @brief Interface for platform-specific audio output backends.
    */
   class IBackend
@@ -58,9 +24,9 @@ namespace ao::audio
     virtual ~IBackend() = default;
 
     /**
-     * @brief Prepares the backend for playback with the given format.
+     * @brief Initialize and open the backend for playback.
      */
-    virtual ao::Result<> open(Format const& format, RenderCallbacks callbacks) = 0;
+    virtual ao::Result<> open(Format const& format, IRenderTarget* target) = 0;
 
     virtual void start() = 0;
     virtual void pause() = 0;

@@ -45,7 +45,7 @@ namespace ao::audio::backend
 
     std::string deviceName;
     ao::audio::Format format;
-    ao::audio::RenderCallbacks callbacks;
+    ao::audio::IRenderTarget* renderTarget = nullptr;
 
     AlsaPcmPtr pcm;
     std::jthread thread;
@@ -147,7 +147,7 @@ namespace ao::audio::backend
       auto* const dst = static_cast<std::byte*>(areas[0].addr) + ((areas[0].first + offset * areas[0].step) / 8);
       auto const bytesToRead = static_cast<std::size_t>(frames) * bytesPerFrame;
 
-      std::size_t const bytesRead = callbacks.readPcm(callbacks.userData, {dst, bytesToRead});
+      std::size_t const bytesRead = renderTarget->readPcm({dst, bytesToRead});
 
       if (bytesRead > 0)
       {
@@ -158,15 +158,10 @@ namespace ao::audio::backend
       {
         ::snd_pcm_mmap_commit(pcm.get(), offset, 0); // Release back to ALSA
 
-        if (callbacks.isSourceDrained(callbacks.userData))
+        if (renderTarget->isSourceDrained())
         {
           ::snd_pcm_drain(pcm.get());
-
-          if (callbacks.onDrainComplete != nullptr)
-          {
-            callbacks.onDrainComplete(callbacks.userData);
-          }
-
+          renderTarget->onDrainComplete();
           break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -192,10 +187,7 @@ namespace ao::audio::backend
         ::snd_pcm_start(pcm.get());
       }
 
-      if (callbacks.onPositionAdvanced != nullptr)
-      {
-        callbacks.onPositionAdvanced(callbacks.userData, static_cast<std::uint32_t>(committed));
-      }
+      renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(committed));
     }
   }
 
@@ -238,11 +230,7 @@ namespace ao::audio::backend
   {
     if (err == -EPIPE)
     {
-      if (callbacks.onUnderrun != nullptr)
-      {
-        callbacks.onUnderrun(callbacks.userData);
-      }
-
+      renderTarget->onUnderrun();
       ::snd_pcm_prepare(pcm.get());
     }
     else if (err == -ESTRPIPE)
@@ -254,12 +242,9 @@ namespace ao::audio::backend
     }
     else if (err == -ENODEV || err == -EBADF)
     {
-      auto const errorMsg = std::format("ALSA Device Lost: {}", ::snd_strerror(err));
-
-      if (callbacks.onBackendError != nullptr)
-      {
-        callbacks.onBackendError(callbacks.userData, errorMsg);
-      }
+      auto const errorMsg = std::string{"ALSA: Unrecoverable stream state"};
+      AUDIO_LOG_ERROR("{}", errorMsg);
+      renderTarget->onBackendError(errorMsg);
     }
   }
 
@@ -507,8 +492,10 @@ namespace ao::audio::backend
     close();
   }
 
-  ao::Result<> AlsaExclusiveBackend::open(ao::audio::Format const& format, ao::audio::RenderCallbacks callbacks)
+  ao::Result<> AlsaExclusiveBackend::open(ao::audio::Format const& format, ao::audio::IRenderTarget* target)
   {
+    _impl->format = format;
+    _impl->renderTarget = target;
     AUDIO_LOG_INFO("AlsaExclusiveBackend: Opening device '{}' with format {}Hz/{}b/{}ch",
                    _impl->deviceName,
                    format.sampleRate,
@@ -516,7 +503,6 @@ namespace ao::audio::backend
                    static_cast<int>(format.channels));
 
     close();
-    _impl->callbacks = callbacks;
 
     ::snd_pcm_t* pcm = nullptr;
 
@@ -569,18 +555,12 @@ namespace ao::audio::backend
       _impl->format.bitDepth = hwBitDepth;
       _impl->format.validBits = format.bitDepth;
 
-      if (_impl->callbacks.onFormatChanged != nullptr)
-      {
-        _impl->callbacks.onFormatChanged(_impl->callbacks.userData, _impl->format);
-      }
+      _impl->renderTarget->onFormatChanged(_impl->format);
     }
+
+    _impl->renderTarget->onRouteReady(_impl->deviceName);
 
     _impl->pcm = std::move(safePcm);
-
-    if (_impl->callbacks.onRouteReady != nullptr)
-    {
-      _impl->callbacks.onRouteReady(_impl->callbacks.userData, _impl->deviceName);
-    }
 
     if (!_impl->initMixer(_impl->pcm.get()))
     {

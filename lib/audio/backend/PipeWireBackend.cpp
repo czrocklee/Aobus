@@ -74,7 +74,7 @@ namespace ao::audio::backend
     Impl& operator=(Impl&&) = delete;
 
     // Event Handlers
-    void handleStreamProcess() const;
+    void handleStreamProcess();
     void handleStreamParamChanged(std::uint32_t id, ::spa_pod const* param);
     void handleStreamStateChanged(::pw_stream_state oldState, ::pw_stream_state newState, char const* errorMessage);
     void handleStreamDrained();
@@ -105,7 +105,7 @@ namespace ao::audio::backend
     }();
 
     // Members
-    ao::audio::RenderCallbacks _callbacks;
+    ao::audio::IRenderTarget* _renderTarget = nullptr;
     ao::audio::Format _format;
     std::atomic<bool> _drainPending = false;
     bool _strictFormatRequired = false;
@@ -146,7 +146,7 @@ namespace ao::audio::backend
     static_cast<Impl*>(data)->handleStreamDrained();
   }
 
-  void PipeWireBackend::Impl::handleStreamProcess() const
+  void PipeWireBackend::Impl::handleStreamProcess()
   {
     auto* buffer = ::pw_stream_dequeue_buffer(_stream.get());
     if (buffer == nullptr)
@@ -176,7 +176,7 @@ namespace ao::audio::backend
       return;
     }
 
-    auto const bytesRead = _callbacks.readPcm(_callbacks.userData, {static_cast<std::byte*>(data), max_size});
+    auto const bytesRead = _renderTarget->readPcm({static_cast<std::byte*>(data), max_size});
 
     if (bytesRead > 0)
     {
@@ -184,7 +184,7 @@ namespace ao::audio::backend
       buffer->buffer->datas[0].chunk->size = bytesRead;
       buffer->buffer->datas[0].chunk->stride = stride;
       ::pw_stream_queue_buffer(_stream.get(), buffer);
-      _callbacks.onPositionAdvanced(_callbacks.userData, static_cast<std::uint32_t>(bytesRead / stride));
+      _renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(bytesRead / stride));
     }
 
     else
@@ -193,7 +193,7 @@ namespace ao::audio::backend
       buffer->buffer->datas[0].chunk->size = 0;
       ::pw_stream_queue_buffer(_stream.get(), buffer);
 
-      if (_callbacks.isSourceDrained(_callbacks.userData))
+      if (_renderTarget->isSourceDrained())
       {
         ::pw_stream_flush(_stream.get(), true);
       }
@@ -225,7 +225,7 @@ namespace ao::audio::backend
       AUDIO_LOG_INFO(
         "Negotiated PipeWire format: {}Hz, {}b, {} channels", _format.sampleRate, _format.bitDepth, _format.channels);
 
-      _callbacks.onFormatChanged(_callbacks.userData, _format);
+      _renderTarget->onFormatChanged(_format);
     }
   }
 
@@ -240,7 +240,7 @@ namespace ao::audio::backend
       {
         if (std::abs(volFloat - _volume.exchange(volFloat)) > kVolumeEpsilon)
         {
-          _callbacks.onPropertyChanged(_callbacks.userData, ao::audio::PropertyId::Volume);
+          _renderTarget->onPropertyChanged(ao::audio::PropertyId::Volume);
         }
       }
     }
@@ -253,10 +253,7 @@ namespace ao::audio::backend
       {
         if (muteBool != _muted.exchange(muteBool))
         {
-          if (_callbacks.onPropertyChanged != nullptr)
-          {
-            _callbacks.onPropertyChanged(_callbacks.userData, ao::audio::PropertyId::Muted);
-          }
+          _renderTarget->onPropertyChanged(ao::audio::PropertyId::Muted);
         }
       }
     }
@@ -268,10 +265,7 @@ namespace ao::audio::backend
   {
     if (newState == PW_STREAM_STATE_ERROR)
     {
-      AUDIO_LOG_ERROR("PipeWire error: {}", errorMessage ? errorMessage : "Unknown PipeWire stream error");
-
-      _callbacks.onBackendError(
-        _callbacks.userData, errorMessage != nullptr ? errorMessage : "Unknown PipeWire stream error");
+      _renderTarget->onBackendError(errorMessage ? errorMessage : "Unknown PipeWire error");
     }
     else if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
     {
@@ -281,7 +275,7 @@ namespace ao::audio::backend
         if (id != PW_ID_ANY)
         {
           _routeAnchorReported = true;
-          _callbacks.onRouteReady(_callbacks.userData, std::format("{}", id));
+          _renderTarget->onRouteReady(std::format("{}", id));
         }
       }
     }
@@ -290,8 +284,7 @@ namespace ao::audio::backend
   void PipeWireBackend::Impl::handleStreamDrained()
   {
     _drainPending = false;
-
-    _callbacks.onDrainComplete(_callbacks.userData);
+    _renderTarget->onDrainComplete();
   }
 
   PipeWireBackend::PipeWireBackend(ao::audio::Device const& device, ao::audio::ProfileId const& profile)
@@ -317,9 +310,9 @@ namespace ao::audio::backend
 
   PipeWireBackend::~PipeWireBackend() = default;
 
-  ao::Result<> PipeWireBackend::open(ao::audio::Format const& format, ao::audio::RenderCallbacks callbacks)
+  ao::Result<> PipeWireBackend::open(ao::audio::Format const& format, ao::audio::IRenderTarget* target)
   {
-    _impl->_callbacks = callbacks;
+    _impl->_renderTarget = target;
     _impl->_format = format;
     _impl->_routeAnchorReported = false;
     bool useExclusive = _exclusiveMode && !_targetDeviceId.empty();
@@ -497,7 +490,7 @@ namespace ao::audio::backend
 
     if (_impl->_stream && !_targetDeviceId.empty())
     {
-      if (auto const openResult = open(_impl->_format, _impl->_callbacks); !openResult)
+      if (auto const openResult = open(_impl->_format, _impl->_renderTarget); !openResult)
       {
         AUDIO_LOG_ERROR("Failed to reopen stream after exclusive mode change: {}", openResult.error().message);
       }
