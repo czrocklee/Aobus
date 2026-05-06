@@ -5,6 +5,7 @@
 
 #include <ao/audio/Backend.h>
 #include <ao/audio/IBackend.h>
+#include <ao/audio/Subscription.h>
 
 #include <functional>
 #include <memory>
@@ -13,53 +14,6 @@
 
 namespace ao::audio
 {
-  /**
-   * @brief A move-only handle that unsubscribes a listener when destroyed.
-   */
-  class Subscription final
-  {
-  public:
-    Subscription() = default;
-    explicit Subscription(std::move_only_function<void()> unsub)
-      : _unsub(std::move(unsub))
-    {
-    }
-
-    ~Subscription()
-    {
-      if (_unsub)
-      {
-        _unsub();
-      }
-    }
-
-    Subscription(Subscription const&) = delete;
-    Subscription& operator=(Subscription const&) = delete;
-
-    Subscription(Subscription&&) noexcept = default;
-    Subscription& operator=(Subscription&&) noexcept = default;
-
-    /**
-     * @brief Manually trigger unsubscription.
-     */
-    void reset()
-    {
-      if (_unsub)
-      {
-        auto unsub = std::move(_unsub);
-        unsub();
-      }
-    }
-
-    /**
-     * @brief Returns true if the subscription is active.
-     */
-    explicit operator bool() const noexcept { return static_cast<bool>(_unsub); }
-
-  private:
-    std::move_only_function<void()> _unsub;
-  };
-
   /**
    * @brief Interface for audio backend providers (e.g., PipeWire, ALSA).
    * Provides reactive access to audio devices and system routing graphs.
