@@ -8,7 +8,6 @@
 #include <ao/audio/Property.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/detail/RouteTracker.h>
-#include <ao/utility/IMainThreadDispatcher.h>
 
 #include <functional>
 #include <memory>
@@ -58,10 +57,7 @@ namespace ao::audio
 
     using OnRouteChanged = std::function<void(RouteStatus const&)>;
 
-    Engine(std::unique_ptr<IBackend> backend,
-           Device const& device,
-           std::shared_ptr<ao::IMainThreadDispatcher> dispatcher = nullptr,
-           DecoderFactoryFn decoderFactory = nullptr);
+    Engine(std::unique_ptr<IBackend> backend, Device const& device, DecoderFactoryFn decoderFactory = nullptr);
     ~Engine();
 
     Engine(Engine const&) = delete;

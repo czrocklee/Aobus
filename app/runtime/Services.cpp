@@ -7,6 +7,7 @@
 #include "EventBus.h"
 #include "EventTypes.h"
 #include "ObservableStore.h"
+#include "TrackDetailProjection.h"
 #include "ViewRegistry.h"
 
 #include <ao/Type.h>
@@ -19,7 +20,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/utility/IMainThreadDispatcher.h>
+#include <ao/utility/ThreadUtils.h>
 
 #include <algorithm>
 #include <memory>
@@ -30,33 +31,67 @@ namespace ao::app
 {
   namespace
   {
-    class ExecutorDispatcher final : public ao::IMainThreadDispatcher
-    {
-    public:
-      explicit ExecutorDispatcher(IControlExecutor& executor)
-        : _executor{&executor}
-      {
-      }
-
-      void dispatch(std::function<void()> task) override { _executor->dispatch(std::move(task)); }
-
-    private:
-      IControlExecutor* _executor;
-    };
-
     auto buildPlaybackState(ao::audio::Player& player) -> PlaybackState
     {
       auto status = player.status();
 
+      auto outputs = std::vector<OutputBackendSnapshot>{};
+      outputs.reserve(status.availableBackends.size());
+      for (auto const& backendStatus : status.availableBackends)
+      {
+        auto devices = std::vector<OutputDeviceSnapshot>{};
+        devices.reserve(backendStatus.devices.size());
+        for (auto const& dev : backendStatus.devices)
+        {
+          devices.push_back(OutputDeviceSnapshot{
+            .id = dev.id,
+            .displayName = dev.displayName,
+            .description = dev.description,
+            .isDefault = dev.isDefault,
+            .backendId = dev.backendId,
+            .capabilities = dev.capabilities,
+          });
+        }
+
+        auto profiles = std::vector<OutputProfileSnapshot>{};
+        profiles.reserve(backendStatus.metadata.supportedProfiles.size());
+        for (auto const& prof : backendStatus.metadata.supportedProfiles)
+        {
+          profiles.push_back(OutputProfileSnapshot{
+            .id = prof.id,
+            .name = prof.name,
+            .description = prof.description,
+          });
+        }
+
+        outputs.push_back(OutputBackendSnapshot{
+          .id = backendStatus.metadata.id,
+          .name = backendStatus.metadata.name,
+          .description = backendStatus.metadata.description,
+          .iconName = backendStatus.metadata.iconName,
+          .supportedProfiles = std::move(profiles),
+          .devices = std::move(devices),
+        });
+      }
+
       return PlaybackState{
         .transport = status.engine.transport,
+        .trackId = {},
         .positionMs = status.engine.positionMs,
         .durationMs = status.engine.durationMs,
         .volume = status.volume,
         .muted = status.muted,
         .volumeAvailable = status.volumeAvailable,
         .ready = status.isReady,
-        .quality = PlaybackQuality::Unknown,
+        .selectedOutput =
+          OutputSelection{
+            .backendId = status.engine.backendId,
+            .deviceId = status.engine.currentDeviceId,
+            .profileId = status.engine.profileId,
+          },
+        .availableOutputs = std::move(outputs),
+        .flow = status.flow,
+        .quality = status.quality,
       };
     }
   }
@@ -66,50 +101,191 @@ namespace ao::app
     IControlExecutor& executor;
     EventBus& events;
     ObservableStore<PlaybackState> store;
-    std::shared_ptr<ExecutorDispatcher> dispatcher;
     std::unique_ptr<ao::audio::Player> player;
+    ViewRegistry& views;
+    ao::library::MusicLibrary& library;
+    ao::TrackId currentTrackId{};
+    ao::ListId currentSourceListId{};
+    std::string currentTrackTitle{};
+    std::string currentTrackArtist{};
 
-    Impl(IControlExecutor& exec, EventBus& ev)
-      : executor{exec}
-      , events{ev}
-      , dispatcher{std::make_shared<ExecutorDispatcher>(exec)}
-      , player{std::make_unique<ao::audio::Player>(dispatcher)}
+    void ensureReady()
     {
+      if (player->isReady())
+      {
+        return;
+      }
+      auto status = player->status();
+      if (status.availableBackends.empty())
+      {
+        return;
+      }
+
+      auto const& backend = status.availableBackends.front();
+      if (backend.devices.empty())
+      {
+        return;
+      }
+
+      auto const& device = backend.devices.front();
+      auto profileId = ao::audio::kProfileShared;
+      if (!backend.metadata.supportedProfiles.empty())
+      {
+        profileId = backend.metadata.supportedProfiles.front().id;
+      }
+      player->setOutput(backend.metadata.id, device.id, profileId);
+    }
+
+    PlaybackState buildState(ao::audio::Player& p) const
+    {
+      auto s = buildPlaybackState(p);
+      s.trackId = currentTrackId;
+      s.sourceListId = currentSourceListId;
+      s.trackTitle = currentTrackTitle;
+      s.trackArtist = currentTrackArtist;
+      return s;
+    }
+
+    explicit Impl(IControlExecutor& exec, EventBus& ev, ViewRegistry& v, ao::library::MusicLibrary& lib)
+      : executor{exec}, events{ev}, player{std::make_unique<ao::audio::Player>()}, views{v}, library{lib}
+    {
+      player->setTrackEndedCallback(
+        [this]()
+        {
+          executor.dispatch(
+            [this]()
+            {
+              auto state = buildState(*player);
+              events.publish(PlaybackTransportChanged{.transport = ao::audio::Transport::Idle});
+              store.update(std::move(state));
+            });
+        });
+
+      player->setOnDevicesChanged(
+        [this](std::vector<ao::audio::IBackendProvider::Status> const&)
+        {
+          executor.dispatch(
+            [this]()
+            {
+              auto state = buildState(*player);
+
+              // Auto-select first available default output if none is selected yet
+              if (state.selectedOutput.backendId.empty() && !state.availableOutputs.empty())
+              {
+                auto const& backend = state.availableOutputs.front();
+                if (!backend.devices.empty())
+                {
+                  auto const& device = backend.devices.front();
+                  auto profileId = ao::audio::kProfileShared;
+                  if (!backend.supportedProfiles.empty())
+                  {
+                    profileId = backend.supportedProfiles.front().id;
+                  }
+                  player->setOutput(backend.id, device.id, profileId);
+                  state = buildState(*player);
+                }
+              }
+
+              store.update(std::move(state));
+              events.publish(PlaybackDevicesChanged{});
+            });
+        });
+
+      player->setOnQualityChanged(
+        [this](ao::audio::Quality quality, bool ready)
+        {
+          executor.dispatch(
+            [this, quality, ready]()
+            {
+              auto state = store.snapshot();
+              state.quality = quality;
+              state.ready = ready;
+              store.update(std::move(state));
+              events.publish(PlaybackQualityChanged{.quality = quality, .ready = ready});
+            });
+        });
     }
   };
 
-  PlaybackService::PlaybackService(CommandBus& commands, EventBus& events, IControlExecutor& executor)
-    : _impl{std::make_unique<Impl>(executor, events)}
+  PlaybackService::PlaybackService(CommandBus& commands,
+                                   EventBus& events,
+                                   IControlExecutor& executor,
+                                   ViewRegistry& views,
+                                   ao::library::MusicLibrary& library)
+    : _impl{std::make_unique<Impl>(executor, events, views, library)}
   {
     commands.registerHandler<PlayTrack>(
       [this](PlayTrack const& cmd) -> ao::Result<void>
       {
-        auto desc = ao::audio::TrackPlaybackDescriptor{
-          .trackId = cmd.trackId,
-        };
-        _impl->player->play(desc);
-        _impl->store.update(buildPlaybackState(*_impl->player));
-        _impl->events.publish(PlaybackTransportChanged{
-          .transport = ao::audio::Transport::Playing,
-        });
+        _impl->ensureReady();
+        _impl->player->play(cmd.descriptor);
+        _impl->currentTrackId = cmd.descriptor.trackId;
+        _impl->currentSourceListId = cmd.sourceListId;
+        _impl->currentTrackTitle = cmd.descriptor.title;
+        _impl->currentTrackArtist = cmd.descriptor.artist;
+        _impl->store.update(_impl->buildState(*_impl->player));
+        _impl->events.publish(PlaybackTransportChanged{.transport = ao::audio::Transport::Playing});
         _impl->events.publish(NowPlayingTrackChanged{
-          .trackId = cmd.trackId,
+          .trackId = cmd.descriptor.trackId,
           .sourceListId = cmd.sourceListId,
         });
         return {};
       });
 
-    commands.registerHandler<PlaySelectionInView>([](PlaySelectionInView const& /*cmd*/) -> ao::Result<ao::TrackId>
-                                                  { return ao::TrackId{}; });
+    commands.registerHandler<PlaySelectionInView>(
+      [this](PlaySelectionInView const& cmd) -> ao::Result<ao::TrackId>
+      {
+        try
+        {
+          auto const& state = _impl->views.trackListState(cmd.viewId);
+          auto const sel = state.snapshot().selection;
+          if (sel.empty())
+          {
+            return ao::TrackId{};
+          }
 
-    commands.registerHandler<PlaySelectionInFocusedView>(
-      [](PlaySelectionInFocusedView const&) -> ao::Result<ao::TrackId> { return ao::TrackId{}; });
+          auto const trackId = sel.front();
+          auto txn = _impl->library.readTransaction();
+          auto reader = _impl->library.tracks().reader(txn);
+          auto const optView = reader.get(trackId, ao::library::TrackStore::Reader::LoadMode::Both);
+          if (!optView)
+          {
+            return ao::TrackId{};
+          }
+
+          auto uri = std::filesystem::path{optView->property().uri()};
+          auto filePath =
+            uri.is_absolute() ? uri.lexically_normal() : (_impl->library.rootPath() / uri).lexically_normal();
+
+          auto desc = ao::audio::TrackPlaybackDescriptor{
+            .trackId = trackId,
+            .filePath = filePath,
+            .title = std::string{optView->metadata().title()},
+            .durationMs = optView->coldHeader().durationMs,
+          };
+
+          _impl->ensureReady();
+          _impl->player->play(desc);
+          _impl->currentTrackId = trackId;
+          _impl->currentSourceListId = state.snapshot().listId;
+          _impl->currentTrackTitle = desc.title;
+          _impl->currentTrackArtist = desc.artist;
+          _impl->store.update(_impl->buildState(*_impl->player));
+          _impl->events.publish(PlaybackTransportChanged{.transport = ao::audio::Transport::Playing});
+          _impl->events.publish(NowPlayingTrackChanged{.trackId = trackId, .sourceListId = state.snapshot().listId});
+          return trackId;
+        }
+        catch (std::exception const&)
+        {
+          return ao::TrackId{};
+        }
+      });
 
     commands.registerHandler<PausePlayback>(
       [this](PausePlayback const&) -> ao::Result<void>
       {
         _impl->player->pause();
-        _impl->store.update(buildPlaybackState(*_impl->player));
+        _impl->store.update(_impl->buildState(*_impl->player));
         _impl->events.publish(PlaybackTransportChanged{
           .transport = ao::audio::Transport::Paused,
         });
@@ -120,7 +296,7 @@ namespace ao::app
       [this](ResumePlayback const&) -> ao::Result<void>
       {
         _impl->player->resume();
-        _impl->store.update(buildPlaybackState(*_impl->player));
+        _impl->store.update(_impl->buildState(*_impl->player));
         _impl->events.publish(PlaybackTransportChanged{
           .transport = ao::audio::Transport::Playing,
         });
@@ -131,10 +307,13 @@ namespace ao::app
       [this](StopPlayback const&) -> ao::Result<void>
       {
         _impl->player->stop();
-        _impl->store.update(buildPlaybackState(*_impl->player));
-        _impl->events.publish(PlaybackTransportChanged{
-          .transport = ao::audio::Transport::Idle,
-        });
+        _impl->currentTrackId = {};
+        _impl->currentSourceListId = {};
+        _impl->currentTrackTitle.clear();
+        _impl->currentTrackArtist.clear();
+        _impl->store.update(_impl->buildState(*_impl->player));
+        _impl->events.publish(PlaybackStopped{});
+        _impl->events.publish(PlaybackTransportChanged{.transport = ao::audio::Transport::Idle});
         return {};
       });
 
@@ -149,7 +328,7 @@ namespace ao::app
       [this](SetPlaybackOutput const& cmd) -> ao::Result<void>
       {
         _impl->player->setOutput(cmd.backendId, cmd.deviceId, cmd.profileId);
-        _impl->store.update(buildPlaybackState(*_impl->player));
+        _impl->store.update(_impl->buildState(*_impl->player));
         _impl->events.publish(PlaybackOutputChanged{
           .selection =
             OutputSelection{
@@ -165,6 +344,7 @@ namespace ao::app
       [this](SetPlaybackVolume const& cmd) -> ao::Result<void>
       {
         _impl->player->setVolume(cmd.volume);
+        _impl->store.update(_impl->buildState(*_impl->player));
         return {};
       });
 
@@ -172,16 +352,26 @@ namespace ao::app
       [this](SetPlaybackMuted const& cmd) -> ao::Result<void>
       {
         _impl->player->setMuted(cmd.muted);
+        _impl->store.update(_impl->buildState(*_impl->player));
         return {};
       });
 
-    _impl->player->setTrackEndedCallback(
-      [this]
+    commands.registerHandler<RefreshPlaybackState>(
+      [this](RefreshPlaybackState const&) -> ao::Result<void>
       {
-        _impl->store.update(buildPlaybackState(*_impl->player));
-        _impl->events.publish(PlaybackTransportChanged{
-          .transport = ao::audio::Transport::Idle,
+        _impl->store.update(_impl->buildState(*_impl->player));
+        return {};
+      });
+
+    commands.registerHandler<RevealPlayingTrack>(
+      [this](RevealPlayingTrack const&) -> ao::Result<void>
+      {
+        auto const state = _impl->store.snapshot();
+        _impl->events.publish(RevealTrackRequested{
+          .trackId = state.trackId,
+          .preferredListId = state.sourceListId,
         });
+        return {};
       });
   }
 
@@ -190,6 +380,11 @@ namespace ao::app
   IReadOnlyStore<PlaybackState>& PlaybackService::state()
   {
     return _impl->store;
+  }
+
+  void PlaybackService::addProvider(std::unique_ptr<ao::audio::IBackendProvider> provider)
+  {
+    _impl->player->addProvider(std::move(provider));
   }
 
   namespace
@@ -247,14 +442,17 @@ namespace ao::app
 
   struct LibraryMutationService::Impl final
   {
+    IControlExecutor& executor;
     EventBus& events;
     ao::library::MusicLibrary& library;
+    std::jthread importThread;
   };
 
   LibraryMutationService::LibraryMutationService(CommandBus& commands,
                                                  EventBus& events,
+                                                 IControlExecutor& executor,
                                                  ao::library::MusicLibrary& library)
-    : _impl{std::make_unique<Impl>(events, library)}
+    : _impl{std::make_unique<Impl>(executor, events, library)}
   {
     commands.registerHandler<UpdateTrackMetadata>(
       [this](UpdateTrackMetadata const& cmd) -> ao::Result<UpdateTrackMetadataReply>
@@ -339,22 +537,39 @@ namespace ao::app
     commands.registerHandler<ImportFiles>(
       [this](ImportFiles const& cmd) -> ao::Result<ImportFilesReply>
       {
-        auto worker = ao::library::ImportWorker{
+        auto totalFiles = cmd.paths.size();
+        auto worker = std::make_shared<ao::library::ImportWorker>(
           _impl->library,
           cmd.paths,
-          [](std::filesystem::path const&, std::int32_t) {},
-          [] {},
-        };
-        worker.run();
+          [this, totalFiles](std::filesystem::path const& filePath, std::int32_t index)
+          {
+            _impl->executor.dispatch(
+              [this, filePath, index, totalFiles]()
+              {
+                _impl->events.publish(ImportProgressUpdated{
+                  .fraction = totalFiles > 0 ? static_cast<double>(index) / static_cast<double>(totalFiles) : 0.0,
+                  .message = "Importing: " + filePath.filename().string(),
+                });
+              });
+          },
+          []() {});
 
-        _impl->events.publish(TracksMutated{.trackIds = worker.result().insertedIds});
-        _impl->events.publish(LibraryImportCompleted{
-          .importedTrackCount = worker.result().insertedIds.size(),
-        });
+        _impl->importThread = std::jthread(
+          [this, worker]()
+          {
+            ao::setCurrentThreadName("FileImport");
+            worker->run();
 
-        return ImportFilesReply{
-          .importedTrackCount = worker.result().insertedIds.size(),
-        };
+            auto const& result = worker->result();
+            _impl->executor.dispatch(
+              [this, ids = result.insertedIds, count = result.insertedIds.size()]()
+              {
+                _impl->events.publish(TracksMutated{.trackIds = ids});
+                _impl->events.publish(LibraryImportCompleted{.importedTrackCount = count});
+              });
+          });
+
+        return ImportFilesReply{.importedTrackCount = 0};
       });
   }
 
@@ -363,10 +578,12 @@ namespace ao::app
   struct LibraryQueryService::Impl final
   {
     ViewRegistry& views;
+    EventBus& events;
+    ao::library::MusicLibrary& library;
   };
 
-  LibraryQueryService::LibraryQueryService(ViewRegistry& views)
-    : _impl{std::make_unique<Impl>(views)}
+  LibraryQueryService::LibraryQueryService(ViewRegistry& views, EventBus& events, ao::library::MusicLibrary& library)
+    : _impl{std::make_unique<Impl>(views, events, library)}
   {
   }
 
@@ -377,9 +594,9 @@ namespace ao::app
     return _impl->views.trackListProjection(viewId);
   }
 
-  std::shared_ptr<ITrackDetailProjection> LibraryQueryService::detailProjection(DetailTarget const& /*target*/)
+  std::shared_ptr<ITrackDetailProjection> LibraryQueryService::detailProjection(DetailTarget const& target)
   {
-    return nullptr;
+    return std::make_shared<TrackDetailProjection>(target, _impl->views, _impl->events, _impl->library);
   }
 
   struct NotificationService::Impl final
@@ -389,9 +606,18 @@ namespace ao::app
     std::uint64_t nextId = 0;
   };
 
-  NotificationService::NotificationService(EventBus& events)
+  NotificationService::NotificationService(CommandBus& commands, EventBus& events)
     : _impl{std::make_unique<Impl>(events)}
   {
+    commands.registerHandler<PostNotification>([this](PostNotification const& cmd) -> ao::Result<NotificationId>
+                                               { return post(cmd.severity, cmd.message, cmd.sticky, cmd.optTimeout); });
+
+    commands.registerHandler<DismissNotification>(
+      [this](DismissNotification const& cmd) -> ao::Result<void>
+      {
+        dismiss(cmd.id);
+        return {};
+      });
   }
 
   NotificationService::~NotificationService() = default;

@@ -5,6 +5,12 @@
 
 #include <ao/audio/Player.h>
 #include <ao/audio/Types.h>
+#include <runtime/StateTypes.h>
+
+namespace ao::app
+{
+  class AppSession;
+}
 
 #include <giomm.h>
 #include <gtkmm.h>
@@ -24,27 +30,11 @@ namespace ao::gtk
   class PlaybackBar final : public Gtk::Box
   {
   public:
-    using PlaySignal = sigc::signal<void()>;
-    using PauseSignal = sigc::signal<void()>;
-    using StopSignal = sigc::signal<void()>;
-    using SeekSignal = sigc::signal<void(std::uint32_t)>;
-    using OutputChangedSignal = sigc::signal<void(ao::audio::BackendId, ao::audio::DeviceId, ao::audio::ProfileId)>;
-    using VolumeChangedSignal = sigc::signal<void(float)>;
-    using MuteToggledSignal = sigc::signal<void()>;
-
-    PlaybackBar();
+    explicit PlaybackBar(ao::app::AppSession& session);
     ~PlaybackBar() override;
 
-    void setSnapshot(ao::audio::Player::Status const& status);
+    void setPlaybackState(ao::app::PlaybackState const& state);
     void setInteractive(bool enabled);
-
-    PlaySignal& signalPlayRequested();
-    PauseSignal& signalPauseRequested();
-    StopSignal& signalStopRequested();
-    SeekSignal& signalSeekRequested();
-    OutputChangedSignal& signalOutputChanged();
-    VolumeChangedSignal& signalVolumeChanged();
-    MuteToggledSignal& signalMuteToggled();
 
   private:
     struct LastState final
@@ -67,7 +57,7 @@ namespace ao::gtk
 
     void setupLayout();
     void setupSignals();
-    void updateTransportButtons(ao::audio::Transport state);
+    void updateTransportButtons(ao::audio::Transport state, bool isReady);
 
     Gtk::Widget* createOutputWidget(Glib::RefPtr<Glib::Object> const& item);
     void updateOutputModel(ao::audio::Player::Status const& status);
@@ -98,13 +88,7 @@ namespace ao::gtk
     Gtk::ToggleButton _muteButton;
     VolumeBar _volumeScale;
 
-    PlaySignal _playRequested;
-    PauseSignal _pauseRequested;
-    StopSignal _stopRequested;
-    SeekSignal _seekRequested;
-    OutputChangedSignal _outputChanged;
-    VolumeChangedSignal _volumeChanged;
-    MuteToggledSignal _muteToggled;
+    ao::app::AppSession& _session;
 
     bool _updatingSeekScale = false;
     bool _updatingVolumeScale = false;
@@ -119,5 +103,14 @@ namespace ao::gtk
     int _outputIconHeight = 0;
 
     LastState _lastState;
+
+    // Position tracking for display-synchronized updates
+    std::uint32_t _lastPositionMs = 0;
+    std::uint32_t _lastDurationMs = 0;
+    ao::audio::Transport _lastTransport = ao::audio::Transport::Idle;
+
+    // Output state for diff detection
+    ao::app::OutputSelection _lastSelectedOutput;
+    std::vector<ao::app::OutputBackendSnapshot> _lastAvailableOutputs;
   };
 } // namespace ao::gtk

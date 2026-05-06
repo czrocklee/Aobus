@@ -10,15 +10,10 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 
 ## Environment Setup
 
-Dependencies are managed with shell.nix. Always work inside the project shell:
-
-```bash
-nix-shell
-```
+`nix-shell` needs `shell.nix` in CWD. Always run from the project root.
 
 > [!TIP]
-> External library headers are located in the Nix store. You can find the exact paths by checking the build configuration or exploring the `/nix/store` directory.
-> Use 'nix-shell -p' for additional tools required 
+> External library headers are in the Nix store; check build config for paths. Use `nix-shell -p` for extra tools. 
 
 ## Working Rules
 1. **Language:** Always use English for code comments, commit messages, and documentation to maintain international accessibility.

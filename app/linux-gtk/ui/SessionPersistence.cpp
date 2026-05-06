@@ -165,7 +165,7 @@ namespace ao::gtk
   void SessionPersistence::save(Gtk::Window const& window,
                                 Gtk::Paned const& paned,
                                 TrackColumnLayoutModel const& trackColumnLayoutModel,
-                                LibrarySession const* librarySession)
+                                std::filesystem::path const& libraryPath)
   {
     try
     {
@@ -191,9 +191,9 @@ namespace ao::gtk
 
       auto sessionState = _appConfig.sessionState();
 
-      if (librarySession != nullptr)
+      if (!libraryPath.empty())
       {
-        sessionState.lastLibraryPath = normalizeLibraryPath(librarySession->musicLibrary->rootPath());
+        sessionState.lastLibraryPath = normalizeLibraryPath(libraryPath);
       }
       else
       {

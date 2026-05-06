@@ -15,10 +15,14 @@
 #include <string>
 #include <vector>
 
+namespace ao::app
+{
+  class CommandBus;
+}
+
 namespace ao::gtk
 {
   class TrackRowDataProvider;
-  class MetadataCoordinator;
 
   class TrackViewPage final : public Gtk::Box
   {
@@ -33,7 +37,8 @@ namespace ao::gtk
     explicit TrackViewPage(ao::ListId listId,
                            TrackListAdapter& adapter,
                            TrackColumnLayoutModel& columnLayoutModel,
-                           MetadataCoordinator& metadataCoordinator);
+                           ao::app::CommandBus& commands,
+                           ao::app::ViewId viewId = ao::app::ViewId{});
     ~TrackViewPage() override;
 
     ao::ListId getListId() const { return _listId; }
@@ -135,9 +140,10 @@ namespace ao::gtk
 
     // Models
     ao::ListId _listId;
+    ao::app::ViewId _viewId{};
     TrackListAdapter& _adapter;
-    MetadataCoordinator& _metadataCoordinator;
-    Glib::RefPtr<Gtk::SortListModel> _sortModel;
+    ao::app::CommandBus& _commands;
+    Glib::RefPtr<Gtk::SortListModel> _groupModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
     TrackColumnLayoutModel& _columnLayoutModel;
     Glib::RefPtr<Gio::ListModel> _columnModel;

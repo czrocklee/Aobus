@@ -25,8 +25,8 @@ namespace ao::app
     struct ViewEntry final
     {
       ObservableStore<TrackListViewState> state;
+      std::shared_ptr<ao::model::TrackIdList> filteredList;
       std::shared_ptr<ITrackListProjection> projection;
-      std::shared_ptr<ao::model::FilteredTrackIdList> filteredList;
     };
   }
 
@@ -73,22 +73,29 @@ namespace ao::app
           .selection = cmd.initial.selection,
         };
 
-        auto filtered =
-          std::make_shared<ao::model::FilteredTrackIdList>(_impl->allTracksSource, _impl->library, _impl->engine);
-
-        if (!cmd.initial.filterExpression.empty())
+        std::shared_ptr<ao::model::TrackIdList> source;
+        if (cmd.source)
         {
-          filtered->setExpression(cmd.initial.filterExpression);
+          source = cmd.source;
+        }
+        else
+        {
+          auto filtered =
+            std::make_shared<ao::model::FilteredTrackIdList>(_impl->allTracksSource, _impl->library, _impl->engine);
+          if (!cmd.initial.filterExpression.empty())
+          {
+            filtered->setExpression(cmd.initial.filterExpression);
+          }
+          _impl->engine.registerList(_impl->allTracksSource, *filtered);
+          source = std::move(filtered);
         }
 
-        _impl->engine.registerList(_impl->allTracksSource, *filtered);
-
-        auto projection = std::make_shared<TrackListProjection>(id, *filtered, _impl->library);
+        auto projection = std::make_shared<TrackListProjection>(id, *source, _impl->library);
 
         auto& entry = _impl->views[id];
         entry.state = ObservableStore<TrackListViewState>{initial};
+        entry.filteredList = source;
         entry.projection = projection;
-        entry.filteredList = filtered;
 
         return CreateTrackListViewReply{.viewId = id};
       });
@@ -105,9 +112,102 @@ namespace ao::app
         auto state = it->second.state.snapshot();
         state.lifecycle = ViewLifecycleState::Destroyed;
         it->second.state.update(std::move(state));
-
         _impl->events.publish(ViewDestroyed{.viewId = cmd.viewId});
+        return {};
+      });
 
+    commands.registerHandler<SetViewFilter>(
+      [this](SetViewFilter const& cmd) -> ao::Result<void>
+      {
+        auto it = _impl->views.find(cmd.viewId);
+        if (it == _impl->views.end())
+        {
+          return {};
+        }
+
+        auto state = it->second.state.snapshot();
+        state.filterExpression = cmd.filterExpression;
+        state.revision++;
+        it->second.state.update(std::move(state));
+
+        if (it->second.filteredList)
+        {
+          if (auto* fl = dynamic_cast<ao::model::FilteredTrackIdList*>(it->second.filteredList.get()))
+          {
+            fl->setExpression(cmd.filterExpression);
+          }
+        }
+        return {};
+      });
+
+    commands.registerHandler<SetViewSort>(
+      [this](SetViewSort const& cmd) -> ao::Result<void>
+      {
+        auto it = _impl->views.find(cmd.viewId);
+        if (it == _impl->views.end())
+        {
+          return {};
+        }
+
+        auto state = it->second.state.snapshot();
+        state.sortBy = cmd.sortBy;
+        state.revision++;
+        it->second.state.update(std::move(state));
+
+        if (it->second.projection)
+        {
+          static_cast<TrackListProjection*>(it->second.projection.get())->setSortBy(cmd.sortBy);
+        }
+        return {};
+      });
+
+    commands.registerHandler<SetViewGrouping>(
+      [this](SetViewGrouping const& cmd) -> ao::Result<void>
+      {
+        auto it = _impl->views.find(cmd.viewId);
+        if (it == _impl->views.end())
+        {
+          return {};
+        }
+
+        auto state = it->second.state.snapshot();
+        state.groupBy = cmd.groupBy;
+        state.revision++;
+        it->second.state.update(std::move(state));
+        return {};
+      });
+
+    commands.registerHandler<SetViewSelection>(
+      [this](SetViewSelection const& cmd) -> ao::Result<void>
+      {
+        auto it = _impl->views.find(cmd.viewId);
+        if (it == _impl->views.end())
+        {
+          return {};
+        }
+
+        auto state = it->second.state.snapshot();
+        state.selection = cmd.selection;
+        state.revision++;
+        it->second.state.update(std::move(state));
+
+        _impl->events.publish(ViewSelectionChanged{.viewId = cmd.viewId, .selection = cmd.selection});
+        return {};
+      });
+
+    commands.registerHandler<OpenListInView>(
+      [this](OpenListInView const& cmd) -> ao::Result<void>
+      {
+        auto it = _impl->views.find(cmd.viewId);
+        if (it == _impl->views.end())
+        {
+          return {};
+        }
+
+        auto state = it->second.state.snapshot();
+        state.listId = cmd.listId;
+        state.revision++;
+        it->second.state.update(std::move(state));
         return {};
       });
   }

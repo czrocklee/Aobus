@@ -3,8 +3,10 @@
 
 #include "TagEditController.h"
 #include "TagPopover.h"
+#include "TrackRowDataProvider.h"
 #include <ao/library/TrackBuilder.h>
 #include <format>
+#include <runtime/AppSession.h>
 
 namespace ao::gtk
 {
@@ -45,17 +47,17 @@ namespace ao::gtk
     }
   }
 
-  TagEditController::TagEditController(Gtk::Window& /*parent*/, Callbacks callbacks)
-    : _callbacks{std::move(callbacks)}
+  TagEditController::TagEditController(Gtk::Window& /*parent*/, ao::app::AppSession& session, Callbacks callbacks)
+    : _callbacks{std::move(callbacks)}, _session{session}
   {
     setupActions();
   }
 
   TagEditController::~TagEditController() = default;
 
-  void TagEditController::setLibrarySession(LibrarySession* session)
+  void TagEditController::setDataProvider(TrackRowDataProvider* provider)
   {
-    _currentSession = session;
+    _dataProvider = provider;
   }
 
   void TagEditController::setupActions()
@@ -91,43 +93,37 @@ namespace ao::gtk
                                                double posX,
                                                double posY)
   {
-    if (_currentSession == nullptr || selection.selectedIds.empty())
+    if (selection.selectedIds.empty())
     {
       return;
     }
 
     _optActiveSelection = selection;
 
-    // Create TagPopover with the selected track IDs
-    _tagPopover = std::make_unique<TagPopover>(*_currentSession->musicLibrary, selection.selectedIds);
+    _tagPopover = std::make_unique<TagPopover>(_session.musicLibrary(), selection.selectedIds);
 
-    // Connect signal to apply tag changes
     _tagPopover->signalTagsChanged().connect(
       [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
-    // Show the popover anchored to the right-click position
     page.showTagPopover(*_tagPopover, posX, posY);
   }
 
   void TagEditController::showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo)
   {
-    if (_currentSession == nullptr || selection.selectedIds.empty())
+    if (selection.selectedIds.empty())
     {
       return;
     }
 
     _optActiveSelection = selection;
 
-    // Create TagPopover with the selected track IDs
-    _tagPopover = std::make_unique<TagPopover>(*_currentSession->musicLibrary, selection.selectedIds);
+    _tagPopover = std::make_unique<TagPopover>(_session.musicLibrary(), selection.selectedIds);
 
-    // Connect signal to apply tag changes
     _tagPopover->signalTagsChanged().connect(
       [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
       { applyTagChangeToCurrentSelection(tagsToAdd, tagsToRemove); });
 
-    // Show popover anchored to the relativeTo widget
     _tagPopover->set_parent(relativeTo);
     _tagPopover->popup();
   }
@@ -145,7 +141,7 @@ namespace ao::gtk
   void TagEditController::applyTagChangeToCurrentSelection(std::vector<std::string> const& tagsToAdd,
                                                            std::vector<std::string> const& tagsToRemove)
   {
-    if (_currentSession == nullptr || !_optActiveSelection)
+    if (!_optActiveSelection)
     {
       return;
     }
@@ -157,9 +153,9 @@ namespace ao::gtk
       return;
     }
 
-    auto txn = _currentSession->musicLibrary->writeTransaction();
-    auto writer = _currentSession->musicLibrary->tracks().writer(txn);
-    auto& dict = _currentSession->musicLibrary->dictionary();
+    auto txn = _session.musicLibrary().writeTransaction();
+    auto writer = _session.musicLibrary().tracks().writer(txn);
+    auto& dict = _session.musicLibrary().dictionary();
 
     for (auto const trackId : selection.selectedIds)
     {
@@ -191,14 +187,15 @@ namespace ao::gtk
 
     txn.commit();
 
-    for (auto const trackId : selection.selectedIds)
+    if (_dataProvider)
     {
-      _currentSession->rowDataProvider->invalidate(trackId);
+      for (auto const trackId : selection.selectedIds)
+      {
+        _dataProvider->invalidate(trackId);
+      }
     }
 
-    // Notify the master list. This will propagate to all derived lists (Smart Lists, Playlists)
-    // via the SmartListEngine and ManualTrackIdList observer chains.
-    _currentSession->allTrackIds->notifyUpdated(selection.selectedIds);
+    _session.allTracks().notifyUpdated(selection.selectedIds);
 
     if (_callbacks.onTagsMutated)
     {

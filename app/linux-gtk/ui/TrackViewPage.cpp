@@ -3,11 +3,12 @@
 
 #include "TrackViewPage.h"
 #include "LayoutConstants.h"
-#include "MetadataCoordinator.h"
 #include "TrackRow.h"
 #include "TrackRowDataProvider.h"
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Log.h>
+#include <runtime/CommandBus.h>
+#include <runtime/CommandTypes.h>
 
 #include "ui/ThemeBus.h"
 #include <gdk/gdk.h>
@@ -241,12 +242,14 @@ namespace ao::gtk
   TrackViewPage::TrackViewPage(ao::ListId listId,
                                TrackListAdapter& adapter,
                                TrackColumnLayoutModel& columnLayoutModel,
-                               MetadataCoordinator& metadataCoordinator)
+                               ao::app::CommandBus& commands,
+                               ao::app::ViewId viewId)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
+    , _viewId{viewId}
     , _adapter{adapter}
-    , _metadataCoordinator{metadataCoordinator}
-    , _sortModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
+    , _commands{commands}
+    , _groupModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
     , _columnLayoutModel{columnLayoutModel}
     , _presentationSpec{presentationSpecForGroup(TrackGroupBy::None)}
   {
@@ -268,7 +271,7 @@ namespace ao::gtk
     _columnView.get_style_context()->add_provider(_dynamicCssProvider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
     // Create multi-selection model to allow bulk operations
-    _selectionModel = Gtk::MultiSelection::create(_sortModel);
+    _selectionModel = Gtk::MultiSelection::create(_groupModel);
 
     setupPresentationControls();
     setupStatusBar();
@@ -514,30 +517,41 @@ namespace ao::gtk
   {
     updateColumnVisibility();
 
-    if (_presentationSpec.sortBy.empty())
+    if (_viewId == ao::app::ViewId{})
     {
-      _sortModel->set_sorter(Glib::RefPtr<Gtk::Sorter>{});
-    }
-    else
-    {
-      _sortModel->set_sorter(
-        createRowSorter([spec = _presentationSpec](TrackRow const& lhs, TrackRow const& rhs)
-                        { return compareForSort(lhs.getPresentationKeys(), rhs.getPresentationKeys(), spec.sortBy); }));
-    }
-
-    if (_presentationSpec.groupBy == TrackGroupBy::None)
-    {
-      _sortModel->set_section_sorter(Glib::RefPtr<Gtk::Sorter>{});
-      _columnView.set_header_factory(Glib::RefPtr<Gtk::ListItemFactory>{});
-
       return;
     }
 
-    _sortModel->set_section_sorter(
-      createRowSorter([groupBy = _presentationSpec.groupBy](TrackRow const& lhs, TrackRow const& rhs)
-                      { return compareForGrouping(lhs.getPresentationKeys(), rhs.getPresentationKeys(), groupBy); }));
+    auto sortBy = std::vector<ao::app::TrackSortTerm>{};
+    for (auto const& t : _presentationSpec.sortBy)
+    {
+      sortBy.push_back(ao::app::TrackSortTerm{
+        .field = static_cast<ao::app::TrackSortField>(t.field),
+        .ascending = true,
+      });
+    }
 
-    _columnView.set_header_factory(_sectionHeaderFactory);
+    _commands.execute<ao::app::SetViewSort>(ao::app::SetViewSort{
+      .viewId = _viewId,
+      .sortBy = std::move(sortBy),
+    });
+
+    auto runtimeGroup = ao::app::TrackGroupKey::None;
+    switch (_presentationSpec.groupBy)
+    {
+      case TrackGroupBy::Artist: runtimeGroup = ao::app::TrackGroupKey::Artist; break;
+      case TrackGroupBy::Album: runtimeGroup = ao::app::TrackGroupKey::Album; break;
+      case TrackGroupBy::AlbumArtist: runtimeGroup = ao::app::TrackGroupKey::AlbumArtist; break;
+      case TrackGroupBy::Genre: runtimeGroup = ao::app::TrackGroupKey::Genre; break;
+      case TrackGroupBy::Composer: runtimeGroup = ao::app::TrackGroupKey::Composer; break;
+      case TrackGroupBy::Work: runtimeGroup = ao::app::TrackGroupKey::Work; break;
+      case TrackGroupBy::Year: runtimeGroup = ao::app::TrackGroupKey::Year; break;
+      default: break;
+    }
+    _commands.execute<ao::app::SetViewGrouping>(ao::app::SetViewGrouping{
+      .viewId = _viewId,
+      .groupBy = runtimeGroup,
+    });
   }
 
   void TrackViewPage::setStatusMessage(std::string const& message)
@@ -1451,48 +1465,44 @@ namespace ao::gtk
                 return;
               }
 
-              auto spec = MetadataCoordinator::MetadataUpdateSpec{};
+              auto patch = ao::app::MetadataPatch{};
 
               if (column == TrackColumn::Title)
               {
-                spec.title = newValue;
+                patch.optTitle = newValue;
                 row->setTitle(newValue);
               }
               else if (column == TrackColumn::Artist)
               {
-                spec.artist = newValue;
+                patch.optArtist = newValue;
                 row->setArtist(newValue);
               }
               else if (column == TrackColumn::Album)
               {
-                spec.album = newValue;
+                patch.optAlbum = newValue;
                 row->setAlbum(newValue);
               }
 
-              _metadataCoordinator.updateMetadata(&_adapter.getMusicLibrary(),
-                                                  {row->getTrackId()},
-                                                  spec,
-                                                  [row, column, oldValue](ao::Result<> const& result)
-                                                  {
-                                                    if (!result)
-                                                    {
-                                                      APP_LOG_ERROR(
-                                                        "Metadata update failed: {}", result.error().message);
+              auto const result = _commands.execute<ao::app::UpdateTrackMetadata>(
+                ao::app::UpdateTrackMetadata{.trackIds = {row->getTrackId()}, .patch = patch});
 
-                                                      if (column == TrackColumn::Title)
-                                                      {
-                                                        row->setTitle(oldValue);
-                                                      }
-                                                      else if (column == TrackColumn::Artist)
-                                                      {
-                                                        row->setArtist(oldValue);
-                                                      }
-                                                      else if (column == TrackColumn::Album)
-                                                      {
-                                                        row->setAlbum(oldValue);
-                                                      }
-                                                    }
-                                                  });
+              if (!result)
+              {
+                APP_LOG_ERROR("Metadata update failed: {}", result.error().message);
+
+                if (column == TrackColumn::Title)
+                {
+                  row->setTitle(oldValue);
+                }
+                else if (column == TrackColumn::Artist)
+                {
+                  row->setArtist(oldValue);
+                }
+                else if (column == TrackColumn::Album)
+                {
+                  row->setAlbum(oldValue);
+                }
+              }
             };
 
             auto const cancelChange = [stack, row, definition, entry]()

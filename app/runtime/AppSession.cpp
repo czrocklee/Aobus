@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "AppSession.h"
+#include "CommandTypes.h"
+#include "EventTypes.h"
 #include "ObservableStore.h"
 
 #include <ao/library/MusicLibrary.h>
@@ -35,12 +37,35 @@ namespace ao::app
       , musicLibrary{std::move(libraryRoot)}
       , allTracksSource{musicLibrary.tracks()}
       , smartListEngine{musicLibrary}
-      , playbackService{commandBus, eventBus, *this->executor}
-      , mutationService{commandBus, eventBus, musicLibrary}
+      , playbackService{commandBus, eventBus, *this->executor, viewRegistry, musicLibrary}
+      , mutationService{commandBus, eventBus, *this->executor, musicLibrary}
       , viewRegistry{musicLibrary, smartListEngine, allTracksSource, eventBus}
-      , notificationService{eventBus}
-      , queryService{viewRegistry}
+      , notificationService{commandBus, eventBus}
+      , queryService{viewRegistry, eventBus, musicLibrary}
     {
+      viewRegistry.registerCommandHandlers(commandBus);
+
+      commandBus.registerHandler<SetFocusedView>(
+        [this](SetFocusedView const& cmd) -> ao::Result<void>
+        {
+          focusStore.update(FocusState{
+            .focusedView = cmd.viewId,
+            .revision = focusStore.snapshot().revision + 1,
+          });
+          eventBus.publish(FocusedViewChanged{.viewId = cmd.viewId});
+          return {};
+        });
+
+      commandBus.registerHandler<PlaySelectionInFocusedView>(
+        [this](PlaySelectionInFocusedView const&) -> ao::Result<ao::TrackId>
+        {
+          auto const focus = focusStore.snapshot();
+          if (focus.focusedView == ViewId{})
+          {
+            return ao::TrackId{};
+          }
+          return commandBus.execute<PlaySelectionInView>(PlaySelectionInView{.viewId = focus.focusedView});
+        });
     }
   };
 
@@ -94,5 +119,36 @@ namespace ao::app
   NotificationService& AppSession::notificationService() noexcept
   {
     return _impl->notificationService;
+  }
+
+  ao::library::MusicLibrary& AppSession::musicLibrary() noexcept
+  {
+    return _impl->musicLibrary;
+  }
+
+  ao::model::TrackIdList& AppSession::allTracks() noexcept
+  {
+    return _impl->allTracksSource;
+  }
+
+  ao::model::AllTrackIdsList& AppSession::allTrackIdsList() noexcept
+  {
+    return _impl->allTracksSource;
+  }
+
+  ao::model::SmartListEngine& AppSession::smartListEngine() noexcept
+  {
+    return _impl->smartListEngine;
+  }
+
+  void AppSession::reloadAllTracks()
+  {
+    auto txn = _impl->musicLibrary.readTransaction();
+    _impl->allTracksSource.reloadFromStore(txn);
+  }
+
+  void AppSession::addAudioProvider(std::unique_ptr<ao::audio::IBackendProvider> provider)
+  {
+    _impl->playbackService.addProvider(std::move(provider));
   }
 }

@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "LibrarySession.h"
+#include <filesystem>
+
 #include "TrackPresentation.h"
 #include <common/AppConfig.h>
 
@@ -32,7 +33,7 @@ namespace ao::gtk
     void save(Gtk::Window const& window,
               Gtk::Paned const& paned,
               TrackColumnLayoutModel const& trackColumnLayoutModel,
-              LibrarySession const* librarySession);
+              std::filesystem::path const& libraryPath);
 
     void updateAudioBackend(ao::audio::BackendId const& backend,
                             ao::audio::ProfileId const& profile,

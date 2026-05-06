@@ -104,7 +104,7 @@ TEST_CASE("Player - Quality Analysis with FakeIt", "[playback][player][quality]"
         {.id = kBackendNone, .name = "Mock", .description = "Mock", .iconName = "audio-card", .supportedProfiles = {}},
       .devices = {}});
 
-  auto player = Player{nullptr};
+  auto player = Player{};
   player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
   player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared);
@@ -226,7 +226,7 @@ TEST_CASE("Player - Lifecycle and Stale Updates with FakeIt", "[playback][player
         {.id = kBackendNone, .name = "Mock", .description = "Mock", .iconName = "audio-card", .supportedProfiles = {}},
       .devices = {}});
 
-  auto player = Player{nullptr};
+  auto player = Player{};
   player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
   player.setOutput(kBackendNone, DeviceId{"mock-sink"}, kProfileShared);
 
@@ -269,7 +269,7 @@ TEST_CASE("Player - Pending Output", "[playback][player][pending]")
                                                         .supportedProfiles = {}},
                                            .devices = {}});
 
-  auto player = Player{nullptr};
+  auto player = Player{};
   player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
   // 1. Call setOutput before devices are available
@@ -295,8 +295,7 @@ TEST_CASE("Player - Pending Output", "[playback][player][pending]")
 
 TEST_CASE("Player - Basic Control Propagation", "[playback][player][control]")
 {
-  auto const dispatcher = std::make_shared<MockDispatcher>();
-  auto player = Player{dispatcher};
+  auto player = Player{};
 
   SECTION("Seek is propagated to engine")
   {

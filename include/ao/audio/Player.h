@@ -14,11 +14,6 @@
 #include <string>
 #include <vector>
 
-namespace ao
-{
-  class IMainThreadDispatcher;
-}
-
 namespace ao::audio
 {
   /**
@@ -45,7 +40,7 @@ namespace ao::audio
       bool operator==(Status const&) const = default;
     };
 
-    explicit Player(std::shared_ptr<ao::IMainThreadDispatcher> dispatcher);
+    Player();
     ~Player();
 
     void addProvider(std::unique_ptr<IBackendProvider> provider);
@@ -66,6 +61,12 @@ namespace ao::audio
     bool isReady() const;
 
     void setTrackEndedCallback(std::function<void()> callback);
+
+    /// Called when available output devices change; receives per-provider status snapshots.
+    void setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback);
+
+    /// Called when playback quality or readiness changes.
+    void setOnQualityChanged(std::function<void(ao::audio::Quality quality, bool ready)> callback);
 
     // Internal visibility for tests
     void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);

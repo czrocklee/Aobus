@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "LibrarySession.h"
 #include "TrackViewPage.h"
 
 #include <ao/library/MusicLibrary.h>
@@ -14,6 +13,15 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+namespace ao::app
+{
+  class AppSession;
+}
+namespace ao::gtk
+{
+  class TrackRowDataProvider;
+}
 
 namespace ao::gtk
 {
@@ -36,10 +44,10 @@ namespace ao::gtk
       std::function<void()> onTagsMutated;
     };
 
-    TagEditController(Gtk::Window& parent, Callbacks callbacks);
+    TagEditController(Gtk::Window& parent, ao::app::AppSession& session, Callbacks callbacks);
     ~TagEditController();
 
-    void setLibrarySession(LibrarySession* session);
+    void setDataProvider(TrackRowDataProvider* provider);
 
     // Add to action group for menu access
     void addActionsTo(Gio::ActionMap& actionMap);
@@ -57,7 +65,8 @@ namespace ao::gtk
                                           std::vector<std::string> const& tagsToRemove);
 
     Callbacks _callbacks;
-    LibrarySession* _currentSession = nullptr;
+    ao::app::AppSession& _session;
+    TrackRowDataProvider* _dataProvider = nullptr;
 
     // The explicit selection to apply the tags to
     std::optional<TrackSelectionContext> _optActiveSelection;

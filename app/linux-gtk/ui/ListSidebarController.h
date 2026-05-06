@@ -3,10 +3,9 @@
 
 #pragma once
 
-#include "LibrarySession.h"
-
 #include <ao/library/MusicLibrary.h>
 #include <ao/model/ListDraft.h>
+#include <ao/model/TrackIdList.h>
 #include <gtkmm.h>
 
 #include <functional>
@@ -14,9 +13,15 @@
 #include <memory>
 #include <string>
 
+namespace ao::app
+{
+  class AppSession;
+}
+
 namespace ao::gtk
 {
   class ListTreeNode;
+  class TrackRowDataProvider;
 
   /**
    * ListSidebarController manages the sidebar tree model, selection, and list CRUD.
@@ -32,12 +37,12 @@ namespace ao::gtk
       std::function<ao::model::TrackIdList*(ao::ListId)> getListMembership;
     };
 
-    ListSidebarController(Gtk::Window& parent, Callbacks callbacks);
+    ListSidebarController(Gtk::Window& parent, ao::app::AppSession& session, Callbacks callbacks);
     ~ListSidebarController();
 
     Gtk::Widget& widget() { return _listScrolledWindow; }
 
-    void rebuildTree(LibrarySession& session, ao::lmdb::ReadTransaction& txn);
+    void rebuildTree(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction& txn);
     void select(ao::ListId listId);
     void createSmartListFromExpression(ao::ListId parentListId, std::string expression);
 
@@ -72,7 +77,8 @@ namespace ao::gtk
 
     Gtk::Window& _parent;
     Callbacks _callbacks;
-    LibrarySession* _currentSession = nullptr;
+    ao::app::AppSession& _session;
+    TrackRowDataProvider* _dataProvider = nullptr;
 
     Gtk::ListView _listView;
     Gtk::ScrolledWindow _listScrolledWindow;

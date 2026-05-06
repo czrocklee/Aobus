@@ -5,6 +5,9 @@
 #include "LayoutConstants.h"
 #include "OutputListItems.h"
 #include <ao/utility/Log.h>
+#include <runtime/AppSession.h>
+#include <runtime/CommandTypes.h>
+#include <runtime/StateTypes.h>
 
 #include "ui/ThemeBus.h"
 #include <gdkmm/display.h>
@@ -70,12 +73,11 @@ namespace ao::gtk
     }
   }
 
-  PlaybackBar::PlaybackBar()
-    : Gtk::Box(Gtk::Orientation::HORIZONTAL)
+  PlaybackBar::PlaybackBar(ao::app::AppSession& session)
+    : Gtk::Box(Gtk::Orientation::HORIZONTAL), _session{session}
   {
     ensurePlaybackBarCss();
 
-    // Subscribe to global theme refresh signal
     signalThemeRefresh().connect(
       [this]()
       {
@@ -92,6 +94,9 @@ namespace ao::gtk
     setupSignals();
 
     signal_map().connect([this]() { syncOutputIconSize(); });
+
+    // Self-wire: subscribe to playback state store
+    _session.playback().subscribe([this](ao::app::PlaybackState const& state) { setPlaybackState(state); });
   }
 
   PlaybackBar::~PlaybackBar()
@@ -164,7 +169,11 @@ namespace ao::gtk
 
           if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
           {
-            _outputChanged.emit(deviceItem->backendId, deviceItem->id, deviceItem->profileId);
+            _session.commands().execute<ao::app::SetPlaybackOutput>(ao::app::SetPlaybackOutput{
+              .backendId = deviceItem->backendId,
+              .deviceId = deviceItem->id,
+              .profileId = deviceItem->profileId,
+            });
             _outputPopover.popdown();
           }
         }
@@ -246,10 +255,9 @@ namespace ao::gtk
     _tickCallbackId = add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
       {
-        bool const isPlaying = (_lastState.engine.transport == ao::audio::Transport::Playing ||
-                                _lastState.engine.transport == ao::audio::Transport::Opening ||
-                                _lastState.engine.transport == ao::audio::Transport::Buffering ||
-                                _lastState.engine.transport == ao::audio::Transport::Seeking);
+        bool const isPlaying =
+          (_lastTransport == ao::audio::Transport::Playing || _lastTransport == ao::audio::Transport::Opening ||
+           _lastTransport == ao::audio::Transport::Buffering || _lastTransport == ao::audio::Transport::Seeking);
 
         if (isPlaying)
         {
@@ -261,10 +269,29 @@ namespace ao::gtk
 
           _animationTimeSec = static_cast<double>(frameTime - _firstFrameTime) / kMicrosecondsPerSecond;
           updateOutputIcon(_lastIconQuality);
+
+          // Display-synchronized seek bar position update
+          auto const elapsedMs = static_cast<std::uint32_t>(static_cast<double>(frameTime - _firstFrameTime) / 1000.0);
+          auto const displayPos = _lastPositionMs + elapsedMs;
+
+          _updatingSeekScale = true;
+          if (displayPos <= _lastDurationMs)
+          {
+            _seekScale.set_value(static_cast<double>(displayPos));
+          }
+          _updatingSeekScale = false;
+
+          if (_lastDurationMs > 0)
+          {
+            auto const posSec = displayPos / 1000;
+            auto const durSec = _lastDurationMs / 1000;
+            _timeLabel.set_text(
+              std::format("{:d}:{:02d} / {:d}:{:02d}", posSec / 60, posSec % 60, durSec / 60, durSec % 60));
+          }
         }
         else
         {
-          _firstFrameTime = 0; // Reset for next play
+          _firstFrameTime = 0;
           if (_animationTimeSec != 0.0)
           {
             _animationTimeSec = 0.0;
@@ -278,9 +305,23 @@ namespace ao::gtk
 
   void PlaybackBar::setupSignals()
   {
-    _playButton.signal_clicked().connect([this]() { _playRequested.emit(); });
-    _pauseButton.signal_clicked().connect([this]() { _pauseRequested.emit(); });
-    _stopButton.signal_clicked().connect([this]() { _stopRequested.emit(); });
+    _playButton.signal_clicked().connect(
+      [this]()
+      {
+        auto const& state = _session.playback().snapshot();
+        if (state.transport == ao::audio::Transport::Paused)
+        {
+          _session.commands().execute<ao::app::ResumePlayback>(ao::app::ResumePlayback{});
+        }
+        else
+        {
+          _session.commands().execute<ao::app::PlaySelectionInFocusedView>(ao::app::PlaySelectionInFocusedView{});
+        }
+      });
+    _pauseButton.signal_clicked().connect(
+      [this]() { _session.commands().execute<ao::app::PausePlayback>(ao::app::PausePlayback{}); });
+    _stopButton.signal_clicked().connect(
+      [this]() { _session.commands().execute<ao::app::StopPlayback>(ao::app::StopPlayback{}); });
 
     _seekScale.signal_value_changed().connect(
       [this]()
@@ -289,9 +330,8 @@ namespace ao::gtk
         {
           return;
         }
-
-        auto const position = static_cast<std::uint32_t>(_seekScale.get_value());
-        _seekRequested.emit(position);
+        _session.commands().execute<ao::app::SeekPlayback>(
+          ao::app::SeekPlayback{.positionMs = static_cast<std::uint32_t>(_seekScale.get_value())});
       });
 
     _volumeScale.signalVolumeChanged().connect(
@@ -301,11 +341,15 @@ namespace ao::gtk
         {
           return;
         }
-
-        _volumeChanged.emit(volume);
+        _session.commands().execute<ao::app::SetPlaybackVolume>(ao::app::SetPlaybackVolume{.volume = volume});
       });
 
-    _muteButton.signal_toggled().connect([this]() { _muteToggled.emit(); });
+    _muteButton.signal_toggled().connect(
+      [this]()
+      {
+        bool const muted = _session.playback().snapshot().muted;
+        _session.commands().execute<ao::app::SetPlaybackMuted>(ao::app::SetPlaybackMuted{.muted = !muted});
+      });
   }
 
   Gtk::Widget* PlaybackBar::createOutputWidget(Glib::RefPtr<Glib::Object> const& item)
@@ -490,96 +534,141 @@ namespace ao::gtk
     _outputSoul.update(_animationTimeSec, quality, isStopped, _lastState.isReady);
   }
 
-  void PlaybackBar::setSnapshot(ao::audio::Player::Status const& status)
+  void PlaybackBar::setPlaybackState(ao::app::PlaybackState const& state)
   {
-    auto const posSec = status.engine.positionMs / 1000;
-    auto const durSec = status.engine.durationMs / 1000;
+    updateTransportButtons(state.transport, state.ready);
 
-    if (status.engine.transport != _lastState.engine.transport || posSec != _lastState.positionSec ||
-        durSec != _lastState.durationSec || status.engine.backendId != _lastState.engine.backendId ||
-        status.engine.profileId != _lastState.engine.profileId ||
-        status.engine.currentDeviceId != _lastState.engine.currentDeviceId ||
-        status.availableBackends != _lastState.availableBackends || status.quality != _lastState.quality ||
-        status.isReady != _lastState.isReady)
+    // Time label
+    auto const posSec = state.positionMs / 1000;
+    auto const durSec = state.durationMs / 1000;
+    if (state.transport == ao::audio::Transport::Idle || durSec == 0)
     {
-      bool const outputStateChanged = (status.engine.backendId != _lastState.engine.backendId ||
-                                       status.engine.profileId != _lastState.engine.profileId ||
-                                       status.engine.currentDeviceId != _lastState.engine.currentDeviceId ||
-                                       status.availableBackends != _lastState.availableBackends);
-
-      _lastState = {.engine = status.engine,
-                    .positionSec = posSec,
-                    .durationSec = durSec,
-                    .availableBackends = status.availableBackends,
-                    .quality = status.quality,
-                    .isReady = status.isReady};
-
-      updateTransportButtons(status.engine.transport);
-
-      if (outputStateChanged)
-      {
-        updateOutputModel(status);
-      }
-
-      updateOutputLabel(status);
-
-      if (status.engine.transport == ao::audio::Transport::Idle)
-      {
-        _timeLabel.set_text("00:00 / 00:00");
-      }
-      else
-      {
-        _timeLabel.set_text(
-          std::format("{:d}:{:02d} / {:d}:{:02d}", posSec / 60, posSec % 60, durSec / 60, durSec % 60));
-      }
-
-      syncOutputIconSize();
-      updateOutputIcon(status.quality);
-
-      if (_soulWindow && _soulWindow->is_visible())
-      {
-        _soulWindow->updateState(status.quality,
-                                 status.engine.transport == ao::audio::Transport::Playing ||
-                                   status.engine.transport == ao::audio::Transport::Opening ||
-                                   status.engine.transport == ao::audio::Transport::Buffering ||
-                                   status.engine.transport == ao::audio::Transport::Seeking);
-      }
-    }
-
-    // Hide volume controls when unavailable
-    bool const volAvailable = status.volumeAvailable;
-    _volumeScale.set_visible(volAvailable);
-
-    if (volAvailable)
-    {
-      _updatingVolumeScale = true;
-      _volumeScale.setVolume(status.volume);
-      _updatingVolumeScale = false;
-    }
-
-    if (status.engine.transport == ao::audio::Transport::Idle)
-    {
+      _timeLabel.set_text("00:00 / 00:00");
       _seekScale.set_range(0, 100);
       _seekScale.set_value(0);
       _seekScale.set_sensitive(false);
-      return;
-    }
-
-    _updatingSeekScale = true;
-    if (status.engine.durationMs > 0)
-    {
-      _seekScale.set_range(0, static_cast<double>(status.engine.durationMs));
-      _seekScale.set_value(static_cast<double>(status.engine.positionMs));
-      _seekScale.set_sensitive(true);
     }
     else
     {
-      _seekScale.set_range(0, 100);
-      _seekScale.set_value(0);
-      _seekScale.set_sensitive(false);
+      _timeLabel.set_text(std::format("{:d}:{:02d} / {:d}:{:02d}", posSec / 60, posSec % 60, durSec / 60, durSec % 60));
+      _updatingSeekScale = true;
+      _seekScale.set_range(0, static_cast<double>(state.durationMs));
+      _seekScale.set_value(static_cast<double>(state.positionMs));
+      _updatingSeekScale = false;
+      _seekScale.set_sensitive(true);
     }
 
-    _updatingSeekScale = false;
+    // Volume
+    bool const volAvailable = state.volumeAvailable;
+    _volumeScale.set_visible(volAvailable);
+    if (volAvailable)
+    {
+      _updatingVolumeScale = true;
+      _volumeScale.setVolume(state.volume);
+      _updatingVolumeScale = false;
+    }
+
+    // Sync legacy _lastState for updateOutputIcon
+    _lastState.isReady = state.ready;
+    _lastState.engine.transport = state.transport;
+    _lastState.quality = state.quality;
+
+    // Store for tick-based position tracking
+    _lastPositionMs = state.positionMs;
+    _lastDurationMs = state.durationMs;
+    _lastTransport = state.transport;
+
+    // Output model — only rebuild when outputs or selection changed
+    if (state.availableOutputs != _lastAvailableOutputs || state.selectedOutput != _lastSelectedOutput)
+    {
+      _lastAvailableOutputs = state.availableOutputs;
+      _lastSelectedOutput = state.selectedOutput;
+      _outputStore->remove_all();
+      for (auto const& backend : state.availableOutputs)
+      {
+        _outputStore->append(BackendItem::create(backend.id, backend.name));
+
+        for (auto const& device : backend.devices)
+        {
+          for (auto const& profileMeta : backend.supportedProfiles)
+          {
+            auto const profile = profileMeta.id;
+            auto const displayName = (profile == ao::audio::kProfileExclusive)
+                                       ? std::format("{} [E]", device.displayName)
+                                       : device.displayName;
+
+            auto audioDevice = ao::audio::Device{
+              .id = device.id,
+              .displayName = device.displayName,
+              .description = device.description,
+              .isDefault = device.isDefault,
+              .backendId = device.backendId,
+              .capabilities = device.capabilities,
+            };
+
+            auto const item = DeviceItem::create(backend.id, audioDevice, profile, displayName);
+            item->active = (backend.id == state.selectedOutput.backendId && profile == state.selectedOutput.profileId &&
+                            device.id == state.selectedOutput.deviceId);
+            _outputStore->append(item);
+          }
+        }
+      }
+
+      // Output label
+      {
+        bool found = false;
+        for (auto const& backend : state.availableOutputs)
+        {
+          if (backend.id == state.selectedOutput.backendId)
+          {
+            for (auto const& device : backend.devices)
+            {
+              if (device.id == state.selectedOutput.deviceId)
+              {
+                auto label = device.displayName;
+                for (auto const& pm : backend.supportedProfiles)
+                {
+                  if (pm.id == state.selectedOutput.profileId &&
+                      state.selectedOutput.profileId == ao::audio::kProfileExclusive)
+                  {
+                    label += " (Exclusive)";
+                    break;
+                  }
+                }
+                if (_outputButton.get_tooltip_text() != label)
+                {
+                  _outputButton.set_tooltip_text(label);
+                }
+                found = true;
+                break;
+              }
+            }
+          }
+          if (found)
+          {
+            break;
+          }
+        }
+        if (!found)
+        {
+          _outputButton.set_tooltip_text("No Output");
+        }
+      }
+    } // end output diff check
+
+    // Output icon
+    updateOutputIcon(state.quality);
+
+    // AobusSoul animation
+    if (_soulWindow && _soulWindow->is_visible())
+    {
+      bool const active =
+        state.transport == ao::audio::Transport::Playing || state.transport == ao::audio::Transport::Opening ||
+        state.transport == ao::audio::Transport::Buffering || state.transport == ao::audio::Transport::Seeking;
+      _soulWindow->updateState(state.quality, active);
+    }
+
+    syncOutputIconSize();
   }
 
   void PlaybackBar::setInteractive(bool enabled)
@@ -589,9 +678,8 @@ namespace ao::gtk
     _seekScale.set_sensitive(enabled);
   }
 
-  void PlaybackBar::updateTransportButtons(ao::audio::Transport state)
+  void PlaybackBar::updateTransportButtons(ao::audio::Transport state, bool isReady)
   {
-    bool const isReady = _lastState.isReady;
     bool const isPlaying = (state == ao::audio::Transport::Playing || state == ao::audio::Transport::Buffering ||
                             state == ao::audio::Transport::Opening);
 
@@ -600,7 +688,7 @@ namespace ao::gtk
       _playButton.set_visible(false);
       _pauseButton.set_visible(true);
       _playButton.set_sensitive(false);
-      _pauseButton.set_sensitive(state == ao::audio::Transport::Playing); // Disable pause while buffering/opening
+      _pauseButton.set_sensitive(state == ao::audio::Transport::Playing);
       _stopButton.set_sensitive(true);
       _seekScale.set_sensitive(state == ao::audio::Transport::Playing);
     }
@@ -608,16 +696,16 @@ namespace ao::gtk
     {
       _playButton.set_visible(true);
       _pauseButton.set_visible(false);
-      _playButton.set_sensitive(isReady);
+      _playButton.set_sensitive(true);
       _pauseButton.set_sensitive(false);
-      _stopButton.set_sensitive(isReady);
-      _seekScale.set_sensitive(isReady);
+      _stopButton.set_sensitive(true);
+      _seekScale.set_sensitive(true);
     }
     else // Idle, Error, Stopping
     {
       _playButton.set_visible(true);
       _pauseButton.set_visible(false);
-      _playButton.set_sensitive(isReady && state != ao::audio::Transport::Stopping);
+      _playButton.set_sensitive(state != ao::audio::Transport::Stopping);
       _pauseButton.set_sensitive(false);
       _stopButton.set_sensitive(false);
       _seekScale.set_sensitive(false);
@@ -642,34 +730,5 @@ namespace ao::gtk
       _soulWindow->set_transient_for(*rootWindow);
       _soulWindow->present();
     }
-  }
-
-  PlaybackBar::PlaySignal& PlaybackBar::signalPlayRequested()
-  {
-    return _playRequested;
-  }
-  PlaybackBar::PauseSignal& PlaybackBar::signalPauseRequested()
-  {
-    return _pauseRequested;
-  }
-  PlaybackBar::StopSignal& PlaybackBar::signalStopRequested()
-  {
-    return _stopRequested;
-  }
-  PlaybackBar::SeekSignal& PlaybackBar::signalSeekRequested()
-  {
-    return _seekRequested;
-  }
-  PlaybackBar::OutputChangedSignal& PlaybackBar::signalOutputChanged()
-  {
-    return _outputChanged;
-  }
-  PlaybackBar::VolumeChangedSignal& PlaybackBar::signalVolumeChanged()
-  {
-    return _volumeChanged;
-  }
-  PlaybackBar::MuteToggledSignal& PlaybackBar::signalMuteToggled()
-  {
-    return _muteToggled;
   }
 } // namespace ao::gtk

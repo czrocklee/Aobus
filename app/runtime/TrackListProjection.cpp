@@ -218,7 +218,7 @@ namespace ao::app
   struct TrackListProjection::Impl final
   {
     ViewId viewId;
-    ao::model::FilteredTrackIdList& source;
+    ao::model::TrackIdList& source;
     ao::library::MusicLibrary& library;
     std::vector<TrackSortTerm> sortBy;
     Comparator comparator;
@@ -228,7 +228,7 @@ namespace ao::app
     std::uint64_t rev = 0;
     std::vector<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>> subscribers;
 
-    Impl(ViewId vid, ao::model::FilteredTrackIdList& src, ao::library::MusicLibrary& lib)
+    Impl(ViewId vid, ao::model::TrackIdList& src, ao::library::MusicLibrary& lib)
       : viewId{vid}, source{src}, library{lib}
     {
       rebuildOrderIndex();
@@ -415,7 +415,7 @@ namespace ao::app
   };
 
   TrackListProjection::TrackListProjection(ViewId viewId,
-                                           ao::model::FilteredTrackIdList& source,
+                                           ao::model::TrackIdList& source,
                                            ao::library::MusicLibrary& library)
     : _impl{std::make_unique<Impl>(viewId, source, library)}
   {

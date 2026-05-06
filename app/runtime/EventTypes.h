@@ -35,6 +35,18 @@ namespace ao::app
     OutputSelection selection{};
   };
 
+  struct PlaybackStopped final
+  {};
+
+  struct PlaybackDevicesChanged final
+  {};
+
+  struct PlaybackQualityChanged final
+  {
+    ao::audio::Quality quality = ao::audio::Quality::Unknown;
+    bool ready = false;
+  };
+
   struct PlaybackFaultTransition final
   {
     std::optional<FaultSnapshot> optFault{};
@@ -68,6 +80,12 @@ namespace ao::app
   struct FocusedViewChanged final
   {
     ViewId viewId{};
+  };
+
+  struct ViewSelectionChanged final
+  {
+    ViewId viewId{};
+    std::vector<ao::TrackId> selection{};
   };
 
   struct ViewDestroyed final

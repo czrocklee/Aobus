@@ -4,7 +4,6 @@
 #include <ao/Error.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackend.h>
-#include <ao/utility/IMainThreadDispatcher.h>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_all.hpp>
@@ -17,14 +16,13 @@ TEST_CASE("Engine - Basic Orchestration", "[playback][engine]")
 {
   auto spy = SpyBackend<>{};
   auto& mockBackend = spy.mock();
-  auto const dispatcher = std::make_shared<MockDispatcher>();
   auto const device = Device{.id = DeviceId{"test-device"},
                              .displayName = "Test",
                              .description = "Test",
                              .isDefault = false,
                              .backendId = kBackendNone};
 
-  auto engine = Engine{spy.make_proxy(), device, dispatcher};
+  auto engine = Engine{spy.make_proxy(), device};
 
   SECTION("Stop correctly cleans up backend")
   {
@@ -73,7 +71,6 @@ TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
   auto spy2 = SpyBackend<>{};
   auto& mockBackend1 = spy1.mock();
   auto& mockBackend2 = spy2.mock();
-  auto const dispatcher = std::make_shared<MockDispatcher>();
 
   When(Method(mockBackend1, backendId)).AlwaysReturn(kBackendNone);
   When(Method(mockBackend1, profileId)).AlwaysReturn(kProfileShared);
@@ -83,8 +80,7 @@ TEST_CASE("Engine - Backend Swapping", "[playback][engine][hot-swap]")
 
   auto engine = Engine{
     spy1.make_proxy(),
-    {.id = DeviceId{"dev1"}, .displayName = "D1", .description = "D1", .isDefault = false, .backendId = kBackendNone},
-    dispatcher};
+    {.id = DeviceId{"dev1"}, .displayName = "D1", .description = "D1", .isDefault = false, .backendId = kBackendNone}};
 
   SECTION("Switching backend while idle")
   {
@@ -115,14 +111,13 @@ TEST_CASE("Engine - Graph Initialization", "[playback][engine][graph]")
   }
 
   auto spy = SpyBackend<>{};
-  auto const dispatcher = std::make_shared<MockDispatcher>();
   auto const device = Device{.id = DeviceId{"test-device"},
                              .displayName = "Test",
                              .description = "Test",
                              .isDefault = false,
                              .backendId = kBackendNone};
 
-  auto engine = Engine{spy.make_proxy(), device, dispatcher};
+  auto engine = Engine{spy.make_proxy(), device};
 
   auto const descriptor =
     TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Test Title", .artist = "Test Artist"};
@@ -164,7 +159,6 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
 
   auto spy = SpyBackend<>{};
   auto& mockBackend = spy.mock();
-  auto const dispatcher = std::make_shared<MockDispatcher>();
   auto const device = Device{.id = DeviceId{"pipewire-shared"},
                              .displayName = "PipeWire",
                              .description = "PipeWire Shared",
@@ -186,7 +180,7 @@ TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[playback][
       });
   When(Method(mockBackend, backendId)).AlwaysReturn(kBackendPipeWire);
 
-  auto engine = Engine{spy.make_proxy(), device, dispatcher};
+  auto engine = Engine{spy.make_proxy(), device};
 
   auto const descriptor =
     TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "PipeWire Shared", .artist = "Test Artist"};
@@ -214,7 +208,6 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
 
   auto spy = SpyBackend<>{};
   auto& mockBackend = spy.mock();
-  auto const dispatcher = std::make_shared<MockDispatcher>();
   auto const device = Device{.id = DeviceId{"alsa-exclusive"},
                              .displayName = "ALSA",
                              .description = "ALSA Exclusive",
@@ -237,7 +230,7 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
   When(Method(mockBackend, backendId)).AlwaysReturn(kBackendAlsa);
   When(Method(mockBackend, profileId)).AlwaysReturn(kProfileExclusive);
 
-  auto engine = Engine{spy.make_proxy(), device, dispatcher};
+  auto engine = Engine{spy.make_proxy(), device};
 
   auto const descriptor =
     TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Unsupported Sample Rate", .artist = "Test Artist"};
@@ -252,7 +245,6 @@ TEST_CASE("Engine - Unsupported backend sample rate fails without resampler", "[
 
 TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
 {
-  auto const dispatcher = std::make_shared<MockDispatcher>();
   auto const device = Device{.id = DeviceId{"test-device"},
                              .displayName = "Test",
                              .description = "Test",
@@ -261,7 +253,7 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
 
   SECTION("Unsupported extension")
   {
-    auto engine = Engine{std::make_unique<CapturingBackend>(), device, dispatcher};
+    auto engine = Engine{std::make_unique<CapturingBackend>(), device};
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "song.txt", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
@@ -282,7 +274,7 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
       return dec;
     };
 
-    auto engine = Engine{std::make_unique<CapturingBackend>(), device, dispatcher, factory};
+    auto engine = Engine{std::make_unique<CapturingBackend>(), device, factory};
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
@@ -310,7 +302,7 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
       return dec;
     };
 
-    auto engine = Engine{std::move(backend), device, dispatcher, factory};
+    auto engine = Engine{std::move(backend), device, factory};
     auto const desc = TrackPlaybackDescriptor{
       .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
@@ -323,7 +315,6 @@ TEST_CASE("Engine - Play failure matrix", "[playback][engine][error]")
 
 TEST_CASE("Engine - Pause and resume matrix", "[playback][engine][transport]")
 {
-  auto const dispatcher = std::make_shared<MockDispatcher>();
   auto const device = Device{.id = DeviceId{"test-device"},
                              .displayName = "Test",
                              .description = "Test",
@@ -345,7 +336,7 @@ TEST_CASE("Engine - Pause and resume matrix", "[playback][engine][transport]")
     return dec;
   };
 
-  auto engine = Engine{std::move(backend), device, dispatcher, factory};
+  auto engine = Engine{std::move(backend), device, factory};
   auto const desc = TrackPlaybackDescriptor{
     .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
@@ -371,7 +362,6 @@ TEST_CASE("Engine - Pause and resume matrix", "[playback][engine][transport]")
 
 TEST_CASE("Engine - Seek matrix", "[playback][engine][seek]")
 {
-  auto const dispatcher = std::make_shared<MockDispatcher>();
   auto const device = Device{.id = DeviceId{"test-device"},
                              .displayName = "Test",
                              .description = "Test",
@@ -390,7 +380,7 @@ TEST_CASE("Engine - Seek matrix", "[playback][engine][seek]")
     return dec;
   };
 
-  auto engine = Engine{std::move(backend), device, dispatcher, factory};
+  auto engine = Engine{std::move(backend), device, factory};
   auto const desc = TrackPlaybackDescriptor{
     .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
@@ -411,7 +401,6 @@ TEST_CASE("Engine - Seek matrix", "[playback][engine][seek]")
 
 TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
 {
-  auto const dispatcher = std::make_shared<MockDispatcher>();
   auto const device = Device{.id = DeviceId{"test-device"},
                              .displayName = "Test",
                              .description = "Test",
@@ -431,7 +420,7 @@ TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
     return dec;
   };
 
-  auto engine = Engine{std::move(backend), device, dispatcher, factory};
+  auto engine = Engine{std::move(backend), device, factory};
   auto const desc = TrackPlaybackDescriptor{
     .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
@@ -466,7 +455,6 @@ TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
 
 TEST_CASE("Engine - Property API", "[playback][engine][property]")
 {
-  auto const dispatcher = std::make_shared<MockDispatcher>();
   auto const device = Device{.id = DeviceId{"test-device"},
                              .displayName = "Test",
                              .description = "Test",
@@ -475,7 +463,7 @@ TEST_CASE("Engine - Property API", "[playback][engine][property]")
   auto backend = std::make_unique<CapturingBackend>();
   auto* const backendPtr = backend.get();
 
-  auto engine = Engine{std::move(backend), device, dispatcher};
+  auto engine = Engine{std::move(backend), device};
 
   SECTION("queryProperty returns all-false for unknown PropertyId")
   {
@@ -560,7 +548,6 @@ TEST_CASE("Engine - Property API", "[playback][engine][property]")
 
 TEST_CASE("Engine - Backend callback simulation", "[playback][engine][callback]")
 {
-  auto const dispatcher = std::make_shared<MockDispatcher>();
   auto const device = Device{.id = DeviceId{"test-device"},
                              .displayName = "Test",
                              .description = "Test",
@@ -580,7 +567,7 @@ TEST_CASE("Engine - Backend callback simulation", "[playback][engine][callback]"
     return dec;
   };
 
-  auto engine = Engine{std::move(backend), device, dispatcher, factory};
+  auto engine = Engine{std::move(backend), device, factory};
 
   SECTION("Backend error transitions to Error state")
   {

@@ -169,11 +169,11 @@ namespace ao::app::test
       bus.registerHandler<PlayTrack>(
         [&](PlayTrack const& cmd) -> ao::Result<void>
         {
-          trackId = cmd.trackId;
+          trackId = cmd.descriptor.trackId;
           return {};
         });
 
-      bus.execute(PlayTrack{.trackId = ao::TrackId{99}});
+      bus.execute(PlayTrack{.descriptor = ao::audio::TrackPlaybackDescriptor{.trackId = ao::TrackId{99}}});
       CHECK(trackId == ao::TrackId{99});
     }
 
