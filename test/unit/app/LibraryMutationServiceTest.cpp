@@ -18,6 +18,12 @@ namespace ao::app::test
 {
   namespace
   {
+    struct NullExecutor final : public IControlExecutor
+    {
+      bool isCurrent() const noexcept override { return true; }
+      void dispatch(std::move_only_function<void()> task) override { task(); }
+    };
+
     class TestMusicLibrary final
     {
     public:
@@ -61,7 +67,8 @@ namespace ao::app::test
 
     auto bus = CommandBus{};
     auto events = EventBus{};
-    auto service = LibraryMutationService{bus, events, testLib.library()};
+    NullExecutor executor;
+    auto service = LibraryMutationService{bus, events, executor, testLib.library()};
 
     auto mutated = std::vector<ao::TrackId>{};
     auto sub = events.subscribe<TracksMutated>([&](TracksMutated const& ev) { mutated = ev.trackIds; });
@@ -83,7 +90,8 @@ namespace ao::app::test
 
     auto bus = CommandBus{};
     auto events = EventBus{};
-    auto service = LibraryMutationService{bus, events, testLib.library()};
+    NullExecutor executor;
+    auto service = LibraryMutationService{bus, events, executor, testLib.library()};
 
     auto mutated = std::vector<ao::TrackId>{};
     auto sub = events.subscribe<TracksMutated>([&](TracksMutated const& ev) { mutated = ev.trackIds; });
@@ -105,7 +113,8 @@ namespace ao::app::test
 
     auto bus = CommandBus{};
     auto events = EventBus{};
-    auto service = LibraryMutationService{bus, events, testLib.library()};
+    NullExecutor executor;
+    auto service = LibraryMutationService{bus, events, executor, testLib.library()};
 
     auto mutated = std::vector<ao::TrackId>{};
     auto sub = events.subscribe<TracksMutated>([&](TracksMutated const& ev) { mutated = ev.trackIds; });
@@ -125,7 +134,8 @@ namespace ao::app::test
 
     auto bus = CommandBus{};
     auto events = EventBus{};
-    auto service = LibraryMutationService{bus, events, testLib.library()};
+    NullExecutor executor;
+    auto service = LibraryMutationService{bus, events, executor, testLib.library()};
 
     auto mutated = std::vector<ao::TrackId>{};
     auto sub = events.subscribe<TracksMutated>([&](TracksMutated const& ev) { mutated = ev.trackIds; });

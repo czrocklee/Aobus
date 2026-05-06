@@ -1,12 +1,11 @@
 # aobus-gtk-lib: GTK implementation for Linux
 add_library(aobus-gtk-lib STATIC
     ui/MainWindow.cpp
-    ui/LibrarySession.cpp
     ui/TrackPageGraph.cpp
-    ui/PlaybackCoordinator.cpp
-    ui/MetadataCoordinator.cpp
+    ui/PlaybackController.cpp
     ui/InspectorSidebar.cpp
     ui/CoverArtCache.cpp
+    ui/CoverArtWidget.cpp
     ui/ImportExportCoordinator.cpp
     ui/ListSidebarController.cpp
     ui/TagEditController.cpp
@@ -32,11 +31,12 @@ add_library(aobus-gtk-lib STATIC
     ui/VolumeBar.cpp
     ui/OutputMenuModel.cpp
     ui/ThemeBus.cpp
+    ui/GtkControlExecutor.cpp
 
     services/PlaylistExporter.cpp
 )
 
-target_link_libraries(aobus-gtk-lib PUBLIC app_common)
+target_link_libraries(aobus-gtk-lib PUBLIC app_common app_runtime)
 target_link_libraries(aobus-gtk-lib PRIVATE ao ao_model ao_audio PkgGTKMM glibmm-2.68 Boost::headers)
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ui")

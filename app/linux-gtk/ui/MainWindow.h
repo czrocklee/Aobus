@@ -7,10 +7,8 @@
 #include "GtkMainThreadDispatcher.h"
 #include "ImportExportCoordinator.h"
 #include "InspectorSidebar.h"
-#include "LibrarySession.h"
 #include "ListSidebarController.h"
-#include "MetadataCoordinator.h"
-#include "PlaybackCoordinator.h"
+#include "PlaybackController.h"
 #include "SessionPersistence.h"
 #include "StatusBar.h"
 #include "TagEditController.h"
@@ -22,6 +20,7 @@
 #include <gtkmm.h>
 #include <memory>
 #include <optional>
+#include <runtime/AppSession.h>
 #include <vector>
 
 namespace ao::gtk::services
@@ -46,22 +45,18 @@ namespace ao::gtk
   class TrackRowDataProvider;
   class TrackPageGraph;
 
-  class MainWindow final
-    : public Gtk::ApplicationWindow
-    , public IPlaybackHost
+  class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
-    MainWindow();
+    explicit MainWindow(ao::app::AppSession& session);
     ~MainWindow() override;
 
-    // IPlaybackHost implementation
-    TrackPageContext const* currentVisibleTrackPageContext() const override;
-    TrackPageContext* findTrackPageContext(ao::ListId listId) override;
-    void showListPage(ao::ListId listId) override;
-    void updatePlaybackStatus(ao::audio::Player::Status const& status) override;
-    void updatePlayingTrack(std::optional<ao::TrackId> trackId) override;
-    void showPlaybackMessage(std::string const& message,
-                             std::optional<std::chrono::seconds> timeout = std::nullopt) override;
+    TrackPageContext const* currentVisibleTrackPageContext() const;
+    TrackPageContext* findTrackPageContext(ao::ListId listId);
+    void showListPage(ao::ListId listId);
+    ImportExportCoordinator& importExportCoordinator() { return *_importExportCoordinator; }
+
+    void initializeSession();
 
   private:
     void updateCoverArt(std::vector<ao::TrackId> const& selectedIds);
@@ -70,7 +65,6 @@ namespace ao::gtk
 
     void setupMenu();
     void setupLayout();
-    void installLibrarySession(std::unique_ptr<LibrarySession> session);
 
     // Page management helpers
     void rebuildListPages(ao::lmdb::ReadTransaction& txn);
@@ -81,17 +75,14 @@ namespace ao::gtk
     void saveSession();
     void loadSession();
 
-    // Playback support
-    void jumpToPlayingList();
-    void onOutputChanged(ao::audio::BackendId const& backend,
-                         ao::audio::DeviceId const& deviceId,
-                         ao::audio::ProfileId const& profile);
     std::optional<ao::audio::TrackPlaybackDescriptor> currentSelectionPlaybackDescriptor() const;
 
-    // Active library session
-    std::unique_ptr<LibrarySession> _librarySession;
+    // GTK-side row data cache
+    std::unique_ptr<TrackRowDataProvider> _rowDataProvider;
 
     SessionPersistence _sessionPersistence;
+
+    ao::app::AppSession& _session;
 
     // Layout: Horizontal paned with left box and right stack
     Gtk::Paned _paned;
@@ -119,8 +110,17 @@ namespace ao::gtk
 
     // Playback support
     std::shared_ptr<GtkMainThreadDispatcher> _dispatcher;
-    std::unique_ptr<PlaybackCoordinator> _playbackCoordinator;
-    std::unique_ptr<MetadataCoordinator> _metadataCoordinator;
+    std::unique_ptr<PlaybackBar> _playbackBar;
+    std::unique_ptr<PlaybackController> _playbackController;
+
+    // Pending output selection from session restore (applied when runtime is ready)
+    ao::audio::BackendId _pendingOutputBackend{};
+    ao::audio::DeviceId _pendingOutputDevice{};
+    ao::audio::ProfileId _pendingOutputProfile{};
+
+    ao::app::Subscription _tracksMutatedSubscription;
+    ao::app::Subscription _importProgressSubscription;
+    ao::app::Subscription _importCompletedSubscription;
 
     // Status bar
     std::unique_ptr<StatusBar> _statusBar;

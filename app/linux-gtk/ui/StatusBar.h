@@ -6,18 +6,25 @@
 #include <ao/audio/Engine.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/Types.h>
+#include <runtime/CorePrimitives.h>
 
 #include <gtkmm.h>
 
 #include <chrono>
 #include <string>
 
+namespace ao::app
+{
+  class AppSession;
+  struct PlaybackState;
+}
+
 namespace ao::gtk
 {
   class StatusBar final : public Gtk::Box
   {
   public:
-    StatusBar();
+    explicit StatusBar(ao::app::AppSession& session);
     ~StatusBar() override;
 
     void showMessage(std::string const& message, std::chrono::seconds duration = std::chrono::seconds{5});
@@ -26,12 +33,10 @@ namespace ao::gtk
     void setTrackCount(std::size_t count);
     void setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
     void setPlaybackDetails(ao::audio::Player::Status const& status);
+    void setPlaybackState(struct ao::app::PlaybackState const& state);
 
     void setImportProgress(double fraction, std::string const& info);
     void clearImportProgress();
-
-    using NowPlayingClickedSignal = sigc::signal<void()>;
-    NowPlayingClickedSignal& signalNowPlayingClicked() { return _nowPlayingClicked; }
 
   private:
     struct LastPlaybackState final
@@ -75,7 +80,9 @@ namespace ao::gtk
     Gtk::Label _statusLabel;
 
     sigc::connection _timerConnection;
-    NowPlayingClickedSignal _nowPlayingClicked;
+    ao::app::AppSession& _session;
+    ao::app::Subscription _stateSub;
+    ao::app::Subscription _notificationSub;
 
     LastPlaybackState _lastPlaybackState;
     std::string _lastTooltipText;

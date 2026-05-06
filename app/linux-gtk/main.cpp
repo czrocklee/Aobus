@@ -3,12 +3,15 @@
 
 #include "MainWindow.h"
 #include "TrackRowDataProvider.h"
+#include "ui/GtkControlExecutor.h"
 #include "ui/ThemeBus.h"
 #include <ao/utility/Log.h>
+#include <common/AppConfig.h>
 #include <giomm/dbusconnection.h>
 #include <giomm/dbusproxy.h>
 #include <giomm/file.h>
 #include <giomm/filemonitor.h>
+#include <runtime/AppSession.h>
 
 #include <ao/AppVersion.h>
 
@@ -21,6 +24,51 @@
 #include <CLI/CLI.hpp>
 
 #include <print>
+
+namespace
+{
+  std::filesystem::path resolveLibraryPath()
+  {
+    try
+    {
+      auto config = ao::app::AppConfig::load();
+      auto const& path = config.sessionState().lastLibraryPath;
+      if (!path.empty())
+      {
+        return std::filesystem::path{path};
+      }
+    }
+    catch (...)
+    {
+    }
+
+    auto emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
+    std::filesystem::create_directories(emptyPath);
+    return emptyPath;
+  }
+
+  Glib::RefPtr<ao::gtk::MainWindow> createWindow(Gtk::Application& app, std::filesystem::path libraryPath)
+  {
+    auto executor = std::make_shared<ao::gtk::GtkControlExecutor>();
+
+    auto appSession = std::make_unique<ao::app::AppSession>(
+      ao::app::AppSessionDependencies{.executor = std::move(executor), .libraryRoot = std::move(libraryPath)});
+
+    auto window = Glib::make_refptr_for_instance<ao::gtk::MainWindow>(new ao::gtk::MainWindow(*appSession));
+
+    // Store AppSession alongside window (lifetime tied to window via pointer)
+    window->set_data("app-session",
+                     new std::unique_ptr<ao::app::AppSession>(std::move(appSession)),
+                     [](void* data) { delete static_cast<std::unique_ptr<ao::app::AppSession>*>(data); });
+
+    window->initializeSession();
+
+    app.add_window(*window);
+    window->present();
+
+    return window;
+  }
+}
 
 int main(int argc, char* argv[])
 {
@@ -188,16 +236,22 @@ int main(int argc, char* argv[])
   quitAction->signal_activate().connect([&app](Glib::VariantBase const& /*variant*/) { app->quit(); });
   app->add_action(quitAction);
 
-  // Keep window alive - use shared_ptr
-  auto mainWindow = Glib::RefPtr<ao::gtk::MainWindow>{};
+  // Store open windows
+  auto windows = std::vector<Glib::RefPtr<ao::gtk::MainWindow>>{};
 
-  // Connect to activate signal to create window after startup
+  // Connect to activate signal to create initial window after startup
   app->signal_activate().connect(
-    [&app, &mainWindow]()
+    [&app, &windows]()
     {
-      mainWindow = Glib::make_refptr_for_instance<ao::gtk::MainWindow>(new ao::gtk::MainWindow());
-      app->add_window(*mainWindow);
-      mainWindow->present();
+      auto libraryPath = resolveLibraryPath();
+
+      auto window = createWindow(*app, libraryPath);
+
+      // Wire up the "Open Library" → new window callback
+      window->importExportCoordinator().callbacks().onOpenNewLibrary =
+        [&app, &windows](std::filesystem::path const& path) { createWindow(*app, path); };
+
+      windows.push_back(std::move(window));
     });
 
   auto remainingArgs = cliApp.remaining_for_passthrough();

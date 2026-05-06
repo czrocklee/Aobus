@@ -6,6 +6,7 @@
 #include "ProjectionTypes.h"
 #include "StateTypes.h"
 
+#include <ao/library/MusicLibrary.h>
 #include <ao/model/TrackIdList.h>
 
 #include <memory>
@@ -28,7 +29,7 @@ namespace ao::app
     , private ao::model::TrackIdListObserver
   {
   public:
-    TrackListProjection(ViewId viewId, ao::model::FilteredTrackIdList& source, ao::library::MusicLibrary& library);
+    TrackListProjection(ViewId viewId, ao::model::TrackIdList& source, ao::library::MusicLibrary& library);
     ~TrackListProjection() override;
 
     TrackListProjection(TrackListProjection const&) = delete;

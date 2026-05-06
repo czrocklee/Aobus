@@ -199,6 +199,60 @@ namespace ao::gtk
   {
     _rebuildConnection.disconnect();
     _source.detach(this);
+    _projectionSub.reset();
+  }
+
+  void TrackListAdapter::bindProjection(ao::app::ITrackListProjection& projection)
+  {
+    _projection = &projection;
+    _projectionSub = projection.subscribe(
+      [this](ao::app::TrackListProjectionDeltaBatch const& batch)
+      {
+        for (auto const& delta : batch.deltas)
+        {
+          std::visit(
+            [this](auto const& d)
+            {
+              using T = std::decay_t<decltype(d)>;
+              if constexpr (std::is_same_v<T, ao::app::ProjectionReset>)
+              {
+                _listModel->remove_all();
+                for (std::size_t i = 0; i < _projection->size(); ++i)
+                {
+                  createRowForTrack(_projection->trackIdAt(i));
+                }
+              }
+              else if constexpr (std::is_same_v<T, ao::app::ProjectionInsertRange>)
+              {
+                for (std::size_t i = 0; i < d.range.count; ++i)
+                {
+                  auto const idx = d.range.start + i;
+                  auto const trackId = _projection->trackIdAt(idx);
+                  auto const row = _provider.getTrackRow(trackId);
+                  _listModel->insert(idx, row);
+                }
+              }
+              else if constexpr (std::is_same_v<T, ao::app::ProjectionRemoveRange>)
+              {
+                for (std::size_t i = 0; i < d.range.count; ++i)
+                {
+                  _listModel->remove(d.range.start);
+                }
+              }
+              else if constexpr (std::is_same_v<T, ao::app::ProjectionUpdateRange>)
+              {
+                for (std::size_t i = 0; i < d.range.count; ++i)
+                {
+                  auto const idx = d.range.start + i;
+                  auto const trackId = _projection->trackIdAt(idx);
+                  auto const row = _provider.getTrackRow(trackId);
+                  _listModel->splice(idx, 1, std::vector<Glib::RefPtr<TrackRow>>{row});
+                }
+              }
+            },
+            delta);
+        }
+      });
   }
 
   void TrackListAdapter::setFilter(Glib::ustring const& filterText)

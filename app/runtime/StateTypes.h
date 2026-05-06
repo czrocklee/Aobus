@@ -23,6 +23,8 @@ namespace ao::app
     ao::audio::ProfileId id{};
     std::string name{};
     std::string description{};
+
+    bool operator==(OutputProfileSnapshot const&) const = default;
   };
 
   struct OutputDeviceSnapshot final
@@ -33,6 +35,8 @@ namespace ao::app
     bool isDefault = false;
     ao::audio::BackendId backendId{};
     ao::audio::DeviceCapabilities capabilities{};
+
+    bool operator==(OutputDeviceSnapshot const&) const = default;
   };
 
   struct OutputBackendSnapshot final
@@ -43,6 +47,8 @@ namespace ao::app
     std::string iconName{};
     std::vector<OutputProfileSnapshot> supportedProfiles{};
     std::vector<OutputDeviceSnapshot> devices{};
+
+    bool operator==(OutputBackendSnapshot const&) const = default;
   };
 
   struct OutputSelection final
@@ -54,18 +60,13 @@ namespace ao::app
     bool operator==(OutputSelection const&) const = default;
   };
 
-  enum class PlaybackQuality : std::uint8_t
-  {
-    Unknown,
-    Lossless,
-    Lossy,
-  };
-
   struct PlaybackState final
   {
     ao::audio::Transport transport = ao::audio::Transport::Idle;
     ao::TrackId trackId{};
     ao::ListId sourceListId{};
+    std::string trackTitle{};
+    std::string trackArtist{};
     std::uint32_t positionMs = 0;
     std::uint32_t durationMs = 0;
     float volume = 1.0f;
@@ -76,7 +77,8 @@ namespace ao::app
     OutputSelection selectedOutput{};
     std::vector<OutputBackendSnapshot> availableOutputs{};
     ao::audio::flow::Graph flow{};
-    PlaybackQuality quality = PlaybackQuality::Unknown;
+    ao::audio::Quality quality = ao::audio::Quality::Unknown;
+    std::string qualityTooltip{};
     std::optional<FaultSnapshot> optFault{};
     std::uint64_t revision = 0;
   };

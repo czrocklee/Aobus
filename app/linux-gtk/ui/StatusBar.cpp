@@ -6,6 +6,9 @@
 #include "OutputListItems.h"
 #include "SvgTemplate.h"
 #include <ao/utility/Log.h>
+#include <runtime/AppSession.h>
+#include <runtime/CommandTypes.h>
+#include <runtime/StateTypes.h>
 
 #include "ui/ThemeBus.h"
 #include <gdkmm/display.h>
@@ -158,12 +161,11 @@ namespace ao::gtk
     }
   }
 
-  StatusBar::StatusBar()
-    : Gtk::Box{Gtk::Orientation::HORIZONTAL}
+  StatusBar::StatusBar(ao::app::AppSession& session)
+    : Gtk::Box{Gtk::Orientation::HORIZONTAL}, _session{session}
   {
     ensureStatusBarCss();
 
-    // Subscribe to global theme refresh signal
     signalThemeRefresh().connect(
       [this]()
       {
@@ -176,6 +178,22 @@ namespace ao::gtk
     set_valign(Gtk::Align::END);
     set_margin(Layout::kMarginSmall);
     add_css_class("status-bar");
+
+    // Self-wire to playback state
+    _stateSub = _session.playback().subscribe([this](ao::app::PlaybackState const& state) { setPlaybackState(state); });
+
+    // Self-wire to notification feed
+    _notificationSub = _session.notifications().subscribe(
+      [this](ao::app::NotificationFeedState const& feed)
+      {
+        if (feed.entries.empty())
+        {
+          return;
+        }
+        auto const& latest = feed.entries.back();
+        auto const duration = latest.optTimeout.value_or(std::chrono::seconds{5});
+        showMessage(latest.message, std::chrono::duration_cast<std::chrono::seconds>(duration));
+      });
 
     // Playback details (Left)
     _playbackDetailsBox.set_spacing(Layout::kSpacingLarge);
@@ -202,7 +220,9 @@ namespace ao::gtk
     _nowPlayingLabel.set_tooltip_text("Click to show playing list");
 
     auto const clickGesture = Gtk::GestureClick::create();
-    clickGesture->signal_pressed().connect([this](int, double, double) { _nowPlayingClicked.emit(); });
+    clickGesture->signal_pressed().connect(
+      [this](int, double, double)
+      { _session.commands().execute<ao::app::RevealPlayingTrack>(ao::app::RevealPlayingTrack{}); });
 
     _nowPlayingLabel.add_controller(clickGesture);
     _nowPlayingLabel.set_cursor(Gdk::Cursor::create("pointer"));
@@ -502,6 +522,22 @@ namespace ao::gtk
 
     // Always update status labels (they might depend on minor state changes)
     updatePlaybackStatusLabels(status);
+  }
+
+  void StatusBar::setPlaybackState(ao::app::PlaybackState const& state)
+  {
+    ao::audio::Player::Status s;
+    s.engine.transport = state.transport;
+    s.engine.backendId = state.selectedOutput.backendId;
+    s.engine.profileId = state.selectedOutput.profileId;
+    s.engine.currentDeviceId = state.selectedOutput.deviceId;
+    s.flow = state.flow;
+    s.quality = state.quality;
+    s.isReady = state.ready;
+    s.trackTitle = state.trackTitle;
+    s.trackArtist = state.trackArtist;
+
+    updatePlaybackStatusLabels(s);
   }
 
   void StatusBar::setImportProgress(double fraction, std::string const& info)

@@ -13,6 +13,11 @@
 #include <filesystem>
 #include <memory>
 
+namespace ao::model
+{
+  class AllTrackIdsList;
+}
+
 namespace ao::app
 {
   struct AppSessionDependencies final
@@ -44,6 +49,13 @@ namespace ao::app
     ViewRegistry& views() noexcept;
     LibraryQueryService& queries() noexcept;
     NotificationService& notificationService() noexcept;
+    ao::library::MusicLibrary& musicLibrary() noexcept;
+    ao::model::TrackIdList& allTracks() noexcept;
+    ao::model::AllTrackIdsList& allTrackIdsList() noexcept;
+    ao::model::SmartListEngine& smartListEngine() noexcept;
+    void reloadAllTracks();
+
+    void addAudioProvider(std::unique_ptr<ao::audio::IBackendProvider> provider);
 
   private:
     struct Impl;

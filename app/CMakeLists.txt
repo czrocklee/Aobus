@@ -23,6 +23,8 @@ add_library(app_runtime STATIC
     runtime/StateTypes.h
     runtime/TrackListProjection.cpp
     runtime/TrackListProjection.h
+    runtime/TrackDetailProjection.cpp
+    runtime/TrackDetailProjection.h
     runtime/ViewRegistry.cpp
     runtime/ViewRegistry.h
 )

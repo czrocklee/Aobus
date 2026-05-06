@@ -67,7 +67,6 @@ namespace ao::audio
   struct Engine::Impl final
   {
     std::unique_ptr<IBackend> backend;
-    std::shared_ptr<IMainThreadDispatcher> dispatcher;
     Device currentDevice;
 
     std::atomic<std::shared_ptr<ISource>> source;
@@ -88,14 +87,8 @@ namespace ao::audio
     RenderCallbacks renderCallbacks;
 
     // ── Construction ──────────────────────────────────────────────
-    Impl(std::unique_ptr<IBackend> backend,
-         Device const& device,
-         std::shared_ptr<IMainThreadDispatcher> dispatcher,
-         DecoderFactoryFn decoderFactory)
-      : backend{std::move(backend)}
-      , dispatcher{std::move(dispatcher)}
-      , currentDevice{device}
-      , decoderFactory{std::move(decoderFactory)}
+    Impl(std::unique_ptr<IBackend> backend, Device const& device, DecoderFactoryFn decoderFactory)
+      : backend{std::move(backend)}, currentDevice{device}, decoderFactory{std::move(decoderFactory)}
     {
       syncBackendIdentity();
       renderCallbacks = RenderCallbacks{.userData = this,
@@ -145,18 +138,6 @@ namespace ao::audio
       routeTracker.clear();
     }
 
-    void dispatchOrCall(std::function<void()>&& fn)
-    {
-      if (dispatcher)
-      {
-        dispatcher->dispatch(std::move(fn));
-      }
-      else
-      {
-        fn();
-      }
-    }
-
     // ── Callbacks ──────────────────────────────────────────────────
     static std::size_t onReadPcm(void* userData, std::span<std::byte> output) noexcept
     {
@@ -200,33 +181,33 @@ namespace ao::audio
         return;
       }
 
-      impl->dispatchOrCall([impl]() { impl->handleDrainComplete(); });
+      impl->handleDrainComplete();
     }
 
     static void onRouteReady(void* userData, std::string_view routeAnchor) noexcept
     {
       auto* const impl = static_cast<Impl*>(userData);
       auto anchor = std::string{routeAnchor};
-      impl->dispatchOrCall([impl, anchor = std::move(anchor)]() { impl->handleRouteReady(anchor); });
+      impl->handleRouteReady(anchor);
     }
 
     static void onFormatChanged(void* userData, Format const& format) noexcept
     {
       auto* const impl = static_cast<Impl*>(userData);
-      impl->dispatchOrCall([impl, format]() { impl->handleFormatChanged(format); });
+      impl->handleFormatChanged(format);
     }
 
     static void onPropertyChanged(void* userData, PropertyId id) noexcept
     {
       auto* const impl = static_cast<Impl*>(userData);
-      impl->dispatchOrCall([impl, id]() { impl->handlePropertyChanged(id); });
+      impl->handlePropertyChanged(id);
     }
 
     static void onBackendError(void* userData, std::string_view message) noexcept
     {
       auto* const impl = static_cast<Impl*>(userData);
       auto msg = std::string{message};
-      impl->dispatchOrCall([impl, msg = std::move(msg)]() { impl->handleBackendError(msg); });
+      impl->handleBackendError(msg);
     }
 
     // ── Handlers ───────────────────────────────────────────────────
@@ -261,52 +242,41 @@ namespace ao::audio
       backend->stop();
     }
 
-    void handleRouteReady(std::string_view routeAnchor)
+    void notifyRouteChanged()
     {
-      routeTracker.setAnchor(backend->backendId(), std::string{routeAnchor});
-
       auto callback = Engine::OnRouteChanged{};
-      auto statusSnapshot = Engine::RouteStatus{};
-
+      auto snapshot = Engine::RouteStatus{};
       {
         auto const lock = std::lock_guard{stateMutex};
         callback = onRouteChanged;
-        statusSnapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
+        snapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
-
       if (callback)
       {
-        dispatchOrCall([callback = std::move(callback), statusSnapshot]() { callback(statusSnapshot); });
+        callback(snapshot);
       }
+    }
+
+    void handleRouteReady(std::string_view routeAnchor)
+    {
+      routeTracker.setAnchor(backend->backendId(), std::string{routeAnchor});
+      notifyRouteChanged();
     }
 
     void handleFormatChanged(Format const& format)
     {
-      auto callback = Engine::OnRouteChanged{};
-      auto statusSnapshot = Engine::RouteStatus{};
-
       {
         auto const lock = std::lock_guard{stateMutex};
         routeTracker.setEngineFormat(format);
         status.routeState.engineOutputFormat = format;
-        callback = onRouteChanged;
-        statusSnapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
-
-      if (callback)
-      {
-        dispatchOrCall([callback = std::move(callback), statusSnapshot]() { callback(statusSnapshot); });
-      }
+      notifyRouteChanged();
     }
 
     void handlePropertyChanged(PropertyId id)
     {
-      auto callback = Engine::OnRouteChanged{};
-      auto statusSnapshot = Engine::RouteStatus{};
-
       {
         auto const lock = std::lock_guard{stateMutex};
-
         if (id == PropertyId::Volume)
         {
           if (auto const vol = backend->get(props::Volume))
@@ -321,16 +291,9 @@ namespace ao::audio
             status.muted = *mute;
           }
         }
-
         status.volumeAvailable = backend->queryProperty(PropertyId::Volume).isAvailable;
-        callback = onRouteChanged;
-        statusSnapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
-
-      if (callback)
-      {
-        dispatchOrCall([callback = std::move(callback), statusSnapshot]() { callback(statusSnapshot); });
-      }
+      notifyRouteChanged();
     }
 
     void handleDrainComplete()
@@ -349,7 +312,7 @@ namespace ao::audio
 
       if (onRouteChangedCallback)
       {
-        dispatchOrCall([callback = std::move(onRouteChangedCallback)]() { callback({}); });
+        onRouteChangedCallback({});
       }
 
       if (onTrackEndedCallback)
@@ -444,7 +407,7 @@ namespace ao::audio
       auto const streamingSource = std::make_shared<StreamingSource>(
         std::move(decoder),
         info,
-        [this](ao::Error const& err) { dispatchOrCall([this, err]() { handleSourceError(err); }); },
+        [this](ao::Error const& err) { handleSourceError(err); },
         kPrerollTargetMs,
         kDecodeHighWatermarkMs);
 
@@ -510,11 +473,8 @@ namespace ao::audio
 
   // ── Engine ──────────────────────────────────────────────────────
 
-  Engine::Engine(std::unique_ptr<IBackend> backend,
-                 Device const& device,
-                 std::shared_ptr<IMainThreadDispatcher> dispatcher,
-                 DecoderFactoryFn decoderFactory)
-    : _impl{std::make_unique<Impl>(std::move(backend), device, std::move(dispatcher), std::move(decoderFactory))}
+  Engine::Engine(std::unique_ptr<IBackend> backend, Device const& device, DecoderFactoryFn decoderFactory)
+    : _impl{std::make_unique<Impl>(std::move(backend), device, std::move(decoderFactory))}
   {
     _impl->syncBackendStatus();
   }

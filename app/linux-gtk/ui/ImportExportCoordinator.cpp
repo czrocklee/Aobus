@@ -6,27 +6,18 @@
 #include <ao/library/Importer.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/ThreadUtils.h>
+#include <runtime/AppSession.h>
 
 namespace ao::gtk
 {
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
-                                                   ImportExportCallbacks callbacks,
-                                                   std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
-    : _parent{parent}, _callbacks{std::move(callbacks)}, _dispatcher{std::move(dispatcher)}
+                                                   ao::app::AppSession& session,
+                                                   ImportExportCallbacks callbacks)
+    : _parent{parent}, _session{session}, _callbacks{std::move(callbacks)}
   {
   }
 
   ImportExportCoordinator::~ImportExportCoordinator() = default;
-
-  LibrarySession* ImportExportCoordinator::currentSession() const
-  {
-    if (_callbacks.getCurrentSession)
-    {
-      return _callbacks.getCurrentSession();
-    }
-
-    return nullptr;
-  }
 
   void ImportExportCoordinator::openLibrary()
   {
@@ -79,7 +70,6 @@ namespace ao::gtk
         auto const path = std::filesystem::path{pathStr};
         APP_LOG_INFO("Importing from: {}", pathStr);
 
-        // Scan for music files
         auto files = std::vector<std::filesystem::path>{};
         scanDirectory(path, files);
 
@@ -93,14 +83,7 @@ namespace ao::gtk
           return;
         }
 
-        auto pendingSession = std::shared_ptr<std::unique_ptr<LibrarySession>>{};
-
-        if (currentSession() == nullptr)
-        {
-          pendingSession = std::make_shared<std::unique_ptr<LibrarySession>>(makeLibrarySession(path));
-        }
-
-        executeImportTask(files, std::move(pendingSession));
+        executeImportTask(files, false);
       }
     }
     catch (Glib::Error const& e)
@@ -109,31 +92,18 @@ namespace ao::gtk
     }
   }
 
-  void ImportExportCoordinator::executeImportTask(std::vector<std::filesystem::path> const& files,
-                                                  std::shared_ptr<std::unique_ptr<LibrarySession>> pendingSession)
+  void ImportExportCoordinator::executeImportTask(std::vector<std::filesystem::path> const& files, bool isNewLibrary)
   {
-    auto* sessionPtr = pendingSession ? pendingSession->get() : currentSession();
-
-    if (sessionPtr == nullptr)
-    {
-      if (_callbacks.onStatusMessage)
-      {
-        _callbacks.onStatusMessage("No music library open");
-      }
-
-      return;
-    }
-
     _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), _parent);
     auto* dialogPtr = _importDialog.get();
     _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
 
     _importWorker = std::make_unique<ao::library::ImportWorker>(
-      *sessionPtr->musicLibrary,
+      _session.musicLibrary(),
       files,
       [this, dialogPtr, total = files.size()](std::filesystem::path const& filePath, int index)
       {
-        _dispatcher->dispatch(
+        _session.executor().dispatch(
           [this, dialogPtr, filePath, index, total]()
           {
             dialogPtr->onNewTrack(filePath.string(), index);
@@ -144,37 +114,21 @@ namespace ao::gtk
             }
           });
       },
-      [this, dialogPtr]() { _dispatcher->dispatch([dialogPtr]() { dialogPtr->ready(); }); });
+      [this, dialogPtr]() { _session.executor().dispatch([dialogPtr]() { dialogPtr->ready(); }); });
 
     auto* workerPtr = _importWorker.get();
     _importThread = std::jthread(
-      [this, workerPtr, pendingSession = std::move(pendingSession)]() mutable
+      [this, workerPtr, isNewLibrary]() mutable
       {
         ao::setCurrentThreadName("FileImport");
         workerPtr->run();
 
-        _dispatcher->dispatch(
-          [this, pendingSession = std::move(pendingSession)]() mutable
+        _session.executor().dispatch(
+          [this, isNewLibrary]()
           {
-            auto importedLibraryTitle = std::string{};
-
-            if (pendingSession)
-            {
-              importedLibraryTitle = pendingSession->get()->musicLibrary->rootPath().string();
-              pendingSession->get()->rowDataProvider->loadAll();
-
-              auto txn = pendingSession->get()->musicLibrary->readTransaction();
-              pendingSession->get()->allTrackIds->reloadFromStore(txn);
-            }
-
             onImportFinished();
 
-            if (pendingSession && _callbacks.onLibrarySessionCreated)
-            {
-              _callbacks.onLibrarySessionCreated(std::move(*pendingSession));
-            }
-
-            if (!pendingSession && _callbacks.onLibraryDataMutated)
+            if (isNewLibrary && _callbacks.onLibraryDataMutated)
             {
               _callbacks.onLibraryDataMutated();
             }
@@ -182,11 +136,6 @@ namespace ao::gtk
             if (_callbacks.onProgressUpdated)
             {
               _callbacks.onProgressUpdated(1.0, "Import complete");
-            }
-
-            if (pendingSession && _callbacks.onTitleChanged)
-            {
-              _callbacks.onTitleChanged("Aobus [" + importedLibraryTitle + "]");
             }
           });
       });
@@ -230,35 +179,27 @@ namespace ao::gtk
     }
   }
 
-  void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path) const
+  void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path)
   {
-    try
+    if (_callbacks.onOpenNewLibrary)
     {
-      auto newSession = makeLibrarySession(path);
-      if (_callbacks.onLibrarySessionCreated)
-      {
-        _callbacks.onLibrarySessionCreated(std::move(newSession));
-      }
-      if (_callbacks.onTitleChanged)
-      {
-        _callbacks.onTitleChanged("Aobus [" + path.string() + "]");
-      }
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_ERROR("Error opening library: {}", e.what());
+      _callbacks.onOpenNewLibrary(path);
     }
   }
 
   void ImportExportCoordinator::importFilesFromPath(std::filesystem::path const& path)
   {
+    if (_callbacks.onOpenNewLibrary)
+    {
+      _callbacks.onOpenNewLibrary(path);
+    }
+
     auto files = std::vector<std::filesystem::path>{};
     scanDirectory(path, files);
 
     if (!files.empty())
     {
-      auto pendingSession = std::make_shared<std::unique_ptr<LibrarySession>>(makeLibrarySession(path));
-      executeImportTask(files, std::move(pendingSession));
+      executeImportTask(files, true);
     }
     else if (_callbacks.onStatusMessage)
     {
@@ -268,11 +209,6 @@ namespace ao::gtk
 
   void ImportExportCoordinator::exportLibrary()
   {
-    if (currentSession() == nullptr)
-    {
-      return;
-    }
-
     auto* dialog = Gtk::make_managed<Gtk::Dialog>();
     dialog->set_title("Select Export Mode");
     dialog->set_transient_for(_parent);
@@ -359,30 +295,23 @@ namespace ao::gtk
 
   void ImportExportCoordinator::executeExportTask(std::filesystem::path const& path, ao::library::ExportMode mode)
   {
-    auto* session = currentSession();
-
-    if (session == nullptr)
-    {
-      return;
-    }
-
     if (_exportThread.joinable())
     {
       return;
     }
 
-    auto* musicLibrary = session->musicLibrary.get();
+    auto& library = _session.musicLibrary();
     _exportThread = std::jthread(
-      [this, musicLibrary, path, mode]()
+      [this, &library, path, mode]()
       {
         ao::setCurrentThreadName("LibraryExport");
 
         try
         {
-          auto exporter = ao::library::Exporter{*musicLibrary};
+          auto exporter = ao::library::Exporter{library};
           exporter.exportToYaml(path, mode);
 
-          _dispatcher->dispatch(
+          _session.executor().dispatch(
             [this]()
             {
               if (_callbacks.onStatusMessage)
@@ -394,7 +323,7 @@ namespace ao::gtk
         catch (std::exception const& e)
         {
           auto const errorText = std::string{e.what()};
-          _dispatcher->dispatch(
+          _session.executor().dispatch(
             [this, errorText]()
             {
               APP_LOG_ERROR("Export failed: {}", errorText);
@@ -410,11 +339,6 @@ namespace ao::gtk
 
   void ImportExportCoordinator::importLibrary()
   {
-    if (currentSession() == nullptr)
-    {
-      return;
-    }
-
     auto fileDialog = Gtk::FileDialog::create();
     fileDialog->set_title("Import Library from YAML");
 
@@ -439,19 +363,13 @@ namespace ao::gtk
       if (auto const file = dialog->open_finish(result); file)
       {
         auto const path = std::filesystem::path{file->get_path()};
-        auto* session = currentSession();
-
-        if (session == nullptr)
-        {
-          return;
-        }
 
         if (_importTaskThread.joinable())
         {
           return;
         }
 
-        _importTaskThread = std::jthread([this, path, session]() { runLibraryImportTask(path, session); });
+        _importTaskThread = std::jthread([this, path]() { runLibraryImportTask(path); });
       }
     }
     catch (Glib::Error const& e)
@@ -460,13 +378,13 @@ namespace ao::gtk
     }
   }
 
-  void ImportExportCoordinator::runLibraryImportTask(std::filesystem::path const& path, LibrarySession* session)
+  void ImportExportCoordinator::runLibraryImportTask(std::filesystem::path const& path)
   {
     ao::setCurrentThreadName("LibraryImport");
 
     try
     {
-      auto importer = ao::library::Importer{*session->musicLibrary};
+      auto importer = ao::library::Importer{_session.musicLibrary()};
       importer.importFromYaml(path);
       reportImportResult(true, "");
     }
@@ -478,7 +396,7 @@ namespace ao::gtk
 
   void ImportExportCoordinator::reportImportResult(bool success, std::string const& errorText)
   {
-    _dispatcher->dispatch(
+    _session.executor().dispatch(
       [this, success, errorText]()
       {
         if (success)

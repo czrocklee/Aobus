@@ -4,10 +4,8 @@
 #pragma once
 
 #include "ImportProgressDialog.h"
-#include "LibrarySession.h"
 #include <ao/library/Exporter.h>
 #include <ao/library/ImportWorker.h>
-#include <ao/utility/IMainThreadDispatcher.h>
 
 #include <gtkmm.h>
 
@@ -18,6 +16,11 @@
 #include <thread>
 #include <vector>
 
+namespace ao::app
+{
+  class AppSession;
+}
+
 namespace ao::gtk
 {
   /**
@@ -25,8 +28,7 @@ namespace ao::gtk
    */
   struct ImportExportCallbacks final
   {
-    std::function<LibrarySession*()> getCurrentSession;
-    std::function<void(std::unique_ptr<LibrarySession>)> onLibrarySessionCreated;
+    std::function<void(std::filesystem::path const&)> onOpenNewLibrary;
     std::function<void()> onLibraryDataMutated;
     std::function<void(double, std::string const&)> onProgressUpdated;
     std::function<void(std::string const&)> onStatusMessage;
@@ -39,10 +41,10 @@ namespace ao::gtk
   class ImportExportCoordinator final
   {
   public:
-    ImportExportCoordinator(Gtk::Window& parent,
-                            ImportExportCallbacks callbacks,
-                            std::shared_ptr<ao::IMainThreadDispatcher> dispatcher);
+    ImportExportCoordinator(Gtk::Window& parent, ao::app::AppSession& session, ImportExportCallbacks callbacks);
     ~ImportExportCoordinator();
+
+    ImportExportCallbacks& callbacks() { return _callbacks; }
 
     void openLibrary();
     void importFiles();
@@ -51,20 +53,17 @@ namespace ao::gtk
 
     void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files) const;
 
-    void openMusicLibrary(std::filesystem::path const& path) const;
+    void openMusicLibrary(std::filesystem::path const& path);
     void importFilesFromPath(std::filesystem::path const& path);
 
   private:
-    LibrarySession* currentSession() const;
-
     void onImportFolderSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
-    void executeImportTask(std::vector<std::filesystem::path> const& files,
-                           std::shared_ptr<std::unique_ptr<LibrarySession>> pendingSession = nullptr);
+    void executeImportTask(std::vector<std::filesystem::path> const& files, bool isNewLibrary);
     void onImportProgress(std::string const& filePath, int index);
     void onImportFinished() const;
 
     void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
-    void runLibraryImportTask(std::filesystem::path const& path, LibrarySession* session);
+    void runLibraryImportTask(std::filesystem::path const& path);
     void reportImportResult(bool success, std::string const& errorText);
 
     void onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
@@ -74,8 +73,8 @@ namespace ao::gtk
     void executeExportTask(std::filesystem::path const& path, ao::library::ExportMode mode);
 
     Gtk::Window& _parent;
+    ao::app::AppSession& _session;
     ImportExportCallbacks _callbacks;
-    std::shared_ptr<ao::IMainThreadDispatcher> _dispatcher;
 
     std::unique_ptr<ao::library::ImportWorker> _importWorker;
     std::jthread _importThread;

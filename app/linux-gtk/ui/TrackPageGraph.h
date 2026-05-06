@@ -3,12 +3,13 @@
 
 #pragma once
 
-#include "LibrarySession.h"
-#include "MetadataCoordinator.h"
 #include "PlaylistExporter.h"
 #include "TrackListAdapter.h"
 #include "TrackPresentation.h"
 #include "TrackViewPage.h"
+#include <runtime/AppSession.h>
+#include <runtime/CommandTypes.h>
+#include <runtime/CorePrimitives.h>
 
 #include <ao/library/ListView.h>
 #include <ao/model/TrackIdList.h>
@@ -22,12 +23,18 @@
 
 namespace ao::gtk
 {
+  class ListSidebarController;
+  class PlaybackController;
+  class TagEditController;
+  class TrackRowDataProvider;
+
   /**
    * TrackPageContext holds the per-page state for a track list.
    */
   struct TrackPageContext final
   {
-    std::unique_ptr<ao::model::TrackIdList> membershipList;
+    ao::app::ViewId viewId{};
+    std::shared_ptr<ao::model::TrackIdList> membershipList;
     std::unique_ptr<TrackListAdapter> adapter;
     std::unique_ptr<TrackViewPage> page;
     std::unique_ptr<ao::gtk::services::PlaylistExporter> exporter;
@@ -50,12 +57,17 @@ namespace ao::gtk
 
     TrackPageGraph(Gtk::Stack& stack,
                    TrackColumnLayoutModel& layoutModel,
-                   MetadataCoordinator& metadataCoordinator,
+                   ao::app::AppSession& session,
+                   PlaybackController* playbackController,
+                   TagEditController& tagEditController,
+                   ListSidebarController& listSidebar,
                    Callbacks callbacks);
     ~TrackPageGraph();
 
+    void setPlaybackController(PlaybackController& c) { _playbackController = &c; }
+
     void clear();
-    void rebuild(LibrarySession& session, ao::lmdb::ReadTransaction& txn);
+    void rebuild(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction& txn);
 
     TrackPageContext* find(ao::ListId listId);
     TrackPageContext const* find(ao::ListId listId) const;
@@ -67,13 +79,20 @@ namespace ao::gtk
     void setPlayingTrack(std::optional<ao::TrackId> trackId);
 
   private:
-    void buildPageForAllTracks(LibrarySession& session);
-    void buildPageForStoredList(ao::ListId listId, ao::library::ListView const& view, LibrarySession& session);
+    void buildPageForAllTracks(TrackRowDataProvider& dataProvider);
+    void buildPageForStoredList(ao::ListId listId,
+                                ao::library::ListView const& view,
+                                TrackRowDataProvider& dataProvider);
     void bindTrackPage(TrackPageContext& ctx);
 
     Gtk::Stack& _stack;
     TrackColumnLayoutModel& _layoutModel;
-    MetadataCoordinator& _metadataCoordinator;
+    ao::app::AppSession& _session;
+    PlaybackController* _playbackController;
+    TagEditController& _tagEditController;
+    ListSidebarController& _listSidebar;
+    ao::app::Subscription _revealSub;
+    ao::app::Subscription _nowPlayingSub;
     Callbacks _callbacks;
 
     std::map<ao::ListId, TrackPageContext> _trackPages;

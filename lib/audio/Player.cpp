@@ -5,13 +5,13 @@
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Player.h>
-#include <ao/utility/IMainThreadDispatcher.h>
 #include <ao/utility/Log.h>
 
 #include <algorithm>
 #include <atomic>
 #include <format>
 #include <map>
+#include <mutex>
 #include <ranges>
 #include <set>
 #include <unordered_map>
@@ -80,20 +80,19 @@ namespace ao::audio
       ProfileId profile;
     };
 
-    explicit Impl(std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
-      : dispatcher{std::move(dispatcher)}
-    {
-    }
+    Impl() = default;
+
+    std::function<void(std::vector<IBackendProvider::Status> const&)> onDevicesChanged;
+    std::function<void(ao::audio::Quality, bool)> onQualityChanged;
 
     std::uint64_t playbackGeneration = 1;
     std::vector<std::unique_ptr<ProviderRecord>> providers;
     std::optional<PendingOutput> pendingOutput;
     IBackendProvider* activeManager = nullptr;
     Subscription graphSubscription;
-
-    std::shared_ptr<ao::IMainThreadDispatcher> dispatcher;
     std::unique_ptr<Engine> engine;
 
+    mutable std::mutex backendsMutex;
     mutable std::vector<IBackendProvider::Status> cachedBackends;
     mutable std::vector<Device> allDevices;
 
@@ -144,17 +143,25 @@ namespace ao::audio
       allDevicesList.insert(allDevicesList.end(), record->devices.begin(), record->devices.end());
     }
 
-    cachedBackends = std::move(snapshots);
-    allDevices = std::move(allDevicesList);
+    {
+      std::lock_guard<std::mutex> lock(backendsMutex);
+      cachedBackends = std::move(snapshots);
+      allDevices = std::move(allDevicesList);
+    }
 
     // Keep the engine's current device capabilities up-to-date
     auto const currentSnap = engine->status();
+    auto allDevicesCopy = std::vector<Device>{};
+    {
+      std::lock_guard<std::mutex> lock(backendsMutex);
+      allDevicesCopy = allDevices;
+    }
     auto const activeIt =
-      std::ranges::find_if(allDevices,
+      std::ranges::find_if(allDevicesCopy,
                            [&](Device const& dev)
                            { return dev.backendId == currentSnap.backendId && dev.id == currentSnap.currentDeviceId; });
 
-    if (activeIt != allDevices.end())
+    if (activeIt != allDevicesCopy.end())
     {
       engine->updateDevice(*activeIt);
     }
@@ -173,9 +180,13 @@ namespace ao::audio
                        pending.profile);
       }
     }
+    if (onDevicesChanged)
+    {
+      onDevicesChanged(cachedBackends);
+    }
   }
 
-  void Player::Impl::handleSystemGraphChanged(Player* /*owner*/, flow::Graph const& graph, std::uint64_t generation)
+  void Player::Impl::handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation)
   {
     if (generation != playbackGeneration)
     {
@@ -184,6 +195,11 @@ namespace ao::audio
 
     cachedSystemGraph = graph;
     updateMergedGraph();
+    if (onQualityChanged)
+    {
+      auto const s = owner->status();
+      onQualityChanged(s.quality, s.isReady);
+    }
   }
 
   void Player::Impl::updateMergedGraph()
@@ -443,8 +459,8 @@ namespace ao::audio
     }
   }
 
-  Player::Player(std::shared_ptr<ao::IMainThreadDispatcher> dispatcher)
-    : _impl{std::make_unique<Impl>(std::move(dispatcher))}
+  Player::Player()
+    : _impl{std::make_unique<Impl>()}
   {
     // Start with a NullBackend until a provider provides something real
     _impl->engine = std::make_unique<Engine>(std::make_unique<NullBackend>(),
@@ -452,8 +468,7 @@ namespace ao::audio
                                                     .displayName = "None",
                                                     .description = "No audio output selected",
                                                     .backendId = kBackendNone,
-                                                    .capabilities = {}},
-                                             _impl->dispatcher);
+                                                    .capabilities = {}});
 
     _impl->engine->setOnTrackEnded(
       [this]()
@@ -470,20 +485,23 @@ namespace ao::audio
         // Capture generation to prevent stale updates
         auto const generation = _impl->playbackGeneration;
 
-        if (_impl->dispatcher)
-        {
-          _impl->dispatcher->dispatch([this, status, generation]() { handleRouteChanged(status, generation); });
-        }
-        else
-        {
-          handleRouteChanged(status, generation);
-        }
+        handleRouteChanged(status, generation);
       });
   }
 
   void Player::setTrackEndedCallback(std::function<void()> callback)
   {
     _impl->onTrackEnded = std::move(callback);
+  }
+
+  void Player::setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback)
+  {
+    _impl->onDevicesChanged = std::move(callback);
+  }
+
+  void Player::setOnQualityChanged(std::function<void(ao::audio::Quality, bool)> callback)
+  {
+    _impl->onQualityChanged = std::move(callback);
   }
 
   Player::~Player()
@@ -509,21 +527,8 @@ namespace ao::audio
     recordPtr->subscription = providerPtr->subscribeDevices(
       [this, providerPtr, recordPtr](std::vector<Device> const& devices)
       {
-        if (_impl->dispatcher)
-        {
-          _impl->dispatcher->dispatch(
-            [this, providerPtr, recordPtr, devices]()
-            {
-              recordPtr->devices = devices;
-              _impl->handleDevicesChanged(this, providerPtr, devices);
-            });
-        }
-        else
-        {
-          recordPtr->devices = devices;
-          _impl->handleDevicesChanged(this, providerPtr, devices);
-        }
-
+        recordPtr->devices = devices;
+        _impl->handleDevicesChanged(this, providerPtr, devices);
         return true;
       });
   }
@@ -559,10 +564,15 @@ namespace ao::audio
     }
 
     // 2. Find the Device matching the kind and id from our cache
+    auto allDevicesCopy = std::vector<Device>{};
+    {
+      std::lock_guard<std::mutex> lock(_impl->backendsMutex);
+      allDevicesCopy = _impl->allDevices;
+    }
     auto const it = std::ranges::find_if(
-      _impl->allDevices, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
+      allDevicesCopy, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
 
-    if (it == _impl->allDevices.end())
+    if (it == allDevicesCopy.end())
     {
       // If we don't have it yet, store it as pending.
       _impl->pendingOutput = Impl::PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
@@ -646,7 +656,10 @@ namespace ao::audio
       status.trackArtist = _impl->currentTrack->artist;
     }
 
-    status.availableBackends = _impl->cachedBackends;
+    {
+      std::lock_guard<std::mutex> lock(_impl->backendsMutex);
+      status.availableBackends = _impl->cachedBackends;
+    }
     status.flow = _impl->mergedGraph;
     status.isReady = isReady();
 
@@ -686,18 +699,7 @@ namespace ao::audio
       {
         _impl->graphSubscription = _impl->activeManager->subscribeGraph(
           _impl->cachedRouteStatus.optAnchor->id,
-          [this, generation](flow::Graph const& graph)
-          {
-            if (_impl->dispatcher)
-            {
-              _impl->dispatcher->dispatch([this, graph, generation]()
-                                          { _impl->handleSystemGraphChanged(this, graph, generation); });
-            }
-            else
-            {
-              _impl->handleSystemGraphChanged(this, graph, generation);
-            }
-          });
+          [this, generation](flow::Graph const& graph) { _impl->handleSystemGraphChanged(this, graph, generation); });
       }
     }
     else
@@ -707,6 +709,11 @@ namespace ao::audio
     }
 
     _impl->updateMergedGraph();
+    if (_impl->onQualityChanged)
+    {
+      auto const s = this->status();
+      _impl->onQualityChanged(s.quality, s.isReady);
+    }
   }
 
   std::uint64_t Player::playbackGeneration() const noexcept

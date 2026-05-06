@@ -5,15 +5,23 @@
 
 #include <ao/Type.h>
 #include <ao/audio/Backend.h>
+#include <ao/audio/Types.h>
 
 #include "CorePrimitives.h"
 #include "StateTypes.h"
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace ao::model
+{
+  class TrackIdList;
+}
 
 namespace ao::app
 {
@@ -21,7 +29,7 @@ namespace ao::app
   {
     using Reply = void;
 
-    ao::TrackId trackId{};
+    ao::audio::TrackPlaybackDescriptor descriptor{};
     ao::ListId sourceListId{};
   };
 
@@ -142,6 +150,7 @@ namespace ao::app
 
     TrackListViewConfig initial{};
     bool attached = true;
+    std::shared_ptr<ao::model::TrackIdList> source{};
   };
 
   struct AttachView final
@@ -210,5 +219,32 @@ namespace ao::app
     using Reply = void;
 
     ViewId viewId{};
+  };
+
+  struct RefreshPlaybackState final
+  {
+    using Reply = void;
+  };
+
+  struct RevealPlayingTrack final
+  {
+    using Reply = void;
+  };
+
+  struct PostNotification final
+  {
+    using Reply = NotificationId;
+
+    NotificationSeverity severity = NotificationSeverity::Info;
+    std::string message{};
+    bool sticky = false;
+    std::optional<std::chrono::milliseconds> optTimeout{};
+  };
+
+  struct DismissNotification final
+  {
+    using Reply = void;
+
+    NotificationId id{};
   };
 }

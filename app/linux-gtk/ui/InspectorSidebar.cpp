@@ -2,10 +2,14 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "InspectorSidebar.h"
-#include "LibrarySession.h"
 #include "TrackPresentation.h"
+#include "TrackRowDataProvider.h"
 #include <ao/library/ResourceStore.h>
+#include <ao/model/TrackIdList.h>
 #include <ao/utility/Log.h>
+#include <runtime/AppSession.h>
+#include <runtime/CommandTypes.h>
+#include <runtime/ProjectionTypes.h>
 
 #include <giomm/memoryinputstream.h>
 
@@ -54,10 +58,22 @@ namespace ao::gtk
 
       return std::format("{:.1f} kHz", rate / kKhzMultiplier);
     }
+
+    std::string formatDuration(std::chrono::milliseconds ms)
+    {
+      auto const totalSeconds = std::chrono::duration_cast<std::chrono::seconds>(ms).count();
+      auto const minutes = (totalSeconds % 3600) / 60;
+      auto const seconds = totalSeconds % 60;
+      if (totalSeconds >= 3600)
+      {
+        return std::format("{}:{:02}:{:02}", totalSeconds / 3600, minutes, seconds);
+      }
+      return std::format("{}:{:02}", minutes, seconds);
+    }
   }
 
-  InspectorSidebar::InspectorSidebar(MetadataCoordinator& metadataCoordinator, CoverArtCache& coverArtCache)
-    : Gtk::Box{Gtk::Orientation::VERTICAL, 0}, _metadataCoordinator{metadataCoordinator}, _coverArtCache{coverArtCache}
+  InspectorSidebar::InspectorSidebar(ao::app::AppSession& session, CoverArtCache& coverArtCache)
+    : Gtk::Box{Gtk::Orientation::VERTICAL, 0}, _session{session}, _coverArtCache{coverArtCache}
   {
     setupUi();
   }
@@ -105,27 +121,26 @@ namespace ao::gtk
     _tagEditor.signal_tags_changed().connect(
       [this](auto const& toAdd, auto const& toRemove)
       {
-        auto const spec = MetadataCoordinator::MetadataUpdateSpec{.tagsToAdd = toAdd, .tagsToRemove = toRemove};
-
         auto ids = _currentSelection | std::views::transform([](auto const& row) { return row->getTrackId(); }) |
                    std::ranges::to<std::vector>();
 
-        auto const idsCopy = ids;
-        _metadataCoordinator.updateMetadata(_currentSession->musicLibrary.get(),
-                                            std::move(ids),
-                                            spec,
-                                            [this, ids = std::move(idsCopy)](auto const& result)
-                                            {
-                                              if (result)
-                                              {
-                                                for (auto const trackId : ids)
-                                                {
-                                                  _currentSession->rowDataProvider->invalidate(trackId);
-                                                }
+        auto const result = _session.commands().execute<ao::app::EditTrackTags>(ao::app::EditTrackTags{
+          .trackIds = ids,
+          .tagsToAdd = toAdd,
+          .tagsToRemove = toRemove,
+        });
 
-                                                _currentSession->allTrackIds->notifyUpdated(ids);
-                                              }
-                                            });
+        if (result)
+        {
+          if (_dataProvider)
+          {
+            for (auto const trackId : ids)
+            {
+              _dataProvider->invalidate(trackId);
+            }
+          }
+          _session.allTracks().notifyUpdated(ids);
+        }
       });
   }
 
@@ -204,9 +219,10 @@ namespace ao::gtk
     createTechnicalRow(_audioBox, "Duration", _durationLabel);
   }
 
-  void InspectorSidebar::updateSelection(LibrarySession* session, std::vector<Glib::RefPtr<TrackRow>> const& rows)
+  void InspectorSidebar::updateSelection(TrackRowDataProvider* dataProvider,
+                                         std::vector<Glib::RefPtr<TrackRow>> const& rows)
   {
-    _currentSession = session;
+    _dataProvider = dataProvider;
     _currentSelection = rows;
 
     if (rows.empty())
@@ -217,11 +233,11 @@ namespace ao::gtk
 
     if (rows.size() == 1)
     {
-      updateSingleSelection(session, rows[0]);
+      updateSingleSelection(dataProvider, rows[0]);
     }
     else
     {
-      updateMultiSelection(session, rows);
+      updateMultiSelection(dataProvider, rows);
     }
   }
 
@@ -233,7 +249,7 @@ namespace ao::gtk
     _tagEditor.set_visible(false);
   }
 
-  void InspectorSidebar::updateSingleSelection(LibrarySession* session, Glib::RefPtr<TrackRow> const& row)
+  void InspectorSidebar::updateSingleSelection(TrackRowDataProvider* dataProvider, Glib::RefPtr<TrackRow> const& row)
   {
     _heroBox.set_visible(true);
     _metadataBox.set_visible(true);
@@ -249,10 +265,10 @@ namespace ao::gtk
     {
       auto pixbuf = _coverArtCache.get(resourceId);
 
-      if (!pixbuf && session != nullptr)
+      if (!pixbuf)
       {
-        auto txn = session->musicLibrary->readTransaction();
-        auto const reader = session->musicLibrary->resources().reader(txn);
+        auto txn = _session.musicLibrary().readTransaction();
+        auto const reader = _session.musicLibrary().resources().reader(txn);
         auto const data = reader.get(static_cast<std::uint32_t>(resourceId));
 
         if (data)
@@ -300,11 +316,11 @@ namespace ao::gtk
 
     // Tags
     auto ids = std::vector<ao::TrackId>{row->getTrackId()};
-    _tagEditor.setup(*session->musicLibrary, std::move(ids));
+    _tagEditor.setup(_session.musicLibrary(), std::move(ids));
     _tagEditor.set_visible(true);
   }
 
-  void InspectorSidebar::updateMultiSelection(LibrarySession* /*session*/,
+  void InspectorSidebar::updateMultiSelection(TrackRowDataProvider* /*dataProvider*/,
                                               std::vector<Glib::RefPtr<TrackRow>> const& rows)
   {
     _heroBox.set_visible(true);
@@ -347,7 +363,7 @@ namespace ao::gtk
     auto ids =
       rows | std::views::transform([](auto const& row) { return row->getTrackId(); }) | std::ranges::to<std::vector>();
 
-    _tagEditor.setup(*_currentSession->musicLibrary, std::move(ids));
+    _tagEditor.setup(_session.musicLibrary(), std::move(ids));
     _tagEditor.set_visible(true);
   }
 
@@ -365,43 +381,34 @@ namespace ao::gtk
       return;
     }
 
-    auto const spec = MetadataCoordinator::MetadataUpdateSpec{.title = newValue};
-
     auto ids = _currentSelection | std::views::transform([](auto const& row) { return row->getTrackId(); }) |
                std::ranges::to<std::vector>();
 
-    struct RollbackEntry
-    {
-      Glib::RefPtr<TrackRow> row;
-      std::string oldTitle;
-    };
-
-    auto rollbackData = std::vector<RollbackEntry>{};
+    auto rollbackData = std::vector<Glib::RefPtr<TrackRow>>{};
+    auto oldTitles = std::vector<std::string>{};
     rollbackData.reserve(_currentSelection.size());
+    oldTitles.reserve(_currentSelection.size());
 
     for (auto const& row : _currentSelection)
     {
-      rollbackData.push_back({.row = row, .oldTitle = row->getTitle()});
-
-      // Optimistic update
+      oldTitles.push_back(row->getTitle());
+      rollbackData.push_back(row);
       row->setTitle(newValue);
     }
 
-    _metadataCoordinator.updateMetadata(_currentSession->musicLibrary.get(),
-                                        std::move(ids),
-                                        spec,
-                                        [rollbackData = std::move(rollbackData)](auto const& result)
-                                        {
-                                          if (!result)
-                                          {
-                                            APP_LOG_ERROR("Failed to update titles: {}", result.error().message);
+    auto const result = _session.commands().execute<ao::app::UpdateTrackMetadata>(ao::app::UpdateTrackMetadata{
+      .trackIds = ids,
+      .patch = ao::app::MetadataPatch{.optTitle = newValue},
+    });
 
-                                            for (auto const& entry : rollbackData)
-                                            {
-                                              entry.row->setTitle(entry.oldTitle);
-                                            }
-                                          }
-                                        });
+    if (!result)
+    {
+      APP_LOG_ERROR("Failed to update titles: {}", result.error().message);
+      for (std::size_t i = 0; i < rollbackData.size(); ++i)
+      {
+        rollbackData[i]->setTitle(oldTitles[i]);
+      }
+    }
   }
 
   void InspectorSidebar::onArtistEdited()
@@ -418,43 +425,34 @@ namespace ao::gtk
       return;
     }
 
-    auto const spec = MetadataCoordinator::MetadataUpdateSpec{.artist = newValue};
-
     auto ids = _currentSelection | std::views::transform([](auto const& row) { return row->getTrackId(); }) |
                std::ranges::to<std::vector>();
 
-    struct RollbackEntry
-    {
-      Glib::RefPtr<TrackRow> row;
-      std::string oldArtist;
-    };
-
-    auto rollbackData = std::vector<RollbackEntry>{};
-    rollbackData.reserve(_currentSelection.size());
+    auto rollbackRows = std::vector<Glib::RefPtr<TrackRow>>{};
+    auto oldValues = std::vector<std::string>{};
+    rollbackRows.reserve(_currentSelection.size());
+    oldValues.reserve(_currentSelection.size());
 
     for (auto const& row : _currentSelection)
     {
-      rollbackData.push_back({.row = row, .oldArtist = row->getArtist()});
-
-      // Optimistic update
+      oldValues.push_back(row->getArtist());
+      rollbackRows.push_back(row);
       row->setArtist(newValue);
     }
 
-    _metadataCoordinator.updateMetadata(_currentSession->musicLibrary.get(),
-                                        std::move(ids),
-                                        spec,
-                                        [rollbackData = std::move(rollbackData)](auto const& result)
-                                        {
-                                          if (!result)
-                                          {
-                                            APP_LOG_ERROR("Failed to update artists: {}", result.error().message);
+    auto const result = _session.commands().execute<ao::app::UpdateTrackMetadata>(ao::app::UpdateTrackMetadata{
+      .trackIds = ids,
+      .patch = ao::app::MetadataPatch{.optArtist = newValue},
+    });
 
-                                            for (auto const& entry : rollbackData)
-                                            {
-                                              entry.row->setArtist(entry.oldArtist);
-                                            }
-                                          }
-                                        });
+    if (!result)
+    {
+      APP_LOG_ERROR("Failed to update artists: {}", result.error().message);
+      for (std::size_t i = 0; i < rollbackRows.size(); ++i)
+      {
+        rollbackRows[i]->setArtist(oldValues[i]);
+      }
+    }
   }
 
   void InspectorSidebar::onAlbumEdited()
@@ -471,42 +469,99 @@ namespace ao::gtk
       return;
     }
 
-    auto const spec = MetadataCoordinator::MetadataUpdateSpec{.album = newValue};
-
     auto ids = _currentSelection | std::views::transform([](auto const& row) { return row->getTrackId(); }) |
                std::ranges::to<std::vector>();
 
-    struct RollbackEntry
-    {
-      Glib::RefPtr<TrackRow> row;
-      std::string oldAlbum;
-    };
-
-    auto rollbackData = std::vector<RollbackEntry>{};
-    rollbackData.reserve(_currentSelection.size());
+    auto rollbackRows = std::vector<Glib::RefPtr<TrackRow>>{};
+    auto oldValues = std::vector<std::string>{};
+    rollbackRows.reserve(_currentSelection.size());
+    oldValues.reserve(_currentSelection.size());
 
     for (auto const& row : _currentSelection)
     {
-      rollbackData.push_back({.row = row, .oldAlbum = row->getAlbum()});
-
-      // Optimistic update
+      oldValues.push_back(row->getAlbum());
+      rollbackRows.push_back(row);
       row->setAlbum(newValue);
     }
 
-    _metadataCoordinator.updateMetadata(_currentSession->musicLibrary.get(),
-                                        std::move(ids),
-                                        spec,
-                                        [rollbackData = std::move(rollbackData)](auto const& result)
-                                        {
-                                          if (!result)
-                                          {
-                                            APP_LOG_ERROR("Failed to update albums: {}", result.error().message);
+    auto const result = _session.commands().execute<ao::app::UpdateTrackMetadata>(ao::app::UpdateTrackMetadata{
+      .trackIds = ids,
+      .patch = ao::app::MetadataPatch{.optAlbum = newValue},
+    });
 
-                                            for (auto const& entry : rollbackData)
-                                            {
-                                              entry.row->setAlbum(entry.oldAlbum);
-                                            }
-                                          }
-                                        });
+    if (!result)
+    {
+      APP_LOG_ERROR("Failed to update albums: {}", result.error().message);
+      for (std::size_t i = 0; i < rollbackRows.size(); ++i)
+      {
+        rollbackRows[i]->setAlbum(oldValues[i]);
+      }
+    }
+  }
+  void InspectorSidebar::bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection)
+  {
+    _detailProjection = std::move(projection);
+    _detailSub = _detailProjection->subscribe(
+      [this](ao::app::TrackDetailSnapshot const& snap)
+      {
+        if (snap.selectionKind == ao::app::SelectionKind::None)
+        {
+          updateEmptyState();
+          return;
+        }
+
+        _heroBox.set_visible(true);
+        _audioBox.set_visible(true);
+
+        // Cover art from projection
+        if (snap.singleCoverArtId != ao::ResourceId{0})
+        {
+          auto pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
+          if (pixbuf)
+          {
+            _coverImage.set_pixbuf(pixbuf);
+            _coverImage.set_visible(true);
+            _noCoverLabel.set_visible(false);
+          }
+        }
+
+        // Audio properties from projection
+        if (snap.audio.codecId.optValue && !snap.audio.codecId.mixed)
+        {
+          _formatLabel.set_text(formatCodecId(*snap.audio.codecId.optValue));
+        }
+        else
+        {
+          _formatLabel.set_text(snap.audio.codecId.mixed ? "Mixed" : "Unknown");
+        }
+
+        if (snap.audio.sampleRate.optValue && !snap.audio.sampleRate.mixed)
+        {
+          _sampleRateLabel.set_text(formatSampleRate(*snap.audio.sampleRate.optValue));
+        }
+        else
+        {
+          _sampleRateLabel.set_text(snap.audio.sampleRate.mixed ? "Mixed" : "Unknown");
+        }
+
+        if (snap.audio.channels.optValue && !snap.audio.channels.mixed)
+        {
+          _channelsLabel.set_text(std::format("{} Ch", *snap.audio.channels.optValue));
+        }
+        else
+        {
+          _channelsLabel.set_text(snap.audio.channels.mixed ? "Mixed" : "Unknown");
+        }
+
+        if (snap.audio.durationMs.optValue && !snap.audio.durationMs.mixed)
+        {
+          auto const durationMs = std::chrono::milliseconds{*snap.audio.durationMs.optValue};
+          _durationLabel.set_text(formatDuration(durationMs));
+        }
+        else
+        {
+          _durationLabel.set_text(snap.audio.durationMs.mixed ? "Mixed" : "Unknown");
+        }
+      });
   }
 } // namespace ao::gtk

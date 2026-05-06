@@ -2,9 +2,20 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "MainWindow.h"
+#include "PlaybackController.h"
 #include "PlaylistExporter.h"
 #include <ao/audio/Player.h>
 #include <ao/utility/Log.h>
+#include <runtime/CommandTypes.h>
+#include <runtime/EventTypes.h>
+#include <runtime/ProjectionTypes.h>
+
+#ifdef ALSA_FOUND
+#include <ao/audio/backend/AlsaProvider.h>
+#endif
+#ifdef PIPEWIRE_FOUND
+#include <ao/audio/backend/PipeWireProvider.h>
+#endif
 
 #include "CoverArtWidget.h"
 #include "ImportProgressDialog.h"
@@ -45,33 +56,29 @@ namespace ao::gtk
     {
       return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
     }
-
-    ao::ListId rootParentId()
-    {
-      return ao::ListId{0};
-    }
   }
 
-  MainWindow::MainWindow()
-    : _librarySession{nullptr}, _coverArtWidget{nullptr}
+  MainWindow::MainWindow(ao::app::AppSession& session)
+    : _session{session}, _coverArtWidget{nullptr}
   {
     set_title("Aobus");
 
     // Set default window size
     set_default_size(ao::app::kDefaultWindowWidth, ao::app::kDefaultWindowHeight);
 
-    // Initialize cover art widget
-    _coverArtWidget = std::make_unique<CoverArtWidget>();
+    // Initialize cover art cache (LRU 100 entries)
+    _coverArtCache = std::make_unique<CoverArtCache>(100);
+
+    // Initialize cover art widget (self-wires to ViewSelectionChanged)
+    _coverArtWidget = std::make_unique<CoverArtWidget>(_session, *_coverArtCache);
 
     // Initialize dispatcher
     _dispatcher = std::make_shared<GtkMainThreadDispatcher>();
 
-    // Initialize cover art cache (LRU 100 entries)
-    _coverArtCache = std::make_unique<CoverArtCache>(100);
-
     // Initialize TagEditController
     _tagEditController = std::make_unique<TagEditController>(
       *this,
+      _session,
       TagEditController::Callbacks{.onStatusMessage = [this](std::string const& msg) { showStatusMessage(msg); },
                                    .onTagsMutated =
                                      []()
@@ -79,114 +86,105 @@ namespace ao::gtk
                                      // Additional invalidation/update logic if needed
                                    }});
 
-    _metadataCoordinator = std::make_unique<MetadataCoordinator>(_dispatcher);
+    // Initialize list sidebar controller (must exist before TrackPageGraph)
+    _listSidebarController = std::make_unique<ListSidebarController>(
+      *this,
+      _session,
+      ListSidebarController::Callbacks{.onListSelected = [this](ao::ListId listId) { _trackPageGraph->show(listId); },
+                                       .onListsChanged =
+                                         [this]()
+                                       {
+                                         if (_rowDataProvider)
+                                         {
+                                           auto txn = _session.musicLibrary().readTransaction();
+                                           rebuildListPages(txn);
+                                         }
+                                       },
+                                       .onListCreatedAndSelected =
+                                         [this](ao::ListId listId)
+                                       {
+                                         if (_rowDataProvider)
+                                         {
+                                           auto txn = _session.musicLibrary().readTransaction();
+                                           rebuildListPages(txn);
+                                           _listSidebarController->select(listId);
+                                         }
+                                       },
+                                       .getListMembership = [this](ao::ListId listId) -> ao::model::TrackIdList*
+                                       {
+                                         if (auto* ctx = _trackPageGraph->find(listId))
+                                         {
+                                           return ctx->membershipList.get();
+                                         }
+                                         return nullptr;
+                                       }});
 
     // Initialize track page graph
     _trackPageGraph = std::make_unique<TrackPageGraph>(
       _stack,
       _trackColumnLayoutModel,
-      *_metadataCoordinator,
-      TrackPageGraph::Callbacks{
-        .onSelectionChanged =
-          [this](std::vector<ao::TrackId> const& ids)
-        {
-          updateCoverArt(ids);
-          onTrackSelectionChanged();
-        },
-        .onContextMenuRequested =
-          [this](TrackViewPage& page, double posX, double posY)
-        {
-          auto const listId = page.getListId();
-          auto* const ctx = _trackPageGraph->find(listId);
-          TrackSelectionContext const selection{.listId = listId,
-                                                .selectedIds = page.getSelectedTrackIds(),
-                                                .membershipList = ctx != nullptr ? ctx->membershipList.get() : nullptr};
-          _tagEditController->showTrackContextMenu(page, selection, posX, posY);
-        },
-        .onTagEditRequested =
-          [this](TrackViewPage& page, std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
-        {
-          if (relativeTo == nullptr)
-          {
-            return;
-          }
-
-          auto const listId = page.getListId();
-          auto* const ctx = _trackPageGraph->find(listId);
-          TrackSelectionContext const selection{.listId = listId,
-                                                .selectedIds = ids,
-                                                .membershipList = ctx != nullptr ? ctx->membershipList.get() : nullptr};
-          _tagEditController->showTagEditor(selection, *relativeTo);
-        },
-        .onTrackActivated = [this](TrackViewPage& page, ao::TrackId id)
-        { _playbackCoordinator->startPlaybackFromVisiblePage(page, id); },
-        .onCreateSmartListRequested =
-          [this](TrackViewPage& page, std::string const& expression)
-        {
-          if (_listSidebarController == nullptr)
-          {
-            return;
-          }
-
-          auto parentListId = page.getListId();
-
-          if (parentListId == allTracksListId())
-          {
-            parentListId = rootParentId();
-          }
-
-          _listSidebarController->createSmartListFromExpression(parentListId, expression);
-        }});
+      _session,
+      _playbackController.get(),
+      *_tagEditController,
+      *_listSidebarController,
+      TrackPageGraph::Callbacks{.onSelectionChanged = [this](std::vector<ao::TrackId> const& ids)
+                                {
+                                  updateCoverArt(ids);
+                                  onTrackSelectionChanged();
+                                }});
 
     // Initialize inspector sidebar
-    _inspectorSidebar = std::make_unique<InspectorSidebar>(*_metadataCoordinator, *_coverArtCache);
+    _inspectorSidebar = std::make_unique<InspectorSidebar>(_session, *_coverArtCache);
     _inspectorSidebar->signalTagEditRequested().connect(
       [this](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
       {
-        if (!_librarySession || relativeTo == nullptr)
+        if (!_rowDataProvider || relativeTo == nullptr)
         {
           return;
         }
 
-        auto const selection = TrackSelectionContext{.listId = allTracksListId(), // Sidebar edit is global
-                                                     .selectedIds = ids,
-                                                     .membershipList = nullptr};
+        auto const selection =
+          TrackSelectionContext{.listId = allTracksListId(), .selectedIds = ids, .membershipList = nullptr};
 
         _tagEditController->showTagEditor(selection, *relativeTo);
       });
 
-    // Initialize playback coordinator
-    _playbackCoordinator = std::make_unique<PlaybackCoordinator>(
-      *this, _dispatcher, [this]() { return _librarySession ? _librarySession->rowDataProvider.get() : nullptr; });
+    // Bind inspector sidebar to focused-view detail projection (cover art + audio auto-update)
+    _inspectorSidebar->bindToDetailProjection(_session.queries().detailProjection(ao::app::FocusedViewTarget{}));
+
+    // Initialize playback bar (self-wires to AppSession)
+    _playbackBar = std::make_unique<PlaybackBar>(_session);
 
     // Initialize import/export coordinator
     _importExportCoordinator = std::make_unique<ImportExportCoordinator>(
       *this,
+      _session,
       ImportExportCallbacks{
-        .getCurrentSession = [this]() { return _librarySession.get(); },
-        .onLibrarySessionCreated = [this](std::unique_ptr<LibrarySession> session)
-        { installLibrarySession(std::move(session)); },
+        .onOpenNewLibrary =
+          [this](std::filesystem::path const& path)
+        {
+          // Handled externally — opens a new window
+        },
         .onLibraryDataMutated =
           [this]()
         {
-          if (_librarySession)
+          if (_rowDataProvider)
           {
-            _librarySession->rowDataProvider->loadAll();
+            _rowDataProvider->loadAll();
+            _session.reloadAllTracks();
 
-            auto txn = _librarySession->musicLibrary->readTransaction();
-            _librarySession->allTrackIds->reloadFromStore(txn);
+            auto txn = _session.musicLibrary().readTransaction();
             rebuildListPages(txn);
 
             if (_statusBar)
             {
-              _statusBar->setTrackCount(_librarySession->allTrackIds->size());
+              _statusBar->setTrackCount(_session.allTracks().size());
             }
           }
         },
         .onProgressUpdated = [this](double fraction, std::string const& info) { updateImportProgress(fraction, info); },
         .onStatusMessage = [this](std::string const& msg) { showStatusMessage(msg); },
-        .onTitleChanged = [this](std::string const& title) { set_title(title); }},
-      _dispatcher);
+        .onTitleChanged = [this](std::string const& title) { set_title(title); }});
 
     setupMenu();
     setupLayout();
@@ -202,9 +200,11 @@ namespace ao::gtk
 
   MainWindow::~MainWindow()
   {
-    saveSession();
+    _tracksMutatedSubscription.reset();
+    _importProgressSubscription.reset();
+    _importCompletedSubscription.reset();
 
-    // std::jthread auto-joins on destruction, no explicit join needed
+    saveSession();
   }
 
   TrackPageContext const* MainWindow::currentVisibleTrackPageContext() const
@@ -222,46 +222,81 @@ namespace ao::gtk
     _trackPageGraph->show(listId);
   }
 
-  void MainWindow::updatePlaybackStatus(ao::audio::Player::Status const& status)
+  void MainWindow::initializeSession()
   {
+    // Create row data provider from AppSession's library
+    _rowDataProvider = std::make_unique<TrackRowDataProvider>(_session.musicLibrary());
+    _rowDataProvider->loadAll();
+
+    // Populate the all-tracks list from LMDB (replaces old makeLibrarySession's reloadFromStore)
+    _session.reloadAllTracks();
+
+    // Register audio backend providers
+#ifdef PIPEWIRE_FOUND
+    _session.addAudioProvider(std::make_unique<ao::audio::backend::PipeWireProvider>());
+#endif
+#ifdef ALSA_FOUND
+    _session.addAudioProvider(std::make_unique<ao::audio::backend::AlsaProvider>());
+#endif
+
+    // Apply pending output selection from session restore
+    if (!_pendingOutputBackend.empty())
+    {
+      _session.commands().execute<ao::app::SetPlaybackOutput>(ao::app::SetPlaybackOutput{
+        .backendId = _pendingOutputBackend,
+        .deviceId = _pendingOutputDevice,
+        .profileId = _pendingOutputProfile,
+      });
+    }
+
+    // Create the shell-side playback controller
+    _playbackController = std::make_unique<PlaybackController>(_session, *_rowDataProvider);
+
+    _trackPageGraph->setPlaybackController(*_playbackController);
+
+    // Import progress
+    _importProgressSubscription = _session.events().subscribe<ao::app::ImportProgressUpdated>(
+      [this](ao::app::ImportProgressUpdated const& event) { updateImportProgress(event.fraction, event.message); });
+
+    // Import completed — reload data
+    _importCompletedSubscription = _session.events().subscribe<ao::app::LibraryImportCompleted>(
+      [this](ao::app::LibraryImportCompleted const& /*event*/)
+      {
+        if (_rowDataProvider && _statusBar)
+        {
+          _rowDataProvider->loadAll();
+          _session.reloadAllTracks();
+          _statusBar->setTrackCount(_session.allTracks().size());
+        }
+        _statusBar->clearImportProgress();
+      });
+
+    // Subscribe to track mutations — invalidate cached row data + notify all views
+    _tracksMutatedSubscription = _session.events().subscribe<ao::app::TracksMutated>(
+      [this](ao::app::TracksMutated const& event)
+      {
+        if (!_rowDataProvider)
+        {
+          return;
+        }
+        for (auto const trackId : event.trackIds)
+        {
+          _rowDataProvider->invalidate(trackId);
+        }
+        _session.allTracks().notifyUpdated(event.trackIds);
+      });
+
+    // Initial state refresh to populate output devices
+    _session.commands().execute<ao::app::RefreshPlaybackState>(ao::app::RefreshPlaybackState{});
+
+    _tagEditController->setDataProvider(_rowDataProvider.get());
+
     if (_statusBar)
     {
-      _statusBar->setPlaybackDetails(status);
-    }
-  }
-
-  void MainWindow::updatePlayingTrack(std::optional<ao::TrackId> trackId)
-  {
-    if (_trackPageGraph)
-    {
-      _trackPageGraph->setPlayingTrack(trackId);
-    }
-  }
-
-  void MainWindow::showPlaybackMessage(std::string const& message, std::optional<std::chrono::seconds> timeout)
-  {
-    if (_statusBar != nullptr)
-    {
-      constexpr auto kDefaultStatusTimeout = std::chrono::seconds{5};
-      _statusBar->showMessage(message, timeout.value_or(kDefaultStatusTimeout));
-    }
-  }
-
-  void MainWindow::installLibrarySession(std::unique_ptr<LibrarySession> session)
-  {
-    auto txn = session->musicLibrary->readTransaction();
-    _librarySession = std::move(session);
-
-    if (_tagEditController)
-    {
-      _tagEditController->setLibrarySession(_librarySession.get());
+      _statusBar->setTrackCount(_session.allTracks().size());
     }
 
-    if (_statusBar)
-    {
-      _statusBar->setTrackCount(_librarySession->allTrackIds->size());
-    }
-
+    auto txn = _session.musicLibrary().readTransaction();
     rebuildListPages(txn);
 
     auto const activeAllTracksListId = allTracksListId();
@@ -328,38 +363,6 @@ namespace ao::gtk
     _leftBox.set_hexpand(true);
     _leftBox.set_vexpand(true);
     _leftBox.set_homogeneous(false);
-
-    // Initialize list sidebar controller
-    _listSidebarController = std::make_unique<ListSidebarController>(
-      *this,
-      ListSidebarController::Callbacks{.onListSelected = [this](ao::ListId listId) { _trackPageGraph->show(listId); },
-                                       .onListsChanged =
-                                         [this]()
-                                       {
-                                         if (_librarySession)
-                                         {
-                                           auto txn = _librarySession->musicLibrary->readTransaction();
-                                           rebuildListPages(txn);
-                                         }
-                                       },
-                                       .onListCreatedAndSelected =
-                                         [this](ao::ListId listId)
-                                       {
-                                         if (_librarySession)
-                                         {
-                                           auto txn = _librarySession->musicLibrary->readTransaction();
-                                           rebuildListPages(txn);
-                                           _listSidebarController->select(listId);
-                                         }
-                                       },
-                                       .getListMembership = [this](ao::ListId listId) -> ao::model::TrackIdList*
-                                       {
-                                         if (auto* ctx = _trackPageGraph->find(listId))
-                                         {
-                                           return ctx->membershipList.get();
-                                         }
-                                         return nullptr;
-                                       }});
 
     // Add sidebar actions to main window
     _listSidebarController->addActionsTo(*this);
@@ -519,15 +522,11 @@ namespace ao::gtk
     auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
     mainBox->append(_menuBar);
 
-    mainBox->append(_playbackCoordinator->playbackBar());
+    mainBox->append(*_playbackBar);
     mainBox->append(_paned);
 
     // Status bar at bottom
-    _statusBar = std::make_unique<StatusBar>();
-    _statusBar->signalNowPlayingClicked().connect(sigc::mem_fun(*this, &MainWindow::jumpToPlayingList));
-
-    _playbackCoordinator->signalOutputChanged().connect(sigc::mem_fun(*this, &MainWindow::onOutputChanged));
-
+    _statusBar = std::make_unique<StatusBar>(_session);
     auto* statusSeparator = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
     mainBox->append(*statusSeparator);
     mainBox->append(*_statusBar);
@@ -540,36 +539,33 @@ namespace ao::gtk
   {
     APP_LOG_DEBUG("rebuildListPages called");
 
-    _trackPageGraph->rebuild(*_librarySession, txn);
+    _trackPageGraph->rebuild(*_rowDataProvider, txn);
 
     if (_listSidebarController)
     {
-      _listSidebarController->rebuildTree(*_librarySession, txn);
+      _listSidebarController->rebuildTree(*_rowDataProvider, txn);
     }
   }
 
   void MainWindow::showStatusMessage(std::string const& message)
   {
-    if (_statusBar)
-    {
-      _statusBar->showMessage(message);
-    }
+    _session.commands().execute<ao::app::PostNotification>(ao::app::PostNotification{
+      .severity = ao::app::NotificationSeverity::Info,
+      .message = message,
+    });
   }
 
   void MainWindow::updateCoverArt(std::vector<ao::TrackId> const& selectedIds)
   {
-    if (!_librarySession || selectedIds.empty())
+    if (!_rowDataProvider || selectedIds.empty())
     {
-      // Clear cover art - use default
       _coverArtWidget->clearCover();
       return;
     }
 
-    // Get the first selected track
     auto trackId = selectedIds.front();
 
-    // Look up cover art ID via provider
-    auto coverArtId = _librarySession->rowDataProvider->getCoverArtId(trackId);
+    auto coverArtId = _rowDataProvider->getCoverArtId(trackId);
 
     if (!coverArtId)
     {
@@ -577,9 +573,8 @@ namespace ao::gtk
       return;
     }
 
-    // Load cover art from ResourceStore and display
-    ao::lmdb::ReadTransaction txn(_librarySession->musicLibrary->readTransaction());
-    auto resourceReader = _librarySession->musicLibrary->resources().reader(txn);
+    ao::lmdb::ReadTransaction txn(_session.musicLibrary().readTransaction());
+    auto resourceReader = _session.musicLibrary().resources().reader(txn);
     auto optBytes = resourceReader.get(*coverArtId);
 
     if (optBytes)
@@ -612,7 +607,7 @@ namespace ao::gtk
 
     if (_inspectorSidebar)
     {
-      _inspectorSidebar->updateSelection(_librarySession.get(), ctx->page->getSelectedRows());
+      _inspectorSidebar->updateSelection(_rowDataProvider.get(), ctx->page->getSelectedRows());
     }
 
     if (_statusBar)
@@ -629,9 +624,9 @@ namespace ao::gtk
       {
         _statusBar->clearImportProgress();
 
-        if (_librarySession)
+        if (_rowDataProvider)
         {
-          _statusBar->setTrackCount(_librarySession->allTrackIds->size());
+          _statusBar->setTrackCount(_session.allTracks().size());
         }
       }
       else
@@ -643,7 +638,7 @@ namespace ao::gtk
 
   void MainWindow::saveSession()
   {
-    _sessionPersistence.save(*this, _paned, _trackColumnLayoutModel, _librarySession.get());
+    _sessionPersistence.save(*this, _paned, _trackColumnLayoutModel, _session.musicLibrary().rootPath());
   }
 
   void MainWindow::loadSession()
@@ -657,10 +652,9 @@ namespace ao::gtk
 
     if (!backend.empty())
     {
-      if (auto* controller = _playbackCoordinator->player())
-      {
-        controller->setOutput(backend, deviceId, profile);
-      }
+      _pendingOutputBackend = backend;
+      _pendingOutputDevice = deviceId;
+      _pendingOutputProfile = profile;
     }
 
     if (!libraryPath.empty())
@@ -673,29 +667,6 @@ namespace ao::gtk
     }
   }
 
-  void MainWindow::jumpToPlayingList()
-  {
-    _playbackCoordinator->jumpToPlayingList();
-  }
-
-  void MainWindow::onOutputChanged(ao::audio::BackendId const& backend,
-                                   ao::audio::DeviceId const& deviceId,
-                                   ao::audio::ProfileId const& profile)
-  {
-    auto* controller = _playbackCoordinator->player();
-
-    if (controller == nullptr)
-    {
-      return;
-    }
-
-    controller->setOutput(backend, deviceId, profile);
-    _statusBar->showMessage("Switched to " + std::string(backend));
-
-    // Persist selection to config
-    _sessionPersistence.updateAudioBackend(backend, profile, deviceId);
-  }
-
   std::optional<ao::audio::TrackPlaybackDescriptor> MainWindow::currentSelectionPlaybackDescriptor() const
   {
     auto const* ctx = _trackPageGraph->currentVisible();
@@ -705,7 +676,6 @@ namespace ao::gtk
       return std::nullopt;
     }
 
-    // Get primary selected track
     auto trackId = ctx->page->getPrimarySelectedTrackId();
 
     if (!trackId)
@@ -713,7 +683,6 @@ namespace ao::gtk
       return std::nullopt;
     }
 
-    // Get playback descriptor
-    return _librarySession->rowDataProvider->getPlaybackDescriptor(*trackId);
+    return _rowDataProvider->getPlaybackDescriptor(*trackId);
   }
 } // namespace ao::gtk

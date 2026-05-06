@@ -4,19 +4,25 @@
 #pragma once
 
 #include "CoverArtCache.h"
-#include "MetadataCoordinator.h"
 #include "TagEditor.h"
 #include "TrackRow.h"
 #include <ao/Type.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/ProjectionTypes.h>
 
 #include <gtkmm.h>
 
 #include <memory>
 #include <vector>
 
+namespace ao::app
+{
+  class AppSession;
+}
+
 namespace ao::gtk
 {
-  struct LibrarySession;
+  class TrackRowDataProvider;
 
   /**
    * @brief InspectorSidebar displays details and allows editing of track metadata.
@@ -27,7 +33,7 @@ namespace ao::gtk
   public:
     using TagEditRequestedSignal = sigc::signal<void(std::vector<ao::TrackId> const&, Gtk::Widget*)>;
 
-    explicit InspectorSidebar(MetadataCoordinator& metadataCoordinator, CoverArtCache& coverArtCache);
+    explicit InspectorSidebar(ao::app::AppSession& session, CoverArtCache& coverArtCache);
     ~InspectorSidebar() override;
 
     TagEditRequestedSignal& signalTagEditRequested() { return _tagEditRequested; }
@@ -36,7 +42,10 @@ namespace ao::gtk
      * @brief Update the sidebar with the current selection.
      * @param selectedRows The list of currently selected track rows.
      */
-    void updateSelection(LibrarySession* session, std::vector<Glib::RefPtr<TrackRow>> const& selectedRows);
+    void updateSelection(TrackRowDataProvider* dataProvider, std::vector<Glib::RefPtr<TrackRow>> const& selectedRows);
+
+    /// Bind to a runtime detail projection for cover art + audio property auto-updates.
+    void bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection);
 
   private:
     // Multi-select Aggregation
@@ -57,18 +66,20 @@ namespace ao::gtk
     void buildAudioSection();
 
     void updateEmptyState();
-    void updateSingleSelection(LibrarySession* session, Glib::RefPtr<TrackRow> const& row);
-    void updateMultiSelection(LibrarySession* session, std::vector<Glib::RefPtr<TrackRow>> const& rows);
+    void updateSingleSelection(TrackRowDataProvider* dataProvider, Glib::RefPtr<TrackRow> const& row);
+    void updateMultiSelection(TrackRowDataProvider* dataProvider, std::vector<Glib::RefPtr<TrackRow>> const& rows);
 
     void onTitleEdited();
     void onArtistEdited();
     void onAlbumEdited();
 
-    MetadataCoordinator& _metadataCoordinator;
+    ao::app::AppSession& _session;
     CoverArtCache& _coverArtCache;
 
-    LibrarySession* _currentSession = nullptr;
+    TrackRowDataProvider* _dataProvider = nullptr;
     std::vector<Glib::RefPtr<TrackRow>> _currentSelection;
+    std::shared_ptr<ao::app::ITrackDetailProjection> _detailProjection;
+    ao::app::Subscription _detailSub;
 
     // UI Components
     Gtk::ScrolledWindow _scrolledWindow;

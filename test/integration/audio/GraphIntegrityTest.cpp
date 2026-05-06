@@ -3,7 +3,6 @@
 
 #include <ao/audio/Engine.h>
 #include <ao/audio/NullBackend.h>
-#include <ao/utility/IMainThreadDispatcher.h>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_all.hpp>
@@ -13,15 +12,6 @@
 #include <thread>
 
 using namespace ao::audio;
-
-namespace
-{
-  class ImmediateDispatcher final : public ao::IMainThreadDispatcher
-  {
-  public:
-    void dispatch(std::function<void()> callback) override { callback(); }
-  };
-}
 
 TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
 {
@@ -33,7 +23,6 @@ TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
     return;
   }
 
-  auto const dispatcher = std::make_shared<ImmediateDispatcher>();
   auto backend = std::make_unique<NullBackend>();
   auto const device = Device{.id = DeviceId{"null"},
                              .displayName = "Null",
@@ -41,7 +30,7 @@ TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
                              .isDefault = false,
                              .backendId = kBackendNone};
 
-  auto engine = Engine{std::move(backend), device, dispatcher};
+  auto engine = Engine{std::move(backend), device};
 
   auto const descriptor =
     TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Test Title", .artist = "Test Artist"};
