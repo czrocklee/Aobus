@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/ usr / bin / env bash
 #Build script for Aobus
 #Usage :./ build.sh[debug | release | pgo1 | pgo2 | profile][--clean][--tidy][--clang]
 
@@ -10,10 +10,11 @@ CLEAN="false"
 ENABLE_TIDY="false"
 USE_CLANG="false"
 ENABLE_ASAN="false"
+ENABLE_TSAN="false"
 VERBOSE="false"
 
 show_usage() {
-    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang] [--asan] [--verbose]"
+    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang] [--asan] [--tsan] [--verbose]"
     echo "  debug     - Debug build (default, no sanitizers)"
     echo "  release   - Release build (optimized, no sanitizers)"
     echo "  pgo1      - PGO step 1: instrumented build for profile generation"
@@ -23,6 +24,7 @@ show_usage() {
     echo "  --tidy    - Enable clang-tidy during the configure/build (implies --clang)"
     echo "  --clang   - Build with clang/clang++ in a dedicated build directory"
     echo "  --asan    - Enable address/undefined sanitizers (Debug only, default: off)"
+    echo "  --tsan    - Enable thread sanitizer (Debug only, default: off)"
     echo "  --verbose - Show full build lines"
 }
 
@@ -40,6 +42,9 @@ do
             ;;
         --asan)
             ENABLE_ASAN="true"
+            ;;
+        --tsan)
+            ENABLE_TSAN="true"
             ;;
         --clang)
             USE_CLANG="true"
@@ -78,6 +83,7 @@ SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
 TIDY_SUFFIX=""
 COMPILER_SUFFIX=""
 ASAN_SUFFIX=""
+TSAN_SUFFIX=""
 COMPILER_NAME="gcc"
 
 if [[ "$ENABLE_TIDY" == "true" ]]; then
@@ -197,5 +203,6 @@ echo "  Build dir: $BUILD_DIR"
 echo "  compiler: $COMPILER_NAME"
 echo "  clang-tidy: $ENABLE_TIDY"
 echo "  asan: $ENABLE_ASAN"
+echo "  tsan: $ENABLE_TSAN"
 echo "  verbose: $VERBOSE"
 echo "  tests: ao_test + ao_test_linux"

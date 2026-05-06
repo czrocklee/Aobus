@@ -6,7 +6,6 @@
 #include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/Property.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/detail/RouteTracker.h>
 
@@ -69,8 +68,8 @@ namespace ao::audio
     void setBackend(std::unique_ptr<IBackend> backend, Device const& device);
     void updateDevice(Device const& device);
 
-    [[nodiscard]] Subscription onTrackEnded(std::function<void()> callback);
-    [[nodiscard]] Subscription onRouteChanged(OnRouteChanged callback);
+    void setOnTrackEnded(std::function<void()> callback);
+    void setOnRouteChanged(OnRouteChanged callback);
 
     RouteStatus routeStatus() const;
 

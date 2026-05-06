@@ -4,6 +4,7 @@ project(aobus VERSION 0.1.0)
 
 option(AOBUS_ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
 option(AOBUS_ENABLE_ASAN "Enable address/undefined sanitizers (debug builds only)" OFF)
+option(AOBUS_ENABLE_TSAN "Enable thread sanitizer (debug builds only)" OFF)
 
 include(cmake/CompilerOptions.cmake)
 include(cmake/Dependencies.cmake)

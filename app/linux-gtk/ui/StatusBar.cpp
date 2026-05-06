@@ -8,6 +8,7 @@
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
 #include <runtime/CommandTypes.h>
+#include <runtime/EventTypes.h>
 #include <runtime/StateTypes.h>
 
 #include "ui/ThemeBus.h"
@@ -193,6 +194,14 @@ namespace ao::gtk
         auto const& latest = feed.entries.back();
         auto const duration = latest.optTimeout.value_or(std::chrono::seconds{5});
         showMessage(latest.message, std::chrono::duration_cast<std::chrono::seconds>(duration));
+      });
+
+    // Self-wire to output changes for tooltip/status updates
+    _outputChangedSub = _session.events().subscribe<ao::app::PlaybackOutputChanged>(
+      [this](ao::app::PlaybackOutputChanged const&)
+      {
+        auto const state = _session.playback().snapshot();
+        setPlaybackState(state);
       });
 
     // Playback details (Left)
