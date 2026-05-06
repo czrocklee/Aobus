@@ -5,6 +5,7 @@
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Player.h>
+#include <ao/audio/QualityAnalyzer.h>
 #include <ao/utility/Log.h>
 
 #include <algorithm>
@@ -20,48 +21,6 @@ namespace ao::audio
 {
   namespace
   {
-    void appendLine(std::string& text, std::string_view line)
-    {
-      if (line.empty())
-      {
-        return;
-      }
-
-      if (!text.empty())
-      {
-        text += '\n';
-      }
-
-      text += line;
-    }
-
-    bool isLosslessBitDepthChange(Format const& src, Format const& dst) noexcept
-    {
-      if (src.isFloat == dst.isFloat)
-      {
-        auto const srcBits = src.validBits != 0 ? src.validBits : src.bitDepth;
-        auto const dstBits = dst.validBits != 0 ? dst.validBits : dst.bitDepth;
-
-        return srcBits <= dstBits;
-      }
-
-      if (!src.isFloat && dst.isFloat)
-      {
-        auto const srcBits = src.validBits != 0 ? src.validBits : src.bitDepth;
-
-        if (dst.bitDepth == 32)
-        {
-          return srcBits <= 24;
-        }
-
-        if (dst.bitDepth == 64)
-        {
-          return srcBits <= 32;
-        }
-      }
-
-      return false;
-    }
   }
 
   struct Player::Impl final
@@ -100,23 +59,14 @@ namespace ao::audio
     flow::Graph cachedSystemGraph;
     flow::Graph mergedGraph;
 
-    Quality quality = Quality::Unknown;
-    std::string qualityTooltip;
+    QualityResult qualityResult;
     std::optional<TrackPlaybackDescriptor> currentTrack;
 
     std::function<void()> onTrackEnded;
 
-    // Quality analysis helpers
-    std::vector<flow::Node const*> findPlaybackPath(std::string const& startId) const;
-    void assessNodeQuality(flow::Node const& node, flow::Node const* nextNode);
-    void processInputSources(flow::Node const& node,
-                             std::span<flow::Node const* const> path,
-                             std::unordered_map<std::string, std::set<std::string>> const& inputSources);
-
     void handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices);
     void handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation);
     void updateMergedGraph();
-    void analyzeAudioQuality();
   };
 
   void Player::Impl::handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices)
@@ -197,8 +147,8 @@ namespace ao::audio
     updateMergedGraph();
     if (onQualityChanged)
     {
-      auto const s = owner->status();
-      onQualityChanged(s.quality, s.isReady);
+      auto const playerStatus = owner->status();
+      onQualityChanged(playerStatus.quality, playerStatus.isReady);
     }
   }
 
@@ -256,207 +206,7 @@ namespace ao::audio
       mergedGraph.connections.push_back({.sourceId = "ao-engine", .destId = streamNodeId, .isActive = true});
     }
 
-    analyzeAudioQuality();
-  }
-
-  std::vector<flow::Node const*> Player::Impl::findPlaybackPath(std::string const& startId) const
-  {
-    std::vector<flow::Node const*> path;
-    auto currentId = std::string_view{startId};
-    std::set<std::string_view> visited;
-
-    while (!currentId.empty() && !visited.contains(currentId))
-    {
-      visited.insert(currentId);
-
-      auto const it = std::ranges::find(mergedGraph.nodes, currentId, &flow::Node::id);
-
-      if (it == mergedGraph.nodes.end())
-      {
-        break;
-      }
-
-      path.push_back(&(*it));
-
-      auto nextId = std::string_view{};
-
-      for (auto const& link : mergedGraph.connections)
-      {
-        if (link.isActive && link.sourceId == currentId)
-        {
-          nextId = link.destId;
-          break;
-        }
-      }
-
-      currentId = nextId;
-    }
-
-    return path;
-  }
-
-  void Player::Impl::processInputSources(flow::Node const& node,
-                                         std::span<flow::Node const* const> path,
-                                         std::unordered_map<std::string, std::set<std::string>> const& inputSources)
-  {
-    if (inputSources.contains(node.id))
-    {
-      auto const& sources = inputSources.at(node.id);
-      auto otherAppNames = std::vector<std::string>{};
-
-      for (auto const& srcId : sources)
-      {
-        bool const isInternal = std::ranges::contains(path, srcId, &flow::Node::id);
-
-        if (!isInternal)
-        {
-          auto const it = std::ranges::find(mergedGraph.nodes, srcId, &flow::Node::id);
-
-          if (it != mergedGraph.nodes.end())
-          {
-            otherAppNames.push_back(it->name);
-          }
-        }
-      }
-
-      if (!otherAppNames.empty())
-      {
-        std::ranges::sort(otherAppNames);
-        auto const [first, last] = std::ranges::unique(otherAppNames);
-        otherAppNames.erase(first, last);
-        auto apps = std::string{};
-
-        for (size_t j = 0; j < otherAppNames.size(); ++j)
-        {
-          apps += otherAppNames[j];
-
-          if (j < otherAppNames.size() - 1)
-          {
-            apps += ", ";
-          }
-        }
-
-        appendLine(qualityTooltip, std::format("• Mixed: {} shared with {}", node.name, apps));
-        quality = std::max(quality, Quality::LinearIntervention);
-      }
-    }
-  }
-
-  void Player::Impl::assessNodeQuality(flow::Node const& node, flow::Node const* nextNode)
-  {
-    if (node.isLossySource)
-    {
-      appendLine(qualityTooltip, std::format("• Source: Lossy format ({})", node.name));
-      quality = std::max(quality, Quality::LossySource);
-    }
-
-    if (node.volumeNotUnity)
-    {
-      appendLine(qualityTooltip, std::format("• Volume: Modification at {}", node.name));
-      quality = std::max(quality, Quality::LinearIntervention);
-    }
-
-    if (node.isMuted)
-    {
-      appendLine(qualityTooltip, std::format("• Status: {} is MUTED", node.name));
-      quality = std::max(quality, Quality::LinearIntervention);
-    }
-
-    if (nextNode != nullptr)
-    {
-      if (node.optFormat && nextNode->optFormat)
-      {
-        auto const& f1 = *node.optFormat;
-        auto const& f2 = *nextNode->optFormat;
-
-        if (f1.sampleRate != f2.sampleRate)
-        {
-          appendLine(qualityTooltip, std::format("• Resampling: {}Hz → {}Hz", f1.sampleRate, f2.sampleRate));
-          quality = std::max(quality, Quality::LinearIntervention);
-        }
-
-        if (f1.channels != f2.channels)
-        {
-          appendLine(qualityTooltip, std::format("• Channels: {}ch → {}ch", f1.channels, f2.channels));
-          quality = std::max(quality, Quality::LinearIntervention);
-        }
-        else if (f1.bitDepth != f2.bitDepth || f1.isFloat != f2.isFloat)
-        {
-          if (isLosslessBitDepthChange(f1, f2))
-          {
-            appendLine(
-              qualityTooltip, f2.isFloat ? "• Bit-Transparent: Float mapping" : "• Bit-Transparent: Integer padding");
-            quality = std::max(quality, f2.isFloat ? Quality::LosslessFloat : Quality::LosslessPadded);
-          }
-          else
-          {
-            appendLine(qualityTooltip, std::format("• Precision: Truncated {}b → {}b", f1.bitDepth, f2.bitDepth));
-            quality = std::max(quality, Quality::LinearIntervention);
-          }
-        }
-      }
-    }
-  }
-
-  void Player::Impl::analyzeAudioQuality()
-  {
-    // Now analyze the merged graph
-    quality = Quality::BitwisePerfect;
-    qualityTooltip.clear();
-
-    if (mergedGraph.nodes.empty())
-    {
-      quality = Quality::Unknown;
-      return;
-    }
-
-    appendLine(qualityTooltip, "Audio Routing Analysis:");
-
-    // 1. Build linear path
-    auto const path = findPlaybackPath("ao-decoder");
-
-    // 2. Identify mixing sources
-    auto inputSources = std::unordered_map<std::string, std::set<std::string>>{};
-
-    for (auto const& link : mergedGraph.connections)
-    {
-      if (link.isActive)
-      {
-        inputSources[link.destId].insert(link.sourceId);
-      }
-    }
-
-    for (size_t i = 0; i < path.size(); ++i)
-    {
-      auto const* const node = path[i];
-      auto const* const nextNode = (i < path.size() - 1) ? path[i + 1] : nullptr;
-
-      assessNodeQuality(*node, nextNode);
-      processInputSources(*node, path, inputSources);
-    }
-
-    if (quality == Quality::BitwisePerfect)
-    {
-      appendLine(qualityTooltip, "• Signal Path: Byte-perfect from decoder to device");
-    }
-
-    switch (quality)
-    {
-      case Quality::BitwisePerfect:
-      case Quality::LosslessPadded: appendLine(qualityTooltip, "\nConclusion: Bit-perfect output"); break;
-
-      case Quality::LosslessFloat: appendLine(qualityTooltip, "\nConclusion: Lossless Conversion"); break;
-
-      case Quality::LinearIntervention:
-        appendLine(qualityTooltip, "\nConclusion: Linear intervention (Resampled/Mixed/Vol)");
-        break;
-
-      case Quality::LossySource: appendLine(qualityTooltip, "\nConclusion: Lossy source format"); break;
-
-      case Quality::Clipped: appendLine(qualityTooltip, "\nConclusion: Signal clipping detected"); break;
-
-      case Quality::Unknown: break;
-    }
+    qualityResult = analyzeAudioQuality(mergedGraph);
   }
 
   Player::Player()
@@ -545,8 +295,7 @@ namespace ao::audio
     _impl->cachedRouteStatus = {};
     _impl->cachedSystemGraph = {};
     _impl->mergedGraph = {};
-    _impl->quality = Quality::Unknown;
-    _impl->qualityTooltip.clear();
+    _impl->qualityResult = {};
     _impl->graphSubscription.reset();
     _impl->currentTrack = descriptor;
     _impl->engine->play(descriptor);
@@ -617,8 +366,7 @@ namespace ao::audio
     _impl->cachedRouteStatus = {};
     _impl->cachedSystemGraph = {};
     _impl->mergedGraph = {};
-    _impl->quality = Quality::Unknown;
-    _impl->qualityTooltip.clear();
+    _impl->qualityResult = {};
     _impl->graphSubscription.reset();
     _impl->currentTrack.reset();
     _impl->engine->stop();
@@ -667,9 +415,8 @@ namespace ao::audio
     status.muted = status.engine.muted;
     status.volumeAvailable = status.engine.volumeAvailable;
 
-    status.quality = _impl->quality;
-    status.qualityTooltip = _impl->qualityTooltip;
-
+    status.quality = _impl->qualityResult.quality;
+    status.qualityTooltip = _impl->qualityResult.tooltip;
     return status;
   }
 
@@ -711,8 +458,8 @@ namespace ao::audio
     _impl->updateMergedGraph();
     if (_impl->onQualityChanged)
     {
-      auto const s = this->status();
-      _impl->onQualityChanged(s.quality, s.isReady);
+      auto const playerStatus = this->status();
+      _impl->onQualityChanged(playerStatus.quality, playerStatus.isReady);
     }
   }
 
