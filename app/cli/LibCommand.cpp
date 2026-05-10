@@ -18,26 +18,27 @@ namespace ao::cli
 
     std::string formatUuid(std::array<std::byte, kUuidByteCount> const& id)
     {
-      constexpr std::size_t kUuidStringLength = 36;
-      constexpr std::size_t kFirstDashPos = 3;
-      constexpr std::size_t kSecondDashPos = 5;
-      constexpr std::size_t kThirdDashPos = 7;
-      constexpr std::size_t kFourthDashPos = 9;
-
-      auto result = std::string{};
-      result.reserve(kUuidStringLength);
-
-      for (auto const [idx, byte] : std::views::enumerate(id))
-      {
-        result += std::format("{:02x}", static_cast<unsigned char>(byte));
-
-        if (idx == kFirstDashPos || idx == kSecondDashPos || idx == kThirdDashPos || idx == kFourthDashPos)
-        {
-          result += "-";
-        }
-      }
-
-      return result;
+      return std::format("{:02x}{:02x}{:02x}{:02x}-"
+                         "{:02x}{:02x}-"
+                         "{:02x}{:02x}-"
+                         "{:02x}{:02x}-"
+                         "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+                         static_cast<unsigned char>(id[0]),
+                         static_cast<unsigned char>(id[1]),
+                         static_cast<unsigned char>(id[2]),
+                         static_cast<unsigned char>(id[3]),
+                         static_cast<unsigned char>(id[4]),
+                         static_cast<unsigned char>(id[5]),
+                         static_cast<unsigned char>(id[6]),
+                         static_cast<unsigned char>(id[7]),
+                         static_cast<unsigned char>(id[8]),
+                         static_cast<unsigned char>(id[9]),
+                         static_cast<unsigned char>(id[10]),
+                         static_cast<unsigned char>(id[11]),
+                         static_cast<unsigned char>(id[12]),
+                         static_cast<unsigned char>(id[13]),
+                         static_cast<unsigned char>(id[14]),
+                         static_cast<unsigned char>(id[15]));
     }
 
     std::string formatTimestamp(std::uint64_t unixMs)

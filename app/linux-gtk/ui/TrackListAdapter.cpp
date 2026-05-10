@@ -255,6 +255,21 @@ namespace ao::gtk
       });
   }
 
+  std::optional<std::size_t> TrackListAdapter::groupIndexForTrack(TrackId trackId) const
+  {
+    if (_projection == nullptr)
+    {
+      return std::nullopt;
+    }
+
+    if (auto const idx = _projection->indexOf(trackId))
+    {
+      return _projection->groupIndexAt(*idx);
+    }
+
+    return std::nullopt;
+  }
+
   void TrackListAdapter::setFilter(Glib::ustring const& filterText)
   {
     _filterText = filterText;

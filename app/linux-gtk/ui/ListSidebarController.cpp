@@ -103,11 +103,11 @@ namespace ao::gtk
 
     buildListTree(txn);
 
-    if (_pendingSelectId)
+    if (_pendingSelectId != ao::ListId{0})
     {
-      selectSidebarList(_pendingSelectId.value());
-      _session.workspace().navigateTo(_pendingSelectId.value());
-      _pendingSelectId.reset();
+      selectSidebarList(_pendingSelectId);
+      _session.workspace().navigateTo(_pendingSelectId);
+      _pendingSelectId = ao::ListId{0};
     }
   }
 

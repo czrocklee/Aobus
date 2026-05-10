@@ -67,6 +67,9 @@ namespace ao::gtk
     void syncOutputIconSize();
     void triggerSoulEasterEgg();
 
+    void rebuildOutputList();
+    void updateOutputTooltip(ao::app::PlaybackState const& state);
+
     // Output selection
     Gtk::Button _outputButton;
     AobusSoul _outputSoul;
@@ -115,8 +118,5 @@ namespace ao::gtk
     std::uint32_t _lastPositionMs = 0;
     std::uint32_t _lastDurationMs = 0;
     ao::audio::Transport _lastTransport = ao::audio::Transport::Idle;
-
-    void rebuildOutputList();
-    void updateOutputTooltip(ao::app::PlaybackState const& state);
   };
 } // namespace ao::gtk

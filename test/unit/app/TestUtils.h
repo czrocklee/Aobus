@@ -19,6 +19,10 @@ namespace ao::app::test
     std::string title = "Track";
     std::string artist = "Artist";
     std::string album = "Album";
+    std::string albumArtist{};
+    std::string genre{};
+    std::string composer{};
+    std::string work{};
     std::uint16_t year = 2020;
     std::uint16_t discNumber = 1;
     std::uint16_t trackNumber = 1;
@@ -50,6 +54,10 @@ namespace ao::app::test
         .title(spec.title)
         .artist(spec.artist)
         .album(spec.album)
+        .albumArtist(spec.albumArtist)
+        .genre(spec.genre)
+        .composer(spec.composer)
+        .work(spec.work)
         .year(spec.year)
         .discNumber(spec.discNumber)
         .trackNumber(spec.trackNumber);

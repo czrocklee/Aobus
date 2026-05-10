@@ -166,4 +166,129 @@ namespace ao::app::test
 
     CHECK(received);
   }
+
+  TEST_CASE("ViewService - createView with groupBy applies effective sort", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto events = EventBus{};
+    auto service = env.makeService(events);
+
+    auto result = service.createView({.groupBy = TrackGroupKey::Artist}, true);
+    auto snap = service.trackListState(result.viewId);
+
+    CHECK(snap.groupBy == TrackGroupKey::Artist);
+
+    std::vector<TrackSortField> const expected = {
+      TrackSortField::Artist, TrackSortField::Album,
+      TrackSortField::DiscNumber, TrackSortField::TrackNumber, TrackSortField::Title};
+    REQUIRE(snap.sortBy.size() == expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i)
+    {
+      CHECK(snap.sortBy[i].field == expected[i]);
+      CHECK(snap.sortBy[i].ascending == true);
+    }
+  }
+
+  TEST_CASE("ViewService - createView with Album groupBy", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto events = EventBus{};
+    auto service = env.makeService(events);
+
+    auto result = service.createView({.groupBy = TrackGroupKey::Album}, true);
+    auto snap = service.trackListState(result.viewId);
+
+    CHECK(snap.groupBy == TrackGroupKey::Album);
+
+    std::vector<TrackSortField> const expected = {
+      TrackSortField::AlbumArtist, TrackSortField::Album,
+      TrackSortField::DiscNumber, TrackSortField::TrackNumber, TrackSortField::Title};
+    REQUIRE(snap.sortBy.size() == expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i)
+    {
+      CHECK(snap.sortBy[i].field == expected[i]);
+    }
+  }
+
+  TEST_CASE("ViewService - setGrouping updates state and projection", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto events = EventBus{};
+    auto service = env.makeService(events);
+
+    auto result = service.createView({}, true);
+    auto viewId = result.viewId;
+
+    service.setGrouping(viewId, TrackGroupKey::Genre);
+    auto snap = service.trackListState(viewId);
+
+    CHECK(snap.groupBy == TrackGroupKey::Genre);
+
+    std::vector<TrackSortField> const expected = {
+      TrackSortField::Genre, TrackSortField::Artist, TrackSortField::Album,
+      TrackSortField::DiscNumber, TrackSortField::TrackNumber, TrackSortField::Title};
+    REQUIRE(snap.sortBy.size() == expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i)
+    {
+      CHECK(snap.sortBy[i].field == expected[i]);
+    }
+  }
+
+  TEST_CASE("ViewService - setGrouping no-ops on same value", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto events = EventBus{};
+    auto service = env.makeService(events);
+
+    auto result = service.createView({.groupBy = TrackGroupKey::Year}, true);
+    auto snap = service.trackListState(result.viewId);
+    auto const revBefore = snap.revision;
+
+    service.setGrouping(result.viewId, TrackGroupKey::Year);
+    auto snapAfter = service.trackListState(result.viewId);
+
+    CHECK(snapAfter.revision == revBefore);
+    CHECK(snapAfter.groupBy == TrackGroupKey::Year);
+  }
+
+  TEST_CASE("ViewService - setGrouping publishes ViewGroupingChanged", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto events = EventBus{};
+    auto service = env.makeService(events);
+
+    auto result = service.createView({}, true);
+
+    auto received = TrackGroupKey::None;
+    auto sub = events.subscribe<ViewGroupingChanged>(
+      [&](ViewGroupingChanged const& ev) { received = ev.groupBy; });
+
+    service.setGrouping(result.viewId, TrackGroupKey::Composer);
+    CHECK(received == TrackGroupKey::Composer);
+  }
+
+  TEST_CASE("ViewService - setGrouping no-ops does not publish event", "[app][runtime][view]")
+  {
+    auto env = TestEnv{};
+    auto events = EventBus{};
+    auto service = env.makeService(events);
+
+    auto result = service.createView({}, true);
+
+    auto callCount = 0;
+    auto sub = events.subscribe<ViewGroupingChanged>(
+      [&](ViewGroupingChanged const&) { ++callCount; });
+
+    // First change should publish
+    service.setGrouping(result.viewId, TrackGroupKey::Artist);
+    CHECK(callCount == 1);
+
+    // No-op should not publish again
+    service.setGrouping(result.viewId, TrackGroupKey::Artist);
+    CHECK(callCount == 1);
+
+    // Different change should publish
+    service.setGrouping(result.viewId, TrackGroupKey::Album);
+    CHECK(callCount == 2);
+  }
 }

@@ -26,7 +26,7 @@ namespace
 
       if (!first)
       {
-        text += ", ";
+        text.append(", ");
       }
 
       text.append(tag.data(), tag.size());

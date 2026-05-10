@@ -5,8 +5,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
-#include <format>
 #include <ranges>
 #include <string>
 
@@ -41,130 +39,6 @@ namespace ao::gtk
       return &*it;
     }
 
-    int compareCaseInsensitive(std::string_view lhs, std::string_view rhs)
-    {
-      auto const common = std::min(lhs.size(), rhs.size());
-
-      for (std::size_t i = 0; i < common; ++i)
-      {
-        auto const lc = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(lhs[i])));
-        auto const rc = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(rhs[i])));
-
-        if (lc < rc)
-        {
-          return -1;
-        }
-
-        if (lc > rc)
-        {
-          return 1;
-        }
-      }
-
-      if (lhs.size() < rhs.size())
-      {
-        return -1;
-      }
-
-      if (lhs.size() > rhs.size())
-      {
-        return 1;
-      }
-
-      return 0;
-    }
-
-    int compareTextField(std::string_view lhs, std::string_view rhs)
-    {
-      auto const leftEmpty = lhs.empty();
-
-      if (auto const rightEmpty = rhs.empty(); leftEmpty != rightEmpty)
-      {
-        return leftEmpty ? 1 : -1;
-      }
-
-      if (auto const cmp = compareCaseInsensitive(lhs, rhs); cmp != 0)
-      {
-        return cmp;
-      }
-
-      if (lhs < rhs)
-      {
-        return -1;
-      }
-
-      if (lhs > rhs)
-      {
-        return 1;
-      }
-
-      return 0;
-    }
-
-    template<typename T>
-    int compareNumberField(T lhs, T rhs)
-    {
-      auto const leftUnknown = lhs == 0;
-      auto const rightUnknown = rhs == 0;
-
-      if (leftUnknown != rightUnknown)
-      {
-        return leftUnknown ? 1 : -1;
-      }
-
-      if (lhs < rhs)
-      {
-        return -1;
-      }
-
-      if (lhs > rhs)
-      {
-        return 1;
-      }
-
-      return 0;
-    }
-
-    int compareTrackId(ao::TrackId lhs, ao::TrackId rhs)
-    {
-      if (lhs.value() < rhs.value())
-      {
-        return -1;
-      }
-
-      if (lhs.value() > rhs.value())
-      {
-        return 1;
-      }
-
-      return 0;
-    }
-
-    int compareByField(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackSortField field)
-    {
-      switch (field)
-      {
-        case TrackSortField::Artist: return compareTextField(lhs.artist, rhs.artist);
-        case TrackSortField::Album: return compareTextField(lhs.album, rhs.album);
-        case TrackSortField::AlbumArtist: return compareTextField(lhs.albumArtist, rhs.albumArtist);
-        case TrackSortField::Genre: return compareTextField(lhs.genre, rhs.genre);
-        case TrackSortField::Composer: return compareTextField(lhs.composer, rhs.composer);
-        case TrackSortField::Work: return compareTextField(lhs.work, rhs.work);
-        case TrackSortField::Year: return compareNumberField(lhs.year, rhs.year);
-        case TrackSortField::DiscNumber: return compareNumberField(lhs.discNumber, rhs.discNumber);
-        case TrackSortField::TrackNumber: return compareNumberField(lhs.trackNumber, rhs.trackNumber);
-        case TrackSortField::Title: return compareTextField(lhs.title, rhs.title);
-        case TrackSortField::Duration: return compareNumberField(lhs.durationMs, rhs.durationMs);
-      }
-
-      return 0;
-    }
-
-    std::string unknownLabel(char const* label)
-    {
-      return std::string{"Unknown "} + label;
-    }
-
     TrackColumnState defaultColumnState(TrackColumn column)
     {
       auto const* definition = trackColumnDefinition(column);
@@ -182,137 +56,19 @@ namespace ao::gtk
     }
   }
 
-  TrackPresentationSpec presentationSpecForGroup(TrackGroupBy groupBy)
+  std::optional<TrackColumn> redundantFieldToColumn(ao::app::TrackSortField field)
   {
-    auto spec = TrackPresentationSpec{};
-    spec.groupBy = groupBy;
-
-    switch (groupBy)
+    switch (field)
     {
-      case TrackGroupBy::None: return spec;
-      case TrackGroupBy::Artist:
-        spec.sortBy = {
-          {TrackSortField::Artist},
-          {TrackSortField::Album},
-          {TrackSortField::DiscNumber},
-          {TrackSortField::TrackNumber},
-          {TrackSortField::Title},
-        };
-        return spec;
-      case TrackGroupBy::Album:
-      case TrackGroupBy::AlbumArtist:
-        spec.sortBy = {
-          {TrackSortField::AlbumArtist},
-          {TrackSortField::Album},
-          {TrackSortField::DiscNumber},
-          {TrackSortField::TrackNumber},
-          {TrackSortField::Title},
-        };
-        return spec;
-      case TrackGroupBy::Genre:
-        spec.sortBy = {
-          {TrackSortField::Genre},
-          {TrackSortField::Artist},
-          {TrackSortField::Album},
-          {TrackSortField::DiscNumber},
-          {TrackSortField::TrackNumber},
-          {TrackSortField::Title},
-        };
-        return spec;
-      case TrackGroupBy::Composer:
-        spec.sortBy = {
-          {TrackSortField::Composer},
-          {TrackSortField::Artist},
-          {TrackSortField::Album},
-          {TrackSortField::DiscNumber},
-          {TrackSortField::TrackNumber},
-          {TrackSortField::Title},
-        };
-        return spec;
-      case TrackGroupBy::Work:
-        spec.sortBy = {
-          {TrackSortField::Work},
-          {TrackSortField::Artist},
-          {TrackSortField::Album},
-          {TrackSortField::DiscNumber},
-          {TrackSortField::TrackNumber},
-          {TrackSortField::Title},
-        };
-        return spec;
-      case TrackGroupBy::Year:
-        spec.sortBy = {
-          {TrackSortField::Year},
-          {TrackSortField::Artist},
-          {TrackSortField::Album},
-          {TrackSortField::DiscNumber},
-          {TrackSortField::TrackNumber},
-          {TrackSortField::Title},
-        };
-        return spec;
-      default: break;
+      case ao::app::TrackSortField::Artist: return TrackColumn::Artist;
+      case ao::app::TrackSortField::Album: return TrackColumn::Album;
+      case ao::app::TrackSortField::AlbumArtist: return TrackColumn::AlbumArtist;
+      case ao::app::TrackSortField::Genre: return TrackColumn::Genre;
+      case ao::app::TrackSortField::Composer: return TrackColumn::Composer;
+      case ao::app::TrackSortField::Work: return TrackColumn::Work;
+      case ao::app::TrackSortField::Year: return TrackColumn::Year;
+      default: return std::nullopt;
     }
-
-    return spec;
-  }
-
-  int compareForSort(TrackPresentationKeysView lhs,
-                     TrackPresentationKeysView rhs,
-                     std::span<TrackSortTerm const> sortBy)
-  {
-    for (auto const& term : sortBy)
-    {
-      if (auto const cmp = compareByField(lhs, rhs, term.field); cmp != 0)
-      {
-        return cmp;
-      }
-    }
-
-    return compareTrackId(lhs.trackId, rhs.trackId);
-  }
-
-  int compareForGrouping(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackGroupBy groupBy)
-  {
-    switch (groupBy)
-    {
-      case TrackGroupBy::None: return 0;
-      case TrackGroupBy::Artist: return compareTextField(lhs.artist, rhs.artist);
-      case TrackGroupBy::Album:
-
-        if (auto const albumArtistCmp = compareTextField(lhs.albumArtist, rhs.albumArtist); albumArtistCmp != 0)
-        {
-          return albumArtistCmp;
-        }
-
-        return compareTextField(lhs.album, rhs.album);
-      case TrackGroupBy::AlbumArtist: return compareTextField(lhs.albumArtist, rhs.albumArtist);
-      case TrackGroupBy::Genre: return compareTextField(lhs.genre, rhs.genre);
-      case TrackGroupBy::Composer: return compareTextField(lhs.composer, rhs.composer);
-      case TrackGroupBy::Work: return compareTextField(lhs.work, rhs.work);
-      case TrackGroupBy::Year: return compareNumberField(lhs.year, rhs.year);
-    }
-
-    return 0;
-  }
-
-  bool shouldShowColumn(TrackGroupBy groupBy, TrackColumn column)
-  {
-    switch (column)
-    {
-      case TrackColumn::Artist: return groupBy != TrackGroupBy::Artist && groupBy != TrackGroupBy::Album;
-      case TrackColumn::Album: return groupBy != TrackGroupBy::Album;
-      case TrackColumn::AlbumArtist: return groupBy != TrackGroupBy::Album && groupBy != TrackGroupBy::AlbumArtist;
-      case TrackColumn::Genre: return groupBy != TrackGroupBy::Genre;
-      case TrackColumn::Composer: return groupBy != TrackGroupBy::Composer;
-      case TrackColumn::Work: return groupBy != TrackGroupBy::Work;
-      case TrackColumn::Year: return groupBy != TrackGroupBy::Year;
-      case TrackColumn::DiscNumber:
-      case TrackColumn::TrackNumber:
-      case TrackColumn::Title:
-      case TrackColumn::Duration:
-      case TrackColumn::Tags: return true;
-    }
-
-    return true;
   }
 
   std::span<TrackColumnDefinition const> trackColumnDefinitions()
@@ -383,36 +139,6 @@ namespace ao::gtk
     }
 
     return result;
-  }
-
-  std::string groupLabelFor(TrackPresentationKeysView keys, TrackGroupBy groupBy)
-  {
-    switch (groupBy)
-    {
-      case TrackGroupBy::None: return {};
-      case TrackGroupBy::Artist: return keys.artist.empty() ? unknownLabel("Artist") : std::string{keys.artist};
-      case TrackGroupBy::Album:
-
-        if (keys.album.empty())
-        {
-          return unknownLabel("Album");
-        }
-
-        if (keys.albumArtist.empty())
-        {
-          return std::string{keys.album};
-        }
-
-        return std::string{keys.album} + " - " + std::string{keys.albumArtist};
-      case TrackGroupBy::AlbumArtist:
-        return keys.albumArtist.empty() ? unknownLabel("Album Artist") : std::string{keys.albumArtist};
-      case TrackGroupBy::Genre: return keys.genre.empty() ? unknownLabel("Genre") : std::string{keys.genre};
-      case TrackGroupBy::Composer: return keys.composer.empty() ? unknownLabel("Composer") : std::string{keys.composer};
-      case TrackGroupBy::Work: return keys.work.empty() ? unknownLabel("Work") : std::string{keys.work};
-      case TrackGroupBy::Year: return keys.year == 0 ? unknownLabel("Year") : std::format("{}", keys.year);
-    }
-
-    return {};
   }
 
   TrackColumnLayoutModel::TrackColumnLayoutModel(TrackColumnLayout const& layout)

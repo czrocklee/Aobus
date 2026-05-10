@@ -49,6 +49,14 @@ namespace ao::library
     std::string_view get(DictionaryId id) const;
 
     /**
+     * Look up a string by its ID, returning a default if the ID is invalid.
+     * @param id The dictionary ID
+     * @param defaultValue Value to return when id is 0 or out of range
+     * @return The string or defaultValue
+     */
+    std::string_view getOrDefault(DictionaryId id, std::string_view defaultValue = {}) const;
+
+    /**
      * Look up an ID by its string.
      * @param str The string to look up
      * @return The ID

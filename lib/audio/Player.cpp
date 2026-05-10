@@ -41,6 +41,11 @@ namespace ao::audio
 
     Impl() = default;
 
+    Impl(Impl const&) = delete;
+    Impl(Impl&&) = delete;
+    auto operator=(Impl const&) -> Impl& = delete;
+    auto operator=(Impl&&) -> Impl& = delete;
+
     ~Impl()
     {
       // Order matters: stop PipeWire threads before their callback targets are destroyed.

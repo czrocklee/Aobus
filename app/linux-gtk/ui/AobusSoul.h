@@ -71,8 +71,6 @@ namespace ao::gtk
                        int& natural_baseline) const override;
 
   private:
-    static Gdk::RGBA shiftColor(Gdk::RGBA const& color, float shift) noexcept;
-
     struct ColorCache
     {
       Gdk::RGBA cyan;
@@ -93,6 +91,8 @@ namespace ao::gtk
     {
       void operator()(::GskStroke* stroke) const noexcept;
     };
+
+    static Gdk::RGBA shiftColor(Gdk::RGBA const& color, float shift) noexcept;
 
     ColorCache _colors;
 

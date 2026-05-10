@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Type.h>
+#include <runtime/StateTypes.h>
 
 #include <sigc++/sigc++.h>
 
@@ -16,33 +17,6 @@
 
 namespace ao::gtk
 {
-  enum class TrackGroupBy : std::uint8_t
-  {
-    None,
-    Artist,
-    Album,
-    AlbumArtist,
-    Genre,
-    Composer,
-    Work,
-    Year,
-  };
-
-  enum class TrackSortField : std::uint8_t
-  {
-    Artist,
-    Album,
-    AlbumArtist,
-    Genre,
-    Composer,
-    Work,
-    Year,
-    DiscNumber,
-    TrackNumber,
-    Title,
-    Duration,
-  };
-
   enum class TrackColumn : std::uint8_t
   {
     Artist,
@@ -87,44 +61,7 @@ namespace ao::gtk
     auto operator==(TrackColumnLayout const&) const -> bool = default;
   };
 
-  struct TrackSortTerm
-  {
-    TrackSortField field;
-
-    auto operator==(TrackSortTerm const&) const -> bool = default;
-  };
-
-  struct TrackPresentationSpec
-  {
-    TrackGroupBy groupBy = TrackGroupBy::None;
-    std::vector<TrackSortTerm> sortBy;
-  };
-
-  struct TrackPresentationKeysView
-  {
-    std::string_view artist{};
-    std::string_view album{};
-    std::string_view albumArtist{};
-    std::string_view genre{};
-    std::string_view composer{};
-    std::string_view work{};
-    std::string_view title{};
-    std::uint32_t durationMs = 0;
-    std::uint16_t year = 0;
-    std::uint16_t discNumber = 0;
-    std::uint16_t trackNumber = 0;
-    ao::TrackId trackId{};
-  };
-
-  TrackPresentationSpec presentationSpecForGroup(TrackGroupBy groupBy);
-
-  std::int32_t compareForSort(TrackPresentationKeysView lhs,
-                              TrackPresentationKeysView rhs,
-                              std::span<TrackSortTerm const> sortBy);
-
-  std::int32_t compareForGrouping(TrackPresentationKeysView lhs, TrackPresentationKeysView rhs, TrackGroupBy groupBy);
-
-  bool shouldShowColumn(TrackGroupBy groupBy, TrackColumn column);
+  std::optional<TrackColumn> redundantFieldToColumn(ao::app::TrackSortField field);
 
   std::span<TrackColumnDefinition const> trackColumnDefinitions();
 
@@ -135,8 +72,6 @@ namespace ao::gtk
   TrackColumnLayout defaultTrackColumnLayout();
 
   TrackColumnLayout normalizeTrackColumnLayout(TrackColumnLayout const& layout);
-
-  std::string groupLabelFor(TrackPresentationKeysView keys, TrackGroupBy groupBy);
 
   class TrackColumnLayoutModel final
   {

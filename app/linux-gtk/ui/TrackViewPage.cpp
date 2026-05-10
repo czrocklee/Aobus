@@ -36,6 +36,7 @@
 #include <runtime/StateTypes.h>
 #include <runtime/WorkspaceService.h>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace ao::gtk
@@ -163,36 +164,18 @@ namespace ao::gtk
       return false;
     }
 
-    std::uint32_t dropdownPositionFor(TrackGroupBy groupBy)
+    std::uint32_t dropdownPositionFor(ao::app::TrackGroupKey groupBy)
     {
-      switch (groupBy)
-      {
-        case TrackGroupBy::None: return 0;
-        case TrackGroupBy::Artist: return 1;
-        case TrackGroupBy::Album: return 2;
-        case TrackGroupBy::AlbumArtist: return 3; // NOLINT(readability-magic-numbers)
-        case TrackGroupBy::Genre: return 4;
-        case TrackGroupBy::Composer: return 5; // NOLINT(readability-magic-numbers)
-        case TrackGroupBy::Work: return 6;     // NOLINT(readability-magic-numbers)
-        case TrackGroupBy::Year: return 7;     // NOLINT(readability-magic-numbers)
-      }
-
-      return 0;
+      return static_cast<std::uint32_t>(groupBy);
     }
 
-    TrackGroupBy groupByFromDropdownPosition(std::uint32_t position)
+    ao::app::TrackGroupKey groupByFromDropdownPosition(std::uint32_t position)
     {
-      switch (position)
+      if (position <= static_cast<std::uint32_t>(ao::app::TrackGroupKey::Year))
       {
-        case 1: return TrackGroupBy::Artist;
-        case 2: return TrackGroupBy::Album;
-        case 3: return TrackGroupBy::AlbumArtist; // NOLINT(readability-magic-numbers)
-        case 4: return TrackGroupBy::Genre;
-        case 5: return TrackGroupBy::Composer; // NOLINT(readability-magic-numbers)
-        case 6: return TrackGroupBy::Work;     // NOLINT(readability-magic-numbers)
-        case 7: return TrackGroupBy::Year;     // NOLINT(readability-magic-numbers)
-        default: return TrackGroupBy::None;
+        return static_cast<ao::app::TrackGroupKey>(position);
       }
+      return ao::app::TrackGroupKey::None;
     }
 
     std::string trackCountLabel(::guint count)
@@ -203,6 +186,54 @@ namespace ao::gtk
 
       return label;
     }
+
+    TrackRow* trackRowFromSorterItem(gpointer item)
+    {
+      auto* const object = static_cast<GObject*>(item);
+      return object != nullptr ? dynamic_cast<TrackRow*>(Glib::wrap_auto(object, false)) : nullptr;
+    }
+
+    class ProjectionGroupSectionSorter final : public Gtk::Sorter
+    {
+    public:
+      static Glib::RefPtr<ProjectionGroupSectionSorter> create(TrackListAdapter& adapter)
+      {
+        return Glib::make_refptr_for_instance<ProjectionGroupSectionSorter>(
+          new ProjectionGroupSectionSorter(adapter)); // NOLINT(cppcoreguidelines-owning-memory)
+      }
+
+    protected:
+      explicit ProjectionGroupSectionSorter(TrackListAdapter& adapter)
+        : Glib::ObjectBase{typeid(ProjectionGroupSectionSorter)}, Gtk::Sorter{}, _adapter{adapter}
+      {
+      }
+
+      Gtk::Ordering compare_vfunc(gpointer item1, gpointer item2) override
+      {
+        auto const* const lhs = trackRowFromSorterItem(item1);
+        auto const* const rhs = trackRowFromSorterItem(item2);
+
+        if (lhs == nullptr || rhs == nullptr)
+        {
+          return Gtk::Ordering::EQUAL;
+        }
+
+        auto const lhsGroup = _adapter.groupIndexForTrack(lhs->getTrackId());
+        auto const rhsGroup = _adapter.groupIndexForTrack(rhs->getTrackId());
+
+        if (!lhsGroup || !rhsGroup || *lhsGroup == *rhsGroup)
+        {
+          return Gtk::Ordering::EQUAL;
+        }
+
+        return *lhsGroup < *rhsGroup ? Gtk::Ordering::SMALLER : Gtk::Ordering::LARGER;
+      }
+
+      Order get_order_vfunc() override { return Order::PARTIAL; }
+
+    private:
+      TrackListAdapter& _adapter;
+    };
   }
 
   TrackViewPage::TrackViewPage(ao::ListId listId,
@@ -217,9 +248,13 @@ namespace ao::gtk
     , _session{session}
     , _groupModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
     , _columnLayoutModel{columnLayoutModel}
-    , _presentationSpec{presentationSpecForGroup(TrackGroupBy::None)}
   {
     ensureTrackPageCss();
+
+    if (_viewId != ao::app::ViewId{})
+    {
+      _activeGroupBy = _session.views().trackListState(_viewId).groupBy;
+    }
 
     // Subscribe to global theme refresh signal (e.g. triggered by SIGUSR1 or DBus in main.cpp)
     signalThemeRefresh().connect(
@@ -245,6 +280,7 @@ namespace ao::gtk
 
     // Set up column view
     _columnView.set_model(_selectionModel);
+    updateSectionHeaders();
     _contextPopover.set_has_arrow(false);
     _contextPopover.set_parent(_columnView);
 
@@ -285,7 +321,7 @@ namespace ao::gtk
     _scrolledWindow.set_vexpand(true);
     _scrolledWindow.set_hexpand(true);
 
-    applyPresentationSpec();
+    updateColumnVisibility();
     applyColumnLayout();
     updateFilterUi();
 
@@ -365,7 +401,7 @@ namespace ao::gtk
     _groupByOptions =
       Gtk::StringList::create({"None", "Artist", "Album", "Album Artist", "Genre", "Composer", "Work", "Year"});
     _groupByDropdown.set_model(_groupByOptions);
-    _groupByDropdown.set_selected(dropdownPositionFor(_presentationSpec.groupBy));
+    _groupByDropdown.set_selected(dropdownPositionFor(_activeGroupBy));
     _groupByDropdown.property_selected().signal_changed().connect(
       sigc::mem_fun(*this, &TrackViewPage::onGroupByChanged));
 
@@ -441,16 +477,15 @@ namespace ao::gtk
           return;
         }
 
-        auto const item = header->get_item();
-        auto const row = std::dynamic_pointer_cast<TrackRow>(item);
-
-        if (!row)
+        auto text = std::string{};
+        if (auto* proj = _adapter.projection())
         {
-          label->set_text("");
-          return;
+          auto const start = header->get_start();
+          if (auto optGroupIndex = proj->groupIndexAt(start); optGroupIndex)
+          {
+            text = proj->groupAt(*optGroupIndex).label;
+          }
         }
-
-        auto text = groupLabelFor(row->getPresentationKeys(), _presentationSpec.groupBy);
 
         if (!text.empty())
         {
@@ -461,6 +496,22 @@ namespace ao::gtk
 
         label->set_text(text);
       });
+  }
+
+  void TrackViewPage::updateSectionHeaders()
+  {
+    auto* const proj = _adapter.projection();
+    auto const groupBy = proj != nullptr ? proj->presentation().groupBy : ao::app::TrackGroupKey::None;
+
+    if (groupBy == ao::app::TrackGroupKey::None)
+    {
+      _groupModel->set_section_sorter({});
+      _columnView.set_header_factory({});
+      return;
+    }
+
+    _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_adapter));
+    _columnView.set_header_factory(_sectionHeaderFactory);
   }
 
   void TrackViewPage::setupStatusBar()
@@ -477,41 +528,6 @@ namespace ao::gtk
     auto const context = _statusLabel.get_style_context();
 
     context->add_class("dim-label");
-  }
-
-  void TrackViewPage::applyPresentationSpec()
-  {
-    updateColumnVisibility();
-
-    if (_viewId == ao::app::ViewId{})
-    {
-      return;
-    }
-
-    auto sortBy = std::vector<ao::app::TrackSortTerm>{};
-    for (auto const& term : _presentationSpec.sortBy)
-    {
-      sortBy.push_back(ao::app::TrackSortTerm{
-        .field = static_cast<ao::app::TrackSortField>(term.field),
-        .ascending = true,
-      });
-    }
-
-    _session.views().setSort(_viewId, sortBy);
-
-    auto runtimeGroup = ao::app::TrackGroupKey::None;
-    switch (_presentationSpec.groupBy)
-    {
-      case TrackGroupBy::Artist: runtimeGroup = ao::app::TrackGroupKey::Artist; break;
-      case TrackGroupBy::Album: runtimeGroup = ao::app::TrackGroupKey::Album; break;
-      case TrackGroupBy::AlbumArtist: runtimeGroup = ao::app::TrackGroupKey::AlbumArtist; break;
-      case TrackGroupBy::Genre: runtimeGroup = ao::app::TrackGroupKey::Genre; break;
-      case TrackGroupBy::Composer: runtimeGroup = ao::app::TrackGroupKey::Composer; break;
-      case TrackGroupBy::Work: runtimeGroup = ao::app::TrackGroupKey::Work; break;
-      case TrackGroupBy::Year: runtimeGroup = ao::app::TrackGroupKey::Year; break;
-      default: break;
-    }
-    _session.views().setGrouping(_viewId, runtimeGroup);
   }
 
   void TrackViewPage::setStatusMessage(std::string const& message)
@@ -749,6 +765,18 @@ namespace ao::gtk
   {
     auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
 
+    auto redundantColumns = std::unordered_set<TrackColumn>{};
+    if (auto* proj = _adapter.projection())
+    {
+      for (auto const& field : proj->presentation().redundantFields)
+      {
+        if (auto col = redundantFieldToColumn(field))
+        {
+          redundantColumns.insert(*col);
+        }
+      }
+    }
+
     for (auto const& state : layout.columns)
     {
       auto* const binding = findColumnBinding(state.column);
@@ -758,15 +786,22 @@ namespace ao::gtk
         continue;
       }
 
-      binding->column->set_visible(state.visible && shouldShowColumn(_presentationSpec.groupBy, state.column));
+      bool const hiddenByGroup = redundantColumns.contains(state.column);
+      binding->column->set_visible(state.visible && !hiddenByGroup);
     }
   }
 
   void TrackViewPage::onGroupByChanged()
   {
-    _presentationSpec = presentationSpecForGroup(groupByFromDropdownPosition(_groupByDropdown.get_selected()));
+    _activeGroupBy = groupByFromDropdownPosition(_groupByDropdown.get_selected());
 
-    applyPresentationSpec();
+    if (_viewId != ao::app::ViewId{})
+    {
+      _session.views().setGrouping(_viewId, _activeGroupBy);
+    }
+
+    updateSectionHeaders();
+    updateColumnVisibility();
   }
 
   void TrackViewPage::onFilterChanged()

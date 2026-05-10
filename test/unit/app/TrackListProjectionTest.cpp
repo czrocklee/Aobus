@@ -192,7 +192,7 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setSortBy({
+    proj.setPresentation(TrackGroupKey::None, {
       TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
       TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
     });
@@ -274,7 +274,7 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setSortBy({
+    proj.setPresentation(TrackGroupKey::None, {
       TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
       TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
       TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
@@ -328,7 +328,7 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setSortBy({TrackSortTerm{.field = TrackSortField::Year}});
+    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year}});
 
     REQUIRE(proj.size() == 10);
     for (auto i = std::size_t{0}; i < 10; ++i)
@@ -351,7 +351,7 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setSortBy({TrackSortTerm{.field = TrackSortField::Year, .ascending = true}});
+    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}});
 
     auto checkMonotonic = [&](bool ascending)
     {
@@ -379,10 +379,10 @@ namespace ao::app::test
     REQUIRE(proj.size() == 10);
     checkMonotonic(true);
 
-    proj.setSortBy({TrackSortTerm{.field = TrackSortField::Year, .ascending = false}});
+    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year, .ascending = false}});
     checkMonotonic(false);
 
-    proj.setSortBy({TrackSortTerm{.field = TrackSortField::Year, .ascending = true}});
+    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}});
     checkMonotonic(true);
   }
 
@@ -401,7 +401,7 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setSortBy({TrackSortTerm{.field = TrackSortField::Year, .ascending = true}});
+    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}});
     REQUIRE(proj.size() == 15);
 
     for (auto i = std::size_t{0}; i < 14; ++i)
@@ -415,7 +415,7 @@ namespace ao::app::test
       CHECK(a->metadata().year() <= b->metadata().year());
     }
 
-    proj.setSortBy({TrackSortTerm{.field = TrackSortField::Title, .ascending = true}});
+    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}});
     REQUIRE(proj.size() == 15);
 
     for (auto i = std::size_t{0}; i < 14; ++i)
@@ -428,5 +428,216 @@ namespace ao::app::test
       REQUIRE(b.has_value());
       CHECK(std::string{a->metadata().title()} <= std::string{b->metadata().title()});
     }
+  }
+
+  TEST_CASE("TrackListProjection - group sections for Artist grouping", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+
+    auto id1 = env.lib.addTrack(TrackSpec{.title = "T1", .artist = "Zeppelin", .album = "IV", .trackNumber = 1});
+    auto id2 = env.lib.addTrack(TrackSpec{.title = "T2", .artist = "Zeppelin", .album = "IV", .trackNumber = 2});
+    auto id3 = env.lib.addTrack(TrackSpec{.title = "T3", .artist = "Abba", .album = "Gold", .trackNumber = 1});
+    auto id4 = env.lib.addTrack(TrackSpec{.title = "T4", .artist = "Coldplay", .album = "X", .trackNumber = 1});
+    auto id5 = env.lib.addTrack(TrackSpec{.title = "T5", .artist = "Coldplay", .album = "Y", .trackNumber = 1});
+    env.setupFiltered({{id1, id2, id3, id4, id5}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::Artist, {
+      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+    });
+
+    REQUIRE(proj.size() == 5);
+
+    // After sorting: Abba(Gold) < Coldplay(X) < Coldplay(Y) < Zeppelin(IV,T1) < Zeppelin(IV,T2)
+    // Groups: Abba(1), Coldplay(2), Zeppelin(2)
+    REQUIRE(proj.groupCount() == 3);
+
+    auto s0 = proj.groupAt(0);
+    CHECK(s0.label == "Abba");
+    CHECK(s0.rows.start == 0);
+    CHECK(s0.rows.count == 1);
+
+    auto s1 = proj.groupAt(1);
+    CHECK(s1.label == "Coldplay");
+    CHECK(s1.rows.start == 1);
+    CHECK(s1.rows.count == 2);
+
+    auto s2 = proj.groupAt(2);
+    CHECK(s2.label == "Zeppelin");
+    CHECK(s2.rows.start == 3);
+    CHECK(s2.rows.count == 2);
+
+    CHECK(proj.groupIndexAt(0) == 0);
+    CHECK(proj.groupIndexAt(1) == 1);
+    CHECK(proj.groupIndexAt(2) == 1);
+    CHECK(proj.groupIndexAt(3) == 2);
+    CHECK(proj.groupIndexAt(4) == 2);
+  }
+
+  TEST_CASE("TrackListProjection - group sections empty for None grouping", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+    auto id1 = env.lib.addTrack(makeSpec("T1", 2020));
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::None, {
+      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+    });
+
+    CHECK(proj.groupCount() == 0);
+    auto s = proj.groupAt(0);
+    CHECK(s.rows.count == 0);
+    CHECK(s.label.empty());
+    CHECK_FALSE(proj.groupIndexAt(0).has_value());
+  }
+
+  TEST_CASE("TrackListProjection - empty projection group metadata", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+    env.setupFiltered({});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::Artist, {
+      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+    });
+
+    CHECK(proj.size() == 0);
+    CHECK(proj.groupCount() == 0);
+  }
+
+  TEST_CASE("TrackListProjection - group label for unknown artist", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+
+    auto id1 = env.lib.addTrack(TrackSpec{.title = "T1", .artist = "", .album = "A"});
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::Artist, {
+      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+    });
+
+    REQUIRE(proj.size() == 1);
+    REQUIRE(proj.groupCount() == 1);
+    CHECK(proj.groupAt(0).label == "Unknown Artist");
+  }
+
+  TEST_CASE("TrackListProjection - group label for unknown year", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+
+    auto id1 = env.lib.addTrack(TrackSpec{.title = "T1", .year = 0});
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::Year, {
+      TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
+    });
+
+    REQUIRE(proj.size() == 1);
+    REQUIRE(proj.groupCount() == 1);
+    CHECK(proj.groupAt(0).label == "Unknown Year");
+  }
+
+  TEST_CASE("TrackListProjection - album groups split by album artist", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+
+    // Same album title, different album artists
+    auto id1 = env.lib.addTrack(TrackSpec{
+      .title = "T1", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist One"});
+    auto id2 = env.lib.addTrack(TrackSpec{
+      .title = "T2", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist Two"});
+    env.setupFiltered({{id1, id2}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::Album, {
+      TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+    });
+
+    REQUIRE(proj.size() == 2);
+    REQUIRE(proj.groupCount() == 2);
+    CHECK(proj.groupAt(0).label == "Greatest Hits - Artist One");
+    CHECK(proj.groupAt(1).label == "Greatest Hits - Artist Two");
+  }
+
+  TEST_CASE("TrackListProjection - presentation() returns correct snapshot", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+    env.setupFiltered({});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::Genre, {
+      TrackSortTerm{.field = TrackSortField::Genre, .ascending = true},
+      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+    });
+
+    auto snap = proj.presentation();
+    CHECK(snap.groupBy == TrackGroupKey::Genre);
+    REQUIRE(snap.effectiveSortBy.size() == 2);
+    CHECK(snap.effectiveSortBy[0].field == TrackSortField::Genre);
+    CHECK(snap.effectiveSortBy[1].field == TrackSortField::Title);
+
+    std::vector<TrackSortField> expectedRedundant = {TrackSortField::Genre};
+    CHECK(snap.redundantFields == expectedRedundant);
+  }
+
+  TEST_CASE("TrackListProjection - group label for album without album artist", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+
+    auto id1 = env.lib.addTrack(TrackSpec{
+      .title = "T1", .album = "Solo Album", .albumArtist = ""});
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::Album, {
+      TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+    });
+
+    REQUIRE(proj.size() == 1);
+    REQUIRE(proj.groupCount() == 1);
+    CHECK(proj.groupAt(0).label == "Solo Album");
+  }
+
+  TEST_CASE("TrackListProjection - unknown album label", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+
+    auto id1 = env.lib.addTrack(TrackSpec{.title = "T1", .album = "", .albumArtist = ""});
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::Album, {
+      TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+    });
+
+    REQUIRE(proj.size() == 1);
+    REQUIRE(proj.groupCount() == 1);
+    CHECK(proj.groupAt(0).label == "Unknown Album");
   }
 }

@@ -328,99 +328,85 @@ namespace ao::gtk
     _artistLabel.set_text(snap.artist.mixed ? "<Multiple Values>" : snap.artist.optValue.value_or(""));
     _albumLabel.set_text(snap.album.mixed ? "<Multiple Values>" : snap.album.optValue.value_or(""));
 
-    // Cover art from projection
-    if (snap.singleCoverArtId != ao::ResourceId{0})
-    {
-      auto pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
-      if (!pixbuf)
-      {
-        auto txn = _session.musicLibrary().readTransaction();
-        auto const reader = _session.musicLibrary().resources().reader(txn);
-        auto const data = reader.get(static_cast<std::uint32_t>(snap.singleCoverArtId.value()));
-
-        if (data)
-        {
-          try
-          {
-            auto const memStream = Gio::MemoryInputStream::create();
-            memStream->add_data(data->data(), static_cast<gssize>(data->size()), nullptr);
-
-            pixbuf = Gdk::Pixbuf::create_from_stream(memStream);
-
-            if (pixbuf)
-            {
-              _coverArtCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.value()), pixbuf);
-            }
-          }
-          catch (std::exception const& ex)
-          {
-            APP_LOG_ERROR("Failed to load cover art: {}", ex.what());
-          }
-        }
-      }
-
-      if (pixbuf)
-      {
-        _coverImage.set_pixbuf(pixbuf);
-        _coverImage.set_visible(true);
-        _noCoverLabel.set_visible(false);
-      }
-    }
-    else
-    {
-      _coverImage.set_visible(false);
-      _noCoverLabel.set_visible(true);
-    }
-
-    if (snap.selectionKind == ao::app::SelectionKind::Single)
-    {
-      _audioBox.set_visible(true);
-    }
-    else
-    {
-      _audioBox.set_visible(false);
-    }
-
-    // Audio properties from projection
-    if (snap.audio.codecId.optValue && !snap.audio.codecId.mixed)
-    {
-      _formatLabel.set_text(formatCodecId(*snap.audio.codecId.optValue));
-    }
-    else
-    {
-      _formatLabel.set_text(snap.audio.codecId.mixed ? "Mixed" : "Unknown");
-    }
-
-    if (snap.audio.sampleRate.optValue && !snap.audio.sampleRate.mixed)
-    {
-      _sampleRateLabel.set_text(formatSampleRate(*snap.audio.sampleRate.optValue));
-    }
-    else
-    {
-      _sampleRateLabel.set_text(snap.audio.sampleRate.mixed ? "Mixed" : "Unknown");
-    }
-
-    if (snap.audio.channels.optValue && !snap.audio.channels.mixed)
-    {
-      _channelsLabel.set_text(std::format("{} Ch", *snap.audio.channels.optValue));
-    }
-    else
-    {
-      _channelsLabel.set_text(snap.audio.channels.mixed ? "Mixed" : "Unknown");
-    }
-
-    if (snap.audio.durationMs.optValue && !snap.audio.durationMs.mixed)
-    {
-      auto const durationMs = std::chrono::milliseconds{*snap.audio.durationMs.optValue};
-      _durationLabel.set_text(formatDuration(durationMs));
-    }
-    else
-    {
-      _durationLabel.set_text(snap.audio.durationMs.mixed ? "Mixed" : "Unknown");
-    }
+    updateCoverArt(snap);
+    updateAudioMetadata(snap);
 
     // Tags
     _tagEditor.setup(_session.musicLibrary(), std::vector<ao::TrackId>{_currentTrackIds});
     _tagEditor.set_visible(true);
+  }
+
+  void InspectorSidebar::updateCoverArt(ao::app::TrackDetailSnapshot const& snap)
+  {
+    if (snap.singleCoverArtId == ao::ResourceId{0})
+    {
+      _coverImage.set_visible(false);
+      _noCoverLabel.set_visible(true);
+      return;
+    }
+
+    auto pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
+    if (!pixbuf)
+    {
+      pixbuf = loadCoverArtFromLibrary(snap.singleCoverArtId);
+      if (pixbuf)
+      {
+        _coverArtCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.value()), pixbuf);
+      }
+    }
+
+    if (pixbuf)
+    {
+      _coverImage.set_pixbuf(pixbuf);
+      _coverImage.set_visible(true);
+      _noCoverLabel.set_visible(false);
+    }
+  }
+
+  auto InspectorSidebar::loadCoverArtFromLibrary(ao::ResourceId resourceId) -> Glib::RefPtr<Gdk::Pixbuf>
+  {
+    auto txn = _session.musicLibrary().readTransaction();
+    auto const reader = _session.musicLibrary().resources().reader(txn);
+    auto const data = reader.get(static_cast<std::uint32_t>(resourceId.value()));
+
+    if (!data)
+    {
+      return {};
+    }
+
+    try
+    {
+      auto const memStream = Gio::MemoryInputStream::create();
+      memStream->add_data(data->data(), static_cast<gssize>(data->size()), nullptr);
+      return Gdk::Pixbuf::create_from_stream(memStream);
+    }
+    catch (std::exception const& ex)
+    {
+      APP_LOG_ERROR("Failed to load cover art: {}", ex.what());
+      return {};
+    }
+  }
+
+  void InspectorSidebar::updateAudioMetadata(ao::app::TrackDetailSnapshot const& snap)
+  {
+    _audioBox.set_visible(snap.selectionKind == ao::app::SelectionKind::Single);
+
+    auto const setLabel = [](Gtk::Label& label, auto const& property, auto const& formatter)
+    {
+      if (property.optValue && !property.mixed)
+      {
+        label.set_text(formatter(*property.optValue));
+      }
+      else
+      {
+        label.set_text(property.mixed ? "Mixed" : "Unknown");
+      }
+    };
+
+    setLabel(_formatLabel, snap.audio.codecId, [](auto id) { return formatCodecId(id); });
+    setLabel(_sampleRateLabel, snap.audio.sampleRate, [](auto rate) { return formatSampleRate(rate); });
+    setLabel(_channelsLabel, snap.audio.channels, [](auto ch) { return std::format("{} Ch", ch); });
+    setLabel(
+      _durationLabel, snap.audio.durationMs, [](auto ms) { return formatDuration(std::chrono::milliseconds{ms}); });
   }
 } // namespace ao::gtk

@@ -48,10 +48,9 @@ namespace ao::gtk
     void addActionsTo(Gio::ActionMap& actionMap);
 
   private:
-    void setupLayout();
-
     static constexpr int kSidebarWidth = 200;
 
+    void setupLayout();
     void setupSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
     void bindSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
     void onListSelectionChanged(std::uint32_t position, std::uint32_t nItems);
@@ -93,6 +92,6 @@ namespace ao::gtk
     Glib::RefPtr<Gio::SimpleAction> _deleteListAction;
     Glib::RefPtr<Gio::SimpleAction> _editListAction;
 
-    std::optional<ao::ListId> _pendingSelectId;
+    ao::ListId _pendingSelectId{0};
   };
 } // namespace ao::gtk

@@ -111,6 +111,7 @@ namespace ao::app
   ao::TrackId AppSession::playSelectionInFocusedView()
   {
     auto const focus = _impl->workspaceService.layoutState();
+
     if (focus.activeViewId == ViewId{})
     {
       return ao::TrackId{};
