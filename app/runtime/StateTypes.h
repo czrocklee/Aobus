@@ -79,7 +79,6 @@ namespace ao::app
     ao::audio::flow::Graph flow{};
     ao::audio::Quality quality = ao::audio::Quality::Unknown;
     std::string qualityTooltip{};
-    std::optional<FaultSnapshot> optFault{};
     std::uint64_t revision = 0;
   };
 
@@ -95,7 +94,6 @@ namespace ao::app
   {
     Info,
     Warning,
-    Error,
   };
 
   struct NotificationEntry final
@@ -156,8 +154,6 @@ namespace ao::app
   enum class ViewKind : std::uint8_t
   {
     TrackList,
-    Inspector,
-    Auxiliary,
   };
 
   struct TrackListViewState final
@@ -191,8 +187,6 @@ namespace ao::app
   enum class GlobalViewKind : std::uint8_t
   {
     AllTracks,
-    Playlists,
-    History,
   };
 
   struct MetadataPatch final

@@ -41,7 +41,7 @@ add_executable(ao_test
     unit/audio/backend/AlsaProviderHelpersTest.cpp
 
     # app unit tests (no platform deps)
-    unit/app/SmartListEngineTest.cpp
+    unit/app/SmartListEvaluatorTest.cpp
     unit/app/EventBusTest.cpp
     unit/app/TrackListProjectionTest.cpp
     unit/app/LibraryMutationServiceTest.cpp

@@ -9,7 +9,6 @@ add_subdirectory(media)
 add_subdirectory(tag)
 add_subdirectory(library)
 add_subdirectory(query)
-add_subdirectory(model)
 add_subdirectory(audio)
 
 # ── Umbrella interface library ──────────────────────────────────────────────
@@ -21,6 +20,5 @@ target_link_libraries(ao INTERFACE
     ao_tag
     ao_library
     ao_query
-    ao_model
     ao_audio
 )

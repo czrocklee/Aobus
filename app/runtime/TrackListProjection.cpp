@@ -3,11 +3,12 @@
 
 #include "TrackListProjection.h"
 
+#include "SmartListSource.h"
+#include "TrackSource.h"
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/model/FilteredTrackIdList.h>
 
 #include <algorithm>
 #include <memory>
@@ -218,7 +219,7 @@ namespace ao::app
   struct TrackListProjection::Impl final
   {
     ViewId viewId;
-    ao::model::TrackIdList& source;
+    TrackSource& source;
     ao::library::MusicLibrary& library;
     std::vector<TrackSortTerm> sortBy;
     Comparator comparator;
@@ -228,7 +229,7 @@ namespace ao::app
     std::uint64_t rev = 0;
     std::vector<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>> subscribers;
 
-    Impl(ViewId vid, ao::model::TrackIdList& src, ao::library::MusicLibrary& lib)
+    Impl(ViewId vid, TrackSource& src, ao::library::MusicLibrary& lib)
       : viewId{vid}, source{src}, library{lib}
     {
       rebuildOrderIndex();
@@ -414,9 +415,7 @@ namespace ao::app
     }
   };
 
-  TrackListProjection::TrackListProjection(ViewId viewId,
-                                           ao::model::TrackIdList& source,
-                                           ao::library::MusicLibrary& library)
+  TrackListProjection::TrackListProjection(ViewId viewId, TrackSource& source, ao::library::MusicLibrary& library)
     : _impl{std::make_unique<Impl>(viewId, source, library)}
   {
     source.attach(this);

@@ -70,22 +70,4 @@ namespace ao::app
     virtual bool isCurrent() const noexcept = 0;
     virtual void dispatch(std::move_only_function<void()> task) = 0;
   };
-
-  enum class FaultDomain : std::uint8_t
-  {
-    Playback,
-    Output,
-    Library,
-    Import,
-    Query,
-    View,
-    Generic,
-  };
-
-  struct FaultSnapshot final
-  {
-    FaultDomain domain = FaultDomain::Generic;
-    ao::Error error{};
-    bool transient = false;
-  };
 }

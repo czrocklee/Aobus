@@ -149,7 +149,6 @@ namespace ao::app::test
       REQUIRE_NOTHROW(bus.publish(PlaybackTransportChanged{}));
       REQUIRE_NOTHROW(bus.publish(NowPlayingTrackChanged{}));
       REQUIRE_NOTHROW(bus.publish(PlaybackOutputChanged{}));
-      REQUIRE_NOTHROW(bus.publish(PlaybackFaultTransition{}));
     }
 
     SECTION("library events")

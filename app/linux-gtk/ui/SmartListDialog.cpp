@@ -10,10 +10,10 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/model/AllTrackIdsList.h>
-#include <ao/model/FilteredTrackIdList.h>
-#include <ao/model/SmartListEngine.h>
-#include <ao/model/TrackIdList.h>
+#include <runtime/AllTracksSource.h>
+#include <runtime/SmartListEvaluator.h>
+#include <runtime/SmartListSource.h>
+#include <runtime/TrackSource.h>
 
 #include <algorithm>
 
@@ -49,8 +49,8 @@ namespace ao::gtk
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
                                    ao::library::MusicLibrary& musicLibrary,
-                                   ao::model::AllTrackIdsList& allTrackIds,
-                                   ao::model::TrackIdList& parentMembershipList,
+                                   ao::app::TrackSource& allTrackIds,
+                                   ao::app::TrackSource& parentMembershipList,
                                    ao::ListId parentListId,
                                    TrackRowDataProvider const& provider)
     : _exprBox{musicLibrary}
@@ -223,7 +223,7 @@ namespace ao::gtk
   void SmartListDialog::setupPreview()
   {
     // Create preview engine for expression evaluation
-    _previewEngine = std::make_unique<ao::model::SmartListEngine>(_musicLibrary);
+    _previewEngine = std::make_unique<ao::app::SmartListEvaluator>(_musicLibrary);
 
     setupPreviewColumns();
     rebuildPreviewSource();
@@ -312,7 +312,7 @@ namespace ao::gtk
         // Use the parent's membership list as source - this already has the inherited filter applied
         // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
         _previewFilteredList =
-          std::make_unique<ao::model::FilteredTrackIdList>(_parentMembershipList, _musicLibrary, *_previewEngine);
+          std::make_unique<ao::app::SmartListSource>(_parentMembershipList, _musicLibrary, *_previewEngine);
         _previewAdapter = std::make_unique<TrackListAdapter>(*_previewFilteredList, _musicLibrary, _rowDataProvider);
 
         auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());

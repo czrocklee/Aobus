@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/model/SmartListEngine.h>
+#include "SmartListEvaluator.h"
 
-#include <ao/model/FilteredTrackIdList.h>
-#include <ao/model/TrackIdList.h>
+#include "SmartListSource.h"
+#include "TrackSource.h"
+
 #include <ao/utility/Log.h>
-
 #include <ao/lmdb/Transaction.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
@@ -16,12 +16,12 @@
 #include <stdexcept>
 #include <utility>
 
-namespace ao::model
+namespace ao::app
 {
   // SourceObserver implementation
 
-  SourceObserver::SourceObserver(SmartListEngine& engine, TrackIdList& source)
-    : _engine{engine}, _source{source}
+  SourceObserver::SourceObserver(SmartListEvaluator& evaluator, TrackSource& source)
+    : _evaluator{evaluator}, _source{source}
   {
   }
 
@@ -32,9 +32,9 @@ namespace ao::model
       return;
     }
 
-    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
+    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
-      _engine.handleSourceReset(*it->second);
+      _evaluator.handleSourceReset(*it->second);
     }
   }
 
@@ -45,9 +45,9 @@ namespace ao::model
       return;
     }
 
-    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
+    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
-      _engine.handleSourceInserted(*it->second, id, index);
+      _evaluator.handleSourceInserted(*it->second, id, index);
     }
   }
 
@@ -58,9 +58,9 @@ namespace ao::model
       return;
     }
 
-    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
+    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
-      _engine.handleSourceUpdated(*it->second, id, index);
+      _evaluator.handleSourceUpdated(*it->second, id, index);
     }
   }
 
@@ -71,9 +71,9 @@ namespace ao::model
       return;
     }
 
-    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
+    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
-      _engine.handleSourceRemoved(*it->second, id);
+      _evaluator.handleSourceRemoved(*it->second, id);
     }
   }
 
@@ -84,9 +84,9 @@ namespace ao::model
       return;
     }
 
-    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
+    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
-      _engine.handleSourceInserted(*it->second, ids);
+      _evaluator.handleSourceInserted(*it->second, ids);
     }
   }
 
@@ -97,9 +97,9 @@ namespace ao::model
       return;
     }
 
-    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
+    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
-      _engine.handleSourceUpdated(*it->second, ids);
+      _evaluator.handleSourceUpdated(*it->second, ids);
     }
   }
 
@@ -110,9 +110,9 @@ namespace ao::model
       return;
     }
 
-    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
+    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
-      _engine.handleSourceRemoved(*it->second, ids);
+      _evaluator.handleSourceRemoved(*it->second, ids);
     }
   }
 
@@ -123,20 +123,20 @@ namespace ao::model
       return;
     }
 
-    if (auto it = _engine._buckets.find(&_source); it != _engine._buckets.end())
+    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
-      _engine.handleSourceDestroyed(*it->second);
+      _evaluator.handleSourceDestroyed(*it->second);
     }
   }
 
-  // SmartListEngine implementation
+  // SmartListEvaluator implementation
 
-  SmartListEngine::SmartListEngine(ao::library::MusicLibrary& ml)
+  SmartListEvaluator::SmartListEvaluator(ao::library::MusicLibrary& ml)
     : _ml{ml}
   {
   }
 
-  SmartListEngine::~SmartListEngine()
+  SmartListEvaluator::~SmartListEvaluator()
   {
     _alive = false;
 
@@ -154,7 +154,7 @@ namespace ao::model
     }
   }
 
-  void SmartListEngine::registerList(TrackIdList& source, FilteredTrackIdList& list)
+  void SmartListEvaluator::registerList(TrackSource& source, SmartListSource& list)
   {
     auto& bucket = _buckets[&source];
 
@@ -169,7 +169,7 @@ namespace ao::model
     bucket->lists.push_back(&list);
   }
 
-  void SmartListEngine::unregisterList(TrackIdList& source, FilteredTrackIdList& list)
+  void SmartListEvaluator::unregisterList(TrackSource& source, SmartListSource& list)
   {
     auto it = _buckets.find(&source);
 
@@ -192,7 +192,7 @@ namespace ao::model
     }
   }
 
-  void SmartListEngine::rebuild(FilteredTrackIdList& list)
+  void SmartListEvaluator::rebuild(SmartListSource& list)
   {
     auto const it = _buckets.find(&list._source);
 
@@ -209,7 +209,7 @@ namespace ao::model
     rebuildDirtyLists(*it->second);
   }
 
-  void SmartListEngine::notifyUpdated(TrackIdList& source, TrackId trackId)
+  void SmartListEvaluator::notifyUpdated(TrackSource& source, TrackId trackId)
   {
     auto const it = _buckets.find(&source);
 
@@ -226,7 +226,7 @@ namespace ao::model
     }
   }
 
-  void SmartListEngine::rebuildActiveLists(SourceBucket& bucket)
+  void SmartListEvaluator::rebuildActiveLists(SourceBucket& bucket)
   {
     if (bucket.lists.empty())
     {
@@ -236,9 +236,9 @@ namespace ao::model
     rebuildLists(bucket.lists);
   }
 
-  void SmartListEngine::rebuildDirtyLists(SourceBucket& bucket)
+  void SmartListEvaluator::rebuildDirtyLists(SourceBucket& bucket)
   {
-    auto dirtyLists = std::vector<FilteredTrackIdList*>{};
+    auto dirtyLists = std::vector<SmartListSource*>{};
     for (auto* list : bucket.lists)
     {
       if (list->_dirty)
@@ -256,14 +256,14 @@ namespace ao::model
     rebuildLists(dirtyLists);
   }
 
-  void SmartListEngine::rebuildLists(std::span<FilteredTrackIdList*> lists)
+  void SmartListEvaluator::rebuildLists(std::span<SmartListSource*> lists)
   {
     if (lists.empty())
     {
       return;
     }
 
-    auto evaluatableLists = std::vector<FilteredTrackIdList*>{};
+    auto evaluatableLists = std::vector<SmartListSource*>{};
     for (auto* list : lists)
     {
       if (list->_hasError || !list->_plan)
@@ -285,12 +285,12 @@ namespace ao::model
     // Notify Reset for only the provided lists
     for (auto* list : lists)
     {
-      list->TrackIdList::notifyReset();
+      list->TrackSource::notifyReset();
     }
   }
 
-  void SmartListEngine::rebuildGroup(TrackIdList& source,
-                                     std::span<FilteredTrackIdList*> lists,
+  void SmartListEvaluator::rebuildGroup(TrackSource& source,
+                                     std::span<SmartListSource*> lists,
                                      ao::library::TrackStore::Reader::LoadMode mode)
   {
     if (lists.empty())
@@ -317,7 +317,7 @@ namespace ao::model
       {
         auto* list = lists[listIndex];
 
-        if (list->_evaluator.matches(*list->_plan, *view))
+        if (list->_planEvaluator.matches(*list->_plan, *view))
         {
           nextMembers[listIndex].push_back(id);
         }
@@ -331,14 +331,14 @@ namespace ao::model
     }
   }
 
-  void SmartListEngine::handleSourceReset(SourceBucket& bucket)
+  void SmartListEvaluator::handleSourceReset(SourceBucket& bucket)
   {
     rebuildActiveLists(bucket);
   }
 
-  void SmartListEngine::handleSourceInserted(SourceBucket& bucket, TrackId id, std::size_t /*sourceIndex*/)
+  void SmartListEvaluator::handleSourceInserted(SourceBucket& bucket, TrackId id, std::size_t /*sourceIndex*/)
   {
-    std::vector<FilteredTrackIdList*> evaluatableLists;
+    std::vector<SmartListSource*> evaluatableLists;
     for (auto* list : bucket.lists)
     {
       if (list->_hasError || !list->_plan || list->_dirty)
@@ -366,22 +366,22 @@ namespace ao::model
 
     for (auto* list : evaluatableLists)
     {
-      if (list->_evaluator.matches(*list->_plan, *view))
+      if (list->_planEvaluator.matches(*list->_plan, *view))
       {
         auto [it, inserted] = list->_members.insert(id);
 
         if (inserted)
         {
           auto const index = static_cast<std::size_t>(std::ranges::distance(list->_members.begin(), it));
-          list->TrackIdList::notifyInserted(id, index);
+          list->TrackSource::notifyInserted(id, index);
         }
       }
     }
   }
 
-  void SmartListEngine::handleSourceUpdated(SourceBucket& bucket, TrackId id, std::size_t /*sourceIndex*/)
+  void SmartListEvaluator::handleSourceUpdated(SourceBucket& bucket, TrackId id, std::size_t /*sourceIndex*/)
   {
-    std::vector<FilteredTrackIdList*> evaluatableLists;
+    std::vector<SmartListSource*> evaluatableLists;
 
     for (auto* list : bucket.lists)
     {
@@ -405,7 +405,7 @@ namespace ao::model
 
     for (auto* list : evaluatableLists)
     {
-      bool const nowMatches = view && list->_evaluator.matches(*list->_plan, *view);
+      bool const nowMatches = view && list->_planEvaluator.matches(*list->_plan, *view);
       auto const it = list->_members.find(id);
       bool const wasPresent = it != list->_members.end();
 
@@ -414,24 +414,24 @@ namespace ao::model
         if (auto [it2, inserted] = list->_members.insert(id); inserted)
         {
           auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it2));
-          list->TrackIdList::notifyInserted(id, index);
+          list->TrackSource::notifyInserted(id, index);
         }
       }
       else if (!nowMatches && wasPresent)
       {
         auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
         list->_members.erase(it);
-        list->TrackIdList::notifyRemoved(id, index);
+        list->TrackSource::notifyRemoved(id, index);
       }
       else if (nowMatches && wasPresent)
       {
         auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
-        list->TrackIdList::notifyUpdated(id, index);
+        list->TrackSource::notifyUpdated(id, index);
       }
     }
   }
 
-  void SmartListEngine::handleSourceRemoved(SourceBucket& bucket, TrackId id)
+  void SmartListEvaluator::handleSourceRemoved(SourceBucket& bucket, TrackId id)
   {
     for (auto* list : bucket.lists)
     {
@@ -444,19 +444,19 @@ namespace ao::model
       {
         auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
         list->_members.erase(it);
-        list->TrackIdList::notifyRemoved(id, index);
+        list->TrackSource::notifyRemoved(id, index);
       }
     }
   }
 
-  void SmartListEngine::handleSourceInserted(SourceBucket& bucket, std::span<TrackId const> ids)
+  void SmartListEvaluator::handleSourceInserted(SourceBucket& bucket, std::span<TrackId const> ids)
   {
     if (ids.empty())
     {
       return;
     }
 
-    std::vector<FilteredTrackIdList*> evaluatableLists;
+    std::vector<SmartListSource*> evaluatableLists;
 
     for (auto* list : bucket.lists)
     {
@@ -490,7 +490,7 @@ namespace ao::model
 
       for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
       {
-        if (evaluatableLists[i]->_evaluator.matches(*evaluatableLists[i]->_plan, *view))
+        if (evaluatableLists[i]->_planEvaluator.matches(*evaluatableLists[i]->_plan, *view))
         {
           matchedIds[i].push_back(id);
         }
@@ -503,19 +503,19 @@ namespace ao::model
       {
         auto& list = *evaluatableLists[i];
         list._members.insert(matchedIds[i].begin(), matchedIds[i].end());
-        list.TrackIdList::notifyInserted(matchedIds[i]);
+        list.TrackSource::notifyInserted(matchedIds[i]);
       }
     }
   }
 
-  void SmartListEngine::handleSourceUpdated(SourceBucket& bucket, std::span<TrackId const> ids)
+  void SmartListEvaluator::handleSourceUpdated(SourceBucket& bucket, std::span<TrackId const> ids)
   {
     if (ids.empty())
     {
       return;
     }
 
-    std::vector<FilteredTrackIdList*> evaluatableLists;
+    std::vector<SmartListSource*> evaluatableLists;
 
     for (auto* list : bucket.lists)
     {
@@ -553,7 +553,7 @@ namespace ao::model
       for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
       {
         auto& list = *evaluatableLists[i];
-        bool const nowMatches = view && list._evaluator.matches(*list._plan, *view);
+        bool const nowMatches = view && list._planEvaluator.matches(*list._plan, *view);
         bool const wasPresent = list._members.contains(id);
 
         if (nowMatches && !wasPresent)
@@ -583,23 +583,23 @@ namespace ao::model
           list._members.erase(id);
         }
 
-        list.TrackIdList::notifyRemoved(trans.removed);
+        list.TrackSource::notifyRemoved(trans.removed);
       }
 
       if (!trans.inserted.empty())
       {
         list._members.insert(trans.inserted.begin(), trans.inserted.end());
-        list.TrackIdList::notifyInserted(trans.inserted);
+        list.TrackSource::notifyInserted(trans.inserted);
       }
 
       if (!trans.updated.empty())
       {
-        list.TrackIdList::notifyUpdated(trans.updated);
+        list.TrackSource::notifyUpdated(trans.updated);
       }
     }
   }
 
-  void SmartListEngine::handleSourceRemoved(SourceBucket& bucket, std::span<TrackId const> ids)
+  void SmartListEvaluator::handleSourceRemoved(SourceBucket& bucket, std::span<TrackId const> ids)
   {
     for (auto* list : bucket.lists)
     {
@@ -625,18 +625,18 @@ namespace ao::model
     }
   }
 
-  void SmartListEngine::handleSourceDestroyed(SourceBucket& bucket)
+  void SmartListEvaluator::handleSourceDestroyed(SourceBucket& bucket)
   {
     bucket.sourceAlive = false;
 
     for (auto* list : bucket.lists)
     {
       list->_members.clear();
-      list->TrackIdList::notifyReset();
+      list->TrackSource::notifyReset();
     }
   }
 
-  ao::library::TrackStore::Reader::LoadMode SmartListEngine::getUnionMode(std::span<FilteredTrackIdList*> lists)
+  ao::library::TrackStore::Reader::LoadMode SmartListEvaluator::getUnionMode(std::span<SmartListSource*> lists)
   {
     bool needsHot = false;
     bool needsCold = false;
@@ -671,4 +671,4 @@ namespace ao::model
 
     return ao::library::TrackStore::Reader::LoadMode::Hot;
   }
-} // namespace ao::model
+}

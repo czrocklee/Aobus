@@ -13,7 +13,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/model/TrackIdList.h>
+#include <runtime/TrackSource.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <cstdint>
@@ -200,11 +200,11 @@ namespace ao::model::test
 namespace
 {
   using ao::TrackId;
+  using ao::app::TrackSource;
+  using ao::app::TrackSourceObserver;
   using ao::library::MusicLibrary;
   using ao::library::TrackBuilder;
   using ao::library::TrackStore;
-  using ao::model::TrackIdList;
-  using ao::model::TrackIdListObserver;
   using ao::model::test::RowData;
   using ao::model::test::TestTrackRowProvider;
 
@@ -282,9 +282,9 @@ namespace
   };
 
   /**
-   * MutableTrackIdList - Test helper for TrackIdList.
+   * MutableTrackSource - Test helper for TrackSource.
    */
-  class MutableTrackIdList final : public TrackIdList
+  class MutableTrackSource final : public TrackSource
   {
   public:
     void addInitial(TrackId id) { _ids.push_back(id); }
@@ -292,24 +292,24 @@ namespace
     void insert(TrackId id, std::size_t index)
     {
       _ids.insert(_ids.begin() + static_cast<std::ptrdiff_t>(index), id);
-      notifyInserted(id, index);
+      TrackSource::notifyInserted(id, index);
     }
 
     void update(TrackId id)
     {
       auto const index = indexOf(id);
       REQUIRE(index.has_value());
-      notifyUpdated(id, *index);
+      TrackSource::notifyUpdated(id, *index);
     }
 
-    void onReset() { notifyReset(); }
+    void onReset() { TrackSource::notifyReset(); }
 
     void remove(TrackId id)
     {
       auto const index = indexOf(id);
       REQUIRE(index.has_value());
       _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*index));
-      notifyRemoved(id, *index);
+      TrackSource::notifyRemoved(id, *index);
     }
 
     std::size_t size() const override { return _ids.size(); }
@@ -337,7 +337,7 @@ namespace
   /**
    * ObserverSpy - Records observer events for verification.
    */
-  class ObserverSpy final : public TrackIdListObserver
+  class ObserverSpy final : public TrackSourceObserver
   {
   public:
     enum class EventKind
@@ -489,9 +489,9 @@ TEST_CASE("app::uiao::gtk::TrackListAdapter", "[app][adapter]")
     CHECK(matchesFilter(*row, "") == true);
   }
 
-  SECTION("MutableTrackIdList notifies observers on insert")
+  SECTION("MutableTrackSource notifies observers on insert")
   {
-    auto source = MutableTrackIdList{};
+    auto source = MutableTrackSource{};
     auto spy = ObserverSpy{};
     source.attach(&spy);
 
@@ -508,9 +508,9 @@ TEST_CASE("app::uiao::gtk::TrackListAdapter", "[app][adapter]")
     source.detach(&spy);
   }
 
-  SECTION("MutableTrackIdList notifies observers on remove")
+  SECTION("MutableTrackSource notifies observers on remove")
   {
-    auto source = MutableTrackIdList{};
+    auto source = MutableTrackSource{};
     auto const id1 = TrackId{1};
     auto const id2 = TrackId{2};
     source.addInitial(id1);
@@ -527,9 +527,9 @@ TEST_CASE("app::uiao::gtk::TrackListAdapter", "[app][adapter]")
     source.detach(&spy);
   }
 
-  SECTION("MutableTrackIdList notifies observers on update")
+  SECTION("MutableTrackSource notifies observers on update")
   {
-    auto source = MutableTrackIdList{};
+    auto source = MutableTrackSource{};
     auto const id = TrackId{1};
     source.addInitial(id);
 
@@ -544,9 +544,9 @@ TEST_CASE("app::uiao::gtk::TrackListAdapter", "[app][adapter]")
     source.detach(&spy);
   }
 
-  SECTION("MutableTrackIdList notifies observers on reset")
+  SECTION("MutableTrackSource notifies observers on reset")
   {
-    auto source = MutableTrackIdList{};
+    auto source = MutableTrackSource{};
     auto spy = ObserverSpy{};
     source.attach(&spy);
 

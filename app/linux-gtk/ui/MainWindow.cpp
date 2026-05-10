@@ -117,7 +117,7 @@ namespace ao::gtk
             _session.workspace().navigateTo(listId);
           }
         },
-        .getListMembership = [](ao::ListId /*listId*/) -> ao::model::TrackIdList*
+        .getListMembership = [](ao::ListId /*listId*/) -> ao::app::TrackSource*
         {
           // This callback is slightly problematic in the new architecture
           // as the sidebar shouldn't care about membership lists directly.
@@ -189,7 +189,7 @@ namespace ao::gtk
 
             if (_statusBar)
             {
-              _statusBar->setTrackCount(_session.allTracks().size());
+              _statusBar->setTrackCount(_session.sources().allTracks().size());
             }
           }
         },
@@ -257,7 +257,7 @@ namespace ao::gtk
         {
           _rowDataProvider->loadAll();
           _session.reloadAllTracks();
-          _statusBar->setTrackCount(_session.allTracks().size());
+          _statusBar->setTrackCount(_session.sources().allTracks().size());
         }
         _statusBar->clearImportProgress();
       });
@@ -274,7 +274,7 @@ namespace ao::gtk
         {
           _rowDataProvider->invalidate(trackId);
         }
-        _session.allTracks().notifyUpdated(event.trackIds);
+        _session.sources().allTracks().notifyUpdated(event.trackIds);
       });
 
     // Initial state refresh (no longer needed with direct services, but keeping for parity if it triggered events)
@@ -284,7 +284,7 @@ namespace ao::gtk
 
     if (_statusBar)
     {
-      _statusBar->setTrackCount(_session.allTracks().size());
+      _statusBar->setTrackCount(_session.sources().allTracks().size());
     }
 
     auto txn = _session.musicLibrary().readTransaction();
@@ -619,7 +619,7 @@ namespace ao::gtk
 
         if (_rowDataProvider)
         {
-          _statusBar->setTrackCount(_session.allTracks().size());
+          _statusBar->setTrackCount(_session.sources().allTracks().size());
         }
       }
       else

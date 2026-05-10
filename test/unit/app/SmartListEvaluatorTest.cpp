@@ -9,9 +9,9 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/model/FilteredTrackIdList.h>
-#include <ao/model/SmartListEngine.h>
-#include <ao/model/TrackIdList.h>
+#include <runtime/SmartListSource.h>
+#include <runtime/SmartListEvaluator.h>
+#include <runtime/TrackSource.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <algorithm>
@@ -30,10 +30,10 @@ namespace
   using ao::library::MusicLibrary;
   using ao::library::TrackBuilder;
   using ao::library::TrackStore;
-  using ao::model::FilteredTrackIdList;
-  using ao::model::SmartListEngine;
-  using ao::model::TrackIdList;
-  using ao::model::TrackIdListObserver;
+  using ao::app::SmartListSource;
+  using ao::app::SmartListEvaluator;
+  using ao::app::TrackSource;
+  using ao::app::TrackSourceObserver;
 
   struct TrackSpec
   {
@@ -55,7 +55,7 @@ namespace
     return spec;
   }
 
-  class MutableTrackIdList final : public TrackIdList
+  class MutableTrackSource final : public TrackSource
   {
   public:
     void addInitial(TrackId id) { _ids.push_back(id); }
@@ -125,7 +125,7 @@ namespace
     std::vector<TrackId> _ids;
   };
 
-  class ObserverSpy final : public TrackIdListObserver
+  class ObserverSpy final : public TrackSourceObserver
   {
   public:
     enum class EventKind : std::uint8_t
@@ -249,7 +249,7 @@ namespace
   };
 } // namespace
 
-TEST_CASE("SmartListEngine", "[app][smartlist]")
+TEST_CASE("ao::app::SmartListEvaluator", "[app][smartlist]")
 {
   SECTION("empty expression matches all tracks and maintains ID order")
   {
@@ -257,13 +257,13 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     auto first = testLibrary.addTrack(makeTrackSpec("first", 2020));
     auto second = testLibrary.addTrack(makeTrackSpec("second", 2021));
 
-    auto source = MutableTrackIdList{};
+    auto source = MutableTrackSource{};
     // Source is [second, first]
     source.addInitial(second);
     source.addInitial(first);
 
-    auto engine = SmartListEngine{testLibrary.library()};
-    auto filtered = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto engine = ao::app::SmartListEvaluator{testLibrary.library()};
+    auto filtered = ao::app::SmartListSource{source, testLibrary.library(), engine};
     auto spy = ObserverSpy{};
     filtered.attach(&spy);
 
@@ -286,13 +286,13 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     auto first = testLibrary.addTrack(makeTrackSpec("first", 2020, 180000));
     auto second = testLibrary.addTrack(makeTrackSpec("second", 2022, 260000));
 
-    auto source = MutableTrackIdList{};
+    auto source = MutableTrackSource{};
     source.addInitial(first);
     source.addInitial(second);
 
-    auto engine = SmartListEngine{testLibrary.library()};
-    auto hotList = FilteredTrackIdList{source, testLibrary.library(), engine};
-    auto coldList = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto engine = ao::app::SmartListEvaluator{testLibrary.library()};
+    auto hotList = ao::app::SmartListSource{source, testLibrary.library(), engine};
+    auto coldList = ao::app::SmartListSource{source, testLibrary.library(), engine};
     hotList.setExpression("$year >= 2021");
     hotList.reload();
     coldList.setExpression("@duration >= 240000");
@@ -323,12 +323,12 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     auto testLibrary = TestMusicLibrary{};
     auto original = testLibrary.addTrack(makeTrackSpec("old", 2020, 180000));
 
-    auto source = MutableTrackIdList{};
+    auto source = MutableTrackSource{};
     source.addInitial(original);
 
-    auto engine = SmartListEngine{testLibrary.library()};
-    auto hotList = FilteredTrackIdList{source, testLibrary.library(), engine};
-    auto coldList = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto engine = ao::app::SmartListEvaluator{testLibrary.library()};
+    auto hotList = ao::app::SmartListSource{source, testLibrary.library(), engine};
+    auto coldList = ao::app::SmartListSource{source, testLibrary.library(), engine};
     hotList.setExpression("$year >= 2021");
     hotList.reload();
     coldList.setExpression("@duration >= 240000");
@@ -364,11 +364,11 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     auto testLibrary = TestMusicLibrary{};
     auto trackId = testLibrary.addTrack(makeTrackSpec("track", 2020));
 
-    auto source = MutableTrackIdList{};
+    auto source = MutableTrackSource{};
     source.addInitial(trackId);
 
-    auto engine = SmartListEngine{testLibrary.library()};
-    auto filtered = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto engine = ao::app::SmartListEvaluator{testLibrary.library()};
+    auto filtered = ao::app::SmartListSource{source, testLibrary.library(), engine};
     filtered.setExpression("$year >= 2021");
     filtered.reload();
 
@@ -413,16 +413,16 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     auto legacy = testLibrary.addTrack(makeTrackSpec("legacy", 2020, 180000));
     auto modern = testLibrary.addTrack(makeTrackSpec("modern", 2022, 250000));
 
-    auto source = MutableTrackIdList{};
+    auto source = MutableTrackSource{};
     source.addInitial(legacy);
     source.addInitial(modern);
 
-    auto engine = SmartListEngine{testLibrary.library()};
-    auto parent = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto engine = ao::app::SmartListEvaluator{testLibrary.library()};
+    auto parent = ao::app::SmartListSource{source, testLibrary.library(), engine};
     parent.setExpression("$year >= 2021");
     parent.reload();
 
-    auto child = FilteredTrackIdList{parent, testLibrary.library(), engine};
+    auto child = ao::app::SmartListSource{parent, testLibrary.library(), engine};
     child.setExpression("@duration >= 240000");
     child.reload();
 
@@ -464,12 +464,12 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
     auto testLibrary = TestMusicLibrary{};
     auto first = testLibrary.addTrack(makeTrackSpec("first", 2022));
 
-    auto source = MutableTrackIdList{};
+    auto source = MutableTrackSource{};
     source.addInitial(first);
 
-    auto engine = SmartListEngine{testLibrary.library()};
-    auto validList = FilteredTrackIdList{source, testLibrary.library(), engine};
-    auto invalidList = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto engine = ao::app::SmartListEvaluator{testLibrary.library()};
+    auto validList = ao::app::SmartListSource{source, testLibrary.library(), engine};
+    auto invalidList = ao::app::SmartListSource{source, testLibrary.library(), engine};
     validList.setExpression("$year >= 2021");
     validList.reload();
     invalidList.setExpression("   ");
@@ -504,10 +504,10 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
   SECTION("source destruction is handled gracefully")
   {
     auto testLibrary = TestMusicLibrary{};
-    auto engine = SmartListEngine{testLibrary.library()};
+    auto engine = ao::app::SmartListEvaluator{testLibrary.library()};
 
-    auto source = std::make_unique<MutableTrackIdList>();
-    auto filtered = std::make_unique<FilteredTrackIdList>(*source, testLibrary.library(), engine);
+    auto source = std::make_unique<MutableTrackSource>();
+    auto filtered = std::make_unique<ao::app::SmartListSource>(*source, testLibrary.library(), engine);
 
     auto spy = ObserverSpy{};
     filtered->attach(&spy);
@@ -527,10 +527,10 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
   SECTION("batch operations emit batch notifications")
   {
     auto testLibrary = TestMusicLibrary{};
-    auto engine = SmartListEngine{testLibrary.library()};
-    auto source = MutableTrackIdList{};
+    auto engine = ao::app::SmartListEvaluator{testLibrary.library()};
+    auto source = MutableTrackSource{};
 
-    auto list = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto list = ao::app::SmartListSource{source, testLibrary.library(), engine};
     list.setExpression("$year >= 2020");
     list.reload();
 
@@ -568,13 +568,13 @@ TEST_CASE("SmartListEngine", "[app][smartlist]")
   SECTION("load mode optimization for mixed access profiles")
   {
     auto testLibrary = TestMusicLibrary{};
-    auto engine = SmartListEngine{testLibrary.library()};
-    auto source = MutableTrackIdList{};
+    auto engine = ao::app::SmartListEvaluator{testLibrary.library()};
+    auto source = MutableTrackSource{};
 
-    auto hotList = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto hotList = ao::app::SmartListSource{source, testLibrary.library(), engine};
     hotList.setExpression("$year >= 2020"); // Hot metadata
 
-    auto coldList = FilteredTrackIdList{source, testLibrary.library(), engine};
+    auto coldList = ao::app::SmartListSource{source, testLibrary.library(), engine};
     coldList.setExpression("@duration >= 180000"); // Cold property
 
     auto t1 = testLibrary.addTrack(makeTrackSpec("Track", 2022, 200000));

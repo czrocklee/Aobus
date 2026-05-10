@@ -47,11 +47,6 @@ namespace ao::app
     bool ready = false;
   };
 
-  struct PlaybackFaultTransition final
-  {
-    std::optional<FaultSnapshot> optFault{};
-  };
-
   // -- Library events ----------------------------------------------------------
 
   struct TracksMutated final

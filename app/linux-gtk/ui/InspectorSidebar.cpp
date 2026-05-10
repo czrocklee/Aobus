@@ -5,7 +5,6 @@
 #include "TrackPresentation.h"
 #include "TrackRowDataProvider.h"
 #include <ao/library/ResourceStore.h>
-#include <ao/model/TrackIdList.h>
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
 #include <runtime/EventBus.h>
@@ -13,6 +12,7 @@
 #include <runtime/LibraryMutationService.h>
 #include <runtime/ProjectionTypes.h>
 #include <runtime/StateTypes.h>
+#include <runtime/TrackSource.h>
 #include <runtime/ViewService.h>
 
 #include <giomm/memoryinputstream.h>
@@ -141,7 +141,7 @@ namespace ao::gtk
               _dataProvider->invalidate(trackId);
             }
           }
-          _session.allTracks().notifyUpdated(ids);
+          _session.sources().allTracks().notifyUpdated(ids);
         }
       });
   }

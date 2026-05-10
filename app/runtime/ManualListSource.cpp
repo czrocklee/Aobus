@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/model/ManualTrackIdList.h>
+#include "ManualListSource.h"
 
 #include <ao/library/ListView.h>
 
 #include <algorithm>
 
-namespace ao::model
+namespace ao::app
 {
-  ManualTrackIdList::ManualTrackIdList(ao::library::ListView const& view, TrackIdList* source)
+  ManualListSource::ManualListSource(ao::library::ListView const& view, TrackSource* source)
     : _source{source}
   {
     _trackIds.reserve(view.tracks().size());
@@ -25,9 +25,9 @@ namespace ao::model
     }
   }
 
-  ManualTrackIdList::ManualTrackIdList() = default;
+  ManualListSource::ManualListSource() = default;
 
-  ManualTrackIdList::~ManualTrackIdList()
+  ManualListSource::~ManualListSource()
   {
     if (_source != nullptr)
     {
@@ -35,7 +35,7 @@ namespace ao::model
     }
   }
 
-  void ManualTrackIdList::reloadFromListView(ao::library::ListView const& view)
+  void ManualListSource::reloadFromListView(ao::library::ListView const& view)
   {
     _trackIds.clear();
     _trackIds.reserve(view.tracks().size());
@@ -48,10 +48,10 @@ namespace ao::model
       }
     }
 
-    TrackIdList::notifyReset();
+    TrackSource::notifyReset();
   }
 
-  void ManualTrackIdList::onReset()
+  void ManualListSource::onReset()
   {
     if (_source == nullptr)
     {
@@ -70,36 +70,36 @@ namespace ao::model
     }
 
     _trackIds = std::move(next);
-    TrackIdList::notifyReset();
+    TrackSource::notifyReset();
   }
 
-  void ManualTrackIdList::onInserted(TrackId /*id*/, std::size_t /*index*/)
+  void ManualListSource::onInserted(TrackId /*id*/, std::size_t /*index*/)
   {
   }
 
-  void ManualTrackIdList::onUpdated(TrackId id, std::size_t /*index*/)
+  void ManualListSource::onUpdated(TrackId id, std::size_t /*index*/)
   {
     if (auto const myIndex = indexOf(id))
     {
-      TrackIdList::notifyUpdated(id, *myIndex);
+      TrackSource::notifyUpdated(id, *myIndex);
     }
   }
 
-  void ManualTrackIdList::onRemoved(TrackId id, std::size_t /*index*/)
+  void ManualListSource::onRemoved(TrackId id, std::size_t /*index*/)
   {
     if (auto it = std::ranges::find(_trackIds, id); it != _trackIds.end())
     {
       auto const myIndex = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
       _trackIds.erase(it);
-      TrackIdList::notifyRemoved(id, myIndex);
+      TrackSource::notifyRemoved(id, myIndex);
     }
   }
 
-  void ManualTrackIdList::onInserted(std::span<TrackId const> /*ids*/)
+  void ManualListSource::onInserted(std::span<TrackId const> /*ids*/)
   {
   }
 
-  void ManualTrackIdList::onUpdated(std::span<TrackId const> ids)
+  void ManualListSource::onUpdated(std::span<TrackId const> ids)
   {
     auto matched = std::vector<TrackId>{};
 
@@ -113,11 +113,11 @@ namespace ao::model
 
     if (!matched.empty())
     {
-      TrackIdList::notifyUpdated(matched);
+      TrackSource::notifyUpdated(matched);
     }
   }
 
-  void ManualTrackIdList::onRemoved(std::span<TrackId const> ids)
+  void ManualListSource::onRemoved(std::span<TrackId const> ids)
   {
     std::vector<TrackId> removed;
 
@@ -132,16 +132,16 @@ namespace ao::model
 
     if (!removed.empty())
     {
-      TrackIdList::notifyRemoved(removed);
+      TrackSource::notifyRemoved(removed);
     }
   }
 
-  bool ManualTrackIdList::contains(TrackId id) const
+  bool ManualListSource::contains(TrackId id) const
   {
     return std::ranges::contains(_trackIds, id);
   }
 
-  std::optional<std::size_t> ManualTrackIdList::indexOf(TrackId id) const
+  std::optional<std::size_t> ManualListSource::indexOf(TrackId id) const
   {
     auto const it = std::ranges::find(_trackIds, id);
 
@@ -152,4 +152,4 @@ namespace ao::model
 
     return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
   }
-} // namespace ao::model
+}

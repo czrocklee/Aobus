@@ -10,21 +10,21 @@
 #include <span>
 #include <vector>
 
-namespace ao::model
+namespace ao::app
 {
   using TrackId = ao::TrackId;
 
   // Forward declaration
-  class SmartListEngine;
+  class SmartListEvaluator;
 
   /**
-   * TrackIdListObserver - Observer interface for TrackIdList changes.
+   * TrackSourceObserver - Observer interface for TrackSource changes.
    * All notifications are emitted AFTER internal state is updated.
    */
-  class TrackIdListObserver
+  class TrackSourceObserver
   {
   public:
-    virtual ~TrackIdListObserver() = default;
+    virtual ~TrackSourceObserver() = default;
 
     virtual void onReset() = 0;
 
@@ -47,19 +47,19 @@ namespace ao::model
   };
 
   /**
-   * TrackIdList - Abstract base class for TrackId membership lists.
+   * TrackSource - Abstract base class for TrackId membership lists.
    */
-  class TrackIdList
+  class TrackSource
   {
   public:
-    virtual ~TrackIdList();
+    virtual ~TrackSource();
 
     virtual std::size_t size() const = 0;
     virtual TrackId trackIdAt(std::size_t index) const = 0;
     virtual std::optional<std::size_t> indexOf(TrackId id) const = 0;
 
-    void attach(TrackIdListObserver* observer);
-    void detach(TrackIdListObserver* observer);
+    void attach(TrackSourceObserver* observer);
+    void detach(TrackSourceObserver* observer);
 
     // Public notification API
     virtual void notifyUpdated(TrackId id);
@@ -68,7 +68,7 @@ namespace ao::model
     virtual void notifyRemoved(std::span<TrackId const> ids);
 
   protected:
-    TrackIdList() = default;
+    TrackSource() = default;
 
     void notifyReset();
     void notifyInserted(TrackId id, std::size_t index);
@@ -76,8 +76,8 @@ namespace ao::model
     void notifyRemoved(TrackId id, std::size_t index);
 
   private:
-    std::vector<TrackIdListObserver*> _observers;
+    std::vector<TrackSourceObserver*> _observers;
 
-    friend class SmartListEngine;
+    friend class SmartListEvaluator;
   };
-} // namespace ao::model
+}

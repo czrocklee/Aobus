@@ -18,12 +18,12 @@ namespace ao::library
   class ListView;
 }
 
-namespace ao::model
+namespace ao::app
 {
-  class AllTrackIdsList;
-  class FilteredTrackIdList;
-  class SmartListEngine;
-  class TrackIdList;
+  class AllTracksSource;
+  class SmartListSource;
+  class SmartListEvaluator;
+  class TrackSource;
 }
 
 namespace ao::gtk
@@ -36,8 +36,8 @@ namespace ao::gtk
   public:
     SmartListDialog(Gtk::Window& parent,
                     ao::library::MusicLibrary& musicLibrary,
-                    ao::model::AllTrackIdsList& allTrackIds,
-                    ao::model::TrackIdList& parentMembershipList,
+                    ao::app::TrackSource& allTrackIds,
+                    ao::app::TrackSource& parentMembershipList,
                     ao::ListId parentListId,
                     TrackRowDataProvider const& provider);
     virtual ~SmartListDialog() override;
@@ -79,12 +79,12 @@ namespace ao::gtk
 
     // Preview infrastructure
     ao::library::MusicLibrary& _musicLibrary;
-    ao::model::AllTrackIdsList& _allTrackIds;
-    ao::model::TrackIdList& _parentMembershipList;
+    ao::app::TrackSource& _allTrackIds;
+    ao::app::TrackSource& _parentMembershipList;
     ao::ListId _parentListId;
     TrackRowDataProvider const& _rowDataProvider;
-    std::unique_ptr<ao::model::FilteredTrackIdList> _previewFilteredList;
-    std::unique_ptr<ao::model::SmartListEngine> _previewEngine;
+    std::unique_ptr<ao::app::SmartListSource> _previewFilteredList;
+    std::unique_ptr<ao::app::SmartListEvaluator> _previewEngine;
     std::unique_ptr<TrackListAdapter> _previewAdapter;
     bool _expressionValid = true;
 

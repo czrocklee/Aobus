@@ -11,9 +11,9 @@
 #include "ViewService.h"
 #include "WorkspaceService.h"
 
+#include "ListSourceStore.h"
+
 #include <ao/library/MusicLibrary.h>
-#include <ao/model/AllTrackIdsList.h>
-#include <ao/model/SmartListEngine.h>
 
 #include <memory>
 
@@ -26,8 +26,7 @@ namespace ao::app
     EventBus eventBus;
 
     ao::library::MusicLibrary musicLibrary;
-    ao::model::AllTrackIdsList allTracksSource;
-    ao::model::SmartListEngine smartListEngine;
+    ListSourceStore sources;
 
     ViewService viewService;
     PlaybackService playbackService;
@@ -40,9 +39,8 @@ namespace ao::app
          std::shared_ptr<ISessionPersistence> persistence)
       : executor{std::move(exec)}
       , musicLibrary{std::move(libraryRoot)}
-      , allTracksSource{musicLibrary.tracks()}
-      , smartListEngine{musicLibrary}
-      , viewService{musicLibrary, smartListEngine, allTracksSource, eventBus}
+      , sources{musicLibrary}
+      , viewService{musicLibrary, sources, eventBus}
       , playbackService{eventBus, *this->executor, viewService, musicLibrary}
       , mutationService{eventBus, *this->executor, musicLibrary}
       , notificationService{eventBus}
@@ -100,25 +98,14 @@ namespace ao::app
     return _impl->musicLibrary;
   }
 
-  ao::model::TrackIdList& AppSession::allTracks() noexcept
+  ListSourceStore& AppSession::sources() noexcept
   {
-    return _impl->allTracksSource;
-  }
-
-  ao::model::AllTrackIdsList& AppSession::allTrackIdsList() noexcept
-  {
-    return _impl->allTracksSource;
-  }
-
-  ao::model::SmartListEngine& AppSession::smartListEngine() noexcept
-  {
-    return _impl->smartListEngine;
+    return _impl->sources;
   }
 
   void AppSession::reloadAllTracks()
   {
-    auto txn = _impl->musicLibrary.readTransaction();
-    _impl->allTracksSource.reloadFromStore(txn);
+    _impl->sources.reloadAllTracks();
   }
 
   ao::TrackId AppSession::playSelectionInFocusedView()

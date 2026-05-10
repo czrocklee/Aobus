@@ -6,8 +6,8 @@
 #include "ProjectionTypes.h"
 #include "StateTypes.h"
 
+#include "TrackSource.h"
 #include <ao/library/MusicLibrary.h>
-#include <ao/model/TrackIdList.h>
 
 #include <memory>
 #include <span>
@@ -17,19 +17,19 @@ namespace ao::library
 {
   class MusicLibrary;
 }
-namespace ao::model
+namespace ao::app
 {
-  class FilteredTrackIdList;
+  class SmartListSource;
 }
 
 namespace ao::app
 {
   class TrackListProjection final
     : public ITrackListProjection
-    , private ao::model::TrackIdListObserver
+    , private TrackSourceObserver
   {
   public:
-    TrackListProjection(ViewId viewId, ao::model::TrackIdList& source, ao::library::MusicLibrary& library);
+    TrackListProjection(ViewId viewId, TrackSource& source, ao::library::MusicLibrary& library);
     ~TrackListProjection() override;
 
     TrackListProjection(TrackListProjection const&) = delete;

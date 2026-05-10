@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/model/TrackIdList.h>
+#include "TrackSource.h"
 
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
@@ -11,29 +11,29 @@
 #include <flat_set>
 #include <vector>
 
-namespace ao::model
+namespace ao::app
 {
   /**
-   * AllTrackIdsList - Authoritative ordered list of all TrackIds in the library.
+   * AllTracksSource - Authoritative ordered list of all TrackIds in the library.
    * Loaded from TrackStore and maintained in ascending TrackId order.
    *
    * All notifications are emitted AFTER DB commit to ensure consistency.
    */
-  class AllTrackIdsList final : public TrackIdList
+  class AllTracksSource final : public TrackSource
   {
   public:
-    explicit AllTrackIdsList(ao::library::TrackStore& store);
+    explicit AllTracksSource(ao::library::TrackStore& store);
 
-    using TrackIdList::notifyInserted;
-    using TrackIdList::notifyRemoved;
-    using TrackIdList::notifyUpdated;
+    using TrackSource::notifyInserted;
+    using TrackSource::notifyRemoved;
+    using TrackSource::notifyUpdated;
 
     void reloadFromStore(ao::lmdb::ReadTransaction& txn);
     void notifyInserted(TrackId id);
     void notifyRemoved(TrackId id);
     void clear();
 
-    // TrackIdList interface
+    // TrackSource interface
     std::size_t size() const override { return _trackIds.size(); }
     TrackId trackIdAt(std::size_t index) const override { return *(_trackIds.begin() + index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
@@ -42,4 +42,4 @@ namespace ao::model
     ao::library::TrackStore& _store;
     std::flat_set<TrackId> _trackIds;
   };
-} // namespace ao::model
+}

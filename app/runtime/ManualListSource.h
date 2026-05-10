@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/model/TrackIdList.h>
+#include "TrackSource.h"
 
 #include <vector>
 
@@ -12,31 +12,31 @@ namespace ao::library
   class ListView;
 }
 
-namespace ao::model
+namespace ao::app
 {
   /**
-   * ManualTrackIdList - A TrackIdList that holds a manually curated set of tracks.
+   * ManualListSource - A TrackSource that holds a manually curated set of tracks.
    *
-   * It also tracks a source TrackIdList to ensure its members still exist
+   * It also tracks a source TrackSource to ensure its members still exist
    * and are visible in that source.
    */
-  class ManualTrackIdList final
-    : public TrackIdList
-    , public TrackIdListObserver
+  class ManualListSource final
+    : public TrackSource
+    , public TrackSourceObserver
   {
   public:
-    explicit ManualTrackIdList(ao::library::ListView const& view, TrackIdList* source = nullptr);
-    explicit ManualTrackIdList();
-    ~ManualTrackIdList() override;
+    explicit ManualListSource(ao::library::ListView const& view, TrackSource* source = nullptr);
+    explicit ManualListSource();
+    ~ManualListSource() override;
 
     void reloadFromListView(ao::library::ListView const& view);
 
-    // TrackIdList interface
+    // TrackSource interface
     std::size_t size() const override { return _trackIds.size(); }
     TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
-    // TrackIdListObserver interface
+    // TrackSourceObserver interface
     void onReset() override;
     void onInserted(TrackId id, std::size_t index) override;
     void onUpdated(TrackId id, std::size_t index) override;
@@ -49,6 +49,6 @@ namespace ao::model
     bool contains(TrackId id) const;
 
     std::vector<TrackId> _trackIds;
-    TrackIdList* _source = nullptr;
+    TrackSource* _source = nullptr;
   };
-} // namespace ao::model
+}

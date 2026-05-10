@@ -1,617 +1,650 @@
-# MainWindow Decomposition Implementation Plan
+# Linux-GTK Shell Containerization Implementation Plan
 
-Date: 2026-04-30
+Date: 2026-05-07
+Status: Draft
 
 ## Goal
 
-Decompose `app/platform/linux/ui/MainWindow.h` and `app/platform/linux/ui/MainWindow.cpp` into smaller, coherent components without changing user-visible behavior.
+Turn the current `app/linux-gtk` UI into a clearer `MainWindow` shell + autonomous widget/controller architecture without changing the intended user-visible behavior.
 
-This plan turns the architectural direction into an implementation checklist that can be executed in small, reviewable commits.
+The target end state is:
 
-## Current Problem Summary
+- `MainWindow` is responsible for top-level layout assembly, window-level actions, and persistence wiring.
+- Feature widgets and controllers subscribe to runtime state directly where possible.
+- List and view membership semantics are owned by runtime code, not reconstructed ad hoc in GTK.
+- Smart-list preview, open-view membership, and nested list behavior all use the same runtime source semantics.
 
-`MainWindow` currently owns too many unrelated responsibilities:
+This plan is intentionally staged so the work can land in small, reviewable pull requests while preserving a buildable tree after each step.
 
-- library open/import/export orchestration
-- sidebar tree construction and list CRUD
-- track page graph construction
-- tag editing UI and tag mutation flow
-- playback setup and playback state polling
-- window/session persistence
-- top-level layout and status updates
+## Scope
 
-The most important observation is that the real coupling center is not any single feature area. It is the combination of:
+This plan covers the current Linux GTK application under `app/linux-gtk/`.
 
-- the current library runtime state
-- the current track page graph
+It focuses on these areas:
 
-Those two seams should be extracted first. After that, the feature-specific controllers become much easier to define cleanly.
+- `app/linux-gtk/ui/MainWindow.*`
+- `app/linux-gtk/ui/ListSidebarController.*`
+- `app/linux-gtk/ui/TrackPageGraph.*`
+- `app/linux-gtk/ui/InspectorSidebar.*`
+- `app/linux-gtk/ui/CoverArtWidget.*`
+- `app/linux-gtk/ui/StatusBar.*`
+- `app/linux-gtk/ui/SmartListDialog.*`
+- `app/runtime/*`
+- `include/ao/model/*`
+- `lib/model/*`
+
+It does not attempt to redesign the GTK visual language or change existing interaction patterns beyond what is required to make the architecture coherent.
+
+## Current Architecture Snapshot
+
+The current codebase is already significantly decomposed compared to a traditional god-window design.
+
+The major pieces already exist:
+
+- `MainWindow` assembles layout and still owns some cross-widget synchronization.
+- `TrackPageGraph` owns page creation and visible-page lifecycle for track-list views.
+- `ListSidebarController` owns the sidebar tree widget and list CRUD UI.
+- `PlaybackBar` and `StatusBar` already self-wire to parts of `AppSession`.
+- `InspectorSidebar` already binds a focused detail projection for some data.
+- `ImportExportCoordinator` already owns import/export dialogs and background work.
+- `TagEditController` already owns tag popovers and tag mutation actions.
+
+The remaining architectural debt is concentrated in a few seams rather than spread uniformly across the whole UI.
+
+## Key Findings
+
+### 1. `MainWindow` is still the cross-widget selection hub
+
+Today, `TrackPageGraph` selection changes are routed back into `MainWindow`, and `MainWindow` still fans that change out into:
+
+- cover art updates
+- status-bar selection info
+- inspector selection updates
+
+That means `MainWindow` still acts as a UI state dispatcher rather than a thin shell.
+
+### 2. Smart-list source semantics belong in runtime, not GTK
+
+The stored smart-list contract already says:
+
+- each smart list stores only its local filter
+- effective membership is `parent_membership AND local_filter`
+- nested smart lists chain through ancestors
+
+This is documented in:
+
+- `include/ao/library/ListView.h`
+- `include/ao/library/ListLayout.h`
+
+GTK preview should not invent a separate interpretation of those semantics.
+
+### 3. Runtime list membership needs a stable app-level owner
+
+The current runtime/model split is misleading.
+
+Important facts:
+
+- `FilteredTrackIdList` accepts any `TrackIdList&` source.
+- `FilteredTrackIdList` auto-registers itself with `SmartListEngine` in its constructor.
+- `SmartListEngine` batches and updates lists by source bucket, not by a special all-tracks-only path.
+- `ManualTrackIdList` already observes its source and forwards resets, updates, and removals.
+- `SmartListEngine` does not materialize all persisted smart lists from LMDB; it only coordinates currently constructed `FilteredTrackIdList` instances.
+
+This means nested source chains can be implemented by composition rather than by pre-combining filter expressions, but ownership should live in one runtime store instead of being attached to individual views.
+
+The desired model is:
+
+- list source objects are materialized on demand
+- one runtime source exists per persisted list while that list still exists
+- views and projections borrow stable sources
+- closing or navigating away from a view does not destroy its list source
+- deleting a list is the normal point where its source is destroyed
+
+### 4. There are a few concrete correctness risks in the current runtime wiring
+
+These should be treated as real bugs or near-bugs, not just refactor cleanup:
+
+- `ViewService` fallback creation of `FilteredTrackIdList` manually calls `registerList()` even though `FilteredTrackIdList` already auto-registers.
+- That same fallback branch constructs a filtered list without an explicit `reload()`, which risks an empty initial membership until some later source notification happens.
+- `TrackDetailProjection` currently follows focus and selection changes, but it does not automatically rebuild when the selected tracks mutate in place.
+- List CRUD refreshes GTK pages and sidebar state, but runtime view-source state is not yet refreshed through one coherent mutation path.
+
+### 5. List identity still needs to be normalized
+
+The GTK layer and runtime layer currently treat “All Tracks” through slightly different conventions.
+
+This needs to be normalized through a single helper or shared rule before deeper shell/container work continues, otherwise every stage keeps carrying special cases.
 
 ## Design Principles
 
-Follow these principles throughout the refactor:
+Apply these principles throughout the implementation:
 
-1. Keep each step buildable.
-2. Keep each step behavior-preserving unless a bug fix is explicitly intended.
-3. Prefer moving existing code behind a better boundary before rewriting logic.
-4. Avoid introducing generic framework-style abstractions.
-5. Use explicit dependencies instead of letting new classes reach back into `MainWindow` internals.
+1. Keep each pull request buildable.
+2. Prefer reusing the existing runtime and model abstractions over introducing new shell-level controllers.
+3. Move logic to the smallest correct owner instead of building a new mediator.
+4. Favor direct subscription to projections and model observers over callback fan-out through `MainWindow`.
+5. Preserve persisted list semantics. Do not change the on-disk meaning of smart-list `filter()`.
+6. Treat nested smart-list behavior as part of correctness, not as optional polish.
+7. Add tests for behavioral seams and regressions, not for trivial data plumbing.
 
-## Target Architecture
+## Target End State
 
-The intended end state is:
+At the end of this plan:
 
-- `MainWindow` becomes a thin shell for layout assembly and top-level wiring.
-- `LibrarySession` owns the active library runtime state.
-- `TrackPageGraph` owns track page construction and lifecycle.
-- `PlaybackCoordinator` owns playback UI state and transport orchestration.
-- `ImportExportCoordinator` owns file dialogs, background tasks, and import/export progress flow.
-- `ListSidebarController` owns the sidebar tree, selection model, and list CRUD UI.
-- `TagEditController` owns tag popovers and tag mutation operations.
-- `SessionPersistence` or a small equivalent helper owns app-config serialization.
+- `MainWindow` owns layout, top-level widgets, menu actions, and session/persistence hooks.
+- `ListSidebarController` drives navigation directly through `WorkspaceService` and keeps its own selection in sync with focused runtime state.
+- Runtime owns the canonical list-to-membership resolution path through a stable list-source store.
+- `ViewService` creates views on demand and borrows list sources instead of owning per-view source chains.
+- `SmartListDialog` preview uses the same runtime source resolution path as normal view opening.
+- `CoverArtWidget`, `InspectorSidebar`, and `StatusBar` bind directly to focused-view runtime projections or list observers.
+- `TrackPageGraph` no longer uses `MainWindow` as a selection relay.
 
-## Dependency Strategy
+## Pull Request Plan
 
-Extract the foundation before the feature controllers.
+Recommended sequence:
 
-Recommended order:
+1. Runtime list-source store and smart-list semantics cleanup.
+2. List mutation pipeline and sidebar/runtime refresh coherence.
+3. Projection-first right-side and bottom-bar widgets.
+4. `MainWindow` shell cleanup and dead-code removal.
 
-1. `LibrarySession`
-2. `TrackPageGraph`
-3. `PlaybackCoordinator`
-4. `ImportExportCoordinator`
-5. `ListSidebarController`
-6. `TagEditController`
-7. `SessionPersistence`
+This order matters.
 
-That order matters because playback, sidebar actions, and tag editing all currently depend on the page graph and the active library state.
+The list-source store must be correct first, otherwise the shell refactor will only move broken semantics into different classes.
 
-## Step 1: Extract `LibrarySession`
+## PR 1: Runtime List-Source Store
 
-## Objective
+### Objective
 
-Group the active library runtime state into one owned object so that opening or replacing a library becomes a single operation.
+Move list membership ownership into runtime and make it stable across view lifetimes.
 
-## State To Move
+This is the foundation for:
 
-Move these members out of `MainWindow` into a dedicated struct or class:
+- nested smart-list correctness
+- consistent smart-list preview
+- coherent open-view refresh after list edits
+- reduced GTK-side special casing
+- back/forward navigation that does not rebuild list membership unnecessarily
 
-- `_musicLibrary`
-- `_rowDataProvider`
-- `_allTrackIds`
-- `_smartListEngine`
+### Why This Comes First
 
-These are currently declared in `app/platform/linux/ui/MainWindow.h` and are created together in:
+The existing `lib/model` layer already has the pieces:
 
-- `openMusicLibrary()`
-- `importFilesFromPath()`
+- `FilteredTrackIdList`
+- `ManualTrackIdList`
+- `SmartListEngine`
+- `AllTrackIdsList`
 
-## Suggested Shape
+However, these classes are not really standalone library model abstractions anymore. They are runtime membership sources used by views, projections, smart-list preview, and list mutation refresh.
 
-```cpp
-struct LibrarySession final
-{
-  std::unique_ptr<ao::library::MusicLibrary> musicLibrary;
-  std::unique_ptr<TrackRowDataProvider> rowDataProvider;
-  std::unique_ptr<ao::model::AllTrackIdsList> allTrackIds;
-  std::unique_ptr<ao::model::SmartListEngine> smartListEngine;
-};
-```
+What is missing is a single runtime owner that resolves a `ListId` into a stable source and keeps that source alive independently of any one view.
 
-Add a small factory or builder function:
+### Main Changes
+
+Move the list-membership classes out of `lib/model` and into `app/runtime`, then introduce a runtime-side list-source store.
+
+Recommended shape:
 
 ```cpp
-std::unique_ptr<LibrarySession> makeLibrarySession(std::filesystem::path const& rootPath);
-```
-
-## Implementation Checklist
-
-- Add `LibrarySession.h` in `app/platform/linux/ui/` or another UI-adjacent location.
-- Define the new state holder type.
-- Add a factory function that builds a ready-to-use session from a library path.
-- Replace direct `MainWindow` ownership with `std::unique_ptr<LibrarySession> _librarySession;`.
-- Update all current uses of `_musicLibrary`, `_rowDataProvider`, `_allTrackIds`, and `_smartListEngine` to go through `_librarySession`.
-- Convert `openMusicLibrary()` to construct a new session first and only swap state after the session is ready.
-- Convert `importFilesFromPath()` to use the same session creation path.
-
-## Files Likely Touched
-
-- `app/platform/linux/ui/MainWindow.h`
-- `app/platform/linux/ui/MainWindow.cpp`
-- `app/platform/linux/ui/LibrarySession.h`
-- optionally `app/platform/linux/ui/LibrarySession.cpp`
-
-## Commit Boundary
-
-This should be a mostly mechanical refactor. Do not change behavior, ownership rules, or UI flow in this step.
-
-## Done Criteria
-
-- `MainWindow` no longer directly owns the four library runtime members.
-- Opening a library and creating a new imported library both use the same session construction path.
-- Build passes with no behavior changes.
-
-## Step 2: Extract `TrackPageGraph`
-
-## Objective
-
-Move track page creation, lookup, and lifecycle management out of `MainWindow` so that feature controllers no longer reach directly into `_trackPages` and `_stack` internals.
-
-## State And Behavior To Move
-
-Move the following out of `MainWindow`:
-
-- `_trackPages`
-- `clearTrackPages()`
-- `rebuildListPages()`
-- `buildPageForAllTracks()`
-- `buildPageForStoredList()`
-- `currentVisibleTrackPageContext()`
-- `currentVisibleTrackPageContext() const`
-- `bindTrackPagePlayback()`
-
-Keep `Gtk::Stack _stack` in `MainWindow`, but let the new object manage the pages inside that stack.
-
-## Key Boundary Decision
-
-Do not move sidebar tree building into `TrackPageGraph` in this step. Keep the first extraction focused on pages, not sidebar widgets.
-
-## Suggested Shape
-
-```cpp
-class TrackPageGraph final
+class ListSourceStore final
 {
 public:
-  struct Callbacks final
-  {
-    std::function<void(std::vector<ao::TrackId> const&)> onSelectionChanged;
-    std::function<void(TrackViewPage&, double, double)> onContextMenuRequested;
-    std::function<void(TrackViewPage&, std::vector<ao::TrackId> const&, double, double)> onTagEditRequested;
-    std::function<void(TrackViewPage&, ao::TrackId)> onTrackActivated;
-  };
+  ListSourceStore(ao::library::MusicLibrary& library);
 
-  TrackPageGraph(Gtk::Stack& stack, TrackColumnLayoutModel& layoutModel, Callbacks callbacks);
+  ao::runtime::TrackSource& allTracks();
+  ao::runtime::TrackSource& sourceFor(ao::ListId listId);
 
-  void clear();
-  void rebuild(LibrarySession& session, ao::lmdb::ReadTransaction& txn);
-  TrackPageContext* find(ao::ListId listId);
-  TrackPageContext const* find(ao::ListId listId) const;
-  TrackPageContext* currentVisible();
-  TrackPageContext const* currentVisible() const;
-  void show(ao::ListId listId);
+  void reloadAllTracks();
+  void refreshList(ao::ListId listId);
+  void eraseList(ao::ListId listId);
+
+private:
+  ao::library::MusicLibrary& _library;
+  AllTracksSource _allTracks;
+  SmartListEvaluator _smartEvaluator;
+  std::unordered_map<ao::ListId, std::unique_ptr<TrackSource>> _sources;
 };
 ```
 
-## Implementation Checklist
+The exact class names can follow local style, but the ownership rule should be explicit:
 
-- Add `TrackPageGraph.h` and `TrackPageGraph.cpp`.
-- Move page graph creation and teardown code into the new class.
-- Keep `TrackPageContext` where it is only if that keeps the change smaller. If needed later, move it into the new header in a follow-up step.
-- Pass callbacks from `MainWindow` for selection changes, tag popover requests, and track activation.
-- Replace `MainWindow::rebuildListPages(txn)` with `_trackPageGraph->rebuild(*_librarySession, txn)`.
-- Replace direct `_trackPages` accesses in `MainWindow` with graph queries.
-- Replace direct `_stack.set_visible_child(...)` calls that target list pages with `_trackPageGraph->show(listId)` where practical.
+- `AllTracksSource` is created with the app session.
+- Persisted list sources are created on demand.
+- Once a persisted list source is created, it remains alive until that list is deleted or the app session ends.
+- Views and projections do not own list sources; they keep references or pointers whose lifetime is guaranteed by `ListSourceStore`.
 
-## Files Likely Touched
+The store should follow these rules:
 
-- `app/platform/linux/ui/MainWindow.h`
-- `app/platform/linux/ui/MainWindow.cpp`
-- `app/platform/linux/ui/TrackPageGraph.h`
-- `app/platform/linux/ui/TrackPageGraph.cpp`
+- All Tracks resolves directly to `AllTracksSource`.
+- Manual lists resolve to a runtime manual source backed by the persisted list and constrained by the parent source.
+- Smart lists resolve to a runtime smart source backed by the parent source and local filter, followed by an initial reload.
+- Nested smart lists recurse through the parent chain instead of flattening the stored filter into one combined expression.
+- Parent sources must be materialized before child sources.
+- Source object addresses must remain stable while borrowed by projections and adapters.
+- Destroying sources must happen child-before-parent when a subtree is deleted.
 
-## Commit Boundary
+### Required Runtime Changes
 
-Keep sidebar tree construction in `MainWindow` for now. The goal is to isolate the page graph without also rewriting the sidebar.
+- Update `AppSession` to own `ListSourceStore` instead of exposing `AllTrackIdsList` and `SmartListEngine` as separate cross-layer primitives.
+- Update `ViewService::createView()` to ask `ListSourceStore` for the list source whenever the caller provides a `listId`.
+- Remove the `std::shared_ptr<TrackIdList>` source parameter from `ViewService::createView()` unless a concrete non-list-backed use case still requires it.
+- Stop storing list-source ownership in `ViewService::ViewEntry`; view entries should own view state and projections, not list sources.
+- Keep list-backed view `listId` stable. Ordinary sidebar navigation should focus an existing list view or create a new one, not replace the list inside an existing view.
+- Normalize “All Tracks” identity through one helper instead of mixing sentinel logic informally.
+- Start moving or renaming the old model classes so UI/runtime code no longer depends on `ao::model::TrackIdList` as a library-layer abstraction.
 
-## Done Criteria
+### PR 1 Staging Guidance
 
-- `MainWindow` no longer directly owns `_trackPages`.
-- Page creation and teardown are centralized in `TrackPageGraph`.
-- Existing page-level signals still work.
-- Build passes and visible behavior is unchanged.
+This PR can become large if the move from `lib/model` to `app/runtime` is done as one big-bang rename.
 
-## Step 3: Extract `PlaybackCoordinator`
+Prefer an incremental transition:
 
-## Objective
+1. Introduce `ListSourceStore` in runtime while it still wraps or reuses the existing `ao::model` classes.
+2. Route `ViewService`, smart-list preview, and GTK membership lookups through `ListSourceStore` first.
+3. Once the runtime ownership boundary is proven by tests, move or rename the old model classes into runtime in a follow-up slice or as the final step of PR 1.
+4. Avoid maintaining two independent implementations; compatibility shims are acceptable temporarily, but the runtime store should become the single construction path.
 
-Move playback state, playback polling, and transport actions out of `MainWindow` so playback becomes a self-contained subsystem with a narrow host interface.
+The important checkpoint is not the physical file move by itself. The important checkpoint is that list sources are owned by the runtime store, materialized on demand, reused across view close/refocus, and erased only when the persisted list is deleted or the app session ends.
 
-## State And Behavior To Move
+### Explicit Fixes To Include
 
-Move the following methods:
+Fix these current issues while touching the runtime path:
 
-- `setupPlayback()`
-- `refreshPlaybackBar()`
-- `onPlayRequested()`
-- `onPauseRequested()`
-- `onStopRequested()`
-- `onSeekRequested()`
-- `playCurrentSelection()`
-- `pausePlayback()`
-- `stopPlayback()`
-- `seekPlayback()`
-- `startPlaybackFromVisiblePage()`
-- `startPlaybackSequence()`
-- `playTrackAtSequenceIndex()`
-- `jumpToPlayingList()`
-- `clearActivePlaybackSequence()`
-- `handlePlaybackFinished()`
+- Remove the duplicate manual `registerList()` call in the fallback branch of `ViewService` if that fallback still exists during migration.
+- Ensure query-backed or fallback smart-source instances receive an initial `reload()`.
+- Add tests that fail if either regression returns.
 
-Move the following members:
+### Files Likely Touched
 
-- `_playbackBar`
-- `_dispatcher`
-- `_playbackController`
-- `_playbackTimer`
-- `_activePlaybackSequence`
-- `_lastPlaybackState`
-- `_lastPlaybackErrorMessage`
+- `app/runtime/ViewService.h`
+- `app/runtime/ViewService.cpp`
+- `app/runtime/AppSession.h`
+- `app/runtime/AppSession.cpp`
+- new runtime source classes such as `app/runtime/TrackSource.*`, `app/runtime/AllTracksSource.*`, `app/runtime/ManualListSource.*`, `app/runtime/SmartListSource.*`
+- new runtime owner such as `app/runtime/ListSourceStore.*`
+- smart-list evaluator code moved from `lib/model/SmartListEngine.*` or renamed in runtime, either in this PR or in the follow-up slice after `ListSourceStore` becomes the only construction path
+- old `include/ao/model/*TrackIdList*.h` and `lib/model/*TrackIdList*.cpp` paths removed or reduced to compatibility shims only after runtime callers have moved to `ListSourceStore`
+- possibly `app/runtime/WorkspaceService.cpp`
+- model/runtime tests covering list resolution and initial view population
 
-## Boundary Warning
+### Tests
 
-Do not move `onOutputChanged()` yet if it still writes directly to `_appConfig`. That persistence coupling is better handled together with the later session-persistence step.
+Add tests for:
 
-## Suggested Host Interface
+- root smart list membership
+- manual-to-smart source chaining
+- smart-to-smart source chaining
+- initial fallback all-tracks or query-backed view population
+- duplicate-registration regression
+- closing a view does not destroy or rebuild the cached list source
+- reopening or refocusing a list reuses the same runtime source while the list still exists
+- deleting a list closes affected views before erasing its source
 
-Use a small explicit interface rather than letting the coordinator hold `MainWindow&`.
+### Done Criteria
+
+- Opening a nested smart list in the UI uses the correct chained membership semantics.
+- Runtime view creation no longer depends on GTK-specific source guessing or per-view source ownership.
+- `ViewService` no longer double-registers filtered lists.
+- Initial filtered-list-backed views populate immediately.
+- List-backed sources live independently of view lifetimes and are released when their persisted list is deleted or the session ends.
+- Each bullet in the PR 1 test list is represented by a focused runtime test or an explicitly documented GTK-only manual verification.
+
+## PR 2: List Mutation Pipeline And Sidebar Coherence
+
+### Objective
+
+Make list create/edit/delete flow coherent across sidebar UI, runtime view state, and already-open track pages.
+
+### Problem Being Solved
+
+Today list mutations mainly rebuild GTK-side structures. That is not enough.
+
+Open runtime views also need their underlying borrowed sources refreshed after list definitions change.
+
+### Main Changes
+
+Add a dedicated runtime event for list definition changes.
+
+Suggested event:
 
 ```cpp
-class IPlaybackHost
+struct ListsMutated final
 {
-public:
-  virtual ~IPlaybackHost() = default;
-  virtual TrackPageContext const* currentVisibleTrackPageContext() const = 0;
-  virtual TrackPageContext* findTrackPageContext(ao::ListId listId) = 0;
-  virtual void showListPage(ao::ListId listId) = 0;
-  virtual void updatePlaybackStatus(ao::audio::PlaybackSnapshot const& snapshot) = 0;
-  virtual void showPlaybackMessage(std::string const& message,
-                                   std::optional<std::chrono::seconds> timeout = std::nullopt) = 0;
+  std::vector<ao::ListId> upserted{};
+  std::vector<ao::ListId> deleted{};
 };
 ```
 
-`MainWindow` can implement this interface by delegating page lookups to `TrackPageGraph` and status updates to `StatusBar`.
+Then update the flow as follows:
 
-## Implementation Checklist
+- `ListSidebarController` invokes a runtime mutation API instead of publishing mutation events itself.
+- The runtime mutation owner writes list mutations to the library and publishes `ListsMutated` after the write succeeds.
+- `ListSidebarController` rebuilds its own tree.
+- `ListSourceStore` listens for or receives `ListsMutated` and refreshes any materialized source affected by those list definitions.
+- `WorkspaceService` closes open views that target deleted lists before `ListSourceStore` erases the deleted sources.
+- `TrackPageGraph` refreshes stack titles when list names change.
 
-- Add `PlaybackCoordinator.h` and `PlaybackCoordinator.cpp`.
-- Move playback initialization into the new class constructor.
-- Move the GTK polling timer ownership into the new class destructor.
-- Expose a `PlaybackBar& widget()` or equivalent accessor for layout assembly.
-- Route playback bar signals to coordinator methods instead of `MainWindow` methods.
-- Delegate page lookup and page activation through `IPlaybackHost`.
-- Keep output-device persistence in `MainWindow` until the session-persistence step.
+The event publication boundary should stay in runtime, not GTK. GTK controllers may initiate a list edit, but they should not be the canonical publisher because future CLI, import, or batch operations can mutate list definitions without going through `ListSidebarController`.
 
-## Files Likely Touched
+### Sidebar Boundary Changes
 
-- `app/platform/linux/ui/MainWindow.h`
-- `app/platform/linux/ui/MainWindow.cpp`
-- `app/platform/linux/ui/PlaybackCoordinator.h`
-- `app/platform/linux/ui/PlaybackCoordinator.cpp`
+Move the sidebar closer to autonomous operation:
 
-## Commit Boundary
+- Selection changes should navigate directly through `_session.workspace().navigateTo(...)`.
+- Sidebar selection should also track focused runtime state instead of depending on `MainWindow` to re-select items.
+- Remove or shrink callback plumbing that only exists to bounce list selection through `MainWindow`.
 
-This step should not change playback semantics. It is a boundary extraction only.
+### Smart-List Preview Changes
 
-## Done Criteria
+`SmartListDialog` must stop accepting `parentMembershipList` as an externally supplied GTK-side concept.
 
-- `MainWindow` no longer owns the playback timer and transport state.
-- `MainWindow` only places the playback widget in the layout and serves as host.
-- Playback UI, next-track progression, and now-playing jump still work.
+Instead:
 
-## Step 4: Extract `ImportExportCoordinator`
+- pass `parentListId`
+- resolve the parent source using the same runtime `ListSourceStore` path as normal views
+- display inherited and effective expression labels from that resolved source context
+- keep persisted data as local expression only
 
-## Objective
+This ensures preview and actual view opening use one semantic path.
 
-Move folder/file dialogs, background import/export tasks, progress dialog ownership, and completion callbacks out of `MainWindow`.
+### Files Likely Touched
 
-## State And Behavior To Move
+- `app/runtime/EventTypes.h`
+- `app/runtime/LibraryMutationService.*` or another runtime list-mutation owner
+- `app/runtime/ListSourceStore.*`
+- `app/runtime/ViewService.cpp`
+- `app/runtime/WorkspaceService.cpp`
+- `app/linux-gtk/ui/ListSidebarController.h`
+- `app/linux-gtk/ui/ListSidebarController.cpp`
+- `app/linux-gtk/ui/TrackPageGraph.cpp`
+- `app/linux-gtk/ui/SmartListDialog.h`
+- `app/linux-gtk/ui/SmartListDialog.cpp`
 
-Move the following methods:
+### Tests
 
-- `openLibrary()`
-- `importFiles()`
-- `onImportFolderSelected()`
-- `executeImportTask()`
-- `onImportProgress()`
-- `onImportFinished()`
-- `scanDirectory()`
-- `exportLibrary()`
-- `onExportModeConfirmed()`
-- `onExportFileSelected()`
-- `executeExportTask()`
-- `importLibrary()`
+Add tests for:
 
-Move the following members:
+- editing a list refreshes the materialized source and updates open-view membership
+- renaming a list updates the visible page title
+- deleting an open list closes or redirects the corresponding view cleanly
+- smart-list preview matches runtime-opened membership
+- sidebar selection follows focused view correctly
 
-- `_importWorker`
-- `_importThread`
-- `_importDialog`
+### Done Criteria
 
-## Key Boundary Decision
+- List CRUD no longer depends on `MainWindow` or GTK-only event publication to coordinate runtime refresh.
+- Open views stay consistent after list edits.
+- Sidebar selection and workspace focus stay in sync.
+- Smart-list preview uses the same membership semantics as runtime view creation.
+- Each PR 2 behavior has a named runtime or GTK regression test, except any GTK-only manual check explicitly listed in the PR notes.
 
-The coordinator should not directly own page rebuild logic or `MainWindow` state replacement. It should return results and notifications through callbacks.
+## PR 3: Projection-First Cover, Inspector, And Status Widgets
 
-## Suggested Callback Shape
+### Objective
 
-```cpp
-struct ImportExportCallbacks final
-{
-  std::function<void(std::unique_ptr<LibrarySession>)> onLibrarySessionCreated;
-  std::function<void()> onLibraryDataMutated;
-  std::function<void(double, std::string const&)> onProgressUpdated;
-  std::function<void(std::string const&)> onStatusMessage;
-};
-```
+Remove the last major selection fan-out logic from `MainWindow` by making the cover art, inspector, and selection status widgets bind directly to runtime state.
 
-## Implementation Checklist
+### Problem Being Solved
 
-- Add `ImportExportCoordinator.h` and `ImportExportCoordinator.cpp`.
-- Move directory scanning into the coordinator.
-- Move import progress dialog creation and lifetime into the coordinator.
-- Move worker-thread ownership into the coordinator.
-- Route successful library creation through `onLibrarySessionCreated`.
-- Route YAML import completion through `onLibraryDataMutated`.
-- Route export/import status text through a host callback.
-- Add or reuse a single `MainWindow::installLibrarySession(...)` path so that open and import converge on the same state swap.
+`MainWindow` still acts as the selection dispatcher.
 
-## Files Likely Touched
+That is the biggest remaining obstacle to a true shell/container role.
 
-- `app/platform/linux/ui/MainWindow.h`
-- `app/platform/linux/ui/MainWindow.cpp`
-- `app/platform/linux/ui/ImportExportCoordinator.h`
-- `app/platform/linux/ui/ImportExportCoordinator.cpp`
+### Main Changes
 
-## Commit Boundary
+Extend `TrackDetailSnapshot` so it contains the metadata the inspector truly needs.
 
-Do not redesign import progress UI or background-thread behavior here. Keep the current user-visible flow intact.
+Suggested additions:
 
-## Done Criteria
+- aggregated title
+- aggregated artist
+- aggregated album
+- possibly future fields such as year or album artist if needed
 
-- `MainWindow` no longer owns the import thread, import worker, or import dialog.
-- Open/import/export actions are routed through the coordinator.
-- Opening an existing library and importing a new one both install a `LibrarySession` through one path.
+Then update `TrackDetailProjection` to rebuild not only on focus and selection changes, but also when the currently selected tracks are mutated.
 
-## Step 5: Extract `ListSidebarController`
+That means `TrackDetailProjection` should subscribe to `TracksMutated` and refresh only when the current snapshot selection intersects the mutated ids.
 
-## Objective
+Keep the rebuild path transaction-aware. If `buildSnapshot` still opens a separate read transaction per selected track, a large batch tag edit can make `TracksMutated` a hot path. The first implementation can keep the existing shape if tests and profiling do not show a problem, but the plan should allow consolidating selected-track reads into one transaction when touching this code.
 
-Move sidebar tree models, row binding, selection handling, context menu state, and list CRUD dialogs out of `MainWindow`.
+### Widget Migration
 
-## State And Behavior To Move
+After projection refresh is correct:
 
-Move the following methods:
+- `InspectorSidebar` should become fully projection-first.
+- `CoverArtWidget` should bind to the focused detail projection instead of raw `ViewSelectionChanged`.
+- `StatusBar` selection info should bind to focused detail projection instead of being pushed from `MainWindow`.
+- Track-count display should bind to `allTracks()` through an observer or equivalent runtime hook.
 
-- `setupSidebarListItem()`
-- `bindSidebarListItem()`
-- `showListContextMenu()`
-- `openNewListDialog()`
-- `openNewSmartListDialog()`
-- `openEditListDialog()`
-- `listHasChildren()`
-- `createList()`
-- `selectSidebarList()`
-- `updateList()`
-- `onDeleteList()`
-- `onEditList()`
-- `buildListTree()`
+### Important Inspector Note
 
-Move the following members:
+`InspectorSidebar` should stop depending on a cached vector of `TrackRow` objects for displayed state.
 
-- `_listView`
-- `_listScrolledWindow`
-- `_listContextMenu`
-- `_listTreeStore`
-- `_treeListModel`
-- `_listSelectionModel`
-- `_nodesById`
-- `_newListAction`
-- `_deleteListAction`
-- `_editListAction`
+For edit operations:
 
-## Boundary Warning
+- use the projected `trackIds`
+- call mutation services
+- rely on `TracksMutated` plus projection refresh for UI updates
 
-Do not let this controller become responsible for page construction. It should own the sidebar and list actions, not the whole page graph.
+This removes the need for `MainWindow` to push current selection rows into the inspector.
 
-## Suggested Interface
+### `MainWindow` Cleanup After Migration
 
-```cpp
-class ListSidebarController final
-{
-public:
-  struct Callbacks final
-  {
-    std::function<void(ao::ListId)> onListSelected;
-    std::function<void()> onListsChanged;
-    std::function<void(ao::ListId)> onListCreatedAndSelected;
-  };
+Once the widgets are projection-first, delete these shell-side responsibilities:
 
-  Gtk::Widget& widget();
-  void rebuildTree(LibrarySession& session, ao::lmdb::ReadTransaction& txn);
-  void select(ao::ListId listId);
-};
-```
+- `MainWindow::updateCoverArt(...)`
+- `MainWindow::onTrackSelectionChanged()`
+- selection fan-out callbacks passed into `TrackPageGraph` that only forward to cover/status/inspector
 
-## Implementation Checklist
+### Files Likely Touched
 
-- Add `ListSidebarController.h` and `ListSidebarController.cpp`.
-- Move all sidebar row factory and binding code into the controller.
-- Move the sidebar context menu and related actions into the controller.
-- Move list create/edit/delete dialog code into the controller.
-- Keep tree rebuild separate from page rebuild even if both are triggered together by `MainWindow`.
-- Normalize post-mutation behavior so list create/edit/delete all go through a consistent refresh path.
-- Route selection changes back to `MainWindow` via `onListSelected(listId)`.
+- `app/runtime/ProjectionTypes.h`
+- `app/runtime/TrackDetailProjection.cpp`
+- `app/linux-gtk/ui/InspectorSidebar.h`
+- `app/linux-gtk/ui/InspectorSidebar.cpp`
+- `app/linux-gtk/ui/CoverArtWidget.h`
+- `app/linux-gtk/ui/CoverArtWidget.cpp`
+- `app/linux-gtk/ui/StatusBar.h`
+- `app/linux-gtk/ui/StatusBar.cpp`
+- `app/linux-gtk/ui/MainWindow.h`
+- `app/linux-gtk/ui/MainWindow.cpp`
+- tests for projection refresh and widget behavior
 
-## Files Likely Touched
+### Tests
 
-- `app/platform/linux/ui/MainWindow.h`
-- `app/platform/linux/ui/MainWindow.cpp`
-- `app/platform/linux/ui/ListSidebarController.h`
-- `app/platform/linux/ui/ListSidebarController.cpp`
+Add tests for:
 
-## Commit Boundary
+- detail projection refresh on `TracksMutated`
+- cover art follows active view rather than background selection events
+- inspector refreshes after metadata edits without reselection
+- status selection count refreshes from projection state
+- track count refreshes from the library list observer
 
-This step may expose current refresh inconsistencies. Fix only the ones required to make the boundary coherent.
+### Done Criteria
 
-## Done Criteria
+- Cover art, inspector, and selection status no longer require `MainWindow` as a relay.
+- Editing selected tracks updates the inspector through projection refresh.
+- `MainWindow` no longer owns selection fan-out logic.
+- Projection refresh after `TracksMutated` is covered by a focused runtime test, including a non-intersecting mutation case that does not rebuild.
+- If the projection rebuild implementation changes transaction behavior, the relevant test or PR notes should state whether selected-track reads are batched in one transaction or intentionally left as-is.
 
-- `MainWindow` no longer owns the sidebar tree model stack.
-- List selection changes route through the controller.
-- List create/edit/delete still work and still select the correct page afterward.
+## PR 4: `MainWindow` Shell Cleanup
 
-## Step 6: Extract `TagEditController`
+### Objective
 
-## Objective
+Finish the transition by stripping `MainWindow` down to its real shell responsibilities and removing dead seams left behind by the earlier work.
 
-Move tag popover creation and tag mutation application out of `MainWindow`, and replace the current implicit page-selection dependency with an explicit selection context.
+### Main Changes
 
-## State And Behavior To Move
+At this stage, `MainWindow` should mainly do the following:
 
-Move the following methods:
+- construct top-level widgets and controllers
+- build the top-level GTK layout
+- install window-level actions
+- connect persistence and session restore hooks
 
-- `setupTrackContextMenu()`
-- `showTrackContextMenu()`
-- `showTagEditor()`
-- `addTagToCurrentSelection()`
-- `removeTagFromCurrentSelection()`
-- `applyTagChangeToCurrentSelection()`
+The cleanup work should include:
 
-Move the following members:
+- remove no-longer-needed `TrackPageGraph` callbacks
+- remove now-unused helper methods from `MainWindow`
+- remove dead selection-context fields that are no longer consumed
+- remove dead inspector signal plumbing if it still exists but has no emit path
+- move child-widget-specific CSS out of `MainWindow` and into the owning widgets
+- update any stale persistence comments so they reflect the real flow
 
-- `_trackTagAddAction`
-- `_trackTagRemoveAction`
-- `_trackTagToggleAction`
+### Specific Candidates For Removal
 
-## Key Boundary Fix
+These should be reviewed once earlier phases land:
 
-Today the flow creates tag UI with explicit selected IDs but later applies changes by re-reading `currentVisibleTrackPageContext()`. Replace that implicit dependency with an explicit selection object.
+- `MainWindow::showListPage(...)` if direct workspace navigation makes it redundant
+- `MainWindow::currentSelectionPlaybackDescriptor()` if still unused
+- `TrackSelectionContext::membershipList` if runtime no longer requires it
+- `TrackPageContext::membershipList` if it remains a dead field
+- any `MainWindow` callback wiring whose only purpose was forwarding between widgets
 
-## Suggested Selection Context
+### Files Likely Touched
 
-```cpp
-struct TrackSelectionContext final
-{
-  ao::ListId listId;
-  std::vector<ao::TrackId> selectedIds;
-  ao::model::TrackIdList* membershipList = nullptr;
-};
-```
+- `app/linux-gtk/ui/MainWindow.h`
+- `app/linux-gtk/ui/MainWindow.cpp`
+- `app/linux-gtk/ui/TrackPageGraph.h`
+- `app/linux-gtk/ui/TrackPageGraph.cpp`
+- `app/linux-gtk/ui/TagEditController.h`
+- `app/linux-gtk/ui/InspectorSidebar.*`
+- possibly `app/linux-gtk/ui/SessionPersistence.cpp`
 
-## Suggested Interface
+### Tests
 
-```cpp
-class TagEditController final
-{
-public:
-  void showTrackContextMenu(TrackViewPage& page,
-                            TrackSelectionContext const& selection,
-                            double x,
-                            double y);
+Focus on regression coverage for end-to-end UI behavior already protected by earlier phases.
 
-  void showTagEditor(TrackViewPage& page,
-                     TrackSelectionContext const& selection,
-                     double x,
-                     double y);
-};
-```
+The value of this phase is simplification, not new behavior.
 
-## Implementation Checklist
+### Done Criteria
 
-- Add `TagEditController.h` and `TagEditController.cpp`.
-- Introduce `TrackSelectionContext`.
-- Update tag popover launch paths to build an explicit selection context.
-- Update tag mutation logic to operate on that explicit selection instead of re-querying the current page.
-- Keep status-bar messages and row-data invalidation behavior unchanged.
+- `MainWindow` reads as a shell/container rather than a feature coordinator.
+- Widget-specific styling and logic live with the relevant widgets.
+- Dead callback seams and unused helper methods are removed.
 
-## Files Likely Touched
+## Validation Checklist After Each PR
 
-- `app/platform/linux/ui/MainWindow.h`
-- `app/platform/linux/ui/MainWindow.cpp`
-- `app/platform/linux/ui/TagEditController.h`
-- `app/platform/linux/ui/TagEditController.cpp`
+After each phase, validate at least the following:
 
-## Commit Boundary
+- Build succeeds.
+- Existing library opens correctly.
+- Import still populates the UI and updates track counts.
+- Sidebar navigation switches content correctly.
+- Smart-list preview matches opened list behavior.
+- Nested smart lists behave correctly.
+- Tag editing still mutates selected tracks.
+- Playback start, pause, seek, stop, and reveal-playing-track still work.
+- Session restore still brings back the expected views.
 
-Do not redesign tag UI behavior here. Only improve the ownership and data flow boundary.
+## Test Strategy
 
-## Done Criteria
+This repository expects meaningful automated coverage for behavior changes.
 
-- `MainWindow` no longer owns tag-edit actions.
-- Tag changes apply to the explicit selected IDs from the initiating page.
-- Existing status updates and row invalidation behavior remain correct.
+The highest-value tests for this plan are:
 
-## Step 7: Extract `SessionPersistence`
+- runtime tests around list-source-store resolution and nested smart-list semantics
+- runtime tests around materialized source refresh after list mutation
+- runtime tests around list-source lifetime across view close/refocus
+- runtime tests around projection refresh after `TracksMutated`
+- one or two GTK-layer regression tests for shell-facing behavior where runtime tests are insufficient
 
-## Objective
+For reviewability, each PR should map its Done Criteria to concrete verification: a test file/test case name for automated coverage, or a short manual-check note when the behavior is GTK-only and not practical to automate in that PR.
 
-Move app-config load/save and window-state persistence out of `MainWindow` once the bigger structural seams are already in place.
+Avoid spending effort on low-value tests for thin forwarding methods or simple data holders.
 
-## State And Behavior To Move
+## Risk Register
 
-Move the following:
+### Risk 1: Nested smart-list semantics drift during refactor
 
-- `_appConfig`
-- `saveSession()`
-- `loadSession()`
+Mitigation:
 
-## Implementation Checklist
+- lock behavior down with runtime tests before changing `ViewService`
+- keep stored filter semantics unchanged
 
-- Add `SessionPersistence.h` and optionally `SessionPersistence.cpp`.
-- Move `AppConfig` load/save behavior into a small helper class or focused free functions.
-- Keep the persisted state format unchanged.
-- Decide whether playback output selection persistence should move here together with `onOutputChanged()`.
-- Make `MainWindow` ask the helper to restore window geometry, last library path, and track view layout.
+### Risk 2: Open views hold dangling references when list sources are erased or rebuilt
 
-## Files Likely Touched
+Mitigation:
 
-- `app/platform/linux/ui/MainWindow.h`
-- `app/platform/linux/ui/MainWindow.cpp`
-- `app/platform/linux/ui/SessionPersistence.h`
-- optionally `app/platform/linux/ui/SessionPersistence.cpp`
+- make `ListSourceStore` own stable source objects and keep them alive independently of view lifetimes
+- close affected views before erasing deleted list sources
+- refresh source nodes in place whenever possible so projections remain attached to stable objects
 
-## Commit Boundary
+### Risk 3: Projection-first inspector stops updating after edits
 
-Keep this small. It is cleanup after the larger architectural seams are already in place.
+Mitigation:
 
-## Done Criteria
+- add explicit `TracksMutated` handling to `TrackDetailProjection`
+- test edit-without-reselection behavior
 
-- `MainWindow` no longer directly owns `AppConfig` persistence logic.
-- Session restore and save behavior remain unchanged.
+### Risk 4: Sidebar and workspace focus diverge for query-only views
 
-## Cross-Step Validation Checklist
+Mitigation:
 
-After each step:
+- define one explicit rule for non-list-backed views
+- recommended rule: no list selection is highlighted for purely ad hoc query views
 
-- Build the project.
-- Open an existing library.
-- Import a new library from a directory.
-- Switch between sidebar lists.
-- Verify the visible page changes correctly.
-- Verify cover art updates when selection changes.
-- Start playback from the selected row.
-- Pause, seek, stop, and resume playback.
-- Use the status bar now-playing jump.
-- Edit tags from a track selection.
-- Create, edit, and delete a list.
-- Quit and relaunch to verify session persistence still works.
+## Non-Goals
 
-## Suggested Commit Sequence
+The following are intentionally out of scope for this plan unless they become necessary to preserve behavior:
 
-1. `Extract LibrarySession from MainWindow state`
-2. `Extract TrackPageGraph page lifecycle from MainWindow`
-3. `Extract PlaybackCoordinator from MainWindow`
-4. `Extract ImportExportCoordinator threading and dialogs`
-5. `Extract ListSidebarController sidebar tree and list actions`
-6. `Extract TagEditController and explicit track selection context`
-7. `Extract SessionPersistence from MainWindow`
+- redesigning GTK visual styling
+- introducing a new generic UI framework layer
+- changing persisted list payload formats
+- replacing quick filter behavior with a fully runtime-backed query-view model
+- adding new inspector features unrelated to shell/container decomposition
 
 ## End-State Responsibility Split
 
-At the end of this plan, `MainWindow` should mainly be responsible for:
+When this plan is complete, responsibilities should look like this:
 
-- top-level widget layout
-- constructing owned subcomponents
-- wiring component callbacks together
-- installing a new `LibrarySession`
-- window-level status and cover-art presentation
+### `MainWindow`
 
-It should no longer directly own the implementation details of playback, import/export threading, sidebar models, or track page graph construction.
+- top-level layout
+- top-level action registration
+- subcomponent construction
+- persistence hooks
+
+### `ListSourceStore`
+
+- create and own canonical runtime list sources
+- keep materialized list sources alive until their persisted list is deleted or the session ends
+- refresh materialized sources after list definition changes
+
+### `ViewService`
+
+- create view state and projections on demand
+- borrow canonical list sources from `ListSourceStore`
+- expose projections for GTK consumers
+
+### `ListSidebarController`
+
+- own sidebar widget tree and list CRUD UI
+- drive workspace navigation directly
+- stay in sync with focused runtime state
+
+### `TrackPageGraph`
+
+- create and manage GTK page widgets for runtime views
+- keep stack membership and visible page state coherent
+- update page titles when list metadata changes
+
+### `InspectorSidebar`, `CoverArtWidget`, `StatusBar`
+
+- consume runtime projections or observers directly
+- update themselves without a `MainWindow` relay
+
+### `SmartListDialog`
+
+- preview from the canonical `ListSourceStore` source resolution path
+- persist only local filter expressions
+
+## Expected Result
+
+After these four pull requests:
+
+- `MainWindow` is no longer the implicit synchronization center of the UI.
+- GTK and runtime agree on list membership semantics.
+- Smart-list preview and actual opened-view behavior match.
+- The remaining architecture is simpler, more local, and easier to extend safely.
