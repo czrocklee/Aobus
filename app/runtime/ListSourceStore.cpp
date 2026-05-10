@@ -181,12 +181,10 @@ namespace ao::app
       _sources.emplace(listId, std::move(smartSource));
       return ref;
     }
-    else
-    {
-      auto manualSource = std::make_unique<ManualListSource>(*optView, &parentSource);
-      auto& ref = *manualSource;
-      _sources.emplace(listId, std::move(manualSource));
-      return ref;
-    }
+
+    auto manualSource = std::make_unique<ManualListSource>(*optView, &parentSource);
+    auto& ref = *manualSource;
+    _sources.emplace(listId, std::move(manualSource));
+    return ref;
   }
 }

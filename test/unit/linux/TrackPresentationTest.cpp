@@ -1,72 +1,60 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+
+#include <algorithm>
 
 #include "TrackPresentation.h"
 
-namespace
+using namespace ao::gtk;
+
+TEST_CASE("TrackPresentation - column definitions", "[app][presentation]")
 {
+  auto const definitions = trackColumnDefinitions();
+  REQUIRE(definitions.size() == 12);
 }
 
-TEST_CASE("ao::gtk::TrackPresentation presets match grouped songs mode", "[app][presentation]")
+TEST_CASE("TrackPresentation - default column layout", "[app][presentation]")
 {
-  using namespace ao::gtk;
+  auto const layout = defaultTrackColumnLayout();
+  REQUIRE(layout.columns.size() == trackColumnDefinitions().size());
 
-  auto const artistSpec = presentationSpecForGroup(TrackGroupBy::Artist);
-
-  REQUIRE(artistSpec.groupBy == TrackGroupBy::Artist);
-  REQUIRE(artistSpec.sortBy == std::vector<TrackSortTerm>{{TrackSortField::Artist},
-                                                          {TrackSortField::Album},
-                                                          {TrackSortField::DiscNumber},
-                                                          {TrackSortField::TrackNumber},
-                                                          {TrackSortField::Title}});
-
-  auto const noneSpec = presentationSpecForGroup(TrackGroupBy::None);
-  REQUIRE(noneSpec.sortBy.empty());
-
-  REQUIRE(shouldShowColumn(TrackGroupBy::None, TrackColumn::Artist));
-  REQUIRE(shouldShowColumn(TrackGroupBy::None, TrackColumn::Album));
-  REQUIRE(shouldShowColumn(TrackGroupBy::None, TrackColumn::DiscNumber));
-  REQUIRE(shouldShowColumn(TrackGroupBy::None, TrackColumn::Duration));
-
-  auto const defaultLayout = defaultTrackColumnLayout();
-  REQUIRE(defaultLayout.columns.size() == trackColumnDefinitions().size());
-  REQUIRE(defaultLayout.columns.at(4) == TrackColumnState{TrackColumn::Duration, true, 84});
-
-  REQUIRE_FALSE(shouldShowColumn(TrackGroupBy::AlbumArtist, TrackColumn::AlbumArtist));
-  REQUIRE_FALSE(shouldShowColumn(TrackGroupBy::Genre, TrackColumn::Genre));
-  REQUIRE_FALSE(shouldShowColumn(TrackGroupBy::Year, TrackColumn::Year));
+  auto const duration = std::ranges::find(layout.columns, TrackColumn::Duration, &TrackColumnState::column);
+  REQUIRE(duration != layout.columns.end());
+  CHECK(duration->visible == true);
+  CHECK(duration->width == 84);
 }
 
-TEST_CASE("ao::gtk::TrackPresentation duration sorting", "[app][presentation]")
+TEST_CASE("TrackPresentation - normalize column layout fills missing", "[app][presentation]")
 {
-  using namespace ao::gtk;
+  auto layout = TrackColumnLayout{
+    .columns = {{TrackColumn::Title, true, 300}},
+  };
+  auto const normalized = normalizeTrackColumnLayout(layout);
 
-  auto const sortBy = std::vector<TrackSortTerm>{{TrackSortField::Duration}};
+  REQUIRE(normalized.columns.size() == trackColumnDefinitions().size());
+  auto const title = std::ranges::find(normalized.columns, TrackColumn::Title, &TrackColumnState::column);
+  REQUIRE(title != normalized.columns.end());
+  CHECK(title->visible == true);
+  CHECK(title->width == 300);
+}
 
-  TrackPresentationKeysView shortTrack{.durationMs = 1000, .trackId = ao::TrackId{1}};
-  TrackPresentationKeysView longTrack{.durationMs = 5000, .trackId = ao::TrackId{2}};
-  TrackPresentationKeysView noDurationTrack{.durationMs = 0, .trackId = ao::TrackId{3}};
+TEST_CASE("TrackPresentation - redundantFieldToColumn mapping", "[app][presentation]")
+{
+  using ao::app::TrackSortField;
 
-  SECTION("shorter duration comes first")
-  {
-    REQUIRE(compareForSort(shortTrack, longTrack, sortBy) < 0);
-    REQUIRE(compareForSort(longTrack, shortTrack, sortBy) > 0);
-  }
+  CHECK(redundantFieldToColumn(TrackSortField::Artist) == TrackColumn::Artist);
+  CHECK(redundantFieldToColumn(TrackSortField::Album) == TrackColumn::Album);
+  CHECK(redundantFieldToColumn(TrackSortField::AlbumArtist) == TrackColumn::AlbumArtist);
+  CHECK(redundantFieldToColumn(TrackSortField::Genre) == TrackColumn::Genre);
+  CHECK(redundantFieldToColumn(TrackSortField::Composer) == TrackColumn::Composer);
+  CHECK(redundantFieldToColumn(TrackSortField::Work) == TrackColumn::Work);
+  CHECK(redundantFieldToColumn(TrackSortField::Year) == TrackColumn::Year);
 
-  SECTION("unknown duration (0) comes last")
-  {
-    REQUIRE(compareForSort(shortTrack, noDurationTrack, sortBy) < 0);
-    REQUIRE(compareForSort(noDurationTrack, shortTrack, sortBy) > 0);
-  }
-
-  SECTION("equal duration falls back to track ID")
-  {
-    TrackPresentationKeysView shortTrack2{.durationMs = 1000, .trackId = ao::TrackId{4}};
-    REQUIRE(compareForSort(shortTrack, shortTrack2, sortBy) < 0);
-  }
+  // Non-display fields should return nullopt
+  CHECK_FALSE(redundantFieldToColumn(TrackSortField::Title).has_value());
+  CHECK_FALSE(redundantFieldToColumn(TrackSortField::Duration).has_value());
+  CHECK_FALSE(redundantFieldToColumn(TrackSortField::DiscNumber).has_value());
+  CHECK_FALSE(redundantFieldToColumn(TrackSortField::TrackNumber).has_value());
 }

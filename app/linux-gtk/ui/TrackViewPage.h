@@ -81,6 +81,9 @@ namespace ao::gtk
     void setStatusMessage(std::string const& message);
     void clearStatusMessage();
 
+    /// Access the bound projection for group section queries.
+    ao::app::ITrackListProjection* projection() const { return _adapter.projection(); }
+
     // Navigation and Selection
     void selectTrack(TrackId trackId);
     void setPlayingTrackId(std::optional<TrackId> trackId);
@@ -102,7 +105,7 @@ namespace ao::gtk
     void setupHeaderFactory();
     void setupStatusBar();
     void setupActivation();
-    void applyPresentationSpec();
+    void updateSectionHeaders();
     void applyColumnLayout();
     void syncColumnToggleStates();
     void queueSharedColumnLayoutUpdate();
@@ -120,6 +123,26 @@ namespace ao::gtk
 
     ColumnBinding* findColumnBinding(TrackColumn column);
     ColumnBinding const* findColumnBinding(TrackColumn column) const;
+
+    void updateTitlePositionVariable();
+    Glib::RefPtr<Gtk::SignalListItemFactory> createTextColumnFactory(TrackColumnDefinition const& definition);
+    void onTextColumnSetup(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                           TrackColumnDefinition const& definition,
+                           bool isEditable,
+                           bool isHyperlink);
+    void onTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                          TrackColumnDefinition const& definition,
+                          bool isEditable);
+    void onTextColumnBindEditable(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                                  TrackColumnDefinition const& definition,
+                                  Glib::RefPtr<TrackRow> const& row);
+    void onTextColumnBindStatic(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                                TrackColumnDefinition const& definition,
+                                Glib::RefPtr<TrackRow> const& row);
+    void commitMetadataChange(Gtk::Stack* stack,
+                              Gtk::Entry* entry,
+                              Glib::RefPtr<TrackRow> const& row,
+                              TrackColumn column);
 
     // Child widgets
     Gtk::Box _controlsBar{Gtk::Orientation::HORIZONTAL};
@@ -150,7 +173,7 @@ namespace ao::gtk
     Glib::RefPtr<Gtk::StringList> _groupByOptions;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
     std::vector<ColumnBinding> _columns;
-    TrackPresentationSpec _presentationSpec;
+    ao::app::TrackGroupKey _activeGroupBy = ao::app::TrackGroupKey::None;
     sigc::connection _columnLayoutChangedConnection;
     sigc::connection _columnModelChangedConnection;
     sigc::connection _queuedColumnLayoutUpdateConnection;
@@ -159,26 +182,6 @@ namespace ao::gtk
     bool _suppressNextTrackActivation = false;
     Glib::RefPtr<Gtk::CssProvider> _dynamicCssProvider;
     std::vector<sigc::connection> _columnNotifyConnections;
-
-    void updateTitlePositionVariable();
-    Glib::RefPtr<Gtk::SignalListItemFactory> createTextColumnFactory(TrackColumnDefinition const& definition);
-    void onTextColumnSetup(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                           TrackColumnDefinition const& definition,
-                           bool isEditable,
-                           bool isHyperlink);
-    void onTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                          TrackColumnDefinition const& definition,
-                          bool isEditable);
-    void onTextColumnBindEditable(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                                  TrackColumnDefinition const& definition,
-                                  Glib::RefPtr<TrackRow> const& row);
-    void onTextColumnBindStatic(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                                TrackColumnDefinition const& definition,
-                                Glib::RefPtr<TrackRow> const& row);
-    void commitMetadataChange(Gtk::Stack* stack,
-                              Gtk::Entry* entry,
-                              Glib::RefPtr<TrackRow> const& row,
-                              TrackColumn column);
 
     // Signals
     SelectionChangedSignal _selectionChanged;

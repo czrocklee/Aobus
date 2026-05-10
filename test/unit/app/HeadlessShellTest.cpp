@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/library/MusicLibrary.h>
 #include <catch2/catch_test_macros.hpp>
-#include <filesystem>
+
 #include <memory>
+
 #include <runtime/AppSession.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/EventBus.h>
@@ -14,6 +14,8 @@
 #include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
+
+#include "TestUtils.h"
 
 namespace ao::app::test
 {
@@ -35,14 +37,12 @@ namespace ao::app::test
 
   TEST_CASE("Headless Shell - Navigation and Layout Management", "[app][runtime][headless]")
   {
-    auto const tempDir = std::filesystem::temp_directory_path() / "aobus_headless_test";
-    std::filesystem::create_directories(tempDir);
-
+    auto tempDir = TempDir{};
     auto executor = std::make_shared<MockExecutor>();
     auto persistence = std::make_shared<MockPersistence>();
 
     AppSession session(
-      AppSessionDependencies{.executor = executor, .libraryRoot = tempDir, .persistence = persistence});
+      AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .persistence = persistence});
 
     SECTION("Initial layout is empty")
     {
@@ -95,7 +95,7 @@ namespace ao::app::test
 
       // Create new session with same persistence
       AppSession session2(
-        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir, .persistence = persistence});
+        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .persistence = persistence});
 
       session2.workspace().restoreSession();
 
@@ -104,6 +104,52 @@ namespace ao::app::test
       CHECK(layout.activeViewId != ViewId{});
     }
 
-    std::filesystem::remove_all(tempDir);
+    SECTION("Session persistence preserves groupBy across instances")
+    {
+      // Setup grouped view in first session
+      session.workspace().navigateTo(ao::ListId{10});
+      auto const viewId = session.workspace().layoutState().activeViewId;
+      session.views().setGrouping(viewId, TrackGroupKey::Artist);
+
+      auto const savedState = session.views().trackListState(viewId);
+      CHECK(savedState.groupBy == TrackGroupKey::Artist);
+      CHECK_FALSE(savedState.sortBy.empty());
+
+      session.workspace().saveSession();
+
+      REQUIRE(persistence->snapshot.has_value());
+      REQUIRE(persistence->snapshot->openViews.size() == 1);
+      CHECK(persistence->snapshot->openViews[0].groupBy == TrackGroupKey::Artist);
+
+      // Restore in new session
+      AppSession session2(
+        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .persistence = persistence});
+
+      session2.workspace().restoreSession();
+
+      auto const layout2 = session2.workspace().layoutState();
+      REQUIRE(layout2.openViews.size() == 1);
+      auto const restoredState = session2.views().trackListState(layout2.openViews[0]);
+      CHECK(restoredState.groupBy == TrackGroupKey::Artist);
+      CHECK_FALSE(restoredState.sortBy.empty());
+    }
+
+    SECTION("Session persistence preserves groupBy=None")
+    {
+      // Ungrouped view
+      session.workspace().navigateTo(ao::ListId{10});
+      session.workspace().saveSession();
+
+      AppSession session2(
+        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .persistence = persistence});
+
+      session2.workspace().restoreSession();
+
+      auto const layout2 = session2.workspace().layoutState();
+      REQUIRE(layout2.openViews.size() == 1);
+      auto const restoredState = session2.views().trackListState(layout2.openViews[0]);
+      CHECK(restoredState.groupBy == TrackGroupKey::None);
+    }
+
   }
 }

@@ -136,24 +136,24 @@ int main(int argc, char* argv[])
   auto app = Gtk::Application::create("org.aobus.app");
 
   // Handle Ctrl-C and SIGTERM gracefully via GLib main loop
-  auto const signal_handler = [](void* data) -> gboolean
+  auto const signal_handler = [](void* data) -> ::gboolean
   {
     auto* app_ptr = static_cast<Glib::RefPtr<Gtk::Application>*>(data);
     APP_LOG_INFO("Received termination signal, shutting down...");
     (*app_ptr)->quit();
     return FALSE; // Remove source
   };
-  g_unix_signal_add(SIGINT, signal_handler, &app);
-  g_unix_signal_add(SIGTERM, signal_handler, &app);
+  ::g_unix_signal_add(SIGINT, signal_handler, &app);
+  ::g_unix_signal_add(SIGTERM, signal_handler, &app);
 
   // Global Theme Refresh: Manual poke for NixOS/Theme changes
-  g_unix_signal_add(
+  ::g_unix_signal_add(
     SIGUSR1,
-    [](void*) -> gboolean
+    [](void*) -> ::gboolean
     {
       APP_LOG_INFO("Received SIGUSR1, scheduling global theme refresh...");
       ao::gtk::emitThemeRefresh();
-      return TRUE; // Keep listening
+      return TRUE;
     },
     nullptr);
 

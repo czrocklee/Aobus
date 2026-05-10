@@ -73,6 +73,18 @@ namespace ao::library
     return _idToStringStorage[idx - 1];
   }
 
+  std::string_view DictionaryStore::getOrDefault(DictionaryId id, std::string_view defaultValue) const
+  {
+    auto idx = id.value();
+
+    if (idx == 0 || idx - 1 >= _idToStringStorage.size())
+    {
+      return defaultValue;
+    }
+
+    return _idToStringStorage[idx - 1];
+  }
+
   DictionaryId DictionaryStore::getId(std::string_view str) const
   {
     if (auto it = _stringToId.find(str); it != _stringToId.end())

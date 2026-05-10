@@ -40,10 +40,16 @@ namespace ao::app
     ViewId viewId() const noexcept override;
     std::uint64_t revision() const noexcept override;
 
-    void setSortBy(std::vector<TrackSortTerm> sortBy);
+    TrackListPresentationSnapshot presentation() const override;
+    std::size_t groupCount() const noexcept override;
+    TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const override;
+    std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const override;
 
     std::size_t size() const noexcept override;
     ao::TrackId trackIdAt(std::size_t index) const override;
+    std::optional<std::size_t> indexOf(ao::TrackId trackId) const noexcept override;
+
+    void setPresentation(TrackGroupKey groupBy, std::vector<TrackSortTerm> sortBy);
 
     Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) override;
 

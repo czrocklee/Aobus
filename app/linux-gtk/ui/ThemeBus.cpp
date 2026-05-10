@@ -22,19 +22,21 @@ namespace ao::gtk
   {
     bool schemaExists(char const* schemaId)
     {
-      auto* const source = g_settings_schema_source_get_default();
+      auto* const source = ::g_settings_schema_source_get_default();
+
       if (source == nullptr)
       {
         return false;
       }
 
-      auto* const schema = g_settings_schema_source_lookup(source, schemaId, TRUE);
+      auto* const schema = ::g_settings_schema_source_lookup(source, schemaId, TRUE);
+
       if (schema == nullptr)
       {
         return false;
       }
 
-      g_settings_schema_unref(schema);
+      ::g_settings_schema_unref(schema);
       return true;
     }
 

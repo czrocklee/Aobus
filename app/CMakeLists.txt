@@ -34,6 +34,8 @@ add_library(app_runtime STATIC
     runtime/SmartListEvaluator.h
     runtime/SmartListSource.cpp
     runtime/SmartListSource.h
+    runtime/TrackListPresentation.cpp
+    runtime/TrackListPresentation.h
     runtime/TrackListProjection.cpp
     runtime/TrackListProjection.h
     runtime/TrackDetailProjection.cpp

@@ -24,6 +24,8 @@ namespace ao::gtk
   public:
     using TrackId = ao::TrackId;
 
+    static Glib::RefPtr<TrackRow> create(TrackId id, TrackRowDataProvider const& provider);
+
     TrackId getTrackId() const { return _id; }
 
     Glib::ustring getArtist() const { return _propertyArtist.get_value(); }
@@ -44,7 +46,6 @@ namespace ao::gtk
     void setTags(Glib::ustring const& tags);
     std::chrono::milliseconds getDuration() const { return _duration; }
     Glib::ustring const& getDurationStr() const { return _durationStr; }
-    TrackPresentationKeysView getPresentationKeys() const;
     std::uint64_t getResourceId() const { return _resourceId.value_or(0); }
 
     std::uint32_t getSampleRate() const { return _sampleRate; }
@@ -55,8 +56,6 @@ namespace ao::gtk
     Glib::PropertyProxy<bool> property_playing();
     bool isPlaying() const;
     void setPlaying(bool playing);
-
-    static Glib::RefPtr<TrackRow> create(TrackId id, TrackRowDataProvider const& provider);
 
     void populate(Glib::ustring const& title,
                   ao::DictionaryId artist,

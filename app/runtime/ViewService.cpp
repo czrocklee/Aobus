@@ -5,6 +5,7 @@
 #include "EventBus.h"
 #include "EventTypes.h"
 #include "TrackDetailProjection.h"
+#include "TrackListPresentation.h"
 #include "TrackListProjection.h"
 
 #include "ListSourceStore.h"
@@ -30,6 +31,20 @@ namespace ao::app
       TrackSource* activeSource = nullptr;
       std::shared_ptr<ITrackListProjection> projection;
     };
+
+    void applyPresentation(ViewEntry& entry)
+    {
+      auto policy = presentationForGroup(entry.state.groupBy);
+      entry.state.sortBy = policy.effectiveSortBy;
+
+      if (entry.projection)
+      {
+        if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(entry.projection.get()))
+        {
+          trackListProj->setPresentation(policy.groupBy, policy.effectiveSortBy);
+        }
+      }
+    }
   }
 
   struct ViewService::Impl final
@@ -87,6 +102,8 @@ namespace ao::app
     entry.activeSource = baseSource;
     entry.projection = projection;
 
+    applyPresentation(entry);
+
     return CreateTrackListViewReply{.viewId = id};
   }
 
@@ -131,10 +148,7 @@ namespace ao::app
 
       // Need to attach projection to new source
       it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
-      if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(it->second.projection.get()))
-      {
-        trackListProj->setSortBy(it->second.state.sortBy);
-      }
+      applyPresentation(it->second);
     }
     else
     {
@@ -143,10 +157,7 @@ namespace ao::app
       it->second.adHocSource.reset();
       it->second.activeSource = baseSource;
       it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
-      if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(it->second.projection.get()))
-      {
-        trackListProj->setSortBy(it->second.state.sortBy);
-      }
+      applyPresentation(it->second);
     }
   }
 
@@ -166,7 +177,7 @@ namespace ao::app
     {
       if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(it->second.projection.get()))
       {
-        trackListProj->setSortBy(sortBy);
+        trackListProj->setPresentation(it->second.state.groupBy, sortBy);
       }
     }
   }
@@ -179,8 +190,14 @@ namespace ao::app
       return;
     }
 
+    if (it->second.state.groupBy == groupBy)
+    {
+      return;
+    }
+
     it->second.state.groupBy = groupBy;
     it->second.state.revision++;
+    applyPresentation(it->second);
     _impl->events.publish(ViewGroupingChanged{.viewId = viewId, .groupBy = groupBy});
   }
 
@@ -226,10 +243,7 @@ namespace ao::app
     }
 
     it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
-    if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(it->second.projection.get()))
-    {
-      trackListProj->setSortBy(it->second.state.sortBy);
-    }
+    applyPresentation(it->second);
 
     _impl->events.publish(ViewListChanged{.viewId = viewId, .listId = listId});
   }

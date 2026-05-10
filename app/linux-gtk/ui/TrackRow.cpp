@@ -198,21 +198,4 @@ namespace ao::gtk
     return _tags;
   }
 
-  TrackPresentationKeysView TrackRow::getPresentationKeys() const
-  {
-    return TrackPresentationKeysView{
-      .artist = getArtist().raw(),
-      .album = getAlbum().raw(),
-      .albumArtist = _provider->resolveDictionaryString(_albumArtistId).raw(),
-      .genre = _provider->resolveDictionaryString(_genreId).raw(),
-      .composer = _provider->resolveDictionaryString(_composerId).raw(),
-      .work = _provider->resolveDictionaryString(_workId).raw(),
-      .title = _propertyTitle.get_value().raw(),
-      .durationMs = static_cast<std::uint32_t>(_duration.count()),
-      .year = _year,
-      .discNumber = _discNumber,
-      .trackNumber = _trackNumber,
-      .trackId = _id,
-    };
-  }
 } // namespace ao::gtk

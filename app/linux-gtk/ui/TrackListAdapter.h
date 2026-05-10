@@ -45,6 +45,10 @@ namespace ao::gtk
     // and instead rebuilds the list store from projection deltas.
     void bindProjection(ao::app::ITrackListProjection& projection);
 
+    // Access the bound projection for group/presentation queries.
+    ao::app::ITrackListProjection* projection() const { return _projection; }
+    std::optional<std::size_t> groupIndexForTrack(TrackId trackId) const;
+
     // Set filter text - filters by common display metadata containing the text.
     void setFilter(Glib::ustring const& filterText);
     TrackFilterMode filterMode() const { return _filterMode; }

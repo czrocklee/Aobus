@@ -225,3 +225,31 @@ TEST_CASE("Dictionary - getOrIntern multiple strings", "[core][dictionary]")
   REQUIRE(dict.contains("artist2"));
   REQUIRE(dict.contains("artist3"));
 }
+
+TEST_CASE("Dictionary - getOrDefault returns value for valid ID", "[core][dictionary]")
+{
+  auto temp = TempDir{};
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+  auto id = dict.put(wtxn, "hello");
+  wtxn.commit();
+
+  CHECK(dict.getOrDefault(id) == "hello");
+  CHECK(dict.getOrDefault(id, "fallback") == "hello");
+}
+
+TEST_CASE("Dictionary - getOrDefault returns default for invalid ID", "[core][dictionary]")
+{
+  auto temp = TempDir{};
+  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+
+  auto wtxn = WriteTransaction{env};
+  auto dict = DictionaryStore{Database{wtxn, "dict"}, wtxn};
+  wtxn.commit();
+
+  CHECK(dict.getOrDefault(DictionaryId{0}).empty());
+  CHECK(dict.getOrDefault(DictionaryId{0}, "fallback") == "fallback");
+  CHECK(dict.getOrDefault(DictionaryId{999}).empty());
+}

@@ -6,6 +6,7 @@
 #include <ao/Type.h>
 
 #include "CorePrimitives.h"
+#include "StateTypes.h"
 
 #include <cstdint>
 #include <memory>
@@ -16,6 +17,20 @@
 
 namespace ao::app
 {
+  struct TrackListPresentationSnapshot final
+  {
+    TrackGroupKey groupBy = TrackGroupKey::None;
+    std::vector<TrackSortTerm> effectiveSortBy{};
+    std::vector<TrackSortField> redundantFields{};
+    std::uint64_t revision = 0;
+  };
+
+  struct TrackGroupSectionSnapshot final
+  {
+    Range rows{};
+    std::string label{};
+  };
+
   struct ProjectionReset final
   {
     std::uint64_t revision = 0;
@@ -53,8 +68,14 @@ namespace ao::app
     virtual ViewId viewId() const noexcept = 0;
     virtual std::uint64_t revision() const noexcept = 0;
 
+    virtual TrackListPresentationSnapshot presentation() const = 0;
+    virtual std::size_t groupCount() const noexcept = 0;
+    virtual TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const = 0;
+    virtual std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const = 0;
+
     virtual std::size_t size() const noexcept = 0;
     virtual ao::TrackId trackIdAt(std::size_t index) const = 0;
+    virtual std::optional<std::size_t> indexOf(ao::TrackId trackId) const noexcept = 0;
 
     virtual Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) = 0;
   };
