@@ -41,6 +41,14 @@ namespace ao::audio
 
     Impl() = default;
 
+    ~Impl()
+    {
+      // Order matters: stop PipeWire threads before their callback targets are destroyed.
+      graphSubscription.reset(); // 1. remove subscription from PipeWireMonitor (still alive)
+      engine.reset();            // 2. stop PipeWire playback thread
+      providers.clear();         // 3. stop PipeWire monitor thread
+    }
+
     std::uint64_t playbackGeneration = 1;
     std::vector<std::unique_ptr<ProviderRecord>> providers;
     std::optional<PendingOutput> pendingOutput;
