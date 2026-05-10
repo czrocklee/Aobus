@@ -43,15 +43,13 @@ namespace ao::gtk
                                  ao::app::AppSession& session,
                                  PlaybackController* playbackController,
                                  TagEditController& tagEditController,
-                                 ListSidebarController& listSidebar,
-                                 Callbacks callbacks)
+                                 ListSidebarController& listSidebar)
     : _stack{stack}
     , _layoutModel{layoutModel}
     , _session{session}
     , _playbackController{playbackController}
     , _tagEditController{tagEditController}
     , _listSidebar{listSidebar}
-    , _callbacks{std::move(callbacks)}
   {
     _revealSub = _session.events().subscribe<ao::app::RevealTrackRequested>(
       [this](ao::app::RevealTrackRequested const& ev)
@@ -268,7 +266,6 @@ namespace ao::gtk
 
     TrackPageContext ctx;
     ctx.viewId = viewId;
-    ctx.membershipList = nullptr;
     ctx.adapter = std::move(adapter);
     ctx.page = std::move(trackPage);
 
@@ -293,26 +290,20 @@ namespace ao::gtk
       });
 
     page->signalContextMenuRequested().connect(
-      [this, page, viewId](double posX, double posY)
+      [this, page](double posX, double posY)
       {
-        auto* const self = find(viewId);
-        TrackSelectionContext sel{.listId = page->getListId(),
-                                  .selectedIds = page->getSelectedTrackIds(),
-                                  .membershipList = self ? self->membershipList.get() : nullptr};
+        TrackSelectionContext sel{.listId = page->getListId(), .selectedIds = page->getSelectedTrackIds()};
         _tagEditController.showTrackContextMenu(*page, sel, posX, posY);
       });
 
     page->signalTagEditRequested().connect(
-      [this, page, viewId](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
+      [this, page](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
       {
         if (!relativeTo)
         {
           return;
         }
-        auto* const self = find(viewId);
-        TrackSelectionContext sel{.listId = page->getListId(),
-                                  .selectedIds = ids,
-                                  .membershipList = self ? self->membershipList.get() : nullptr};
+        TrackSelectionContext sel{.listId = page->getListId(), .selectedIds = ids};
         _tagEditController.showTagEditor(sel, *relativeTo);
       });
 

@@ -113,11 +113,7 @@ namespace ao::gtk
                                                        _session,
                                                        _playbackController.get(),
                                                        *_tagEditController,
-                                                       *_listSidebarController,
-                                                       TrackPageGraph::Callbacks{.onContextMenuRequested = {},
-                                                                                 .onTagEditRequested = {},
-                                                                                 .onTrackActivated = {},
-                                                                                 .onCreateSmartListRequested = {}});
+                                                       *_listSidebarController);
 
     // Initialize inspector sidebar
     _inspectorSidebar = std::make_unique<InspectorSidebar>(_session, *_coverArtCache);
@@ -129,8 +125,7 @@ namespace ao::gtk
           return;
         }
 
-        auto const selection =
-          TrackSelectionContext{.listId = allTracksListId(), .selectedIds = ids, .membershipList = nullptr};
+        auto const selection = TrackSelectionContext{.listId = allTracksListId(), .selectedIds = ids};
 
         _tagEditController->showTagEditor(selection, *relativeTo);
       });
@@ -192,11 +187,6 @@ namespace ao::gtk
     _listsMutatedSubscription.reset();
 
     saveSession();
-  }
-
-  void MainWindow::showListPage(ao::ListId listId)
-  {
-    _session.workspace().navigateTo(listId);
   }
 
   void MainWindow::initializeSession()
@@ -565,22 +555,5 @@ namespace ao::gtk
   void MainWindow::loadSession()
   {
     _sessionPersistence->loadUi(*this, _paned, _trackColumnLayoutModel);
-  }
-
-  std::optional<ao::audio::TrackPlaybackDescriptor> MainWindow::currentSelectionPlaybackDescriptor() const
-  {
-    auto const layout = _session.workspace().layoutState();
-    if (layout.activeViewId == ao::app::ViewId{})
-    {
-      return std::nullopt;
-    }
-
-    auto const& state = _session.views().trackListState(layout.activeViewId);
-    if (state.selection.empty())
-    {
-      return std::nullopt;
-    }
-
-    return _rowDataProvider->getPlaybackDescriptor(state.selection.front());
   }
 } // namespace ao::gtk

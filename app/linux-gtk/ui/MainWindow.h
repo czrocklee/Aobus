@@ -52,7 +52,6 @@ namespace ao::gtk
     ~MainWindow() override;
     void on_hide() override;
 
-    void showListPage(ao::ListId listId);
     ImportExportCoordinator& importExportCoordinator() { return *_importExportCoordinator; }
 
     void initializeSession();
@@ -70,8 +69,6 @@ namespace ao::gtk
 
     void saveSession();
     void loadSession();
-
-    std::optional<ao::audio::TrackPlaybackDescriptor> currentSelectionPlaybackDescriptor() const;
 
     // GTK-side row data cache
     std::unique_ptr<TrackRowDataProvider> _rowDataProvider;
