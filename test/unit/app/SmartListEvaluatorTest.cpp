@@ -9,8 +9,8 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <runtime/SmartListSource.h>
 #include <runtime/SmartListEvaluator.h>
+#include <runtime/SmartListSource.h>
 #include <runtime/TrackSource.h>
 #include <test/unit/lmdb/TestUtils.h>
 
@@ -27,13 +27,13 @@
 namespace
 {
   using ao::TrackId;
+  using ao::app::SmartListEvaluator;
+  using ao::app::SmartListSource;
+  using ao::app::TrackSource;
+  using ao::app::TrackSourceObserver;
   using ao::library::MusicLibrary;
   using ao::library::TrackBuilder;
   using ao::library::TrackStore;
-  using ao::app::SmartListSource;
-  using ao::app::SmartListEvaluator;
-  using ao::app::TrackSource;
-  using ao::app::TrackSourceObserver;
 
   struct TrackSpec
   {

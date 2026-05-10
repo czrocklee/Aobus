@@ -24,14 +24,14 @@ namespace ao::cli
       {
         try
         {
-          auto tagFile = tag::File::open(path);
+          auto const optTagFile = tag::File::open(path);
 
-          if (!tagFile)
+          if (!optTagFile)
           {
             continue;
           }
 
-          auto builder = tagFile->loadTrack();
+          auto builder = optTagFile->loadTrack();
           // NOTE: pathStr must outlive builder because PropertyBuilder stores string_view
           auto const pathStr = path.string();
           builder.property()
@@ -39,8 +39,8 @@ namespace ao::cli
             .fileSize(std::filesystem::file_size(path))
             .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
 
-          auto [preparedHot, preparedCold] = builder.prepare(txn, dict, ml.resources());
-          auto [id, trackView] = writer.createHotCold(
+          auto const [preparedHot, preparedCold] = builder.prepare(txn, dict, ml.resources());
+          auto const [id, trackView] = writer.createHotCold(
             preparedHot.size(),
             preparedCold.size(),
             [&preparedHot, &preparedCold](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
@@ -62,7 +62,7 @@ namespace ao::cli
 
   void setupInitCommand(CLI::App& app, ao::library::MusicLibrary& ml)
   {
-    auto* cmd = app.add_subcommand("init", "Scan current directory and initialize library");
-    cmd->callback([&ml]() { scanAndImport(ml, std::cout); });
+    auto* const cmd = app.add_subcommand("init", "Scan current directory and initialize library");
+    cmd->callback([&ml] { scanAndImport(ml, std::cout); });
   }
 }

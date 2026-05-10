@@ -29,8 +29,8 @@ namespace ao::audio::backend::detail
     std::string nodeNick;
     std::string nodeDescription;
     std::string objectPath;
-    std::optional<std::uint32_t> objectSerial;
-    std::optional<std::uint32_t> driverId;
+    std::optional<std::uint32_t> optObjectSerial;
+    std::optional<std::uint32_t> optDriverId;
   };
 
   struct LinkRecord final

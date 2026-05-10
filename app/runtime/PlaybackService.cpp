@@ -19,7 +19,7 @@ namespace ao::app
 {
   namespace
   {
-    auto buildPlaybackState(ao::audio::Player const& player) -> PlaybackState
+    PlaybackState buildPlaybackState(ao::audio::Player const& player)
     {
       auto status = player.status();
 
@@ -153,10 +153,10 @@ namespace ao::app
       , library{musicLibrary}
     {
       player->setOnTrackEnded(
-        [this]()
+        [this]
         {
           executor.dispatch(
-            [this]()
+            [this]
             {
               state = buildState(*player);
               events.publish(PlaybackTransportChanged{.transport = ao::audio::Transport::Idle});
@@ -167,7 +167,7 @@ namespace ao::app
         [this](std::vector<ao::audio::IBackendProvider::Status> const&)
         {
           executor.dispatch(
-            [this]()
+            [this]
             {
               state = buildState(*player);
 
@@ -199,7 +199,7 @@ namespace ao::app
         [this](ao::audio::Quality quality, bool ready)
         {
           executor.dispatch(
-            [this, quality, ready]()
+            [this, quality, ready]
             {
               state.quality = quality;
               state.ready = ready;
@@ -253,7 +253,7 @@ namespace ao::app
       }
 
       auto const trackId = sel.front();
-      auto txn = _impl->library.readTransaction();
+      auto const txn = _impl->library.readTransaction();
       auto reader = _impl->library.tracks().reader(txn);
       auto const optView = reader.get(trackId, ao::library::TrackStore::Reader::LoadMode::Both);
 

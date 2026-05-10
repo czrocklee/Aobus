@@ -29,7 +29,7 @@ namespace ao::app
       bool changedCold = false;
     };
 
-    auto applyMetadataPatch(ao::library::TrackBuilder& builder, MetadataPatch const& patch) -> PatchResult
+    PatchResult applyMetadataPatch(ao::library::TrackBuilder& builder, MetadataPatch const& patch)
     {
       auto& meta = builder.metadata();
       auto result = PatchResult{};
@@ -181,7 +181,7 @@ namespace ao::app
       [this, totalFiles](std::filesystem::path const& filePath, std::int32_t index)
       {
         _impl->executor.dispatch(
-          [this, filePath, index, totalFiles]()
+          [this, filePath, index, totalFiles]
           {
             _impl->events.publish(ImportProgressUpdated{
               .fraction = totalFiles > 0 ? static_cast<double>(index) / static_cast<double>(totalFiles) : 0.0,
@@ -189,17 +189,17 @@ namespace ao::app
             });
           });
       },
-      []() {});
+      [] {});
 
     _impl->importThread = std::jthread(
-      [this, worker]()
+      [this, worker]
       {
         ao::setCurrentThreadName("FileImport");
         worker->run();
 
         auto const& result = worker->result();
         _impl->executor.dispatch(
-          [this, ids = result.insertedIds, count = result.insertedIds.size()]()
+          [this, ids = result.insertedIds, count = result.insertedIds.size()]
           {
             _impl->events.publish(TracksMutated{.trackIds = ids});
             _impl->events.publish(LibraryImportCompleted{.importedTrackCount = count});

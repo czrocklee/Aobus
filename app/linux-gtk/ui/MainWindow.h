@@ -15,12 +15,14 @@
 #include "TrackPageGraph.h"
 #include "TrackViewPage.h"
 #include <ao/audio/Types.h>
+#include <runtime/AppSession.h>
+
+#include <gtkmm.h>
+
 #include <cstdint>
 #include <filesystem>
-#include <gtkmm.h>
 #include <memory>
 #include <optional>
-#include <runtime/AppSession.h>
 #include <vector>
 
 namespace ao::gtk::services
@@ -57,15 +59,15 @@ namespace ao::gtk
     void initializeSession();
 
   private:
-    void showStatusMessage(std::string const& message);
+    void showStatusMessage(std::string_view message);
 
     void setupMenu();
     void setupLayout();
 
     // Page management helpers
-    void rebuildListPages(ao::lmdb::ReadTransaction& txn);
+    void rebuildListPages(ao::lmdb::ReadTransaction const& txn);
 
-    void updateImportProgress(double fraction, std::string const& info);
+    void updateImportProgress(double fraction, std::string_view info);
 
     void saveSession();
     void loadSession();

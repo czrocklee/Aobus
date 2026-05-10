@@ -2,17 +2,21 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TrackViewPage.h"
+
 #include "LayoutConstants.h"
 #include "TrackRow.h"
 #include "TrackRowDataProvider.h"
+#include "ui/ThemeBus.h"
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Log.h>
+#include <runtime/AppSession.h>
+#include <runtime/EventBus.h>
+#include <runtime/LibraryMutationService.h>
+#include <runtime/PlaybackService.h>
+#include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>
+#include <runtime/WorkspaceService.h>
 
-#include "ui/ThemeBus.h"
-#include <cstdint>
-#include <format>
-#include <functional>
 #include <gdk/gdk.h>
 #include <gdkmm/contentprovider.h>
 #include <gdkmm/cursor.h>
@@ -27,14 +31,12 @@
 #include <gtkmm/listitem.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/stylecontext.h>
+
+#include <cstdint>
+#include <format>
+#include <functional>
 #include <memory>
 #include <ranges>
-#include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
-#include <runtime/LibraryMutationService.h>
-#include <runtime/PlaybackService.h>
-#include <runtime/StateTypes.h>
-#include <runtime/WorkspaceService.h>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -258,7 +260,7 @@ namespace ao::gtk
 
     // Subscribe to global theme refresh signal (e.g. triggered by SIGUSR1 or DBus in main.cpp)
     signalThemeRefresh().connect(
-      [this]()
+      [this]
       {
         APP_LOG_INFO("Executing theme refresh for TrackViewPage...");
 
@@ -430,7 +432,7 @@ namespace ao::gtk
     _resetColumnsButton.set_label("Reset to Default");
     _resetColumnsButton.set_sensitive(true);
     _resetColumnsButton.add_css_class("suggested-action");
-    _resetColumnsButton.signal_clicked().connect([this]() { _columnLayoutModel.reset(); });
+    _resetColumnsButton.signal_clicked().connect([this] { _columnLayoutModel.reset(); });
 
     _columnsPopoverBox.append(_columnsPopoverTitle);
     _columnsPopoverBox.append(_columnToggleList);
@@ -530,15 +532,15 @@ namespace ao::gtk
     context->add_class("dim-label");
   }
 
-  void TrackViewPage::setStatusMessage(std::string const& message)
+  void TrackViewPage::setStatusMessage(std::string_view message)
   {
+    _statusLabel.set_text(std::string{message});
     if (message.empty())
     {
       clearStatusMessage();
       return;
     }
 
-    _statusLabel.set_text(message);
     _statusLabel.set_visible(true);
   }
 
@@ -563,7 +565,7 @@ namespace ao::gtk
       column->set_fixed_width(definition.defaultWidth);
 
       column->property_fixed_width().signal_changed().connect(
-        [this]()
+        [this]
         {
           if (_syncingColumnLayout)
           {
@@ -581,7 +583,7 @@ namespace ao::gtk
       auto* const toggle = Gtk::make_managed<Gtk::CheckButton>(title);
 
       toggle->signal_toggled().connect(
-        [this, columnId = definition.column, toggleButton = toggle]()
+        [this, columnId = definition.column, toggleButton = toggle]
         {
           if (_syncingColumnLayout)
           {
@@ -621,9 +623,8 @@ namespace ao::gtk
 
     _syncingColumnLayout = true;
 
-    for (std::size_t index = 0; index < layout.columns.size(); ++index)
+    for (auto const& [index, state] : std::views::enumerate(layout.columns))
     {
-      auto const& state = layout.columns[index];
       auto* const binding = findColumnBinding(state.column);
 
       if (binding == nullptr)
@@ -735,7 +736,7 @@ namespace ao::gtk
 
     layout.columns.reserve(nItems);
 
-    for (::guint i = 0; i < nItems; ++i)
+    for (auto const i : std::views::iota(0uz, nItems))
     {
       auto const object = _columnModel->get_object(i);
       auto const column = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
@@ -812,9 +813,9 @@ namespace ao::gtk
     updateFilterUi();
   }
 
-  void TrackViewPage::setFilterExpression(std::string const& expression)
+  void TrackViewPage::setFilterExpression(std::string_view expression)
   {
-    _filterEntry.set_text(expression);
+    _filterEntry.set_text(std::string{expression});
   }
 
   void TrackViewPage::updateFilterUi()
@@ -1433,7 +1434,7 @@ namespace ao::gtk
       onTextColumnBindStatic(listItem, definition, row);
     }
 
-    auto const updateStyles = [listItem, row, definition]()
+    auto const updateStyles = [listItem, row, definition]
     {
       auto* const child = listItem->get_child();
 
@@ -1501,10 +1502,10 @@ namespace ao::gtk
       label->set_text(row->getColumnText(definition.column));
       entry->set_text(row->getColumnText(definition.column));
 
-      auto const commitChange = [this, stack, entry, row, column = definition.column]()
+      auto const commitChange = [this, stack, entry, row, column = definition.column]
       { commitMetadataChange(stack, entry, row, column); };
 
-      auto const cancelChange = [stack, row, definition, entry]()
+      auto const cancelChange = [stack, row, definition, entry]
       {
         stack->set_visible_child("display");
         entry->set_text(row->getColumnText(definition.column));
@@ -1513,7 +1514,7 @@ namespace ao::gtk
       auto const activateConn = entry->signal_activate().connect(commitChange);
       auto const focusController = Gtk::EventControllerFocus::create();
 
-      focusController->signal_leave().connect([commitChange]() { commitChange(); });
+      focusController->signal_leave().connect([commitChange] { commitChange(); });
       entry->add_controller(focusController);
 
       auto const keyController = Gtk::EventControllerKey::create();
@@ -1536,7 +1537,7 @@ namespace ao::gtk
       if (definition.column == TrackColumn::Title)
       {
         modelConnection = row->property_title().signal_changed().connect(
-          [label, entry, row]()
+          [label, entry, row]
           {
             label->set_text(row->getTitle());
             entry->set_text(row->getTitle());
@@ -1545,7 +1546,7 @@ namespace ao::gtk
       else if (definition.column == TrackColumn::Artist)
       {
         modelConnection = row->property_artist().signal_changed().connect(
-          [label, entry, row]()
+          [label, entry, row]
           {
             label->set_text(row->getArtist());
             entry->set_text(row->getArtist());
@@ -1554,7 +1555,7 @@ namespace ao::gtk
       else if (definition.column == TrackColumn::Album)
       {
         modelConnection = row->property_album().signal_changed().connect(
-          [label, entry, row]()
+          [label, entry, row]
           {
             label->set_text(row->getAlbum());
             entry->set_text(row->getAlbum());

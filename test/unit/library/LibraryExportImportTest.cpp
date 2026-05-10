@@ -103,16 +103,16 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
 
   // 4. Verify
   {
-    auto txn = ml2.readTransaction();
-    auto trackReader = ml2.tracks().reader(txn);
-    auto listReader = ml2.lists().reader(txn);
+    auto const txn = ml2.readTransaction();
+    auto const reader = ml2.tracks().reader(txn);
+    auto const listReader = ml2.lists().reader(txn);
     auto& dict = ml2.dictionary();
 
     // Check tracks
     std::vector<std::pair<ao::TrackId, ao::library::TrackView>> tracks;
-    for (auto item : trackReader)
+    for (auto const& item : reader)
     {
-      tracks.push_back(std::move(item));
+      tracks.push_back(item);
     }
     REQUIRE(tracks.size() == 1);
     auto const& view = tracks[0].second;
@@ -215,8 +215,8 @@ library:
   REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
 
   {
-    auto txn = ml.readTransaction();
-    auto listReader = ml.lists().reader(txn);
+    auto const txn = ml.readTransaction();
+    auto const listReader = ml.lists().reader(txn);
 
     std::optional<ao::library::ListView> parent;
     std::optional<ao::library::ListView> child;

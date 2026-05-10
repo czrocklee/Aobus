@@ -68,7 +68,7 @@ namespace ao::app::test
       {
       }
 
-      auto createProjection(ViewId viewId) -> TrackListProjection
+      TrackListProjection createProjection(ViewId viewId)
       {
         return TrackListProjection{viewId, *filtered, lib.library()};
       }
@@ -192,10 +192,11 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None, {
-      TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
-      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::None,
+                         {
+                           TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
+                           TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                         });
 
     REQUIRE(proj.size() == 20);
 
@@ -203,8 +204,8 @@ namespace ao::app::test
     {
       for (auto i = start; i < end; ++i)
       {
-        auto txn = env.lib.library().readTransaction();
-        auto reader = env.lib.library().tracks().reader(txn);
+        auto const txn = env.lib.library().readTransaction();
+        auto const reader = env.lib.library().tracks().reader(txn);
         auto v = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
         CHECK(v.has_value());
         CHECK(v->metadata().year() == expectedYear);
@@ -220,8 +221,8 @@ namespace ao::app::test
       auto start = is2020 ? std::size_t{0} : std::size_t{10};
       for (auto i = start; i < start + 9; ++i)
       {
-        auto txn = env.lib.library().readTransaction();
-        auto reader = env.lib.library().tracks().reader(txn);
+        auto const txn = env.lib.library().readTransaction();
+        auto const reader = env.lib.library().tracks().reader(txn);
         auto a = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
         auto b = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
         REQUIRE(a.has_value());
@@ -274,11 +275,12 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None, {
-      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
-      TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
-      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::None,
+                         {
+                           TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                           TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                           TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                         });
 
     REQUIRE(proj.size() == 15);
 
@@ -289,8 +291,8 @@ namespace ao::app::test
     auto prevTrack = std::uint16_t{0};
 
     auto& dict = env.lib.library().dictionary();
-    auto txn = env.lib.library().readTransaction();
-    auto reader = env.lib.library().tracks().reader(txn);
+    auto const txn = env.lib.library().readTransaction();
+    auto const reader = env.lib.library().tracks().reader(txn);
 
     for (auto i = std::size_t{0}; i < 15; ++i)
     {
@@ -357,8 +359,8 @@ namespace ao::app::test
     {
       for (auto i = std::size_t{0}; i < 9; ++i)
       {
-        auto txn = env.lib.library().readTransaction();
-        auto reader = env.lib.library().tracks().reader(txn);
+        auto const txn = env.lib.library().readTransaction();
+        auto const reader = env.lib.library().tracks().reader(txn);
         auto a = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
         auto b = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
         REQUIRE(a.has_value());
@@ -406,8 +408,8 @@ namespace ao::app::test
 
     for (auto i = std::size_t{0}; i < 14; ++i)
     {
-      auto txn = env.lib.library().readTransaction();
-      auto reader = env.lib.library().tracks().reader(txn);
+      auto const txn = env.lib.library().readTransaction();
+      auto const reader = env.lib.library().tracks().reader(txn);
       auto a = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
       auto b = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
       REQUIRE(a.has_value());
@@ -420,8 +422,8 @@ namespace ao::app::test
 
     for (auto i = std::size_t{0}; i < 14; ++i)
     {
-      auto txn = env.lib.library().readTransaction();
-      auto reader = env.lib.library().tracks().reader(txn);
+      auto const txn = env.lib.library().readTransaction();
+      auto const reader = env.lib.library().tracks().reader(txn);
       auto a = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
       auto b = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
       REQUIRE(a.has_value());
@@ -444,11 +446,12 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Artist, {
-      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
-      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
-      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::Artist,
+                         {
+                           TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                           TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                           TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                         });
 
     REQUIRE(proj.size() == 5);
 
@@ -487,9 +490,10 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None, {
-      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::None,
+                         {
+                           TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                         });
 
     CHECK(proj.groupCount() == 0);
     auto s = proj.groupAt(0);
@@ -506,9 +510,10 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Artist, {
-      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::Artist,
+                         {
+                           TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                         });
 
     CHECK(proj.size() == 0);
     CHECK(proj.groupCount() == 0);
@@ -524,9 +529,10 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Artist, {
-      TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::Artist,
+                         {
+                           TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
+                         });
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
@@ -543,9 +549,10 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Year, {
-      TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::Year,
+                         {
+                           TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
+                         });
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
@@ -557,19 +564,20 @@ namespace ao::app::test
     auto env = TestEnv{};
 
     // Same album title, different album artists
-    auto id1 = env.lib.addTrack(TrackSpec{
-      .title = "T1", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist One"});
-    auto id2 = env.lib.addTrack(TrackSpec{
-      .title = "T2", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist Two"});
+    auto id1 = env.lib.addTrack(
+      TrackSpec{.title = "T1", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist One"});
+    auto id2 = env.lib.addTrack(
+      TrackSpec{.title = "T2", .artist = "Ari", .album = "Greatest Hits", .albumArtist = "Artist Two"});
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Album, {
-      TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
-      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::Album,
+                         {
+                           TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+                           TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                         });
 
     REQUIRE(proj.size() == 2);
     REQUIRE(proj.groupCount() == 2);
@@ -585,10 +593,11 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Genre, {
-      TrackSortTerm{.field = TrackSortField::Genre, .ascending = true},
-      TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::Genre,
+                         {
+                           TrackSortTerm{.field = TrackSortField::Genre, .ascending = true},
+                           TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                         });
 
     auto snap = proj.presentation();
     CHECK(snap.groupBy == TrackGroupKey::Genre);
@@ -604,17 +613,17 @@ namespace ao::app::test
   {
     auto env = TestEnv{};
 
-    auto id1 = env.lib.addTrack(TrackSpec{
-      .title = "T1", .album = "Solo Album", .albumArtist = ""});
+    auto id1 = env.lib.addTrack(TrackSpec{.title = "T1", .album = "Solo Album", .albumArtist = ""});
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Album, {
-      TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
-      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::Album,
+                         {
+                           TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+                           TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                         });
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
@@ -631,10 +640,11 @@ namespace ao::app::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Album, {
-      TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
-      TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
-    });
+    proj.setPresentation(TrackGroupKey::Album,
+                         {
+                           TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+                           TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                         });
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);

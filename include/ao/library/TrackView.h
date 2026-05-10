@@ -193,11 +193,11 @@ namespace ao::library
     {
     }
 
-    // TrackView is movable
+    // TrackView is copyable and movable
     TrackView(TrackView&&) = default;
     TrackView& operator=(TrackView&&) = default;
-    TrackView(TrackView const&) = delete;
-    TrackView& operator=(TrackView const&) = delete;
+    TrackView(TrackView const&) = default;
+    TrackView& operator=(TrackView const&) = default;
     ~TrackView() = default;
 
     // Hot validity check

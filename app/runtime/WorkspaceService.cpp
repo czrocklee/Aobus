@@ -173,9 +173,9 @@ namespace ao::app
       _impl->layoutState.openViews.push_back(res.viewId);
     }
 
-    if (snapshot.activeViewIndex && *snapshot.activeViewIndex < _impl->layoutState.openViews.size())
+    if (snapshot.optActiveViewIndex && *snapshot.optActiveViewIndex < _impl->layoutState.openViews.size())
     {
-      _impl->layoutState.activeViewId = _impl->layoutState.openViews[*snapshot.activeViewIndex];
+      _impl->layoutState.activeViewId = _impl->layoutState.openViews[*snapshot.optActiveViewIndex];
     }
     else if (!_impl->layoutState.openViews.empty())
     {
@@ -207,7 +207,7 @@ namespace ao::app
 
     auto const& layout = _impl->layoutState;
     auto snapshot = SessionSnapshot{};
-    snapshot.activeViewIndex = std::nullopt;
+    snapshot.optActiveViewIndex = std::nullopt;
     snapshot.lastLibraryPath = _impl->library.rootPath().string();
 
     for (auto i = std::size_t{0}; i < layout.openViews.size(); ++i)
@@ -215,7 +215,7 @@ namespace ao::app
       auto const viewId = layout.openViews[i];
       if (viewId == layout.activeViewId)
       {
-        snapshot.activeViewIndex = static_cast<std::uint32_t>(i);
+        snapshot.optActiveViewIndex = static_cast<std::uint32_t>(i);
       }
 
       auto const& state = _impl->views.trackListState(viewId);

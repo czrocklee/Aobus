@@ -7,6 +7,7 @@
 #include "TrackRowDataProvider.h"
 
 #include <ao/library/TrackStore.h>
+#include <ao/utility/VariantVisitor.h>
 
 #include <boost/algorithm/string.hpp>
 #include <format>
@@ -210,47 +211,43 @@ namespace ao::gtk
       {
         for (auto const& delta : batch.deltas)
         {
-          std::visit(
-            [this](auto const& delta)
-            {
-              using T = std::decay_t<decltype(delta)>;
-              if constexpr (std::is_same_v<T, ao::app::ProjectionReset>)
-              {
-                _listModel->remove_all();
-                for (std::size_t i = 0; i < _projection->size(); ++i)
-                {
-                  createRowForTrack(_projection->trackIdAt(i));
-                }
-              }
-              else if constexpr (std::is_same_v<T, ao::app::ProjectionInsertRange>)
-              {
-                for (std::size_t i = 0; i < delta.range.count; ++i)
-                {
-                  auto const idx = delta.range.start + i;
-                  auto const trackId = _projection->trackIdAt(idx);
-                  auto const row = _provider.getTrackRow(trackId);
-                  _listModel->insert(idx, row);
-                }
-              }
-              else if constexpr (std::is_same_v<T, ao::app::ProjectionRemoveRange>)
-              {
-                for (std::size_t i = 0; i < delta.range.count; ++i)
-                {
-                  _listModel->remove(delta.range.start);
-                }
-              }
-              else if constexpr (std::is_same_v<T, ao::app::ProjectionUpdateRange>)
-              {
-                for (std::size_t i = 0; i < delta.range.count; ++i)
-                {
-                  auto const idx = delta.range.start + i;
-                  auto const trackId = _projection->trackIdAt(idx);
-                  auto const row = _provider.getTrackRow(trackId);
-                  _listModel->splice(idx, 1, std::vector<Glib::RefPtr<TrackRow>>{row});
-                }
-              }
-            },
-            delta);
+          std::visit(ao::utility::makeVisitor(
+                       [this](ao::app::ProjectionReset const&)
+                       {
+                         _listModel->remove_all();
+                         for (auto const i : std::views::iota(0uz, _projection->size()))
+                         {
+                           createRowForTrack(_projection->trackIdAt(i));
+                         }
+                       },
+                       [this](ao::app::ProjectionInsertRange const& delta)
+                       {
+                         for (auto const i : std::views::iota(0uz, delta.range.count))
+                         {
+                           auto const idx = delta.range.start + i;
+                           auto const trackId = _projection->trackIdAt(idx);
+                           auto const row = _provider.getTrackRow(trackId);
+                           _listModel->insert(static_cast<::guint>(idx), row);
+                         }
+                       },
+                       [this](ao::app::ProjectionRemoveRange const& delta)
+                       {
+                         for ([[maybe_unused]] auto const i : std::views::iota(0uz, delta.range.count))
+                         {
+                           _listModel->remove(static_cast<::guint>(delta.range.start));
+                         }
+                       },
+                       [this](ao::app::ProjectionUpdateRange const& delta)
+                       {
+                         for (auto const i : std::views::iota(0uz, delta.range.count))
+                         {
+                           auto const idx = delta.range.start + i;
+                           auto const trackId = _projection->trackIdAt(idx);
+                           auto const row = _provider.getTrackRow(trackId);
+                           _listModel->splice(static_cast<::guint>(idx), 1, std::vector<Glib::RefPtr<TrackRow>>{row});
+                         }
+                       }),
+                     delta);
         }
       });
   }
@@ -315,7 +312,7 @@ namespace ao::gtk
     }
 
     _rebuildConnection = Glib::signal_idle().connect(
-      [this]()
+      [this]
       {
         rebuildViewInternal();
         return false; // Run once
@@ -332,10 +329,10 @@ namespace ao::gtk
       return;
     }
 
-    auto txn = _musicLibrary.readTransaction();
-    auto reader = _musicLibrary.tracks().reader(txn);
+    auto const txn = _musicLibrary.readTransaction();
+    auto const reader = _musicLibrary.tracks().reader(txn);
 
-    for (std::size_t i = 0; i < _source.size(); ++i)
+    for (auto const i : std::views::iota(0uz, _source.size()))
     {
       auto const id = _source.trackIdAt(i);
 
@@ -346,9 +343,9 @@ namespace ao::gtk
     }
   }
 
-  bool TrackListAdapter::shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader& reader) const
+  bool TrackListAdapter::shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader const& reader) const
   {
-    if (_filterPlan == nullptr)
+    if (_filterMode == TrackFilterMode::None)
     {
       return true;
     }

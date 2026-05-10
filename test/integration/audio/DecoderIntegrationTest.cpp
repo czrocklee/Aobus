@@ -21,7 +21,7 @@ namespace ao::audio
      * @brief Extracts a specific number of samples from a decoder session for verification.
      */
     template<typename T>
-    auto extractSamples(IDecoderSession& decoder, std::size_t count) -> std::vector<T>
+    std::vector<T> extractSamples(IDecoderSession& decoder, std::size_t count)
     {
       auto const block = decoder.readNextBlock();
 
@@ -58,7 +58,7 @@ namespace ao::audio
     /**
      * @brief Helper for ALAC 24-bit unpacking from 3-byte packed PCM.
      */
-    auto unpackS24(std::span<std::byte const> bytes) -> std::vector<std::int32_t>
+    std::vector<std::int32_t> unpackS24(std::span<std::byte const> bytes)
     {
       std::vector<std::int32_t> samples;
 

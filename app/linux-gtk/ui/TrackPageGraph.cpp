@@ -137,7 +137,7 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageGraph::rebuild(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction& /*txn*/)
+  void TrackPageGraph::rebuild(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction const& /*txn*/)
   {
     APP_LOG_DEBUG("TrackPageGraph::rebuild called");
     clear();

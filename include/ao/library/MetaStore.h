@@ -18,7 +18,7 @@ namespace ao::library
     {
     }
 
-    std::optional<MetaHeader> load(lmdb::ReadTransaction& txn) const;
+    std::optional<MetaHeader> load(lmdb::ReadTransaction const& txn) const;
     void create(lmdb::WriteTransaction& txn, MetaHeader const& header);
     void update(lmdb::WriteTransaction& txn, MetaHeader const& header);
 

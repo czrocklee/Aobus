@@ -55,7 +55,7 @@ namespace ao::gtk
     void setPlaybackController(PlaybackController& c) { _playbackController = &c; }
 
     void clear();
-    void rebuild(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction& txn);
+    void rebuild(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction const& txn);
 
     TrackPageContext* find(ao::app::ViewId viewId);
     TrackPageContext const* find(ao::app::ViewId viewId) const;

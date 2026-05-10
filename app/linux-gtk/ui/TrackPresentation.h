@@ -51,14 +51,14 @@ namespace ao::gtk
     bool visible = true;
     std::int32_t width = -1;
 
-    auto operator==(TrackColumnState const&) const -> bool = default;
+    bool operator==(TrackColumnState const&) const = default;
   };
 
   struct TrackColumnLayout
   {
     std::vector<TrackColumnState> columns;
 
-    auto operator==(TrackColumnLayout const&) const -> bool = default;
+    bool operator==(TrackColumnLayout const&) const = default;
   };
 
   std::optional<TrackColumn> redundantFieldToColumn(ao::app::TrackSortField field);

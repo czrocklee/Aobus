@@ -33,17 +33,33 @@ namespace ao::app
     }
   }
 
+  void TrackSource::notifyInserted(std::span<TrackId const> ids)
+  {
+    for (auto* const obs : _observers)
+    {
+      obs->onInserted(ids);
+    }
+  }
+
   void TrackSource::notifyUpdated(std::span<TrackId const> ids)
   {
-    for (auto* obs : _observers)
+    for (auto* const obs : _observers)
     {
       obs->onUpdated(ids);
     }
   }
 
+  void TrackSource::notifyRemoved(std::span<TrackId const> ids)
+  {
+    for (auto* const obs : _observers)
+    {
+      obs->onRemoved(ids);
+    }
+  }
+
   void TrackSource::notifyReset()
   {
-    for (auto* obs : _observers)
+    for (auto* const obs : _observers)
     {
       obs->onReset();
     }
@@ -51,23 +67,15 @@ namespace ao::app
 
   void TrackSource::notifyInserted(TrackId id, std::size_t index)
   {
-    for (auto* obs : _observers)
+    for (auto* const obs : _observers)
     {
       obs->onInserted(id, index);
     }
   }
 
-  void TrackSource::notifyInserted(std::span<TrackId const> ids)
-  {
-    for (auto* obs : _observers)
-    {
-      obs->onInserted(ids);
-    }
-  }
-
   void TrackSource::notifyUpdated(TrackId id, std::size_t index)
   {
-    for (auto* obs : _observers)
+    for (auto* const obs : _observers)
     {
       obs->onUpdated(id, index);
     }
@@ -75,17 +83,9 @@ namespace ao::app
 
   void TrackSource::notifyRemoved(TrackId id, std::size_t index)
   {
-    for (auto* obs : _observers)
+    for (auto* const obs : _observers)
     {
       obs->onRemoved(id, index);
-    }
-  }
-
-  void TrackSource::notifyRemoved(std::span<TrackId const> ids)
-  {
-    for (auto* obs : _observers)
-    {
-      obs->onRemoved(ids);
     }
   }
 }

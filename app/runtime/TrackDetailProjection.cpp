@@ -182,9 +182,8 @@ namespace ao::app
       return snap;
     }
 
-    auto txn = _impl->library.readTransaction();
-    auto reader = _impl->library.tracks().reader(txn);
-
+    auto const txn = _impl->library.readTransaction();
+    auto const reader = _impl->library.tracks().reader(txn);
     auto codecIds = std::vector<std::uint16_t>{};
     auto sampleRates = std::vector<std::uint32_t>{};
     auto channelss = std::vector<std::uint8_t>{};

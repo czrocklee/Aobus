@@ -43,8 +43,8 @@ namespace ao::audio
 
     Impl(Impl const&) = delete;
     Impl(Impl&&) = delete;
-    auto operator=(Impl const&) -> Impl& = delete;
-    auto operator=(Impl&&) -> Impl& = delete;
+    Impl& operator=(Impl const&) = delete;
+    Impl& operator=(Impl&&) = delete;
 
     ~Impl()
     {
@@ -56,7 +56,7 @@ namespace ao::audio
 
     std::uint64_t playbackGeneration = 1;
     std::vector<std::unique_ptr<ProviderRecord>> providers;
-    std::optional<PendingOutput> pendingOutput;
+    std::optional<PendingOutput> optPendingOutput;
     IBackendProvider* activeManager = nullptr;
     Subscription graphSubscription;
     std::unique_ptr<Engine> engine;
@@ -70,7 +70,7 @@ namespace ao::audio
     flow::Graph mergedGraph;
 
     QualityResult qualityResult;
-    std::optional<TrackPlaybackDescriptor> currentTrack;
+    std::optional<TrackPlaybackDescriptor> optCurrentTrack;
 
     std::function<void()> onTrackEnded;
     std::function<void(std::vector<IBackendProvider::Status> const&)> onDevicesChanged;
@@ -106,7 +106,7 @@ namespace ao::audio
     }
 
     {
-      std::lock_guard<std::mutex> lock(backendsMutex);
+      std::lock_guard lock(backendsMutex);
       cachedBackends = std::move(snapshots);
       allDevices = std::move(allDevicesList);
     }
@@ -115,7 +115,7 @@ namespace ao::audio
     auto const currentSnap = engine->status();
     auto allDevicesCopy = std::vector<Device>{};
     {
-      std::lock_guard<std::mutex> lock(backendsMutex);
+      std::lock_guard lock(backendsMutex);
       allDevicesCopy = allDevices;
     }
     auto const activeIt =
@@ -128,13 +128,13 @@ namespace ao::audio
       engine->updateDevice(*activeIt);
     }
 
-    if (pendingOutput)
+    if (optPendingOutput)
     {
       // Try to apply pending output
-      auto const pending = *pendingOutput;
+      auto const pending = *optPendingOutput;
       owner->setOutput(pending.backend, pending.deviceId, pending.profile);
 
-      if (!pendingOutput)
+      if (!optPendingOutput)
       {
         AUDIO_LOG_INFO("Player: Pending output {}:{} ({}) successfully restored",
                        pending.backend,
@@ -233,7 +233,7 @@ namespace ao::audio
                                                     .capabilities = {}});
 
     _impl->engine->setOnTrackEnded(
-      [this]()
+      [this]
       {
         if (_impl->onTrackEnded)
         {
@@ -306,7 +306,7 @@ namespace ao::audio
     _impl->mergedGraph = {};
     _impl->qualityResult = {};
     _impl->graphSubscription.reset();
-    _impl->currentTrack = descriptor;
+    _impl->optCurrentTrack = descriptor;
     _impl->engine->play(descriptor);
   }
 
@@ -317,14 +317,14 @@ namespace ao::audio
     // 1. Check if we already have this output active
     if (backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
     {
-      _impl->pendingOutput.reset();
+      _impl->optPendingOutput.reset();
       return;
     }
 
     // 2. Find the Device matching the kind and id from our cache
     auto allDevicesCopy = std::vector<Device>{};
     {
-      std::lock_guard<std::mutex> lock(_impl->backendsMutex);
+      std::lock_guard lock(_impl->backendsMutex);
       allDevicesCopy = _impl->allDevices;
     }
     auto const it = std::ranges::find_if(
@@ -333,13 +333,13 @@ namespace ao::audio
     if (it == allDevicesCopy.end())
     {
       // If we don't have it yet, store it as pending.
-      _impl->pendingOutput = Impl::PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
+      _impl->optPendingOutput = Impl::PendingOutput{.backend = backend, .deviceId = deviceId, .profile = profile};
       AUDIO_LOG_DEBUG("Player: Requested output {}:{} not yet available, pending discovery", backend, deviceId);
       return;
     }
 
     // Found it! Clear any pending output.
-    _impl->pendingOutput.reset();
+    _impl->optPendingOutput.reset();
 
     // 3. Find the provider object that can handle this BackendId
     auto const recordIt = std::ranges::find_if(
@@ -377,7 +377,7 @@ namespace ao::audio
     _impl->mergedGraph = {};
     _impl->qualityResult = {};
     _impl->graphSubscription.reset();
-    _impl->currentTrack.reset();
+    _impl->optCurrentTrack.reset();
     _impl->engine->stop();
   }
 
@@ -407,14 +407,14 @@ namespace ao::audio
     auto status = Player::Status{};
     status.engine = _impl->engine->status();
 
-    if (_impl->currentTrack)
+    if (_impl->optCurrentTrack)
     {
-      status.trackTitle = _impl->currentTrack->title;
-      status.trackArtist = _impl->currentTrack->artist;
+      status.trackTitle = _impl->optCurrentTrack->title;
+      status.trackArtist = _impl->optCurrentTrack->artist;
     }
 
     {
-      std::lock_guard<std::mutex> lock(_impl->backendsMutex);
+      std::lock_guard lock(_impl->backendsMutex);
       status.availableBackends = _impl->cachedBackends;
     }
     status.flow = _impl->mergedGraph;
@@ -436,7 +436,7 @@ namespace ao::audio
 
   bool Player::isReady() const
   {
-    return _impl->engine->backendId() != kBackendNone && !_impl->pendingOutput.has_value();
+    return _impl->engine->backendId() != kBackendNone && !_impl->optPendingOutput;
   }
 
   void Player::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)

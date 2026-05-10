@@ -29,7 +29,7 @@ namespace ao::app::test
     std::uint32_t durationMs = 200000;
   };
 
-  inline auto makeSpec(std::string_view title, std::uint16_t year) -> TrackSpec
+  inline TrackSpec makeSpec(std::string_view title, std::uint16_t year)
   {
     return TrackSpec{.title = std::string{title}, .year = year};
   }
@@ -45,7 +45,7 @@ namespace ao::app::test
     ao::library::MusicLibrary& library() { return _library; }
     ao::library::MusicLibrary const& library() const { return _library; }
 
-    auto addTrack(TrackSpec const& spec) -> ao::TrackId
+    ao::TrackId addTrack(TrackSpec const& spec)
     {
       auto txn = _library.writeTransaction();
       auto writer = _library.tracks().writer(txn);
@@ -75,7 +75,7 @@ namespace ao::app::test
       return id;
     }
 
-    auto addTrack(std::string_view title) -> ao::TrackId { return addTrack(TrackSpec{.title = std::string{title}}); }
+    ao::TrackId addTrack(std::string_view title) { return addTrack(TrackSpec{.title = std::string{title}}); }
 
   private:
     TempDir _tempDir;

@@ -144,7 +144,7 @@ namespace ao::library
     out << YAML::Key << "version" << YAML::Value << 1;
     out << YAML::Key << "export_mode" << YAML::Value << modeToString(mode);
 
-    auto txn = _ml.readTransaction();
+    auto const txn = _ml.readTransaction();
     out << YAML::Key << "library" << YAML::Value << YAML::BeginMap;
 
     exportTracks(out, txn, mode);
@@ -159,9 +159,9 @@ namespace ao::library
     }
   }
 
-  void Exporter::exportTracks(YAML::Emitter& out, ao::lmdb::ReadTransaction& txn, ExportMode mode)
+  void Exporter::exportTracks(YAML::Emitter& out, ao::lmdb::ReadTransaction const& txn, ExportMode mode)
   {
-    auto trackReader = _ml.tracks().reader(txn);
+    auto const trackReader = _ml.tracks().reader(txn);
     out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
     for (auto const& [trackId, view] : trackReader)
     {
@@ -193,10 +193,10 @@ namespace ao::library
     out << YAML::EndMap;
   }
 
-  void Exporter::exportLists(YAML::Emitter& out, ao::lmdb::ReadTransaction& txn)
+  void Exporter::exportLists(YAML::Emitter& out, ao::lmdb::ReadTransaction const& txn)
   {
     out << YAML::Key << "lists" << YAML::Value << YAML::BeginSeq;
-    auto listReader = _ml.lists().reader(txn);
+    auto const listReader = _ml.lists().reader(txn);
     for (auto const& [listId, listView] : listReader)
     {
       out << YAML::BeginMap;

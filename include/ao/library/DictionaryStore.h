@@ -30,7 +30,7 @@ namespace ao::library
      * @param txn Write transaction for loading existing entries (must remain alive)
      * @param db Database name
      */
-    DictionaryStore(lmdb::Database db, lmdb::ReadTransaction& txn);
+    DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& txn);
 
     /**
      * Store a string and auto-generate a unique ID.

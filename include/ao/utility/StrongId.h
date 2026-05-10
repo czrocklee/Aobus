@@ -35,10 +35,10 @@ namespace ao::utility
     {
     }
 
-    [[nodiscard]] std::string const& value() const noexcept { return _value; }
-    [[nodiscard]] std::string& value() noexcept { return _value; }
+    std::string const& value() const noexcept { return _value; }
+    std::string& value() noexcept { return _value; }
 
-    [[nodiscard]] bool empty() const noexcept { return _value.empty(); }
+    bool empty() const noexcept { return _value.empty(); }
     void clear() noexcept { _value.clear(); }
 
     // Implicit conversion to string_view is safe for read-only access (logging, comparisons)

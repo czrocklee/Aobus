@@ -15,11 +15,11 @@ namespace ao::cli
   {
     void show(ao::library::MusicLibrary& ml, std::ostream& os)
     {
-      auto txn = ml.readTransaction();
-      auto reader = ml.lists().reader(txn);
+      auto const txn = ml.readTransaction();
+      auto const reader = ml.lists().reader(txn);
 
       constexpr int idWidth = 5;
-      for (auto [id, view] : reader)
+      for (auto const& [id, view] : reader)
       {
         os << std::setw(idWidth) << id << " " << view.name() << "\n";
         os << std::string(idWidth, ' ') << "  [" << (view.isSmart() ? "smart" : "manual") << "] parent: ";
@@ -66,9 +66,9 @@ namespace ao::cli
         builder.filter(filter);
       }
 
-      auto data = builder.serialize();
+      auto const data = builder.serialize();
 
-      auto [id, view] = ml.lists().writer(txn).create(data);
+      auto const [id, view] = ml.lists().writer(txn).create(data);
       txn.commit();
 
       os << "add list: " << id << " " << name << "\n";
@@ -79,7 +79,7 @@ namespace ao::cli
   {
     auto* list = app.add_subcommand("list", "List management commands");
 
-    list->add_subcommand("show", "Show all lists")->callback([&ml]() { show(ml, std::cout); });
+    list->add_subcommand("show", "Show all lists")->callback([&ml] { show(ml, std::cout); });
 
     auto* create = list->add_subcommand("create", "Create a new list");
     auto* name = create->add_option("-n,--name", "list name")->required();
@@ -87,7 +87,7 @@ namespace ao::cli
     auto* desc = create->add_option("-d,--desc", "list description");
     auto* parent = create->add_option("-p,--parent", "parent list id (0 = all-tracks)")->default_val(0);
     create->callback(
-      [&ml, name, filter, desc, parent]()
+      [&ml, name, filter, desc, parent]
       {
         createList(ml,
                    name->as<std::string>(),
@@ -100,7 +100,7 @@ namespace ao::cli
     auto* del = list->add_subcommand("delete", "Delete a list");
     auto* id = del->add_option("id", "list id")->required();
     del->callback(
-      [&ml, id]()
+      [&ml, id]
       {
         auto txn = ml.writeTransaction();
         auto writer = ml.lists().writer(txn);

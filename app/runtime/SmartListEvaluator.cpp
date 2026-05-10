@@ -6,10 +6,10 @@
 #include "SmartListSource.h"
 #include "TrackSource.h"
 
-#include <ao/utility/Log.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
+#include <ao/utility/Log.h>
 
 #include <algorithm>
 #include <flat_set>
@@ -220,9 +220,9 @@ namespace ao::app
 
     // Re-evaluate membership for all lists in this bucket
 
-    if (auto sourceIndex = source.indexOf(trackId))
+    if (auto const optSourceIndex = source.indexOf(trackId))
     {
-      handleSourceUpdated(*it->second, trackId, *sourceIndex);
+      handleSourceUpdated(*it->second, trackId, *optSourceIndex);
     }
   }
 
@@ -290,34 +290,32 @@ namespace ao::app
   }
 
   void SmartListEvaluator::rebuildGroup(TrackSource& source,
-                                     std::span<SmartListSource*> lists,
-                                     ao::library::TrackStore::Reader::LoadMode mode)
+                                        std::span<SmartListSource*> lists,
+                                        ao::library::TrackStore::Reader::LoadMode mode)
   {
     if (lists.empty())
     {
       return;
     }
 
-    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
-    auto reader = _ml.tracks().reader(txn);
+    auto const txn = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(txn);
 
     std::vector<std::vector<TrackId>> nextMembers(lists.size());
 
-    for (std::size_t i = 0; i < source.size(); ++i)
+    for (auto const i : std::views::iota(0uz, source.size()))
     {
-      auto id = source.trackIdAt(i);
-      auto view = reader.get(id, mode);
+      auto const id = source.trackIdAt(i);
+      auto const optView = reader.get(id, mode);
 
-      if (!view)
+      if (!optView)
       {
         continue;
       }
 
-      for (std::size_t listIndex = 0; listIndex < lists.size(); ++listIndex)
+      for (auto const& [listIndex, list] : std::views::enumerate(lists))
       {
-        auto* list = lists[listIndex];
-
-        if (list->_planEvaluator.matches(*list->_plan, *view))
+        if (list->_planEvaluator.matches(*list->_plan, *optView))
         {
           nextMembers[listIndex].push_back(id);
         }
@@ -339,6 +337,8 @@ namespace ao::app
   void SmartListEvaluator::handleSourceInserted(SourceBucket& bucket, TrackId id, std::size_t /*sourceIndex*/)
   {
     std::vector<SmartListSource*> evaluatableLists;
+    evaluatableLists.reserve(bucket.lists.size());
+
     for (auto* list : bucket.lists)
     {
       if (list->_hasError || !list->_plan || list->_dirty)
@@ -354,19 +354,19 @@ namespace ao::app
       return;
     }
 
-    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
-    auto reader = _ml.tracks().reader(txn);
+    auto const txn = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
-    auto const view = reader.get(id, mode);
+    auto const optView = reader.get(id, mode);
 
-    if (!view)
+    if (!optView)
     {
       return;
     }
 
-    for (auto* list : evaluatableLists)
+    for (auto* const list : evaluatableLists)
     {
-      if (list->_planEvaluator.matches(*list->_plan, *view))
+      if (list->_planEvaluator.matches(*list->_plan, *optView))
       {
         auto [it, inserted] = list->_members.insert(id);
 
@@ -398,14 +398,14 @@ namespace ao::app
       return;
     }
 
-    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
-    auto reader = _ml.tracks().reader(txn);
+    auto const txn = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
-    auto const view = reader.get(id, mode);
+    auto const optView = reader.get(id, mode);
 
-    for (auto* list : evaluatableLists)
+    for (auto* const list : evaluatableLists)
     {
-      bool const nowMatches = view && list->_planEvaluator.matches(*list->_plan, *view);
+      bool const nowMatches = optView && list->_planEvaluator.matches(*list->_plan, *optView);
       auto const it = list->_members.find(id);
       bool const wasPresent = it != list->_members.end();
 
@@ -473,24 +473,24 @@ namespace ao::app
       return;
     }
 
-    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
-    auto reader = _ml.tracks().reader(txn);
+    auto const txn = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
 
     std::vector<std::vector<TrackId>> matchedIds(evaluatableLists.size());
 
-    for (auto id : ids)
+    for (auto const id : ids)
     {
-      auto const view = reader.get(id, mode);
+      auto const optView = reader.get(id, mode);
 
-      if (!view)
+      if (!optView)
       {
         continue;
       }
 
       for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
       {
-        if (evaluatableLists[i]->_planEvaluator.matches(*evaluatableLists[i]->_plan, *view))
+        if (evaluatableLists[i]->_planEvaluator.matches(*evaluatableLists[i]->_plan, *optView))
         {
           matchedIds[i].push_back(id);
         }
@@ -532,8 +532,8 @@ namespace ao::app
       return;
     }
 
-    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
-    auto reader = _ml.tracks().reader(txn);
+    auto const txn = _ml.readTransaction();
+    auto const reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
 
     // Track transitions for each list
@@ -544,16 +544,16 @@ namespace ao::app
       std::vector<TrackId> updated;
     };
 
-    std::vector<Transitions> transitions(evaluatableLists.size());
+    auto transitions = std::vector<Transitions>(evaluatableLists.size());
 
-    for (auto id : ids)
+    for (auto const id : ids)
     {
-      auto const view = reader.get(id, mode);
+      auto const optView = reader.get(id, mode);
 
       for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
       {
         auto& list = *evaluatableLists[i];
-        bool const nowMatches = view && list._planEvaluator.matches(*list._plan, *view);
+        bool const nowMatches = optView && list._planEvaluator.matches(*list._plan, *optView);
         bool const wasPresent = list._members.contains(id);
 
         if (nowMatches && !wasPresent)
@@ -578,7 +578,7 @@ namespace ao::app
 
       if (!trans.removed.empty())
       {
-        for (auto id : trans.removed)
+        for (auto const id : trans.removed)
         {
           list._members.erase(id);
         }

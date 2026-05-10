@@ -22,7 +22,7 @@ namespace ao::gtk
   {
     std::vector<ao::TrackId> trackIds;
     std::size_t currentIndex = 0;
-    std::optional<ao::ListId> sourceListId;
+    std::optional<ao::ListId> optSourceListId;
   };
 
   class TrackRowDataProvider;

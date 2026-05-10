@@ -104,7 +104,7 @@ namespace ao::gtk
       [this, dialogPtr, total = files.size()](std::filesystem::path const& filePath, int index)
       {
         _session.executor().dispatch(
-          [this, dialogPtr, filePath, index, total]()
+          [this, dialogPtr, filePath, index, total]
           {
             dialogPtr->onNewTrack(filePath.string(), index);
             if (_callbacks.onProgressUpdated)
@@ -114,17 +114,17 @@ namespace ao::gtk
             }
           });
       },
-      [this, dialogPtr]() { _session.executor().dispatch([dialogPtr]() { dialogPtr->ready(); }); });
+      [this, dialogPtr] { _session.executor().dispatch([dialogPtr] { dialogPtr->ready(); }); });
 
     auto* workerPtr = _importWorker.get();
     _importThread = std::jthread(
-      [this, workerPtr, isNewLibrary]() mutable
+      [this, workerPtr, isNewLibrary] mutable
       {
         ao::setCurrentThreadName("FileImport");
         workerPtr->run();
 
         _session.executor().dispatch(
-          [this, isNewLibrary]()
+          [this, isNewLibrary]
           {
             onImportFinished();
 
@@ -302,7 +302,7 @@ namespace ao::gtk
 
     auto& library = _session.musicLibrary();
     _exportThread = std::jthread(
-      [this, &library, path, mode]()
+      [this, &library, path, mode]
       {
         ao::setCurrentThreadName("LibraryExport");
 
@@ -312,7 +312,7 @@ namespace ao::gtk
           exporter.exportToYaml(path, mode);
 
           _session.executor().dispatch(
-            [this]()
+            [this]
             {
               if (_callbacks.onStatusMessage)
               {
@@ -324,7 +324,7 @@ namespace ao::gtk
         {
           auto const errorText = std::string{e.what()};
           _session.executor().dispatch(
-            [this, errorText]()
+            [this, errorText]
             {
               APP_LOG_ERROR("Export failed: {}", errorText);
 
@@ -369,7 +369,7 @@ namespace ao::gtk
           return;
         }
 
-        _importTaskThread = std::jthread([this, path]() { runLibraryImportTask(path); });
+        _importTaskThread = std::jthread([this, path] { runLibraryImportTask(path); });
       }
     }
     catch (Glib::Error const& e)
@@ -397,7 +397,7 @@ namespace ao::gtk
   void ImportExportCoordinator::reportImportResult(bool success, std::string const& errorText)
   {
     _session.executor().dispatch(
-      [this, success, errorText]()
+      [this, success, errorText]
       {
         if (success)
         {

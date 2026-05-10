@@ -13,9 +13,9 @@ namespace ao::app
   {
   }
 
-  void AllTracksSource::reloadFromStore(ao::lmdb::ReadTransaction& txn)
+  void AllTracksSource::reloadFromStore(ao::lmdb::ReadTransaction const& txn)
   {
-    auto reader = _store.reader(txn);
+    auto const reader = _store.reader(txn);
     auto ids = std::vector<TrackId>{};
     ids.reserve(1000);
 

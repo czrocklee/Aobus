@@ -115,7 +115,7 @@ namespace ao::audio
     _ringBuffer.clear();
 
     {
-      auto lock = std::lock_guard<std::mutex>{_decoderMutex};
+      auto lock = std::lock_guard{_decoderMutex};
 
       auto const seekResult = _decoder->seek(positionMs);
 
@@ -254,7 +254,7 @@ namespace ao::audio
     auto block = PcmBlock{};
 
     {
-      auto lock = std::lock_guard<std::mutex>{_decoderMutex};
+      auto lock = std::lock_guard{_decoderMutex};
 
       if (seekToken.stop_requested())
       {
@@ -284,7 +284,7 @@ namespace ao::audio
                                    std::stop_token const& seekToken,
                                    std::stop_token const* threadStopToken)
   {
-    auto const stopRequested = [&]()
+    auto const stopRequested = [&]
     { return seekToken.stop_requested() || (threadStopToken && threadStopToken->stop_requested()); };
 
     auto const* current = bytes.data();

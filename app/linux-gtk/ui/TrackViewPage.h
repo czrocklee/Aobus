@@ -78,7 +78,7 @@ namespace ao::gtk
     void showTagPopover(TagPopover& popover, double x, double y);
 
     // Status banner API
-    void setStatusMessage(std::string const& message);
+    void setStatusMessage(std::string_view message);
     void clearStatusMessage();
 
     /// Access the bound projection for group section queries.
@@ -87,7 +87,7 @@ namespace ao::gtk
     // Navigation and Selection
     void selectTrack(TrackId trackId);
     void setPlayingTrackId(std::optional<TrackId> trackId);
-    void setFilterExpression(std::string const& expression);
+    void setFilterExpression(std::string_view expression);
 
   private:
     struct ColumnBinding final

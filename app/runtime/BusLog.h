@@ -14,7 +14,7 @@
 
 namespace ao::app::detail
 {
-  inline auto demangle(char const* mangled) -> std::string
+  inline std::string demangle(char const* mangled)
   {
     int status = 0;
     std::unique_ptr<char, void (*)(void*)> result{abi::__cxa_demangle(mangled, nullptr, nullptr, &status), std::free};
@@ -22,14 +22,14 @@ namespace ao::app::detail
   }
 
   template<typename T>
-  auto busTypeName() -> std::string
+  std::string busTypeName()
   {
     auto const full = demangle(typeid(T).name());
     auto const pos = full.rfind("::");
     return pos != std::string::npos ? full.substr(pos + 2) : full;
   }
 
-  inline auto shortFileName(std::source_location const& src) -> std::string_view
+  inline std::string_view shortFileName(std::source_location const& src)
   {
     auto const path = std::string_view{src.file_name()};
     auto const pos = path.rfind('/');

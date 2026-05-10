@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
 
   cliApp.add_flag_callback(
     "--version",
-    []()
+    []
     {
       std::cout << "Aobus " << ao::kAppVersion << '\n';
       std::exit(0);
@@ -127,7 +127,7 @@ int main(int argc, char* argv[])
 
   auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "aobus" / "logs";
   ao::log::Log::init(logLevel, logDir);
-  auto const logGuard = gsl_lite::finally([]() { ao::log::Log::shutdown(); });
+  auto const logGuard = gsl_lite::finally([] { ao::log::Log::shutdown(); });
 
   APP_LOG_INFO("Aobus {} starting...", ao::kAppVersion);
 
@@ -243,7 +243,7 @@ int main(int argc, char* argv[])
 
   // Connect to activate signal to create initial window after startup
   app->signal_activate().connect(
-    [&app, &windows]()
+    [&app, &windows]
     {
       auto libraryPath = resolveLibraryPath();
 

@@ -97,7 +97,7 @@ namespace ao::gtk
     actionMap.add_action(_editListAction);
   }
 
-  void ListSidebarController::rebuildTree(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction& txn)
+  void ListSidebarController::rebuildTree(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction const& txn)
   {
     _dataProvider = &dataProvider;
 
@@ -569,8 +569,7 @@ namespace ao::gtk
 
     _pendingSelectId = allTracksListId();
   }
-
-  void ListSidebarController::buildListTree(ao::lmdb::ReadTransaction& txn)
+  void ListSidebarController::buildListTree(ao::lmdb::ReadTransaction const& txn)
   {
     // Clear existing tree store and lookup map
     _nodesById.clear();
@@ -578,7 +577,8 @@ namespace ao::gtk
     // Create new tree store
     _listTreeStore = Gio::ListStore<ListTreeNode>::create();
 
-    auto reader = _session.musicLibrary().lists().reader(txn);
+    // 1. Root-level lists (parentId = 0)
+    auto const reader = _session.musicLibrary().lists().reader(txn);
     auto nodes = std::map<ao::ListId, StoredListNode>{};
 
     for (auto const& [id, listView] : reader)

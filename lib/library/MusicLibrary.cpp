@@ -36,7 +36,7 @@ namespace
   {
     auto bytes = std::array<std::byte, kLibraryIdBytes>{};
     auto random = std::random_device{};
-    std::ranges::generate(bytes, [&random]() { return static_cast<std::byte>(random()); });
+    std::ranges::generate(bytes, [&random] { return static_cast<std::byte>(random()); });
     return bytes;
   }
 
@@ -144,6 +144,7 @@ namespace ao::library
   {
     return _impl->tracks;
   }
+
   TrackStore const& MusicLibrary::tracks() const
   {
     return _impl->tracks;
@@ -153,6 +154,7 @@ namespace ao::library
   {
     return _impl->lists;
   }
+
   ListStore const& MusicLibrary::lists() const
   {
     return _impl->lists;
@@ -162,6 +164,7 @@ namespace ao::library
   {
     return _impl->resources;
   }
+
   ResourceStore const& MusicLibrary::resources() const
   {
     return _impl->resources;
@@ -171,6 +174,7 @@ namespace ao::library
   {
     return _impl->dictionary;
   }
+
   DictionaryStore const& MusicLibrary::dictionary() const
   {
     return _impl->dictionary;

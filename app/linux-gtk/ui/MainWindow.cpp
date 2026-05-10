@@ -88,7 +88,7 @@ namespace ao::gtk
       _session,
       TagEditController::Callbacks{.onStatusMessage = [this](std::string const& msg) { showStatusMessage(msg); },
                                    .onTagsMutated =
-                                     []()
+                                     []
                                    {
                                      // Additional invalidation/update logic if needed
                                    }});
@@ -147,16 +147,15 @@ namespace ao::gtk
           // Handled externally — opens a new window
         },
         .onLibraryDataMutated =
-          [this]()
+          [this]
         {
           if (_rowDataProvider)
           {
             _rowDataProvider->loadAll();
             _session.reloadAllTracks();
 
-            auto txn = _session.musicLibrary().readTransaction();
+            auto const txn = _session.musicLibrary().readTransaction();
             rebuildListPages(txn);
-
             if (_statusBar)
             {
               _statusBar->setTrackCount(_session.sources().allTracks().size());
@@ -187,6 +186,12 @@ namespace ao::gtk
     _listsMutatedSubscription.reset();
 
     saveSession();
+  }
+
+  void MainWindow::on_hide()
+  {
+    saveSession();
+    Gtk::ApplicationWindow::on_hide();
   }
 
   void MainWindow::initializeSession()
@@ -247,7 +252,7 @@ namespace ao::gtk
       {
         if (_rowDataProvider)
         {
-          auto txn = _session.musicLibrary().readTransaction();
+          auto const txn = _session.musicLibrary().readTransaction();
           rebuildListPages(txn);
         }
       });
@@ -262,7 +267,7 @@ namespace ao::gtk
       _statusBar->setTrackCount(_session.sources().allTracks().size());
     }
 
-    auto txn = _session.musicLibrary().readTransaction();
+    auto const txn = _session.musicLibrary().readTransaction();
     rebuildListPages(txn);
 
     // Instead of manually showing All Tracks, we restore the session.
@@ -276,6 +281,11 @@ namespace ao::gtk
     }
 
     saveSession();
+  }
+
+  void MainWindow::showStatusMessage(std::string_view message)
+  {
+    _statusBar->showMessage(message);
   }
 
   void MainWindow::setupMenu()
@@ -374,7 +384,7 @@ namespace ao::gtk
     _inspectorHandle.set_focus_on_click(false);
 
     _inspectorHandle.signal_toggled().connect(
-      [this]()
+      [this]
       {
         bool const active = _inspectorHandle.get_active();
         _inspectorRevealer.set_reveal_child(active);
@@ -503,7 +513,7 @@ namespace ao::gtk
     set_child(*mainBox);
   }
 
-  void MainWindow::rebuildListPages(ao::lmdb::ReadTransaction& txn)
+  void MainWindow::rebuildListPages(ao::lmdb::ReadTransaction const& txn)
   {
     APP_LOG_DEBUG("rebuildListPages called");
 
@@ -515,12 +525,7 @@ namespace ao::gtk
     }
   }
 
-  void MainWindow::showStatusMessage(std::string const& message)
-  {
-    _session.notifications().post(ao::app::NotificationSeverity::Info, message);
-  }
-
-  void MainWindow::updateImportProgress(double fraction, std::string const& info)
+  void MainWindow::updateImportProgress(double fraction, std::string_view info)
   {
     if (_statusBar)
     {
@@ -538,12 +543,6 @@ namespace ao::gtk
         _statusBar->setImportProgress(fraction, info);
       }
     }
-  }
-
-  void MainWindow::on_hide()
-  {
-    saveSession();
-    Gtk::ApplicationWindow::on_hide();
   }
 
   void MainWindow::saveSession()

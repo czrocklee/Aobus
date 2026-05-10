@@ -57,7 +57,7 @@ namespace ao::audio
       return false;
     }
 
-    auto findPlaybackPath(flow::Graph const& graph, std::string const& startId) -> std::vector<flow::Node const*>
+    std::vector<flow::Node const*> findPlaybackPath(flow::Graph const& graph, std::string const& startId)
     {
       auto path = std::vector<flow::Node const*>{};
       auto currentId = std::string_view{startId};

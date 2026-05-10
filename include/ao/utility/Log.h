@@ -8,6 +8,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <source_location>
 #include <string>
 
 namespace ao::log
@@ -36,36 +37,42 @@ namespace ao::log
     static std::shared_ptr<spdlog::logger> _appLogger;
     static std::shared_ptr<spdlog::logger> _audioLogger;
   };
+
+  /**
+   * @brief Internal helper to convert C++20 source_location to spdlog source_loc.
+   */
+  inline spdlog::source_loc toSpdlog(std::source_location const& loc)
+  {
+    return {loc.file_name(), static_cast<int>(loc.line()), loc.function_name()};
+  }
 } // namespace ao::log
 
 // Core log macros
-#define APP_LOG_TRACE(...)                                                                                             \
-  if (ao::log::Log::getAppLogger()->should_log(spdlog::level::trace)) ao::log::Log::getAppLogger()->trace(__VA_ARGS__)
-#define APP_LOG_DEBUG(...)                                                                                             \
-  if (ao::log::Log::getAppLogger()->should_log(spdlog::level::debug)) ao::log::Log::getAppLogger()->debug(__VA_ARGS__)
-#define APP_LOG_INFO(...)                                                                                              \
-  if (ao::log::Log::getAppLogger()->should_log(spdlog::level::info)) ao::log::Log::getAppLogger()->info(__VA_ARGS__)
-#define APP_LOG_WARN(...)                                                                                              \
-  if (ao::log::Log::getAppLogger()->should_log(spdlog::level::warn)) ao::log::Log::getAppLogger()->warn(__VA_ARGS__)
-#define APP_LOG_ERROR(...)                                                                                             \
-  if (ao::log::Log::getAppLogger()->should_log(spdlog::level::err)) ao::log::Log::getAppLogger()->error(__VA_ARGS__)
-#define APP_LOG_CRITICAL(...)                                                                                          \
-  if (ao::log::Log::getAppLogger()->should_log(spdlog::level::critical))                                               \
-  ao::log::Log::getAppLogger()->critical(__VA_ARGS__)
+#define AO_LOG_CALL(logger, level, loc, ...)                                                                           \
+  if (logger->should_log(level)) logger->log(ao::log::toSpdlog(loc), level, __VA_ARGS__)
 
-// Playback log macros
+#define APP_LOG_TRACE(...)                                                                                             \
+  AO_LOG_CALL(ao::log::Log::getAppLogger(), spdlog::level::trace, std::source_location::current(), __VA_ARGS__)
+#define APP_LOG_DEBUG(...)                                                                                             \
+  AO_LOG_CALL(ao::log::Log::getAppLogger(), spdlog::level::debug, std::source_location::current(), __VA_ARGS__)
+#define APP_LOG_INFO(...)                                                                                              \
+  AO_LOG_CALL(ao::log::Log::getAppLogger(), spdlog::level::info, std::source_location::current(), __VA_ARGS__)
+#define APP_LOG_WARN(...)                                                                                              \
+  AO_LOG_CALL(ao::log::Log::getAppLogger(), spdlog::level::warn, std::source_location::current(), __VA_ARGS__)
+#define APP_LOG_ERROR(...)                                                                                             \
+  AO_LOG_CALL(ao::log::Log::getAppLogger(), spdlog::level::err, std::source_location::current(), __VA_ARGS__)
+#define APP_LOG_CRITICAL(...)                                                                                          \
+  AO_LOG_CALL(ao::log::Log::getAppLogger(), spdlog::level::critical, std::source_location::current(), __VA_ARGS__)
+
 #define AUDIO_LOG_TRACE(...)                                                                                           \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::trace))                                                \
-  ao::log::Log::getAudioLogger()->trace(__VA_ARGS__)
+  AO_LOG_CALL(ao::log::Log::getAudioLogger(), spdlog::level::trace, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_DEBUG(...)                                                                                           \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::debug))                                                \
-  ao::log::Log::getAudioLogger()->debug(__VA_ARGS__)
+  AO_LOG_CALL(ao::log::Log::getAudioLogger(), spdlog::level::debug, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_INFO(...)                                                                                            \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::info)) ao::log::Log::getAudioLogger()->info(__VA_ARGS__)
+  AO_LOG_CALL(ao::log::Log::getAudioLogger(), spdlog::level::info, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_WARN(...)                                                                                            \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::warn)) ao::log::Log::getAudioLogger()->warn(__VA_ARGS__)
+  AO_LOG_CALL(ao::log::Log::getAudioLogger(), spdlog::level::warn, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_ERROR(...)                                                                                           \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::err)) ao::log::Log::getAudioLogger()->error(__VA_ARGS__)
+  AO_LOG_CALL(ao::log::Log::getAudioLogger(), spdlog::level::err, std::source_location::current(), __VA_ARGS__)
 #define AUDIO_LOG_CRITICAL(...)                                                                                        \
-  if (ao::log::Log::getAudioLogger()->should_log(spdlog::level::critical))                                             \
-  ao::log::Log::getAudioLogger()->critical(__VA_ARGS__)
+  AO_LOG_CALL(ao::log::Log::getAudioLogger(), spdlog::level::critical, std::source_location::current(), __VA_ARGS__)

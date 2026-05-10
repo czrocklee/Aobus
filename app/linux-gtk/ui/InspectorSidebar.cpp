@@ -363,9 +363,9 @@ namespace ao::gtk
     }
   }
 
-  auto InspectorSidebar::loadCoverArtFromLibrary(ao::ResourceId resourceId) -> Glib::RefPtr<Gdk::Pixbuf>
+  Glib::RefPtr<Gdk::Pixbuf> InspectorSidebar::loadCoverArtFromLibrary(ao::ResourceId resourceId)
   {
-    auto txn = _session.musicLibrary().readTransaction();
+    auto const txn = _session.musicLibrary().readTransaction();
     auto const reader = _session.musicLibrary().resources().reader(txn);
     auto const data = reader.get(static_cast<std::uint32_t>(resourceId.value()));
 

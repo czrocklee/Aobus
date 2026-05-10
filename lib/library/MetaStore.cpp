@@ -15,9 +15,10 @@ namespace
 
 namespace ao::library
 {
-  std::optional<MetaHeader> MetaStore::load(lmdb::ReadTransaction& txn) const
+  std::optional<MetaHeader> MetaStore::load(lmdb::ReadTransaction const& txn) const
   {
-    auto const bytes = _database.reader(txn).get(kHeaderRecordId);
+    auto const reader = _database.reader(txn);
+    auto const bytes = reader.get(kHeaderRecordId);
 
     if (!bytes)
     {

@@ -23,29 +23,29 @@ namespace ao::cli
     std::vector<std::pair<ao::TrackId, ao::library::TrackView>> collectTracks(ao::library::MusicLibrary& ml,
                                                                               std::string const& filter)
     {
-      auto txn = ml.readTransaction();
-      auto reader = ml.tracks().reader(txn);
+      auto const txn = ml.readTransaction();
+      auto const reader = ml.tracks().reader(txn);
       auto matches = std::vector<std::pair<ao::TrackId, ao::library::TrackView>>{};
 
       if (filter.empty())
       {
-        for (auto [id, view] : reader)
+        for (auto const& [id, view] : reader)
         {
-          matches.emplace_back(id, std::move(view));
+          matches.emplace_back(id, view);
         }
         return matches;
       }
 
-      auto expr = ao::query::parse(filter);
+      auto const expr = ao::query::parse(filter);
       auto compiler = ao::query::QueryCompiler{&ml.dictionary()};
-      auto plan = compiler.compile(expr);
+      auto const plan = compiler.compile(expr);
       auto evaluator = ao::query::PlanEvaluator{};
 
-      for (auto [id, view] : reader)
+      for (auto const& [id, view] : reader)
       {
         if (evaluator.matches(plan, view))
         {
-          matches.emplace_back(id, std::move(view));
+          matches.emplace_back(id, view);
         }
       }
       return matches;
@@ -139,9 +139,9 @@ namespace ao::cli
 
     void createTrack(ao::library::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
     {
-      auto tagFile = tag::File::open(path);
+      auto const optTagFile = tag::File::open(path);
 
-      if (!tagFile)
+      if (!optTagFile)
       {
         os << "unsupported file format: " << path << '\n';
         return;
@@ -149,14 +149,14 @@ namespace ao::cli
 
       auto txn = ml.writeTransaction();
       auto writer = ml.tracks().writer(txn);
-      auto builder = tagFile->loadTrack();
+      auto builder = optTagFile->loadTrack();
       builder.property()
         .uri(path.string())
         .fileSize(std::filesystem::file_size(path))
         .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
 
-      auto [preparedHot, preparedCold] = builder.prepare(txn, ml.dictionary(), ml.resources());
-      auto [id, trackView] = writer.createHotCold(
+      auto const [preparedHot, preparedCold] = builder.prepare(txn, ml.dictionary(), ml.resources());
+      auto const [id, trackView] = writer.createHotCold(
         preparedHot.size(),
         preparedCold.size(),
         [&preparedHot, &preparedCold](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
@@ -180,7 +180,7 @@ namespace ao::cli
     auto* limit = showCmd->add_option("-l,--limit", "limit number of results (0 = all)")->default_val(0);
     auto* offset = showCmd->add_option("-o,--offset", "offset results")->default_val(0);
     showCmd->callback(
-      [&ml, filter, json, limit, offset]()
+      [&ml, filter, json, limit, offset]
       {
         show(ml,
              filter->as<std::string>(),
@@ -192,12 +192,12 @@ namespace ao::cli
 
     auto* create = track->add_subcommand("create", "Create a track from a file");
     auto* path = create->add_option("path", "audio file path")->required();
-    create->callback([&ml, path]() { createTrack(ml, path->as<std::string>(), std::cout); });
+    create->callback([&ml, path] { createTrack(ml, path->as<std::string>(), std::cout); });
 
     auto* del = track->add_subcommand("delete", "Delete a track by id");
     auto* id = del->add_option("id", "track id")->required();
     del->callback(
-      [&ml, id]()
+      [&ml, id]
       {
         auto txn = ml.writeTransaction();
         auto writer = ml.tracks().writer(txn);

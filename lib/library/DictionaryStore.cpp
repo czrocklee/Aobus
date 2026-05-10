@@ -13,7 +13,7 @@ namespace ao::library
   // Extra capacity for dictionary entries
   constexpr std::uint32_t kExtraCapacity = 4096;
 
-  DictionaryStore::DictionaryStore(lmdb::Database db, lmdb::ReadTransaction& txn)
+  DictionaryStore::DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& txn)
     : _database{std::move(db)}
   {
     auto const reader = _database.reader(txn);

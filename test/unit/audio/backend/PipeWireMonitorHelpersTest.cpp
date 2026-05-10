@@ -59,8 +59,8 @@ TEST_CASE("PipeWireMonitorHelpers - Property Parsing", "[audio][pipewire][monito
     CHECK(record.version == 1);
     CHECK(record.mediaClass == "Audio/Sink");
     CHECK(record.nodeName == "test-node");
-    CHECK(record.objectSerial == 1234);
-    CHECK(record.driverId == 5678);
+    CHECK(record.optObjectSerial == 1234);
+    CHECK(record.optDriverId == 5678);
   }
 }
 

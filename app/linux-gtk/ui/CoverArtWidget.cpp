@@ -45,8 +45,8 @@ namespace ao::gtk
 
     if (!cached)
     {
-      auto txn = _session.musicLibrary().readTransaction();
-      auto resReader = _session.musicLibrary().resources().reader(txn);
+      auto const txn = _session.musicLibrary().readTransaction();
+      auto const resReader = _session.musicLibrary().resources().reader(txn);
       auto const optData = resReader.get(rid);
 
       if (optData)

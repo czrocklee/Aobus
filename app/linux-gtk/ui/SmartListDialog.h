@@ -39,7 +39,7 @@ namespace ao::gtk
                     ao::app::AppSession& session,
                     ao::ListId parentListId,
                     TrackRowDataProvider const& provider);
-    virtual ~SmartListDialog() override;
+    ~SmartListDialog() override;
 
     // Populate dialog fields from an existing list for editing
     void populate(ao::ListId id, ao::library::ListView const& view);

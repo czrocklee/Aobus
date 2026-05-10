@@ -425,7 +425,7 @@ TEST_CASE("Engine - Drain and callback matrix", "[playback][engine][drain]")
     .filePath = "song.flac", .title = "Test", .artist = "Test", .album = "Test", .optCoverArtId = std::nullopt};
 
   bool trackEnded = false;
-  engine.setOnTrackEnded([&]() { trackEnded = true; });
+  engine.setOnTrackEnded([&] { trackEnded = true; });
 
   engine.play(desc);
 
