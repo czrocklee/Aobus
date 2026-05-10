@@ -64,7 +64,7 @@ namespace ao::gtk::services
 
     // Schedule write after 3 second delay (Glib::signal_timeout uses milliseconds)
     _timeoutConnection = std::make_unique<sigc::connection>(Glib::signal_timeout().connect(
-      [this]()
+      [this]
       {
         writeFile();
         return false;

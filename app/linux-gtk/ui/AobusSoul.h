@@ -40,7 +40,7 @@ namespace ao::gtk
      * @brief Set whether to show the full Aobus logo (a + o).
      * @param show True to show full logo, false for just the soul (o).
      */
-    void set_show_full_logo(bool show);
+    void setShowFullLogo(bool show);
 
     // Animation constants
     static constexpr double kGoldenRatio = 1.61803398875;

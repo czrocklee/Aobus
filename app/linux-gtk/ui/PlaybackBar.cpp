@@ -81,7 +81,7 @@ namespace ao::gtk
     ensurePlaybackBarCss();
 
     signalThemeRefresh().connect(
-      [this]()
+      [this]
       {
         APP_LOG_INFO("Executing theme refresh for PlaybackBar...");
         ensurePlaybackBarCss(true);
@@ -95,7 +95,7 @@ namespace ao::gtk
     setupLayout();
     setupSignals();
 
-    signal_map().connect([this]() { syncOutputIconSize(); });
+    signal_map().connect([this] { syncOutputIconSize(); });
 
     // Self-wire: transport changes → buttons, time label, position tracking, soul
     _transportChangedSub = _session.events().subscribe<ao::app::PlaybackTransportChanged>(
@@ -203,7 +203,7 @@ namespace ao::gtk
         _soulLongPressTimer.disconnect();
         static constexpr int kLongPressMs = 1000;
         _soulLongPressTimer = Glib::signal_timeout().connect(
-          [this]()
+          [this]
           {
             triggerSoulEasterEgg();
             return false; // Run once
@@ -215,7 +215,7 @@ namespace ao::gtk
 
     _outputButton.add_controller(soulGesture);
 
-    _outputButton.signal_clicked().connect([this]() { _outputPopover.popup(); });
+    _outputButton.signal_clicked().connect([this] { _outputPopover.popup(); });
 
     _outputStore = Gio::ListStore<Glib::Object>::create();
     _outputListBox.set_selection_mode(Gtk::SelectionMode::NONE);
@@ -366,7 +366,7 @@ namespace ao::gtk
   void PlaybackBar::setupSignals()
   {
     _playButton.signal_clicked().connect(
-      [this]()
+      [this]
       {
         auto const& state = _session.playback().state();
         if (state.transport == ao::audio::Transport::Paused)
@@ -378,8 +378,8 @@ namespace ao::gtk
           _session.playSelectionInFocusedView();
         }
       });
-    _pauseButton.signal_clicked().connect([this]() { _session.playback().pause(); });
-    _stopButton.signal_clicked().connect([this]() { _session.playback().stop(); });
+    _pauseButton.signal_clicked().connect([this] { _session.playback().pause(); });
+    _stopButton.signal_clicked().connect([this] { _session.playback().stop(); });
 
     // Seek Scale Interaction: Warp-to-click and Drag Handling
     auto const seekGesture = Gtk::GestureClick::create();
@@ -426,7 +426,7 @@ namespace ao::gtk
       });
 
     _muteButton.signal_toggled().connect(
-      [this]()
+      [this]
       {
         bool const muted = _session.playback().state().muted;
         _session.playback().setMuted(!muted);
@@ -592,6 +592,9 @@ namespace ao::gtk
 
     _outputButton.set_size_request(referenceHeight, referenceHeight);
     _outputSoul.set_size_request(_outputIconWidth, _outputIconHeight);
+
+    // Show full logo (a + o) only if we have enough horizontal space
+    _outputSoul.setShowFullLogo(_outputIconWidth > AobusSoul::kSoulMinSize * 2);
 
     updateOutputIcon(_lastIconQuality);
   }

@@ -40,7 +40,7 @@ namespace ao::gtk
 
     Gtk::Widget& widget() { return _listScrolledWindow; }
 
-    void rebuildTree(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction& txn);
+    void rebuildTree(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction const& txn);
     void select(ao::ListId listId);
     void createSmartListFromExpression(ao::ListId parentListId, std::string expression);
 
@@ -69,7 +69,7 @@ namespace ao::gtk
     void onDeleteList();
     void onEditList();
 
-    void buildListTree(ao::lmdb::ReadTransaction& txn);
+    void buildListTree(ao::lmdb::ReadTransaction const& txn);
     void selectSidebarList(ao::ListId listId);
 
     Gtk::Window& _parent;

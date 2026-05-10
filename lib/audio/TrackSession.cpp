@@ -49,7 +49,7 @@ namespace ao::audio
                                             DecoderFactoryFn const& decoderFactory,
                                             OnSourceErrorFn onSourceError)
   {
-    auto const outputFormat = []() { return Format{.isInterleaved = true}; }();
+    auto const outputFormat = [] { return Format{.isInterleaved = true}; }();
 
     auto decoder = decoderFactory ? decoderFactory(descriptor.filePath, outputFormat)
                                   : createDecoderSession(descriptor.filePath, outputFormat);

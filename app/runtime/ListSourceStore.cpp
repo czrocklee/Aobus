@@ -45,7 +45,7 @@ namespace ao::app
 
   void ListSourceStore::reloadAllTracks()
   {
-    auto txn = _library.readTransaction();
+    auto const txn = _library.readTransaction();
     _allTracks.reloadFromStore(txn);
   }
 
@@ -62,7 +62,7 @@ namespace ao::app
       return;
     }
 
-    auto txn = _library.readTransaction();
+    auto const txn = _library.readTransaction();
     auto optView = _library.lists().reader(txn).get(listId);
 
     if (!optView)
@@ -161,7 +161,7 @@ namespace ao::app
       return *it->second;
     }
 
-    auto txn = _library.readTransaction();
+    auto const txn = _library.readTransaction();
     auto optView = _library.lists().reader(txn).get(listId);
 
     if (!optView)

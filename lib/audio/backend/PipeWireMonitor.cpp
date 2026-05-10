@@ -139,7 +139,7 @@ namespace ao::audio::backend
     {
       stopping.store(true, std::memory_order_release);
       {
-        auto const lock = std::lock_guard<std::mutex>{mutex};
+        auto const lock = std::lock_guard{mutex};
         deviceSubscriptions.clear();
         graphSubscriptions.clear();
       }
@@ -234,7 +234,7 @@ namespace ao::audio::backend
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
 
       {
-        auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+        auto const lock = std::lock_guard{impl->mutex};
 
         if (seq == impl->coreSyncSeq)
         {
@@ -271,7 +271,7 @@ namespace ao::audio::backend
                                                     auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
 
                                                     {
-                                                      auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+                                                      auto const lock = std::lock_guard{impl->mutex};
                                                       auto& link = impl->links[info->id];
 
                                                       link.outputNodeId = info->output_node_id;
@@ -287,7 +287,7 @@ namespace ao::audio::backend
                                                   }};
 
       {
-        auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+        auto const lock = std::lock_guard{impl->mutex};
 
         if (isNode)
         {
@@ -316,7 +316,7 @@ namespace ao::audio::backend
       bool needsRefresh = false;
 
       {
-        auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+        auto const lock = std::lock_guard{impl->mutex};
 
         if (auto const it = impl->linkBindings.find(id); it != impl->linkBindings.end())
         {
@@ -369,7 +369,7 @@ namespace ao::audio::backend
       auto* const impl = binding->impl;
 
       {
-        auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+        auto const lock = std::lock_guard{impl->mutex};
 
         if ((info->change_mask & PW_NODE_CHANGE_MASK_PROPS) != 0)
         {
@@ -398,7 +398,7 @@ namespace ao::audio::backend
       auto* const impl = binding->impl;
 
       {
-        auto const lock = std::lock_guard<std::mutex>{impl->mutex};
+        auto const lock = std::lock_guard{impl->mutex};
 
         if (id == SPA_PARAM_Format)
         {
@@ -518,7 +518,7 @@ namespace ao::audio::backend
 
   void PipeWireMonitor::stop()
   {
-    auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
+    auto const lock = std::lock_guard{_impl->mutex};
     _impl->refreshEvent.reset();
     _impl->linkBindings.clear();
     _impl->streamNodeBindings.clear();
@@ -545,7 +545,7 @@ namespace ao::audio::backend
 
   std::optional<std::uint32_t> PipeWireMonitor::findSinkIdByName(std::string_view name) const
   {
-    auto const lock = std::lock_guard<std::mutex>{_impl->mutex};
+    auto const lock = std::lock_guard{_impl->mutex};
 
     for (auto const& [id, node] : _impl->nodes)
     {
@@ -577,7 +577,7 @@ namespace ao::audio::backend
     auto cb = DeviceCallback{};
 
     {
-      auto const lock = std::lock_guard<std::mutex>{mutex};
+      auto const lock = std::lock_guard{mutex};
       deviceSubscriptions.push_back({id, callback});
       cb = std::move(callback);
       devices = enumerateSinks();
@@ -588,9 +588,9 @@ namespace ao::audio::backend
       cb(devices);
     }
 
-    return ao::audio::Subscription{[this, id]()
+    return ao::audio::Subscription{[this, id]
                                    {
-                                     auto const lock = std::lock_guard<std::mutex>{mutex};
+                                     auto const lock = std::lock_guard{mutex};
                                      auto const it =
                                        std::ranges::find(deviceSubscriptions, id, &DeviceSubscription::id);
                                      if (it != deviceSubscriptions.end())
@@ -606,15 +606,15 @@ namespace ao::audio::backend
   {
     auto const id = nextSubscriptionId++;
     {
-      auto const lock = std::lock_guard<std::mutex>{mutex};
+      auto const lock = std::lock_guard{mutex};
       graphSubscriptions.push_back({id, std::string(routeAnchor), std::move(callback)});
     }
     triggerRefresh();
 
-    return ao::audio::Subscription{[this, id]()
+    return ao::audio::Subscription{[this, id]
                                    {
                                      {
-                                       auto const lock = std::lock_guard<std::mutex>{mutex};
+                                       auto const lock = std::lock_guard{mutex};
                                        auto const it =
                                          std::ranges::find(graphSubscriptions, id, &GraphSubscription::id);
                                        if (it != graphSubscriptions.end())
@@ -633,7 +633,7 @@ namespace ao::audio::backend
     {
       if (isSinkMediaClass(node.mediaClass))
       {
-        auto const deviceId = node.objectSerial ? std::format("{}", *node.objectSerial) : std::format("{}", id);
+        auto const deviceId = node.optObjectSerial ? std::format("{}", *node.optObjectSerial) : std::format("{}", id);
         auto displayName = node.nodeNick;
         if (displayName.empty())
         {
@@ -670,7 +670,7 @@ namespace ao::audio::backend
 
     // Phase 1: sync bindings under mutex
     {
-      auto const lock = std::lock_guard<std::mutex>{mutex};
+      auto const lock = std::lock_guard{mutex};
       auto subscribedStreamIds = std::unordered_set<std::uint32_t>{};
 
       for (auto const& sub : graphSubscriptions)
@@ -692,7 +692,7 @@ namespace ao::audio::backend
     auto deviceSnapshot = std::vector<ao::audio::Device>{};
 
     {
-      auto const lock = std::lock_guard<std::mutex>{mutex};
+      auto const lock = std::lock_guard{mutex};
 
       for (auto const& sub : graphSubscriptions)
       {

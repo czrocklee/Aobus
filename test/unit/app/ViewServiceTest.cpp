@@ -27,7 +27,7 @@ namespace ao::app::test
 
       TestEnv() { store = std::make_unique<ao::app::ListSourceStore>(library.library(), events); }
 
-      auto makeService(EventBus& events) -> ViewService { return ViewService{library.library(), *store, events}; }
+      ViewService makeService(EventBus& events) { return ViewService{library.library(), *store, events}; }
     };
   }
 
@@ -178,9 +178,11 @@ namespace ao::app::test
 
     CHECK(snap.groupBy == TrackGroupKey::Artist);
 
-    std::vector<TrackSortField> const expected = {
-      TrackSortField::Artist, TrackSortField::Album,
-      TrackSortField::DiscNumber, TrackSortField::TrackNumber, TrackSortField::Title};
+    std::vector<TrackSortField> const expected = {TrackSortField::Artist,
+                                                  TrackSortField::Album,
+                                                  TrackSortField::DiscNumber,
+                                                  TrackSortField::TrackNumber,
+                                                  TrackSortField::Title};
     REQUIRE(snap.sortBy.size() == expected.size());
     for (std::size_t i = 0; i < expected.size(); ++i)
     {
@@ -200,9 +202,11 @@ namespace ao::app::test
 
     CHECK(snap.groupBy == TrackGroupKey::Album);
 
-    std::vector<TrackSortField> const expected = {
-      TrackSortField::AlbumArtist, TrackSortField::Album,
-      TrackSortField::DiscNumber, TrackSortField::TrackNumber, TrackSortField::Title};
+    std::vector<TrackSortField> const expected = {TrackSortField::AlbumArtist,
+                                                  TrackSortField::Album,
+                                                  TrackSortField::DiscNumber,
+                                                  TrackSortField::TrackNumber,
+                                                  TrackSortField::Title};
     REQUIRE(snap.sortBy.size() == expected.size());
     for (std::size_t i = 0; i < expected.size(); ++i)
     {
@@ -224,9 +228,12 @@ namespace ao::app::test
 
     CHECK(snap.groupBy == TrackGroupKey::Genre);
 
-    std::vector<TrackSortField> const expected = {
-      TrackSortField::Genre, TrackSortField::Artist, TrackSortField::Album,
-      TrackSortField::DiscNumber, TrackSortField::TrackNumber, TrackSortField::Title};
+    std::vector<TrackSortField> const expected = {TrackSortField::Genre,
+                                                  TrackSortField::Artist,
+                                                  TrackSortField::Album,
+                                                  TrackSortField::DiscNumber,
+                                                  TrackSortField::TrackNumber,
+                                                  TrackSortField::Title};
     REQUIRE(snap.sortBy.size() == expected.size());
     for (std::size_t i = 0; i < expected.size(); ++i)
     {
@@ -260,8 +267,7 @@ namespace ao::app::test
     auto result = service.createView({}, true);
 
     auto received = TrackGroupKey::None;
-    auto sub = events.subscribe<ViewGroupingChanged>(
-      [&](ViewGroupingChanged const& ev) { received = ev.groupBy; });
+    auto sub = events.subscribe<ViewGroupingChanged>([&](ViewGroupingChanged const& ev) { received = ev.groupBy; });
 
     service.setGrouping(result.viewId, TrackGroupKey::Composer);
     CHECK(received == TrackGroupKey::Composer);
@@ -276,8 +282,7 @@ namespace ao::app::test
     auto result = service.createView({}, true);
 
     auto callCount = 0;
-    auto sub = events.subscribe<ViewGroupingChanged>(
-      [&](ViewGroupingChanged const&) { ++callCount; });
+    auto sub = events.subscribe<ViewGroupingChanged>([&](ViewGroupingChanged const&) { ++callCount; });
 
     // First change should publish
     service.setGrouping(result.viewId, TrackGroupKey::Artist);

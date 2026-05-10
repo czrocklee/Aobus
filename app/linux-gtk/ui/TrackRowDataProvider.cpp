@@ -67,8 +67,8 @@ namespace ao::gtk
     _rowCache.clear();
     _stringCache.clear();
 
-    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
-    auto reader = _store.reader(txn);
+    auto const txn = _ml.readTransaction();
+    auto const reader = _store.reader(txn);
 
     for (auto const& [id, view] : reader)
     {
@@ -114,8 +114,8 @@ namespace ao::gtk
     }
 
     // Lazy load the row if it's missing from the cache (e.g., after an invalidate)
-    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
-    auto reader = _store.reader(txn);
+    auto const txn = _ml.readTransaction();
+    auto const reader = _store.reader(txn);
     auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
@@ -131,8 +131,8 @@ namespace ao::gtk
   std::optional<std::uint32_t> TrackRowDataProvider::getCoverArtId(TrackId id) const
   {
     // Need cold data for coverArtId
-    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
-    auto reader = _store.reader(txn);
+    auto const txn = _ml.readTransaction();
+    auto const reader = _store.reader(txn);
     auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
@@ -153,8 +153,8 @@ namespace ao::gtk
   std::optional<std::filesystem::path> TrackRowDataProvider::getUriPath(TrackId id) const
   {
     // Need cold data for URI
-    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
-    auto reader = _store.reader(txn);
+    auto const txn = _ml.readTransaction();
+    auto const reader = _store.reader(txn);
 
     auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
 
@@ -169,8 +169,8 @@ namespace ao::gtk
   std::optional<ao::audio::TrackPlaybackDescriptor> TrackRowDataProvider::getPlaybackDescriptor(TrackId id) const
   {
     // Need cold data for URI and property info
-    ao::lmdb::ReadTransaction txn(_ml.readTransaction());
-    auto reader = _store.reader(txn);
+    auto const txn = _ml.readTransaction();
+    auto const reader = _store.reader(txn);
 
     auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
 
@@ -187,9 +187,9 @@ namespace ao::gtk
     desc.trackId = id;
 
     // File path
-    if (auto const filePath = resolveLibraryPath(_ml.rootPath(), property.uri()))
+    if (auto const optFilePath = resolveLibraryPath(_ml.rootPath(), property.uri()))
     {
-      desc.filePath = *filePath;
+      desc.filePath = *optFilePath;
     }
 
     // Title

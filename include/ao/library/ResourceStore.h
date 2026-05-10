@@ -20,7 +20,7 @@ namespace ao::library
     {
     }
 
-    Reader reader(lmdb::ReadTransaction& txn) const { return _database.reader(txn); };
+    Reader reader(lmdb::ReadTransaction const& txn) const { return _database.reader(txn); };
     Writer writer(lmdb::WriteTransaction& txn);
 
   private:

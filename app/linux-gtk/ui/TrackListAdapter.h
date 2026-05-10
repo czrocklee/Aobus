@@ -69,7 +69,7 @@ namespace ao::gtk
     void rebuildView();
     void rebuildViewInternal();
     void createRowForTrack(TrackId id);
-    bool shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader& reader) const;
+    bool shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader const& reader) const;
 
     ao::app::TrackSource& _source;
     ao::library::MusicLibrary& _musicLibrary;

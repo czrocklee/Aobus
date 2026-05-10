@@ -110,7 +110,7 @@ namespace ao::gtk
                           std::uint16_t discNumber,
                           std::uint16_t totalDiscs,
                           std::uint16_t trackNumber,
-                          std::optional<std::uint64_t> resourceId,
+                          std::optional<std::uint64_t> optResourceId,
                           std::uint32_t sampleRate,
                           std::uint8_t channels,
                           std::uint8_t bitDepth,
@@ -131,7 +131,7 @@ namespace ao::gtk
     _discNumber = discNumber;
     _totalDiscs = totalDiscs;
     _trackNumber = trackNumber;
-    _resourceId = resourceId;
+    _optResourceId = optResourceId;
 
     _sampleRate = sampleRate;
     _channels = channels;
@@ -197,5 +197,4 @@ namespace ao::gtk
   {
     return _tags;
   }
-
 } // namespace ao::gtk

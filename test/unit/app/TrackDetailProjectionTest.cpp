@@ -28,7 +28,7 @@ namespace
     ViewService views{lib.library(), sources, events};
   };
 
-  auto allTracksId() -> ao::ListId
+  ao::ListId allTracksId()
   {
     return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
   }

@@ -54,7 +54,7 @@ namespace ao::lmdb
     throwOnError("mdb_dbi_open", ::mdb_dbi_open(txn._handle.get(), db.c_str(), MDB_INTEGERKEY, &_dbi));
   }
 
-  Reader Database::reader(ReadTransaction& txn) const
+  Reader Database::reader(ReadTransaction const& txn) const
   {
     return Reader{_dbi, txn._handle.get()};
   }

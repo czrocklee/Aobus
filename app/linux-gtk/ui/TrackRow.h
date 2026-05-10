@@ -46,7 +46,7 @@ namespace ao::gtk
     void setTags(Glib::ustring const& tags);
     std::chrono::milliseconds getDuration() const { return _duration; }
     Glib::ustring const& getDurationStr() const { return _durationStr; }
-    std::uint64_t getResourceId() const { return _resourceId.value_or(0); }
+    std::uint64_t getResourceId() const { return _optResourceId.value_or(0); }
 
     std::uint32_t getSampleRate() const { return _sampleRate; }
     std::uint8_t getChannels() const { return _channels; }
@@ -102,7 +102,7 @@ namespace ao::gtk
     std::uint16_t _discNumber = 0;
     std::uint16_t _totalDiscs = 0;
     std::uint16_t _trackNumber = 0;
-    std::optional<std::uint64_t> _resourceId;
+    std::optional<std::uint64_t> _optResourceId;
 
     std::uint32_t _sampleRate = 0;
     std::uint8_t _channels = 0;

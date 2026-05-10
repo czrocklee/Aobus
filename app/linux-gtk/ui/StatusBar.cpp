@@ -25,8 +25,8 @@
 
 #include <format>
 #include <iomanip>
+#include <iterator>
 #include <ranges>
-#include <sstream>
 #include <unordered_set>
 
 namespace ao::gtk
@@ -78,7 +78,7 @@ namespace ao::gtk
       {
         if (force)
         {
-          if (auto display = Gdk::Display::get_default(); display)
+          if (auto const display = Gdk::Display::get_default(); display)
           {
             Gtk::StyleContext::remove_provider_for_display(display, provider);
           }
@@ -171,7 +171,7 @@ namespace ao::gtk
     ensureStatusBarCss();
 
     signalThemeRefresh().connect(
-      [this]()
+      [this]
       {
         APP_LOG_INFO("Executing theme refresh for StatusBar...");
         ensureStatusBarCss(true);
@@ -299,23 +299,23 @@ namespace ao::gtk
 
   StatusBar::~StatusBar() = default;
 
-  void StatusBar::showMessage(std::string const& message, std::chrono::seconds duration)
+  void StatusBar::showMessage(std::string_view message, std::chrono::seconds duration)
   {
     if (_timerConnection)
     {
       _timerConnection.disconnect();
     }
 
-    _statusLabel.set_text(message);
+    _statusLabel.set_text(std::string{message});
 
     // Switch stack to status
-    if (auto* stack = dynamic_cast<Gtk::Stack*>(_statusLabel.get_parent()))
+    if (auto* const stack = dynamic_cast<Gtk::Stack*>(_statusLabel.get_parent()))
     {
       stack->set_visible_child("status");
     }
 
     _timerConnection = Glib::signal_timeout().connect_seconds(
-      [this]()
+      [this]
       {
         clearMessage();
         return false;
@@ -393,15 +393,11 @@ namespace ao::gtk
     // Source Format from Decoder Node
     auto const statusText = [&]
     {
-      auto info = std::string{};
-      for (auto const& node : status.flow.nodes)
-      {
-        if (node.type == ao::audio::flow::NodeType::Decoder && node.optFormat)
-        {
-          info = formatStream(*node.optFormat);
-          break;
-        }
-      }
+      auto const it = std::ranges::find_if(
+        status.flow.nodes,
+        [](auto const& node) { return node.type == ao::audio::flow::NodeType::Decoder && node.optFormat; });
+
+      auto info = (it != status.flow.nodes.end()) ? formatStream(*it->optFormat) : std::string{};
 
       if (status.engine.underrunCount == 0)
       {
@@ -439,8 +435,7 @@ namespace ao::gtk
 
   void StatusBar::updatePlaybackTooltip(ao::audio::Player::Status const& status)
   {
-    auto ss = std::stringstream{};
-    ss << "Audio Pipeline:\n";
+    auto tooltip = std::string{"Audio Pipeline:\n"};
 
     auto const nodeTypeString = [](ao::audio::flow::NodeType type)
     {
@@ -474,44 +469,36 @@ namespace ao::gtk
         }
 
         auto const& node = *it;
-        ss << std::format("• {} {}", nodeTypeString(node.type), node.name);
+        std::format_to(std::back_inserter(tooltip), "• {} {}", nodeTypeString(node.type), node.name);
 
         if (node.optFormat)
         {
-          ss << std::format(" ({})", formatStream(*node.optFormat));
+          std::format_to(std::back_inserter(tooltip), " ({})", formatStream(*node.optFormat));
         }
 
         if (node.volumeNotUnity)
         {
-          ss << " [Vol Control]";
+          tooltip += " [Vol Control]";
         }
 
         if (node.isMuted)
         {
-          ss << " [Muted]";
+          tooltip += " [Muted]";
         }
 
-        ss << "\n";
+        tooltip += "\n";
 
-        auto nextId = std::string{};
-        for (auto const& link : status.flow.connections)
-        {
-          if (link.isActive && link.sourceId == currentId)
-          {
-            nextId = link.destId;
-            break;
-          }
-        }
-        currentId = nextId;
+        auto const linkIt = std::ranges::find_if(
+          status.flow.connections, [&](auto const& link) { return link.isActive && link.sourceId == currentId; });
+
+        currentId = (linkIt != status.flow.connections.end()) ? linkIt->destId : "";
       }
     }
 
     if (!status.qualityTooltip.empty())
     {
-      ss << "\n" << status.qualityTooltip;
+      std::format_to(std::back_inserter(tooltip), "\n{}", status.qualityTooltip);
     }
-
-    auto const tooltip = ss.str();
     if (tooltip != _lastTooltipText)
     {
       APP_LOG_DEBUG("StatusBar: Updating tooltip (length={})", tooltip.length());
@@ -568,11 +555,11 @@ namespace ao::gtk
     setPlaybackState(_session.playback().state());
   }
 
-  void StatusBar::setImportProgress(double fraction, std::string const& info)
+  void StatusBar::setImportProgress(double fraction, std::string_view info)
   {
     _importBox.set_visible(true);
     _importProgressBar.set_fraction(fraction);
-    _importLabel.set_text(info);
+    _importLabel.set_text(std::string{info});
     _selectionLabel.set_visible(false);
   }
 

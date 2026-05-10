@@ -17,7 +17,7 @@ Rules are numbered for easy reference in reviews and tooling.
     - 2.2.1. Types and classes use `PascalCase`: `TrackStore`, `Metadata`
     - 2.2.2. Functions use `camelCase`: `loadMetadata()`, `getString()`
     - 2.2.3. Variables use `camelCase`: `trackCount`, `filePath`
-    - 2.2.4. Non-static data members use `_camelCase`: `_handle`, `_tracks`
+    - 2.2.4. Non-static data members of classes use `_camelCase` (e.g., `_handle`, `_tracks`); members of structs (PODs, Impl, helper records) use plain `camelCase` (e.g., `trackId`, `year`)
     - 2.2.5. Constants use `kCamelCase`: `kMaxSize`, `kDefaultFlags`
     - 2.2.6. Enum values follow their scope: scoped enums use `PascalCase` (`Code::IoError`), unscoped constants use `kCamelCase`
   - 2.3. Headers
@@ -101,6 +101,8 @@ Rules are numbered for easy reference in reviews and tooling.
       - **Primitive types** (`int`, `std::size_t`, `float`, etc.): use `T x = val;` (e.g., `std::size_t pos = 0;`, `auto count = 0;`). Do not use brace initialization for primitives.
       - Interfacing with C APIs: use explicit types when an API requires a pointer to a specific C type (e.g., `unsigned int*`).
       - Exception: for null pointer initialization, use `T* ptr = nullptr;`.
+    - 3.4.6. Return types: Use traditional return type syntax (`RetType FuncName(...)`) for all non-lambda functions. Avoid trailing return types.
+    - 3.4.7. Lambdas: Omit the empty parameter list `()` in lambdas that take no arguments (e.g., `[] { ... }` instead of `[]() { ... }`).
 - 4\. Best Practices
   - 4.1. Getters and Accessors
     - 4.1.1. Keep trivial one-line getters and setters inline in headers

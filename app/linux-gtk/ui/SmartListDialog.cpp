@@ -137,13 +137,13 @@ namespace ao::gtk
     exprLabel.set_halign(Gtk::Align::START);
     _exprBox.entry().set_placeholder_text("Filter expression (type $, @, #, or %)");
     _exprBox.entry().signal_changed().connect(
-      [this]()
+      [this]
       {
         // Cancel any pending update
         _exprTimeoutConnection.disconnect();
         // Debounce: update preview after 100ms of inactivity
         _exprTimeoutConnection = Glib::signal_timeout().connect(
-          [this]()
+          [this]
           {
             updatePreview();
             return false; // one-shot
@@ -173,13 +173,13 @@ namespace ao::gtk
     buttonBox.set_margin_top(kBoxSpacing * 2);
 
     _cancelButton.set_label("Cancel");
-    _cancelButton.signal_clicked().connect([this]() { response(Gtk::ResponseType::CANCEL); });
+    _cancelButton.signal_clicked().connect([this] { response(Gtk::ResponseType::CANCEL); });
 
     _okButton.set_label("Create");
     _okButton.set_sensitive(false);
-    _okButton.signal_clicked().connect([this]() { response(Gtk::ResponseType::OK); });
+    _okButton.signal_clicked().connect([this] { response(Gtk::ResponseType::OK); });
 
-    _nameEntry.signal_changed().connect([this]() { updateDialogState(); });
+    _nameEntry.signal_changed().connect([this] { updateDialogState(); });
 
     buttonBox.append(_cancelButton);
     buttonBox.append(_okButton);
@@ -294,7 +294,7 @@ namespace ao::gtk
     // Use deferred execution to avoid GTK accessing freed adapter during event processing
     // Schedule model replacement to happen after current GTK event is processed
     Glib::signal_idle().connect_once(
-      [this]()
+      [this]
       {
         // First clear the GTK model to release any held references
         auto emptySelection = Glib::RefPtr<Gtk::SelectionModel>{};

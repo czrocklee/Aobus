@@ -54,7 +54,7 @@ namespace ao::gtk
     }
 
     int const logoWidth = static_cast<int>(std::round(static_cast<double>(logoHeight) * (147.0 / 65.0)));
-    _bigSoul.set_show_full_logo(true);
+    _bigSoul.setShowFullLogo(true);
     _bigSoul.set_size_request(logoWidth, logoHeight);
     _bigSoul.set_halign(Gtk::Align::CENTER);
     _bigSoul.set_valign(Gtk::Align::CENTER);
@@ -114,7 +114,7 @@ namespace ao::gtk
 
   void AobusSoulWindow::ensureCss()
   {
-    [[maybe_unused]] static auto const cssInitialized = []()
+    [[maybe_unused]] static auto const cssInitialized = []
     {
       auto const provider = Gtk::CssProvider::create();
       provider->load_from_data(".soul-window {"

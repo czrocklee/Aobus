@@ -57,25 +57,25 @@ namespace ao::media::mp4
           break;
         }
 
-        auto type = utility::bytes::stringView(utility::bytes::view(layout->type));
-        auto skip = std::optional<std::size_t>{};
+        auto const type = utility::bytes::stringView(utility::bytes::view(layout->type));
+        auto optSkip = std::optional<std::size_t>{};
 
-        if (auto iter = ContainerAtomInterested.find(type); iter != ContainerAtomInterested.end())
+        if (auto const it = ContainerAtomInterested.find(type); it != ContainerAtomInterested.end())
         {
-          skip = iter->second;
+          optSkip = it->second;
         }
         else if (parent.type() == "stsd" && (type == "alac" || type == "mp4a"))
         {
           // Audio sample entries (alac, mp4a) in stsd have 28 bytes of fixed data
-          skip = 28; // NOLINT(readability-magic-numbers)
+          optSkip = 28; // NOLINT(readability-magic-numbers)
         }
 
-        if (skip)
+        if (optSkip)
         {
           // Atom header is 8 bytes (4 for size + 4 for type)
           constexpr std::size_t kAtomHeaderSize = 8;
           auto child = std::make_unique<ContainerAtomView>(data.subspan(0, length), parent);
-          parseAtoms(*child, data.subspan(kAtomHeaderSize + *skip, length - kAtomHeaderSize - *skip));
+          parseAtoms(*child, data.subspan(kAtomHeaderSize + *optSkip, length - kAtomHeaderSize - *optSkip));
           parent.add(std::move(child));
         }
         else

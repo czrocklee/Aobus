@@ -4,8 +4,8 @@
 #include "SmartListSource.h"
 #include "SmartListEvaluator.h"
 
-#include <ao/utility/Log.h>
 #include <ao/query/Parser.h>
+#include <ao/utility/Log.h>
 
 #include <algorithm>
 

@@ -112,12 +112,13 @@ namespace ao::audio::backend
     : _impl{std::make_unique<Impl>()}
   {
   }
+
   AlsaProvider::~AlsaProvider() = default;
 
   ao::audio::Subscription AlsaProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
     auto const id = _impl->nextSubId++;
-    auto const devices = [this, id, callback]()
+    auto const devices = [this, id, callback]
     {
       auto const lock = std::lock_guard{_impl->mutex};
       _impl->deviceSubs.push_back({.id = id, .callback = callback});
@@ -129,7 +130,7 @@ namespace ao::audio::backend
       callback(devices);
     }
 
-    return ao::audio::Subscription{[this, id]()
+    return ao::audio::Subscription{[this, id]
                                    {
                                      std::lock_guard lock(_impl->mutex);
                                      auto const it = std::ranges::find(_impl->deviceSubs, id, &Impl::DeviceSub::id);

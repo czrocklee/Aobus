@@ -10,7 +10,7 @@ namespace ao::library
   {
   }
 
-  ListStore::Reader ListStore::reader(lmdb::ReadTransaction& txn) const
+  ListStore::Reader ListStore::reader(lmdb::ReadTransaction const& txn) const
   {
     return Reader{_database.reader(txn)};
   }

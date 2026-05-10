@@ -27,7 +27,7 @@ namespace ao::gtk
     explicit StatusBar(ao::app::AppSession& session);
     ~StatusBar() override;
 
-    void showMessage(std::string const& message, std::chrono::seconds duration = std::chrono::seconds{5});
+    void showMessage(std::string_view message, std::chrono::seconds duration = std::chrono::seconds{5});
     void clearMessage();
 
     void setTrackCount(std::size_t count);
@@ -35,7 +35,7 @@ namespace ao::gtk
     void setPlaybackDetails(ao::audio::Player::Status const& status);
     void setPlaybackState(struct ao::app::PlaybackState const& state);
 
-    void setImportProgress(double fraction, std::string const& info);
+    void setImportProgress(double fraction, std::string_view info);
     void clearImportProgress();
 
   private:

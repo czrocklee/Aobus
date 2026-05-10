@@ -48,18 +48,18 @@ namespace ao::audio::backend::detail
     record.nodeDescription = lookupProperty(props, PW_KEY_NODE_DESCRIPTION);
     record.objectPath = lookupProperty(props, PW_KEY_OBJECT_PATH);
 
-    if (auto const serial = parseUintProperty(::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL)))
+    if (auto const optSerial = parseUintProperty(::spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL)))
     {
-      record.objectSerial = serial;
+      record.optObjectSerial = optSerial;
     }
 
-    if (auto const id = parseUintProperty(::spa_dict_lookup(props, "node.driver-id")))
+    if (auto const optId = parseUintProperty(::spa_dict_lookup(props, "node.driver-id")))
     {
-      record.driverId = id;
+      record.optDriverId = optId;
     }
-    else if (auto const id = parseUintProperty(::spa_dict_lookup(props, "node.driver")))
+    else if (auto const optIdFallback = parseUintProperty(::spa_dict_lookup(props, "node.driver")))
     {
-      record.driverId = id;
+      record.optDriverId = optIdFallback;
     }
 
     return record;

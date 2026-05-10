@@ -36,21 +36,21 @@ namespace ao::gtk
     auto const it = std::ranges::find(trackIds, startTrackId);
     auto const startIndex = static_cast<std::size_t>(std::distance(trackIds.begin(), it));
 
-    auto desc = _dataProvider.getPlaybackDescriptor(startTrackId);
-    if (!desc)
+    auto const optDesc = _dataProvider.getPlaybackDescriptor(startTrackId);
+    if (!optDesc)
     {
       return false;
     }
 
     unsubscribeEvents();
 
-    _sequence = std::unique_ptr<ActivePlaybackSequence>(new ActivePlaybackSequence{
+    _sequence = std::make_unique<ActivePlaybackSequence>(ActivePlaybackSequence{
       .trackIds = std::move(trackIds),
       .currentIndex = startIndex,
-      .sourceListId = page.getListId(),
+      .optSourceListId = page.getListId(),
     });
 
-    _session.playback().play(*desc, page.getListId());
+    _session.playback().play(*optDesc, page.getListId());
 
     subscribeEvents();
     return true;
@@ -81,7 +81,7 @@ namespace ao::gtk
     {
       return std::nullopt;
     }
-    return _sequence->sourceListId;
+    return _sequence->optSourceListId;
   }
 
   void PlaybackController::clear()
@@ -100,12 +100,12 @@ namespace ao::gtk
     auto const nextIndex = _sequence->currentIndex + 1;
     for (auto i = nextIndex; i < _sequence->trackIds.size(); ++i)
     {
-      auto desc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[i]);
-      if (desc)
+      auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[i]);
+      if (optDesc)
       {
         _sequence->currentIndex = i;
 
-        _session.playback().play(*desc, _sequence->sourceListId.value_or(ao::ListId{}));
+        _session.playback().play(*optDesc, _sequence->optSourceListId.value_or(ao::ListId{}));
         return;
       }
     }

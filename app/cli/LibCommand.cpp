@@ -18,27 +18,31 @@ namespace ao::cli
 
     std::string formatUuid(std::array<std::byte, kUuidByteCount> const& id)
     {
+      // NOLINTBEGIN(readability-magic-numbers, cppcoreguidelines-pro-bounds-constant-array-index)
+      auto const cast = [&](std::size_t idx) { return static_cast<unsigned char>(id[idx]); };
+
       return std::format("{:02x}{:02x}{:02x}{:02x}-"
                          "{:02x}{:02x}-"
                          "{:02x}{:02x}-"
                          "{:02x}{:02x}-"
                          "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-                         static_cast<unsigned char>(id[0]),
-                         static_cast<unsigned char>(id[1]),
-                         static_cast<unsigned char>(id[2]),
-                         static_cast<unsigned char>(id[3]),
-                         static_cast<unsigned char>(id[4]),
-                         static_cast<unsigned char>(id[5]),
-                         static_cast<unsigned char>(id[6]),
-                         static_cast<unsigned char>(id[7]),
-                         static_cast<unsigned char>(id[8]),
-                         static_cast<unsigned char>(id[9]),
-                         static_cast<unsigned char>(id[10]),
-                         static_cast<unsigned char>(id[11]),
-                         static_cast<unsigned char>(id[12]),
-                         static_cast<unsigned char>(id[13]),
-                         static_cast<unsigned char>(id[14]),
-                         static_cast<unsigned char>(id[15]));
+                         cast(0),
+                         cast(1),
+                         cast(2),
+                         cast(3),
+                         cast(4),
+                         cast(5),
+                         cast(6),
+                         cast(7),
+                         cast(8),
+                         cast(9),
+                         cast(10),
+                         cast(11),
+                         cast(12),
+                         cast(13),
+                         cast(14),
+                         cast(15));
+      // NOLINTEND(readability-magic-numbers, cppcoreguidelines-pro-bounds-constant-array-index)
     }
 
     std::string formatTimestamp(std::uint64_t unixMs)
@@ -97,16 +101,16 @@ namespace ao::cli
   {
     auto* lib = app.add_subcommand("lib", "Library management commands");
 
-    lib->add_subcommand("show", "Show library information")->callback([&ml]() { show(ml, std::cout); });
+    lib->add_subcommand("show", "Show library information")->callback([&ml] { show(ml, std::cout); });
 
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");
     auto* exportPath = exportCmd->add_option("output,-o,--output", "Output YAML file path")->required();
     auto* exportMode = exportCmd->add_option("-m,--mode", "Export mode (minimum, metadata, full)")->default_val("full");
-    exportCmd->callback([&ml, exportPath, exportMode]()
+    exportCmd->callback([&ml, exportPath, exportMode]
                         { exportLib(ml, exportPath->as<std::string>(), exportMode->as<std::string>(), std::cout); });
 
     auto* importCmd = lib->add_subcommand("import", "Import library from YAML");
     auto* importPath = importCmd->add_option("input,-i,--input", "Input YAML file path")->required();
-    importCmd->callback([&ml, importPath]() { importLib(ml, importPath->as<std::string>(), std::cout); });
+    importCmd->callback([&ml, importPath] { importLib(ml, importPath->as<std::string>(), std::cout); });
   }
 }

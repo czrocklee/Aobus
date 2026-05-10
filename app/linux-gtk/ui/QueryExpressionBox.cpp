@@ -379,8 +379,8 @@ namespace ao::gtk
   {
     auto uniqueTags = std::set<std::string>{};
     auto uniqueCustomKeys = std::set<std::string>{};
-    auto txn = _musicLibrary.readTransaction();
-    auto reader = _musicLibrary.tracks().reader(txn);
+    auto const txn = _musicLibrary.readTransaction();
+    auto const reader = _musicLibrary.tracks().reader(txn);
     auto const& dictionary = _musicLibrary.dictionary();
 
     for (auto iter = reader.begin(ao::library::TrackStore::Reader::LoadMode::Both),

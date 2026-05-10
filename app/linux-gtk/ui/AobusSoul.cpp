@@ -44,12 +44,14 @@ namespace ao::gtk
 
     // 1. Pre-bake unit path for 'o' (Soul)
     auto* const oBuilder = ::gsk_path_builder_new();
-    ::graphene_point_t const origin = {0.0F, 0.0F};
+    ::graphene_point_t const origin = {.x = 0.0F, .y = 0.0F};
+
     ::gsk_path_builder_add_circle(oBuilder, &origin, kNormalizedRadius);
     _unitPathO.reset(::gsk_path_builder_free_to_path(oBuilder));
 
     // 2. Pre-bake unit path for 'a' (Circle + Stem)
     auto* const aBuilder = ::gsk_path_builder_new();
+
     ::gsk_path_builder_add_circle(aBuilder, &origin, kNormalizedRadius);
 
     static constexpr float kRefStemY1 = -35.0F / kRefHeight;
@@ -75,7 +77,7 @@ namespace ao::gtk
     queue_draw();
   }
 
-  void AobusSoul::set_show_full_logo(bool show)
+  void AobusSoul::setShowFullLogo(bool show)
   {
     if (_showFullLogo == show)
     {
@@ -266,7 +268,8 @@ namespace ao::gtk
       static constexpr float kRefBoundsY = -kRefR * 2.0F;
       static constexpr float kRefBoundsW = kRefR * 4.5F;
       static constexpr float kRefBoundsH = kRefR * 4.0F;
-      ::graphene_rect_t const aBounds = {{kRefBoundsX, kRefBoundsY}, {kRefBoundsW, kRefBoundsH}};
+      ::graphene_rect_t const aBounds = {
+        .origin = {.x = kRefBoundsX, .y = kRefBoundsY}, .size = {.width = kRefBoundsW, .height = kRefBoundsH}};
 
       ::gtk_snapshot_append_color(snapshot->gobj(), _colors.amber.gobj(), &aBounds);
       ::gtk_snapshot_pop(snapshot->gobj());
@@ -340,9 +343,10 @@ namespace ao::gtk
     static constexpr float kUnitR = 30.0F / 65.0F;
     float const normalizedStrokeWidth = currentStrokeBase / kRefHeight;
     float const outerRadius = kUnitR + normalizedStrokeWidth;
-    ::graphene_rect_t const gradientBounds = {{-outerRadius, -outerRadius}, {outerRadius * 2.0F, outerRadius * 2.0F}};
-    ::graphene_point_t const startPoint = {kUnitR, kUnitR};
-    ::graphene_point_t const endPoint = {-kUnitR, -kUnitR};
+    ::graphene_rect_t const gradientBounds = {.origin = {.x = -outerRadius, .y = -outerRadius},
+                                              .size = {.width = outerRadius * 2.0F, .height = outerRadius * 2.0F}};
+    ::graphene_point_t const startPoint = {.x = kUnitR, .y = kUnitR};
+    ::graphene_point_t const endPoint = {.x = -kUnitR, .y = -kUnitR};
 
     ::gtk_snapshot_append_linear_gradient(
       snapshot->gobj(), &gradientBounds, &startPoint, &endPoint, stops.data(), stops.size());

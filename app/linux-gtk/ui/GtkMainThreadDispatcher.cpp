@@ -18,7 +18,7 @@ namespace ao::gtk
     }
 
     {
-      std::lock_guard<std::mutex> lock(_mutex);
+      std::lock_guard lock(_mutex);
       _tasks.push_back(std::move(task));
     }
     _dispatcher.emit();
@@ -28,7 +28,7 @@ namespace ao::gtk
   {
     std::vector<std::function<void()>> tasksToRun;
     {
-      std::lock_guard<std::mutex> lock(_mutex);
+      std::lock_guard lock(_mutex);
       tasksToRun.swap(_tasks);
     }
 

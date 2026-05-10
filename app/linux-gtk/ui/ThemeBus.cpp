@@ -117,7 +117,7 @@ namespace ao::gtk
 
     debounce_connection.disconnect();
     debounce_connection = Glib::signal_timeout().connect(
-      []() -> bool
+      [] -> bool
       {
         auto const configDir = std::string(Glib::get_user_config_dir()) + "/gtk-4.0";
         auto const settingsPath = configDir + "/settings.ini";

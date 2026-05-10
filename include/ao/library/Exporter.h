@@ -45,9 +45,9 @@ namespace ao::library
     void exportToYaml(std::filesystem::path const& path, ExportMode mode);
 
   private:
-    void exportTracks(YAML::Emitter& out, ao::lmdb::ReadTransaction& txn, ExportMode mode);
+    void exportTracks(YAML::Emitter& out, ao::lmdb::ReadTransaction const& txn, ExportMode mode);
     void exportTrack(YAML::Emitter& out, TrackId id, TrackView const& view, ExportMode mode);
-    void exportLists(YAML::Emitter& out, ao::lmdb::ReadTransaction& txn);
+    void exportLists(YAML::Emitter& out, ao::lmdb::ReadTransaction const& txn);
 
     MusicLibrary& _ml;
   };

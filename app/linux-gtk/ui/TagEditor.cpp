@@ -114,8 +114,8 @@ namespace ao::gtk
     auto const selectionCount = _selectedTrackIds.size();
     auto tagFrequency = std::map<std::string, std::size_t>{};
 
-    auto txn = _musicLibrary->readTransaction();
-    auto reader = _musicLibrary->tracks().reader(txn);
+    auto const txn = _musicLibrary->readTransaction();
+    auto const reader = _musicLibrary->tracks().reader(txn);
     auto const& dictionary = _musicLibrary->dictionary();
 
     for (auto const trackId : _selectedTrackIds)
@@ -193,7 +193,7 @@ namespace ao::gtk
 
       chip->set_active(true);
       setChipStyle(*chip, true);
-      chip->signal_toggled().connect([this, chip, tag]() { onTagChipToggled(chip, tag, true); });
+      chip->signal_toggled().connect([this, chip, tag] { onTagChipToggled(chip, tag, true); });
 
       _currentTagsBox.append(*chip);
     };
@@ -228,7 +228,7 @@ namespace ao::gtk
 
       chip->set_active(false);
       setChipStyle(*chip, false);
-      chip->signal_toggled().connect([this, chip, tag]() { onTagChipToggled(chip, tag, false); });
+      chip->signal_toggled().connect([this, chip, tag] { onTagChipToggled(chip, tag, false); });
 
       _availableTagsBox.append(*chip);
     }
@@ -244,7 +244,7 @@ namespace ao::gtk
 
       chip->set_active(false);
       setChipStyle(*chip, false);
-      chip->signal_toggled().connect([this, chip, tag]() { onTagChipToggled(chip, tag, false); });
+      chip->signal_toggled().connect([this, chip, tag] { onTagChipToggled(chip, tag, false); });
 
       _availableTagsBox.append(*chip);
     }

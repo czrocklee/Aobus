@@ -32,7 +32,7 @@ namespace ao::audio
     std::atomic<std::uint32_t> engineSampleRate{0};
 
     mutable std::mutex stateMutex;
-    std::optional<TrackPlaybackDescriptor> currentTrack;
+    std::optional<TrackPlaybackDescriptor> optCurrentTrack;
     Engine::Status status;
     std::function<void()> onTrackEnded;
     Engine::OnRouteChanged onRouteChanged;
@@ -75,7 +75,7 @@ namespace ao::audio
 
     void resetEngine()
     {
-      currentTrack.reset();
+      optCurrentTrack.reset();
       backendStarted = false;
       playbackDrainPending = false;
       status = {};
@@ -299,18 +299,18 @@ namespace ao::audio
   {
     struct State
     {
-      std::optional<TrackPlaybackDescriptor> track;
+      std::optional<TrackPlaybackDescriptor> optTrack;
       std::uint32_t positionMs = 0;
       bool wasPlaying = false;
     };
 
-    auto const state = [this]()
+    auto const state = [this]
     {
       auto const lock = std::lock_guard{_impl->stateMutex};
       return State{
-        .track = _impl->currentTrack,
+        .optTrack = _impl->optCurrentTrack,
         .positionMs =
-          [this]()
+          [this]
         {
           auto const frames = _impl->accumulatedFrames.load(std::memory_order_relaxed);
           auto const sr = _impl->engineSampleRate.load(std::memory_order_relaxed);
@@ -330,10 +330,10 @@ namespace ao::audio
       _impl->syncBackendStatus();
     }
 
-    if (state.track)
+    if (state.optTrack)
     {
-      AUDIO_LOG_INFO("Resuming track '{}' after backend switch", state.track->title);
-      play(*state.track);
+      AUDIO_LOG_INFO("Resuming track '{}' after backend switch", state.optTrack->title);
+      play(*state.optTrack);
       seek(state.positionMs);
 
       if (!state.wasPlaying)
@@ -350,13 +350,13 @@ namespace ao::audio
 
   void Engine::setOnTrackEnded(std::function<void()> callback)
   {
-    std::lock_guard<std::mutex> lock(_impl->stateMutex);
+    std::lock_guard lock(_impl->stateMutex);
     _impl->onTrackEnded = std::move(callback);
   }
 
   void Engine::setOnRouteChanged(OnRouteChanged callback)
   {
-    std::lock_guard<std::mutex> lock(_impl->stateMutex);
+    std::lock_guard lock(_impl->stateMutex);
     _impl->onRouteChanged = std::move(callback);
   }
 
@@ -410,13 +410,13 @@ namespace ao::audio
       _impl->backendStarted = false;
       _impl->playbackDrainPending = false;
       _impl->status.transport = Transport::Opening;
-      _impl->currentTrack = descriptor;
+      _impl->optCurrentTrack = descriptor;
       _impl->syncBackendIdentity();
 
       if (!_impl->openTrack(descriptor, source, backendFormat))
       {
         _impl->status.transport = Transport::Error;
-        _impl->currentTrack.reset();
+        _impl->optCurrentTrack.reset();
         return;
       }
 
@@ -429,7 +429,7 @@ namespace ao::audio
     {
       _impl->source.store({}, std::memory_order_release);
       auto const lock = std::lock_guard{_impl->stateMutex};
-      _impl->currentTrack.reset();
+      _impl->optCurrentTrack.reset();
       _impl->status.transport = Transport::Error;
       _impl->status.statusText = openResult.error().message;
       return;

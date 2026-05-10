@@ -54,7 +54,7 @@ namespace ao::app
 
     constexpr std::size_t kArticleAnLen = 3;
 
-    auto normalizeTitle(std::string_view title) -> std::string
+    std::string normalizeTitle(std::string_view title)
     {
       auto result = std::string{title};
       std::ranges::transform(result, result.begin(), [](unsigned char ch) { return std::tolower(ch); });
@@ -77,7 +77,7 @@ namespace ao::app
       return result;
     }
 
-    auto sortFieldNeedsCold(TrackSortField field) -> bool
+    bool sortFieldNeedsCold(TrackSortField field)
     {
       switch (field)
       {
@@ -89,13 +89,13 @@ namespace ao::app
       }
     }
 
-    auto groupByNeedsCold(TrackGroupKey groupBy) -> bool
+    bool groupByNeedsCold(TrackGroupKey groupBy)
     {
       return groupBy == TrackGroupKey::Work;
     }
 
-    auto computeLoadMode(std::vector<TrackSortTerm> const& sortBy, TrackGroupKey groupBy)
-      -> ao::library::TrackStore::Reader::LoadMode
+    ao::library::TrackStore::Reader::LoadMode computeLoadMode(std::vector<TrackSortTerm> const& sortBy,
+                                                              TrackGroupKey groupBy)
     {
       auto needsHot = false;
       auto needsCold = groupByNeedsCold(groupBy);
@@ -130,7 +130,7 @@ namespace ao::app
       return ao::library::TrackStore::Reader::LoadMode::Hot;
     }
 
-    auto compareNumeric(auto lhsVal, auto rhsVal) -> int
+    int compareNumeric(auto lhsVal, auto rhsVal)
     {
       if (lhsVal < rhsVal)
       {
@@ -145,7 +145,7 @@ namespace ao::app
       return 0;
     }
 
-    auto compareSingleField(TrackSortTerm const& term, SortKeys const& lhs, SortKeys const& rhs) -> int
+    int compareSingleField(TrackSortTerm const& term, SortKeys const& lhs, SortKeys const& rhs)
     {
       switch (term.field)
       {
@@ -164,7 +164,7 @@ namespace ao::app
       return 0;
     }
 
-    auto buildComparator(std::vector<TrackSortTerm> sortBy) -> Comparator
+    Comparator buildComparator(std::vector<TrackSortTerm> sortBy)
     {
       if (sortBy.empty())
       {
@@ -332,7 +332,7 @@ namespace ao::app
       }
     }
 
-    auto sameSortDirection(std::vector<TrackSortTerm> const& old, std::vector<TrackSortTerm> const& updated) -> bool
+    bool sameSortDirection(std::vector<TrackSortTerm> const& old, std::vector<TrackSortTerm> const& updated)
     {
       if (old.size() != updated.size())
       {
@@ -397,7 +397,7 @@ namespace ao::app
         .label = orderIndex[0].groupLabel,
       });
 
-      for (auto i = std::size_t{1}; i < orderIndex.size(); ++i)
+      for (auto const i : std::views::iota(1uz, orderIndex.size()))
       {
         if (orderIndex[i].groupKey != orderIndex[i - 1].groupKey)
         {
@@ -420,11 +420,11 @@ namespace ao::app
       sections.clear();
       orderIndex.reserve(source.size());
 
-      auto txn = library.readTransaction();
+      auto const txn = library.readTransaction();
       auto const reader = library.tracks().reader(txn);
       auto& dict = library.dictionary();
 
-      for (auto i = std::size_t{0}; i < source.size(); ++i)
+      for (auto const i : std::views::iota(0uz, source.size()))
       {
         auto const trackId = source.trackIdAt(i);
         auto const optView = reader.get(trackId, loadMode);
@@ -454,13 +454,14 @@ namespace ao::app
     void rebuildPositionIndex()
     {
       positionIndex.clear();
-      for (auto i = std::size_t{0}; i < orderIndex.size(); ++i)
+      positionIndex.reserve(orderIndex.size());
+      for (auto const& [i, entry] : std::views::enumerate(orderIndex))
       {
-        positionIndex[orderIndex[i].trackId] = i;
+        positionIndex[entry.trackId] = i;
       }
     }
 
-    auto findPosition(ao::TrackId trackId) const -> std::optional<std::size_t>
+    std::optional<std::size_t> findPosition(ao::TrackId trackId) const
     {
       auto it = positionIndex.find(trackId);
       if (it == positionIndex.end())
@@ -470,7 +471,7 @@ namespace ao::app
       return it->second;
     }
 
-    auto sectionsEqual(std::vector<GroupSection> const& left, std::vector<GroupSection> const& right) const -> bool
+    bool sectionsEqual(std::vector<GroupSection> const& left, std::vector<GroupSection> const& right) const
     {
       if (left.size() != right.size())
       {
@@ -489,7 +490,7 @@ namespace ao::app
 
     void insertEntry(ao::TrackId trackId)
     {
-      auto txn = library.readTransaction();
+      auto const txn = library.readTransaction();
       auto const reader = library.tracks().reader(txn);
       auto& dict = library.dictionary();
 
@@ -592,8 +593,8 @@ namespace ao::app
       auto oldPos = *optPos;
       auto& oldEntry = orderIndex[oldPos];
 
-      auto txn = library.readTransaction();
-      auto reader = library.tracks().reader(txn);
+      auto const txn = library.readTransaction();
+      auto const reader = library.tracks().reader(txn);
       auto& dict = library.dictionary();
 
       auto const optView = reader.get(trackId, loadMode);
@@ -658,6 +659,7 @@ namespace ao::app
   {
     return _impl->viewId;
   }
+
   std::uint64_t TrackListProjection::revision() const noexcept
   {
     return _impl->rev;

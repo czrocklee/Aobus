@@ -150,6 +150,5 @@ namespace ao::app::test
       auto const restoredState = session2.views().trackListState(layout2.openViews[0]);
       CHECK(restoredState.groupBy == TrackGroupKey::None);
     }
-
   }
 }

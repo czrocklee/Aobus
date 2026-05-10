@@ -53,7 +53,7 @@ namespace ao::gtk
 
     void onTrackDetailSnapshot(ao::app::TrackDetailSnapshot const& snap);
     void updateCoverArt(ao::app::TrackDetailSnapshot const& snap);
-    auto loadCoverArtFromLibrary(ao::ResourceId resourceId) -> Glib::RefPtr<Gdk::Pixbuf>;
+    Glib::RefPtr<Gdk::Pixbuf> loadCoverArtFromLibrary(ao::ResourceId resourceId);
     void updateAudioMetadata(ao::app::TrackDetailSnapshot const& snap);
 
     ao::app::AppSession& _session;

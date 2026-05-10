@@ -28,7 +28,7 @@ namespace ao::app
     using TrackSource::notifyRemoved;
     using TrackSource::notifyUpdated;
 
-    void reloadFromStore(ao::lmdb::ReadTransaction& txn);
+    void reloadFromStore(ao::lmdb::ReadTransaction const& txn);
     void notifyInserted(TrackId id);
     void notifyRemoved(TrackId id);
     void clear();

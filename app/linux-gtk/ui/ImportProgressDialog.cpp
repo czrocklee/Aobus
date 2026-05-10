@@ -38,7 +38,7 @@ namespace ao::gtk
 
     _okButton.set_label("OK");
     _okButton.set_sensitive(false);
-    _okButton.signal_clicked().connect([this]() { response(Gtk::ResponseType::OK); });
+    _okButton.signal_clicked().connect([this] { response(Gtk::ResponseType::OK); });
     box.append(_okButton);
 
     // Add action area for the button

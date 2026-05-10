@@ -31,7 +31,7 @@ namespace ao::lmdb
 
     ~Database() = default;
 
-    Reader reader(ReadTransaction& txn) const;
+    Reader reader(ReadTransaction const& txn) const;
     Writer writer(WriteTransaction& txn) const;
 
   private:

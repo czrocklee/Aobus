@@ -108,7 +108,7 @@ TEST_CASE("PcmRingBuffer - Concurrency", "[audio][unit][ring_buffer]")
   std::atomic<bool> done{false};
 
   std::thread producer(
-    [&]()
+    [&]
     {
       for (int i = 0; i < iterations; ++i)
       {
@@ -122,7 +122,7 @@ TEST_CASE("PcmRingBuffer - Concurrency", "[audio][unit][ring_buffer]")
     });
 
   std::thread consumer(
-    [&]()
+    [&]
     {
       int count = 0;
       while (!done || buffer.size() > 0)

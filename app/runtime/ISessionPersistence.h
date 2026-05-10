@@ -18,7 +18,7 @@ namespace ao::app
     std::string lastOutputDeviceId;
 
     std::vector<TrackListViewConfig> openViews;
-    std::optional<std::size_t> activeViewIndex;
+    std::optional<std::size_t> optActiveViewIndex;
   };
 
   class ISessionPersistence

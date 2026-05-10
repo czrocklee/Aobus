@@ -40,31 +40,31 @@ namespace ao::audio::backend
 
     ~Impl()
     {
-      if (_threadLoop)
+      if (threadLoop)
       {
-        ::pw_thread_loop_stop(_threadLoop.get());
+        ::pw_thread_loop_stop(threadLoop.get());
       }
 
-      _streamListener.reset();
-      _stream.reset();
-      _core.reset();
-      _context.reset();
-      _threadLoop.reset();
+      streamListener.reset();
+      stream.reset();
+      core.reset();
+      context.reset();
+      threadLoop.reset();
     }
 
     void destroyStream()
     {
-      if (_threadLoop)
+      if (threadLoop)
       {
-        ::pw_thread_loop_lock(_threadLoop.get());
+        ::pw_thread_loop_lock(threadLoop.get());
       }
 
-      _streamListener.reset();
-      _stream.reset();
+      streamListener.reset();
+      stream.reset();
 
-      if (_threadLoop)
+      if (threadLoop)
       {
-        ::pw_thread_loop_unlock(_threadLoop.get());
+        ::pw_thread_loop_unlock(threadLoop.get());
       }
     }
 
@@ -105,22 +105,22 @@ namespace ao::audio::backend
     }();
 
     // Members
-    ao::audio::IRenderTarget* _renderTarget = nullptr;
-    ao::audio::Format _format;
-    std::atomic<bool> _drainPending = false;
-    bool _strictFormatRequired = false;
-    bool _strictFormatRejected = false;
-    bool _routeAnchorReported = false;
+    ao::audio::IRenderTarget* renderTarget = nullptr;
+    ao::audio::Format format;
+    std::atomic<bool> drainPending = false;
+    bool strictFormatRequired = false;
+    bool strictFormatRejected = false;
+    bool routeAnchorReported = false;
 
-    PwThreadLoopPtr _threadLoop;
-    PwContextPtr _context;
-    PwCorePtr _core;
-    PwStreamPtr _stream;
-    SpaHookGuard _streamListener;
+    PwThreadLoopPtr threadLoop;
+    PwContextPtr context;
+    PwCorePtr core;
+    PwStreamPtr stream;
+    SpaHookGuard streamListener;
 
-    std::atomic<float> _volume{1.0F};
-    std::atomic<bool> _muted{false};
-    bool _volumeAvailable = true;
+    std::atomic<float> volume{1.0F};
+    std::atomic<bool> muted{false};
+    bool volumeAvailable = true;
   };
 
   void PipeWireBackend::Impl::onStreamProcess(void* data)
@@ -148,7 +148,7 @@ namespace ao::audio::backend
 
   void PipeWireBackend::Impl::handleStreamProcess() const
   {
-    auto* buffer = ::pw_stream_dequeue_buffer(_stream.get());
+    auto* buffer = ::pw_stream_dequeue_buffer(stream.get());
     if (buffer == nullptr)
     {
       return;
@@ -158,44 +158,44 @@ namespace ao::audio::backend
 
     if (data == nullptr)
     {
-      ::pw_stream_queue_buffer(_stream.get(), buffer);
+      ::pw_stream_queue_buffer(stream.get(), buffer);
       return;
     }
 
     auto const max_size = buffer->buffer->datas[0].maxsize;
     auto stride = buffer->buffer->datas[0].chunk->stride;
 
-    if (stride == 0 && _format.channels > 0 && _format.bitDepth > 0)
+    if (stride == 0 && format.channels > 0 && format.bitDepth > 0)
     {
-      stride = _format.channels * (_format.bitDepth / 8);
+      stride = format.channels * (format.bitDepth / 8);
     }
 
     if (stride == 0)
     {
-      ::pw_stream_queue_buffer(_stream.get(), buffer);
+      ::pw_stream_queue_buffer(stream.get(), buffer);
       return;
     }
 
-    auto const bytesRead = _renderTarget->readPcm({static_cast<std::byte*>(data), max_size});
+    auto const bytesRead = renderTarget->readPcm({static_cast<std::byte*>(data), max_size});
 
     if (bytesRead > 0)
     {
       buffer->buffer->datas[0].chunk->offset = 0;
       buffer->buffer->datas[0].chunk->size = bytesRead;
       buffer->buffer->datas[0].chunk->stride = stride;
-      ::pw_stream_queue_buffer(_stream.get(), buffer);
-      _renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(bytesRead / stride));
+      ::pw_stream_queue_buffer(stream.get(), buffer);
+      renderTarget->onPositionAdvanced(static_cast<std::uint32_t>(bytesRead / stride));
     }
 
     else
     {
       buffer->buffer->datas[0].chunk->offset = 0;
       buffer->buffer->datas[0].chunk->size = 0;
-      ::pw_stream_queue_buffer(_stream.get(), buffer);
+      ::pw_stream_queue_buffer(stream.get(), buffer);
 
-      if (_renderTarget->isSourceDrained())
+      if (renderTarget->isSourceDrained())
       {
-        ::pw_stream_flush(_stream.get(), true);
+        ::pw_stream_flush(stream.get(), true);
       }
     }
   }
@@ -221,11 +221,11 @@ namespace ao::audio::backend
   {
     if (auto negotiated = parseRawStreamFormat(param))
     {
-      _format = *negotiated;
+      format = *negotiated;
       AUDIO_LOG_INFO(
-        "Negotiated PipeWire format: {}Hz, {}b, {} channels", _format.sampleRate, _format.bitDepth, _format.channels);
+        "Negotiated PipeWire format: {}Hz, {}b, {} channels", format.sampleRate, format.bitDepth, format.channels);
 
-      _renderTarget->onFormatChanged(_format);
+      renderTarget->onFormatChanged(format);
     }
   }
 
@@ -238,9 +238,9 @@ namespace ao::audio::backend
 
       if (::spa_pod_get_float(&prop->value, &volFloat) == 0)
       {
-        if (std::abs(volFloat - _volume.exchange(volFloat)) > kVolumeEpsilon)
+        if (std::abs(volFloat - volume.exchange(volFloat)) > kVolumeEpsilon)
         {
-          _renderTarget->onPropertyChanged(ao::audio::PropertyId::Volume);
+          renderTarget->onPropertyChanged(ao::audio::PropertyId::Volume);
         }
       }
     }
@@ -251,9 +251,9 @@ namespace ao::audio::backend
 
       if (::spa_pod_get_bool(&prop->value, &muteBool) == 0)
       {
-        if (muteBool != _muted.exchange(muteBool))
+        if (muteBool != muted.exchange(muteBool))
         {
-          _renderTarget->onPropertyChanged(ao::audio::PropertyId::Muted);
+          renderTarget->onPropertyChanged(ao::audio::PropertyId::Muted);
         }
       }
     }
@@ -265,17 +265,17 @@ namespace ao::audio::backend
   {
     if (newState == PW_STREAM_STATE_ERROR)
     {
-      _renderTarget->onBackendError(errorMessage != nullptr ? errorMessage : "Unknown PipeWire error");
+      renderTarget->onBackendError(errorMessage != nullptr ? errorMessage : "Unknown PipeWire error");
     }
     else if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
     {
-      if (!_routeAnchorReported && _stream)
+      if (!routeAnchorReported && stream)
       {
-        auto id = ::pw_stream_get_node_id(_stream.get());
+        auto id = ::pw_stream_get_node_id(stream.get());
         if (id != PW_ID_ANY)
         {
-          _routeAnchorReported = true;
-          _renderTarget->onRouteReady(std::format("{}", id));
+          routeAnchorReported = true;
+          renderTarget->onRouteReady(std::format("{}", id));
         }
       }
     }
@@ -283,8 +283,8 @@ namespace ao::audio::backend
 
   void PipeWireBackend::Impl::handleStreamDrained()
   {
-    _drainPending = false;
-    _renderTarget->onDrainComplete();
+    drainPending = false;
+    renderTarget->onDrainComplete();
   }
 
   PipeWireBackend::PipeWireBackend(ao::audio::Device const& device, ao::audio::ProfileId const& profile)
@@ -292,18 +292,18 @@ namespace ao::audio::backend
     , _targetDeviceId{device.id}
     , _exclusiveMode{profile == ao::audio::kProfileExclusive}
   {
-    _impl->_threadLoop.reset(::pw_thread_loop_new("PipeWireBackend", nullptr));
+    _impl->threadLoop.reset(::pw_thread_loop_new("PipeWireBackend", nullptr));
 
-    if (_impl->_threadLoop)
+    if (_impl->threadLoop)
     {
-      _impl->_context.reset(::pw_context_new(::pw_thread_loop_get_loop(_impl->_threadLoop.get()), nullptr, 0));
+      _impl->context.reset(::pw_context_new(::pw_thread_loop_get_loop(_impl->threadLoop.get()), nullptr, 0));
 
-      if (_impl->_context)
+      if (_impl->context)
       {
-        ::pw_thread_loop_start(_impl->_threadLoop.get());
-        ::pw_thread_loop_lock(_impl->_threadLoop.get());
-        _impl->_core.reset(::pw_context_connect(_impl->_context.get(), nullptr, 0));
-        ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+        ::pw_thread_loop_start(_impl->threadLoop.get());
+        ::pw_thread_loop_lock(_impl->threadLoop.get());
+        _impl->core.reset(::pw_context_connect(_impl->context.get(), nullptr, 0));
+        ::pw_thread_loop_unlock(_impl->threadLoop.get());
       }
     }
   }
@@ -312,17 +312,17 @@ namespace ao::audio::backend
 
   ao::Result<> PipeWireBackend::open(ao::audio::Format const& format, ao::audio::IRenderTarget* target)
   {
-    _impl->_renderTarget = target;
-    _impl->_format = format;
-    _impl->_routeAnchorReported = false;
+    _impl->renderTarget = target;
+    _impl->format = format;
+    _impl->routeAnchorReported = false;
     bool useExclusive = _exclusiveMode && !_targetDeviceId.empty();
 
-    if (!_impl->_threadLoop)
+    if (!_impl->threadLoop)
     {
       return ao::makeError(ao::Error::Code::InitFailed, "PipeWire not initialized");
     }
 
-    ::pw_thread_loop_lock(_impl->_threadLoop.get());
+    ::pw_thread_loop_lock(_impl->threadLoop.get());
     auto* rawProps = ::pw_properties_new(PW_KEY_MEDIA_TYPE, // NOLINT(cppcoreguidelines-pro-type-vararg)
                                          "Audio",
                                          PW_KEY_MEDIA_CATEGORY,
@@ -349,15 +349,15 @@ namespace ao::audio::backend
       }
     }
 
-    _impl->_stream.reset(::pw_stream_new(_impl->_core.get(), "Aobus Playback", props.release()));
-    if (!_impl->_stream)
+    _impl->stream.reset(::pw_stream_new(_impl->core.get(), "Aobus Playback", props.release()));
+    if (!_impl->stream)
     {
-      ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+      ::pw_thread_loop_unlock(_impl->threadLoop.get());
       return ao::makeError(ao::Error::Code::InitFailed, "Failed to create stream");
     }
 
-    _impl->_streamListener.reset();
-    ::pw_stream_add_listener(_impl->_stream.get(), _impl->_streamListener.get(), &Impl::streamEvents, _impl.get());
+    _impl->streamListener.reset();
+    ::pw_stream_add_listener(_impl->stream.get(), _impl->streamListener.get(), &Impl::streamEvents, _impl.get());
 
     auto spaFmt = SPA_AUDIO_FORMAT_S16_LE;
 
@@ -407,40 +407,40 @@ namespace ao::audio::backend
       flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
     }
 
-    if (::pw_stream_connect(_impl->_stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params.data(), 1) < 0)
+    if (::pw_stream_connect(_impl->stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params.data(), 1) < 0)
     {
-      ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+      ::pw_thread_loop_unlock(_impl->threadLoop.get());
       return ao::makeError(ao::Error::Code::InitFailed, "Failed to connect stream");
     }
 
-    _impl->_volumeAvailable = !useExclusive; // Default to available in shared mode
+    _impl->volumeAvailable = !useExclusive; // Default to available in shared mode
 
-    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+    ::pw_thread_loop_unlock(_impl->threadLoop.get());
     return {};
   }
 
   void PipeWireBackend::start()
   {
-    if (!_impl->_stream)
+    if (!_impl->stream)
     {
       return;
     }
 
-    ::pw_thread_loop_lock(_impl->_threadLoop.get());
-    ::pw_stream_set_active(_impl->_stream.get(), true);
-    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+    ::pw_thread_loop_lock(_impl->threadLoop.get());
+    ::pw_stream_set_active(_impl->stream.get(), true);
+    ::pw_thread_loop_unlock(_impl->threadLoop.get());
   }
 
   void PipeWireBackend::pause()
   {
-    if (!_impl->_stream)
+    if (!_impl->stream)
     {
       return;
     }
 
-    ::pw_thread_loop_lock(_impl->_threadLoop.get());
-    ::pw_stream_set_active(_impl->_stream.get(), false);
-    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+    ::pw_thread_loop_lock(_impl->threadLoop.get());
+    ::pw_stream_set_active(_impl->stream.get(), false);
+    ::pw_thread_loop_unlock(_impl->threadLoop.get());
   }
 
   void PipeWireBackend::resume()
@@ -450,28 +450,28 @@ namespace ao::audio::backend
 
   void PipeWireBackend::flush()
   {
-    if (!_impl->_stream)
+    if (!_impl->stream)
     {
       return;
     }
 
-    _impl->_drainPending = false;
-    ::pw_thread_loop_lock(_impl->_threadLoop.get());
-    ::pw_stream_flush(_impl->_stream.get(), false);
-    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+    _impl->drainPending = false;
+    ::pw_thread_loop_lock(_impl->threadLoop.get());
+    ::pw_stream_flush(_impl->stream.get(), false);
+    ::pw_thread_loop_unlock(_impl->threadLoop.get());
   }
 
   void PipeWireBackend::stop()
   {
-    if (!_impl->_stream)
+    if (!_impl->stream)
     {
       return;
     }
 
-    _impl->_drainPending = false;
-    ::pw_thread_loop_lock(_impl->_threadLoop.get());
-    ::pw_stream_set_active(_impl->_stream.get(), false);
-    ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+    _impl->drainPending = false;
+    ::pw_thread_loop_lock(_impl->threadLoop.get());
+    ::pw_stream_set_active(_impl->stream.get(), false);
+    ::pw_thread_loop_unlock(_impl->threadLoop.get());
   }
 
   void PipeWireBackend::close()
@@ -488,9 +488,9 @@ namespace ao::audio::backend
 
     _exclusiveMode = exclusive;
 
-    if (_impl->_stream && !_targetDeviceId.empty())
+    if (_impl->stream && !_targetDeviceId.empty())
     {
-      if (auto const openResult = open(_impl->_format, _impl->_renderTarget); !openResult)
+      if (auto const openResult = open(_impl->format, _impl->renderTarget); !openResult)
       {
         AUDIO_LOG_ERROR("Failed to reopen stream after exclusive mode change: {}", openResult.error().message);
       }
@@ -518,9 +518,9 @@ namespace ao::audio::backend
     {
       auto const volume = std::get<float>(value);
       auto const clamped = std::clamp(volume, 0.0F, 1.0F);
-      _impl->_volume.store(clamped, std::memory_order_relaxed);
+      _impl->volume.store(clamped, std::memory_order_relaxed);
 
-      if (!_impl->_stream)
+      if (!_impl->stream)
       {
         return {};
       }
@@ -537,20 +537,20 @@ namespace ao::audio::backend
       ::spa_pod_builder_add(&builder, SPA_PROP_volume, SPA_POD_Float(clamped), 0);
       auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
 
-      ::pw_thread_loop_lock(_impl->_threadLoop.get());
+      ::pw_thread_loop_lock(_impl->threadLoop.get());
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-      ::pw_stream_set_control(_impl->_stream.get(), SPA_PROP_volume, 1, &vol);
-      ::pw_stream_update_params(_impl->_stream.get(), &param, 1);
-      ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+      ::pw_stream_set_control(_impl->stream.get(), SPA_PROP_volume, 1, &vol);
+      ::pw_stream_update_params(_impl->stream.get(), &param, 1);
+      ::pw_thread_loop_unlock(_impl->threadLoop.get());
       return {};
     }
 
     if (id == ao::audio::PropertyId::Muted)
     {
       auto const muted = std::get<bool>(value);
-      _impl->_muted.store(muted, std::memory_order_relaxed);
+      _impl->muted.store(muted, std::memory_order_relaxed);
 
-      if (!_impl->_stream)
+      if (!_impl->stream)
       {
         return {};
       }
@@ -565,9 +565,9 @@ namespace ao::audio::backend
       ::spa_pod_builder_add(&builder, SPA_PROP_mute, SPA_POD_Bool(muted), 0);
       auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
 
-      ::pw_thread_loop_lock(_impl->_threadLoop.get());
-      ::pw_stream_update_params(_impl->_stream.get(), &param, 1);
-      ::pw_thread_loop_unlock(_impl->_threadLoop.get());
+      ::pw_thread_loop_lock(_impl->threadLoop.get());
+      ::pw_stream_update_params(_impl->stream.get(), &param, 1);
+      ::pw_thread_loop_unlock(_impl->threadLoop.get());
       return {};
     }
 
@@ -578,12 +578,12 @@ namespace ao::audio::backend
   {
     if (id == ao::audio::PropertyId::Volume)
     {
-      return _impl->_volume.load(std::memory_order_relaxed);
+      return _impl->volume.load(std::memory_order_relaxed);
     }
 
     if (id == ao::audio::PropertyId::Muted)
     {
-      return _impl->_muted.load(std::memory_order_relaxed);
+      return _impl->muted.load(std::memory_order_relaxed);
     }
 
     return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
@@ -595,7 +595,7 @@ namespace ao::audio::backend
     {
       return {.canRead = true,
               .canWrite = true,
-              .isAvailable = _impl && _impl->_volumeAvailable,
+              .isAvailable = _impl && _impl->volumeAvailable,
               .emitsChangeNotifications = true};
     }
 
