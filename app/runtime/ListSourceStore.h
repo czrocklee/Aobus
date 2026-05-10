@@ -4,6 +4,7 @@
 #pragma once
 
 #include "AllTracksSource.h"
+#include "CorePrimitives.h"
 #include "SmartListEvaluator.h"
 #include "TrackSource.h"
 
@@ -15,10 +16,12 @@
 
 namespace ao::app
 {
+  class EventBus;
+
   class ListSourceStore final
   {
   public:
-    explicit ListSourceStore(ao::library::MusicLibrary& library);
+    ListSourceStore(ao::library::MusicLibrary& library, ao::app::EventBus& events);
     ~ListSourceStore();
 
     ListSourceStore(ListSourceStore const&) = delete;
@@ -39,6 +42,9 @@ namespace ao::app
     ao::library::MusicLibrary& _library;
     AllTracksSource _allTracks;
     SmartListEvaluator _smartEvaluator;
+
+    ao::app::EventBus& _events;
+    ao::app::Subscription _listsMutatedSubscription;
 
     std::unordered_map<ao::ListId, std::unique_ptr<TrackSource>> _sources;
   };

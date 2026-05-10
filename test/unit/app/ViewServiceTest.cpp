@@ -22,9 +22,10 @@ namespace ao::app::test
     struct TestEnv final
     {
       TestMusicLibrary library;
+      EventBus events;
       std::unique_ptr<ao::app::ListSourceStore> store;
 
-      TestEnv() { store = std::make_unique<ao::app::ListSourceStore>(library.library()); }
+      TestEnv() { store = std::make_unique<ao::app::ListSourceStore>(library.library(), events); }
 
       auto makeService(EventBus& events) -> ViewService { return ViewService{library.library(), *store, events}; }
     };

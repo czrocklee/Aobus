@@ -39,7 +39,7 @@ namespace ao::app
          std::shared_ptr<ISessionPersistence> persistence)
       : executor{std::move(exec)}
       , musicLibrary{std::move(libraryRoot)}
-      , sources{musicLibrary}
+      , sources{musicLibrary, eventBus}
       , viewService{musicLibrary, sources, eventBus}
       , playbackService{eventBus, *this->executor, viewService, musicLibrary}
       , mutationService{eventBus, *this->executor, musicLibrary}

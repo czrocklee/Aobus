@@ -20,6 +20,7 @@ namespace ao::library
 
 namespace ao::app
 {
+  class AppSession;
   class AllTracksSource;
   class SmartListSource;
   class SmartListEvaluator;
@@ -35,9 +36,7 @@ namespace ao::gtk
   {
   public:
     SmartListDialog(Gtk::Window& parent,
-                    ao::library::MusicLibrary& musicLibrary,
-                    ao::app::TrackSource& allTrackIds,
-                    ao::app::TrackSource& parentMembershipList,
+                    ao::app::AppSession& session,
                     ao::ListId parentListId,
                     TrackRowDataProvider const& provider);
     virtual ~SmartListDialog() override;
@@ -78,9 +77,7 @@ namespace ao::gtk
     sigc::connection _exprTimeoutConnection;
 
     // Preview infrastructure
-    ao::library::MusicLibrary& _musicLibrary;
-    ao::app::TrackSource& _allTrackIds;
-    ao::app::TrackSource& _parentMembershipList;
+    ao::app::AppSession& _session;
     ao::ListId _parentListId;
     TrackRowDataProvider const& _rowDataProvider;
     std::unique_ptr<ao::app::SmartListSource> _previewFilteredList;

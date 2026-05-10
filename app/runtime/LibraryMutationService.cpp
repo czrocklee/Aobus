@@ -6,9 +6,12 @@
 #include "EventTypes.h"
 
 #include <ao/library/ImportWorker.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/model/ListDraft.h>
 #include <ao/utility/ThreadUtils.h>
 
 #include <algorithm>
@@ -204,5 +207,72 @@ namespace ao::app
       });
 
     return ImportFilesReply{.importedTrackCount = 0};
+  }
+
+  ao::ListId LibraryMutationService::createList(ao::model::ListDraft const& draft)
+  {
+    auto txn = _impl->library.writeTransaction();
+
+    auto builder =
+      ao::library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
+
+    if (draft.kind == ao::model::ListKind::Smart)
+    {
+      builder.filter(draft.expression);
+    }
+    else
+    {
+      for (auto id : draft.trackIds)
+      {
+        builder.tracks().add(id);
+      }
+    }
+
+    auto payload = builder.serialize();
+
+    auto [listId, view] = _impl->library.lists().writer(txn).create(payload);
+
+    txn.commit();
+
+    _impl->events.publish(ListsMutated{.upserted = {listId}, .deleted = {}});
+
+    return listId;
+  }
+
+  void LibraryMutationService::updateList(ao::model::ListDraft const& draft)
+  {
+    auto txn = _impl->library.writeTransaction();
+
+    auto builder =
+      ao::library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
+
+    if (draft.kind == ao::model::ListKind::Smart)
+    {
+      builder.filter(draft.expression);
+    }
+    else
+    {
+      for (auto id : draft.trackIds)
+      {
+        builder.tracks().add(id);
+      }
+    }
+
+    auto payload = builder.serialize();
+
+    _impl->library.lists().writer(txn).update(draft.listId, payload);
+
+    txn.commit();
+
+    _impl->events.publish(ListsMutated{.upserted = {draft.listId}, .deleted = {}});
+  }
+
+  void LibraryMutationService::deleteList(ao::ListId listId)
+  {
+    auto txn = _impl->library.writeTransaction();
+    _impl->library.lists().writer(txn).del(listId);
+    txn.commit();
+
+    _impl->events.publish(ListsMutated{.upserted = {}, .deleted = {listId}});
   }
 }

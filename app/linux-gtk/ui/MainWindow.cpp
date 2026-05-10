@@ -98,25 +98,6 @@ namespace ao::gtk
       _session,
       ListSidebarController::Callbacks{
         .onListSelected = [this](ao::ListId listId) { _session.workspace().navigateTo(listId); },
-        .onListsChanged =
-          [this]()
-        {
-          if (_rowDataProvider)
-          {
-            auto txn = _session.musicLibrary().readTransaction();
-            rebuildListPages(txn);
-          }
-        },
-        .onListCreatedAndSelected =
-          [this](ao::ListId listId)
-        {
-          if (_rowDataProvider)
-          {
-            auto txn = _session.musicLibrary().readTransaction();
-            rebuildListPages(txn);
-            _session.workspace().navigateTo(listId);
-          }
-        },
         .getListMembership = [](ao::ListId /*listId*/) -> ao::app::TrackSource*
         {
           // This callback is slightly problematic in the new architecture
@@ -214,6 +195,7 @@ namespace ao::gtk
     _tracksMutatedSubscription.reset();
     _importProgressSubscription.reset();
     _importCompletedSubscription.reset();
+    _listsMutatedSubscription.reset();
 
     saveSession();
   }
@@ -275,6 +257,17 @@ namespace ao::gtk
           _rowDataProvider->invalidate(trackId);
         }
         _session.sources().allTracks().notifyUpdated(event.trackIds);
+      });
+
+    // Subscribe to list mutations
+    _listsMutatedSubscription = _session.events().subscribe<ao::app::ListsMutated>(
+      [this](ao::app::ListsMutated const& /*event*/)
+      {
+        if (_rowDataProvider)
+        {
+          auto txn = _session.musicLibrary().readTransaction();
+          rebuildListPages(txn);
+        }
       });
 
     // Initial state refresh (no longer needed with direct services, but keeping for parity if it triggered events)

@@ -115,6 +115,7 @@ namespace ao::gtk
     ao::app::Subscription _tracksMutatedSubscription;
     ao::app::Subscription _importProgressSubscription;
     ao::app::Subscription _importCompletedSubscription;
+    ao::app::Subscription _listsMutatedSubscription;
 
     // Status bar
     std::unique_ptr<StatusBar> _statusBar;
