@@ -21,7 +21,13 @@ namespace ao::audio::backend
       monitor->start();
     }
 
-    ~Impl() { monitor.reset(); }
+    ~Impl()
+    {
+      if (monitor)
+      {
+        monitor->stop();
+      }
+    }
 
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;

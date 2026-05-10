@@ -23,6 +23,10 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
   std::atomic<int> errorCount{0};
   auto onError = [&](ao::Error const&) { errorCount.fetch_add(1); };
 
+  // NOTE: StreamingSource contains a ~2MB inline ring buffer. Under ASAN, the
+  // stack frame for this test function would be ~14MB which exceeds the 8MB
+  // default stack. All source instances are heap-allocated for this reason.
+
   SECTION("Initialize matrix")
   {
     SECTION("Preroll success starts thread")
@@ -31,9 +35,9 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
       std::vector<std::byte> block(400, std::byte{0}); // 200ms
       decoder->setReadScript({{block, false}, {{}, true}});
 
-      StreamingSource source(std::move(decoder), info, onError, 100, 500);
-      REQUIRE(source.initialize());
-      REQUIRE(source.bufferedMs() >= 100);
+      auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
+      REQUIRE(source->initialize());
+      REQUIRE(source->bufferedMs() >= 100);
       REQUIRE(errorCount.load() == 0);
     }
 
@@ -43,9 +47,9 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
       std::vector<std::byte> block(20, std::byte{0}); // 10ms
       decoder->setReadScript({{block, true}});        // EOF immediately
 
-      StreamingSource source(std::move(decoder), info, onError, 100, 500);
-      REQUIRE(source.initialize());
-      REQUIRE(source.isDrained());
+      auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
+      REQUIRE(source->initialize());
+      REQUIRE(source->isDrained());
       REQUIRE(errorCount.load() == 0);
     }
 
@@ -54,8 +58,8 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
       auto decoder = std::make_unique<ScriptedDecoderSession>(info);
       decoder->setReadScript({{{}, false, std::unexpected(ao::Error{.message = "fail"})}});
 
-      StreamingSource source(std::move(decoder), info, onError, 100, 500);
-      auto result = source.initialize();
+      auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
+      auto result = source->initialize();
       REQUIRE_FALSE(result);
       REQUIRE(errorCount.load() == 1);
     }
@@ -67,13 +71,13 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
     std::vector<std::byte> block(400, std::byte{0});
     decoder->setReadScript({{block, false}, {block, false}, {{}, true}});
 
-    StreamingSource source(std::move(decoder), info, onError, 100, 500);
-    REQUIRE(source.initialize());
+    auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
+    REQUIRE(source->initialize());
 
     SECTION("Successful seek clears and re-prerolls")
     {
-      REQUIRE(source.seek(50));
-      REQUIRE(source.bufferedMs() >= 100);
+      REQUIRE(source->seek(50));
+      REQUIRE(source->bufferedMs() >= 100);
       REQUIRE(errorCount.load() == 0);
     }
 
@@ -83,10 +87,10 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
       decoder2->setSeekResult(std::unexpected(ao::Error{.message = "seek fail"}));
       decoder2->setReadScript({{block, false}});
 
-      StreamingSource source2(std::move(decoder2), info, onError, 100, 500);
-      REQUIRE(source2.initialize());
+      auto source2 = std::make_unique<StreamingSource>(std::move(decoder2), info, onError, 100, 500);
+      REQUIRE(source2->initialize());
 
-      auto result = source2.seek(50);
+      auto result = source2->seek(50);
       REQUIRE_FALSE(result);
       REQUIRE(errorCount.load() >= 1);
     }
@@ -101,8 +105,8 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
       {{}, false, std::unexpected(ao::Error{.message = "async fail"})} // second block fails
     });
 
-    StreamingSource source(std::move(decoder), info, onError, 50, 500);
-    REQUIRE(source.initialize());
+    auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 50, 500);
+    REQUIRE(source->initialize());
 
     // Wait for async failure
     int retries = 0;
@@ -121,22 +125,22 @@ TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
     std::vector<std::byte> block(20, std::byte{0}); // 10ms
     decoder->setReadScript({{block, false}, {{}, true}});
 
-    StreamingSource source(std::move(decoder), info, onError, 5, 500);
-    REQUIRE(source.initialize());
+    auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 5, 500);
+    REQUIRE(source->initialize());
 
     // Consume data
     std::vector<std::byte> out(20);
-    REQUIRE(source.read(out) == 20);
+    REQUIRE(source->read(out) == 20);
 
     // Wait for EOF to be processed if not already
     int retries = 0;
-    while (!source.isDrained() && retries < 100)
+    while (!source->isDrained() && retries < 100)
     {
       std::this_thread::sleep_for(10ms);
       retries++;
     }
 
-    REQUIRE(source.isDrained());
-    REQUIRE(source.bufferedMs() == 0);
+    REQUIRE(source->isDrained());
+    REQUIRE(source->bufferedMs() == 0);
   }
 }

@@ -20,7 +20,8 @@ namespace ao::query
 
         if (!binary->optOperation)
         {
-          std::swap(root, binary->operand);
+          auto extracted = std::move(binary->operand);
+          root = std::move(extracted);
           return;
         }
 

@@ -94,7 +94,7 @@ namespace ao::audio::test
   {
   public:
     SpyBackend()
-      : _mock{_base}
+      : _mock{}
     {
       // Provide default 'fake' behavior for all common methods to avoid UnexpectedMethodCallException
       fakeit::Fake(Method(_mock, open));

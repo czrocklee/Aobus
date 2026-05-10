@@ -27,6 +27,7 @@ extern "C"
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <format>
 #include <mutex>
@@ -136,6 +137,13 @@ namespace ao::audio::backend
 
     ~Impl()
     {
+      stopping.store(true, std::memory_order_release);
+      {
+        auto const lock = std::lock_guard<std::mutex>{mutex};
+        deviceSubscriptions.clear();
+        graphSubscriptions.clear();
+      }
+
       if (threadLoop)
       {
         ::pw_thread_loop_stop(threadLoop.get());
@@ -149,6 +157,7 @@ namespace ao::audio::backend
       registry.reset();
       coreListener.reset();
       nodeFormatMap.clear();
+      sinkCapabilitiesMap.clear();
       sinkPropsMap.clear();
       core.reset();
       context.reset();
@@ -179,6 +188,7 @@ namespace ao::audio::backend
     std::unordered_map<std::uint32_t, SinkProps> sinkPropsMap;
     detail::SpaSourcePtr refreshEvent;
 
+    std::atomic<bool> stopping{false};
     std::uint64_t nextSubscriptionId = 1;
     std::vector<GraphSubscription> graphSubscriptions;
     std::vector<DeviceSubscription> deviceSubscriptions;
@@ -708,15 +718,18 @@ namespace ao::audio::backend
       }
     }
 
-    // Phase 3: invoke all callbacks outside ALL locks
-    for (auto& [cb, graph] : pendingGraphCbs)
+    // Phase 3: invoke all callbacks outside ALL locks (unless stopping)
+    if (!stopping.load(std::memory_order_acquire))
     {
-      cb(graph);
-    }
+      for (auto& [cb, graph] : pendingGraphCbs)
+      {
+        cb(graph);
+      }
 
-    for (auto& cb : pendingDeviceCbs)
-    {
-      cb(deviceSnapshot);
+      for (auto& cb : pendingDeviceCbs)
+      {
+        cb(deviceSnapshot);
+      }
     }
 
     ::pw_thread_loop_unlock(threadLoop.get());
