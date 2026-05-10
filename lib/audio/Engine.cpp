@@ -22,7 +22,6 @@ namespace ao::audio
 
   struct Engine::Impl final : public IRenderTarget
   {
-    std::unique_ptr<IBackend> backend;
     Device currentDevice;
 
     std::atomic<std::shared_ptr<ISource>> source;
@@ -40,9 +39,13 @@ namespace ao::audio
     detail::RouteTracker routeTracker;
     DecoderFactoryFn decoderFactory;
 
+    // Must be declared last so the PipeWire thread loop is stopped
+    // before the callbacks and state it accesses are destroyed.
+    std::unique_ptr<IBackend> backend;
+
     // ── Construction ──────────────────────────────────────────────
     Impl(std::unique_ptr<IBackend> backend, Device const& device, DecoderFactoryFn decoderFactory)
-      : backend{std::move(backend)}, currentDevice{device}, decoderFactory{std::move(decoderFactory)}
+      : currentDevice{device}, decoderFactory{std::move(decoderFactory)}, backend{std::move(backend)}
     {
       syncBackendIdentity();
     }
