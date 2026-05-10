@@ -58,8 +58,6 @@ namespace ao::gtk
     void initializeSession();
 
   private:
-    void updateCoverArt(std::vector<ao::TrackId> const& selectedIds);
-
     void showStatusMessage(std::string const& message);
 
     void setupMenu();
@@ -68,7 +66,6 @@ namespace ao::gtk
     // Page management helpers
     void rebuildListPages(ao::lmdb::ReadTransaction& txn);
 
-    void onTrackSelectionChanged();
     void updateImportProgress(double fraction, std::string const& info);
 
     void saveSession();

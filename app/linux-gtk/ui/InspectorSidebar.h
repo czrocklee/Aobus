@@ -5,7 +5,6 @@
 
 #include "CoverArtCache.h"
 #include "TagEditor.h"
-#include "TrackRow.h"
 #include <ao/Type.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/ProjectionTypes.h>
@@ -22,8 +21,6 @@ namespace ao::app
 
 namespace ao::gtk
 {
-  class TrackRowDataProvider;
-
   /**
    * @brief InspectorSidebar displays details and allows editing of track metadata.
    * It slides in from the right and reacts to the current selection.
@@ -38,27 +35,10 @@ namespace ao::gtk
 
     TagEditRequestedSignal& signalTagEditRequested() { return _tagEditRequested; }
 
-    /**
-     * @brief Update the sidebar with the current selection.
-     * @param selectedRows The list of currently selected track rows.
-     */
-    void updateSelection(TrackRowDataProvider* dataProvider, std::vector<Glib::RefPtr<TrackRow>> const& selectedRows);
-
     /// Bind to a runtime detail projection for cover art + audio property auto-updates.
     void bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection);
 
   private:
-    // Multi-select Aggregation
-    struct AggregatedMetadata final
-    {
-      std::string title;
-      std::string artist;
-      std::string album;
-      bool sameTitle = true;
-      bool sameArtist = true;
-      bool sameAlbum = true;
-    };
-
     void setupUi();
     void buildHeroSection();
     void buildMetadataSection();
@@ -66,8 +46,6 @@ namespace ao::gtk
     void buildAudioSection();
 
     void updateEmptyState();
-    void updateSingleSelection(TrackRowDataProvider* dataProvider, Glib::RefPtr<TrackRow> const& row);
-    void updateMultiSelection(TrackRowDataProvider* dataProvider, std::vector<Glib::RefPtr<TrackRow>> const& rows);
 
     void onTitleEdited();
     void onArtistEdited();
@@ -78,8 +56,7 @@ namespace ao::gtk
     ao::app::AppSession& _session;
     CoverArtCache& _coverArtCache;
 
-    TrackRowDataProvider* _dataProvider = nullptr;
-    std::vector<Glib::RefPtr<TrackRow>> _currentSelection;
+    std::vector<ao::TrackId> _currentTrackIds;
     std::shared_ptr<ao::app::ITrackDetailProjection> _detailProjection;
     ao::app::Subscription _detailSub;
 

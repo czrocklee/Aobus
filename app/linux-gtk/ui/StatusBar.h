@@ -86,6 +86,8 @@ namespace ao::gtk
     ao::app::Subscription _outputChangedSub;
     ao::app::Subscription _qualityChangedSub;
     ao::app::Subscription _notificationPostedSub;
+    ao::app::Subscription _selectionChangedSub;
+    ao::app::Subscription _importCompletedSub;
 
     LastPlaybackState _lastPlaybackState;
     std::string _lastTooltipText;

@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
 #include <ao/Type.h>
 #include <runtime/CorePrimitives.h>
+#include <runtime/ProjectionTypes.h>
 
 #include <giomm/memoryinputstream.h>
 #include <gtkmm.h>
 
 #include <cstdint>
+#include <memory>
 #include <span>
 
 namespace ao::app
@@ -31,11 +33,15 @@ namespace ao::gtk
     void setCoverPixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);
     void clearCover();
 
+    /// Bind to a runtime detail projection for reactive cover art updates.
+    void bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection);
+
   private:
-    Glib::RefPtr<Gdk::Pixbuf> resolveCover(std::vector<ao::TrackId> const& ids) const;
+    void onDetailSnapshot(ao::app::TrackDetailSnapshot const& snap);
 
     ao::app::AppSession& _session;
     CoverArtCache& _cache;
-    ao::app::Subscription _selSub;
+    std::shared_ptr<ao::app::ITrackDetailProjection> _detailProjection;
+    ao::app::Subscription _detailSub;
   };
 } // namespace ao::gtk

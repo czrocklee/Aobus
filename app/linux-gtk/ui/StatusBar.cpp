@@ -9,6 +9,7 @@
 #include <runtime/AppSession.h>
 #include <runtime/EventBus.h>
 #include <runtime/EventTypes.h>
+#include <runtime/ListSourceStore.h>
 #include <runtime/NotificationService.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
@@ -206,6 +207,18 @@ namespace ao::gtk
 
     // Populate initial state from snapshot (one-shot, no subscription)
     applyInitialState();
+
+    // Self-wire: selection changes update the selection label
+    _selectionChangedSub = _session.events().subscribe<ao::app::ViewSelectionChanged>(
+      [this](ao::app::ViewSelectionChanged const& ev) { setSelectionInfo(ev.selection.size()); });
+
+    // Self-wire: import completed reloads track count
+    _importCompletedSub = _session.events().subscribe<ao::app::LibraryImportCompleted>(
+      [this](ao::app::LibraryImportCompleted const&)
+      {
+        clearImportProgress();
+        setTrackCount(_session.sources().allTracks().size());
+      });
 
     // Playback details (Left)
     _playbackDetailsBox.set_spacing(Layout::kSpacingLarge);

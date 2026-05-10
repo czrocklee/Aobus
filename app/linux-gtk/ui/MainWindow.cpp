@@ -75,8 +75,9 @@ namespace ao::gtk
     // Initialize cover art cache (LRU 100 entries)
     _coverArtCache = std::make_unique<CoverArtCache>(100);
 
-    // Initialize cover art widget (self-wires to ViewSelectionChanged)
+    // Initialize cover art widget and bind to focused-view detail projection
     _coverArtWidget = std::make_unique<CoverArtWidget>(_session, *_coverArtCache);
+    _coverArtWidget->bindToDetailProjection(_session.views().detailProjection(ao::app::FocusedViewTarget{}));
 
     // Initialize dispatcher
     _dispatcher = std::make_shared<GtkMainThreadDispatcher>();
@@ -107,23 +108,16 @@ namespace ao::gtk
         }});
 
     // Initialize track page graph
-    _trackPageGraph =
-      std::make_unique<TrackPageGraph>(_stack,
-                                       _trackColumnLayoutModel,
-                                       _session,
-                                       _playbackController.get(),
-                                       *_tagEditController,
-                                       *_listSidebarController,
-                                       TrackPageGraph::Callbacks{.onSelectionChanged =
-                                                                   [this](std::vector<ao::TrackId> const& ids)
-                                                                 {
-                                                                   updateCoverArt(ids);
-                                                                   onTrackSelectionChanged();
-                                                                 },
-                                                                 .onContextMenuRequested = {},
-                                                                 .onTagEditRequested = {},
-                                                                 .onTrackActivated = {},
-                                                                 .onCreateSmartListRequested = {}});
+    _trackPageGraph = std::make_unique<TrackPageGraph>(_stack,
+                                                       _trackColumnLayoutModel,
+                                                       _session,
+                                                       _playbackController.get(),
+                                                       *_tagEditController,
+                                                       *_listSidebarController,
+                                                       TrackPageGraph::Callbacks{.onContextMenuRequested = {},
+                                                                                 .onTagEditRequested = {},
+                                                                                 .onTrackActivated = {},
+                                                                                 .onCreateSmartListRequested = {}});
 
     // Initialize inspector sidebar
     _inspectorSidebar = std::make_unique<InspectorSidebar>(_session, *_coverArtCache);
@@ -231,17 +225,15 @@ namespace ao::gtk
     _importProgressSubscription = _session.events().subscribe<ao::app::ImportProgressUpdated>(
       [this](ao::app::ImportProgressUpdated const& event) { updateImportProgress(event.fraction, event.message); });
 
-    // Import completed — reload data
+    // Import completed — reload data provider (StatusBar handles its own count/progress)
     _importCompletedSubscription = _session.events().subscribe<ao::app::LibraryImportCompleted>(
       [this](ao::app::LibraryImportCompleted const& /*event*/)
       {
-        if (_rowDataProvider && _statusBar)
+        if (_rowDataProvider)
         {
           _rowDataProvider->loadAll();
           _session.reloadAllTracks();
-          _statusBar->setTrackCount(_session.sources().allTracks().size());
         }
-        _statusBar->clearImportProgress();
       });
 
     // Subscribe to track mutations — invalidate cached row data + notify all views
@@ -536,70 +528,6 @@ namespace ao::gtk
   void MainWindow::showStatusMessage(std::string const& message)
   {
     _session.notifications().post(ao::app::NotificationSeverity::Info, message);
-  }
-
-  void MainWindow::updateCoverArt(std::vector<ao::TrackId> const& selectedIds)
-  {
-    if (!_rowDataProvider || selectedIds.empty())
-    {
-      _coverArtWidget->clearCover();
-      return;
-    }
-
-    auto trackId = selectedIds.front();
-
-    auto coverArtId = _rowDataProvider->getCoverArtId(trackId);
-
-    if (!coverArtId)
-    {
-      _coverArtWidget->clearCover();
-      return;
-    }
-
-    ao::lmdb::ReadTransaction txn(_session.musicLibrary().readTransaction());
-    auto resourceReader = _session.musicLibrary().resources().reader(txn);
-    auto optBytes = resourceReader.get(*coverArtId);
-
-    if (optBytes)
-    {
-      auto artBytes = std::vector<std::byte>{optBytes->begin(), optBytes->end()};
-      _coverArtWidget->setCoverFromBytes(artBytes);
-    }
-    else
-    {
-      _coverArtWidget->clearCover();
-    }
-  }
-
-  void MainWindow::onTrackSelectionChanged()
-  {
-    auto const layout = _session.workspace().layoutState();
-    if (layout.activeViewId == ao::app::ViewId{})
-    {
-      if (_statusBar)
-      {
-        _statusBar->setSelectionInfo(0);
-      }
-      return;
-    }
-
-    auto const& state = _session.views().trackListState(layout.activeViewId);
-    auto const count = state.selection.size();
-
-    // Duration calculation still needs some access to the rows or projection.
-    // For now, let's just use the count.
-    if (_statusBar)
-    {
-      _statusBar->setSelectionInfo(count);
-    }
-
-    if (_inspectorSidebar)
-    {
-      if (auto* ctx = _trackPageGraph->find(layout.activeViewId))
-      {
-        _inspectorSidebar->updateSelection(_rowDataProvider.get(), ctx->page->getSelectedRows());
-      }
-    }
   }
 
   void MainWindow::updateImportProgress(double fraction, std::string const& info)

@@ -3,7 +3,6 @@
 
 #include "InspectorSidebar.h"
 #include "TrackPresentation.h"
-#include "TrackRowDataProvider.h"
 #include <ao/library/ResourceStore.h>
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
@@ -127,20 +126,12 @@ namespace ao::gtk
     _tagEditor.signal_tags_changed().connect(
       [this](auto const& toAdd, auto const& toRemove)
       {
-        auto ids = _currentSelection | std::views::transform([](auto const& row) { return row->getTrackId(); }) |
-                   std::ranges::to<std::vector>();
+        auto ids = _currentTrackIds;
 
         auto const result = _session.mutation().editTags(ids, toAdd, toRemove);
 
         if (result)
         {
-          if (_dataProvider)
-          {
-            for (auto const trackId : ids)
-            {
-              _dataProvider->invalidate(trackId);
-            }
-          }
           _session.sources().allTracks().notifyUpdated(ids);
         }
       });
@@ -221,28 +212,90 @@ namespace ao::gtk
     createTechnicalRow(_audioBox, "Duration", _durationLabel);
   }
 
-  void InspectorSidebar::updateSelection(TrackRowDataProvider* dataProvider,
-                                         std::vector<Glib::RefPtr<TrackRow>> const& rows)
+  void InspectorSidebar::onTitleEdited()
   {
-    _dataProvider = dataProvider;
-    _currentSelection = rows;
-
-    if (rows.empty())
+    if (_titleLabel.get_editing() || _currentTrackIds.empty())
     {
-      updateEmptyState();
       return;
     }
 
-    if (rows.size() == 1)
+    auto const newValue = _titleLabel.get_text().raw();
+
+    if (newValue == "<Multiple Values>")
     {
-      updateSingleSelection(dataProvider, rows[0]);
+      return;
     }
-    else
+
+    auto const result =
+      _session.mutation().updateMetadata(_currentTrackIds, ao::app::MetadataPatch{.optTitle = newValue});
+
+    if (!result)
     {
-      updateMultiSelection(dataProvider, rows);
+      APP_LOG_ERROR("Failed to update titles: {}", result.error().message);
+
+      if (_detailProjection)
+      {
+        auto const snap = _detailProjection->snapshot();
+        _titleLabel.set_text(snap.title.mixed ? "<Multiple Values>" : snap.title.optValue.value_or(""));
+      }
     }
   }
 
+  void InspectorSidebar::onArtistEdited()
+  {
+    if (_artistLabel.get_editing() || _currentTrackIds.empty())
+    {
+      return;
+    }
+
+    auto const newValue = _artistLabel.get_text().raw();
+
+    if (newValue == "<Multiple Values>")
+    {
+      return;
+    }
+
+    auto const result =
+      _session.mutation().updateMetadata(_currentTrackIds, ao::app::MetadataPatch{.optArtist = newValue});
+
+    if (!result)
+    {
+      APP_LOG_ERROR("Failed to update artists: {}", result.error().message);
+      if (_detailProjection)
+      {
+        auto const snap = _detailProjection->snapshot();
+        _artistLabel.set_text(snap.artist.mixed ? "<Multiple Values>" : snap.artist.optValue.value_or(""));
+      }
+    }
+  }
+
+  void InspectorSidebar::onAlbumEdited()
+  {
+    if (_albumLabel.get_editing() || _currentTrackIds.empty())
+    {
+      return;
+    }
+
+    auto const newValue = _albumLabel.get_text().raw();
+
+    if (newValue == "<Multiple Values>")
+    {
+      return;
+    }
+
+    auto const result =
+      _session.mutation().updateMetadata(_currentTrackIds, ao::app::MetadataPatch{.optAlbum = newValue});
+
+    if (!result)
+    {
+      APP_LOG_ERROR("Failed to update albums: {}", result.error().message);
+      if (_detailProjection)
+      {
+        auto const snap = _detailProjection->snapshot();
+        _albumLabel.set_text(snap.album.mixed ? "<Multiple Values>" : snap.album.optValue.value_or(""));
+      }
+    }
+  }
   void InspectorSidebar::updateEmptyState()
   {
     _heroBox.set_visible(false);
@@ -251,28 +304,39 @@ namespace ao::gtk
     _tagEditor.set_visible(false);
   }
 
-  void InspectorSidebar::updateSingleSelection(TrackRowDataProvider* /*dataProvider*/,
-                                               Glib::RefPtr<TrackRow> const& row)
+  void InspectorSidebar::bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection)
   {
+    _detailProjection = std::move(projection);
+    _detailSub =
+      _detailProjection->subscribe([this](ao::app::TrackDetailSnapshot const& snap) { onTrackDetailSnapshot(snap); });
+  }
+
+  void InspectorSidebar::onTrackDetailSnapshot(ao::app::TrackDetailSnapshot const& snap)
+  {
+    _currentTrackIds = snap.trackIds;
+
+    if (snap.selectionKind == ao::app::SelectionKind::None)
+    {
+      updateEmptyState();
+      return;
+    }
+
     _heroBox.set_visible(true);
     _metadataBox.set_visible(true);
 
-    _titleLabel.set_text(row->getTitle());
-    _artistLabel.set_text(row->getArtist());
-    _albumLabel.set_text(row->getAlbum());
+    _titleLabel.set_text(snap.title.mixed ? "<Multiple Values>" : snap.title.optValue.value_or(""));
+    _artistLabel.set_text(snap.artist.mixed ? "<Multiple Values>" : snap.artist.optValue.value_or(""));
+    _albumLabel.set_text(snap.album.mixed ? "<Multiple Values>" : snap.album.optValue.value_or(""));
 
-    auto const resourceId = row->getResourceId();
-    auto coverShown = false;
-
-    if (resourceId != 0)
+    // Cover art from projection
+    if (snap.singleCoverArtId != ao::ResourceId{0})
     {
-      auto pixbuf = _coverArtCache.get(resourceId);
-
+      auto pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
       if (!pixbuf)
       {
         auto txn = _session.musicLibrary().readTransaction();
         auto const reader = _session.musicLibrary().resources().reader(txn);
-        auto const data = reader.get(static_cast<std::uint32_t>(resourceId));
+        auto const data = reader.get(static_cast<std::uint32_t>(snap.singleCoverArtId.value()));
 
         if (data)
         {
@@ -285,7 +349,7 @@ namespace ao::gtk
 
             if (pixbuf)
             {
-              _coverArtCache.put(resourceId, pixbuf);
+              _coverArtCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.value()), pixbuf);
             }
           }
           catch (std::exception const& ex)
@@ -300,226 +364,21 @@ namespace ao::gtk
         _coverImage.set_pixbuf(pixbuf);
         _coverImage.set_visible(true);
         _noCoverLabel.set_visible(false);
-        coverShown = true;
       }
     }
-
-    if (!coverShown)
+    else
     {
       _coverImage.set_visible(false);
       _noCoverLabel.set_visible(true);
     }
 
-    // Audio properties
-    _formatLabel.set_text(formatCodecId(row->getCodecId()));
-    _sampleRateLabel.set_text(formatSampleRate(row->getSampleRate()));
-    _channelsLabel.set_text(std::format("{} Ch", row->getChannels()));
-    _durationLabel.set_text(row->getDurationStr());
-    _audioBox.set_visible(true);
-
-    // Tags
-    auto ids = std::vector<ao::TrackId>{row->getTrackId()};
-    _tagEditor.setup(_session.musicLibrary(), std::move(ids));
-    _tagEditor.set_visible(true);
-  }
-
-  void InspectorSidebar::updateMultiSelection(TrackRowDataProvider* /*dataProvider*/,
-                                              std::vector<Glib::RefPtr<TrackRow>> const& rows)
-  {
-    _heroBox.set_visible(true);
-    _metadataBox.set_visible(true);
-
-    if (rows.empty())
+    if (snap.selectionKind == ao::app::SelectionKind::Single)
     {
-      return;
+      _audioBox.set_visible(true);
     }
-
-    auto aggregated = AggregatedMetadata{
-      .title = rows[0]->getTitle().raw(), .artist = rows[0]->getArtist().raw(), .album = rows[0]->getAlbum().raw()};
-
-    for (std::size_t i = 1; i < rows.size(); ++i)
+    else
     {
-      if (aggregated.sameTitle && rows[i]->getTitle().raw() != aggregated.title)
-      {
-        aggregated.sameTitle = false;
-      }
-
-      if (aggregated.sameArtist && rows[i]->getArtist().raw() != aggregated.artist)
-      {
-        aggregated.sameArtist = false;
-      }
-
-      if (aggregated.sameAlbum && rows[i]->getAlbum().raw() != aggregated.album)
-      {
-        aggregated.sameAlbum = false;
-      }
-    }
-
-    _titleLabel.set_text(aggregated.sameTitle ? aggregated.title : "<Multiple Values>");
-    _artistLabel.set_text(aggregated.sameArtist ? aggregated.artist : "<Multiple Values>");
-    _albumLabel.set_text(aggregated.sameAlbum ? aggregated.album : "<Multiple Values>");
-
-    _coverImage.set_visible(false);
-    _noCoverLabel.set_visible(true);
-    _audioBox.set_visible(false);
-
-    auto ids =
-      rows | std::views::transform([](auto const& row) { return row->getTrackId(); }) | std::ranges::to<std::vector>();
-
-    _tagEditor.setup(_session.musicLibrary(), std::move(ids));
-    _tagEditor.set_visible(true);
-  }
-
-  void InspectorSidebar::onTitleEdited()
-  {
-    if (_titleLabel.get_editing() || _currentSelection.empty())
-    {
-      return;
-    }
-
-    auto const newValue = _titleLabel.get_text().raw();
-
-    if (newValue == "<Multiple Values>")
-    {
-      return;
-    }
-
-    auto ids = _currentSelection | std::views::transform([](auto const& row) { return row->getTrackId(); }) |
-               std::ranges::to<std::vector>();
-
-    auto rollbackData = std::vector<Glib::RefPtr<TrackRow>>{};
-    auto oldTitles = std::vector<std::string>{};
-    rollbackData.reserve(_currentSelection.size());
-    oldTitles.reserve(_currentSelection.size());
-
-    for (auto const& row : _currentSelection)
-    {
-      oldTitles.push_back(row->getTitle());
-      rollbackData.push_back(row);
-      row->setTitle(newValue);
-    }
-
-    auto const result = _session.mutation().updateMetadata(ids, ao::app::MetadataPatch{.optTitle = newValue});
-
-    if (!result)
-    {
-      APP_LOG_ERROR("Failed to update titles: {}", result.error().message);
-      for (std::size_t i = 0; i < rollbackData.size(); ++i)
-      {
-        rollbackData[i]->setTitle(oldTitles[i]);
-      }
-    }
-  }
-
-  void InspectorSidebar::onArtistEdited()
-  {
-    if (_artistLabel.get_editing() || _currentSelection.empty())
-    {
-      return;
-    }
-
-    auto const newValue = _artistLabel.get_text().raw();
-
-    if (newValue == "<Multiple Values>")
-    {
-      return;
-    }
-
-    auto ids = _currentSelection | std::views::transform([](auto const& row) { return row->getTrackId(); }) |
-               std::ranges::to<std::vector>();
-
-    auto rollbackRows = std::vector<Glib::RefPtr<TrackRow>>{};
-    auto oldValues = std::vector<std::string>{};
-    rollbackRows.reserve(_currentSelection.size());
-    oldValues.reserve(_currentSelection.size());
-
-    for (auto const& row : _currentSelection)
-    {
-      oldValues.push_back(row->getArtist());
-      rollbackRows.push_back(row);
-      row->setArtist(newValue);
-    }
-
-    auto const result = _session.mutation().updateMetadata(ids, ao::app::MetadataPatch{.optArtist = newValue});
-
-    if (!result)
-    {
-      APP_LOG_ERROR("Failed to update artists: {}", result.error().message);
-      for (std::size_t i = 0; i < rollbackRows.size(); ++i)
-      {
-        rollbackRows[i]->setArtist(oldValues[i]);
-      }
-    }
-  }
-
-  void InspectorSidebar::onAlbumEdited()
-  {
-    if (_albumLabel.get_editing() || _currentSelection.empty())
-    {
-      return;
-    }
-
-    auto const newValue = _albumLabel.get_text().raw();
-
-    if (newValue == "<Multiple Values>")
-    {
-      return;
-    }
-
-    auto ids = _currentSelection | std::views::transform([](auto const& row) { return row->getTrackId(); }) |
-               std::ranges::to<std::vector>();
-
-    auto rollbackRows = std::vector<Glib::RefPtr<TrackRow>>{};
-    auto oldValues = std::vector<std::string>{};
-    rollbackRows.reserve(_currentSelection.size());
-    oldValues.reserve(_currentSelection.size());
-
-    for (auto const& row : _currentSelection)
-    {
-      oldValues.push_back(row->getAlbum());
-      rollbackRows.push_back(row);
-      row->setAlbum(newValue);
-    }
-
-    auto const result = _session.mutation().updateMetadata(ids, ao::app::MetadataPatch{.optAlbum = newValue});
-
-    if (!result)
-    {
-      APP_LOG_ERROR("Failed to update albums: {}", result.error().message);
-      for (std::size_t i = 0; i < rollbackRows.size(); ++i)
-      {
-        rollbackRows[i]->setAlbum(oldValues[i]);
-      }
-    }
-  }
-  void InspectorSidebar::bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection)
-  {
-    _detailProjection = std::move(projection);
-    _detailSub =
-      _detailProjection->subscribe([this](ao::app::TrackDetailSnapshot const& snap) { onTrackDetailSnapshot(snap); });
-  }
-
-  void InspectorSidebar::onTrackDetailSnapshot(ao::app::TrackDetailSnapshot const& snap)
-  {
-    if (snap.selectionKind == ao::app::SelectionKind::None)
-    {
-      updateEmptyState();
-      return;
-    }
-
-    _heroBox.set_visible(true);
-    _audioBox.set_visible(true);
-
-    // Cover art from projection
-    if (snap.singleCoverArtId != ao::ResourceId{0})
-    {
-      auto pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
-      if (pixbuf)
-      {
-        _coverImage.set_pixbuf(pixbuf);
-        _coverImage.set_visible(true);
-        _noCoverLabel.set_visible(false);
-      }
+      _audioBox.set_visible(false);
     }
 
     // Audio properties from projection
@@ -559,5 +418,9 @@ namespace ao::gtk
     {
       _durationLabel.set_text(snap.audio.durationMs.mixed ? "Mixed" : "Unknown");
     }
+
+    // Tags
+    _tagEditor.setup(_session.musicLibrary(), std::vector<ao::TrackId>{_currentTrackIds});
+    _tagEditor.set_visible(true);
   }
 } // namespace ao::gtk

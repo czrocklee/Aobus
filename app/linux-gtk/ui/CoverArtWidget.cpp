@@ -5,11 +5,8 @@
 #include "CoverArtCache.h"
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
+#include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
 
 namespace ao::gtk
 {
@@ -18,68 +15,65 @@ namespace ao::gtk
   {
     set_keep_aspect_ratio(true);
     set_alternative_text("No cover art");
-
-    _selSub = _session.events().subscribe<ao::app::ViewSelectionChanged>(
-      [this](ao::app::ViewSelectionChanged const& ev)
-      {
-        if (ev.selection.empty())
-        {
-          clearCover();
-          return;
-        }
-        auto const pixbuf = resolveCover(ev.selection);
-        pixbuf ? setCoverPixbuf(pixbuf) : clearCover();
-      });
   }
 
   CoverArtWidget::~CoverArtWidget() = default;
 
-  Glib::RefPtr<Gdk::Pixbuf> CoverArtWidget::resolveCover(std::vector<ao::TrackId> const& ids) const
+  void CoverArtWidget::bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection)
   {
-    for (auto const trackId : ids)
+    _detailProjection = std::move(projection);
+    _detailSub =
+      _detailProjection->subscribe([this](ao::app::TrackDetailSnapshot const& snap) { onDetailSnapshot(snap); });
+  }
+
+  void CoverArtWidget::onDetailSnapshot(ao::app::TrackDetailSnapshot const& snap)
+  {
+    if (snap.selectionKind == ao::app::SelectionKind::None || snap.trackIds.empty())
+    {
+      clearCover();
+      return;
+    }
+
+    if (snap.singleCoverArtId == ao::ResourceId{0})
+    {
+      clearCover();
+      return;
+    }
+
+    auto const rid = static_cast<std::uint64_t>(snap.singleCoverArtId.value());
+    auto cached = _cache.get(rid);
+
+    if (!cached)
     {
       auto txn = _session.musicLibrary().readTransaction();
-      auto reader = _session.musicLibrary().tracks().reader(txn);
-      auto const optView = reader.get(trackId, ao::library::TrackStore::Reader::LoadMode::Both);
-      if (!optView)
-      {
-        continue;
-      }
-
-      auto const coverId = optView->metadata().coverArtId();
-      if (coverId == 0)
-      {
-        continue;
-      }
-
-      auto const rid = static_cast<std::uint64_t>(coverId);
-      auto cached = _cache.get(rid);
-      if (cached)
-      {
-        return cached;
-      }
-
       auto resReader = _session.musicLibrary().resources().reader(txn);
       auto const optData = resReader.get(rid);
-      if (!optData)
-      {
-        continue;
-      }
 
-      try
+      if (optData)
       {
-        auto memStream = Gio::MemoryInputStream::create();
-        memStream->add_data(optData->data(), static_cast<gssize>(optData->size()), nullptr);
-        auto pixbuf = Gdk::Pixbuf::create_from_stream(memStream);
-        _cache.put(rid, pixbuf);
-        return pixbuf;
-      }
-      catch (Glib::Error const&)
-      {
-        continue;
+        try
+        {
+          auto const memStream = Gio::MemoryInputStream::create();
+          memStream->add_data(optData->data(), static_cast<gssize>(optData->size()), nullptr);
+          cached = Gdk::Pixbuf::create_from_stream(memStream);
+          _cache.put(rid, cached);
+        }
+        catch (Glib::Error const&)
+        {
+          clearCover();
+          return;
+        }
       }
     }
-    return {};
+
+    if (cached)
+    {
+      setCoverPixbuf(cached);
+    }
+    else
+    {
+      clearCover();
+    }
   }
 
   void CoverArtWidget::setCoverFromBytes(std::span<std::byte const> bytes)
@@ -91,7 +85,7 @@ namespace ao::gtk
     }
     try
     {
-      auto memStream = Gio::MemoryInputStream::create();
+      auto const memStream = Gio::MemoryInputStream::create();
       memStream->add_data(bytes.data(), static_cast<gssize>(bytes.size()), nullptr);
       set_pixbuf(Gdk::Pixbuf::create_from_stream(memStream));
     }

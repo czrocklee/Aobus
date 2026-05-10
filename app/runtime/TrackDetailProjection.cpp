@@ -6,6 +6,7 @@
 #include "EventTypes.h"
 #include "ViewService.h"
 
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
@@ -60,6 +61,7 @@ namespace ao::app
     std::vector<std::move_only_function<void(TrackDetailSnapshot const&)>> subscribers;
     Subscription focusSub;
     Subscription selectionSub;
+    Subscription tracksMutatedSub;
     ViewId trackedViewId{};
   };
 
@@ -112,6 +114,31 @@ namespace ao::app
         _impl->cachedSnapshot = buildSnapshot(ev.selection);
         publishSnapshot();
       });
+
+    _impl->tracksMutatedSub = _impl->events.subscribe<TracksMutated>(
+      [this](TracksMutated const& ev)
+      {
+        if (_impl->cachedSnapshot.trackIds.empty())
+        {
+          return;
+        }
+
+        bool intersect = false;
+        for (auto const id : ev.trackIds)
+        {
+          if (std::ranges::find(_impl->cachedSnapshot.trackIds, id) != _impl->cachedSnapshot.trackIds.end())
+          {
+            intersect = true;
+            break;
+          }
+        }
+
+        if (intersect)
+        {
+          _impl->cachedSnapshot = buildSnapshot(_impl->cachedSnapshot.trackIds);
+          publishSnapshot();
+        }
+      });
   }
 
   TrackDetailProjection::~TrackDetailProjection() = default;
@@ -125,7 +152,7 @@ namespace ao::app
   {
     handler(_impl->cachedSnapshot);
 
-    auto index = _impl->subscribers.size();
+    auto const index = _impl->subscribers.size();
     _impl->subscribers.push_back(std::move(handler));
 
     return Subscription{[this, index] { _impl->subscribers[index] = {}; }};
@@ -164,6 +191,10 @@ namespace ao::app
     auto bitDepths = std::vector<std::uint8_t>{};
     auto durations = std::vector<std::uint32_t>{};
 
+    auto titles = std::vector<std::string>{};
+    auto artists = std::vector<std::string>{};
+    auto albums = std::vector<std::string>{};
+
     for (auto const trackId : ids)
     {
       auto const optView = reader.get(trackId, ao::library::TrackStore::Reader::LoadMode::Both);
@@ -177,6 +208,16 @@ namespace ao::app
       channelss.push_back(optView->property().channels());
       bitDepths.push_back(optView->property().bitDepth());
       durations.push_back(optView->property().durationMs());
+
+      titles.push_back(std::string{optView->metadata().title()});
+
+      auto const artistId = optView->metadata().artistId();
+      artists.push_back(artistId != ao::DictionaryId{0} ? std::string{_impl->library.dictionary().get(artistId)}
+                                                        : std::string{});
+
+      auto const albumId = optView->metadata().albumId();
+      albums.push_back(albumId != ao::DictionaryId{0} ? std::string{_impl->library.dictionary().get(albumId)}
+                                                      : std::string{});
 
       if (ids.size() == 1)
       {
@@ -193,6 +234,10 @@ namespace ao::app
     snap.audio.channels = aggregate(channelss);
     snap.audio.bitDepth = aggregate(bitDepths);
     snap.audio.durationMs = aggregate(durations);
+
+    snap.title = aggregate(titles);
+    snap.artist = aggregate(artists);
+    snap.album = aggregate(albums);
 
     return snap;
   }
