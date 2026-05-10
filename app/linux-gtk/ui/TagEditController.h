@@ -29,7 +29,6 @@ namespace ao::gtk
   {
     ao::ListId listId;
     std::vector<ao::TrackId> selectedIds;
-    ao::app::TrackSource* membershipList = nullptr;
   };
 
   /**

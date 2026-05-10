@@ -33,7 +33,6 @@ namespace ao::gtk
   struct TrackPageContext final
   {
     ao::app::ViewId viewId{};
-    std::shared_ptr<ao::app::TrackSource> membershipList;
     std::unique_ptr<TrackListAdapter> adapter;
     std::unique_ptr<TrackViewPage> page;
     std::unique_ptr<ao::gtk::services::PlaylistExporter> exporter;
@@ -45,21 +44,12 @@ namespace ao::gtk
   class TrackPageGraph final
   {
   public:
-    struct Callbacks final
-    {
-      std::function<void(TrackViewPage&, double, double)> onContextMenuRequested;
-      std::function<void(TrackViewPage&, std::vector<ao::TrackId> const&, Gtk::Widget*)> onTagEditRequested;
-      std::function<void(TrackViewPage&, ao::TrackId)> onTrackActivated;
-      std::function<void(TrackViewPage&, std::string const&)> onCreateSmartListRequested;
-    };
-
     TrackPageGraph(Gtk::Stack& stack,
                    TrackColumnLayoutModel& layoutModel,
                    ao::app::AppSession& session,
                    PlaybackController* playbackController,
                    TagEditController& tagEditController,
-                   ListSidebarController& listSidebar,
-                   Callbacks callbacks);
+                   ListSidebarController& listSidebar);
     ~TrackPageGraph();
 
     void setPlaybackController(PlaybackController& c) { _playbackController = &c; }
@@ -89,7 +79,6 @@ namespace ao::gtk
     ao::app::Subscription _nowPlayingSub;
     ao::app::Subscription _focusSub;
     ao::app::Subscription _viewDestroyedSub;
-    Callbacks _callbacks;
 
     std::map<ao::app::ViewId, TrackPageContext> _trackPages;
     std::optional<ao::TrackId> _optPlayingTrackId;
