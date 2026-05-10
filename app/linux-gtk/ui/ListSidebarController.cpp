@@ -12,9 +12,9 @@
 #include <ao/library/ListView.h>
 #include <ao/utility/Log.h>
 #include <format>
-#include <limits>
 #include <runtime/AppSession.h>
 #include <runtime/EventBus.h>
+#include <runtime/LibraryMutationService.h>
 #include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
@@ -102,6 +102,13 @@ namespace ao::gtk
     _dataProvider = &dataProvider;
 
     buildListTree(txn);
+
+    if (_pendingSelectId)
+    {
+      selectSidebarList(_pendingSelectId.value());
+      _session.workspace().navigateTo(_pendingSelectId.value());
+      _pendingSelectId.reset();
+    }
   }
 
   void ListSidebarController::select(ao::ListId listId)
@@ -156,35 +163,7 @@ namespace ao::gtk
       return;
     }
 
-    // Determine the parent membership list
-    ao::app::TrackSource* parentMembershipList = nullptr;
-
-    if (parentListId == allTracksListId())
-    {
-      // Use All Tracks as source
-      parentMembershipList = &_session.sources().allTracks();
-    }
-    else
-    {
-      // Find the parent's membership list from track pages
-      if (auto* parentList = _callbacks.getListMembership ? _callbacks.getListMembership(parentListId) : nullptr;
-          parentList)
-      {
-        parentMembershipList = parentList;
-      }
-      else
-      {
-        // Fallback to All Tracks if parent not found
-        parentMembershipList = &_session.sources().allTracks();
-      }
-    }
-
-    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent,
-                                                      _session.musicLibrary(),
-                                                      _session.sources().allTracks(),
-                                                      *parentMembershipList,
-                                                      parentListId,
-                                                      *_dataProvider);
+    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _session, parentListId, *_dataProvider);
 
     if (!initialExpression.empty())
     {
@@ -405,36 +384,8 @@ namespace ao::gtk
 
   void ListSidebarController::createList(ao::model::ListDraft const& draft)
   {
-    auto txn = _session.musicLibrary().writeTransaction();
-
-    // Build the list payload
-    auto builder =
-      ao::library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
-
-    if (draft.kind == ao::model::ListKind::Smart)
-    {
-      builder.filter(draft.expression);
-    }
-    else
-    {
-      for (auto id : draft.trackIds)
-      {
-        builder.tracks().add(id);
-      }
-    }
-
-    auto payload = builder.serialize();
-
-    // Create the list in the store
-    auto [listId, view] = _session.musicLibrary().lists().writer(txn).create(payload);
-
-    txn.commit();
-
-    // Refresh the lists
-    if (_callbacks.onListCreatedAndSelected)
-    {
-      _callbacks.onListCreatedAndSelected(listId);
-    }
+    auto listId = _session.mutation().createList(draft);
+    _pendingSelectId = listId;
   }
 
   void ListSidebarController::selectSidebarList(ao::ListId listId)
@@ -476,35 +427,8 @@ namespace ao::gtk
 
   void ListSidebarController::updateList(ao::model::ListDraft const& draft)
   {
-    auto txn = _session.musicLibrary().writeTransaction();
-
-    auto builder =
-      ao::library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
-
-    if (draft.kind == ao::model::ListKind::Smart)
-    {
-      builder.filter(draft.expression);
-    }
-    else
-    {
-      for (auto id : draft.trackIds)
-      {
-        builder.tracks().add(id);
-      }
-    }
-
-    auto payload = builder.serialize();
-
-    _session.musicLibrary().lists().writer(txn).update(draft.listId, payload);
-
-    txn.commit();
-
-    // Refresh the list page
-    if (_callbacks.onListsChanged)
-    {
-      _callbacks.onListsChanged();
-      selectSidebarList(draft.listId);
-    }
+    _session.mutation().updateList(draft);
+    _pendingSelectId = draft.listId;
   }
 
   void ListSidebarController::onEditList()
@@ -568,33 +492,7 @@ namespace ao::gtk
       return;
     }
 
-    // Determine the parent membership list for the preview
-    ao::app::TrackSource* parentMembershipList = nullptr;
-    auto const parentId = view->parentId();
-
-    if (parentId == allTracksListId())
-    {
-      parentMembershipList = &_session.sources().allTracks();
-    }
-    else
-    {
-      if (auto* parentList = _callbacks.getListMembership ? _callbacks.getListMembership(parentId) : nullptr;
-          parentList)
-      {
-        parentMembershipList = parentList;
-      }
-      else
-      {
-        parentMembershipList = &_session.sources().allTracks();
-      }
-    }
-
-    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent,
-                                                      _session.musicLibrary(),
-                                                      _session.sources().allTracks(),
-                                                      *parentMembershipList,
-                                                      view->parentId(),
-                                                      *_dataProvider);
+    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _session, view->parentId(), *_dataProvider);
 
     dialog->populate(listId, *view);
 
@@ -667,16 +565,9 @@ namespace ao::gtk
     }
 
     // Delete the list from the library
-    auto txn = _session.musicLibrary().writeTransaction();
-    _session.musicLibrary().lists().writer(txn).del(listId);
-    txn.commit();
+    _session.mutation().deleteList(listId);
 
-    // Refresh lists
-    if (_callbacks.onListsChanged)
-    {
-      _callbacks.onListsChanged();
-      selectSidebarList(allTracksListId());
-    }
+    _pendingSelectId = allTracksListId();
   }
 
   void ListSidebarController::buildListTree(ao::lmdb::ReadTransaction& txn)

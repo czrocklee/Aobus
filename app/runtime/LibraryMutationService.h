@@ -15,6 +15,11 @@ namespace ao::library
   class MusicLibrary;
 }
 
+namespace ao::model
+{
+  struct ListDraft;
+}
+
 namespace ao::app
 {
   class EventBus;
@@ -32,6 +37,10 @@ namespace ao::app
                                             std::vector<std::string> const& tagsToAdd,
                                             std::vector<std::string> const& tagsToRemove);
     ImportFilesReply importFiles(std::vector<std::filesystem::path> const& paths);
+
+    ao::ListId createList(ao::model::ListDraft const& draft);
+    void updateList(ao::model::ListDraft const& draft);
+    void deleteList(ao::ListId listId);
 
     LibraryMutationService(LibraryMutationService const&) = delete;
     LibraryMutationService& operator=(LibraryMutationService const&) = delete;

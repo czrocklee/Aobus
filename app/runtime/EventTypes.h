@@ -56,7 +56,8 @@ namespace ao::app
 
   struct ListsMutated final
   {
-    std::vector<ao::ListId> listIds{};
+    std::vector<ao::ListId> upserted{};
+    std::vector<ao::ListId> deleted{};
   };
 
   struct LibraryImportCompleted final

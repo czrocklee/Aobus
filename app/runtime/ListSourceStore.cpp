@@ -6,14 +6,29 @@
 #include "ManualListSource.h"
 #include "SmartListSource.h"
 
+#include "EventBus.h"
+#include "EventTypes.h"
 #include <ao/library/ListStore.h>
+
 #include <ao/library/ListView.h>
 
 namespace ao::app
 {
-  ListSourceStore::ListSourceStore(ao::library::MusicLibrary& library)
-    : _library{library}, _allTracks{_library.tracks()}, _smartEvaluator{_library}
+  ListSourceStore::ListSourceStore(ao::library::MusicLibrary& library, ao::app::EventBus& events)
+    : _library{library}, _allTracks{_library.tracks()}, _smartEvaluator{_library}, _events{events}
   {
+    _listsMutatedSubscription = _events.subscribe<ListsMutated>(
+      [this](ListsMutated const& ev)
+      {
+        for (auto id : ev.deleted)
+        {
+          eraseList(id);
+        }
+        for (auto id : ev.upserted)
+        {
+          refreshList(id);
+        }
+      });
   }
 
   ListSourceStore::~ListSourceStore() = default;

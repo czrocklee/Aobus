@@ -22,14 +22,36 @@ namespace ao::app
     ao::library::MusicLibrary& library;
     LayoutState layoutState;
     std::shared_ptr<ISessionPersistence> persistence;
+    Subscription listsMutatedSub;
 
-    Impl(EventBus& events,
+    Impl(WorkspaceService* self,
+         EventBus& events,
          ViewService& views,
          PlaybackService& playback,
          ao::library::MusicLibrary& library,
          std::shared_ptr<ISessionPersistence> persistence)
       : events{events}, views{views}, playback{playback}, library{library}, persistence{std::move(persistence)}
     {
+      listsMutatedSub = events.subscribe<ListsMutated>(
+        [this, self](ListsMutated const& ev)
+        {
+          auto toClose = std::vector<ViewId>{};
+          for (auto id : ev.deleted)
+          {
+            for (auto const viewId : this->layoutState.openViews)
+            {
+              auto const& state = this->views.trackListState(viewId);
+              if (state.listId == id)
+              {
+                toClose.push_back(viewId);
+              }
+            }
+          }
+          for (auto const viewId : toClose)
+          {
+            self->closeView(viewId);
+          }
+        });
     }
   };
 
@@ -38,7 +60,7 @@ namespace ao::app
                                      PlaybackService& playback,
                                      ao::library::MusicLibrary& library,
                                      std::shared_ptr<ISessionPersistence> persistence)
-    : _impl{std::make_unique<Impl>(events, views, playback, library, std::move(persistence))}
+    : _impl{std::make_unique<Impl>(this, events, views, playback, library, std::move(persistence))}
   {
   }
 

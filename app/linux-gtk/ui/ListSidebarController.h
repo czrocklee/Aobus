@@ -32,8 +32,6 @@ namespace ao::gtk
     struct Callbacks final
     {
       std::function<void(ao::ListId)> onListSelected;
-      std::function<void()> onListsChanged;
-      std::function<void(ao::ListId)> onListCreatedAndSelected;
       std::function<ao::app::TrackSource*(ao::ListId)> getListMembership;
     };
 
@@ -94,5 +92,7 @@ namespace ao::gtk
     Glib::RefPtr<Gio::SimpleAction> _newListAction;
     Glib::RefPtr<Gio::SimpleAction> _deleteListAction;
     Glib::RefPtr<Gio::SimpleAction> _editListAction;
+
+    std::optional<ao::ListId> _pendingSelectId;
   };
 } // namespace ao::gtk
