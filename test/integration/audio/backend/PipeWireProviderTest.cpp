@@ -130,9 +130,10 @@ TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integrati
     return;
   }
 
+  auto currentDevices = std::make_shared<std::vector<Device>>();
   auto provider = PipeWireProvider{};
-  auto currentDevices = std::vector<Device>{};
-  auto const sub = provider.subscribeDevices([&](std::vector<Device> const& devices) { currentDevices = devices; });
+  auto const sub =
+    provider.subscribeDevices([currentDevices](std::vector<Device> const& devices) { *currentDevices = devices; });
 
   SECTION("Enumeration finds the dummy sink")
   {
@@ -141,7 +142,7 @@ TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integrati
     // Wait a bit for PipeWire to propagate the new node to the provider's registry
     for (int i = 0; i < 20; ++i)
     {
-      for (auto const& d : currentDevices)
+      for (auto const& d : *currentDevices)
       {
         if (d.displayName == "rs-test-dummy-sink" || d.id == "rs-test-dummy-sink")
         {
@@ -203,7 +204,7 @@ TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integrati
 
       for (int i = 0; i < 20; ++i)
       {
-        for (auto const& d : currentDevices)
+        for (auto const& d : *currentDevices)
         {
           if (d.displayName == "ao-test-duplex-sink" || d.id == "ao-test-duplex-sink")
           {
