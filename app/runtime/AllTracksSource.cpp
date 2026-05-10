@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/model/AllTrackIdsList.h>
+#include "AllTracksSource.h"
 
 #include <algorithm>
 #include <ranges>
 
-namespace ao::model
+namespace ao::app
 {
-  AllTrackIdsList::AllTrackIdsList(ao::library::TrackStore& store)
+  AllTracksSource::AllTracksSource(ao::library::TrackStore& store)
     : _store{store}
   {
   }
 
-  void AllTrackIdsList::reloadFromStore(ao::lmdb::ReadTransaction& txn)
+  void AllTracksSource::reloadFromStore(ao::lmdb::ReadTransaction& txn)
   {
     auto reader = _store.reader(txn);
     auto ids = std::vector<TrackId>{};
@@ -28,35 +28,35 @@ namespace ao::model
     std::ranges::sort(ids);
     _trackIds = std::flat_set<TrackId>(std::sorted_unique, std::move(ids));
 
-    TrackIdList::notifyReset();
+    TrackSource::notifyReset();
   }
 
-  void AllTrackIdsList::notifyInserted(TrackId id)
+  void AllTracksSource::notifyInserted(TrackId id)
   {
     if (auto [it, inserted] = _trackIds.insert(id); inserted)
     {
       auto const index = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
-      TrackIdList::notifyInserted(id, index);
+      TrackSource::notifyInserted(id, index);
     }
   }
 
-  void AllTrackIdsList::notifyRemoved(TrackId id)
+  void AllTracksSource::notifyRemoved(TrackId id)
   {
     if (auto const it = _trackIds.find(id); it != _trackIds.end())
     {
       auto const index = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
       _trackIds.erase(it);
-      TrackIdList::notifyRemoved(id, index);
+      TrackSource::notifyRemoved(id, index);
     }
   }
 
-  void AllTrackIdsList::clear()
+  void AllTracksSource::clear()
   {
     _trackIds.clear();
-    TrackIdList::notifyReset();
+    TrackSource::notifyReset();
   }
 
-  std::optional<std::size_t> AllTrackIdsList::indexOf(TrackId id) const
+  std::optional<std::size_t> AllTracksSource::indexOf(TrackId id) const
   {
     if (auto const it = _trackIds.find(id); it != _trackIds.end())
     {
@@ -65,4 +65,4 @@ namespace ao::model
 
     return std::nullopt;
   }
-} // namespace ao::model
+}

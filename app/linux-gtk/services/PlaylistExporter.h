@@ -6,7 +6,7 @@
 #include <ao/library/MusicLibrary.h>
 
 #include "TrackRowDataProvider.h"
-#include <ao/model/TrackIdList.h>
+#include <runtime/TrackSource.h>
 
 #include <sigc++/sigc++.h>
 
@@ -15,12 +15,12 @@
 
 namespace ao::gtk::services
 {
-  class PlaylistExporter final : public ao::model::TrackIdListObserver
+  class PlaylistExporter final : public ao::app::TrackSourceObserver
   {
   public:
     using TrackId = ao::TrackId;
 
-    PlaylistExporter(ao::model::TrackIdList& list,
+    PlaylistExporter(ao::app::TrackSource& list,
                      ao::gtk::TrackRowDataProvider const& provider,
                      std::filesystem::path root,
                      std::filesystem::path path);
@@ -38,7 +38,7 @@ namespace ao::gtk::services
     void writeFile();
     void scheduleForWrite();
 
-    ao::model::TrackIdList& _list;
+    ao::app::TrackSource& _list;
     ao::gtk::TrackRowDataProvider const& _provider;
     std::filesystem::path const _root;
     std::filesystem::path const _path;

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/model/TrackIdList.h>
+#include "TrackSource.h"
 
 #include <algorithm>
 
-namespace ao::model
+namespace ao::app
 {
-  TrackIdList::~TrackIdList()
+  TrackSource::~TrackSource()
   {
     for (auto* obs : _observers)
     {
@@ -15,17 +15,17 @@ namespace ao::model
     }
   }
 
-  void TrackIdList::attach(TrackIdListObserver* observer)
+  void TrackSource::attach(TrackSourceObserver* observer)
   {
     _observers.push_back(observer);
   }
 
-  void TrackIdList::detach(TrackIdListObserver* observer)
+  void TrackSource::detach(TrackSourceObserver* observer)
   {
     std::erase(_observers, observer);
   }
 
-  void TrackIdList::notifyUpdated(TrackId id)
+  void TrackSource::notifyUpdated(TrackId id)
   {
     if (auto const index = indexOf(id))
     {
@@ -33,7 +33,7 @@ namespace ao::model
     }
   }
 
-  void TrackIdList::notifyUpdated(std::span<TrackId const> ids)
+  void TrackSource::notifyUpdated(std::span<TrackId const> ids)
   {
     for (auto* obs : _observers)
     {
@@ -41,7 +41,7 @@ namespace ao::model
     }
   }
 
-  void TrackIdList::notifyReset()
+  void TrackSource::notifyReset()
   {
     for (auto* obs : _observers)
     {
@@ -49,7 +49,7 @@ namespace ao::model
     }
   }
 
-  void TrackIdList::notifyInserted(TrackId id, std::size_t index)
+  void TrackSource::notifyInserted(TrackId id, std::size_t index)
   {
     for (auto* obs : _observers)
     {
@@ -57,7 +57,7 @@ namespace ao::model
     }
   }
 
-  void TrackIdList::notifyInserted(std::span<TrackId const> ids)
+  void TrackSource::notifyInserted(std::span<TrackId const> ids)
   {
     for (auto* obs : _observers)
     {
@@ -65,7 +65,7 @@ namespace ao::model
     }
   }
 
-  void TrackIdList::notifyUpdated(TrackId id, std::size_t index)
+  void TrackSource::notifyUpdated(TrackId id, std::size_t index)
   {
     for (auto* obs : _observers)
     {
@@ -73,7 +73,7 @@ namespace ao::model
     }
   }
 
-  void TrackIdList::notifyRemoved(TrackId id, std::size_t index)
+  void TrackSource::notifyRemoved(TrackId id, std::size_t index)
   {
     for (auto* obs : _observers)
     {
@@ -81,11 +81,11 @@ namespace ao::model
     }
   }
 
-  void TrackIdList::notifyRemoved(std::span<TrackId const> ids)
+  void TrackSource::notifyRemoved(std::span<TrackId const> ids)
   {
     for (auto* obs : _observers)
     {
       obs->onRemoved(ids);
     }
   }
-} // namespace ao::model
+}

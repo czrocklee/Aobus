@@ -14,10 +14,11 @@ namespace ao::library
 {
   class MusicLibrary;
 }
-namespace ao::model
+namespace ao::app
 {
-  class SmartListEngine;
-  class TrackIdList;
+  class EventBus;
+  class ListSourceStore;
+  class TrackSource;
 }
 
 namespace ao::app
@@ -27,10 +28,7 @@ namespace ao::app
   class ViewService final
   {
   public:
-    ViewService(ao::library::MusicLibrary& library,
-                ao::model::SmartListEngine& engine,
-                ao::model::TrackIdList& allTracksSource,
-                EventBus& events);
+    ViewService(ao::library::MusicLibrary& library, ListSourceStore& sources, EventBus& events);
     ~ViewService();
 
     ViewService(ViewService const&) = delete;
@@ -38,9 +36,7 @@ namespace ao::app
     ViewService(ViewService&&) = delete;
     ViewService& operator=(ViewService&&) = delete;
 
-    CreateTrackListViewReply createView(TrackListViewConfig const& initial,
-                                        bool attached = true,
-                                        std::shared_ptr<ao::model::TrackIdList> source = {});
+    CreateTrackListViewReply createView(TrackListViewConfig const& initial, bool attached = true);
     void destroyView(ViewId viewId);
     void setFilter(ViewId viewId, std::string const& filterExpression);
     void setSort(ViewId viewId, std::vector<TrackSortTerm> const& sortBy);

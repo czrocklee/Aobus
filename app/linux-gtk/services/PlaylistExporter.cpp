@@ -5,7 +5,7 @@
 #include <ao/utility/Log.h>
 
 #include "TrackRowDataProvider.h"
-#include <ao/model/TrackIdList.h>
+#include <runtime/TrackSource.h>
 
 #include <glibmm.h>
 
@@ -13,7 +13,7 @@
 
 namespace ao::gtk::services
 {
-  PlaylistExporter::PlaylistExporter(ao::model::TrackIdList& list,
+  PlaylistExporter::PlaylistExporter(ao::app::TrackSource& list,
                                      ao::gtk::TrackRowDataProvider const& provider,
                                      std::filesystem::path root,
                                      std::filesystem::path path)

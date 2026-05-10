@@ -7,8 +7,8 @@
 #include <runtime/EventTypes.h>
 #include <runtime/ViewService.h>
 
-#include <ao/model/AllTrackIdsList.h>
-#include <ao/model/SmartListEngine.h>
+#include <runtime/AllTracksSource.h>
+#include <runtime/ListSourceStore.h>
 
 #include "TestUtils.h"
 
@@ -22,19 +22,11 @@ namespace ao::app::test
     struct TestEnv final
     {
       TestMusicLibrary library;
-      std::unique_ptr<ao::model::AllTrackIdsList> allTracks;
-      std::unique_ptr<ao::model::SmartListEngine> engine;
+      std::unique_ptr<ao::app::ListSourceStore> store;
 
-      TestEnv()
-      {
-        allTracks = std::make_unique<ao::model::AllTrackIdsList>(library.library().tracks());
-        engine = std::make_unique<ao::model::SmartListEngine>(library.library());
-      }
+      TestEnv() { store = std::make_unique<ao::app::ListSourceStore>(library.library()); }
 
-      auto makeService(EventBus& events) -> ViewService
-      {
-        return ViewService{library.library(), *engine, *allTracks, events};
-      }
+      auto makeService(EventBus& events) -> ViewService { return ViewService{library.library(), *store, events}; }
     };
   }
 

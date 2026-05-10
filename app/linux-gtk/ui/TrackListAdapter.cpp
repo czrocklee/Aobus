@@ -187,7 +187,7 @@ namespace ao::gtk
     }
   }
 
-  TrackListAdapter::TrackListAdapter(ao::model::TrackIdList& source,
+  TrackListAdapter::TrackListAdapter(ao::app::TrackSource& source,
                                      ao::library::MusicLibrary& musicLibrary,
                                      TrackRowDataProvider const& provider)
     : _source{source}, _musicLibrary{musicLibrary}, _provider{provider}, _listModel(Gio::ListStore<TrackRow>::create())

@@ -14,7 +14,7 @@ add_library(ao_audio STATIC
     detail/RouteTracker.cpp
 )
 target_include_directories(ao_audio PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
-target_link_libraries(ao_audio PUBLIC ao_model PkgFLAC PkgALAC)
+target_link_libraries(ao_audio PUBLIC ao_library PkgFLAC PkgALAC)
 
 if(LINUX)
     target_compile_definitions(ao_audio PUBLIC PIPEWIRE_FOUND ALSA_FOUND)

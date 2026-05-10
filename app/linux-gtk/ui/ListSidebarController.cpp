@@ -157,12 +157,12 @@ namespace ao::gtk
     }
 
     // Determine the parent membership list
-    ao::model::TrackIdList* parentMembershipList = nullptr;
+    ao::app::TrackSource* parentMembershipList = nullptr;
 
     if (parentListId == allTracksListId())
     {
       // Use All Tracks as source
-      parentMembershipList = &_session.allTracks();
+      parentMembershipList = &_session.sources().allTracks();
     }
     else
     {
@@ -175,13 +175,13 @@ namespace ao::gtk
       else
       {
         // Fallback to All Tracks if parent not found
-        parentMembershipList = &_session.allTracks();
+        parentMembershipList = &_session.sources().allTracks();
       }
     }
 
     auto* dialog = Gtk::make_managed<SmartListDialog>(_parent,
                                                       _session.musicLibrary(),
-                                                      _session.allTrackIdsList(),
+                                                      _session.sources().allTracks(),
                                                       *parentMembershipList,
                                                       parentListId,
                                                       *_dataProvider);
@@ -569,12 +569,12 @@ namespace ao::gtk
     }
 
     // Determine the parent membership list for the preview
-    ao::model::TrackIdList* parentMembershipList = nullptr;
+    ao::app::TrackSource* parentMembershipList = nullptr;
     auto const parentId = view->parentId();
 
     if (parentId == allTracksListId())
     {
-      parentMembershipList = &_session.allTracks();
+      parentMembershipList = &_session.sources().allTracks();
     }
     else
     {
@@ -585,13 +585,13 @@ namespace ao::gtk
       }
       else
       {
-        parentMembershipList = &_session.allTracks();
+        parentMembershipList = &_session.sources().allTracks();
       }
     }
 
     auto* dialog = Gtk::make_managed<SmartListDialog>(_parent,
                                                       _session.musicLibrary(),
-                                                      _session.allTrackIdsList(),
+                                                      _session.sources().allTracks(),
                                                       *parentMembershipList,
                                                       view->parentId(),
                                                       *_dataProvider);

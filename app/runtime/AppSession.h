@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CorePrimitives.h"
+#include "ListSourceStore.h"
 #include <ao/Type.h>
 #include <filesystem>
 #include <memory>
@@ -16,13 +17,6 @@ namespace ao::audio
 namespace ao::library
 {
   class MusicLibrary;
-}
-
-namespace ao::model
-{
-  class TrackIdList;
-  class AllTrackIdsList;
-  class SmartListEngine;
 }
 
 namespace ao::app
@@ -64,9 +58,7 @@ namespace ao::app
     ViewService& views() noexcept;
 
     ao::library::MusicLibrary& musicLibrary() noexcept;
-    ao::model::TrackIdList& allTracks() noexcept;
-    ao::model::AllTrackIdsList& allTrackIdsList() noexcept;
-    ao::model::SmartListEngine& smartListEngine() noexcept;
+    ListSourceStore& sources() noexcept;
     void reloadAllTracks();
 
     ao::TrackId playSelectionInFocusedView();

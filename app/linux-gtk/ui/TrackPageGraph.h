@@ -11,8 +11,8 @@
 #include <runtime/CorePrimitives.h>
 
 #include <ao/library/ListView.h>
-#include <ao/model/TrackIdList.h>
 #include <gtkmm.h>
+#include <runtime/TrackSource.h>
 
 #include <functional>
 #include <map>
@@ -33,7 +33,7 @@ namespace ao::gtk
   struct TrackPageContext final
   {
     ao::app::ViewId viewId{};
-    std::shared_ptr<ao::model::TrackIdList> membershipList;
+    std::shared_ptr<ao::app::TrackSource> membershipList;
     std::unique_ptr<TrackListAdapter> adapter;
     std::unique_ptr<TrackViewPage> page;
     std::unique_ptr<ao::gtk::services::PlaylistExporter> exporter;

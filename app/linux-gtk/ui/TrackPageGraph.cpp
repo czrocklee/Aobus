@@ -8,14 +8,14 @@
 #include "TrackRowDataProvider.h"
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
-#include <ao/model/AllTrackIdsList.h>
-#include <ao/model/FilteredTrackIdList.h>
-#include <ao/model/ManualTrackIdList.h>
 #include <ao/utility/Log.h>
+#include <runtime/AllTracksSource.h>
 #include <runtime/AppSession.h>
 #include <runtime/EventBus.h>
 #include <runtime/EventTypes.h>
+#include <runtime/ManualListSource.h>
 #include <runtime/PlaybackService.h>
+#include <runtime/SmartListSource.h>
 #include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
@@ -242,7 +242,8 @@ namespace ao::gtk
     auto const listId = state.listId;
 
     // Provide dummy source, bindProjection takes over
-    auto adapter = std::make_unique<TrackListAdapter>(_session.allTracks(), _session.musicLibrary(), dataProvider);
+    auto adapter =
+      std::make_unique<TrackListAdapter>(_session.sources().allTracks(), _session.musicLibrary(), dataProvider);
     adapter->bindProjection(*proj);
 
     auto trackPage = std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _session, viewId);

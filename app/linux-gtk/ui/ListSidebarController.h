@@ -5,8 +5,8 @@
 
 #include <ao/library/MusicLibrary.h>
 #include <ao/model/ListDraft.h>
-#include <ao/model/TrackIdList.h>
 #include <gtkmm.h>
+#include <runtime/TrackSource.h>
 
 #include <functional>
 #include <map>
@@ -34,7 +34,7 @@ namespace ao::gtk
       std::function<void(ao::ListId)> onListSelected;
       std::function<void()> onListsChanged;
       std::function<void(ao::ListId)> onListCreatedAndSelected;
-      std::function<ao::model::TrackIdList*(ao::ListId)> getListMembership;
+      std::function<ao::app::TrackSource*(ao::ListId)> getListMembership;
     };
 
     ListSidebarController(Gtk::Window& parent, ao::app::AppSession& session, Callbacks callbacks);

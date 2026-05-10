@@ -37,7 +37,7 @@ add_library(aobus-gtk-lib STATIC
 )
 
 target_link_libraries(aobus-gtk-lib PUBLIC app_common app_runtime)
-target_link_libraries(aobus-gtk-lib PRIVATE ao ao_model ao_audio PkgGTKMM glibmm-2.68 Boost::headers)
+target_link_libraries(aobus-gtk-lib PRIVATE ao ao_audio PkgGTKMM glibmm-2.68 Boost::headers)
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ui")
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/services")

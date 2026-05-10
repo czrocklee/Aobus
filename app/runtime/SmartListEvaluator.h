@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/model/TrackIdList.h>
+#include "TrackSource.h"
 
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -16,16 +16,16 @@
 #include <string>
 #include <vector>
 
-namespace ao::model
+namespace ao::app
 {
-  class FilteredTrackIdList;
-  class SmartListEngine;
+  class SmartListSource;
+  class SmartListEvaluator;
 
-  // SourceObserver - handles source list events and dispatches to engine
-  class SourceObserver final : public TrackIdListObserver
+  // SourceObserver - handles source list events and dispatches to evaluator
+  class SourceObserver final : public TrackSourceObserver
   {
   public:
-    explicit SourceObserver(SmartListEngine& engine, TrackIdList& source);
+    explicit SourceObserver(SmartListEvaluator& evaluator, TrackSource& source);
 
     void onReset() override;
     void onInserted(TrackId id, std::size_t index) override;
@@ -41,53 +41,52 @@ namespace ao::model
     void invalidate() { _valid = false; }
 
   private:
-    SmartListEngine& _engine;
-    TrackIdList& _source;
+    SmartListEvaluator& _evaluator;
+    TrackSource& _source;
     bool _valid = true;
   };
 
   /**
-   * SmartListEngine - Batching expression evaluator for smart list filtering.
+   * SmartListEvaluator - Batching expression evaluator for smart list filtering.
    *
-   * The engine no longer stores membership data. Instead, it coordinates
-   * batch evaluation of FilteredTrackIdLists that share the same source.
+   * The evaluator coordinates batch evaluation of SmartListSources that share the same source.
    */
-  class SmartListEngine final
+  class SmartListEvaluator final
   {
   public:
-    explicit SmartListEngine(ao::library::MusicLibrary& ml);
-    ~SmartListEngine();
+    explicit SmartListEvaluator(ao::library::MusicLibrary& ml);
+    ~SmartListEvaluator();
 
     // Disable copy/move
-    SmartListEngine(SmartListEngine const&) = delete;
-    SmartListEngine& operator=(SmartListEngine const&) = delete;
-    SmartListEngine(SmartListEngine&&) = delete;
-    SmartListEngine& operator=(SmartListEngine&&) = delete;
+    SmartListEvaluator(SmartListEvaluator const&) = delete;
+    SmartListEvaluator& operator=(SmartListEvaluator const&) = delete;
+    SmartListEvaluator(SmartListEvaluator&&) = delete;
+    SmartListEvaluator& operator=(SmartListEvaluator&&) = delete;
 
     bool isAlive() const { return _alive; }
 
-    void registerList(TrackIdList& source, FilteredTrackIdList& list);
-    void unregisterList(TrackIdList& source, FilteredTrackIdList& list);
+    void registerList(TrackSource& source, SmartListSource& list);
+    void unregisterList(TrackSource& source, SmartListSource& list);
 
-    void rebuild(FilteredTrackIdList& list);
+    void rebuild(SmartListSource& list);
 
-    // Notify engine that a track's data changed so it can re-evaluate filter membership
-    void notifyUpdated(TrackIdList& source, TrackId trackId);
+    // Notify evaluator that a track's data changed so it can re-evaluate filter membership
+    void notifyUpdated(TrackSource& source, TrackId trackId);
 
   private:
     struct SourceBucket
     {
-      TrackIdList* source = nullptr;
+      TrackSource* source = nullptr;
       bool sourceAlive = true;
-      std::vector<FilteredTrackIdList*> lists;
-      std::unique_ptr<TrackIdListObserver> observer;
+      std::vector<SmartListSource*> lists;
+      std::unique_ptr<TrackSourceObserver> observer;
     };
 
     void rebuildActiveLists(SourceBucket& bucket);
     void rebuildDirtyLists(SourceBucket& bucket);
-    void rebuildLists(std::span<FilteredTrackIdList*> lists);
-    void rebuildGroup(TrackIdList& source,
-                      std::span<FilteredTrackIdList*> lists,
+    void rebuildLists(std::span<SmartListSource*> lists);
+    void rebuildGroup(TrackSource& source,
+                      std::span<SmartListSource*> lists,
                       ao::library::TrackStore::Reader::LoadMode mode);
 
     void handleSourceReset(SourceBucket& bucket);
@@ -101,13 +100,13 @@ namespace ao::model
 
     void handleSourceDestroyed(SourceBucket& bucket);
 
-    static ao::library::TrackStore::Reader::LoadMode getUnionMode(std::span<FilteredTrackIdList*> lists);
+    static ao::library::TrackStore::Reader::LoadMode getUnionMode(std::span<SmartListSource*> lists);
 
     ao::library::MusicLibrary& _ml;
-    std::map<TrackIdList*, std::unique_ptr<SourceBucket>> _buckets;
+    std::map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;
     bool _alive = true;
 
     friend class SourceObserver;
-    friend class FilteredTrackIdList;
+    friend class SmartListSource;
   };
-} // namespace ao::model
+}

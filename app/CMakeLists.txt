@@ -11,6 +11,8 @@ aobus_apply_clang_tidy(app_common STRICT)
 add_library(app_runtime STATIC
     runtime/AppSession.cpp
     runtime/AppSession.h
+    runtime/AllTracksSource.cpp
+    runtime/AllTracksSource.h
     runtime/CorePrimitives.h
     runtime/EventBus.h
     runtime/EventTypes.h
@@ -19,15 +21,25 @@ add_library(app_runtime STATIC
     runtime/PlaybackService.h
     runtime/LibraryMutationService.cpp
     runtime/LibraryMutationService.h
+    runtime/ListSourceStore.cpp
+    runtime/ListSourceStore.h
+    runtime/ManualListSource.cpp
+    runtime/ManualListSource.h
     runtime/WorkspaceService.cpp
     runtime/WorkspaceService.h
     runtime/NotificationService.cpp
     runtime/NotificationService.h
     runtime/StateTypes.h
+    runtime/SmartListEvaluator.cpp
+    runtime/SmartListEvaluator.h
+    runtime/SmartListSource.cpp
+    runtime/SmartListSource.h
     runtime/TrackListProjection.cpp
     runtime/TrackListProjection.h
     runtime/TrackDetailProjection.cpp
     runtime/TrackDetailProjection.h
+    runtime/TrackSource.cpp
+    runtime/TrackSource.h
     runtime/ViewService.cpp
     runtime/ViewService.h
 )

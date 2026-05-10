@@ -6,8 +6,8 @@
 #include "TrackViewPage.h"
 
 #include <ao/library/MusicLibrary.h>
-#include <ao/model/TrackIdList.h>
 #include <gtkmm.h>
+#include <runtime/TrackSource.h>
 
 #include <functional>
 #include <memory>
@@ -29,7 +29,7 @@ namespace ao::gtk
   {
     ao::ListId listId;
     std::vector<ao::TrackId> selectedIds;
-    ao::model::TrackIdList* membershipList = nullptr;
+    ao::app::TrackSource* membershipList = nullptr;
   };
 
   /**

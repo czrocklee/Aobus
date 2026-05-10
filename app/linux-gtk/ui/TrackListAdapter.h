@@ -9,8 +9,8 @@
 
 #include "TrackRow.h"
 #include "TrackRowDataProvider.h"
-#include <ao/model/TrackIdList.h>
 #include <runtime/ProjectionTypes.h>
+#include <runtime/TrackSource.h>
 
 #include <giomm/liststore.h>
 
@@ -27,12 +27,12 @@ namespace ao::gtk
     Expression,
   };
 
-  class TrackListAdapter final : public ao::model::TrackIdListObserver
+  class TrackListAdapter final : public ao::app::TrackSourceObserver
   {
   public:
     using TrackId = ao::TrackId;
 
-    explicit TrackListAdapter(ao::model::TrackIdList& source,
+    explicit TrackListAdapter(ao::app::TrackSource& source,
                               ao::library::MusicLibrary& musicLibrary,
                               TrackRowDataProvider const& provider);
     ~TrackListAdapter() override;
@@ -67,7 +67,7 @@ namespace ao::gtk
     void createRowForTrack(TrackId id);
     bool shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader& reader) const;
 
-    ao::model::TrackIdList& _source;
+    ao::app::TrackSource& _source;
     ao::library::MusicLibrary& _musicLibrary;
     TrackRowDataProvider const& _provider;
     Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;

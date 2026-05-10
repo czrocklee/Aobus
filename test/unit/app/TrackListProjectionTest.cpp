@@ -8,9 +8,9 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/model/FilteredTrackIdList.h>
-#include <ao/model/SmartListEngine.h>
-#include <ao/model/TrackIdList.h>
+#include <runtime/SmartListEvaluator.h>
+#include <runtime/SmartListSource.h>
+#include <runtime/TrackSource.h>
 
 #include "TestUtils.h"
 
@@ -27,14 +27,14 @@ namespace ao::app::test
   namespace
   {
     using ao::TrackId;
+    using ao::app::SmartListEvaluator;
+    using ao::app::SmartListSource;
+    using ao::app::TrackSource;
     using ao::library::MusicLibrary;
     using ao::library::TrackBuilder;
     using ao::library::TrackStore;
-    using ao::model::FilteredTrackIdList;
-    using ao::model::SmartListEngine;
-    using ao::model::TrackIdList;
 
-    class MutableTrackIdList final : public TrackIdList
+    class MutableTrackSource final : public TrackSource
     {
     public:
       void addInitial(TrackId id) { _ids.push_back(id); }
@@ -59,9 +59,9 @@ namespace ao::app::test
     struct TestEnv final
     {
       TestMusicLibrary lib;
-      MutableTrackIdList source;
-      SmartListEngine engine;
-      std::unique_ptr<FilteredTrackIdList> filtered;
+      MutableTrackSource source;
+      ao::app::SmartListEvaluator engine;
+      std::unique_ptr<ao::app::SmartListSource> filtered;
 
       TestEnv()
         : engine{lib.library()}
@@ -79,7 +79,7 @@ namespace ao::app::test
         {
           source.addInitial(id);
         }
-        filtered = std::make_unique<FilteredTrackIdList>(source, lib.library(), engine);
+        filtered = std::make_unique<ao::app::SmartListSource>(source, lib.library(), engine);
         filtered->reload();
       }
     };

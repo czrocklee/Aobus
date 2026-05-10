@@ -1,47 +1,45 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/model/FilteredTrackIdList.h>
+#include "SmartListSource.h"
+#include "SmartListEvaluator.h"
+
 #include <ao/utility/Log.h>
-
-#include <ao/model/SmartListEngine.h>
-#include <ao/model/TrackIdList.h>
-
 #include <ao/query/Parser.h>
 
 #include <algorithm>
 
-namespace ao::model
+namespace ao::app
 {
-  FilteredTrackIdList::FilteredTrackIdList(TrackIdList& source, ao::library::MusicLibrary& ml, SmartListEngine& engine)
-    : _source{source}, _ml{ml}, _engine{&engine}
+  SmartListSource::SmartListSource(TrackSource& source, ao::library::MusicLibrary& ml, SmartListEvaluator& evaluator)
+    : _source{source}, _ml{ml}, _evaluator{&evaluator}
   {
-    _engine->registerList(_source, *this);
+    _evaluator->registerList(_source, *this);
     stageExpression("");
   }
 
-  FilteredTrackIdList::~FilteredTrackIdList()
+  SmartListSource::~SmartListSource()
   {
-    if (_engine != nullptr && _engine->isAlive())
+    if (_evaluator != nullptr && _evaluator->isAlive())
     {
-      _engine->unregisterList(_source, *this);
+      _evaluator->unregisterList(_source, *this);
     }
   }
 
-  void FilteredTrackIdList::setExpression(std::string expr)
+  void SmartListSource::setExpression(std::string expr)
   {
     stageExpression(std::move(expr));
   }
 
-  void FilteredTrackIdList::reload()
+  void SmartListSource::reload()
   {
-    if (_engine != nullptr && _engine->isAlive())
+    if (_evaluator != nullptr && _evaluator->isAlive())
     {
-      _engine->rebuild(*this);
+      _evaluator->rebuild(*this);
     }
   }
 
-  std::optional<std::size_t> FilteredTrackIdList::indexOf(TrackId id) const
+  std::optional<std::size_t> SmartListSource::indexOf(TrackId id) const
   {
     auto const it = _members.find(id);
 
@@ -53,15 +51,15 @@ namespace ao::model
     return static_cast<std::size_t>(std::distance(_members.begin(), it));
   }
 
-  void FilteredTrackIdList::notifyUpdated(TrackId id)
+  void SmartListSource::notifyUpdated(TrackId id)
   {
-    if (_engine != nullptr && _engine->isAlive())
+    if (_evaluator != nullptr && _evaluator->isAlive())
     {
-      _engine->notifyUpdated(_source, id);
+      _evaluator->notifyUpdated(_source, id);
     }
   }
 
-  void FilteredTrackIdList::stageExpression(std::string expr)
+  void SmartListSource::stageExpression(std::string expr)
   {
     _stagedExpression = std::move(expr);
 
@@ -86,7 +84,7 @@ namespace ao::model
     _dirty = true;
   }
 
-  void FilteredTrackIdList::applyStagedState()
+  void SmartListSource::applyStagedState()
   {
     if (!_dirty)
     {
@@ -99,4 +97,4 @@ namespace ao::model
     _plan = std::move(_stagedPlan);
     _dirty = false;
   }
-} // namespace ao::model
+}
