@@ -47,7 +47,6 @@ namespace ao::gtk
   public:
     struct Callbacks final
     {
-      std::function<void(std::vector<ao::TrackId> const&)> onSelectionChanged;
       std::function<void(TrackViewPage&, double, double)> onContextMenuRequested;
       std::function<void(TrackViewPage&, std::vector<ao::TrackId> const&, Gtk::Widget*)> onTagEditRequested;
       std::function<void(TrackViewPage&, ao::TrackId)> onTrackActivated;

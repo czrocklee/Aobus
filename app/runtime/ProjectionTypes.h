@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -86,6 +87,10 @@ namespace ao::app
     SelectionKind selectionKind = SelectionKind::None;
     std::vector<ao::TrackId> trackIds{};
     std::uint64_t revision = 0;
+
+    AggregateValue<std::string> title{};
+    AggregateValue<std::string> artist{};
+    AggregateValue<std::string> album{};
 
     ao::ResourceId singleCoverArtId{};
     AudioPropertySnapshot audio{};

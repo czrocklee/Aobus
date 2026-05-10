@@ -290,10 +290,6 @@ namespace ao::gtk
           _session.views().setSelection(viewId, ids);
           _session.workspace().setFocusedView(viewId);
         }
-        if (_callbacks.onSelectionChanged)
-        {
-          _callbacks.onSelectionChanged(ids);
-        }
       });
 
     page->signalContextMenuRequested().connect(
