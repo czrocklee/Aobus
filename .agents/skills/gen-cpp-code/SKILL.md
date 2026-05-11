@@ -1,6 +1,6 @@
 ---
 name: gen-cpp-code
-description: Expert C++23 code generation for Aobus. TRIGGER when: task involves writing or modifying C++ code (features, bug fixes, refactoring, implementing plans); working in .cpp/.h/.hpp files. SKIP: build scripts, CMake config, markdown/docs, non-C++ files.
+description: Expert C++23 code generation for Aobus. Use when asked to write, edit, refactor, or fix any C++ code (.cpp, .h, .hpp files). This skill is mandatory for all C++ feature implementation, bug fixing, test generation, or any task that modifies C++ source files.
 ---
 
 # Aobus C++ Code Generation

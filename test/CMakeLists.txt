@@ -48,6 +48,7 @@ add_executable(ao_test
     unit/rt/LibraryMutationServiceTest.cpp
     unit/rt/NotificationServiceTest.cpp
     unit/rt/ViewServiceTest.cpp
+    unit/rt/ConfigStoreTest.cpp
     unit/rt/HeadlessShellTest.cpp
 
     # integration tests
@@ -80,6 +81,10 @@ add_executable(ao_test_gtk
     unit/gtk/TrackListAdapterTest.cpp
     unit/gtk/TrackPresentationTest.cpp
     unit/gtk/TrackRowDataProviderTest.cpp
+    unit/gtk/LayoutModelTest.cpp
+    unit/gtk/LayoutContainersTest.cpp
+    unit/gtk/LayoutComponentsTest.cpp
+    unit/gtk/LayoutEditorTest.cpp
 )
 
 target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")

@@ -264,7 +264,7 @@ namespace ao::gtk
     std::string listName = "List";
     if (listId != allTracksListId() && listId != ao::ListId{})
     {
-      auto txn = _session.musicLibrary().readTransaction();
+      auto const txn = _session.musicLibrary().readTransaction();
       auto lists = _session.musicLibrary().lists().reader(txn);
       if (auto optView = lists.get(listId))
       {
@@ -278,10 +278,7 @@ namespace ao::gtk
 
     _stack.add(*trackPage, pageId, listName);
 
-    TrackPageContext ctx;
-    ctx.viewId = viewId;
-    ctx.adapter = std::move(adapter);
-    ctx.page = std::move(trackPage);
+    auto ctx = TrackPageContext{.viewId = viewId, .adapter = std::move(adapter), .page = std::move(trackPage)};
 
     bindTrackPage(ctx);
     _trackPages[viewId] = std::move(ctx);
@@ -348,5 +345,13 @@ namespace ao::gtk
     {
       page->setPlayingTrackId(_optPlayingTrackId);
     }
+  }
+  ao::ListId TrackPageGraph::activeListId() const
+  {
+    if (auto const* ctx = currentVisible())
+    {
+      return ctx->page->getListId();
+    }
+    return allTracksListId();
   }
 } // namespace ao::gtk

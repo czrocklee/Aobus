@@ -3,6 +3,9 @@
 
 #include "MainWindow.h"
 #include "PlaybackController.h"
+#include "layout/LayoutRuntime.h"
+#include "layout/LayoutYaml.h"
+#include "layout/editor/LayoutEditorDialog.h"
 #include "service/PlaylistExporter.h"
 #include <ao/audio/Player.h>
 #include <ao/utility/Log.h>
@@ -14,7 +17,6 @@
 #include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
-
 #ifdef ALSA_FOUND
 #include <ao/audio/backend/AlsaProvider.h>
 #endif
@@ -133,7 +135,7 @@ namespace ao::gtk
 
     TrackViewState trackViewStateFromLayout(TrackColumnLayout const& layout)
     {
-      auto normalized = normalizeTrackColumnLayout(layout);
+      auto const normalized = normalizeTrackColumnLayout(layout);
       auto state = TrackViewState{};
 
       for (auto const& entry : normalized.columns)
@@ -160,7 +162,15 @@ namespace ao::gtk
   }
 
   MainWindow::MainWindow(ao::rt::AppSession& session, std::shared_ptr<ao::rt::ConfigStore> configStore)
-    : _configStore{std::move(configStore)}, _session{session}, _coverArtWidget{nullptr}
+    : _configStore{std::move(configStore)}
+    , _session{session}
+    , _componentRegistry{}
+    , _componentContext{.registry = _componentRegistry,
+                        .session = _session,
+                        .parentWindow = *this,
+                        .menuModel = {},
+                        .onNodeMoved = {}}
+    , _layoutHost{_componentRegistry}
   {
     set_title("Aobus");
 
@@ -168,14 +178,14 @@ namespace ao::gtk
     set_default_size(ao::gtk::kDefaultWindowWidth, ao::gtk::kDefaultWindowHeight);
 
     // Initialize cover art cache (LRU 100 entries)
-    _coverArtCache = std::make_unique<CoverArtCache>(100);
-
-    // Initialize cover art widget and bind to focused-view detail projection
-    _coverArtWidget = std::make_unique<CoverArtWidget>(_session, *_coverArtCache);
-    _coverArtWidget->bindToDetailProjection(_session.views().detailProjection(ao::rt::FocusedViewTarget{}));
+    int const coverArtCacheSize = 100;
+    _coverArtCache = std::make_unique<CoverArtCache>(coverArtCacheSize);
 
     // Initialize dispatcher
     _dispatcher = std::make_shared<GtkMainThreadDispatcher>();
+
+    // Initialize StatusBar
+    _statusBar = std::make_unique<StatusBar>(_session);
 
     // Initialize TagEditController
     _tagEditController = std::make_unique<TagEditController>(
@@ -194,13 +204,8 @@ namespace ao::gtk
       _session,
       ListSidebarController::Callbacks{
         .onListSelected = [this](ao::ListId listId) { _session.workspace().navigateTo(listId); },
-        .getListMembership = [](ao::ListId /*listId*/) -> ao::rt::TrackSource*
-        {
-          // This callback is slightly problematic in the new architecture
-          // as the sidebar shouldn't care about membership lists directly.
-          // For now, we still allow it but it's a candidate for future cleanup.
-          return nullptr;
-        }});
+        .getListMembership = [this](ao::ListId listId) { return &_session.sources().sourceFor(listId); }});
+    _componentContext.listSidebarController = _listSidebarController.get();
 
     // Initialize track page graph
     _trackPageGraph = std::make_unique<TrackPageGraph>(_stack,
@@ -210,26 +215,8 @@ namespace ao::gtk
                                                        *_tagEditController,
                                                        *_listSidebarController);
 
-    // Initialize inspector sidebar
-    _inspectorSidebar = std::make_unique<InspectorSidebar>(_session, *_coverArtCache);
-    _inspectorSidebar->signalTagEditRequested().connect(
-      [this](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
-      {
-        if (!_rowDataProvider || relativeTo == nullptr)
-        {
-          return;
-        }
-
-        auto const selection = TrackSelectionContext{.listId = allTracksListId(), .selectedIds = ids};
-
-        _tagEditController->showTagEditor(selection, *relativeTo);
-      });
-
     // Bind inspector sidebar to focused-view detail projection (cover art + audio auto-update)
-    _inspectorSidebar->bindToDetailProjection(_session.views().detailProjection(ao::rt::FocusedViewTarget{}));
-
-    // Initialize playback bar (self-wires to AppSession)
-    _playbackBar = std::make_unique<PlaybackBar>(_session);
+    // (This is now handled by the InspectorSidebarComponent)
 
     // Initialize import/export coordinator
     _importExportCoordinator = std::make_unique<ImportExportCoordinator>(
@@ -261,16 +248,18 @@ namespace ao::gtk
         .onStatusMessage = [this](std::string const& msg) { showStatusMessage(msg); },
         .onTitleChanged = [this](std::string const& title) { set_title(title); }});
 
+    // Register standard layout components
+    layout::LayoutRuntime::registerStandardComponents(_componentRegistry);
+
+    // Default sidebar state (will be refined by layout later)
+    _inspectorHandle.set_active(false);
+    _inspectorRevealer.set_reveal_child(false);
+
     setupMenu();
     setupLayout();
 
     // Try to restore previous session
     loadSession();
-
-    // Default sidebar state
-    _inspectorHandle.set_active(false);
-    _inspectorRevealer.set_reveal_child(false);
-    _inspectorSidebar->set_visible(false);
   }
 
   MainWindow::~MainWindow()
@@ -369,8 +358,11 @@ namespace ao::gtk
 
     if (_statusBar)
     {
-      _statusBar->setTrackCount(_session.sources().allTracks().size());
+      _statusBar->showMessage("Aobus Ready");
     }
+
+    // Rebuild layout with all controllers ready
+    setupLayoutHost();
 
     auto const txn = _session.musicLibrary().readTransaction();
     rebuildListPages(txn);
@@ -405,13 +397,18 @@ namespace ao::gtk
     fileMenu->append("Quit", "app.quit");
     menuModel->append_submenu("File", fileMenu);
 
+    // View menu
+    auto viewMenu = Gio::Menu::create();
+    viewMenu->append("Edit Layout...", "win.edit-layout");
+    menuModel->append_submenu("View", viewMenu);
+
     // Help menu (placeholder)
     auto helpMenu = Gio::Menu::create();
     helpMenu->append("About", "app.about");
     menuModel->append_submenu("Help", helpMenu);
 
-    // Set up menu bar
-    _menuBar.set_menu_model(menuModel);
+    // Store menu model in context for layout component
+    _componentContext.menuModel = menuModel;
 
     // Create actions
     auto openAction = Gio::SimpleAction::create("open-library");
@@ -433,73 +430,15 @@ namespace ao::gtk
     importLibAction->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
                                                { _importExportCoordinator->importLibrary(); });
     add_action(importLibAction);
+
+    auto editLayoutAction = Gio::SimpleAction::create("edit-layout");
+    editLayoutAction->signal_activate().connect([this](Glib::VariantBase const& /*variant*/) { openLayoutEditor(); });
+    add_action(editLayoutAction);
   }
 
   void MainWindow::setupLayout()
   {
-    // Set up horizontal paned (split view)
-    _paned.set_orientation(Gtk::Orientation::HORIZONTAL);
-    _paned.set_vexpand(true);
-
-    // Left side: vertical box
-    _leftBox.set_orientation(Gtk::Orientation::VERTICAL);
-    _leftBox.set_hexpand(true);
-    _leftBox.set_vexpand(true);
-    _leftBox.set_homogeneous(false);
-
-    // Add sidebar actions to main window
-    _listSidebarController->addActionsTo(*this);
-
-    // Add tag edit actions to main window
-    _tagEditController->addActionsTo(*this);
-
-    // Cover art widget (min 50x50)
-    _coverArtWidget->set_valign(Gtk::Align::END);
-    _coverArtWidget->set_halign(Gtk::Align::FILL);
-    _coverArtWidget->set_size_request(kCoverArtSize, kCoverArtSize);
-    _coverArtWidget->set_vexpand(false);
-    _coverArtWidget->set_hexpand(false);
-
-    // Add widgets to left box
-    _listSidebarController->widget().set_vexpand(true);
-    _leftBox.append(_listSidebarController->widget());
-    _leftBox.append(*_coverArtWidget);
-
-    // Right side: stack for pages and inspector
-    _stack.set_hexpand(true);
-    _stack.set_vexpand(true);
-
-    // Inspector container
-    auto* inspectorBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-    inspectorBox->set_hexpand(true);
-    inspectorBox->set_vexpand(true);
-
-    _inspectorRevealer.set_transition_type(Gtk::RevealerTransitionType::SLIDE_LEFT);
-    _inspectorRevealer.set_child(*_inspectorSidebar);
-    _inspectorRevealer.set_reveal_child(false);
-    _inspectorRevealer.set_hexpand(false);
-    _inspectorRevealer.set_vexpand(true);
-    _inspectorSidebar->set_vexpand(true);
-
-    // Inspector handle (sidebar trigger)
-    _inspectorHandle.set_icon_name("pan-start-symbolic");
-    _inspectorHandle.add_css_class("inspector-handle");
-    _inspectorHandle.set_valign(Gtk::Align::CENTER);
-    _inspectorHandle.set_hexpand(false);
-    _inspectorHandle.set_focus_on_click(false);
-
-    _inspectorHandle.signal_toggled().connect(
-      [this]
-      {
-        bool const active = _inspectorHandle.get_active();
-        _inspectorRevealer.set_reveal_child(active);
-
-        // Ensure the sidebar doesn't take space when collapsed
-        _inspectorSidebar->set_visible(active);
-
-        _inspectorHandle.set_icon_name(active ? "pan-end-symbolic" : "pan-start-symbolic");
-        _inspectorHandle.set_tooltip_text(active ? "Hide Inspector" : "Show Inspector");
-      });
+    set_child(_layoutHost);
 
     // Style the handle with CSS
     auto const cssProvider = Gtk::CssProvider::create();
@@ -576,46 +515,66 @@ namespace ao::gtk
                                 "}");
     Gtk::StyleContext::add_provider_for_display(
       Gdk::Display::get_default(), cssProvider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  }
 
-    inspectorBox->append(_stack);
-    inspectorBox->append(_inspectorHandle);
-    inspectorBox->append(_inspectorRevealer);
+  void MainWindow::openLayoutEditor()
+  {
+    auto const dialog = std::make_shared<layout::editor::LayoutEditorDialog>(*this, _componentRegistry, _activeLayout);
+    auto* const dialogPtr = dialog.get();
 
-    // Add placeholder page
-    auto* placeholderLabel = Gtk::make_managed<Gtk::Label>("Select a library or import tracks");
-    placeholderLabel->set_halign(Gtk::Align::CENTER);
-    placeholderLabel->set_valign(Gtk::Align::CENTER);
-    _stack.add(*placeholderLabel, "welcome", "Welcome");
+    _componentContext.editMode = true;
+    _componentContext.onNodeMoved = [dialogPtr](std::string const& nodeId, int posX, int posY)
+    { dialogPtr->updateNodePosition(nodeId, posX, posY); };
 
-    // Add to paned
-    _paned.set_start_child(_leftBox);
-    _paned.set_end_child(*inspectorBox);
+    // Rebuild to inject edit mode
+    _layoutHost.setLayout(_componentContext, _activeLayout);
 
-    // Set paned behavior
-    _paned.set_resize_start_child(true);
-    _paned.set_shrink_start_child(false);
-    _paned.set_resize_end_child(true);
-    _paned.set_shrink_end_child(false);
+    dialogPtr->signalApplyPreview().connect([this](layout::LayoutDocument const& doc)
+                                            { _layoutHost.setLayout(_componentContext, doc); });
 
-    // Set initial position to give 1/3 to left, 2/3 to right
-    constexpr std::int32_t kPanedInitialPosition = 330;
-    _paned.set_position(kPanedInitialPosition);
+    dialogPtr->signal_response().connect(
+      [this, sharedDialog = dialog](int responseId)
+      {
+        _componentContext.editMode = false;
+        _componentContext.onNodeMoved = nullptr;
 
-    // Set up the main layout
-    auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
-    mainBox->append(_menuBar);
+        if (responseId == Gtk::ResponseType::OK)
+        {
+          _activeLayout = sharedDialog->document();
+          _layoutHost.setLayout(_componentContext, _activeLayout);
 
-    mainBox->append(*_playbackBar);
-    mainBox->append(_paned);
+          _configStore->save("linuxGtkLayout", _activeLayout);
+        }
+        else if (responseId == Gtk::ResponseType::CANCEL)
+        {
+          // Revert preview
+          _layoutHost.setLayout(_componentContext, _activeLayout);
+        }
 
-    // Status bar at bottom
-    _statusBar = std::make_unique<StatusBar>(_session);
-    auto* statusSeparator = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
-    mainBox->append(*statusSeparator);
-    mainBox->append(*_statusBar);
+        sharedDialog->close();
+      });
 
-    // Set as window child
-    set_child(*mainBox);
+    dialogPtr->present();
+  }
+
+  void MainWindow::setupLayoutHost()
+  {
+    // Try to load layout from config
+    auto doc = layout::createDefaultLayout();
+    _configStore->load("linuxGtkLayout", doc);
+
+    // Update context with initialized controllers
+    _componentContext.rowDataProvider = _rowDataProvider.get();
+    _componentContext.coverArtCache = _coverArtCache.get();
+    _componentContext.playbackController = _playbackController.get();
+    _componentContext.tagEditController = _tagEditController.get();
+    _componentContext.importExportCoordinator = _importExportCoordinator.get();
+    _componentContext.trackPageGraph = _trackPageGraph.get();
+    _componentContext.columnLayoutModel = &_trackColumnLayoutModel;
+    _componentContext.statusBar = _statusBar.get();
+
+    _activeLayout = doc;
+    _layoutHost.setLayout(_componentContext, _activeLayout);
   }
 
   void MainWindow::rebuildListPages(ao::lmdb::ReadTransaction const& txn)
@@ -665,12 +624,12 @@ namespace ao::gtk
 
     ws.maximized = is_maximized();
 
-    if (auto const pos = _paned.get_position(); pos > 0)
-    {
-      ws.panedPosition = pos;
-    }
+    // Paned position will be handled by layout persistence in the future.
+    // For Phase 3, we just remove the direct paned access.
 
     _configStore->save("window", ws);
+
+    _configStore->save("linuxGtkLayout", _activeLayout);
 
     _configStore->save("track_view", trackViewStateFromLayout(_trackColumnLayoutModel.layout()));
 
@@ -683,11 +642,6 @@ namespace ao::gtk
     _configStore->load("window", ws);
 
     set_default_size(ws.width, ws.height);
-
-    if (ws.panedPosition > 0)
-    {
-      _paned.set_position(ws.panedPosition);
-    }
 
     if (ws.maximized)
     {

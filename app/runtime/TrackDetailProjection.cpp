@@ -91,12 +91,14 @@ namespace ao::rt
       [this](auto const& target)
       {
         using T = std::decay_t<decltype(target)>;
+
         if constexpr (std::is_same_v<T, FocusedViewTarget>)
         {
           _impl->focusSub = _impl->workspace.onFocusedViewChanged(
             [this](ViewId viewId)
             {
               _impl->trackedViewId = viewId;
+
               if (viewId == ViewId{})
               {
                 return;
@@ -215,6 +217,7 @@ namespace ao::rt
     for (auto const trackId : ids)
     {
       auto const optView = reader.get(trackId, ao::library::TrackStore::Reader::LoadMode::Both);
+
       if (!optView)
       {
         continue;

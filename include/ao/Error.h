@@ -11,6 +11,7 @@ namespace ao
     enum class Code : std::uint8_t
     {
       Generic,
+      NotFound,
       DeviceNotFound,
       FormatRejected,
       InitFailed,

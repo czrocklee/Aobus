@@ -18,6 +18,10 @@
 #include <runtime/AppSession.h>
 #include <runtime/ConfigStore.h>
 
+#include "layout/ComponentContext.h"
+#include "layout/ComponentRegistry.h"
+#include "layout/LayoutHost.h"
+
 #include <gtkmm.h>
 
 #include <cstdint>
@@ -53,6 +57,7 @@ namespace ao::gtk
   public:
     explicit MainWindow(ao::rt::AppSession& session, std::shared_ptr<ao::rt::ConfigStore> configStore);
     ~MainWindow() override;
+
     void on_hide() override;
 
     ImportExportCoordinator& importExportCoordinator() { return *_importExportCoordinator; }
@@ -73,6 +78,12 @@ namespace ao::gtk
     void saveSession();
     void loadSession();
 
+    void setupLayoutHost();
+    void openLayoutEditor();
+
+    // Layout constants
+    static constexpr int kCoverArtSize = 50;
+
     // GTK-side row data cache
     std::unique_ptr<TrackRowDataProvider> _rowDataProvider;
 
@@ -80,22 +91,20 @@ namespace ao::gtk
 
     ao::rt::AppSession& _session;
 
-    // Layout: Horizontal paned with left box and right stack
-    Gtk::Paned _paned;
+    // Layout system
+    layout::ComponentRegistry _componentRegistry;
+    layout::ComponentContext _componentContext;
+    layout::LayoutHost _layoutHost;
+    layout::LayoutDocument _activeLayout;
 
-    // Left side: vertical box with list + cover art
-    Gtk::Box _leftBox;
+    // Left side: controllers
     std::unique_ptr<ListSidebarController> _listSidebarController;
-    std::unique_ptr<CoverArtWidget> _coverArtWidget;
 
     // Import/Export orchestration
     std::unique_ptr<ImportExportCoordinator> _importExportCoordinator;
 
     // Right side: stack for pages
     Gtk::Stack _stack;
-
-    // Menu
-    Gtk::PopoverMenuBar _menuBar;
 
     // Track pages graph
     std::unique_ptr<TrackPageGraph> _trackPageGraph;
@@ -106,7 +115,6 @@ namespace ao::gtk
 
     // Playback support
     std::shared_ptr<GtkMainThreadDispatcher> _dispatcher;
-    std::unique_ptr<PlaybackBar> _playbackBar;
     std::unique_ptr<PlaybackController> _playbackController;
 
     ao::rt::Subscription _tracksMutatedSubscription;
@@ -117,14 +125,10 @@ namespace ao::gtk
     // Status bar
     std::unique_ptr<StatusBar> _statusBar;
 
-    // Inspector
-    std::unique_ptr<InspectorSidebar> _inspectorSidebar;
+    // Inspector support
     Gtk::Revealer _inspectorRevealer;
     Gtk::ToggleButton _inspectorHandle;
 
     std::unique_ptr<CoverArtCache> _coverArtCache;
-
-    // Layout constants
-    static constexpr int kCoverArtSize = 50;
   };
 } // namespace ao::gtk
