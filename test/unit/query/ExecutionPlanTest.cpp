@@ -57,6 +57,7 @@ TEST_CASE("ExecutionPlan - Compile Metadata Field")
       break;
     }
   }
+
   CHECK(hasEq == true);
 }
 
@@ -78,6 +79,7 @@ TEST_CASE("ExecutionPlan - Compile Property Field")
       break;
     }
   }
+
   CHECK(hasGt == true);
 }
 
@@ -163,6 +165,7 @@ TEST_CASE("ExecutionPlan - Compile Logical And")
       break;
     }
   }
+
   CHECK(hasAnd == true);
 }
 
@@ -182,6 +185,7 @@ TEST_CASE("ExecutionPlan - Compile Logical Or")
       break;
     }
   }
+
   CHECK(hasOr == true);
 }
 
@@ -200,6 +204,7 @@ TEST_CASE("ExecutionPlan - Compile Logical Not")
       break;
     }
   }
+
   CHECK(hasNot == true);
 }
 
@@ -218,6 +223,7 @@ TEST_CASE("ExecutionPlan - Compile Relational Operators")
       break;
     }
   }
+
   CHECK(hasLt == true);
 
   expr = parse("$year <= 2000");
@@ -233,6 +239,7 @@ TEST_CASE("ExecutionPlan - Compile Relational Operators")
       break;
     }
   }
+
   CHECK(hasLe == true);
 }
 
@@ -251,6 +258,7 @@ TEST_CASE("ExecutionPlan - Compile Like")
       break;
     }
   }
+
   CHECK(hasLike == true);
 }
 
@@ -580,6 +588,7 @@ TEST_CASE("ExecutionPlan - Future matching for tags not yet in dictionary")
       }
     }
   }
+
   CHECK(foundTagEq);
 
   // Verify Bloom Filter also contains the bit for this getOrInternd ID
@@ -614,6 +623,7 @@ TEST_CASE("ExecutionPlan - Future matching for custom fields not yet in dictiona
       foundLoadField = true;
     }
   }
+
   CHECK(foundLoadField);
 }
 
@@ -722,6 +732,7 @@ TEST_CASE("ExecutionPlan - AccessProfile Exhaustive Classification")
       {
         expr = parse(std::string(f) + " = 0");
       }
+
       auto plan = compiler.compile(expr);
       CHECK(plan.accessProfile == AccessProfile::HotOnly);
     }

@@ -105,5 +105,6 @@ TEST_CASE("ResourceStore - deduplication", "[core][resource]")
   {
     ++count;
   }
+
   REQUIRE(count == 1);
 }

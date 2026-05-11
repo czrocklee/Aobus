@@ -114,6 +114,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     {
       tracks.push_back(item);
     }
+
     REQUIRE(tracks.size() == 1);
     auto const& view = tracks[0].second;
     REQUIRE(std::string(view.property().uri()) == "song.flac");
@@ -127,6 +128,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
     {
       tagNames.push_back(std::string(dict.get(tid)));
     }
+
     REQUIRE(std::ranges::contains(tagNames, "rock"));
     REQUIRE(std::ranges::contains(tagNames, "favorite"));
 
@@ -140,6 +142,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
         foundMood = true;
       }
     }
+
     REQUIRE(foundMood);
 
     // Check lists
@@ -162,6 +165,7 @@ TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
         REQUIRE(lview.tracks()[0] == tracks[0].first);
       }
     }
+
     REQUIRE(smartCount == 1);
     REQUIRE(manualCount == 1);
   }
@@ -230,6 +234,7 @@ library:
         parentId = listId;
         parent = view;
       }
+
       if (std::string(view.name()) == "Child")
       {
         childId = listId;

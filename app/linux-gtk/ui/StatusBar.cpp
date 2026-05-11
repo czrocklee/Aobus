@@ -90,6 +90,7 @@ namespace ao::gtk
           padding-top: 1px;
           padding-bottom: 1px;
         }
+
         .now-playing-label {
           transition: all 200ms ease-in-out;
           padding: 2px 12px;
@@ -97,22 +98,27 @@ namespace ao::gtk
           color: @theme_fg_color;
           opacity: 0.85;
         }
+
         .now-playing-label:hover {
           background-color: alpha(@theme_selected_bg_color, 0.15);
           color: @theme_selected_bg_color;
           opacity: 1.0;
         }
+
         .now-playing-label:active {
           background-color: alpha(@theme_selected_bg_color, 0.25);
           opacity: 0.7;
         }
+
         .clickable-label {
           /* No direct cursor property in standard GTK CSS for Label */
         }
+
         .device-row {
            padding: 6px 16px;
            transition: background 150ms ease;
         }
+
         .menu-header {
            font-weight: 800;
            font-size: 0.75em;
@@ -125,18 +131,22 @@ namespace ao::gtk
            letter-spacing: 0.12em;
            opacity: 0.7;
         }
+
         /* Restore clean top spacing for the first header */
         listboxrow:first-child .menu-header {
            padding-top: 8px;
         }
+
         .selected-row {
            background-color: alpha(@theme_selected_bg_color, 0.15);
            border-left: 4px solid @theme_selected_bg_color;
         }
+
         .selected-row label {
            color: @theme_selected_bg_color;
            font-weight: bold;
         }
+
         .sink-status-perfect { color: #A855F7; }
         .sink-status-lossless { color: #10B981; }
         .sink-status-intervention { color: #F59E0B; }
@@ -150,6 +160,7 @@ namespace ao::gtk
           {
             Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
           }
+
           initialized = true;
         }
       }
@@ -499,6 +510,7 @@ namespace ao::gtk
     {
       std::format_to(std::back_inserter(tooltip), "\n{}", status.qualityTooltip);
     }
+
     if (tooltip != _lastTooltipText)
     {
       APP_LOG_DEBUG("StatusBar: Updating tooltip (length={})", tooltip.length());

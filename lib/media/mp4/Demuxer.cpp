@@ -270,6 +270,7 @@ namespace ao::media::mp4
     {
       return {0, 0};
     }
+
     return _samples[index];
   }
 

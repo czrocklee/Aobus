@@ -46,6 +46,7 @@ namespace ao::audio::test
     {
       return _real.setProperty(id, value);
     }
+
     ao::Result<PropertyValue> getProperty(PropertyId id) const override { return _real.getProperty(id); }
     PropertyInfo queryProperty(PropertyId id) const noexcept override { return _real.queryProperty(id); }
 

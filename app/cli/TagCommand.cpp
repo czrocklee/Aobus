@@ -103,6 +103,7 @@ namespace ao::cli
       {
         os << name << " ";
       }
+
       os << '\n';
     }
   }

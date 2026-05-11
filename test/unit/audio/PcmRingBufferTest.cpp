@@ -118,6 +118,7 @@ TEST_CASE("PcmRingBuffer - Concurrency", "[audio][unit][ring_buffer]")
           std::this_thread::yield();
         }
       }
+
       done = true;
     });
 
@@ -138,6 +139,7 @@ TEST_CASE("PcmRingBuffer - Concurrency", "[audio][unit][ring_buffer]")
           std::this_thread::yield();
         }
       }
+
       REQUIRE(count == iterations);
     });
 

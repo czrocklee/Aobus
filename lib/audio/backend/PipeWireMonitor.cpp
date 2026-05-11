@@ -494,6 +494,7 @@ namespace ao::audio::backend
       AUDIO_LOG_ERROR("Failed to add PipeWire refresh event - periodic refresh disabled");
       return;
     }
+
     _impl->refreshEvent.reset(event);
 
     ::pw_thread_loop_lock(_impl->threadLoop.get());
@@ -554,6 +555,7 @@ namespace ao::audio::backend
         return id;
       }
     }
+
     return std::nullopt;
   }
 
@@ -609,6 +611,7 @@ namespace ao::audio::backend
       auto const lock = std::lock_guard{mutex};
       graphSubscriptions.push_back({id, std::string(routeAnchor), std::move(callback)});
     }
+
     triggerRefresh();
 
     return ao::audio::Subscription{[this, id]
@@ -622,6 +625,7 @@ namespace ao::audio::backend
                                          graphSubscriptions.erase(it);
                                        }
                                      }
+
                                      triggerRefresh();
                                    }};
   }
@@ -639,6 +643,7 @@ namespace ao::audio::backend
         {
           displayName = node.nodeName.empty() ? node.objectPath : node.nodeName;
         }
+
         auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
         auto caps = ao::audio::DeviceCapabilities{};
 
@@ -661,6 +666,7 @@ namespace ao::audio::backend
                            .capabilities = caps});
       }
     }
+
     return devices;
   }
 

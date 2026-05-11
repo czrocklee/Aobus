@@ -270,6 +270,7 @@ int main(int argc, char* argv[])
   {
     gtkArgv.push_back(arg.data());
   }
+
   int gtkArgc = static_cast<int>(gtkArgv.size());
 
   APP_LOG_INFO("Entering GTK main loop");

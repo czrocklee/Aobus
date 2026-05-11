@@ -89,6 +89,7 @@ namespace ao::gtk
           {
             _stack.remove(*it->second.page);
           }
+
           it = _trackPages.erase(it);
         }
         else
@@ -149,6 +150,7 @@ namespace ao::gtk
     {
       ensureViewPage(viewId, *_activeDataProvider);
     }
+
     if (layout.activeViewId != ao::app::ViewId{})
     {
       _stack.set_visible_child(std::format("view-{}", layout.activeViewId.value()));
@@ -303,6 +305,7 @@ namespace ao::gtk
         {
           return;
         }
+
         TrackSelectionContext sel{.listId = page->getListId(), .selectedIds = ids};
         _tagEditController.showTagEditor(sel, *relativeTo);
       });
@@ -324,6 +327,7 @@ namespace ao::gtk
         {
           parentId = rootParentId();
         }
+
         _listSidebar.createSmartListFromExpression(parentId, expression);
       });
 

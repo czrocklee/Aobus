@@ -25,6 +25,7 @@ namespace ao::audio::backend::detail
     {
       return caps;
     }
+
     auto pcm = ao::utility::makeUniquePtr<::snd_pcm_close>(rawPcm);
 
     ::snd_pcm_hw_params_t* params = nullptr;

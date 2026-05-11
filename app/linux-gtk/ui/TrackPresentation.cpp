@@ -106,6 +106,7 @@ namespace ao::gtk
 
     return layout;
   }
+
   TrackColumnLayout normalizeTrackColumnLayout(TrackColumnLayout const& layout)
   {
     auto result = TrackColumnLayout{};

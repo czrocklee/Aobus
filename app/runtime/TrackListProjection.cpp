@@ -161,6 +161,7 @@ namespace ao::app
         case TrackSortField::Composer: return lhs.composerKey.compare(rhs.composerKey);
         case TrackSortField::Work: return lhs.workKey.compare(rhs.workKey);
       }
+
       return 0;
     }
 
@@ -182,6 +183,7 @@ namespace ao::app
             return term.ascending ? (cmp < 0) : (cmp > 0);
           }
         }
+
         return lhs.trackId < rhs.trackId;
       };
     }
@@ -232,40 +234,47 @@ namespace ao::app
           {
             keys.artistKey = normalizeTitle(dict.getOrDefault(view.metadata().artistId()));
           }
+
           break;
         case TrackGroupKey::Album:
           if (keys.albumKey.empty())
           {
             keys.albumKey = normalizeTitle(dict.getOrDefault(view.metadata().albumId()));
           }
+
           if (keys.albumArtistKey.empty())
           {
             keys.albumArtistKey = normalizeTitle(dict.getOrDefault(view.metadata().albumArtistId()));
           }
+
           break;
         case TrackGroupKey::AlbumArtist:
           if (keys.albumArtistKey.empty())
           {
             keys.albumArtistKey = normalizeTitle(dict.getOrDefault(view.metadata().albumArtistId()));
           }
+
           break;
         case TrackGroupKey::Genre:
           if (keys.genreKey.empty())
           {
             keys.genreKey = normalizeTitle(dict.getOrDefault(view.metadata().genreId()));
           }
+
           break;
         case TrackGroupKey::Composer:
           if (keys.composerKey.empty())
           {
             keys.composerKey = normalizeTitle(dict.getOrDefault(view.metadata().composerId()));
           }
+
           break;
         case TrackGroupKey::Work:
           if (keys.workKey.empty())
           {
             keys.workKey = normalizeTitle(dict.getOrDefault(view.metadata().workId()));
           }
+
           break;
         default: break;
       }
@@ -302,6 +311,7 @@ namespace ao::app
               entry.groupLabel = std::move(album) + " - " + std::move(albumArtist);
             }
           }
+
           break;
         case TrackGroupKey::AlbumArtist:
           entry.groupKey = entry.keys.albumArtistKey;
@@ -328,6 +338,7 @@ namespace ao::app
           entry.groupKey = std::format("{:05d}", year);
           entry.groupLabel = (year == 0) ? "Unknown Year" : std::format("{}", year);
         }
+
         break;
       }
     }
@@ -467,6 +478,7 @@ namespace ao::app
       {
         return it->second;
       }
+
       return std::nullopt;
     }
 
@@ -476,6 +488,7 @@ namespace ao::app
       {
         return false;
       }
+
       for (auto i = std::size_t{0}; i < left.size(); ++i)
       {
         if (left[i].rows.start != right[i].rows.start || left[i].rows.count != right[i].rows.count ||
@@ -484,6 +497,7 @@ namespace ao::app
           return false;
         }
       }
+
       return true;
     }
 
@@ -703,6 +717,7 @@ namespace ao::app
     {
       return ao::TrackId{};
     }
+
     return _impl->orderIndex[index].trackId;
   }
 
@@ -712,6 +727,7 @@ namespace ao::app
     {
       return it->second;
     }
+
     return std::nullopt;
   }
 
@@ -736,6 +752,7 @@ namespace ao::app
     {
       return {};
     }
+
     auto const& section = _impl->sections[groupIndex];
     return TrackGroupSectionSnapshot{
       .rows = section.rows,
@@ -753,6 +770,7 @@ namespace ao::app
         return i;
       }
     }
+
     return std::nullopt;
   }
 

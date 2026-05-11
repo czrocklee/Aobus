@@ -156,6 +156,7 @@ namespace ao::app
       {
         tags.add(tag);
       }
+
       for (auto const& tag : tagsToRemove)
       {
         tags.remove(tag);

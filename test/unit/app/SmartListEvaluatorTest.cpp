@@ -101,6 +101,7 @@ namespace
           actualRemoved.push_back(id);
         }
       }
+
       notifyRemoved(actualRemoved);
     }
 

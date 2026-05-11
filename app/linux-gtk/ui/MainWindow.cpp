@@ -336,10 +336,12 @@ namespace ao::gtk
         {
           return;
         }
+
         for (auto const trackId : event.trackIds)
         {
           _rowDataProvider->invalidate(trackId);
         }
+
         _session.sources().allTracks().notifyUpdated(event.trackIds);
       });
 
@@ -654,12 +656,14 @@ namespace ao::gtk
     {
       ws.height = height;
     }
+
     ws.maximized = is_maximized();
 
     if (auto const pos = _paned.get_position(); pos > 0)
     {
       ws.panedPosition = pos;
     }
+
     _configStore->save("window", ws);
 
     _configStore->save("track_view", trackViewStateFromLayout(_trackColumnLayoutModel.layout()));

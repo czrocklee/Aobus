@@ -185,6 +185,7 @@ namespace ao::app::test
         bus.publish(PlaybackTransportChanged{});
         CHECK(count == 1);
       }
+
       bus.publish(PlaybackTransportChanged{});
       CHECK(count == 1);
     }

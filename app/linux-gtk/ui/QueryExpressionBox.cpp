@@ -290,6 +290,7 @@ namespace ao::gtk
             suggestions.emplace_back("#" + tag);
           }
         }
+
         break;
       case '%':
         for (auto const& key : _availableCustomKeys)
@@ -299,6 +300,7 @@ namespace ao::gtk
             suggestions.emplace_back("%" + key);
           }
         }
+
         break;
       default: break;
     }

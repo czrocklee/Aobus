@@ -49,6 +49,7 @@ namespace ao::audio
         _muted = std::get<bool>(value);
         return {};
       }
+
       return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
     }
 
@@ -63,6 +64,7 @@ namespace ao::audio
       {
         return _muted;
       }
+
       return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
     }
 
@@ -72,6 +74,7 @@ namespace ao::audio
       {
         return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
       }
+
       return {};
     }
 
@@ -90,6 +93,7 @@ namespace ao::audio
         _target->onRouteReady(anchor);
       }
     }
+
     void fireFormatChanged(Format const& fmt)
     {
       _format = fmt;
@@ -99,6 +103,7 @@ namespace ao::audio
         _target->onFormatChanged(fmt);
       }
     }
+
     void fireBackendError(std::string_view msg)
     {
       if (_target)
@@ -106,6 +111,7 @@ namespace ao::audio
         _target->onBackendError(msg);
       }
     }
+
     void fireDrainComplete()
     {
       if (_target)
@@ -113,6 +119,7 @@ namespace ao::audio
         _target->onDrainComplete();
       }
     }
+
     void firePropertyChanged(PropertyId id)
     {
       if (_target)

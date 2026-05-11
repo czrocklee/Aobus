@@ -423,6 +423,7 @@ namespace
     {
       ++count;
     }
+
     CHECK(count == 0);
   }
 
@@ -439,6 +440,7 @@ namespace
       CHECK(v == "value1");
       ++count;
     }
+
     CHECK(count == 1);
     CHECK(view.property().uri() == "/path/to/file.flac");
   }
@@ -464,6 +466,7 @@ namespace
     {
       result.emplace_back(k, v);
     }
+
     CHECK(result.size() == 3);
     CHECK(result[0].first == id0);
     CHECK(result[0].second == "-6.5");
@@ -483,6 +486,7 @@ namespace
     {
       ++count;
     }
+
     CHECK(count == 0);
   }
 
@@ -500,6 +504,7 @@ namespace
       CHECK(value == "value1");
       ++count;
     }
+
     CHECK(count == 1);
   }
 
@@ -533,6 +538,7 @@ namespace
     {
       result.emplace_back(key, value);
     }
+
     CHECK(result.size() == 3);
     CHECK(result[0].first == DictionaryId{1});
     CHECK(result[0].second == "-6.5");
@@ -620,6 +626,7 @@ namespace
       CHECK(v.empty());
       ++count;
     }
+
     CHECK(count == 1);
   }
 

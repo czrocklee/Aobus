@@ -140,6 +140,7 @@ namespace ao::gtk
           box-shadow: none; 
           font-weight: bold;
         }
+
         .inline-editor-entry text { padding-top: 0; padding-bottom: 0; min-height: 0; }
       )");
 
@@ -175,6 +176,7 @@ namespace ao::gtk
       {
         return static_cast<ao::app::TrackGroupKey>(position);
       }
+
       return ao::app::TrackGroupKey::None;
     }
 
@@ -1525,6 +1527,7 @@ namespace ao::gtk
             cancelChange();
             return true;
           }
+
           return false;
         },
         false);

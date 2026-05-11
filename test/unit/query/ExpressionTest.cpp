@@ -21,6 +21,7 @@ namespace
         oss << "null";
         return;
       }
+
       oss << "(";
       std::visit(*this, binary->operand);
       if (binary->optOperation)
@@ -42,6 +43,7 @@ namespace
 
         std::visit(*this, binary->optOperation->operand);
       }
+
       oss << ")";
     }
 
@@ -52,6 +54,7 @@ namespace
         oss << "null";
         return;
       }
+
       oss << "not ";
       std::visit(*this, unary->operand);
     }

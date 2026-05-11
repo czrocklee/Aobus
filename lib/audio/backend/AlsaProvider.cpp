@@ -52,6 +52,7 @@ namespace ao::audio::backend
       {
         AUDIO_LOG_WARN("ALSA device enumeration returned no devices - ALSA may not be available");
       }
+
       monitorThread = std::jthread(
         [this](std::stop_token const& st)
         {
@@ -67,12 +68,14 @@ namespace ao::audio::backend
       {
         return;
       }
+
       auto monitor =
         ao::utility::makeUniquePtr<::udev_monitor_unref>(::udev_monitor_new_from_netlink(udev.get(), "udev"));
       if (!monitor)
       {
         return;
       }
+
       ::udev_monitor_filter_add_match_subsystem_devtype(monitor.get(), "sound", nullptr);
       ::udev_monitor_enable_receiving(monitor.get());
       auto const fd = ::udev_monitor_get_fd(monitor.get());
@@ -95,6 +98,7 @@ namespace ao::audio::backend
               cachedDevices = std::move(newDevices);
               subs = deviceSubs;
             }
+
             for (auto const& sub : subs)
             {
               if (sub.callback)
@@ -174,6 +178,7 @@ namespace ao::audio::backend
       graph.connections.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});
       callback(graph);
     }
+
     return ao::audio::Subscription{};
   }
 } // namespace ao::audio::backend

@@ -339,6 +339,7 @@ namespace ao::gtk
           {
             _seekScale.set_value(static_cast<double>(displayPos));
           }
+
           _updatingSeekScale = false;
 
           if (_lastDurationMs > 0)
@@ -422,6 +423,7 @@ namespace ao::gtk
         {
           return;
         }
+
         _session.playback().setVolume(volume);
       });
 
@@ -728,17 +730,20 @@ namespace ao::gtk
                 break;
               }
             }
+
             _outputButton.set_tooltip_text(label);
             found = true;
             break;
           }
         }
       }
+
       if (found)
       {
         break;
       }
     }
+
     if (!found)
     {
       _outputButton.set_tooltip_text("No Output");

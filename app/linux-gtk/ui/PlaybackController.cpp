@@ -72,6 +72,7 @@ namespace ao::gtk
     {
       return std::nullopt;
     }
+
     return _sequence->trackIds[_sequence->currentIndex];
   }
 
@@ -81,6 +82,7 @@ namespace ao::gtk
     {
       return std::nullopt;
     }
+
     return _sequence->optSourceListId;
   }
 

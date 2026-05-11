@@ -118,6 +118,7 @@ namespace ao::audio
       std::lock_guard lock(backendsMutex);
       allDevicesCopy = allDevices;
     }
+
     auto const activeIt =
       std::ranges::find_if(allDevicesCopy,
                            [&](Device const& dev)
@@ -142,6 +143,7 @@ namespace ao::audio
                        pending.profile);
       }
     }
+
     if (onDevicesChanged)
     {
       onDevicesChanged(cachedBackends);
@@ -327,6 +329,7 @@ namespace ao::audio
       std::lock_guard lock(_impl->backendsMutex);
       allDevicesCopy = _impl->allDevices;
     }
+
     auto const it = std::ranges::find_if(
       allDevicesCopy, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
 
@@ -417,6 +420,7 @@ namespace ao::audio
       std::lock_guard lock(_impl->backendsMutex);
       status.availableBackends = _impl->cachedBackends;
     }
+
     status.flow = _impl->mergedGraph;
     status.isReady = isReady();
 

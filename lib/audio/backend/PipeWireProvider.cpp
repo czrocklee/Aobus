@@ -39,6 +39,7 @@ namespace ao::audio::backend
     : _impl{std::make_unique<Impl>()}
   {
   }
+
   PipeWireProvider::~PipeWireProvider() = default;
 
   ao::audio::Subscription PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
@@ -88,6 +89,7 @@ namespace ao::audio::backend
     {
       return ao::audio::Subscription{};
     }
+
     return _impl->monitor->subscribeGraph(routeAnchor, std::move(callback));
   }
 } // namespace ao::audio::backend

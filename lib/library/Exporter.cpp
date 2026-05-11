@@ -27,6 +27,7 @@ namespace ao::library
         case ExportMode::Metadata: return "metadata";
         case ExportMode::Full: return "full";
       }
+
       return "unknown";
     }
 
@@ -87,6 +88,7 @@ namespace ao::library
         {
           out << YAML::Key << std::string(dict.get(dictId)) << YAML::Value << std::string(value);
         }
+
         out << YAML::EndMap;
       }
     }
@@ -120,6 +122,7 @@ namespace ao::library
         {
           out << std::string(dict.get(tagId));
         }
+
         out << YAML::EndSeq;
       }
     }
@@ -167,6 +170,7 @@ namespace ao::library
     {
       exportTrack(out, trackId, view, mode);
     }
+
     out << YAML::EndSeq;
   }
 
@@ -224,12 +228,14 @@ namespace ao::library
           {
             out << tid.value();
           }
+
           out << YAML::EndSeq;
         }
       }
 
       out << YAML::EndMap;
     }
+
     out << YAML::EndSeq;
   }
 } // namespace ao::library
