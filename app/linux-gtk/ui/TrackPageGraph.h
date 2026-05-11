@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "PlaylistExporter.h"
 #include "TrackListAdapter.h"
 #include "TrackPresentation.h"
 #include "TrackViewPage.h"
+#include "service/PlaylistExporter.h"
 #include <runtime/AppSession.h>
 #include <runtime/CorePrimitives.h>
 
@@ -35,7 +35,7 @@ namespace ao::gtk
     ao::app::ViewId viewId{};
     std::unique_ptr<TrackListAdapter> adapter;
     std::unique_ptr<TrackViewPage> page;
-    std::unique_ptr<ao::gtk::services::PlaylistExporter> exporter;
+    std::unique_ptr<ao::gtk::service::PlaylistExporter> exporter;
   };
 
   /**

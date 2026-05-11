@@ -32,14 +32,14 @@ add_library(aobus-gtk-lib STATIC
     ui/ThemeBus.cpp
     ui/GtkControlExecutor.cpp
 
-    services/PlaylistExporter.cpp
+    service/PlaylistExporter.cpp
 )
 
 target_link_libraries(aobus-gtk-lib PUBLIC app_runtime)
 target_link_libraries(aobus-gtk-lib PRIVATE ao ao_audio PkgGTKMM glibmm-2.68 Boost::headers)
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ui")
-target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/services")
+target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/service")
 
 aobus_apply_clang_tidy(aobus-gtk-lib STRICT)
 

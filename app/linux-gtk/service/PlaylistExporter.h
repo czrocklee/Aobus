@@ -13,7 +13,7 @@
 #include <filesystem>
 #include <memory>
 
-namespace ao::gtk::services
+namespace ao::gtk::service
 {
   class PlaylistExporter final : public ao::app::TrackSourceObserver
   {
@@ -44,4 +44,4 @@ namespace ao::gtk::services
     std::filesystem::path const _path;
     std::unique_ptr<sigc::connection> _timeoutConnection;
   };
-} // namespace ao::gtk::services
+} // namespace ao::gtk::service

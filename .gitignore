@@ -64,6 +64,6 @@ vcpkg_installed/
 .DS_Store
 Thumbs.db
 
-# Test results and logs
+# Test results and log
 *.log
-tests/test_results/
+test/test_results/
