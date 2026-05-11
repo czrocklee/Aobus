@@ -3,7 +3,7 @@
 
 #include "MainWindow.h"
 #include "PlaybackController.h"
-#include "PlaylistExporter.h"
+#include "service/PlaylistExporter.h"
 #include <ao/audio/Player.h>
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>

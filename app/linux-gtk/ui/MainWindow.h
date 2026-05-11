@@ -26,7 +26,7 @@
 #include <optional>
 #include <vector>
 
-namespace ao::gtk::services
+namespace ao::gtk::service
 {
   class PlaylistExporter;
 }

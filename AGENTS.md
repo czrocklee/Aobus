@@ -20,7 +20,7 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 2. **Search:** Use `rg` for searching. Prefer narrow scopes when possible.
 3. **Assumptions:** State any technical assumptions clearly in your response.
 4. **No TACO (Trump Always Chickens Out):** Do not over-promise and under-deliver. Always follow through on complex requirements, without taking shortcuts when things get difficult.
-5. **Design Docs:** Update `docs/design/` when modifying code that affects user-facing behavior. Sync all affected docs.
+5. **Design Docs:** Update `doc/design/` when modifying code that affects user-facing behavior. Sync all affected docs.
 6. **Test Coverage:** All changes must include appropriate test coverage.
 
 ## Build And Validation

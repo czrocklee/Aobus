@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "PlaylistExporter.h"
+#include "service/PlaylistExporter.h"
 #include <ao/utility/Log.h>
 
 #include "TrackRowDataProvider.h"
@@ -11,7 +11,7 @@
 
 #include <fstream>
 
-namespace ao::gtk::services
+namespace ao::gtk::service
 {
   PlaylistExporter::PlaylistExporter(ao::app::TrackSource& list,
                                      ao::gtk::TrackRowDataProvider const& provider,
@@ -108,4 +108,4 @@ namespace ao::gtk::services
   {
     scheduleForWrite();
   }
-} // namespace ao::gtk::services
+} // namespace ao::gtk::service
