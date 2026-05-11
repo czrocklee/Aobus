@@ -32,6 +32,15 @@ add_library(aobus-gtk-lib STATIC
     ui/ThemeBus.cpp
     ui/GtkControlExecutor.cpp
 
+    layout/LayoutDocument.cpp
+    layout/LayoutRuntime.cpp
+    layout/ComponentRegistry.cpp
+    layout/LayoutHost.cpp
+    layout/components/Containers.cpp
+    layout/components/PlaybackComponents.cpp
+    layout/components/SemanticComponents.cpp
+    layout/editor/LayoutEditorDialog.cpp
+
     service/PlaylistExporter.cpp
 )
 
@@ -40,6 +49,7 @@ target_link_libraries(aobus-gtk-lib PRIVATE ao ao_audio PkgGTKMM glibmm-2.68 Boo
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ui")
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/service")
+target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/layout")
 
 aobus_apply_clang_tidy(aobus-gtk-lib STRICT)
 

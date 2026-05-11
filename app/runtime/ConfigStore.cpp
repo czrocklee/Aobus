@@ -4,35 +4,65 @@
 #include "ConfigStore.h"
 #include <ao/utility/Log.h>
 
+#include <format>
 #include <fstream>
 
 namespace ao::rt
 {
-  ConfigStore::ConfigStore(std::filesystem::path filePath)
-    : _filePath{std::move(filePath)}
+  ConfigStore::ConfigStore(std::filesystem::path filePath, OpenMode mode)
+    : _filePath{std::move(filePath)}, _mode{mode}
   {
   }
 
-  void ConfigStore::flush()
+  ao::Result<> ConfigStore::flush()
   {
+    if (_mode == OpenMode::ReadOnly)
+    {
+      throw std::logic_error{"flush() called on ReadOnly ConfigStore"};
+    }
+
     APP_LOG_INFO("Saving config to: {}", _filePath.string());
     std::filesystem::create_directories(_filePath.parent_path());
     auto file = std::ofstream{_filePath};
     file << _root;
+
+    if (!file.good())
+    {
+      return makeError(ao::Error::Code::IoError, std::format("Failed to write config file: {}", _filePath.string()));
+    }
+
+    return {};
   }
 
-  void ConfigStore::ensureLoaded()
+  ao::Result<> ConfigStore::ensureLoaded()
   {
     if (_loaded)
     {
-      return;
+      return {};
     }
 
     _loaded = true;
 
-    if (std::filesystem::exists(_filePath))
+    if (!std::filesystem::exists(_filePath))
+    {
+      if (_mode == OpenMode::ReadOnly)
+      {
+        return makeError(ao::Error::Code::NotFound, std::format("Config file not found: {}", _filePath.string()));
+      }
+
+      return {};
+    }
+
+    try
     {
       _root = YAML::LoadFile(_filePath.string());
     }
+    catch (std::exception const& e)
+    {
+      return makeError(
+        ao::Error::Code::IoError, std::format("Failed to parse config file '{}': {}", _filePath.string(), e.what()));
+    }
+
+    return {};
   }
 }

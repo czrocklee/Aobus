@@ -55,6 +55,8 @@ namespace ao::gtk
 
     void setPlaybackController(PlaybackController& c) { _playbackController = &c; }
 
+    Gtk::Stack& stack() { return _stack; }
+
     void clear();
     void rebuild(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction const& txn);
 
@@ -65,6 +67,11 @@ namespace ao::gtk
     TrackPageContext const* currentVisible() const;
 
     void setPlayingTrack(std::optional<ao::TrackId> trackId);
+
+    /**
+     * @return The list ID of the currently visible page, or allTracksListId() if none.
+     */
+    ao::ListId activeListId() const;
 
   private:
     void ensureViewPage(ao::rt::ViewId viewId, TrackRowDataProvider& dataProvider);

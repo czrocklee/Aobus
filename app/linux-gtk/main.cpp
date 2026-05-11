@@ -30,12 +30,16 @@ namespace
 {
   std::filesystem::path resolveLibraryPath()
   {
-    try
     {
-      auto configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
+      auto const configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
       auto store = ao::rt::ConfigStore{configPath};
       auto snapshot = ao::rt::SessionSnapshot{};
-      store.load("session", snapshot);
+
+      if (auto result = store.load("session", snapshot); !result)
+      {
+        APP_LOG_WARN("Failed to load session config: {}", result.error().message);
+      }
+
       auto const& path = snapshot.lastLibraryPath;
 
       if (!path.empty())
@@ -43,11 +47,8 @@ namespace
         return std::filesystem::path{path};
       }
     }
-    catch (...)
-    {
-    }
 
-    auto emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
+    auto const emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
     std::filesystem::create_directories(emptyPath);
     return emptyPath;
   }
@@ -55,7 +56,7 @@ namespace
   Glib::RefPtr<ao::gtk::MainWindow> createWindow(Gtk::Application& app, std::filesystem::path libraryPath)
   {
     auto executor = std::make_shared<ao::gtk::GtkControlExecutor>();
-    auto configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
+    auto const configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
     auto configStore = std::make_shared<ao::rt::ConfigStore>(configPath);
 
     auto appSession = std::make_unique<ao::rt::AppSession>(ao::rt::AppSessionDependencies{
@@ -86,13 +87,13 @@ int main(int argc, char* argv[])
   auto logLevel = ao::log::LogLevel::Info;
 
   // Map strings to LogLevel enum for CLI11
-  std::map<std::string, ao::log::LogLevel> logMapping{{"trace", ao::log::LogLevel::Trace},
-                                                      {"debug", ao::log::LogLevel::Debug},
-                                                      {"info", ao::log::LogLevel::Info},
-                                                      {"warn", ao::log::LogLevel::Warn},
-                                                      {"error", ao::log::LogLevel::Error},
-                                                      {"critical", ao::log::LogLevel::Critical},
-                                                      {"off", ao::log::LogLevel::Off}};
+  auto const logMapping = std::map<std::string, ao::log::LogLevel>{{"trace", ao::log::LogLevel::Trace},
+                                                                    {"debug", ao::log::LogLevel::Debug},
+                                                                    {"info", ao::log::LogLevel::Info},
+                                                                    {"warn", ao::log::LogLevel::Warn},
+                                                                    {"error", ao::log::LogLevel::Error},
+                                                                    {"critical", ao::log::LogLevel::Critical},
+                                                                    {"off", ao::log::LogLevel::Off}};
 
   int verbosity = 0;
   cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");
@@ -264,14 +265,14 @@ int main(int argc, char* argv[])
   auto remainingArgs = cliApp.remaining_for_passthrough();
   remainingArgs.insert(remainingArgs.begin(), argv[0]);
 
-  std::vector<char*> gtkArgv;
+  auto gtkArgv = std::vector<char*>{};
   gtkArgv.reserve(remainingArgs.size());
   for (auto& arg : remainingArgs)
   {
     gtkArgv.push_back(arg.data());
   }
 
-  int gtkArgc = static_cast<int>(gtkArgv.size());
+  int const gtkArgc = static_cast<int>(gtkArgv.size());
 
   APP_LOG_INFO("Entering GTK main loop");
   auto const result = app->run(gtkArgc, gtkArgv.data());
