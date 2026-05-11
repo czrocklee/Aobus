@@ -109,7 +109,9 @@ namespace ao::gtk
         // Time label + seek scale
         auto const posSec = state.positionMs / 1000;
         auto const durSec = state.durationMs / 1000;
-        if (ev.transport == ao::audio::Transport::Idle || durSec == 0)
+        if (ev.transport == ao::audio::Transport::Idle ||
+            ev.transport == ao::audio::Transport::Opening ||
+            ev.transport == ao::audio::Transport::Buffering || durSec == 0)
         {
           _timeLabel.set_text("00:00 / 00:00");
           _seekScale.set_range(0, 100);
@@ -132,6 +134,15 @@ namespace ao::gtk
         _lastDurationMs = state.durationMs;
         _lastTransport = ev.transport;
 
+        bool const isActive = (ev.transport == ao::audio::Transport::Playing ||
+                               ev.transport == ao::audio::Transport::Opening ||
+                               ev.transport == ao::audio::Transport::Buffering ||
+                               ev.transport == ao::audio::Transport::Seeking);
+        if (isActive)
+        {
+          _firstFrameTime = 0;
+        }
+
         // Soul animation
         if (_soulWindow && _soulWindow->is_visible())
         {
@@ -139,6 +150,16 @@ namespace ao::gtk
             ev.transport == ao::audio::Transport::Playing || ev.transport == ao::audio::Transport::Opening ||
             ev.transport == ao::audio::Transport::Buffering || ev.transport == ao::audio::Transport::Seeking;
           _soulWindow->updateState(state.quality, active);
+        }
+
+        // Volume visibility may change when backend is first initialised
+        bool const volAvailable = state.volumeAvailable;
+        _volumeScale.set_visible(volAvailable);
+        if (volAvailable)
+        {
+          _updatingVolumeScale = true;
+          _volumeScale.setVolume(state.volume);
+          _updatingVolumeScale = false;
         }
 
         syncOutputIconSize();
@@ -707,6 +728,14 @@ namespace ao::gtk
     }
 
     updateOutputTooltip(state);
+
+    _volumeScale.set_visible(state.volumeAvailable);
+    if (state.volumeAvailable)
+    {
+      _updatingVolumeScale = true;
+      _volumeScale.setVolume(state.volume);
+      _updatingVolumeScale = false;
+    }
   }
 
   void PlaybackBar::updateOutputTooltip(ao::app::PlaybackState const& state)
