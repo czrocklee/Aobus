@@ -561,6 +561,7 @@ namespace ao::gtk
 
     _pendingSelectId = allTracksListId();
   }
+
   void ListSidebarController::buildListTree(ao::lmdb::ReadTransaction const& txn)
   {
     // Clear existing tree store and lookup map

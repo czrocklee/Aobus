@@ -114,6 +114,7 @@ namespace
       {
         spec.tags.push_back(std::format("tag{}", id));
       }
+
       spec.composer = std::move(composer);
       spec.work = std::move(work);
       init(spec, nullptr);
@@ -182,18 +183,22 @@ namespace
       {
         header->artistId = DictionaryId{spec.artistId};
       }
+
       if (spec.albumId != 0)
       {
         header->albumId = DictionaryId{spec.albumId};
       }
+
       if (spec.genreId != 0)
       {
         header->genreId = DictionaryId{spec.genreId};
       }
+
       if (spec.albumArtistId != 0)
       {
         header->albumArtistId = DictionaryId{spec.albumArtistId};
       }
+
       if (spec.composerId != 0)
       {
         header->composerId = DictionaryId{spec.composerId};

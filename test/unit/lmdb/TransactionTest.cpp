@@ -53,6 +53,7 @@ TEST_CASE("ReadTransaction - destructor aborts", "[lmdb][transaction]")
     auto txn = ReadTransaction{env};
     // Destructor should abort
   }
+
   // Should be able to start new transaction
   auto txn2 = ReadTransaction{env};
   auto reader = db.reader(txn2);

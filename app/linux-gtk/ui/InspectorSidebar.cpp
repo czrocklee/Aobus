@@ -73,6 +73,7 @@ namespace ao::gtk
       {
         return std::format("{}:{:02}:{:02}", totalSeconds / kSecondsPerHour, minutes, seconds);
       }
+
       return std::format("{}:{:02}", minutes, seconds);
     }
   }
@@ -296,6 +297,7 @@ namespace ao::gtk
       }
     }
   }
+
   void InspectorSidebar::updateEmptyState()
   {
     _heroBox.set_visible(false);

@@ -132,6 +132,7 @@ namespace ao::model
       {
         return std::nullopt;
       }
+
       return it->second;
     }
 

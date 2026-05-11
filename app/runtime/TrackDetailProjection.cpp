@@ -23,10 +23,12 @@ namespace ao::app
       {
         return SelectionKind::None;
       }
+
       if (count == 1)
       {
         return SelectionKind::Single;
       }
+
       return SelectionKind::Multiple;
     }
 
@@ -37,6 +39,7 @@ namespace ao::app
       {
         return {};
       }
+
       auto result = AggregateValue<T>{.optValue = values.front()};
       for (std::size_t i = 1; i < values.size(); ++i)
       {
@@ -46,6 +49,7 @@ namespace ao::app
           break;
         }
       }
+
       return result;
     }
   }
@@ -85,6 +89,7 @@ namespace ao::app
               {
                 return;
               }
+
               auto const state = _impl->views.trackListState(ev.viewId);
               _impl->cachedSnapshot = buildSnapshot(state.selection);
               publishSnapshot();
@@ -111,6 +116,7 @@ namespace ao::app
         {
           return;
         }
+
         _impl->cachedSnapshot = buildSnapshot(ev.selection);
         publishSnapshot();
       });

@@ -49,6 +49,7 @@ namespace ao::app::test
             return i;
           }
         }
+
         return std::nullopt;
       }
 
@@ -79,6 +80,7 @@ namespace ao::app::test
         {
           source.addInitial(id);
         }
+
         filtered = std::make_unique<ao::app::SmartListSource>(source, lib.library(), engine);
         filtered->reload();
       }
@@ -183,10 +185,12 @@ namespace ao::app::test
     {
       ids.push_back(env.lib.addTrack(makeSpec(std::string(1, static_cast<char>('J' - i)), 2020)));
     }
+
     for (auto i = 0; i < 10; ++i)
     {
       ids.push_back(env.lib.addTrack(makeSpec(std::string(1, static_cast<char>('J' - i)), 2021)));
     }
+
     env.setupFiltered(ids);
 
     auto proj = env.createProjection(ViewId{1});
@@ -270,6 +274,7 @@ namespace ao::app::test
       spec.trackNumber = r.track;
       ids.push_back(env.lib.addTrack(spec));
     }
+
     env.setupFiltered(ids);
 
     auto proj = env.createProjection(ViewId{1});
@@ -325,6 +330,7 @@ namespace ao::app::test
     {
       ids.push_back(env.lib.addTrack(makeSpec("Same", 2020)));
     }
+
     env.setupFiltered(ids);
 
     auto proj = env.createProjection(ViewId{1});
@@ -348,6 +354,7 @@ namespace ao::app::test
     {
       ids.push_back(env.lib.addTrack(makeSpec(std::to_string(y), static_cast<std::uint16_t>(y))));
     }
+
     env.setupFiltered(ids);
 
     auto proj = env.createProjection(ViewId{1});
@@ -398,6 +405,7 @@ namespace ao::app::test
       auto title = std::string(1, static_cast<char>('A' + ((i * 7) % 15)));
       ids.push_back(env.lib.addTrack(makeSpec(title, static_cast<std::uint16_t>(2000 + ((i * 3) % 20)))));
     }
+
     env.setupFiltered(ids);
 
     auto proj = env.createProjection(ViewId{1});

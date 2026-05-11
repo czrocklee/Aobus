@@ -124,6 +124,7 @@ namespace ao::gtk
       {
         Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
       }
+
       return true;
     }();
   }

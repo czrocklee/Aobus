@@ -33,6 +33,7 @@ namespace ao::cli
         {
           matches.emplace_back(id, view);
         }
+
         return matches;
       }
 
@@ -48,6 +49,7 @@ namespace ao::cli
           matches.emplace_back(id, view);
         }
       }
+
       return matches;
     }
 

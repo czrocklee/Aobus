@@ -158,6 +158,7 @@ TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integrati
 
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
+
     REQUIRE(found);
   }
 
@@ -220,6 +221,7 @@ TEST_CASE("PipeWireProvider - Integration with Real Daemon via API", "[integrati
 
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
       }
+
       CHECK(found);
     }
 

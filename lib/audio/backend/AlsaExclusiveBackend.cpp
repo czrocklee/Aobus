@@ -164,6 +164,7 @@ namespace ao::audio::backend
           renderTarget->onDrainComplete();
           break;
         }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
     }
@@ -193,11 +194,14 @@ namespace ao::audio::backend
 
   bool AlsaExclusiveBackend::Impl::waitForFrames(::snd_pcm_uframes_t periodSize) const
   {
-    if (auto const avail = ::snd_pcm_avail_update(pcm.get()); avail < 0)
+    auto const avail = ::snd_pcm_avail_update(pcm.get());
+
+    if (avail < 0)
     {
       handleXrun(static_cast<int>(avail));
       return false;
     }
+
     if (static_cast<::snd_pcm_uframes_t>(avail) < periodSize)
     {
       // Only block on the pollfd when the device is truly running.
@@ -254,6 +258,7 @@ namespace ao::audio::backend
     {
       return false;
     }
+
     int card = ::snd_pcm_info_get_card(info);
 
     ::snd_mixer_t* raw = nullptr;
@@ -262,6 +267,7 @@ namespace ao::audio::backend
     {
       return false;
     }
+
     mixer.reset(raw);
 
     auto const cardStr = std::format("hw:{}", card);
@@ -295,6 +301,7 @@ namespace ao::audio::backend
           mixerElemName = name.data();
           break;
         }
+
         elem = ::snd_mixer_elem_next(elem);
       }
 
@@ -320,6 +327,7 @@ namespace ao::audio::backend
     {
       return;
     }
+
     float clamped = std::clamp(vol, 0.0F, 1.0F);
 
     if (hasDB)
@@ -351,6 +359,7 @@ namespace ao::audio::backend
     {
       return 1.0F;
     }
+
     long val = 0;
 
     if (hasDB)
@@ -440,7 +449,7 @@ namespace ao::audio::backend
       return ao::makeError(ao::Error::Code::FormatRejected, "Failed to set channels");
     }
 
-    auto periods = std::uint32_t{4};
+    std::uint32_t periods = 4;
     ::snd_pcm_hw_params_set_periods_near(pcm, params, &periods, 0);
 
     periodSize = kDefaultPeriodSize;
@@ -473,6 +482,7 @@ namespace ao::audio::backend
     {
       return ao::makeError(ao::Error::Code::InitFailed, "Failed to apply sw params");
     }
+
     return {};
   }
 

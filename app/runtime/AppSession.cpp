@@ -116,6 +116,7 @@ namespace ao::app
     {
       return ao::TrackId{};
     }
+
     return _impl->playbackService.playSelectionInView(focus.activeViewId);
   }
 

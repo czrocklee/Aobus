@@ -96,6 +96,7 @@ namespace ao::app
         {
           node[k] = detail::toYamlNodeImpl(v);
         }
+
         return node;
       }
       else if constexpr (detail::HasValueMethod<Raw>)
@@ -114,6 +115,7 @@ namespace ao::app
                                      {
                                        node[key] = std::move(child);
                                      }
+
                                      ++index;
                                    });
         return node;
@@ -186,6 +188,7 @@ namespace ao::app
                                      {
                                        detail::fromYamlNodeImpl(child, field);
                                      }
+
                                      ++index;
                                    });
       }

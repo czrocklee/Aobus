@@ -37,6 +37,7 @@ namespace
       : _backendId{std::move(b)}, _profileId{std::move(p)}
     {
     }
+
     BackendId backendId() const noexcept override { return _backendId; }
     ProfileId profileId() const noexcept override { return _profileId; }
   };

@@ -184,6 +184,7 @@ namespace ao::audio
         callback = onRouteChanged;
         snapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
+
       if (callback)
       {
         callback(snapshot);
@@ -203,6 +204,7 @@ namespace ao::audio
         routeTracker.setEngineFormat(format);
         status.routeState.engineOutputFormat = format;
       }
+
       notifyRouteChanged();
     }
 
@@ -224,8 +226,10 @@ namespace ao::audio
             status.muted = *mute;
           }
         }
+
         status.volumeAvailable = backend->queryProperty(PropertyId::Volume).isAvailable;
       }
+
       notifyRouteChanged();
     }
 
@@ -456,6 +460,7 @@ namespace ao::audio
       _impl->status.transport = Transport::Playing;
       _impl->backendStarted = true;
     }
+
     _impl->backend->start();
   }
 
@@ -471,6 +476,7 @@ namespace ao::audio
         shouldPause = _impl->backendStarted.load();
       }
     }
+
     if (shouldPause)
     {
       _impl->backend->pause();
@@ -577,6 +583,7 @@ namespace ao::audio
       _impl->status.transport = Transport::Playing;
       _impl->backendStarted = true;
     }
+
     _impl->backend->start();
   }
 
@@ -586,6 +593,7 @@ namespace ao::audio
     {
       AUDIO_LOG_ERROR("Failed to set volume: {}", result.error().message);
     }
+
     auto const lock = std::lock_guard{_impl->stateMutex};
     _impl->status.volume = volume;
   }
@@ -602,6 +610,7 @@ namespace ao::audio
     {
       AUDIO_LOG_ERROR("Failed to set muted state: {}", result.error().message);
     }
+
     auto const lock = std::lock_guard{_impl->stateMutex};
     _impl->status.muted = muted;
   }

@@ -21,6 +21,7 @@ namespace ao::gtk
       std::lock_guard lock(_mutex);
       _tasks.push_back(std::move(task));
     }
+
     _dispatcher.emit();
   }
 

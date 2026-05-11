@@ -153,6 +153,7 @@ namespace ao::gtk
       cr->arc(segmentX + kSegmentRadius, yOffset + drawHeight - kSegmentRadius, kSegmentRadius, kAngle90, kAngle180);
       cr->close_path();
     }
+
     cr->clip();
 
     // 2. Define the "Perfect Triangle" path (a trapezoid from 10% to 100% height)

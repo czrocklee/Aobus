@@ -27,6 +27,7 @@ public:
     {
       throw std::runtime_error("mkdtemp failed");
     }
+
     _path = result;
   }
 
@@ -58,6 +59,7 @@ inline std::vector<std::byte> createTestData(std::size_t size)
   {
     data[i] = static_cast<std::byte>(i % 256);
   }
+
   return data;
 }
 

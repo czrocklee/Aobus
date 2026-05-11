@@ -33,12 +33,14 @@ namespace ao::audio::backend::detail
     {
       return std::nullopt;
     }
+
     char* end = nullptr;
     auto const parsed = ::strtoul(value, &end, 10);
     if (end == value || *end != '\0')
     {
       return std::nullopt;
     }
+
     return static_cast<std::uint32_t>(parsed);
   }
 
@@ -48,6 +50,7 @@ namespace ao::audio::backend::detail
     {
       return std::nullopt;
     }
+
     auto info = ::spa_audio_info_raw{};
     if (::spa_format_audio_raw_parse(param, &info) < 0)
     {

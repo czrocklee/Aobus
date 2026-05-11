@@ -74,6 +74,7 @@ namespace ao::gtk
       clearCover();
       return;
     }
+
     try
     {
       auto const memStream = Gio::MemoryInputStream::create();

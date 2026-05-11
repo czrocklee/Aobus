@@ -47,6 +47,7 @@ namespace ao::app
               }
             }
           }
+
           for (auto const viewId : toClose)
           {
             self->closeView(viewId);
@@ -125,6 +126,7 @@ namespace ao::app
       {
         _impl->layoutState.openViews.push_back(targetViewId);
       }
+
       _impl->layoutState.activeViewId = targetViewId;
       _impl->layoutState.revision++;
       _impl->events.publish(FocusedViewChanged{.viewId = targetViewId});

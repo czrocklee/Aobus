@@ -24,6 +24,7 @@ namespace ao::app
         {
           eraseList(id);
         }
+
         for (auto id : ev.upserted)
         {
           refreshList(id);
@@ -134,6 +135,7 @@ namespace ao::app
             }
           }
         }
+
         if (foundNew)
         {
           break; // restart outer loop to avoid iterator invalidation issues mentally
