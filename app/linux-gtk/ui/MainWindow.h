@@ -9,13 +9,14 @@
 #include "InspectorSidebar.h"
 #include "ListSidebarController.h"
 #include "PlaybackController.h"
-#include "SessionPersistence.h"
 #include "StatusBar.h"
 #include "TagEditController.h"
 #include "TrackPageGraph.h"
 #include "TrackViewPage.h"
+#include "UIState.h"
 #include <ao/audio/Types.h>
 #include <runtime/AppSession.h>
+#include <runtime/ConfigStore.h>
 
 #include <gtkmm.h>
 
@@ -50,7 +51,7 @@ namespace ao::gtk
   class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
-    explicit MainWindow(ao::app::AppSession& session, std::shared_ptr<SessionPersistence> persistence);
+    explicit MainWindow(ao::app::AppSession& session, std::shared_ptr<ao::app::ConfigStore> configStore);
     ~MainWindow() override;
     void on_hide() override;
 
@@ -75,7 +76,7 @@ namespace ao::gtk
     // GTK-side row data cache
     std::unique_ptr<TrackRowDataProvider> _rowDataProvider;
 
-    std::shared_ptr<SessionPersistence> _sessionPersistence;
+    std::shared_ptr<ao::app::ConfigStore> _configStore;
 
     ao::app::AppSession& _session;
 

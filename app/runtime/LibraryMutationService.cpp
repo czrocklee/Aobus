@@ -108,18 +108,19 @@ namespace ao::app
       }
 
       auto builder = ao::library::TrackBuilder::fromView(*optView, _impl->library.dictionary());
-      auto patchResult = applyMetadataPatch(builder, patch);
-
-      if (patchResult.changedHot)
+      if (auto patchResult = applyMetadataPatch(builder, patch); patchResult.changedHot || patchResult.changedCold)
       {
-        auto const hotData = builder.serializeHot(txn, _impl->library.dictionary());
-        writer.updateHot(trackId, hotData);
-      }
+        if (patchResult.changedHot)
+        {
+          auto const hotData = builder.serializeHot(txn, _impl->library.dictionary());
+          writer.updateHot(trackId, hotData);
+        }
 
-      if (patchResult.changedCold)
-      {
-        auto const coldData = builder.serializeCold(txn, _impl->library.dictionary(), _impl->library.resources());
-        writer.updateCold(trackId, coldData);
+        if (patchResult.changedCold)
+        {
+          auto const coldData = builder.serializeCold(txn, _impl->library.dictionary(), _impl->library.resources());
+          writer.updateCold(trackId, coldData);
+        }
       }
 
       mutated.push_back(trackId);

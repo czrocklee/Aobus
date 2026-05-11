@@ -100,23 +100,19 @@ namespace ao::tag::flac
           VorbisCommentBlockView{iter->data()}.visitComments(
             [&](std::string_view comment)
             {
-              auto const pos = comment.find('=');
-
-              if (pos == std::string_view::npos)
+              if (auto const pos = comment.find('='); pos != std::string_view::npos)
               {
-                return;
-              }
+                auto const key = comment.substr(0, pos);
+                auto const value = comment.substr(pos + 1);
 
-              auto const key = comment.substr(0, pos);
-              auto const value = comment.substr(pos + 1);
-
-              if (auto const* entry = FlacVorbisDispatchTable::lookupVorbisField(key.data(), key.size()))
-              {
-                entry->handler(builder, value);
-              }
-              else
-              {
-                builder.custom().add(key, value);
+                if (auto const* entry = FlacVorbisDispatchTable::lookupVorbisField(key.data(), key.size()))
+                {
+                  entry->handler(builder, value);
+                }
+                else
+                {
+                  builder.custom().add(key, value);
+                }
               }
             });
 

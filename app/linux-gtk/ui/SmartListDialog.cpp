@@ -333,9 +333,7 @@ namespace ao::gtk
     {
       auto readTxn = _session.musicLibrary().readTransaction();
       auto reader = _session.musicLibrary().lists().reader(readTxn);
-      auto listView = reader.get(_parentListId);
-
-      if (listView)
+      if (auto listView = reader.get(_parentListId); listView)
       {
         inheritedExpr = listView->filter();
       }

@@ -218,4 +218,14 @@ namespace ao::app
   {
     ViewId viewId{};
   };
+
+  struct SessionSnapshot final
+  {
+    std::string lastLibraryPath;
+    std::string lastBackend;
+    std::string lastProfile;
+    std::string lastOutputDeviceId;
+    std::vector<TrackListViewConfig> openViews;
+    std::optional<std::size_t> optActiveViewIndex;
+  };
 }

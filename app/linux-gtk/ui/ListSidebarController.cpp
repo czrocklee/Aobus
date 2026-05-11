@@ -224,14 +224,12 @@ namespace ao::gtk
 
   bool ListSidebarController::listHasChildren(ao::ListId listId) const
   {
-    auto it = _nodesById.find(listId);
-
-    if (it == _nodesById.end())
+    if (auto it = _nodesById.find(listId); it != _nodesById.end())
     {
-      return false;
+      return it->second->hasChildren();
     }
 
-    return it->second->hasChildren();
+    return false;
   }
 
   void ListSidebarController::setupSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
@@ -485,34 +483,28 @@ namespace ao::gtk
 
     auto readTxn = _session.musicLibrary().readTransaction();
     auto reader = _session.musicLibrary().lists().reader(readTxn);
-    auto view = reader.get(listId);
-
-    if (!view)
+    if (auto view = reader.get(listId); view)
     {
-      return;
-    }
-
-    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _session, view->parentId(), *_dataProvider);
-
-    dialog->populate(listId, *view);
-
-    dialog->signal_response().connect(
-      [this, dialog](int responseId)
-      {
-        if (responseId == Gtk::ResponseType::OK)
+      auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _session, view->parentId(), *_dataProvider);
+      dialog->populate(listId, *view);
+      dialog->signal_response().connect(
+        [this, dialog](int responseId)
         {
-          auto const draft = dialog->draft();
-
-          if (draft.listId != ao::ListId{0})
+          if (responseId == Gtk::ResponseType::OK)
           {
-            updateList(draft);
+            auto const draft = dialog->draft();
+
+            if (draft.listId != ao::ListId{0})
+            {
+              updateList(draft);
+            }
           }
-        }
 
-        dialog->close();
-      });
+          dialog->close();
+        });
 
-    dialog->present();
+      dialog->present();
+    }
   }
 
   void ListSidebarController::onDeleteList()

@@ -6,7 +6,6 @@
 #include "ui/GtkControlExecutor.h"
 #include "ui/ThemeBus.h"
 #include <ao/utility/Log.h>
-#include <common/AppConfig.h>
 #include <giomm/dbusconnection.h>
 #include <giomm/dbusproxy.h>
 #include <giomm/file.h>
@@ -23,7 +22,9 @@
 
 #include <CLI/CLI.hpp>
 
-#include "ui/SessionPersistence.h"
+#include <runtime/ConfigStore.h>
+
+#include <glibmm/miscutils.h>
 
 namespace
 {
@@ -31,8 +32,12 @@ namespace
   {
     try
     {
-      auto config = ao::app::AppConfig::load();
-      auto const& path = config.sessionState().lastLibraryPath;
+      auto configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
+      auto store = ao::app::ConfigStore{configPath};
+      auto snapshot = ao::app::SessionSnapshot{};
+      store.load("session", snapshot);
+      auto const& path = snapshot.lastLibraryPath;
+
       if (!path.empty())
       {
         return std::filesystem::path{path};
@@ -50,13 +55,14 @@ namespace
   Glib::RefPtr<ao::gtk::MainWindow> createWindow(Gtk::Application& app, std::filesystem::path libraryPath)
   {
     auto executor = std::make_shared<ao::gtk::GtkControlExecutor>();
-    auto persistence = std::make_shared<ao::gtk::SessionPersistence>();
+    auto configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
+    auto configStore = std::make_shared<ao::app::ConfigStore>(configPath);
 
     auto appSession = std::make_unique<ao::app::AppSession>(ao::app::AppSessionDependencies{
-      .executor = std::move(executor), .libraryRoot = std::move(libraryPath), .persistence = persistence});
+      .executor = std::move(executor), .libraryRoot = std::move(libraryPath), .configStore = configStore});
 
     auto window =
-      Glib::make_refptr_for_instance<ao::gtk::MainWindow>(new ao::gtk::MainWindow(*appSession, persistence));
+      Glib::make_refptr_for_instance<ao::gtk::MainWindow>(new ao::gtk::MainWindow(*appSession, configStore));
 
     // Store AppSession alongside window (lifetime tied to window via pointer)
     window->set_data("app-session",
@@ -186,8 +192,7 @@ int main(int argc, char* argv[])
   // DBus Theme Detection (Stylix/Portal support)
   try
   {
-    auto bus = Gio::DBus::Connection::get_sync(Gio::DBus::BusType::SESSION);
-    if (bus)
+    if (auto bus = Gio::DBus::Connection::get_sync(Gio::DBus::BusType::SESSION); bus)
     {
       bus->signal_subscribe(
         [](Glib::RefPtr<Gio::DBus::Connection> const&,

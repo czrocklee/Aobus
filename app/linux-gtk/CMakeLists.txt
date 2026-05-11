@@ -9,7 +9,6 @@ add_library(aobus-gtk-lib STATIC
     ui/ImportExportCoordinator.cpp
     ui/ListSidebarController.cpp
     ui/TagEditController.cpp
-    ui/SessionPersistence.cpp
     ui/TrackPresentation.cpp
     ui/TrackViewPage.cpp
     ui/GtkMainThreadDispatcher.cpp
@@ -36,7 +35,7 @@ add_library(aobus-gtk-lib STATIC
     services/PlaylistExporter.cpp
 )
 
-target_link_libraries(aobus-gtk-lib PUBLIC app_common app_runtime)
+target_link_libraries(aobus-gtk-lib PUBLIC app_runtime)
 target_link_libraries(aobus-gtk-lib PRIVATE ao ao_audio PkgGTKMM glibmm-2.68 Boost::headers)
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ui")

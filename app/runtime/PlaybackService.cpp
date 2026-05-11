@@ -172,24 +172,29 @@ namespace ao::app
               state = buildState(*player);
 
               // Auto-select first available default output if none is selected yet
-              if (state.selectedOutput.backendId.empty() && !state.availableOutputs.empty())
+              if (!state.selectedOutput.backendId.empty() || state.availableOutputs.empty())
               {
-                auto const& backend = state.availableOutputs.front();
-
-                if (!backend.devices.empty())
-                {
-                  auto const& device = backend.devices.front();
-                  auto profileId = ao::audio::kProfileShared;
-
-                  if (!backend.supportedProfiles.empty())
-                  {
-                    profileId = backend.supportedProfiles.front().id;
-                  }
-
-                  player->setOutput(backend.id, device.id, profileId);
-                  state = buildState(*player);
-                }
+                events.publish(PlaybackDevicesChanged{});
+                return;
               }
+
+              auto const& backend = state.availableOutputs.front();
+              if (backend.devices.empty())
+              {
+                events.publish(PlaybackDevicesChanged{});
+                return;
+              }
+
+              auto const& device = backend.devices.front();
+              auto profileId = ao::audio::kProfileShared;
+
+              if (!backend.supportedProfiles.empty())
+              {
+                profileId = backend.supportedProfiles.front().id;
+              }
+
+              player->setOutput(backend.id, device.id, profileId);
+              state = buildState(*player);
 
               events.publish(PlaybackDevicesChanged{});
             });

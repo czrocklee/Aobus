@@ -45,20 +45,20 @@ namespace ao::query
     Instruction const* findPrevLoadField(std::vector<Instruction> const& instructions, Instruction const* current)
     {
       auto const it = std::ranges::find(instructions, current, [](auto const& instr) { return &instr; });
-
       if (it == instructions.end())
       {
         return nullptr;
       }
 
-      if (auto const found = std::ranges::find_last(
-            std::ranges::subrange(instructions.begin(), it), OpCode::LoadField, &Instruction::op);
-          !found.empty())
+      auto const found =
+        std::ranges::find_last(std::ranges::subrange(instructions.begin(), it), OpCode::LoadField, &Instruction::op);
+
+      if (found.empty())
       {
-        return &found.front();
+        return nullptr;
       }
 
-      return nullptr;
+      return &found.front();
     }
 
     // Check if a field requires string comparison (not numeric)
@@ -95,8 +95,7 @@ namespace ao::query
         return {};
       }
 
-      auto idx = static_cast<size_t>(stringIdx);
-
+      auto const idx = static_cast<size_t>(stringIdx);
       if (idx >= plan->stringConstants.size())
       {
         return {};

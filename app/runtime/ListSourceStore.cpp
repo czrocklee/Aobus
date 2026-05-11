@@ -155,8 +155,7 @@ namespace ao::app
       return _allTracks;
     }
 
-    auto it = _sources.find(listId);
-    if (it != _sources.end())
+    if (auto it = _sources.find(listId); it != _sources.end())
     {
       return *it->second;
     }

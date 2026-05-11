@@ -62,15 +62,112 @@ namespace ao::gtk
     {
       return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
     }
+
+    TrackColumnLayout trackColumnLayoutFromState(TrackViewState const& state)
+    {
+      auto layout = defaultTrackColumnLayout();
+      auto ordered = std::vector<TrackColumnState>{};
+      ordered.reserve(layout.columns.size());
+
+      auto takeColumn = [&layout](TrackColumn column) -> std::optional<TrackColumnState>
+      {
+        auto const it = std::ranges::find(layout.columns, column, &TrackColumnState::column);
+
+        if (it == layout.columns.end())
+        {
+          return std::nullopt;
+        }
+
+        return *it;
+      };
+
+      for (auto const& id : state.columnOrder)
+      {
+        auto const column = trackColumnFromId(id);
+
+        if (!column)
+        {
+          continue;
+        }
+
+        auto const existing = std::ranges::find(ordered, *column, &TrackColumnState::column);
+
+        if (existing != ordered.end())
+        {
+          continue;
+        }
+
+        if (auto stateEntry = takeColumn(*column))
+        {
+          ordered.push_back(*stateEntry);
+        }
+      }
+
+      for (auto const& entry : layout.columns)
+      {
+        auto const existing = std::ranges::find(ordered, entry.column, &TrackColumnState::column);
+
+        if (existing == ordered.end())
+        {
+          ordered.push_back(entry);
+        }
+      }
+
+      layout.columns = std::move(ordered);
+
+      for (auto& entry : layout.columns)
+      {
+        auto const columnId = std::string{trackColumnId(entry.column)};
+
+        if (std::ranges::contains(state.hiddenColumns, columnId))
+        {
+          entry.visible = false;
+        }
+
+        if (auto const width = state.columnWidths.find(columnId); width != state.columnWidths.end())
+        {
+          entry.width = width->second;
+        }
+      }
+
+      return normalizeTrackColumnLayout(layout);
+    }
+
+    TrackViewState trackViewStateFromLayout(TrackColumnLayout const& layout)
+    {
+      auto normalized = normalizeTrackColumnLayout(layout);
+      auto state = TrackViewState{};
+
+      for (auto const& entry : normalized.columns)
+      {
+        auto const columnId = std::string{trackColumnId(entry.column)};
+        state.columnOrder.push_back(columnId);
+
+        if (!entry.visible)
+        {
+          state.hiddenColumns.push_back(columnId);
+        }
+
+        auto const definitionIt =
+          std::ranges::find(trackColumnDefinitions(), entry.column, &TrackColumnDefinition::column);
+
+        if (definitionIt != trackColumnDefinitions().end() && entry.width != definitionIt->defaultWidth)
+        {
+          state.columnWidths.insert_or_assign(columnId, entry.width);
+        }
+      }
+
+      return state;
+    }
   }
 
-  MainWindow::MainWindow(ao::app::AppSession& session, std::shared_ptr<SessionPersistence> persistence)
-    : _sessionPersistence{std::move(persistence)}, _session{session}, _coverArtWidget{nullptr}
+  MainWindow::MainWindow(ao::app::AppSession& session, std::shared_ptr<ao::app::ConfigStore> configStore)
+    : _configStore{std::move(configStore)}, _session{session}, _coverArtWidget{nullptr}
   {
     set_title("Aobus");
 
     // Set default window size
-    set_default_size(ao::app::kDefaultWindowWidth, ao::app::kDefaultWindowHeight);
+    set_default_size(ao::gtk::kDefaultWindowWidth, ao::gtk::kDefaultWindowHeight);
 
     // Initialize cover art cache (LRU 100 entries)
     _coverArtCache = std::make_unique<CoverArtCache>(100);
@@ -547,12 +644,48 @@ namespace ao::gtk
 
   void MainWindow::saveSession()
   {
-    _sessionPersistence->saveUi(*this, _paned, _trackColumnLayoutModel);
+    auto ws = WindowState{};
+    if (auto const width = get_width(); width > 0)
+    {
+      ws.width = width;
+    }
+
+    if (auto const height = get_height(); height > 0)
+    {
+      ws.height = height;
+    }
+    ws.maximized = is_maximized();
+
+    if (auto const pos = _paned.get_position(); pos > 0)
+    {
+      ws.panedPosition = pos;
+    }
+    _configStore->save("window", ws);
+
+    _configStore->save("track_view", trackViewStateFromLayout(_trackColumnLayoutModel.layout()));
+
     _session.workspace().saveSession();
   }
 
   void MainWindow::loadSession()
   {
-    _sessionPersistence->loadUi(*this, _paned, _trackColumnLayoutModel);
+    auto ws = WindowState{};
+    _configStore->load("window", ws);
+
+    set_default_size(ws.width, ws.height);
+
+    if (ws.panedPosition > 0)
+    {
+      _paned.set_position(ws.panedPosition);
+    }
+
+    if (ws.maximized)
+    {
+      maximize();
+    }
+
+    auto tvs = TrackViewState{};
+    _configStore->load("track_view", tvs);
+    _trackColumnLayoutModel.setLayout(trackColumnLayoutFromState(tvs));
   }
 } // namespace ao::gtk

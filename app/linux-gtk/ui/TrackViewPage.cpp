@@ -90,67 +90,65 @@ namespace ao::gtk
       static auto const provider = Gtk::CssProvider::create();
       static bool initialized = false;
 
-      if (!initialized || force)
+      if (initialized && !force)
       {
-        if (force)
+        return;
+      }
+
+      if (force)
+      {
+        if (auto const display = Gdk::Display::get_default(); display)
         {
-          if (auto const display = Gdk::Display::get_default(); display)
-          {
-            Gtk::StyleContext::remove_provider_for_display(display, provider);
-          }
-        }
-
-        provider->load_from_data(R"(
-          /* 1. The Dynamic Beam: Seamlessly following the Title column via CSS variables */
-          columnview row.playing-row {
-            /* We use var(--ao-title-x) which is updated in real-time by C++ */
-            background-image: linear-gradient(to right, 
-              transparent 0%, 
-              alpha(@warning_bg_color, 0.2) var(--ao-title-x, 35%), 
-              transparent 100%
-            );
-            background-color: transparent;
-            border-color: transparent;
-            transition: background-image 1.0s ease-out; /* Smooth sliding of the beam */
-          }
-
-          /* 2. Sharp Title Text */
-          .playing-title {
-            color: @theme_fg_color;
-            font-weight: bold;
-          }
-
-          /* Sophisticated transition */
-          columnview row {
-            transition: all 450ms cubic-bezier(0.16, 1, 0.3, 1);
-          }
-
-          .inline-editor-stack { min-height: 0; margin: 0; }
-          .inline-editor-label { border: 1px solid transparent; min-height: 0; }
-          .inline-editor-entry { 
-            background: @view_bg_color; 
-            border: 1px solid @accent_color; 
-            border-radius: 4px; 
-            padding: 0 6px; 
-            margin: 0; 
-            min-height: 0;
-            box-shadow: none; 
-            font-weight: bold;
-          }
-          .inline-editor-entry text { padding-top: 0; padding-bottom: 0; min-height: 0; }
-        )");
-
-        if (!initialized || force)
-        {
-          if (auto const display = Gdk::Display::get_default(); display)
-          {
-            // Use USER priority to override potential theme/stylix overrides
-            Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
-          }
-
-          initialized = true;
+          Gtk::StyleContext::remove_provider_for_display(display, provider);
         }
       }
+
+      provider->load_from_data(R"(
+        /* 1. The Dynamic Beam: Seamlessly following the Title column via CSS variables */
+        columnview row.playing-row {
+          /* We use var(--ao-title-x) which is updated in real-time by C++ */
+          background-image: linear-gradient(to right, 
+            transparent 0%, 
+            alpha(@warning_bg_color, 0.2) var(--ao-title-x, 35%), 
+            transparent 100%
+          );
+          background-color: transparent;
+          border-color: transparent;
+          transition: background-image 1.0s ease-out; /* Smooth sliding of the beam */
+        }
+
+        /* 2. Sharp Title Text */
+        .playing-title {
+          color: @theme_fg_color;
+          font-weight: bold;
+        }
+
+        /* Sophisticated transition */
+        columnview row {
+          transition: all 450ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .inline-editor-stack { min-height: 0; margin: 0; }
+        .inline-editor-label { border: 1px solid transparent; min-height: 0; }
+        .inline-editor-entry { 
+          background: @view_bg_color; 
+          border: 1px solid @accent_color; 
+          border-radius: 4px; 
+          padding: 0 6px; 
+          margin: 0; 
+          min-height: 0;
+          box-shadow: none; 
+          font-weight: bold;
+        }
+        .inline-editor-entry text { padding-top: 0; padding-bottom: 0; min-height: 0; }
+      )");
+
+      if (auto const display = Gdk::Display::get_default(); display)
+      {
+        Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
+      }
+
+      initialized = true;
     }
 
     bool isTagsCellWidget(Gtk::Widget const* widget)

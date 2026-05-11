@@ -182,7 +182,7 @@ namespace ao::audio::backend
       // XRUN recovery via snd_pcm_prepare leaves the device in
       // PREPARED state. If the auto-start threshold has been met
       // by now, explicitly kick the device into RUNNING.
-      if (::snd_pcm_state(pcm.get()) == SND_PCM_STATE_PREPARED)
+      if (auto const state = ::snd_pcm_state(pcm.get()); state == SND_PCM_STATE_PREPARED)
       {
         ::snd_pcm_start(pcm.get());
       }
@@ -193,14 +193,11 @@ namespace ao::audio::backend
 
   bool AlsaExclusiveBackend::Impl::waitForFrames(::snd_pcm_uframes_t periodSize) const
   {
-    auto avail = ::snd_pcm_avail_update(pcm.get());
-
-    if (avail < 0)
+    if (auto const avail = ::snd_pcm_avail_update(pcm.get()); avail < 0)
     {
       handleXrun(static_cast<int>(avail));
       return false;
     }
-
     if (static_cast<::snd_pcm_uframes_t>(avail) < periodSize)
     {
       // Only block on the pollfd when the device is truly running.
@@ -592,38 +589,42 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::pause()
   {
-    if (_impl->pcm)
+    if (!_impl->pcm)
     {
-      _impl->paused = true;
+      return;
+    }
 
-      if (_impl->canPause)
-      {
-        ::snd_pcm_pause(_impl->pcm.get(), 1);
-      }
-      else
-      {
-        ::snd_pcm_drop(_impl->pcm.get());
-      }
+    _impl->paused = true;
+
+    if (_impl->canPause)
+    {
+      ::snd_pcm_pause(_impl->pcm.get(), 1);
+    }
+    else
+    {
+      ::snd_pcm_drop(_impl->pcm.get());
     }
   }
 
   void AlsaExclusiveBackend::resume()
   {
-    if (_impl->pcm)
+    if (!_impl->pcm)
     {
-      _impl->paused = false;
-      int err = 0;
+      return;
+    }
 
-      if (_impl->canPause)
-      {
-        err = ::snd_pcm_pause(_impl->pcm.get(), 0);
-      }
+    _impl->paused = false;
+    int err = 0;
 
-      if (!_impl->canPause || err < 0)
-      {
-        ::snd_pcm_prepare(_impl->pcm.get());
-        ::snd_pcm_start(_impl->pcm.get());
-      }
+    if (_impl->canPause)
+    {
+      err = ::snd_pcm_pause(_impl->pcm.get(), 0);
+    }
+
+    if (!_impl->canPause || err < 0)
+    {
+      ::snd_pcm_prepare(_impl->pcm.get());
+      ::snd_pcm_start(_impl->pcm.get());
     }
   }
 

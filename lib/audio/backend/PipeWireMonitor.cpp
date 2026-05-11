@@ -758,7 +758,6 @@ namespace ao::audio::backend
       }
 
       auto const it = nodes.find(streamId);
-
       if (!registry || it == nodes.end())
       {
         continue;
@@ -874,7 +873,6 @@ namespace ao::audio::backend
     std::unordered_set<std::uint32_t> const& reachableSet) const
   {
     auto const it = nodes.find(id);
-
     if (it == nodes.end())
     {
       if (id == streamId)

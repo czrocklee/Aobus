@@ -3,13 +3,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
 #include <memory>
 
 #include <runtime/AppSession.h>
+#include <runtime/ConfigStore.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/EventBus.h>
 #include <runtime/EventTypes.h>
-#include <runtime/ISessionPersistence.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>
@@ -26,23 +27,14 @@ namespace ao::app::test
     void dispatch(std::move_only_function<void()> task) override { task(); }
   };
 
-  class MockPersistence final : public ISessionPersistence
-  {
-  public:
-    std::optional<SessionSnapshot> loadSnapshot() override { return snapshot; }
-    void saveSnapshot(SessionSnapshot const& s) override { snapshot = s; }
-
-    std::optional<SessionSnapshot> snapshot;
-  };
-
   TEST_CASE("Headless Shell - Navigation and Layout Management", "[app][runtime][headless]")
   {
     auto tempDir = TempDir{};
     auto executor = std::make_shared<MockExecutor>();
-    auto persistence = std::make_shared<MockPersistence>();
+    auto configStore = std::make_shared<ao::app::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     AppSession session(
-      AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .persistence = persistence});
+      AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
 
     SECTION("Initial layout is empty")
     {
@@ -90,12 +82,13 @@ namespace ao::app::test
       session.workspace().navigateTo(ao::ListId{20});
       session.workspace().saveSession();
 
-      REQUIRE(persistence->snapshot.has_value());
-      CHECK(persistence->snapshot->openViews.size() == 2);
+      auto loaded = ao::app::SessionSnapshot{};
+      configStore->load("session", loaded);
+      CHECK(loaded.openViews.size() == 2);
 
       // Create new session with same persistence
       AppSession session2(
-        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .persistence = persistence});
+        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
 
       session2.workspace().restoreSession();
 
@@ -117,13 +110,14 @@ namespace ao::app::test
 
       session.workspace().saveSession();
 
-      REQUIRE(persistence->snapshot.has_value());
-      REQUIRE(persistence->snapshot->openViews.size() == 1);
-      CHECK(persistence->snapshot->openViews[0].groupBy == TrackGroupKey::Artist);
+      auto loaded = ao::app::SessionSnapshot{};
+      configStore->load("session", loaded);
+      REQUIRE(loaded.openViews.size() == 1);
+      CHECK(loaded.openViews[0].groupBy == TrackGroupKey::Artist);
 
       // Restore in new session
       AppSession session2(
-        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .persistence = persistence});
+        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
 
       session2.workspace().restoreSession();
 
@@ -141,7 +135,7 @@ namespace ao::app::test
       session.workspace().saveSession();
 
       AppSession session2(
-        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .persistence = persistence});
+        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
 
       session2.workspace().restoreSession();
 
