@@ -61,7 +61,7 @@ namespace ao::gtk
     ao::app::AppSession& _session;
     TrackRowDataProvider& _dataProvider;
     std::unique_ptr<ActivePlaybackSequence> _sequence;
-    ao::app::Subscription _transportSub;
+    ao::app::Subscription _idleSub;
     ao::app::Subscription _stoppedSub;
   };
 }

@@ -215,36 +215,39 @@ namespace ao::gtk
                        [this](ao::app::ProjectionReset const&)
                        {
                          _listModel->remove_all();
-                         for (auto const i : std::views::iota(0uz, _projection->size()))
+
+                         for (auto const idx : std::views::iota(0UZ, _projection->size()))
                          {
-                           createRowForTrack(_projection->trackIdAt(i));
+                           createRowForTrack(_projection->trackIdAt(idx));
                          }
                        },
                        [this](ao::app::ProjectionInsertRange const& delta)
                        {
-                         for (auto const i : std::views::iota(0uz, delta.range.count))
+                         for (auto const idx : std::views::iota(0UZ, delta.range.count))
                          {
-                           auto const idx = delta.range.start + i;
-                           auto const trackId = _projection->trackIdAt(idx);
+                           auto const trackIdx = delta.range.start + idx;
+                           auto const trackId = _projection->trackIdAt(trackIdx);
                            auto const row = _provider.getTrackRow(trackId);
-                           _listModel->insert(static_cast<::guint>(idx), row);
+
+                           _listModel->insert(static_cast<::guint>(trackIdx), row);
                          }
                        },
                        [this](ao::app::ProjectionRemoveRange const& delta)
                        {
-                         for ([[maybe_unused]] auto const i : std::views::iota(0uz, delta.range.count))
+                         for ([[maybe_unused]] auto const idx : std::views::iota(0UZ, delta.range.count))
                          {
                            _listModel->remove(static_cast<::guint>(delta.range.start));
                          }
                        },
                        [this](ao::app::ProjectionUpdateRange const& delta)
                        {
-                         for (auto const i : std::views::iota(0uz, delta.range.count))
+                         for (auto const idx : std::views::iota(0UZ, delta.range.count))
                          {
-                           auto const idx = delta.range.start + i;
-                           auto const trackId = _projection->trackIdAt(idx);
+                           auto const trackIdx = delta.range.start + idx;
+                           auto const trackId = _projection->trackIdAt(trackIdx);
                            auto const row = _provider.getTrackRow(trackId);
-                           _listModel->splice(static_cast<::guint>(idx), 1, std::vector<Glib::RefPtr<TrackRow>>{row});
+                           _listModel->splice(
+                             static_cast<::guint>(trackIdx), 1, std::vector<Glib::RefPtr<TrackRow>>{row});
                          }
                        }),
                      delta);
@@ -332,9 +335,9 @@ namespace ao::gtk
     auto const txn = _musicLibrary.readTransaction();
     auto const reader = _musicLibrary.tracks().reader(txn);
 
-    for (auto const i : std::views::iota(0uz, _source.size()))
+    for (auto const idx : std::views::iota(0UZ, _source.size()))
     {
-      auto const id = _source.trackIdAt(i);
+      auto const id = _source.trackIdAt(idx);
 
       if (_filterMode == TrackFilterMode::None || shouldIncludeTrack(id, reader))
       {

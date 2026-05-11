@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TrackDetailProjection.h"
-#include "EventBus.h"
-#include "EventTypes.h"
+#include "LibraryMutationService.h"
 #include "ViewService.h"
+#include "WorkspaceService.h"
 
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -58,8 +58,10 @@ namespace ao::app
   {
     DetailTarget target;
     ViewService& views;
-    EventBus& events;
     ao::library::MusicLibrary& library;
+    WorkspaceService& workspace;
+    LibraryMutationService& mutation;
+
     TrackDetailSnapshot cachedSnapshot;
     std::uint64_t revision = 0;
     std::vector<std::move_only_function<void(TrackDetailSnapshot const&)>> subscribers;
@@ -67,13 +69,23 @@ namespace ao::app
     Subscription selectionSub;
     Subscription tracksMutatedSub;
     ViewId trackedViewId{};
+
+    Impl(DetailTarget target,
+         ViewService& views,
+         ao::library::MusicLibrary& library,
+         WorkspaceService& workspace,
+         LibraryMutationService& mutation)
+      : target{std::move(target)}, views{views}, library{library}, workspace{workspace}, mutation{mutation}
+    {
+    }
   };
 
   TrackDetailProjection::TrackDetailProjection(DetailTarget target,
                                                ViewService& views,
-                                               EventBus& events,
-                                               ao::library::MusicLibrary& library)
-    : _impl{std::make_unique<Impl>(std::move(target), views, events, library)}
+                                               ao::library::MusicLibrary& library,
+                                               WorkspaceService& workspace,
+                                               LibraryMutationService& mutation)
+    : _impl{std::make_unique<Impl>(std::move(target), views, library, workspace, mutation)}
   {
     std::visit(
       [this](auto const& target)
@@ -81,16 +93,16 @@ namespace ao::app
         using T = std::decay_t<decltype(target)>;
         if constexpr (std::is_same_v<T, FocusedViewTarget>)
         {
-          _impl->focusSub = _impl->events.subscribe<FocusedViewChanged>(
-            [this](FocusedViewChanged const& ev)
+          _impl->focusSub = _impl->workspace.onFocusedViewChanged(
+            [this](ViewId viewId)
             {
-              _impl->trackedViewId = ev.viewId;
-              if (ev.viewId == ViewId{})
+              _impl->trackedViewId = viewId;
+              if (viewId == ViewId{})
               {
                 return;
               }
 
-              auto const state = _impl->views.trackListState(ev.viewId);
+              auto const state = _impl->views.trackListState(viewId);
               _impl->cachedSnapshot = buildSnapshot(state.selection);
               publishSnapshot();
             });
@@ -109,8 +121,8 @@ namespace ao::app
       _impl->target);
 
     // Shared subscriber: ViewSelectionChanged, filtered by trackedViewId
-    _impl->selectionSub = _impl->events.subscribe<ViewSelectionChanged>(
-      [this](ViewSelectionChanged const& ev)
+    _impl->selectionSub = _impl->views.onSelectionChanged(
+      [this](ViewService::SelectionChanged const& ev)
       {
         if (ev.viewId != _impl->trackedViewId)
         {
@@ -121,8 +133,8 @@ namespace ao::app
         publishSnapshot();
       });
 
-    _impl->tracksMutatedSub = _impl->events.subscribe<TracksMutated>(
-      [this](TracksMutated const& ev)
+    _impl->tracksMutatedSub = _impl->mutation.onTracksMutated(
+      [this](std::vector<ao::TrackId> const& trackIds)
       {
         if (_impl->cachedSnapshot.trackIds.empty())
         {
@@ -130,7 +142,7 @@ namespace ao::app
         }
 
         bool intersect = false;
-        for (auto const id : ev.trackIds)
+        for (auto const id : trackIds)
         {
           if (std::ranges::find(_impl->cachedSnapshot.trackIds, id) != _impl->cachedSnapshot.trackIds.end())
           {

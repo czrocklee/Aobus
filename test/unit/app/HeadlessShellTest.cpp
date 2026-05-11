@@ -9,8 +9,6 @@
 #include <runtime/AppSession.h>
 #include <runtime/ConfigStore.h>
 #include <runtime/CorePrimitives.h>
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>

@@ -21,9 +21,7 @@ namespace ao::library
 
 namespace ao::app
 {
-  class EventBus;
   class IControlExecutor;
-  class ConfigStore;
   class ConfigStore;
   class PlaybackService;
   class LibraryMutationService;
@@ -50,7 +48,6 @@ namespace ao::app
     AppSession& operator=(AppSession&&) = delete;
 
     IControlExecutor& executor() noexcept;
-    EventBus& events() noexcept;
 
     PlaybackService& playback() noexcept;
     WorkspaceService& workspace() noexcept;

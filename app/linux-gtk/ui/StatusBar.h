@@ -82,7 +82,10 @@ namespace ao::gtk
 
     sigc::connection _timerConnection;
     ao::app::AppSession& _session;
-    ao::app::Subscription _transportChangedSub;
+    ao::app::Subscription _startedSub;
+    ao::app::Subscription _pausedSub;
+    ao::app::Subscription _idleSub;
+    ao::app::Subscription _stoppedSub;
     ao::app::Subscription _outputChangedSub;
     ao::app::Subscription _qualityChangedSub;
     ao::app::Subscription _notificationPostedSub;

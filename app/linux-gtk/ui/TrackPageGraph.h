@@ -9,6 +9,7 @@
 #include "service/PlaylistExporter.h"
 #include <runtime/AppSession.h>
 #include <runtime/CorePrimitives.h>
+#include <runtime/PlaybackService.h>
 
 #include <ao/library/ListView.h>
 #include <gtkmm.h>
@@ -68,6 +69,8 @@ namespace ao::gtk
   private:
     void ensureViewPage(ao::app::ViewId viewId, TrackRowDataProvider& dataProvider);
     void bindTrackPage(TrackPageContext& ctx);
+    void syncLayout();
+    void handleRevealTrack(ao::app::PlaybackService::RevealTrackRequested const& ev);
 
     Gtk::Stack& _stack;
     TrackColumnLayoutModel& _layoutModel;

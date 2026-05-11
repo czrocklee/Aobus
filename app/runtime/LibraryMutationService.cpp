@@ -2,9 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "LibraryMutationService.h"
-#include "EventBus.h"
-#include "EventTypes.h"
-
 #include <ao/library/ImportWorker.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
@@ -77,19 +74,42 @@ namespace ao::app
   struct LibraryMutationService::Impl final
   {
     IControlExecutor& executor;
-    EventBus& events;
     ao::library::MusicLibrary& library;
     std::jthread importThread;
+    Signal<std::vector<ao::TrackId> const&> tracksMutatedSignal;
+    Signal<LibraryMutationService::ListsMutated const&> listsMutatedSignal;
+    Signal<std::size_t> importCompletedSignal;
+    Signal<LibraryMutationService::ImportProgressUpdated const&> importProgressSignal;
   };
 
-  LibraryMutationService::LibraryMutationService(EventBus& events,
-                                                 IControlExecutor& executor,
-                                                 ao::library::MusicLibrary& library)
-    : _impl{std::make_unique<Impl>(executor, events, library)}
+  LibraryMutationService::LibraryMutationService(IControlExecutor& executor, ao::library::MusicLibrary& library)
+    : _impl{std::make_unique<Impl>(executor, library)}
   {
   }
 
   LibraryMutationService::~LibraryMutationService() = default;
+
+  Subscription LibraryMutationService::onTracksMutated(
+    std::move_only_function<void(std::vector<ao::TrackId> const&)> handler)
+  {
+    return _impl->tracksMutatedSignal.connect(std::move(handler));
+  }
+
+  Subscription LibraryMutationService::onListsMutated(std::move_only_function<void(ListsMutated const&)> handler)
+  {
+    return _impl->listsMutatedSignal.connect(std::move(handler));
+  }
+
+  Subscription LibraryMutationService::onImportCompleted(std::move_only_function<void(std::size_t)> handler)
+  {
+    return _impl->importCompletedSignal.connect(std::move(handler));
+  }
+
+  Subscription LibraryMutationService::onImportProgress(
+    std::move_only_function<void(ImportProgressUpdated const&)> handler)
+  {
+    return _impl->importProgressSignal.connect(std::move(handler));
+  }
 
   ao::Result<UpdateTrackMetadataReply> LibraryMutationService::updateMetadata(std::vector<ao::TrackId> const& trackIds,
                                                                               MetadataPatch const& patch)
@@ -128,7 +148,7 @@ namespace ao::app
 
     txn.commit();
 
-    _impl->events.publish(TracksMutated{.trackIds = mutated});
+    _impl->tracksMutatedSignal.emit(mutated);
 
     return UpdateTrackMetadataReply{.mutatedIds = std::move(mutated)};
   }
@@ -169,15 +189,21 @@ namespace ao::app
 
     txn.commit();
 
-    _impl->events.publish(TracksMutated{.trackIds = mutated});
+    _impl->tracksMutatedSignal.emit(mutated);
 
     return EditTrackTagsReply{.mutatedIds = std::move(mutated)};
   }
 
   ImportFilesReply LibraryMutationService::importFiles(std::vector<std::filesystem::path> const& paths)
   {
-    auto totalFiles = paths.size();
-    auto worker = std::make_shared<ao::library::ImportWorker>(
+    struct ResultContainer
+    {
+      ao::library::ImportWorker::ImportResult result;
+    };
+    auto const container = std::make_shared<ResultContainer>();
+
+    auto const totalFiles = paths.size();
+    auto const worker = std::make_shared<ao::library::ImportWorker>(
       _impl->library,
       paths,
       [this, totalFiles](std::filesystem::path const& filePath, std::int32_t index)
@@ -185,30 +211,37 @@ namespace ao::app
         _impl->executor.dispatch(
           [this, filePath, index, totalFiles]
           {
-            _impl->events.publish(ImportProgressUpdated{
-              .fraction = totalFiles > 0 ? static_cast<double>(index) / static_cast<double>(totalFiles) : 0.0,
-              .message = "Importing: " + filePath.filename().string(),
+            auto const fraction = totalFiles > 0 ? static_cast<double>(index) / static_cast<double>(totalFiles) : 0.0;
+            auto const message = "Importing: " + filePath.filename().string();
+            _impl->importProgressSignal.emit(LibraryMutationService::ImportProgressUpdated{
+              .fraction = fraction,
+              .message = message,
             });
           });
       },
-      [] {});
-
-    _impl->importThread = std::jthread(
-      [this, worker]
+      [this, container]
       {
-        ao::setCurrentThreadName("FileImport");
-        worker->run();
-
-        auto const& result = worker->result();
         _impl->executor.dispatch(
-          [this, ids = result.insertedIds, count = result.insertedIds.size()]
+          [this, container]
           {
-            _impl->events.publish(TracksMutated{.trackIds = ids});
-            _impl->events.publish(LibraryImportCompleted{.importedTrackCount = count});
+            _impl->importCompletedSignal.emit(container->result.insertedIds.size());
+
+            if (!container->result.insertedIds.empty())
+            {
+              _impl->tracksMutatedSignal.emit(container->result.insertedIds);
+            }
           });
       });
 
-    return ImportFilesReply{.importedTrackCount = 0};
+    _impl->importThread = std::jthread(
+      [worker, container]
+      {
+        ao::setCurrentThreadName("FileImport");
+        worker->run();
+        container->result = worker->result();
+      });
+
+    return ImportFilesReply{};
   }
 
   ao::ListId LibraryMutationService::createList(ao::model::ListDraft const& draft)
@@ -236,7 +269,8 @@ namespace ao::app
 
     txn.commit();
 
-    _impl->events.publish(ListsMutated{.upserted = {listId}, .deleted = {}});
+    auto const ev = LibraryMutationService::ListsMutated{.upserted = {listId}, .deleted = {}};
+    _impl->listsMutatedSignal.emit(ev);
 
     return listId;
   }
@@ -266,7 +300,8 @@ namespace ao::app
 
     txn.commit();
 
-    _impl->events.publish(ListsMutated{.upserted = {draft.listId}, .deleted = {}});
+    auto const ev = LibraryMutationService::ListsMutated{.upserted = {draft.listId}, .deleted = {}};
+    _impl->listsMutatedSignal.emit(ev);
   }
 
   void LibraryMutationService::deleteList(ao::ListId listId)
@@ -275,6 +310,7 @@ namespace ao::app
     _impl->library.lists().writer(txn).del(listId);
     txn.commit();
 
-    _impl->events.publish(ListsMutated{.upserted = {}, .deleted = {listId}});
+    auto const ev = LibraryMutationService::ListsMutated{.upserted = {}, .deleted = {listId}};
+    _impl->listsMutatedSignal.emit(ev);
   }
 }

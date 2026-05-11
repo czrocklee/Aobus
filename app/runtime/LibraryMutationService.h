@@ -22,13 +22,12 @@ namespace ao::model
 
 namespace ao::app
 {
-  class EventBus;
   class IControlExecutor;
 
   class LibraryMutationService final
   {
   public:
-    LibraryMutationService(EventBus& events, IControlExecutor& executor, ao::library::MusicLibrary& library);
+    LibraryMutationService(IControlExecutor& executor, ao::library::MusicLibrary& library);
     ~LibraryMutationService();
 
     ao::Result<UpdateTrackMetadataReply> updateMetadata(std::vector<ao::TrackId> const& trackIds,
@@ -41,6 +40,23 @@ namespace ao::app
     ao::ListId createList(ao::model::ListDraft const& draft);
     void updateList(ao::model::ListDraft const& draft);
     void deleteList(ao::ListId listId);
+
+    struct ListsMutated final
+    {
+      std::vector<ao::ListId> upserted{};
+      std::vector<ao::ListId> deleted{};
+    };
+
+    struct ImportProgressUpdated final
+    {
+      double fraction = 0.0;
+      std::string message{};
+    };
+
+    Subscription onTracksMutated(std::move_only_function<void(std::vector<ao::TrackId> const&)> handler);
+    Subscription onListsMutated(std::move_only_function<void(ListsMutated const&)> handler);
+    Subscription onImportCompleted(std::move_only_function<void(std::size_t)> handler);
+    Subscription onImportProgress(std::move_only_function<void(ImportProgressUpdated const&)> handler);
 
     LibraryMutationService(LibraryMutationService const&) = delete;
     LibraryMutationService& operator=(LibraryMutationService const&) = delete;

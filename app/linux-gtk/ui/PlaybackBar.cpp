@@ -6,8 +6,6 @@
 #include "OutputListItems.h"
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
 
@@ -97,83 +95,129 @@ namespace ao::gtk
 
     signal_map().connect([this] { syncOutputIconSize(); });
 
-    // Self-wire: transport changes → buttons, time label, position tracking, soul
-    _transportChangedSub = _session.events().subscribe<ao::app::PlaybackTransportChanged>(
-      [this](ao::app::PlaybackTransportChanged const& ev)
+    _preparingSub = _session.playback().onPreparing(
+      [this]
       {
-        auto const state = _session.playback().state();
+        _timeLabel.set_text("00:00 / 00:00");
+        _seekScale.set_range(0, 100);
+        _seekScale.set_value(0);
+        _seekScale.set_sensitive(false);
+        _lastTransport = ao::audio::Transport::Opening;
+        updateTransportButtons(ao::audio::Transport::Opening, _session.playback().state().ready);
+        syncOutputIconSize();
+      });
 
-        _lastState.engine.transport = ev.transport;
-        updateTransportButtons(ev.transport, state.ready);
-
-        // Time label + seek scale
-        auto const posSec = state.positionMs / 1000;
-        auto const durSec = state.durationMs / 1000;
-        if (ev.transport == ao::audio::Transport::Idle ||
-            ev.transport == ao::audio::Transport::Opening ||
-            ev.transport == ao::audio::Transport::Buffering || durSec == 0)
-        {
-          _timeLabel.set_text("00:00 / 00:00");
-          _seekScale.set_range(0, 100);
-          _seekScale.set_value(0);
-          _seekScale.set_sensitive(false);
-        }
-        else
-        {
-          _timeLabel.set_text(
-            std::format("{:d}:{:02d} / {:d}:{:02d}", posSec / 60, posSec % 60, durSec / 60, durSec % 60));
-          _updatingSeekScale = true;
-          _seekScale.set_range(0, static_cast<double>(state.durationMs));
-          _seekScale.set_value(static_cast<double>(state.positionMs));
-          _updatingSeekScale = false;
-          _seekScale.set_sensitive(true);
-        }
-
-        // Position tracking for tick-based animation
+    _startedSub = _session.playback().onStarted(
+      [this]
+      {
+        auto const& state = _session.playback().state();
+        _lastState.engine.transport = ao::audio::Transport::Playing;
+        updateTransportButtons(ao::audio::Transport::Playing, state.ready);
         _lastPositionMs = state.positionMs;
         _lastDurationMs = state.durationMs;
-        _lastTransport = ev.transport;
-
-        bool const isActive = (ev.transport == ao::audio::Transport::Playing ||
-                               ev.transport == ao::audio::Transport::Opening ||
-                               ev.transport == ao::audio::Transport::Buffering ||
-                               ev.transport == ao::audio::Transport::Seeking);
-        if (isActive)
         {
-          _firstFrameTime = 0;
+          auto const posSec = state.positionMs / 1000;
+          auto const durSec = state.durationMs / 1000;
+          if (durSec == 0)
+          {
+            _seekScale.set_range(0, 100);
+            _seekScale.set_sensitive(false);
+          }
+          else
+          {
+            _timeLabel.set_text(
+              std::format("{:d}:{:02d} / {:d}:{:02d}", posSec / 60, posSec % 60, durSec / 60, durSec % 60));
+            _updatingSeekScale = true;
+            _seekScale.set_range(0, static_cast<double>(state.durationMs));
+            _seekScale.set_value(static_cast<double>(state.positionMs));
+            _updatingSeekScale = false;
+            _seekScale.set_sensitive(true);
+          }
         }
+        _isPlaying = true;
+        _firstFrameTime = 0;
+        _lastTransport = ao::audio::Transport::Playing;
 
-        // Soul animation
-        if (_soulWindow && _soulWindow->is_visible())
-        {
-          bool const active =
-            ev.transport == ao::audio::Transport::Playing || ev.transport == ao::audio::Transport::Opening ||
-            ev.transport == ao::audio::Transport::Buffering || ev.transport == ao::audio::Transport::Seeking;
-          _soulWindow->updateState(state.quality, active);
-        }
-
-        // Volume visibility may change when backend is first initialised
-        bool const volAvailable = state.volumeAvailable;
-        _volumeScale.set_visible(volAvailable);
-        if (volAvailable)
+        _volumeScale.set_visible(state.volumeAvailable);
+        if (state.volumeAvailable)
         {
           _updatingVolumeScale = true;
           _volumeScale.setVolume(state.volume);
           _updatingVolumeScale = false;
         }
 
+        if (_soulWindow && _soulWindow->is_visible())
+        {
+          _soulWindow->updateState(state.quality, true);
+        }
+
+        syncOutputIconSize();
+      });
+
+    _pausedSub = _session.playback().onPaused(
+      [this]
+      {
+        auto const& state = _session.playback().state();
+        _lastState.engine.transport = ao::audio::Transport::Paused;
+        updateTransportButtons(ao::audio::Transport::Paused, state.ready);
+        _lastPositionMs = state.positionMs;
+        _lastDurationMs = state.durationMs;
+        _lastTransport = ao::audio::Transport::Paused;
+        _isPlaying = false;
+        _lastTransport = ao::audio::Transport::Idle;
+      });
+
+    _idleSub = _session.playback().onIdle(
+      [this]
+      {
+        auto const& state = _session.playback().state();
+        _lastState.engine.transport = ao::audio::Transport::Idle;
+        updateTransportButtons(ao::audio::Transport::Idle, state.ready);
+        _isPlaying = false;
+        _lastTransport = ao::audio::Transport::Idle;
+
+        _seekScale.set_value(0);
+        _seekScale.set_range(0, 100);
+        _seekScale.set_sensitive(false);
+        _timeLabel.set_text("00:00 / 00:00");
+
+        if (_soulWindow && _soulWindow->is_visible())
+        {
+          _soulWindow->updateState(state.quality, false);
+        }
+
+        syncOutputIconSize();
+      });
+
+    _stoppedSub = _session.playback().onStopped(
+      [this]
+      {
+        auto const& state = _session.playback().state();
+        _lastState.engine.transport = ao::audio::Transport::Idle;
+        updateTransportButtons(ao::audio::Transport::Idle, state.ready);
+        _isPlaying = false;
+        _lastTransport = ao::audio::Transport::Idle;
+
+        _seekScale.set_value(0);
+        _seekScale.set_range(0, 100);
+        _seekScale.set_sensitive(false);
+        _timeLabel.set_text("00:00 / 00:00");
+
+        if (_soulWindow && _soulWindow->is_visible())
+        {
+          _soulWindow->updateState(state.quality, false);
+        }
+
         syncOutputIconSize();
       });
 
     // Output/device/quality changes
-    _outputChangedSub = _session.events().subscribe<ao::app::PlaybackOutputChanged>(
-      [this](ao::app::PlaybackOutputChanged const&) { rebuildOutputList(); });
+    _outputChangedSub = _session.playback().onOutputChanged([this](auto const&) { rebuildOutputList(); });
 
-    _devicesChangedSub = _session.events().subscribe<ao::app::PlaybackDevicesChanged>(
-      [this](ao::app::PlaybackDevicesChanged const&) { rebuildOutputList(); });
+    _devicesChangedSub = _session.playback().onDevicesChanged([this] { rebuildOutputList(); });
 
-    _qualityChangedSub = _session.events().subscribe<ao::app::PlaybackQualityChanged>(
-      [this](ao::app::PlaybackQualityChanged const& ev)
+    _qualityChangedSub = _session.playback().onQualityChanged(
+      [this](auto const& ev)
       {
         _lastState.quality = ev.quality;
         _lastState.isReady = ev.ready;
@@ -336,11 +380,7 @@ namespace ao::gtk
     _tickCallbackId = add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
       {
-        bool const isPlaying =
-          (_lastTransport == ao::audio::Transport::Playing || _lastTransport == ao::audio::Transport::Opening ||
-           _lastTransport == ao::audio::Transport::Buffering || _lastTransport == ao::audio::Transport::Seeking);
-
-        if (isPlaying)
+        if (_isPlaying)
         {
           auto const frameTime = clock->get_frame_time();
           if (_firstFrameTime == 0)
@@ -643,7 +683,7 @@ namespace ao::gtk
 
   void PlaybackBar::applyInitialState()
   {
-    auto const state = _session.playback().state();
+    auto const& state = _session.playback().state();
 
     updateTransportButtons(state.transport, state.ready);
 
@@ -684,6 +724,9 @@ namespace ao::gtk
     _lastPositionMs = state.positionMs;
     _lastDurationMs = state.durationMs;
     _lastTransport = state.transport;
+    _isPlaying =
+      (state.transport == ao::audio::Transport::Playing || state.transport == ao::audio::Transport::Opening ||
+       state.transport == ao::audio::Transport::Buffering || state.transport == ao::audio::Transport::Seeking);
 
     // Initial state for quality handler (won't fire until change)
     _lastState.quality = state.quality;
@@ -695,7 +738,7 @@ namespace ao::gtk
 
   void PlaybackBar::rebuildOutputList()
   {
-    auto const state = _session.playback().state();
+    auto const& state = _session.playback().state();
 
     _outputStore->remove_all();
     for (auto const& backend : state.availableOutputs)
@@ -827,12 +870,7 @@ namespace ao::gtk
       _soulWindow = std::make_unique<AobusSoulWindow>();
     }
 
-    bool const isPlaying = (_lastState.engine.transport == ao::audio::Transport::Playing ||
-                            _lastState.engine.transport == ao::audio::Transport::Opening ||
-                            _lastState.engine.transport == ao::audio::Transport::Buffering ||
-                            _lastState.engine.transport == ao::audio::Transport::Seeking);
-
-    _soulWindow->updateState(_lastState.quality, isPlaying);
+    _soulWindow->updateState(_lastState.quality, _isPlaying);
     if (auto* rootWindow = dynamic_cast<Gtk::Window*>(get_root()))
     {
       _soulWindow->set_transient_for(*rootWindow);

@@ -11,8 +11,6 @@
 #include <ao/utility/Log.h>
 #include <runtime/AllTracksSource.h>
 #include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
 #include <runtime/ManualListSource.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/SmartListSource.h>
@@ -51,86 +49,85 @@ namespace ao::gtk
     , _tagEditController{tagEditController}
     , _listSidebar{listSidebar}
   {
-    _revealSub = _session.events().subscribe<ao::app::RevealTrackRequested>(
-      [this](ao::app::RevealTrackRequested const& ev)
-      {
-        auto viewId = ev.preferredViewId;
+    _revealSub = _session.playback().onRevealTrackRequested([this](auto const& ev) { handleRevealTrack(ev); });
 
-        // Fallback: If no view ID specified, try to find a view currently displaying the requested list
-        if (viewId == ao::app::ViewId{} && ev.preferredListId != ao::ListId{})
-        {
-          for (auto const& [id, ctx] : _trackPages)
-          {
-            if (ctx.page && ctx.page->getListId() == ev.preferredListId)
-            {
-              viewId = id;
-              break;
-            }
-          }
-        }
-
-        if (viewId != ao::app::ViewId{})
-        {
-          _session.workspace().setFocusedView(viewId);
-          if (ev.trackId != ao::TrackId{})
-          {
-            if (auto* ctx = find(viewId))
-            {
-              ctx->page->selectTrack(ev.trackId);
-            }
-          }
-        }
-      });
-
-    _nowPlayingSub = _session.events().subscribe<ao::app::NowPlayingTrackChanged>(
-      [this](ao::app::NowPlayingTrackChanged const& ev)
+    _nowPlayingSub = _session.playback().onNowPlayingChanged(
+      [this](auto const& ev)
       { setPlayingTrack(ev.trackId != ao::TrackId{} ? std::optional{ev.trackId} : std::nullopt); });
 
-    auto const syncLayout = [this]
+    _focusSub = _session.workspace().onFocusedViewChanged([this](auto) { syncLayout(); });
+
+    _viewDestroyedSub = _session.views().onDestroyed([this](auto) { syncLayout(); });
+  }
+
+  void TrackPageGraph::handleRevealTrack(ao::app::PlaybackService::RevealTrackRequested const& ev)
+  {
+    auto viewId = ev.preferredViewId;
+
+    // Fallback: If no view ID specified, try to find a view currently displaying the requested list
+    if (viewId == ao::app::ViewId{} && ev.preferredListId != ao::ListId{})
     {
-      if (!_activeDataProvider)
+      for (auto const& [id, ctx] : _trackPages)
       {
-        return;
-      }
-
-      auto const state = _session.workspace().layoutState();
-
-      // Remove closed views
-      for (auto it = _trackPages.begin(); it != _trackPages.end();)
-      {
-        if (std::ranges::find(state.openViews, it->first) == state.openViews.end())
+        if (ctx.page && ctx.page->getListId() == ev.preferredListId)
         {
-          if (it->second.page)
-          {
-            _stack.remove(*it->second.page);
-          }
-
-          it = _trackPages.erase(it);
-        }
-        else
-        {
-          ++it;
+          viewId = id;
+          break;
         }
       }
+    }
 
-      // Add new views
-      for (auto const viewId : state.openViews)
+    if (viewId != ao::app::ViewId{})
+    {
+      _session.workspace().setFocusedView(viewId);
+      if (ev.trackId != ao::TrackId{})
       {
-        ensureViewPage(viewId, *_activeDataProvider);
+        if (auto* ctx = find(viewId))
+        {
+          ctx->page->selectTrack(ev.trackId);
+        }
       }
+    }
+  }
 
-      // Set active
-      if (state.activeViewId != ao::app::ViewId{})
+  void TrackPageGraph::syncLayout()
+  {
+    if (_activeDataProvider == nullptr)
+    {
+      return;
+    }
+
+    auto const state = _session.workspace().layoutState();
+
+    // Remove closed views
+    for (auto it = _trackPages.begin(); it != _trackPages.end();)
+    {
+      if (std::ranges::find(state.openViews, it->first) == state.openViews.end())
       {
-        _stack.set_visible_child(std::format("view-{}", state.activeViewId.value()));
+        if (it->second.page)
+        {
+          _stack.remove(*it->second.page);
+        }
+
+        it = _trackPages.erase(it);
       }
-    };
+      else
+      {
+        ++it;
+      }
+    }
 
-    _focusSub = _session.events().subscribe<ao::app::FocusedViewChanged>(
-      [syncLayout](ao::app::FocusedViewChanged const&) { syncLayout(); });
+    // Add new views
+    for (auto const viewId : state.openViews)
+    {
+      ensureViewPage(viewId, *_activeDataProvider);
+    }
 
-    _viewDestroyedSub = _session.events().subscribe<ao::app::ViewDestroyed>([syncLayout](ao::app::ViewDestroyed const&)
-                                                                            { syncLayout(); });
+    // Set active
+    if (state.activeViewId != ao::app::ViewId{})
+    {
+      _stack.set_visible_child(std::format("view-{}", state.activeViewId.value()));
+    }
   }
 
   TrackPageGraph::~TrackPageGraph()

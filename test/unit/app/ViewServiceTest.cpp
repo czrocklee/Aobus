@@ -3,11 +3,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
 #include <runtime/ViewService.h>
 
 #include <runtime/AllTracksSource.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/LibraryMutationService.h>
 #include <runtime/ListSourceStore.h>
 
 #include "TestUtils.h"
@@ -19,23 +19,34 @@ namespace ao::app::test
 {
   namespace
   {
+    class MockControlExecutor final : public IControlExecutor
+    {
+    public:
+      bool isCurrent() const noexcept override { return true; }
+      void dispatch(std::move_only_function<void()> task) override { task(); }
+    };
+
     struct TestEnv final
     {
       TestMusicLibrary library;
-      EventBus events;
+      MockControlExecutor executor;
+      LibraryMutationService mutation;
       std::unique_ptr<ao::app::ListSourceStore> store;
 
-      TestEnv() { store = std::make_unique<ao::app::ListSourceStore>(library.library(), events); }
+      TestEnv()
+        : mutation{executor, library.library()}
+        , store{std::make_unique<ao::app::ListSourceStore>(library.library(), mutation)}
+      {
+      }
 
-      ViewService makeService(EventBus& events) { return ViewService{library.library(), *store, events}; }
+      ViewService makeService() { return ViewService{library.library(), *store}; }
     };
   }
 
   TEST_CASE("ViewService - listViews starts empty", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     CHECK(service.listViews().empty());
   }
@@ -43,8 +54,7 @@ namespace ao::app::test
   TEST_CASE("ViewService - create view via direct API", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     SECTION("creating a track list view returns ViewId")
     {
@@ -81,8 +91,7 @@ namespace ao::app::test
   TEST_CASE("ViewService - destroy view", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     auto result = service.createView({}, true);
     auto viewId = result.viewId;
@@ -110,7 +119,7 @@ namespace ao::app::test
     SECTION("destroy publishes ViewDestroyed event")
     {
       auto received = ViewId{};
-      auto sub = events.subscribe<ViewDestroyed>([&](ViewDestroyed const& ev) { received = ev.viewId; });
+      auto sub = service.onDestroyed([&](auto viewId) { received = viewId; });
 
       service.destroyView(viewId);
       CHECK(received == viewId);
@@ -120,8 +129,7 @@ namespace ao::app::test
   TEST_CASE("ViewService - trackListState access", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     auto result = service.createView({.filterExpression = "$year > 2000"}, true);
     auto snap = service.trackListState(result.viewId);
@@ -136,8 +144,7 @@ namespace ao::app::test
   TEST_CASE("ViewService - trackListProjection access", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     auto result = service.createView({}, true);
     auto projection = service.trackListProjection(result.viewId);
@@ -149,8 +156,7 @@ namespace ao::app::test
   TEST_CASE("ViewService - projection subscription", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     auto result = service.createView({}, true);
     auto projection = service.trackListProjection(result.viewId);
@@ -170,8 +176,7 @@ namespace ao::app::test
   TEST_CASE("ViewService - createView with groupBy applies effective sort", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     auto result = service.createView({.groupBy = TrackGroupKey::Artist}, true);
     auto snap = service.trackListState(result.viewId);
@@ -194,8 +199,7 @@ namespace ao::app::test
   TEST_CASE("ViewService - createView with Album groupBy", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     auto result = service.createView({.groupBy = TrackGroupKey::Album}, true);
     auto snap = service.trackListState(result.viewId);
@@ -217,8 +221,7 @@ namespace ao::app::test
   TEST_CASE("ViewService - setGrouping updates state and projection", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     auto result = service.createView({}, true);
     auto viewId = result.viewId;
@@ -244,8 +247,7 @@ namespace ao::app::test
   TEST_CASE("ViewService - setGrouping no-ops on same value", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     auto result = service.createView({.groupBy = TrackGroupKey::Year}, true);
     auto snap = service.trackListState(result.viewId);
@@ -261,13 +263,12 @@ namespace ao::app::test
   TEST_CASE("ViewService - setGrouping publishes ViewGroupingChanged", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     auto result = service.createView({}, true);
 
     auto received = TrackGroupKey::None;
-    auto sub = events.subscribe<ViewGroupingChanged>([&](ViewGroupingChanged const& ev) { received = ev.groupBy; });
+    auto sub = service.onGroupingChanged([&](auto const& ev) { received = ev.groupBy; });
 
     service.setGrouping(result.viewId, TrackGroupKey::Composer);
     CHECK(received == TrackGroupKey::Composer);
@@ -276,13 +277,12 @@ namespace ao::app::test
   TEST_CASE("ViewService - setGrouping no-ops does not publish event", "[app][runtime][view]")
   {
     auto env = TestEnv{};
-    auto events = EventBus{};
-    auto service = env.makeService(events);
+    auto service = env.makeService();
 
     auto result = service.createView({}, true);
 
     auto callCount = 0;
-    auto sub = events.subscribe<ViewGroupingChanged>([&](ViewGroupingChanged const&) { ++callCount; });
+    auto sub = service.onGroupingChanged([&](auto const&) { ++callCount; });
 
     // First change should publish
     service.setGrouping(result.viewId, TrackGroupKey::Artist);

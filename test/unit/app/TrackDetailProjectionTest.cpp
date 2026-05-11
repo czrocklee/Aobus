@@ -4,12 +4,14 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "TestUtils.h"
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
+#include <runtime/ConfigStore.h>
+#include <runtime/LibraryMutationService.h>
 #include <runtime/ListSourceStore.h>
+#include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
 #include <runtime/TrackDetailProjection.h>
 #include <runtime/ViewService.h>
+#include <runtime/WorkspaceService.h>
 
 #include <ao/library/TrackBuilder.h>
 
@@ -20,12 +22,35 @@ using namespace ao::app::test;
 
 namespace
 {
+  class MockControlExecutor final : public IControlExecutor
+  {
+  public:
+    bool isCurrent() const noexcept override { return true; }
+    void dispatch(std::move_only_function<void()> task) override { task(); }
+  };
+
   struct Env final
   {
     TestMusicLibrary lib;
-    EventBus events;
-    ListSourceStore sources{lib.library(), events};
-    ViewService views{lib.library(), sources, events};
+    MockControlExecutor executor;
+    ao::app::LibraryMutationService mutation;
+    ao::app::ListSourceStore sources;
+    ao::app::ViewService views;
+    std::shared_ptr<ao::app::ConfigStore> config;
+    ao::app::PlaybackService playback;
+    ao::app::WorkspaceService workspace;
+
+    Env()
+      : mutation{executor, lib.library()}
+      , sources{lib.library(), mutation}
+      , views{lib.library(), sources}
+      , config{std::make_shared<ao::app::ConfigStore>(lib.library().rootPath() / "config.json")}
+      , playback{executor, views, lib.library()}
+      , workspace{views, playback, mutation, lib.library(), config}
+    {
+      views.setWorkspaceService(workspace);
+      views.setLibraryMutationService(mutation);
+    }
   };
 
   ao::ListId allTracksId()
@@ -50,24 +75,13 @@ TEST_CASE("TrackDetailProjection refreshes on TracksMutated", "[projection]")
   REQUIRE(snap.title.optValue.has_value());
   CHECK(snap.title.optValue.value() == "Before");
 
-  // Mutate the track in the library
+  // Mutate the track in the library using the service
   {
-    auto txn = env.lib.library().writeTransaction();
-    auto writer = env.lib.library().tracks().writer(txn);
-    auto reader = env.lib.library().tracks().reader(txn);
-    auto const optView = reader.get(id1, ao::library::TrackStore::Reader::LoadMode::Both);
-    REQUIRE(optView.has_value());
-    auto builder = ao::library::TrackBuilder::fromView(*optView, env.lib.library().dictionary());
-    builder.metadata().title("After");
-    auto hot = builder.serializeHot(txn, env.lib.library().dictionary());
-    auto cold = builder.serializeCold(txn, env.lib.library().dictionary(), env.lib.library().resources());
-    writer.updateHot(id1, hot);
-    writer.updateCold(id1, cold);
-    txn.commit();
+    MetadataPatch patch{.optTitle = "After"};
+    env.mutation.updateMetadata({id1}, patch);
   }
 
-  // Publish TracksMutated — projection should refresh
-  env.events.publish(TracksMutated{.trackIds = {id1}});
+  // Mutation service already published the signal
 
   snap = proj->snapshot();
   CHECK(snap.title.optValue.value() == "After");
@@ -88,7 +102,7 @@ TEST_CASE("TrackDetailProjection ignores non-intersecting TracksMutated", "[proj
   auto const revBefore = proj->snapshot().revision;
 
   // Mutate a track not in the selection
-  env.events.publish(TracksMutated{.trackIds = {id2}});
+  env.mutation.updateMetadata({id2}, MetadataPatch{.optTitle = "Something Else"});
 
   // Revision should NOT change because the mutated track is not selected
   CHECK(proj->snapshot().revision == revBefore);

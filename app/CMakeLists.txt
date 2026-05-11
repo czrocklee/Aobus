@@ -5,8 +5,6 @@ add_library(app_runtime STATIC
     runtime/AllTracksSource.cpp
     runtime/AllTracksSource.h
     runtime/CorePrimitives.h
-    runtime/EventBus.h
-    runtime/EventTypes.h
     runtime/ConfigStore.cpp
     runtime/ConfigStore.h
     runtime/ProjectionTypes.h

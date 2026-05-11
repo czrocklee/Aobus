@@ -3,8 +3,6 @@
 
 #include "AppSession.h"
 #include "ConfigStore.h"
-#include "EventBus.h"
-#include "EventTypes.h"
 #include "LibraryMutationService.h"
 #include "NotificationService.h"
 #include "PlaybackService.h"
@@ -23,14 +21,12 @@ namespace ao::app
   {
     std::shared_ptr<IControlExecutor> executor;
 
-    EventBus eventBus;
-
     ao::library::MusicLibrary musicLibrary;
+    LibraryMutationService mutationService;
     ListSourceStore sources;
 
     ViewService viewService;
     PlaybackService playbackService;
-    LibraryMutationService mutationService;
     NotificationService notificationService;
     WorkspaceService workspaceService;
 
@@ -39,13 +35,15 @@ namespace ao::app
          std::shared_ptr<ConfigStore> configStore)
       : executor{std::move(exec)}
       , musicLibrary{std::move(libraryRoot)}
-      , sources{musicLibrary, eventBus}
-      , viewService{musicLibrary, sources, eventBus}
-      , playbackService{eventBus, *this->executor, viewService, musicLibrary}
-      , mutationService{eventBus, *this->executor, musicLibrary}
-      , notificationService{eventBus}
-      , workspaceService{eventBus, viewService, playbackService, musicLibrary, std::move(configStore)}
+      , mutationService{*this->executor, musicLibrary}
+      , sources{musicLibrary, mutationService}
+      , viewService{musicLibrary, sources}
+      , playbackService{*this->executor, viewService, musicLibrary}
+      , notificationService{}
+      , workspaceService{viewService, playbackService, mutationService, musicLibrary, std::move(configStore)}
     {
+      viewService.setWorkspaceService(workspaceService);
+      viewService.setLibraryMutationService(mutationService);
     }
   };
 
@@ -61,11 +59,6 @@ namespace ao::app
   IControlExecutor& AppSession::executor() noexcept
   {
     return *_impl->executor;
-  }
-
-  EventBus& AppSession::events() noexcept
-  {
-    return _impl->eventBus;
   }
 
   PlaybackService& AppSession::playback() noexcept

@@ -15,17 +15,32 @@ namespace ao::library
 
 namespace ao::app
 {
-  class EventBus;
   class IControlExecutor;
   class ViewService;
 
   class PlaybackService final
   {
   public:
-    PlaybackService(EventBus& events,
-                    IControlExecutor& executor,
-                    ViewService& views,
-                    ao::library::MusicLibrary& library);
+    struct NowPlayingChanged final
+    {
+      ao::TrackId trackId{};
+      ao::ListId sourceListId{};
+    };
+
+    struct QualityChanged final
+    {
+      ao::audio::Quality quality = ao::audio::Quality::Unknown;
+      bool ready = false;
+    };
+
+    struct RevealTrackRequested final
+    {
+      ao::TrackId trackId{};
+      ao::ListId preferredListId{};
+      ViewId preferredViewId{};
+    };
+
+    PlaybackService(IControlExecutor& executor, ViewService& views, ao::library::MusicLibrary& library);
     ~PlaybackService();
 
     PlaybackService(PlaybackService const&) = delete;
@@ -33,7 +48,18 @@ namespace ao::app
     PlaybackService(PlaybackService&&) = delete;
     PlaybackService& operator=(PlaybackService&&) = delete;
 
-    PlaybackState state() const;
+    PlaybackState const& state() const;
+
+    Subscription onPreparing(std::move_only_function<void()> handler);
+    Subscription onStarted(std::move_only_function<void()> handler);
+    Subscription onPaused(std::move_only_function<void()> handler);
+    Subscription onIdle(std::move_only_function<void()> handler);
+    Subscription onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler);
+    Subscription onOutputChanged(std::move_only_function<void(OutputSelection const&)> handler);
+    Subscription onStopped(std::move_only_function<void()> handler);
+    Subscription onDevicesChanged(std::move_only_function<void()> handler);
+    Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
+    Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
 
     void play(ao::audio::TrackPlaybackDescriptor const& descriptor, ao::ListId sourceListId);
     ao::TrackId playSelectionInView(ViewId viewId);

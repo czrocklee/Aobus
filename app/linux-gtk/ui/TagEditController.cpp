@@ -5,9 +5,8 @@
 #include "TagPopover.h"
 #include "TrackRowDataProvider.h"
 #include <ao/library/TrackBuilder.h>
+#include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
 #include <runtime/LibraryMutationService.h>
 
 namespace ao::gtk
