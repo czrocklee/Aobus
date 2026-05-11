@@ -5,8 +5,6 @@
 #include "TrackRowDataProvider.h"
 #include "TrackViewPage.h"
 #include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
 
@@ -119,22 +117,14 @@ namespace ao::gtk
 
   void PlaybackController::subscribeEvents()
   {
-    _transportSub = _session.events().subscribe<ao::app::PlaybackTransportChanged>(
-      [this](ao::app::PlaybackTransportChanged const& event)
-      {
-        if (event.transport == ao::audio::Transport::Idle)
-        {
-          advanceToNext();
-        }
-      });
+    _idleSub = _session.playback().onIdle([this] { advanceToNext(); });
 
-    _stoppedSub =
-      _session.events().subscribe<ao::app::PlaybackStopped>([this](ao::app::PlaybackStopped const&) { clear(); });
+    _stoppedSub = _session.playback().onStopped([this] { clear(); });
   }
 
   void PlaybackController::unsubscribeEvents()
   {
-    _transportSub.reset();
+    _idleSub.reset();
     _stoppedSub.reset();
   }
 }

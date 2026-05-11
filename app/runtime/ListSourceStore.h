@@ -16,12 +16,12 @@
 
 namespace ao::app
 {
-  class EventBus;
+  class LibraryMutationService;
 
   class ListSourceStore final
   {
   public:
-    ListSourceStore(ao::library::MusicLibrary& library, ao::app::EventBus& events);
+    ListSourceStore(ao::library::MusicLibrary& library, LibraryMutationService& mutation);
     ~ListSourceStore();
 
     ListSourceStore(ListSourceStore const&) = delete;
@@ -43,7 +43,6 @@ namespace ao::app
     AllTracksSource _allTracks;
     SmartListEvaluator _smartEvaluator;
 
-    ao::app::EventBus& _events;
     ao::app::Subscription _listsMutatedSubscription;
 
     std::unordered_map<ao::ListId, std::unique_ptr<TrackSource>> _sources;

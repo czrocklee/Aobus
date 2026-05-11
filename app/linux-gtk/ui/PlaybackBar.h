@@ -5,7 +5,6 @@
 
 #include <ao/audio/Player.h>
 #include <ao/audio/Types.h>
-#include <runtime/EventTypes.h>
 #include <runtime/StateTypes.h>
 
 namespace ao::app
@@ -94,11 +93,16 @@ namespace ao::gtk
 
     ao::app::AppSession& _session;
 
-    ao::app::Subscription _transportChangedSub;
+    ao::app::Subscription _preparingSub;
+    ao::app::Subscription _startedSub;
+    ao::app::Subscription _pausedSub;
+    ao::app::Subscription _idleSub;
+    ao::app::Subscription _stoppedSub;
     ao::app::Subscription _outputChangedSub;
     ao::app::Subscription _devicesChangedSub;
     ao::app::Subscription _qualityChangedSub;
 
+    bool _isPlaying = false;
     bool _updatingSeekScale = false;
     bool _isDraggingSeek = false;
     bool _updatingVolumeScale = false;

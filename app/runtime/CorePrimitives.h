@@ -62,6 +62,32 @@ namespace ao::app
     std::move_only_function<void()> _unsubscribe;
   };
 
+  template<typename... Args>
+  class Signal final
+  {
+  public:
+    Subscription connect(std::move_only_function<void(Args...)> handler)
+    {
+      auto index = _handlers.size();
+      _handlers.push_back(std::move(handler));
+      return Subscription([this, index] { _handlers[index] = {}; });
+    }
+
+    void emit(Args... args)
+    {
+      for (auto& h : _handlers)
+      {
+        if (h)
+        {
+          h(args...);
+        }
+      }
+    }
+
+  private:
+    std::vector<std::move_only_function<void(Args...)>> _handlers;
+  };
+
   class IControlExecutor
   {
   public:

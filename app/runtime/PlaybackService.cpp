@@ -2,8 +2,6 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "PlaybackService.h"
-#include "EventBus.h"
-#include "EventTypes.h"
 #include "ViewService.h"
 
 #include <ao/audio/Player.h>
@@ -21,7 +19,7 @@ namespace ao::app
   {
     PlaybackState buildPlaybackState(ao::audio::Player const& player)
     {
-      auto status = player.status();
+      auto const status = player.status();
 
       auto outputs = std::vector<OutputBackendSnapshot>{};
       outputs.reserve(status.availableBackends.size());
@@ -90,7 +88,6 @@ namespace ao::app
   struct PlaybackService::Impl final
   {
     IControlExecutor& executor;
-    EventBus& events;
     PlaybackState state;
     std::unique_ptr<ao::audio::Player> player;
     ViewService& views;
@@ -99,6 +96,16 @@ namespace ao::app
     ao::ListId currentSourceListId{};
     std::string currentTrackTitle{};
     std::string currentTrackArtist{};
+    Signal<> preparingSignal;
+    Signal<> startedSignal;
+    Signal<> pausedSignal;
+    Signal<> idleSignal;
+    Signal<PlaybackService::NowPlayingChanged const&> nowPlayingChangedSignal;
+    Signal<OutputSelection const&> outputChangedSignal;
+    Signal<> stoppedSignal;
+    Signal<> devicesChangedSignal;
+    Signal<PlaybackService::QualityChanged const&> qualityChangedSignal;
+    Signal<PlaybackService::RevealTrackRequested const&> revealTrackRequestedSignal;
 
     void ensureReady() const
     {
@@ -107,7 +114,7 @@ namespace ao::app
         return;
       }
 
-      auto status = player->status();
+      auto const status = player->status();
 
       if (status.availableBackends.empty())
       {
@@ -142,12 +149,8 @@ namespace ao::app
       return snapshot;
     }
 
-    explicit Impl(IControlExecutor& controlExecutor,
-                  EventBus& eventBus,
-                  ViewService& viewService,
-                  ao::library::MusicLibrary& musicLibrary)
+    explicit Impl(IControlExecutor& controlExecutor, ViewService& viewService, ao::library::MusicLibrary& musicLibrary)
       : executor{controlExecutor}
-      , events{eventBus}
       , player{std::make_unique<ao::audio::Player>()}
       , views{viewService}
       , library{musicLibrary}
@@ -159,7 +162,7 @@ namespace ao::app
             [this]
             {
               state = buildState(*player);
-              events.publish(PlaybackTransportChanged{.transport = ao::audio::Transport::Idle});
+              idleSignal.emit();
             });
         });
 
@@ -174,14 +177,14 @@ namespace ao::app
               // Auto-select first available default output if none is selected yet
               if (!state.selectedOutput.backendId.empty() || state.availableOutputs.empty())
               {
-                events.publish(PlaybackDevicesChanged{});
+                devicesChangedSignal.emit();
                 return;
               }
 
               auto const& backend = state.availableOutputs.front();
               if (backend.devices.empty())
               {
-                events.publish(PlaybackDevicesChanged{});
+                devicesChangedSignal.emit();
                 return;
               }
 
@@ -195,8 +198,7 @@ namespace ao::app
 
               player->setOutput(backend.id, device.id, profileId);
               state = buildState(*player);
-
-              events.publish(PlaybackDevicesChanged{});
+              devicesChangedSignal.emit();
             });
         });
 
@@ -208,23 +210,71 @@ namespace ao::app
             {
               state.quality = quality;
               state.ready = ready;
-              events.publish(PlaybackQualityChanged{.quality = quality, .ready = ready});
+              qualityChangedSignal.emit(PlaybackService::QualityChanged{.quality = quality, .ready = ready});
             });
         });
     }
   };
 
-  PlaybackService::PlaybackService(EventBus& events,
-                                   IControlExecutor& executor,
-                                   ViewService& views,
-                                   ao::library::MusicLibrary& library)
-    : _impl{std::make_unique<Impl>(executor, events, views, library)}
+  PlaybackService::PlaybackService(IControlExecutor& executor, ViewService& views, ao::library::MusicLibrary& library)
+    : _impl{std::make_unique<Impl>(executor, views, library)}
   {
   }
 
   PlaybackService::~PlaybackService() = default;
 
-  PlaybackState PlaybackService::state() const
+  Subscription PlaybackService::onPreparing(std::move_only_function<void()> handler)
+  {
+    return _impl->preparingSignal.connect(std::move(handler));
+  }
+
+  Subscription PlaybackService::onStarted(std::move_only_function<void()> handler)
+  {
+    return _impl->startedSignal.connect(std::move(handler));
+  }
+
+  Subscription PlaybackService::onPaused(std::move_only_function<void()> handler)
+  {
+    return _impl->pausedSignal.connect(std::move(handler));
+  }
+
+  Subscription PlaybackService::onIdle(std::move_only_function<void()> handler)
+  {
+    return _impl->idleSignal.connect(std::move(handler));
+  }
+
+  Subscription PlaybackService::onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler)
+  {
+    return _impl->nowPlayingChangedSignal.connect(std::move(handler));
+  }
+
+  Subscription PlaybackService::onOutputChanged(std::move_only_function<void(OutputSelection const&)> handler)
+  {
+    return _impl->outputChangedSignal.connect(std::move(handler));
+  }
+
+  Subscription PlaybackService::onStopped(std::move_only_function<void()> handler)
+  {
+    return _impl->stoppedSignal.connect(std::move(handler));
+  }
+
+  Subscription PlaybackService::onDevicesChanged(std::move_only_function<void()> handler)
+  {
+    return _impl->devicesChangedSignal.connect(std::move(handler));
+  }
+
+  Subscription PlaybackService::onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler)
+  {
+    return _impl->qualityChangedSignal.connect(std::move(handler));
+  }
+
+  Subscription PlaybackService::onRevealTrackRequested(
+    std::move_only_function<void(RevealTrackRequested const&)> handler)
+  {
+    return _impl->revealTrackRequestedSignal.connect(std::move(handler));
+  }
+
+  PlaybackState const& PlaybackService::state() const
   {
     return _impl->state;
   }
@@ -235,7 +285,7 @@ namespace ao::app
 
     // Signal "about to play" so the UI resets the seekbar before the
     // blocking Engine::play call freezes the main thread.
-    _impl->events.publish(PlaybackTransportChanged{.transport = ao::audio::Transport::Opening});
+    _impl->preparingSignal.emit();
 
     _impl->player->play(descriptor);
     _impl->currentTrackId = descriptor.trackId;
@@ -243,8 +293,9 @@ namespace ao::app
     _impl->currentTrackTitle = descriptor.title;
     _impl->currentTrackArtist = descriptor.artist;
     _impl->state = _impl->buildState(*_impl->player);
-    _impl->events.publish(PlaybackTransportChanged{.transport = ao::audio::Transport::Playing});
-    _impl->events.publish(NowPlayingTrackChanged{
+    _impl->startedSignal.emit();
+
+    _impl->nowPlayingChangedSignal.emit(PlaybackService::NowPlayingChanged{
       .trackId = descriptor.trackId,
       .sourceListId = sourceListId,
     });
@@ -272,7 +323,7 @@ namespace ao::app
         return ao::TrackId{};
       }
 
-      auto uri = std::filesystem::path{optView->property().uri()};
+      auto const uri = std::filesystem::path{optView->property().uri()};
       auto filePath = uri.is_absolute() ? uri.lexically_normal() : (_impl->library.rootPath() / uri).lexically_normal();
 
       auto desc = ao::audio::TrackPlaybackDescriptor{
@@ -296,18 +347,14 @@ namespace ao::app
   {
     _impl->player->pause();
     _impl->state = _impl->buildState(*_impl->player);
-    _impl->events.publish(PlaybackTransportChanged{
-      .transport = ao::audio::Transport::Paused,
-    });
+    _impl->pausedSignal.emit();
   }
 
   void PlaybackService::resume()
   {
     _impl->player->resume();
     _impl->state = _impl->buildState(*_impl->player);
-    _impl->events.publish(PlaybackTransportChanged{
-      .transport = ao::audio::Transport::Playing,
-    });
+    _impl->startedSignal.emit();
   }
 
   void PlaybackService::stop()
@@ -318,16 +365,14 @@ namespace ao::app
     _impl->currentTrackTitle.clear();
     _impl->currentTrackArtist.clear();
     _impl->state = _impl->buildState(*_impl->player);
-    _impl->events.publish(PlaybackStopped{});
-    _impl->events.publish(PlaybackTransportChanged{.transport = ao::audio::Transport::Idle});
+    _impl->stoppedSignal.emit();
+    _impl->idleSignal.emit();
   }
 
   void PlaybackService::seek(std::uint32_t positionMs)
   {
     _impl->player->seek(positionMs);
     _impl->state = _impl->buildState(*_impl->player);
-    auto const transport = _impl->state.transport;
-    _impl->events.publish(PlaybackTransportChanged{.transport = transport});
   }
 
   void PlaybackService::setOutput(ao::audio::BackendId const& backendId,
@@ -336,13 +381,10 @@ namespace ao::app
   {
     _impl->player->setOutput(backendId, deviceId, profileId);
     _impl->state = _impl->buildState(*_impl->player);
-    _impl->events.publish(PlaybackOutputChanged{
-      .selection =
-        OutputSelection{
-          .backendId = backendId,
-          .deviceId = deviceId,
-          .profileId = profileId,
-        },
+    _impl->outputChangedSignal.emit(OutputSelection{
+      .backendId = backendId,
+      .deviceId = deviceId,
+      .profileId = profileId,
     });
   }
 
@@ -360,7 +402,7 @@ namespace ao::app
 
   void PlaybackService::revealPlayingTrack()
   {
-    _impl->events.publish(RevealTrackRequested{
+    _impl->revealTrackRequestedSignal.emit(PlaybackService::RevealTrackRequested{
       .trackId = _impl->state.trackId,
       .preferredListId = _impl->state.sourceListId,
     });

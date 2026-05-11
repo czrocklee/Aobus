@@ -7,12 +7,13 @@
 #include "SvgTemplate.h"
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
+#include <runtime/LibraryMutationService.h>
 #include <runtime/ListSourceStore.h>
 #include <runtime/NotificationService.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
+#include <runtime/ViewService.h>
+#include <runtime/WorkspaceService.h>
 
 #include "ui/ThemeBus.h"
 #include <gdkmm/display.h>
@@ -195,17 +196,17 @@ namespace ao::gtk
     add_css_class("status-bar");
 
     // Self-wire: events drive state reads from store snapshot
-    _transportChangedSub = _session.events().subscribe<ao::app::PlaybackTransportChanged>(
-      [this](ao::app::PlaybackTransportChanged const&) { setPlaybackState(_session.playback().state()); });
+    _startedSub = _session.playback().onStarted([this] { setPlaybackState(_session.playback().state()); });
+    _pausedSub = _session.playback().onPaused([this] { setPlaybackState(_session.playback().state()); });
+    _idleSub = _session.playback().onIdle([this] { setPlaybackState(_session.playback().state()); });
+    _stoppedSub = _session.playback().onStopped([this] { setPlaybackState(_session.playback().state()); });
+    _outputChangedSub =
+      _session.playback().onOutputChanged([this](auto const&) { setPlaybackState(_session.playback().state()); });
+    _qualityChangedSub =
+      _session.playback().onQualityChanged([this](auto const&) { setPlaybackState(_session.playback().state()); });
 
-    _outputChangedSub = _session.events().subscribe<ao::app::PlaybackOutputChanged>(
-      [this](ao::app::PlaybackOutputChanged const&) { setPlaybackState(_session.playback().state()); });
-
-    _qualityChangedSub = _session.events().subscribe<ao::app::PlaybackQualityChanged>(
-      [this](ao::app::PlaybackQualityChanged const&) { setPlaybackState(_session.playback().state()); });
-
-    _notificationPostedSub = _session.events().subscribe<ao::app::NotificationPosted>(
-      [this](ao::app::NotificationPosted const&)
+    _notificationPostedSub = _session.notifications().onPosted(
+      [this](auto)
       {
         auto const feed = _session.notifications().feed();
         if (!feed.entries.empty())
@@ -220,12 +221,12 @@ namespace ao::gtk
     applyInitialState();
 
     // Self-wire: selection changes update the selection label
-    _selectionChangedSub = _session.events().subscribe<ao::app::ViewSelectionChanged>(
-      [this](ao::app::ViewSelectionChanged const& ev) { setSelectionInfo(ev.selection.size()); });
+    _selectionChangedSub =
+      _session.views().onSelectionChanged([this](auto const& ev) { setSelectionInfo(ev.selection.size()); });
 
     // Self-wire: import completed reloads track count
-    _importCompletedSub = _session.events().subscribe<ao::app::LibraryImportCompleted>(
-      [this](ao::app::LibraryImportCompleted const&)
+    _importCompletedSub = _session.mutation().onImportCompleted(
+      [this](auto)
       {
         clearImportProgress();
         setTrackCount(_session.sources().allTracks().size());

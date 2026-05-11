@@ -291,9 +291,9 @@ namespace ao::app
 
     std::vector<std::vector<TrackId>> nextMembers(lists.size());
 
-    for (auto const i : std::views::iota(0uz, source.size()))
+    for (auto const idx : std::views::iota(0UZ, source.size()))
     {
-      auto const id = source.trackIdAt(i);
+      auto const id = source.trackIdAt(idx);
       auto const optView = reader.get(id, mode);
 
       if (!optView)
@@ -301,19 +301,19 @@ namespace ao::app
         continue;
       }
 
-      for (auto const& [listIndex, list] : std::views::enumerate(lists))
+      for (std::size_t idx = 0; idx < lists.size(); ++idx)
       {
-        if (list->_planEvaluator.matches(*list->_plan, *optView))
+        if (lists[idx]->_planEvaluator.matches(*lists[idx]->_plan, *optView))
         {
-          nextMembers[listIndex].push_back(id);
+          nextMembers[idx].push_back(id);
         }
       }
     }
 
-    for (std::size_t i = 0; i < lists.size(); ++i)
+    for (std::size_t listIdx = 0; listIdx < lists.size(); ++listIdx)
     {
-      std::ranges::sort(nextMembers[i]);
-      lists[i]->_members = std::flat_set<TrackId>(std::sorted_unique, std::move(nextMembers[i]));
+      std::ranges::sort(nextMembers[listIdx]);
+      lists[listIdx]->_members = std::flat_set<TrackId>(std::sorted_unique, std::move(nextMembers[listIdx]));
     }
   }
 

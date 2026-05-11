@@ -12,8 +12,9 @@
 
 namespace ao::app
 {
-  class EventBus;
   class ViewService;
+  class WorkspaceService;
+  class LibraryMutationService;
 }
 
 namespace ao::library
@@ -28,8 +29,9 @@ namespace ao::app
   public:
     TrackDetailProjection(DetailTarget target,
                           ViewService& views,
-                          EventBus& events,
-                          ao::library::MusicLibrary& library);
+                          ao::library::MusicLibrary& library,
+                          WorkspaceService& workspace,
+                          LibraryMutationService& mutation);
     ~TrackDetailProjection() override;
 
     TrackDetailProjection(TrackDetailProjection const&) = delete;

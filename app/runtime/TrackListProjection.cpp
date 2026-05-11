@@ -350,7 +350,7 @@ namespace ao::app
         return false;
       }
 
-      for (auto i = std::size_t{0}; i < old.size(); ++i)
+      for (std::size_t i = 0; i < old.size(); ++i)
       {
         if (old[i].field != updated[i].field)
         {
@@ -408,13 +408,13 @@ namespace ao::app
         .label = orderIndex[0].groupLabel,
       });
 
-      for (auto const i : std::views::iota(1uz, orderIndex.size()))
+      for (auto const idx : std::views::iota(1UZ, orderIndex.size()))
       {
-        if (orderIndex[i].groupKey != orderIndex[i - 1].groupKey)
+        if (orderIndex[idx].groupKey != orderIndex[idx - 1].groupKey)
         {
           sections.push_back(GroupSection{
-            .rows = {i, 1},
-            .label = orderIndex[i].groupLabel,
+            .rows = {idx, 1},
+            .label = orderIndex[idx].groupLabel,
           });
         }
         else
@@ -435,9 +435,9 @@ namespace ao::app
       auto const reader = library.tracks().reader(txn);
       auto& dict = library.dictionary();
 
-      for (auto const i : std::views::iota(0uz, source.size()))
+      for (auto const idx : std::views::iota(0UZ, source.size()))
       {
-        auto const trackId = source.trackIdAt(i);
+        auto const trackId = source.trackIdAt(idx);
         auto const optView = reader.get(trackId, loadMode);
 
         if (!optView)
@@ -466,9 +466,9 @@ namespace ao::app
     {
       positionIndex.clear();
       positionIndex.reserve(orderIndex.size());
-      for (auto const& [i, entry] : std::views::enumerate(orderIndex))
+      for (auto const& [idx, entry] : std::views::enumerate(orderIndex))
       {
-        positionIndex[entry.trackId] = i;
+        positionIndex[entry.trackId] = idx;
       }
     }
 
@@ -782,10 +782,10 @@ namespace ao::app
       .deltas = {ProjectionReset{}},
     });
 
-    auto index = _impl->subscribers.size();
+    auto idx = _impl->subscribers.size();
     _impl->subscribers.push_back(std::move(handler));
 
-    return Subscription{[this, index] { _impl->subscribers[index] = {}; }};
+    return Subscription{[this, idx] { _impl->subscribers[idx] = {}; }};
   }
 
   void TrackListProjection::onReset()

@@ -6,8 +6,6 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/ProjectionTypes.h>
 #include <runtime/StateTypes.h>

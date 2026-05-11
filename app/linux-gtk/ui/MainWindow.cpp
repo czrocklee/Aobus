@@ -7,8 +7,6 @@
 #include <ao/audio/Player.h>
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/NotificationService.h>
 #include <runtime/PlaybackService.h>
@@ -282,7 +280,18 @@ namespace ao::gtk
     _importCompletedSubscription.reset();
     _listsMutatedSubscription.reset();
 
-    saveSession();
+    try
+    {
+      saveSession();
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_ERROR("Failed to save session in destructor: {}", e.what());
+    }
+    catch (...)
+    {
+      APP_LOG_ERROR("Failed to save session in destructor: unknown exception");
+    }
   }
 
   void MainWindow::on_hide()
@@ -314,12 +323,12 @@ namespace ao::gtk
     _trackPageGraph->setPlaybackController(*_playbackController);
 
     // Import progress
-    _importProgressSubscription = _session.events().subscribe<ao::app::ImportProgressUpdated>(
-      [this](ao::app::ImportProgressUpdated const& event) { updateImportProgress(event.fraction, event.message); });
+    _importProgressSubscription = _session.mutation().onImportProgress(
+      [this](auto const& event) { updateImportProgress(event.fraction, event.message); });
 
     // Import completed — reload data provider (StatusBar handles its own count/progress)
-    _importCompletedSubscription = _session.events().subscribe<ao::app::LibraryImportCompleted>(
-      [this](ao::app::LibraryImportCompleted const& /*event*/)
+    _importCompletedSubscription = _session.mutation().onImportCompleted(
+      [this](auto)
       {
         if (_rowDataProvider)
         {
@@ -329,25 +338,25 @@ namespace ao::gtk
       });
 
     // Subscribe to track mutations — invalidate cached row data + notify all views
-    _tracksMutatedSubscription = _session.events().subscribe<ao::app::TracksMutated>(
-      [this](ao::app::TracksMutated const& event)
+    _tracksMutatedSubscription = _session.mutation().onTracksMutated(
+      [this](auto const& trackIds)
       {
         if (!_rowDataProvider)
         {
           return;
         }
 
-        for (auto const trackId : event.trackIds)
+        for (auto const trackId : trackIds)
         {
           _rowDataProvider->invalidate(trackId);
         }
 
-        _session.sources().allTracks().notifyUpdated(event.trackIds);
+        _session.sources().allTracks().notifyUpdated(trackIds);
       });
 
     // Subscribe to list mutations
-    _listsMutatedSubscription = _session.events().subscribe<ao::app::ListsMutated>(
-      [this](ao::app::ListsMutated const& /*event*/)
+    _listsMutatedSubscription = _session.mutation().onListsMutated(
+      [this](auto const& /*event*/)
       {
         if (_rowDataProvider)
         {
@@ -355,9 +364,6 @@ namespace ao::gtk
           rebuildListPages(txn);
         }
       });
-
-    // Initial state refresh (no longer needed with direct services, but keeping for parity if it triggered events)
-    (void)_session.playback().state();
 
     _tagEditController->setDataProvider(_rowDataProvider.get());
 

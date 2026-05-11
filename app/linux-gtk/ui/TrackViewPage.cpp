@@ -10,7 +10,6 @@
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
@@ -623,7 +622,7 @@ namespace ao::gtk
 
     _syncingColumnLayout = true;
 
-    for (auto const& [index, state] : std::views::enumerate(layout.columns))
+    for (auto const& [idx, state] : std::views::enumerate(layout.columns))
     {
       auto* const binding = findColumnBinding(state.column);
 
@@ -634,9 +633,9 @@ namespace ao::gtk
 
       bool needsInsertion = true;
 
-      if (_columnModel && _columnModel->get_n_items() > index)
+      if (_columnModel && _columnModel->get_n_items() > idx)
       {
-        auto const object = _columnModel->get_object(static_cast<::guint>(index));
+        auto const object = _columnModel->get_object(static_cast<::guint>(idx));
 
         if (auto const currentColumn = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
             currentColumn && currentColumn->get_id() == binding->column->get_id())
@@ -647,7 +646,7 @@ namespace ao::gtk
 
       if (needsInsertion)
       {
-        _columnView.insert_column(static_cast<::guint>(index), binding->column);
+        _columnView.insert_column(static_cast<::guint>(idx), binding->column);
       }
 
       auto const width = state.width == -1 ? binding->defaultWidth : state.width;
@@ -736,7 +735,7 @@ namespace ao::gtk
 
     layout.columns.reserve(nItems);
 
-    for (auto const i : std::views::iota(0uz, nItems))
+    for (std::uint32_t i = 0; i < nItems; ++i)
     {
       auto const object = _columnModel->get_object(i);
       auto const column = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);

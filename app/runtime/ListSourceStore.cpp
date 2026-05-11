@@ -3,22 +3,21 @@
 
 #include "ListSourceStore.h"
 
+#include "LibraryMutationService.h"
 #include "ManualListSource.h"
 #include "SmartListSource.h"
 
-#include "EventBus.h"
-#include "EventTypes.h"
 #include <ao/library/ListStore.h>
 
 #include <ao/library/ListView.h>
 
 namespace ao::app
 {
-  ListSourceStore::ListSourceStore(ao::library::MusicLibrary& library, ao::app::EventBus& events)
-    : _library{library}, _allTracks{_library.tracks()}, _smartEvaluator{_library}, _events{events}
+  ListSourceStore::ListSourceStore(ao::library::MusicLibrary& library, LibraryMutationService& mutation)
+    : _library{library}, _allTracks{_library.tracks()}, _smartEvaluator{_library}
   {
-    _listsMutatedSubscription = _events.subscribe<ListsMutated>(
-      [this](ListsMutated const& ev)
+    _listsMutatedSubscription = mutation.onListsMutated(
+      [this](LibraryMutationService::ListsMutated const& ev)
       {
         for (auto id : ev.deleted)
         {

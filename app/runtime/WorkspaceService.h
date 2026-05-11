@@ -16,17 +16,17 @@ namespace ao::library
 
 namespace ao::app
 {
-  class EventBus;
   class ViewService;
   class PlaybackService;
+  class LibraryMutationService;
   class ConfigStore;
 
   class WorkspaceService final
   {
   public:
-    WorkspaceService(EventBus& events,
-                     ViewService& views,
+    WorkspaceService(ViewService& views,
                      PlaybackService& playback,
+                     LibraryMutationService& mutation,
                      ao::library::MusicLibrary& library,
                      std::shared_ptr<ConfigStore> configStore);
     ~WorkspaceService();
@@ -43,6 +43,9 @@ namespace ao::app
     void closeView(ViewId viewId);
     void restoreSession();
     void saveSession();
+
+    Subscription onFocusedViewChanged(std::move_only_function<void(ViewId)> handler);
+    Subscription onSessionRestored(std::move_only_function<void(std::string const&)> handler);
 
   private:
     struct Impl;

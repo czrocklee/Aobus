@@ -3,8 +3,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <runtime/EventBus.h>
-#include <runtime/EventTypes.h>
 #include <runtime/LibraryMutationService.h>
 
 #include "TestUtils.h"
@@ -25,12 +23,11 @@ namespace ao::app::test
     auto testLib = TestMusicLibrary{};
     auto trackId = testLib.addTrack("Original Title");
 
-    auto events = EventBus{};
     NullExecutor executor;
-    auto service = LibraryMutationService{events, executor, testLib.library()};
+    auto service = LibraryMutationService{executor, testLib.library()};
 
     auto mutated = std::vector<ao::TrackId>{};
-    auto sub = events.subscribe<TracksMutated>([&](TracksMutated const& ev) { mutated = ev.trackIds; });
+    auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
     auto result = service.updateMetadata({trackId}, MetadataPatch{.optTitle = "New Title"});
 
@@ -44,12 +41,11 @@ namespace ao::app::test
     auto testLib = TestMusicLibrary{};
     auto trackId = testLib.addTrack("Track");
 
-    auto events = EventBus{};
     NullExecutor executor;
-    auto service = LibraryMutationService{events, executor, testLib.library()};
+    auto service = LibraryMutationService{executor, testLib.library()};
 
     auto mutated = std::vector<ao::TrackId>{};
-    auto sub = events.subscribe<TracksMutated>([&](TracksMutated const& ev) { mutated = ev.trackIds; });
+    auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
     auto result = service.editTags({trackId}, {"rock"}, {});
 
@@ -63,12 +59,11 @@ namespace ao::app::test
     auto testLib = TestMusicLibrary{};
     auto trackId = testLib.addTrack("Track");
 
-    auto events = EventBus{};
     NullExecutor executor;
-    auto service = LibraryMutationService{events, executor, testLib.library()};
+    auto service = LibraryMutationService{executor, testLib.library()};
 
     auto mutated = std::vector<ao::TrackId>{};
-    auto sub = events.subscribe<TracksMutated>([&](TracksMutated const& ev) { mutated = ev.trackIds; });
+    auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
     auto result = service.updateMetadata({trackId}, {});
 
@@ -80,12 +75,11 @@ namespace ao::app::test
   {
     auto testLib = TestMusicLibrary{};
 
-    auto events = EventBus{};
     NullExecutor executor;
-    auto service = LibraryMutationService{events, executor, testLib.library()};
+    auto service = LibraryMutationService{executor, testLib.library()};
 
     auto mutated = std::vector<ao::TrackId>{};
-    auto sub = events.subscribe<TracksMutated>([&](TracksMutated const& ev) { mutated = ev.trackIds; });
+    auto sub = service.onTracksMutated([&](auto const& trackIds) { mutated = trackIds; });
 
     auto result = service.updateMetadata({ao::TrackId{99999}}, MetadataPatch{.optTitle = "X"});
 

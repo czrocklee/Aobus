@@ -42,7 +42,6 @@ add_executable(ao_test
 
     # app unit tests (no platform deps)
     unit/app/SmartListEvaluatorTest.cpp
-    unit/app/EventBusTest.cpp
     unit/app/TrackListPresentationTest.cpp
     unit/app/TrackListProjectionTest.cpp
     unit/app/TrackDetailProjectionTest.cpp

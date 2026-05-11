@@ -16,25 +16,24 @@ namespace ao::library
 }
 namespace ao::app
 {
-  class EventBus;
   class ListSourceStore;
   class TrackSource;
-}
-
-namespace ao::app
-{
-  class EventBus;
+  class WorkspaceService;
+  class LibraryMutationService;
 
   class ViewService final
   {
   public:
-    ViewService(ao::library::MusicLibrary& library, ListSourceStore& sources, EventBus& events);
+    ViewService(ao::library::MusicLibrary& library, ListSourceStore& sources);
     ~ViewService();
 
     ViewService(ViewService const&) = delete;
     ViewService& operator=(ViewService const&) = delete;
     ViewService(ViewService&&) = delete;
     ViewService& operator=(ViewService&&) = delete;
+
+    void setWorkspaceService(WorkspaceService& workspace);
+    void setLibraryMutationService(LibraryMutationService& mutation);
 
     CreateTrackListViewReply createView(TrackListViewConfig const& initial, bool attached = true);
     void destroyView(ViewId viewId);
@@ -43,6 +42,43 @@ namespace ao::app
     void setGrouping(ViewId viewId, TrackGroupKey groupBy);
     void setSelection(ViewId viewId, std::vector<ao::TrackId> const& selection);
     void openListInView(ViewId viewId, ao::ListId listId);
+
+    struct FilterChanged final
+    {
+      ViewId viewId{};
+      std::string filterExpression{};
+    };
+
+    struct SortChanged final
+    {
+      ViewId viewId{};
+      std::vector<TrackSortTerm> sortBy{};
+    };
+
+    struct GroupingChanged final
+    {
+      ViewId viewId{};
+      TrackGroupKey groupBy = TrackGroupKey::None;
+    };
+
+    struct SelectionChanged final
+    {
+      ViewId viewId{};
+      std::vector<ao::TrackId> selection{};
+    };
+
+    struct ListChanged final
+    {
+      ViewId viewId{};
+      ao::ListId listId{};
+    };
+
+    Subscription onDestroyed(std::move_only_function<void(ViewId)> handler);
+    Subscription onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler);
+    Subscription onSortChanged(std::move_only_function<void(SortChanged const&)> handler);
+    Subscription onGroupingChanged(std::move_only_function<void(GroupingChanged const&)> handler);
+    Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler);
+    Subscription onListChanged(std::move_only_function<void(ListChanged const&)> handler);
 
     std::vector<ViewRecord> listViews() const;
 

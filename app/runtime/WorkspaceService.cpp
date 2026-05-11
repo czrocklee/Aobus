@@ -3,8 +3,7 @@
 
 #include "WorkspaceService.h"
 #include "ConfigStore.h"
-#include "EventBus.h"
-#include "EventTypes.h"
+#include "LibraryMutationService.h"
 #include "PlaybackService.h"
 #include "ViewService.h"
 
@@ -16,24 +15,27 @@ namespace ao::app
 {
   struct WorkspaceService::Impl final
   {
-    EventBus& events;
     ViewService& views;
     PlaybackService& playback;
+    LibraryMutationService& mutation;
     ao::library::MusicLibrary& library;
     LayoutState layoutState;
     std::shared_ptr<ConfigStore> configStore;
     Subscription listsMutatedSub;
 
+    Signal<ViewId> focusedViewChangedSignal;
+    Signal<std::string const&> sessionRestoredSignal;
+
     Impl(WorkspaceService* self,
-         EventBus& events,
          ViewService& views,
          PlaybackService& playback,
+         LibraryMutationService& mutation,
          ao::library::MusicLibrary& library,
          std::shared_ptr<ConfigStore> configStore)
-      : events{events}, views{views}, playback{playback}, library{library}, configStore{std::move(configStore)}
+      : views{views}, playback{playback}, mutation{mutation}, library{library}, configStore{std::move(configStore)}
     {
-      listsMutatedSub = events.subscribe<ListsMutated>(
-        [this, self](ListsMutated const& ev)
+      listsMutatedSub = mutation.onListsMutated(
+        [this, self](LibraryMutationService::ListsMutated const& ev)
         {
           auto toClose = std::vector<ViewId>{};
           for (auto id : ev.deleted)
@@ -56,16 +58,26 @@ namespace ao::app
     }
   };
 
-  WorkspaceService::WorkspaceService(EventBus& events,
-                                     ViewService& views,
+  WorkspaceService::WorkspaceService(ViewService& views,
                                      PlaybackService& playback,
+                                     LibraryMutationService& mutation,
                                      ao::library::MusicLibrary& library,
                                      std::shared_ptr<ConfigStore> configStore)
-    : _impl{std::make_unique<Impl>(this, events, views, playback, library, std::move(configStore))}
+    : _impl{std::make_unique<Impl>(this, views, playback, mutation, library, std::move(configStore))}
   {
   }
 
   WorkspaceService::~WorkspaceService() = default;
+
+  Subscription WorkspaceService::onFocusedViewChanged(std::move_only_function<void(ViewId)> handler)
+  {
+    return _impl->focusedViewChangedSignal.connect(std::move(handler));
+  }
+
+  Subscription WorkspaceService::onSessionRestored(std::move_only_function<void(std::string const&)> handler)
+  {
+    return _impl->sessionRestoredSignal.connect(std::move(handler));
+  }
 
   LayoutState WorkspaceService::layoutState() const
   {
@@ -76,7 +88,7 @@ namespace ao::app
   {
     _impl->layoutState.activeViewId = viewId;
     _impl->layoutState.revision++;
-    _impl->events.publish(FocusedViewChanged{.viewId = viewId});
+    _impl->focusedViewChangedSignal.emit(viewId);
   }
 
   void WorkspaceService::navigateTo(std::variant<ao::ListId, std::string, GlobalViewKind> target)
@@ -129,7 +141,7 @@ namespace ao::app
 
       _impl->layoutState.activeViewId = targetViewId;
       _impl->layoutState.revision++;
-      _impl->events.publish(FocusedViewChanged{.viewId = targetViewId});
+      _impl->focusedViewChangedSignal.emit(targetViewId);
     }
   }
 
@@ -147,7 +159,7 @@ namespace ao::app
     }
 
     _impl->layoutState.revision++;
-    _impl->events.publish(FocusedViewChanged{.viewId = _impl->layoutState.activeViewId});
+    _impl->focusedViewChangedSignal.emit(_impl->layoutState.activeViewId);
 
     _impl->views.destroyView(viewId);
   }
@@ -186,10 +198,10 @@ namespace ao::app
                                 ao::audio::ProfileId(snapshot.lastProfile));
     }
 
-    _impl->events.publish(SessionRestored{.libraryPath = snapshot.lastLibraryPath});
+    _impl->sessionRestoredSignal.emit(snapshot.lastLibraryPath);
     if (_impl->layoutState.activeViewId != ViewId{})
     {
-      _impl->events.publish(FocusedViewChanged{.viewId = _impl->layoutState.activeViewId});
+      _impl->focusedViewChangedSignal.emit(_impl->layoutState.activeViewId);
     }
   }
 
@@ -223,7 +235,7 @@ namespace ao::app
     }
 
     // Capture playback output state for restoration
-    auto const pb = _impl->playback.state();
+    auto const& pb = _impl->playback.state();
     snapshot.lastBackend = pb.selectedOutput.backendId.value();
     snapshot.lastOutputDeviceId = pb.selectedOutput.deviceId.value();
     snapshot.lastProfile = pb.selectedOutput.profileId.value();

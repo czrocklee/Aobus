@@ -12,12 +12,10 @@
 
 namespace ao::app
 {
-  class EventBus;
-
   class NotificationService final
   {
   public:
-    NotificationService(EventBus& events);
+    NotificationService();
     ~NotificationService();
 
     NotificationService(NotificationService const&) = delete;
@@ -34,6 +32,9 @@ namespace ao::app
 
     void dismiss(NotificationId id);
     void dismissAll();
+
+    Subscription onPosted(std::move_only_function<void(NotificationId)> handler);
+    Subscription onDismissed(std::move_only_function<void(NotificationId)> handler);
 
   private:
     struct Impl;

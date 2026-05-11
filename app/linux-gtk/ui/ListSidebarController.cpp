@@ -13,7 +13,6 @@
 #include <ao/utility/Log.h>
 #include <format>
 #include <runtime/AppSession.h>
-#include <runtime/EventBus.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>
