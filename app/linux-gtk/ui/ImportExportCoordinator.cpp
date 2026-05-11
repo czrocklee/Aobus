@@ -11,7 +11,7 @@
 namespace ao::gtk
 {
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
-                                                   ao::app::AppSession& session,
+                                                   ao::rt::AppSession& session,
                                                    ImportExportCallbacks callbacks)
     : _parent{parent}, _session{session}, _callbacks{std::move(callbacks)}
   {

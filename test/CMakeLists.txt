@@ -41,14 +41,14 @@ add_executable(ao_test
     unit/audio/backend/AlsaProviderHelpersTest.cpp
 
     # app unit tests (no platform deps)
-    unit/app/SmartListEvaluatorTest.cpp
-    unit/app/TrackListPresentationTest.cpp
-    unit/app/TrackListProjectionTest.cpp
-    unit/app/TrackDetailProjectionTest.cpp
-    unit/app/LibraryMutationServiceTest.cpp
-    unit/app/NotificationServiceTest.cpp
-    unit/app/ViewServiceTest.cpp
-    unit/app/HeadlessShellTest.cpp
+    unit/rt/SmartListEvaluatorTest.cpp
+    unit/rt/TrackListPresentationTest.cpp
+    unit/rt/TrackListProjectionTest.cpp
+    unit/rt/TrackDetailProjectionTest.cpp
+    unit/rt/LibraryMutationServiceTest.cpp
+    unit/rt/NotificationServiceTest.cpp
+    unit/rt/ViewServiceTest.cpp
+    unit/rt/HeadlessShellTest.cpp
 
     # integration tests
     integration/audio/DecoderIntegrationTest.cpp

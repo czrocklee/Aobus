@@ -13,7 +13,7 @@
 
 namespace ao::gtk::service
 {
-  PlaylistExporter::PlaylistExporter(ao::app::TrackSource& list,
+  PlaylistExporter::PlaylistExporter(ao::rt::TrackSource& list,
                                      ao::gtk::TrackRowDataProvider const& provider,
                                      std::filesystem::path root,
                                      std::filesystem::path path)

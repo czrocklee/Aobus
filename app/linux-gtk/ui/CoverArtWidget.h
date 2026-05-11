@@ -14,7 +14,7 @@
 #include <memory>
 #include <span>
 
-namespace ao::app
+namespace ao::rt
 {
   class AppSession;
 }
@@ -26,7 +26,7 @@ namespace ao::gtk
   class CoverArtWidget final : public Gtk::Picture
   {
   public:
-    CoverArtWidget(ao::app::AppSession& session, CoverArtCache& cache);
+    CoverArtWidget(ao::rt::AppSession& session, CoverArtCache& cache);
     ~CoverArtWidget() override;
 
     void setCoverFromBytes(std::span<std::byte const> bytes);
@@ -34,14 +34,14 @@ namespace ao::gtk
     void clearCover();
 
     /// Bind to a runtime detail projection for reactive cover art updates.
-    void bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection);
+    void bindToDetailProjection(std::shared_ptr<ao::rt::ITrackDetailProjection> projection);
 
   private:
-    void onDetailSnapshot(ao::app::TrackDetailSnapshot const& snap);
+    void onDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap);
 
-    ao::app::AppSession& _session;
+    ao::rt::AppSession& _session;
     CoverArtCache& _cache;
-    std::shared_ptr<ao::app::ITrackDetailProjection> _detailProjection;
-    ao::app::Subscription _detailSub;
+    std::shared_ptr<ao::rt::ITrackDetailProjection> _detailProjection;
+    ao::rt::Subscription _detailSub;
   };
 } // namespace ao::gtk

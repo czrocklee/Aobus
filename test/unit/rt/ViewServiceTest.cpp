@@ -15,7 +15,7 @@
 #include <filesystem>
 #include <memory>
 
-namespace ao::app::test
+namespace ao::rt::test
 {
   namespace
   {
@@ -31,11 +31,11 @@ namespace ao::app::test
       TestMusicLibrary library;
       MockControlExecutor executor;
       LibraryMutationService mutation;
-      std::unique_ptr<ao::app::ListSourceStore> store;
+      std::unique_ptr<ao::rt::ListSourceStore> store;
 
       TestEnv()
         : mutation{executor, library.library()}
-        , store{std::make_unique<ao::app::ListSourceStore>(library.library(), mutation)}
+        , store{std::make_unique<ao::rt::ListSourceStore>(library.library(), mutation)}
       {
       }
 

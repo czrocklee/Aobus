@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace ao::app
+namespace ao::rt
 {
   struct OutputProfileSnapshot final
   {

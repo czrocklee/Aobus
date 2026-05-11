@@ -11,7 +11,7 @@
 
 #include <ao/library/ListView.h>
 
-namespace ao::app
+namespace ao::rt
 {
   ListSourceStore::ListSourceStore(ao::library::MusicLibrary& library, LibraryMutationService& mutation)
     : _library{library}, _allTracks{_library.tracks()}, _smartEvaluator{_library}
@@ -33,12 +33,12 @@ namespace ao::app
 
   ListSourceStore::~ListSourceStore() = default;
 
-  ao::app::TrackSource& ListSourceStore::allTracks()
+  ao::rt::TrackSource& ListSourceStore::allTracks()
   {
     return _allTracks;
   }
 
-  ao::app::TrackSource& ListSourceStore::sourceFor(ao::ListId listId)
+  ao::rt::TrackSource& ListSourceStore::sourceFor(ao::ListId listId)
   {
     return getOrBuildSource(listId);
   }

@@ -15,12 +15,12 @@
 
 namespace ao::gtk::service
 {
-  class PlaylistExporter final : public ao::app::TrackSourceObserver
+  class PlaylistExporter final : public ao::rt::TrackSourceObserver
   {
   public:
     using TrackId = ao::TrackId;
 
-    PlaylistExporter(ao::app::TrackSource& list,
+    PlaylistExporter(ao::rt::TrackSource& list,
                      ao::gtk::TrackRowDataProvider const& provider,
                      std::filesystem::path root,
                      std::filesystem::path path);
@@ -38,7 +38,7 @@ namespace ao::gtk::service
     void writeFile();
     void scheduleForWrite();
 
-    ao::app::TrackSource& _list;
+    ao::rt::TrackSource& _list;
     ao::gtk::TrackRowDataProvider const& _provider;
     std::filesystem::path const _root;
     std::filesystem::path const _path;

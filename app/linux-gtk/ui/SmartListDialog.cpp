@@ -50,7 +50,7 @@ namespace ao::gtk
   }
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
-                                   ao::app::AppSession& session,
+                                   ao::rt::AppSession& session,
                                    ao::ListId parentListId,
                                    TrackRowDataProvider const& provider)
     : _exprBox{session.musicLibrary()}, _session{session}, _parentListId{parentListId}, _rowDataProvider{provider}
@@ -218,7 +218,7 @@ namespace ao::gtk
   void SmartListDialog::setupPreview()
   {
     // Create preview engine for expression evaluation
-    _previewEngine = std::make_unique<ao::app::SmartListEvaluator>(_session.musicLibrary());
+    _previewEngine = std::make_unique<ao::rt::SmartListEvaluator>(_session.musicLibrary());
 
     setupPreviewColumns();
     rebuildPreviewSource();
@@ -309,7 +309,7 @@ namespace ao::gtk
         // Use the parent's membership list as source - this already has the inherited filter applied
         // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
         _previewFilteredList =
-          std::make_unique<ao::app::SmartListSource>(parentSource, _session.musicLibrary(), *_previewEngine);
+          std::make_unique<ao::rt::SmartListSource>(parentSource, _session.musicLibrary(), *_previewEngine);
         _previewAdapter =
           std::make_unique<TrackListAdapter>(*_previewFilteredList, _session.musicLibrary(), _rowDataProvider);
 

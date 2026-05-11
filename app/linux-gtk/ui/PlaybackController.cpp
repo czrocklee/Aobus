@@ -13,7 +13,7 @@
 
 namespace ao::gtk
 {
-  PlaybackController::PlaybackController(ao::app::AppSession& session, TrackRowDataProvider& dataProvider)
+  PlaybackController::PlaybackController(ao::rt::AppSession& session, TrackRowDataProvider& dataProvider)
     : _session{session}, _dataProvider{dataProvider}
   {
   }

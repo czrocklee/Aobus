@@ -18,7 +18,7 @@ namespace ao::library
   class ListView;
 }
 
-namespace ao::app
+namespace ao::rt
 {
   class AppSession;
   class AllTracksSource;
@@ -36,7 +36,7 @@ namespace ao::gtk
   {
   public:
     SmartListDialog(Gtk::Window& parent,
-                    ao::app::AppSession& session,
+                    ao::rt::AppSession& session,
                     ao::ListId parentListId,
                     TrackRowDataProvider const& provider);
     ~SmartListDialog() override;
@@ -77,11 +77,11 @@ namespace ao::gtk
     sigc::connection _exprTimeoutConnection;
 
     // Preview infrastructure
-    ao::app::AppSession& _session;
+    ao::rt::AppSession& _session;
     ao::ListId _parentListId;
     TrackRowDataProvider const& _rowDataProvider;
-    std::unique_ptr<ao::app::SmartListSource> _previewFilteredList;
-    std::unique_ptr<ao::app::SmartListEvaluator> _previewEngine;
+    std::unique_ptr<ao::rt::SmartListSource> _previewFilteredList;
+    std::unique_ptr<ao::rt::SmartListEvaluator> _previewEngine;
     std::unique_ptr<TrackListAdapter> _previewAdapter;
     bool _expressionValid = true;
 

@@ -12,7 +12,7 @@
 #include <optional>
 #include <string>
 
-namespace ao::app
+namespace ao::rt
 {
   using ViewId = ao::utility::TaggedInteger<std::uint64_t, struct ViewIdTag>;
   using NotificationId = ao::utility::TaggedInteger<std::uint64_t, struct NotificationIdTag>;

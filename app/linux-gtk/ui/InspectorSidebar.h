@@ -14,7 +14,7 @@
 #include <memory>
 #include <vector>
 
-namespace ao::app
+namespace ao::rt
 {
   class AppSession;
 }
@@ -30,13 +30,13 @@ namespace ao::gtk
   public:
     using TagEditRequestedSignal = sigc::signal<void(std::vector<ao::TrackId> const&, Gtk::Widget*)>;
 
-    explicit InspectorSidebar(ao::app::AppSession& session, CoverArtCache& coverArtCache);
+    explicit InspectorSidebar(ao::rt::AppSession& session, CoverArtCache& coverArtCache);
     ~InspectorSidebar() override;
 
     TagEditRequestedSignal& signalTagEditRequested() { return _tagEditRequested; }
 
     /// Bind to a runtime detail projection for cover art + audio property auto-updates.
-    void bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection);
+    void bindToDetailProjection(std::shared_ptr<ao::rt::ITrackDetailProjection> projection);
 
   private:
     void setupUi();
@@ -51,17 +51,17 @@ namespace ao::gtk
     void onArtistEdited();
     void onAlbumEdited();
 
-    void onTrackDetailSnapshot(ao::app::TrackDetailSnapshot const& snap);
-    void updateCoverArt(ao::app::TrackDetailSnapshot const& snap);
+    void onTrackDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap);
+    void updateCoverArt(ao::rt::TrackDetailSnapshot const& snap);
     Glib::RefPtr<Gdk::Pixbuf> loadCoverArtFromLibrary(ao::ResourceId resourceId);
-    void updateAudioMetadata(ao::app::TrackDetailSnapshot const& snap);
+    void updateAudioMetadata(ao::rt::TrackDetailSnapshot const& snap);
 
-    ao::app::AppSession& _session;
+    ao::rt::AppSession& _session;
     CoverArtCache& _coverArtCache;
 
     std::vector<ao::TrackId> _currentTrackIds;
-    std::shared_ptr<ao::app::ITrackDetailProjection> _detailProjection;
-    ao::app::Subscription _detailSub;
+    std::shared_ptr<ao::rt::ITrackDetailProjection> _detailProjection;
+    ao::rt::Subscription _detailSub;
 
     // UI Components
     Gtk::ScrolledWindow _scrolledWindow;

@@ -27,12 +27,12 @@ namespace ao::gtk
     Expression,
   };
 
-  class TrackListAdapter final : public ao::app::TrackSourceObserver
+  class TrackListAdapter final : public ao::rt::TrackSourceObserver
   {
   public:
     using TrackId = ao::TrackId;
 
-    explicit TrackListAdapter(ao::app::TrackSource& source,
+    explicit TrackListAdapter(ao::rt::TrackSource& source,
                               ao::library::MusicLibrary& musicLibrary,
                               TrackRowDataProvider const& provider);
     ~TrackListAdapter() override;
@@ -43,10 +43,10 @@ namespace ao::gtk
     // Bind to a runtime projection for delta-based updates.
     // When bound, the adapter ignores direct TrackIdListObserver callbacks
     // and instead rebuilds the list store from projection deltas.
-    void bindProjection(ao::app::ITrackListProjection& projection);
+    void bindProjection(ao::rt::ITrackListProjection& projection);
 
     // Access the bound projection for group/presentation queries.
-    ao::app::ITrackListProjection* projection() const { return _projection; }
+    ao::rt::ITrackListProjection* projection() const { return _projection; }
     std::optional<std::size_t> groupIndexForTrack(TrackId trackId) const;
 
     // Set filter text - filters by common display metadata containing the text.
@@ -71,7 +71,7 @@ namespace ao::gtk
     void createRowForTrack(TrackId id);
     bool shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader const& reader) const;
 
-    ao::app::TrackSource& _source;
+    ao::rt::TrackSource& _source;
     ao::library::MusicLibrary& _musicLibrary;
     TrackRowDataProvider const& _provider;
     Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;
@@ -84,7 +84,7 @@ namespace ao::gtk
     sigc::connection _rebuildConnection;
 
     // Projection binding
-    ao::app::ITrackListProjection* _projection = nullptr;
-    ao::app::Subscription _projectionSub;
+    ao::rt::ITrackListProjection* _projection = nullptr;
+    ao::rt::Subscription _projectionSub;
   };
 } // namespace ao::gtk

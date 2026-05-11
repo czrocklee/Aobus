@@ -13,7 +13,7 @@
 #include <chrono>
 #include <string>
 
-namespace ao::app
+namespace ao::rt
 {
   class AppSession;
   struct PlaybackState;
@@ -24,7 +24,7 @@ namespace ao::gtk
   class StatusBar final : public Gtk::Box
   {
   public:
-    explicit StatusBar(ao::app::AppSession& session);
+    explicit StatusBar(ao::rt::AppSession& session);
     ~StatusBar() override;
 
     void showMessage(std::string_view message, std::chrono::seconds duration = std::chrono::seconds{5});
@@ -33,7 +33,7 @@ namespace ao::gtk
     void setTrackCount(std::size_t count);
     void setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
     void setPlaybackDetails(ao::audio::Player::Status const& status);
-    void setPlaybackState(struct ao::app::PlaybackState const& state);
+    void setPlaybackState(struct ao::rt::PlaybackState const& state);
 
     void setImportProgress(double fraction, std::string_view info);
     void clearImportProgress();
@@ -81,16 +81,16 @@ namespace ao::gtk
     Gtk::Label _statusLabel;
 
     sigc::connection _timerConnection;
-    ao::app::AppSession& _session;
-    ao::app::Subscription _startedSub;
-    ao::app::Subscription _pausedSub;
-    ao::app::Subscription _idleSub;
-    ao::app::Subscription _stoppedSub;
-    ao::app::Subscription _outputChangedSub;
-    ao::app::Subscription _qualityChangedSub;
-    ao::app::Subscription _notificationPostedSub;
-    ao::app::Subscription _selectionChangedSub;
-    ao::app::Subscription _importCompletedSub;
+    ao::rt::AppSession& _session;
+    ao::rt::Subscription _startedSub;
+    ao::rt::Subscription _pausedSub;
+    ao::rt::Subscription _idleSub;
+    ao::rt::Subscription _stoppedSub;
+    ao::rt::Subscription _outputChangedSub;
+    ao::rt::Subscription _qualityChangedSub;
+    ao::rt::Subscription _notificationPostedSub;
+    ao::rt::Subscription _selectionChangedSub;
+    ao::rt::Subscription _importCompletedSub;
 
     LastPlaybackState _lastPlaybackState;
     std::string _lastTooltipText;

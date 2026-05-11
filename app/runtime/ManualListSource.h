@@ -12,7 +12,7 @@ namespace ao::library
   class ListView;
 }
 
-namespace ao::app
+namespace ao::rt
 {
   /**
    * ManualListSource - A TrackSource that holds a manually curated set of tracks.

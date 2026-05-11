@@ -20,7 +20,7 @@ namespace ao::model
   struct ListDraft;
 }
 
-namespace ao::app
+namespace ao::rt
 {
   class IControlExecutor;
 

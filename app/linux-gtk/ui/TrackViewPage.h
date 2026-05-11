@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace ao::app
+namespace ao::rt
 {
   class AppSession;
 }
@@ -37,8 +37,8 @@ namespace ao::gtk
     explicit TrackViewPage(ao::ListId listId,
                            TrackListAdapter& adapter,
                            TrackColumnLayoutModel& columnLayoutModel,
-                           ao::app::AppSession& session,
-                           ao::app::ViewId viewId = ao::app::ViewId{});
+                           ao::rt::AppSession& session,
+                           ao::rt::ViewId viewId = ao::rt::ViewId{});
     ~TrackViewPage() override;
 
     ao::ListId getListId() const { return _listId; }
@@ -82,7 +82,7 @@ namespace ao::gtk
     void clearStatusMessage();
 
     /// Access the bound projection for group section queries.
-    ao::app::ITrackListProjection* projection() const { return _adapter.projection(); }
+    ao::rt::ITrackListProjection* projection() const { return _adapter.projection(); }
 
     // Navigation and Selection
     void selectTrack(TrackId trackId);
@@ -163,9 +163,9 @@ namespace ao::gtk
 
     // Models
     ao::ListId _listId;
-    ao::app::ViewId _viewId{};
+    ao::rt::ViewId _viewId{};
     TrackListAdapter& _adapter;
-    ao::app::AppSession& _session;
+    ao::rt::AppSession& _session;
     Glib::RefPtr<Gtk::SortListModel> _groupModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
     TrackColumnLayoutModel& _columnLayoutModel;
@@ -173,7 +173,7 @@ namespace ao::gtk
     Glib::RefPtr<Gtk::StringList> _groupByOptions;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
     std::vector<ColumnBinding> _columns;
-    ao::app::TrackGroupKey _activeGroupBy = ao::app::TrackGroupKey::None;
+    ao::rt::TrackGroupKey _activeGroupBy = ao::rt::TrackGroupKey::None;
     sigc::connection _columnLayoutChangedConnection;
     sigc::connection _columnModelChangedConnection;
     sigc::connection _queuedColumnLayoutUpdateConnection;

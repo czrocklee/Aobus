@@ -7,7 +7,7 @@
 
 #include <algorithm>
 
-namespace ao::app
+namespace ao::rt
 {
   ManualListSource::ManualListSource(ao::library::ListView const& view, TrackSource* source)
     : _source{source}

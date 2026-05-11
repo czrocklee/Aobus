@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <ranges>
 
-namespace ao::app
+namespace ao::rt
 {
   struct NotificationService::Impl final
   {

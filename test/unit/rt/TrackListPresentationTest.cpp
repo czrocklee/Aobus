@@ -5,7 +5,7 @@
 
 #include <runtime/TrackListPresentation.h>
 
-using namespace ao::app;
+using namespace ao::rt;
 
 TEST_CASE("TrackListPresentation: None mapping", "[app][runtime][presentation]")
 {

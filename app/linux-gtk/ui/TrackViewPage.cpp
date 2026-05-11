@@ -164,19 +164,19 @@ namespace ao::gtk
       return false;
     }
 
-    std::uint32_t dropdownPositionFor(ao::app::TrackGroupKey groupBy)
+    std::uint32_t dropdownPositionFor(ao::rt::TrackGroupKey groupBy)
     {
       return static_cast<std::uint32_t>(groupBy);
     }
 
-    ao::app::TrackGroupKey groupByFromDropdownPosition(std::uint32_t position)
+    ao::rt::TrackGroupKey groupByFromDropdownPosition(std::uint32_t position)
     {
-      if (position <= static_cast<std::uint32_t>(ao::app::TrackGroupKey::Year))
+      if (position <= static_cast<std::uint32_t>(ao::rt::TrackGroupKey::Year))
       {
-        return static_cast<ao::app::TrackGroupKey>(position);
+        return static_cast<ao::rt::TrackGroupKey>(position);
       }
 
-      return ao::app::TrackGroupKey::None;
+      return ao::rt::TrackGroupKey::None;
     }
 
     std::string trackCountLabel(::guint count)
@@ -240,8 +240,8 @@ namespace ao::gtk
   TrackViewPage::TrackViewPage(ao::ListId listId,
                                TrackListAdapter& adapter,
                                TrackColumnLayoutModel& columnLayoutModel,
-                               ao::app::AppSession& session,
-                               ao::app::ViewId viewId)
+                               ao::rt::AppSession& session,
+                               ao::rt::ViewId viewId)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
     , _viewId{viewId}
@@ -252,7 +252,7 @@ namespace ao::gtk
   {
     ensureTrackPageCss();
 
-    if (_viewId != ao::app::ViewId{})
+    if (_viewId != ao::rt::ViewId{})
     {
       _activeGroupBy = _session.views().trackListState(_viewId).groupBy;
     }
@@ -502,9 +502,9 @@ namespace ao::gtk
   void TrackViewPage::updateSectionHeaders()
   {
     auto* const proj = _adapter.projection();
-    auto const groupBy = proj != nullptr ? proj->presentation().groupBy : ao::app::TrackGroupKey::None;
+    auto const groupBy = proj != nullptr ? proj->presentation().groupBy : ao::rt::TrackGroupKey::None;
 
-    if (groupBy == ao::app::TrackGroupKey::None)
+    if (groupBy == ao::rt::TrackGroupKey::None)
     {
       _groupModel->set_section_sorter({});
       _columnView.set_header_factory({});
@@ -795,7 +795,7 @@ namespace ao::gtk
   {
     _activeGroupBy = groupByFromDropdownPosition(_groupByDropdown.get_selected());
 
-    if (_viewId != ao::app::ViewId{})
+    if (_viewId != ao::rt::ViewId{})
     {
       _session.views().setGrouping(_viewId, _activeGroupBy);
     }
@@ -1618,7 +1618,7 @@ namespace ao::gtk
       return;
     }
 
-    auto patch = ao::app::MetadataPatch{};
+    auto patch = ao::rt::MetadataPatch{};
 
     if (column == TrackColumn::Title)
     {

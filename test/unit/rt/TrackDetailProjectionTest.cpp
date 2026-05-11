@@ -17,8 +17,8 @@
 
 #include <limits>
 
-using namespace ao::app;
-using namespace ao::app::test;
+using namespace ao::rt;
+using namespace ao::rt::test;
 
 namespace
 {
@@ -33,18 +33,18 @@ namespace
   {
     TestMusicLibrary lib;
     MockControlExecutor executor;
-    ao::app::LibraryMutationService mutation;
-    ao::app::ListSourceStore sources;
-    ao::app::ViewService views;
-    std::shared_ptr<ao::app::ConfigStore> config;
-    ao::app::PlaybackService playback;
-    ao::app::WorkspaceService workspace;
+    ao::rt::LibraryMutationService mutation;
+    ao::rt::ListSourceStore sources;
+    ao::rt::ViewService views;
+    std::shared_ptr<ao::rt::ConfigStore> config;
+    ao::rt::PlaybackService playback;
+    ao::rt::WorkspaceService workspace;
 
     Env()
       : mutation{executor, lib.library()}
       , sources{lib.library(), mutation}
       , views{lib.library(), sources}
-      , config{std::make_shared<ao::app::ConfigStore>(lib.library().rootPath() / "config.json")}
+      , config{std::make_shared<ao::rt::ConfigStore>(lib.library().rootPath() / "config.json")}
       , playback{executor, views, lib.library()}
       , workspace{views, playback, mutation, lib.library(), config}
     {

@@ -20,7 +20,7 @@
 #include <ranges>
 #include <unordered_map>
 
-namespace ao::app
+namespace ao::rt
 {
   namespace
   {

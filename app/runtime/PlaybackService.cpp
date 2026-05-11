@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 
-namespace ao::app
+namespace ao::rt
 {
   namespace
   {

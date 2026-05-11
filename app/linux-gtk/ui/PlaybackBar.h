@@ -7,7 +7,7 @@
 #include <ao/audio/Types.h>
 #include <runtime/StateTypes.h>
 
-namespace ao::app
+namespace ao::rt
 {
   class AppSession;
 }
@@ -30,7 +30,7 @@ namespace ao::gtk
   class PlaybackBar final : public Gtk::Box
   {
   public:
-    explicit PlaybackBar(ao::app::AppSession& session);
+    explicit PlaybackBar(ao::rt::AppSession& session);
     ~PlaybackBar() override;
 
     void applyInitialState();
@@ -67,7 +67,7 @@ namespace ao::gtk
     void triggerSoulEasterEgg();
 
     void rebuildOutputList();
-    void updateOutputTooltip(ao::app::PlaybackState const& state);
+    void updateOutputTooltip(ao::rt::PlaybackState const& state);
 
     // Output selection
     Gtk::Button _outputButton;
@@ -91,16 +91,16 @@ namespace ao::gtk
     Gtk::ToggleButton _muteButton;
     VolumeBar _volumeScale;
 
-    ao::app::AppSession& _session;
+    ao::rt::AppSession& _session;
 
-    ao::app::Subscription _preparingSub;
-    ao::app::Subscription _startedSub;
-    ao::app::Subscription _pausedSub;
-    ao::app::Subscription _idleSub;
-    ao::app::Subscription _stoppedSub;
-    ao::app::Subscription _outputChangedSub;
-    ao::app::Subscription _devicesChangedSub;
-    ao::app::Subscription _qualityChangedSub;
+    ao::rt::Subscription _preparingSub;
+    ao::rt::Subscription _startedSub;
+    ao::rt::Subscription _pausedSub;
+    ao::rt::Subscription _idleSub;
+    ao::rt::Subscription _stoppedSub;
+    ao::rt::Subscription _outputChangedSub;
+    ao::rt::Subscription _devicesChangedSub;
+    ao::rt::Subscription _qualityChangedSub;
 
     bool _isPlaying = false;
     bool _updatingSeekScale = false;

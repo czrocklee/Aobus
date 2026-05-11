@@ -14,7 +14,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace ao::app
+namespace ao::rt
 {
   template<typename T>
   YAML::Node toYamlNode(T const& obj);

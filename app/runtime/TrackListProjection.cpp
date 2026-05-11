@@ -17,7 +17,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace ao::app
+namespace ao::rt
 {
   namespace
   {

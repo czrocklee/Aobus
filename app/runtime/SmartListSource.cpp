@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-namespace ao::app
+namespace ao::rt
 {
   SmartListSource::SmartListSource(TrackSource& source, ao::library::MusicLibrary& ml, SmartListEvaluator& evaluator)
     : _source{source}, _ml{ml}, _evaluator{&evaluator}

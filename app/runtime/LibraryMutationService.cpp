@@ -16,7 +16,7 @@
 #include <stop_token>
 #include <vector>
 
-namespace ao::app
+namespace ao::rt
 {
   namespace
   {

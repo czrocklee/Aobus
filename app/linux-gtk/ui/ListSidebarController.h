@@ -13,7 +13,7 @@
 #include <memory>
 #include <string>
 
-namespace ao::app
+namespace ao::rt
 {
   class AppSession;
 }
@@ -32,10 +32,10 @@ namespace ao::gtk
     struct Callbacks final
     {
       std::function<void(ao::ListId)> onListSelected;
-      std::function<ao::app::TrackSource*(ao::ListId)> getListMembership;
+      std::function<ao::rt::TrackSource*(ao::ListId)> getListMembership;
     };
 
-    ListSidebarController(Gtk::Window& parent, ao::app::AppSession& session, Callbacks callbacks);
+    ListSidebarController(Gtk::Window& parent, ao::rt::AppSession& session, Callbacks callbacks);
     ~ListSidebarController();
 
     Gtk::Widget& widget() { return _listScrolledWindow; }
@@ -74,7 +74,7 @@ namespace ao::gtk
 
     Gtk::Window& _parent;
     Callbacks _callbacks;
-    ao::app::AppSession& _session;
+    ao::rt::AppSession& _session;
     TrackRowDataProvider* _dataProvider = nullptr;
 
     Gtk::ListView _listView;

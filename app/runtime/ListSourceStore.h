@@ -14,7 +14,7 @@
 #include <memory>
 #include <unordered_map>
 
-namespace ao::app
+namespace ao::rt
 {
   class LibraryMutationService;
 
@@ -27,14 +27,14 @@ namespace ao::app
     ListSourceStore(ListSourceStore const&) = delete;
     ListSourceStore& operator=(ListSourceStore const&) = delete;
 
-    ao::app::TrackSource& allTracks();
-    ao::app::TrackSource& sourceFor(ao::ListId listId);
+    ao::rt::TrackSource& allTracks();
+    ao::rt::TrackSource& sourceFor(ao::ListId listId);
 
     void reloadAllTracks();
     void refreshList(ao::ListId listId);
     void eraseList(ao::ListId listId);
 
-    ao::app::SmartListEvaluator& smartEvaluator() { return _smartEvaluator; }
+    ao::rt::SmartListEvaluator& smartEvaluator() { return _smartEvaluator; }
 
   private:
     TrackSource& getOrBuildSource(ao::ListId listId);
@@ -43,7 +43,7 @@ namespace ao::app
     AllTracksSource _allTracks;
     SmartListEvaluator _smartEvaluator;
 
-    ao::app::Subscription _listsMutatedSubscription;
+    ao::rt::Subscription _listsMutatedSubscription;
 
     std::unordered_map<ao::ListId, std::unique_ptr<TrackSource>> _sources;
   };

@@ -61,7 +61,7 @@ namespace ao::gtk
     bool operator==(TrackColumnLayout const&) const = default;
   };
 
-  std::optional<TrackColumn> redundantFieldToColumn(ao::app::TrackSortField field);
+  std::optional<TrackColumn> redundantFieldToColumn(ao::rt::TrackSortField field);
 
   std::span<TrackColumnDefinition const> trackColumnDefinitions();
 

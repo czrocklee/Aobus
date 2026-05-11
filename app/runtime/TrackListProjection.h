@@ -17,12 +17,12 @@ namespace ao::library
 {
   class MusicLibrary;
 }
-namespace ao::app
+namespace ao::rt
 {
   class SmartListSource;
 }
 
-namespace ao::app
+namespace ao::rt
 {
   class TrackListProjection final
     : public ITrackListProjection

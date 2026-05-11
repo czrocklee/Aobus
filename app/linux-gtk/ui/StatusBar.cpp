@@ -177,7 +177,7 @@ namespace ao::gtk
     }
   }
 
-  StatusBar::StatusBar(ao::app::AppSession& session)
+  StatusBar::StatusBar(ao::rt::AppSession& session)
     : Gtk::Box{Gtk::Orientation::HORIZONTAL}, _session{session}
   {
     ensureStatusBarCss();
@@ -547,7 +547,7 @@ namespace ao::gtk
     updatePlaybackStatusLabels(status);
   }
 
-  void StatusBar::setPlaybackState(ao::app::PlaybackState const& state)
+  void StatusBar::setPlaybackState(ao::rt::PlaybackState const& state)
   {
     ao::audio::Player::Status status;
     status.engine.transport = state.transport;

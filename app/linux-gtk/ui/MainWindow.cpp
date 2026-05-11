@@ -159,7 +159,7 @@ namespace ao::gtk
     }
   }
 
-  MainWindow::MainWindow(ao::app::AppSession& session, std::shared_ptr<ao::app::ConfigStore> configStore)
+  MainWindow::MainWindow(ao::rt::AppSession& session, std::shared_ptr<ao::rt::ConfigStore> configStore)
     : _configStore{std::move(configStore)}, _session{session}, _coverArtWidget{nullptr}
   {
     set_title("Aobus");
@@ -172,7 +172,7 @@ namespace ao::gtk
 
     // Initialize cover art widget and bind to focused-view detail projection
     _coverArtWidget = std::make_unique<CoverArtWidget>(_session, *_coverArtCache);
-    _coverArtWidget->bindToDetailProjection(_session.views().detailProjection(ao::app::FocusedViewTarget{}));
+    _coverArtWidget->bindToDetailProjection(_session.views().detailProjection(ao::rt::FocusedViewTarget{}));
 
     // Initialize dispatcher
     _dispatcher = std::make_shared<GtkMainThreadDispatcher>();
@@ -194,7 +194,7 @@ namespace ao::gtk
       _session,
       ListSidebarController::Callbacks{
         .onListSelected = [this](ao::ListId listId) { _session.workspace().navigateTo(listId); },
-        .getListMembership = [](ao::ListId /*listId*/) -> ao::app::TrackSource*
+        .getListMembership = [](ao::ListId /*listId*/) -> ao::rt::TrackSource*
         {
           // This callback is slightly problematic in the new architecture
           // as the sidebar shouldn't care about membership lists directly.
@@ -226,7 +226,7 @@ namespace ao::gtk
       });
 
     // Bind inspector sidebar to focused-view detail projection (cover art + audio auto-update)
-    _inspectorSidebar->bindToDetailProjection(_session.views().detailProjection(ao::app::FocusedViewTarget{}));
+    _inspectorSidebar->bindToDetailProjection(_session.views().detailProjection(ao::rt::FocusedViewTarget{}));
 
     // Initialize playback bar (self-wires to AppSession)
     _playbackBar = std::make_unique<PlaybackBar>(_session);

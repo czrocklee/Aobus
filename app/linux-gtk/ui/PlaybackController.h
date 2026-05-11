@@ -11,7 +11,7 @@
 #include <optional>
 #include <vector>
 
-namespace ao::app
+namespace ao::rt
 {
   class AppSession;
 }
@@ -31,7 +31,7 @@ namespace ao::gtk
   class PlaybackController final
   {
   public:
-    PlaybackController(ao::app::AppSession& session, TrackRowDataProvider& dataProvider);
+    PlaybackController(ao::rt::AppSession& session, TrackRowDataProvider& dataProvider);
     ~PlaybackController();
 
     PlaybackController(PlaybackController const&) = delete;
@@ -58,10 +58,10 @@ namespace ao::gtk
     void subscribeEvents();
     void unsubscribeEvents();
 
-    ao::app::AppSession& _session;
+    ao::rt::AppSession& _session;
     TrackRowDataProvider& _dataProvider;
     std::unique_ptr<ActivePlaybackSequence> _sequence;
-    ao::app::Subscription _idleSub;
-    ao::app::Subscription _stoppedSub;
+    ao::rt::Subscription _idleSub;
+    ao::rt::Subscription _stoppedSub;
   };
 }

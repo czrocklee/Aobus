@@ -15,7 +15,7 @@
 
 #include <memory>
 
-namespace ao::app
+namespace ao::rt
 {
   struct AppSession::Impl final
   {

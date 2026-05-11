@@ -33,7 +33,7 @@ namespace ao::gtk
    */
   struct TrackPageContext final
   {
-    ao::app::ViewId viewId{};
+    ao::rt::ViewId viewId{};
     std::unique_ptr<TrackListAdapter> adapter;
     std::unique_ptr<TrackViewPage> page;
     std::unique_ptr<ao::gtk::service::PlaylistExporter> exporter;
@@ -47,7 +47,7 @@ namespace ao::gtk
   public:
     TrackPageGraph(Gtk::Stack& stack,
                    TrackColumnLayoutModel& layoutModel,
-                   ao::app::AppSession& session,
+                   ao::rt::AppSession& session,
                    PlaybackController* playbackController,
                    TagEditController& tagEditController,
                    ListSidebarController& listSidebar);
@@ -58,8 +58,8 @@ namespace ao::gtk
     void clear();
     void rebuild(TrackRowDataProvider& dataProvider, ao::lmdb::ReadTransaction const& txn);
 
-    TrackPageContext* find(ao::app::ViewId viewId);
-    TrackPageContext const* find(ao::app::ViewId viewId) const;
+    TrackPageContext* find(ao::rt::ViewId viewId);
+    TrackPageContext const* find(ao::rt::ViewId viewId) const;
 
     TrackPageContext* currentVisible();
     TrackPageContext const* currentVisible() const;
@@ -67,23 +67,23 @@ namespace ao::gtk
     void setPlayingTrack(std::optional<ao::TrackId> trackId);
 
   private:
-    void ensureViewPage(ao::app::ViewId viewId, TrackRowDataProvider& dataProvider);
+    void ensureViewPage(ao::rt::ViewId viewId, TrackRowDataProvider& dataProvider);
     void bindTrackPage(TrackPageContext& ctx);
     void syncLayout();
-    void handleRevealTrack(ao::app::PlaybackService::RevealTrackRequested const& ev);
+    void handleRevealTrack(ao::rt::PlaybackService::RevealTrackRequested const& ev);
 
     Gtk::Stack& _stack;
     TrackColumnLayoutModel& _layoutModel;
-    ao::app::AppSession& _session;
+    ao::rt::AppSession& _session;
     PlaybackController* _playbackController;
     TagEditController& _tagEditController;
     ListSidebarController& _listSidebar;
-    ao::app::Subscription _revealSub;
-    ao::app::Subscription _nowPlayingSub;
-    ao::app::Subscription _focusSub;
-    ao::app::Subscription _viewDestroyedSub;
+    ao::rt::Subscription _revealSub;
+    ao::rt::Subscription _nowPlayingSub;
+    ao::rt::Subscription _focusSub;
+    ao::rt::Subscription _viewDestroyedSub;
 
-    std::map<ao::app::ViewId, TrackPageContext> _trackPages;
+    std::map<ao::rt::ViewId, TrackPageContext> _trackPages;
     std::optional<ao::TrackId> _optPlayingTrackId;
     TrackRowDataProvider* _activeDataProvider = nullptr;
   };

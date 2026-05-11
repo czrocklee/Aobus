@@ -3,7 +3,7 @@
 
 #include "TrackListPresentation.h"
 
-namespace ao::app
+namespace ao::rt
 {
   TrackListPresentationSnapshot presentationForGroup(TrackGroupKey groupBy)
   {
