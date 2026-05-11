@@ -3,7 +3,7 @@
 
 #include <ao/tag/mp4/File.h>
 
-#include "../Decoder.h"
+#include "../detail/Decoder.h"
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/utility/ByteView.h>

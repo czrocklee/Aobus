@@ -76,13 +76,13 @@ target_compile_options(ao_test PRIVATE -Wno-array-bounds)
 add_test(NAME ao_test COMMAND ao_test)
 aobus_apply_clang_tidy(ao_test RELAXED)
 
-# ao_test_linux: Linux UI tests (require aobus-gtk-lib and GTKMM)
-add_executable(ao_test_linux
-    unit/linux/TrackListAdapterTest.cpp
-    unit/linux/TrackPresentationTest.cpp
-    unit/linux/TrackRowDataProviderTest.cpp
+# ao_test_gtk: Linux UI tests (require aobus-gtk-lib and GTKMM)
+add_executable(ao_test_gtk
+    unit/gtk/TrackListAdapterTest.cpp
+    unit/gtk/TrackPresentationTest.cpp
+    unit/gtk/TrackRowDataProviderTest.cpp
 )
 
-target_include_directories(ao_test_linux PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
-target_link_libraries(ao_test_linux PRIVATE ao aobus-gtk-lib PkgGTKMM Catch2 spdlog::spdlog Catch2::Catch2WithMain)
-add_test(NAME ao_test_linux COMMAND ao_test_linux)
+target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
+target_link_libraries(ao_test_gtk PRIVATE ao aobus-gtk-lib PkgGTKMM Catch2 spdlog::spdlog Catch2::Catch2WithMain)
+add_test(NAME ao_test_gtk COMMAND ao_test_gtk)

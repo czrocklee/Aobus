@@ -54,12 +54,27 @@ namespace ao::gtk
     _revealSub = _session.events().subscribe<ao::app::RevealTrackRequested>(
       [this](ao::app::RevealTrackRequested const& ev)
       {
-        if (ev.preferredViewId != ao::app::ViewId{})
+        auto viewId = ev.preferredViewId;
+
+        // Fallback: If no view ID specified, try to find a view currently displaying the requested list
+        if (viewId == ao::app::ViewId{} && ev.preferredListId != ao::ListId{})
         {
-          _session.workspace().setFocusedView(ev.preferredViewId);
+          for (auto const& [id, ctx] : _trackPages)
+          {
+            if (ctx.page && ctx.page->getListId() == ev.preferredListId)
+            {
+              viewId = id;
+              break;
+            }
+          }
+        }
+
+        if (viewId != ao::app::ViewId{})
+        {
+          _session.workspace().setFocusedView(viewId);
           if (ev.trackId != ao::TrackId{})
           {
-            if (auto* ctx = find(ev.preferredViewId))
+            if (auto* ctx = find(viewId))
             {
               ctx->page->selectTrack(ev.trackId);
             }

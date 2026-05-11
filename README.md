@@ -51,7 +51,7 @@ Aobus takes stability seriously. We maintain a comprehensive suite of unit and i
 /tmp/build/debug/test/ao_test
 
 # Run Linux-specific tests
-/tmp/build/debug/test/ao_test_linux
+/tmp/build/debug/test/ao_test_gtk
 ```
 
 ## 🤖 AI Agents
