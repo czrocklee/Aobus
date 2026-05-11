@@ -109,14 +109,11 @@ namespace ao::app
 
   void ViewService::destroyView(ViewId viewId)
   {
-    auto it = _impl->views.find(viewId);
-    if (it == _impl->views.end())
+    if (auto it = _impl->views.find(viewId); it != _impl->views.end())
     {
-      return;
+      it->second.state.lifecycle = ViewLifecycleState::Destroyed;
+      _impl->events.publish(ViewDestroyed{.viewId = viewId});
     }
-
-    it->second.state.lifecycle = ViewLifecycleState::Destroyed;
-    _impl->events.publish(ViewDestroyed{.viewId = viewId});
   }
 
   void ViewService::setFilter(ViewId viewId, std::string const& filterExpression)

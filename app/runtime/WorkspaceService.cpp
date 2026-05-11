@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "WorkspaceService.h"
+#include "ConfigStore.h"
 #include "EventBus.h"
 #include "EventTypes.h"
-#include "ISessionPersistence.h"
 #include "PlaybackService.h"
 #include "ViewService.h"
 
@@ -21,7 +21,7 @@ namespace ao::app
     PlaybackService& playback;
     ao::library::MusicLibrary& library;
     LayoutState layoutState;
-    std::shared_ptr<ISessionPersistence> persistence;
+    std::shared_ptr<ConfigStore> configStore;
     Subscription listsMutatedSub;
 
     Impl(WorkspaceService* self,
@@ -29,8 +29,8 @@ namespace ao::app
          ViewService& views,
          PlaybackService& playback,
          ao::library::MusicLibrary& library,
-         std::shared_ptr<ISessionPersistence> persistence)
-      : events{events}, views{views}, playback{playback}, library{library}, persistence{std::move(persistence)}
+         std::shared_ptr<ConfigStore> configStore)
+      : events{events}, views{views}, playback{playback}, library{library}, configStore{std::move(configStore)}
     {
       listsMutatedSub = events.subscribe<ListsMutated>(
         [this, self](ListsMutated const& ev)
@@ -59,8 +59,8 @@ namespace ao::app
                                      ViewService& views,
                                      PlaybackService& playback,
                                      ao::library::MusicLibrary& library,
-                                     std::shared_ptr<ISessionPersistence> persistence)
-    : _impl{std::make_unique<Impl>(this, events, views, playback, library, std::move(persistence))}
+                                     std::shared_ptr<ConfigStore> configStore)
+    : _impl{std::make_unique<Impl>(this, events, views, playback, library, std::move(configStore))}
   {
   }
 
@@ -112,8 +112,7 @@ namespace ao::app
     }
     else if (std::holds_alternative<GlobalViewKind>(target))
     {
-      auto kind = std::get<GlobalViewKind>(target);
-      if (kind == GlobalViewKind::AllTracks)
+      if (auto kind = std::get<GlobalViewKind>(target); kind == GlobalViewKind::AllTracks)
       {
         auto res = _impl->views.createView(TrackListViewConfig{}, true);
         targetViewId = res.viewId;
@@ -134,8 +133,7 @@ namespace ao::app
 
   void WorkspaceService::closeView(ViewId viewId)
   {
-    auto it = std::ranges::find(_impl->layoutState.openViews, viewId);
-    if (it != _impl->layoutState.openViews.end())
+    if (auto it = std::ranges::find(_impl->layoutState.openViews, viewId); it != _impl->layoutState.openViews.end())
     {
       _impl->layoutState.openViews.erase(it);
     }
@@ -154,18 +152,13 @@ namespace ao::app
 
   void WorkspaceService::restoreSession()
   {
-    if (!_impl->persistence)
+    if (!_impl->configStore)
     {
       return;
     }
 
-    auto const optSnapshot = _impl->persistence->loadSnapshot();
-    if (!optSnapshot)
-    {
-      return;
-    }
-
-    auto const& snapshot = *optSnapshot;
+    auto snapshot = SessionSnapshot{};
+    _impl->configStore->load("session", snapshot);
 
     for (auto const& viewConfig : snapshot.openViews)
     {
@@ -200,7 +193,7 @@ namespace ao::app
 
   void WorkspaceService::saveSession()
   {
-    if (!_impl->persistence)
+    if (!_impl->configStore)
     {
       return;
     }
@@ -233,6 +226,7 @@ namespace ao::app
     snapshot.lastOutputDeviceId = pb.selectedOutput.deviceId.value();
     snapshot.lastProfile = pb.selectedOutput.profileId.value();
 
-    _impl->persistence->saveSnapshot(snapshot);
+    _impl->configStore->save("session", snapshot);
+    _impl->configStore->flush();
   }
 }

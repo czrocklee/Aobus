@@ -33,10 +33,12 @@ namespace ao::app
 
   void SmartListSource::reload()
   {
-    if (_evaluator != nullptr && _evaluator->isAlive())
+    if (_evaluator == nullptr || !_evaluator->isAlive())
     {
-      _evaluator->rebuild(*this);
+      return;
     }
+
+    _evaluator->rebuild(*this);
   }
 
   std::optional<std::size_t> SmartListSource::indexOf(TrackId id) const
@@ -53,10 +55,12 @@ namespace ao::app
 
   void SmartListSource::notifyUpdated(TrackId id)
   {
-    if (_evaluator != nullptr && _evaluator->isAlive())
+    if (_evaluator == nullptr || !_evaluator->isAlive())
     {
-      _evaluator->notifyUpdated(_source, id);
+      return;
     }
+
+    _evaluator->notifyUpdated(_source, id);
   }
 
   void SmartListSource::stageExpression(std::string expr)

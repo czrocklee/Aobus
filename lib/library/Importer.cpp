@@ -390,16 +390,15 @@ namespace ao::library
         continue;
       }
 
-      auto const childIt = yamlListIdToNewListId.find(importedList.yamlId);
       auto const parentIt = yamlListIdToNewListId.find(importedList.yamlParentId);
-
       if (parentIt == yamlListIdToNewListId.end())
       {
         AO_THROW_FORMAT(
           ao::Exception, "List '{}' references missing parent id {}", importedList.name, importedList.yamlParentId);
       }
 
-      listWriter.update(childIt->second, serializeList(importedList, parentIt->second));
+      auto const childId = yamlListIdToNewListId.at(importedList.yamlId);
+      listWriter.update(childId, serializeList(importedList, parentIt->second));
     }
   }
 } // namespace ao::library

@@ -19,7 +19,7 @@ namespace ao::app
   class EventBus;
   class ViewService;
   class PlaybackService;
-  class ISessionPersistence;
+  class ConfigStore;
 
   class WorkspaceService final
   {
@@ -28,7 +28,7 @@ namespace ao::app
                      ViewService& views,
                      PlaybackService& playback,
                      ao::library::MusicLibrary& library,
-                     std::shared_ptr<ISessionPersistence> persistence);
+                     std::shared_ptr<ConfigStore> configStore);
     ~WorkspaceService();
 
     WorkspaceService(WorkspaceService const&) = delete;

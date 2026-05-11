@@ -221,20 +221,16 @@ namespace ao::gtk
 
   void TagPromptDialog::clearPendingChange(std::string const& tag)
   {
-    auto it = _tagStates.find(tag);
-
-    if (it == _tagStates.end())
+    if (auto it = _tagStates.find(tag); it != _tagStates.end())
     {
-      return;
-    }
-
-    if (it->second.membershipCount == 0)
-    {
-      _tagStates.erase(it);
-    }
-    else
-    {
-      it->second.pending = PendingTagChange::Keep;
+      if (it->second.membershipCount == 0)
+      {
+        _tagStates.erase(it);
+      }
+      else
+      {
+        it->second.pending = PendingTagChange::Keep;
+      }
     }
 
     updateUi();
@@ -409,10 +405,9 @@ namespace ao::gtk
 
     for (auto const& tag : _availableTags)
     {
-      auto const it = _tagStates.find(tag);
-
-      if (it != _tagStates.end() && it->second.membershipCount == _selectionCount &&
-          it->second.pending != PendingTagChange::RemoveFromAll)
+      if (auto const it = _tagStates.find(tag); it != _tagStates.end() &&
+                                                it->second.membershipCount == _selectionCount &&
+                                                it->second.pending != PendingTagChange::RemoveFromAll)
       {
         continue;
       }

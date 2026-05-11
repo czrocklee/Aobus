@@ -23,7 +23,8 @@ namespace ao::app
 {
   class EventBus;
   class IControlExecutor;
-  class ISessionPersistence;
+  class ConfigStore;
+  class ConfigStore;
   class PlaybackService;
   class LibraryMutationService;
   class WorkspaceService;
@@ -34,7 +35,7 @@ namespace ao::app
   {
     std::shared_ptr<IControlExecutor> executor{};
     std::filesystem::path libraryRoot{};
-    std::shared_ptr<ISessionPersistence> persistence{};
+    std::shared_ptr<ConfigStore> configStore{};
   };
 
   class AppSession final

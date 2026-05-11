@@ -171,58 +171,46 @@ namespace ao::app
 
   void SmartListEvaluator::unregisterList(TrackSource& source, SmartListSource& list)
   {
-    auto it = _buckets.find(&source);
-
-    if (it == _buckets.end())
+    if (auto it = _buckets.find(&source); it != _buckets.end())
     {
-      return;
-    }
+      auto& bucket = *it->second;
+      std::erase(bucket.lists, &list);
 
-    auto& bucket = *it->second;
-    std::erase(bucket.lists, &list);
-
-    if (bucket.lists.empty())
-    {
-      if (bucket.sourceAlive)
+      if (bucket.lists.empty())
       {
-        source.detach(bucket.observer.get());
-      }
+        if (bucket.sourceAlive)
+        {
+          source.detach(bucket.observer.get());
+        }
 
-      _buckets.erase(it);
+        _buckets.erase(it);
+      }
     }
   }
 
   void SmartListEvaluator::rebuild(SmartListSource& list)
   {
-    auto const it = _buckets.find(&list._source);
-
-    if (it == _buckets.end())
+    if (auto const it = _buckets.find(&list._source); it != _buckets.end())
     {
-      return;
-    }
+      if (!list._dirty)
+      {
+        list.stageExpression(list._expression);
+      }
 
-    if (!list._dirty)
-    {
-      list.stageExpression(list._expression);
+      rebuildDirtyLists(*it->second);
     }
-
-    rebuildDirtyLists(*it->second);
   }
 
   void SmartListEvaluator::notifyUpdated(TrackSource& source, TrackId trackId)
   {
-    auto const it = _buckets.find(&source);
-
-    if (it == _buckets.end())
+    if (auto const it = _buckets.find(&source); it != _buckets.end())
     {
-      return;
-    }
+      // Re-evaluate membership for all lists in this bucket
 
-    // Re-evaluate membership for all lists in this bucket
-
-    if (auto const optSourceIndex = source.indexOf(trackId))
-    {
-      handleSourceUpdated(*it->second, trackId, *optSourceIndex);
+      if (auto const optSourceIndex = source.indexOf(trackId))
+      {
+        handleSourceUpdated(*it->second, trackId, *optSourceIndex);
+      }
     }
   }
 

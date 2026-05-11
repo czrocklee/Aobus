@@ -28,13 +28,8 @@ namespace ao::gtk
 
   void CoverArtWidget::onDetailSnapshot(ao::app::TrackDetailSnapshot const& snap)
   {
-    if (snap.selectionKind == ao::app::SelectionKind::None || snap.trackIds.empty())
-    {
-      clearCover();
-      return;
-    }
-
-    if (snap.singleCoverArtId == ao::ResourceId{0})
+    if (snap.selectionKind == ao::app::SelectionKind::None || snap.trackIds.empty() ||
+        snap.singleCoverArtId == ao::ResourceId{0})
     {
       clearCover();
       return;
@@ -49,31 +44,27 @@ namespace ao::gtk
       auto const resReader = _session.musicLibrary().resources().reader(txn);
       auto const optData = resReader.get(rid);
 
-      if (optData)
+      if (!optData)
       {
-        try
-        {
-          auto const memStream = Gio::MemoryInputStream::create();
-          memStream->add_data(optData->data(), static_cast<gssize>(optData->size()), nullptr);
-          cached = Gdk::Pixbuf::create_from_stream(memStream);
-          _cache.put(rid, cached);
-        }
-        catch (Glib::Error const&)
-        {
-          clearCover();
-          return;
-        }
+        clearCover();
+        return;
+      }
+
+      try
+      {
+        auto const memStream = Gio::MemoryInputStream::create();
+        memStream->add_data(optData->data(), static_cast<gssize>(optData->size()), nullptr);
+        cached = Gdk::Pixbuf::create_from_stream(memStream);
+        _cache.put(rid, cached);
+      }
+      catch (Glib::Error const&)
+      {
+        clearCover();
+        return;
       }
     }
 
-    if (cached)
-    {
-      setCoverPixbuf(cached);
-    }
-    else
-    {
-      clearCover();
-    }
+    setCoverPixbuf(cached);
   }
 
   void CoverArtWidget::setCoverFromBytes(std::span<std::byte const> bytes)

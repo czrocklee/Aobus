@@ -463,12 +463,11 @@ namespace ao::app
 
     std::optional<std::size_t> findPosition(ao::TrackId trackId) const
     {
-      auto it = positionIndex.find(trackId);
-      if (it == positionIndex.end())
+      if (auto it = positionIndex.find(trackId); it != positionIndex.end())
       {
-        return std::nullopt;
+        return it->second;
       }
-      return it->second;
+      return std::nullopt;
     }
 
     bool sectionsEqual(std::vector<GroupSection> const& left, std::vector<GroupSection> const& right) const
@@ -709,12 +708,11 @@ namespace ao::app
 
   std::optional<std::size_t> TrackListProjection::indexOf(ao::TrackId trackId) const noexcept
   {
-    auto const it = _impl->positionIndex.find(trackId);
-    if (it == _impl->positionIndex.end())
+    if (auto const it = _impl->positionIndex.find(trackId); it != _impl->positionIndex.end())
     {
-      return std::nullopt;
+      return it->second;
     }
-    return it->second;
+    return std::nullopt;
   }
 
   TrackListPresentationSnapshot TrackListProjection::presentation() const

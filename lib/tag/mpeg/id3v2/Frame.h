@@ -71,10 +71,9 @@ namespace ao::tag::mpeg::id3v2
 
       for (auto const* it = u16_begin; it + 1 < u16_end; it += 2)
       {
-        std::uint16_t cp = big_endian ? (static_cast<std::uint16_t>(it[0]) << 8) | it[1]
-                                      : (static_cast<std::uint16_t>(it[1]) << 8) | it[0];
-
-        if (cp < 0x80)
+        if (std::uint16_t cp = big_endian ? (static_cast<std::uint16_t>(it[0]) << 8) | it[1]
+                                          : (static_cast<std::uint16_t>(it[1]) << 8) | it[0];
+            cp < 0x80)
         {
           result.push_back(static_cast<char>(cp));
         }

@@ -1,12 +1,3 @@
-# app/common: Shared application logic
-add_library(app_common STATIC
-    common/AppConfig.cpp
-    common/AppConfig.h
-)
-target_include_directories(app_common PUBLIC "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(app_common PRIVATE ao PkgGLIBMM)
-aobus_apply_clang_tidy(app_common STRICT)
-
 # app/runtime: Shared application runtime (UI-neutral, used by all frontends)
 add_library(app_runtime STATIC
     runtime/AppSession.cpp
@@ -16,6 +7,8 @@ add_library(app_runtime STATIC
     runtime/CorePrimitives.h
     runtime/EventBus.h
     runtime/EventTypes.h
+    runtime/ConfigStore.cpp
+    runtime/ConfigStore.h
     runtime/ProjectionTypes.h
     runtime/PlaybackService.cpp
     runtime/PlaybackService.h
@@ -46,7 +39,7 @@ add_library(app_runtime STATIC
     runtime/ViewService.h
 )
 target_include_directories(app_runtime PUBLIC "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(app_runtime PRIVATE ao)
+target_link_libraries(app_runtime PRIVATE ao yaml-cpp::yaml-cpp)
 aobus_apply_clang_tidy(app_runtime STRICT)
 
 # Frontends

@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "AppSession.h"
+#include "ConfigStore.h"
 #include "EventBus.h"
 #include "EventTypes.h"
-#include "ISessionPersistence.h"
 #include "LibraryMutationService.h"
 #include "NotificationService.h"
 #include "PlaybackService.h"
@@ -36,7 +36,7 @@ namespace ao::app
 
     Impl(std::shared_ptr<IControlExecutor> exec,
          std::filesystem::path libraryRoot,
-         std::shared_ptr<ISessionPersistence> persistence)
+         std::shared_ptr<ConfigStore> configStore)
       : executor{std::move(exec)}
       , musicLibrary{std::move(libraryRoot)}
       , sources{musicLibrary, eventBus}
@@ -44,7 +44,7 @@ namespace ao::app
       , playbackService{eventBus, *this->executor, viewService, musicLibrary}
       , mutationService{eventBus, *this->executor, musicLibrary}
       , notificationService{eventBus}
-      , workspaceService{eventBus, viewService, playbackService, musicLibrary, std::move(persistence)}
+      , workspaceService{eventBus, viewService, playbackService, musicLibrary, std::move(configStore)}
     {
     }
   };
@@ -52,7 +52,7 @@ namespace ao::app
   AppSession::AppSession(AppSessionDependencies dependencies)
     : _impl{std::make_unique<Impl>(std::move(dependencies.executor),
                                    std::move(dependencies.libraryRoot),
-                                   std::move(dependencies.persistence))}
+                                   std::move(dependencies.configStore))}
   {
   }
 
