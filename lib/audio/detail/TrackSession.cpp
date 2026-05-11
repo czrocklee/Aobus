@@ -9,7 +9,7 @@
 #include <ao/utility/Log.h>
 #include <format>
 
-namespace ao::audio
+namespace ao::audio::detail
 {
   namespace
   {
@@ -191,4 +191,4 @@ namespace ao::audio
     auto const estimatedBytes = static_cast<double>(bytesPerSecond(info.outputFormat)) * (info.durationMs / 1000.0);
     return estimatedBytes > 0 && estimatedBytes <= kMemoryPcmSourceBudgetBytes;
   }
-} // namespace ao::audio
+} // namespace ao::audio::detail

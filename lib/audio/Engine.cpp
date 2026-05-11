@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TrackSession.h"
+#include "detail/TrackSession.h"
 #include <ao/audio/DecoderFactory.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/FormatNegotiator.h>
@@ -261,7 +261,7 @@ namespace ao::audio
     // ── Track opening ──────────────────────────────────────────────
     bool openTrack(TrackPlaybackDescriptor const& descriptor, std::shared_ptr<ISource>& source, Format& backendFormat)
     {
-      auto session = TrackSession::create(descriptor,
+      auto session = detail::TrackSession::create(descriptor,
                                           currentDevice,
                                           backend->backendId(),
                                           backend->profileId(),

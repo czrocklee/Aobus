@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "ThrowError.h"
+#include "detail/ThrowError.h"
 #include <ao/lmdb/Transaction.h>
 
 namespace ao::lmdb

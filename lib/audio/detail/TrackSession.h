@@ -12,7 +12,7 @@
 #include <functional>
 #include <memory>
 
-namespace ao::audio
+namespace ao::audio::detail
 {
   /**
    * @brief Manages a single track playback session, including decoder lifecycle and format negotiation.
@@ -62,4 +62,4 @@ namespace ao::audio
 
     static bool shouldUseMemoryPcmSource(DecodedStreamInfo const& info);
   };
-} // namespace ao::audio
+} // namespace ao::audio::detail
