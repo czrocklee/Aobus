@@ -232,6 +232,11 @@ namespace ao::app
   void PlaybackService::play(ao::audio::TrackPlaybackDescriptor const& descriptor, ao::ListId sourceListId)
   {
     _impl->ensureReady();
+
+    // Signal "about to play" so the UI resets the seekbar before the
+    // blocking Engine::play call freezes the main thread.
+    _impl->events.publish(PlaybackTransportChanged{.transport = ao::audio::Transport::Opening});
+
     _impl->player->play(descriptor);
     _impl->currentTrackId = descriptor.trackId;
     _impl->currentSourceListId = sourceListId;
