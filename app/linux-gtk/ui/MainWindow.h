@@ -51,7 +51,7 @@ namespace ao::gtk
   class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
-    explicit MainWindow(ao::app::AppSession& session, std::shared_ptr<ao::app::ConfigStore> configStore);
+    explicit MainWindow(ao::rt::AppSession& session, std::shared_ptr<ao::rt::ConfigStore> configStore);
     ~MainWindow() override;
     void on_hide() override;
 
@@ -76,9 +76,9 @@ namespace ao::gtk
     // GTK-side row data cache
     std::unique_ptr<TrackRowDataProvider> _rowDataProvider;
 
-    std::shared_ptr<ao::app::ConfigStore> _configStore;
+    std::shared_ptr<ao::rt::ConfigStore> _configStore;
 
-    ao::app::AppSession& _session;
+    ao::rt::AppSession& _session;
 
     // Layout: Horizontal paned with left box and right stack
     Gtk::Paned _paned;
@@ -109,10 +109,10 @@ namespace ao::gtk
     std::unique_ptr<PlaybackBar> _playbackBar;
     std::unique_ptr<PlaybackController> _playbackController;
 
-    ao::app::Subscription _tracksMutatedSubscription;
-    ao::app::Subscription _importProgressSubscription;
-    ao::app::Subscription _importCompletedSubscription;
-    ao::app::Subscription _listsMutatedSubscription;
+    ao::rt::Subscription _tracksMutatedSubscription;
+    ao::rt::Subscription _importProgressSubscription;
+    ao::rt::Subscription _importCompletedSubscription;
+    ao::rt::Subscription _listsMutatedSubscription;
 
     // Status bar
     std::unique_ptr<StatusBar> _statusBar;

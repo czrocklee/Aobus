@@ -16,7 +16,7 @@
 #include <thread>
 #include <vector>
 
-namespace ao::app
+namespace ao::rt
 {
   class AppSession;
 }
@@ -41,7 +41,7 @@ namespace ao::gtk
   class ImportExportCoordinator final
   {
   public:
-    ImportExportCoordinator(Gtk::Window& parent, ao::app::AppSession& session, ImportExportCallbacks callbacks);
+    ImportExportCoordinator(Gtk::Window& parent, ao::rt::AppSession& session, ImportExportCallbacks callbacks);
     ~ImportExportCoordinator();
 
     ImportExportCallbacks& callbacks() { return _callbacks; }
@@ -73,7 +73,7 @@ namespace ao::gtk
     void executeExportTask(std::filesystem::path const& path, ao::library::ExportMode mode);
 
     Gtk::Window& _parent;
-    ao::app::AppSession& _session;
+    ao::rt::AppSession& _session;
     ImportExportCallbacks _callbacks;
 
     std::unique_ptr<ao::library::ImportWorker> _importWorker;

@@ -188,7 +188,7 @@ namespace ao::gtk
     }
   }
 
-  TrackListAdapter::TrackListAdapter(ao::app::TrackSource& source,
+  TrackListAdapter::TrackListAdapter(ao::rt::TrackSource& source,
                                      ao::library::MusicLibrary& musicLibrary,
                                      TrackRowDataProvider const& provider)
     : _source{source}, _musicLibrary{musicLibrary}, _provider{provider}, _listModel(Gio::ListStore<TrackRow>::create())
@@ -203,16 +203,16 @@ namespace ao::gtk
     _projectionSub.reset();
   }
 
-  void TrackListAdapter::bindProjection(ao::app::ITrackListProjection& projection)
+  void TrackListAdapter::bindProjection(ao::rt::ITrackListProjection& projection)
   {
     _projection = &projection;
     _projectionSub = projection.subscribe(
-      [this](ao::app::TrackListProjectionDeltaBatch const& batch)
+      [this](ao::rt::TrackListProjectionDeltaBatch const& batch)
       {
         for (auto const& delta : batch.deltas)
         {
           std::visit(ao::utility::makeVisitor(
-                       [this](ao::app::ProjectionReset const&)
+                       [this](ao::rt::ProjectionReset const&)
                        {
                          _listModel->remove_all();
 
@@ -221,7 +221,7 @@ namespace ao::gtk
                            createRowForTrack(_projection->trackIdAt(idx));
                          }
                        },
-                       [this](ao::app::ProjectionInsertRange const& delta)
+                       [this](ao::rt::ProjectionInsertRange const& delta)
                        {
                          for (auto const idx : std::views::iota(0UZ, delta.range.count))
                          {
@@ -232,14 +232,14 @@ namespace ao::gtk
                            _listModel->insert(static_cast<::guint>(trackIdx), row);
                          }
                        },
-                       [this](ao::app::ProjectionRemoveRange const& delta)
+                       [this](ao::rt::ProjectionRemoveRange const& delta)
                        {
                          for ([[maybe_unused]] auto const idx : std::views::iota(0UZ, delta.range.count))
                          {
                            _listModel->remove(static_cast<::guint>(delta.range.start));
                          }
                        },
-                       [this](ao::app::ProjectionUpdateRange const& delta)
+                       [this](ao::rt::ProjectionUpdateRange const& delta)
                        {
                          for (auto const idx : std::views::iota(0UZ, delta.range.count))
                          {

@@ -10,7 +10,7 @@
 #include <memory>
 #include <vector>
 
-namespace ao::app
+namespace ao::rt
 {
   class ViewService;
   class WorkspaceService;
@@ -22,7 +22,7 @@ namespace ao::library
   class MusicLibrary;
 }
 
-namespace ao::app
+namespace ao::rt
 {
   class TrackDetailProjection final : public ITrackDetailProjection
   {

@@ -13,7 +13,7 @@
 #include <memory>
 #include <string>
 
-namespace ao::app
+namespace ao::rt
 {
   class SmartListEvaluator;
 

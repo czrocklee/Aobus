@@ -42,7 +42,7 @@ namespace ao::gtk
     };
   }
 
-  ListSidebarController::ListSidebarController(Gtk::Window& parent, ao::app::AppSession& session, Callbacks callbacks)
+  ListSidebarController::ListSidebarController(Gtk::Window& parent, ao::rt::AppSession& session, Callbacks callbacks)
     : _parent{parent}, _callbacks{std::move(callbacks)}, _session{session}
   {
     setupLayout();

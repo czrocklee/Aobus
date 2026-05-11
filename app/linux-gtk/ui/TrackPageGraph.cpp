@@ -38,7 +38,7 @@ namespace ao::gtk
 
   TrackPageGraph::TrackPageGraph(Gtk::Stack& stack,
                                  TrackColumnLayoutModel& layoutModel,
-                                 ao::app::AppSession& session,
+                                 ao::rt::AppSession& session,
                                  PlaybackController* playbackController,
                                  TagEditController& tagEditController,
                                  ListSidebarController& listSidebar)
@@ -60,12 +60,12 @@ namespace ao::gtk
     _viewDestroyedSub = _session.views().onDestroyed([this](auto) { syncLayout(); });
   }
 
-  void TrackPageGraph::handleRevealTrack(ao::app::PlaybackService::RevealTrackRequested const& ev)
+  void TrackPageGraph::handleRevealTrack(ao::rt::PlaybackService::RevealTrackRequested const& ev)
   {
     auto viewId = ev.preferredViewId;
 
     // Fallback: If no view ID specified, try to find a view currently displaying the requested list
-    if (viewId == ao::app::ViewId{} && ev.preferredListId != ao::ListId{})
+    if (viewId == ao::rt::ViewId{} && ev.preferredListId != ao::ListId{})
     {
       for (auto const& [id, ctx] : _trackPages)
       {
@@ -77,7 +77,7 @@ namespace ao::gtk
       }
     }
 
-    if (viewId != ao::app::ViewId{})
+    if (viewId != ao::rt::ViewId{})
     {
       _session.workspace().setFocusedView(viewId);
       if (ev.trackId != ao::TrackId{})
@@ -124,7 +124,7 @@ namespace ao::gtk
     }
 
     // Set active
-    if (state.activeViewId != ao::app::ViewId{})
+    if (state.activeViewId != ao::rt::ViewId{})
     {
       _stack.set_visible_child(std::format("view-{}", state.activeViewId.value()));
     }
@@ -163,19 +163,19 @@ namespace ao::gtk
       ensureViewPage(viewId, *_activeDataProvider);
     }
 
-    if (layout.activeViewId != ao::app::ViewId{})
+    if (layout.activeViewId != ao::rt::ViewId{})
     {
       _stack.set_visible_child(std::format("view-{}", layout.activeViewId.value()));
     }
   }
 
-  TrackPageContext* TrackPageGraph::find(ao::app::ViewId viewId)
+  TrackPageContext* TrackPageGraph::find(ao::rt::ViewId viewId)
   {
     auto it = _trackPages.find(viewId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
   }
 
-  TrackPageContext const* TrackPageGraph::find(ao::app::ViewId viewId) const
+  TrackPageContext const* TrackPageGraph::find(ao::rt::ViewId viewId) const
   {
     auto it = _trackPages.find(viewId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
@@ -237,7 +237,7 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageGraph::ensureViewPage(ao::app::ViewId viewId, TrackRowDataProvider& dataProvider)
+  void TrackPageGraph::ensureViewPage(ao::rt::ViewId viewId, TrackRowDataProvider& dataProvider)
   {
     if (_trackPages.contains(viewId))
     {
@@ -296,7 +296,7 @@ namespace ao::gtk
       [this, page, viewId]
       {
         auto const ids = page->getSelectedTrackIds();
-        if (viewId != ao::app::ViewId{})
+        if (viewId != ao::rt::ViewId{})
         {
           _session.views().setSelection(viewId, ids);
           _session.workspace().setFocusedView(viewId);

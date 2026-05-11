@@ -6,7 +6,7 @@
 
 #include <fstream>
 
-namespace ao::app
+namespace ao::rt
 {
   ConfigStore::ConfigStore(std::filesystem::path filePath)
     : _filePath{std::move(filePath)}

@@ -16,7 +16,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace ao::app
+namespace ao::rt
 {
   // SourceObserver implementation
 

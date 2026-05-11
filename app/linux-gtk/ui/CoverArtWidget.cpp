@@ -10,7 +10,7 @@
 
 namespace ao::gtk
 {
-  CoverArtWidget::CoverArtWidget(ao::app::AppSession& session, CoverArtCache& cache)
+  CoverArtWidget::CoverArtWidget(ao::rt::AppSession& session, CoverArtCache& cache)
     : _session{session}, _cache{cache}
   {
     set_keep_aspect_ratio(true);
@@ -19,16 +19,16 @@ namespace ao::gtk
 
   CoverArtWidget::~CoverArtWidget() = default;
 
-  void CoverArtWidget::bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection)
+  void CoverArtWidget::bindToDetailProjection(std::shared_ptr<ao::rt::ITrackDetailProjection> projection)
   {
     _detailProjection = std::move(projection);
     _detailSub =
-      _detailProjection->subscribe([this](ao::app::TrackDetailSnapshot const& snap) { onDetailSnapshot(snap); });
+      _detailProjection->subscribe([this](ao::rt::TrackDetailSnapshot const& snap) { onDetailSnapshot(snap); });
   }
 
-  void CoverArtWidget::onDetailSnapshot(ao::app::TrackDetailSnapshot const& snap)
+  void CoverArtWidget::onDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap)
   {
-    if (snap.selectionKind == ao::app::SelectionKind::None || snap.trackIds.empty() ||
+    if (snap.selectionKind == ao::rt::SelectionKind::None || snap.trackIds.empty() ||
         snap.singleCoverArtId == ao::ResourceId{0})
     {
       clearCover();

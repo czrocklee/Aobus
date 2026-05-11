@@ -5,7 +5,7 @@
 
 #include <runtime/NotificationService.h>
 
-namespace ao::app::test
+namespace ao::rt::test
 {
   TEST_CASE("NotificationService - post publishes NotificationPosted", "[app][runtime][notification]")
   {

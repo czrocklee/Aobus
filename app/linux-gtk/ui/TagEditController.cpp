@@ -43,7 +43,7 @@ namespace ao::gtk
     }
   }
 
-  TagEditController::TagEditController(Gtk::Window& /*parent*/, ao::app::AppSession& session, Callbacks callbacks)
+  TagEditController::TagEditController(Gtk::Window& /*parent*/, ao::rt::AppSession& session, Callbacks callbacks)
     : _callbacks{std::move(callbacks)}, _session{session}
   {
     setupActions();

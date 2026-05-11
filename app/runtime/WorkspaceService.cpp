@@ -11,7 +11,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ranges>
 
-namespace ao::app
+namespace ao::rt
 {
   struct WorkspaceService::Impl final
   {

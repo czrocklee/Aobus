@@ -13,7 +13,7 @@
 
 #include <algorithm>
 
-namespace ao::app
+namespace ao::rt
 {
   namespace
   {

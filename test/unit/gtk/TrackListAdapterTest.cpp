@@ -200,8 +200,8 @@ namespace ao::model::test
 namespace
 {
   using ao::TrackId;
-  using ao::app::TrackSource;
-  using ao::app::TrackSourceObserver;
+  using ao::rt::TrackSource;
+  using ao::rt::TrackSourceObserver;
   using ao::library::MusicLibrary;
   using ao::library::TrackBuilder;
   using ao::library::TrackStore;

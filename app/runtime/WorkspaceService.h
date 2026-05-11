@@ -14,7 +14,7 @@ namespace ao::library
   class MusicLibrary;
 }
 
-namespace ao::app
+namespace ao::rt
 {
   class ViewService;
   class PlaybackService;

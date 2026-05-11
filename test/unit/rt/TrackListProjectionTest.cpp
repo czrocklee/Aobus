@@ -22,14 +22,14 @@
 #include <string_view>
 #include <vector>
 
-namespace ao::app::test
+namespace ao::rt::test
 {
   namespace
   {
     using ao::TrackId;
-    using ao::app::SmartListEvaluator;
-    using ao::app::SmartListSource;
-    using ao::app::TrackSource;
+    using ao::rt::SmartListEvaluator;
+    using ao::rt::SmartListSource;
+    using ao::rt::TrackSource;
     using ao::library::MusicLibrary;
     using ao::library::TrackBuilder;
     using ao::library::TrackStore;
@@ -61,8 +61,8 @@ namespace ao::app::test
     {
       TestMusicLibrary lib;
       MutableTrackSource source;
-      ao::app::SmartListEvaluator engine;
-      std::unique_ptr<ao::app::SmartListSource> filtered;
+      ao::rt::SmartListEvaluator engine;
+      std::unique_ptr<ao::rt::SmartListSource> filtered;
 
       TestEnv()
         : engine{lib.library()}
@@ -81,7 +81,7 @@ namespace ao::app::test
           source.addInitial(id);
         }
 
-        filtered = std::make_unique<ao::app::SmartListSource>(source, lib.library(), engine);
+        filtered = std::make_unique<ao::rt::SmartListSource>(source, lib.library(), engine);
         filtered->reload();
       }
     };

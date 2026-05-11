@@ -33,8 +33,8 @@ namespace
     try
     {
       auto configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
-      auto store = ao::app::ConfigStore{configPath};
-      auto snapshot = ao::app::SessionSnapshot{};
+      auto store = ao::rt::ConfigStore{configPath};
+      auto snapshot = ao::rt::SessionSnapshot{};
       store.load("session", snapshot);
       auto const& path = snapshot.lastLibraryPath;
 
@@ -56,9 +56,9 @@ namespace
   {
     auto executor = std::make_shared<ao::gtk::GtkControlExecutor>();
     auto configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
-    auto configStore = std::make_shared<ao::app::ConfigStore>(configPath);
+    auto configStore = std::make_shared<ao::rt::ConfigStore>(configPath);
 
-    auto appSession = std::make_unique<ao::app::AppSession>(ao::app::AppSessionDependencies{
+    auto appSession = std::make_unique<ao::rt::AppSession>(ao::rt::AppSessionDependencies{
       .executor = std::move(executor), .libraryRoot = std::move(libraryPath), .configStore = configStore});
 
     auto window =
@@ -66,8 +66,8 @@ namespace
 
     // Store AppSession alongside window (lifetime tied to window via pointer)
     window->set_data("app-session",
-                     new std::unique_ptr<ao::app::AppSession>(std::move(appSession)),
-                     [](void* data) { delete static_cast<std::unique_ptr<ao::app::AppSession>*>(data); });
+                     new std::unique_ptr<ao::rt::AppSession>(std::move(appSession)),
+                     [](void* data) { delete static_cast<std::unique_ptr<ao::rt::AppSession>*>(data); });
 
     window->initializeSession();
 

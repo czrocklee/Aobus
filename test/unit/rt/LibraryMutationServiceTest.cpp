@@ -7,7 +7,7 @@
 
 #include "TestUtils.h"
 
-namespace ao::app::test
+namespace ao::rt::test
 {
   namespace
   {

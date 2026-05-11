@@ -42,7 +42,7 @@ TEST_CASE("TrackPresentation - normalize column layout fills missing", "[app][pr
 
 TEST_CASE("TrackPresentation - redundantFieldToColumn mapping", "[app][presentation]")
 {
-  using ao::app::TrackSortField;
+  using ao::rt::TrackSortField;
 
   CHECK(redundantFieldToColumn(TrackSortField::Artist) == TrackColumn::Artist);
   CHECK(redundantFieldToColumn(TrackSortField::Album) == TrackColumn::Album);

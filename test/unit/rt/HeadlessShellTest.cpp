@@ -16,7 +16,7 @@
 
 #include "TestUtils.h"
 
-namespace ao::app::test
+namespace ao::rt::test
 {
   class MockExecutor final : public IControlExecutor
   {
@@ -29,7 +29,7 @@ namespace ao::app::test
   {
     auto tempDir = TempDir{};
     auto executor = std::make_shared<MockExecutor>();
-    auto configStore = std::make_shared<ao::app::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
+    auto configStore = std::make_shared<ao::rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
     AppSession session(
       AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
@@ -80,7 +80,7 @@ namespace ao::app::test
       session.workspace().navigateTo(ao::ListId{20});
       session.workspace().saveSession();
 
-      auto loaded = ao::app::SessionSnapshot{};
+      auto loaded = ao::rt::SessionSnapshot{};
       configStore->load("session", loaded);
       CHECK(loaded.openViews.size() == 2);
 
@@ -108,7 +108,7 @@ namespace ao::app::test
 
       session.workspace().saveSession();
 
-      auto loaded = ao::app::SessionSnapshot{};
+      auto loaded = ao::rt::SessionSnapshot{};
       configStore->load("session", loaded);
       REQUIRE(loaded.openViews.size() == 1);
       CHECK(loaded.openViews[0].groupBy == TrackGroupKey::Artist);

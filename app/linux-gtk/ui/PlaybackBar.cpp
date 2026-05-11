@@ -73,7 +73,7 @@ namespace ao::gtk
     }
   }
 
-  PlaybackBar::PlaybackBar(ao::app::AppSession& session)
+  PlaybackBar::PlaybackBar(ao::rt::AppSession& session)
     : Gtk::Box(Gtk::Orientation::HORIZONTAL), _session{session}
   {
     ensurePlaybackBarCss();
@@ -781,7 +781,7 @@ namespace ao::gtk
     }
   }
 
-  void PlaybackBar::updateOutputTooltip(ao::app::PlaybackState const& state)
+  void PlaybackBar::updateOutputTooltip(ao::rt::PlaybackState const& state)
   {
     bool found = false;
     for (auto const& backend : state.availableOutputs)

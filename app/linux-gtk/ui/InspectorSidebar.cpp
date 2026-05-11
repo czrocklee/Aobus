@@ -76,7 +76,7 @@ namespace ao::gtk
     }
   }
 
-  InspectorSidebar::InspectorSidebar(ao::app::AppSession& session, CoverArtCache& coverArtCache)
+  InspectorSidebar::InspectorSidebar(ao::rt::AppSession& session, CoverArtCache& coverArtCache)
     : Gtk::Box{Gtk::Orientation::VERTICAL, 0}, _session{session}, _coverArtCache{coverArtCache}
   {
     setupUi();
@@ -226,7 +226,7 @@ namespace ao::gtk
     }
 
     auto const result =
-      _session.mutation().updateMetadata(_currentTrackIds, ao::app::MetadataPatch{.optTitle = newValue});
+      _session.mutation().updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optTitle = newValue});
 
     if (!result)
     {
@@ -255,7 +255,7 @@ namespace ao::gtk
     }
 
     auto const result =
-      _session.mutation().updateMetadata(_currentTrackIds, ao::app::MetadataPatch{.optArtist = newValue});
+      _session.mutation().updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optArtist = newValue});
 
     if (!result)
     {
@@ -283,7 +283,7 @@ namespace ao::gtk
     }
 
     auto const result =
-      _session.mutation().updateMetadata(_currentTrackIds, ao::app::MetadataPatch{.optAlbum = newValue});
+      _session.mutation().updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optAlbum = newValue});
 
     if (!result)
     {
@@ -304,18 +304,18 @@ namespace ao::gtk
     _tagEditor.set_visible(false);
   }
 
-  void InspectorSidebar::bindToDetailProjection(std::shared_ptr<ao::app::ITrackDetailProjection> projection)
+  void InspectorSidebar::bindToDetailProjection(std::shared_ptr<ao::rt::ITrackDetailProjection> projection)
   {
     _detailProjection = std::move(projection);
     _detailSub =
-      _detailProjection->subscribe([this](ao::app::TrackDetailSnapshot const& snap) { onTrackDetailSnapshot(snap); });
+      _detailProjection->subscribe([this](ao::rt::TrackDetailSnapshot const& snap) { onTrackDetailSnapshot(snap); });
   }
 
-  void InspectorSidebar::onTrackDetailSnapshot(ao::app::TrackDetailSnapshot const& snap)
+  void InspectorSidebar::onTrackDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap)
   {
     _currentTrackIds = snap.trackIds;
 
-    if (snap.selectionKind == ao::app::SelectionKind::None)
+    if (snap.selectionKind == ao::rt::SelectionKind::None)
     {
       updateEmptyState();
       return;
@@ -336,7 +336,7 @@ namespace ao::gtk
     _tagEditor.set_visible(true);
   }
 
-  void InspectorSidebar::updateCoverArt(ao::app::TrackDetailSnapshot const& snap)
+  void InspectorSidebar::updateCoverArt(ao::rt::TrackDetailSnapshot const& snap)
   {
     if (snap.singleCoverArtId == ao::ResourceId{0})
     {
@@ -387,9 +387,9 @@ namespace ao::gtk
     }
   }
 
-  void InspectorSidebar::updateAudioMetadata(ao::app::TrackDetailSnapshot const& snap)
+  void InspectorSidebar::updateAudioMetadata(ao::rt::TrackDetailSnapshot const& snap)
   {
-    _audioBox.set_visible(snap.selectionKind == ao::app::SelectionKind::Single);
+    _audioBox.set_visible(snap.selectionKind == ao::rt::SelectionKind::Single);
 
     auto const setLabel = [](Gtk::Label& label, auto const& property, auto const& formatter)
     {
