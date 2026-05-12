@@ -162,7 +162,7 @@ namespace ao::rt::test
     auto projection = service.trackListProjection(result.viewId);
     REQUIRE(projection != nullptr);
 
-    auto received = false;
+    bool received = false;
     auto sub = projection->subscribe(
       [&](TrackListProjectionDeltaBatch const& batch)
       {
@@ -281,7 +281,7 @@ namespace ao::rt::test
 
     auto result = service.createView({}, true);
 
-    auto callCount = 0;
+    int callCount = 0;
     auto sub = service.onGroupingChanged([&](auto const&) { ++callCount; });
 
     // First change should publish

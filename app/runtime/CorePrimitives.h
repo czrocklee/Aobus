@@ -68,9 +68,10 @@ namespace ao::rt
   public:
     Subscription connect(std::move_only_function<void(Args...)> handler)
     {
-      auto index = _handlers.size();
       _handlers.push_back(std::move(handler));
-      return Subscription([this, index] { _handlers[index] = {}; });
+      std::size_t const index = _handlers.size() - 1;
+
+      return Subscription{[this, index] { _handlers[index] = {}; }};
     }
 
     void emit(Args... args)

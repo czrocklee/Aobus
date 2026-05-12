@@ -479,7 +479,7 @@ namespace ao::query
       auto const rightReg = _nextReg - 1;
 
       // Store leftField in field for LIKE instructions so executeLike can use it directly
-      auto const instrField = (opcode == OpCode::Like) ? static_cast<std::uint8_t>(leftField) : std::uint8_t{0};
+      std::uint8_t const instrField = (opcode == OpCode::Like) ? static_cast<std::uint8_t>(leftField) : std::uint8_t{0};
 
       _plan.instructions.push_back(Instruction{
         .op = opcode,
@@ -577,7 +577,7 @@ namespace ao::query
 
     // For custom fields, pre-resolve dictId and store as constant (Option B)
     // If resolution fails (key not in dictionary), store 0 - evaluator will return empty string
-    auto constValue = std::int64_t{0};
+    std::int64_t constValue = 0;
 
     if (var.type == VariableType::Custom)
     {

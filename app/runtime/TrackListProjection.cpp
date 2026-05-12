@@ -27,53 +27,71 @@ namespace ao::rt
       std::uint16_t discNumber = 0;
       std::uint16_t trackNumber = 0;
       std::uint32_t durationMs = 0;
-      std::string titleKey{};
-      std::string artistKey{};
-      std::string albumKey{};
-      std::string albumArtistKey{};
-      std::string genreKey{};
-      std::string composerKey{};
-      std::string workKey{};
+      std::string_view titleKey{};
+      std::string_view artistKey{};
+      std::string_view albumKey{};
+      std::string_view albumArtistKey{};
+      std::string_view genreKey{};
+      std::string_view composerKey{};
+      std::string_view workKey{};
     };
 
     struct GroupSection final
     {
       Range rows{};
-      std::string label{};
+      std::string_view label{};
     };
 
     struct OrderEntry final
     {
       ao::TrackId trackId{};
       SortKeys keys{};
-      std::string groupKey{};
-      std::string groupLabel{};
+      std::string_view groupKey{};
+      std::string_view groupLabel{};
     };
 
     using Comparator = std::move_only_function<bool(OrderEntry const&, OrderEntry const&)>;
 
     constexpr std::size_t kArticleAnLen = 3;
 
+    bool iequals_prefix(std::string_view str, std::string_view prefix)
+    {
+      if (str.size() < prefix.size())
+      {
+        return false;
+      }
+
+      for (std::size_t i = 0; i < prefix.size(); ++i)
+      {
+        if (std::tolower(static_cast<unsigned char>(str[i])) != std::tolower(static_cast<unsigned char>(prefix[i])))
+        {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
     std::string normalizeTitle(std::string_view title)
     {
-      auto result = std::string{title};
-      std::ranges::transform(result, result.begin(), [](unsigned char ch) { return std::tolower(ch); });
+      auto offset = 0UZ;
 
-      if (result.starts_with("the "))
+      if (iequals_prefix(title, "the "))
       {
-        return result.substr(4);
+        offset = 4;
+      }
+      else if (iequals_prefix(title, "a "))
+      {
+        offset = 2;
+      }
+      else if (iequals_prefix(title, "an "))
+      {
+        offset = kArticleAnLen;
       }
 
-      if (result.starts_with("a "))
-      {
-        return result.substr(2);
-      }
-
-      if (result.starts_with("an "))
-      {
-        return result.substr(kArticleAnLen);
-      }
-
+      auto result = std::string{title.substr(offset)};
+      std::ranges::transform(
+        result, result.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
       return result;
     }
 
@@ -97,8 +115,8 @@ namespace ao::rt
     ao::library::TrackStore::Reader::LoadMode computeLoadMode(std::vector<TrackSortTerm> const& sortBy,
                                                               TrackGroupKey groupBy)
     {
-      auto needsHot = false;
-      auto needsCold = groupByNeedsCold(groupBy);
+      bool needsHot = false;
+      bool needsCold = groupByNeedsCold(groupBy);
 
       for (auto const& term : sortBy)
       {
@@ -176,7 +194,7 @@ namespace ao::rt
       {
         for (auto const& term : sortBy)
         {
-          auto const cmp = compareSingleField(term, lhs.keys, rhs.keys);
+          int const cmp = compareSingleField(term, lhs.keys, rhs.keys);
 
           if (cmp != 0)
           {
@@ -188,11 +206,33 @@ namespace ao::rt
       };
     }
 
+    std::string_view intern(std::unordered_set<std::string>& pool, std::string&& str)
+    {
+      if (str.empty())
+      {
+        return {};
+      }
+
+      return *pool.insert(std::move(str)).first;
+    }
+
     void fillSortKeys(SortKeys& keys,
                       ao::library::TrackView const& view,
                       ao::library::DictionaryStore& dict,
-                      std::vector<TrackSortTerm> const& sortBy)
+                      std::vector<TrackSortTerm> const& sortBy,
+                      std::unordered_map<ao::DictionaryId, std::string>& normCache,
+                      std::unordered_set<std::string>& stringPool)
     {
+      auto const getNorm = [&](ao::DictionaryId id) -> std::string_view
+      {
+        if (auto it = normCache.find(id); it != normCache.end())
+        {
+          return it->second;
+        }
+
+        return normCache.emplace(id, normalizeTitle(dict.getOrDefault(id))).first->second;
+      };
+
       for (auto const& term : sortBy)
       {
         switch (term.field)
@@ -201,23 +241,15 @@ namespace ao::rt
           case TrackSortField::DiscNumber: keys.discNumber = view.metadata().discNumber(); break;
           case TrackSortField::TrackNumber: keys.trackNumber = view.metadata().trackNumber(); break;
           case TrackSortField::Duration: keys.durationMs = view.property().durationMs(); break;
-          case TrackSortField::Title: keys.titleKey = normalizeTitle(view.metadata().title()); break;
-          case TrackSortField::Artist:
-            keys.artistKey = normalizeTitle(dict.getOrDefault(view.metadata().artistId()));
+          case TrackSortField::Title:
+            keys.titleKey = intern(stringPool, normalizeTitle(view.metadata().title()));
             break;
-          case TrackSortField::Album:
-            keys.albumKey = normalizeTitle(dict.getOrDefault(view.metadata().albumId()));
-            break;
-          case TrackSortField::AlbumArtist:
-            keys.albumArtistKey = normalizeTitle(dict.getOrDefault(view.metadata().albumArtistId()));
-            break;
-          case TrackSortField::Genre:
-            keys.genreKey = normalizeTitle(dict.getOrDefault(view.metadata().genreId()));
-            break;
-          case TrackSortField::Composer:
-            keys.composerKey = normalizeTitle(dict.getOrDefault(view.metadata().composerId()));
-            break;
-          case TrackSortField::Work: keys.workKey = normalizeTitle(dict.getOrDefault(view.metadata().workId())); break;
+          case TrackSortField::Artist: keys.artistKey = getNorm(view.metadata().artistId()); break;
+          case TrackSortField::Album: keys.albumKey = getNorm(view.metadata().albumId()); break;
+          case TrackSortField::AlbumArtist: keys.albumArtistKey = getNorm(view.metadata().albumArtistId()); break;
+          case TrackSortField::Genre: keys.genreKey = getNorm(view.metadata().genreId()); break;
+          case TrackSortField::Composer: keys.composerKey = getNorm(view.metadata().composerId()); break;
+          case TrackSortField::Work: keys.workKey = getNorm(view.metadata().workId()); break;
         }
       }
     }
@@ -225,54 +257,65 @@ namespace ao::rt
     void ensureGroupSortKeys(SortKeys& keys,
                              ao::library::TrackView const& view,
                              ao::library::DictionaryStore& dict,
-                             TrackGroupKey groupBy)
+                             TrackGroupKey groupBy,
+                             std::unordered_map<ao::DictionaryId, std::string>& normCache)
     {
+      auto const getNorm = [&](ao::DictionaryId id) -> std::string_view
+      {
+        if (auto it = normCache.find(id); it != normCache.end())
+        {
+          return it->second;
+        }
+
+        return normCache.emplace(id, normalizeTitle(dict.getOrDefault(id))).first->second;
+      };
+
       switch (groupBy)
       {
         case TrackGroupKey::Artist:
           if (keys.artistKey.empty())
           {
-            keys.artistKey = normalizeTitle(dict.getOrDefault(view.metadata().artistId()));
+            keys.artistKey = getNorm(view.metadata().artistId());
           }
 
           break;
         case TrackGroupKey::Album:
           if (keys.albumKey.empty())
           {
-            keys.albumKey = normalizeTitle(dict.getOrDefault(view.metadata().albumId()));
+            keys.albumKey = getNorm(view.metadata().albumId());
           }
 
           if (keys.albumArtistKey.empty())
           {
-            keys.albumArtistKey = normalizeTitle(dict.getOrDefault(view.metadata().albumArtistId()));
+            keys.albumArtistKey = getNorm(view.metadata().albumArtistId());
           }
 
           break;
         case TrackGroupKey::AlbumArtist:
           if (keys.albumArtistKey.empty())
           {
-            keys.albumArtistKey = normalizeTitle(dict.getOrDefault(view.metadata().albumArtistId()));
+            keys.albumArtistKey = getNorm(view.metadata().albumArtistId());
           }
 
           break;
         case TrackGroupKey::Genre:
           if (keys.genreKey.empty())
           {
-            keys.genreKey = normalizeTitle(dict.getOrDefault(view.metadata().genreId()));
+            keys.genreKey = getNorm(view.metadata().genreId());
           }
 
           break;
         case TrackGroupKey::Composer:
           if (keys.composerKey.empty())
           {
-            keys.composerKey = normalizeTitle(dict.getOrDefault(view.metadata().composerId()));
+            keys.composerKey = getNorm(view.metadata().composerId());
           }
 
           break;
         case TrackGroupKey::Work:
           if (keys.workKey.empty())
           {
-            keys.workKey = normalizeTitle(dict.getOrDefault(view.metadata().workId()));
+            keys.workKey = getNorm(view.metadata().workId());
           }
 
           break;
@@ -280,66 +323,66 @@ namespace ao::rt
       }
     }
 
-    void fillGroupData(OrderEntry& entry,
-                       ao::library::TrackView const& view,
-                       ao::library::DictionaryStore& dict,
-                       TrackGroupKey groupBy)
+    void fillGroupMetadata(OrderEntry& entry,
+                           ao::library::TrackView const& view,
+                           ao::library::DictionaryStore& dict,
+                           TrackGroupKey groupBy,
+                           std::unordered_set<std::string>& stringPool)
     {
       switch (groupBy)
       {
         case TrackGroupKey::None: return;
         case TrackGroupKey::Artist:
           entry.groupKey = entry.keys.artistKey;
-          entry.groupLabel =
-            entry.keys.artistKey.empty() ? "Unknown Artist" : dict.getOrDefault(view.metadata().artistId());
+          entry.groupLabel = dict.getOrDefault(view.metadata().artistId(), "Unknown Artist");
           break;
         case TrackGroupKey::Album:
-          entry.groupKey = entry.keys.albumArtistKey + "\x1F" + entry.keys.albumKey;
+          entry.groupKey =
+            intern(stringPool, std::string{entry.keys.albumArtistKey} + "\x1F" + std::string{entry.keys.albumKey});
           {
-            auto album = std::string{dict.getOrDefault(view.metadata().albumId())};
-            auto albumArtist = std::string{dict.getOrDefault(view.metadata().albumArtistId())};
+            std::string album{dict.getOrDefault(view.metadata().albumId())};
+            std::string albumArtist{dict.getOrDefault(view.metadata().albumArtistId())};
+
             if (entry.keys.albumKey.empty())
             {
               entry.groupLabel = "Unknown Album";
             }
             else if (entry.keys.albumArtistKey.empty())
             {
-              entry.groupLabel = std::move(album);
+              entry.groupLabel = intern(stringPool, std::move(album));
             }
             else
             {
-              entry.groupLabel = std::move(album) + " - " + std::move(albumArtist);
+              entry.groupLabel = intern(stringPool, album + " - " + albumArtist);
             }
           }
 
           break;
         case TrackGroupKey::AlbumArtist:
           entry.groupKey = entry.keys.albumArtistKey;
-          entry.groupLabel = entry.keys.albumArtistKey.empty() ? "Unknown Album Artist"
-                                                               : dict.getOrDefault(view.metadata().albumArtistId());
+          entry.groupLabel = dict.getOrDefault(view.metadata().albumArtistId(), "Unknown Artist");
           break;
         case TrackGroupKey::Genre:
           entry.groupKey = entry.keys.genreKey;
-          entry.groupLabel =
-            entry.keys.genreKey.empty() ? "Unknown Genre" : dict.getOrDefault(view.metadata().genreId());
+          entry.groupLabel = dict.getOrDefault(view.metadata().genreId(), "Unknown Genre");
           break;
         case TrackGroupKey::Composer:
           entry.groupKey = entry.keys.composerKey;
-          entry.groupLabel =
-            entry.keys.composerKey.empty() ? "Unknown Composer" : dict.getOrDefault(view.metadata().composerId());
+          entry.groupLabel = dict.getOrDefault(view.metadata().composerId(), "Unknown Composer");
           break;
         case TrackGroupKey::Work:
           entry.groupKey = entry.keys.workKey;
-          entry.groupLabel = entry.keys.workKey.empty() ? "Unknown Work" : dict.getOrDefault(view.metadata().workId());
+          entry.groupLabel = dict.getOrDefault(view.metadata().workId(), "Unknown Work");
           break;
         case TrackGroupKey::Year:
         {
-          auto const year = entry.keys.year;
-          entry.groupKey = std::format("{:05d}", year);
-          entry.groupLabel = (year == 0) ? "Unknown Year" : std::format("{}", year);
+          std::uint16_t const year = entry.keys.year;
+          entry.groupKey = intern(stringPool, std::format("{:05d}", year));
+          entry.groupLabel = (year == 0) ? "Unknown Year" : intern(stringPool, std::format("{}", year));
         }
 
         break;
+        default: break;
       }
     }
 
@@ -350,9 +393,9 @@ namespace ao::rt
         return false;
       }
 
-      for (std::size_t i = 0; i < old.size(); ++i)
+      for (std::size_t idx = 0; idx < old.size(); ++idx)
       {
-        if (old[i].field != updated[i].field)
+        if (old[idx].field != updated[idx].field)
         {
           return false;
         }
@@ -375,7 +418,33 @@ namespace ao::rt
     std::unordered_map<ao::TrackId, std::size_t> positionIndex;
     std::vector<GroupSection> sections;
     std::uint64_t rev = 0;
+    std::unordered_map<ao::DictionaryId, std::string> normCache;
+    std::unordered_set<std::string> stringPool;
     std::vector<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>> subscribers;
+
+    void rebuildGroups()
+    {
+      if (groupBy == TrackGroupKey::None || orderIndex.empty())
+      {
+        sections.clear();
+        return;
+      }
+
+      auto txn = library.readTransaction();
+      auto reader = library.tracks().reader(txn);
+      auto& dict = library.dictionary();
+
+      for (auto& entry : orderIndex)
+      {
+        auto view = reader.get(entry.trackId, loadMode);
+
+        if (view)
+        {
+          ensureGroupSortKeys(entry.keys, *view, dict, groupBy, normCache);
+          fillGroupMetadata(entry, *view, dict, groupBy, stringPool);
+        }
+      }
+    }
 
     Impl(ViewId vid, TrackSource& src, ao::library::MusicLibrary& lib)
       : viewId{vid}, source{src}, library{lib}
@@ -408,7 +477,7 @@ namespace ao::rt
         .label = orderIndex[0].groupLabel,
       });
 
-      for (auto const idx : std::views::iota(1UZ, orderIndex.size()))
+      for (std::size_t idx = 1; idx < orderIndex.size(); ++idx)
       {
         if (orderIndex[idx].groupKey != orderIndex[idx - 1].groupKey)
         {
@@ -435,22 +504,22 @@ namespace ao::rt
       auto const reader = library.tracks().reader(txn);
       auto& dict = library.dictionary();
 
-      for (auto const idx : std::views::iota(0UZ, source.size()))
+      for (std::size_t idx = 0; idx < source.size(); ++idx)
       {
         auto const trackId = source.trackIdAt(idx);
         auto const optView = reader.get(trackId, loadMode);
 
-        if (!optView)
+        if (optView)
         {
-          continue;
+          OrderEntry entry{.trackId = trackId};
+          fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
+          if (groupBy != TrackGroupKey::None)
+          {
+            ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
+            fillGroupMetadata(entry, *optView, dict, groupBy, stringPool);
+          }
+          orderIndex.push_back(entry);
         }
-
-        auto entry = OrderEntry{.trackId = trackId};
-        fillSortKeys(entry.keys, *optView, dict, sortBy);
-        ensureGroupSortKeys(entry.keys, *optView, dict, groupBy);
-        fillGroupData(entry, *optView, dict, groupBy);
-
-        orderIndex.push_back(std::move(entry));
       }
 
       if (comparator)
@@ -489,10 +558,10 @@ namespace ao::rt
         return false;
       }
 
-      for (auto i = std::size_t{0}; i < left.size(); ++i)
+      for (std::size_t idx = 0; idx < left.size(); ++idx)
       {
-        if (left[i].rows.start != right[i].rows.start || left[i].rows.count != right[i].rows.count ||
-            left[i].label != right[i].label)
+        if (left[idx].rows.start != right[idx].rows.start || left[idx].rows.count != right[idx].rows.count ||
+            left[idx].label != right[idx].label)
         {
           return false;
         }
@@ -514,10 +583,13 @@ namespace ao::rt
         return;
       }
 
-      auto entry = OrderEntry{.trackId = trackId};
-      fillSortKeys(entry.keys, *optView, dict, sortBy);
-      ensureGroupSortKeys(entry.keys, *optView, dict, groupBy);
-      fillGroupData(entry, *optView, dict, groupBy);
+      OrderEntry entry{.trackId = trackId};
+      fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
+      if (groupBy != TrackGroupKey::None)
+      {
+        ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
+        fillGroupMetadata(entry, *optView, dict, groupBy, stringPool);
+      }
 
       std::size_t pos = 0;
 
@@ -525,17 +597,17 @@ namespace ao::rt
       {
         auto it = std::ranges::lower_bound(orderIndex, entry, std::ref(comparator));
         pos = static_cast<std::size_t>(it - orderIndex.begin());
-        orderIndex.insert(it, std::move(entry));
+        orderIndex.insert(it, entry);
       }
       else
       {
         pos = orderIndex.size();
-        orderIndex.push_back(std::move(entry));
+        orderIndex.push_back(entry);
       }
 
-      for (auto i = pos; i < orderIndex.size(); ++i)
+      for (std::size_t idx = pos; idx < orderIndex.size(); ++idx)
       {
-        positionIndex[orderIndex[i].trackId] = i;
+        positionIndex[orderIndex[idx].trackId] = idx;
       }
 
       if (groupBy != TrackGroupKey::None)
@@ -558,6 +630,87 @@ namespace ao::rt
       });
     }
 
+    void insertEntries(std::span<ao::TrackId const> ids)
+    {
+      if (ids.empty())
+      {
+        return;
+      }
+
+      if (ids.size() == 1)
+      {
+        insertEntry(ids[0]);
+        return;
+      }
+
+      auto const txn = library.readTransaction();
+      auto const reader = library.tracks().reader(txn);
+      auto& dict = library.dictionary();
+
+      std::vector<OrderEntry> sortedNew;
+      sortedNew.reserve(ids.size());
+
+      for (auto const id : ids)
+      {
+        auto const optView = reader.get(id, loadMode);
+
+        if (optView)
+        {
+          OrderEntry entry{.trackId = id};
+          fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
+          if (groupBy != TrackGroupKey::None)
+          {
+            ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
+            fillGroupMetadata(entry, *optView, dict, groupBy, stringPool);
+          }
+          sortedNew.push_back(entry);
+        }
+      }
+
+      if (sortedNew.empty())
+      {
+        return;
+      }
+
+      if (comparator)
+      {
+        std::ranges::sort(sortedNew, std::ref(comparator));
+      }
+
+      if (groupBy != TrackGroupKey::None)
+      {
+        rebuildOrderIndex();
+        publishDelta(TrackListProjectionDeltaBatch{
+          .revision = ++rev,
+          .deltas = {ProjectionReset{}},
+        });
+        return;
+      }
+
+      std::vector<OrderEntry> merged;
+      merged.reserve(orderIndex.size() + sortedNew.size());
+
+      if (comparator)
+      {
+        std::ranges::merge(orderIndex, sortedNew, std::back_inserter(merged), std::ref(comparator));
+      }
+      else
+      {
+        merged = std::move(orderIndex);
+        merged.insert(
+          merged.end(), std::make_move_iterator(sortedNew.begin()), std::make_move_iterator(sortedNew.end()));
+      }
+
+      orderIndex = std::move(merged);
+      rebuildPositionIndex();
+
+      // For now, always use ProjectionReset for multiple insertions to simplify UI sync.
+      publishDelta(TrackListProjectionDeltaBatch{
+        .revision = ++rev,
+        .deltas = {ProjectionReset{}},
+      });
+    }
+
     void removeEntry(ao::TrackId trackId)
     {
       auto const optPos = findPosition(trackId);
@@ -566,13 +719,13 @@ namespace ao::rt
         return;
       }
 
-      auto const pos = *optPos;
+      std::size_t const pos = *optPos;
       orderIndex.erase(orderIndex.begin() + static_cast<std::ptrdiff_t>(pos));
       positionIndex.erase(trackId);
 
-      for (auto i = pos; i < orderIndex.size(); ++i)
+      for (std::size_t idx = pos; idx < orderIndex.size(); ++idx)
       {
-        positionIndex[orderIndex[i].trackId] = i;
+        positionIndex[orderIndex[idx].trackId] = idx;
       }
 
       if (groupBy != TrackGroupKey::None)
@@ -592,6 +745,57 @@ namespace ao::rt
       publishDelta(TrackListProjectionDeltaBatch{
         .revision = ++rev,
         .deltas = {ProjectionRemoveRange{Range{.start = pos, .count = 1}}},
+      });
+    }
+
+    void removeEntries(std::span<ao::TrackId const> ids)
+    {
+      if (ids.empty())
+      {
+        return;
+      }
+
+      if (ids.size() == 1)
+      {
+        removeEntry(ids[0]);
+        return;
+      }
+
+      std::vector<std::size_t> positions;
+      positions.reserve(ids.size());
+
+      for (auto id : ids)
+      {
+        if (auto optPos = findPosition(id))
+        {
+          positions.push_back(*optPos);
+        }
+      }
+
+      if (positions.empty())
+      {
+        return;
+      }
+
+      std::ranges::sort(positions, std::greater<>{});
+
+      for (auto pos : positions)
+      {
+        auto id = orderIndex[pos].trackId;
+        orderIndex.erase(orderIndex.begin() + static_cast<std::ptrdiff_t>(pos));
+        positionIndex.erase(id);
+      }
+
+      rebuildPositionIndex();
+
+      if (groupBy != TrackGroupKey::None)
+      {
+        buildGroupSections();
+      }
+
+      publishDelta(TrackListProjectionDeltaBatch{
+        .revision = ++rev,
+        .deltas = {ProjectionReset{}},
       });
     }
 
@@ -618,7 +822,7 @@ namespace ao::rt
       }
 
       auto newKeys = SortKeys{};
-      fillSortKeys(newKeys, *optView, dict, sortBy);
+      fillSortKeys(newKeys, *optView, dict, sortBy, normCache, stringPool);
 
       if (groupBy != TrackGroupKey::None)
       {
@@ -632,11 +836,11 @@ namespace ao::rt
 
       if (comparator)
       {
-        auto testEntry = OrderEntry{.trackId = trackId, .keys = std::move(newKeys)};
+        auto testEntry = OrderEntry{.trackId = trackId, .keys = newKeys};
 
         if (comparator(oldEntry, testEntry) == comparator(testEntry, oldEntry))
         {
-          oldEntry.keys = std::move(testEntry.keys);
+          oldEntry.keys = testEntry.keys;
           publishDelta(TrackListProjectionDeltaBatch{
             .revision = ++rev,
             .deltas = {ProjectionUpdateRange{Range{.start = oldPos, .count = 1}}},
@@ -649,10 +853,35 @@ namespace ao::rt
         return;
       }
 
-      oldEntry.keys = std::move(newKeys);
+      oldEntry.keys = newKeys;
       publishDelta(TrackListProjectionDeltaBatch{
         .revision = ++rev,
         .deltas = {ProjectionUpdateRange{Range{.start = oldPos, .count = 1}}},
+      });
+    }
+
+    void updateEntries(std::span<ao::TrackId const> ids)
+    {
+      if (ids.empty())
+      {
+        return;
+      }
+
+      if (ids.size() == 1)
+      {
+        updateEntry(ids[0]);
+        return;
+      }
+
+      // If many entries are updated, it's easier to just rebuild.
+      // But we can still avoid full re-fetching from DB for UNCHANGED tracks.
+      // However, we don't know which ones are unchanged without checking.
+
+      // For now, let's just rebuild if multiple updates occur.
+      rebuildOrderIndex();
+      publishDelta(TrackListProjectionDeltaBatch{
+        .revision = ++rev,
+        .deltas = {ProjectionReset{}},
       });
     }
   };
@@ -756,18 +985,19 @@ namespace ao::rt
     auto const& section = _impl->sections[groupIndex];
     return TrackGroupSectionSnapshot{
       .rows = section.rows,
-      .label = section.label,
+      .label = std::string{section.label},
     };
   }
 
   std::optional<std::size_t> TrackListProjection::groupIndexAt(std::size_t rowIndex) const
   {
-    for (auto i = std::size_t{0}; i < _impl->sections.size(); ++i)
+    for (std::size_t idx = 0; idx < _impl->sections.size(); ++idx)
     {
-      auto const& section = _impl->sections[i];
+      auto const& section = _impl->sections[idx];
+
       if (rowIndex >= section.rows.start && rowIndex < section.rows.start + section.rows.count)
       {
-        return i;
+        return idx;
       }
     }
 
@@ -782,8 +1012,8 @@ namespace ao::rt
       .deltas = {ProjectionReset{}},
     });
 
-    auto idx = _impl->subscribers.size();
     _impl->subscribers.push_back(std::move(handler));
+    std::size_t const idx = _impl->subscribers.size() - 1;
 
     return Subscription{[this, idx] { _impl->subscribers[idx] = {}; }};
   }
@@ -812,31 +1042,19 @@ namespace ao::rt
     _impl->removeEntry(id);
   }
 
-  void TrackListProjection::onInserted(std::span<ao::TrackId const> /*ids*/)
+  void TrackListProjection::onInserted(std::span<ao::TrackId const> ids)
   {
-    _impl->rebuildOrderIndex();
-    _impl->publishDelta(TrackListProjectionDeltaBatch{
-      .revision = ++_impl->rev,
-      .deltas = {ProjectionReset{}},
-    });
+    _impl->insertEntries(ids);
   }
 
-  void TrackListProjection::onUpdated(std::span<ao::TrackId const> /*ids*/)
+  void TrackListProjection::onUpdated(std::span<ao::TrackId const> ids)
   {
-    _impl->rebuildOrderIndex();
-    _impl->publishDelta(TrackListProjectionDeltaBatch{
-      .revision = ++_impl->rev,
-      .deltas = {ProjectionReset{}},
-    });
+    _impl->updateEntries(ids);
   }
 
-  void TrackListProjection::onRemoved(std::span<ao::TrackId const> /*ids*/)
+  void TrackListProjection::onRemoved(std::span<ao::TrackId const> ids)
   {
-    _impl->rebuildOrderIndex();
-    _impl->publishDelta(TrackListProjectionDeltaBatch{
-      .revision = ++_impl->rev,
-      .deltas = {ProjectionReset{}},
-    });
+    _impl->removeEntries(ids);
   }
 
   void TrackListProjection::publishDelta(TrackListProjectionDeltaBatch const& batch)

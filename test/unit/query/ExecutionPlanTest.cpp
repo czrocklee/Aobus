@@ -869,8 +869,8 @@ TEST_CASE("ExecutionPlan - Tag Bloom Mask Compilation")
   auto jazzId = dict.put(wtxn, "jazz");
   wtxn.commit();
 
-  auto rockBit = std::uint32_t{1} << (rockId.value() & 31);
-  auto jazzBit = std::uint32_t{1} << (jazzId.value() & 31);
+  std::uint32_t rockBit = std::uint32_t{1} << (rockId.value() & 31);
+  std::uint32_t jazzBit = std::uint32_t{1} << (jazzId.value() & 31);
 
   SECTION("Tag Bloom Mask For SingleTagWithDictionary")
   {

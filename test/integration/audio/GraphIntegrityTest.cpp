@@ -38,7 +38,7 @@ TEST_CASE("Engine - Graph Integrity", "[playback][integration][graph]")
   engine.play(descriptor);
 
   // Wait for the engine to open the track and populate route state
-  auto routeReady = false;
+  bool routeReady = false;
 
   for (int i = 0; i < 50; ++i)
   {

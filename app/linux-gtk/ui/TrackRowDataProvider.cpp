@@ -13,7 +13,7 @@ namespace
   Glib::ustring joinResolvedTags(ao::library::TrackView::TagProxy tags, ao::library::DictionaryStore const& dictionary)
   {
     auto text = Glib::ustring{};
-    auto first = true;
+    bool first = true;
 
     for (auto const tagId : tags)
     {

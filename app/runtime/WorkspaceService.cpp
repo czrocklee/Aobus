@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <ao/library/MusicLibrary.h>
+#include <ao/utility/Log.h>
 #include <ranges>
 
 namespace ao::rt
@@ -38,11 +39,13 @@ namespace ao::rt
         [this, self](LibraryMutationService::ListsMutated const& ev)
         {
           auto toClose = std::vector<ViewId>{};
-          for (auto id : ev.deleted)
+
+          for (auto const id : ev.deleted)
           {
             for (auto const viewId : this->layoutState.openViews)
             {
               auto const& state = this->views.trackListState(viewId);
+
               if (state.listId == id)
               {
                 toClose.push_back(viewId);
@@ -84,25 +87,27 @@ namespace ao::rt
     return _impl->layoutState;
   }
 
-  void WorkspaceService::setFocusedView(ViewId viewId)
+  void WorkspaceService::setFocusedView(ViewId const viewId)
   {
     _impl->layoutState.activeViewId = viewId;
     _impl->layoutState.revision++;
     _impl->focusedViewChangedSignal.emit(viewId);
   }
 
-  void WorkspaceService::navigateTo(std::variant<ao::ListId, std::string, GlobalViewKind> target)
+  void WorkspaceService::navigateTo(std::variant<ao::ListId, std::string, GlobalViewKind> const& target)
   {
     ViewId targetViewId{};
 
     if (std::holds_alternative<ao::ListId>(target))
     {
-      auto listId = std::get<ao::ListId>(target);
+      auto const listId = std::get<ao::ListId>(target);
+
       for (auto const& record : _impl->views.listViews())
       {
         if (record.kind == ViewKind::TrackList)
         {
           auto const& state = _impl->views.trackListState(record.id);
+
           if (state.listId == listId && state.filterExpression.empty())
           {
             targetViewId = record.id;
@@ -113,21 +118,21 @@ namespace ao::rt
 
       if (targetViewId == ViewId{})
       {
-        auto res = _impl->views.createView(TrackListViewConfig{.listId = listId}, true);
+        auto const res = _impl->views.createView(TrackListViewConfig{.listId = listId}, true);
         targetViewId = res.viewId;
       }
     }
     else if (std::holds_alternative<std::string>(target))
     {
-      auto query = std::get<std::string>(target);
-      auto res = _impl->views.createView(TrackListViewConfig{.filterExpression = query}, true);
+      auto const query = std::get<std::string>(target);
+      auto const res = _impl->views.createView(TrackListViewConfig{.filterExpression = query}, true);
       targetViewId = res.viewId;
     }
     else if (std::holds_alternative<GlobalViewKind>(target))
     {
-      if (auto kind = std::get<GlobalViewKind>(target); kind == GlobalViewKind::AllTracks)
+      if (auto const kind = std::get<GlobalViewKind>(target); kind == GlobalViewKind::AllTracks)
       {
-        auto res = _impl->views.createView(TrackListViewConfig{}, true);
+        auto const res = _impl->views.createView(TrackListViewConfig{}, true);
         targetViewId = res.viewId;
       }
     }
@@ -145,9 +150,10 @@ namespace ao::rt
     }
   }
 
-  void WorkspaceService::closeView(ViewId viewId)
+  void WorkspaceService::closeView(ViewId const viewId)
   {
-    if (auto it = std::ranges::find(_impl->layoutState.openViews, viewId); it != _impl->layoutState.openViews.end())
+    if (auto const it = std::ranges::find(_impl->layoutState.openViews, viewId);
+        it != _impl->layoutState.openViews.end())
     {
       _impl->layoutState.openViews.erase(it);
     }
@@ -172,11 +178,15 @@ namespace ao::rt
     }
 
     auto snapshot = SessionSnapshot{};
-    _impl->configStore->load("session", snapshot);
+
+    if (auto const res = _impl->configStore->load("session", snapshot); !res)
+    {
+      APP_LOG_WARN("WorkspaceService: Failed to restore session - {}", res.error().message);
+    }
 
     for (auto const& viewConfig : snapshot.openViews)
     {
-      auto res = _impl->views.createView(viewConfig, true);
+      auto const res = _impl->views.createView(viewConfig, true);
       _impl->layoutState.openViews.push_back(res.viewId);
     }
 
@@ -195,10 +205,11 @@ namespace ao::rt
     {
       _impl->playback.setOutput(ao::audio::BackendId{snapshot.lastBackend},
                                 ao::audio::DeviceId{snapshot.lastOutputDeviceId},
-                                ao::audio::ProfileId(snapshot.lastProfile));
+                                ao::audio::ProfileId{snapshot.lastProfile});
     }
 
     _impl->sessionRestoredSignal.emit(snapshot.lastLibraryPath);
+
     if (_impl->layoutState.activeViewId != ViewId{})
     {
       _impl->focusedViewChangedSignal.emit(_impl->layoutState.activeViewId);
@@ -217,9 +228,10 @@ namespace ao::rt
     snapshot.optActiveViewIndex = std::nullopt;
     snapshot.lastLibraryPath = _impl->library.rootPath().string();
 
-    for (auto i = std::size_t{0}; i < layout.openViews.size(); ++i)
+    for (std::size_t i = 0; i < layout.openViews.size(); ++i)
     {
       auto const viewId = layout.openViews[i];
+
       if (viewId == layout.activeViewId)
       {
         snapshot.optActiveViewIndex = static_cast<std::uint32_t>(i);
@@ -241,6 +253,10 @@ namespace ao::rt
     snapshot.lastProfile = pb.selectedOutput.profileId.value();
 
     _impl->configStore->save("session", snapshot);
-    _impl->configStore->flush();
+
+    if (auto const res = _impl->configStore->flush(); !res)
+    {
+      APP_LOG_ERROR("WorkspaceService: Failed to flush session - {}", res.error().message);
+    }
   }
 }

@@ -96,7 +96,7 @@ namespace ao::model
   std::string joinResolvedTags(ao::library::TrackView::TagProxy tags, ao::library::DictionaryStore const& dictionary)
   {
     auto text = std::string{};
-    auto first = true;
+    bool first = true;
 
     for (auto const tagId : tags)
     {

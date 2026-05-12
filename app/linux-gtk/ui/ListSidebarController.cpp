@@ -339,8 +339,8 @@ namespace ao::gtk
 
   void ListSidebarController::showListContextMenu(Gtk::ListView& /*listView*/, Gdk::Rectangle const& rect)
   {
-    auto canDelete = false;
-    auto canEdit = false;
+    bool canDelete = false;
+    bool canEdit = false;
 
     if (auto const selected = _listSelectionModel ? _listSelectionModel->get_selected() : GTK_INVALID_LIST_POSITION;
         _treeListModel && selected != GTK_INVALID_LIST_POSITION && selected != 0)

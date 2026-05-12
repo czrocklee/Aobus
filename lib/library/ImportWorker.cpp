@@ -34,7 +34,7 @@ namespace ao::library
     auto trackWriter = _ml.tracks().writer(txn);
     auto& dict = _ml.dictionary();
 
-    for (auto i = 0U; i < _files.size(); ++i)
+    for (std::size_t i = 0; i < _files.size(); ++i)
     {
       try
       {

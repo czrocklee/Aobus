@@ -44,6 +44,7 @@ add_executable(ao_test
     unit/rt/SmartListEvaluatorTest.cpp
     unit/rt/TrackListPresentationTest.cpp
     unit/rt/TrackListProjectionTest.cpp
+    unit/rt/TrackListProjectionScaleTest.cpp
     unit/rt/TrackDetailProjectionTest.cpp
     unit/rt/LibraryMutationServiceTest.cpp
     unit/rt/NotificationServiceTest.cpp

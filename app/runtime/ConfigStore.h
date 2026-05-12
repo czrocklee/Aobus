@@ -130,7 +130,7 @@ namespace ao::rt
       ReadOnly,  // file must already exist, NotFound is an error for load()
     };
 
-    virtual ~ConfigStore() = default;
+    ~ConfigStore() = default;
     explicit ConfigStore(std::filesystem::path filePath, OpenMode mode = OpenMode::ReadWrite);
 
     ao::Result<> flush();

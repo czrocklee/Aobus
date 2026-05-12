@@ -128,7 +128,9 @@ namespace ao::rt
       }
 
       auto builder = ao::library::TrackBuilder::fromView(*optView, _impl->library.dictionary());
-      if (auto patchResult = applyMetadataPatch(builder, patch); patchResult.changedHot || patchResult.changedCold)
+
+      if (auto const patchResult = applyMetadataPatch(builder, patch);
+          patchResult.changedHot || patchResult.changedCold)
       {
         if (patchResult.changedHot)
         {
@@ -164,6 +166,7 @@ namespace ao::rt
     for (auto const trackId : trackIds)
     {
       auto const optView = writer.get(trackId, ao::library::TrackStore::Reader::LoadMode::Hot);
+
       if (!optView)
       {
         continue;
@@ -172,6 +175,7 @@ namespace ao::rt
       auto builder = ao::library::TrackBuilder::fromView(*optView, _impl->library.dictionary());
 
       auto& tags = builder.tags();
+
       for (auto const& tag : tagsToAdd)
       {
         tags.add(tag);
@@ -196,7 +200,7 @@ namespace ao::rt
 
   ImportFilesReply LibraryMutationService::importFiles(std::vector<std::filesystem::path> const& paths)
   {
-    struct ResultContainer
+    struct ResultContainer final
     {
       ao::library::ImportWorker::ImportResult result;
     };
@@ -257,15 +261,15 @@ namespace ao::rt
     }
     else
     {
-      for (auto id : draft.trackIds)
+      for (auto const id : draft.trackIds)
       {
         builder.tracks().add(id);
       }
     }
 
-    auto payload = builder.serialize();
+    auto const payload = builder.serialize();
 
-    auto [listId, view] = _impl->library.lists().writer(txn).create(payload);
+    auto const [listId, view] = _impl->library.lists().writer(txn).create(payload);
 
     txn.commit();
 
@@ -288,13 +292,13 @@ namespace ao::rt
     }
     else
     {
-      for (auto id : draft.trackIds)
+      for (auto const id : draft.trackIds)
       {
         builder.tracks().add(id);
       }
     }
 
-    auto payload = builder.serialize();
+    auto const payload = builder.serialize();
 
     _impl->library.lists().writer(txn).update(draft.listId, payload);
 

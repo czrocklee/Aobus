@@ -31,7 +31,7 @@ namespace ao::rt
     TrackSource::notifyReset();
   }
 
-  void AllTracksSource::notifyInserted(TrackId id)
+  void AllTracksSource::notifyInserted(TrackId const id)
   {
     if (auto [it, inserted] = _trackIds.insert(id); inserted)
     {
@@ -40,7 +40,7 @@ namespace ao::rt
     }
   }
 
-  void AllTracksSource::notifyRemoved(TrackId id)
+  void AllTracksSource::notifyRemoved(TrackId const id)
   {
     if (auto const it = _trackIds.find(id); it != _trackIds.end())
     {
@@ -56,7 +56,7 @@ namespace ao::rt
     TrackSource::notifyReset();
   }
 
-  std::optional<std::size_t> AllTracksSource::indexOf(TrackId id) const
+  std::optional<std::size_t> AllTracksSource::indexOf(TrackId const id) const
   {
     if (auto const it = _trackIds.find(id); it != _trackIds.end())
     {

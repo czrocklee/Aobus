@@ -35,7 +35,7 @@ namespace ao::rt::test
   {
     auto service = NotificationService{};
 
-    auto published = false;
+    bool published = false;
     auto sub = service.onDismissed([&](auto const&) { published = true; });
 
     service.dismiss(NotificationId{999});
@@ -58,7 +58,7 @@ namespace ao::rt::test
     service.post(NotificationSeverity::Info, "a");
     service.post(NotificationSeverity::Info, "b");
 
-    auto dismissedCount = 0;
+    int dismissedCount = 0;
     auto sub = service.onDismissed([&](auto const&) { ++dismissedCount; });
 
     service.dismissAll();
