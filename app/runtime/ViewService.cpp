@@ -8,9 +8,11 @@
 
 #include "LibraryMutationService.h"
 #include "ListSourceStore.h"
+
 #include "SmartListSource.h"
 #include "TrackSource.h"
 #include "WorkspaceService.h"
+#include <ao/utility/ScopedTimer.h>
 
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -63,7 +65,9 @@ namespace ao::rt
     }
 
     Signal<ViewId> destroyedSignal;
+    Signal<TrackListProjectionChanged const&> projectionChangedSignal;
     Signal<ViewService::FilterChanged const&> filterChangedSignal;
+    Signal<FilterStatusChanged const&> filterStatusChangedSignal;
     Signal<ViewService::SortChanged const&> sortChangedSignal;
     Signal<ViewService::GroupingChanged const&> groupingChangedSignal;
     Signal<ViewService::SelectionChanged const&> selectionChangedSignal;
@@ -92,9 +96,20 @@ namespace ao::rt
     return _impl->destroyedSignal.connect(std::move(handler));
   }
 
+  Subscription ViewService::onProjectionChanged(
+    std::move_only_function<void(TrackListProjectionChanged const&)> handler)
+  {
+    return _impl->projectionChangedSignal.connect(std::move(handler));
+  }
+
   Subscription ViewService::onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler)
   {
     return _impl->filterChangedSignal.connect(std::move(handler));
+  }
+
+  Subscription ViewService::onFilterStatusChanged(std::move_only_function<void(FilterStatusChanged const&)> handler)
+  {
+    return _impl->filterStatusChangedSignal.connect(std::move(handler));
   }
 
   Subscription ViewService::onSortChanged(std::move_only_function<void(SortChanged const&)> handler)
@@ -131,7 +146,7 @@ namespace ao::rt
       .selection = initial.selection,
     };
 
-    TrackSource* baseSource = &_impl->sources.sourceFor(initial.listId);
+    auto* baseSource = &_impl->sources.sourceFor(initial.listId);
     std::unique_ptr<SmartListSource> adHocSource;
 
     if (!initial.filterExpression.empty())
@@ -166,6 +181,7 @@ namespace ao::rt
 
   void ViewService::setFilter(ViewId viewId, std::string const& filterExpression)
   {
+    auto const timer = ao::utility::ScopedTimer{"ViewService::setFilter"};
     auto it = _impl->views.find(viewId);
     if (it == _impl->views.end())
     {
@@ -184,7 +200,7 @@ namespace ao::rt
     else if (!filterExpression.empty())
     {
       // If we didn't have an adHocSource but now we need one
-      TrackSource* baseSource = &_impl->sources.sourceFor(it->second.state.listId);
+      auto* baseSource = &_impl->sources.sourceFor(it->second.state.listId);
       it->second.adHocSource =
         std::make_unique<SmartListSource>(*baseSource, _impl->library, _impl->sources.smartEvaluator());
       it->second.adHocSource->setExpression(filterExpression);
@@ -194,16 +210,33 @@ namespace ao::rt
       // Need to attach projection to new source
       it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
       applyPresentation(it->second);
+      _impl->projectionChangedSignal.emit(TrackListProjectionChanged{
+        .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision});
     }
     else
     {
       // Switching from adHocSource to no filter
-      TrackSource* baseSource = &_impl->sources.sourceFor(it->second.state.listId);
+      auto* baseSource = &_impl->sources.sourceFor(it->second.state.listId);
       it->second.adHocSource.reset();
       it->second.activeSource = baseSource;
       it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
       applyPresentation(it->second);
+      _impl->projectionChangedSignal.emit(TrackListProjectionChanged{
+        .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision});
     }
+
+    auto status = FilterStatusChanged{};
+    status.viewId = viewId;
+    status.expression = filterExpression;
+    status.revision = it->second.state.revision;
+
+    if (it->second.adHocSource != nullptr)
+    {
+      status.hasError = it->second.adHocSource->hasError();
+      status.errorMessage = it->second.adHocSource->errorMessage();
+    }
+
+    _impl->filterStatusChangedSignal.emit(status);
   }
 
   void ViewService::setSort(ViewId viewId, std::vector<TrackSortTerm> const& sortBy)
@@ -271,7 +304,7 @@ namespace ao::rt
     it->second.state.listId = listId;
     it->second.state.revision++;
 
-    TrackSource* baseSource = &_impl->sources.sourceFor(listId);
+    auto* baseSource = &_impl->sources.sourceFor(listId);
 
     if (it->second.adHocSource)
     {
@@ -289,6 +322,8 @@ namespace ao::rt
 
     it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
     applyPresentation(it->second);
+    _impl->projectionChangedSignal.emit(TrackListProjectionChanged{
+      .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision});
 
     _impl->listChangedSignal.emit(ViewService::ListChanged{.viewId = viewId, .listId = listId});
   }

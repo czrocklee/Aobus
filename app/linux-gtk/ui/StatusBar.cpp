@@ -209,6 +209,7 @@ namespace ao::gtk
       [this](auto)
       {
         auto const feed = _session.notifications().feed();
+
         if (!feed.entries.empty())
         {
           auto const& latest = feed.entries.back();
@@ -433,6 +434,7 @@ namespace ao::gtk
     _sinkStatusIcon.set_visible(true);
 
     using Quality = ao::audio::Quality;
+
     switch (status.quality)
     {
       case Quality::BitwisePerfect:

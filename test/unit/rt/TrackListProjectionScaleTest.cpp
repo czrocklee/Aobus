@@ -52,7 +52,7 @@ namespace ao::rt::test
     auto& lib = env.library();
 
     int const kTrackCount = 10000;
-    std::vector<TrackId> ids;
+    auto ids = std::vector<TrackId>{};
     ids.reserve(kTrackCount);
 
     for (int idx = 0; idx < kTrackCount; ++idx)
@@ -97,6 +97,79 @@ namespace ao::rt::test
       CHECK(proj.size() == kTrackCount + 100);
       // Merging 100 into 10k should be very fast (< 50ms)
       CHECK(batchDuration.count() < 100);
+    }
+
+    SECTION("indexOf O(1) lookup performance")
+    {
+      // Verify indexOf is constant-time regardless of lookup position
+      auto const firstId = proj.trackIdAt(0);
+      auto const midId = proj.trackIdAt(static_cast<std::size_t>(kTrackCount / 2));
+      auto const lastId = proj.trackIdAt(static_cast<std::size_t>(kTrackCount - 1));
+
+      // Warm up
+      (void)proj.indexOf(firstId);
+
+      constexpr int kIterations = 10000;
+      auto const measureIndexOf = [&](TrackId id)
+      {
+        auto t0 = std::chrono::steady_clock::now();
+
+        for (int i = 0; i < kIterations; ++i)
+        {
+          (void)proj.indexOf(id);
+        }
+
+        auto t1 = std::chrono::steady_clock::now();
+        return std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0);
+      };
+
+      auto const firstDuration = measureIndexOf(firstId);
+      auto const midDuration = measureIndexOf(midId);
+      auto const lastDuration = measureIndexOf(lastId);
+
+      // All lookups should be fast regardless of position
+      CHECK(firstDuration.count() < 5000);
+      CHECK(midDuration.count() < 5000);
+      CHECK(lastDuration.count() < 5000);
+
+      // O(1) property: mid and last should be within 2x of first
+      auto const baseline = std::max(std::int64_t{1}, firstDuration.count());
+      auto const ratioMid = static_cast<double>(midDuration.count()) / static_cast<double>(baseline);
+      auto const ratioLast = static_cast<double>(lastDuration.count()) / static_cast<double>(baseline);
+      CHECK(ratioMid < 2.0);
+      CHECK(ratioLast < 2.0);
+    }
+
+    SECTION("Reset delta application latency")
+    {
+      auto const projSize = proj.size();
+      bool receivedReset = false;
+      std::size_t receivedSize = 0;
+
+      auto sub = proj.subscribe(
+        [&](TrackListProjectionDeltaBatch const& batch)
+        {
+          if (batch.deltas.empty())
+          {
+            return;
+          }
+
+          if (std::holds_alternative<ProjectionReset>(batch.deltas.front()))
+          {
+            receivedReset = true;
+            receivedSize = proj.size();
+          }
+        });
+
+      auto const resetStart = std::chrono::steady_clock::now();
+      proj.setPresentation(TrackGroupKey::Artist, {TrackSortTerm{.field = TrackSortField::Artist}});
+      auto const resetEnd = std::chrono::steady_clock::now();
+
+      auto const resetDuration = std::chrono::duration_cast<std::chrono::milliseconds>(resetEnd - resetStart);
+
+      CHECK(receivedReset);
+      CHECK(receivedSize == projSize);
+      CHECK(resetDuration.count() < 2000);
     }
   }
 }

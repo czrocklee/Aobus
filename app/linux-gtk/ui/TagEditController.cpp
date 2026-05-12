@@ -58,7 +58,7 @@ namespace ao::gtk
 
   void TagEditController::setupActions()
   {
-    auto const stringType = Glib::VariantType("s");
+    auto const stringType = Glib::VariantType{"s"};
 
     _trackTagAddAction = Gio::SimpleAction::create("track-tag-add", stringType);
     _trackTagAddAction->signal_activate().connect(

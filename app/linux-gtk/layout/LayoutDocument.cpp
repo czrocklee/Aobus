@@ -3,6 +3,7 @@
 
 #include "LayoutDocument.h"
 #include "LayoutYaml.h"
+#include "LayoutConstants.h"
 
 #include <ao/utility/Log.h>
 #include <stdexcept>
@@ -219,7 +220,8 @@ namespace ao::gtk::layout
         LayoutNode{.id = "playback-row",
                    .type = "box",
                    .props = {{"orientation", LayoutValue{std::string{"horizontal"}}},
-                             {"spacing", LayoutValue{static_cast<std::int64_t>(6)}}},
+                             {"spacing", LayoutValue{static_cast<std::int64_t>(::ao::gtk::Layout::kSpacingMedium)}}},
+
                    .children = {LayoutNode{.type = "playback.outputButton"},
                                 LayoutNode{.type = "playback.playPauseButton"},
                                 LayoutNode{.type = "playback.stopButton"},
@@ -230,7 +232,7 @@ namespace ao::gtk::layout
           .id = "main-paned",
           .type = "split",
           .props = {{"orientation", LayoutValue{std::string{"horizontal"}}},
-                    {"position", LayoutValue{static_cast<std::int64_t>(330)}}},
+                    {"position", LayoutValue{static_cast<std::int64_t>(::ao::gtk::Layout::kDefaultSidebarWidth)}}},
           .layout = {{"vexpand", LayoutValue{true}}},
           .children =
             {LayoutNode{
@@ -239,7 +241,7 @@ namespace ao::gtk::layout
                .props = {{"orientation", LayoutValue{std::string{"vertical"}}}},
                .children = {LayoutNode{.type = "library.listTree", .layout = {{"vexpand", LayoutValue{true}}}},
                             LayoutNode{.type = "inspector.coverArt",
-                                       .layout = {{"minHeight", LayoutValue{static_cast<std::int64_t>(50)}}}}}},
+                                       .layout = {{"minHeight", LayoutValue{static_cast<std::int64_t>(::ao::gtk::Layout::kMinCoverArtHeight)}}}}}},
              LayoutNode{.id = "workspace-with-inspector", .type = "app.workspaceWithInspector"}}},
         LayoutNode{.type = "status.defaultBar"}}};
 

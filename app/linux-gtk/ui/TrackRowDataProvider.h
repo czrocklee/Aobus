@@ -44,16 +44,15 @@ namespace ao::gtk
     explicit TrackRowDataProvider(ao::library::MusicLibrary& ml);
 
     /**
-     * Batch-load all tracks from the library into the central cache.
-     * This avoids multiple LMDB transactions during UI sorting.
-     */
-    void loadAll();
-
-    /**
      * Get the shared TrackRow for a given ID.
      * @return TrackRow if it was loaded, nullptr otherwise.
      */
     Glib::RefPtr<TrackRow> getTrackRow(TrackId id) const;
+
+    /**
+     * Get the shared TrackRow for a given ID, reusing a caller-provided reader.
+     */
+    Glib::RefPtr<TrackRow> getTrackRow(TrackId id, ao::library::TrackStore::Reader const& reader) const;
 
     /**
      * Resolve a dictionary string and cache it.
@@ -78,12 +77,18 @@ namespace ao::gtk
     /**
      * Invalidate entry for a track (after updates).
      */
-    void invalidate(TrackId id);
+    void invalidate(TrackId id) const;
 
     /**
      * Remove track from cache (after deletion).
      */
     void remove(TrackId id);
+
+    /**
+     * Clear all cached rows and strings without reloading.
+     * Subsequent getTrackRow() calls will lazily reload from the database.
+     */
+    void clearCache();
 
     /**
      * Get the dictionary store reference.

@@ -233,11 +233,12 @@ namespace ao::gtk
         {
           if (_rowDataProvider)
           {
-            _rowDataProvider->loadAll();
+            _rowDataProvider->clearCache();
             _session.reloadAllTracks();
 
             auto const txn = _session.musicLibrary().readTransaction();
             rebuildListPages(txn);
+ 
             if (_statusBar)
             {
               _statusBar->setTrackCount(_session.sources().allTracks().size());
@@ -293,7 +294,6 @@ namespace ao::gtk
   {
     // Create row data provider from AppSession's library
     _rowDataProvider = std::make_unique<TrackRowDataProvider>(_session.musicLibrary());
-    _rowDataProvider->loadAll();
 
     // Populate the all-tracks list from LMDB (replaces old makeLibrarySession's reloadFromStore)
     _session.reloadAllTracks();
@@ -321,7 +321,7 @@ namespace ao::gtk
       {
         if (_rowDataProvider)
         {
-          _rowDataProvider->loadAll();
+          _rowDataProvider->clearCache();
           _session.reloadAllTracks();
         }
       });
@@ -561,7 +561,11 @@ namespace ao::gtk
   {
     // Try to load layout from config
     auto doc = layout::createDefaultLayout();
-    _configStore->load("linuxGtkLayout", doc);
+    if (auto const res = _configStore->load("linuxGtkLayout", doc);
+        !res && res.error().code != ao::Error::Code::NotFound)
+    {
+      APP_LOG_DEBUG("Failed to load layout from config: {}", res.error().message);
+    }
 
     // Update context with initialized controllers
     _componentContext.rowDataProvider = _rowDataProvider.get();
@@ -612,6 +616,7 @@ namespace ao::gtk
   void MainWindow::saveSession()
   {
     auto ws = WindowState{};
+
     if (auto const width = get_width(); width > 0)
     {
       ws.width = width;
@@ -639,7 +644,11 @@ namespace ao::gtk
   void MainWindow::loadSession()
   {
     auto ws = WindowState{};
-    _configStore->load("window", ws);
+
+    if (auto const res = _configStore->load("window", ws); !res && res.error().code != ao::Error::Code::NotFound)
+    {
+      APP_LOG_DEBUG("Failed to load window config: {}", res.error().message);
+    }
 
     set_default_size(ws.width, ws.height);
 
@@ -649,7 +658,12 @@ namespace ao::gtk
     }
 
     auto tvs = TrackViewState{};
-    _configStore->load("track_view", tvs);
-    _trackColumnLayoutModel.setLayout(trackColumnLayoutFromState(tvs));
+ 
+     if (auto const res = _configStore->load("track_view", tvs); !res && res.error().code != ao::Error::Code::NotFound)
+    {
+      APP_LOG_DEBUG("Failed to load track view config: {}", res.error().message);
+    }
+ 
+     _trackColumnLayoutModel.setLayout(trackColumnLayoutFromState(tvs));
   }
 } // namespace ao::gtk

@@ -44,7 +44,7 @@ namespace
       return std::nullopt;
     }
 
-    auto path = std::filesystem::path{uri};
+    auto const path = std::filesystem::path{uri};
 
     if (path.is_absolute())
     {
@@ -62,23 +62,9 @@ namespace ao::gtk
   {
   }
 
-  void TrackRowDataProvider::loadAll()
-  {
-    _rowCache.clear();
-    _stringCache.clear();
-
-    auto const txn = _ml.readTransaction();
-    auto const reader = _store.reader(txn);
-
-    for (auto const& [id, view] : reader)
-    {
-      _rowCache[id] = createRowFromView(id, view);
-    }
-  }
-
   Glib::RefPtr<TrackRow> TrackRowDataProvider::createRowFromView(TrackId id, ao::library::TrackView const& view) const
   {
-    auto row = TrackRow::create(id, *this);
+    auto const row = TrackRow::create(id, *this);
 
     auto const& metadata = view.metadata();
     auto const title = metadata.title();
@@ -108,6 +94,7 @@ namespace ao::gtk
   Glib::RefPtr<TrackRow> TrackRowDataProvider::getTrackRow(TrackId id) const
   {
     auto const it = _rowCache.find(id);
+
     if (it != _rowCache.end())
     {
       return it->second;
@@ -123,7 +110,29 @@ namespace ao::gtk
       return nullptr;
     }
 
-    auto row = createRowFromView(id, *optView);
+    auto const row = createRowFromView(id, *optView);
+    _rowCache[id] = row;
+    return row;
+  }
+
+  Glib::RefPtr<TrackRow> TrackRowDataProvider::getTrackRow(TrackId id,
+                                                           ao::library::TrackStore::Reader const& reader) const
+  {
+    auto const it = _rowCache.find(id);
+
+    if (it != _rowCache.end())
+    {
+      return it->second;
+    }
+
+    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
+
+    if (!optView)
+    {
+      return nullptr;
+    }
+
+    auto const row = createRowFromView(id, *optView);
     _rowCache[id] = row;
     return row;
   }
@@ -183,8 +192,11 @@ namespace ao::gtk
     auto const& metadata = view.metadata();
     auto const& property = view.property();
 
-    ao::audio::TrackPlaybackDescriptor desc;
-    desc.trackId = id;
+    auto desc = ao::audio::TrackPlaybackDescriptor{.trackId = id,
+                                                   .durationMs = property.durationMs(),
+                                                   .sampleRateHint = property.sampleRate(),
+                                                   .channelsHint = property.channels(),
+                                                   .bitDepthHint = property.bitDepth()};
 
     // File path
     if (auto const optFilePath = resolveLibraryPath(_ml.rootPath(), property.uri()))
@@ -213,18 +225,10 @@ namespace ao::gtk
       desc.optCoverArtId = ao::ResourceId{coverArtId};
     }
 
-    // Duration
-    desc.durationMs = property.durationMs();
-
-    // Technical properties (hints for decoder)
-    desc.sampleRateHint = property.sampleRate();
-    desc.channelsHint = property.channels();
-    desc.bitDepthHint = property.bitDepth();
-
     return desc;
   }
 
-  void TrackRowDataProvider::invalidate(TrackId id)
+  void TrackRowDataProvider::invalidate(TrackId id) const
   {
     _rowCache.erase(id);
   }
@@ -232,6 +236,12 @@ namespace ao::gtk
   void TrackRowDataProvider::remove(TrackId id)
   {
     _rowCache.erase(id);
+  }
+
+  void TrackRowDataProvider::clearCache()
+  {
+    _rowCache.clear();
+    _stringCache.clear();
   }
 
   Glib::ustring const& TrackRowDataProvider::resolveDictionaryString(ao::DictionaryId id) const
@@ -243,7 +253,7 @@ namespace ao::gtk
     }
 
     // Resolve from dictionary and cache
-    Glib::ustring result;
+    auto result = Glib::ustring{};
 
     try
     {

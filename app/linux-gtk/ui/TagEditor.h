@@ -27,7 +27,7 @@ namespace ao::gtk
     void setup(ao::library::MusicLibrary& library, std::vector<ao::TrackId> selectedTrackIds);
 
     // Signals
-    TagsChangedSignal& signal_tags_changed() { return _tagsChanged; }
+    TagsChangedSignal& signalTagsChanged() { return _tagsChanged; }
 
   private:
     void setupUi();

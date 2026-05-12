@@ -58,6 +58,24 @@ namespace ao::gtk
     _focusSub = _session.workspace().onFocusedViewChanged([this](auto) { syncLayout(); });
 
     _viewDestroyedSub = _session.views().onDestroyed([this](auto) { syncLayout(); });
+
+    _projectionChangedSub = _session.views().onProjectionChanged(
+      [this](ao::rt::TrackListProjectionChanged const& ev)
+      {
+        auto* ctx = find(ev.viewId);
+
+        if (ctx == nullptr || ctx->adapter == nullptr)
+        {
+          return;
+        }
+
+        ctx->adapter->bindProjection(*ev.projection);
+
+        if (_optPlayingTrackId)
+        {
+          ctx->page->setPlayingTrackId(_optPlayingTrackId);
+        }
+      });
   }
 
   void TrackPageGraph::handleRevealTrack(ao::rt::PlaybackService::RevealTrackRequested const& ev)
@@ -80,6 +98,7 @@ namespace ao::gtk
     if (viewId != ao::rt::ViewId{})
     {
       _session.workspace().setFocusedView(viewId);
+
       if (ev.trackId != ao::TrackId{})
       {
         if (auto* ctx = find(viewId))
@@ -157,7 +176,8 @@ namespace ao::gtk
     _activeDataProvider = &dataProvider;
 
     // Force layout state re-evaluation now that dataProvider is ready
-    auto layout = _session.workspace().layoutState();
+    auto const layout = _session.workspace().layoutState();
+
     for (auto const viewId : layout.openViews)
     {
       ensureViewPage(viewId, *_activeDataProvider);
@@ -184,6 +204,7 @@ namespace ao::gtk
   TrackPageContext* TrackPageGraph::currentVisible()
   {
     auto* const visibleChild = _stack.get_visible_child();
+
     if (visibleChild == nullptr)
     {
       return nullptr;
@@ -203,6 +224,7 @@ namespace ao::gtk
   TrackPageContext const* TrackPageGraph::currentVisible() const
   {
     auto const* const visibleChild = _stack.get_visible_child();
+
     if (visibleChild == nullptr)
     {
       return nullptr;
@@ -245,6 +267,7 @@ namespace ao::gtk
     }
 
     auto proj = _session.views().trackListProjection(viewId);
+
     if (!proj)
     {
       return;
@@ -259,13 +282,15 @@ namespace ao::gtk
     adapter->bindProjection(*proj);
 
     auto trackPage = std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _session, viewId);
-    auto pageId = std::format("view-{}", viewId.value());
+    auto const pageId = std::format("view-{}", viewId.value());
 
-    std::string listName = "List";
+    auto listName = std::string{"List"};
+
     if (listId != allTracksListId() && listId != ao::ListId{})
     {
       auto const txn = _session.musicLibrary().readTransaction();
       auto lists = _session.musicLibrary().lists().reader(txn);
+
       if (auto optView = lists.get(listId))
       {
         listName = optView->name().empty() ? "<Unnamed List>" : std::string(optView->name());
@@ -293,6 +318,7 @@ namespace ao::gtk
       [this, page, viewId]
       {
         auto const ids = page->getSelectedTrackIds();
+
         if (viewId != ao::rt::ViewId{})
         {
           _session.views().setSelection(viewId, ids);
@@ -332,6 +358,7 @@ namespace ao::gtk
       [this, page](std::string const& expression)
       {
         auto parentId = page->getListId();
+
         if (parentId == allTracksListId())
         {
           parentId = rootParentId();

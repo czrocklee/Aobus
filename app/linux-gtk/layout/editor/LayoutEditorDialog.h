@@ -48,19 +48,28 @@ namespace ao::gtk::layout::editor
     void onSelectionChanged();
     void updatePropertiesPanel(LayoutNode* node);
     void applyPropertyChange(LayoutNode* node,
-                             std::string const& propName,
+                             std::string_view propName,
                              LayoutValue const& value,
                              bool isLayoutProp);
     void notifyPreview();
 
     void renderIdSection(LayoutNode* node);
-    void addSectionTitle(std::string const& text);
-    void renderBoolEditor(LayoutNode* node, PropertyDescriptor const& prop, LayoutValue currentVal, bool isLayoutProp);
-    void renderIntEditor(LayoutNode* node, PropertyDescriptor const& prop, LayoutValue currentVal, bool isLayoutProp);
-    void renderEnumEditor(LayoutNode* node, PropertyDescriptor const& prop, LayoutValue currentVal, bool isLayoutProp);
+    void addSectionTitle(std::string_view text);
+    void renderBoolEditor(LayoutNode* node,
+                          PropertyDescriptor const& prop,
+                          LayoutValue const& currentVal,
+                          bool isLayoutProp);
+    void renderIntEditor(LayoutNode* node,
+                         PropertyDescriptor const& prop,
+                         LayoutValue const& currentVal,
+                         bool isLayoutProp);
+    void renderEnumEditor(LayoutNode* node,
+                          PropertyDescriptor const& prop,
+                          LayoutValue const& currentVal,
+                          bool isLayoutProp);
     void renderStringEditor(LayoutNode* node,
                             PropertyDescriptor const& prop,
-                            LayoutValue currentVal,
+                            LayoutValue const& currentVal,
                             bool isLayoutProp);
     void dispatchEditor(LayoutNode* node, PropertyDescriptor const& prop, bool isLayoutProp);
 

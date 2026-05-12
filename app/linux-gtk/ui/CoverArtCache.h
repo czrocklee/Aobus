@@ -20,7 +20,7 @@ namespace ao::gtk
   class CoverArtCache final
   {
   public:
-    explicit CoverArtCache(size_t maxSize = 50);
+    explicit CoverArtCache(std::size_t maxSize = 50);
     ~CoverArtCache();
 
     /**
@@ -49,7 +49,7 @@ namespace ao::gtk
       Glib::RefPtr<Gdk::Pixbuf> pixbuf;
     };
 
-    size_t _maxSize;
+    std::size_t _maxSize;
     std::list<CacheEntry> _entries;
     std::unordered_map<std::uint64_t, std::list<CacheEntry>::iterator> _cacheMap;
   };

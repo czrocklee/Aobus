@@ -88,12 +88,12 @@ int main(int argc, char* argv[])
 
   // Map strings to LogLevel enum for CLI11
   auto const logMapping = std::map<std::string, ao::log::LogLevel>{{"trace", ao::log::LogLevel::Trace},
-                                                                    {"debug", ao::log::LogLevel::Debug},
-                                                                    {"info", ao::log::LogLevel::Info},
-                                                                    {"warn", ao::log::LogLevel::Warn},
-                                                                    {"error", ao::log::LogLevel::Error},
-                                                                    {"critical", ao::log::LogLevel::Critical},
-                                                                    {"off", ao::log::LogLevel::Off}};
+                                                                   {"debug", ao::log::LogLevel::Debug},
+                                                                   {"info", ao::log::LogLevel::Info},
+                                                                   {"warn", ao::log::LogLevel::Warn},
+                                                                   {"error", ao::log::LogLevel::Error},
+                                                                   {"critical", ao::log::LogLevel::Critical},
+                                                                   {"off", ao::log::LogLevel::Off}};
 
   int verbosity = 0;
   cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");

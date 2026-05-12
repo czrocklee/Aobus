@@ -17,10 +17,9 @@ namespace ao::gtk::layout
   struct LayoutDocument final
   {
     std::uint32_t version = 1;
-    LayoutNode root;
-    std::map<std::string, LayoutNode, std::less<>> templates;
+    LayoutNode root{};
+    std::map<std::string, LayoutNode, std::less<>> templates{};
   };
-
   /**
    * @brief Create a built-in default layout document.
    */

@@ -11,7 +11,20 @@ TEST_CASE("TrackListPresentation: None mapping", "[app][runtime][presentation]")
 {
   auto snapshot = presentationForGroup(TrackGroupKey::None);
   REQUIRE(snapshot.groupBy == TrackGroupKey::None);
-  REQUIRE(snapshot.effectiveSortBy.empty());
+
+  auto const expectedSort = std::vector<TrackSortField>{TrackSortField::Artist,
+                                                        TrackSortField::Album,
+                                                        TrackSortField::DiscNumber,
+                                                        TrackSortField::TrackNumber,
+                                                        TrackSortField::Title};
+  REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+
+  for (size_t i = 0; i < expectedSort.size(); ++i)
+  {
+    REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
+    REQUIRE(snapshot.effectiveSortBy[i].ascending == true);
+  }
+
   REQUIRE(snapshot.redundantFields.empty());
 }
 
@@ -20,12 +33,13 @@ TEST_CASE("TrackListPresentation: Artist mapping", "[app][runtime][presentation]
   auto snapshot = presentationForGroup(TrackGroupKey::Artist);
   REQUIRE(snapshot.groupBy == TrackGroupKey::Artist);
 
-  std::vector<TrackSortField> expectedSort = {TrackSortField::Artist,
-                                              TrackSortField::Album,
-                                              TrackSortField::DiscNumber,
-                                              TrackSortField::TrackNumber,
-                                              TrackSortField::Title};
+  auto const expectedSort = std::vector<TrackSortField>{TrackSortField::Artist,
+                                                        TrackSortField::Album,
+                                                        TrackSortField::DiscNumber,
+                                                        TrackSortField::TrackNumber,
+                                                        TrackSortField::Title};
   REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+
   for (size_t i = 0; i < expectedSort.size(); ++i)
   {
     REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
@@ -41,12 +55,13 @@ TEST_CASE("TrackListPresentation: Album mapping", "[app][runtime][presentation]"
   auto snapshot = presentationForGroup(TrackGroupKey::Album);
   REQUIRE(snapshot.groupBy == TrackGroupKey::Album);
 
-  std::vector<TrackSortField> expectedSort = {TrackSortField::AlbumArtist,
-                                              TrackSortField::Album,
-                                              TrackSortField::DiscNumber,
-                                              TrackSortField::TrackNumber,
-                                              TrackSortField::Title};
+  auto const expectedSort = std::vector<TrackSortField>{TrackSortField::AlbumArtist,
+                                                        TrackSortField::Album,
+                                                        TrackSortField::DiscNumber,
+                                                        TrackSortField::TrackNumber,
+                                                        TrackSortField::Title};
   REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+
   for (size_t i = 0; i < expectedSort.size(); ++i)
   {
     REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
@@ -62,12 +77,13 @@ TEST_CASE("TrackListPresentation: AlbumArtist mapping", "[app][runtime][presenta
   auto snapshot = presentationForGroup(TrackGroupKey::AlbumArtist);
   REQUIRE(snapshot.groupBy == TrackGroupKey::AlbumArtist);
 
-  std::vector<TrackSortField> expectedSort = {TrackSortField::AlbumArtist,
-                                              TrackSortField::Album,
-                                              TrackSortField::DiscNumber,
-                                              TrackSortField::TrackNumber,
-                                              TrackSortField::Title};
+  auto const expectedSort = std::vector<TrackSortField>{TrackSortField::AlbumArtist,
+                                                        TrackSortField::Album,
+                                                        TrackSortField::DiscNumber,
+                                                        TrackSortField::TrackNumber,
+                                                        TrackSortField::Title};
   REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+
   for (size_t i = 0; i < expectedSort.size(); ++i)
   {
     REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
@@ -89,6 +105,7 @@ TEST_CASE("TrackListPresentation: Genre mapping", "[app][runtime][presentation]"
                                               TrackSortField::TrackNumber,
                                               TrackSortField::Title};
   REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+
   for (size_t i = 0; i < expectedSort.size(); ++i)
   {
     REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
@@ -110,6 +127,7 @@ TEST_CASE("TrackListPresentation: Composer mapping", "[app][runtime][presentatio
                                               TrackSortField::TrackNumber,
                                               TrackSortField::Title};
   REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+
   for (size_t i = 0; i < expectedSort.size(); ++i)
   {
     REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
@@ -131,6 +149,7 @@ TEST_CASE("TrackListPresentation: Work mapping", "[app][runtime][presentation]")
                                               TrackSortField::TrackNumber,
                                               TrackSortField::Title};
   REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+
   for (size_t i = 0; i < expectedSort.size(); ++i)
   {
     REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
@@ -152,6 +171,7 @@ TEST_CASE("TrackListPresentation: Year mapping", "[app][runtime][presentation]")
                                               TrackSortField::TrackNumber,
                                               TrackSortField::Title};
   REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+
   for (size_t i = 0; i < expectedSort.size(); ++i)
   {
     REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);

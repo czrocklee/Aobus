@@ -262,11 +262,11 @@ namespace ao::audio
     bool openTrack(TrackPlaybackDescriptor const& descriptor, std::shared_ptr<ISource>& source, Format& backendFormat)
     {
       auto session = detail::TrackSession::create(descriptor,
-                                          currentDevice,
-                                          backend->backendId(),
-                                          backend->profileId(),
-                                          decoderFactory,
-                                          [this](ao::Error const& err) { handleSourceError(err); });
+                                                  currentDevice,
+                                                  backend->backendId(),
+                                                  backend->profileId(),
+                                                  decoderFactory,
+                                                  [this](ao::Error const& err) { handleSourceError(err); });
 
       if (!session)
       {

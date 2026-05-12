@@ -24,6 +24,7 @@ add_library(aobus-gtk-lib STATIC
     ui/ImportProgressDialog.cpp
     ui/StatusBar.cpp
     ui/TrackRowDataProvider.cpp
+    ui/TrackListModel.cpp
     ui/PlaybackBar.cpp
     ui/AobusSoul.cpp
     ui/AobusSoulWindow.cpp

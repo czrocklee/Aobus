@@ -122,7 +122,7 @@ namespace ao::gtk
     _contentBox.append(_audioBox);
     _contentBox.append(_tagEditor);
 
-    _tagEditor.signal_tags_changed().connect(
+    _tagEditor.signalTagsChanged().connect(
       [this](auto const& toAdd, auto const& toRemove)
       {
         auto ids = _currentTrackIds;

@@ -26,7 +26,7 @@ namespace ao::gtk
 
     set_default_size(kDialogWidth, kDialogHeight);
 
-    auto box = Gtk::Box(Gtk::Orientation::VERTICAL, kBoxSpacing);
+    auto box = Gtk::Box{Gtk::Orientation::VERTICAL, kBoxSpacing};
     box.set_margin(kBoxMargin);
 
     _progressLabel.set_text("Preparing to import...");
@@ -53,7 +53,7 @@ namespace ao::gtk
 
   void ImportProgressDialog::onNewTrack(std::string const& path, std::int32_t itemIndex)
   {
-    auto fraction = static_cast<double>(itemIndex) / _maxItems;
+    auto const fraction = static_cast<double>(itemIndex) / _maxItems;
     _progressBar.set_fraction(fraction);
     _progressLabel.set_text("Importing: " + path);
   }

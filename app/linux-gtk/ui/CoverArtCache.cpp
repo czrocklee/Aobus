@@ -5,7 +5,7 @@
 
 namespace ao::gtk
 {
-  CoverArtCache::CoverArtCache(size_t maxSize)
+  CoverArtCache::CoverArtCache(std::size_t maxSize)
     : _maxSize{maxSize}
   {
   }

@@ -4,9 +4,8 @@
 #pragma once
 
 #include <ao/library/MusicLibrary.h>
-#include <ao/query/Parser.h>
-#include <ao/query/PlanEvaluator.h>
 
+#include "TrackListModel.h"
 #include "TrackRow.h"
 #include "TrackRowDataProvider.h"
 #include <runtime/ProjectionTypes.h>
@@ -27,6 +26,12 @@ namespace ao::gtk
     Expression,
   };
 
+  struct ResolvedTrackFilter final
+  {
+    TrackFilterMode mode = TrackFilterMode::None;
+    std::string expression{};
+  };
+
   class TrackListAdapter final : public ao::rt::TrackSourceObserver
   {
   public:
@@ -40,6 +45,9 @@ namespace ao::gtk
     Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
     ao::library::MusicLibrary& getMusicLibrary() { return _musicLibrary; }
 
+    // O(1) index lookup via projection when bound, fallback to source scan.
+    std::optional<std::size_t> indexOf(TrackId trackId) const;
+
     // Bind to a runtime projection for delta-based updates.
     // When bound, the adapter ignores direct TrackIdListObserver callbacks
     // and instead rebuilds the list store from projection deltas.
@@ -49,12 +57,11 @@ namespace ao::gtk
     ao::rt::ITrackListProjection* projection() const { return _projection; }
     std::optional<std::size_t> groupIndexForTrack(TrackId trackId) const;
 
-    // Set filter text - filters by common display metadata containing the text.
-    void setFilter(Glib::ustring const& filterText);
-    TrackFilterMode filterMode() const { return _filterMode; }
-    bool hasFilterError() const { return !_filterErrorMessage.empty(); }
-    std::string const& filterErrorMessage() const { return _filterErrorMessage; }
-    std::string const& currentSmartFilterExpression() const { return _filterExpression; }
+    // Signal emitted when the underlying ListModel is swapped (e.g. during projection binding).
+    sigc::signal<void()>& signalModelChanged() { return _signalModelChanged; }
+
+    // Resolve raw filter text to a filter mode and expression.
+    static ResolvedTrackFilter resolveFilterExpression(std::string_view rawFilter);
 
     // Observer overrides
     void onReset() override;
@@ -69,22 +76,27 @@ namespace ao::gtk
     void rebuildView();
     void rebuildViewInternal();
     void createRowForTrack(TrackId id);
-    bool shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader const& reader) const;
+
+    // Batch projection delta application
+    void applyDeltaBatch(ao::rt::TrackListProjectionDeltaBatch const& batch);
+    void applyResetDelta();
+    void applyInsertRange(ao::rt::ProjectionInsertRange const& delta);
+    void applyRemoveRange(ao::rt::ProjectionRemoveRange const& delta);
+    void applyUpdateRange(ao::rt::ProjectionUpdateRange const& delta);
 
     ao::rt::TrackSource& _source;
     ao::library::MusicLibrary& _musicLibrary;
     TrackRowDataProvider const& _provider;
-    Glib::RefPtr<Gio::ListStore<TrackRow>> _listModel;
-    Glib::ustring _filterText;
-    TrackFilterMode _filterMode = TrackFilterMode::None;
-    std::string _filterExpression;
-    std::string _filterErrorMessage;
-    std::unique_ptr<ao::query::ExecutionPlan> _filterPlan;
-    ao::query::PlanEvaluator _filterEvaluator;
+    Glib::RefPtr<Gio::ListStore<TrackRow>> _listStore;
+    Glib::RefPtr<ProjectionTrackModel> _projectionModel;
+    Glib::RefPtr<Gio::ListModel> _listModel;
+    std::size_t _modelSize = 0;
     sigc::connection _rebuildConnection;
 
     // Projection binding
     ao::rt::ITrackListProjection* _projection = nullptr;
     ao::rt::Subscription _projectionSub;
+    bool _sourceDetachedForProjection = false;
+    sigc::signal<void()> _signalModelChanged;
   };
 } // namespace ao::gtk

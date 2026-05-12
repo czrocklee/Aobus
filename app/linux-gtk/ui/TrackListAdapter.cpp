@@ -7,6 +7,7 @@
 #include "TrackRowDataProvider.h"
 
 #include <ao/library/TrackStore.h>
+#include <ao/utility/ScopedTimer.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <boost/algorithm/string.hpp>
@@ -156,7 +157,7 @@ namespace ao::gtk
       return expression;
     }
 
-    std::optional<std::pair<TrackFilterMode, std::string>> resolveFilterExpression(std::string_view rawFilter)
+    std::optional<ResolvedTrackFilter> resolveFilter(std::string_view rawFilter)
     {
       auto const trimmed = boost::algorithm::trim_copy_if(std::string(rawFilter), boost::algorithm::is_space());
 
@@ -167,7 +168,7 @@ namespace ao::gtk
 
       if (looksLikeExpression(trimmed))
       {
-        return std::pair{TrackFilterMode::Expression, trimmed};
+        return ResolvedTrackFilter{.mode = TrackFilterMode::Expression, .expression = trimmed};
       }
 
       auto const terms = splitQuickTerms(trimmed);
@@ -184,14 +185,29 @@ namespace ao::gtk
         expression = std::format("({}) and ({})", expression, buildQuickTermExpression(term));
       }
 
-      return std::pair{TrackFilterMode::Quick, std::move(expression)};
+      return ResolvedTrackFilter{.mode = TrackFilterMode::Quick, .expression = std::move(expression)};
     }
+  }
+
+  ResolvedTrackFilter TrackListAdapter::resolveFilterExpression(std::string_view rawFilter)
+  {
+    if (auto const optResolved = resolveFilter(rawFilter))
+    {
+      return *optResolved;
+    }
+
+    return ResolvedTrackFilter{};
   }
 
   TrackListAdapter::TrackListAdapter(ao::rt::TrackSource& source,
                                      ao::library::MusicLibrary& musicLibrary,
                                      TrackRowDataProvider const& provider)
-    : _source{source}, _musicLibrary{musicLibrary}, _provider{provider}, _listModel(Gio::ListStore<TrackRow>::create())
+    : _source{source}
+    , _musicLibrary{musicLibrary}
+    , _provider{provider}
+    , _listStore(Gio::ListStore<TrackRow>::create())
+    , _projectionModel(ProjectionTrackModel::create())
+    , _listModel(_listStore)
   {
     _source.attach(this);
   }
@@ -199,60 +215,98 @@ namespace ao::gtk
   TrackListAdapter::~TrackListAdapter()
   {
     _rebuildConnection.disconnect();
-    _source.detach(this);
     _projectionSub.reset();
+
+    if (!_sourceDetachedForProjection)
+    {
+      _source.detach(this);
+    }
   }
 
   void TrackListAdapter::bindProjection(ao::rt::ITrackListProjection& projection)
   {
+    _rebuildConnection.disconnect();
+    _projectionSub.reset();
+
+    if (!_sourceDetachedForProjection)
+    {
+      _source.detach(this);
+      _sourceDetachedForProjection = true;
+    }
+
     _projection = &projection;
-    _projectionSub = projection.subscribe(
-      [this](ao::rt::TrackListProjectionDeltaBatch const& batch)
-      {
-        for (auto const& delta : batch.deltas)
-        {
-          std::visit(ao::utility::makeVisitor(
-                       [this](ao::rt::ProjectionReset const&)
-                       {
-                         _listModel->remove_all();
+    _projectionModel->setProjection(&projection, _provider);
+    _listModel = _projectionModel;
+    _modelSize = projection.size();
 
-                         for (auto const idx : std::views::iota(0UZ, _projection->size()))
-                         {
-                           createRowForTrack(_projection->trackIdAt(idx));
-                         }
-                       },
-                       [this](ao::rt::ProjectionInsertRange const& delta)
-                       {
-                         for (auto const idx : std::views::iota(0UZ, delta.range.count))
-                         {
-                           auto const trackIdx = delta.range.start + idx;
-                           auto const trackId = _projection->trackIdAt(trackIdx);
-                           auto const row = _provider.getTrackRow(trackId);
+    _projectionSub =
+      projection.subscribe([this](ao::rt::TrackListProjectionDeltaBatch const& batch) { applyDeltaBatch(batch); });
+    _signalModelChanged.emit();
+  }
 
-                           _listModel->insert(static_cast<::guint>(trackIdx), row);
-                         }
-                       },
-                       [this](ao::rt::ProjectionRemoveRange const& delta)
-                       {
-                         for ([[maybe_unused]] auto const idx : std::views::iota(0UZ, delta.range.count))
-                         {
-                           _listModel->remove(static_cast<::guint>(delta.range.start));
-                         }
-                       },
-                       [this](ao::rt::ProjectionUpdateRange const& delta)
-                       {
-                         for (auto const idx : std::views::iota(0UZ, delta.range.count))
-                         {
-                           auto const trackIdx = delta.range.start + idx;
-                           auto const trackId = _projection->trackIdAt(trackIdx);
-                           auto const row = _provider.getTrackRow(trackId);
-                           _listModel->splice(
-                             static_cast<::guint>(trackIdx), 1, std::vector<Glib::RefPtr<TrackRow>>{row});
-                         }
-                       }),
-                     delta);
-        }
-      });
+  void TrackListAdapter::applyDeltaBatch(ao::rt::TrackListProjectionDeltaBatch const& batch)
+  {
+    auto const timer = ao::utility::ScopedTimer{
+      std::format("TrackListAdapter::applyDeltas ({} deltas, rev={})", batch.deltas.size(), batch.revision)};
+
+    for (auto const& delta : batch.deltas)
+    {
+      std::visit(
+        ao::utility::makeVisitor([this](ao::rt::ProjectionReset const&) { applyResetDelta(); },
+                                 [this](ao::rt::ProjectionInsertRange const& delta) { applyInsertRange(delta); },
+                                 [this](ao::rt::ProjectionRemoveRange const& delta) { applyRemoveRange(delta); },
+                                 [this](ao::rt::ProjectionUpdateRange const& delta) { applyUpdateRange(delta); }),
+        delta);
+    }
+
+    gsl_Expects(_modelSize == _projection->size());
+  }
+
+  void TrackListAdapter::applyResetDelta()
+  {
+    auto const newSize = static_cast<::guint>(_projection->size());
+    auto const oldSize = static_cast<::guint>(_modelSize);
+    _projectionModel->notifyReset(oldSize, newSize);
+    _modelSize = newSize;
+  }
+
+  void TrackListAdapter::applyInsertRange(ao::rt::ProjectionInsertRange const& delta)
+  {
+    auto const pos = static_cast<::guint>(delta.range.start);
+    auto const count = static_cast<::guint>(delta.range.count);
+    _projectionModel->notifyInsert(pos, count);
+    _modelSize += count;
+  }
+
+  void TrackListAdapter::applyRemoveRange(ao::rt::ProjectionRemoveRange const& delta)
+  {
+    auto const pos = static_cast<::guint>(delta.range.start);
+    auto const count = static_cast<::guint>(delta.range.count);
+    _projectionModel->notifyRemove(pos, count);
+    _modelSize -= count;
+  }
+
+  void TrackListAdapter::applyUpdateRange(ao::rt::ProjectionUpdateRange const& delta)
+  {
+    auto const pos = static_cast<::guint>(delta.range.start);
+    auto const count = static_cast<::guint>(delta.range.count);
+
+    for (auto const idx : std::views::iota(delta.range.start, delta.range.start + delta.range.count))
+    {
+      _provider.invalidate(_projection->trackIdAt(idx));
+    }
+
+    _projectionModel->notifyUpdate(pos, count);
+  }
+
+  std::optional<std::size_t> TrackListAdapter::indexOf(TrackId trackId) const
+  {
+    if (_projection != nullptr)
+    {
+      return _projection->indexOf(trackId);
+    }
+
+    return _source.indexOf(trackId);
   }
 
   std::optional<std::size_t> TrackListAdapter::groupIndexForTrack(TrackId trackId) const
@@ -270,40 +324,11 @@ namespace ao::gtk
     return std::nullopt;
   }
 
-  void TrackListAdapter::setFilter(Glib::ustring const& filterText)
-  {
-    _filterText = filterText;
-    _filterMode = TrackFilterMode::None;
-    _filterExpression.clear();
-    _filterErrorMessage.clear();
-    _filterPlan.reset();
-
-    if (auto const optResolved = resolveFilterExpression(_filterText.raw()); optResolved)
-    {
-      _filterMode = optResolved->first;
-      _filterExpression = optResolved->second;
-
-      try
-      {
-        auto expr = ao::query::parse(_filterExpression);
-        auto compiler = ao::query::QueryCompiler{&_musicLibrary.dictionary()};
-        _filterPlan = std::make_unique<ao::query::ExecutionPlan>(compiler.compile(expr));
-      }
-      catch (std::exception const& e)
-      {
-        _filterErrorMessage = e.what();
-        _filterPlan.reset();
-      }
-    }
-
-    rebuildView();
-  }
-
   void TrackListAdapter::createRowForTrack(TrackId id)
   {
     if (auto row = _provider.getTrackRow(id))
     {
-      _listModel->append(row);
+      _listStore->append(row);
     }
   }
 
@@ -325,42 +350,12 @@ namespace ao::gtk
   void TrackListAdapter::rebuildViewInternal()
   {
     _rebuildConnection.disconnect();
-    _listModel->remove_all();
-
-    if (_filterMode != TrackFilterMode::None && (_filterPlan == nullptr || !_filterErrorMessage.empty()))
-    {
-      return;
-    }
-
-    auto const txn = _musicLibrary.readTransaction();
-    auto const reader = _musicLibrary.tracks().reader(txn);
+    _listStore->remove_all();
 
     for (auto const idx : std::views::iota(0UZ, _source.size()))
     {
-      auto const id = _source.trackIdAt(idx);
-
-      if (_filterMode == TrackFilterMode::None || shouldIncludeTrack(id, reader))
-      {
-        createRowForTrack(id);
-      }
+      createRowForTrack(_source.trackIdAt(idx));
     }
-  }
-
-  bool TrackListAdapter::shouldIncludeTrack(TrackId id, ao::library::TrackStore::Reader const& reader) const
-  {
-    if (_filterMode == TrackFilterMode::None)
-    {
-      return true;
-    }
-
-    auto const view = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
-
-    if (!view)
-    {
-      return false;
-    }
-
-    return _filterEvaluator.matches(*_filterPlan, *view);
   }
 
   void TrackListAdapter::onReset()
@@ -370,82 +365,52 @@ namespace ao::gtk
 
   void TrackListAdapter::onInserted(TrackId id, std::size_t index)
   {
-    // If filter is active, rebuild to recalculate positions
-
-    if (_filterMode != TrackFilterMode::None)
-    {
-      rebuildView();
-      return;
-    }
-
-    // Load and insert at position
-
-    if (auto row = _provider.getTrackRow(id))
+    if (auto const row = _provider.getTrackRow(id))
     {
       auto const uintIdx = static_cast<std::uint32_t>(index);
 
-      if (uintIdx <= _listModel->get_n_items())
+      if (uintIdx <= _listStore->get_n_items())
       {
-        _listModel->insert(uintIdx, row);
+        _listStore->insert(uintIdx, row);
       }
     }
   }
 
   void TrackListAdapter::onUpdated(TrackId id, std::size_t index)
   {
-    // If filter is active, rebuild
-
-    if (_filterMode != TrackFilterMode::None)
-    {
-      rebuildView();
-      return;
-    }
-
-    // Update the row at position
-    auto row = _provider.getTrackRow(id);
+    auto const row = _provider.getTrackRow(id);
 
     auto const uintIdx = static_cast<std::uint32_t>(index);
 
-    if (uintIdx >= _listModel->get_n_items())
+    if (uintIdx >= _listStore->get_n_items())
     {
       return;
     }
 
     if (!row)
     {
-      // Track was deleted or missing - remove it
-      _listModel->remove(uintIdx);
+      _listStore->remove(uintIdx);
       return;
     }
 
-    std::vector<Glib::RefPtr<TrackRow>> additions;
+    auto additions = std::vector<Glib::RefPtr<TrackRow>>{};
     additions.push_back(row);
-    _listModel->splice(uintIdx, 1, additions);
+    _listStore->splice(uintIdx, 1, additions);
   }
 
   void TrackListAdapter::onRemoved(TrackId /*id*/, std::size_t index)
   {
-    // If filter is active, rebuild
-
-    if (_filterMode != TrackFilterMode::None)
-    {
-      rebuildView();
-      return;
-    }
-
     auto const uintIdx = static_cast<std::uint32_t>(index);
 
-    if (uintIdx < _listModel->get_n_items())
+    if (uintIdx < _listStore->get_n_items())
     {
-      _listModel->remove(uintIdx);
+      _listStore->remove(uintIdx);
     }
   }
 
   void TrackListAdapter::onUpdated(std::span<TrackId const> ids)
   {
-    // Optimization: If only one track is updated and no filter is active,
-    // refresh only that row to preserve scroll position and UI state.
-    if (ids.size() == 1 && _filterMode == TrackFilterMode::None)
+    if (ids.size() == 1)
     {
       if (auto const optIndex = _source.indexOf(ids[0]); optIndex)
       {
@@ -454,8 +419,6 @@ namespace ao::gtk
       }
     }
 
-    // For larger batch updates or when filters are active, rebuilding the entire view
-    // is more efficient and ensures correct visibility/sorting.
     rebuildView();
   }
 

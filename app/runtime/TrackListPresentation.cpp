@@ -15,7 +15,13 @@ namespace ao::rt
 
     switch (groupBy)
     {
-      case TrackGroupKey::None: break;
+      case TrackGroupKey::None:
+        pushTerm(TrackSortField::Artist);
+        pushTerm(TrackSortField::Album);
+        pushTerm(TrackSortField::DiscNumber);
+        pushTerm(TrackSortField::TrackNumber);
+        pushTerm(TrackSortField::Title);
+        break;
 
       case TrackGroupKey::Artist:
         pushTerm(TrackSortField::Artist);

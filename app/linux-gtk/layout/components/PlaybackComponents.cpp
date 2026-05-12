@@ -747,9 +747,11 @@ namespace ao::gtk::layout
           [this](Gtk::ListBoxRow* row)
           {
             auto const index = row->get_index();
+
             if (index >= 0 && static_cast<std::size_t>(index) < _store->get_n_items())
             {
               auto const item = _store->get_item(index);
+
               if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
               {
                 _session.playback().setOutput(deviceItem->backendId, deviceItem->id, deviceItem->profileId);
@@ -774,6 +776,7 @@ namespace ao::gtk::layout
             if (_isPlaying)
             {
               auto const frameTime = clock->get_frame_time();
+
               if (_firstFrameTime == 0)
               {
                 _firstFrameTime = frameTime;
@@ -942,6 +945,7 @@ namespace ao::gtk::layout
             if (_isPlaying)
             {
               auto const frameTime = clock->get_frame_time();
+
               if (_firstFrameTime == 0)
               {
                 _firstFrameTime = frameTime;

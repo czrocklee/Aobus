@@ -20,7 +20,7 @@ namespace ao::gtk
                     std::size_t selectionCount,
                     std::map<std::string, std::size_t> selectedTagCounts,
                     std::vector<std::string> availableTags);
-    virtual ~TagPromptDialog() = default;
+    ~TagPromptDialog() override = default;
 
     std::vector<std::string> tagsToAdd() const;
     std::vector<std::string> tagsToRemove() const;

@@ -33,7 +33,7 @@ namespace ao::gtk
     Tags,
   };
 
-  struct TrackColumnDefinition
+  struct TrackColumnDefinition final
   {
     TrackColumn column;
     std::string_view id;
@@ -45,7 +45,7 @@ namespace ao::gtk
     bool tagsCell = false;
   };
 
-  struct TrackColumnState
+  struct TrackColumnState final
   {
     TrackColumn column = TrackColumn::Title;
     bool visible = true;
@@ -54,7 +54,7 @@ namespace ao::gtk
     bool operator==(TrackColumnState const&) const = default;
   };
 
-  struct TrackColumnLayout
+  struct TrackColumnLayout final
   {
     std::vector<TrackColumnState> columns;
 

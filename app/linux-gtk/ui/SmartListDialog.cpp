@@ -103,7 +103,7 @@ namespace ao::gtk
     set_default_size(kDialogWidth, kDialogHeight);
 
     // Main container: horizontal box (left: inputs, right: preview)
-    auto mainBox = Gtk::Box(Gtk::Orientation::HORIZONTAL, kBoxSpacing * 2);
+    auto mainBox = Gtk::Box{Gtk::Orientation::HORIZONTAL, kBoxSpacing * 2};
     mainBox.set_margin(kBoxMargin);
 
     // Left panel: input fields
@@ -232,7 +232,7 @@ namespace ao::gtk
     factory->signal_setup().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItem)
       {
-        auto* label = Gtk::make_managed<Gtk::Label>("");
+        auto* const label = Gtk::make_managed<Gtk::Label>("");
         label->set_halign(Gtk::Align::START);
         label->set_ellipsize(Pango::EllipsizeMode::END);
         listItem->set_child(*label);
@@ -241,10 +241,10 @@ namespace ao::gtk
     factory->signal_bind().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItem)
       {
-        auto item = listItem->get_item();
+        auto const item = listItem->get_item();
         auto row = std::dynamic_pointer_cast<TrackRow>(item);
 
-        if (auto* label = dynamic_cast<Gtk::Label*>(listItem->get_child()); row && label)
+        if (auto* const label = dynamic_cast<Gtk::Label*>(listItem->get_child()); row && label)
         {
           auto const& title = row->getTitle();
           auto const& artist = row->getArtist();

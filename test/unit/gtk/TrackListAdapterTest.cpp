@@ -200,13 +200,13 @@ namespace ao::model::test
 namespace
 {
   using ao::TrackId;
-  using ao::rt::TrackSource;
-  using ao::rt::TrackSourceObserver;
   using ao::library::MusicLibrary;
   using ao::library::TrackBuilder;
   using ao::library::TrackStore;
   using ao::model::test::RowData;
   using ao::model::test::TestTrackRowProvider;
+  using ao::rt::TrackSource;
+  using ao::rt::TrackSourceObserver;
 
   struct TrackSpec
   {

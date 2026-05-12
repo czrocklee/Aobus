@@ -15,7 +15,7 @@ namespace ao::gtk
     TagPopover(ao::library::MusicLibrary& musicLibrary, std::vector<ao::TrackId> selectedTrackIds);
     ~TagPopover() override;
 
-    TagEditor::TagsChangedSignal& signalTagsChanged() { return _tagEditor.signal_tags_changed(); }
+    TagEditor::TagsChangedSignal& signalTagsChanged() { return _tagEditor.signalTagsChanged(); }
 
   private:
     TagEditor _tagEditor;

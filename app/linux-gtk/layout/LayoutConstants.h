@@ -23,4 +23,8 @@ namespace ao::gtk::Layout
 
   // Transition/animation durations (milliseconds)
   constexpr int kTransitionDurationMs = 250;
+
+  // UI Element sizing
+  constexpr int kDefaultSidebarWidth = 330;
+  constexpr int kMinCoverArtHeight = 50;
 } // namespace ao::gtk::Layout

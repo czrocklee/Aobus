@@ -91,7 +91,7 @@ namespace ao::gtk
 
   Glib::RefPtr<TrackRow> TrackRow::create(TrackId id, TrackRowDataProvider const& provider)
   {
-    auto obj = Glib::make_refptr_for_instance<TrackRow>(new TrackRow()); // NOLINT(cppcoreguidelines-owning-memory)
+    auto obj = Glib::make_refptr_for_instance<TrackRow>(new TrackRow{}); // NOLINT(cppcoreguidelines-owning-memory)
     obj->_id = id;
     obj->_provider = &provider;
     return obj;

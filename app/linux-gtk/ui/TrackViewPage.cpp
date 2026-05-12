@@ -9,6 +9,7 @@
 #include "ui/ThemeBus.h"
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Log.h>
+#include <ao/utility/ScopedTimer.h>
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/PlaybackService.h>
@@ -46,6 +47,7 @@ namespace ao::gtk
   {
     using RowCompareFn = std::move_only_function<int(TrackRow const&, TrackRow const&)>;
     constexpr auto kTagsCellWidgetName = "track-tags-cell";
+    constexpr auto kFilterDebounceMs = 200;
     constexpr double kTitlePositionDivisor = 2.0;
     constexpr double kLongPressDelayFactor = 1.03;
 
@@ -78,7 +80,7 @@ namespace ao::gtk
         return {};
       }
 
-      auto const expr = prefix + "\"" + value + "\"";
+      auto const expr = std::format("{}\"{}\"", prefix, value);
       auto const bytes = Glib::Bytes::create(expr.data(), expr.size());
 
       return Gdk::ContentProvider::create("text/plain", bytes);
@@ -209,7 +211,7 @@ namespace ao::gtk
       {
       }
 
-      Gtk::Ordering compare_vfunc(gpointer item1, gpointer item2) override
+      Gtk::Ordering compare_vfunc(::gpointer item1, ::gpointer item2) override
       {
         auto const* const lhs = trackRowFromSorterItem(item1);
         auto const* const rhs = trackRowFromSorterItem(item2);
@@ -268,6 +270,12 @@ namespace ao::gtk
         updateTitlePositionVariable();
         _columnView.queue_draw();
       });
+
+    if (_viewId != ao::rt::ViewId{})
+    {
+      _filterStatusSub =
+        _session.views().onFilterStatusChanged(sigc::mem_fun(*this, &TrackViewPage::onFilterStatusChanged));
+    }
 
     _dynamicCssProvider = Gtk::CssProvider::create();
     _columnView.get_style_context()->add_provider(_dynamicCssProvider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
@@ -331,6 +339,7 @@ namespace ao::gtk
     append(_statusLabel);
     append(_scrolledWindow);
 
+    _adapter.signalModelChanged().connect(sigc::mem_fun(*this, &TrackViewPage::onModelChanged));
     updateTitlePositionVariable();
   }
 
@@ -355,19 +364,19 @@ namespace ao::gtk
     _filterEntry.set_icon_activatable(true, Gtk::Entry::IconPosition::SECONDARY);
     _filterEntry.set_icon_tooltip_text("Create smart list from current filter", Gtk::Entry::IconPosition::SECONDARY);
     _filterEntry.set_menu_entry_icon_text("Create smart list from current filter", Gtk::Entry::IconPosition::SECONDARY);
-    _filterEntry.signal_changed().connect(sigc::mem_fun(*this, &TrackViewPage::onFilterChanged));
+    _filterEntry.signal_changed().connect(sigc::mem_fun(*this, &TrackViewPage::onFilterTextChanged));
 
     _filterEntry.signal_icon_press().connect(
       [this](Gtk::Entry::IconPosition iconPosition)
       {
-        if (iconPosition != Gtk::Entry::IconPosition::SECONDARY || _adapter.hasFilterError())
+        if (iconPosition != Gtk::Entry::IconPosition::SECONDARY)
         {
           return;
         }
 
-        if (auto const& expression = _adapter.currentSmartFilterExpression(); !expression.empty())
+        if (!_filterExpression.empty())
         {
-          _createSmartListRequested.emit(expression);
+          _createSmartListRequested.emit(_filterExpression);
         }
       });
 
@@ -479,9 +488,11 @@ namespace ao::gtk
         }
 
         auto text = std::string{};
+
         if (auto* proj = _adapter.projection())
         {
           auto const start = header->get_start();
+
           if (auto optGroupIndex = proj->groupIndexAt(start); optGroupIndex)
           {
             text = proj->groupAt(*optGroupIndex).label;
@@ -534,6 +545,7 @@ namespace ao::gtk
   void TrackViewPage::setStatusMessage(std::string_view message)
   {
     _statusLabel.set_text(std::string{message});
+
     if (message.empty())
     {
       clearStatusMessage();
@@ -763,32 +775,59 @@ namespace ao::gtk
 
   void TrackViewPage::updateColumnVisibility()
   {
-    auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
-
-    auto redundantColumns = std::unordered_set<TrackColumn>{};
-    if (auto* proj = _adapter.projection())
+    if (_columnVisibilityIdle)
     {
-      for (auto const& field : proj->presentation().redundantFields)
+      return;
+    }
+
+    _columnVisibilityIdle = Glib::signal_idle().connect(
+      [this]
       {
-        if (auto col = redundantFieldToColumn(field))
+        _columnVisibilityIdle.disconnect();
+
+        auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
+
+        auto redundantColumns = std::unordered_set<TrackColumn>{};
+
+        if (auto* const proj = _adapter.projection(); proj != nullptr)
         {
-          redundantColumns.insert(*col);
+          for (auto const& field : proj->presentation().redundantFields)
+          {
+            if (auto const col = redundantFieldToColumn(field))
+            {
+              redundantColumns.insert(*col);
+            }
+          }
         }
-      }
-    }
 
-    for (auto const& state : layout.columns)
-    {
-      auto* const binding = findColumnBinding(state.column);
+        for (auto const& state : layout.columns)
+        {
+          auto* const binding = findColumnBinding(state.column);
 
-      if (binding == nullptr)
-      {
-        continue;
-      }
+          if (binding == nullptr)
+          {
+            continue;
+          }
 
-      bool const hiddenByGroup = redundantColumns.contains(state.column);
-      binding->column->set_visible(state.visible && !hiddenByGroup);
-    }
+          bool const hiddenByGroup = redundantColumns.contains(state.column);
+          binding->column->set_visible(state.visible && !hiddenByGroup);
+        }
+
+        return false;
+      });
+  }
+
+  void TrackViewPage::onModelChanged()
+  {
+    _groupModel->set_model(_adapter.getModel());
+    _selectionModel = Gtk::MultiSelection::create(_groupModel);
+    _columnView.set_model(_selectionModel);
+
+    // Re-connect selection signal to the new selection model
+    _selectionModel->signal_selection_changed().connect(sigc::mem_fun(*this, &TrackViewPage::onSelectionChanged));
+
+    updateSectionHeaders();
+    updateColumnVisibility();
   }
 
   void TrackViewPage::onGroupByChanged()
@@ -804,11 +843,58 @@ namespace ao::gtk
     updateColumnVisibility();
   }
 
-  void TrackViewPage::onFilterChanged()
+  void TrackViewPage::onFilterTextChanged()
   {
+    _filterDebounceTimer.disconnect();
+    _filterDebounceTimer = Glib::signal_timeout().connect(
+      [this]
+      {
+        onFilterDebounced();
+        return false;
+      },
+      kFilterDebounceMs);
+  }
+
+  void TrackViewPage::onFilterDebounced()
+  {
+    auto const timer = ao::utility::ScopedTimer{"TrackViewPage::onFilterDebounced"};
     auto const filterText = _filterEntry.get_text();
 
-    _adapter.setFilter(filterText);
+    if (_viewId == ao::rt::ViewId{})
+    {
+      updateFilterUi();
+      return;
+    }
+
+    auto const resolved = TrackListAdapter::resolveFilterExpression(filterText.raw());
+
+    _filterMode = resolved.mode;
+    _filterExpression = resolved.expression;
+    _filterPending = true;
+
+    if (resolved.mode == TrackFilterMode::None)
+    {
+      _session.views().setFilter(_viewId, "");
+    }
+    else
+    {
+      _session.views().setFilter(_viewId, resolved.expression);
+    }
+
+    updateFilterUi();
+  }
+
+  void TrackViewPage::onFilterStatusChanged(ao::rt::FilterStatusChanged const& status)
+  {
+    if (status.viewId != _viewId)
+    {
+      return;
+    }
+
+    _filterPending = status.pending;
+    _filterHasError = status.hasError;
+    _filterErrorMessage = status.errorMessage;
+
     updateFilterUi();
   }
 
@@ -819,12 +905,10 @@ namespace ao::gtk
 
   void TrackViewPage::updateFilterUi()
   {
-    auto const hasExpressionError = _adapter.filterMode() == TrackFilterMode::Expression && _adapter.hasFilterError();
-
-    if (hasExpressionError)
+    if (_filterHasError)
     {
       _filterEntry.add_css_class("error");
-      setStatusMessage("Expression error: " + _adapter.filterErrorMessage());
+      setStatusMessage("Expression error: " + _filterErrorMessage);
     }
     else
     {
@@ -832,7 +916,7 @@ namespace ao::gtk
       clearStatusMessage();
     }
 
-    auto const canCreateSmartList = !_adapter.currentSmartFilterExpression().empty() && !_adapter.hasFilterError();
+    auto const canCreateSmartList = !_filterExpression.empty() && !_filterPending && !_filterHasError;
 
     _filterEntry.set_icon_sensitive(Gtk::Entry::IconPosition::SECONDARY, canCreateSmartList);
   }
@@ -844,25 +928,11 @@ namespace ao::gtk
 
   std::size_t TrackViewPage::selectedTrackCount() const
   {
-    std::size_t count = 0;
-    auto const model = _selectionModel->get_model();
-
-    if (!model)
+    if (auto const bitset = _selectionModel->get_selection())
     {
-      return count;
+      return bitset->get_size();
     }
-
-    auto const nItems = model->get_n_items();
-
-    for (std::uint32_t i = 0; i < nItems; ++i)
-    {
-      if (_selectionModel->is_selected(i))
-      {
-        ++count;
-      }
-    }
-
-    return count;
+    return 0;
   }
 
   std::optional<TrackViewPage::TrackId> TrackViewPage::trackIdAtPosition(std::uint32_t position) const
@@ -891,25 +961,17 @@ namespace ao::gtk
 
   void TrackViewPage::selectTrack(TrackId trackId)
   {
-    auto const model = _selectionModel->get_model();
+    auto const optIndex = _adapter.indexOf(trackId);
 
-    if (!model)
+    if (!optIndex || *optIndex >= _selectionModel->get_n_items())
     {
       return;
     }
 
-    auto const nItems = model->get_n_items();
+    auto const pos = static_cast<guint>(*optIndex);
 
-    for (std::uint32_t i = 0; i < nItems; ++i)
-    {
-      if (trackIdAtPosition(i) == trackId)
-      {
-        _selectionModel->select_item(i, true);
-        _columnView.scroll_to(i, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
-
-        break;
-      }
-    }
+    _selectionModel->select_item(pos, true);
+    _columnView.scroll_to(pos, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
   }
 
   void TrackViewPage::setPlayingTrackId(std::optional<TrackId> trackId)
@@ -921,20 +983,32 @@ namespace ao::gtk
       return;
     }
 
-    auto const nItems = model->get_n_items();
-
-    for (std::uint32_t i = 0; i < nItems; ++i)
+    // Clear old playing row if still visible
+    if (_playingTrackId)
     {
-      auto const item = model->get_object(i);
-      auto const row = std::dynamic_pointer_cast<TrackRow>(item);
-
-      if (row)
+      if (auto const optIdx = _adapter.indexOf(*_playingTrackId); optIdx && *optIdx < model->get_n_items())
       {
-        bool const isPlaying = trackId && row->getTrackId() == *trackId;
+        auto const item = model->get_object(static_cast<guint>(*optIdx));
 
-        if (row->isPlaying() != isPlaying)
+        if (auto const row = std::dynamic_pointer_cast<TrackRow>(item))
         {
-          row->setPlaying(isPlaying);
+          row->setPlaying(false);
+        }
+      }
+    }
+
+    _playingTrackId = trackId;
+
+    // Set new playing row if visible
+    if (trackId)
+    {
+      if (auto const optIdx = _adapter.indexOf(*trackId); optIdx && *optIdx < model->get_n_items())
+      {
+        auto const item = model->get_object(static_cast<guint>(*optIdx));
+
+        if (auto const row = std::dynamic_pointer_cast<TrackRow>(item))
+        {
+          row->setPlaying(true);
         }
       }
     }
@@ -943,23 +1017,18 @@ namespace ao::gtk
   std::vector<TrackListAdapter::TrackId> TrackViewPage::getVisibleTrackIds() const
   {
     auto result = std::vector<TrackListAdapter::TrackId>{};
-    auto const model = _selectionModel->get_model();
+    auto* const proj = _adapter.projection();
 
-    if (!model)
+    if (proj == nullptr)
     {
       return result;
     }
 
-    auto const nItems = model->get_n_items();
+    result.reserve(proj->size());
 
-    result.reserve(nItems);
-
-    for (std::uint32_t i = 0; i < nItems; ++i)
+    for (std::size_t i = 0; i < proj->size(); ++i)
     {
-      if (auto const trackId = trackIdAtPosition(i))
-      {
-        result.push_back(*trackId);
-      }
+      result.push_back(proj->trackIdAt(i));
     }
 
     return result;
@@ -1207,31 +1276,14 @@ namespace ao::gtk
 
   std::optional<TrackViewPage::TrackId> TrackViewPage::getPrimarySelectedTrackId() const
   {
-    auto const model = _selectionModel->get_model();
+    auto const bitset = _selectionModel->get_selection();
 
-    if (!model)
+    if (!bitset || bitset->get_size() == 0)
     {
       return std::nullopt;
     }
 
-    // Find first selected item
-    auto const nItems = model->get_n_items();
-
-    for (std::uint32_t i = 0; i < nItems; ++i)
-    {
-      if (_selectionModel->is_selected(i))
-      {
-        if (auto const trackId = trackIdAtPosition(i))
-        {
-          return trackId;
-        }
-
-        // Found first selected, no need to continue
-        break;
-      }
-    }
-
-    return std::nullopt;
+    return trackIdAtPosition(static_cast<std::uint32_t>(bitset->get_nth(0)));
   }
 
   TrackViewPage::ColumnBinding* TrackViewPage::findColumnBinding(TrackColumn column)
