@@ -32,7 +32,7 @@ namespace ao::gtk
     void ensurePlaybackBarCss(bool force = false)
     {
       static auto const provider = Gtk::CssProvider::create();
-      static auto initialized = false;
+      static bool initialized = false;
 
       if (!initialized || force)
       {

@@ -27,26 +27,41 @@ namespace ao::rt::test
   namespace
   {
     using ao::TrackId;
-    using ao::rt::SmartListEvaluator;
-    using ao::rt::SmartListSource;
-    using ao::rt::TrackSource;
     using ao::library::MusicLibrary;
     using ao::library::TrackBuilder;
     using ao::library::TrackStore;
+    using ao::rt::SmartListEvaluator;
+    using ao::rt::SmartListSource;
+    using ao::rt::TrackSource;
 
     class MutableTrackSource final : public TrackSource
     {
     public:
       void addInitial(TrackId id) { _ids.push_back(id); }
+      void batchInsert(std::span<TrackId const> ids)
+      {
+        _ids.insert(_ids.end(), ids.begin(), ids.end());
+        notifyInserted(ids);
+      }
+      void batchRemove(std::span<TrackId const> ids)
+      {
+        for (auto id : ids)
+        {
+          std::erase(_ids, id);
+        }
+        notifyRemoved(ids);
+      }
+      void batchUpdate(std::span<TrackId const> ids) { notifyUpdated(ids); }
+
       std::size_t size() const override { return _ids.size(); }
       TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
       std::optional<std::size_t> indexOf(TrackId id) const override
       {
-        for (std::size_t i = 0; i < _ids.size(); ++i)
+        for (std::size_t idx = 0; idx < _ids.size(); ++idx)
         {
-          if (_ids[i] == id)
+          if (_ids[idx] == id)
           {
-            return i;
+            return idx;
           }
         }
 
@@ -117,6 +132,50 @@ namespace ao::rt::test
     {
       CHECK(proj.trackIdAt(999) == TrackId{});
     }
+
+    SECTION("indexOf returns correct positions")
+    {
+      CHECK(proj.indexOf(id1) == 0);
+      CHECK(proj.indexOf(id2) == 1);
+      CHECK_FALSE(proj.indexOf(TrackId{999}).has_value());
+    }
+  }
+
+  TEST_CASE("TrackListProjection - normalizeTitle behavior", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+    auto id1 = env.lib.addTrack(TrackSpec{.title = "The Best"});
+    auto id2 = env.lib.addTrack(TrackSpec{.title = "A Better"});
+    auto id3 = env.lib.addTrack(TrackSpec{.title = "An Apple"});
+    auto id4 = env.lib.addTrack(TrackSpec{.title = "Zeppelin"});
+    auto id5 = env.lib.addTrack(TrackSpec{.title = "the other"});
+    auto id6 = env.lib.addTrack(TrackSpec{.title = "a different"});
+    auto id7 = env.lib.addTrack(TrackSpec{.title = "ANOTHER"});
+
+    env.setupFiltered({{id1, id2, id3, id4, id5, id6, id7}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}});
+
+    // Expected order (normalized):
+    // ANOTHER -> another
+    // An Apple -> apple
+    // The Best -> best
+    // A Better -> better
+    // a different -> different
+    // the other -> other
+    // Zeppelin -> zeppelin
+
+    REQUIRE(proj.size() == 7);
+    CHECK(proj.trackIdAt(0) == id7); // ANOTHER
+    CHECK(proj.trackIdAt(1) == id3); // An Apple
+    CHECK(proj.trackIdAt(2) == id1); // The Best
+    CHECK(proj.trackIdAt(3) == id2); // A Better
+    CHECK(proj.trackIdAt(4) == id6); // a different
+    CHECK(proj.trackIdAt(5) == id5); // the other
+    CHECK(proj.trackIdAt(6) == id4); // Zeppelin
   }
 
   TEST_CASE("TrackListProjection - subscribe reset-on-subscribe", "[app][runtime][projection]")
@@ -126,7 +185,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto receivedReset = false;
+    bool receivedReset = false;
     auto sub = proj.subscribe(
       [&](TrackListProjectionDeltaBatch const& batch)
       {
@@ -145,7 +204,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto count = 0;
+    int count = 0;
     auto sub1 = proj.subscribe([&](TrackListProjectionDeltaBatch const&) { ++count; });
     auto sub2 = proj.subscribe([&](TrackListProjectionDeltaBatch const&) { ++count; });
     CHECK(count == 2);
@@ -158,7 +217,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto count = 0;
+    int count = 0;
     auto sub = proj.subscribe([&](TrackListProjectionDeltaBatch const&) { ++count; });
     auto initial = count;
     sub.reset();
@@ -181,14 +240,15 @@ namespace ao::rt::test
     auto env = TestEnv{};
     std::vector<TrackId> ids;
     ids.reserve(20);
-    for (auto i = 0; i < 10; ++i)
+
+    for (int idx = 0; idx < 10; ++idx)
     {
-      ids.push_back(env.lib.addTrack(makeSpec(std::string(1, static_cast<char>('J' - i)), 2020)));
+      ids.push_back(env.lib.addTrack(makeSpec(std::string(1, static_cast<char>('J' - idx)), 2020)));
     }
 
-    for (auto i = 0; i < 10; ++i)
+    for (int idx = 0; idx < 10; ++idx)
     {
-      ids.push_back(env.lib.addTrack(makeSpec(std::string(1, static_cast<char>('J' - i)), 2021)));
+      ids.push_back(env.lib.addTrack(makeSpec(std::string(1, static_cast<char>('J' - idx)), 2021)));
     }
 
     env.setupFiltered(ids);
@@ -206,11 +266,12 @@ namespace ao::rt::test
 
     auto checkOrder = [&](std::size_t start, std::size_t end, std::uint16_t expectedYear)
     {
-      for (auto i = start; i < end; ++i)
+      for (std::size_t idx = start; idx < end; ++idx)
       {
         auto const txn = env.lib.library().readTransaction();
         auto const reader = env.lib.library().tracks().reader(txn);
-        auto v = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
+        auto v = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
+
         CHECK(v.has_value());
         CHECK(v->metadata().year() == expectedYear);
       }
@@ -222,13 +283,15 @@ namespace ao::rt::test
     // Within each year group, titles are ascending
     for (auto is2020 : {true, false})
     {
-      auto start = is2020 ? std::size_t{0} : std::size_t{10};
-      for (auto i = start; i < start + 9; ++i)
+      std::size_t const start = is2020 ? std::size_t{0} : std::size_t{10};
+
+      for (std::size_t idx = start; idx < start + 9; ++idx)
       {
         auto const txn = env.lib.library().readTransaction();
         auto const reader = env.lib.library().tracks().reader(txn);
-        auto a = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
-        auto b = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
+        auto a = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
+        auto b = reader.get(proj.trackIdAt(idx + 1), TrackStore::Reader::LoadMode::Hot);
+
         REQUIRE(a.has_value());
         REQUIRE(b.has_value());
         CHECK(std::string{a->metadata().title()} <= std::string{b->metadata().title()});
@@ -292,14 +355,14 @@ namespace ao::rt::test
     // Verify monotonic: album non-decreasing, disc non-decreasing within album,
     // track non-decreasing within disc.
     auto prevAlbum = std::string{};
-    auto prevDisc = std::uint16_t{0};
-    auto prevTrack = std::uint16_t{0};
+    std::uint16_t prevDisc = 0;
+    std::uint16_t prevTrack = 0;
 
     auto& dict = env.lib.library().dictionary();
     auto const txn = env.lib.library().readTransaction();
     auto const reader = env.lib.library().tracks().reader(txn);
 
-    for (auto i = std::size_t{0}; i < 15; ++i)
+    for (std::size_t i = 0; i < 15; ++i)
     {
       auto view = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
       REQUIRE(view.has_value());
@@ -326,7 +389,7 @@ namespace ao::rt::test
     auto env = TestEnv{};
     std::vector<TrackId> ids;
     ids.reserve(10);
-    for (auto i = 0; i < 10; ++i)
+    for (int i = 0; i < 10; ++i)
     {
       ids.push_back(env.lib.addTrack(makeSpec("Same", 2020)));
     }
@@ -339,7 +402,7 @@ namespace ao::rt::test
     proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year}});
 
     REQUIRE(proj.size() == 10);
-    for (auto i = std::size_t{0}; i < 10; ++i)
+    for (std::size_t i = 0; i < 10; ++i)
     {
       CHECK(proj.trackIdAt(i) != TrackId{});
     }
@@ -350,7 +413,7 @@ namespace ao::rt::test
     auto env = TestEnv{};
     std::vector<TrackId> ids;
     ids.reserve(10);
-    for (auto y = 2019; y >= 2010; --y)
+    for (int y = 2019; y >= 2010; --y)
     {
       ids.push_back(env.lib.addTrack(makeSpec(std::to_string(y), static_cast<std::uint16_t>(y))));
     }
@@ -364,7 +427,7 @@ namespace ao::rt::test
 
     auto checkMonotonic = [&](bool ascending)
     {
-      for (auto i = std::size_t{0}; i < 9; ++i)
+      for (std::size_t i = 0; i < 9; ++i)
       {
         auto const txn = env.lib.library().readTransaction();
         auto const reader = env.lib.library().tracks().reader(txn);
@@ -400,7 +463,7 @@ namespace ao::rt::test
     auto env = TestEnv{};
     std::vector<TrackId> ids;
     ids.reserve(15);
-    for (auto i = 0; i < 15; ++i)
+    for (int i = 0; i < 15; ++i)
     {
       auto title = std::string(1, static_cast<char>('A' + ((i * 7) % 15)));
       ids.push_back(env.lib.addTrack(makeSpec(title, static_cast<std::uint16_t>(2000 + ((i * 3) % 20)))));
@@ -414,7 +477,7 @@ namespace ao::rt::test
     proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}});
     REQUIRE(proj.size() == 15);
 
-    for (auto i = std::size_t{0}; i < 14; ++i)
+    for (std::size_t i = 0; i < 14; ++i)
     {
       auto const txn = env.lib.library().readTransaction();
       auto const reader = env.lib.library().tracks().reader(txn);
@@ -428,7 +491,7 @@ namespace ao::rt::test
     proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}});
     REQUIRE(proj.size() == 15);
 
-    for (auto i = std::size_t{0}; i < 14; ++i)
+    for (std::size_t i = 0; i < 14; ++i)
     {
       auto const txn = env.lib.library().readTransaction();
       auto const reader = env.lib.library().tracks().reader(txn);
@@ -657,5 +720,78 @@ namespace ao::rt::test
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
     CHECK(proj.groupAt(0).label == "Unknown Album");
+  }
+
+  TEST_CASE("TrackListProjection - incremental batch insertion", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+    auto id1 = env.lib.addTrack(makeSpec("B", 2020));
+    auto id2 = env.lib.addTrack(makeSpec("D", 2020));
+    env.setupFiltered({{id1, id2}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}});
+
+    REQUIRE(proj.size() == 2);
+    CHECK(proj.trackIdAt(0) == id1);
+    CHECK(proj.trackIdAt(1) == id2);
+
+    auto id3 = env.lib.addTrack(makeSpec("A", 2020));
+    auto id4 = env.lib.addTrack(makeSpec("C", 2020));
+    auto id5 = env.lib.addTrack(makeSpec("E", 2020));
+
+    // Simulate batch insertion from source
+    // In our TestEnv, the filtered (SmartListSource) is the one attached to proj.
+    // We notify the evaluator about the new tracks in the base source.
+    env.source.batchInsert({{id3, id4, id5}});
+    // SmartListSource reacts to source changes.
+
+    // After updates, the projection should have updated incrementally
+    REQUIRE(proj.size() == 5);
+    CHECK(proj.trackIdAt(0) == id3); // A
+    CHECK(proj.trackIdAt(1) == id1); // B
+    CHECK(proj.trackIdAt(2) == id4); // C
+    CHECK(proj.trackIdAt(3) == id2); // D
+    CHECK(proj.trackIdAt(4) == id5); // E
+
+    // Verify positionIndex
+    CHECK(proj.indexOf(id3) == 0);
+    CHECK(proj.indexOf(id1) == 1);
+    CHECK(proj.indexOf(id4) == 2);
+    CHECK(proj.indexOf(id2) == 3);
+    CHECK(proj.indexOf(id5) == 4);
+  }
+
+  TEST_CASE("TrackListProjection - incremental batch removal", "[app][runtime][projection]")
+  {
+    auto env = TestEnv{};
+    auto id1 = env.lib.addTrack(makeSpec("A", 2020));
+    auto id2 = env.lib.addTrack(makeSpec("B", 2020));
+    auto id3 = env.lib.addTrack(makeSpec("C", 2020));
+    auto id4 = env.lib.addTrack(makeSpec("D", 2020));
+    env.setupFiltered({{id1, id2, id3, id4}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+
+    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}});
+
+    REQUIRE(proj.size() == 4);
+
+    // Remove B and D
+    // In our improved MutableTrackSource, we can now use batchRemove
+    // But since filtered is a SmartListSource, it will handle the removal notification.
+    env.source.batchRemove({{id2, id4}});
+
+    REQUIRE(proj.size() == 2);
+    CHECK(proj.trackIdAt(0) == id1);
+    CHECK(proj.trackIdAt(1) == id3);
+
+    CHECK(proj.indexOf(id1) == 0);
+    CHECK(proj.indexOf(id3) == 1);
+    CHECK_FALSE(proj.indexOf(id2).has_value());
+    CHECK_FALSE(proj.indexOf(id4).has_value());
   }
 }

@@ -32,85 +32,85 @@ namespace ao::rt
       return;
     }
 
-    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
       _evaluator.handleSourceReset(*it->second);
     }
   }
 
-  void SourceObserver::onInserted(TrackId id, std::size_t index)
+  void SourceObserver::onInserted(TrackId const id, std::size_t const index)
   {
     if (!_valid)
     {
       return;
     }
 
-    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
       _evaluator.handleSourceInserted(*it->second, id, index);
     }
   }
 
-  void SourceObserver::onUpdated(TrackId id, std::size_t index)
+  void SourceObserver::onUpdated(TrackId const id, std::size_t const index)
   {
     if (!_valid)
     {
       return;
     }
 
-    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
       _evaluator.handleSourceUpdated(*it->second, id, index);
     }
   }
 
-  void SourceObserver::onRemoved(TrackId id, std::size_t /*index*/)
+  void SourceObserver::onRemoved(TrackId const id, std::size_t /*index*/)
   {
     if (!_valid)
     {
       return;
     }
 
-    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
       _evaluator.handleSourceRemoved(*it->second, id);
     }
   }
 
-  void SourceObserver::onInserted(std::span<TrackId const> ids)
+  void SourceObserver::onInserted(std::span<TrackId const> const ids)
   {
     if (!_valid)
     {
       return;
     }
 
-    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
       _evaluator.handleSourceInserted(*it->second, ids);
     }
   }
 
-  void SourceObserver::onUpdated(std::span<TrackId const> ids)
+  void SourceObserver::onUpdated(std::span<TrackId const> const ids)
   {
     if (!_valid)
     {
       return;
     }
 
-    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
       _evaluator.handleSourceUpdated(*it->second, ids);
     }
   }
 
-  void SourceObserver::onRemoved(std::span<TrackId const> ids)
+  void SourceObserver::onRemoved(std::span<TrackId const> const ids)
   {
     if (!_valid)
     {
       return;
     }
 
-    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
       _evaluator.handleSourceRemoved(*it->second, ids);
     }
@@ -123,7 +123,7 @@ namespace ao::rt
       return;
     }
 
-    if (auto it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
+    if (auto const it = _evaluator._buckets.find(&_source); it != _evaluator._buckets.end())
     {
       _evaluator.handleSourceDestroyed(*it->second);
     }
@@ -171,7 +171,7 @@ namespace ao::rt
 
   void SmartListEvaluator::unregisterList(TrackSource& source, SmartListSource& list)
   {
-    if (auto it = _buckets.find(&source); it != _buckets.end())
+    if (auto const it = _buckets.find(&source); it != _buckets.end())
     {
       auto& bucket = *it->second;
       std::erase(bucket.lists, &list);
@@ -201,7 +201,7 @@ namespace ao::rt
     }
   }
 
-  void SmartListEvaluator::notifyUpdated(TrackSource& source, TrackId trackId)
+  void SmartListEvaluator::notifyUpdated(TrackSource& source, TrackId const trackId)
   {
     if (auto const it = _buckets.find(&source); it != _buckets.end())
     {
@@ -227,7 +227,8 @@ namespace ao::rt
   void SmartListEvaluator::rebuildDirtyLists(SourceBucket& bucket)
   {
     auto dirtyLists = std::vector<SmartListSource*>{};
-    for (auto* list : bucket.lists)
+
+    for (auto* const list : bucket.lists)
     {
       if (list->_dirty)
       {
@@ -244,7 +245,7 @@ namespace ao::rt
     rebuildLists(dirtyLists);
   }
 
-  void SmartListEvaluator::rebuildLists(std::span<SmartListSource*> lists)
+  void SmartListEvaluator::rebuildLists(std::span<SmartListSource*> const lists)
   {
     if (lists.empty())
     {
@@ -252,7 +253,8 @@ namespace ao::rt
     }
 
     auto evaluatableLists = std::vector<SmartListSource*>{};
-    for (auto* list : lists)
+
+    for (auto* const list : lists)
     {
       if (list->_hasError || !list->_plan)
       {
@@ -271,15 +273,15 @@ namespace ao::rt
     }
 
     // Notify Reset for only the provided lists
-    for (auto* list : lists)
+    for (auto* const list : lists)
     {
       list->TrackSource::notifyReset();
     }
   }
 
   void SmartListEvaluator::rebuildGroup(TrackSource& source,
-                                        std::span<SmartListSource*> lists,
-                                        ao::library::TrackStore::Reader::LoadMode mode)
+                                        std::span<SmartListSource*> const lists,
+                                        ao::library::TrackStore::Reader::LoadMode const mode)
   {
     if (lists.empty())
     {
@@ -289,7 +291,7 @@ namespace ao::rt
     auto const txn = _ml.readTransaction();
     auto const reader = _ml.tracks().reader(txn);
 
-    std::vector<std::vector<TrackId>> nextMembers(lists.size());
+    auto nextMembers = std::vector<std::vector<TrackId>>(lists.size());
 
     for (auto const idx : std::views::iota(0UZ, source.size()))
     {
@@ -301,11 +303,11 @@ namespace ao::rt
         continue;
       }
 
-      for (std::size_t idx = 0; idx < lists.size(); ++idx)
+      for (std::size_t i = 0; i < lists.size(); ++i)
       {
-        if (lists[idx]->_planEvaluator.matches(*lists[idx]->_plan, *optView))
+        if (lists[i]->_planEvaluator.matches(*lists[i]->_plan, *optView))
         {
-          nextMembers[idx].push_back(id);
+          nextMembers[i].push_back(id);
         }
       }
     }
@@ -322,12 +324,12 @@ namespace ao::rt
     rebuildActiveLists(bucket);
   }
 
-  void SmartListEvaluator::handleSourceInserted(SourceBucket& bucket, TrackId id, std::size_t /*sourceIndex*/)
+  void SmartListEvaluator::handleSourceInserted(SourceBucket& bucket, TrackId const id, std::size_t /*sourceIndex*/)
   {
-    std::vector<SmartListSource*> evaluatableLists;
+    auto evaluatableLists = std::vector<SmartListSource*>{};
     evaluatableLists.reserve(bucket.lists.size());
 
-    for (auto* list : bucket.lists)
+    for (auto* const list : bucket.lists)
     {
       if (list->_hasError || !list->_plan || list->_dirty)
       {
@@ -367,11 +369,11 @@ namespace ao::rt
     }
   }
 
-  void SmartListEvaluator::handleSourceUpdated(SourceBucket& bucket, TrackId id, std::size_t /*sourceIndex*/)
+  void SmartListEvaluator::handleSourceUpdated(SourceBucket& bucket, TrackId const id, std::size_t /*sourceIndex*/)
   {
-    std::vector<SmartListSource*> evaluatableLists;
+    auto evaluatableLists = std::vector<SmartListSource*>{};
 
-    for (auto* list : bucket.lists)
+    for (auto* const list : bucket.lists)
     {
       if (list->_hasError || !list->_plan || list->_dirty)
       {
@@ -419,9 +421,9 @@ namespace ao::rt
     }
   }
 
-  void SmartListEvaluator::handleSourceRemoved(SourceBucket& bucket, TrackId id)
+  void SmartListEvaluator::handleSourceRemoved(SourceBucket& bucket, TrackId const id)
   {
-    for (auto* list : bucket.lists)
+    for (auto* const list : bucket.lists)
     {
       if (list->_dirty)
       {
@@ -437,16 +439,16 @@ namespace ao::rt
     }
   }
 
-  void SmartListEvaluator::handleSourceInserted(SourceBucket& bucket, std::span<TrackId const> ids)
+  void SmartListEvaluator::handleSourceInserted(SourceBucket& bucket, std::span<TrackId const> const ids)
   {
     if (ids.empty())
     {
       return;
     }
 
-    std::vector<SmartListSource*> evaluatableLists;
+    auto evaluatableLists = std::vector<SmartListSource*>{};
 
-    for (auto* list : bucket.lists)
+    for (auto* const list : bucket.lists)
     {
       if (list->_hasError || !list->_plan || list->_dirty)
       {
@@ -465,7 +467,7 @@ namespace ao::rt
     auto const reader = _ml.tracks().reader(txn);
     auto const mode = getUnionMode(evaluatableLists);
 
-    std::vector<std::vector<TrackId>> matchedIds(evaluatableLists.size());
+    auto matchedIds = std::vector<std::vector<TrackId>>(evaluatableLists.size());
 
     for (auto const id : ids)
     {
@@ -485,27 +487,31 @@ namespace ao::rt
       }
     }
 
-    for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
+    for (std::size_t idx = 0; idx < evaluatableLists.size(); ++idx)
     {
-      if (!matchedIds[i].empty())
+      if (!matchedIds[idx].empty())
       {
-        auto& list = *evaluatableLists[i];
-        list._members.insert(matchedIds[i].begin(), matchedIds[i].end());
-        list.TrackSource::notifyInserted(matchedIds[i]);
+        auto& list = *evaluatableLists[idx];
+        std::ranges::sort(matchedIds[idx]);
+        auto const [first, last] = std::ranges::unique(matchedIds[idx]);
+        matchedIds[idx].erase(first, last);
+
+        list._members.insert(matchedIds[idx].begin(), matchedIds[idx].end());
+        list.TrackSource::notifyInserted(matchedIds[idx]);
       }
     }
   }
 
-  void SmartListEvaluator::handleSourceUpdated(SourceBucket& bucket, std::span<TrackId const> ids)
+  void SmartListEvaluator::handleSourceUpdated(SourceBucket& bucket, std::span<TrackId const> const ids)
   {
     if (ids.empty())
     {
       return;
     }
 
-    std::vector<SmartListSource*> evaluatableLists;
+    auto evaluatableLists = std::vector<SmartListSource*>{};
 
-    for (auto* list : bucket.lists)
+    for (auto* const list : bucket.lists)
     {
       if (list->_hasError || !list->_plan || list->_dirty)
       {
@@ -525,7 +531,7 @@ namespace ao::rt
     auto const mode = getUnionMode(evaluatableLists);
 
     // Track transitions for each list
-    struct Transitions
+    struct Transitions final
     {
       std::vector<TrackId> inserted;
       std::vector<TrackId> removed;
@@ -559,23 +565,32 @@ namespace ao::rt
       }
     }
 
-    for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
+    for (std::size_t idx = 0; idx < evaluatableLists.size(); ++idx)
     {
-      auto& list = *evaluatableLists[i];
-      auto& trans = transitions[i];
+      auto& list = *evaluatableLists[idx];
+      auto& trans = transitions[idx];
 
       if (!trans.removed.empty())
       {
-        for (auto const id : trans.removed)
-        {
-          list._members.erase(id);
-        }
+        // Batch removal for flat_set
+        std::ranges::sort(trans.removed);
+        auto const [first, last] = std::ranges::unique(trans.removed);
+        trans.removed.erase(first, last);
+
+        auto newMembers = std::vector<TrackId>{};
+        newMembers.reserve(list._members.size());
+        std::ranges::set_difference(list._members, trans.removed, std::back_inserter(newMembers));
+        list._members = std::flat_set<TrackId>(std::sorted_unique, std::move(newMembers));
 
         list.TrackSource::notifyRemoved(trans.removed);
       }
 
       if (!trans.inserted.empty())
       {
+        std::ranges::sort(trans.inserted);
+        auto const [first, last] = std::ranges::unique(trans.inserted);
+        trans.inserted.erase(first, last);
+
         list._members.insert(trans.inserted.begin(), trans.inserted.end());
         list.TrackSource::notifyInserted(trans.inserted);
       }
@@ -587,20 +602,20 @@ namespace ao::rt
     }
   }
 
-  void SmartListEvaluator::handleSourceRemoved(SourceBucket& bucket, std::span<TrackId const> ids)
+  void SmartListEvaluator::handleSourceRemoved(SourceBucket& bucket, std::span<TrackId const> const ids)
   {
-    for (auto* list : bucket.lists)
+    for (auto* const list : bucket.lists)
     {
       if (list->_dirty)
       {
         continue;
       }
 
-      std::vector<TrackId> removed;
+      auto removed = std::vector<TrackId>{};
 
-      for (auto id : ids)
+      for (auto const id : ids)
       {
-        if (list->_members.erase(id) > 0)
+        if (list->_members.contains(id))
         {
           removed.push_back(id);
         }
@@ -608,6 +623,15 @@ namespace ao::rt
 
       if (!removed.empty())
       {
+        std::ranges::sort(removed);
+        auto const [first, last] = std::ranges::unique(removed);
+        removed.erase(first, last);
+
+        auto newMembers = std::vector<TrackId>{};
+        newMembers.reserve(list->_members.size());
+        std::ranges::set_difference(list->_members, removed, std::back_inserter(newMembers));
+        list->_members = std::flat_set<TrackId>(std::sorted_unique, std::move(newMembers));
+
         list->notifyRemoved(removed);
       }
     }
@@ -617,19 +641,19 @@ namespace ao::rt
   {
     bucket.sourceAlive = false;
 
-    for (auto* list : bucket.lists)
+    for (auto* const list : bucket.lists)
     {
       list->_members.clear();
       list->TrackSource::notifyReset();
     }
   }
 
-  ao::library::TrackStore::Reader::LoadMode SmartListEvaluator::getUnionMode(std::span<SmartListSource*> lists)
+  ao::library::TrackStore::Reader::LoadMode SmartListEvaluator::getUnionMode(std::span<SmartListSource*> const lists)
   {
     bool needsHot = false;
     bool needsCold = false;
 
-    for (auto* list : lists)
+    for (auto* const list : lists)
     {
       if (!list->_plan)
       {

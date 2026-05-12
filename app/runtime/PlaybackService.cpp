@@ -182,6 +182,7 @@ namespace ao::rt
               }
 
               auto const& backend = state.availableOutputs.front();
+
               if (backend.devices.empty())
               {
                 devicesChangedSignal.emit();
@@ -203,7 +204,7 @@ namespace ao::rt
         });
 
       player->setOnQualityChanged(
-        [this](ao::audio::Quality quality, bool ready)
+        [this](ao::audio::Quality quality, bool const ready)
         {
           executor.dispatch(
             [this, quality, ready]
@@ -279,7 +280,7 @@ namespace ao::rt
     return _impl->state;
   }
 
-  void PlaybackService::play(ao::audio::TrackPlaybackDescriptor const& descriptor, ao::ListId sourceListId)
+  void PlaybackService::play(ao::audio::TrackPlaybackDescriptor const& descriptor, ao::ListId const sourceListId)
   {
     _impl->ensureReady();
 
@@ -301,7 +302,7 @@ namespace ao::rt
     });
   }
 
-  ao::TrackId PlaybackService::playSelectionInView(ViewId viewId)
+  ao::TrackId PlaybackService::playSelectionInView(ViewId const viewId)
   {
     try
     {
@@ -324,9 +325,10 @@ namespace ao::rt
       }
 
       auto const uri = std::filesystem::path{optView->property().uri()};
-      auto filePath = uri.is_absolute() ? uri.lexically_normal() : (_impl->library.rootPath() / uri).lexically_normal();
+      auto const filePath =
+        uri.is_absolute() ? uri.lexically_normal() : (_impl->library.rootPath() / uri).lexically_normal();
 
-      auto desc = ao::audio::TrackPlaybackDescriptor{
+      auto const desc = ao::audio::TrackPlaybackDescriptor{
         .trackId = trackId,
         .filePath = filePath,
         .title = std::string{optView->metadata().title()},
@@ -369,7 +371,7 @@ namespace ao::rt
     _impl->idleSignal.emit();
   }
 
-  void PlaybackService::seek(std::uint32_t positionMs)
+  void PlaybackService::seek(std::uint32_t const positionMs)
   {
     _impl->player->seek(positionMs);
     _impl->state = _impl->buildState(*_impl->player);
@@ -388,13 +390,13 @@ namespace ao::rt
     });
   }
 
-  void PlaybackService::setVolume(float volume)
+  void PlaybackService::setVolume(float const volume)
   {
     _impl->player->setVolume(volume);
     _impl->state = _impl->buildState(*_impl->player);
   }
 
-  void PlaybackService::setMuted(bool muted)
+  void PlaybackService::setMuted(bool const muted)
   {
     _impl->player->setMuted(muted);
     _impl->state = _impl->buildState(*_impl->player);

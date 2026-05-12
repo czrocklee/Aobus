@@ -354,7 +354,7 @@ namespace ao::gtk::layout
                                 .props = {{.name = "view",
                                            .kind = PropertyKind::String,
                                            .label = "View Source",
-                                           .defaultValue = LayoutValue("workspace.focused")}},
+                                           .defaultValue = LayoutValue{"workspace.focused"}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .maxChildren = 0},

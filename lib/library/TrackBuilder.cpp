@@ -318,7 +318,7 @@ namespace ao::library
 
   std::uint32_t TrackBuilder::computeBloomFilter(std::span<DictionaryId const> tagIds)
   {
-    auto bloom = std::uint32_t{0};
+    std::uint32_t bloom = 0;
 
     for (auto const tagId : tagIds)
     {
@@ -560,7 +560,7 @@ namespace ao::library
       std::uint16_t len = 0;
     };
 
-    auto valueOffset = std::size_t{sizeof(TrackColdHeader) + (_resolvedPairs.size() * 8)};
+    std::size_t valueOffset = sizeof(TrackColdHeader) + (_resolvedPairs.size() * 8);
 
     for (auto const& [dictId, value] : _resolvedPairs)
     {

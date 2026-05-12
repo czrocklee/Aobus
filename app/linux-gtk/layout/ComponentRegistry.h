@@ -31,10 +31,10 @@ namespace ao::gtk::layout
   struct PropertyDescriptor final
   {
     std::string name;
-    PropertyKind kind;
+    PropertyKind kind = PropertyKind::String;
     std::string label;
-    LayoutValue defaultValue;
-    std::vector<std::string> enumValues;
+    LayoutValue defaultValue = {};
+    std::vector<std::string> enumValues = {};
   };
 
   struct ComponentDescriptor final
@@ -43,10 +43,10 @@ namespace ao::gtk::layout
     std::string displayName;
     std::string category;
     bool container = false;
-    std::vector<PropertyDescriptor> props;
-    std::vector<PropertyDescriptor> layoutProps;
+    std::vector<PropertyDescriptor> props = {};
+    std::vector<PropertyDescriptor> layoutProps = {};
     std::size_t minChildren = 0;
-    std::optional<std::size_t> maxChildren;
+    std::optional<std::size_t> maxChildren = {};
   };
 
   using ComponentFactory = std::unique_ptr<ILayoutComponent> (*)(ComponentContext&, LayoutNode const&);

@@ -21,7 +21,7 @@ namespace ao::tag::mpeg
     constexpr std::uint32_t kBitsPerByte = 8;
     constexpr std::size_t kId3v1TagSize = 128;
 
-    auto durationMs = std::uint32_t{0};
+    std::uint32_t durationMs = 0;
 
     // 1. Prefer Xing/Info header if present for accurate duration (especially VBR)
     if (auto xing = frame.xingInfo())
@@ -108,7 +108,7 @@ namespace ao::tag::mpeg
     if (auto frameView = locate(audioStart, audioSize))
     {
       auto bitrate = frameView->bitrate();
-      auto durationMs = std::uint32_t{0};
+      std::uint32_t durationMs = 0;
 
       builder.property()
         .sampleRate(frameView->sampleRate())

@@ -27,9 +27,9 @@ namespace ao::media::mp4
       return false;
     }
 
-    auto sampleIndex = std::size_t{0};
+    std::size_t sampleIndex = 0;
 
-    for (auto entryIndex = std::size_t{0}; entryIndex < sampleToChunk.size(); ++entryIndex)
+    for (std::size_t entryIndex = 0; entryIndex < sampleToChunk.size(); ++entryIndex)
     {
       auto const& entry = sampleToChunk[entryIndex];
 
@@ -45,7 +45,7 @@ namespace ao::media::mp4
         return false;
       }
 
-      auto chunkEndIndex = chunkOffsets.size();
+      std::size_t chunkEndIndex = chunkOffsets.size();
 
       if (entryIndex + 1 < sampleToChunk.size())
       {
@@ -63,7 +63,7 @@ namespace ao::media::mp4
       {
         auto sampleOffset = chunkOffsets[chunkIndex];
 
-        for (auto sampleInChunk = std::uint32_t{0}; sampleInChunk < entry.samplesPerChunk; ++sampleInChunk)
+        for (std::uint32_t sampleInChunk = 0; sampleInChunk < entry.samplesPerChunk; ++sampleInChunk)
         {
           if (sampleIndex >= samples.size())
           {

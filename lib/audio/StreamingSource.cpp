@@ -288,7 +288,7 @@ namespace ao::audio
     { return seekToken.stop_requested() || (threadStopToken && threadStopToken->stop_requested()); };
 
     auto const* current = bytes.data();
-    auto remaining = bytes.size();
+    std::size_t remaining = bytes.size();
 
     while (remaining > 0 && !stopRequested())
     {

@@ -77,7 +77,7 @@ namespace ao::rt
   {
   }
 
-  void ManualListSource::onUpdated(TrackId id, std::size_t /*index*/)
+  void ManualListSource::onUpdated(TrackId const id, std::size_t /*index*/)
   {
     if (auto const myIndex = indexOf(id))
     {
@@ -85,9 +85,9 @@ namespace ao::rt
     }
   }
 
-  void ManualListSource::onRemoved(TrackId id, std::size_t /*index*/)
+  void ManualListSource::onRemoved(TrackId const id, std::size_t /*index*/)
   {
-    if (auto it = std::ranges::find(_trackIds, id); it != _trackIds.end())
+    if (auto const it = std::ranges::find(_trackIds, id); it != _trackIds.end())
     {
       auto const myIndex = static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
       _trackIds.erase(it);
@@ -99,7 +99,7 @@ namespace ao::rt
   {
   }
 
-  void ManualListSource::onUpdated(std::span<TrackId const> ids)
+  void ManualListSource::onUpdated(std::span<TrackId const> const ids)
   {
     auto matched = std::vector<TrackId>{};
 
@@ -117,13 +117,13 @@ namespace ao::rt
     }
   }
 
-  void ManualListSource::onRemoved(std::span<TrackId const> ids)
+  void ManualListSource::onRemoved(std::span<TrackId const> const ids)
   {
-    std::vector<TrackId> removed;
+    auto removed = std::vector<TrackId>{};
 
-    for (auto id : ids)
+    for (auto const id : ids)
     {
-      if (auto it = std::ranges::find(_trackIds, id); it != _trackIds.end())
+      if (auto const it = std::ranges::find(_trackIds, id); it != _trackIds.end())
       {
         _trackIds.erase(it);
         removed.push_back(id);
@@ -136,12 +136,12 @@ namespace ao::rt
     }
   }
 
-  bool ManualListSource::contains(TrackId id) const
+  bool ManualListSource::contains(TrackId const id) const
   {
     return std::ranges::contains(_trackIds, id);
   }
 
-  std::optional<std::size_t> ManualListSource::indexOf(TrackId id) const
+  std::optional<std::size_t> ManualListSource::indexOf(TrackId const id) const
   {
     auto const it = std::ranges::find(_trackIds, id);
 

@@ -209,8 +209,8 @@ namespace ao::gtk::layout::editor
 
     if (node != nullptr)
     {
-      node->layout["x"] = LayoutValue(static_cast<std::int64_t>(posX));
-      node->layout["y"] = LayoutValue(static_cast<std::int64_t>(posY));
+      node->layout["x"] = LayoutValue{static_cast<std::int64_t>(posX)};
+      node->layout["y"] = LayoutValue{static_cast<std::int64_t>(posY)};
 
       if (auto const row = _treeView.get_selection()->get_selected())
       {
@@ -241,7 +241,7 @@ namespace ao::gtk::layout::editor
     }
 
     auto const currentZ = node->getLayout<std::int64_t>("zIndex", 0);
-    node->layout["zIndex"] = LayoutValue(static_cast<std::int64_t>(currentZ + 1));
+    node->layout["zIndex"] = LayoutValue{static_cast<std::int64_t>(currentZ + 1)};
 
     if (auto const selection = _treeView.get_selection()->get_selected())
     {
@@ -272,7 +272,7 @@ namespace ao::gtk::layout::editor
 
     auto const currentZ = node->getLayout<std::int64_t>("zIndex", 0);
     node->layout["zIndex"] =
-      LayoutValue(static_cast<std::int64_t>(std::max(static_cast<std::int64_t>(0), currentZ - 1)));
+      LayoutValue{static_cast<std::int64_t>(std::max(static_cast<std::int64_t>(0), currentZ - 1))};
 
     if (auto const selection = _treeView.get_selection()->get_selected())
     {
@@ -590,7 +590,7 @@ namespace ao::gtk::layout::editor
     check->set_active(currentVal.asBool());
     check->signal_toggled().connect(
       [this, node, prop, check, isLayoutProp]
-      { applyPropertyChange(node, prop.name, LayoutValue(check->get_active()), isLayoutProp); });
+      { applyPropertyChange(node, prop.name, LayoutValue{check->get_active()}, isLayoutProp); });
     _propertiesBox.append(*createPropertyRow(prop.label, *check));
   }
 
@@ -605,7 +605,7 @@ namespace ao::gtk::layout::editor
       [this, node, prop, spin, isLayoutProp]
       {
         applyPropertyChange(
-          node, prop.name, LayoutValue(static_cast<std::int64_t>(spin->get_value_as_int())), isLayoutProp);
+          node, prop.name, LayoutValue{static_cast<std::int64_t>(spin->get_value_as_int())}, isLayoutProp);
       });
     _propertiesBox.append(*createPropertyRow(prop.label, *spin));
   }
@@ -625,7 +625,7 @@ namespace ao::gtk::layout::editor
     combo->set_active_id(currentVal.asString());
     combo->signal_changed().connect(
       [this, node, prop, combo, isLayoutProp]
-      { applyPropertyChange(node, prop.name, LayoutValue(combo->get_active_id().raw()), isLayoutProp); });
+      { applyPropertyChange(node, prop.name, LayoutValue{combo->get_active_id().raw()}, isLayoutProp); });
     _propertiesBox.append(*createPropertyRow(prop.label, *combo));
   }
 
@@ -650,7 +650,7 @@ namespace ao::gtk::layout::editor
         *debounceConn = Glib::signal_timeout().connect(
           [this, node, prop, entry, isLayoutProp]() -> bool
           {
-            applyPropertyChange(node, prop.name, LayoutValue(std::string(entry->get_text().raw())), isLayoutProp);
+            applyPropertyChange(node, prop.name, LayoutValue{std::string{entry->get_text().raw()}}, isLayoutProp);
             return false;
           },
           500);
@@ -731,26 +731,26 @@ namespace ao::gtk::layout::editor
         }
       };
 
-      addCommon({"margin", PropertyKind::Int, "Margin", LayoutValue(static_cast<std::int64_t>(0)), {}});
-      addCommon({"hexpand", PropertyKind::Bool, "Expand Horizontal", LayoutValue(false), {}});
-      addCommon({"vexpand", PropertyKind::Bool, "Expand Vertical", LayoutValue(false), {}});
+      addCommon({"margin", PropertyKind::Int, "Margin", LayoutValue{static_cast<std::int64_t>(0)}, {}});
+      addCommon({"hexpand", PropertyKind::Bool, "Expand Horizontal", LayoutValue{false}, {}});
+      addCommon({"vexpand", PropertyKind::Bool, "Expand Vertical", LayoutValue{false}, {}});
       addCommon({"halign",
                  PropertyKind::Enum,
                  "Horizontal Align",
-                 LayoutValue(std::string{"fill"}),
+                 LayoutValue{std::string{"fill"}},
                  {"fill", "start", "end", "center"}});
       addCommon({"valign",
                  PropertyKind::Enum,
                  "Vertical Align",
-                 LayoutValue(std::string{"fill"}),
+                 LayoutValue{std::string{"fill"}},
                  {"fill", "start", "end", "center"}});
-      addCommon({"minWidth", PropertyKind::Int, "Min Width", LayoutValue(static_cast<std::int64_t>(-1)), {}});
-      addCommon({"minHeight", PropertyKind::Int, "Min Height", LayoutValue(static_cast<std::int64_t>(-1)), {}});
-      addCommon({"x", PropertyKind::Int, "X", LayoutValue(static_cast<std::int64_t>(0)), {}});
-      addCommon({"y", PropertyKind::Int, "Y", LayoutValue(static_cast<std::int64_t>(0)), {}});
-      addCommon({"width", PropertyKind::Int, "Width", LayoutValue(static_cast<std::int64_t>(-1)), {}});
-      addCommon({"height", PropertyKind::Int, "Height", LayoutValue(static_cast<std::int64_t>(-1)), {}});
-      addCommon({"zIndex", PropertyKind::Int, "Z-Index", LayoutValue(static_cast<std::int64_t>(0)), {}});
+      addCommon({"minWidth", PropertyKind::Int, "Min Width", LayoutValue{static_cast<std::int64_t>(-1)}, {}});
+      addCommon({"minHeight", PropertyKind::Int, "Min Height", LayoutValue{static_cast<std::int64_t>(-1)}, {}});
+      addCommon({"x", PropertyKind::Int, "X", LayoutValue{static_cast<std::int64_t>(0)}, {}});
+      addCommon({"y", PropertyKind::Int, "Y", LayoutValue{static_cast<std::int64_t>(0)}, {}});
+      addCommon({"width", PropertyKind::Int, "Width", LayoutValue{static_cast<std::int64_t>(-1)}, {}});
+      addCommon({"height", PropertyKind::Int, "Height", LayoutValue{static_cast<std::int64_t>(-1)}, {}});
+      addCommon({"zIndex", PropertyKind::Int, "Z-Index", LayoutValue{static_cast<std::int64_t>(0)}, {}});
 
       if (!layoutProps.empty())
       {

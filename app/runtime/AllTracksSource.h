@@ -22,11 +22,11 @@ namespace ao::rt
   class AllTracksSource final : public TrackSource
   {
   public:
-    explicit AllTracksSource(ao::library::TrackStore& store);
-
     using TrackSource::notifyInserted;
     using TrackSource::notifyRemoved;
     using TrackSource::notifyUpdated;
+
+    explicit AllTracksSource(ao::library::TrackStore& store);
 
     void reloadFromStore(ao::lmdb::ReadTransaction const& txn);
     void notifyInserted(TrackId id);

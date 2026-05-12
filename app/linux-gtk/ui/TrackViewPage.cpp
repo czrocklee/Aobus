@@ -844,7 +844,7 @@ namespace ao::gtk
 
   std::size_t TrackViewPage::selectedTrackCount() const
   {
-    auto count = std::size_t{0};
+    std::size_t count = 0;
     auto const model = _selectionModel->get_model();
 
     if (!model)

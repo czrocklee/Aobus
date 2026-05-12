@@ -38,10 +38,10 @@ namespace ao::rt
     return _impl->state;
   }
 
-  NotificationId NotificationService::post(NotificationSeverity severity,
+  NotificationId NotificationService::post(NotificationSeverity const severity,
                                            std::string message,
-                                           bool sticky,
-                                           std::optional<std::chrono::milliseconds> optTimeout)
+                                           bool const sticky,
+                                           std::optional<std::chrono::milliseconds> const optTimeout)
   {
     auto const id = NotificationId{++_impl->nextId};
 
@@ -59,7 +59,7 @@ namespace ao::rt
     return id;
   }
 
-  void NotificationService::dismiss(NotificationId id)
+  void NotificationService::dismiss(NotificationId const id)
   {
     auto const it = std::ranges::find(_impl->state.entries, id, &NotificationEntry::id);
 

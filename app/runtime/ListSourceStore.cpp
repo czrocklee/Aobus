@@ -19,12 +19,12 @@ namespace ao::rt
     _listsMutatedSubscription = mutation.onListsMutated(
       [this](LibraryMutationService::ListsMutated const& ev)
       {
-        for (auto id : ev.deleted)
+        for (auto const id : ev.deleted)
         {
           eraseList(id);
         }
 
-        for (auto id : ev.upserted)
+        for (auto const id : ev.upserted)
         {
           refreshList(id);
         }
@@ -38,7 +38,7 @@ namespace ao::rt
     return _allTracks;
   }
 
-  ao::rt::TrackSource& ListSourceStore::sourceFor(ao::ListId listId)
+  ao::rt::TrackSource& ListSourceStore::sourceFor(ao::ListId const listId)
   {
     return getOrBuildSource(listId);
   }
@@ -49,21 +49,22 @@ namespace ao::rt
     _allTracks.reloadFromStore(txn);
   }
 
-  void ListSourceStore::refreshList(ao::ListId listId)
+  void ListSourceStore::refreshList(ao::ListId const listId)
   {
     if (listId == ao::ListId{})
     {
       return;
     }
 
-    auto it = _sources.find(listId);
+    auto const it = _sources.find(listId);
+
     if (it == _sources.end())
     {
       return;
     }
 
     auto const txn = _library.readTransaction();
-    auto optView = _library.lists().reader(txn).get(listId);
+    auto const optView = _library.lists().reader(txn).get(listId);
 
     if (!optView)
     {
@@ -71,18 +72,18 @@ namespace ao::rt
       return;
     }
 
-    if (auto* manual = dynamic_cast<ManualListSource*>(it->second.get()))
+    if (auto* const manual = dynamic_cast<ManualListSource*>(it->second.get()))
     {
       manual->reloadFromListView(*optView);
     }
-    else if (auto* smart = dynamic_cast<SmartListSource*>(it->second.get()))
+    else if (auto* const smart = dynamic_cast<SmartListSource*>(it->second.get()))
     {
       smart->setExpression(std::string{optView->filter()});
       smart->reload();
     }
   }
 
-  void ListSourceStore::eraseList(ao::ListId listId)
+  void ListSourceStore::eraseList(ao::ListId const listId)
   {
     if (listId == ao::ListId{})
     {
@@ -102,9 +103,11 @@ namespace ao::rt
     toErase.push_back(listId);
 
     bool foundNew = true;
+
     while (foundNew)
     {
       foundNew = false;
+
       for (auto const& [childId, childSource] : _sources)
       {
         if (std::ranges::find(toErase, childId) != toErase.end())
@@ -113,18 +116,19 @@ namespace ao::rt
         }
 
         TrackSource* parentPtr = nullptr;
-        if (auto* manual = dynamic_cast<ManualListSource*>(childSource.get()))
+
+        if (auto* const manual = dynamic_cast<ManualListSource*>(childSource.get()))
         {
           parentPtr = manual->_source;
         }
-        else if (auto* smart = dynamic_cast<SmartListSource*>(childSource.get()))
+        else if (auto* const smart = dynamic_cast<SmartListSource*>(childSource.get()))
         {
           parentPtr = &smart->source();
         }
 
-        for (auto id : toErase)
+        for (auto const id : toErase)
         {
-          if (auto it = _sources.find(id); it != _sources.end())
+          if (auto const it = _sources.find(id); it != _sources.end())
           {
             if (parentPtr == it->second.get())
             {
@@ -149,20 +153,20 @@ namespace ao::rt
     }
   }
 
-  TrackSource& ListSourceStore::getOrBuildSource(ao::ListId listId)
+  TrackSource& ListSourceStore::getOrBuildSource(ao::ListId const listId)
   {
     if (listId == ao::ListId{})
     {
       return _allTracks;
     }
 
-    if (auto it = _sources.find(listId); it != _sources.end())
+    if (auto const it = _sources.find(listId); it != _sources.end())
     {
       return *it->second;
     }
 
     auto const txn = _library.readTransaction();
-    auto optView = _library.lists().reader(txn).get(listId);
+    auto const optView = _library.lists().reader(txn).get(listId);
 
     if (!optView)
     {
