@@ -89,6 +89,7 @@ namespace ao::gtk
     ao::rt::Subscription _nowPlayingSub;
     ao::rt::Subscription _focusSub;
     ao::rt::Subscription _viewDestroyedSub;
+    ao::rt::Subscription _projectionChangedSub;
 
     std::map<ao::rt::ViewId, TrackPageContext> _trackPages;
     std::optional<ao::TrackId> _optPlayingTrackId;

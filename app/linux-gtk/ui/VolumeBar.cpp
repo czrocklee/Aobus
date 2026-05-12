@@ -113,7 +113,7 @@ namespace ao::gtk
     auto const height = get_height();
 
     auto const cr =
-      snapshot->append_cairo(Gdk::Graphene::Rect(0, 0, static_cast<float>(width), static_cast<float>(height)));
+      snapshot->append_cairo(Gdk::Graphene::Rect{0, 0, static_cast<float>(width), static_cast<float>(height)});
 
     float const segmentWidth =
       (static_cast<float>(width) - (static_cast<float>(kNumSegments) - 1.0F) * static_cast<float>(kSegmentGap)) /

@@ -109,14 +109,14 @@ namespace ao::gtk
             dialogPtr->onNewTrack(filePath.string(), index);
             if (_callbacks.onProgressUpdated)
             {
-              double fraction = static_cast<double>(index) / static_cast<double>(total);
+              double const fraction = static_cast<double>(index) / static_cast<double>(total);
               _callbacks.onProgressUpdated(fraction, "Importing: " + filePath.filename().string());
             }
           });
       },
       [this, dialogPtr] { _session.executor().dispatch([dialogPtr] { dialogPtr->ready(); }); });
 
-    auto* workerPtr = _importWorker.get();
+    auto* const workerPtr = _importWorker.get();
     _importThread = std::jthread(
       [this, workerPtr, isNewLibrary] mutable
       {

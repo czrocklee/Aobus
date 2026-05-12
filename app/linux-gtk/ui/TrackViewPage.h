@@ -114,7 +114,10 @@ namespace ao::gtk
     TrackColumnLayout captureCurrentColumnLayout() const;
     void updateColumnVisibility();
     void onGroupByChanged();
-    void onFilterChanged();
+    void onFilterTextChanged();
+    void onFilterDebounced();
+    void onModelChanged();
+    void onFilterStatusChanged(ao::rt::FilterStatusChanged const& status);
     void updateFilterUi();
     void onSelectionChanged(std::uint32_t position, std::uint32_t nItems);
     void onActivateCurrentSelection();
@@ -143,6 +146,18 @@ namespace ao::gtk
                               Gtk::Entry* entry,
                               Glib::RefPtr<TrackRow> const& row,
                               TrackColumn column);
+
+    // Playing track state (TrackId, not stale index)
+    std::optional<TrackId> _playingTrackId;
+
+    // Filter UI state
+    TrackFilterMode _filterMode = TrackFilterMode::None;
+    std::string _filterExpression;
+    bool _filterPending = false;
+    bool _filterHasError = false;
+    std::string _filterErrorMessage;
+    sigc::connection _filterDebounceTimer;
+    ao::rt::Subscription _filterStatusSub;
 
     // Child widgets
     Gtk::Box _controlsBar{Gtk::Orientation::HORIZONTAL};
@@ -177,6 +192,7 @@ namespace ao::gtk
     sigc::connection _columnLayoutChangedConnection;
     sigc::connection _columnModelChangedConnection;
     sigc::connection _queuedColumnLayoutUpdateConnection;
+    sigc::connection _columnVisibilityIdle;
     bool _syncingColumnLayout = false;
     bool _capturingColumnLayout = false;
     bool _suppressNextTrackActivation = false;

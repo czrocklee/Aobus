@@ -41,6 +41,7 @@ namespace ao::gtk::layout
       {
         return *p;
       }
+
       return defaultValue;
     }
 
@@ -168,7 +169,7 @@ namespace ao::gtk::layout
         data);
     }
 
-    Value data;
+    Value data{};
   };
 
   /**
@@ -186,6 +187,7 @@ namespace ao::gtk::layout
       {
         return it->second.as<T>(defaultValue);
       }
+
       return defaultValue;
     }
 
@@ -199,6 +201,7 @@ namespace ao::gtk::layout
       {
         return it->second.as<T>(defaultValue);
       }
+
       return defaultValue;
     }
 

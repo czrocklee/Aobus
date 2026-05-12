@@ -31,7 +31,7 @@ namespace ao::gtk
     void clearMessage();
 
     void setTrackCount(std::size_t count);
-    void setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
+    void setSelectionInfo(std::size_t count, std::optional<std::chrono::milliseconds> optTotalDuration = std::nullopt);
     void setPlaybackDetails(ao::audio::Player::Status const& status);
     void setPlaybackState(struct ao::rt::PlaybackState const& state);
 

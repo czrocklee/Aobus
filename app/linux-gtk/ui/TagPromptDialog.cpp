@@ -72,7 +72,7 @@ namespace ao::gtk
 
   std::string TagPromptDialog::normalizeTag(std::string_view tag)
   {
-    return boost::algorithm::trim_copy_if(std::string(tag), boost::algorithm::is_space());
+    return boost::algorithm::trim_copy_if(std::string{tag}, boost::algorithm::is_space());
   }
 
   TagPromptDialog::TagPromptDialog(Gtk::Window& parent,

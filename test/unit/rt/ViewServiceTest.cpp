@@ -138,7 +138,18 @@ namespace ao::rt::test
     CHECK(snap.filterExpression == "$year > 2000");
     CHECK(snap.lifecycle == ViewLifecycleState::Attached);
     CHECK(snap.groupBy == TrackGroupKey::None);
-    CHECK(snap.sortBy.empty());
+
+    std::vector<TrackSortField> const expectedNone = {TrackSortField::Artist,
+                                                      TrackSortField::Album,
+                                                      TrackSortField::DiscNumber,
+                                                      TrackSortField::TrackNumber,
+                                                      TrackSortField::Title};
+    REQUIRE(snap.sortBy.size() == expectedNone.size());
+    for (std::size_t i = 0; i < expectedNone.size(); ++i)
+    {
+      CHECK(snap.sortBy[i].field == expectedNone[i]);
+      CHECK(snap.sortBy[i].ascending == true);
+    }
   }
 
   TEST_CASE("ViewService - trackListProjection access", "[app][runtime][view]")

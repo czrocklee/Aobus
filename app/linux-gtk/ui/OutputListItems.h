@@ -17,7 +17,7 @@ namespace ao::gtk
   public:
     static Glib::RefPtr<BackendItem> create(ao::audio::BackendId const& id, std::string const& name)
     {
-      return Glib::make_refptr_for_instance<BackendItem>(new BackendItem(id, name));
+      return Glib::make_refptr_for_instance<BackendItem>(new BackendItem{id, name});
     }
 
     ao::audio::BackendId id;

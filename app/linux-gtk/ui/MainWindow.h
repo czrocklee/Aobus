@@ -81,9 +81,6 @@ namespace ao::gtk
     void setupLayoutHost();
     void openLayoutEditor();
 
-    // Layout constants
-    static constexpr int kCoverArtSize = 50;
-
     // GTK-side row data cache
     std::unique_ptr<TrackRowDataProvider> _rowDataProvider;
 
@@ -130,5 +127,7 @@ namespace ao::gtk
     Gtk::ToggleButton _inspectorHandle;
 
     std::unique_ptr<CoverArtCache> _coverArtCache;
+
+    static constexpr int kCoverArtSize = 50;
   };
 } // namespace ao::gtk

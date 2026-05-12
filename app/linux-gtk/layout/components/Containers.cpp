@@ -431,6 +431,7 @@ namespace ao::gtk::layout
             break;
           }
         }
+
         sortChildren();
       }
 
@@ -444,6 +445,7 @@ namespace ao::gtk::layout
             break;
           }
         }
+
         sortChildren();
       }
 

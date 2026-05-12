@@ -10,6 +10,7 @@
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
 #include <ao/utility/Log.h>
+#include <ao/utility/ScopedTimer.h>
 
 #include <algorithm>
 #include <flat_set>
@@ -197,7 +198,7 @@ namespace ao::rt
         list.stageExpression(list._expression);
       }
 
-      rebuildDirtyLists(*it->second);
+      evaluateDirtyLists(*it->second);
     }
   }
 
@@ -214,17 +215,17 @@ namespace ao::rt
     }
   }
 
-  void SmartListEvaluator::rebuildActiveLists(SourceBucket& bucket)
+  void SmartListEvaluator::evaluateAllLists(SourceBucket& bucket)
   {
     if (bucket.lists.empty())
     {
       return;
     }
 
-    rebuildLists(bucket.lists);
+    evaluateLists(bucket.lists);
   }
 
-  void SmartListEvaluator::rebuildDirtyLists(SourceBucket& bucket)
+  void SmartListEvaluator::evaluateDirtyLists(SourceBucket& bucket)
   {
     auto dirtyLists = std::vector<SmartListSource*>{};
 
@@ -242,10 +243,10 @@ namespace ao::rt
       return;
     }
 
-    rebuildLists(dirtyLists);
+    evaluateLists(dirtyLists);
   }
 
-  void SmartListEvaluator::rebuildLists(std::span<SmartListSource*> const lists)
+  void SmartListEvaluator::evaluateLists(std::span<SmartListSource*> const lists)
   {
     if (lists.empty())
     {
@@ -269,7 +270,7 @@ namespace ao::rt
     if (!evaluatableLists.empty())
     {
       auto const mode = getUnionMode(evaluatableLists);
-      rebuildGroup(lists.front()->_source, evaluatableLists, mode);
+      evaluateMembers(lists.front()->_source, evaluatableLists, mode);
     }
 
     // Notify Reset for only the provided lists
@@ -279,10 +280,11 @@ namespace ao::rt
     }
   }
 
-  void SmartListEvaluator::rebuildGroup(TrackSource& source,
-                                        std::span<SmartListSource*> const lists,
-                                        ao::library::TrackStore::Reader::LoadMode const mode)
+  void SmartListEvaluator::evaluateMembers(TrackSource& source,
+                                           std::span<SmartListSource*> const lists,
+                                           ao::library::TrackStore::Reader::LoadMode const mode)
   {
+    auto const timer = ao::utility::ScopedTimer{"SmartListEvaluator::evaluateMembers"};
     if (lists.empty())
     {
       return;
@@ -321,7 +323,7 @@ namespace ao::rt
 
   void SmartListEvaluator::handleSourceReset(SourceBucket& bucket)
   {
-    rebuildActiveLists(bucket);
+    evaluateAllLists(bucket);
   }
 
   void SmartListEvaluator::handleSourceInserted(SourceBucket& bucket, TrackId const id, std::size_t /*sourceIndex*/)

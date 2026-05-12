@@ -80,6 +80,23 @@ namespace ao::rt
     virtual Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) = 0;
   };
 
+  struct TrackListProjectionChanged final
+  {
+    ViewId viewId{};
+    std::shared_ptr<ITrackListProjection> projection{};
+    std::uint64_t revision = 0;
+  };
+
+  struct FilterStatusChanged final
+  {
+    ViewId viewId{};
+    std::string expression{};
+    bool pending = false;
+    bool hasError = false;
+    std::string errorMessage{};
+    std::uint64_t revision = 0;
+  };
+
   enum class SelectionKind : std::uint8_t
   {
     None,

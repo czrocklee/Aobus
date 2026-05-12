@@ -10,6 +10,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/utility/ScopedTimer.h>
 
 #include <algorithm>
 #include <memory>
@@ -495,6 +496,7 @@ namespace ao::rt
 
     void rebuildOrderIndex()
     {
+      auto const timer = ao::utility::ScopedTimer{"TrackListProjection::rebuildOrderIndex"};
       orderIndex.clear();
       positionIndex.clear();
       sections.clear();
@@ -647,7 +649,7 @@ namespace ao::rt
       auto const reader = library.tracks().reader(txn);
       auto& dict = library.dictionary();
 
-      std::vector<OrderEntry> sortedNew;
+      auto sortedNew = std::vector<OrderEntry>{};
       sortedNew.reserve(ids.size());
 
       for (auto const id : ids)
@@ -761,7 +763,7 @@ namespace ao::rt
         return;
       }
 
-      std::vector<std::size_t> positions;
+      auto positions = std::vector<std::size_t>{};
       positions.reserve(ids.size());
 
       for (auto id : ids)

@@ -82,12 +82,12 @@ namespace ao::rt
       std::unique_ptr<TrackSourceObserver> observer;
     };
 
-    void rebuildActiveLists(SourceBucket& bucket);
-    void rebuildDirtyLists(SourceBucket& bucket);
-    void rebuildLists(std::span<SmartListSource*> lists);
-    void rebuildGroup(TrackSource& source,
-                      std::span<SmartListSource*> lists,
-                      ao::library::TrackStore::Reader::LoadMode mode);
+    void evaluateAllLists(SourceBucket& bucket);
+    void evaluateDirtyLists(SourceBucket& bucket);
+    void evaluateLists(std::span<SmartListSource*> lists);
+    void evaluateMembers(TrackSource& source,
+                         std::span<SmartListSource*> lists,
+                         ao::library::TrackStore::Reader::LoadMode mode);
 
     void handleSourceReset(SourceBucket& bucket);
     void handleSourceInserted(SourceBucket& bucket, TrackId id, std::size_t sourceIndex);

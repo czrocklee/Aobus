@@ -17,7 +17,7 @@ namespace ao::gtk
                                         Glib::ustring const& name,
                                         Glib::ustring const& filter)
   {
-    auto obj = Glib::make_refptr_for_instance<ListRow>(new ListRow()); // NOLINT(cppcoreguidelines-owning-memory)
+    auto obj = Glib::make_refptr_for_instance<ListRow>(new ListRow{}); // NOLINT(cppcoreguidelines-owning-memory)
     obj->_listId = id;
     obj->_parentId = parentId;
     obj->_depth = depth;

@@ -12,6 +12,8 @@
 #include <gtkmm/spinbutton.h>
 #include <memory>
 #include <string>
+#include <string_view>
+#include "../LayoutConstants.h"
 
 namespace ao::gtk::layout::editor
 {
@@ -105,7 +107,7 @@ namespace ao::gtk::layout::editor
     _treeBox.append(_toolbar);
     _treeBox.append(_treeScroll);
 
-    int const padding = 10;
+    int const padding = ::ao::gtk::Layout::kMarginXLarge;
     _propertiesBox.set_margin_start(padding);
     _propertiesBox.set_margin_end(padding);
     _propertiesBox.set_margin_top(padding);
@@ -486,17 +488,17 @@ namespace ao::gtk::layout::editor
   }
 
   void LayoutEditorDialog::applyPropertyChange(LayoutNode* node,
-                                               std::string const& propName,
+                                               std::string_view propName,
                                                LayoutValue const& value,
                                                bool isLayoutProp)
   {
     if (isLayoutProp)
     {
-      node->layout[propName] = value;
+      node->layout[std::string{propName}] = value;
     }
     else
     {
-      node->props[propName] = value;
+      node->props[std::string{propName}] = value;
     }
 
     notifyPreview();
@@ -516,18 +518,18 @@ namespace ao::gtk::layout::editor
     }
   }
 
-  void LayoutEditorDialog::addSectionTitle(std::string const& text)
+  void LayoutEditorDialog::addSectionTitle(std::string_view text)
   {
-    auto* const label = Gtk::make_managed<Gtk::Label>("<b>" + text + "</b>");
+    auto* const label = Gtk::make_managed<Gtk::Label>("<b>" + std::string{text} + "</b>");
     label->set_use_markup(true);
     label->set_halign(Gtk::Align::START);
-    label->set_margin_top(10);
+    label->set_margin_top(::ao::gtk::Layout::kMarginXLarge);
     _propertiesBox.append(*label);
   }
 
   void LayoutEditorDialog::renderIdSection(LayoutNode* node)
   {
-    auto* const hbox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 10);
+    auto* const hbox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, ::ao::gtk::Layout::kSpacingLarge);
 
     auto* const label = Gtk::make_managed<Gtk::Label>("ID");
     label->set_halign(Gtk::Align::START);
@@ -538,6 +540,8 @@ namespace ao::gtk::layout::editor
     entry->set_hexpand(true);
 
     auto const debounceConn = std::make_shared<sigc::connection>();
+    constexpr int kDebounceMs = 500;
+
     entry->signal_changed().connect(
       [this, node, entry, debounceConn]
       {
@@ -549,31 +553,31 @@ namespace ao::gtk::layout::editor
         *debounceConn = Glib::signal_timeout().connect(
           [this, node, entry]() -> bool
           {
-            std::string const newId = entry->get_text();
-
-            if (node->id != newId)
+            auto const newId = std::string{entry->get_text().raw()};
+            if (node->id == newId)
             {
-              node->id = newId;
-
-              if (auto const row = _treeView.get_selection()->get_selected())
-              {
-                auto const descriptor = _registry.getDescriptor(node->type);
-                auto displayName = Glib::ustring{node->id};
-
-                if (displayName.empty())
-                {
-                  displayName = descriptor ? descriptor->displayName : node->type;
-                }
-
-                row->set_value(_columns.displayName, displayName);
-              }
-
-              notifyPreview();
+              return false;
             }
 
+            node->id = newId;
+
+            if (auto const row = _treeView.get_selection()->get_selected())
+            {
+              auto const descriptor = _registry.getDescriptor(node->type);
+              auto displayName = Glib::ustring{node->id};
+
+              if (displayName.empty())
+              {
+                displayName = descriptor ? descriptor->displayName : node->type;
+              }
+
+              row->set_value(_columns.displayName, displayName);
+            }
+
+            notifyPreview();
             return false;
           },
-          500);
+          kDebounceMs);
       });
 
     hbox->append(*label);
@@ -583,7 +587,7 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::renderBoolEditor(LayoutNode* node,
                                             PropertyDescriptor const& prop,
-                                            LayoutValue currentVal,
+                                            LayoutValue const& currentVal,
                                             bool isLayoutProp)
   {
     auto* const check = Gtk::make_managed<Gtk::CheckButton>();
@@ -596,7 +600,7 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::renderIntEditor(LayoutNode* node,
                                            PropertyDescriptor const& prop,
-                                           LayoutValue currentVal,
+                                           LayoutValue const& currentVal,
                                            bool isLayoutProp)
   {
     auto* const spin = Gtk::make_managed<Gtk::SpinButton>(
@@ -612,7 +616,7 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::renderEnumEditor(LayoutNode* node,
                                             PropertyDescriptor const& prop,
-                                            LayoutValue currentVal,
+                                            LayoutValue const& currentVal,
                                             bool isLayoutProp)
   {
     auto* const combo = Gtk::make_managed<Gtk::ComboBoxText>();
@@ -631,7 +635,7 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::renderStringEditor(LayoutNode* node,
                                               PropertyDescriptor const& prop,
-                                              LayoutValue currentVal,
+                                              LayoutValue const& currentVal,
                                               bool isLayoutProp)
   {
     auto* const entry = Gtk::make_managed<Gtk::Entry>();
@@ -639,6 +643,8 @@ namespace ao::gtk::layout::editor
     entry->set_hexpand(true);
 
     auto const debounceConn = std::make_shared<sigc::connection>();
+    constexpr int kDebounceMs = 500;
+
     entry->signal_changed().connect(
       [this, node, prop, entry, isLayoutProp, debounceConn]
       {
@@ -653,7 +659,7 @@ namespace ao::gtk::layout::editor
             applyPropertyChange(node, prop.name, LayoutValue{std::string{entry->get_text().raw()}}, isLayoutProp);
             return false;
           },
-          500);
+          kDebounceMs);
       });
 
     _propertiesBox.append(*createPropertyRow(prop.label, *entry));
@@ -713,6 +719,7 @@ namespace ao::gtk::layout::editor
     if (descriptorOption && !descriptorOption->props.empty())
     {
       addSectionTitle("Properties");
+
       for (auto const& prop : descriptorOption->props)
       {
         dispatchEditor(node, prop, false);
@@ -755,6 +762,7 @@ namespace ao::gtk::layout::editor
       if (!layoutProps.empty())
       {
         addSectionTitle("Layout Properties");
+
         for (auto const& prop : layoutProps)
         {
           dispatchEditor(node, prop, true);
@@ -767,7 +775,7 @@ namespace ao::gtk::layout::editor
       auto* const label = Gtk::make_managed<Gtk::Label>("<i>No descriptor found</i>");
       label->set_use_markup(true);
       label->set_halign(Gtk::Align::START);
-      label->set_margin_top(10);
+      label->set_margin_top(::ao::gtk::Layout::kMarginXLarge);
       _propertiesBox.append(*label);
     }
   }
