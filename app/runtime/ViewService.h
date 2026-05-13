@@ -45,13 +45,13 @@ namespace ao::rt
     struct SelectionChanged final
     {
       ViewId viewId{};
-      std::vector<ao::TrackId> selection{};
+      std::vector<TrackId> selection{};
     };
 
     struct ListChanged final
     {
       ViewId viewId{};
-      ao::ListId listId{};
+      ListId listId{};
     };
 
     ViewService(IControlExecutor& executor, ao::library::MusicLibrary& library, ListSourceStore& sources);
@@ -67,8 +67,8 @@ namespace ao::rt
     void setFilter(ViewId viewId, std::string const& filterExpression);
     void setSort(ViewId viewId, std::vector<TrackSortTerm> const& sortBy);
     void setGrouping(ViewId viewId, TrackGroupKey groupBy);
-    void setSelection(ViewId viewId, std::vector<ao::TrackId> const& selection);
-    void openListInView(ViewId viewId, ao::ListId listId);
+    void setSelection(ViewId viewId, std::vector<TrackId> const& selection);
+    void openListInView(ViewId viewId, ListId listId);
 
     Subscription onDestroyed(std::move_only_function<void(ViewId)> handler);
     Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);

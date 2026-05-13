@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "shell/ShellLayoutController.h"
+#include "app/ShellLayoutController.h"
 #include "layout/LayoutConstants.h"
 #include "layout/document/LayoutYaml.h"
 #include "layout/editor/LayoutEditorDialog.h"
@@ -10,7 +10,7 @@
 #include <gtkmm/cssprovider.h>
 #include <runtime/ConfigStore.h>
 
-namespace ao::gtk::shell
+namespace ao::gtk
 {
   ShellLayoutController::ShellLayoutController(ao::rt::AppSession& session, Gtk::Window& parentWindow)
     : _registry{}
@@ -157,4 +157,4 @@ namespace ao::gtk::shell
     Gtk::StyleContext::add_provider_for_display(
       Gdk::Display::get_default(), cssProvider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   }
-} // namespace ao::gtk::shell
+} // namespace ao::gtk

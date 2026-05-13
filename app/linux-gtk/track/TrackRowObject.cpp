@@ -99,12 +99,12 @@ namespace ao::gtk
   }
 
   void TrackRowObject::populate(Glib::ustring const& title,
-                                ao::DictionaryId artist,
-                                ao::DictionaryId album,
-                                ao::DictionaryId albumArtist,
-                                ao::DictionaryId genre,
-                                ao::DictionaryId composer,
-                                ao::DictionaryId work,
+                                DictionaryId artist,
+                                DictionaryId album,
+                                DictionaryId albumArtist,
+                                DictionaryId genre,
+                                DictionaryId composer,
+                                DictionaryId work,
                                 Glib::ustring const& tags,
                                 std::chrono::milliseconds duration,
                                 std::uint16_t year,

@@ -46,8 +46,8 @@ namespace ao::rt
     std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const override;
 
     std::size_t size() const noexcept override;
-    ao::TrackId trackIdAt(std::size_t index) const override;
-    std::optional<std::size_t> indexOf(ao::TrackId trackId) const noexcept override;
+    TrackId trackIdAt(std::size_t index) const override;
+    std::optional<std::size_t> indexOf(TrackId trackId) const noexcept override;
 
     void setPresentation(TrackGroupKey groupBy, std::vector<TrackSortTerm> sortBy);
 
@@ -55,13 +55,13 @@ namespace ao::rt
 
   private:
     void onReset() override;
-    void onInserted(ao::TrackId id, std::size_t index) override;
-    void onUpdated(ao::TrackId id, std::size_t index) override;
-    void onRemoved(ao::TrackId id, std::size_t index) override;
+    void onInserted(TrackId id, std::size_t index) override;
+    void onUpdated(TrackId id, std::size_t index) override;
+    void onRemoved(TrackId id, std::size_t index) override;
 
-    void onInserted(std::span<ao::TrackId const> ids) override;
-    void onUpdated(std::span<ao::TrackId const> ids) override;
-    void onRemoved(std::span<ao::TrackId const> ids) override;
+    void onInserted(std::span<TrackId const> ids) override;
+    void onUpdated(std::span<TrackId const> ids) override;
+    void onRemoved(std::span<TrackId const> ids) override;
 
     void publishDelta(TrackListProjectionDeltaBatch const& batch);
 

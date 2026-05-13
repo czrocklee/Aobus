@@ -3,7 +3,7 @@
 
 #include "playback/VolumeControl.h"
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
   VolumeControl::VolumeControl(ao::rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
@@ -44,4 +44,4 @@ namespace ao::gtk::playback
       _updating = false;
     }
   }
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

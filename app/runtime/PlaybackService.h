@@ -23,8 +23,8 @@ namespace ao::rt
   public:
     struct NowPlayingChanged final
     {
-      ao::TrackId trackId{};
-      ao::ListId sourceListId{};
+      TrackId trackId{};
+      ListId sourceListId{};
     };
 
     struct QualityChanged final
@@ -35,8 +35,8 @@ namespace ao::rt
 
     struct RevealTrackRequested final
     {
-      ao::TrackId trackId{};
-      ao::ListId preferredListId{};
+      TrackId trackId{};
+      ListId preferredListId{};
       ViewId preferredViewId{};
     };
 
@@ -61,8 +61,8 @@ namespace ao::rt
     Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
     Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
 
-    void play(ao::audio::TrackPlaybackDescriptor const& descriptor, ao::ListId sourceListId);
-    ao::TrackId playSelectionInView(ViewId viewId);
+    void play(ao::audio::TrackPlaybackDescriptor const& descriptor, ListId sourceListId);
+    TrackId playSelectionInView(ViewId viewId);
     void pause();
     void resume();
     void stop();

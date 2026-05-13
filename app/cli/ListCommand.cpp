@@ -53,7 +53,7 @@ namespace ao::cli
                     std::string const& name,
                     std::string const& filter,
                     std::string const& desc,
-                    ao::ListId parentListId,
+                    ListId parentListId,
                     std::ostream& os)
     {
       auto txn = ml.writeTransaction();
@@ -93,7 +93,7 @@ namespace ao::cli
                    name->as<std::string>(),
                    filter->as<std::string>(),
                    desc->as<std::string>(),
-                   ao::ListId{parent->as<std::uint32_t>()},
+                   ListId{parent->as<std::uint32_t>()},
                    std::cout);
       });
 
@@ -104,7 +104,7 @@ namespace ao::cli
       {
         auto txn = ml.writeTransaction();
         auto writer = ml.lists().writer(txn);
-        auto const listId = ao::ListId{id->as<std::uint32_t>()};
+        auto const listId = ListId{id->as<std::uint32_t>()};
 
         if (writer.del(listId))
         {

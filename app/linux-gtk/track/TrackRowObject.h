@@ -58,12 +58,12 @@ namespace ao::gtk
     void setPlaying(bool playing);
 
     void populate(Glib::ustring const& title,
-                  ao::DictionaryId artist,
-                  ao::DictionaryId album,
-                  ao::DictionaryId albumArtist,
-                  ao::DictionaryId genre,
-                  ao::DictionaryId composer,
-                  ao::DictionaryId work,
+                  DictionaryId artist,
+                  DictionaryId album,
+                  DictionaryId albumArtist,
+                  DictionaryId genre,
+                  DictionaryId composer,
+                  DictionaryId work,
                   Glib::ustring const& tags,
                   std::chrono::milliseconds duration,
                   std::uint16_t year,
@@ -83,12 +83,12 @@ namespace ao::gtk
     TrackId _id;
     TrackRowCache const* _provider = nullptr;
 
-    ao::DictionaryId _artistId{0};
-    ao::DictionaryId _albumId{0};
-    ao::DictionaryId _albumArtistId{0};
-    ao::DictionaryId _genreId{0};
-    ao::DictionaryId _composerId{0};
-    ao::DictionaryId _workId{0};
+    DictionaryId _artistId{0};
+    DictionaryId _albumId{0};
+    DictionaryId _albumArtistId{0};
+    DictionaryId _genreId{0};
+    DictionaryId _composerId{0};
+    DictionaryId _workId{0};
 
     Glib::ustring _tags;
     Glib::ustring _yearStr;

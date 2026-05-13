@@ -51,7 +51,7 @@ namespace ao::gtk
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
                                    ao::rt::AppSession& session,
-                                   ao::ListId parentListId,
+                                   ListId parentListId,
                                    TrackRowCache const& provider)
     : _exprBox{session.musicLibrary()}, _session{session}, _parentListId{parentListId}, _trackRowCache{provider}
   {
@@ -68,7 +68,7 @@ namespace ao::gtk
     _exprTimeoutConnection.disconnect();
   }
 
-  void SmartListDialog::populate(ao::ListId id, ao::library::ListView const& view)
+  void SmartListDialog::populate(ListId id, ao::library::ListView const& view)
   {
     _optEditListId = id;
     _nameEntry.set_text(std::string(view.name()));
@@ -79,9 +79,9 @@ namespace ao::gtk
     updateDialogState();
   }
 
-  ao::ListId SmartListDialog::editListId() const
+  ListId SmartListDialog::editListId() const
   {
-    return _optEditListId.value_or(ao::ListId{0});
+    return _optEditListId.value_or(ListId{0});
   }
 
   void SmartListDialog::setLocalExpression(std::string expression)
@@ -327,7 +327,7 @@ namespace ao::gtk
 
     // Check if parent is All Tracks
     auto const isAllTracks =
-      (_parentListId == ao::ListId{std::numeric_limits<std::uint32_t>::max()} || _parentListId == ao::ListId{0});
+      (_parentListId == ListId{std::numeric_limits<std::uint32_t>::max()} || _parentListId == ListId{0});
 
     if (!isAllTracks)
     {
@@ -373,7 +373,7 @@ namespace ao::gtk
 
     auto const& expr = _exprBox.entry().get_text();
     auto const isAllTracks =
-      (_parentListId == ao::ListId{std::numeric_limits<std::uint32_t>::max()} || _parentListId == ao::ListId{0});
+      (_parentListId == ListId{std::numeric_limits<std::uint32_t>::max()} || _parentListId == ListId{0});
 
     if (expr.empty())
     {

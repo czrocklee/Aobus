@@ -39,7 +39,7 @@ namespace ao::rt
     LayoutState layoutState() const;
 
     void setFocusedView(ViewId viewId);
-    void navigateTo(std::variant<ao::ListId, std::string, GlobalViewKind> const& target);
+    void navigateTo(std::variant<ListId, std::string, GlobalViewKind> const& target);
     void closeView(ViewId viewId);
     void restoreSession();
     void saveSession();

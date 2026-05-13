@@ -3,16 +3,13 @@
 
 #include "PlaybackComponents.h"
 
-#include "playback/AobusSoul.h"
-#include "playback/NowPlayingArtistLabel.h"
-#include "playback/NowPlayingTitleLabel.h"
+#include "app/AobusSoul.h"
+#include "playback/AobusSoulBinding.h"
+#include "playback/NowPlayingFieldLabel.h"
 #include "playback/OutputSelector.h"
-#include "playback/PauseButton.h"
-#include "playback/PlayButton.h"
-#include "playback/PlayPauseButton.h"
 #include "playback/SeekControl.h"
-#include "playback/StopButton.h"
 #include "playback/TimeLabel.h"
+#include "playback/TransportButton.h"
 #include "playback/VolumeControl.h"
 #include <runtime/AppSession.h>
 
@@ -30,6 +27,7 @@ namespace ao::gtk::layout
     public:
       PlayPauseButtonComponent(LayoutDependencies& ctx, LayoutNode const& node)
         : _button{ctx.session.playback(),
+                  TransportButton::Action::PlayPause,
                   [&session = ctx.session] { session.playSelectionInFocusedView(); },
                   node.getProp<bool>("showLabel", false),
                   node.getProp<std::string>("size", "normal")}
@@ -39,7 +37,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _button.widget(); }
 
     private:
-      playback::PlayPauseButton _button;
+      TransportButton _button;
     };
 
     /**
@@ -50,6 +48,8 @@ namespace ao::gtk::layout
     public:
       StopButtonComponent(LayoutDependencies& ctx, LayoutNode const& node)
         : _button{ctx.session.playback(),
+                  TransportButton::Action::Stop,
+                  {},
                   node.getProp<bool>("showLabel", false),
                   node.getProp<std::string>("size", "normal")}
       {
@@ -58,7 +58,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _button.widget(); }
 
     private:
-      playback::StopButton _button;
+      TransportButton _button;
     };
 
     /**
@@ -75,7 +75,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _control.widget(); }
 
     private:
-      playback::VolumeControl _control;
+      VolumeControl _control;
     };
 
     /**
@@ -85,14 +85,14 @@ namespace ao::gtk::layout
     {
     public:
       CurrentTitleLabelComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _label{ctx.session.playback()}
+        : _label{ctx.session.playback(), NowPlayingFieldLabel::Field::Title}
       {
       }
 
       Gtk::Widget& widget() override { return _label.widget(); }
 
     private:
-      playback::NowPlayingTitleLabel _label;
+      NowPlayingFieldLabel _label;
     };
 
     /**
@@ -102,14 +102,14 @@ namespace ao::gtk::layout
     {
     public:
       CurrentArtistLabelComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _label{ctx.session.playback()}
+        : _label{ctx.session.playback(), NowPlayingFieldLabel::Field::Artist}
       {
       }
 
       Gtk::Widget& widget() override { return _label.widget(); }
 
     private:
-      playback::NowPlayingArtistLabel _label;
+      NowPlayingFieldLabel _label;
     };
 
     /**
@@ -126,7 +126,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _control.widget(); }
 
     private:
-      playback::SeekControl _control;
+      SeekControl _control;
     };
 
     /**
@@ -143,7 +143,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _label.widget(); }
 
     private:
-      playback::TimeLabel _label;
+      TimeLabel _label;
     };
 
     /**
@@ -154,6 +154,7 @@ namespace ao::gtk::layout
     public:
       PlayButtonComponent(LayoutDependencies& ctx, LayoutNode const& node)
         : _button{ctx.session.playback(),
+                  TransportButton::Action::Play,
                   [&session = ctx.session] { session.playSelectionInFocusedView(); },
                   node.getProp<bool>("showLabel", false),
                   node.getProp<std::string>("size", "normal")}
@@ -163,7 +164,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _button.widget(); }
 
     private:
-      playback::PlayButton _button;
+      TransportButton _button;
     };
 
     /**
@@ -174,6 +175,8 @@ namespace ao::gtk::layout
     public:
       PauseButtonComponent(LayoutDependencies& ctx, LayoutNode const& node)
         : _button{ctx.session.playback(),
+                  TransportButton::Action::Pause,
+                  {},
                   node.getProp<bool>("showLabel", false),
                   node.getProp<std::string>("size", "normal")}
       {
@@ -182,7 +185,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _button.widget(); }
 
     private:
-      playback::PauseButton _button;
+      TransportButton _button;
     };
 
     /**
@@ -192,14 +195,14 @@ namespace ao::gtk::layout
     {
     public:
       OutputButtonComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _selector{ctx.session}
+        : _selector{ctx.session.playback()}
       {
       }
 
       Gtk::Widget& widget() override { return _selector.widget(); }
 
     private:
-      playback::OutputSelector _selector;
+      OutputSelector _selector;
     };
 
     /**
@@ -209,20 +212,19 @@ namespace ao::gtk::layout
     {
     public:
       QualityIndicatorComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _session{ctx.session}
+        : _session{ctx.session}, _soulBinding{std::make_unique<AobusSoulBinding>(_soul, _session.playback())}
       {
         _soul.set_size_request(24, 24);
         _soul.set_valign(Gtk::Align::CENTER);
         _soul.set_halign(Gtk::Align::CENTER);
-
-        _soul.bind(_session);
       }
 
       Gtk::Widget& widget() override { return _soul; }
 
     private:
       ao::rt::AppSession& _session;
-      ao::gtk::AobusSoul _soul{};
+      AobusSoul _soul{};
+      std::unique_ptr<AobusSoulBinding> _soulBinding;
     };
 
     std::unique_ptr<ILayoutComponent> createPlayPauseButton(LayoutDependencies& ctx, LayoutNode const& node)

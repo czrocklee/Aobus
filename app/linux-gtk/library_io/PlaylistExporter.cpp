@@ -11,10 +11,10 @@
 
 #include <fstream>
 
-namespace ao::gtk::service
+namespace ao::gtk
 {
   PlaylistExporter::PlaylistExporter(ao::rt::TrackSource& list,
-                                     ao::gtk::TrackRowCache const& provider,
+                                     TrackRowCache const& provider,
                                      std::filesystem::path root,
                                      std::filesystem::path path)
     : _list{list}, _provider{provider}, _root{std::move(root)}, _path{std::move(path)}
@@ -108,4 +108,4 @@ namespace ao::gtk::service
   {
     scheduleForWrite();
   }
-} // namespace ao::gtk::service
+} // namespace ao::gtk

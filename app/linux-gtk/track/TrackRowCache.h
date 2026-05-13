@@ -57,7 +57,7 @@ namespace ao::gtk
     /**
      * Resolve a dictionary string and cache it.
      */
-    Glib::ustring const& resolveDictionaryString(ao::DictionaryId id) const;
+    Glib::ustring const& resolveDictionaryString(DictionaryId id) const;
 
     /**
      * Get cover art resource ID for a track (direct from DB).
@@ -101,7 +101,7 @@ namespace ao::gtk
     ao::library::DictionaryStore& _dict;
 
     mutable std::unordered_map<TrackId, Glib::RefPtr<TrackRowObject>> _rowCache;
-    mutable std::unordered_map<ao::DictionaryId, Glib::ustring> _stringCache;
+    mutable std::unordered_map<DictionaryId, Glib::ustring> _stringCache;
 
     Glib::RefPtr<TrackRowObject> createRowFromView(TrackId id, ao::library::TrackView const& view) const;
   };

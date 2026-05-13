@@ -14,7 +14,7 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/stylecontext.h>
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
   namespace
   {
@@ -76,15 +76,15 @@ namespace ao::gtk::playback
     }
   }
 
-  OutputSelector::OutputSelector(ao::rt::AppSession& session)
-    : _session{session}
+  OutputSelector::OutputSelector(ao::rt::PlaybackService& playback)
+    : _playback{playback}
   {
     ensureOutputSelectorCss();
     _button.set_has_frame(false);
     _button.add_css_class("output-button-logo");
     _button.set_child(_soul);
 
-    _soul.bind(_session);
+    _soulBinding = std::make_unique<AobusSoulBinding>(_soul, _playback);
 
     _popover.set_parent(_button);
     _popover.set_autohide(true);
@@ -127,7 +127,7 @@ namespace ao::gtk::playback
             }
           }
 
-          _soulWindow->bind(_session);
+          _soulWindow->bind(_playback);
         }
 
         _soulWindow->present();
@@ -153,7 +153,7 @@ namespace ao::gtk::playback
 
           if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
           {
-            _session.playback().setOutput(deviceItem->backendId, deviceItem->id, deviceItem->profileId);
+            _playback.setOutput(deviceItem->backendId, deviceItem->id, deviceItem->profileId);
             _popover.popdown();
           }
         }
@@ -224,7 +224,7 @@ namespace ao::gtk::playback
 
   void OutputSelector::rebuildModel()
   {
-    auto const& state = _session.playback().state();
+    auto const& state = _playback.state();
     _store->remove_all();
 
     for (auto const& backend : state.availableOutputs)
@@ -257,4 +257,4 @@ namespace ao::gtk::playback
       }
     }
   }
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

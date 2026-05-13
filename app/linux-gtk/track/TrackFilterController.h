@@ -16,7 +16,7 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class ViewService;
 }
 
 namespace ao::gtk
@@ -27,7 +27,7 @@ namespace ao::gtk
     using CreateSmartListSignal = sigc::signal<void(std::string)>;
     using StatusMessageFn = std::function<void(std::string_view)>;
 
-    TrackFilterController(ao::rt::AppSession& session, ao::rt::ViewId viewId, Gtk::Entry& filterEntry);
+    TrackFilterController(ao::rt::ViewService& viewService, ao::rt::ViewId viewId, Gtk::Entry& filterEntry);
 
     void setFilterExpression(std::string_view expression);
     void setStatusMessageCallback(StatusMessageFn callback);
@@ -39,7 +39,7 @@ namespace ao::gtk
     void onFilterStatusChanged(ao::rt::FilterStatusChanged const& status);
     void updateFilterUi();
 
-    ao::rt::AppSession& _session;
+    ao::rt::ViewService& _viewService;
     ao::rt::ViewId _viewId;
     Gtk::Entry& _filterEntry;
 

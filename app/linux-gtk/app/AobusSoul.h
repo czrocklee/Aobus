@@ -3,24 +3,12 @@
 
 #pragma once
 
-#include <ao/audio/Types.h>
 #include <gdkmm/rgba.h>
 #include <gtkmm/widget.h>
 #include <memory>
 
-#include "runtime/CorePrimitives.h"
-
-namespace ao::rt
-{
-  class AppSession;
-}
-
 namespace ao::gtk
 {
-  /**
-   * @class AobusSoul
-   * @brief The animated brand mark of Aobus.
-   */
   class AobusSoul final : public Gtk::Widget
   {
   public:
@@ -30,9 +18,8 @@ namespace ao::gtk
     AobusSoul(AobusSoul const&) = delete;
     AobusSoul& operator=(AobusSoul const&) = delete;
 
-    void bind(ao::rt::AppSession& session);
-    void unbind();
-    void update(double timeSec, ao::audio::Quality quality, bool isStopped, bool isReady);
+    void breathe(bool breathing);
+    void setAura(Gdk::RGBA const& aura);
     void setShowFullLogo(bool show);
 
     static constexpr double kGoldenRatio = 1.61803398875;
@@ -48,17 +35,6 @@ namespace ao::gtk
                        int& natural_baseline) const override;
 
   private:
-    struct ColorCache final
-    {
-      Gdk::RGBA cyan{};
-      Gdk::RGBA gray{};
-      Gdk::RGBA purple{};
-      Gdk::RGBA green{};
-      Gdk::RGBA orange{};
-      Gdk::RGBA red{};
-      Gdk::RGBA amber{};
-    };
-
     struct PathDeleter
     {
       void operator()(::GskPath* path) const noexcept;
@@ -84,20 +60,18 @@ namespace ao::gtk
     static constexpr int kFullLogoMinSize = 54;
     static constexpr int kSoulMinSize = 24;
 
-    ColorCache _colors{};
+    Gdk::RGBA _cyan{"#00E5FF"};
+    Gdk::RGBA _gray{"#6B7280"};
+    Gdk::RGBA _amber{"#F97316"};
+    Gdk::RGBA _aura{_cyan};
+
     double _timeSec = 0.0;
-    ao::audio::Quality _quality = ao::audio::Quality::Unknown;
     bool _isStopped = true;
-    bool _isReady = false;
     bool _showFullLogo = false;
 
     std::int64_t _firstFrameTime = 0;
     std::uint32_t _tickId = 0;
-    bool _isPlaying = false;
-    ao::rt::Subscription _qualitySub{};
-    ao::rt::Subscription _idleSub{};
-    ao::rt::Subscription _startedSub{};
-    ao::rt::Subscription _stoppedSub{};
+    bool _isBreathing = false;
 
     std::unique_ptr<::GskPath, PathDeleter> _unitPathO{};
     std::unique_ptr<::GskPath, PathDeleter> _unitPathA{};

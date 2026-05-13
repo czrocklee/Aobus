@@ -13,7 +13,7 @@
 #include <filesystem>
 #include <memory>
 
-namespace ao::gtk::service
+namespace ao::gtk
 {
   class PlaylistExporter final : public ao::rt::TrackSourceObserver
   {
@@ -21,7 +21,7 @@ namespace ao::gtk::service
     using TrackId = ao::TrackId;
 
     PlaylistExporter(ao::rt::TrackSource& list,
-                     ao::gtk::TrackRowCache const& provider,
+                     TrackRowCache const& provider,
                      std::filesystem::path root,
                      std::filesystem::path path);
     ~PlaylistExporter() override;
@@ -39,9 +39,9 @@ namespace ao::gtk::service
     void scheduleForWrite();
 
     ao::rt::TrackSource& _list;
-    ao::gtk::TrackRowCache const& _provider;
+    TrackRowCache const& _provider;
     std::filesystem::path const _root;
     std::filesystem::path const _path;
     std::unique_ptr<sigc::connection> _timeoutConnection;
   };
-} // namespace ao::gtk::service
+} // namespace ao::gtk

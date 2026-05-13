@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "shell/ImportProgressIndicator.h"
+#include "library_io/ImportProgressIndicator.h"
 #include "layout/LayoutConstants.h"
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
@@ -11,7 +11,7 @@ namespace ao::gtk
   ImportProgressIndicator::ImportProgressIndicator(ao::rt::LibraryMutationService& mutationService)
     : _mutationService{mutationService}
   {
-    _container.set_spacing(Layout::kSpacingXLarge);
+    _container.set_spacing(layout::kSpacingXLarge);
     _container.set_visible(false);
 
     _label.add_css_class("dim-label");

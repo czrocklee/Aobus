@@ -3,7 +3,7 @@
 
 #include "track/TrackSelectionController.h"
 
-#include "shell/ThemeBus.h"
+#include "app/ThemeBus.h"
 #include <ao/utility/Log.h>
 
 #include <gdk/gdk.h>

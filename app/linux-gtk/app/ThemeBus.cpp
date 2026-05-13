@@ -1,4 +1,4 @@
-#include "shell/ThemeBus.h"
+#include "app/ThemeBus.h"
 #include <ao/utility/Log.h>
 #include <gdkmm/display.h>
 #include <gio/gio.h>

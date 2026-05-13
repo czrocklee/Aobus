@@ -27,8 +27,8 @@ namespace ao::gtk
   public:
     struct Callbacks final
     {
-      std::function<void(ao::ListId)> onListSelected;
-      std::function<ao::rt::TrackSource*(ao::ListId)> getListMembership;
+      std::function<void(ListId)> onListSelected;
+      std::function<ao::rt::TrackSource*(ListId)> getListMembership;
     };
 
     ListSidebarController(Gtk::Window& parent, ao::rt::AppSession& session, Callbacks callbacks);
@@ -37,19 +37,19 @@ namespace ao::gtk
     Gtk::Widget& widget();
 
     void rebuildTree(TrackRowCache& dataProvider, ao::lmdb::ReadTransaction const& txn);
-    void select(ao::ListId listId);
-    void createSmartListFromExpression(ao::ListId parentListId, std::string expression);
+    void select(ListId listId);
+    void createSmartListFromExpression(ListId parentListId, std::string expression);
 
     void addActionsTo(Gio::ActionMap& actionMap);
 
   private:
     void setupActions();
-    void onContextMenuRequested(ao::ListId listId, Gdk::Rectangle const& rect);
-    void onSelectionChanged(ao::ListId listId);
+    void onContextMenuRequested(ListId listId, Gdk::Rectangle const& rect);
+    void onSelectionChanged(ListId listId);
 
-    void openNewListDialog(ao::ListId parentListId, std::string initialExpression = {});
+    void openNewListDialog(ListId parentListId, std::string initialExpression = {});
     void openNewSmartListDialog();
-    void openEditListDialog(ao::ListId listId);
+    void openEditListDialog(ListId listId);
 
     void createList(ao::model::ListDraft const& draft);
     void updateList(ao::model::ListDraft const& draft);
@@ -67,6 +67,6 @@ namespace ao::gtk
     Glib::RefPtr<Gio::SimpleAction> _deleteListAction;
     Glib::RefPtr<Gio::SimpleAction> _editListAction;
 
-    ao::ListId _pendingSelectId{0};
+    ListId _pendingSelectId{0};
   };
 } // namespace ao::gtk

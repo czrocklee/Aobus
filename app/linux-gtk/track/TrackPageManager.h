@@ -36,7 +36,7 @@ namespace ao::gtk
     ao::rt::ViewId viewId{};
     std::unique_ptr<TrackListAdapter> adapter = {};
     std::unique_ptr<TrackViewPage> page = {};
-    std::unique_ptr<ao::gtk::service::PlaylistExporter> exporter = {};
+    std::unique_ptr<PlaylistExporter> exporter = {};
   };
 
   /**
@@ -66,12 +66,12 @@ namespace ao::gtk
     TrackPageContext* currentVisible();
     TrackPageContext const* currentVisible() const;
 
-    void setPlayingTrack(std::optional<ao::TrackId> trackId);
+    void setPlayingTrack(std::optional<TrackId> trackId);
 
     /**
      * @return The list ID of the currently visible page, or allTracksListId() if none.
      */
-    ao::ListId activeListId() const;
+    ListId activeListId() const;
 
   private:
     void ensureViewPage(ao::rt::ViewId viewId, TrackRowCache& dataProvider);
@@ -92,7 +92,7 @@ namespace ao::gtk
     ao::rt::Subscription _projectionChangedSub;
 
     std::map<ao::rt::ViewId, TrackPageContext> _trackPages;
-    std::optional<ao::TrackId> _optPlayingTrackId;
+    std::optional<TrackId> _optPlayingTrackId;
     TrackRowCache* _activeDataProvider = nullptr;
   };
 } // namespace ao::gtk

@@ -208,13 +208,13 @@ namespace ao::gtk
     desc.title = std::string{metadata.title()};
 
     // Artist
-    if (auto const artistId = metadata.artistId(); artistId != ao::DictionaryId{0})
+    if (auto const artistId = metadata.artistId(); artistId != DictionaryId{0})
     {
       desc.artist = resolveDictionaryString(artistId).raw();
     }
 
     // Album
-    if (auto const albumId = metadata.albumId(); albumId != ao::DictionaryId{0})
+    if (auto const albumId = metadata.albumId(); albumId != DictionaryId{0})
     {
       desc.album = resolveDictionaryString(albumId).raw();
     }
@@ -222,7 +222,7 @@ namespace ao::gtk
     // Cover art
     if (auto const coverArtId = metadata.coverArtId(); coverArtId != 0)
     {
-      desc.optCoverArtId = ao::ResourceId{coverArtId};
+      desc.optCoverArtId = ResourceId{coverArtId};
     }
 
     return desc;
@@ -244,7 +244,7 @@ namespace ao::gtk
     _stringCache.clear();
   }
 
-  Glib::ustring const& TrackRowCache::resolveDictionaryString(ao::DictionaryId id) const
+  Glib::ustring const& TrackRowCache::resolveDictionaryString(DictionaryId id) const
   {
     // Check cache first
     if (auto const it = _stringCache.find(id); it != _stringCache.end())

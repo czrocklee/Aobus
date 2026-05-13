@@ -18,7 +18,7 @@ namespace ao::library
   public:
     using ProgressCallback = std::move_only_function<void(std::filesystem::path const& path, std::int32_t itemIndex)>;
     using FinishedCallback = std::move_only_function<void()>;
-    using TrackIdList = std::vector<ao::TrackId>;
+    using TrackIdList = std::vector<TrackId>;
 
     /**
      * ImportResult - Result of an import operation.

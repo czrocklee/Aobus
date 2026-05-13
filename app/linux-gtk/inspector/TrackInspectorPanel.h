@@ -14,9 +14,15 @@
 #include <memory>
 #include <vector>
 
+namespace ao::library
+{
+  class MusicLibrary;
+}
+
 namespace ao::rt
 {
-  class AppSession;
+  class LibraryMutationService;
+  class ListSourceStore;
 }
 
 namespace ao::gtk
@@ -28,9 +34,12 @@ namespace ao::gtk
   class TrackInspectorPanel final : public Gtk::Box
   {
   public:
-    using TagEditRequestedSignal = sigc::signal<void(std::vector<ao::TrackId> const&, Gtk::Widget*)>;
+    using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId> const&, Gtk::Widget*)>;
 
-    explicit TrackInspectorPanel(ao::rt::AppSession& session, CoverArtCache& coverArtCache);
+    explicit TrackInspectorPanel(ao::library::MusicLibrary& library,
+                                 ao::rt::LibraryMutationService& mutation,
+                                 ao::rt::ListSourceStore& sources,
+                                 CoverArtCache& coverArtCache);
     ~TrackInspectorPanel() override;
 
     TagEditRequestedSignal& signalTagEditRequested() { return _tagEditRequested; }
@@ -53,13 +62,15 @@ namespace ao::gtk
 
     void onTrackDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap);
     void updateCoverArt(ao::rt::TrackDetailSnapshot const& snap);
-    Glib::RefPtr<Gdk::Pixbuf> loadCoverArtFromLibrary(ao::ResourceId resourceId);
+    Glib::RefPtr<Gdk::Pixbuf> loadCoverArtFromLibrary(ResourceId resourceId);
     void updateAudioMetadata(ao::rt::TrackDetailSnapshot const& snap);
 
-    ao::rt::AppSession& _session;
+    ao::library::MusicLibrary& _library;
+    ao::rt::LibraryMutationService& _mutation;
+    ao::rt::ListSourceStore& _sources;
     CoverArtCache& _coverArtCache;
 
-    std::vector<ao::TrackId> _currentTrackIds;
+    std::vector<TrackId> _currentTrackIds;
     std::shared_ptr<ao::rt::ITrackDetailProjection> _detailProjection;
     ao::rt::Subscription _detailSub;
 

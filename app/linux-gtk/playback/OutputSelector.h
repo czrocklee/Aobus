@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "playback/AobusSoul.h"
+#include "app/AobusSoul.h"
+#include "playback/AobusSoulBinding.h"
 #include "playback/AobusSoulWindow.h"
 #include "runtime/PlaybackService.h"
 #include <giomm/liststore.h>
@@ -14,18 +15,15 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class PlaybackService;
 }
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
-  /**
-   * @brief A composite widget for selecting audio output devices and backends.
-   */
   class OutputSelector final
   {
   public:
-    explicit OutputSelector(ao::rt::AppSession& session);
+    explicit OutputSelector(ao::rt::PlaybackService& playback);
     ~OutputSelector();
 
     OutputSelector(OutputSelector const&) = delete;
@@ -37,12 +35,13 @@ namespace ao::gtk::playback
     Gtk::Widget* createRow(Glib::RefPtr<Glib::Object> const& item);
     void rebuildModel();
 
-    ao::rt::AppSession& _session;
+    ao::rt::PlaybackService& _playback;
     Gtk::Button _button;
     AobusSoul _soul;
+    std::unique_ptr<AobusSoulBinding> _soulBinding;
     std::unique_ptr<AobusSoulWindow> _soulWindow;
     Gtk::Popover _popover;
     Gtk::ListBox _listBox;
     Glib::RefPtr<Gio::ListStore<Glib::Object>> _store;
   };
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

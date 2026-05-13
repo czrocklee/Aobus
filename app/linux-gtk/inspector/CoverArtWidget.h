@@ -14,9 +14,9 @@
 #include <memory>
 #include <span>
 
-namespace ao::rt
+namespace ao::library
 {
-  class AppSession;
+  class MusicLibrary;
 }
 
 namespace ao::gtk
@@ -26,7 +26,7 @@ namespace ao::gtk
   class CoverArtWidget final : public Gtk::Picture
   {
   public:
-    CoverArtWidget(ao::rt::AppSession& session, CoverArtCache& cache);
+    CoverArtWidget(ao::library::MusicLibrary& library, CoverArtCache& cache);
     ~CoverArtWidget() override;
 
     void setCoverFromBytes(std::span<std::byte const> bytes);
@@ -39,7 +39,7 @@ namespace ao::gtk
   private:
     void onDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap);
 
-    ao::rt::AppSession& _session;
+    ao::library::MusicLibrary& _library;
     CoverArtCache& _cache;
     std::shared_ptr<ao::rt::ITrackDetailProjection> _detailProjection;
     ao::rt::Subscription _detailSub;

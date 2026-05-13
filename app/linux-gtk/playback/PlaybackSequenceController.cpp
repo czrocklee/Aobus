@@ -13,8 +13,8 @@
 
 namespace ao::gtk
 {
-  PlaybackSequenceController::PlaybackSequenceController(ao::rt::AppSession& session, TrackRowCache& dataProvider)
-    : _session{session}, _dataProvider{dataProvider}
+  PlaybackSequenceController::PlaybackSequenceController(ao::rt::PlaybackService& playback, TrackRowCache& dataProvider)
+    : _playback{playback}, _dataProvider{dataProvider}
   {
   }
 
@@ -23,7 +23,7 @@ namespace ao::gtk
     unsubscribeEvents();
   }
 
-  bool PlaybackSequenceController::playFromPage(TrackViewPage& page, ao::TrackId startTrackId)
+  bool PlaybackSequenceController::playFromPage(TrackViewPage& page, TrackId startTrackId)
   {
     auto trackIds = page.selectionController().getVisibleTrackIds();
     if (trackIds.empty())
@@ -48,7 +48,7 @@ namespace ao::gtk
       .optSourceListId = page.getListId(),
     });
 
-    _session.playback().play(*optDesc, page.getListId());
+    _playback.play(*optDesc, page.getListId());
 
     subscribeEvents();
     return true;
@@ -56,7 +56,7 @@ namespace ao::gtk
 
   void PlaybackSequenceController::resume()
   {
-    _session.playback().resume();
+    _playback.resume();
   }
 
   bool PlaybackSequenceController::isActive() const
@@ -64,7 +64,7 @@ namespace ao::gtk
     return _sequence != nullptr;
   }
 
-  std::optional<ao::TrackId> PlaybackSequenceController::nowPlayingTrackId() const
+  std::optional<TrackId> PlaybackSequenceController::nowPlayingTrackId() const
   {
     if (!_sequence || _sequence->currentIndex >= _sequence->trackIds.size())
     {
@@ -74,7 +74,7 @@ namespace ao::gtk
     return _sequence->trackIds[_sequence->currentIndex];
   }
 
-  std::optional<ao::ListId> PlaybackSequenceController::sourceListId() const
+  std::optional<ListId> PlaybackSequenceController::sourceListId() const
   {
     if (!_sequence)
     {
@@ -105,21 +105,21 @@ namespace ao::gtk
       {
         _sequence->currentIndex = i;
 
-        _session.playback().play(*optDesc, _sequence->optSourceListId.value_or(ao::ListId{}));
+        _playback.play(*optDesc, _sequence->optSourceListId.value_or(ListId{}));
         return;
       }
     }
 
     clear();
 
-    _session.playback().stop();
+    _playback.stop();
   }
 
   void PlaybackSequenceController::subscribeEvents()
   {
-    _idleSub = _session.playback().onIdle([this] { advanceToNext(); });
+    _idleSub = _playback.onIdle([this] { advanceToNext(); });
 
-    _stoppedSub = _session.playback().onStopped([this] { clear(); });
+    _stoppedSub = _playback.onStopped([this] { clear(); });
   }
 
   void PlaybackSequenceController::unsubscribeEvents()

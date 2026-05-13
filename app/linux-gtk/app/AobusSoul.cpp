@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "playback/AobusSoul.h"
-#include "runtime/AppSession.h"
-#include "runtime/PlaybackService.h"
+#include "app/AobusSoul.h"
 
 #include <algorithm>
 #include <cmath>
@@ -32,28 +30,18 @@ namespace ao::gtk
     set_can_focus(false);
     set_focusable(false);
 
-    _colors = {.cyan = Gdk::RGBA{"#00E5FF"},
-               .gray = Gdk::RGBA{"#6B7280"},
-               .purple = Gdk::RGBA{"#A855F7"},
-               .green = Gdk::RGBA{"#10B981"},
-               .orange = Gdk::RGBA{"#F59E0B"},
-               .red = Gdk::RGBA{"#EF4444"},
-               .amber = Gdk::RGBA{"#F97316"}};
-
     ::gsk_stroke_set_line_cap(_cachedStroke.get(), GSK_LINE_CAP_ROUND);
     ::gsk_stroke_set_line_cap(_cachedStrokeA.get(), GSK_LINE_CAP_ROUND);
 
     static constexpr float kRefRadius = 30.0F;
     static constexpr float kNormalizedRadius = kRefRadius / kRefHeight;
 
-    // 1. Pre-bake unit path for 'o' (Soul)
     auto* const oBuilder = ::gsk_path_builder_new();
     ::graphene_point_t const origin = {.x = 0.0F, .y = 0.0F};
 
     ::gsk_path_builder_add_circle(oBuilder, &origin, kNormalizedRadius);
     _unitPathO.reset(::gsk_path_builder_free_to_path(oBuilder));
 
-    // 2. Pre-bake unit path for 'a' (Circle + Stem)
     auto* const aBuilder = ::gsk_path_builder_new();
 
     ::gsk_path_builder_add_circle(aBuilder, &origin, kNormalizedRadius);
@@ -64,49 +52,11 @@ namespace ao::gtk
     ::gsk_path_builder_move_to(aBuilder, kNormalizedRadius, kRefStemY1);
     ::gsk_path_builder_line_to(aBuilder, kNormalizedRadius, kRefStemY2);
     _unitPathA.reset(::gsk_path_builder_free_to_path(aBuilder));
-  }
-
-  AobusSoul::~AobusSoul() = default;
-
-  void AobusSoul::bind(ao::rt::AppSession& session)
-  {
-    auto& playback = session.playback();
-
-    _qualitySub = playback.onQualityChanged(
-      [this](auto const& ev)
-      {
-        _quality = ev.quality;
-        _isReady = ev.ready;
-        queue_draw();
-      });
-
-    auto const onStarted = [this]
-    {
-      _isPlaying = true;
-      queue_draw();
-    };
-
-    auto const onStopped = [this]
-    {
-      _isPlaying = false;
-      _firstFrameTime = 0;
-      queue_draw();
-    };
-
-    _idleSub = playback.onIdle(onStopped);
-    _stoppedSub = playback.onStopped(onStopped);
-    _startedSub = playback.onStarted(onStarted);
-
-    // Initial state
-    auto const& state = playback.state();
-    _isPlaying = (state.transport == ao::audio::Transport::Playing);
-    _quality = state.quality;
-    _isReady = state.ready;
 
     _tickId = add_tick_callback(
       [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
       {
-        if (_isPlaying)
+        if (_isBreathing)
         {
           auto const frameTime = clock->get_frame_time();
 
@@ -130,37 +80,39 @@ namespace ao::gtk
       });
   }
 
-  void AobusSoul::unbind()
+  AobusSoul::~AobusSoul()
   {
-    _qualitySub.reset();
-    _idleSub.reset();
-    _startedSub.reset();
-    _stoppedSub.reset();
-
     if (_tickId != 0)
     {
       remove_tick_callback(_tickId);
-      _tickId = 0;
     }
-
-    _isPlaying = false;
-    _firstFrameTime = 0;
   }
 
-  void AobusSoul::update(double const timeSec,
-                         ao::audio::Quality const quality,
-                         bool const isStopped,
-                         bool const isReady)
+  void AobusSoul::breathe(bool const breathing)
   {
-    if (_timeSec == timeSec && _quality == quality && _isStopped == isStopped && _isReady == isReady)
+    if (_isBreathing == breathing)
     {
       return;
     }
 
-    _timeSec = timeSec;
-    _quality = quality;
-    _isStopped = isStopped;
-    _isReady = isReady;
+    _isBreathing = breathing;
+
+    if (!breathing)
+    {
+      _firstFrameTime = 0;
+    }
+
+    queue_draw();
+  }
+
+  void AobusSoul::setAura(Gdk::RGBA const& aura)
+  {
+    if (_aura == aura)
+    {
+      return;
+    }
+
+    _aura = aura;
     queue_draw();
   }
 
@@ -189,7 +141,6 @@ namespace ao::gtk
   {
     if (orientation == Gtk::Orientation::HORIZONTAL && _showFullLogo)
     {
-      // Aspect ratio from SVG: 147 / 65 approx 2.26
       minimum = kFullLogoMinSize;
       natural = kFullLogoMinSize;
     }
@@ -309,26 +260,7 @@ namespace ao::gtk
       return;
     }
 
-    // Color Logic
-    auto indicatorColor = _isStopped ? _colors.cyan : _colors.gray;
-
-    if (!_isReady)
-    {
-      indicatorColor = _colors.gray;
-    }
-    else if (!_isStopped)
-    {
-      switch (_quality)
-      {
-        case ao::audio::Quality::BitwisePerfect:
-        case ao::audio::Quality::LosslessPadded: indicatorColor = _colors.purple; break;
-        case ao::audio::Quality::LosslessFloat: indicatorColor = _colors.green; break;
-        case ao::audio::Quality::LinearIntervention: indicatorColor = _colors.orange; break;
-        case ao::audio::Quality::LossySource: indicatorColor = _colors.gray; break;
-        case ao::audio::Quality::Clipped: indicatorColor = _colors.red; break;
-        default: break;
-      }
-    }
+    auto const aura = _isStopped ? _cyan : _aura;
 
     float const centerX = width / 2.0F;
     float const centerY = height / 2.0F;
@@ -358,7 +290,7 @@ namespace ao::gtk
       ::graphene_rect_t const aBounds = {
         .origin = {.x = kRefBoundsX, .y = kRefBoundsY}, .size = {.width = kRefBoundsW, .height = kRefBoundsH}};
 
-      ::gtk_snapshot_append_color(snapshot->gobj(), _colors.amber.gobj(), &aBounds);
+      ::gtk_snapshot_append_color(snapshot->gobj(), _amber.gobj(), &aBounds);
       ::gtk_snapshot_pop(snapshot->gobj());
 
       snapshot->restore();
@@ -409,23 +341,22 @@ namespace ao::gtk
         std::fmod(static_cast<float>(_timeSec) * (2.0F * std::numbers::pi_v<float> / static_cast<float>(kHuePeriodSec)),
                   2.0F * std::numbers::pi_v<float>);
       static constexpr float kMaxHueShift = 10.0F;
-      hueShift = kMaxHueShift * std::sin(huePhase); // Subtle ±10 degree shift
+      hueShift = kMaxHueShift * std::sin(huePhase);
     }
 
     static constexpr std::size_t kStopCount = 3;
     auto stops = std::array<::GskColorStop, kStopCount>{};
-    // Color Antagonism: Cyan shifts forward, Indicator shifts backward
-    auto const shiftedCyan = shiftColor(_colors.cyan, hueShift);
-    auto const shiftedIndicator = shiftColor(indicatorColor, -hueShift);
+    auto const shiftedCyan = shiftColor(_cyan, hueShift);
+    auto const shiftedAura = shiftColor(aura, -hueShift);
 
     // Player UI: Cyan as the core (38.2%), Indicator (Quality) as the dominant body (61.8%)
     static constexpr float kCoreOffset = 0.382F;
     stops[0].offset = 0.0F;
     stops[0].color = *(shiftedCyan.gobj());
     stops[1].offset = kCoreOffset;
-    stops[1].color = *(shiftedIndicator.gobj());
+    stops[1].color = *(shiftedAura.gobj());
     stops[2].offset = 1.0F;
-    stops[2].color = *(shiftedIndicator.gobj());
+    stops[2].color = *(shiftedAura.gobj());
 
     static constexpr float kUnitR = 30.0F / 65.0F;
     float const normalizedStrokeWidth = currentStrokeBase / kRefHeight;

@@ -220,7 +220,7 @@ namespace ao::gtk::layout
         LayoutNode{.id = "playback-row",
                    .type = "box",
                    .props = {{"orientation", LayoutValue{std::string{"horizontal"}}},
-                             {"spacing", LayoutValue{static_cast<std::int64_t>(::ao::gtk::Layout::kSpacingMedium)}}},
+                             {"spacing", LayoutValue{static_cast<std::int64_t>(kSpacingMedium)}}},
 
                    .children = {LayoutNode{.type = "playback.outputButton"},
                                 LayoutNode{.type = "playback.playPauseButton"},
@@ -228,22 +228,21 @@ namespace ao::gtk::layout
                                 LayoutNode{.type = "playback.seekSlider", .layout = {{"hexpand", LayoutValue{true}}}},
                                 LayoutNode{.type = "playback.timeLabel"},
                                 LayoutNode{.type = "playback.volumeControl"}}},
-        LayoutNode{
-          .id = "main-paned",
-          .type = "split",
-          .props = {{"orientation", LayoutValue{std::string{"horizontal"}}},
-                    {"position", LayoutValue{static_cast<std::int64_t>(::ao::gtk::Layout::kDefaultSidebarWidth)}}},
-          .layout = {{"vexpand", LayoutValue{true}}},
-          .children = {LayoutNode{.id = "left-sidebar",
-                                  .type = "box",
-                                  .props = {{"orientation", LayoutValue{std::string{"vertical"}}}},
-                                  .children = {LayoutNode{.type = "library.listTree",
-                                                          .layout = {{"vexpand", LayoutValue{true}}}},
-                                               LayoutNode{.type = "inspector.coverArt",
-                                                          .layout = {{"minHeight",
-                                                                      LayoutValue{static_cast<std::int64_t>(
-                                                                        ::ao::gtk::Layout::kMinCoverArtHeight)}}}}}},
-                       LayoutNode{.id = "workspace-with-inspector", .type = "app.workspaceWithInspector"}}},
+        LayoutNode{.id = "main-paned",
+                   .type = "split",
+                   .props = {{"orientation", LayoutValue{std::string{"horizontal"}}},
+                             {"position", LayoutValue{static_cast<std::int64_t>(kDefaultSidebarWidth)}}},
+                   .layout = {{"vexpand", LayoutValue{true}}},
+                   .children = {LayoutNode{.id = "left-sidebar",
+                                           .type = "box",
+                                           .props = {{"orientation", LayoutValue{std::string{"vertical"}}}},
+                                           .children = {LayoutNode{.type = "library.listTree",
+                                                                   .layout = {{"vexpand", LayoutValue{true}}}},
+                                                        LayoutNode{.type = "inspector.coverArt",
+                                                                   .layout = {{"minHeight",
+                                                                               LayoutValue{static_cast<std::int64_t>(
+                                                                                 kMinCoverArtHeight)}}}}}},
+                                LayoutNode{.id = "workspace-with-inspector", .type = "app.workspaceWithInspector"}}},
         LayoutNode{.type = "status.defaultBar"}}};
 
     doc.templates = getBuiltInTemplates();

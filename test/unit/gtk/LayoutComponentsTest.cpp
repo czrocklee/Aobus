@@ -7,8 +7,8 @@
 #include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
 #include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
 
-#include "inspector/CoverArtCache.h"
-#include "track/TrackRowCache.h"
+#include <app/linux-gtk/inspector/CoverArtCache.h>
+#include <app/linux-gtk/track/TrackRowCache.h>
 #include <app/runtime/AppSession.h>
 #include <app/runtime/ConfigStore.h>
 

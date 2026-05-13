@@ -1,6 +1,9 @@
 ---
 name: manage-git-flow
-description: "Manages Aobus formatting, conformance validation, and commit flow. Use before any git status, diff, staging, or commit work so the required targeted clang-format, delegated standards checks, and history verification steps are followed."
+description: >-
+  BLOCKING — Activate BEFORE git status/diff/log/add/commit/push/rebase/stash/checkout/reset/show/branch,
+  or when the user says "commit"/"push"/"rebase"/"diff". Enforces clang-format, conformance checks,
+  and prohibits AI attribution in commits.
 ---
 
 # Manage Git Flow
@@ -54,6 +57,7 @@ Do not duplicate coding-standard rules in this skill. `check-code-conformance` i
 
 ## 4. Scope And Safety
 
+- **DANGER — `git checkout` / `git restore` / `git reset --hard` destroy uncommitted work without warning.** Before running these, confirm with the user and double-check there are no unstaged changes that matter.
 - Do not widen the formatting or conformance scope unless the user asked for cleanup beyond the current change.
 - Do not silently fix unrelated violations found during formatting or conformance checks.
 - If the worktree contains unrelated user changes, operate around them and keep your reporting focused on the files relevant to the requested git task.

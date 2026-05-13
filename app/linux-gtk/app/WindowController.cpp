@@ -27,9 +27,9 @@ namespace ao::gtk
 {
   namespace
   {
-    ao::ListId allTracksListId()
+    ListId allTracksListId()
     {
-      return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
+      return ListId{std::numeric_limits<std::uint32_t>::max()};
     }
 
     TrackColumnLayout trackColumnLayoutFromState(TrackViewState const& state)
@@ -131,8 +131,8 @@ namespace ao::gtk
       window,
       _session,
       ListSidebarController::Callbacks{
-        .onListSelected = [this](ao::ListId listId) { _session.workspace().navigateTo(listId); },
-        .getListMembership = [this](ao::ListId listId) { return &_session.sources().sourceFor(listId); }});
+        .onListSelected = [this](ListId listId) { _session.workspace().navigateTo(listId); },
+        .getListMembership = [this](ListId listId) { return &_session.sources().sourceFor(listId); }});
 
     // Initialize track page manager
     _trackPageManager = std::make_unique<TrackPageManager>(_stack,
@@ -182,7 +182,7 @@ namespace ao::gtk
     _session.addAudioProvider(std::make_unique<ao::audio::backend::AlsaProvider>());
 #endif
 
-    _playbackSequenceController = std::make_unique<PlaybackSequenceController>(_session, *_trackRowCache);
+    _playbackSequenceController = std::make_unique<PlaybackSequenceController>(_session.playback(), *_trackRowCache);
     _trackPageManager->setPlaybackSequenceController(*_playbackSequenceController);
 
     _importCompletedSubscription = _session.mutation().onImportCompleted(

@@ -6,7 +6,7 @@
 #include <format>
 #include <gdkmm/frameclock.h>
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
   TimeLabel::TimeLabel(ao::rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
@@ -70,4 +70,4 @@ namespace ao::gtk::playback
     _label.set_text(std::format(
       "{:d}:{:02d} / {:d}:{:02d}", posSec / secInMin, posSec % secInMin, durSec / secInMin, durSec % secInMin));
   }
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

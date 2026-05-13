@@ -10,8 +10,8 @@
 
 namespace ao::gtk
 {
-  CoverArtWidget::CoverArtWidget(ao::rt::AppSession& session, CoverArtCache& cache)
-    : _session{session}, _cache{cache}
+  CoverArtWidget::CoverArtWidget(ao::library::MusicLibrary& library, CoverArtCache& cache)
+    : _library{library}, _cache{cache}
   {
     set_keep_aspect_ratio(true);
     set_alternative_text("No cover art");
@@ -29,7 +29,7 @@ namespace ao::gtk
   void CoverArtWidget::onDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap)
   {
     if (snap.selectionKind == ao::rt::SelectionKind::None || snap.trackIds.empty() ||
-        snap.singleCoverArtId == ao::ResourceId{0})
+        snap.singleCoverArtId == ResourceId{0})
     {
       clearCover();
       return;
@@ -40,8 +40,8 @@ namespace ao::gtk
 
     if (!cached)
     {
-      auto const txn = _session.musicLibrary().readTransaction();
-      auto const resReader = _session.musicLibrary().resources().reader(txn);
+      auto const txn = _library.readTransaction();
+      auto const resReader = _library.resources().reader(txn);
       auto const optData = resReader.get(rid);
 
       if (!optData)

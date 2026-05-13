@@ -59,7 +59,7 @@ namespace ao::rt
     ListSourceStore& sources() noexcept;
     void reloadAllTracks();
 
-    ao::TrackId playSelectionInFocusedView();
+    TrackId playSelectionInFocusedView();
 
     void addAudioProvider(std::unique_ptr<ao::audio::IBackendProvider> provider);
 

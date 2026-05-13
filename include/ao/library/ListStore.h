@@ -23,13 +23,13 @@ namespace ao::library
     class Reader;
     class Writer;
 
-    explicit ListStore(lmdb::Database db);
+    explicit ListStore(ao::lmdb::Database db);
 
-    Reader reader(lmdb::ReadTransaction const& txn) const;
-    Writer writer(lmdb::WriteTransaction& txn);
+    Reader reader(ao::lmdb::ReadTransaction const& txn) const;
+    Writer writer(ao::lmdb::WriteTransaction& txn);
 
   private:
-    lmdb::Database _database;
+    ao::lmdb::Database _database;
   };
 
   /**
@@ -46,9 +46,9 @@ namespace ao::library
     std::optional<ListView> get(ListId id) const;
 
   private:
-    Reader(lmdb::Database::Reader reader);
+    Reader(ao::lmdb::Database::Reader reader);
 
-    lmdb::Database::Reader _reader;
+    ao::lmdb::Database::Reader _reader;
     friend class ListStore;
   };
 
@@ -73,9 +73,9 @@ namespace ao::library
     value_type operator*() const;
 
   private:
-    Iterator(lmdb::Database::Reader::Iterator&& iter);
+    Iterator(ao::lmdb::Database::Reader::Iterator&& iter);
 
-    lmdb::Database::Reader::Iterator _iter;
+    ao::lmdb::Database::Reader::Iterator _iter;
     friend class Reader;
   };
 
@@ -93,9 +93,9 @@ namespace ao::library
     std::optional<ListView> get(ListId id) const;
 
   private:
-    explicit Writer(lmdb::Database::Writer&& writer);
+    explicit Writer(ao::lmdb::Database::Writer&& writer);
 
-    lmdb::Database::Writer _writer;
+    ao::lmdb::Database::Writer _writer;
     friend class ListStore;
   };
 } // namespace ao::library

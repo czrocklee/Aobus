@@ -52,7 +52,7 @@ namespace ao::media::mp4
 
     std::string_view type() const override
     {
-      return utility::bytes::stringView(utility::bytes::view(layout<AtomLayout>().type));
+      return ao::utility::bytes::stringView(ao::utility::bytes::view(layout<AtomLayout>().type));
     }
 
     Atom const* parent() const override { return &_parent; }
@@ -64,14 +64,14 @@ namespace ao::media::mp4
     {
       if constexpr (sizeof(typename Layout::FixedSize) != 0 && Layout::FixedSize::value)
       {
-        gsl_Expects(utility::layout::view<AtomLayout>(_data)->length.value() == sizeof(Layout));
+        gsl_Expects(ao::utility::layout::view<AtomLayout>(_data)->length.value() == sizeof(Layout));
       }
       else
       {
-        gsl_Expects(utility::layout::view<AtomLayout>(_data)->length.value() >= sizeof(Layout));
+        gsl_Expects(ao::utility::layout::view<AtomLayout>(_data)->length.value() >= sizeof(Layout));
       }
 
-      return *utility::layout::view<Layout>(_data);
+      return *ao::utility::layout::view<Layout>(_data);
     }
 
   private:

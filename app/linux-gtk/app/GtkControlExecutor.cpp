@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "common/GtkControlExecutor.h"
+#include "app/GtkControlExecutor.h"
 #include <ao/utility/Log.h>
 
 namespace ao::gtk

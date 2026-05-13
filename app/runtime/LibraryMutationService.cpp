@@ -76,7 +76,7 @@ namespace ao::rt
     IControlExecutor& executor;
     ao::library::MusicLibrary& library;
     std::jthread importThread;
-    Signal<std::vector<ao::TrackId> const&> tracksMutatedSignal;
+    Signal<std::vector<TrackId> const&> tracksMutatedSignal;
     Signal<LibraryMutationService::ListsMutated const&> listsMutatedSignal;
     Signal<std::size_t> importCompletedSignal;
     Signal<LibraryMutationService::ImportProgressUpdated const&> importProgressSignal;
@@ -90,7 +90,7 @@ namespace ao::rt
   LibraryMutationService::~LibraryMutationService() = default;
 
   Subscription LibraryMutationService::onTracksMutated(
-    std::move_only_function<void(std::vector<ao::TrackId> const&)> handler)
+    std::move_only_function<void(std::vector<TrackId> const&)> handler)
   {
     return _impl->tracksMutatedSignal.connect(std::move(handler));
   }
@@ -111,12 +111,12 @@ namespace ao::rt
     return _impl->importProgressSignal.connect(std::move(handler));
   }
 
-  ao::Result<UpdateTrackMetadataReply> LibraryMutationService::updateMetadata(std::vector<ao::TrackId> const& trackIds,
+  ao::Result<UpdateTrackMetadataReply> LibraryMutationService::updateMetadata(std::vector<TrackId> const& trackIds,
                                                                               MetadataPatch const& patch)
   {
     auto txn = _impl->library.writeTransaction();
     auto writer = _impl->library.tracks().writer(txn);
-    auto mutated = std::vector<ao::TrackId>{};
+    auto mutated = std::vector<TrackId>{};
 
     for (auto const trackId : trackIds)
     {
@@ -155,13 +155,13 @@ namespace ao::rt
     return UpdateTrackMetadataReply{.mutatedIds = std::move(mutated)};
   }
 
-  ao::Result<EditTrackTagsReply> LibraryMutationService::editTags(std::vector<ao::TrackId> const& trackIds,
+  ao::Result<EditTrackTagsReply> LibraryMutationService::editTags(std::vector<TrackId> const& trackIds,
                                                                   std::vector<std::string> const& tagsToAdd,
                                                                   std::vector<std::string> const& tagsToRemove)
   {
     auto txn = _impl->library.writeTransaction();
     auto writer = _impl->library.tracks().writer(txn);
-    auto mutated = std::vector<ao::TrackId>{};
+    auto mutated = std::vector<TrackId>{};
 
     for (auto const trackId : trackIds)
     {
@@ -248,7 +248,7 @@ namespace ao::rt
     return ImportFilesReply{};
   }
 
-  ao::ListId LibraryMutationService::createList(ao::model::ListDraft const& draft)
+  ListId LibraryMutationService::createList(ao::model::ListDraft const& draft)
   {
     auto txn = _impl->library.writeTransaction();
 
@@ -308,7 +308,7 @@ namespace ao::rt
     _impl->listsMutatedSignal.emit(ev);
   }
 
-  void LibraryMutationService::deleteList(ao::ListId listId)
+  void LibraryMutationService::deleteList(ListId listId)
   {
     auto txn = _impl->library.writeTransaction();
     _impl->library.lists().writer(txn).del(listId);

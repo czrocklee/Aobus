@@ -28,16 +28,16 @@ namespace ao::rt
     ListSourceStore& operator=(ListSourceStore const&) = delete;
 
     ao::rt::TrackSource& allTracks();
-    ao::rt::TrackSource& sourceFor(ao::ListId listId);
+    ao::rt::TrackSource& sourceFor(ListId listId);
 
     void reloadAllTracks();
-    void refreshList(ao::ListId listId);
-    void eraseList(ao::ListId listId);
+    void refreshList(ListId listId);
+    void eraseList(ListId listId);
 
     ao::rt::SmartListEvaluator& smartEvaluator() { return _smartEvaluator; }
 
   private:
-    TrackSource& getOrBuildSource(ao::ListId listId);
+    TrackSource& getOrBuildSource(ListId listId);
 
     ao::library::MusicLibrary& _library;
     AllTracksSource _allTracks;
@@ -45,6 +45,6 @@ namespace ao::rt
 
     ao::rt::Subscription _listsMutatedSubscription;
 
-    std::unordered_map<ao::ListId, std::unique_ptr<TrackSource>> _sources;
+    std::unordered_map<ListId, std::unique_ptr<TrackSource>> _sources;
   };
 }

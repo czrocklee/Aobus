@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "shell/NowPlayingStatusLabel.h"
+#include "playback/NowPlayingStatusLabel.h"
 #include <ao/utility/Log.h>
 #include <gdkmm/display.h>
 #include <gtkmm/cssprovider.h>

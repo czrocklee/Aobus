@@ -116,17 +116,16 @@ namespace ao::cli
     auto* addId = add->add_option("id", "track id")->required();
     auto* addTagName = add->add_option("tag", "tag name")->required();
     add->callback([&ml, addId, addTagName]
-                  { addTag(ml, ao::TrackId{addId->as<std::uint32_t>()}, addTagName->as<std::string>(), std::cout); });
+                  { addTag(ml, TrackId{addId->as<std::uint32_t>()}, addTagName->as<std::string>(), std::cout); });
 
     auto* remove = tag->add_subcommand("remove", "Remove a tag from a track");
     auto* remId = remove->add_option("id", "track id")->required();
     auto* remTagName = remove->add_option("tag", "tag name")->required();
-    remove->callback(
-      [&ml, remId, remTagName]
-      { removeTag(ml, ao::TrackId{remId->as<std::uint32_t>()}, remTagName->as<std::string>(), std::cout); });
+    remove->callback([&ml, remId, remTagName]
+                     { removeTag(ml, TrackId{remId->as<std::uint32_t>()}, remTagName->as<std::string>(), std::cout); });
 
     auto* show = tag->add_subcommand("show", "Show tags for a track");
     auto* showId = show->add_option("id", "track id")->required();
-    show->callback([&ml, showId] { showTags(ml, ao::TrackId{showId->as<std::uint32_t>()}, std::cout); });
+    show->callback([&ml, showId] { showTags(ml, TrackId{showId->as<std::uint32_t>()}, std::cout); });
   }
 }

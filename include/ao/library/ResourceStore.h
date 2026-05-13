@@ -12,19 +12,19 @@ namespace ao::library
   class ResourceStore
   {
   public:
-    using Reader = lmdb::Database::Reader;
+    using Reader = ao::lmdb::Database::Reader;
     class Writer;
 
-    explicit ResourceStore(lmdb::Database db)
+    explicit ResourceStore(ao::lmdb::Database db)
       : _database{std::move(db)}
     {
     }
 
-    Reader reader(lmdb::ReadTransaction const& txn) const { return _database.reader(txn); };
-    Writer writer(lmdb::WriteTransaction& txn);
+    Reader reader(ao::lmdb::ReadTransaction const& txn) const { return _database.reader(txn); };
+    Writer writer(ao::lmdb::WriteTransaction& txn);
 
   private:
-    lmdb::Database _database;
+    ao::lmdb::Database _database;
   };
 
   class ResourceStore::Writer
@@ -35,13 +35,13 @@ namespace ao::library
     void clear() { _writer.clear(); }
 
   private:
-    explicit Writer(lmdb::Database::Reader&& reader, lmdb::Database::Writer&& writer)
+    explicit Writer(ao::lmdb::Database::Reader&& reader, ao::lmdb::Database::Writer&& writer)
       : _reader{std::move(reader)}, _writer{std::move(writer)}
     {
     }
 
-    lmdb::Database::Reader _reader;
-    lmdb::Database::Writer _writer;
+    ao::lmdb::Database::Reader _reader;
+    ao::lmdb::Database::Writer _writer;
     friend class ResourceStore;
   };
 }

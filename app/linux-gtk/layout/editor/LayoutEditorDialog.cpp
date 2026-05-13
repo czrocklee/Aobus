@@ -107,7 +107,7 @@ namespace ao::gtk::layout::editor
     _treeBox.append(_toolbar);
     _treeBox.append(_treeScroll);
 
-    int const padding = ::ao::gtk::Layout::kMarginXLarge;
+    int const padding = kMarginXLarge;
     _propertiesBox.set_margin_start(padding);
     _propertiesBox.set_margin_end(padding);
     _propertiesBox.set_margin_top(padding);
@@ -523,13 +523,13 @@ namespace ao::gtk::layout::editor
     auto* const label = Gtk::make_managed<Gtk::Label>("<b>" + std::string{text} + "</b>");
     label->set_use_markup(true);
     label->set_halign(Gtk::Align::START);
-    label->set_margin_top(::ao::gtk::Layout::kMarginXLarge);
+    label->set_margin_top(kMarginXLarge);
     _propertiesBox.append(*label);
   }
 
   void LayoutEditorDialog::renderIdSection(LayoutNode* node)
   {
-    auto* const hbox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, ::ao::gtk::Layout::kSpacingLarge);
+    auto* const hbox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kSpacingLarge);
 
     auto* const label = Gtk::make_managed<Gtk::Label>("ID");
     label->set_halign(Gtk::Align::START);
@@ -805,7 +805,7 @@ namespace ao::gtk::layout::editor
       auto* const label = Gtk::make_managed<Gtk::Label>("<i>No descriptor found</i>");
       label->set_use_markup(true);
       label->set_halign(Gtk::Align::START);
-      label->set_margin_top(::ao::gtk::Layout::kMarginXLarge);
+      label->set_margin_top(kMarginXLarge);
       _propertiesBox.append(*label);
     }
   }

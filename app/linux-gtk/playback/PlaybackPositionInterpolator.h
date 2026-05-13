@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cstdint>
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
   /**
    * @brief Utility for interpolating playback position between state updates using the frame clock.
@@ -47,4 +47,4 @@ namespace ao::gtk::playback
     bool _isPlaying = false;
     std::int64_t _firstFrameTime = 0;
   };
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

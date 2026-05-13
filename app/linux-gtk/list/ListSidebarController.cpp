@@ -16,14 +16,14 @@ namespace ao::gtk
 {
   namespace
   {
-    ao::ListId allTracksListId()
+    ListId allTracksListId()
     {
-      return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
+      return ListId{std::numeric_limits<std::uint32_t>::max()};
     }
 
-    ao::ListId rootParentId()
+    ListId rootParentId()
     {
-      return ao::ListId{0};
+      return ListId{0};
     }
   }
 
@@ -31,8 +31,8 @@ namespace ao::gtk
     : _parent{parent}, _callbacks{std::move(callbacks)}, _session{session}
   {
     auto panelCallbacks = ListSidebarPanel::Callbacks{
-      .onSelectionChanged = [this](ao::ListId listId) { onSelectionChanged(listId); },
-      .onContextMenuRequested = [this](ao::ListId listId, Gdk::Rectangle const& rect)
+      .onSelectionChanged = [this](ListId listId) { onSelectionChanged(listId); },
+      .onContextMenuRequested = [this](ListId listId, Gdk::Rectangle const& rect)
       { onContextMenuRequested(listId, rect); },
     };
 
@@ -76,20 +76,20 @@ namespace ao::gtk
 
     _panel->rebuildTree(_session, txn);
 
-    if (_pendingSelectId != ao::ListId{0})
+    if (_pendingSelectId != ListId{0})
     {
       _panel->selectList(_pendingSelectId);
       _session.workspace().navigateTo(_pendingSelectId);
-      _pendingSelectId = ao::ListId{0};
+      _pendingSelectId = ListId{0};
     }
   }
 
-  void ListSidebarController::select(ao::ListId listId)
+  void ListSidebarController::select(ListId listId)
   {
     _panel->selectList(listId);
   }
 
-  void ListSidebarController::onSelectionChanged(ao::ListId listId)
+  void ListSidebarController::onSelectionChanged(ListId listId)
   {
     _newListAction->set_enabled(true);
     _deleteListAction->set_enabled(listId != allTracksListId());
@@ -101,12 +101,12 @@ namespace ao::gtk
     }
   }
 
-  void ListSidebarController::onContextMenuRequested(ao::ListId listId, Gdk::Rectangle const& rect)
+  void ListSidebarController::onContextMenuRequested(ListId listId, Gdk::Rectangle const& rect)
   {
     bool canDelete = false;
     bool canEdit = false;
 
-    if (listId != ao::ListId{0} && listId != allTracksListId())
+    if (listId != ListId{0} && listId != allTracksListId())
     {
       canDelete = !_panel->listHasChildren(listId);
       canEdit = true;
@@ -135,7 +135,7 @@ namespace ao::gtk
     auto parentListId = rootParentId();
     auto const selectedId = _panel->selectedListId();
 
-    if (selectedId != ao::ListId{0} && selectedId != allTracksListId())
+    if (selectedId != ListId{0} && selectedId != allTracksListId())
     {
       parentListId = selectedId;
     }
@@ -143,7 +143,7 @@ namespace ao::gtk
     openNewListDialog(parentListId);
   }
 
-  void ListSidebarController::openNewListDialog(ao::ListId parentListId, std::string initialExpression)
+  void ListSidebarController::openNewListDialog(ListId parentListId, std::string initialExpression)
   {
     if (_dataProvider == nullptr)
     {
@@ -162,7 +162,7 @@ namespace ao::gtk
       {
         if (responseId == Gtk::ResponseType::OK)
         {
-          if (auto const draft = dialog->draft(); draft.listId != ao::ListId{0})
+          if (auto const draft = dialog->draft(); draft.listId != ListId{0})
           {
             updateList(draft);
           }
@@ -178,12 +178,12 @@ namespace ao::gtk
     dialog->present();
   }
 
-  void ListSidebarController::createSmartListFromExpression(ao::ListId parentListId, std::string expression)
+  void ListSidebarController::createSmartListFromExpression(ListId parentListId, std::string expression)
   {
     openNewListDialog(parentListId, std::move(expression));
   }
 
-  void ListSidebarController::openEditListDialog(ao::ListId listId)
+  void ListSidebarController::openEditListDialog(ListId listId)
   {
     if (_dataProvider == nullptr)
     {
@@ -203,7 +203,7 @@ namespace ao::gtk
           {
             auto const draft = dialog->draft();
 
-            if (draft.listId != ao::ListId{0})
+            if (draft.listId != ListId{0})
             {
               updateList(draft);
             }
@@ -237,7 +237,7 @@ namespace ao::gtk
 
     auto const listId = _panel->selectedListId();
 
-    if (listId == ao::ListId{0} || listId == allTracksListId())
+    if (listId == ListId{0} || listId == allTracksListId())
     {
       return;
     }
@@ -254,7 +254,7 @@ namespace ao::gtk
 
     auto const listId = _panel->selectedListId();
 
-    if (listId == ao::ListId{0} || listId == allTracksListId())
+    if (listId == ListId{0} || listId == allTracksListId())
     {
       return;
     }

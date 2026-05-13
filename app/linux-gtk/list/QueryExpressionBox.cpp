@@ -159,10 +159,10 @@ namespace ao::gtk
       {
         auto* label = Gtk::make_managed<Gtk::Label>("");
         label->set_halign(Gtk::Align::START);
-        label->set_margin_start(Layout::kSpacingLarge);
-        label->set_margin_end(Layout::kSpacingLarge);
-        label->set_margin_top(Layout::kMarginSmall);
-        label->set_margin_bottom(Layout::kMarginSmall);
+        label->set_margin_start(layout::kSpacingLarge);
+        label->set_margin_end(layout::kSpacingLarge);
+        label->set_margin_top(layout::kMarginSmall);
+        label->set_margin_bottom(layout::kMarginSmall);
         listItem->set_child(*label);
       });
 

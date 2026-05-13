@@ -27,7 +27,7 @@ namespace ao::gtk
       Glib::RefPtr<Gio::ListStore<ListTreeItem>> store;
       Glib::RefPtr<Gtk::TreeListModel> treeModel;
       Glib::RefPtr<Gtk::SingleSelection> selectionModel;
-      std::map<ao::ListId, Glib::RefPtr<ListTreeItem>> nodesById;
+      std::map<ListId, Glib::RefPtr<ListTreeItem>> nodesById;
     };
 
     static Result build(ao::rt::AppSession& session, ao::lmdb::ReadTransaction const& txn);

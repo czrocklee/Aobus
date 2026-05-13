@@ -94,13 +94,13 @@ namespace ao::rt
     _impl->focusedViewChangedSignal.emit(viewId);
   }
 
-  void WorkspaceService::navigateTo(std::variant<ao::ListId, std::string, GlobalViewKind> const& target)
+  void WorkspaceService::navigateTo(std::variant<ListId, std::string, GlobalViewKind> const& target)
   {
     ViewId targetViewId{};
 
-    if (std::holds_alternative<ao::ListId>(target))
+    if (std::holds_alternative<ListId>(target))
     {
-      auto const listId = std::get<ao::ListId>(target);
+      auto const listId = std::get<ListId>(target);
 
       for (auto const& record : _impl->views.listViews())
       {

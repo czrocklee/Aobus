@@ -5,7 +5,7 @@
 
 #include <algorithm>
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
   void PlaybackPositionInterpolator::updateState(std::uint32_t positionMs,
                                                  std::uint32_t durationMs,
@@ -45,4 +45,4 @@ namespace ao::gtk::playback
 
     return std::min(displayPos, _lastDurationMs);
   }
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

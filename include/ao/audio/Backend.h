@@ -20,9 +20,9 @@ namespace ao::audio
   /**
    * @brief Type aliases for backend and profile identification.
    */
-  using BackendId = utility::StrongId<struct BackendTag>;
-  using ProfileId = utility::StrongId<struct ProfileTag>;
-  using DeviceId = utility::StrongId<struct DeviceTag>;
+  using BackendId = ao::utility::StrongId<struct BackendTag>;
+  using ProfileId = ao::utility::StrongId<struct ProfileTag>;
+  using DeviceId = ao::utility::StrongId<struct DeviceTag>;
 
   /**
    * @brief Standard Backend and Profile IDs.

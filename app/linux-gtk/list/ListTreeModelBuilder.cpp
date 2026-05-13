@@ -15,20 +15,20 @@ namespace ao::gtk
 {
   namespace
   {
-    ao::ListId allTracksListId()
+    ListId allTracksListId()
     {
-      return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
+      return ListId{std::numeric_limits<std::uint32_t>::max()};
     }
 
-    ao::ListId rootParentId()
+    ListId rootParentId()
     {
-      return ao::ListId{0};
+      return ListId{0};
     }
 
     struct StoredListNode final
     {
-      ao::ListId id = ao::ListId{0};
-      ao::ListId parentId = rootParentId();
+      ListId id = ListId{0};
+      ListId parentId = rootParentId();
       std::string name;
       bool isSmart = false;
       std::string localExpression;
@@ -42,7 +42,7 @@ namespace ao::gtk
     result.store = Gio::ListStore<ListTreeItem>::create();
 
     auto const reader = session.musicLibrary().lists().reader(txn);
-    auto nodes = std::map<ao::ListId, StoredListNode>{};
+    auto nodes = std::map<ListId, StoredListNode>{};
 
     for (auto const& [id, listView] : reader)
     {
@@ -54,7 +54,7 @@ namespace ao::gtk
                                    .localExpression = std::string(listView.filter())});
     }
 
-    auto children = std::map<ao::ListId, std::vector<ao::ListId>>{};
+    auto children = std::map<ListId, std::vector<ListId>>{};
     for (auto const& [id, node] : nodes)
     {
       if (node.parentId != rootParentId() && node.parentId != id && nodes.contains(node.parentId))

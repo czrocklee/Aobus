@@ -37,14 +37,14 @@ namespace ao::gtk
     using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId> const&, Gtk::Widget*)>;
     using CreateSmartListRequestedSignal = sigc::signal<void(std::string)>;
 
-    explicit TrackViewPage(ao::ListId listId,
+    explicit TrackViewPage(ListId listId,
                            TrackListAdapter& adapter,
                            TrackColumnLayoutModel& columnLayoutModel,
                            ao::rt::AppSession& session,
                            ao::rt::ViewId viewId = ao::rt::ViewId{});
     ~TrackViewPage() override;
-
-    ao::ListId getListId() const { return _listId; }
+ 
+    ListId getListId() const { return _listId; }
 
     Gtk::ColumnView& getColumnView() { return _columnView; }
 
@@ -79,7 +79,7 @@ namespace ao::gtk
     Gtk::Popover _contextPopover;
 
     // Models
-    ao::ListId _listId;
+    ListId _listId;
     ao::rt::ViewId _viewId{};
     TrackListAdapter& _adapter;
     ao::rt::AppSession& _session;

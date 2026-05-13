@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include "app/ShellLayoutController.h"
 #include "library_io/ImportExportCoordinator.h"
-#include "shell/ShellLayoutController.h"
 
 #include <gtkmm.h>
 #include <memory>
@@ -38,7 +38,7 @@ namespace ao::gtk
     std::shared_ptr<ao::rt::ConfigStore> _configStore;
 
     std::unique_ptr<WindowController> _windowController;
-    shell::ShellLayoutController _shellLayout;
+    ShellLayoutController _shellLayout;
     std::unique_ptr<MenuController> _menuController;
   };
 } // namespace ao::gtk

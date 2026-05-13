@@ -5,7 +5,7 @@
 
 #include <algorithm>
 
-#include "track/TrackPresentation.h"
+#include <app/linux-gtk/track/TrackPresentation.h>
 
 using namespace ao::gtk;
 

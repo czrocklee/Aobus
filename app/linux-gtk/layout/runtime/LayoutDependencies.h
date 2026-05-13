@@ -32,29 +32,29 @@ namespace ao::gtk::layout
 
   struct TrackUiContext final
   {
-    ao::gtk::TrackPageManager* pageManager = nullptr;
-    ao::gtk::TrackColumnLayoutModel* columnLayoutModel = nullptr;
-    ao::gtk::TrackRowCache* trackRowCache = nullptr;
+    TrackPageManager* pageManager = nullptr;
+    TrackColumnLayoutModel* columnLayoutModel = nullptr;
+    TrackRowCache* trackRowCache = nullptr;
   };
 
   struct ListUiContext final
   {
-    ao::gtk::ListSidebarController* sidebarController = nullptr;
+    ListSidebarController* sidebarController = nullptr;
   };
 
   struct PlaybackUiContext final
   {
-    ao::gtk::PlaybackSequenceController* sequenceController = nullptr;
+    PlaybackSequenceController* sequenceController = nullptr;
   };
 
   struct InspectorUiContext final
   {
-    ao::gtk::CoverArtCache* coverArtCache = nullptr;
+    CoverArtCache* coverArtCache = nullptr;
   };
 
   struct TagUiContext final
   {
-    ao::gtk::TagEditController* editController = nullptr;
+    TagEditController* editController = nullptr;
   };
 
   struct ShellUiContext final
@@ -64,7 +64,7 @@ namespace ao::gtk::layout
 
   struct LibraryIoContext final
   {
-    ao::gtk::ImportExportCoordinator* coordinator = nullptr;
+    ImportExportCoordinator* coordinator = nullptr;
   };
 
   struct LayoutDependencies final

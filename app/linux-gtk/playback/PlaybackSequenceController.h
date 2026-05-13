@@ -13,16 +13,16 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class PlaybackService;
 }
 
 namespace ao::gtk
 {
   struct ActivePlaybackSequence final
   {
-    std::vector<ao::TrackId> trackIds;
+    std::vector<TrackId> trackIds;
     std::size_t currentIndex = 0;
-    std::optional<ao::ListId> optSourceListId;
+    std::optional<ListId> optSourceListId;
   };
 
   class TrackRowCache;
@@ -31,7 +31,7 @@ namespace ao::gtk
   class PlaybackSequenceController final
   {
   public:
-    PlaybackSequenceController(ao::rt::AppSession& session, TrackRowCache& dataProvider);
+    PlaybackSequenceController(ao::rt::PlaybackService& playback, TrackRowCache& dataProvider);
     ~PlaybackSequenceController();
 
     PlaybackSequenceController(PlaybackSequenceController const&) = delete;
@@ -42,15 +42,15 @@ namespace ao::gtk
     // Start playback from a track view page.
     // Builds the sequence from visible tracks, resolves the descriptor for
     // startTrackId, dispatches PlayTrack, and subscribes to transport events.
-    bool playFromPage(TrackViewPage& page, ao::TrackId startTrackId);
+    bool playFromPage(TrackViewPage& page, TrackId startTrackId);
 
     // Resume playback from a paused state.
     void resume();
 
     // Current playback state queries (used by status bar, navigation).
     bool isActive() const;
-    std::optional<ao::TrackId> nowPlayingTrackId() const;
-    std::optional<ao::ListId> sourceListId() const;
+    std::optional<TrackId> nowPlayingTrackId() const;
+    std::optional<ListId> sourceListId() const;
 
   private:
     void clear();
@@ -58,7 +58,7 @@ namespace ao::gtk
     void subscribeEvents();
     void unsubscribeEvents();
 
-    ao::rt::AppSession& _session;
+    ao::rt::PlaybackService& _playback;
     TrackRowCache& _dataProvider;
     std::unique_ptr<ActivePlaybackSequence> _sequence;
     ao::rt::Subscription _idleSub;

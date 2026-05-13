@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <app/linux-gtk/shell/ImportProgressIndicator.h>
-#include <app/linux-gtk/shell/LibraryTrackCountLabel.h>
-#include <app/linux-gtk/shell/NowPlayingStatusLabel.h>
-#include <app/linux-gtk/shell/PlaybackDetailsWidget.h>
-#include <app/linux-gtk/shell/StatusNotificationLabel.h>
+#include <app/linux-gtk/library_io/ImportProgressIndicator.h>
+#include <app/linux-gtk/track/LibraryTrackCountLabel.h>
+#include <app/linux-gtk/playback/NowPlayingStatusLabel.h>
+#include <app/linux-gtk/playback/PlaybackDetailsWidget.h>
+#include <app/linux-gtk/track/StatusNotificationLabel.h>
 #include <app/runtime/AppSession.h>
 #include <app/runtime/ConfigStore.h>
 

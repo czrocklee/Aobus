@@ -3,14 +3,14 @@
 
 #include "StatusComponents.h"
 #include "layout/LayoutConstants.h"
-#include "shell/ImportProgressIndicator.h"
-#include "shell/LibraryTrackCountLabel.h"
-#include "shell/NowPlayingStatusLabel.h"
+#include "library_io/ImportProgressIndicator.h"
+#include "playback/NowPlayingStatusLabel.h"
+#include "track/LibraryTrackCountLabel.h"
 #include <gdkmm/display.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/stylecontext.h>
-#include <shell/PlaybackDetailsWidget.h>
-#include <shell/StatusNotificationLabel.h>
+#include <playback/PlaybackDetailsWidget.h>
+#include <track/StatusNotificationLabel.h>
 
 #include <runtime/AppSession.h>
 #include <runtime/ListSourceStore.h>
@@ -151,7 +151,7 @@ namespace ao::gtk::layout
       {
         ensureStatusBarContainerCss();
         _container.add_css_class("status-bar");
-        _container.set_margin(Layout::kMarginSmall);
+        _container.set_margin(layout::kMarginSmall);
         _container.set_valign(Gtk::Align::END);
         _container.set_hexpand(true);
 
@@ -171,8 +171,8 @@ namespace ao::gtk::layout
         _container.append(_notification.widget());
 
         auto* const sep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
-        sep->set_margin_start(Layout::kMarginMedium);
-        sep->set_margin_end(Layout::kMarginMedium);
+        sep->set_margin_start(layout::kMarginMedium);
+        sep->set_margin_end(layout::kMarginMedium);
         _container.append(*sep);
 
         _container.append(_trackCount.widget());

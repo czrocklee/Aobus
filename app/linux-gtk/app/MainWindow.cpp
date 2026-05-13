@@ -19,7 +19,7 @@ namespace ao::gtk
     , _shellLayout{_session, *this}
   {
     set_title("Aobus");
-    set_default_size(ao::gtk::kDefaultWindowWidth, ao::gtk::kDefaultWindowHeight);
+    set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
 
     _windowController->loadSession();
 

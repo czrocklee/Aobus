@@ -32,12 +32,12 @@ namespace ao::audio
 
   struct TrackPlaybackDescriptor final
   {
-    ao::TrackId trackId{};
+    TrackId trackId{};
     std::filesystem::path filePath{};
     std::string title{};
     std::string artist{};
     std::string album{};
-    std::optional<ao::ResourceId> optCoverArtId{};
+    std::optional<ResourceId> optCoverArtId{};
     std::uint32_t durationMs = 0;
     std::uint32_t sampleRateHint = 0;
     std::uint8_t channelsHint = 0;
