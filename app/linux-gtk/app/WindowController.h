@@ -7,7 +7,6 @@
 #include "library_io/ImportExportCoordinator.h"
 #include "list/ListSidebarController.h"
 #include "playback/PlaybackSequenceController.h"
-#include "shell/StatusBar.h"
 #include "shell/UIState.h"
 #include "tag/TagEditController.h"
 #include "track/TrackPageManager.h"
@@ -33,8 +32,6 @@ namespace ao::gtk
     void loadSession();
 
     void rebuildListPages(ao::lmdb::ReadTransaction const& txn);
-    void updateImportProgress(double fraction, std::string_view info);
-    void showStatusMessage(std::string_view message);
 
     TrackRowCache* trackRowCache() { return _trackRowCache.get(); }
     CoverArtCache* coverArtCache() { return _coverArtCache.get(); }
@@ -44,7 +41,6 @@ namespace ao::gtk
     TrackPageManager* trackPageManager() { return _trackPageManager.get(); }
     TrackColumnLayoutModel* columnLayoutModel() { return &_trackColumnLayoutModel; }
     ListSidebarController* listSidebarController() { return _listSidebarController.get(); }
-    StatusBar* statusBar() { return _statusBar.get(); }
 
     ImportExportCoordinator& importExport() { return *_importExportCoordinator; }
 
@@ -55,7 +51,6 @@ namespace ao::gtk
 
     std::unique_ptr<TrackRowCache> _trackRowCache;
     std::unique_ptr<CoverArtCache> _coverArtCache;
-    std::unique_ptr<StatusBar> _statusBar;
     std::unique_ptr<TagEditController> _tagEditController;
     std::unique_ptr<ListSidebarController> _listSidebarController;
     std::unique_ptr<TrackPageManager> _trackPageManager;

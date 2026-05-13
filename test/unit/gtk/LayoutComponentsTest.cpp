@@ -8,7 +8,6 @@
 #include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
 
 #include "inspector/CoverArtCache.h"
-#include "shell/StatusBar.h"
 #include "track/TrackRowCache.h"
 #include <app/runtime/AppSession.h>
 #include <app/runtime/ConfigStore.h>
@@ -315,18 +314,6 @@ TEST_CASE("Semantic component error states", "[layout][components]")
     CHECK(label->get_label().find("coverArtCache missing") != std::string::npos);
   }
 
-  SECTION("status.defaultBar shows error when statusBar missing")
-  {
-    auto const node = LayoutNode{.type = "status.defaultBar"};
-    auto const comp = registry.create(ctx, node);
-
-    REQUIRE(comp != nullptr);
-
-    auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
-    REQUIRE(label != nullptr);
-    CHECK(label->get_label().find("statusBar missing") != std::string::npos);
-  }
-
   SECTION("app.workspaceWithInspector shows error when trackPageGraph missing")
   {
     auto const node = LayoutNode{.type = "app.workspaceWithInspector"};
@@ -368,7 +355,6 @@ TEST_CASE("Semantic component success states", "[layout][components]")
 
   int const cacheSize = 10;
   auto coverArtCache = std::make_unique<ao::gtk::CoverArtCache>(cacheSize);
-  auto statusBar = std::make_unique<ao::gtk::StatusBar>(session);
   auto menuModel = Gio::Menu::create();
   menuModel->append("Test Item", "win.test");
 
@@ -376,7 +362,7 @@ TEST_CASE("Semantic component success states", "[layout][components]")
                                 .session = session,
                                 .parentWindow = window,
                                 .inspector = {.coverArtCache = coverArtCache.get()},
-                                .shell = {.statusBar = statusBar.get(), .menuModel = menuModel}};
+                                .shell = {.menuModel = menuModel}};
 
   [[maybe_unused]] auto runtime = LayoutRuntime{registry};
   {
@@ -445,13 +431,13 @@ TEST_CASE("Semantic component success states", "[layout][components]")
     CHECK(label == nullptr);
   }
 
-  SECTION("status.defaultBar returns the context statusBar widget")
+  SECTION("status.defaultBar returns a Gtk::Box")
   {
     auto const node = LayoutNode{.type = "status.defaultBar"};
     auto const comp = registry.create(ctx, node);
 
     REQUIRE(comp != nullptr);
-    CHECK(&comp->widget() == statusBar.get());
+    CHECK(dynamic_cast<Gtk::Box*>(&comp->widget()) != nullptr);
   }
 }
 
@@ -476,7 +462,7 @@ TEST_CASE("All component types register and instantiate", "[layout][components]"
   auto window = Gtk::Window{};
   auto ctx = makeContext(registry, session, window);
 
-  SECTION("all 9 semantic types")
+  SECTION("all 14 status and semantic types")
   {
     char const* types[] = {"status.messageLabel",
                            "library.listTree",
@@ -486,7 +472,12 @@ TEST_CASE("All component types register and instantiate", "[layout][components]"
                            "inspector.sidebar",
                            "status.defaultBar",
                            "app.menuBar",
-                           "app.workspaceWithInspector"};
+                           "app.workspaceWithInspector",
+                           "status.playbackDetails",
+                           "status.nowPlaying",
+                           "status.importProgress",
+                           "status.notification",
+                           "status.trackCount"};
 
     for (auto const* type : types)
     {

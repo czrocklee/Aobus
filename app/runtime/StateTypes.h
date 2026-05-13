@@ -94,6 +94,7 @@ namespace ao::rt
   {
     Info,
     Warning,
+    Error,
   };
 
   struct NotificationEntry final

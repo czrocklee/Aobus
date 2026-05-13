@@ -43,6 +43,8 @@ namespace ao::gtk
     bool expands = false;
     bool numeric = false;
     bool tagsCell = false;
+    bool editable = false;
+    bool draggable = false;
   };
 
   struct TrackColumnState final

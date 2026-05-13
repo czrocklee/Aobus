@@ -7,7 +7,6 @@
 #include "inspector/CoverArtWidget.h"
 #include "inspector/TrackInspectorPanel.h"
 #include "list/ListSidebarController.h"
-#include "shell/StatusBar.h"
 #include "tag/TagEditController.h"
 #include "track/TrackPageManager.h"
 #include "track/TrackRowCache.h"
@@ -35,27 +34,6 @@ namespace ao::gtk::layout
     {
       return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
     }
-
-    /**
-     * @brief status.messageLabel
-     */
-    class StatusMessageLabelComponent final : public ILayoutComponent
-    {
-    public:
-      StatusMessageLabelComponent(LayoutDependencies& /*ctx*/, LayoutNode const& /*node*/)
-      {
-        _label.set_ellipsize(Pango::EllipsizeMode::END);
-        _label.set_halign(Gtk::Align::START);
-
-        // Subscription would go here if there was a status service
-        _label.set_text("Aobus Ready");
-      }
-
-      Gtk::Widget& widget() override { return _label; }
-
-    private:
-      Gtk::Label _label;
-    };
 
     /**
      * @brief library.listTree
@@ -217,33 +195,6 @@ namespace ao::gtk::layout
     };
 
     /**
-     * @brief status.defaultBar
-     */
-    class DefaultStatusBarComponent final : public ILayoutComponent
-    {
-    public:
-      DefaultStatusBarComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-      {
-        if (ctx.shell.statusBar == nullptr)
-        {
-          _error = Gtk::make_managed<Gtk::Label>("Error: statusBar missing");
-          return;
-        }
-
-        _widget = ctx.shell.statusBar;
-      }
-
-      Gtk::Widget& widget() override
-      {
-        return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(*_widget);
-      }
-
-    private:
-      ao::gtk::StatusBar* _widget = nullptr;
-      Gtk::Label* _error = nullptr;
-    };
-
-    /**
      * @brief app.menuBar
      */
     class MenuBarComponent final : public ILayoutComponent
@@ -327,17 +278,6 @@ namespace ao::gtk::layout
 
   void registerSemanticComponents(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "status.messageLabel",
-                                .displayName = "Status Message",
-                                .category = "Status",
-                                .container = false,
-                                .props = {},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .maxChildren = 0},
-                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<StatusMessageLabelComponent>(ctx, node); });
-
     registry.registerComponent({.type = "library.listTree",
                                 .displayName = "Library Tree",
                                 .category = "Library",
@@ -395,17 +335,6 @@ namespace ao::gtk::layout
                                 .maxChildren = 0},
                                [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<InspectorSidebarComponent>(ctx, node); });
-
-    registry.registerComponent({.type = "status.defaultBar",
-                                .displayName = "Default Status Bar",
-                                .category = "Status",
-                                .container = false,
-                                .props = {},
-                                .layoutProps = {},
-                                .minChildren = 0,
-                                .maxChildren = 0},
-                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<DefaultStatusBarComponent>(ctx, node); });
 
     registry.registerComponent({.type = "app.menuBar",
                                 .displayName = "Menu Bar",

@@ -73,7 +73,6 @@ namespace ao::gtk
     ctx.track.pageManager = _windowController->trackPageManager();
     ctx.track.columnLayoutModel = _windowController->columnLayoutModel();
     ctx.list.sidebarController = _windowController->listSidebarController();
-    ctx.shell.statusBar = _windowController->statusBar();
 
     _shellLayout.loadLayout(*_configStore);
   }

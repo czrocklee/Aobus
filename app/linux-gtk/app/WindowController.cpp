@@ -6,6 +6,7 @@
 #include <ao/audio/Player.h>
 #include <ao/utility/Log.h>
 #include <runtime/LibraryMutationService.h>
+#include <runtime/NotificationService.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
@@ -121,15 +122,9 @@ namespace ao::gtk
     int const coverArtCacheSize = 100;
     _coverArtCache = std::make_unique<CoverArtCache>(coverArtCacheSize);
 
-    // Initialize StatusBar
-    _statusBar = std::make_unique<StatusBar>(_session);
-
     // Initialize TagEditController
-    _tagEditController = std::make_unique<TagEditController>(
-      window,
-      _session,
-      TagEditController::Callbacks{
-        .onStatusMessage = [this](std::string const& msg) { showStatusMessage(msg); }, .onTagsMutated = [] {}});
+    _tagEditController =
+      std::make_unique<TagEditController>(window, _session, TagEditController::Callbacks{.onTagsMutated = [] {}});
 
     // Initialize list sidebar controller (must exist before TrackPageManager)
     _listSidebarController = std::make_unique<ListSidebarController>(
@@ -151,26 +146,19 @@ namespace ao::gtk
     _importExportCoordinator = std::make_unique<ImportExportCoordinator>(
       window,
       _session,
-      ImportExportCallbacks{
-        .onOpenNewLibrary = [](std::filesystem::path const&) {},
-        .onLibraryDataMutated =
-          [this]
-        {
-          if (_trackRowCache)
-          {
-            _trackRowCache->clearCache();
-            _session.reloadAllTracks();
-            auto const txn = _session.musicLibrary().readTransaction();
-            rebuildListPages(txn);
-            if (_statusBar)
-            {
-              _statusBar->setTrackCount(_session.sources().allTracks().size());
-            }
-          }
-        },
-        .onProgressUpdated = [this](double fraction, std::string const& info) { updateImportProgress(fraction, info); },
-        .onStatusMessage = [this](std::string const& msg) { showStatusMessage(msg); },
-        .onTitleChanged = [this](std::string const& title) { _window.set_title(title); }});
+      ImportExportCallbacks{.onOpenNewLibrary = [](std::filesystem::path const&) {},
+                            .onLibraryDataMutated =
+                              [this]
+                            {
+                              if (_trackRowCache)
+                              {
+                                _trackRowCache->clearCache();
+                                _session.reloadAllTracks();
+                                auto const txn = _session.musicLibrary().readTransaction();
+                                rebuildListPages(txn);
+                              }
+                            },
+                            .onTitleChanged = [this](std::string const& title) { _window.set_title(title); }});
   }
 
   WindowController::~WindowController()
@@ -196,9 +184,6 @@ namespace ao::gtk
 
     _playbackSequenceController = std::make_unique<PlaybackSequenceController>(_session, *_trackRowCache);
     _trackPageManager->setPlaybackSequenceController(*_playbackSequenceController);
-
-    _importProgressSubscription = _session.mutation().onImportProgress(
-      [this](auto const& event) { updateImportProgress(event.fraction, event.message); });
 
     _importCompletedSubscription = _session.mutation().onImportCompleted(
       [this](auto)
@@ -236,10 +221,7 @@ namespace ao::gtk
 
     _tagEditController->setDataProvider(_trackRowCache.get());
 
-    if (_statusBar)
-    {
-      _statusBar->showMessage("Aobus Ready");
-    }
+    _session.notifications().post(ao::rt::NotificationSeverity::Info, "Aobus Ready");
 
     auto const txn = _session.musicLibrary().readTransaction();
     rebuildListPages(txn);
@@ -262,10 +244,12 @@ namespace ao::gtk
     {
       ws.width = width;
     }
+
     if (auto const height = _window.get_height(); height > 0)
     {
       ws.height = height;
     }
+
     ws.maximized = _window.is_maximized();
 
     _configStore->save("window", ws);
@@ -278,18 +262,21 @@ namespace ao::gtk
   void WindowController::loadSession()
   {
     auto ws = WindowState{};
+
     if (auto const res = _configStore->load("window", ws); !res && res.error().code != ao::Error::Code::NotFound)
     {
       APP_LOG_DEBUG("Failed to load window config: {}", res.error().message);
     }
 
     _window.set_default_size(ws.width, ws.height);
+
     if (ws.maximized)
     {
       _window.maximize();
     }
 
     auto tvs = TrackViewState{};
+
     if (auto const res = _configStore->load("track_view", tvs); !res && res.error().code != ao::Error::Code::NotFound)
     {
       APP_LOG_DEBUG("Failed to load track view config: {}", res.error().message);
@@ -307,30 +294,5 @@ namespace ao::gtk
     {
       _listSidebarController->rebuildTree(*_trackRowCache, txn);
     }
-  }
-
-  void WindowController::updateImportProgress(double fraction, std::string_view info)
-  {
-    if (!_statusBar)
-    {
-      return;
-    }
-    if (fraction >= 1.0)
-    {
-      _statusBar->clearImportProgress();
-      if (_trackRowCache)
-      {
-        _statusBar->setTrackCount(_session.sources().allTracks().size());
-      }
-    }
-    else
-    {
-      _statusBar->setImportProgress(fraction, info);
-    }
-  }
-
-  void WindowController::showStatusMessage(std::string_view message)
-  {
-    _statusBar->showMessage(message);
   }
 } // namespace ao::gtk

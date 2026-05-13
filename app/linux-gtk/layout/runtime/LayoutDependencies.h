@@ -23,7 +23,6 @@ namespace ao::gtk
   class ImportExportCoordinator;
   class TrackPageManager;
   class TrackColumnLayoutModel;
-  class StatusBar;
   class ListSidebarController;
 } // namespace ao::gtk
 
@@ -60,7 +59,6 @@ namespace ao::gtk::layout
 
   struct ShellUiContext final
   {
-    ao::gtk::StatusBar* statusBar = nullptr;
     Glib::RefPtr<Gio::MenuModel> menuModel;
   };
 

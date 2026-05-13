@@ -738,26 +738,56 @@ namespace ao::gtk::layout::editor
         }
       };
 
-      addCommon({"margin", PropertyKind::Int, "Margin", LayoutValue{static_cast<std::int64_t>(0)}, {}});
-      addCommon({"hexpand", PropertyKind::Bool, "Expand Horizontal", LayoutValue{false}, {}});
-      addCommon({"vexpand", PropertyKind::Bool, "Expand Vertical", LayoutValue{false}, {}});
-      addCommon({"halign",
-                 PropertyKind::Enum,
-                 "Horizontal Align",
-                 LayoutValue{std::string{"fill"}},
-                 {"fill", "start", "end", "center"}});
-      addCommon({"valign",
-                 PropertyKind::Enum,
-                 "Vertical Align",
-                 LayoutValue{std::string{"fill"}},
-                 {"fill", "start", "end", "center"}});
-      addCommon({"minWidth", PropertyKind::Int, "Min Width", LayoutValue{static_cast<std::int64_t>(-1)}, {}});
-      addCommon({"minHeight", PropertyKind::Int, "Min Height", LayoutValue{static_cast<std::int64_t>(-1)}, {}});
-      addCommon({"x", PropertyKind::Int, "X", LayoutValue{static_cast<std::int64_t>(0)}, {}});
-      addCommon({"y", PropertyKind::Int, "Y", LayoutValue{static_cast<std::int64_t>(0)}, {}});
-      addCommon({"width", PropertyKind::Int, "Width", LayoutValue{static_cast<std::int64_t>(-1)}, {}});
-      addCommon({"height", PropertyKind::Int, "Height", LayoutValue{static_cast<std::int64_t>(-1)}, {}});
-      addCommon({"zIndex", PropertyKind::Int, "Z-Index", LayoutValue{static_cast<std::int64_t>(0)}, {}});
+      addCommon({.name = "margin",
+                 .kind = PropertyKind::Int,
+                 .label = "Margin",
+                 .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}});
+      addCommon({.name = "hexpand",
+                 .kind = PropertyKind::Bool,
+                 .label = "Expand Horizontal",
+                 .defaultValue = LayoutValue{false}});
+      addCommon({.name = "vexpand",
+                 .kind = PropertyKind::Bool,
+                 .label = "Expand Vertical",
+                 .defaultValue = LayoutValue{false}});
+      addCommon({.name = "halign",
+                 .kind = PropertyKind::Enum,
+                 .label = "Horizontal Align",
+                 .defaultValue = LayoutValue{std::string{"fill"}},
+                 .enumValues = {"fill", "start", "end", "center"}});
+      addCommon({.name = "valign",
+                 .kind = PropertyKind::Enum,
+                 .label = "Vertical Align",
+                 .defaultValue = LayoutValue{std::string{"fill"}},
+                 .enumValues = {"fill", "start", "end", "center"}});
+      addCommon({.name = "minWidth",
+                 .kind = PropertyKind::Int,
+                 .label = "Min Width",
+                 .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}});
+      addCommon({.name = "minHeight",
+                 .kind = PropertyKind::Int,
+                 .label = "Min Height",
+                 .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}});
+      addCommon({.name = "x",
+                 .kind = PropertyKind::Int,
+                 .label = "X",
+                 .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}});
+      addCommon({.name = "y",
+                 .kind = PropertyKind::Int,
+                 .label = "Y",
+                 .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}});
+      addCommon({.name = "width",
+                 .kind = PropertyKind::Int,
+                 .label = "Width",
+                 .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}});
+      addCommon({.name = "height",
+                 .kind = PropertyKind::Int,
+                 .label = "Height",
+                 .defaultValue = LayoutValue{static_cast<std::int64_t>(-1)}});
+      addCommon({.name = "zIndex",
+                 .kind = PropertyKind::Int,
+                 .label = "Z-Index",
+                 .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}});
 
       if (!layoutProps.empty())
       {

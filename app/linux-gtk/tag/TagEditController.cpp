@@ -8,6 +8,7 @@
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
+#include <runtime/NotificationService.h>
 
 namespace ao::gtk
 {
@@ -153,13 +154,9 @@ namespace ao::gtk
 
     if (!result)
     {
-      APP_LOG_ERROR("Failed to edit tags: {}", result.error().message);
-
-      if (_callbacks.onStatusMessage)
-      {
-        _callbacks.onStatusMessage(std::format("Failed to edit tags: {}", result.error().message));
-      }
-
+      auto const errorMsg = std::format("Failed to edit tags: {}", result.error().message);
+      APP_LOG_ERROR("{}", errorMsg);
+      _session.notifications().post(ao::rt::NotificationSeverity::Error, errorMsg);
       return;
     }
 
@@ -168,10 +165,8 @@ namespace ao::gtk
       _callbacks.onTagsMutated();
     }
 
-    if (_callbacks.onStatusMessage)
-    {
-      _callbacks.onStatusMessage(
-        tagChangeStatusMessage(selection.selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
-    }
+    _session.notifications().post(
+      ao::rt::NotificationSeverity::Info,
+      tagChangeStatusMessage(selection.selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
   }
 } // namespace ao::gtk

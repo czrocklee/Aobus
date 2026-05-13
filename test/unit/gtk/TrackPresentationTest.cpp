@@ -29,7 +29,7 @@ TEST_CASE("TrackPresentation - default column layout", "[app][presentation]")
 TEST_CASE("TrackPresentation - normalize column layout fills missing", "[app][presentation]")
 {
   auto layout = TrackColumnLayout{
-    .columns = {{TrackColumn::Title, true, 300}},
+    .columns = {{.column = TrackColumn::Title, .visible = true, .width = 300}},
   };
   auto const normalized = normalizeTrackColumnLayout(layout);
 
@@ -57,4 +57,24 @@ TEST_CASE("TrackPresentation - redundantFieldToColumn mapping", "[app][presentat
   CHECK_FALSE(redundantFieldToColumn(TrackSortField::Duration).has_value());
   CHECK_FALSE(redundantFieldToColumn(TrackSortField::DiscNumber).has_value());
   CHECK_FALSE(redundantFieldToColumn(TrackSortField::TrackNumber).has_value());
+}
+
+TEST_CASE("TrackPresentation - editable trait", "[app][presentation]")
+{
+  for (auto const& def : trackColumnDefinitions())
+  {
+    bool const expected =
+      def.column == TrackColumn::Title || def.column == TrackColumn::Artist || def.column == TrackColumn::Album;
+    CHECK(def.editable == expected);
+  }
+}
+
+TEST_CASE("TrackPresentation - draggable trait", "[app][presentation]")
+{
+  for (auto const& def : trackColumnDefinitions())
+  {
+    bool const expected =
+      def.column == TrackColumn::Artist || def.column == TrackColumn::Album || def.column == TrackColumn::Genre;
+    CHECK(def.draggable == expected);
+  }
 }
