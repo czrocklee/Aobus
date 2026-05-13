@@ -11,7 +11,7 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class LibraryMutationService;
 }
 
 namespace ao::gtk
@@ -23,13 +23,13 @@ namespace ao::gtk
   class ImportProgressIndicator final
   {
   public:
-    explicit ImportProgressIndicator(ao::rt::AppSession& session);
+    explicit ImportProgressIndicator(ao::rt::LibraryMutationService& mutationService);
     ~ImportProgressIndicator();
 
     Gtk::Widget& widget() { return _container; }
 
   private:
-    ao::rt::AppSession& _session;
+    ao::rt::LibraryMutationService& _mutationService;
     Gtk::Box _container{Gtk::Orientation::HORIZONTAL};
     Gtk::Label _label;
     Gtk::ProgressBar _progressBar;

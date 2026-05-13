@@ -42,7 +42,7 @@ TEST_CASE("Status bar components", "[gtk][shell]")
 
   SECTION("PlaybackDetailsWidget instantiates")
   {
-    auto widget = PlaybackDetailsWidget{session};
+    auto widget = PlaybackDetailsWidget{session.playback()};
     auto& gtkWidget = widget.widget();
     auto* box = dynamic_cast<Gtk::Box*>(&gtkWidget);
     REQUIRE(box != nullptr);
@@ -50,7 +50,7 @@ TEST_CASE("Status bar components", "[gtk][shell]")
 
   SECTION("NowPlayingStatusLabel instantiates and is empty by default")
   {
-    auto label = NowPlayingStatusLabel{session};
+    auto label = NowPlayingStatusLabel{session.playback()};
     auto* gtkLabel = dynamic_cast<Gtk::Label*>(&label.widget());
     REQUIRE(gtkLabel != nullptr);
     CHECK(gtkLabel->get_text() == "");
@@ -58,13 +58,13 @@ TEST_CASE("Status bar components", "[gtk][shell]")
 
   SECTION("ImportProgressIndicator instantiates and is hidden by default")
   {
-    auto indicator = ImportProgressIndicator{session};
+    auto indicator = ImportProgressIndicator{session.mutation()};
     REQUIRE(indicator.widget().get_visible() == false);
   }
 
   SECTION("LibraryTrackCountLabel instantiates and shows 0 tracks")
   {
-    auto label = LibraryTrackCountLabel{session};
+    auto label = LibraryTrackCountLabel{session.sources().allTracks()};
     auto* gtkLabel = dynamic_cast<Gtk::Label*>(&label.widget());
     REQUIRE(gtkLabel != nullptr);
     CHECK(gtkLabel->get_text() == "0 tracks");
@@ -72,7 +72,7 @@ TEST_CASE("Status bar components", "[gtk][shell]")
 
   SECTION("StatusNotificationLabel instantiates")
   {
-    auto label = StatusNotificationLabel{session};
+    auto label = StatusNotificationLabel{session.notifications(), session.views()};
     REQUIRE(dynamic_cast<Gtk::Stack*>(&label.widget()) != nullptr);
   }
 }

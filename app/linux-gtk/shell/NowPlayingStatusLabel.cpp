@@ -60,8 +60,8 @@ namespace ao::gtk
     }
   }
 
-  NowPlayingStatusLabel::NowPlayingStatusLabel(ao::rt::AppSession& session)
-    : _session{session}
+  NowPlayingStatusLabel::NowPlayingStatusLabel(ao::rt::PlaybackService& playbackService)
+    : _playbackService{playbackService}
   {
     ensureNowPlayingCss();
     _label.add_css_class("now-playing-label");
@@ -69,15 +69,15 @@ namespace ao::gtk
     _label.set_tooltip_text("Click to show playing list");
 
     auto const clickGesture = Gtk::GestureClick::create();
-    clickGesture->signal_pressed().connect([this](int, double, double) { _session.playback().revealPlayingTrack(); });
+    clickGesture->signal_pressed().connect([this](int, double, double) { _playbackService.revealPlayingTrack(); });
 
     _label.add_controller(clickGesture);
     _label.set_cursor(Gdk::Cursor::create("pointer"));
 
-    _startedSub = _session.playback().onStarted([this] { updateState(); });
-    _pausedSub = _session.playback().onPaused([this] { updateState(); });
-    _idleSub = _session.playback().onIdle([this] { updateState(); });
-    _stoppedSub = _session.playback().onStopped([this] { updateState(); });
+    _startedSub = _playbackService.onStarted([this] { updateState(); });
+    _pausedSub = _playbackService.onPaused([this] { updateState(); });
+    _idleSub = _playbackService.onIdle([this] { updateState(); });
+    _stoppedSub = _playbackService.onStopped([this] { updateState(); });
 
     updateState();
   }
@@ -86,7 +86,7 @@ namespace ao::gtk
 
   void NowPlayingStatusLabel::updateState()
   {
-    auto const& state = _session.playback().state();
+    auto const& state = _playbackService.state();
 
     if (state.transport == ao::audio::Transport::Idle)
     {

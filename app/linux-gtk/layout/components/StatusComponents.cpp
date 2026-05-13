@@ -12,6 +12,9 @@
 #include <shell/PlaybackDetailsWidget.h>
 #include <shell/StatusNotificationLabel.h>
 
+#include <runtime/AppSession.h>
+#include <runtime/ListSourceStore.h>
+
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
 #include <gtkmm/separator.h>
@@ -44,19 +47,74 @@ namespace ao::gtk::layout
       }
     }
 
-    template<typename T>
-    class GenericStatusComponent final : public ILayoutComponent
+    class PlaybackDetailsComponent final : public ILayoutComponent
     {
     public:
-      GenericStatusComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.session}
+      PlaybackDetailsComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.session.playback()}
       {
       }
 
       Gtk::Widget& widget() override { return _widget.widget(); }
 
     private:
-      T _widget;
+      PlaybackDetailsWidget _widget;
+    };
+
+    class NowPlayingStatusComponent final : public ILayoutComponent
+    {
+    public:
+      NowPlayingStatusComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.session.playback()}
+      {
+      }
+
+      Gtk::Widget& widget() override { return _widget.widget(); }
+
+    private:
+      NowPlayingStatusLabel _widget;
+    };
+
+    class ImportProgressComponent final : public ILayoutComponent
+    {
+    public:
+      ImportProgressComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.session.mutation()}
+      {
+      }
+
+      Gtk::Widget& widget() override { return _widget.widget(); }
+
+    private:
+      ImportProgressIndicator _widget;
+    };
+
+    class StatusNotificationComponent final : public ILayoutComponent
+    {
+    public:
+      StatusNotificationComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.session.notifications(), ctx.session.views()}
+      {
+      }
+
+      Gtk::Widget& widget() override { return _widget.widget(); }
+
+    private:
+      StatusNotificationLabel _widget;
+    };
+
+    class LibraryTrackCountComponent final : public ILayoutComponent
+    {
+    public:
+      LibraryTrackCountComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.session.sources().allTracks()}
+      {
+      }
+
+      Gtk::Widget& widget() override { return _widget.widget(); }
+
+    private:
+      LibraryTrackCountLabel _widget;
     };
 
     /**
@@ -85,11 +143,11 @@ namespace ao::gtk::layout
     {
     public:
       DefaultStatusBarComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _playbackDetails{ctx.session}
-        , _nowPlaying{ctx.session}
-        , _importProgress{ctx.session}
-        , _notification{ctx.session}
-        , _trackCount{ctx.session}
+        : _playbackDetails{ctx.session.playback()}
+        , _nowPlaying{ctx.session.playback()}
+        , _importProgress{ctx.session.mutation()}
+        , _notification{ctx.session.notifications(), ctx.session.views()}
+        , _trackCount{ctx.session.sources().allTracks()}
       {
         ensureStatusBarContainerCss();
         _container.add_css_class("status-bar");
@@ -137,26 +195,26 @@ namespace ao::gtk::layout
     registry.registerComponent(
       {.type = "status.playbackDetails", .displayName = "Playback Details", .category = "Status"},
       [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<GenericStatusComponent<PlaybackDetailsWidget>>(ctx, node); });
+      { return std::make_unique<PlaybackDetailsComponent>(ctx, node); });
 
     registry.registerComponent({.type = "status.nowPlaying", .displayName = "Now Playing Status", .category = "Status"},
                                [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<GenericStatusComponent<NowPlayingStatusLabel>>(ctx, node); });
+                               { return std::make_unique<NowPlayingStatusComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "status.importProgress", .displayName = "Import Progress", .category = "Status"},
       [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<GenericStatusComponent<ImportProgressIndicator>>(ctx, node); });
+      { return std::make_unique<ImportProgressComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "status.notification", .displayName = "Status Notifications", .category = "Status"},
       [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<GenericStatusComponent<StatusNotificationLabel>>(ctx, node); });
+      { return std::make_unique<StatusNotificationComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "status.trackCount", .displayName = "Library Track Count", .category = "Status"},
       [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-      { return std::make_unique<GenericStatusComponent<LibraryTrackCountLabel>>(ctx, node); });
+      { return std::make_unique<LibraryTrackCountComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "status.messageLabel", .displayName = "Status Message (Basic)", .category = "Status"},

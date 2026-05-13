@@ -35,8 +35,9 @@ namespace ao::gtk
     }
   }
 
-  StatusNotificationLabel::StatusNotificationLabel(ao::rt::AppSession& session)
-    : _session{session}, _selectionInfo{session}
+  StatusNotificationLabel::StatusNotificationLabel(ao::rt::NotificationService& notificationService,
+                                                   ao::rt::ViewService& viewService)
+    : _notificationService{notificationService}, _selectionInfo{viewService}
   {
     ensureStatusNotificationCss();
     _stack.set_transition_type(Gtk::StackTransitionType::SLIDE_UP_DOWN);
@@ -49,10 +50,10 @@ namespace ao::gtk
     _stack.add(_statusLabel, "status");
     _stack.set_visible_child("info");
 
-    _notificationPostedSub = _session.notifications().onPosted(
+    _notificationPostedSub = _notificationService.onPosted(
       [this](auto)
       {
-        auto const feed = _session.notifications().feed();
+        auto const feed = _notificationService.feed();
 
         if (!feed.entries.empty())
         {

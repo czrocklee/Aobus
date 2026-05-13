@@ -11,20 +11,55 @@
 
 namespace ao::gtk
 {
-  LibraryTrackCountLabel::LibraryTrackCountLabel(ao::rt::AppSession& session)
-    : _session{session}
+  LibraryTrackCountLabel::LibraryTrackCountLabel(ao::rt::TrackSource& source)
+    : _source{&source}
   {
     _label.add_css_class("dim-label");
-    _importCompletedSub = _session.mutation().onImportCompleted([this](auto) { updateCount(); });
+    _source->attach(this);
 
     updateCount();
   }
 
-  LibraryTrackCountLabel::~LibraryTrackCountLabel() = default;
+  LibraryTrackCountLabel::~LibraryTrackCountLabel()
+  {
+    if (_source != nullptr)
+    {
+      _source->detach(this);
+    }
+  }
+
+  void LibraryTrackCountLabel::onReset()
+  {
+    updateCount();
+  }
+
+  void LibraryTrackCountLabel::onInserted(ao::rt::TrackId /*id*/, std::size_t /*index*/)
+  {
+    updateCount();
+  }
+
+  void LibraryTrackCountLabel::onUpdated(ao::rt::TrackId /*id*/, std::size_t /*index*/)
+  {
+  }
+
+  void LibraryTrackCountLabel::onRemoved(ao::rt::TrackId /*id*/, std::size_t /*index*/)
+  {
+    updateCount();
+  }
+
+  void LibraryTrackCountLabel::onSourceDestroyed()
+  {
+    _source = nullptr;
+  }
 
   void LibraryTrackCountLabel::updateCount()
   {
-    auto const count = _session.sources().allTracks().size();
+    if (_source == nullptr)
+    {
+      return;
+    }
+
+    auto const count = _source->size();
     _label.set_text(std::format("{} tracks", count));
   }
 } // namespace ao::gtk

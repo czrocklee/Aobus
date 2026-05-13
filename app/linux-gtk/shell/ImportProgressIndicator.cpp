@@ -8,8 +8,8 @@
 
 namespace ao::gtk
 {
-  ImportProgressIndicator::ImportProgressIndicator(ao::rt::AppSession& session)
-    : _session{session}
+  ImportProgressIndicator::ImportProgressIndicator(ao::rt::LibraryMutationService& mutationService)
+    : _mutationService{mutationService}
   {
     _container.set_spacing(Layout::kSpacingXLarge);
     _container.set_visible(false);
@@ -21,7 +21,7 @@ namespace ao::gtk
     _progressBar.set_size_request(kProgressBarWidth, -1);
     _container.append(_progressBar);
 
-    _progressSub = _session.mutation().onImportProgress(
+    _progressSub = _mutationService.onImportProgress(
       [this](auto const& ev)
       {
         _container.set_visible(true);
@@ -29,7 +29,7 @@ namespace ao::gtk
         _label.set_text(ev.message);
       });
 
-    _completedSub = _session.mutation().onImportCompleted([this](auto) { _container.set_visible(false); });
+    _completedSub = _mutationService.onImportCompleted([this](auto) { _container.set_visible(false); });
   }
 
   ImportProgressIndicator::~ImportProgressIndicator() = default;

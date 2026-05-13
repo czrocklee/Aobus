@@ -73,8 +73,8 @@ namespace ao::gtk
     }
   }
 
-  PlaybackDetailsWidget::PlaybackDetailsWidget(ao::rt::AppSession& session)
-    : _session{session}
+  PlaybackDetailsWidget::PlaybackDetailsWidget(ao::rt::PlaybackService& playbackService)
+    : _playbackService{playbackService}
   {
     ensurePlaybackDetailsCss();
     _container.set_spacing(Layout::kSpacingLarge);
@@ -89,12 +89,12 @@ namespace ao::gtk
     _container.append(_streamInfoLabel);
     _container.append(_sinkStatusIcon);
 
-    _startedSub = _session.playback().onStarted([this] { updateState(); });
-    _pausedSub = _session.playback().onPaused([this] { updateState(); });
-    _idleSub = _session.playback().onIdle([this] { updateState(); });
-    _stoppedSub = _session.playback().onStopped([this] { updateState(); });
-    _outputChangedSub = _session.playback().onOutputChanged([this](auto const&) { updateState(); });
-    _qualityChangedSub = _session.playback().onQualityChanged([this](auto const&) { updateState(); });
+    _startedSub = _playbackService.onStarted([this] { updateState(); });
+    _pausedSub = _playbackService.onPaused([this] { updateState(); });
+    _idleSub = _playbackService.onIdle([this] { updateState(); });
+    _stoppedSub = _playbackService.onStopped([this] { updateState(); });
+    _outputChangedSub = _playbackService.onOutputChanged([this](auto const&) { updateState(); });
+    _qualityChangedSub = _playbackService.onQualityChanged([this](auto const&) { updateState(); });
 
     updateState();
   }
@@ -103,7 +103,7 @@ namespace ao::gtk
 
   void PlaybackDetailsWidget::updateState()
   {
-    auto const& state = _session.playback().state();
+    auto const& state = _playbackService.state();
 
     if (state.transport == ao::audio::Transport::Idle)
     {

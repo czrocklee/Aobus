@@ -15,7 +15,7 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class PlaybackService;
   struct PlaybackState;
 }
 
@@ -28,7 +28,7 @@ namespace ao::gtk
   class PlaybackDetailsWidget final
   {
   public:
-    explicit PlaybackDetailsWidget(ao::rt::AppSession& session);
+    explicit PlaybackDetailsWidget(ao::rt::PlaybackService& playbackService);
     ~PlaybackDetailsWidget();
 
     Gtk::Widget& widget() { return _container; }
@@ -37,7 +37,7 @@ namespace ao::gtk
     void updateState();
     void updateTooltip(ao::rt::PlaybackState const& state);
 
-    ao::rt::AppSession& _session;
+    ao::rt::PlaybackService& _playbackService;
     Gtk::Box _container{Gtk::Orientation::HORIZONTAL};
     Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;

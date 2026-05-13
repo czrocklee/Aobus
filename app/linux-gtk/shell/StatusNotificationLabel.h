@@ -14,7 +14,8 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class NotificationService;
+  class ViewService;
 }
 
 namespace ao::gtk
@@ -26,7 +27,8 @@ namespace ao::gtk
   class StatusNotificationLabel final
   {
   public:
-    explicit StatusNotificationLabel(ao::rt::AppSession& session);
+    explicit StatusNotificationLabel(ao::rt::NotificationService& notificationService,
+                                     ao::rt::ViewService& viewService);
     ~StatusNotificationLabel();
 
     Gtk::Widget& widget() { return _stack; }
@@ -35,7 +37,7 @@ namespace ao::gtk
     void showMessage(std::string_view message, std::chrono::seconds duration);
     void clearMessage();
 
-    ao::rt::AppSession& _session;
+    ao::rt::NotificationService& _notificationService;
     Gtk::Stack _stack;
     SelectionInfoLabel _selectionInfo;
     Gtk::Label _statusLabel;

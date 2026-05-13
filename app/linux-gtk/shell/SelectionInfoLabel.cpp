@@ -26,14 +26,14 @@ namespace ao::gtk
     }
   }
 
-  SelectionInfoLabel::SelectionInfoLabel(ao::rt::AppSession& session)
-    : _session{session}
+  SelectionInfoLabel::SelectionInfoLabel(ao::rt::ViewService& viewService)
+    : _viewService{viewService}
   {
     _label.add_css_class("dim-label");
     _label.set_halign(Gtk::Align::END);
 
     _selectionChangedSub =
-      _session.views().onSelectionChanged([this](auto const& ev) { updateState(ev.selection.size()); });
+      _viewService.onSelectionChanged([this](auto const& ev) { updateState(ev.selection.size()); });
 
     updateState(0);
   }
