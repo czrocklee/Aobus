@@ -12,8 +12,6 @@
 
 namespace ao::rt
 {
-  using TrackId = ao::TrackId;
-
   // Forward declaration
   class SmartListEvaluator;
 

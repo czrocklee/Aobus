@@ -76,9 +76,9 @@ namespace ao::gtk
     }
   }
 
-  TrackInspectorPanel::TrackInspectorPanel(ao::library::MusicLibrary& library,
-                                           ao::rt::LibraryMutationService& mutation,
-                                           ao::rt::ListSourceStore& sources,
+  TrackInspectorPanel::TrackInspectorPanel(library::MusicLibrary& library,
+                                           rt::LibraryMutationService& mutation,
+                                           rt::ListSourceStore& sources,
                                            CoverArtCache& coverArtCache)
     : Gtk::Box{Gtk::Orientation::VERTICAL, 0}
     , _library{library}
@@ -233,7 +233,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const result = _mutation.updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optTitle = newValue});
+    auto const result = _mutation.updateMetadata(_currentTrackIds, rt::MetadataPatch{.optTitle = newValue});
 
     if (!result)
     {
@@ -261,7 +261,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const result = _mutation.updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optArtist = newValue});
+    auto const result = _mutation.updateMetadata(_currentTrackIds, rt::MetadataPatch{.optArtist = newValue});
 
     if (!result)
     {
@@ -288,7 +288,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const result = _mutation.updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optAlbum = newValue});
+    auto const result = _mutation.updateMetadata(_currentTrackIds, rt::MetadataPatch{.optAlbum = newValue});
 
     if (!result)
     {
@@ -309,18 +309,18 @@ namespace ao::gtk
     _tagEditor.set_visible(false);
   }
 
-  void TrackInspectorPanel::bindToDetailProjection(std::shared_ptr<ao::rt::ITrackDetailProjection> projection)
+  void TrackInspectorPanel::bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection)
   {
     _detailProjection = std::move(projection);
     _detailSub =
-      _detailProjection->subscribe([this](ao::rt::TrackDetailSnapshot const& snap) { onTrackDetailSnapshot(snap); });
+      _detailProjection->subscribe([this](rt::TrackDetailSnapshot const& snap) { onTrackDetailSnapshot(snap); });
   }
 
-  void TrackInspectorPanel::onTrackDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap)
+  void TrackInspectorPanel::onTrackDetailSnapshot(rt::TrackDetailSnapshot const& snap)
   {
     _currentTrackIds = snap.trackIds;
 
-    if (snap.selectionKind == ao::rt::SelectionKind::None)
+    if (snap.selectionKind == rt::SelectionKind::None)
     {
       updateEmptyState();
       return;
@@ -341,7 +341,7 @@ namespace ao::gtk
     _tagEditor.set_visible(true);
   }
 
-  void TrackInspectorPanel::updateCoverArt(ao::rt::TrackDetailSnapshot const& snap)
+  void TrackInspectorPanel::updateCoverArt(rt::TrackDetailSnapshot const& snap)
   {
     if (snap.singleCoverArtId == ResourceId{0})
     {
@@ -392,9 +392,9 @@ namespace ao::gtk
     }
   }
 
-  void TrackInspectorPanel::updateAudioMetadata(ao::rt::TrackDetailSnapshot const& snap)
+  void TrackInspectorPanel::updateAudioMetadata(rt::TrackDetailSnapshot const& snap)
   {
-    _audioBox.set_visible(snap.selectionKind == ao::rt::SelectionKind::Single);
+    _audioBox.set_visible(snap.selectionKind == rt::SelectionKind::Single);
 
     auto const setLabel = [](Gtk::Label& label, auto const& property, auto const& formatter)
     {

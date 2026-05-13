@@ -156,7 +156,7 @@ namespace ao::audio
       status.statusText = std::string{message};
     }
 
-    void handleSourceError(ao::Error const& error)
+    void handleSourceError(Error const& error)
     {
       {
         auto const lock = std::lock_guard{stateMutex};
@@ -266,7 +266,7 @@ namespace ao::audio
                                                   backend->backendId(),
                                                   backend->profileId(),
                                                   decoderFactory,
-                                                  [this](ao::Error const& err) { handleSourceError(err); });
+                                                  [this](Error const& err) { handleSourceError(err); });
 
       if (!session)
       {

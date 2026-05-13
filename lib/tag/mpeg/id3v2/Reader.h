@@ -4,14 +4,14 @@
 #pragma once
 
 #include <ao/library/TrackBuilder.h>
-#include <ao/tag/File.h>
+#include <ao/tag/TagFile.h>
 
 namespace ao::tag::mpeg::id3v2
 {
   struct HeaderLayout;
 
-  ao::library::TrackBuilder loadFrames(ao::tag::File const& owner,
-                                       HeaderLayout const& header,
-                                       void const* buffer,
-                                       std::size_t size);
+  library::TrackBuilder loadFrames(ao::tag::TagFile const& owner,
+                                   HeaderLayout const& header,
+                                   void const* buffer,
+                                   std::size_t size);
 }

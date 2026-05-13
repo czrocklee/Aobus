@@ -8,7 +8,7 @@
 
 namespace ao::gtk
 {
-  ImportProgressIndicator::ImportProgressIndicator(ao::rt::LibraryMutationService& mutationService)
+  ImportProgressIndicator::ImportProgressIndicator(rt::LibraryMutationService& mutationService)
     : _mutationService{mutationService}
   {
     _container.set_spacing(layout::kSpacingXLarge);

@@ -42,7 +42,7 @@ namespace ao::gtk
       }
     }
 
-    std::string formatStream(ao::audio::Format const& format)
+    std::string formatStream(audio::Format const& format)
     {
       constexpr auto kKhzMultiplier = 1000.0;
       auto const channelsText = [&]
@@ -73,7 +73,7 @@ namespace ao::gtk
     }
   }
 
-  PlaybackDetailsWidget::PlaybackDetailsWidget(ao::rt::PlaybackService& playbackService)
+  PlaybackDetailsWidget::PlaybackDetailsWidget(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
   {
     ensurePlaybackDetailsCss();
@@ -105,7 +105,7 @@ namespace ao::gtk
   {
     auto const& state = _playbackService.state();
 
-    if (state.transport == ao::audio::Transport::Idle)
+    if (state.transport == audio::Transport::Idle)
     {
       _streamInfoLabel.set_text(state.ready ? "" : "Connecting to audio engine...");
       _sinkStatusIcon.set_visible(false);
@@ -114,9 +114,8 @@ namespace ao::gtk
     }
 
     // Source Format from Decoder Node
-    auto const it = std::ranges::find_if(state.flow.nodes,
-                                         [](auto const& node)
-                                         { return node.type == ao::audio::flow::NodeType::Decoder && node.optFormat; });
+    auto const it = std::ranges::find_if(
+      state.flow.nodes, [](auto const& node) { return node.type == audio::flow::NodeType::Decoder && node.optFormat; });
 
     auto const info = (it != state.flow.nodes.end() && it->optFormat) ? formatStream(*it->optFormat) : std::string{};
     _streamInfoLabel.set_text(info);
@@ -127,7 +126,7 @@ namespace ao::gtk
     clearSinkStatusClasses(_sinkStatusIcon);
     _sinkStatusIcon.set_visible(true);
 
-    using Quality = ao::audio::Quality;
+    using Quality = audio::Quality;
 
     switch (state.quality)
     {
@@ -141,12 +140,12 @@ namespace ao::gtk
     }
   }
 
-  void PlaybackDetailsWidget::updateTooltip(ao::rt::PlaybackState const& state)
+  void PlaybackDetailsWidget::updateTooltip(rt::PlaybackState const& state)
   {
     auto tooltip = std::string{"Audio Pipeline:\n"};
-    auto const nodeTypeString = [](ao::audio::flow::NodeType type)
+    auto const nodeTypeString = [](audio::flow::NodeType type)
     {
-      using Type = ao::audio::flow::NodeType;
+      using Type = audio::flow::NodeType;
 
       switch (type)
       {
@@ -167,7 +166,7 @@ namespace ao::gtk
       while (!currentId.empty() && !visited.contains(currentId))
       {
         visited.insert(currentId);
-        auto const it = std::ranges::find(state.flow.nodes, currentId, &ao::audio::flow::Node::id);
+        auto const it = std::ranges::find(state.flow.nodes, currentId, &audio::flow::Node::id);
 
         if (it == state.flow.nodes.end())
         {

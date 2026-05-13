@@ -115,7 +115,7 @@ namespace ao::query
     std::vector<std::string> stringConstants;
 
     // Dictionary used to resolve DictionaryId-backed metadata during evaluation.
-    ao::library::DictionaryStore const* dictionary = nullptr;
+    library::DictionaryStore const* dictionary = nullptr;
 
     // Bloom filter for tag fast-path rejection
     std::uint32_t tagBloomMask = 0;
@@ -143,7 +143,7 @@ namespace ao::query
      *
      * @param dict Pointer to DictionaryStore for resolving string constants to IDs, can be nullptr
      */
-    explicit QueryCompiler(ao::library::DictionaryStore* dict);
+    explicit QueryCompiler(library::DictionaryStore* dict);
 
     /**
      * Compile an expression AST into an execution plan.
@@ -168,7 +168,7 @@ namespace ao::query
     // Member variables
     ExecutionPlan _plan;
     std::uint32_t _nextReg = 0;
-    ao::library::DictionaryStore* _dict = nullptr;
+    library::DictionaryStore* _dict = nullptr;
     Field _lastField = Field::TagBloom; // Track last field for context
     bool _hasHotAccess = false;         // Track if expression uses hot (metadata/property/tag) variables
     bool _hasColdAccess = false;        // Track if expression uses cold (custom) variables

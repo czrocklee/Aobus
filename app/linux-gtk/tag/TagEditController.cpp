@@ -44,7 +44,7 @@ namespace ao::gtk
     }
   }
 
-  TagEditController::TagEditController(Gtk::Window& /*parent*/, ao::rt::AppSession& session, Callbacks callbacks)
+  TagEditController::TagEditController(Gtk::Window& /*parent*/, rt::AppSession& session, Callbacks callbacks)
     : _callbacks{std::move(callbacks)}, _session{session}
   {
     setupActions();
@@ -156,7 +156,7 @@ namespace ao::gtk
     {
       auto const errorMsg = std::format("Failed to edit tags: {}", result.error().message);
       APP_LOG_ERROR("{}", errorMsg);
-      _session.notifications().post(ao::rt::NotificationSeverity::Error, errorMsg);
+      _session.notifications().post(rt::NotificationSeverity::Error, errorMsg);
       return;
     }
 
@@ -166,7 +166,7 @@ namespace ao::gtk
     }
 
     _session.notifications().post(
-      ao::rt::NotificationSeverity::Info,
+      rt::NotificationSeverity::Info,
       tagChangeStatusMessage(selection.selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
   }
 } // namespace ao::gtk

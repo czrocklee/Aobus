@@ -10,7 +10,9 @@
 
 namespace YAML
 {
-  Node convert<ao::gtk::layout::LayoutValue>::encode(ao::gtk::layout::LayoutValue const& rhs)
+  using namespace ao::gtk::layout;
+
+  Node convert<LayoutValue>::encode(LayoutValue const& rhs)
   {
     return std::visit(
       [](auto const& nodeValue) -> Node
@@ -29,7 +31,7 @@ namespace YAML
       rhs.data);
   }
 
-  bool convert<ao::gtk::layout::LayoutValue>::decode(Node const& node, ao::gtk::layout::LayoutValue& rhs)
+  bool convert<LayoutValue>::decode(Node const& node, LayoutValue& rhs)
   {
     if (!node.IsDefined() || node.IsNull())
     {
@@ -108,7 +110,7 @@ namespace YAML
     return false;
   }
 
-  Node convert<ao::gtk::layout::LayoutNode>::encode(ao::gtk::layout::LayoutNode const& rhs)
+  Node convert<LayoutNode>::encode(LayoutNode const& rhs)
   {
     Node node;
 
@@ -137,7 +139,7 @@ namespace YAML
     return node;
   }
 
-  bool convert<ao::gtk::layout::LayoutNode>::decode(Node const& node, ao::gtk::layout::LayoutNode& rhs)
+  bool convert<LayoutNode>::decode(Node const& node, LayoutNode& rhs)
   {
     if (!node.IsMap())
     {
@@ -156,23 +158,23 @@ namespace YAML
 
     if (node["props"])
     {
-      rhs.props = node["props"].as<std::map<std::string, ao::gtk::layout::LayoutValue, std::less<>>>();
+      rhs.props = node["props"].as<std::map<std::string, LayoutValue, std::less<>>>();
     }
 
     if (node["layout"])
     {
-      rhs.layout = node["layout"].as<std::map<std::string, ao::gtk::layout::LayoutValue, std::less<>>>();
+      rhs.layout = node["layout"].as<std::map<std::string, LayoutValue, std::less<>>>();
     }
 
     if (node["children"])
     {
-      rhs.children = node["children"].as<std::vector<ao::gtk::layout::LayoutNode>>();
+      rhs.children = node["children"].as<std::vector<LayoutNode>>();
     }
 
     return true;
   }
 
-  Node convert<ao::gtk::layout::LayoutDocument>::encode(ao::gtk::layout::LayoutDocument const& rhs)
+  Node convert<LayoutDocument>::encode(LayoutDocument const& rhs)
   {
     Node node;
     node["version"] = rhs.version;
@@ -186,7 +188,7 @@ namespace YAML
     return node;
   }
 
-  bool convert<ao::gtk::layout::LayoutDocument>::decode(Node const& node, ao::gtk::layout::LayoutDocument& rhs)
+  bool convert<LayoutDocument>::decode(Node const& node, LayoutDocument& rhs)
   {
     if (!node.IsMap() || !node["version"] || !node["root"])
     {
@@ -194,11 +196,11 @@ namespace YAML
     }
 
     rhs.version = node["version"].as<int>();
-    rhs.root = node["root"].as<ao::gtk::layout::LayoutNode>();
+    rhs.root = node["root"].as<LayoutNode>();
 
     if (node["templates"])
     {
-      rhs.templates = node["templates"].as<std::map<std::string, ao::gtk::layout::LayoutNode, std::less<>>>();
+      rhs.templates = node["templates"].as<std::map<std::string, LayoutNode, std::less<>>>();
     }
 
     return true;

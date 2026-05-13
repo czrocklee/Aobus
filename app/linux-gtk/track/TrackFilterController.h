@@ -27,7 +27,7 @@ namespace ao::gtk
     using CreateSmartListSignal = sigc::signal<void(std::string)>;
     using StatusMessageFn = std::function<void(std::string_view)>;
 
-    TrackFilterController(ao::rt::ViewService& viewService, ao::rt::ViewId viewId, Gtk::Entry& filterEntry);
+    TrackFilterController(rt::ViewService& viewService, rt::ViewId viewId, Gtk::Entry& filterEntry);
 
     void setFilterExpression(std::string_view expression);
     void setStatusMessageCallback(StatusMessageFn callback);
@@ -36,11 +36,11 @@ namespace ao::gtk
   private:
     void onFilterTextChanged();
     void onFilterDebounced();
-    void onFilterStatusChanged(ao::rt::FilterStatusChanged const& status);
+    void onFilterStatusChanged(rt::FilterStatusChanged const& status);
     void updateFilterUi();
 
-    ao::rt::ViewService& _viewService;
-    ao::rt::ViewId _viewId;
+    rt::ViewService& _viewService;
+    rt::ViewId _viewId;
     Gtk::Entry& _filterEntry;
 
     TrackFilterMode _filterMode = TrackFilterMode::None;
@@ -52,7 +52,7 @@ namespace ao::gtk
     sigc::connection _filterTextConnection;
     sigc::connection _filterIconConnection;
     sigc::connection _filterDebounceTimer;
-    ao::rt::Subscription _filterStatusSub;
+    rt::Subscription _filterStatusSub;
 
     StatusMessageFn _statusMessageCallback;
     CreateSmartListSignal* _createSmartListSignal = nullptr;

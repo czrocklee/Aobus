@@ -39,9 +39,7 @@ namespace ao::gtk
   class TrackRowCache final
   {
   public:
-    using TrackId = ao::TrackId;
-
-    explicit TrackRowCache(ao::library::MusicLibrary& ml);
+    explicit TrackRowCache(library::MusicLibrary& ml);
 
     /**
      * Get the shared TrackRowObject for a given ID.
@@ -52,7 +50,7 @@ namespace ao::gtk
     /**
      * Get the shared TrackRowObject for a given ID, reusing a caller-provided reader.
      */
-    Glib::RefPtr<TrackRowObject> getTrackRow(TrackId id, ao::library::TrackStore::Reader const& reader) const;
+    Glib::RefPtr<TrackRowObject> getTrackRow(TrackId id, library::TrackStore::Reader const& reader) const;
 
     /**
      * Resolve a dictionary string and cache it.
@@ -72,7 +70,7 @@ namespace ao::gtk
     /**
      * Get playback descriptor for a track (direct from DB).
      */
-    std::optional<ao::audio::TrackPlaybackDescriptor> getPlaybackDescriptor(TrackId id) const;
+    std::optional<audio::TrackPlaybackDescriptor> getPlaybackDescriptor(TrackId id) const;
 
     /**
      * Invalidate entry for a track (after updates).
@@ -93,16 +91,16 @@ namespace ao::gtk
     /**
      * Get the dictionary store reference.
      */
-    ao::library::DictionaryStore const& dictionary() const { return _dict; }
+    library::DictionaryStore const& dictionary() const { return _dict; }
 
   private:
-    ao::library::MusicLibrary& _ml;
-    ao::library::TrackStore& _store;
-    ao::library::DictionaryStore& _dict;
+    library::MusicLibrary& _ml;
+    library::TrackStore& _store;
+    library::DictionaryStore& _dict;
 
     mutable std::unordered_map<TrackId, Glib::RefPtr<TrackRowObject>> _rowCache;
     mutable std::unordered_map<DictionaryId, Glib::ustring> _stringCache;
 
-    Glib::RefPtr<TrackRowObject> createRowFromView(TrackId id, ao::library::TrackView const& view) const;
+    Glib::RefPtr<TrackRowObject> createRowFromView(TrackId id, library::TrackView const& view) const;
   };
 } // namespace ao::gtk

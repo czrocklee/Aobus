@@ -3,6 +3,7 @@
 #Usage :./ build.sh[debug | release | pgo1 | pgo2 | profile][--clean][--tidy][--clang]
 
 set -e
+set -o pipefail
 
 #Default to debug build
 BUILD_TYPE="debug"
@@ -144,6 +145,7 @@ if ! command -v nix-shell &> /dev/null; then
 fi
 
 #Configure
+mkdir -p "$BUILD_DIR"
 echo "Configuring Aobus with preset '$PRESET' in '$BUILD_DIR'..."
 CONFIGURE_COMMAND="cmake -S '$SOURCE_DIR' --preset '$PRESET' -B '$BUILD_DIR'"
 BUILD_COMMAND="cmake --build '$BUILD_DIR' --parallel"
@@ -177,17 +179,17 @@ if [[ "$ENABLE_ASAN" == "true" ]]; then
     CONFIGURE_COMMAND+=" -DAOBUS_ENABLE_ASAN=ON"
 fi
 
-nix-shell --run "$CONFIGURE_COMMAND"
+nix-shell --run "$CONFIGURE_COMMAND" 2>&1 | tee "$BUILD_DIR/build.log"
 
 #Build
 echo "Building Aobus..."
-nix-shell --run "$BUILD_COMMAND"
+nix-shell --run "$BUILD_COMMAND" 2>&1 | tee -a "$BUILD_DIR/build.log"
 
 #Run tests(only for debug and release)
 if [[ "$BUILD_TYPE" == "debug" || "$BUILD_TYPE" == "release" ]]; then
     if [[ -z "$TARGET" ]]; then
         echo "Running tests..."
-        nix-shell --run "$TEST_COMMAND && $TEST_LINUX_COMMAND"
+        nix-shell --run "$TEST_COMMAND && $TEST_LINUX_COMMAND" 2>&1 | tee -a "$BUILD_DIR/build.log"
     else
         echo "Target specified ($TARGET), skipping tests."
     fi

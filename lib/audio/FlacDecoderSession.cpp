@@ -29,7 +29,7 @@ namespace ao::audio
     Format requestedOutput;
     ::FLAC__StreamDecoder* decoder = nullptr;
 
-    ao::utility::MappedFile mappedFile;
+    utility::MappedFile mappedFile;
     std::uint64_t currentOffset = 0;
 
     DecodedStreamInfo info;
@@ -99,7 +99,7 @@ namespace ao::audio
 
   FlacDecoderSession::~FlacDecoderSession() = default;
 
-  ao::Result<> FlacDecoderSession::open(std::filesystem::path const& filePath)
+  Result<> FlacDecoderSession::open(std::filesystem::path const& filePath)
   {
     close();
 
@@ -125,13 +125,13 @@ namespace ao::audio
 
     if (initStatus != ::FLAC__STREAM_DECODER_INIT_STATUS_OK)
     {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to initialize FLAC decoder");
+      return makeError(Error::Code::InitFailed, "Failed to initialize FLAC decoder");
     }
 
     // Process until metadata is read
     if (::FLAC__stream_decoder_process_until_end_of_metadata(_impl->decoder) == 0)
     {
-      return ao::makeError(ao::Error::Code::DecodeFailed, "Failed to read FLAC metadata");
+      return makeError(Error::Code::DecodeFailed, "Failed to read FLAC metadata");
     }
 
     return {};
@@ -149,7 +149,7 @@ namespace ao::audio
     _impl->bufferedFrames = 0;
   }
 
-  ao::Result<> FlacDecoderSession::seek(std::uint32_t positionMs)
+  Result<> FlacDecoderSession::seek(std::uint32_t positionMs)
   {
     _impl->pcmBuffer.clear();
     _impl->bufferedFrames = 0;
@@ -159,14 +159,14 @@ namespace ao::audio
 
     if (sampleRate == 0)
     {
-      return ao::makeError(ao::Error::Code::SeekFailed, "Sample rate is 0");
+      return makeError(Error::Code::SeekFailed, "Sample rate is 0");
     }
 
     auto const targetSample = static_cast<::FLAC__uint64>(positionMs) * sampleRate / 1000;
 
     if (::FLAC__stream_decoder_seek_absolute(_impl->decoder, targetSample) == 0)
     {
-      return ao::makeError(ao::Error::Code::SeekFailed, "FLAC seek failed");
+      return makeError(Error::Code::SeekFailed, "FLAC seek failed");
     }
 
     _impl->nextFrameIndex = targetSample;
@@ -181,7 +181,7 @@ namespace ao::audio
     _impl->bufferedFrames = 0;
   }
 
-  ao::Result<PcmBlock> FlacDecoderSession::readNextBlock()
+  Result<PcmBlock> FlacDecoderSession::readNextBlock()
   {
     if (_impl->eof && _impl->bufferedFrames == 0)
     {
@@ -199,7 +199,7 @@ namespace ao::audio
           break;
         }
 
-        return ao::makeError(ao::Error::Code::DecodeFailed, "FLAC process single failed");
+        return makeError(Error::Code::DecodeFailed, "FLAC process single failed");
       }
 
       if (::FLAC__stream_decoder_get_state(_impl->decoder) == ::FLAC__STREAM_DECODER_END_OF_STREAM)
@@ -241,7 +241,7 @@ namespace ao::audio
                                                                          std::size_t* bytes,
                                                                          void* clientData)
   {
-    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
     auto const fileBytes = impl->mappedFile.bytes();
 
     if (*bytes > 0)
@@ -269,7 +269,7 @@ namespace ao::audio
                                                                          ::FLAC__uint64 absoluteByteOffset,
                                                                          void* clientData)
   {
-    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
     auto const fileBytes = impl->mappedFile.bytes();
 
     if (absoluteByteOffset >= fileBytes.size())
@@ -286,7 +286,7 @@ namespace ao::audio
                                                                          ::FLAC__uint64* absoluteByteOffset,
                                                                          void* clientData)
   {
-    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
     *absoluteByteOffset = impl->currentOffset;
 
     return ::FLAC__STREAM_DECODER_TELL_STATUS_OK;
@@ -296,7 +296,7 @@ namespace ao::audio
                                                                              ::FLAC__uint64* streamLength,
                                                                              void* clientData)
   {
-    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
     *streamLength = impl->mappedFile.bytes().size();
 
     return ::FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
@@ -304,7 +304,7 @@ namespace ao::audio
 
   ::FLAC__bool FlacDecoderSession::Impl::eofCallback(::FLAC__StreamDecoder const* /*decoder*/, void* clientData)
   {
-    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
 
     return static_cast<::FLAC__bool>(impl->currentOffset >= impl->mappedFile.bytes().size());
   }
@@ -314,7 +314,7 @@ namespace ao::audio
                                                                            ::FLAC__int32 const* const* buffer,
                                                                            void* clientData)
   {
-    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
 
     auto const channels = frame->header.channels;
     auto const bps = frame->header.bits_per_sample;
@@ -325,7 +325,7 @@ namespace ao::audio
     if (outBps == 16)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 2);
-      auto* out = ao::utility::layout::asMutablePtr<std::int16_t>(impl->pcmBuffer);
+      auto* out = utility::layout::asMutablePtr<std::int16_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
       {
@@ -338,7 +338,7 @@ namespace ao::audio
     else if (outBps == 24)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * kBytesPer24BitSample);
-      auto* out = ao::utility::layout::asMutablePtr<std::uint8_t>(impl->pcmBuffer);
+      auto* out = utility::layout::asMutablePtr<std::uint8_t>(impl->pcmBuffer);
 
       for (std::uint32_t i = 0; i < blockSize; ++i)
       {
@@ -354,7 +354,7 @@ namespace ao::audio
     else if (outBps == 32)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 4);
-      auto const dst = ao::utility::layout::viewArrayMutable<std::int32_t>(impl->pcmBuffer);
+      auto const dst = utility::layout::viewArrayMutable<std::int32_t>(impl->pcmBuffer);
 
       auto channelSpans = std::vector<std::span<std::int32_t const>>(channels);
       for (std::uint32_t ch = 0; ch < channels; ++ch)
@@ -382,7 +382,7 @@ namespace ao::audio
                                                   ::FLAC__StreamMetadata const* metadata,
                                                   void* clientData)
   {
-    auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
+    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
 
     if (metadata->type == ::FLAC__METADATA_TYPE_STREAMINFO)
     {
@@ -417,7 +417,7 @@ namespace ao::audio
                                                ::FLAC__StreamDecoderErrorStatus /*status*/,
                                                void* clientData)
   {
-    [[maybe_unused]] auto* const impl = ao::utility::unsafeDowncast<Impl>(clientData);
+    [[maybe_unused]] auto* const impl = utility::unsafeDowncast<Impl>(clientData);
     /* TODO logging */
   }
 } // namespace ao::audio

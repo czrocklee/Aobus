@@ -15,23 +15,23 @@ namespace ao::gtk
   class SeekControl final
   {
   public:
-    explicit SeekControl(ao::rt::PlaybackService& playbackService);
+    explicit SeekControl(rt::PlaybackService& playbackService);
 
     Gtk::Widget& widget() { return _scale; }
 
   private:
     void reset();
 
-    ao::rt::PlaybackService& _playbackService;
+    rt::PlaybackService& _playbackService;
     Gtk::Scale _scale;
     PlaybackPositionInterpolator _interpolator;
     bool _isDragging = false;
     bool _updating = false;
 
-    ao::rt::Subscription _startedSub;
-    ao::rt::Subscription _pausedSub;
-    ao::rt::Subscription _idleSub;
-    ao::rt::Subscription _stoppedSub;
-    ao::rt::Subscription _preparingSub;
+    rt::Subscription _startedSub;
+    rt::Subscription _pausedSub;
+    rt::Subscription _idleSub;
+    rt::Subscription _stoppedSub;
+    rt::Subscription _preparingSub;
   };
 } // namespace ao::gtk

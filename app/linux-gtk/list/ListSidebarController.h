@@ -28,15 +28,15 @@ namespace ao::gtk
     struct Callbacks final
     {
       std::function<void(ListId)> onListSelected;
-      std::function<ao::rt::TrackSource*(ListId)> getListMembership;
+      std::function<rt::TrackSource*(ListId)> getListMembership;
     };
 
-    ListSidebarController(Gtk::Window& parent, ao::rt::AppSession& session, Callbacks callbacks);
+    ListSidebarController(Gtk::Window& parent, rt::AppSession& session, Callbacks callbacks);
     ~ListSidebarController();
 
     Gtk::Widget& widget();
 
-    void rebuildTree(TrackRowCache& dataProvider, ao::lmdb::ReadTransaction const& txn);
+    void rebuildTree(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn);
     void select(ListId listId);
     void createSmartListFromExpression(ListId parentListId, std::string expression);
 
@@ -51,14 +51,14 @@ namespace ao::gtk
     void openNewSmartListDialog();
     void openEditListDialog(ListId listId);
 
-    void createList(ao::model::ListDraft const& draft);
-    void updateList(ao::model::ListDraft const& draft);
+    void createList(model::ListDraft const& draft);
+    void updateList(model::ListDraft const& draft);
     void onDeleteList();
     void onEditList();
 
     Gtk::Window& _parent;
     Callbacks _callbacks;
-    ao::rt::AppSession& _session;
+    rt::AppSession& _session;
     TrackRowCache* _dataProvider = nullptr;
 
     std::unique_ptr<ListSidebarPanel> _panel;

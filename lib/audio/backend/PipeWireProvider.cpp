@@ -42,35 +42,34 @@ namespace ao::audio::backend
 
   PipeWireProvider::~PipeWireProvider() = default;
 
-  ao::audio::Subscription PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
+  Subscription PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
     if (!_impl->monitor)
     {
-      return ao::audio::Subscription{};
+      return Subscription{};
     }
 
     // Wrap the callback to add the "System Default" virtual device
-    auto wrappedCallback = [callback = std::move(callback)](std::vector<ao::audio::Device> devices)
+    auto wrappedCallback = [callback = std::move(callback)](std::vector<Device> devices)
     {
       devices.insert(devices.begin(),
                      {.id = DeviceId{""},
                       .displayName = "System Default",
                       .description = "PipeWire",
                       .isDefault = true,
-                      .backendId = ao::audio::kBackendPipeWire});
+                      .backendId = kBackendPipeWire});
       callback(devices);
     };
 
     return _impl->monitor->subscribeDevices(std::move(wrappedCallback));
   }
 
-  std::unique_ptr<ao::audio::IBackend> PipeWireProvider::createBackend(ao::audio::Device const& device,
-                                                                       ao::audio::ProfileId const& profile)
+  std::unique_ptr<IBackend> PipeWireProvider::createBackend(Device const& device, ProfileId const& profile)
   {
     return std::make_unique<PipeWireBackend>(device, profile);
   }
 
-  ao::audio::IBackendProvider::Status PipeWireProvider::status() const
+  IBackendProvider::Status PipeWireProvider::status() const
   {
     return {.metadata =
               {.id = kBackendPipeWire,
@@ -82,12 +81,11 @@ namespace ao::audio::backend
             .devices = _impl->monitor ? _impl->monitor->enumerateSinks() : std::vector<Device>{}};
   }
 
-  ao::audio::Subscription PipeWireProvider::subscribeGraph(std::string_view routeAnchor,
-                                                           OnGraphChangedCallback callback)
+  Subscription PipeWireProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
   {
     if (!_impl->monitor)
     {
-      return ao::audio::Subscription{};
+      return Subscription{};
     }
 
     return _impl->monitor->subscribeGraph(routeAnchor, std::move(callback));

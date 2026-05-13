@@ -21,7 +21,7 @@ namespace ao::gtk
       PlayPause,
     };
 
-    TransportButton(ao::rt::PlaybackService& playbackService,
+    TransportButton(rt::PlaybackService& playbackService,
                     Action action,
                     std::function<void()> onPlaySelection = {},
                     bool showLabel = false,
@@ -32,16 +32,16 @@ namespace ao::gtk
   private:
     void refresh();
 
-    ao::rt::PlaybackService& _playbackService;
+    rt::PlaybackService& _playbackService;
     Action _action;
     std::function<void()> _onPlaySelection;
     bool _showLabel = false;
     Gtk::Button _button;
 
-    ao::rt::Subscription _startedSub;
-    ao::rt::Subscription _pausedSub;
-    ao::rt::Subscription _idleSub;
-    ao::rt::Subscription _stoppedSub;
-    ao::rt::Subscription _preparingSub;
+    rt::Subscription _startedSub;
+    rt::Subscription _pausedSub;
+    rt::Subscription _idleSub;
+    rt::Subscription _stoppedSub;
+    rt::Subscription _preparingSub;
   };
 } // namespace ao::gtk

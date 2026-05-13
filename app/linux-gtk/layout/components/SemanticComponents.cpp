@@ -136,7 +136,7 @@ namespace ao::gtk::layout
 
         _widget = std::make_unique<CoverArtWidget>(ctx.session.musicLibrary(), *ctx.inspector.coverArtCache);
         _widget->bindToDetailProjection(ctx.session.views().detailProjection(
-          ao::rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
+          rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
       }
 
       Gtk::Widget& widget() override
@@ -166,7 +166,7 @@ namespace ao::gtk::layout
         _widget = std::make_unique<TrackInspectorPanel>(
           ctx.session.musicLibrary(), ctx.session.mutation(), ctx.session.sources(), *ctx.inspector.coverArtCache);
         _widget->bindToDetailProjection(ctx.session.views().detailProjection(
-          ao::rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
+          rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
 
         if (ctx.tag.editController != nullptr)
         {

@@ -153,8 +153,8 @@ namespace ao::audio::backend::detail
       }
       else if (::spa_pod_is_choice(pod) != 0)
       {
-        auto const podSpan = ao::utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
-        auto const* choice = ao::utility::layout::view<::spa_pod_choice>(podSpan);
+        auto const podSpan = utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
+        auto const* choice = utility::layout::view<::spa_pod_choice>(podSpan);
         processChoiceIntValues(choice, output);
       }
     }
@@ -176,8 +176,8 @@ namespace ao::audio::backend::detail
       }
       else if (::spa_pod_is_choice(pod) != 0)
       {
-        auto const podSpan = ao::utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
-        auto const* choice = ao::utility::layout::view<::spa_pod_choice>(podSpan);
+        auto const podSpan = utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
+        auto const* choice = utility::layout::view<::spa_pod_choice>(podSpan);
         auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
 
         if (n_vals == 0 || SPA_POD_CHOICE_VALUE_TYPE(choice) != SPA_TYPE_Id)
@@ -207,8 +207,8 @@ namespace ao::audio::backend::detail
     }
 
     ::spa_pod_prop const* prop = nullptr;
-    auto const podSpan = ao::utility::bytes::view(param, param->size + sizeof(::spa_pod));
-    auto const* obj = ao::utility::layout::view<::spa_pod_object>(podSpan);
+    auto const podSpan = utility::bytes::view(param, param->size + sizeof(::spa_pod));
+    auto const* obj = utility::layout::view<::spa_pod_object>(podSpan);
 
     SPA_POD_OBJECT_FOREACH(obj, prop)
     {

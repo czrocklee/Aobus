@@ -11,7 +11,7 @@
 
 namespace ao::gtk
 {
-  LibraryTrackCountLabel::LibraryTrackCountLabel(ao::rt::TrackSource& source)
+  LibraryTrackCountLabel::LibraryTrackCountLabel(rt::TrackSource& source)
     : _source{&source}
   {
     _label.add_css_class("dim-label");
@@ -33,16 +33,16 @@ namespace ao::gtk
     updateCount();
   }
 
-  void LibraryTrackCountLabel::onInserted(ao::rt::TrackId /*id*/, std::size_t /*index*/)
+  void LibraryTrackCountLabel::onInserted(TrackId /*id*/, std::size_t /*index*/)
   {
     updateCount();
   }
 
-  void LibraryTrackCountLabel::onUpdated(ao::rt::TrackId /*id*/, std::size_t /*index*/)
+  void LibraryTrackCountLabel::onUpdated(TrackId /*id*/, std::size_t /*index*/)
   {
   }
 
-  void LibraryTrackCountLabel::onRemoved(ao::rt::TrackId /*id*/, std::size_t /*index*/)
+  void LibraryTrackCountLabel::onRemoved(TrackId /*id*/, std::size_t /*index*/)
   {
     updateCount();
   }

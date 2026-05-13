@@ -222,7 +222,7 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _soul; }
 
     private:
-      ao::rt::AppSession& _session;
+      rt::AppSession& _session;
       AobusSoul _soul{};
       std::unique_ptr<AobusSoulBinding> _soulBinding;
     };

@@ -11,17 +11,17 @@ namespace ao::audio::backend
   /**
    * @brief Provider for ALSA audio backends.
    */
-  class AlsaProvider final : public ao::audio::IBackendProvider
+  class AlsaProvider final : public IBackendProvider
   {
   public:
     AlsaProvider();
     ~AlsaProvider() override;
 
-    ao::audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
-    ao::audio::IBackendProvider::Status status() const override;
-    std::unique_ptr<ao::audio::IBackend> createBackend(ao::audio::Device const& device,
-                                                       ao::audio::ProfileId const& profile) override;
-    ao::audio::Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
+    Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
+    IBackendProvider::Status status() const override;
+    std::unique_ptr<IBackend> createBackend(Device const& device,
+                                                       ProfileId const& profile) override;
+    Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
 
   private:
     struct Impl;

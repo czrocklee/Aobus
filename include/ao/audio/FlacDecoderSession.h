@@ -13,12 +13,12 @@ namespace ao::audio
     explicit FlacDecoderSession(Format outputFormat);
     ~FlacDecoderSession() override;
 
-    ao::Result<> open(std::filesystem::path const& filePath) override;
+    Result<> open(std::filesystem::path const& filePath) override;
     void close() override;
-    ao::Result<> seek(std::uint32_t positionMs) override;
+    Result<> seek(std::uint32_t positionMs) override;
     void flush() override;
 
-    ao::Result<PcmBlock> readNextBlock() override;
+    Result<PcmBlock> readNextBlock() override;
     DecodedStreamInfo streamInfo() const override;
 
   private:

@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "File.h"
 #include "Frame.h"
 #include "id3v2/Layout.h"
 #include "id3v2/Reader.h"
-#include <ao/tag/mpeg/File.h>
-
 #include <cstring>
 
 namespace ao::tag::mpeg
@@ -55,10 +54,10 @@ namespace ao::tag::mpeg
     return durationMs;
   }
 
-  ao::library::TrackBuilder File::loadTrack() const
+  library::TrackBuilder File::loadTrack() const
   {
     clearOwnedStrings();
-    auto builder = ao::library::TrackBuilder::createNew();
+    auto builder = library::TrackBuilder::createNew();
 
     void const* audioStart = _mappedRegion.get_address();
     std::size_t audioSize = _mappedRegion.get_size();

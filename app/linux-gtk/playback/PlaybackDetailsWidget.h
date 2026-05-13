@@ -28,26 +28,26 @@ namespace ao::gtk
   class PlaybackDetailsWidget final
   {
   public:
-    explicit PlaybackDetailsWidget(ao::rt::PlaybackService& playbackService);
+    explicit PlaybackDetailsWidget(rt::PlaybackService& playbackService);
     ~PlaybackDetailsWidget();
 
     Gtk::Widget& widget() { return _container; }
 
   private:
     void updateState();
-    void updateTooltip(ao::rt::PlaybackState const& state);
+    void updateTooltip(rt::PlaybackState const& state);
 
-    ao::rt::PlaybackService& _playbackService;
+    rt::PlaybackService& _playbackService;
     Gtk::Box _container{Gtk::Orientation::HORIZONTAL};
     Gtk::Label _streamInfoLabel;
     Gtk::Image _sinkStatusIcon;
 
-    ao::rt::Subscription _startedSub;
-    ao::rt::Subscription _pausedSub;
-    ao::rt::Subscription _idleSub;
-    ao::rt::Subscription _stoppedSub;
-    ao::rt::Subscription _outputChangedSub;
-    ao::rt::Subscription _qualityChangedSub;
+    rt::Subscription _startedSub;
+    rt::Subscription _pausedSub;
+    rt::Subscription _idleSub;
+    rt::Subscription _stoppedSub;
+    rt::Subscription _outputChangedSub;
+    rt::Subscription _qualityChangedSub;
 
     std::string _lastTooltipText;
   };

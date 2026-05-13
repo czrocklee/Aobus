@@ -23,7 +23,7 @@ namespace ao::gtk
   class OutputSelector final
   {
   public:
-    explicit OutputSelector(ao::rt::PlaybackService& playback);
+    explicit OutputSelector(rt::PlaybackService& playback);
     ~OutputSelector();
 
     OutputSelector(OutputSelector const&) = delete;
@@ -35,7 +35,7 @@ namespace ao::gtk
     Gtk::Widget* createRow(Glib::RefPtr<Glib::Object> const& item);
     void rebuildModel();
 
-    ao::rt::PlaybackService& _playback;
+    rt::PlaybackService& _playback;
     Gtk::Button _button;
     AobusSoul _soul;
     std::unique_ptr<AobusSoulBinding> _soulBinding;

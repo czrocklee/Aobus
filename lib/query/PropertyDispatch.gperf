@@ -11,19 +11,19 @@ namespace property_dispatch {
 struct Entry
 {
   char const* name;
-  ao::query::Field field;
+  Field field;
 };
 %%
-duration, ao::query::Field::DurationMs
-l, ao::query::Field::DurationMs
-bitrate, ao::query::Field::Bitrate
-br, ao::query::Field::Bitrate
-sampleRate, ao::query::Field::SampleRate
-sr, ao::query::Field::SampleRate
-channels, ao::query::Field::Channels
-bitDepth, ao::query::Field::BitDepth
-bd, ao::query::Field::BitDepth
-rating, ao::query::Field::Rating
-codecId, ao::query::Field::CodecId
+duration, Field::DurationMs
+l, Field::DurationMs
+bitrate, Field::Bitrate
+br, Field::Bitrate
+sampleRate, Field::SampleRate
+sr, Field::SampleRate
+channels, Field::Channels
+bitDepth, Field::BitDepth
+bd, Field::BitDepth
+rating, Field::Rating
+codecId, Field::CodecId
 %%
 } // namespace property_dispatch

@@ -14,8 +14,8 @@
 
 namespace ao::audio
 {
-  using namespace ao::media::mp4;
-  using namespace ao::utility;
+  using namespace media::mp4;
+  using namespace utility;
 
   namespace
   {
@@ -48,7 +48,7 @@ namespace ao::audio
     std::uint32_t currentSampleIndex = 0;
     std::uint32_t timescale = 0;
 
-    ao::utility::MappedFile mappedFile;
+    utility::MappedFile mappedFile;
     std::unique_ptr<Demuxer> demuxer;
 
     std::vector<std::byte> sourcePcm;
@@ -68,7 +68,7 @@ namespace ao::audio
 
   AlacDecoderSession::~AlacDecoderSession() = default;
 
-  ao::Result<> AlacDecoderSession::open(std::filesystem::path const& filePath)
+  Result<> AlacDecoderSession::open(std::filesystem::path const& filePath)
   {
     close();
 
@@ -82,7 +82,7 @@ namespace ao::audio
 
     if (!demuxError.empty())
     {
-      return ao::makeError(ao::Error::Code::InitFailed, demuxError);
+      return makeError(Error::Code::InitFailed, demuxError);
     }
 
     auto const cookie = _impl->demuxer->magicCookie();
@@ -90,14 +90,14 @@ namespace ao::audio
 
     if (initStatus != ALAC_noErr)
     {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to initialize ALAC decoder");
+      return makeError(Error::Code::InitFailed, "Failed to initialize ALAC decoder");
     }
 
     auto const& config = _impl->decoder->mConfig;
 
     if (config.sampleRate == 0 || config.numChannels == 0 || config.bitDepth == 0)
     {
-      return ao::makeError(ao::Error::Code::InitFailed, "Invalid ALAC stream configuration");
+      return makeError(Error::Code::InitFailed, "Invalid ALAC stream configuration");
     }
 
     _impl->timescale = _impl->demuxer->timescale();
@@ -142,11 +142,11 @@ namespace ao::audio
     _impl->timescale = 0;
   }
 
-  ao::Result<> AlacDecoderSession::seek(std::uint32_t /*positionMs*/)
+  Result<> AlacDecoderSession::seek(std::uint32_t /*positionMs*/)
   {
     if (_impl->timescale == 0)
     {
-      return ao::makeError(ao::Error::Code::SeekFailed, "Timescale is 0");
+      return makeError(Error::Code::SeekFailed, "Timescale is 0");
     }
 
     _impl->currentSampleIndex = 0;
@@ -157,7 +157,7 @@ namespace ao::audio
   {
   }
 
-  ao::Result<PcmBlock> AlacDecoderSession::readNextBlock()
+  Result<PcmBlock> AlacDecoderSession::readNextBlock()
   {
     if (!_impl->demuxer || _impl->currentSampleIndex >= _impl->demuxer->sampleCount())
     {
@@ -168,7 +168,7 @@ namespace ao::audio
 
     if (packet.empty())
     {
-      return ao::makeError(ao::Error::Code::DecodeFailed, "Failed to read ALAC sample payload");
+      return makeError(Error::Code::DecodeFailed, "Failed to read ALAC sample payload");
     }
 
     auto const maxFrames = (_impl->decoder->mConfig.frameLength > 0)
@@ -184,7 +184,7 @@ namespace ao::audio
 
     if (sourceBytesPerFrame == 0 || targetBytesPerFrame == 0)
     {
-      return ao::makeError(ao::Error::Code::DecodeFailed, "Invalid ALAC format calculation");
+      return makeError(Error::Code::DecodeFailed, "Invalid ALAC format calculation");
     }
 
     std::uint32_t numFrames = 0;
@@ -201,7 +201,7 @@ namespace ao::audio
 
       if (status != 0)
       {
-        return ao::makeError(ao::Error::Code::DecodeFailed, "ALAC decode failed");
+        return makeError(Error::Code::DecodeFailed, "ALAC decode failed");
       }
 
       _impl->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);
@@ -219,8 +219,8 @@ namespace ao::audio
       }
       else
       {
-        return ao::makeError(
-          ao::Error::Code::NotSupported, std::format("Unsupported ALAC conversion: {} -> {}", sourceBps, targetBps));
+        return makeError(
+          Error::Code::NotSupported, std::format("Unsupported ALAC conversion: {} -> {}", sourceBps, targetBps));
       }
 
       _impl->currentSampleIndex++;
@@ -244,7 +244,7 @@ namespace ao::audio
 
     if (status != 0)
     {
-      return ao::makeError(ao::Error::Code::DecodeFailed, "ALAC decode failed");
+      return makeError(Error::Code::DecodeFailed, "ALAC decode failed");
     }
 
     _impl->targetPcm.resize(static_cast<std::size_t>(numFrames) * targetBytesPerFrame);

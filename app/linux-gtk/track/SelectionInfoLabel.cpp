@@ -26,7 +26,7 @@ namespace ao::gtk
     }
   }
 
-  SelectionInfoLabel::SelectionInfoLabel(ao::rt::ViewService& viewService)
+  SelectionInfoLabel::SelectionInfoLabel(rt::ViewService& viewService)
     : _viewService{viewService}
   {
     _label.add_css_class("dim-label");

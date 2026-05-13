@@ -44,8 +44,8 @@ namespace ao::audio::backend
     using AlsaPcmPtr = std::unique_ptr<::snd_pcm_t, AlsaPcmDeleter>;
 
     std::string deviceName;
-    ao::audio::Format format;
-    ao::audio::IRenderTarget* renderTarget = nullptr;
+    Format format;
+    IRenderTarget* renderTarget = nullptr;
 
     AlsaPcmPtr pcm;
     std::jthread thread;
@@ -85,11 +85,11 @@ namespace ao::audio::backend
     void applyMute(bool mute) const;
     float readVolume() const;
 
-    ao::Result<> configureHwParams(::snd_pcm_t* pcm,
-                                   ao::audio::Format& format,
-                                   ::snd_pcm_format_t& alsaFormat,
-                                   ::snd_pcm_uframes_t& periodSize);
-    ao::Result<> configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize);
+    Result<> configureHwParams(::snd_pcm_t* pcm,
+                               Format& format,
+                               ::snd_pcm_format_t& alsaFormat,
+                               ::snd_pcm_uframes_t& periodSize);
+    Result<> configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize);
 
     bool waitForFrames(::snd_pcm_uframes_t periodSize) const;
     void handleXrun(int err) const;
@@ -383,22 +383,22 @@ namespace ao::audio::backend
     return 1.0F;
   }
 
-  ao::Result<> AlsaExclusiveBackend::Impl::configureHwParams(::snd_pcm_t* pcm,
-                                                             ao::audio::Format& format,
-                                                             ::snd_pcm_format_t& alsaFormat,
-                                                             ::snd_pcm_uframes_t& periodSize)
+  Result<> AlsaExclusiveBackend::Impl::configureHwParams(::snd_pcm_t* pcm,
+                                                         Format& format,
+                                                         ::snd_pcm_format_t& alsaFormat,
+                                                         ::snd_pcm_uframes_t& periodSize)
   {
     ::snd_pcm_hw_params_t* params = nullptr;
     snd_pcm_hw_params_alloca(&params); // macro
 
     if (::snd_pcm_hw_params_any(pcm, params) < 0)
     {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to init ALSA hw params");
+      return makeError(Error::Code::InitFailed, "Failed to init ALSA hw params");
     }
 
     if (::snd_pcm_hw_params_set_access(pcm, params, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)
     {
-      return ao::makeError(ao::Error::Code::FormatRejected, "No MMAP interleaved support");
+      return makeError(Error::Code::FormatRejected, "No MMAP interleaved support");
     }
 
     alsaFormat = SND_PCM_FORMAT_S16_LE;
@@ -420,12 +420,12 @@ namespace ao::audio::backend
 
         if (::snd_pcm_hw_params_set_format(pcm, params, alsaFormat) < 0)
         {
-          return ao::makeError(ao::Error::Code::FormatRejected, "Hardware supports neither S16_LE nor S32_LE");
+          return makeError(Error::Code::FormatRejected, "Hardware supports neither S16_LE nor S32_LE");
         }
       }
       else
       {
-        return ao::makeError(ao::Error::Code::FormatRejected, "Format not supported by hardware");
+        return makeError(Error::Code::FormatRejected, "Format not supported by hardware");
       }
     }
 
@@ -433,7 +433,7 @@ namespace ao::audio::backend
 
     if (::snd_pcm_hw_params_set_rate_near(pcm, params, &rate, 0) < 0)
     {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to set rate");
+      return makeError(Error::Code::InitFailed, "Failed to set rate");
     }
 
     if (rate != format.sampleRate)
@@ -446,7 +446,7 @@ namespace ao::audio::backend
 
     if (::snd_pcm_hw_params_set_channels(pcm, params, format.channels) < 0)
     {
-      return ao::makeError(ao::Error::Code::FormatRejected, "Failed to set channels");
+      return makeError(Error::Code::FormatRejected, "Failed to set channels");
     }
 
     std::uint32_t periods = 4;
@@ -457,7 +457,7 @@ namespace ao::audio::backend
 
     if (::snd_pcm_hw_params(pcm, params) < 0)
     {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to apply hw params");
+      return makeError(Error::Code::InitFailed, "Failed to apply hw params");
     }
 
     canPause = (::snd_pcm_hw_params_can_pause(params) == 1);
@@ -465,14 +465,14 @@ namespace ao::audio::backend
     return {};
   }
 
-  ao::Result<> AlsaExclusiveBackend::Impl::configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize)
+  Result<> AlsaExclusiveBackend::Impl::configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize)
   {
     ::snd_pcm_sw_params_t* swParams = nullptr;
     snd_pcm_sw_params_alloca(&swParams);
 
     if (::snd_pcm_sw_params_current(pcm, swParams) < 0)
     {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to get sw params");
+      return makeError(Error::Code::InitFailed, "Failed to get sw params");
     }
 
     ::snd_pcm_sw_params_set_start_threshold(pcm, swParams, periodSize);
@@ -480,13 +480,13 @@ namespace ao::audio::backend
 
     if (::snd_pcm_sw_params(pcm, swParams) < 0)
     {
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to apply sw params");
+      return makeError(Error::Code::InitFailed, "Failed to apply sw params");
     }
 
     return {};
   }
 
-  AlsaExclusiveBackend::AlsaExclusiveBackend(ao::audio::Device const& device, ao::audio::ProfileId const& /*profile*/)
+  AlsaExclusiveBackend::AlsaExclusiveBackend(Device const& device, ProfileId const& /*profile*/)
     : _impl{std::make_unique<Impl>(device.id.value())}
   {
     AUDIO_LOG_DEBUG("AlsaExclusiveBackend: Creating backend instance for device '{}'", _impl->deviceName);
@@ -499,7 +499,7 @@ namespace ao::audio::backend
     close();
   }
 
-  ao::Result<> AlsaExclusiveBackend::open(ao::audio::Format const& format, ao::audio::IRenderTarget* target)
+  Result<> AlsaExclusiveBackend::open(Format const& format, IRenderTarget* target)
   {
     _impl->format = format;
     _impl->renderTarget = target;
@@ -515,8 +515,7 @@ namespace ao::audio::backend
 
     if (::snd_pcm_open(&pcm, _impl->deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0) < 0)
     {
-      return ao::makeError(
-        ao::Error::Code::DeviceNotFound, std::format("Failed to open ALSA device: {}", _impl->deviceName));
+      return makeError(Error::Code::DeviceNotFound, std::format("Failed to open ALSA device: {}", _impl->deviceName));
     }
 
     auto safePcm = Impl::AlsaPcmPtr(pcm);
@@ -589,7 +588,7 @@ namespace ao::audio::backend
       _impl->thread = std::jthread(
         [this](std::stop_token const& st)
         {
-          ao::setCurrentThreadName("AlsaPlayback");
+          setCurrentThreadName("AlsaPlayback");
           _impl->playbackLoop(st);
         });
     }
@@ -671,31 +670,31 @@ namespace ao::audio::backend
     _impl->mixerElem = nullptr;
   }
 
-  ao::Result<> AlsaExclusiveBackend::setProperty(ao::audio::PropertyId id, ao::audio::PropertyValue const& value)
+  Result<> AlsaExclusiveBackend::setProperty(PropertyId id, PropertyValue const& value)
   {
-    if (id == ao::audio::PropertyId::Volume)
+    if (id == PropertyId::Volume)
     {
       _impl->applyVolume(std::get<float>(value));
       return {};
     }
 
-    if (id == ao::audio::PropertyId::Muted)
+    if (id == PropertyId::Muted)
     {
       _impl->applyMute(std::get<bool>(value));
       return {};
     }
 
-    return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
+    return std::unexpected(Error{.code = Error::Code::NotSupported});
   }
 
-  ao::Result<ao::audio::PropertyValue> AlsaExclusiveBackend::getProperty(ao::audio::PropertyId id) const
+  Result<PropertyValue> AlsaExclusiveBackend::getProperty(PropertyId id) const
   {
-    if (id == ao::audio::PropertyId::Volume)
+    if (id == PropertyId::Volume)
     {
       return _impl->readVolume();
     }
 
-    if (id == ao::audio::PropertyId::Muted)
+    if (id == PropertyId::Muted)
     {
       if (_impl->mixerElem == nullptr)
       {
@@ -707,12 +706,12 @@ namespace ao::audio::backend
       return val == 0;
     }
 
-    return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
+    return std::unexpected(Error{.code = Error::Code::NotSupported});
   }
 
-  ao::audio::PropertyInfo AlsaExclusiveBackend::queryProperty(ao::audio::PropertyId id) const noexcept
+  PropertyInfo AlsaExclusiveBackend::queryProperty(PropertyId id) const noexcept
   {
-    if (id == ao::audio::PropertyId::Volume || id == ao::audio::PropertyId::Muted)
+    if (id == PropertyId::Volume || id == PropertyId::Muted)
     {
       bool const available = _impl != nullptr && _impl->mixerElem != nullptr;
       return {.canRead = true, .canWrite = true, .isAvailable = available, .emitsChangeNotifications = false};
@@ -721,13 +720,13 @@ namespace ao::audio::backend
     return {};
   }
 
-  ao::audio::BackendId AlsaExclusiveBackend::backendId() const noexcept
+  BackendId AlsaExclusiveBackend::backendId() const noexcept
   {
-    return ao::audio::kBackendAlsa;
+    return kBackendAlsa;
   }
 
-  ao::audio::ProfileId AlsaExclusiveBackend::profileId() const noexcept
+  ProfileId AlsaExclusiveBackend::profileId() const noexcept
   {
-    return ao::audio::kProfileExclusive;
+    return kProfileExclusive;
   }
 } // namespace ao::audio::backend

@@ -74,7 +74,7 @@ namespace ao::audio
 
     std::function<void()> onTrackEnded;
     std::function<void(std::vector<IBackendProvider::Status> const&)> onDevicesChanged;
-    std::function<void(ao::audio::Quality, bool)> onQualityChanged;
+    std::function<void(Quality, bool)> onQualityChanged;
 
     void handleDevicesChanged(Player* owner, IBackendProvider* provider, std::vector<Device> const& devices);
     void handleSystemGraphChanged(Player* owner, flow::Graph const& graph, std::uint64_t generation);
@@ -263,7 +263,7 @@ namespace ao::audio
     _impl->onDevicesChanged = std::move(callback);
   }
 
-  void Player::setOnQualityChanged(std::function<void(ao::audio::Quality quality, bool ready)> callback)
+  void Player::setOnQualityChanged(std::function<void(Quality quality, bool ready)> callback)
   {
     _impl->onQualityChanged = std::move(callback);
   }

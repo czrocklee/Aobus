@@ -19,7 +19,6 @@ namespace ao::gtk
   class TrackSelectionController final
   {
   public:
-    using TrackId = TrackListAdapter::TrackId;
     using SelectionChangedSignal = sigc::signal<void()>;
     using TrackActivatedSignal = sigc::signal<void(TrackId)>;
     using ContextMenuRequestedSignal = sigc::signal<void(double, double)>;

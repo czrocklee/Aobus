@@ -47,7 +47,7 @@ namespace ao::audio
 
   StreamingSource::StreamingSource(std::unique_ptr<IDecoderSession> decoder,
                                    DecodedStreamInfo streamInfo,
-                                   std::function<void(ao::Error const&)> onError,
+                                   std::function<void(Error const&)> onError,
                                    std::uint32_t prerollTargetMs,
                                    std::uint32_t decodeHighWatermarkMs)
     : _decoder{std::move(decoder)}
@@ -64,7 +64,7 @@ namespace ao::audio
     stopDecodeThread();
   }
 
-  ao::Result<> StreamingSource::initialize()
+  Result<> StreamingSource::initialize()
   {
     auto const seekToken = _seekStopSource.get_token();
 
@@ -81,7 +81,7 @@ namespace ao::audio
     if (_failed.load(std::memory_order_relaxed))
     {
       return std::unexpected(
-        ao::Error{.code = ao::Error::Code::Generic, .message = "Streaming source failed during initialization"});
+        Error{.code = Error::Code::Generic, .message = "Streaming source failed during initialization"});
     }
 
     return {};
@@ -102,7 +102,7 @@ namespace ao::audio
     return bufferedDurationMs(_ringBuffer.size(), _bytesPerSecond);
   }
 
-  ao::Result<> StreamingSource::seek(std::uint32_t positionMs)
+  Result<> StreamingSource::seek(std::uint32_t positionMs)
   {
     stopDecodeThread();
 
@@ -145,8 +145,7 @@ namespace ao::audio
 
     if (_failed.load(std::memory_order_relaxed))
     {
-      return std::unexpected(
-        ao::Error{.code = ao::Error::Code::Generic, .message = "Streaming source is in failed state"});
+      return std::unexpected(Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"});
     }
 
     return {};
@@ -159,7 +158,7 @@ namespace ao::audio
     _decodeThread = std::jthread(
       [this](std::stop_token const& token)
       {
-        ao::setCurrentThreadName("StreamingSource-Decode");
+        setCurrentThreadName("StreamingSource-Decode");
         decodeLoop(token);
       });
   }
@@ -208,7 +207,7 @@ namespace ao::audio
     }
   }
 
-  ao::Result<> StreamingSource::fillUntil(std::uint32_t targetBufferedMs, std::stop_token const& seekToken)
+  Result<> StreamingSource::fillUntil(std::uint32_t targetBufferedMs, std::stop_token const& seekToken)
   {
     while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
            !seekToken.stop_requested() && bufferedMs() < targetBufferedMs)
@@ -236,15 +235,14 @@ namespace ao::audio
 
     if (_failed.load(std::memory_order_relaxed))
     {
-      return std::unexpected(
-        ao::Error{.code = ao::Error::Code::Generic, .message = "Streaming source is in failed state"});
+      return std::unexpected(Error{.code = Error::Code::Generic, .message = "Streaming source is in failed state"});
     }
 
     return {};
   }
 
-  ao::Result<bool> StreamingSource::decodeNextBlock(std::stop_token const& seekToken,
-                                                    std::stop_token const* threadStopToken)
+  Result<bool> StreamingSource::decodeNextBlock(std::stop_token const& seekToken,
+                                                std::stop_token const* threadStopToken)
   {
     if (seekToken.stop_requested())
     {

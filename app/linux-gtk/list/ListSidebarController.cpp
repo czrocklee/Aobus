@@ -27,7 +27,7 @@ namespace ao::gtk
     }
   }
 
-  ListSidebarController::ListSidebarController(Gtk::Window& parent, ao::rt::AppSession& session, Callbacks callbacks)
+  ListSidebarController::ListSidebarController(Gtk::Window& parent, rt::AppSession& session, Callbacks callbacks)
     : _parent{parent}, _callbacks{std::move(callbacks)}, _session{session}
   {
     auto panelCallbacks = ListSidebarPanel::Callbacks{
@@ -70,7 +70,7 @@ namespace ao::gtk
     actionMap.add_action(_editListAction);
   }
 
-  void ListSidebarController::rebuildTree(TrackRowCache& dataProvider, ao::lmdb::ReadTransaction const& txn)
+  void ListSidebarController::rebuildTree(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn)
   {
     _dataProvider = &dataProvider;
 
@@ -216,13 +216,13 @@ namespace ao::gtk
     }
   }
 
-  void ListSidebarController::createList(ao::model::ListDraft const& draft)
+  void ListSidebarController::createList(model::ListDraft const& draft)
   {
     auto listId = _session.mutation().createList(draft);
     _pendingSelectId = listId;
   }
 
-  void ListSidebarController::updateList(ao::model::ListDraft const& draft)
+  void ListSidebarController::updateList(model::ListDraft const& draft)
   {
     _session.mutation().updateList(draft);
     _pendingSelectId = draft.listId;

@@ -27,7 +27,7 @@ namespace ao::gtk
 
   TagEditor::~TagEditor() = default;
 
-  void TagEditor::setup(ao::library::MusicLibrary& library, std::vector<TrackId> selectedTrackIds)
+  void TagEditor::setup(library::MusicLibrary& library, std::vector<TrackId> selectedTrackIds)
   {
     _musicLibrary = &library;
     _selectedTrackIds = std::move(selectedTrackIds);
@@ -120,7 +120,7 @@ namespace ao::gtk
 
     for (auto const trackId : _selectedTrackIds)
     {
-      auto const view = reader.get(trackId, ao::library::TrackStore::Reader::LoadMode::Hot);
+      auto const view = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
 
       if (!view)
       {
@@ -152,8 +152,8 @@ namespace ao::gtk
     }
 
     // Full scan for available tags
-    for (auto it = reader.begin(ao::library::TrackStore::Reader::LoadMode::Hot),
-              end = reader.end(ao::library::TrackStore::Reader::LoadMode::Hot);
+    for (auto it = reader.begin(library::TrackStore::Reader::LoadMode::Hot),
+              end = reader.end(library::TrackStore::Reader::LoadMode::Hot);
          it != end;
          ++it)
     {

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "File.h"
 #include "../detail/Decoder.h"
 #include <ao/Exception.h>
 #include <ao/media/flac/MetadataBlock.h>
-#include <ao/tag/flac/File.h>
 #include <ao/utility/ByteView.h>
 
 #include <cstring>
@@ -13,7 +13,7 @@
 
 namespace ao::tag::flac
 {
-  using namespace ao::media::flac;
+  using namespace media::flac;
 
   namespace
   {
@@ -23,18 +23,18 @@ namespace ao::tag::flac
     constexpr std::uint32_t kMsPerSecond = 1000;
 
     using TextSetter =
-      ao::library::TrackBuilder::MetadataBuilder& (ao::library::TrackBuilder::MetadataBuilder::*)(std::string_view);
+      library::TrackBuilder::MetadataBuilder& (library::TrackBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter =
-      ao::library::TrackBuilder::MetadataBuilder& (ao::library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+      library::TrackBuilder::MetadataBuilder& (library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
     template<TextSetter Setter>
-    void handleText(ao::library::TrackBuilder& builder, std::string_view value)
+    void handleText(library::TrackBuilder& builder, std::string_view value)
     {
       (builder.metadata().*Setter)(value);
     }
 
     template<NumberSetter Setter>
-    void handleNumber(ao::library::TrackBuilder& builder, std::string_view value)
+    void handleNumber(library::TrackBuilder& builder, std::string_view value)
     {
       if (auto const optParsed = decodeUint16(value); optParsed)
       {
@@ -43,7 +43,7 @@ namespace ao::tag::flac
     }
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
-    void handleSlashNumber(ao::library::TrackBuilder& builder, std::string_view value)
+    void handleSlashNumber(library::TrackBuilder& builder, std::string_view value)
     {
       auto const separator = value.find('/');
       handleNumber<PrimarySetter>(builder, value.substr(0, separator));
@@ -57,15 +57,15 @@ namespace ao::tag::flac
 #include "tag/flac/VorbisCommentDispatch.h"
   } // namespace
 
-  ao::library::TrackBuilder File::loadTrack() const
+  library::TrackBuilder File::loadTrack() const
   {
     if (_mappedRegion.get_size() < 4 || std::memcmp(_mappedRegion.get_address(), "fLaC", 4) != 0)
     {
-      AO_THROW(ao::Exception, "unrecognized flac file content");
+      AO_THROW(Exception, "unrecognized flac file content");
     }
 
     clearOwnedStrings();
-    auto builder = ao::library::TrackBuilder::createNew();
+    auto builder = library::TrackBuilder::createNew();
 
     auto iter = MetadataBlockViewIterator{
       static_cast<char const*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};

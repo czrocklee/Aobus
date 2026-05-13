@@ -44,7 +44,7 @@ namespace ao::gtk
     }
   } // namespace
 
-  TransportButton::TransportButton(ao::rt::PlaybackService& playbackService,
+  TransportButton::TransportButton(rt::PlaybackService& playbackService,
                                    Action action,
                                    std::function<void()> onPlaySelection,
                                    bool showLabel,
@@ -74,11 +74,11 @@ namespace ao::gtk
         switch (_action)
         {
           case Action::Play:
-            if (state.transport == ao::audio::Transport::Paused)
+            if (state.transport == audio::Transport::Paused)
             {
               _playbackService.resume();
             }
-            else if (state.transport != ao::audio::Transport::Playing)
+            else if (state.transport != audio::Transport::Playing)
             {
               if (_onPlaySelection)
               {
@@ -92,11 +92,11 @@ namespace ao::gtk
           case Action::Stop: _playbackService.stop(); break;
 
           case Action::PlayPause:
-            if (state.transport == ao::audio::Transport::Paused)
+            if (state.transport == audio::Transport::Paused)
             {
               _playbackService.resume();
             }
-            else if (state.transport == ao::audio::Transport::Playing)
+            else if (state.transport == audio::Transport::Playing)
             {
               _playbackService.pause();
             }
@@ -128,7 +128,7 @@ namespace ao::gtk
   void TransportButton::refresh()
   {
     auto const& state = _playbackService.state();
-    bool const isPlaying = (state.transport == ao::audio::Transport::Playing);
+    bool const isPlaying = (state.transport == audio::Transport::Playing);
 
     switch (_action)
     {
@@ -136,7 +136,7 @@ namespace ao::gtk
 
       case Action::Pause: _button.set_sensitive(state.ready && isPlaying); break;
 
-      case Action::Stop: _button.set_sensitive(state.transport != ao::audio::Transport::Idle); break;
+      case Action::Stop: _button.set_sensitive(state.transport != audio::Transport::Idle); break;
 
       case Action::PlayPause:
         _button.set_icon_name(isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic");

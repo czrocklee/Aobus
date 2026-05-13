@@ -26,7 +26,7 @@ namespace ao::audio
     /**
      * @brief Initialize and open the backend for playback.
      */
-    virtual ao::Result<> open(Format const& format, IRenderTarget* target) = 0;
+    virtual Result<> open(Format const& format, IRenderTarget* target) = 0;
 
     virtual void start() = 0;
     virtual void pause() = 0;

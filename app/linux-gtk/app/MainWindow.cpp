@@ -12,7 +12,7 @@
 
 namespace ao::gtk
 {
-  MainWindow::MainWindow(ao::rt::AppSession& session, std::shared_ptr<ao::rt::ConfigStore> configStore)
+  MainWindow::MainWindow(rt::AppSession& session, std::shared_ptr<rt::ConfigStore> configStore)
     : _session{session}
     , _configStore{std::move(configStore)}
     , _windowController{std::make_unique<WindowController>(*this, _session, _configStore)}

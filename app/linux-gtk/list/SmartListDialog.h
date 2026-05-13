@@ -35,20 +35,17 @@ namespace ao::gtk
   class SmartListDialog final : public Gtk::Dialog
   {
   public:
-    SmartListDialog(Gtk::Window& parent,
-                    ao::rt::AppSession& session,
-                    ListId parentListId,
-                    TrackRowCache const& provider);
+    SmartListDialog(Gtk::Window& parent, rt::AppSession& session, ListId parentListId, TrackRowCache const& provider);
     ~SmartListDialog() override;
 
     // Populate dialog fields from an existing list for editing
-    void populate(ListId id, ao::library::ListView const& view);
+    void populate(ListId id, library::ListView const& view);
 
     // Returns the ListId for update (0 if creating a new list)
     ListId editListId() const;
 
     // Returns a ListDraft populated from the dialog fields
-    ao::model::ListDraft draft() const;
+    model::ListDraft draft() const;
 
     void setLocalExpression(std::string expression);
 
@@ -77,11 +74,11 @@ namespace ao::gtk
     sigc::connection _exprTimeoutConnection;
 
     // Preview infrastructure
-    ao::rt::AppSession& _session;
+    rt::AppSession& _session;
     ListId _parentListId;
     TrackRowCache const& _trackRowCache;
-    std::unique_ptr<ao::rt::SmartListSource> _previewFilteredList;
-    std::unique_ptr<ao::rt::SmartListEvaluator> _previewEngine;
+    std::unique_ptr<rt::SmartListSource> _previewFilteredList;
+    std::unique_ptr<rt::SmartListEvaluator> _previewEngine;
     std::unique_ptr<TrackListAdapter> _previewAdapter;
     bool _expressionValid = true;
 

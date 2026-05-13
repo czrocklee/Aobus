@@ -27,8 +27,8 @@ namespace ao::library
     explicit MusicLibrary(std::filesystem::path rootPath);
     ~MusicLibrary();
 
-    ao::lmdb::ReadTransaction readTransaction() const;
-    ao::lmdb::WriteTransaction writeTransaction();
+    lmdb::ReadTransaction readTransaction() const;
+    lmdb::WriteTransaction writeTransaction();
 
     TrackStore& tracks();
     TrackStore const& tracks() const;

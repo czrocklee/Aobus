@@ -162,8 +162,7 @@ namespace ao::gtk
     _selectionChanged.emit();
   }
 
-  std::optional<TrackSelectionController::TrackId> TrackSelectionController::trackIdAtPosition(
-    std::uint32_t position) const
+  std::optional<TrackId> TrackSelectionController::trackIdAtPosition(std::uint32_t position) const
   {
     if (!_selectionModel)
     {
@@ -197,7 +196,7 @@ namespace ao::gtk
     return 0;
   }
 
-  std::vector<TrackSelectionController::TrackId> TrackSelectionController::getSelectedTrackIds() const
+  std::vector<TrackId> TrackSelectionController::getSelectedTrackIds() const
   {
     auto result = std::vector<TrackId>{};
     auto const model = _selectionModel->get_model();
@@ -279,7 +278,7 @@ namespace ao::gtk
     return totalDuration;
   }
 
-  std::optional<TrackSelectionController::TrackId> TrackSelectionController::getPrimarySelectedTrackId() const
+  std::optional<TrackId> TrackSelectionController::getPrimarySelectedTrackId() const
   {
     auto const bitset = _selectionModel->get_selection();
 
@@ -344,7 +343,7 @@ namespace ao::gtk
     }
   }
 
-  std::vector<TrackSelectionController::TrackId> TrackSelectionController::getVisibleTrackIds() const
+  std::vector<TrackId> TrackSelectionController::getVisibleTrackIds() const
   {
     auto result = std::vector<TrackId>{};
     auto* const proj = _adapter.projection();

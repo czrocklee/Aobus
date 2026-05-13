@@ -14,17 +14,19 @@
 
 namespace YAML
 {
+  using namespace ao::gtk::layout;
+
   template<>
-  struct convert<ao::gtk::layout::LayoutValue>
+  struct convert<LayoutValue>
   {
-    static Node encode(ao::gtk::layout::LayoutValue const& rhs);
-    static bool decode(Node const& node, ao::gtk::layout::LayoutValue& rhs);
+    static Node encode(LayoutValue const& rhs);
+    static bool decode(Node const& node, LayoutValue& rhs);
   };
 
   template<>
-  struct convert<std::map<std::string, ao::gtk::layout::LayoutValue, std::less<>>>
+  struct convert<std::map<std::string, LayoutValue, std::less<>>>
   {
-    static Node encode(std::map<std::string, ao::gtk::layout::LayoutValue, std::less<>> const& rhs)
+    static Node encode(std::map<std::string, LayoutValue, std::less<>> const& rhs)
     {
       auto node = Node{NodeType::Map};
 
@@ -36,7 +38,7 @@ namespace YAML
       return node;
     }
 
-    static bool decode(Node const& node, std::map<std::string, ao::gtk::layout::LayoutValue, std::less<>>& rhs)
+    static bool decode(Node const& node, std::map<std::string, LayoutValue, std::less<>>& rhs)
     {
       if (!node.IsMap())
       {
@@ -47,7 +49,7 @@ namespace YAML
 
       for (auto const& item : node)
       {
-        rhs.emplace(item.first.as<std::string>(), item.second.as<ao::gtk::layout::LayoutValue>());
+        rhs.emplace(item.first.as<std::string>(), item.second.as<LayoutValue>());
       }
 
       return true;
@@ -55,16 +57,16 @@ namespace YAML
   };
 
   template<>
-  struct convert<ao::gtk::layout::LayoutNode>
+  struct convert<LayoutNode>
   {
-    static Node encode(ao::gtk::layout::LayoutNode const& rhs);
-    static bool decode(Node const& node, ao::gtk::layout::LayoutNode& rhs);
+    static Node encode(LayoutNode const& rhs);
+    static bool decode(Node const& node, LayoutNode& rhs);
   };
 
   template<>
-  struct convert<ao::gtk::layout::LayoutDocument>
+  struct convert<LayoutDocument>
   {
-    static Node encode(ao::gtk::layout::LayoutDocument const& rhs);
-    static bool decode(Node const& node, ao::gtk::layout::LayoutDocument& rhs);
+    static Node encode(LayoutDocument const& rhs);
+    static bool decode(Node const& node, LayoutDocument& rhs);
   };
 } // namespace YAML

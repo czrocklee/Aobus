@@ -7,7 +7,7 @@
 
 namespace ao::utility
 {
-  ao::Result<> MappedFile::map(std::filesystem::path const& filePath)
+  Result<> MappedFile::map(std::filesystem::path const& filePath)
   {
     unmap();
 
@@ -21,7 +21,7 @@ namespace ao::utility
     catch (std::exception const& e)
     {
       return std::unexpected(
-        ao::Error{.code = ao::Error::Code::IoError, .message = std::format("Failed to mmap file: {}", e.what())});
+        Error{.code = Error::Code::IoError, .message = std::format("Failed to mmap file: {}", e.what())});
     }
   }
 

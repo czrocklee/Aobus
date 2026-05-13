@@ -134,7 +134,7 @@ namespace ao::gtk
     }
   }
 
-  QueryExpressionBox::QueryExpressionBox(ao::library::MusicLibrary& musicLibrary)
+  QueryExpressionBox::QueryExpressionBox(library::MusicLibrary& musicLibrary)
     : Gtk::Box(Gtk::Orientation::VERTICAL), _musicLibrary(musicLibrary)
   {
     _entry.set_hexpand(true);
@@ -385,8 +385,8 @@ namespace ao::gtk
     auto const reader = _musicLibrary.tracks().reader(txn);
     auto const& dictionary = _musicLibrary.dictionary();
 
-    for (auto iter = reader.begin(ao::library::TrackStore::Reader::LoadMode::Both),
-              end = reader.end(ao::library::TrackStore::Reader::LoadMode::Both);
+    for (auto iter = reader.begin(library::TrackStore::Reader::LoadMode::Both),
+              end = reader.end(library::TrackStore::Reader::LoadMode::Both);
          iter != end;
          ++iter)
     {

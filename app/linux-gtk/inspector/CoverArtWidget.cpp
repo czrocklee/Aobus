@@ -10,7 +10,7 @@
 
 namespace ao::gtk
 {
-  CoverArtWidget::CoverArtWidget(ao::library::MusicLibrary& library, CoverArtCache& cache)
+  CoverArtWidget::CoverArtWidget(library::MusicLibrary& library, CoverArtCache& cache)
     : _library{library}, _cache{cache}
   {
     set_keep_aspect_ratio(true);
@@ -19,16 +19,15 @@ namespace ao::gtk
 
   CoverArtWidget::~CoverArtWidget() = default;
 
-  void CoverArtWidget::bindToDetailProjection(std::shared_ptr<ao::rt::ITrackDetailProjection> projection)
+  void CoverArtWidget::bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection)
   {
     _detailProjection = std::move(projection);
-    _detailSub =
-      _detailProjection->subscribe([this](ao::rt::TrackDetailSnapshot const& snap) { onDetailSnapshot(snap); });
+    _detailSub = _detailProjection->subscribe([this](rt::TrackDetailSnapshot const& snap) { onDetailSnapshot(snap); });
   }
 
-  void CoverArtWidget::onDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap)
+  void CoverArtWidget::onDetailSnapshot(rt::TrackDetailSnapshot const& snap)
   {
-    if (snap.selectionKind == ao::rt::SelectionKind::None || snap.trackIds.empty() ||
+    if (snap.selectionKind == rt::SelectionKind::None || snap.trackIds.empty() ||
         snap.singleCoverArtId == ResourceId{0})
     {
       clearCover();

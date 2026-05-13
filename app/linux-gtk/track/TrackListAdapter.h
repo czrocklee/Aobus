@@ -32,18 +32,16 @@ namespace ao::gtk
     std::string expression{};
   };
 
-  class TrackListAdapter final : public ao::rt::TrackSourceObserver
+  class TrackListAdapter final : public rt::TrackSourceObserver
   {
   public:
-    using TrackId = ao::TrackId;
-
-    explicit TrackListAdapter(ao::rt::TrackSource& source,
-                              ao::library::MusicLibrary& musicLibrary,
+    explicit TrackListAdapter(rt::TrackSource& source,
+                              library::MusicLibrary& musicLibrary,
                               TrackRowCache const& provider);
     ~TrackListAdapter() override;
 
     Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
-    ao::library::MusicLibrary& getMusicLibrary() { return _musicLibrary; }
+    library::MusicLibrary& getMusicLibrary() { return _musicLibrary; }
 
     // O(1) index lookup via projection when bound, fallback to source scan.
     std::optional<std::size_t> indexOf(TrackId trackId) const;
@@ -51,10 +49,10 @@ namespace ao::gtk
     // Bind to a runtime projection for delta-based updates.
     // When bound, the adapter ignores direct TrackIdListObserver callbacks
     // and instead rebuilds the list store from projection deltas.
-    void bindProjection(std::shared_ptr<ao::rt::ITrackListProjection> projection);
+    void bindProjection(std::shared_ptr<rt::ITrackListProjection> projection);
 
     // Access the bound projection for group/presentation queries.
-    ao::rt::ITrackListProjection* projection() const { return _projection.get(); }
+    rt::ITrackListProjection* projection() const { return _projection.get(); }
     std::optional<std::size_t> groupIndexForTrack(TrackId trackId) const;
 
     // Signal emitted when the underlying ListModel is swapped (e.g. during projection binding).
@@ -78,14 +76,14 @@ namespace ao::gtk
     void createRowForTrack(TrackId id);
 
     // Batch projection delta application
-    void applyDeltaBatch(ao::rt::TrackListProjectionDeltaBatch const& batch);
+    void applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch);
     void applyResetDelta();
-    void applyInsertRange(ao::rt::ProjectionInsertRange const& delta);
-    void applyRemoveRange(ao::rt::ProjectionRemoveRange const& delta);
-    void applyUpdateRange(ao::rt::ProjectionUpdateRange const& delta);
+    void applyInsertRange(rt::ProjectionInsertRange const& delta);
+    void applyRemoveRange(rt::ProjectionRemoveRange const& delta);
+    void applyUpdateRange(rt::ProjectionUpdateRange const& delta);
 
-    ao::rt::TrackSource& _source;
-    ao::library::MusicLibrary& _musicLibrary;
+    rt::TrackSource& _source;
+    library::MusicLibrary& _musicLibrary;
     TrackRowCache const& _provider;
     Glib::RefPtr<Gio::ListStore<TrackRowObject>> _listStore;
     Glib::RefPtr<ProjectionTrackModel> _projectionModel;
@@ -94,8 +92,8 @@ namespace ao::gtk
     sigc::connection _rebuildConnection;
 
     // Projection binding
-    std::shared_ptr<ao::rt::ITrackListProjection> _projection;
-    ao::rt::Subscription _projectionSub;
+    std::shared_ptr<rt::ITrackListProjection> _projection;
+    rt::Subscription _projectionSub;
     bool _sourceDetachedForProjection = false;
     sigc::signal<void()> _signalModelChanged;
   };

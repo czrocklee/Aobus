@@ -13,7 +13,7 @@
 
 namespace ao::gtk
 {
-  PlaybackSequenceController::PlaybackSequenceController(ao::rt::PlaybackService& playback, TrackRowCache& dataProvider)
+  PlaybackSequenceController::PlaybackSequenceController(rt::PlaybackService& playback, TrackRowCache& dataProvider)
     : _playback{playback}, _dataProvider{dataProvider}
   {
   }

@@ -29,14 +29,14 @@ namespace ao::library
     class Reader;
     class Writer;
 
-    explicit TrackStore(ao::lmdb::Database hotDb, ao::lmdb::Database coldDb);
+    explicit TrackStore(lmdb::Database hotDb, lmdb::Database coldDb);
 
-    Reader reader(ao::lmdb::ReadTransaction const& txn) const;
-    Writer writer(ao::lmdb::WriteTransaction& txn);
+    Reader reader(lmdb::ReadTransaction const& txn) const;
+    Writer writer(lmdb::WriteTransaction& txn);
 
   private:
-    ao::lmdb::Database _hotDb;
-    ao::lmdb::Database _coldDb;
+    lmdb::Database _hotDb;
+    lmdb::Database _coldDb;
   };
 
   /**
@@ -67,10 +67,10 @@ namespace ao::library
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 
   private:
-    Reader(ao::lmdb::Database::Reader hotReader, ao::lmdb::Database::Reader coldReader);
+    Reader(lmdb::Database::Reader hotReader, lmdb::Database::Reader coldReader);
 
-    ao::lmdb::Database::Reader _hotReader;
-    ao::lmdb::Database::Reader _coldReader;
+    lmdb::Database::Reader _hotReader;
+    lmdb::Database::Reader _coldReader;
     friend class TrackStore;
   };
 
@@ -96,12 +96,12 @@ namespace ao::library
     value_type operator*() const;
 
   private:
-    Iterator(ao::lmdb::Database::Reader::Iterator&& hotIter,
-             ao::lmdb::Database::Reader::Iterator&& coldIter,
+    Iterator(lmdb::Database::Reader::Iterator&& hotIter,
+             lmdb::Database::Reader::Iterator&& coldIter,
              Reader::LoadMode mode);
 
-    std::optional<ao::lmdb::Database::Reader::Iterator> _optHotIter;
-    std::optional<ao::lmdb::Database::Reader::Iterator> _optColdIter;
+    std::optional<lmdb::Database::Reader::Iterator> _optHotIter;
+    std::optional<lmdb::Database::Reader::Iterator> _optColdIter;
     Reader::LoadMode _mode = Reader::LoadMode::Both;
     friend class Reader;
   };
@@ -175,10 +175,10 @@ namespace ao::library
     void clear();
 
   private:
-    explicit Writer(ao::lmdb::Database::Writer&& hotWriter, ao::lmdb::Database::Writer&& coldWriter);
+    explicit Writer(lmdb::Database::Writer&& hotWriter, lmdb::Database::Writer&& coldWriter);
 
-    ao::lmdb::Database::Writer _hotWriter;
-    ao::lmdb::Database::Writer _coldWriter;
+    lmdb::Database::Writer _hotWriter;
+    lmdb::Database::Writer _coldWriter;
     friend class TrackStore;
   };
 

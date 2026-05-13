@@ -32,7 +32,7 @@ namespace ao::lmdb
     {
       if (val.mv_size != sizeof(T))
       {
-        AO_THROW(ao::Exception, "read: bad value size");
+        AO_THROW(Exception, "read: bad value size");
       }
 
       T value;
@@ -297,4 +297,4 @@ namespace ao::lmdb
     throwOnError("mdb_get", rc);
     return utility::bytes::view(static_cast<void const*>(val.mv_data), val.mv_size);
   }
-}
+} // namespace ao::lmdb

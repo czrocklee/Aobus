@@ -24,7 +24,7 @@ namespace ao::audio
     /**
      * @brief Opens an audio file for decoding.
      */
-    virtual ao::Result<> open(std::filesystem::path const& filePath) = 0;
+    virtual Result<> open(std::filesystem::path const& filePath) = 0;
 
     /**
      * @brief Closes the current session and releases resources.
@@ -34,7 +34,7 @@ namespace ao::audio
     /**
      * @brief Seeks to a specific position in milliseconds.
      */
-    virtual ao::Result<> seek(std::uint32_t positionMs) = 0;
+    virtual Result<> seek(std::uint32_t positionMs) = 0;
 
     /**
      * @brief Flushes internal decoder buffers.
@@ -45,7 +45,7 @@ namespace ao::audio
      * @brief Decodes and returns the next block of PCM data.
      * @return A PcmBlock if successful, or an error.
      */
-    virtual ao::Result<PcmBlock> readNextBlock() = 0;
+    virtual Result<PcmBlock> readNextBlock() = 0;
 
     /**
      * @brief Returns information about the decoded stream.

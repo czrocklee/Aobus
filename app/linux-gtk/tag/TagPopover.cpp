@@ -5,7 +5,7 @@
 
 namespace ao::gtk
 {
-  TagPopover::TagPopover(ao::library::MusicLibrary& musicLibrary, std::vector<TrackId> selectedTrackIds)
+  TagPopover::TagPopover(library::MusicLibrary& musicLibrary, std::vector<TrackId> selectedTrackIds)
   {
     set_autohide(true);
     set_has_arrow(false);

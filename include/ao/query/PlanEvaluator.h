@@ -28,7 +28,7 @@ namespace ao::query
      * @param track The track view to evaluate
      * @return true if the track matches the query
      */
-    bool matches(ExecutionPlan const& plan, ao::library::TrackView const& track) const;
+    bool matches(ExecutionPlan const& plan, library::TrackView const& track) const;
 
     /**
      * Evaluate the full execution plan (without bloom filter optimization).
@@ -37,7 +37,7 @@ namespace ao::query
      * @param track The track view to evaluate
      * @return true if the track matches the query
      */
-    bool evaluateFull(ExecutionPlan const& plan, ao::library::TrackView const& track) const;
+    bool evaluateFull(ExecutionPlan const& plan, library::TrackView const& track) const;
 
   private:
     // Register stack for evaluation

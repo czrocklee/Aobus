@@ -9,7 +9,7 @@
 
 namespace ao::gtk
 {
-  SeekControl::SeekControl(ao::rt::PlaybackService& playbackService)
+  SeekControl::SeekControl(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
   {
     _scale.set_range(0, 100);

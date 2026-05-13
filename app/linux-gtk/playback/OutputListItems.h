@@ -15,16 +15,16 @@ namespace ao::gtk
   class BackendItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<BackendItem> create(ao::audio::BackendId const& id, std::string const& name)
+    static Glib::RefPtr<BackendItem> create(audio::BackendId const& id, std::string const& name)
     {
       return Glib::make_refptr_for_instance<BackendItem>(new BackendItem{id, name});
     }
 
-    ao::audio::BackendId id;
+    audio::BackendId id;
     std::string name;
 
   protected:
-    BackendItem(ao::audio::BackendId const& id, std::string const& name)
+    BackendItem(audio::BackendId const& id, std::string const& name)
       : Glib::ObjectBase(typeid(BackendItem)), id(id), name(name)
     {
     }
@@ -36,31 +36,31 @@ namespace ao::gtk
   class DeviceItem final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<DeviceItem> create(ao::audio::BackendId const& backend,
-                                           ao::audio::Device const& device,
-                                           ao::audio::ProfileId const& profile,
+    static Glib::RefPtr<DeviceItem> create(audio::BackendId const& backend,
+                                           audio::Device const& device,
+                                           audio::ProfileId const& profile,
                                            std::string const& customName = "")
     {
       return Glib::make_refptr_for_instance<DeviceItem>(new DeviceItem(backend, device, profile, customName));
     }
 
-    ao::audio::BackendId backendId;
-    ao::audio::ProfileId profileId;
-    ao::audio::DeviceId id;
+    audio::BackendId backendId;
+    audio::ProfileId profileId;
+    audio::DeviceId id;
     std::string name;
     std::string description;
     bool active = false;
 
     // Helper for diffing
-    bool matches(ao::audio::BackendId const& b, ao::audio::DeviceId const& devId, ao::audio::ProfileId const& p) const
+    bool matches(audio::BackendId const& b, audio::DeviceId const& devId, audio::ProfileId const& p) const
     {
       return backendId == b && id == devId && profileId == p;
     }
 
   protected:
-    DeviceItem(ao::audio::BackendId const& backend,
-               ao::audio::Device const& device,
-               ao::audio::ProfileId const& profile,
+    DeviceItem(audio::BackendId const& backend,
+               audio::Device const& device,
+               audio::ProfileId const& profile,
                std::string const& customName)
       : Glib::ObjectBase(typeid(DeviceItem))
       , backendId(backend)

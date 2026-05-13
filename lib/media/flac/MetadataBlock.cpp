@@ -33,7 +33,7 @@ namespace ao::media::flac
   {
     if (size < StreamInfoBlockSize || _view.type() != MetadataBlockType::StreamInfo)
     {
-      AO_THROW(ao::Exception, "invalid flac metadata blocks, first block must be StreamInfo");
+      AO_THROW(Exception, "invalid flac metadata blocks, first block must be StreamInfo");
     }
   }
 
@@ -50,7 +50,7 @@ namespace ao::media::flac
 
     if (_view.size() > _sizeLeft)
     {
-      AO_THROW(ao::Exception, "invalid flac metadata blocks size, exceeding the file boundary");
+      AO_THROW(Exception, "invalid flac metadata blocks size, exceeding the file boundary");
     }
   }
 } // namespace ao::media::flac

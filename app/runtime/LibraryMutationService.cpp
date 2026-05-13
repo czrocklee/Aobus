@@ -240,7 +240,7 @@ namespace ao::rt
     _impl->importThread = std::jthread(
       [worker, container]
       {
-        ao::setCurrentThreadName("FileImport");
+        setCurrentThreadName("FileImport");
         worker->run();
         container->result = worker->result();
       });

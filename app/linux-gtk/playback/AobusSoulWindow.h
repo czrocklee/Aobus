@@ -26,7 +26,7 @@ namespace ao::gtk
     AobusSoulWindow(AobusSoulWindow&&) = delete;
     AobusSoulWindow& operator=(AobusSoulWindow&&) = delete;
 
-    void bind(ao::rt::PlaybackService& playback);
+    void bind(rt::PlaybackService& playback);
 
   protected:
     void on_show() override;
@@ -35,7 +35,7 @@ namespace ao::gtk
   private:
     void ensureCss();
 
-    ao::rt::PlaybackService* _playback = nullptr;
+    rt::PlaybackService* _playback = nullptr;
     AobusSoul _bigSoul{};
     std::unique_ptr<AobusSoulBinding> _soulBinding;
   };

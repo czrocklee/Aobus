@@ -36,16 +36,16 @@ namespace ao::gtk
   public:
     using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId> const&, Gtk::Widget*)>;
 
-    explicit TrackInspectorPanel(ao::library::MusicLibrary& library,
-                                 ao::rt::LibraryMutationService& mutation,
-                                 ao::rt::ListSourceStore& sources,
+    explicit TrackInspectorPanel(library::MusicLibrary& library,
+                                 rt::LibraryMutationService& mutation,
+                                 rt::ListSourceStore& sources,
                                  CoverArtCache& coverArtCache);
     ~TrackInspectorPanel() override;
 
     TagEditRequestedSignal& signalTagEditRequested() { return _tagEditRequested; }
 
     /// Bind to a runtime detail projection for cover art + audio property auto-updates.
-    void bindToDetailProjection(std::shared_ptr<ao::rt::ITrackDetailProjection> projection);
+    void bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection);
 
   private:
     void setupUi();
@@ -60,19 +60,19 @@ namespace ao::gtk
     void onArtistEdited();
     void onAlbumEdited();
 
-    void onTrackDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap);
-    void updateCoverArt(ao::rt::TrackDetailSnapshot const& snap);
+    void onTrackDetailSnapshot(rt::TrackDetailSnapshot const& snap);
+    void updateCoverArt(rt::TrackDetailSnapshot const& snap);
     Glib::RefPtr<Gdk::Pixbuf> loadCoverArtFromLibrary(ResourceId resourceId);
-    void updateAudioMetadata(ao::rt::TrackDetailSnapshot const& snap);
+    void updateAudioMetadata(rt::TrackDetailSnapshot const& snap);
 
-    ao::library::MusicLibrary& _library;
-    ao::rt::LibraryMutationService& _mutation;
-    ao::rt::ListSourceStore& _sources;
+    library::MusicLibrary& _library;
+    rt::LibraryMutationService& _mutation;
+    rt::ListSourceStore& _sources;
     CoverArtCache& _coverArtCache;
 
     std::vector<TrackId> _currentTrackIds;
-    std::shared_ptr<ao::rt::ITrackDetailProjection> _detailProjection;
-    ao::rt::Subscription _detailSub;
+    std::shared_ptr<rt::ITrackDetailProjection> _detailProjection;
+    rt::Subscription _detailSub;
 
     // UI Components
     Gtk::ScrolledWindow _scrolledWindow;

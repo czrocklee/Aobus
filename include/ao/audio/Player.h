@@ -66,7 +66,7 @@ namespace ao::audio
     void setOnDevicesChanged(std::function<void(std::vector<IBackendProvider::Status> const&)> callback);
 
     /// Called when playback quality or readiness changes.
-    void setOnQualityChanged(std::function<void(ao::audio::Quality quality, bool ready)> callback);
+    void setOnQualityChanged(std::function<void(Quality quality, bool ready)> callback);
 
     // Internal visibility for tests
     void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);

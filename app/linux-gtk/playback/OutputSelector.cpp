@@ -76,7 +76,7 @@ namespace ao::gtk
     }
   }
 
-  OutputSelector::OutputSelector(ao::rt::PlaybackService& playback)
+  OutputSelector::OutputSelector(rt::PlaybackService& playback)
     : _playback{playback}
   {
     ensureOutputSelectorCss();
@@ -237,9 +237,9 @@ namespace ao::gtk
         {
           auto const profile = profileMeta.id;
           auto const displayName =
-            (profile == ao::audio::kProfileExclusive) ? std::format("{} [E]", device.displayName) : device.displayName;
+            (profile == audio::kProfileExclusive) ? std::format("{} [E]", device.displayName) : device.displayName;
 
-          auto audioDevice = ao::audio::Device{
+          auto audioDevice = audio::Device{
             .id = device.id,
             .displayName = device.displayName,
             .description = device.description,

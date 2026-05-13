@@ -23,7 +23,7 @@ namespace ao::gtk
   class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
-    explicit MainWindow(ao::rt::AppSession& session, std::shared_ptr<ao::rt::ConfigStore> configStore);
+    explicit MainWindow(rt::AppSession& session, std::shared_ptr<rt::ConfigStore> configStore);
     ~MainWindow() override;
 
     void on_hide() override;
@@ -34,8 +34,8 @@ namespace ao::gtk
     void rebuildLayout();
 
   private:
-    ao::rt::AppSession& _session;
-    std::shared_ptr<ao::rt::ConfigStore> _configStore;
+    rt::AppSession& _session;
+    std::shared_ptr<rt::ConfigStore> _configStore;
 
     std::unique_ptr<WindowController> _windowController;
     ShellLayoutController _shellLayout;

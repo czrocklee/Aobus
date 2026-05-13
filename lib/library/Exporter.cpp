@@ -36,22 +36,22 @@ namespace ao::library
       auto const metadata = view.metadata();
       out << YAML::Key << "title" << YAML::Value << std::string(metadata.title());
 
-      if (auto const artistId = metadata.artistId(); artistId != ao::DictionaryId{0})
+      if (auto const artistId = metadata.artistId(); artistId != DictionaryId{0})
       {
         out << YAML::Key << "artist" << YAML::Value << std::string(dict.get(artistId));
       }
 
-      if (auto const albumId = metadata.albumId(); albumId != ao::DictionaryId{0})
+      if (auto const albumId = metadata.albumId(); albumId != DictionaryId{0})
       {
         out << YAML::Key << "album" << YAML::Value << std::string(dict.get(albumId));
       }
 
-      if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != ao::DictionaryId{0})
+      if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != DictionaryId{0})
       {
         out << YAML::Key << "albumArtist" << YAML::Value << std::string(dict.get(albumArtistId));
       }
 
-      if (auto const genreId = metadata.genreId(); genreId != ao::DictionaryId{0})
+      if (auto const genreId = metadata.genreId(); genreId != DictionaryId{0})
       {
         out << YAML::Key << "genre" << YAML::Value << std::string(dict.get(genreId));
       }
@@ -139,7 +139,7 @@ namespace ao::library
 
     if (!ofs)
     {
-      AO_THROW_FORMAT(ao::Exception, "Failed to open '{}' for writing", path.string());
+      AO_THROW_FORMAT(Exception, "Failed to open '{}' for writing", path.string());
     }
 
     auto out = YAML::Emitter{ofs};
@@ -158,11 +158,11 @@ namespace ao::library
 
     if (!out.good())
     {
-      AO_THROW_FORMAT(ao::Exception, "YAML emitter error while writing '{}': {}", path.string(), out.GetLastError());
+      AO_THROW_FORMAT(Exception, "YAML emitter error while writing '{}': {}", path.string(), out.GetLastError());
     }
   }
 
-  void Exporter::exportTracks(YAML::Emitter& out, ao::lmdb::ReadTransaction const& txn, ExportMode mode)
+  void Exporter::exportTracks(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode)
   {
     auto const trackReader = _ml.tracks().reader(txn);
     out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
@@ -197,7 +197,7 @@ namespace ao::library
     out << YAML::EndMap;
   }
 
-  void Exporter::exportLists(YAML::Emitter& out, ao::lmdb::ReadTransaction const& txn)
+  void Exporter::exportLists(YAML::Emitter& out, lmdb::ReadTransaction const& txn)
   {
     out << YAML::Key << "lists" << YAML::Value << YAML::BeginSeq;
     auto const listReader = _ml.lists().reader(txn);

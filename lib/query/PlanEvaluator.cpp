@@ -26,7 +26,7 @@ namespace ao::query
       return plan.accessProfile != AccessProfile::HotOnly;
     }
 
-    bool hasRequiredTrackData(ExecutionPlan const& plan, ao::library::TrackView const& track)
+    bool hasRequiredTrackData(ExecutionPlan const& plan, library::TrackView const& track)
     {
       if (requiresHotData(plan) && !track.isHotValid())
       {
@@ -104,9 +104,7 @@ namespace ao::query
       return plan->stringConstants[idx];
     }
 
-    std::string_view loadDictionaryFieldValue(ao::library::TrackView const& track,
-                                              Field field,
-                                              ExecutionPlan const* plan)
+    std::string_view loadDictionaryFieldValue(library::TrackView const& track, Field field, ExecutionPlan const* plan)
     {
       gsl_Expects(plan != nullptr);
       gsl_Expects(plan->dictionary != nullptr);
@@ -116,7 +114,7 @@ namespace ao::query
         return {};
       }
 
-      auto dictionaryId = ao::DictionaryId{0};
+      auto dictionaryId = DictionaryId{0};
 
       switch (field)
       {
@@ -129,7 +127,7 @@ namespace ao::query
         default: return {};
       }
 
-      if (dictionaryId == ao::DictionaryId{0})
+      if (dictionaryId == DictionaryId{0})
       {
         return {};
       }
@@ -137,7 +135,7 @@ namespace ao::query
       return plan->dictionary->get(dictionaryId);
     }
 
-    std::string_view loadStringFieldValue(ao::library::TrackView const& track,
+    std::string_view loadStringFieldValue(library::TrackView const& track,
                                           Field field,
                                           Instruction const* instr,
                                           ExecutionPlan const* plan = nullptr)
@@ -150,7 +148,7 @@ namespace ao::query
 
           if (instr != nullptr && instr->constValue > 0)
           {
-            auto dictId = ao::DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
+            auto dictId = DictionaryId{static_cast<std::uint32_t>(instr->constValue)};
             return track.custom().get(dictId).value_or("");
           }
 
@@ -168,7 +166,7 @@ namespace ao::query
     }
 
     // Free function to load field value
-    std::int64_t loadFieldValue(ao::library::TrackView const& track, Field field)
+    std::int64_t loadFieldValue(library::TrackView const& track, Field field)
     {
       switch (field)
       {
@@ -210,7 +208,7 @@ namespace ao::query
     // Execute comparison operation (helper for Ne, Lt, Le, Gt, Ge)
     template<typename Op>
     void executeComparison(std::vector<std::int64_t>& registers,
-                           ao::library::TrackView const& track,
+                           library::TrackView const& track,
                            ExecutionPlan const* plan,
                            Instruction const& instr,
                            Op&& op)
@@ -238,7 +236,7 @@ namespace ao::query
 
     // Execute equality comparison (special case for tag lookups)
     void executeEq(std::vector<std::int64_t>& registers,
-                   ao::library::TrackView const& track,
+                   library::TrackView const& track,
                    ExecutionPlan const* plan,
                    Instruction const& instr,
                    std::vector<Instruction> const& instructions)
@@ -247,7 +245,7 @@ namespace ao::query
       if (bool isTagComparison = prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag;
           isTagComparison)
       {
-        auto tagIdToMatch = ao::DictionaryId{static_cast<std::uint32_t>(registers[instr.operand])};
+        auto tagIdToMatch = DictionaryId{static_cast<std::uint32_t>(registers[instr.operand])};
         auto matches = track.tags().has(tagIdToMatch);
         registers[instr.operand - 1] = matches ? 1 : 0;
       }
@@ -272,7 +270,7 @@ namespace ao::query
 
     // Execute LIKE comparison (substring matching for string fields)
     void executeLike(std::vector<std::int64_t>& registers,
-                     ao::library::TrackView const& track,
+                     library::TrackView const& track,
                      ExecutionPlan const* plan,
                      Instruction const& instr,
                      std::vector<Instruction> const& instructions)
@@ -299,7 +297,7 @@ namespace ao::query
     }
   }
 
-  bool PlanEvaluator::matches(ExecutionPlan const& plan, ao::library::TrackView const& track) const
+  bool PlanEvaluator::matches(ExecutionPlan const& plan, library::TrackView const& track) const
   {
     // Fast path: empty query matches all
 
@@ -328,7 +326,7 @@ namespace ao::query
   }
 
   // NOLINTNEXTLINE(readability-function-size,readability-function-cognitive-complexity)
-  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, ao::library::TrackView const& track) const
+  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, library::TrackView const& track) const
   {
     if (plan.matchesAll)
     {

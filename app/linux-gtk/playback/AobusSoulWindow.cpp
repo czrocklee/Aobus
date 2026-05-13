@@ -103,7 +103,7 @@ namespace ao::gtk
     _soulBinding.reset();
   }
 
-  void AobusSoulWindow::bind(ao::rt::PlaybackService& playback)
+  void AobusSoulWindow::bind(rt::PlaybackService& playback)
   {
     _playback = &playback;
     if (get_visible())

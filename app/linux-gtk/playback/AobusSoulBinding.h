@@ -18,7 +18,7 @@ namespace ao::gtk
   class AobusSoulBinding final
   {
   public:
-    AobusSoulBinding(AobusSoul& soul, ao::rt::PlaybackService& playback);
+    AobusSoulBinding(AobusSoul& soul, rt::PlaybackService& playback);
     ~AobusSoulBinding();
 
     AobusSoulBinding(AobusSoulBinding const&) = delete;
@@ -26,15 +26,15 @@ namespace ao::gtk
 
   private:
     AobusSoul& _soul;
-    ao::rt::PlaybackService& _playback;
+    rt::PlaybackService& _playback;
     bool _playing = false;
     bool _ready = false;
-    ao::audio::Quality _quality = ao::audio::Quality::Unknown;
+    audio::Quality _quality = audio::Quality::Unknown;
 
-    ao::rt::Subscription _qualitySub;
-    ao::rt::Subscription _outputSub;
-    ao::rt::Subscription _startedSub;
-    ao::rt::Subscription _stoppedSub;
-    ao::rt::Subscription _idleSub;
+    rt::Subscription _qualitySub;
+    rt::Subscription _outputSub;
+    rt::Subscription _startedSub;
+    rt::Subscription _stoppedSub;
+    rt::Subscription _idleSub;
   };
 } // namespace ao::gtk

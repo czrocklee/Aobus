@@ -69,10 +69,10 @@ namespace ao::rt
 
     try
     {
-      auto parsed = _stagedExpression.empty() ? ao::query::parse("true") : ao::query::parse(_stagedExpression);
-      auto compiler = ao::query::QueryCompiler{&_ml.dictionary()};
+      auto parsed = _stagedExpression.empty() ? query::parse("true") : query::parse(_stagedExpression);
+      auto compiler = query::QueryCompiler{&_ml.dictionary()};
 
-      _stagedPlan = std::make_unique<ao::query::ExecutionPlan>(compiler.compile(parsed));
+      _stagedPlan = std::make_unique<query::ExecutionPlan>(compiler.compile(parsed));
       _stagedHasError = false;
       _stagedErrorMessage.clear();
     }

@@ -95,5 +95,5 @@ namespace ao::audio::backend::detail
 
   void ensurePipeWireInit();
   std::optional<std::uint32_t> parseUintProperty(char const* value) noexcept;
-  std::optional<ao::audio::Format> parseRawStreamFormat(::spa_pod const* param) noexcept;
+  std::optional<Format> parseRawStreamFormat(::spa_pod const* param) noexcept;
 } // namespace ao::audio::backend::detail

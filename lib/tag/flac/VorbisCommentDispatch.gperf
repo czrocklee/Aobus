@@ -7,23 +7,23 @@
 %define lookup-function-name lookupVorbisField
 struct FlacVorbisDispatchEntry
 {
-  using VorbisHandler = void (*)(ao::library::TrackBuilder&, std::string_view);
+  using VorbisHandler = void (*)(library::TrackBuilder&, std::string_view);
   char const* name;
   VorbisHandler handler;
 };
 %%
-TITLE, &::ao::tag::flac::handleText<&::ao::library::TrackBuilder::MetadataBuilder::title>
-ARTIST, &::ao::tag::flac::handleText<&::ao::library::TrackBuilder::MetadataBuilder::artist>
-ALBUM, &::ao::tag::flac::handleText<&::ao::library::TrackBuilder::MetadataBuilder::album>
-ALBUMARTIST, &::ao::tag::flac::handleText<&::ao::library::TrackBuilder::MetadataBuilder::albumArtist>
-COMPOSER, &::ao::tag::flac::handleText<&::ao::library::TrackBuilder::MetadataBuilder::composer>
-TRACKNUMBER, &::ao::tag::flac::handleSlashNumber<&::ao::library::TrackBuilder::MetadataBuilder::trackNumber, &::ao::library::TrackBuilder::MetadataBuilder::totalTracks>
-TRACKTOTAL, &::ao::tag::flac::handleNumber<&::ao::library::TrackBuilder::MetadataBuilder::totalTracks>
-TOTALTRACKS, &::ao::tag::flac::handleNumber<&::ao::library::TrackBuilder::MetadataBuilder::totalTracks>
-DISCNUMBER, &::ao::tag::flac::handleSlashNumber<&::ao::library::TrackBuilder::MetadataBuilder::discNumber, &::ao::library::TrackBuilder::MetadataBuilder::totalDiscs>
-DISCTOTAL, &::ao::tag::flac::handleNumber<&::ao::library::TrackBuilder::MetadataBuilder::totalDiscs>
-TOTALDISCS, &::ao::tag::flac::handleNumber<&::ao::library::TrackBuilder::MetadataBuilder::totalDiscs>
-GENRE, &::ao::tag::flac::handleText<&::ao::library::TrackBuilder::MetadataBuilder::genre>
-WORK, &::ao::tag::flac::handleText<&::ao::library::TrackBuilder::MetadataBuilder::work>
-GROUPING, &::ao::tag::flac::handleText<&::ao::library::TrackBuilder::MetadataBuilder::work>
-DATE, &::ao::tag::flac::handleNumber<&::ao::library::TrackBuilder::MetadataBuilder::year>
+TITLE, &handleText<&library::TrackBuilder::MetadataBuilder::title>
+ARTIST, &handleText<&library::TrackBuilder::MetadataBuilder::artist>
+ALBUM, &handleText<&library::TrackBuilder::MetadataBuilder::album>
+ALBUMARTIST, &handleText<&library::TrackBuilder::MetadataBuilder::albumArtist>
+COMPOSER, &handleText<&library::TrackBuilder::MetadataBuilder::composer>
+TRACKNUMBER, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::trackNumber, &library::TrackBuilder::MetadataBuilder::totalTracks>
+TRACKTOTAL, &handleNumber<&library::TrackBuilder::MetadataBuilder::totalTracks>
+TOTALTRACKS, &handleNumber<&library::TrackBuilder::MetadataBuilder::totalTracks>
+DISCNUMBER, &handleSlashNumber<&library::TrackBuilder::MetadataBuilder::discNumber, &library::TrackBuilder::MetadataBuilder::totalDiscs>
+DISCTOTAL, &handleNumber<&library::TrackBuilder::MetadataBuilder::totalDiscs>
+TOTALDISCS, &handleNumber<&library::TrackBuilder::MetadataBuilder::totalDiscs>
+GENRE, &handleText<&library::TrackBuilder::MetadataBuilder::genre>
+WORK, &handleText<&library::TrackBuilder::MetadataBuilder::work>
+GROUPING, &handleText<&library::TrackBuilder::MetadataBuilder::work>
+DATE, &handleNumber<&library::TrackBuilder::MetadataBuilder::year>

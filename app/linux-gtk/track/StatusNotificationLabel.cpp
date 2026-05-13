@@ -35,8 +35,8 @@ namespace ao::gtk
     }
   }
 
-  StatusNotificationLabel::StatusNotificationLabel(ao::rt::NotificationService& notificationService,
-                                                   ao::rt::ViewService& viewService)
+  StatusNotificationLabel::StatusNotificationLabel(rt::NotificationService& notificationService,
+                                                   rt::ViewService& viewService)
     : _notificationService{notificationService}, _selectionInfo{viewService}
   {
     ensureStatusNotificationCss();

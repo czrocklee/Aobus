@@ -42,7 +42,7 @@ namespace ao::gtk
       std::function<void()> onTagsMutated;
     };
 
-    TagEditController(Gtk::Window& parent, ao::rt::AppSession& session, Callbacks callbacks);
+    TagEditController(Gtk::Window& parent, rt::AppSession& session, Callbacks callbacks);
     ~TagEditController();
 
     void setDataProvider(TrackRowCache* provider);
@@ -63,7 +63,7 @@ namespace ao::gtk
                                           std::vector<std::string> const& tagsToRemove);
 
     Callbacks _callbacks;
-    ao::rt::AppSession& _session;
+    rt::AppSession& _session;
     TrackRowCache* _dataProvider = nullptr;
 
     // The explicit selection to apply the tags to

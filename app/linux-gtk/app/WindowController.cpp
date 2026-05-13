@@ -114,8 +114,8 @@ namespace ao::gtk
   }
 
   WindowController::WindowController(MainWindow& window,
-                                     ao::rt::AppSession& session,
-                                     std::shared_ptr<ao::rt::ConfigStore> configStore)
+                                     rt::AppSession& session,
+                                     std::shared_ptr<rt::ConfigStore> configStore)
     : _window{window}, _session{session}, _configStore{std::move(configStore)}
   {
     // Initialize cover art cache
@@ -176,10 +176,10 @@ namespace ao::gtk
     _session.reloadAllTracks();
 
 #ifdef PIPEWIRE_FOUND
-    _session.addAudioProvider(std::make_unique<ao::audio::backend::PipeWireProvider>());
+    _session.addAudioProvider(std::make_unique<audio::backend::PipeWireProvider>());
 #endif
 #ifdef ALSA_FOUND
-    _session.addAudioProvider(std::make_unique<ao::audio::backend::AlsaProvider>());
+    _session.addAudioProvider(std::make_unique<audio::backend::AlsaProvider>());
 #endif
 
     _playbackSequenceController = std::make_unique<PlaybackSequenceController>(_session.playback(), *_trackRowCache);
@@ -221,7 +221,7 @@ namespace ao::gtk
 
     _tagEditController->setDataProvider(_trackRowCache.get());
 
-    _session.notifications().post(ao::rt::NotificationSeverity::Info, "Aobus Ready");
+    _session.notifications().post(rt::NotificationSeverity::Info, "Aobus Ready");
 
     auto const txn = _session.musicLibrary().readTransaction();
     rebuildListPages(txn);
@@ -263,7 +263,7 @@ namespace ao::gtk
   {
     auto ws = WindowState{};
 
-    if (auto const res = _configStore->load("window", ws); !res && res.error().code != ao::Error::Code::NotFound)
+    if (auto const res = _configStore->load("window", ws); !res && res.error().code != Error::Code::NotFound)
     {
       APP_LOG_DEBUG("Failed to load window config: {}", res.error().message);
     }
@@ -277,7 +277,7 @@ namespace ao::gtk
 
     auto tvs = TrackViewState{};
 
-    if (auto const res = _configStore->load("track_view", tvs); !res && res.error().code != ao::Error::Code::NotFound)
+    if (auto const res = _configStore->load("track_view", tvs); !res && res.error().code != Error::Code::NotFound)
     {
       APP_LOG_DEBUG("Failed to load track view config: {}", res.error().message);
     }
@@ -285,7 +285,7 @@ namespace ao::gtk
     _trackColumnLayoutModel.setLayout(trackColumnLayoutFromState(tvs));
   }
 
-  void WindowController::rebuildListPages(ao::lmdb::ReadTransaction const& txn)
+  void WindowController::rebuildListPages(lmdb::ReadTransaction const& txn)
   {
     APP_LOG_DEBUG("rebuildListPages called");
     _trackPageManager->rebuild(*_trackRowCache, txn);

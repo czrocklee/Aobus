@@ -132,17 +132,17 @@ namespace ao::gtk
     }
   }
 
-  std::optional<TrackColumn> redundantFieldToColumn(ao::rt::TrackSortField field)
+  std::optional<TrackColumn> redundantFieldToColumn(rt::TrackSortField field)
   {
     switch (field)
     {
-      case ao::rt::TrackSortField::Artist: return TrackColumn::Artist;
-      case ao::rt::TrackSortField::Album: return TrackColumn::Album;
-      case ao::rt::TrackSortField::AlbumArtist: return TrackColumn::AlbumArtist;
-      case ao::rt::TrackSortField::Genre: return TrackColumn::Genre;
-      case ao::rt::TrackSortField::Composer: return TrackColumn::Composer;
-      case ao::rt::TrackSortField::Work: return TrackColumn::Work;
-      case ao::rt::TrackSortField::Year: return TrackColumn::Year;
+      case rt::TrackSortField::Artist: return TrackColumn::Artist;
+      case rt::TrackSortField::Album: return TrackColumn::Album;
+      case rt::TrackSortField::AlbumArtist: return TrackColumn::AlbumArtist;
+      case rt::TrackSortField::Genre: return TrackColumn::Genre;
+      case rt::TrackSortField::Composer: return TrackColumn::Composer;
+      case rt::TrackSortField::Work: return TrackColumn::Work;
+      case rt::TrackSortField::Year: return TrackColumn::Year;
       default: return std::nullopt;
     }
   }

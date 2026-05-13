@@ -40,7 +40,7 @@ namespace ao::gtk
   class ImportExportCoordinator final
   {
   public:
-    ImportExportCoordinator(Gtk::Window& parent, ao::rt::AppSession& session, ImportExportCallbacks callbacks);
+    ImportExportCoordinator(Gtk::Window& parent, rt::AppSession& session, ImportExportCallbacks callbacks);
     ~ImportExportCoordinator();
 
     ImportExportCallbacks& callbacks() { return _callbacks; }
@@ -66,16 +66,16 @@ namespace ao::gtk
 
     void onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
-                              ao::library::ExportMode mode,
+                              library::ExportMode mode,
                               Glib::RefPtr<Gtk::FileDialog> const& fileDialog);
-    void executeExportTask(std::filesystem::path const& path, ao::library::ExportMode mode);
+    void executeExportTask(std::filesystem::path const& path, library::ExportMode mode);
 
     Gtk::Window& _parent;
-    ao::rt::AppSession& _session;
+    rt::AppSession& _session;
     ImportExportCallbacks _callbacks;
 
-    ao::rt::Subscription _importProgressSub;
-    ao::rt::Subscription _importCompleteSub;
+    rt::Subscription _importProgressSub;
+    rt::Subscription _importCompleteSub;
     std::jthread _exportThread;
     std::jthread _importTaskThread;
     std::unique_ptr<ImportProgressDialog> _importDialog;

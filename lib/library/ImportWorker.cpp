@@ -8,7 +8,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/tag/File.h>
+#include <ao/tag/TagFile.h>
 
 #include <chrono>
 
@@ -49,7 +49,7 @@ namespace ao::library
         }
 
         // Open tag file
-        auto const tagFile = ao::tag::File::open(path);
+        auto const tagFile = tag::TagFile::open(path);
 
         if (!tagFile)
         {
@@ -77,7 +77,7 @@ namespace ao::library
         auto [trackId, view] = trackWriter.createHotCold(
           preparedHot.size(),
           preparedCold.size(),
-          [&preparedHot, &preparedCold](ao::TrackId /*id*/, std::span<std::byte> hot, std::span<std::byte> cold)
+          [&preparedHot, &preparedCold](TrackId /*id*/, std::span<std::byte> hot, std::span<std::byte> cold)
           {
             preparedHot.writeTo(hot);
             preparedCold.writeTo(cold);

@@ -23,7 +23,7 @@ namespace ao::gtk
   class NowPlayingStatusLabel final
   {
   public:
-    explicit NowPlayingStatusLabel(ao::rt::PlaybackService& playbackService);
+    explicit NowPlayingStatusLabel(rt::PlaybackService& playbackService);
     ~NowPlayingStatusLabel();
 
     Gtk::Widget& widget() { return _label; }
@@ -31,12 +31,12 @@ namespace ao::gtk
   private:
     void updateState();
 
-    ao::rt::PlaybackService& _playbackService;
+    rt::PlaybackService& _playbackService;
     Gtk::Label _label;
 
-    ao::rt::Subscription _startedSub;
-    ao::rt::Subscription _pausedSub;
-    ao::rt::Subscription _idleSub;
-    ao::rt::Subscription _stoppedSub;
+    rt::Subscription _startedSub;
+    rt::Subscription _pausedSub;
+    rt::Subscription _idleSub;
+    rt::Subscription _stoppedSub;
   };
 } // namespace ao::gtk
