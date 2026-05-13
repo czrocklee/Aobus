@@ -54,7 +54,7 @@ namespace ao::rt
       ListId listId{};
     };
 
-    ViewService(IControlExecutor& executor, ao::library::MusicLibrary& library, ListSourceStore& sources);
+    ViewService(IControlExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources);
     ~ViewService();
 
     ViewService(ViewService const&) = delete;

@@ -55,10 +55,10 @@ namespace ao::rt
     std::unordered_map<ViewId, ViewEntry> views;
 
     IControlExecutor& executor;
-    ao::library::MusicLibrary& library;
+    library::MusicLibrary& library;
     ListSourceStore& sources;
 
-    Impl(IControlExecutor& exec, ao::library::MusicLibrary& lib, ListSourceStore& src)
+    Impl(IControlExecutor& exec, library::MusicLibrary& lib, ListSourceStore& src)
       : executor{exec}, library{lib}, sources{src}
     {
     }
@@ -73,7 +73,7 @@ namespace ao::rt
     Signal<ViewService::ListChanged const&> listChangedSignal;
   };
 
-  ViewService::ViewService(IControlExecutor& executor, ao::library::MusicLibrary& library, ListSourceStore& sources)
+  ViewService::ViewService(IControlExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources)
     : _impl{std::make_unique<Impl>(executor, library, sources)}
   {
   }
@@ -170,7 +170,7 @@ namespace ao::rt
 
   void ViewService::setFilter(ViewId viewId, std::string const& filterExpression)
   {
-    auto const timer = ao::utility::ScopedTimer{"ViewService::setFilter"};
+    auto const timer = utility::ScopedTimer{"ViewService::setFilter"};
     auto it = _impl->views.find(viewId);
     if (it == _impl->views.end())
     {

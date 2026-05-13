@@ -14,8 +14,8 @@
 
 namespace ao::rt
 {
-  using ViewId = ao::utility::TaggedInteger<std::uint64_t, struct ViewIdTag>;
-  using NotificationId = ao::utility::TaggedInteger<std::uint64_t, struct NotificationIdTag>;
+  using ViewId = utility::TaggedInteger<std::uint64_t, struct ViewIdTag>;
+  using NotificationId = utility::TaggedInteger<std::uint64_t, struct NotificationIdTag>;
 
   struct Range final
   {

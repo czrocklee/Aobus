@@ -14,7 +14,7 @@ namespace ao::rt
   {
   }
 
-  ao::Result<> ConfigStore::flush()
+  Result<> ConfigStore::flush()
   {
     if (_mode == OpenMode::ReadOnly)
     {
@@ -28,13 +28,13 @@ namespace ao::rt
 
     if (!file.good())
     {
-      return makeError(ao::Error::Code::IoError, std::format("Failed to write config file: {}", _filePath.string()));
+      return makeError(Error::Code::IoError, std::format("Failed to write config file: {}", _filePath.string()));
     }
 
     return {};
   }
 
-  ao::Result<> ConfigStore::ensureLoaded()
+  Result<> ConfigStore::ensureLoaded()
   {
     if (_loaded)
     {
@@ -47,7 +47,7 @@ namespace ao::rt
     {
       if (_mode == OpenMode::ReadOnly)
       {
-        return makeError(ao::Error::Code::NotFound, std::format("Config file not found: {}", _filePath.string()));
+        return makeError(Error::Code::NotFound, std::format("Config file not found: {}", _filePath.string()));
       }
 
       return {};
@@ -60,7 +60,7 @@ namespace ao::rt
     catch (std::exception const& e)
     {
       return makeError(
-        ao::Error::Code::IoError, std::format("Failed to parse config file '{}': {}", _filePath.string(), e.what()));
+        Error::Code::IoError, std::format("Failed to parse config file '{}': {}", _filePath.string(), e.what()));
     }
 
     return {};

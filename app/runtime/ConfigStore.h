@@ -133,7 +133,7 @@ namespace ao::rt
     ~ConfigStore() = default;
     explicit ConfigStore(std::filesystem::path filePath, OpenMode mode = OpenMode::ReadWrite);
 
-    ao::Result<> flush();
+    Result<> flush();
 
     template<typename T>
     void save(std::string_view group, T const& obj)
@@ -143,7 +143,7 @@ namespace ao::rt
         throw std::logic_error{"save() called on ReadOnly ConfigStore"};
       }
 
-      if (auto const result = ensureLoaded(); !result && result.error().code != ao::Error::Code::NotFound)
+      if (auto const result = ensureLoaded(); !result && result.error().code != Error::Code::NotFound)
       {
         return;
       }
@@ -152,7 +152,7 @@ namespace ao::rt
     }
 
     template<typename T>
-    ao::Result<> load(std::string_view group, T& obj)
+    Result<> load(std::string_view group, T& obj)
     {
       if (auto const result = ensureLoaded(); !result)
       {
@@ -168,7 +168,7 @@ namespace ao::rt
         catch (std::exception const& e)
         {
           return makeError(
-            ao::Error::Code::FormatRejected, std::format("Failed to decode config key '{}': {}", group, e.what()));
+            Error::Code::FormatRejected, std::format("Failed to decode config key '{}': {}", group, e.what()));
         }
       }
 
@@ -176,7 +176,7 @@ namespace ao::rt
     }
 
   private:
-    ao::Result<> ensureLoaded();
+    Result<> ensureLoaded();
 
     std::filesystem::path _filePath;
     OpenMode _mode = OpenMode::ReadWrite;

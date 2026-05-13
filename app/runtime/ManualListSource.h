@@ -25,11 +25,11 @@ namespace ao::rt
     , public TrackSourceObserver
   {
   public:
-    explicit ManualListSource(ao::library::ListView const& view, TrackSource* source = nullptr);
+    explicit ManualListSource(library::ListView const& view, TrackSource* source = nullptr);
     explicit ManualListSource();
     ~ManualListSource() override;
 
-    void reloadFromListView(ao::library::ListView const& view);
+    void reloadFromListView(library::ListView const& view);
 
     // TrackSource interface
     std::size_t size() const override { return _trackIds.size(); }

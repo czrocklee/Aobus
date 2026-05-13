@@ -13,16 +13,15 @@ namespace ao::gtk
     {
       switch (field)
       {
-      case NowPlayingFieldLabel::Field::Title: return "playback-title";
-      case NowPlayingFieldLabel::Field::Artist: return "playback-artist";
+        case NowPlayingFieldLabel::Field::Title: return "playback-title";
+        case NowPlayingFieldLabel::Field::Artist: return "playback-artist";
       }
       return "";
     }
   } // namespace
 
   NowPlayingFieldLabel::NowPlayingFieldLabel(ao::rt::PlaybackService& playbackService, Field field)
-    : _playbackService{playbackService}
-    , _field{field}
+    : _playbackService{playbackService}, _field{field}
   {
     _label.set_ellipsize(Pango::EllipsizeMode::END);
     _label.add_css_class(cssClassForField(field));

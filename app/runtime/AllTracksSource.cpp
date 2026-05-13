@@ -8,7 +8,7 @@
 
 namespace ao::rt
 {
-  AllTracksSource::AllTracksSource(ao::library::TrackStore& store)
+  AllTracksSource::AllTracksSource(library::TrackStore& store)
     : _store{store}
   {
   }

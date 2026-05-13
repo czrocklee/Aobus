@@ -29,7 +29,7 @@ namespace ao::rt
     , private TrackSourceObserver
   {
   public:
-    TrackListProjection(ViewId viewId, TrackSource& source, ao::library::MusicLibrary& library);
+    TrackListProjection(ViewId viewId, TrackSource& source, library::MusicLibrary& library);
     ~TrackListProjection() override;
 
     TrackListProjection(TrackListProjection const&) = delete;

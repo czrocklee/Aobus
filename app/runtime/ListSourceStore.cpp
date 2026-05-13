@@ -13,7 +13,7 @@
 
 namespace ao::rt
 {
-  ListSourceStore::ListSourceStore(ao::library::MusicLibrary& library, LibraryMutationService& mutation)
+  ListSourceStore::ListSourceStore(library::MusicLibrary& library, LibraryMutationService& mutation)
     : _library{library}, _allTracks{_library.tracks()}, _smartEvaluator{_library}
   {
     _listsMutatedSubscription = mutation.onListsMutated(
@@ -33,12 +33,12 @@ namespace ao::rt
 
   ListSourceStore::~ListSourceStore() = default;
 
-  ao::rt::TrackSource& ListSourceStore::allTracks()
+  TrackSource& ListSourceStore::allTracks()
   {
     return _allTracks;
   }
 
-  ao::rt::TrackSource& ListSourceStore::sourceFor(ListId const listId)
+  TrackSource& ListSourceStore::sourceFor(ListId const listId)
   {
     return getOrBuildSource(listId);
   }

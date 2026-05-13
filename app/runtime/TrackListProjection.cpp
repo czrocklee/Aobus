@@ -113,8 +113,8 @@ namespace ao::rt
       return groupBy == TrackGroupKey::Work;
     }
 
-    ao::library::TrackStore::Reader::LoadMode computeLoadMode(std::vector<TrackSortTerm> const& sortBy,
-                                                              TrackGroupKey groupBy)
+    library::TrackStore::Reader::LoadMode computeLoadMode(std::vector<TrackSortTerm> const& sortBy,
+                                                          TrackGroupKey groupBy)
     {
       bool needsHot = false;
       bool needsCold = groupByNeedsCold(groupBy);
@@ -133,20 +133,20 @@ namespace ao::rt
 
       if (sortBy.empty() && !needsCold)
       {
-        return ao::library::TrackStore::Reader::LoadMode::Hot;
+        return library::TrackStore::Reader::LoadMode::Hot;
       }
 
       if (needsHot && needsCold)
       {
-        return ao::library::TrackStore::Reader::LoadMode::Both;
+        return library::TrackStore::Reader::LoadMode::Both;
       }
 
       if (needsCold)
       {
-        return ao::library::TrackStore::Reader::LoadMode::Cold;
+        return library::TrackStore::Reader::LoadMode::Cold;
       }
 
-      return ao::library::TrackStore::Reader::LoadMode::Hot;
+      return library::TrackStore::Reader::LoadMode::Hot;
     }
 
     int compareNumeric(auto lhsVal, auto rhsVal)
@@ -218,8 +218,8 @@ namespace ao::rt
     }
 
     void fillSortKeys(SortKeys& keys,
-                      ao::library::TrackView const& view,
-                      ao::library::DictionaryStore& dict,
+                      library::TrackView const& view,
+                      library::DictionaryStore& dict,
                       std::vector<TrackSortTerm> const& sortBy,
                       std::unordered_map<DictionaryId, std::string>& normCache,
                       std::unordered_set<std::string>& stringPool)
@@ -256,8 +256,8 @@ namespace ao::rt
     }
 
     void ensureGroupSortKeys(SortKeys& keys,
-                             ao::library::TrackView const& view,
-                             ao::library::DictionaryStore& dict,
+                             library::TrackView const& view,
+                             library::DictionaryStore& dict,
                              TrackGroupKey groupBy,
                              std::unordered_map<DictionaryId, std::string>& normCache)
     {
@@ -325,8 +325,8 @@ namespace ao::rt
     }
 
     void fillGroupMetadata(OrderEntry& entry,
-                           ao::library::TrackView const& view,
-                           ao::library::DictionaryStore& dict,
+                           library::TrackView const& view,
+                           library::DictionaryStore& dict,
                            TrackGroupKey groupBy,
                            std::unordered_set<std::string>& stringPool)
     {
@@ -410,11 +410,11 @@ namespace ao::rt
   {
     ViewId viewId;
     TrackSource& source;
-    ao::library::MusicLibrary& library;
+    library::MusicLibrary& library;
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy;
     Comparator comparator;
-    ao::library::TrackStore::Reader::LoadMode loadMode = ao::library::TrackStore::Reader::LoadMode::Hot;
+    library::TrackStore::Reader::LoadMode loadMode = library::TrackStore::Reader::LoadMode::Hot;
     std::vector<OrderEntry> orderIndex;
     std::unordered_map<TrackId, std::size_t> positionIndex;
     std::vector<GroupSection> sections;
@@ -447,7 +447,7 @@ namespace ao::rt
       }
     }
 
-    Impl(ViewId vid, TrackSource& src, ao::library::MusicLibrary& lib)
+    Impl(ViewId vid, TrackSource& src, library::MusicLibrary& lib)
       : viewId{vid}, source{src}, library{lib}
     {
       rebuildOrderIndex();
@@ -496,7 +496,7 @@ namespace ao::rt
 
     void rebuildOrderIndex()
     {
-      auto const timer = ao::utility::ScopedTimer{"TrackListProjection::rebuildOrderIndex"};
+      auto const timer = utility::ScopedTimer{"TrackListProjection::rebuildOrderIndex"};
       orderIndex.clear();
       positionIndex.clear();
       sections.clear();
@@ -888,7 +888,7 @@ namespace ao::rt
     }
   };
 
-  TrackListProjection::TrackListProjection(ViewId viewId, TrackSource& source, ao::library::MusicLibrary& library)
+  TrackListProjection::TrackListProjection(ViewId viewId, TrackSource& source, library::MusicLibrary& library)
     : _impl{std::make_unique<Impl>(viewId, source, library)}
   {
     source.attach(this);

@@ -25,7 +25,7 @@ namespace ao::gtk
   {
     _filterTextConnection =
       _filterEntry.signal_changed().connect(sigc::mem_fun(*this, &TrackFilterController::onFilterTextChanged));
- 
+
     _filterIconConnection = _filterEntry.signal_icon_press().connect(
       [this](Gtk::Entry::IconPosition iconPosition)
       {
@@ -33,13 +33,13 @@ namespace ao::gtk
         {
           return;
         }
- 
+
         if (!_filterExpression.empty() && _createSmartListSignal)
         {
           _createSmartListSignal->emit(_filterExpression);
         }
       });
- 
+
     auto const dropTarget = Gtk::DropTarget::create(Glib::Value<std::string>::value_type(), Gdk::DragAction::COPY);
     dropTarget->signal_drop().connect(
       [this](Glib::ValueBase const& value, double, double)
@@ -51,13 +51,13 @@ namespace ao::gtk
           setFilterExpression(val.get());
           return true;
         }
- 
+
         return false;
       },
       false);
- 
+
     _filterEntry.add_controller(dropTarget);
- 
+
     if (_viewId != ao::rt::ViewId{})
     {
       _filterStatusSub =

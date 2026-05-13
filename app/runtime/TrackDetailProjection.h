@@ -29,7 +29,7 @@ namespace ao::rt
   public:
     TrackDetailProjection(DetailTarget target,
                           ViewService& views,
-                          ao::library::MusicLibrary& library,
+                          library::MusicLibrary& library,
                           WorkspaceService& workspace,
                           LibraryMutationService& mutation);
     ~TrackDetailProjection() override;

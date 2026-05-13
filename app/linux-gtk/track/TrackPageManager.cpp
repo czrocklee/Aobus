@@ -52,8 +52,7 @@ namespace ao::gtk
     _revealSub = _session.playback().onRevealTrackRequested([this](auto const& ev) { handleRevealTrack(ev); });
 
     _nowPlayingSub = _session.playback().onNowPlayingChanged(
-      [this](auto const& ev)
-      { setPlayingTrack(ev.trackId != TrackId{} ? std::optional{ev.trackId} : std::nullopt); });
+      [this](auto const& ev) { setPlayingTrack(ev.trackId != TrackId{} ? std::optional{ev.trackId} : std::nullopt); });
 
     _focusSub = _session.workspace().onFocusedViewChanged([this](auto) { syncLayout(); });
 

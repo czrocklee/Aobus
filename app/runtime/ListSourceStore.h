@@ -21,29 +21,29 @@ namespace ao::rt
   class ListSourceStore final
   {
   public:
-    ListSourceStore(ao::library::MusicLibrary& library, LibraryMutationService& mutation);
+    ListSourceStore(library::MusicLibrary& library, LibraryMutationService& mutation);
     ~ListSourceStore();
 
     ListSourceStore(ListSourceStore const&) = delete;
     ListSourceStore& operator=(ListSourceStore const&) = delete;
 
-    ao::rt::TrackSource& allTracks();
-    ao::rt::TrackSource& sourceFor(ListId listId);
+    TrackSource& allTracks();
+    TrackSource& sourceFor(ListId listId);
 
     void reloadAllTracks();
     void refreshList(ListId listId);
     void eraseList(ListId listId);
 
-    ao::rt::SmartListEvaluator& smartEvaluator() { return _smartEvaluator; }
+    SmartListEvaluator& smartEvaluator() { return _smartEvaluator; }
 
   private:
     TrackSource& getOrBuildSource(ListId listId);
 
-    ao::library::MusicLibrary& _library;
+    library::MusicLibrary& _library;
     AllTracksSource _allTracks;
     SmartListEvaluator _smartEvaluator;
 
-    ao::rt::Subscription _listsMutatedSubscription;
+    Subscription _listsMutatedSubscription;
 
     std::unordered_map<ListId, std::unique_ptr<TrackSource>> _sources;
   };

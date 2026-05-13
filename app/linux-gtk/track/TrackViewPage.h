@@ -43,7 +43,7 @@ namespace ao::gtk
                            ao::rt::AppSession& session,
                            ao::rt::ViewId viewId = ao::rt::ViewId{});
     ~TrackViewPage() override;
- 
+
     ListId getListId() const { return _listId; }
 
     Gtk::ColumnView& getColumnView() { return _columnView; }

@@ -9,7 +9,7 @@
 
 namespace ao::rt
 {
-  ManualListSource::ManualListSource(ao::library::ListView const& view, TrackSource* source)
+  ManualListSource::ManualListSource(library::ListView const& view, TrackSource* source)
     : _source{source}
   {
     _trackIds.reserve(view.tracks().size());
@@ -35,7 +35,7 @@ namespace ao::rt
     }
   }
 
-  void ManualListSource::reloadFromListView(ao::library::ListView const& view)
+  void ManualListSource::reloadFromListView(library::ListView const& view)
   {
     _trackIds.clear();
     _trackIds.reserve(view.tracks().size());

@@ -26,7 +26,7 @@ namespace ao::rt
       bool changedCold = false;
     };
 
-    PatchResult applyMetadataPatch(ao::library::TrackBuilder& builder, MetadataPatch const& patch)
+    PatchResult applyMetadataPatch(library::TrackBuilder& builder, MetadataPatch const& patch)
     {
       auto& meta = builder.metadata();
       auto result = PatchResult{};
@@ -74,7 +74,7 @@ namespace ao::rt
   struct LibraryMutationService::Impl final
   {
     IControlExecutor& executor;
-    ao::library::MusicLibrary& library;
+    library::MusicLibrary& library;
     std::jthread importThread;
     Signal<std::vector<TrackId> const&> tracksMutatedSignal;
     Signal<LibraryMutationService::ListsMutated const&> listsMutatedSignal;
@@ -82,7 +82,7 @@ namespace ao::rt
     Signal<LibraryMutationService::ImportProgressUpdated const&> importProgressSignal;
   };
 
-  LibraryMutationService::LibraryMutationService(IControlExecutor& executor, ao::library::MusicLibrary& library)
+  LibraryMutationService::LibraryMutationService(IControlExecutor& executor, library::MusicLibrary& library)
     : _impl{std::make_unique<Impl>(executor, library)}
   {
   }
@@ -111,8 +111,8 @@ namespace ao::rt
     return _impl->importProgressSignal.connect(std::move(handler));
   }
 
-  ao::Result<UpdateTrackMetadataReply> LibraryMutationService::updateMetadata(std::vector<TrackId> const& trackIds,
-                                                                              MetadataPatch const& patch)
+  Result<UpdateTrackMetadataReply> LibraryMutationService::updateMetadata(std::vector<TrackId> const& trackIds,
+                                                                          MetadataPatch const& patch)
   {
     auto txn = _impl->library.writeTransaction();
     auto writer = _impl->library.tracks().writer(txn);
@@ -120,14 +120,14 @@ namespace ao::rt
 
     for (auto const trackId : trackIds)
     {
-      auto const optView = writer.get(trackId, ao::library::TrackStore::Reader::LoadMode::Both);
+      auto const optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
       if (!optView)
       {
         continue;
       }
 
-      auto builder = ao::library::TrackBuilder::fromView(*optView, _impl->library.dictionary());
+      auto builder = library::TrackBuilder::fromView(*optView, _impl->library.dictionary());
 
       if (auto const patchResult = applyMetadataPatch(builder, patch);
           patchResult.changedHot || patchResult.changedCold)
@@ -155,9 +155,9 @@ namespace ao::rt
     return UpdateTrackMetadataReply{.mutatedIds = std::move(mutated)};
   }
 
-  ao::Result<EditTrackTagsReply> LibraryMutationService::editTags(std::vector<TrackId> const& trackIds,
-                                                                  std::vector<std::string> const& tagsToAdd,
-                                                                  std::vector<std::string> const& tagsToRemove)
+  Result<EditTrackTagsReply> LibraryMutationService::editTags(std::vector<TrackId> const& trackIds,
+                                                              std::vector<std::string> const& tagsToAdd,
+                                                              std::vector<std::string> const& tagsToRemove)
   {
     auto txn = _impl->library.writeTransaction();
     auto writer = _impl->library.tracks().writer(txn);
@@ -165,14 +165,14 @@ namespace ao::rt
 
     for (auto const trackId : trackIds)
     {
-      auto const optView = writer.get(trackId, ao::library::TrackStore::Reader::LoadMode::Hot);
+      auto const optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
 
       if (!optView)
       {
         continue;
       }
 
-      auto builder = ao::library::TrackBuilder::fromView(*optView, _impl->library.dictionary());
+      auto builder = library::TrackBuilder::fromView(*optView, _impl->library.dictionary());
 
       auto& tags = builder.tags();
 
@@ -202,12 +202,12 @@ namespace ao::rt
   {
     struct ResultContainer final
     {
-      ao::library::ImportWorker::ImportResult result;
+      library::ImportWorker::ImportResult result;
     };
     auto const container = std::make_shared<ResultContainer>();
 
     auto const totalFiles = paths.size();
-    auto const worker = std::make_shared<ao::library::ImportWorker>(
+    auto const worker = std::make_shared<library::ImportWorker>(
       _impl->library,
       paths,
       [this, totalFiles](std::filesystem::path const& filePath, std::int32_t index)
@@ -248,14 +248,14 @@ namespace ao::rt
     return ImportFilesReply{};
   }
 
-  ListId LibraryMutationService::createList(ao::model::ListDraft const& draft)
+  ListId LibraryMutationService::createList(model::ListDraft const& draft)
   {
     auto txn = _impl->library.writeTransaction();
 
     auto builder =
-      ao::library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
+      library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
 
-    if (draft.kind == ao::model::ListKind::Smart)
+    if (draft.kind == model::ListKind::Smart)
     {
       builder.filter(draft.expression);
     }
@@ -279,14 +279,14 @@ namespace ao::rt
     return listId;
   }
 
-  void LibraryMutationService::updateList(ao::model::ListDraft const& draft)
+  void LibraryMutationService::updateList(model::ListDraft const& draft)
   {
     auto txn = _impl->library.writeTransaction();
 
     auto builder =
-      ao::library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
+      library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
 
-    if (draft.kind == ao::model::ListKind::Smart)
+    if (draft.kind == model::ListKind::Smart)
     {
       builder.filter(draft.expression);
     }

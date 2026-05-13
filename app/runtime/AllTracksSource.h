@@ -26,7 +26,7 @@ namespace ao::rt
     using TrackSource::notifyRemoved;
     using TrackSource::notifyUpdated;
 
-    explicit AllTracksSource(ao::library::TrackStore& store);
+    explicit AllTracksSource(library::TrackStore& store);
 
     void reloadFromStore(ao::lmdb::ReadTransaction const& txn);
     void notifyInserted(TrackId id);
@@ -39,7 +39,7 @@ namespace ao::rt
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
   private:
-    ao::library::TrackStore& _store;
+    library::TrackStore& _store;
     std::flat_set<TrackId> _trackIds;
   };
 }

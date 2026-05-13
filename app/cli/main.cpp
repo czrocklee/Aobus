@@ -12,20 +12,22 @@
 
 #include <iostream>
 
+using namespace ao;
+
 int main(int argc, char const* argv[])
 {
   try
   {
-    auto ml = ao::library::MusicLibrary{"."};
+    auto ml = library::MusicLibrary{"."};
 
     CLI::App app{"Aobus CLI - aobus"};
     app.require_subcommand(1);
 
-    ao::cli::setupTrackCommand(app, ml);
-    ao::cli::setupListCommand(app, ml);
-    ao::cli::setupInitCommand(app, ml);
-    ao::cli::setupTagCommand(app, ml);
-    ao::cli::setupLibCommand(app, ml);
+    cli::setupTrackCommand(app, ml);
+    cli::setupListCommand(app, ml);
+    cli::setupInitCommand(app, ml);
+    cli::setupTagCommand(app, ml);
+    cli::setupLibCommand(app, ml);
 
     CLI11_PARSE(app, argc, argv);
     return 0;

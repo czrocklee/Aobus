@@ -13,9 +13,9 @@ namespace ao::cli
 {
   namespace
   {
-    void scanAndImport(ao::library::MusicLibrary& ml, std::ostream& os)
+    void scanAndImport(library::MusicLibrary& ml, std::ostream& os)
     {
-      ao::utility::Finder finder{".", {".flac", ".m4a", ".mp3"}};
+      utility::Finder finder{".", {".flac", ".m4a", ".mp3"}};
       auto txn = ml.writeTransaction();
       auto writer = ml.tracks().writer(txn);
       auto& dict = ml.dictionary();
@@ -60,7 +60,7 @@ namespace ao::cli
     }
   }
 
-  void setupInitCommand(CLI::App& app, ao::library::MusicLibrary& ml)
+  void setupInitCommand(CLI::App& app, library::MusicLibrary& ml)
   {
     auto* const cmd = app.add_subcommand("init", "Scan current directory and initialize library");
     cmd->callback([&ml] { scanAndImport(ml, std::cout); });

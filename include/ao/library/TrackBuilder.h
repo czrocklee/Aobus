@@ -195,7 +195,9 @@ namespace ao::library
 
     // Partial serialization for hot-only or cold-only updates
     std::vector<std::byte> serializeHot(ao::lmdb::WriteTransaction& txn, DictionaryStore& dict);
-    std::vector<std::byte> serializeCold(ao::lmdb::WriteTransaction& txn, DictionaryStore& dict, ResourceStore& resources);
+    std::vector<std::byte> serializeCold(ao::lmdb::WriteTransaction& txn,
+                                         DictionaryStore& dict,
+                                         ResourceStore& resources);
 
     //=============================================================================
     // Prepared structures for zero-copy serialization

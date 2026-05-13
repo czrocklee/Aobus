@@ -8,5 +8,5 @@
 
 namespace ao::cli
 {
-  void setupListCommand(CLI::App& app, ao::library::MusicLibrary& ml);
+  void setupListCommand(CLI::App& app, library::MusicLibrary& ml);
 }

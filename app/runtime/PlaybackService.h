@@ -29,7 +29,7 @@ namespace ao::rt
 
     struct QualityChanged final
     {
-      ao::audio::Quality quality = ao::audio::Quality::Unknown;
+      audio::Quality quality = audio::Quality::Unknown;
       bool ready = false;
     };
 
@@ -40,7 +40,7 @@ namespace ao::rt
       ViewId preferredViewId{};
     };
 
-    PlaybackService(IControlExecutor& executor, ViewService& views, ao::library::MusicLibrary& library);
+    PlaybackService(IControlExecutor& executor, ViewService& views, library::MusicLibrary& library);
     ~PlaybackService();
 
     PlaybackService(PlaybackService const&) = delete;
@@ -61,20 +61,20 @@ namespace ao::rt
     Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
     Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
 
-    void play(ao::audio::TrackPlaybackDescriptor const& descriptor, ListId sourceListId);
+    void play(audio::TrackPlaybackDescriptor const& descriptor, ListId sourceListId);
     TrackId playSelectionInView(ViewId viewId);
     void pause();
     void resume();
     void stop();
     void seek(std::uint32_t positionMs);
-    void setOutput(ao::audio::BackendId const& backendId,
-                   ao::audio::DeviceId const& deviceId,
-                   ao::audio::ProfileId const& profileId);
+    void setOutput(audio::BackendId const& backendId,
+                   audio::DeviceId const& deviceId,
+                   audio::ProfileId const& profileId);
     void setVolume(float volume);
     void setMuted(bool muted);
     void revealPlayingTrack();
 
-    void addProvider(std::unique_ptr<ao::audio::IBackendProvider> provider);
+    void addProvider(std::unique_ptr<audio::IBackendProvider> provider);
 
   private:
     struct Impl;

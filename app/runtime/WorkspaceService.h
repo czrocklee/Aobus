@@ -27,7 +27,7 @@ namespace ao::rt
     WorkspaceService(ViewService& views,
                      PlaybackService& playback,
                      LibraryMutationService& mutation,
-                     ao::library::MusicLibrary& library,
+                     library::MusicLibrary& library,
                      std::shared_ptr<ConfigStore> configStore);
     ~WorkspaceService();
 
