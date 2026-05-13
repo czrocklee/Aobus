@@ -6,6 +6,7 @@
 #include "library_io/ImportProgressDialog.h"
 #include <ao/library/Exporter.h>
 #include <ao/library/ImportWorker.h>
+#include <runtime/CorePrimitives.h>
 
 #include <gtkmm.h>
 
@@ -30,8 +31,6 @@ namespace ao::gtk
   {
     std::function<void(std::filesystem::path const&)> onOpenNewLibrary;
     std::function<void()> onLibraryDataMutated;
-    std::function<void(double, std::string const&)> onProgressUpdated;
-    std::function<void(std::string const&)> onStatusMessage;
     std::function<void(std::string const&)> onTitleChanged;
   };
 
@@ -59,7 +58,6 @@ namespace ao::gtk
   private:
     void onImportFolderSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
     void executeImportTask(std::vector<std::filesystem::path> const& files, bool isNewLibrary);
-    void onImportProgress(std::string const& filePath, int index);
     void onImportFinished() const;
 
     void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
@@ -76,8 +74,8 @@ namespace ao::gtk
     ao::rt::AppSession& _session;
     ImportExportCallbacks _callbacks;
 
-    std::unique_ptr<ao::library::ImportWorker> _importWorker;
-    std::jthread _importThread;
+    ao::rt::Subscription _importProgressSub;
+    ao::rt::Subscription _importCompleteSub;
     std::jthread _exportThread;
     std::jthread _importTaskThread;
     std::unique_ptr<ImportProgressDialog> _importDialog;

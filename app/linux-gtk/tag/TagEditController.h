@@ -39,7 +39,6 @@ namespace ao::gtk
   public:
     struct Callbacks final
     {
-      std::function<void(std::string const&)> onStatusMessage;
       std::function<void()> onTagsMutated;
     };
 

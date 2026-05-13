@@ -66,24 +66,7 @@ namespace ao::gtk
     void onGroupByChanged();
     void onModelChanged();
 
-    Glib::RefPtr<Gtk::SignalListItemFactory> createTextColumnFactory(TrackColumnDefinition const& definition);
-    void onTextColumnSetup(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                           TrackColumnDefinition const& definition,
-                           bool isEditable,
-                           bool isHyperlink);
-    void onTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                          TrackColumnDefinition const& definition,
-                          bool isEditable);
-    void onTextColumnBindEditable(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                                  TrackColumnDefinition const& definition,
-                                  Glib::RefPtr<TrackRowObject> const& row);
-    void onTextColumnBindStatic(Glib::RefPtr<Gtk::ListItem> const& listItem,
-                                TrackColumnDefinition const& definition,
-                                Glib::RefPtr<TrackRowObject> const& row);
-    void commitMetadataChange(Gtk::Stack* stack,
-                              Gtk::Entry* entry,
-                              Glib::RefPtr<TrackRowObject> const& row,
-                              TrackColumn column);
+    void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row, TrackColumn column, std::string const& newValue);
 
     // Child widgets
     Gtk::Box _controlsBar{Gtk::Orientation::HORIZONTAL};

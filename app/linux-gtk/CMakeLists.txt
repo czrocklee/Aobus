@@ -14,6 +14,7 @@ add_library(aobus-gtk-lib STATIC
     track/TrackPresentation.cpp
     track/TrackRowObject.cpp
     track/TrackRowCache.cpp
+    track/TrackColumnFactoryBuilder.cpp
 
     list/ListSidebarController.cpp
     list/ListSidebarPanel.cpp
@@ -24,6 +25,17 @@ add_library(aobus-gtk-lib STATIC
     list/QueryExpressionBox.cpp
 
     playback/PlaybackSequenceController.cpp
+    playback/PlaybackPositionInterpolator.cpp
+    playback/PlayPauseButton.cpp
+    playback/StopButton.cpp
+    playback/PlayButton.cpp
+    playback/PauseButton.cpp
+    playback/SeekControl.cpp
+    playback/TimeLabel.cpp
+    playback/NowPlayingTitleLabel.cpp
+    playback/NowPlayingArtistLabel.cpp
+    playback/OutputSelector.cpp
+    playback/VolumeControl.cpp
     playback/AobusSoul.cpp
     playback/AobusSoulWindow.cpp
     playback/VolumeBar.cpp
@@ -40,7 +52,12 @@ add_library(aobus-gtk-lib STATIC
     library_io/ImportProgressDialog.cpp
     library_io/PlaylistExporter.cpp
 
-    shell/StatusBar.cpp
+    shell/PlaybackDetailsWidget.cpp
+    shell/NowPlayingStatusLabel.cpp
+    shell/ImportProgressIndicator.cpp
+    shell/SelectionInfoLabel.cpp
+    shell/StatusNotificationLabel.cpp
+    shell/LibraryTrackCountLabel.cpp
     shell/ThemeBus.cpp
     shell/ShellLayoutController.cpp
 
@@ -53,6 +70,7 @@ add_library(aobus-gtk-lib STATIC
     layout/components/Containers.cpp
     layout/components/PlaybackComponents.cpp
     layout/components/SemanticComponents.cpp
+    layout/components/StatusComponents.cpp
     layout/editor/LayoutEditorDialog.cpp
 )
 

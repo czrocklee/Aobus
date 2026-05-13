@@ -7,6 +7,8 @@
 #include <ao/utility/Log.h>
 #include <ao/utility/ThreadUtils.h>
 #include <runtime/AppSession.h>
+#include <runtime/LibraryMutationService.h>
+#include <runtime/NotificationService.h>
 
 namespace ao::gtk
 {
@@ -75,11 +77,7 @@ namespace ao::gtk
 
         if (files.empty())
         {
-          if (_callbacks.onStatusMessage)
-          {
-            _callbacks.onStatusMessage("No music files found");
-          }
-
+          _session.notifications().post(ao::rt::NotificationSeverity::Info, "No music files found");
           return;
         }
 
@@ -95,64 +93,35 @@ namespace ao::gtk
   void ImportExportCoordinator::executeImportTask(std::vector<std::filesystem::path> const& files, bool isNewLibrary)
   {
     _importDialog = std::make_unique<ImportProgressDialog>(static_cast<int>(files.size()), _parent);
-    auto* dialogPtr = _importDialog.get();
+    auto* const dialogPtr = _importDialog.get();
     _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
 
-    _importWorker = std::make_unique<ao::library::ImportWorker>(
-      _session.musicLibrary(),
-      files,
-      [this, dialogPtr, total = files.size()](std::filesystem::path const& filePath, int index)
+    _importProgressSub = _session.mutation().onImportProgress(
+      [dialogPtr, total = files.size()](auto const& ev)
+      { dialogPtr->onNewTrack(ev.message, static_cast<int>(ev.fraction * static_cast<double>(total))); });
+
+    _importCompleteSub = _session.mutation().onImportCompleted(
+      [this, dialogPtr, isNewLibrary](auto)
       {
-        _session.executor().dispatch(
-          [this, dialogPtr, filePath, index, total]
-          {
-            dialogPtr->onNewTrack(filePath.string(), index);
-            if (_callbacks.onProgressUpdated)
-            {
-              double const fraction = static_cast<double>(index) / static_cast<double>(total);
-              _callbacks.onProgressUpdated(fraction, "Importing: " + filePath.filename().string());
-            }
-          });
-      },
-      [this, dialogPtr] { _session.executor().dispatch([dialogPtr] { dialogPtr->ready(); }); });
+        dialogPtr->ready();
+        onImportFinished();
 
-    auto* const workerPtr = _importWorker.get();
-    _importThread = std::jthread(
-      [this, workerPtr, isNewLibrary] mutable
-      {
-        ao::setCurrentThreadName("FileImport");
-        workerPtr->run();
+        if (isNewLibrary && _callbacks.onLibraryDataMutated)
+        {
+          _callbacks.onLibraryDataMutated();
+        }
 
-        _session.executor().dispatch(
-          [this, isNewLibrary]
-          {
-            onImportFinished();
-
-            if (isNewLibrary && _callbacks.onLibraryDataMutated)
-            {
-              _callbacks.onLibraryDataMutated();
-            }
-
-            if (_callbacks.onProgressUpdated)
-            {
-              _callbacks.onProgressUpdated(1.0, "Import complete");
-            }
-          });
+        _importProgressSub.reset();
+        _importCompleteSub.reset();
       });
 
+    _session.mutation().importFiles(files);
     _importDialog->show();
-  }
-
-  void ImportExportCoordinator::onImportProgress(std::string const& /*filePath*/, int /*index*/)
-  {
   }
 
   void ImportExportCoordinator::onImportFinished() const
   {
-    if (_callbacks.onStatusMessage)
-    {
-      _callbacks.onStatusMessage("Import complete");
-    }
+    _session.notifications().post(ao::rt::NotificationSeverity::Info, "Import complete");
   }
 
   void ImportExportCoordinator::scanDirectory(std::filesystem::path const& dir,
@@ -201,9 +170,9 @@ namespace ao::gtk
     {
       executeImportTask(files, true);
     }
-    else if (_callbacks.onStatusMessage)
+    else
     {
-      _callbacks.onStatusMessage("No music files found");
+      _session.notifications().post(ao::rt::NotificationSeverity::Info, "No music files found");
     }
   }
 
@@ -313,12 +282,7 @@ namespace ao::gtk
 
           _session.executor().dispatch(
             [this]
-            {
-              if (_callbacks.onStatusMessage)
-              {
-                _callbacks.onStatusMessage("Library exported successfully");
-              }
-            });
+            { _session.notifications().post(ao::rt::NotificationSeverity::Info, "Library exported successfully"); });
         }
         catch (std::exception const& e)
         {
@@ -327,11 +291,7 @@ namespace ao::gtk
             [this, errorText]
             {
               APP_LOG_ERROR("Export failed: {}", errorText);
-
-              if (_callbacks.onStatusMessage)
-              {
-                _callbacks.onStatusMessage("Export failed: " + errorText);
-              }
+              _session.notifications().post(ao::rt::NotificationSeverity::Error, "Export failed: " + errorText);
             });
         }
       });
@@ -406,19 +366,12 @@ namespace ao::gtk
             _callbacks.onLibraryDataMutated();
           }
 
-          if (_callbacks.onStatusMessage)
-          {
-            _callbacks.onStatusMessage("Library imported successfully");
-          }
+          _session.notifications().post(ao::rt::NotificationSeverity::Info, "Library imported successfully");
         }
         else
         {
           APP_LOG_ERROR("Import failed: {}", errorText);
-
-          if (_callbacks.onStatusMessage)
-          {
-            _callbacks.onStatusMessage("Import failed: " + errorText);
-          }
+          _session.notifications().post(ao::rt::NotificationSeverity::Error, "Import failed: " + errorText);
         }
       });
   }

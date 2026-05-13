@@ -5,6 +5,7 @@
 #include "layout/components/Containers.h"
 #include "layout/components/PlaybackComponents.h"
 #include "layout/components/SemanticComponents.h"
+#include "layout/components/StatusComponents.h"
 
 #include <algorithm>
 #include <vector>
@@ -98,6 +99,7 @@ namespace ao::gtk::layout
     registerContainerComponents(registry);
     registerPlaybackComponents(registry);
     registerSemanticComponents(registry);
+    registerStatusComponents(registry);
   }
 
   std::unique_ptr<ILayoutComponent> LayoutRuntime::build(LayoutDependencies& ctx, LayoutDocument const& doc)

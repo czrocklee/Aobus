@@ -87,6 +87,7 @@ add_executable(ao_test_gtk
     unit/gtk/LayoutContainersTest.cpp
     unit/gtk/LayoutComponentsTest.cpp
     unit/gtk/LayoutEditorTest.cpp
+    unit/gtk/StatusComponentsTest.cpp
 )
 
 target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
