@@ -1,56 +1,64 @@
 # aobus-gtk-lib: GTK implementation for Linux
 add_library(aobus-gtk-lib STATIC
-    ui/MainWindow.cpp
-    ui/TrackPageGraph.cpp
-    ui/PlaybackController.cpp
-    ui/InspectorSidebar.cpp
-    ui/CoverArtCache.cpp
-    ui/CoverArtWidget.cpp
-    ui/ImportExportCoordinator.cpp
-    ui/ListSidebarController.cpp
-    ui/TagEditController.cpp
-    ui/TrackPresentation.cpp
-    ui/TrackViewPage.cpp
-    ui/GtkMainThreadDispatcher.cpp
-    ui/TrackListAdapter.cpp
-    ui/TrackRow.cpp
-    ui/ListRow.cpp
-    ui/ListTreeNode.cpp
-    ui/SmartListDialog.cpp
-    ui/QueryExpressionBox.cpp
-    ui/TagPromptDialog.cpp
-    ui/TagPopover.cpp
-    ui/TagEditor.cpp
-    ui/ImportProgressDialog.cpp
-    ui/StatusBar.cpp
-    ui/TrackRowDataProvider.cpp
-    ui/TrackListModel.cpp
-    ui/PlaybackBar.cpp
-    ui/AobusSoul.cpp
-    ui/AobusSoulWindow.cpp
-    ui/VolumeBar.cpp
-    ui/OutputMenuModel.cpp
-    ui/ThemeBus.cpp
-    ui/GtkControlExecutor.cpp
+    app/MainWindow.cpp
+    app/MenuController.cpp
+    app/WindowController.cpp
 
-    layout/LayoutDocument.cpp
-    layout/LayoutRuntime.cpp
-    layout/ComponentRegistry.cpp
-    layout/LayoutHost.cpp
+    track/TrackPageManager.cpp
+    track/TrackViewPage.cpp
+    track/TrackColumnController.cpp
+    track/TrackFilterController.cpp
+    track/TrackSelectionController.cpp
+    track/TrackListAdapter.cpp
+    track/TrackListModel.cpp
+    track/TrackPresentation.cpp
+    track/TrackRowObject.cpp
+    track/TrackRowCache.cpp
+
+    list/ListSidebarController.cpp
+    list/ListSidebarPanel.cpp
+    list/ListTreeModelBuilder.cpp
+    list/ListRowObject.cpp
+    list/ListTreeItem.cpp
+    list/SmartListDialog.cpp
+    list/QueryExpressionBox.cpp
+
+    playback/PlaybackSequenceController.cpp
+    playback/AobusSoul.cpp
+    playback/AobusSoulWindow.cpp
+    playback/VolumeBar.cpp
+
+    inspector/TrackInspectorPanel.cpp
+    inspector/CoverArtCache.cpp
+    inspector/CoverArtWidget.cpp
+
+    tag/TagEditController.cpp
+    tag/TagPopover.cpp
+    tag/TagEditor.cpp
+
+    library_io/ImportExportCoordinator.cpp
+    library_io/ImportProgressDialog.cpp
+    library_io/PlaylistExporter.cpp
+
+    shell/StatusBar.cpp
+    shell/ThemeBus.cpp
+    shell/ShellLayoutController.cpp
+
+    common/GtkControlExecutor.cpp
+
+    layout/document/LayoutDocument.cpp
+    layout/runtime/LayoutRuntime.cpp
+    layout/runtime/ComponentRegistry.cpp
+    layout/runtime/LayoutHost.cpp
     layout/components/Containers.cpp
     layout/components/PlaybackComponents.cpp
     layout/components/SemanticComponents.cpp
     layout/editor/LayoutEditorDialog.cpp
-
-    service/PlaylistExporter.cpp
 )
 
 target_link_libraries(aobus-gtk-lib PUBLIC app_runtime)
 target_link_libraries(aobus-gtk-lib PRIVATE ao ao_audio PkgGTKMM glibmm-2.68 Boost::headers)
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
-target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ui")
-target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/service")
-target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/layout")
 
 aobus_apply_clang_tidy(aobus-gtk-lib STRICT)
 

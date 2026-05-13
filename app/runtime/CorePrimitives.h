@@ -62,6 +62,20 @@ namespace ao::rt
     std::move_only_function<void()> _unsubscribe;
   };
 
+  class IControlExecutor
+  {
+  public:
+    virtual ~IControlExecutor() = default;
+
+    virtual bool isCurrent() const noexcept = 0;
+
+    // Thread-safe: enqueue and wake the control thread (e.g. for cross-thread callbacks).
+    virtual void dispatch(std::move_only_function<void()> task) = 0;
+
+    // Always deferred: run in the next idle iteration, even from the control thread.
+    virtual void defer(std::move_only_function<void()> task) = 0;
+  };
+
   template<typename... Args>
   class Signal final
   {
@@ -85,16 +99,22 @@ namespace ao::rt
       }
     }
 
+    void post(IControlExecutor& executor, std::decay_t<Args>... args)
+    {
+      executor.defer(
+        [this, ... args = std::move(args)]() mutable
+        {
+          for (auto& h : _handlers)
+          {
+            if (h)
+            {
+              h(args...);
+            }
+          }
+        });
+    }
+
   private:
     std::vector<std::move_only_function<void(Args...)>> _handlers;
-  };
-
-  class IControlExecutor
-  {
-  public:
-    virtual ~IControlExecutor() = default;
-
-    virtual bool isCurrent() const noexcept = 0;
-    virtual void dispatch(std::move_only_function<void()> task) = 0;
   };
 }

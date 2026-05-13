@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <app/linux-gtk/layout/LayoutDocument.h>
-#include <app/linux-gtk/layout/LayoutYaml.h>
+#include <app/linux-gtk/layout/document/LayoutDocument.h>
+#include <app/linux-gtk/layout/document/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <yaml-cpp/yaml.h>

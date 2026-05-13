@@ -134,7 +134,7 @@ namespace ao::gtk::layout
     class BoxComponent final : public ILayoutComponent
     {
     public:
-      BoxComponent(ComponentContext& ctx, LayoutNode const& node)
+      BoxComponent(LayoutDependencies& ctx, LayoutNode const& node)
       {
         auto orientation = Gtk::Orientation::VERTICAL;
 
@@ -169,7 +169,7 @@ namespace ao::gtk::layout
     class SplitComponent final : public ILayoutComponent
     {
     public:
-      SplitComponent(ComponentContext& ctx, LayoutNode const& node)
+      SplitComponent(LayoutDependencies& ctx, LayoutNode const& node)
       {
         if (node.children.size() != 2)
         {
@@ -226,7 +226,7 @@ namespace ao::gtk::layout
     class ScrollComponent final : public ILayoutComponent
     {
     public:
-      ScrollComponent(ComponentContext& ctx, LayoutNode const& node)
+      ScrollComponent(LayoutDependencies& ctx, LayoutNode const& node)
       {
         if (node.children.size() != 1)
         {
@@ -291,7 +291,7 @@ namespace ao::gtk::layout
     class SpacerComponent final : public ILayoutComponent
     {
     public:
-      SpacerComponent(ComponentContext& /*ctx*/, LayoutNode const& /*node*/) {}
+      SpacerComponent(LayoutDependencies& /*ctx*/, LayoutNode const& /*node*/) {}
 
       Gtk::Widget& widget() override { return _box; }
 
@@ -305,7 +305,7 @@ namespace ao::gtk::layout
     class TabsComponent final : public ILayoutComponent
     {
     public:
-      TabsComponent(ComponentContext& ctx, LayoutNode const& node)
+      TabsComponent(LayoutDependencies& ctx, LayoutNode const& node)
         : _box(Gtk::Orientation::VERTICAL)
       {
         if (node.children.empty())
@@ -355,27 +355,27 @@ namespace ao::gtk::layout
       std::vector<std::unique_ptr<ILayoutComponent>> _children;
     };
 
-    std::unique_ptr<ILayoutComponent> createBox(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createBox(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<BoxComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createSplit(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createSplit(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<SplitComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createScroll(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createScroll(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<ScrollComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createSpacer(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createSpacer(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<SpacerComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createTabs(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createTabs(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<TabsComponent>(ctx, node);
     }
@@ -888,7 +888,7 @@ namespace ao::gtk::layout
     class AbsoluteCanvasComponent final : public ILayoutComponent
     {
     public:
-      AbsoluteCanvasComponent(ComponentContext& ctx, LayoutNode const& node)
+      AbsoluteCanvasComponent(LayoutDependencies& ctx, LayoutNode const& node)
         : _canvas(ctx.editMode,
                   ctx.onNodeMoved,
                   node.getProp<bool>("snapToGrid", true),
@@ -919,7 +919,7 @@ namespace ao::gtk::layout
       std::vector<std::unique_ptr<ILayoutComponent>> _children;
     };
 
-    std::unique_ptr<ILayoutComponent> createAbsoluteCanvas(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createAbsoluteCanvas(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<AbsoluteCanvasComponent>(ctx, node);
     }

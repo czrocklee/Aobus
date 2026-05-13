@@ -37,13 +37,11 @@ namespace ao::rt
       , musicLibrary{std::move(libraryRoot)}
       , mutationService{*this->executor, musicLibrary}
       , sources{musicLibrary, mutationService}
-      , viewService{musicLibrary, sources}
+      , viewService{*this->executor, musicLibrary, sources}
       , playbackService{*this->executor, viewService, musicLibrary}
       , notificationService{}
       , workspaceService{viewService, playbackService, mutationService, musicLibrary, std::move(configStore)}
     {
-      viewService.setWorkspaceService(workspaceService);
-      viewService.setLibraryMutationService(mutationService);
     }
   };
 
