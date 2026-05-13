@@ -9,8 +9,8 @@
 
 namespace ao
 {
-  using TrackId = utility::TaggedInteger<std::uint32_t, struct TrackIdTag>;
-  using ListId = utility::TaggedInteger<std::uint32_t, struct ListIdTag>;
-  using ResourceId = utility::TaggedInteger<std::uint32_t, struct ResourceIdTag>;
-  using DictionaryId = utility::TaggedInteger<std::uint32_t, struct DictionaryIdTag>;
+  using TrackId = ao::utility::TaggedInteger<std::uint32_t, struct TrackIdTag>;
+  using ListId = ao::utility::TaggedInteger<std::uint32_t, struct ListIdTag>;
+  using ResourceId = ao::utility::TaggedInteger<std::uint32_t, struct ResourceIdTag>;
+  using DictionaryId = ao::utility::TaggedInteger<std::uint32_t, struct DictionaryIdTag>;
 } // namespace ao

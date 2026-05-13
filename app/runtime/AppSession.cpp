@@ -99,13 +99,13 @@ namespace ao::rt
     _impl->sources.reloadAllTracks();
   }
 
-  ao::TrackId AppSession::playSelectionInFocusedView()
+  TrackId AppSession::playSelectionInFocusedView()
   {
     auto const focus = _impl->workspaceService.layoutState();
 
     if (focus.activeViewId == ViewId{})
     {
-      return ao::TrackId{};
+      return TrackId{};
     }
 
     return _impl->playbackService.playSelectionInView(focus.activeViewId);

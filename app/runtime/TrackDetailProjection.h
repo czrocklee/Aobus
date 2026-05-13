@@ -44,7 +44,7 @@ namespace ao::rt
 
   private:
     void onSelectionChanged();
-    TrackDetailSnapshot buildSnapshot(std::span<ao::TrackId const> ids) const;
+    TrackDetailSnapshot buildSnapshot(std::span<TrackId const> ids) const;
     void publishSnapshot();
 
     struct Impl;

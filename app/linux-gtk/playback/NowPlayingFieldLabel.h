@@ -6,15 +6,18 @@
 #include "runtime/PlaybackService.h"
 #include <gtkmm/label.h>
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
-  /**
-   * @brief A composite widget displaying the current track's artist.
-   */
-  class NowPlayingArtistLabel final
+  class NowPlayingFieldLabel final
   {
   public:
-    explicit NowPlayingArtistLabel(ao::rt::PlaybackService& playbackService);
+    enum class Field
+    {
+      Title,
+      Artist,
+    };
+
+    NowPlayingFieldLabel(ao::rt::PlaybackService& playbackService, Field field);
 
     Gtk::Widget& widget() { return _label; }
 
@@ -22,9 +25,10 @@ namespace ao::gtk::playback
     void refresh();
 
     ao::rt::PlaybackService& _playbackService;
+    Field _field;
     Gtk::Label _label;
 
     ao::rt::Subscription _nowPlayingSub;
     ao::rt::Subscription _idleSub;
   };
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

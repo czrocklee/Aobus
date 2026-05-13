@@ -37,15 +37,15 @@ namespace ao::gtk
   public:
     SmartListDialog(Gtk::Window& parent,
                     ao::rt::AppSession& session,
-                    ao::ListId parentListId,
+                    ListId parentListId,
                     TrackRowCache const& provider);
     ~SmartListDialog() override;
 
     // Populate dialog fields from an existing list for editing
-    void populate(ao::ListId id, ao::library::ListView const& view);
+    void populate(ListId id, ao::library::ListView const& view);
 
     // Returns the ListId for update (0 if creating a new list)
-    ao::ListId editListId() const;
+    ListId editListId() const;
 
     // Returns a ListDraft populated from the dialog fields
     ao::model::ListDraft draft() const;
@@ -78,7 +78,7 @@ namespace ao::gtk
 
     // Preview infrastructure
     ao::rt::AppSession& _session;
-    ao::ListId _parentListId;
+    ListId _parentListId;
     TrackRowCache const& _trackRowCache;
     std::unique_ptr<ao::rt::SmartListSource> _previewFilteredList;
     std::unique_ptr<ao::rt::SmartListEvaluator> _previewEngine;
@@ -86,6 +86,6 @@ namespace ao::gtk
     bool _expressionValid = true;
 
     // Edit mode state
-    std::optional<ao::ListId> _optEditListId;
+    std::optional<ListId> _optEditListId;
   };
 } // namespace ao::gtk

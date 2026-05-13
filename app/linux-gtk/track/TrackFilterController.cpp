@@ -18,14 +18,14 @@ namespace ao::gtk
     constexpr auto kFilterDebounceMs = 200;
   }
 
-  TrackFilterController::TrackFilterController(ao::rt::AppSession& session,
+  TrackFilterController::TrackFilterController(ao::rt::ViewService& viewService,
                                                ao::rt::ViewId viewId,
                                                Gtk::Entry& filterEntry)
-    : _session{session}, _viewId{viewId}, _filterEntry{filterEntry}
+    : _viewService{viewService}, _viewId{viewId}, _filterEntry{filterEntry}
   {
     _filterTextConnection =
       _filterEntry.signal_changed().connect(sigc::mem_fun(*this, &TrackFilterController::onFilterTextChanged));
-
+ 
     _filterIconConnection = _filterEntry.signal_icon_press().connect(
       [this](Gtk::Entry::IconPosition iconPosition)
       {
@@ -33,13 +33,13 @@ namespace ao::gtk
         {
           return;
         }
-
+ 
         if (!_filterExpression.empty() && _createSmartListSignal)
         {
           _createSmartListSignal->emit(_filterExpression);
         }
       });
-
+ 
     auto const dropTarget = Gtk::DropTarget::create(Glib::Value<std::string>::value_type(), Gdk::DragAction::COPY);
     dropTarget->signal_drop().connect(
       [this](Glib::ValueBase const& value, double, double)
@@ -51,17 +51,17 @@ namespace ao::gtk
           setFilterExpression(val.get());
           return true;
         }
-
+ 
         return false;
       },
       false);
-
+ 
     _filterEntry.add_controller(dropTarget);
-
+ 
     if (_viewId != ao::rt::ViewId{})
     {
       _filterStatusSub =
-        _session.views().onFilterStatusChanged(sigc::mem_fun(*this, &TrackFilterController::onFilterStatusChanged));
+        _viewService.onFilterStatusChanged(sigc::mem_fun(*this, &TrackFilterController::onFilterStatusChanged));
     }
   }
 
@@ -111,11 +111,11 @@ namespace ao::gtk
 
     if (resolved.mode == TrackFilterMode::None)
     {
-      _session.views().setFilter(_viewId, "");
+      _viewService.setFilter(_viewId, "");
     }
     else
     {
-      _session.views().setFilter(_viewId, resolved.expression);
+      _viewService.setFilter(_viewId, resolved.expression);
     }
 
     updateFilterUi();

@@ -20,12 +20,12 @@ namespace ao::cli
   {
     using namespace ao;
 
-    std::vector<std::pair<ao::TrackId, ao::library::TrackView>> collectTracks(ao::library::MusicLibrary& ml,
-                                                                              std::string const& filter)
+    std::vector<std::pair<TrackId, ao::library::TrackView>> collectTracks(ao::library::MusicLibrary& ml,
+                                                                          std::string const& filter)
     {
       auto const txn = ml.readTransaction();
       auto const reader = ml.tracks().reader(txn);
-      auto matches = std::vector<std::pair<ao::TrackId, ao::library::TrackView>>{};
+      auto matches = std::vector<std::pair<TrackId, ao::library::TrackView>>{};
 
       if (filter.empty())
       {
@@ -53,7 +53,7 @@ namespace ao::cli
       return matches;
     }
 
-    void formatJson(std::vector<std::pair<ao::TrackId, ao::library::TrackView>> const& matches,
+    void formatJson(std::vector<std::pair<TrackId, ao::library::TrackView>> const& matches,
                     std::size_t offset,
                     std::size_t limit,
                     ao::library::MusicLibrary& ml,
@@ -96,7 +96,7 @@ namespace ao::cli
       os << "]\n";
     }
 
-    void formatPlain(std::vector<std::pair<ao::TrackId, ao::library::TrackView>> const& matches,
+    void formatPlain(std::vector<std::pair<TrackId, ao::library::TrackView>> const& matches,
                      std::size_t offset,
                      std::size_t limit,
                      std::ostream& os)
@@ -158,14 +158,14 @@ namespace ao::cli
         .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
 
       auto const [preparedHot, preparedCold] = builder.prepare(txn, ml.dictionary(), ml.resources());
-      auto const [id, trackView] = writer.createHotCold(
-        preparedHot.size(),
-        preparedCold.size(),
-        [&preparedHot, &preparedCold](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-        {
-          preparedHot.writeTo(hot);
-          preparedCold.writeTo(cold);
-        });
+      auto const [id, trackView] =
+        writer.createHotCold(preparedHot.size(),
+                             preparedCold.size(),
+                             [&preparedHot, &preparedCold](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                             {
+                               preparedHot.writeTo(hot);
+                               preparedCold.writeTo(cold);
+                             });
       txn.commit();
 
       os << "add track: " << id << " " << trackView.metadata().title() << '\n';
@@ -203,7 +203,7 @@ namespace ao::cli
       {
         auto txn = ml.writeTransaction();
         auto writer = ml.tracks().writer(txn);
-        auto const trackId = ao::TrackId{id->as<std::uint32_t>()};
+        auto const trackId = TrackId{id->as<std::uint32_t>()};
 
         if (writer.remove(trackId))
         {

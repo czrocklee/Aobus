@@ -184,8 +184,8 @@ namespace ao::gtk
     dialog->set_modal(true);
 
     auto* const contentArea = dialog->get_content_area();
-    auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, Layout::kMarginMedium);
-    box->set_margin(Layout::kMarginMedium);
+    auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, layout::kMarginMedium);
+    box->set_margin(layout::kMarginMedium);
 
     auto* const label = Gtk::make_managed<Gtk::Label>("Choose what to include in the backup:");
     label->set_halign(Gtk::Align::START);

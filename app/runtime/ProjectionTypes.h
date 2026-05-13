@@ -74,8 +74,8 @@ namespace ao::rt
     virtual std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const = 0;
 
     virtual std::size_t size() const noexcept = 0;
-    virtual ao::TrackId trackIdAt(std::size_t index) const = 0;
-    virtual std::optional<std::size_t> indexOf(ao::TrackId trackId) const noexcept = 0;
+    virtual TrackId trackIdAt(std::size_t index) const = 0;
+    virtual std::optional<std::size_t> indexOf(TrackId trackId) const noexcept = 0;
 
     virtual Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) = 0;
   };
@@ -123,16 +123,16 @@ namespace ao::rt
   struct TrackDetailSnapshot final
   {
     SelectionKind selectionKind = SelectionKind::None;
-    std::vector<ao::TrackId> trackIds{};
+    std::vector<TrackId> trackIds{};
     std::uint64_t revision = 0;
 
     AggregateValue<std::string> title{};
     AggregateValue<std::string> artist{};
     AggregateValue<std::string> album{};
 
-    ao::ResourceId singleCoverArtId{};
+    ResourceId singleCoverArtId{};
     AudioPropertySnapshot audio{};
-    std::vector<ao::DictionaryId> commonTagIds{};
+    std::vector<DictionaryId> commonTagIds{};
   };
 
   struct FocusedViewTarget final
@@ -143,7 +143,7 @@ namespace ao::rt
   };
   struct ExplicitSelectionTarget final
   {
-    std::vector<ao::TrackId> trackIds{};
+    std::vector<TrackId> trackIds{};
   };
 
   using DetailTarget = std::variant<FocusedViewTarget, ExplicitViewTarget, ExplicitSelectionTarget>;

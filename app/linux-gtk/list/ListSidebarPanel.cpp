@@ -47,7 +47,7 @@ namespace ao::gtk
     _listView.set_model(_listSelectionModel);
   }
 
-  void ListSidebarPanel::selectList(ao::ListId listId)
+  void ListSidebarPanel::selectList(ListId listId)
   {
     if (!_treeListModel)
     {
@@ -84,7 +84,7 @@ namespace ao::gtk
     }
   }
 
-  bool ListSidebarPanel::listHasChildren(ao::ListId listId) const
+  bool ListSidebarPanel::listHasChildren(ListId listId) const
   {
     if (auto it = _nodesById.find(listId); it != _nodesById.end())
     {
@@ -94,32 +94,32 @@ namespace ao::gtk
     return false;
   }
 
-  ao::ListId ListSidebarPanel::selectedListId() const
+  ListId ListSidebarPanel::selectedListId() const
   {
     if (_listSelectionModel == nullptr)
     {
-      return ao::ListId{0};
+      return ListId{0};
     }
 
     auto const selectedPosition = _listSelectionModel->get_selected();
 
     if (selectedPosition == GTK_INVALID_LIST_POSITION)
     {
-      return ao::ListId{0};
+      return ListId{0};
     }
 
     auto const treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(_listSelectionModel->get_selected_item());
 
     if (treeListRow == nullptr)
     {
-      return ao::ListId{0};
+      return ListId{0};
     }
 
     auto const node = std::dynamic_pointer_cast<ListTreeItem>(treeListRow->get_item());
 
     if (node == nullptr)
     {
-      return ao::ListId{0};
+      return ListId{0};
     }
 
     return node->getListId();
@@ -136,10 +136,10 @@ namespace ao::gtk
     auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
     rowBox->set_halign(Gtk::Align::FILL);
     rowBox->set_hexpand(true);
-    rowBox->set_margin_start(Layout::kMarginMedium);
-    rowBox->set_margin_end(Layout::kMarginMedium);
-    rowBox->set_margin_top(Layout::kMarginSmall);
-    rowBox->set_margin_bottom(Layout::kMarginSmall);
+    rowBox->set_margin_start(layout::kMarginMedium);
+    rowBox->set_margin_end(layout::kMarginMedium);
+    rowBox->set_margin_top(layout::kMarginSmall);
+    rowBox->set_margin_bottom(layout::kMarginSmall);
 
     auto* expander = Gtk::make_managed<Gtk::TreeExpander>();
     rowBox->append(*expander);
@@ -151,7 +151,7 @@ namespace ao::gtk
     auto* filterLabel = Gtk::make_managed<Gtk::Label>("");
     filterLabel->set_halign(Gtk::Align::START);
     filterLabel->add_css_class("dim-label");
-    filterLabel->set_margin_start(Layout::kMarginMedium);
+    filterLabel->set_margin_start(layout::kMarginMedium);
     filterLabel->set_ellipsize(Pango::EllipsizeMode::END);
     filterLabel->set_hexpand(true);
     rowBox->append(*filterLabel);

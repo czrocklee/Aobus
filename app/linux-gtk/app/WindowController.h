@@ -3,11 +3,11 @@
 
 #pragma once
 
+#include "app/UIState.h"
 #include "inspector/CoverArtCache.h"
 #include "library_io/ImportExportCoordinator.h"
 #include "list/ListSidebarController.h"
 #include "playback/PlaybackSequenceController.h"
-#include "shell/UIState.h"
 #include "tag/TagEditController.h"
 #include "track/TrackPageManager.h"
 #include "track/TrackPresentation.h"

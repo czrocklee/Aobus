@@ -101,7 +101,7 @@ namespace ao::gtk
     _columnsButton.set_label("Columns");
     _columnsButton.set_popover(_columnsPopover);
 
-    _columnsPopoverBox.set_spacing(Layout::kSpacingSmall);
+    _columnsPopoverBox.set_spacing(layout::kSpacingSmall);
 
     _columnsPopoverTitle.set_markup("<span size='small' weight='bold'>VISIBLE COLUMNS</span>");
     _columnsPopoverTitle.set_halign(Gtk::Align::START);

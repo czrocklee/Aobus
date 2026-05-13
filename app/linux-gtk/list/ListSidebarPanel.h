@@ -30,8 +30,8 @@ namespace ao::gtk
   public:
     struct Callbacks final
     {
-      std::function<void(ao::ListId)> onSelectionChanged;
-      std::function<void(ao::ListId, Gdk::Rectangle const&)> onContextMenuRequested;
+      std::function<void(ListId)> onSelectionChanged;
+      std::function<void(ListId, Gdk::Rectangle const&)> onContextMenuRequested;
     };
 
     ListSidebarPanel(Callbacks callbacks);
@@ -40,9 +40,9 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _listScrolledWindow; }
 
     void rebuildTree(ao::rt::AppSession& session, ao::lmdb::ReadTransaction const& txn);
-    void selectList(ao::ListId listId);
-    bool listHasChildren(ao::ListId listId) const;
-    ao::ListId selectedListId() const;
+    void selectList(ListId listId);
+    bool listHasChildren(ListId listId) const;
+    ListId selectedListId() const;
 
     void showContextMenu(Gdk::Rectangle const& rect);
 
@@ -62,6 +62,6 @@ namespace ao::gtk
     Glib::RefPtr<Gio::ListStore<ListTreeItem>> _listTreeStore;
     Glib::RefPtr<Gtk::TreeListModel> _treeListModel;
     Glib::RefPtr<Gtk::SingleSelection> _listSelectionModel;
-    std::map<ao::ListId, Glib::RefPtr<ListTreeItem>> _nodesById;
+    std::map<ListId, Glib::RefPtr<ListTreeItem>> _nodesById;
   };
 } // namespace ao::gtk

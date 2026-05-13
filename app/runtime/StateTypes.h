@@ -63,8 +63,8 @@ namespace ao::rt
   struct PlaybackState final
   {
     ao::audio::Transport transport = ao::audio::Transport::Idle;
-    ao::TrackId trackId{};
-    ao::ListId sourceListId{};
+    TrackId trackId{};
+    ListId sourceListId{};
     std::string trackTitle{};
     std::string trackArtist{};
     std::uint32_t positionMs = 0;
@@ -161,21 +161,21 @@ namespace ao::rt
   {
     ViewId id{};
     ViewLifecycleState lifecycle = ViewLifecycleState::Detached;
-    ao::ListId listId{};
+    ListId listId{};
     std::string filterExpression{};
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
-    std::vector<ao::TrackId> selection{};
+    std::vector<TrackId> selection{};
     std::uint64_t revision = 0;
   };
 
   struct TrackListViewConfig final
   {
-    ao::ListId listId{};
+    ListId listId{};
     std::string filterExpression{};
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
-    std::vector<ao::TrackId> selection{};
+    std::vector<TrackId> selection{};
   };
 
   struct ViewRecord final
@@ -202,12 +202,12 @@ namespace ao::rt
 
   struct UpdateTrackMetadataReply final
   {
-    std::vector<ao::TrackId> mutatedIds;
+    std::vector<TrackId> mutatedIds;
   };
 
   struct EditTrackTagsReply final
   {
-    std::vector<ao::TrackId> mutatedIds;
+    std::vector<TrackId> mutatedIds;
   };
 
   struct ImportFilesReply final

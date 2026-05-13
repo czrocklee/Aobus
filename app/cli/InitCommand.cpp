@@ -15,7 +15,7 @@ namespace ao::cli
   {
     void scanAndImport(ao::library::MusicLibrary& ml, std::ostream& os)
     {
-      utility::Finder finder{".", {".flac", ".m4a", ".mp3"}};
+      ao::utility::Finder finder{".", {".flac", ".m4a", ".mp3"}};
       auto txn = ml.writeTransaction();
       auto writer = ml.tracks().writer(txn);
       auto& dict = ml.dictionary();
@@ -43,7 +43,7 @@ namespace ao::cli
           auto const [id, trackView] = writer.createHotCold(
             preparedHot.size(),
             preparedCold.size(),
-            [&preparedHot, &preparedCold](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+            [&preparedHot, &preparedCold](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
             {
               preparedHot.writeTo(hot);
               preparedCold.writeTo(cold);

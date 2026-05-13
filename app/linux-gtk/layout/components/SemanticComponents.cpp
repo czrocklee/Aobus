@@ -30,9 +30,9 @@ namespace ao::gtk::layout
 {
   namespace
   {
-    ao::ListId allTracksListId()
+    ListId allTracksListId()
     {
-      return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
+      return ListId{std::numeric_limits<std::uint32_t>::max()};
     }
 
     /**
@@ -68,7 +68,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      ao::gtk::ListSidebarController* _controller = nullptr;
+      ListSidebarController* _controller = nullptr;
       Gtk::Label* _error = nullptr;
     };
 
@@ -134,7 +134,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        _widget = std::make_unique<ao::gtk::CoverArtWidget>(ctx.session, *ctx.inspector.coverArtCache);
+        _widget = std::make_unique<CoverArtWidget>(ctx.session.musicLibrary(), *ctx.inspector.coverArtCache);
         _widget->bindToDetailProjection(ctx.session.views().detailProjection(
           ao::rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
       }
@@ -145,7 +145,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      std::unique_ptr<ao::gtk::CoverArtWidget> _widget;
+      std::unique_ptr<CoverArtWidget> _widget;
       Gtk::Label* _error = nullptr;
     };
 
@@ -163,14 +163,15 @@ namespace ao::gtk::layout
           return;
         }
 
-        _widget = std::make_unique<ao::gtk::TrackInspectorPanel>(ctx.session, *ctx.inspector.coverArtCache);
+        _widget = std::make_unique<TrackInspectorPanel>(
+          ctx.session.musicLibrary(), ctx.session.mutation(), ctx.session.sources(), *ctx.inspector.coverArtCache);
         _widget->bindToDetailProjection(ctx.session.views().detailProjection(
           ao::rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
 
         if (ctx.tag.editController != nullptr)
         {
           _widget->signalTagEditRequested().connect(
-            [ctx](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
+            [ctx](std::vector<TrackId> const& ids, Gtk::Widget* relativeTo)
             {
               if (relativeTo != nullptr)
               {
@@ -190,7 +191,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      std::unique_ptr<ao::gtk::TrackInspectorPanel> _widget;
+      std::unique_ptr<TrackInspectorPanel> _widget;
       Gtk::Label* _error = nullptr;
     };
 

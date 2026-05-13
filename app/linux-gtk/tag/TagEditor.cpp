@@ -27,7 +27,7 @@ namespace ao::gtk
 
   TagEditor::~TagEditor() = default;
 
-  void TagEditor::setup(ao::library::MusicLibrary& library, std::vector<ao::TrackId> selectedTrackIds)
+  void TagEditor::setup(ao::library::MusicLibrary& library, std::vector<TrackId> selectedTrackIds)
   {
     _musicLibrary = &library;
     _selectedTrackIds = std::move(selectedTrackIds);

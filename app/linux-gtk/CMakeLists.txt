@@ -1,9 +1,16 @@
 # aobus-gtk-lib: GTK implementation for Linux
 add_library(aobus-gtk-lib STATIC
+    app/AobusSoul.cpp
+    app/GtkControlExecutor.cpp
     app/MainWindow.cpp
     app/MenuController.cpp
+    app/ShellLayoutController.cpp
+    app/ThemeBus.cpp
     app/WindowController.cpp
 
+    track/LibraryTrackCountLabel.cpp
+    track/SelectionInfoLabel.cpp
+    track/StatusNotificationLabel.cpp
     track/TrackPageManager.cpp
     track/TrackViewPage.cpp
     track/TrackColumnController.cpp
@@ -24,19 +31,17 @@ add_library(aobus-gtk-lib STATIC
     list/SmartListDialog.cpp
     list/QueryExpressionBox.cpp
 
+    playback/AobusSoulBinding.cpp
+    playback/NowPlayingFieldLabel.cpp
+    playback/NowPlayingStatusLabel.cpp
+    playback/PlaybackDetailsWidget.cpp
     playback/PlaybackSequenceController.cpp
     playback/PlaybackPositionInterpolator.cpp
-    playback/PlayPauseButton.cpp
-    playback/StopButton.cpp
-    playback/PlayButton.cpp
-    playback/PauseButton.cpp
+    playback/TransportButton.cpp
     playback/SeekControl.cpp
     playback/TimeLabel.cpp
-    playback/NowPlayingTitleLabel.cpp
-    playback/NowPlayingArtistLabel.cpp
     playback/OutputSelector.cpp
     playback/VolumeControl.cpp
-    playback/AobusSoul.cpp
     playback/AobusSoulWindow.cpp
     playback/VolumeBar.cpp
 
@@ -50,18 +55,8 @@ add_library(aobus-gtk-lib STATIC
 
     library_io/ImportExportCoordinator.cpp
     library_io/ImportProgressDialog.cpp
+    library_io/ImportProgressIndicator.cpp
     library_io/PlaylistExporter.cpp
-
-    shell/PlaybackDetailsWidget.cpp
-    shell/NowPlayingStatusLabel.cpp
-    shell/ImportProgressIndicator.cpp
-    shell/SelectionInfoLabel.cpp
-    shell/StatusNotificationLabel.cpp
-    shell/LibraryTrackCountLabel.cpp
-    shell/ThemeBus.cpp
-    shell/ShellLayoutController.cpp
-
-    common/GtkControlExecutor.cpp
 
     layout/document/LayoutDocument.cpp
     layout/runtime/LayoutRuntime.cpp

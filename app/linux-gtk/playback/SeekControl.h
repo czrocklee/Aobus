@@ -7,7 +7,7 @@
 #include "runtime/PlaybackService.h"
 #include <gtkmm/scale.h>
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
   /**
    * @brief A composite widget providing a seek slider for playback.
@@ -34,4 +34,4 @@ namespace ao::gtk::playback
     ao::rt::Subscription _stoppedSub;
     ao::rt::Subscription _preparingSub;
   };
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

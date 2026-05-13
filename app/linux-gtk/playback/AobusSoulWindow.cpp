@@ -13,6 +13,7 @@
 #include <gtkmm/shortcutcontroller.h>
 #include <gtkmm/shortcuttrigger.h>
 #include <gtkmm/stylecontext.h>
+#include <runtime/AppSession.h>
 
 namespace ao::gtk
 {
@@ -99,30 +100,30 @@ namespace ao::gtk
 
   AobusSoulWindow::~AobusSoulWindow()
   {
-    _bigSoul.unbind();
+    _soulBinding.reset();
   }
 
-  void AobusSoulWindow::bind(ao::rt::AppSession& session)
+  void AobusSoulWindow::bind(ao::rt::PlaybackService& playback)
   {
-    _session = &session;
+    _playback = &playback;
     if (get_visible())
     {
-      _bigSoul.bind(*_session);
+      _soulBinding = std::make_unique<AobusSoulBinding>(_bigSoul, *_playback);
     }
   }
 
   void AobusSoulWindow::on_show()
   {
     Gtk::Window::on_show();
-    if (_session != nullptr)
+    if (_playback != nullptr)
     {
-      _bigSoul.bind(*_session);
+      _soulBinding = std::make_unique<AobusSoulBinding>(_bigSoul, *_playback);
     }
   }
 
   void AobusSoulWindow::on_hide()
   {
-    _bigSoul.unbind();
+    _soulBinding.reset();
     Gtk::Window::on_hide();
   }
 

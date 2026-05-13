@@ -3,15 +3,18 @@
 
 #pragma once
 
-#include "playback/AobusSoul.h"
+#include "app/AobusSoul.h"
+#include "playback/AobusSoulBinding.h"
 #include <gtkmm/window.h>
+#include <memory>
+
+namespace ao::rt
+{
+  class PlaybackService;
+}
 
 namespace ao::gtk
 {
-  /**
-   * @class AobusSoulWindow
-   * @brief A fullscreen overlay that displays a giant Aobus Soul.
-   */
   class AobusSoulWindow final : public Gtk::Window
   {
   public:
@@ -23,11 +26,7 @@ namespace ao::gtk
     AobusSoulWindow(AobusSoulWindow&&) = delete;
     AobusSoulWindow& operator=(AobusSoulWindow&&) = delete;
 
-    /**
-     * @brief Bind the window to an AppSession.
-     * @param session The AppSession to bind to.
-     */
-    void bind(ao::rt::AppSession& session);
+    void bind(ao::rt::PlaybackService& playback);
 
   protected:
     void on_show() override;
@@ -36,7 +35,8 @@ namespace ao::gtk
   private:
     void ensureCss();
 
-    ao::rt::AppSession* _session = nullptr;
+    ao::rt::PlaybackService* _playback = nullptr;
     AobusSoul _bigSoul{};
+    std::unique_ptr<AobusSoulBinding> _soulBinding;
   };
 } // namespace ao::gtk

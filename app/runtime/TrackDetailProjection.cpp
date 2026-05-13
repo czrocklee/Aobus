@@ -136,7 +136,7 @@ namespace ao::rt
       });
 
     _impl->tracksMutatedSub = _impl->mutation.onTracksMutated(
-      [this](std::vector<ao::TrackId> const& trackIds)
+      [this](std::vector<TrackId> const& trackIds)
       {
         if (_impl->cachedSnapshot.trackIds.empty())
         {
@@ -190,7 +190,7 @@ namespace ao::rt
     }
   }
 
-  TrackDetailSnapshot TrackDetailProjection::buildSnapshot(std::span<ao::TrackId const> ids) const
+  TrackDetailSnapshot TrackDetailProjection::buildSnapshot(std::span<TrackId const> ids) const
   {
     auto snap = TrackDetailSnapshot{
       .selectionKind = selectionKindFromCount(ids.size()),
@@ -232,16 +232,16 @@ namespace ao::rt
       titles.push_back(std::string{optView->metadata().title()});
 
       auto const artistId = optView->metadata().artistId();
-      artists.push_back(artistId != ao::DictionaryId{0} ? std::string{_impl->library.dictionary().get(artistId)}
+      artists.push_back(artistId != DictionaryId{0} ? std::string{_impl->library.dictionary().get(artistId)}
                                                         : std::string{});
 
       auto const albumId = optView->metadata().albumId();
-      albums.push_back(albumId != ao::DictionaryId{0} ? std::string{_impl->library.dictionary().get(albumId)}
+      albums.push_back(albumId != DictionaryId{0} ? std::string{_impl->library.dictionary().get(albumId)}
                                                       : std::string{});
 
       if (ids.size() == 1)
       {
-        snap.singleCoverArtId = ao::ResourceId{optView->metadata().coverArtId()};
+        snap.singleCoverArtId = ResourceId{optView->metadata().coverArtId()};
         for (auto const tagId : optView->tags())
         {
           snap.commonTagIds.push_back(tagId);

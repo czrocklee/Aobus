@@ -7,7 +7,7 @@
 #include <gtkmm/adjustment.h>
 #include <gtkmm/gestureclick.h>
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
   SeekControl::SeekControl(ao::rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
@@ -107,4 +107,4 @@ namespace ao::gtk::playback
     _scale.set_sensitive(false);
     _interpolator.reset();
   }
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

@@ -38,7 +38,7 @@ namespace ao::rt
     return _allTracks;
   }
 
-  ao::rt::TrackSource& ListSourceStore::sourceFor(ao::ListId const listId)
+  ao::rt::TrackSource& ListSourceStore::sourceFor(ListId const listId)
   {
     return getOrBuildSource(listId);
   }
@@ -49,9 +49,9 @@ namespace ao::rt
     _allTracks.reloadFromStore(txn);
   }
 
-  void ListSourceStore::refreshList(ao::ListId const listId)
+  void ListSourceStore::refreshList(ListId const listId)
   {
-    if (listId == ao::ListId{})
+    if (listId == ListId{})
     {
       return;
     }
@@ -83,9 +83,9 @@ namespace ao::rt
     }
   }
 
-  void ListSourceStore::eraseList(ao::ListId const listId)
+  void ListSourceStore::eraseList(ListId const listId)
   {
-    if (listId == ao::ListId{})
+    if (listId == ListId{})
     {
       return;
     }
@@ -99,7 +99,7 @@ namespace ao::rt
     // this might be sufficient for now.
 
     // Find all children recursively that depend on this list and erase them too
-    auto toErase = std::vector<ao::ListId>{};
+    auto toErase = std::vector<ListId>{};
     toErase.push_back(listId);
 
     bool foundNew = true;
@@ -153,9 +153,9 @@ namespace ao::rt
     }
   }
 
-  TrackSource& ListSourceStore::getOrBuildSource(ao::ListId const listId)
+  TrackSource& ListSourceStore::getOrBuildSource(ListId const listId)
   {
-    if (listId == ao::ListId{})
+    if (listId == ListId{})
     {
       return _allTracks;
     }

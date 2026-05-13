@@ -273,7 +273,7 @@ namespace ao::rt
       _impl->executor, ViewService::GroupingChanged{.viewId = viewId, .groupBy = groupBy});
   }
 
-  void ViewService::setSelection(ViewId viewId, std::vector<ao::TrackId> const& selection)
+  void ViewService::setSelection(ViewId viewId, std::vector<TrackId> const& selection)
   {
     auto it = _impl->views.find(viewId);
     if (it == _impl->views.end())
@@ -287,7 +287,7 @@ namespace ao::rt
     _impl->selectionChangedSignal.emit(ViewService::SelectionChanged{.viewId = viewId, .selection = selection});
   }
 
-  void ViewService::openListInView(ViewId viewId, ao::ListId listId)
+  void ViewService::openListInView(ViewId viewId, ListId listId)
   {
     auto it = _impl->views.find(viewId);
     if (it == _impl->views.end())

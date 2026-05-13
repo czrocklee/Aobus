@@ -76,8 +76,15 @@ namespace ao::gtk
     }
   }
 
-  TrackInspectorPanel::TrackInspectorPanel(ao::rt::AppSession& session, CoverArtCache& coverArtCache)
-    : Gtk::Box{Gtk::Orientation::VERTICAL, 0}, _session{session}, _coverArtCache{coverArtCache}
+  TrackInspectorPanel::TrackInspectorPanel(ao::library::MusicLibrary& library,
+                                           ao::rt::LibraryMutationService& mutation,
+                                           ao::rt::ListSourceStore& sources,
+                                           CoverArtCache& coverArtCache)
+    : Gtk::Box{Gtk::Orientation::VERTICAL, 0}
+    , _library{library}
+    , _mutation{mutation}
+    , _sources{sources}
+    , _coverArtCache{coverArtCache}
   {
     setupUi();
   }
@@ -127,11 +134,11 @@ namespace ao::gtk
       {
         auto const ids = _currentTrackIds;
 
-        auto const result = _session.mutation().editTags(ids, toAdd, toRemove);
+        auto const result = _mutation.editTags(ids, toAdd, toRemove);
 
         if (result)
         {
-          _session.sources().allTracks().notifyUpdated(ids);
+          _sources.allTracks().notifyUpdated(ids);
         }
       });
   }
@@ -226,8 +233,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const result =
-      _session.mutation().updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optTitle = newValue});
+    auto const result = _mutation.updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optTitle = newValue});
 
     if (!result)
     {
@@ -255,8 +261,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const result =
-      _session.mutation().updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optArtist = newValue});
+    auto const result = _mutation.updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optArtist = newValue});
 
     if (!result)
     {
@@ -283,8 +288,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const result =
-      _session.mutation().updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optAlbum = newValue});
+    auto const result = _mutation.updateMetadata(_currentTrackIds, ao::rt::MetadataPatch{.optAlbum = newValue});
 
     if (!result)
     {
@@ -333,13 +337,13 @@ namespace ao::gtk
     updateAudioMetadata(snap);
 
     // Tags
-    _tagEditor.setup(_session.musicLibrary(), std::vector<ao::TrackId>{_currentTrackIds});
+    _tagEditor.setup(_library, std::vector<TrackId>{_currentTrackIds});
     _tagEditor.set_visible(true);
   }
 
   void TrackInspectorPanel::updateCoverArt(ao::rt::TrackDetailSnapshot const& snap)
   {
-    if (snap.singleCoverArtId == ao::ResourceId{0})
+    if (snap.singleCoverArtId == ResourceId{0})
     {
       _coverImage.set_visible(false);
       _noCoverLabel.set_visible(true);
@@ -364,10 +368,10 @@ namespace ao::gtk
     }
   }
 
-  Glib::RefPtr<Gdk::Pixbuf> TrackInspectorPanel::loadCoverArtFromLibrary(ao::ResourceId resourceId)
+  Glib::RefPtr<Gdk::Pixbuf> TrackInspectorPanel::loadCoverArtFromLibrary(ResourceId resourceId)
   {
-    auto const txn = _session.musicLibrary().readTransaction();
-    auto const reader = _session.musicLibrary().resources().reader(txn);
+    auto const txn = _library.readTransaction();
+    auto const reader = _library.resources().reader(txn);
     auto const data = reader.get(static_cast<std::uint32_t>(resourceId.value()));
 
     if (!data)

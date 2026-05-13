@@ -30,7 +30,7 @@ namespace ao::library
      * @param txn Write transaction for loading existing entries (must remain alive)
      * @param db Database name
      */
-    DictionaryStore(lmdb::Database db, lmdb::ReadTransaction const& txn);
+    DictionaryStore(ao::lmdb::Database db, ao::lmdb::ReadTransaction const& txn);
 
     /**
      * Store a string and auto-generate a unique ID.
@@ -38,7 +38,7 @@ namespace ao::library
      * @param value The string to store
      * @return The generated ID, or 0 on failure
      */
-    DictionaryId put(lmdb::WriteTransaction& txn, std::string_view value);
+    DictionaryId put(ao::lmdb::WriteTransaction& txn, std::string_view value);
 
     /**
      * Look up a string by its ID using in-memory index.
@@ -87,7 +87,7 @@ namespace ao::library
     DictionaryId getOrIntern(std::string_view str);
 
   private:
-    lmdb::Database _database;
+    ao::lmdb::Database _database;
 
     // In-memory index: string_view → id (views into _idToStringStorage)
     std::unordered_map<std::string_view, DictionaryId> _stringToId;

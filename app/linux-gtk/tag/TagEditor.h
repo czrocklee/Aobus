@@ -24,7 +24,7 @@ namespace ao::gtk
     TagEditor();
     ~TagEditor() override;
 
-    void setup(ao::library::MusicLibrary& library, std::vector<ao::TrackId> selectedTrackIds);
+    void setup(ao::library::MusicLibrary& library, std::vector<TrackId> selectedTrackIds);
 
     // Signals
     TagsChangedSignal& signalTagsChanged() { return _tagsChanged; }
@@ -42,7 +42,7 @@ namespace ao::gtk
     void setChipStyle(Gtk::ToggleButton& chip, bool isHighlighted);
 
     ao::library::MusicLibrary* _musicLibrary = nullptr;
-    std::vector<ao::TrackId> _selectedTrackIds;
+    std::vector<TrackId> _selectedTrackIds;
 
     Gtk::Entry _searchEntry;
     Gtk::Label _currentLabel;

@@ -25,14 +25,14 @@ namespace ao::gtk
 {
   namespace
   {
-    ao::ListId allTracksListId()
+    ListId allTracksListId()
     {
-      return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
+      return ListId{std::numeric_limits<std::uint32_t>::max()};
     }
 
-    ao::ListId rootParentId()
+    ListId rootParentId()
     {
-      return ao::ListId{0};
+      return ListId{0};
     }
   }
 
@@ -53,7 +53,7 @@ namespace ao::gtk
 
     _nowPlayingSub = _session.playback().onNowPlayingChanged(
       [this](auto const& ev)
-      { setPlayingTrack(ev.trackId != ao::TrackId{} ? std::optional{ev.trackId} : std::nullopt); });
+      { setPlayingTrack(ev.trackId != TrackId{} ? std::optional{ev.trackId} : std::nullopt); });
 
     _focusSub = _session.workspace().onFocusedViewChanged([this](auto) { syncLayout(); });
 
@@ -83,7 +83,7 @@ namespace ao::gtk
     auto viewId = ev.preferredViewId;
 
     // Fallback: If no view ID specified, try to find a view currently displaying the requested list
-    if (viewId == ao::rt::ViewId{} && ev.preferredListId != ao::ListId{})
+    if (viewId == ao::rt::ViewId{} && ev.preferredListId != ListId{})
     {
       for (auto const& [id, ctx] : _trackPages)
       {
@@ -99,7 +99,7 @@ namespace ao::gtk
     {
       _session.workspace().setFocusedView(viewId);
 
-      if (ev.trackId != ao::TrackId{})
+      if (ev.trackId != TrackId{})
       {
         if (auto* ctx = find(viewId))
         {
@@ -241,7 +241,7 @@ namespace ao::gtk
     return nullptr;
   }
 
-  void TrackPageManager::setPlayingTrack(std::optional<ao::TrackId> trackId)
+  void TrackPageManager::setPlayingTrack(std::optional<TrackId> trackId)
   {
     if (_optPlayingTrackId == trackId)
     {
@@ -286,7 +286,7 @@ namespace ao::gtk
 
     auto listName = std::string{"List"};
 
-    if (listId != allTracksListId() && listId != ao::ListId{})
+    if (listId != allTracksListId() && listId != ListId{})
     {
       auto const txn = _session.musicLibrary().readTransaction();
       auto lists = _session.musicLibrary().lists().reader(txn);
@@ -335,7 +335,7 @@ namespace ao::gtk
       });
 
     page->selectionController().signalTagEditRequested().connect(
-      [this, page](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
+      [this, page](std::vector<TrackId> const& ids, Gtk::Widget* relativeTo)
       {
         if (!relativeTo)
         {
@@ -347,7 +347,7 @@ namespace ao::gtk
       });
 
     page->selectionController().signalTrackActivated().connect(
-      [this, page](ao::TrackId id)
+      [this, page](TrackId id)
       {
         if (_playbackSequenceController)
         {
@@ -374,7 +374,7 @@ namespace ao::gtk
       page->selectionController().setPlayingTrackId(_optPlayingTrackId);
     }
   }
-  ao::ListId TrackPageManager::activeListId() const
+  ListId TrackPageManager::activeListId() const
   {
     if (auto const* ctx = currentVisible())
     {

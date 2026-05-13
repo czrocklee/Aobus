@@ -92,8 +92,8 @@ namespace ao::rt
     std::unique_ptr<ao::audio::Player> player;
     ViewService& views;
     ao::library::MusicLibrary& library;
-    ao::TrackId currentTrackId{};
-    ao::ListId currentSourceListId{};
+    TrackId currentTrackId{};
+    ListId currentSourceListId{};
     std::string currentTrackTitle{};
     std::string currentTrackArtist{};
     Signal<> preparingSignal;
@@ -199,7 +199,7 @@ namespace ao::rt
 
               player->setOutput(backend.id, device.id, profileId);
               state = buildState(*player);
-              devicesChangedSignal.emit();
+              outputChangedSignal.emit(state.selectedOutput);
             });
         });
 
@@ -280,7 +280,7 @@ namespace ao::rt
     return _impl->state;
   }
 
-  void PlaybackService::play(ao::audio::TrackPlaybackDescriptor const& descriptor, ao::ListId const sourceListId)
+  void PlaybackService::play(ao::audio::TrackPlaybackDescriptor const& descriptor, ListId const sourceListId)
   {
     _impl->ensureReady();
 
@@ -302,7 +302,7 @@ namespace ao::rt
     });
   }
 
-  ao::TrackId PlaybackService::playSelectionInView(ViewId const viewId)
+  TrackId PlaybackService::playSelectionInView(ViewId const viewId)
   {
     try
     {
@@ -311,7 +311,7 @@ namespace ao::rt
 
       if (sel.empty())
       {
-        return ao::TrackId{};
+        return TrackId{};
       }
 
       auto const trackId = sel.front();
@@ -321,7 +321,7 @@ namespace ao::rt
 
       if (!optView)
       {
-        return ao::TrackId{};
+        return TrackId{};
       }
 
       auto const uri = std::filesystem::path{optView->property().uri()};
@@ -341,7 +341,7 @@ namespace ao::rt
     }
     catch (std::exception const&)
     {
-      return ao::TrackId{};
+      return TrackId{};
     }
   }
 

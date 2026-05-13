@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "shell/LibraryTrackCountLabel.h"
+#include "track/LibraryTrackCountLabel.h"
 #include <runtime/AllTracksSource.h>
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>

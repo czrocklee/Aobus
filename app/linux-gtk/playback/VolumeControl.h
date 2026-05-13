@@ -6,7 +6,7 @@
 #include "playback/VolumeBar.h"
 #include "runtime/PlaybackService.h"
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
   /**
    * @brief A composite widget for controlling playback volume.
@@ -22,10 +22,10 @@ namespace ao::gtk::playback
     void refresh();
 
     ao::rt::PlaybackService& _playbackService;
-    ao::gtk::VolumeBar _volumeBar;
+    VolumeBar _volumeBar;
     bool _updating = false;
 
     ao::rt::Subscription _outputSub;
     ao::rt::Subscription _startedSub;
   };
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

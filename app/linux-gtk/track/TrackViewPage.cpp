@@ -4,7 +4,7 @@
 #include "track/TrackViewPage.h"
 
 #include "layout/LayoutConstants.h"
-#include "shell/ThemeBus.h"
+#include "app/ThemeBus.h"
 #include "track/TrackColumnFactoryBuilder.h"
 #include "track/TrackFilterController.h"
 #include "track/TrackRowCache.h"
@@ -121,7 +121,7 @@ namespace ao::gtk
     };
   }
 
-  TrackViewPage::TrackViewPage(ao::ListId listId,
+  TrackViewPage::TrackViewPage(ListId listId,
                                TrackListAdapter& adapter,
                                TrackColumnLayoutModel& columnLayoutModel,
                                ao::rt::AppSession& session,
@@ -141,7 +141,7 @@ namespace ao::gtk
 
     _selectionModel = Gtk::MultiSelection::create(_groupModel);
 
-    _filterController = std::make_unique<TrackFilterController>(_session, _viewId, _filterEntry);
+    _filterController = std::make_unique<TrackFilterController>(_session.views(), _viewId, _filterEntry);
     _filterController->setStatusMessageCallback([this](std::string_view msg) { setStatusMessage(msg); });
     _filterController->setCreateSmartListSignal(&_createSmartListRequested);
 
@@ -217,7 +217,7 @@ namespace ao::gtk
 
   void TrackViewPage::setupPresentationControls()
   {
-    _controlsBar.set_spacing(Layout::kSpacingLarge);
+    _controlsBar.set_spacing(layout::kSpacingLarge);
     _controlsBar.set_margin_start(4);
     _controlsBar.set_margin_end(4);
     _controlsBar.set_margin_top(4);
@@ -266,10 +266,10 @@ namespace ao::gtk
         auto* const label = Gtk::make_managed<Gtk::Label>("");
 
         label->set_halign(Gtk::Align::START);
-        label->set_margin_start(Layout::kSpacingLarge);
-        label->set_margin_end(Layout::kSpacingLarge);
-        label->set_margin_top(Layout::kSpacingLarge);
-        label->set_margin_bottom(Layout::kMarginSmall);
+        label->set_margin_start(layout::kSpacingLarge);
+        label->set_margin_end(layout::kSpacingLarge);
+        label->set_margin_top(layout::kSpacingLarge);
+        label->set_margin_bottom(layout::kMarginSmall);
         label->set_xalign(0.0F);
 
         header->set_child(*label);

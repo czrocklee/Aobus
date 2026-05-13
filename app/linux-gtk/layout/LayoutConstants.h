@@ -3,7 +3,7 @@
 
 #pragma once
 
-namespace ao::gtk::Layout
+namespace ao::gtk::layout
 {
   // Spacing presets
   constexpr int kSpacingSmall = 4;
@@ -27,4 +27,4 @@ namespace ao::gtk::Layout
   // UI Element sizing
   constexpr int kDefaultSidebarWidth = 330;
   constexpr int kMinCoverArtHeight = 50;
-} // namespace ao::gtk::Layout
+} // namespace ao::gtk::layout

@@ -13,7 +13,7 @@ namespace ao::rt
   class ConfigStore;
 }
 
-namespace ao::gtk::shell
+namespace ao::gtk
 {
   class ShellLayoutController final
   {
@@ -38,4 +38,4 @@ namespace ao::gtk::shell
     layout::LayoutHost _host;
     layout::LayoutDocument _activeLayout;
   };
-} // namespace ao::gtk::shell
+} // namespace ao::gtk

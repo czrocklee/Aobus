@@ -26,11 +26,11 @@ namespace ao::model
   struct ListDraft final
   {
     ListKind kind = ListKind::Smart;
-    ao::ListId parentId = ao::ListId{0};
-    ao::ListId listId = ao::ListId{0}; // 0 = create, non-zero = update
+    ListId parentId = ListId{0};
+    ListId listId = ListId{0}; // 0 = create, non-zero = update
     std::string name;
     std::string description;
     std::string expression;            // Only used for Smart lists
-    std::vector<ao::TrackId> trackIds; // Only used for Manual lists
+    std::vector<TrackId> trackIds; // Only used for Manual lists
   };
 } // namespace ao::model

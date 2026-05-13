@@ -45,7 +45,7 @@ namespace ao::rt
 
     struct OrderEntry final
     {
-      ao::TrackId trackId{};
+      TrackId trackId{};
       SortKeys keys{};
       std::string_view groupKey{};
       std::string_view groupLabel{};
@@ -221,10 +221,10 @@ namespace ao::rt
                       ao::library::TrackView const& view,
                       ao::library::DictionaryStore& dict,
                       std::vector<TrackSortTerm> const& sortBy,
-                      std::unordered_map<ao::DictionaryId, std::string>& normCache,
+                      std::unordered_map<DictionaryId, std::string>& normCache,
                       std::unordered_set<std::string>& stringPool)
     {
-      auto const getNorm = [&](ao::DictionaryId id) -> std::string_view
+      auto const getNorm = [&](DictionaryId id) -> std::string_view
       {
         if (auto it = normCache.find(id); it != normCache.end())
         {
@@ -259,9 +259,9 @@ namespace ao::rt
                              ao::library::TrackView const& view,
                              ao::library::DictionaryStore& dict,
                              TrackGroupKey groupBy,
-                             std::unordered_map<ao::DictionaryId, std::string>& normCache)
+                             std::unordered_map<DictionaryId, std::string>& normCache)
     {
-      auto const getNorm = [&](ao::DictionaryId id) -> std::string_view
+      auto const getNorm = [&](DictionaryId id) -> std::string_view
       {
         if (auto it = normCache.find(id); it != normCache.end())
         {
@@ -416,10 +416,10 @@ namespace ao::rt
     Comparator comparator;
     ao::library::TrackStore::Reader::LoadMode loadMode = ao::library::TrackStore::Reader::LoadMode::Hot;
     std::vector<OrderEntry> orderIndex;
-    std::unordered_map<ao::TrackId, std::size_t> positionIndex;
+    std::unordered_map<TrackId, std::size_t> positionIndex;
     std::vector<GroupSection> sections;
     std::uint64_t rev = 0;
-    std::unordered_map<ao::DictionaryId, std::string> normCache;
+    std::unordered_map<DictionaryId, std::string> normCache;
     std::unordered_set<std::string> stringPool;
     std::vector<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>> subscribers;
 
@@ -543,7 +543,7 @@ namespace ao::rt
       }
     }
 
-    std::optional<std::size_t> findPosition(ao::TrackId trackId) const
+    std::optional<std::size_t> findPosition(TrackId trackId) const
     {
       if (auto it = positionIndex.find(trackId); it != positionIndex.end())
       {
@@ -572,7 +572,7 @@ namespace ao::rt
       return true;
     }
 
-    void insertEntry(ao::TrackId trackId)
+    void insertEntry(TrackId trackId)
     {
       auto const txn = library.readTransaction();
       auto const reader = library.tracks().reader(txn);
@@ -632,7 +632,7 @@ namespace ao::rt
       });
     }
 
-    void insertEntries(std::span<ao::TrackId const> ids)
+    void insertEntries(std::span<TrackId const> ids)
     {
       if (ids.empty())
       {
@@ -713,7 +713,7 @@ namespace ao::rt
       });
     }
 
-    void removeEntry(ao::TrackId trackId)
+    void removeEntry(TrackId trackId)
     {
       auto const optPos = findPosition(trackId);
       if (!optPos)
@@ -750,7 +750,7 @@ namespace ao::rt
       });
     }
 
-    void removeEntries(std::span<ao::TrackId const> ids)
+    void removeEntries(std::span<TrackId const> ids)
     {
       if (ids.empty())
       {
@@ -801,7 +801,7 @@ namespace ao::rt
       });
     }
 
-    void updateEntry(ao::TrackId trackId)
+    void updateEntry(TrackId trackId)
     {
       auto optPos = findPosition(trackId);
       if (!optPos)
@@ -862,7 +862,7 @@ namespace ao::rt
       });
     }
 
-    void updateEntries(std::span<ao::TrackId const> ids)
+    void updateEntries(std::span<TrackId const> ids)
     {
       if (ids.empty())
       {
@@ -942,17 +942,17 @@ namespace ao::rt
     return _impl->orderIndex.size();
   }
 
-  ao::TrackId TrackListProjection::trackIdAt(std::size_t index) const
+  TrackId TrackListProjection::trackIdAt(std::size_t index) const
   {
     if (index >= _impl->orderIndex.size())
     {
-      return ao::TrackId{};
+      return TrackId{};
     }
 
     return _impl->orderIndex[index].trackId;
   }
 
-  std::optional<std::size_t> TrackListProjection::indexOf(ao::TrackId trackId) const noexcept
+  std::optional<std::size_t> TrackListProjection::indexOf(TrackId trackId) const noexcept
   {
     if (auto const it = _impl->positionIndex.find(trackId); it != _impl->positionIndex.end())
     {
@@ -1029,32 +1029,32 @@ namespace ao::rt
     });
   }
 
-  void TrackListProjection::onInserted(ao::TrackId id, std::size_t /*sourceIndex*/)
+  void TrackListProjection::onInserted(TrackId id, std::size_t /*sourceIndex*/)
   {
     _impl->insertEntry(id);
   }
 
-  void TrackListProjection::onUpdated(ao::TrackId id, std::size_t /*sourceIndex*/)
+  void TrackListProjection::onUpdated(TrackId id, std::size_t /*sourceIndex*/)
   {
     _impl->updateEntry(id);
   }
 
-  void TrackListProjection::onRemoved(ao::TrackId id, std::size_t /*sourceIndex*/)
+  void TrackListProjection::onRemoved(TrackId id, std::size_t /*sourceIndex*/)
   {
     _impl->removeEntry(id);
   }
 
-  void TrackListProjection::onInserted(std::span<ao::TrackId const> ids)
+  void TrackListProjection::onInserted(std::span<TrackId const> ids)
   {
     _impl->insertEntries(ids);
   }
 
-  void TrackListProjection::onUpdated(std::span<ao::TrackId const> ids)
+  void TrackListProjection::onUpdated(std::span<TrackId const> ids)
   {
     _impl->updateEntries(ids);
   }
 
-  void TrackListProjection::onRemoved(std::span<ao::TrackId const> ids)
+  void TrackListProjection::onRemoved(std::span<TrackId const> ids)
   {
     _impl->removeEntries(ids);
   }

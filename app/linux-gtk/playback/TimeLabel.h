@@ -7,7 +7,7 @@
 #include "runtime/PlaybackService.h"
 #include <gtkmm/label.h>
 
-namespace ao::gtk::playback
+namespace ao::gtk
 {
   /**
    * @brief A composite widget providing a formatted time display (current / total).
@@ -33,4 +33,4 @@ namespace ao::gtk::playback
     ao::rt::Subscription _stoppedSub;
     ao::rt::Subscription _preparingSub;
   };
-} // namespace ao::gtk::playback
+} // namespace ao::gtk

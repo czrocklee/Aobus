@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "shell/PlaybackDetailsWidget.h"
+#include "playback/PlaybackDetailsWidget.h"
 #include "layout/LayoutConstants.h"
 #include <ao/utility/Log.h>
 #include <gdkmm/display.h>
@@ -77,13 +77,13 @@ namespace ao::gtk
     : _playbackService{playbackService}
   {
     ensurePlaybackDetailsCss();
-    _container.set_spacing(Layout::kSpacingLarge);
-    _container.set_margin_start(Layout::kMarginMedium);
-    _container.set_margin_end(Layout::kMarginMedium);
+    _container.set_spacing(layout::kSpacingLarge);
+    _container.set_margin_start(layout::kMarginMedium);
+    _container.set_margin_end(layout::kMarginMedium);
 
     _streamInfoLabel.add_css_class("dim-label");
     _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
-    _sinkStatusIcon.set_pixel_size(Layout::kIconSizeXSmall);
+    _sinkStatusIcon.set_pixel_size(layout::kIconSizeXSmall);
     _sinkStatusIcon.set_visible(false);
 
     _container.append(_streamInfoLabel);

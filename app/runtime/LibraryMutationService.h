@@ -30,21 +30,21 @@ namespace ao::rt
     LibraryMutationService(IControlExecutor& executor, ao::library::MusicLibrary& library);
     ~LibraryMutationService();
 
-    ao::Result<UpdateTrackMetadataReply> updateMetadata(std::vector<ao::TrackId> const& trackIds,
+    ao::Result<UpdateTrackMetadataReply> updateMetadata(std::vector<TrackId> const& trackIds,
                                                         MetadataPatch const& patch);
-    ao::Result<EditTrackTagsReply> editTags(std::vector<ao::TrackId> const& trackIds,
+    ao::Result<EditTrackTagsReply> editTags(std::vector<TrackId> const& trackIds,
                                             std::vector<std::string> const& tagsToAdd,
                                             std::vector<std::string> const& tagsToRemove);
     ImportFilesReply importFiles(std::vector<std::filesystem::path> const& paths);
 
-    ao::ListId createList(ao::model::ListDraft const& draft);
+    ListId createList(ao::model::ListDraft const& draft);
     void updateList(ao::model::ListDraft const& draft);
-    void deleteList(ao::ListId listId);
+    void deleteList(ListId listId);
 
     struct ListsMutated final
     {
-      std::vector<ao::ListId> upserted{};
-      std::vector<ao::ListId> deleted{};
+      std::vector<ListId> upserted{};
+      std::vector<ListId> deleted{};
     };
 
     struct ImportProgressUpdated final
@@ -53,7 +53,7 @@ namespace ao::rt
       std::string message{};
     };
 
-    Subscription onTracksMutated(std::move_only_function<void(std::vector<ao::TrackId> const&)> handler);
+    Subscription onTracksMutated(std::move_only_function<void(std::vector<TrackId> const&)> handler);
     Subscription onListsMutated(std::move_only_function<void(ListsMutated const&)> handler);
     Subscription onImportCompleted(std::move_only_function<void(std::size_t)> handler);
     Subscription onImportProgress(std::move_only_function<void(ImportProgressUpdated const&)> handler);

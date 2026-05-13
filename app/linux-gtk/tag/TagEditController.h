@@ -27,8 +27,8 @@ namespace ao::gtk
 {
   struct TrackSelectionContext final
   {
-    ao::ListId listId;
-    std::vector<ao::TrackId> selectedIds;
+    ListId listId;
+    std::vector<TrackId> selectedIds;
   };
 
   /**
