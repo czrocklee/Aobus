@@ -12,12 +12,8 @@
 
 #include <test/unit/library/TestUtils.h>
 
-namespace
+namespace ao::library::test
 {
-  using namespace test;
-  using ao::library::TrackColdHeader;
-  using ao::library::TrackHotHeader;
-
   TEST_CASE("TrackHotHeader - Size and Alignment")
   {
     CHECK(sizeof(TrackHotHeader) == 36);
@@ -78,4 +74,4 @@ namespace
     // 1-byte section
     CHECK(offsetof(TrackColdHeader, channels) == 50);
   }
-} // anonymous namespace
+} // namespace ao::library::test

@@ -30,8 +30,7 @@ namespace ao::audio::backend
     std::vector<Device> enumerateSinks() const;
     std::optional<std::uint32_t> findSinkIdByName(std::string_view name) const;
 
-    Subscription subscribeGraph(std::string_view routeAnchor,
-                                           std::function<void(flow::Graph const&)> callback);
+    Subscription subscribeGraph(std::string_view routeAnchor, std::function<void(flow::Graph const&)> callback);
 
   private:
     struct Impl;

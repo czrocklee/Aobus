@@ -362,7 +362,7 @@ namespace ao::audio
         channelSpans[ch] = {buffer[ch], blockSize};
       }
 
-      pcm::Converter::interleaveAndPad<std::int32_t, std::int32_t>(
+      PcmConverter::interleaveAndPad<std::int32_t, std::int32_t>(
         channelSpans, dst, static_cast<std::uint8_t>(32 - bps));
     }
     else

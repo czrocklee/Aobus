@@ -9,7 +9,7 @@
 #include <string_view>
 #include <vector>
 
-namespace test
+namespace ao::library::test
 {
   /**
    * Serialize a POD struct to a byte vector.
@@ -20,7 +20,7 @@ namespace test
     static_assert(std::is_trivially_copyable_v<T>, "Header must be trivially copyable");
 
     std::vector<std::byte> data;
-    data.insert_range(data.end(), ao::utility::bytes::view(header));
+    data.insert_range(data.end(), utility::bytes::view(header));
     return data;
   }
 
@@ -29,7 +29,7 @@ namespace test
    */
   inline void appendString(std::vector<std::byte>& payload, std::string_view str)
   {
-    payload.insert_range(payload.end(), ao::utility::bytes::view(str));
+    payload.insert_range(payload.end(), utility::bytes::view(str));
     payload.push_back(std::byte{'\0'});
   }
-} // namespace test
+} // namespace ao::library::test

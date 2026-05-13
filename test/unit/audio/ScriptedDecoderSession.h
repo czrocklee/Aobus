@@ -7,16 +7,16 @@
 #include <functional>
 #include <vector>
 
-namespace ao::audio
+namespace ao::audio::test
 {
-  class ScriptedDecoderSession : public IDecoderSession
+  class ScriptedDecoderSession final : public IDecoderSession
   {
   public:
-    struct ReadScriptEntry
+    struct ReadScriptEntry final
     {
       std::vector<std::byte> data;
       bool endOfStream = false;
-      ao::Result<> result = {};
+      Result<> result = {};
     };
 
     explicit ScriptedDecoderSession(DecodedStreamInfo info)
@@ -26,7 +26,7 @@ namespace ao::audio
 
     void setReadScript(std::vector<ReadScriptEntry> script) { _script = std::move(script); }
 
-    ao::Result<> open(std::filesystem::path const& path) override
+    Result<> open(std::filesystem::path const& path) override
     {
       _opened = true;
       _lastOpenedPath = path;
@@ -36,14 +36,14 @@ namespace ao::audio
     void close() override { _closed = true; }
     void flush() override { _flushed = true; }
 
-    ao::Result<> seek(std::uint32_t positionMs) override
+    Result<> seek(std::uint32_t positionMs) override
     {
       _lastSeekPosition = positionMs;
       _scriptIdx = 0;
       return _seekResult;
     }
 
-    ao::Result<PcmBlock> readNextBlock() override
+    Result<PcmBlock> readNextBlock() override
     {
       _readCount++;
       if (_scriptIdx >= _script.size())
@@ -76,16 +76,16 @@ namespace ao::audio
     std::size_t readCount() const { return _readCount; }
 
     // Configuration
-    void setOpenResult(ao::Result<> res) { _openResult = res; }
-    void setSeekResult(ao::Result<> res) { _seekResult = res; }
+    void setOpenResult(Result<> res) { _openResult = res; }
+    void setSeekResult(Result<> res) { _seekResult = res; }
 
   private:
     DecodedStreamInfo _info;
     std::vector<ReadScriptEntry> _script;
     std::size_t _scriptIdx = 0;
 
-    ao::Result<> _openResult = {};
-    ao::Result<> _seekResult = {};
+    Result<> _openResult = {};
+    Result<> _seekResult = {};
 
     bool _opened = false;
     bool _closed = false;
@@ -94,4 +94,4 @@ namespace ao::audio
     std::filesystem::path _lastOpenedPath;
     std::size_t _readCount = 0;
   };
-} // namespace ao::audio
+} // namespace ao::audio::test

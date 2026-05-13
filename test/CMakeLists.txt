@@ -13,7 +13,7 @@ add_executable(ao_test
     unit/library/TrackBuilderTest.cpp
     unit/library/ListLayoutTest.cpp
     unit/library/ListViewTest.cpp
-    unit/library/DictionaryTest.cpp
+    unit/library/DictionaryStoreTest.cpp
     unit/library/ResourceStoreTest.cpp
     unit/library/TrackStoreTest.cpp
     unit/library/ListStoreTest.cpp
@@ -33,25 +33,25 @@ add_executable(ao_test
     unit/audio/MemorySourceTest.cpp
     unit/audio/StreamingSourceTest.cpp
     unit/audio/PcmRingBufferTest.cpp
-    unit/audio/backend/PipeWireSharedTest.cpp
+    unit/audio/backend/detail/PipeWireSharedTest.cpp
     unit/audio/PcmConverterTest.cpp
     unit/audio/PlayerTest.cpp
-    unit/audio/PlaybackEngineTest.cpp
-    unit/audio/backend/PipeWireMonitorHelpersTest.cpp
-    unit/audio/backend/AlsaProviderHelpersTest.cpp
+    unit/audio/EngineTest.cpp
+    unit/audio/backend/detail/PipeWireMonitorHelpersTest.cpp
+    unit/audio/backend/detail/AlsaProviderHelpersTest.cpp
 
     # app unit tests (no platform deps)
-    unit/rt/SmartListEvaluatorTest.cpp
-    unit/rt/TrackListPresentationTest.cpp
-    unit/rt/TrackListProjectionTest.cpp
-    unit/rt/TrackListProjectionScaleTest.cpp
-    unit/rt/TrackDetailProjectionTest.cpp
-    unit/rt/LibraryMutationServiceTest.cpp
-    unit/rt/NotificationServiceTest.cpp
-    unit/rt/ViewServiceTest.cpp
-    unit/rt/ConfigStoreTest.cpp
-    unit/rt/ManualListSourceTest.cpp
-    unit/rt/HeadlessShellTest.cpp
+    unit/runtime/SmartListEvaluatorTest.cpp
+    unit/runtime/TrackListPresentationTest.cpp
+    unit/runtime/TrackListProjectionTest.cpp
+    unit/runtime/TrackListProjectionScaleTest.cpp
+    unit/runtime/TrackDetailProjectionTest.cpp
+    unit/runtime/LibraryMutationServiceTest.cpp
+    unit/runtime/NotificationServiceTest.cpp
+    unit/runtime/ViewServiceTest.cpp
+    unit/runtime/ConfigStoreTest.cpp
+    unit/runtime/ManualListSourceTest.cpp
+    unit/runtime/HeadlessShellTest.cpp
 
     # integration tests
     integration/audio/DecoderIntegrationTest.cpp
@@ -80,14 +80,14 @@ aobus_apply_clang_tidy(ao_test RELAXED)
 
 # ao_test_gtk: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_test_gtk
-    unit/gtk/TrackListAdapterTest.cpp
-    unit/gtk/TrackPresentationTest.cpp
-    unit/gtk/TrackRowCacheTest.cpp
-    unit/gtk/LayoutModelTest.cpp
-    unit/gtk/LayoutContainersTest.cpp
-    unit/gtk/LayoutComponentsTest.cpp
-    unit/gtk/LayoutEditorTest.cpp
-    unit/gtk/StatusComponentsTest.cpp
+    unit/linux-gtk/track/TrackListAdapterTest.cpp
+    unit/linux-gtk/track/TrackPresentationTest.cpp
+    unit/linux-gtk/track/TrackRowCacheTest.cpp
+    unit/linux-gtk/layout/document/LayoutModelTest.cpp
+    unit/linux-gtk/layout/components/ContainersTest.cpp
+    unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
+    unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
+    unit/linux-gtk/layout/components/StatusComponentsTest.cpp
 )
 
 target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
@@ -96,7 +96,7 @@ add_test(NAME ao_test_gtk COMMAND ao_test_gtk)
 
 # ao_perf_baseline: standalone performance baseline (not run by default in build.sh)
 add_executable(ao_perf_baseline
-    unit/rt/PerformanceBaselineTest.cpp
+    unit/runtime/PerformanceBaselineTest.cpp
 )
 
 target_include_directories(ao_perf_baseline PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")

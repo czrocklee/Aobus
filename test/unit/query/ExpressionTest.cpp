@@ -7,226 +7,228 @@
 #include <memory>
 #include <sstream>
 
-using namespace ao::query;
-
-namespace
+namespace ao::query::test
 {
-  // Local canonicalizer for AST comparison without relying on Parser/Serializer
-  struct Canonicalizer
+  namespace
   {
-    void operator()(std::unique_ptr<BinaryExpression> const& binary)
+    // Local canonicalizer for AST comparison without relying on Parser/Serializer
+    struct Canonicalizer final
     {
-      if (!binary)
+      void operator()(std::unique_ptr<BinaryExpression> const& binary)
       {
-        oss << "null";
-        return;
-      }
-
-      oss << "(";
-      std::visit(*this, binary->operand);
-      if (binary->optOperation)
-      {
-        switch (binary->optOperation->op)
+        if (!binary)
         {
-          case Operator::Add: oss << " + "; break;
-          case Operator::And: oss << " and "; break;
-          case Operator::Or: oss << " or "; break;
-          case Operator::Equal: oss << " = "; break;
-          case Operator::NotEqual: oss << " != "; break;
-          case Operator::Like: oss << " ~ "; break;
-          case Operator::Less: oss << " < "; break;
-          case Operator::LessEqual: oss << " <= "; break;
-          case Operator::Greater: oss << " > "; break;
-          case Operator::GreaterEqual: oss << " >= "; break;
-          default: oss << " op "; break;
+          oss << "null";
+          return;
         }
 
-        std::visit(*this, binary->optOperation->operand);
+        oss << "(";
+        std::visit(*this, binary->operand);
+        if (binary->optOperation)
+        {
+          switch (binary->optOperation->op)
+          {
+            case Operator::Add: oss << " + "; break;
+            case Operator::And: oss << " and "; break;
+            case Operator::Or: oss << " or "; break;
+            case Operator::Equal: oss << " = "; break;
+            case Operator::NotEqual: oss << " != "; break;
+            case Operator::Like: oss << " ~ "; break;
+            case Operator::Less: oss << " < "; break;
+            case Operator::LessEqual: oss << " <= "; break;
+            case Operator::Greater: oss << " > "; break;
+            case Operator::GreaterEqual: oss << " >= "; break;
+            default: oss << " op "; break;
+          }
+
+          std::visit(*this, binary->optOperation->operand);
+        }
+
+        oss << ")";
       }
 
-      oss << ")";
-    }
-
-    void operator()(std::unique_ptr<UnaryExpression> const& unary)
-    {
-      if (!unary)
+      void operator()(std::unique_ptr<UnaryExpression> const& unary)
       {
-        oss << "null";
-        return;
+        if (!unary)
+        {
+          oss << "null";
+          return;
+        }
+
+        oss << "not ";
+        std::visit(*this, unary->operand);
       }
 
-      oss << "not ";
-      std::visit(*this, unary->operand);
-    }
+      void operator()(VariableExpression const& var) { oss << var.name; }
 
-    void operator()(VariableExpression const& var) { oss << var.name; }
+      void operator()(ConstantExpression const& constant)
+      {
+        std::visit(utility::makeVisitor([this](bool val) { oss << (val ? "true" : "false"); },
+                                        [this](std::int64_t val) { oss << val; },
+                                        [this](UnitConstantExpression const& val) { oss << val.lexeme; },
+                                        [this](std::string const& val) { oss << "\"" << val << "\""; }),
+                   constant);
+      }
 
-    void operator()(ConstantExpression const& constant)
+      std::ostringstream oss;
+    };
+
+    std::string canonicalize(Expression const& expr)
     {
-      std::visit(ao::utility::makeVisitor([this](bool val) { oss << (val ? "true" : "false"); },
-                                          [this](std::int64_t val) { oss << val; },
-                                          [this](UnitConstantExpression const& val) { oss << val.lexeme; },
-                                          [this](std::string const& val) { oss << "\"" << val << "\""; }),
-                 constant);
+      Canonicalizer c;
+      std::visit(c, expr);
+      return c.oss.str();
     }
-
-    std::ostringstream oss;
-  };
-
-  std::string canonicalize(Expression const& expr)
-  {
-    Canonicalizer c;
-    std::visit(c, expr);
-    return c.oss.str();
   }
-}
 
-TEST_CASE("Expression - Normalize Collapses Binary Node Without Operation")
-{
-  // Input: (a) where (a) is a BinaryExpression with no optOperation
-  auto binary = std::make_unique<BinaryExpression>();
-  binary->operand = VariableExpression{VariableType::Metadata, "a"};
-  binary->optOperation = std::nullopt;
+  TEST_CASE("Expression - Normalize Collapses Binary Node Without Operation")
+  {
+    // Input: (a) where (a) is a BinaryExpression with no optOperation
+    auto binary = std::make_unique<BinaryExpression>();
+    binary->operand = VariableExpression{VariableType::Metadata, "a"};
+    binary->optOperation = std::nullopt;
 
-  Expression expr = std::move(binary);
+    Expression expr = std::move(binary);
 
-  normalize(expr);
+    normalize(expr);
 
-  CHECK(canonicalize(expr) == "a");
-}
+    CHECK(canonicalize(expr) == "a");
+  }
 
-TEST_CASE("Expression - Normalize Leaves Constant Unchanged")
-{
-  Expression expr = ConstantExpression{true};
-  normalize(expr);
-  CHECK(canonicalize(expr) == "true");
-}
+  TEST_CASE("Expression - Normalize Leaves Constant Unchanged")
+  {
+    Expression expr = ConstantExpression{true};
+    normalize(expr);
+    CHECK(canonicalize(expr) == "true");
+  }
 
-TEST_CASE("Expression - Normalize Leaves Variable Unchanged")
-{
-  Expression expr = VariableExpression{VariableType::Metadata, "artist"};
-  normalize(expr);
-  CHECK(canonicalize(expr) == "artist");
-}
+  TEST_CASE("Expression - Normalize Leaves Variable Unchanged")
+  {
+    Expression expr = VariableExpression{VariableType::Metadata, "artist"};
+    normalize(expr);
+    CHECK(canonicalize(expr) == "artist");
+  }
 
-TEST_CASE("Expression - Normalize Reassociates Right Nested Add Chain")
-{
-  // Input: a + (b + c)
-  auto inner = std::make_unique<BinaryExpression>();
-  inner->operand = VariableExpression{VariableType::Metadata, "b"};
-  inner->optOperation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "c"}};
+  TEST_CASE("Expression - Normalize Reassociates Right Nested Add Chain")
+  {
+    // Input: a + (b + c)
+    auto inner = std::make_unique<BinaryExpression>();
+    inner->operand = VariableExpression{VariableType::Metadata, "b"};
+    inner->optOperation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "c"}};
 
-  auto root = std::make_unique<BinaryExpression>();
-  root->operand = VariableExpression{VariableType::Metadata, "a"};
-  root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+    auto root = std::make_unique<BinaryExpression>();
+    root->operand = VariableExpression{VariableType::Metadata, "a"};
+    root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
 
-  Expression expr = std::move(root);
-  normalize(expr);
+    Expression expr = std::move(root);
+    normalize(expr);
 
-  // Expected: (a + b) + c
-  CHECK(canonicalize(expr) == "((a + b) + c)");
-}
+    // Expected: (a + b) + c
+    CHECK(canonicalize(expr) == "((a + b) + c)");
+  }
 
-TEST_CASE("Expression - Normalize Reassociates Four Term Add Chain")
-{
-  // Input: a + (b + (c + d))
-  auto innermost = std::make_unique<BinaryExpression>();
-  innermost->operand = VariableExpression{VariableType::Metadata, "c"};
-  innermost->optOperation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "d"}};
+  TEST_CASE("Expression - Normalize Reassociates Four Term Add Chain")
+  {
+    // Input: a + (b + (c + d))
+    auto innermost = std::make_unique<BinaryExpression>();
+    innermost->operand = VariableExpression{VariableType::Metadata, "c"};
+    innermost->optOperation =
+      BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "d"}};
 
-  auto inner = std::make_unique<BinaryExpression>();
-  inner->operand = VariableExpression{VariableType::Metadata, "b"};
-  inner->optOperation = BinaryExpression::Operation{Operator::Add, std::move(innermost)};
+    auto inner = std::make_unique<BinaryExpression>();
+    inner->operand = VariableExpression{VariableType::Metadata, "b"};
+    inner->optOperation = BinaryExpression::Operation{Operator::Add, std::move(innermost)};
 
-  auto root = std::make_unique<BinaryExpression>();
-  root->operand = VariableExpression{VariableType::Metadata, "a"};
-  root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+    auto root = std::make_unique<BinaryExpression>();
+    root->operand = VariableExpression{VariableType::Metadata, "a"};
+    root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
 
-  Expression expr = std::move(root);
-  normalize(expr);
+    Expression expr = std::move(root);
+    normalize(expr);
 
-  // Expected: ((a + b) + c) + d
-  CHECK(canonicalize(expr) == "(((a + b) + c) + d)");
-}
+    // Expected: ((a + b) + c) + d
+    CHECK(canonicalize(expr) == "(((a + b) + c) + d)");
+  }
 
-TEST_CASE("Expression - Normalize Does Not Touch NonAdd Binary")
-{
-  // Input: a and (b and c)
-  auto inner = std::make_unique<BinaryExpression>();
-  inner->operand = VariableExpression{VariableType::Metadata, "b"};
-  inner->optOperation = BinaryExpression::Operation{Operator::And, VariableExpression{VariableType::Metadata, "c"}};
+  TEST_CASE("Expression - Normalize Does Not Touch NonAdd Binary")
+  {
+    // Input: a and (b and c)
+    auto inner = std::make_unique<BinaryExpression>();
+    inner->operand = VariableExpression{VariableType::Metadata, "b"};
+    inner->optOperation = BinaryExpression::Operation{Operator::And, VariableExpression{VariableType::Metadata, "c"}};
 
-  auto root = std::make_unique<BinaryExpression>();
-  root->operand = VariableExpression{VariableType::Metadata, "a"};
-  root->optOperation = BinaryExpression::Operation{Operator::And, std::move(inner)};
+    auto root = std::make_unique<BinaryExpression>();
+    root->operand = VariableExpression{VariableType::Metadata, "a"};
+    root->optOperation = BinaryExpression::Operation{Operator::And, std::move(inner)};
 
-  Expression expr = std::move(root);
-  normalize(expr);
+    Expression expr = std::move(root);
+    normalize(expr);
 
-  CHECK(canonicalize(expr) == "(a and (b and c))");
-}
+    CHECK(canonicalize(expr) == "(a and (b and c))");
+  }
 
-TEST_CASE("Expression - Normalize Stops When Right Operand Is Not Binary")
-{
-  // Input: a + 1
-  auto root = std::make_unique<BinaryExpression>();
-  root->operand = VariableExpression{VariableType::Metadata, "a"};
-  root->optOperation = BinaryExpression::Operation{Operator::Add, ConstantExpression{std::int64_t{1}}};
+  TEST_CASE("Expression - Normalize Stops When Right Operand Is Not Binary")
+  {
+    // Input: a + 1
+    auto root = std::make_unique<BinaryExpression>();
+    root->operand = VariableExpression{VariableType::Metadata, "a"};
+    root->optOperation = BinaryExpression::Operation{Operator::Add, ConstantExpression{std::int64_t{1}}};
 
-  Expression expr = std::move(root);
-  normalize(expr);
+    Expression expr = std::move(root);
+    normalize(expr);
 
-  CHECK(canonicalize(expr) == "(a + 1)");
-}
+    CHECK(canonicalize(expr) == "(a + 1)");
+  }
 
-TEST_CASE("Expression - Normalize Stops When Right Binary Is Not Add")
-{
-  // Input: a + (b and c)
-  auto inner = std::make_unique<BinaryExpression>();
-  inner->operand = VariableExpression{VariableType::Metadata, "b"};
-  inner->optOperation = BinaryExpression::Operation{Operator::And, VariableExpression{VariableType::Metadata, "c"}};
+  TEST_CASE("Expression - Normalize Stops When Right Binary Is Not Add")
+  {
+    // Input: a + (b and c)
+    auto inner = std::make_unique<BinaryExpression>();
+    inner->operand = VariableExpression{VariableType::Metadata, "b"};
+    inner->optOperation = BinaryExpression::Operation{Operator::And, VariableExpression{VariableType::Metadata, "c"}};
 
-  auto root = std::make_unique<BinaryExpression>();
-  root->operand = VariableExpression{VariableType::Metadata, "a"};
-  root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+    auto root = std::make_unique<BinaryExpression>();
+    root->operand = VariableExpression{VariableType::Metadata, "a"};
+    root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
 
-  Expression expr = std::move(root);
-  normalize(expr);
+    Expression expr = std::move(root);
+    normalize(expr);
 
-  CHECK(canonicalize(expr) == "(a + (b and c))");
-}
+    CHECK(canonicalize(expr) == "(a + (b and c))");
+  }
 
-TEST_CASE("Expression - Normalize Unary Recurses Into Operand")
-{
-  // Input: not (a + (b + c))
-  auto inner = std::make_unique<BinaryExpression>();
-  inner->operand = VariableExpression{VariableType::Metadata, "b"};
-  inner->optOperation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "c"}};
+  TEST_CASE("Expression - Normalize Unary Recurses Into Operand")
+  {
+    // Input: not (a + (b + c))
+    auto inner = std::make_unique<BinaryExpression>();
+    inner->operand = VariableExpression{VariableType::Metadata, "b"};
+    inner->optOperation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "c"}};
 
-  auto binary = std::make_unique<BinaryExpression>();
-  binary->operand = VariableExpression{VariableType::Metadata, "a"};
-  binary->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+    auto binary = std::make_unique<BinaryExpression>();
+    binary->operand = VariableExpression{VariableType::Metadata, "a"};
+    binary->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
 
-  auto unary = std::make_unique<UnaryExpression>();
-  unary->op = Operator::Not;
-  unary->operand = std::move(binary);
+    auto unary = std::make_unique<UnaryExpression>();
+    unary->op = Operator::Not;
+    unary->operand = std::move(binary);
 
-  Expression expr = std::move(unary);
-  normalize(expr);
+    Expression expr = std::move(unary);
+    normalize(expr);
 
-  CHECK(canonicalize(expr) == "not ((a + b) + c)");
-}
+    CHECK(canonicalize(expr) == "not ((a + b) + c)");
+  }
 
-TEST_CASE("Expression - Normalize Null Unary Pointer Is Safe")
-{
-  auto expr = Expression{std::unique_ptr<UnaryExpression>{}};
-  normalize(expr);
-  CHECK(canonicalize(expr) == "null");
-}
+  TEST_CASE("Expression - Normalize Null Unary Pointer Is Safe")
+  {
+    auto expr = Expression{std::unique_ptr<UnaryExpression>{}};
+    normalize(expr);
+    CHECK(canonicalize(expr) == "null");
+  }
 
-TEST_CASE("Expression - Normalize Null Binary Pointer Is Safe")
-{
-  auto expr = Expression{std::unique_ptr<BinaryExpression>{}};
-  normalize(expr);
-  CHECK(canonicalize(expr) == "null");
-}
+  TEST_CASE("Expression - Normalize Null Binary Pointer Is Safe")
+  {
+    auto expr = Expression{std::unique_ptr<BinaryExpression>{}};
+    normalize(expr);
+    CHECK(canonicalize(expr) == "null");
+  }
+} // namespace ao::query::test

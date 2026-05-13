@@ -19,8 +19,7 @@ namespace ao::audio::backend
 
     Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
     IBackendProvider::Status status() const override;
-    std::unique_ptr<IBackend> createBackend(Device const& device,
-                                                       ProfileId const& profile) override;
+    std::unique_ptr<IBackend> createBackend(Device const& device, ProfileId const& profile) override;
     Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
 
   private:

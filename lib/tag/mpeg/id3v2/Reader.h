@@ -10,7 +10,7 @@ namespace ao::tag::mpeg::id3v2
 {
   struct HeaderLayout;
 
-  library::TrackBuilder loadFrames(ao::tag::TagFile const& owner,
+  library::TrackBuilder loadFrames(TagFile const& owner,
                                    HeaderLayout const& header,
                                    void const* buffer,
                                    std::size_t size);

@@ -117,9 +117,8 @@ namespace ao::media::flac
 
       if (auto sizeLeft = static_cast<std::size_t>(end - ptr); sizeLeft > 0)
       {
-        AO_THROW_FORMAT(Exception,
-                        "invalid flac vorbis_comment block, unexpected content \"{}\"",
-                        std::string_view{ptr, sizeLeft});
+        AO_THROW_FORMAT(
+          Exception, "invalid flac vorbis_comment block, unexpected content \"{}\"", std::string_view{ptr, sizeLeft});
       }
     }
 

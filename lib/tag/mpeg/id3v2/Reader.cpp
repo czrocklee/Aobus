@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "Reader.h"
+#include "../File.h"
 #include "Frame.h"
 #include "Layout.h"
-#include "../File.h"
 #include <ao/utility/ByteView.h>
 
 #include <charconv>
@@ -62,10 +62,7 @@ namespace ao::tag::mpeg::id3v2
     }
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
-    void handleSlashNumber(library::TrackBuilder& builder,
-                           TagFile const& /*owner*/,
-                           void const* data,
-                           std::size_t size)
+    void handleSlashNumber(library::TrackBuilder& builder, TagFile const& /*owner*/, void const* data, std::size_t size)
     {
       auto const view = V23TextFrameView{data, size};
       auto const text = view.text();

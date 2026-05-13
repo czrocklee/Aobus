@@ -16,64 +16,53 @@
 #include <test/unit/library/TestUtils.h>
 #include <vector>
 
-namespace
+namespace ao::library::test
 {
-#if defined(__GNUC__) && !defined(__clang__)
-  static_assert(std::ranges::view<ao::library::ListView::TrackProxy>);
-#endif
-
-  using namespace test;
-  using ao::library::ListView;
-
   TEST_CASE("ListView - Construct from Data")
   {
-    auto payload = ao::library::ListBuilder::createNew().serialize();
-    auto view = ListView{payload};
+    auto const payload = ListBuilder::createNew().serialize();
+    auto const view = ListView{payload};
     CHECK(view.tracks().empty());
   }
 
   TEST_CASE("ListView - Field Accessors")
   {
-    auto payload =
-      ao::library::ListBuilder::createNew().name("Test").description("Desc").parentId(ao::ListId{9}).serialize();
-    auto view = ListView{payload};
+    auto const payload = ListBuilder::createNew().name("Test").description("Desc").parentId(ListId{9}).serialize();
+    auto const view = ListView{payload};
 
     CHECK(view.tracks().empty());
     CHECK(view.name() == "Test");
     CHECK(view.description() == "Desc");
     CHECK(view.filter().empty());
     CHECK(view.isSmart() == false);
-    CHECK(view.parentId() == ao::ListId{9});
+    CHECK(view.parentId() == ListId{9});
     CHECK(view.isRootParent() == false);
   }
 
   TEST_CASE("ListView - Manual List with TrackIds")
   {
-    auto builder = ao::library::ListBuilder::createNew().name("My List").description("Description");
-    builder.tracks().add(ao::TrackId{100});
-    builder.tracks().add(ao::TrackId{200});
-    builder.tracks().add(ao::TrackId{300});
-    auto payload = builder.serialize();
-    auto view = ListView{payload};
+    auto builder = ListBuilder::createNew().name("My List").description("Description");
+    builder.tracks().add(TrackId{100});
+    builder.tracks().add(TrackId{200});
+    builder.tracks().add(TrackId{300});
+    auto const payload = builder.serialize();
+    auto const view = ListView{payload};
 
     CHECK(view.tracks().size() == 3);
     CHECK_FALSE(view.tracks().empty());
     CHECK(view.name() == "My List");
     CHECK(view.description() == "Description");
     CHECK(view.isSmart() == false);
-    CHECK(view.tracks()[0] == ao::TrackId{100});
-    CHECK(view.tracks()[1] == ao::TrackId{200});
-    CHECK(view.tracks()[2] == ao::TrackId{300});
+    CHECK(view.tracks()[0] == TrackId{100});
+    CHECK(view.tracks()[1] == TrackId{200});
+    CHECK(view.tracks()[2] == TrackId{300});
   }
 
   TEST_CASE("ListView - Smart List with Filter")
   {
-    auto payload = ao::library::ListBuilder::createNew()
-                     .name("Smart List")
-                     .description("A smart list")
-                     .filter("@year > 2020")
-                     .serialize();
-    auto view = ListView{payload};
+    auto const payload =
+      ListBuilder::createNew().name("Smart List").description("A smart list").filter("@year > 2020").serialize();
+    auto const view = ListView{payload};
 
     CHECK(view.tracks().empty());
     CHECK(view.name() == "Smart List");
@@ -84,8 +73,8 @@ namespace
 
   TEST_CASE("ListView - Empty Strings")
   {
-    auto payload = ao::library::ListBuilder::createNew().serialize();
-    auto view = ListView{payload};
+    auto const payload = ListBuilder::createNew().serialize();
+    auto const view = ListView{payload};
 
     CHECK(view.name().empty());
     CHECK(view.description().empty());
@@ -95,28 +84,28 @@ namespace
 
   TEST_CASE("ListView - Invalid Data")
   {
-    auto nullSpan = std::span<std::byte const>{static_cast<std::byte*>(nullptr), 100};
-    REQUIRE_THROWS_AS(ListView{nullSpan}, ao::Exception);
+    auto const nullSpan = std::span<std::byte const>{static_cast<std::byte*>(nullptr), 100};
+    REQUIRE_THROWS_AS(ListView{nullSpan}, Exception);
 
-    auto smallData = std::vector<std::byte>{10};
-    REQUIRE_THROWS_AS(ListView{smallData}, ao::Exception);
+    auto const smallData = std::vector<std::byte>(10);
+    REQUIRE_THROWS_AS(ListView{smallData}, Exception);
   }
 
   TEST_CASE("ListView - isSmart")
   {
-    auto manualPayload = ao::library::ListBuilder::createNew().name("Manual").serialize();
-    auto manualView = ListView{manualPayload};
+    auto const manualPayload = ListBuilder::createNew().name("Manual").serialize();
+    auto const manualView = ListView{manualPayload};
     CHECK(manualView.isSmart() == false);
 
-    auto smartPayload = ao::library::ListBuilder::createNew().name("Smart").filter("@year > 2020").serialize();
-    auto smartView = ListView{smartPayload};
+    auto const smartPayload = ListBuilder::createNew().name("Smart").filter("@year > 2020").serialize();
+    auto const smartView = ListView{smartPayload};
     CHECK(smartView.isSmart() == true);
   }
 
   TEST_CASE("ListView - Large trackIds Count")
   {
-    auto payload = ao::library::ListBuilder::createNew().name("Test").serialize();
-    auto view = ListView{payload};
+    auto const payload = ListBuilder::createNew().name("Test").serialize();
+    auto const view = ListView{payload};
     CHECK(view.tracks().empty());
   }
-} // anonymous namespace
+} // namespace ao::library::test
