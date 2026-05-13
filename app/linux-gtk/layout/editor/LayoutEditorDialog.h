@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "layout/runtime/ComponentRegistry.h"
 #include "layout/document/LayoutDocument.h"
+#include "layout/runtime/ComponentRegistry.h"
 
 #include <gtkmm.h>
 #include <map>
@@ -47,10 +47,7 @@ namespace ao::gtk::layout::editor
     void appendNodeToTree(Gtk::TreeModel::Row parentRow, LayoutNode* node);
     void onSelectionChanged();
     void updatePropertiesPanel(LayoutNode* node);
-    void applyPropertyChange(LayoutNode* node,
-                             std::string_view propName,
-                             LayoutValue const& value,
-                             bool isLayoutProp);
+    void applyPropertyChange(LayoutNode* node, std::string_view propName, LayoutValue const& value, bool isLayoutProp);
     void notifyPreview();
 
     void renderIdSection(LayoutNode* node);

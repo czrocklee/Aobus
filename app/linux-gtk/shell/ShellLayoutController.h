@@ -4,8 +4,8 @@
 #pragma once
 
 #include "layout/document/LayoutDocument.h"
-#include "layout/runtime/LayoutDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/LayoutDependencies.h"
 #include "layout/runtime/LayoutHost.h"
 
 namespace ao::rt

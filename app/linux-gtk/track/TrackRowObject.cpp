@@ -91,30 +91,31 @@ namespace ao::gtk
 
   Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id, TrackRowCache const& provider)
   {
-    auto obj = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{}); // NOLINT(cppcoreguidelines-owning-memory)
+    auto obj =
+      Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{}); // NOLINT(cppcoreguidelines-owning-memory)
     obj->_id = id;
     obj->_provider = &provider;
     return obj;
   }
 
   void TrackRowObject::populate(Glib::ustring const& title,
-                          ao::DictionaryId artist,
-                          ao::DictionaryId album,
-                          ao::DictionaryId albumArtist,
-                          ao::DictionaryId genre,
-                          ao::DictionaryId composer,
-                          ao::DictionaryId work,
-                          Glib::ustring const& tags,
-                          std::chrono::milliseconds duration,
-                          std::uint16_t year,
-                          std::uint16_t discNumber,
-                          std::uint16_t totalDiscs,
-                          std::uint16_t trackNumber,
-                          std::optional<std::uint64_t> optResourceId,
-                          std::uint32_t sampleRate,
-                          std::uint8_t channels,
-                          std::uint8_t bitDepth,
-                          std::uint16_t codecId)
+                                ao::DictionaryId artist,
+                                ao::DictionaryId album,
+                                ao::DictionaryId albumArtist,
+                                ao::DictionaryId genre,
+                                ao::DictionaryId composer,
+                                ao::DictionaryId work,
+                                Glib::ustring const& tags,
+                                std::chrono::milliseconds duration,
+                                std::uint16_t year,
+                                std::uint16_t discNumber,
+                                std::uint16_t totalDiscs,
+                                std::uint16_t trackNumber,
+                                std::optional<std::uint64_t> optResourceId,
+                                std::uint32_t sampleRate,
+                                std::uint8_t channels,
+                                std::uint8_t bitDepth,
+                                std::uint16_t codecId)
   {
     _propertyTitle.set_value(title);
     _propertyArtist.set_value(_provider->resolveDictionaryString(artist));

@@ -6,8 +6,8 @@
 #include "track/TrackRowCache.h"
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
-#include <runtime/AppSession.h>
 #include <map>
+#include <runtime/AppSession.h>
 #include <string>
 #include <vector>
 
@@ -58,7 +58,9 @@ namespace ao::gtk
     for (auto const& [id, node] : nodes)
     {
       if (node.parentId != rootParentId() && node.parentId != id && nodes.contains(node.parentId))
+      {
         children[node.parentId].push_back(id);
+      }
     }
 
     for (auto const& [id, node] : nodes)
@@ -95,7 +97,10 @@ namespace ao::gtk
       [](Glib::RefPtr<Glib::ObjectBase> const& item) -> Glib::RefPtr<Gio::ListModel>
       {
         auto node = std::dynamic_pointer_cast<ListTreeItem>(item);
-        if (!node || !node->hasChildren()) return nullptr;
+        if (!node || !node->hasChildren())
+        {
+          return nullptr;
+        }
         return node->getChildren();
       },
       false,

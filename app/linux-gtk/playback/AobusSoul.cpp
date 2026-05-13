@@ -2,8 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/AobusSoul.h"
+#include "runtime/AppSession.h"
+#include "runtime/PlaybackService.h"
+
 #include <algorithm>
 #include <cmath>
+#include <gdkmm/frameclock.h>
 #include <gdkmm/graphene_point.h>
 #include <gdkmm/graphene_rect.h>
 #include <gtk/gtk.h>
@@ -56,6 +60,7 @@ namespace ao::gtk
 
     static constexpr float kRefStemY1 = -35.0F / kRefHeight;
     static constexpr float kRefStemY2 = 30.0F / kRefHeight;
+
     ::gsk_path_builder_move_to(aBuilder, kNormalizedRadius, kRefStemY1);
     ::gsk_path_builder_line_to(aBuilder, kNormalizedRadius, kRefStemY2);
     _unitPathA.reset(::gsk_path_builder_free_to_path(aBuilder));
@@ -63,7 +68,89 @@ namespace ao::gtk
 
   AobusSoul::~AobusSoul() = default;
 
-  void AobusSoul::update(double timeSec, ao::audio::Quality quality, bool isStopped, bool isReady)
+  void AobusSoul::bind(ao::rt::AppSession& session)
+  {
+    auto& playback = session.playback();
+
+    _qualitySub = playback.onQualityChanged(
+      [this](auto const& ev)
+      {
+        _quality = ev.quality;
+        _isReady = ev.ready;
+        queue_draw();
+      });
+
+    auto const onStarted = [this]
+    {
+      _isPlaying = true;
+      queue_draw();
+    };
+
+    auto const onStopped = [this]
+    {
+      _isPlaying = false;
+      _firstFrameTime = 0;
+      queue_draw();
+    };
+
+    _idleSub = playback.onIdle(onStopped);
+    _stoppedSub = playback.onStopped(onStopped);
+    _startedSub = playback.onStarted(onStarted);
+
+    // Initial state
+    auto const& state = playback.state();
+    _isPlaying = (state.transport == ao::audio::Transport::Playing);
+    _quality = state.quality;
+    _isReady = state.ready;
+
+    _tickId = add_tick_callback(
+      [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
+      {
+        if (_isPlaying)
+        {
+          auto const frameTime = clock->get_frame_time();
+
+          if (_firstFrameTime == 0)
+          {
+            _firstFrameTime = frameTime;
+          }
+
+          static constexpr double kMicrosecondsPerSecond = 1'000'000.0;
+          _timeSec = static_cast<double>(frameTime - _firstFrameTime) / kMicrosecondsPerSecond;
+          _isStopped = false;
+        }
+        else
+        {
+          _timeSec = 0.0;
+          _isStopped = true;
+        }
+
+        queue_draw();
+        return true;
+      });
+  }
+
+  void AobusSoul::unbind()
+  {
+    _qualitySub.reset();
+    _idleSub.reset();
+    _startedSub.reset();
+    _stoppedSub.reset();
+
+    if (_tickId != 0)
+    {
+      remove_tick_callback(_tickId);
+      _tickId = 0;
+    }
+
+    _isPlaying = false;
+    _firstFrameTime = 0;
+  }
+
+  void AobusSoul::update(double const timeSec,
+                         ao::audio::Quality const quality,
+                         bool const isStopped,
+                         bool const isReady)
   {
     if (_timeSec == timeSec && _quality == quality && _isStopped == isStopped && _isReady == isReady)
     {

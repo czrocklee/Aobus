@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
 #include <app/linux-gtk/layout/document/LayoutDocument.h>
-#include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
 #include <app/linux-gtk/layout/document/LayoutYaml.h>
 #include <app/linux-gtk/layout/editor/LayoutEditorDialog.h>
+#include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
+#include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
 
 #include <app/runtime/AppSession.h>
 #include <app/runtime/ConfigStore.h>
@@ -28,7 +28,8 @@ namespace
   {
   public:
     bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); } void defer(std::move_only_function<void()> task) override { task(); }
+    void dispatch(std::move_only_function<void()> task) override { task(); }
+    void defer(std::move_only_function<void()> task) override { task(); }
   };
 } // namespace
 

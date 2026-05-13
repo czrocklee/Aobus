@@ -3,6 +3,7 @@
 
 #include "LayoutEditorDialog.h"
 
+#include "../LayoutConstants.h"
 #include <gtkmm/box.h>
 #include <gtkmm/checkbutton.h>
 #include <gtkmm/comboboxtext.h>
@@ -13,7 +14,6 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include "../LayoutConstants.h"
 
 namespace ao::gtk::layout::editor
 {

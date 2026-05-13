@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutDependencies.h"
-#include "layout/document/LayoutNode.h"
 
 #include <functional>
 #include <map>

@@ -18,8 +18,7 @@ namespace ao::gtk
   class TrackColumnController final
   {
   public:
-    using FactoryProvider =
-      std::function<Glib::RefPtr<Gtk::SignalListItemFactory>(TrackColumnDefinition const&)>;
+    using FactoryProvider = std::function<Glib::RefPtr<Gtk::SignalListItemFactory>(TrackColumnDefinition const&)>;
     using RedundancyProvider = std::function<std::unordered_set<TrackColumn>()>;
 
     TrackColumnController(Gtk::ColumnView& columnView, TrackColumnLayoutModel& layoutModel);
@@ -27,7 +26,7 @@ namespace ao::gtk
     void setRedundancyProvider(RedundancyProvider provider) { _redundancyProvider = std::move(provider); }
 
     // Column setup — calls factoryProvider for each column definition
-    void setupColumns(FactoryProvider factoryProvider);
+    void setupColumns(FactoryProvider const& factoryProvider);
     void setupColumnControls();
 
     // Layout management

@@ -11,13 +11,14 @@ namespace ao::gtk
   }
 
   Glib::RefPtr<ListRowObject> ListRowObject::create(ListId id,
-                                        ListId parentId,
-                                        std::int32_t depth,
-                                        bool smart,
-                                        Glib::ustring const& name,
-                                        Glib::ustring const& filter)
+                                                    ListId parentId,
+                                                    std::int32_t depth,
+                                                    bool smart,
+                                                    Glib::ustring const& name,
+                                                    Glib::ustring const& filter)
   {
-    auto obj = Glib::make_refptr_for_instance<ListRowObject>(new ListRowObject{}); // NOLINT(cppcoreguidelines-owning-memory)
+    auto obj =
+      Glib::make_refptr_for_instance<ListRowObject>(new ListRowObject{}); // NOLINT(cppcoreguidelines-owning-memory)
     obj->_listId = id;
     obj->_parentId = parentId;
     obj->_depth = depth;

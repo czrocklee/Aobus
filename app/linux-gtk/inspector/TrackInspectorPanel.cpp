@@ -125,7 +125,7 @@ namespace ao::gtk
     _tagEditor.signalTagsChanged().connect(
       [this](auto const& toAdd, auto const& toRemove)
       {
-        auto ids = _currentTrackIds;
+        auto const ids = _currentTrackIds;
 
         auto const result = _session.mutation().editTags(ids, toAdd, toRemove);
 
@@ -165,7 +165,8 @@ namespace ao::gtk
     createEditableRow("ALBUM", _albumLabel);
 
     _titleLabel.property_editing().signal_changed().connect(sigc::mem_fun(*this, &TrackInspectorPanel::onTitleEdited));
-    _artistLabel.property_editing().signal_changed().connect(sigc::mem_fun(*this, &TrackInspectorPanel::onArtistEdited));
+    _artistLabel.property_editing().signal_changed().connect(
+      sigc::mem_fun(*this, &TrackInspectorPanel::onArtistEdited));
     _albumLabel.property_editing().signal_changed().connect(sigc::mem_fun(*this, &TrackInspectorPanel::onAlbumEdited));
   }
 
@@ -345,13 +346,13 @@ namespace ao::gtk
       return;
     }
 
-    auto pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
+    auto const pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
     if (!pixbuf)
     {
-      pixbuf = loadCoverArtFromLibrary(snap.singleCoverArtId);
-      if (pixbuf)
+      auto const loadedPixbuf = loadCoverArtFromLibrary(snap.singleCoverArtId);
+      if (loadedPixbuf)
       {
-        _coverArtCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.value()), pixbuf);
+        _coverArtCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.value()), loadedPixbuf);
       }
     }
 

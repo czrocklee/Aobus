@@ -116,7 +116,7 @@ namespace ao::gtk
   }
 
   Glib::RefPtr<TrackRowObject> TrackRowCache::getTrackRow(TrackId id,
-                                                           ao::library::TrackStore::Reader const& reader) const
+                                                          ao::library::TrackStore::Reader const& reader) const
   {
     auto const it = _rowCache.find(id);
 

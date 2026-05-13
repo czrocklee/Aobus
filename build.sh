@@ -12,45 +12,66 @@ USE_CLANG="false"
 ENABLE_ASAN="false"
 ENABLE_TSAN="false"
 VERBOSE="false"
+TARGET=""
 
 show_usage() {
-    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang] [--asan] [--tsan] [--verbose]"
-    echo "  debug     - Debug build (default, no sanitizers)"
-    echo "  release   - Release build (optimized, no sanitizers)"
-    echo "  pgo1      - PGO step 1: instrumented build for profile generation"
-    echo "  pgo2      - PGO step 2: optimized build using collected profile"
-    echo "  profile   - Optimized build with debug symbols and frame pointers (for perf)"
-    echo "  --clean   - Clean build directory before building"
-    echo "  --tidy    - Enable clang-tidy during the configure/build (implies --clang)"
-    echo "  --clang   - Build with clang/clang++ in a dedicated build directory"
-    echo "  --asan    - Enable address/undefined sanitizers (Debug only, default: off)"
-    echo "  --tsan    - Enable thread sanitizer (Debug only, default: off)"
-    echo "  --verbose - Show full build lines"
+    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang] [--asan] [--tsan] [--verbose] [--target <target>]"
+    echo "  debug             - Debug build (default, no sanitizers)"
+    echo "  release           - Release build (optimized, no sanitizers)"
+    echo "  pgo1              - PGO step 1: instrumented build for profile generation"
+    echo "  pgo2              - PGO step 2: optimized build using collected profile"
+    echo "  profile           - Optimized build with debug symbols and frame pointers (for perf)"
+    echo "  --clean           - Clean build directory before building"
+    echo "  --tidy            - Enable clang-tidy during the configure/build (implies --clang)"
+    echo "  --clang           - Build with clang/clang++ in a dedicated build directory"
+    echo "  --asan            - Enable address/undefined sanitizers (Debug only, default: off)"
+    echo "  --tsan            - Enable thread sanitizer (Debug only, default: off)"
+    echo "  --verbose         - Show full build lines"
+    echo "  --target <target> - Build a specific target instead of all, and skip tests"
 }
 
-for ARG in "$@";
-do
-    case "$ARG" in
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         debug|release|pgo1|pgo2|profile)
-            BUILD_TYPE="$ARG"
+            BUILD_TYPE="$1"
+            shift
             ;;
         clean|--clean)
             CLEAN="true"
+            shift
+            ;;
+        --target)
+            if [[ -n "$2" ]]; then
+                TARGET="$2"
+                shift 2
+            else
+                echo "Error: --target requires an argument"
+                exit 1
+            fi
+            ;;
+        --target=*)
+            TARGET="${1#*=}"
+            shift
             ;;
         --tidy)
             ENABLE_TIDY="true"
+            shift
             ;;
         --asan)
             ENABLE_ASAN="true"
+            shift
             ;;
         --tsan)
             ENABLE_TSAN="true"
+            shift
             ;;
         --clang)
             USE_CLANG="true"
+            shift
             ;;
         --verbose)
             VERBOSE="true"
+            shift
             ;;
         -h|--help)
             show_usage
@@ -126,6 +147,9 @@ fi
 echo "Configuring Aobus with preset '$PRESET' in '$BUILD_DIR'..."
 CONFIGURE_COMMAND="cmake -S '$SOURCE_DIR' --preset '$PRESET' -B '$BUILD_DIR'"
 BUILD_COMMAND="cmake --build '$BUILD_DIR' --parallel"
+if [[ -n "$TARGET" ]]; then
+    BUILD_COMMAND+=" --target '$TARGET'"
+fi
 TEST_COMMAND="$BUILD_DIR/test/ao_test"
 TEST_LINUX_COMMAND="$BUILD_DIR/test/ao_test_gtk"
 
@@ -161,8 +185,12 @@ nix-shell --run "$BUILD_COMMAND"
 
 #Run tests(only for debug and release)
 if [[ "$BUILD_TYPE" == "debug" || "$BUILD_TYPE" == "release" ]]; then
-    echo "Running tests..."
-    nix-shell --run "$TEST_COMMAND && $TEST_LINUX_COMMAND"
+    if [[ -z "$TARGET" ]]; then
+        echo "Running tests..."
+        nix-shell --run "$TEST_COMMAND && $TEST_LINUX_COMMAND"
+    else
+        echo "Target specified ($TARGET), skipping tests."
+    fi
 fi
 
 #PGO instructions
@@ -205,4 +233,8 @@ echo "  clang-tidy: $ENABLE_TIDY"
 echo "  asan: $ENABLE_ASAN"
 echo "  tsan: $ENABLE_TSAN"
 echo "  verbose: $VERBOSE"
-echo "  tests: ao_test + ao_test_gtk"
+if [[ -z "$TARGET" ]]; then
+    echo "  tests: ao_test + ao_test_gtk"
+else
+    echo "  target: $TARGET (tests skipped)"
+fi

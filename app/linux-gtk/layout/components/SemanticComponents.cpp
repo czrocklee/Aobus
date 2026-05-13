@@ -157,7 +157,8 @@ namespace ao::gtk::layout
         }
 
         _widget = std::make_unique<ao::gtk::CoverArtWidget>(ctx.session, *ctx.inspector.coverArtCache);
-        _widget->bindToDetailProjection(ctx.session.views().detailProjection(ao::rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
+        _widget->bindToDetailProjection(ctx.session.views().detailProjection(
+          ao::rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
       }
 
       Gtk::Widget& widget() override
@@ -185,7 +186,8 @@ namespace ao::gtk::layout
         }
 
         _widget = std::make_unique<ao::gtk::TrackInspectorPanel>(ctx.session, *ctx.inspector.coverArtCache);
-        _widget->bindToDetailProjection(ctx.session.views().detailProjection(ao::rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
+        _widget->bindToDetailProjection(ctx.session.views().detailProjection(
+          ao::rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
 
         if (ctx.tag.editController != nullptr)
         {

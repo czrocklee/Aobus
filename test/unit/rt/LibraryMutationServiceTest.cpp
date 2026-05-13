@@ -14,7 +14,8 @@ namespace ao::rt::test
     struct NullExecutor final : public IControlExecutor
     {
       bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> task) override { task(); } void defer(std::move_only_function<void()> task) override { task(); }
+      void dispatch(std::move_only_function<void()> task) override { task(); }
+      void defer(std::move_only_function<void()> task) override { task(); }
     };
   }
 

@@ -22,7 +22,8 @@ namespace ao::rt::test
   {
   public:
     bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); } void defer(std::move_only_function<void()> task) override { task(); }
+    void dispatch(std::move_only_function<void()> task) override { task(); }
+    void defer(std::move_only_function<void()> task) override { task(); }
   };
 
   TEST_CASE("Headless Shell - Navigation and Layout Management", "[app][runtime][headless]")

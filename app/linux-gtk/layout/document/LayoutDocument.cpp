@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutYaml.h"
 #include "layout/LayoutConstants.h"
+#include "layout/document/LayoutYaml.h"
 
 #include <ao/utility/Log.h>
 #include <stdexcept>
@@ -234,15 +234,16 @@ namespace ao::gtk::layout
           .props = {{"orientation", LayoutValue{std::string{"horizontal"}}},
                     {"position", LayoutValue{static_cast<std::int64_t>(::ao::gtk::Layout::kDefaultSidebarWidth)}}},
           .layout = {{"vexpand", LayoutValue{true}}},
-          .children =
-            {LayoutNode{
-               .id = "left-sidebar",
-               .type = "box",
-               .props = {{"orientation", LayoutValue{std::string{"vertical"}}}},
-               .children = {LayoutNode{.type = "library.listTree", .layout = {{"vexpand", LayoutValue{true}}}},
-                            LayoutNode{.type = "inspector.coverArt",
-                                       .layout = {{"minHeight", LayoutValue{static_cast<std::int64_t>(::ao::gtk::Layout::kMinCoverArtHeight)}}}}}},
-             LayoutNode{.id = "workspace-with-inspector", .type = "app.workspaceWithInspector"}}},
+          .children = {LayoutNode{.id = "left-sidebar",
+                                  .type = "box",
+                                  .props = {{"orientation", LayoutValue{std::string{"vertical"}}}},
+                                  .children = {LayoutNode{.type = "library.listTree",
+                                                          .layout = {{"vexpand", LayoutValue{true}}}},
+                                               LayoutNode{.type = "inspector.coverArt",
+                                                          .layout = {{"minHeight",
+                                                                      LayoutValue{static_cast<std::int64_t>(
+                                                                        ::ao::gtk::Layout::kMinCoverArtHeight)}}}}}},
+                       LayoutNode{.id = "workspace-with-inspector", .type = "app.workspaceWithInspector"}}},
         LayoutNode{.type = "status.defaultBar"}}};
 
     doc.templates = getBuiltInTemplates();

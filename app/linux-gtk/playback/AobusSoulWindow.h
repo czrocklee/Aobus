@@ -18,25 +18,25 @@ namespace ao::gtk
     AobusSoulWindow();
     ~AobusSoulWindow() override;
 
+    AobusSoulWindow(AobusSoulWindow const&) = delete;
+    AobusSoulWindow& operator=(AobusSoulWindow const&) = delete;
+    AobusSoulWindow(AobusSoulWindow&&) = delete;
+    AobusSoulWindow& operator=(AobusSoulWindow&&) = delete;
+
     /**
-     * @brief Set the quality and state for the big soul.
+     * @brief Bind the window to an AppSession.
+     * @param session The AppSession to bind to.
      */
-    void updateState(ao::audio::Quality quality, bool isPlaying);
+    void bind(ao::rt::AppSession& session);
 
   protected:
-    // Close on any key or button press - handled via Gtk::ShortcutController
+    void on_show() override;
+    void on_hide() override;
 
   private:
     void ensureCss();
 
-    AobusSoul _bigSoul;
-    std::uint32_t _tickId = 0;
-    double _animationTime = 0.0;
-    std::int64_t _firstFrameTime = 0;
-
-    ao::audio::Quality _currentQuality = ao::audio::Quality::Unknown;
-    bool _isPlaying = false;
-
-    static constexpr int kDefaultLogoHeight = 400;
+    ao::rt::AppSession* _session = nullptr;
+    AobusSoul _bigSoul{};
   };
 } // namespace ao::gtk

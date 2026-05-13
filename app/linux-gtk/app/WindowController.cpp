@@ -40,7 +40,10 @@ namespace ao::gtk
       auto takeColumn = [&layout](TrackColumn column) -> std::optional<TrackColumnState>
       {
         auto const it = std::ranges::find(layout.columns, column, &TrackColumnState::column);
-        if (it == layout.columns.end()) return std::nullopt;
+        if (it == layout.columns.end())
+        {
+          return std::nullopt;
+        }
         return *it;
       };
 
@@ -48,15 +51,23 @@ namespace ao::gtk
       {
         if (auto const column = trackColumnFromId(id))
         {
-          if (std::ranges::find(ordered, *column, &TrackColumnState::column) != ordered.end()) continue;
-          if (auto stateEntry = takeColumn(*column)) ordered.push_back(*stateEntry);
+          if (std::ranges::find(ordered, *column, &TrackColumnState::column) != ordered.end())
+          {
+            continue;
+          }
+          if (auto stateEntry = takeColumn(*column))
+          {
+            ordered.push_back(*stateEntry);
+          }
         }
       }
 
       for (auto const& entry : layout.columns)
       {
         if (std::ranges::find(ordered, entry.column, &TrackColumnState::column) == ordered.end())
+        {
           ordered.push_back(entry);
+        }
       }
 
       layout.columns = std::move(ordered);
@@ -64,9 +75,14 @@ namespace ao::gtk
       for (auto& entry : layout.columns)
       {
         auto const columnId = std::string{trackColumnId(entry.column)};
-        if (std::ranges::contains(state.hiddenColumns, columnId)) entry.visible = false;
+        if (std::ranges::contains(state.hiddenColumns, columnId))
+        {
+          entry.visible = false;
+        }
         if (auto const width = state.columnWidths.find(columnId); width != state.columnWidths.end())
+        {
           entry.width = width->second;
+        }
       }
 
       return normalizeTrackColumnLayout(layout);
@@ -81,10 +97,15 @@ namespace ao::gtk
       {
         auto const columnId = std::string{trackColumnId(entry.column)};
         state.columnOrder.push_back(columnId);
-        if (!entry.visible) state.hiddenColumns.push_back(columnId);
+        if (!entry.visible)
+        {
+          state.hiddenColumns.push_back(columnId);
+        }
         if (auto const def = std::ranges::find(trackColumnDefinitions(), entry.column, &TrackColumnDefinition::column);
             def != trackColumnDefinitions().end() && entry.width != def->defaultWidth)
+        {
           state.columnWidths.insert_or_assign(columnId, entry.width);
+        }
       }
 
       return state;
@@ -120,11 +141,11 @@ namespace ao::gtk
 
     // Initialize track page manager
     _trackPageManager = std::make_unique<TrackPageManager>(_stack,
-                                                         _trackColumnLayoutModel,
-                                                         _session,
-                                                         _playbackSequenceController.get(),
-                                                         *_tagEditController,
-                                                         *_listSidebarController);
+                                                           _trackColumnLayoutModel,
+                                                           _session,
+                                                           _playbackSequenceController.get(),
+                                                           *_tagEditController,
+                                                           *_listSidebarController);
 
     // Initialize import/export coordinator
     _importExportCoordinator = std::make_unique<ImportExportCoordinator>(
@@ -192,8 +213,14 @@ namespace ao::gtk
     _tracksMutatedSubscription = _session.mutation().onTracksMutated(
       [this](auto const& trackIds)
       {
-        if (!_trackRowCache) return;
-        for (auto const trackId : trackIds) _trackRowCache->invalidate(trackId);
+        if (!_trackRowCache)
+        {
+          return;
+        }
+        for (auto const trackId : trackIds)
+        {
+          _trackRowCache->invalidate(trackId);
+        }
         _session.sources().allTracks().notifyUpdated(trackIds);
       });
 
@@ -209,14 +236,20 @@ namespace ao::gtk
 
     _tagEditController->setDataProvider(_trackRowCache.get());
 
-    if (_statusBar) _statusBar->showMessage("Aobus Ready");
+    if (_statusBar)
+    {
+      _statusBar->showMessage("Aobus Ready");
+    }
 
     auto const txn = _session.musicLibrary().readTransaction();
     rebuildListPages(txn);
 
     _session.workspace().restoreSession();
 
-    if (_session.workspace().layoutState().openViews.empty()) _session.workspace().navigateTo(allTracksListId());
+    if (_session.workspace().layoutState().openViews.empty())
+    {
+      _session.workspace().navigateTo(allTracksListId());
+    }
 
     saveSession();
   }
@@ -225,8 +258,14 @@ namespace ao::gtk
   {
     auto ws = WindowState{};
 
-    if (auto const width = _window.get_width(); width > 0) ws.width = width;
-    if (auto const height = _window.get_height(); height > 0) ws.height = height;
+    if (auto const width = _window.get_width(); width > 0)
+    {
+      ws.width = width;
+    }
+    if (auto const height = _window.get_height(); height > 0)
+    {
+      ws.height = height;
+    }
     ws.maximized = _window.is_maximized();
 
     _configStore->save("window", ws);
@@ -240,14 +279,21 @@ namespace ao::gtk
   {
     auto ws = WindowState{};
     if (auto const res = _configStore->load("window", ws); !res && res.error().code != ao::Error::Code::NotFound)
+    {
       APP_LOG_DEBUG("Failed to load window config: {}", res.error().message);
+    }
 
     _window.set_default_size(ws.width, ws.height);
-    if (ws.maximized) _window.maximize();
+    if (ws.maximized)
+    {
+      _window.maximize();
+    }
 
     auto tvs = TrackViewState{};
     if (auto const res = _configStore->load("track_view", tvs); !res && res.error().code != ao::Error::Code::NotFound)
+    {
       APP_LOG_DEBUG("Failed to load track view config: {}", res.error().message);
+    }
 
     _trackColumnLayoutModel.setLayout(trackColumnLayoutFromState(tvs));
   }
@@ -257,16 +303,25 @@ namespace ao::gtk
     APP_LOG_DEBUG("rebuildListPages called");
     _trackPageManager->rebuild(*_trackRowCache, txn);
 
-    if (_listSidebarController) _listSidebarController->rebuildTree(*_trackRowCache, txn);
+    if (_listSidebarController)
+    {
+      _listSidebarController->rebuildTree(*_trackRowCache, txn);
+    }
   }
 
   void WindowController::updateImportProgress(double fraction, std::string_view info)
   {
-    if (!_statusBar) return;
+    if (!_statusBar)
+    {
+      return;
+    }
     if (fraction >= 1.0)
     {
       _statusBar->clearImportProgress();
-      if (_trackRowCache) _statusBar->setTrackCount(_session.sources().allTracks().size());
+      if (_trackRowCache)
+      {
+        _statusBar->setTrackCount(_session.sources().allTracks().size());
+      }
     }
     else
     {

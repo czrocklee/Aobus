@@ -3,8 +3,8 @@
 
 #include "list/SmartListDialog.h"
 #include "track/TrackListAdapter.h"
-#include "track/TrackRowObject.h"
 #include "track/TrackRowCache.h"
+#include "track/TrackRowObject.h"
 #include "track/TrackViewPage.h"
 
 #include <ao/library/ListStore.h>

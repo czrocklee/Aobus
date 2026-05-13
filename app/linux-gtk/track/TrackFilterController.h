@@ -27,9 +27,7 @@ namespace ao::gtk
     using CreateSmartListSignal = sigc::signal<void(std::string)>;
     using StatusMessageFn = std::function<void(std::string_view)>;
 
-    TrackFilterController(ao::rt::AppSession& session,
-                          ao::rt::ViewId viewId,
-                          Gtk::Entry& filterEntry);
+    TrackFilterController(ao::rt::AppSession& session, ao::rt::ViewId viewId, Gtk::Entry& filterEntry);
 
     void setFilterExpression(std::string_view expression);
     void setStatusMessageCallback(StatusMessageFn callback);

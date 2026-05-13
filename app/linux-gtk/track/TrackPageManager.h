@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include "library_io/PlaylistExporter.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackPresentation.h"
 #include "track/TrackViewPage.h"
-#include "library_io/PlaylistExporter.h"
 #include <runtime/AppSession.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/PlaybackService.h>
@@ -46,11 +46,11 @@ namespace ao::gtk
   {
   public:
     TrackPageManager(Gtk::Stack& stack,
-                   TrackColumnLayoutModel& layoutModel,
-                   ao::rt::AppSession& session,
-                   PlaybackSequenceController* sequenceController,
-                   TagEditController& tagEditController,
-                   ListSidebarController& listSidebar);
+                     TrackColumnLayoutModel& layoutModel,
+                     ao::rt::AppSession& session,
+                     PlaybackSequenceController* sequenceController,
+                     TagEditController& tagEditController,
+                     ListSidebarController& listSidebar);
     ~TrackPageManager();
 
     void setPlaybackSequenceController(PlaybackSequenceController& c) { _playbackSequenceController = &c; }

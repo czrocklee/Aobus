@@ -67,3 +67,7 @@ Thumbs.db
 # Test results and log
 *.log
 test/test_results/
+
+# AI agents
+.gemini
+.claude

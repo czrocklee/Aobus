@@ -30,8 +30,7 @@ namespace ao::gtk
       new ProjectionTrackModel()); // NOLINT(cppcoreguidelines-owning-memory)
   }
 
-  void ProjectionTrackModel::setProjection(ao::rt::ITrackListProjection* projection,
-                                           TrackRowCache const& provider)
+  void ProjectionTrackModel::setProjection(ao::rt::ITrackListProjection* projection, TrackRowCache const& provider)
   {
     _projection = projection;
     _provider = &provider;

@@ -3,9 +3,9 @@
 
 #include "PlaybackComponents.h"
 
+#include "layout/LayoutConstants.h"
 #include "playback/AobusSoul.h"
 #include "playback/AobusSoulWindow.h"
-#include "layout/LayoutConstants.h"
 #include "playback/OutputListItems.h"
 #include "playback/VolumeBar.h"
 #include <runtime/AppSession.h>
@@ -29,6 +29,8 @@ namespace ao::gtk::layout
 {
   namespace
   {
+    constexpr double kLongPressDelayFactor = 2.0;
+
     /**
      * @brief playback.playPauseButton
      */
@@ -717,6 +719,8 @@ namespace ao::gtk::layout
         _button.add_css_class("output-button-logo");
         _button.set_child(_soul);
 
+        _soul.bind(_session);
+
         _popover.set_parent(_button);
         _popover.set_autohide(true);
         _popover.set_position(Gtk::PositionType::BOTTOM);
@@ -727,6 +731,7 @@ namespace ao::gtk::layout
 
         int const minPopoverWidth = 300;
         int const minPopoverHeight = 300;
+
         scrolled->set_min_content_height(minPopoverHeight);
         scrolled->set_min_content_width(minPopoverWidth);
         _popover.set_child(*scrolled);
@@ -739,18 +744,30 @@ namespace ao::gtk::layout
           });
 
         auto const longPress = Gtk::GestureLongPress::create();
+
         longPress->set_button(GDK_BUTTON_SECONDARY);
-        longPress->set_delay_factor(2.0);
+        longPress->set_delay_factor(kLongPressDelayFactor);
         longPress->signal_pressed().connect(
           [this](double, double)
           {
             if (!_soulWindow)
             {
               _soulWindow = std::make_unique<AobusSoulWindow>();
+
+              if (auto* const root = _button.get_root())
+              {
+                if (auto* const window = dynamic_cast<Gtk::Window*>(root))
+                {
+                  _soulWindow->set_transient_for(*window);
+                }
+              }
+
+              _soulWindow->bind(_session);
             }
-            _soulWindow->updateState(_lastQuality, _isPlaying);
+
             _soulWindow->present();
           });
+
         _button.add_controller(longPress);
 
         _listBox.set_selection_mode(Gtk::SelectionMode::NONE);
@@ -776,39 +793,6 @@ namespace ao::gtk::layout
               }
             }
           });
-
-        _qualitySub = _session.playback().onQualityChanged(
-          [this](auto const& ev)
-          {
-            _lastQuality = ev.quality;
-            _isReady = ev.ready;
-          });
-
-        _idleSub = _session.playback().onIdle([this] { _isPlaying = false; });
-        _startedSub = _session.playback().onStarted([this] { _isPlaying = true; });
-
-        _button.add_tick_callback(
-          [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
-          {
-            if (_isPlaying)
-            {
-              auto const frameTime = clock->get_frame_time();
-
-              if (_firstFrameTime == 0)
-              {
-                _firstFrameTime = frameTime;
-              }
-              double const timeSec = static_cast<double>(frameTime - _firstFrameTime) / 1'000'000.0;
-              _soul.update(timeSec, _lastQuality, false, _isReady);
-            }
-            else
-            {
-              _soul.update(0.0, _lastQuality, true, _isReady);
-              _firstFrameTime = 0;
-            }
-
-            return true;
-          });
       }
 
       ~OutputButtonComponent() override { _popover.unparent(); }
@@ -830,13 +814,13 @@ namespace ao::gtk::layout
           header->set_valign(Gtk::Align::CENTER);
           header->set_xalign(0.0);
           header->add_css_class("menu-header");
+
           return header;
         }
 
         if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
         {
           auto* const rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-
           int const rowSpacing = 10;
           rowBox->set_spacing(rowSpacing);
           rowBox->set_valign(Gtk::Align::CENTER);
@@ -908,6 +892,7 @@ namespace ao::gtk::layout
               };
 
               auto const item = DeviceItem::create(backend.id, audioDevice, profile, displayName);
+
               item->active = (backend.id == state.selectedOutput.backendId &&
                               profile == state.selectedOutput.profileId && device.id == state.selectedOutput.deviceId);
               _store->append(item);
@@ -917,21 +902,12 @@ namespace ao::gtk::layout
       }
 
       ao::rt::AppSession& _session;
-      Gtk::Button _button;
-      ao::gtk::AobusSoul _soul;
-      std::unique_ptr<AobusSoulWindow> _soulWindow;
-      Gtk::Popover _popover;
-      Gtk::ListBox _listBox;
-      Glib::RefPtr<Gio::ListStore<Glib::Object>> _store;
-
-      ao::audio::Quality _lastQuality = ao::audio::Quality::Unknown;
-      bool _isReady = false;
-      bool _isPlaying = false;
-      std::int64_t _firstFrameTime = 0;
-
-      ao::rt::Subscription _qualitySub;
-      ao::rt::Subscription _idleSub;
-      ao::rt::Subscription _startedSub;
+      Gtk::Button _button{};
+      ao::gtk::AobusSoul _soul{};
+      std::unique_ptr<AobusSoulWindow> _soulWindow{};
+      Gtk::Popover _popover{};
+      Gtk::ListBox _listBox{};
+      Glib::RefPtr<Gio::ListStore<Glib::Object>> _store{};
     };
 
     /**
@@ -947,52 +923,14 @@ namespace ao::gtk::layout
         _soul.set_valign(Gtk::Align::CENTER);
         _soul.set_halign(Gtk::Align::CENTER);
 
-        _qualitySub = _session.playback().onQualityChanged(
-          [this](auto const& ev)
-          {
-            _lastQuality = ev.quality;
-            _isReady = ev.ready;
-          });
-
-        _idleSub = _session.playback().onIdle([this] { _isPlaying = false; });
-        _startedSub = _session.playback().onStarted([this] { _isPlaying = true; });
-
-        _soul.add_tick_callback(
-          [this](Glib::RefPtr<Gdk::FrameClock> const& clock) -> bool
-          {
-            if (_isPlaying)
-            {
-              auto const frameTime = clock->get_frame_time();
-
-              if (_firstFrameTime == 0)
-              {
-                _firstFrameTime = frameTime;
-              }
-              double const timeSec = static_cast<double>(frameTime - _firstFrameTime) / 1'000'000.0;
-              _soul.update(timeSec, _lastQuality, false, _isReady);
-            }
-            else
-            {
-              _soul.update(0.0, _lastQuality, true, _isReady);
-              _firstFrameTime = 0;
-            }
-
-            return true;
-          });
+        _soul.bind(_session);
       }
 
       Gtk::Widget& widget() override { return _soul; }
 
     private:
       ao::rt::AppSession& _session;
-      ao::gtk::AobusSoul _soul;
-      ao::audio::Quality _lastQuality = ao::audio::Quality::Unknown;
-      bool _isReady = false;
-      bool _isPlaying = false;
-      std::int64_t _firstFrameTime = 0;
-      ao::rt::Subscription _qualitySub;
-      ao::rt::Subscription _idleSub;
-      ao::rt::Subscription _startedSub;
+      ao::gtk::AobusSoul _soul{};
     };
 
     std::unique_ptr<ILayoutComponent> createPlayPauseButton(LayoutDependencies& ctx, LayoutNode const& node)

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "layout/runtime/LayoutDependencies.h"
 #include "layout/document/LayoutDocument.h"
+#include "layout/runtime/LayoutDependencies.h"
 #include "layout/runtime/LayoutRuntime.h"
 
 #include <gtkmm/box.h>

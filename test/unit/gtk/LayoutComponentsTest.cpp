@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
-#include <app/linux-gtk/layout/document/LayoutDocument.h>
-#include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
-#include <app/linux-gtk/layout/document/LayoutYaml.h>
 #include <app/linux-gtk/layout/components/Containers.h>
+#include <app/linux-gtk/layout/document/LayoutDocument.h>
+#include <app/linux-gtk/layout/document/LayoutYaml.h>
+#include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
+#include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
 
 #include "inspector/CoverArtCache.h"
 #include "shell/StatusBar.h"
@@ -34,7 +34,8 @@ namespace
   {
   public:
     bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); } void defer(std::move_only_function<void()> task) override { task(); }
+    void dispatch(std::move_only_function<void()> task) override { task(); }
+    void defer(std::move_only_function<void()> task) override { task(); }
   };
 
   LayoutDependencies makeContext(ComponentRegistry& registry, ao::rt::AppSession& session, Gtk::Window& window)
@@ -372,10 +373,10 @@ TEST_CASE("Semantic component success states", "[layout][components]")
   menuModel->append("Test Item", "win.test");
 
   auto ctx = LayoutDependencies{.registry = registry,
-                              .session = session,
-                              .parentWindow = window,
-                              .inspector = {.coverArtCache = coverArtCache.get()},
-                              .shell = {.statusBar = statusBar.get(), .menuModel = menuModel}};
+                                .session = session,
+                                .parentWindow = window,
+                                .inspector = {.coverArtCache = coverArtCache.get()},
+                                .shell = {.statusBar = statusBar.get(), .menuModel = menuModel}};
 
   [[maybe_unused]] auto runtime = LayoutRuntime{registry};
   {

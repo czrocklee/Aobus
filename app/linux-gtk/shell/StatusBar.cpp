@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "shell/StatusBar.h"
+#include "common/SvgTemplate.h"
 #include "layout/LayoutConstants.h"
 #include "playback/OutputListItems.h"
-#include "common/SvgTemplate.h"
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>

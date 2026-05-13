@@ -37,11 +37,11 @@ namespace ao::gtk
   }
 
   TrackPageManager::TrackPageManager(Gtk::Stack& stack,
-                                 TrackColumnLayoutModel& layoutModel,
-                                 ao::rt::AppSession& session,
-                                 PlaybackSequenceController* sequenceController,
-                                 TagEditController& tagEditController,
-                                 ListSidebarController& listSidebar)
+                                     TrackColumnLayoutModel& layoutModel,
+                                     ao::rt::AppSession& session,
+                                     PlaybackSequenceController* sequenceController,
+                                     TagEditController& tagEditController,
+                                     ListSidebarController& listSidebar)
     : _stack{stack}
     , _layoutModel{layoutModel}
     , _session{session}
@@ -329,7 +329,8 @@ namespace ao::gtk
     page->selectionController().signalContextMenuRequested().connect(
       [this, page](double posX, double posY)
       {
-        TrackSelectionContext sel{.listId = page->getListId(), .selectedIds = page->selectionController().getSelectedTrackIds()};
+        TrackSelectionContext sel{
+          .listId = page->getListId(), .selectedIds = page->selectionController().getSelectedTrackIds()};
         _tagEditController.showTrackContextMenu(*page, sel, posX, posY);
       });
 

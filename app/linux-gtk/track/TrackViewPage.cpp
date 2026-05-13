@@ -4,11 +4,11 @@
 #include "track/TrackViewPage.h"
 
 #include "layout/LayoutConstants.h"
-#include "track/TrackFilterController.h"
-#include "track/TrackRowObject.h"
-#include "track/TrackRowCache.h"
-#include "track/TrackSelectionController.h"
 #include "shell/ThemeBus.h"
+#include "track/TrackFilterController.h"
+#include "track/TrackRowCache.h"
+#include "track/TrackRowObject.h"
+#include "track/TrackSelectionController.h"
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
@@ -246,8 +246,7 @@ namespace ao::gtk
     _selectionModel = Gtk::MultiSelection::create(_groupModel);
 
     _filterController = std::make_unique<TrackFilterController>(_session, _viewId, _filterEntry);
-    _filterController->setStatusMessageCallback(
-      [this](std::string_view msg) { setStatusMessage(msg); });
+    _filterController->setStatusMessageCallback([this](std::string_view msg) { setStatusMessage(msg); });
     _filterController->setCreateSmartListSignal(&_createSmartListRequested);
 
     _selectionController = std::make_unique<TrackSelectionController>(_columnView, _adapter, _selectionModel);
@@ -280,7 +279,8 @@ namespace ao::gtk
         _columnView.queue_draw();
       });
 
-    _columnView.get_style_context()->add_provider(_columnController->cssProvider(), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    _columnView.get_style_context()->add_provider(
+      _columnController->cssProvider(), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
     setupPresentationControls();
     setupStatusBar();
@@ -294,8 +294,7 @@ namespace ao::gtk
     _columnView.set_show_row_separators(true);
     _columnView.set_reorderable(true);
 
-    _columnController->setupColumns(
-      [this](TrackColumnDefinition const& def) { return createTextColumnFactory(def); });
+    _columnController->setupColumns([this](TrackColumnDefinition const& def) { return createTextColumnFactory(def); });
     _columnController->setupColumnControls();
 
     _scrolledWindow.set_child(_columnView);

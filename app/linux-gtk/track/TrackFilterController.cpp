@@ -21,12 +21,10 @@ namespace ao::gtk
   TrackFilterController::TrackFilterController(ao::rt::AppSession& session,
                                                ao::rt::ViewId viewId,
                                                Gtk::Entry& filterEntry)
-    : _session{session}
-    , _viewId{viewId}
-    , _filterEntry{filterEntry}
+    : _session{session}, _viewId{viewId}, _filterEntry{filterEntry}
   {
-    _filterTextConnection = _filterEntry.signal_changed().connect(
-      sigc::mem_fun(*this, &TrackFilterController::onFilterTextChanged));
+    _filterTextConnection =
+      _filterEntry.signal_changed().connect(sigc::mem_fun(*this, &TrackFilterController::onFilterTextChanged));
 
     _filterIconConnection = _filterEntry.signal_icon_press().connect(
       [this](Gtk::Entry::IconPosition iconPosition)
@@ -46,7 +44,7 @@ namespace ao::gtk
     dropTarget->signal_drop().connect(
       [this](Glib::ValueBase const& value, double, double)
       {
-        if (G_VALUE_HOLDS_STRING(value.gobj()))
+        if (value.gobj()->g_type == G_TYPE_STRING)
         {
           auto val = Glib::Value<std::string>{};
           val.init(value.gobj());
@@ -144,7 +142,7 @@ namespace ao::gtk
       _filterEntry.add_css_class("error");
       if (_statusMessageCallback)
       {
-        _statusMessageCallback("Expression error: " + _filterErrorMessage);
+        _statusMessageCallback(std::format("Expression error: {}", _filterErrorMessage));
       }
     }
     else

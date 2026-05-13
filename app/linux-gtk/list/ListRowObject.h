@@ -35,11 +35,11 @@ namespace ao::gtk
     Glib::ustring getFilter() const { return _filter; }
 
     static Glib::RefPtr<ListRowObject> create(ListId id,
-                                        ListId parentId,
-                                        std::int32_t depth,
-                                        bool smart,
-                                        Glib::ustring const& name,
-                                        Glib::ustring const& filter = "");
+                                              ListId parentId,
+                                              std::int32_t depth,
+                                              bool smart,
+                                              Glib::ustring const& name,
+                                              Glib::ustring const& filter = "");
 
   protected:
     explicit ListRowObject();

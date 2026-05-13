@@ -24,13 +24,12 @@ namespace ao::gtk
   }
 
   TrackColumnController::TrackColumnController(Gtk::ColumnView& columnView, TrackColumnLayoutModel& layoutModel)
-    : _columnView{columnView}
-    , _columnLayoutModel{layoutModel}
+    : _columnView{columnView}, _columnLayoutModel{layoutModel}
   {
     _dynamicCssProvider = Gtk::CssProvider::create();
   }
 
-  void TrackColumnController::setupColumns(FactoryProvider factoryProvider)
+  void TrackColumnController::setupColumns(FactoryProvider const& factoryProvider)
   {
     _columns.reserve(trackColumnDefinitions().size());
 

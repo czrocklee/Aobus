@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "layout/runtime/LayoutDependencies.h"
+#include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
-#include "layout/document/LayoutDocument.h"
+#include "layout/runtime/LayoutDependencies.h"
 
 #include <memory>
 

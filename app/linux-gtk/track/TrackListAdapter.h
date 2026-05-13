@@ -6,8 +6,8 @@
 #include <ao/library/MusicLibrary.h>
 
 #include "track/TrackListModel.h"
-#include "track/TrackRowObject.h"
 #include "track/TrackRowCache.h"
+#include "track/TrackRowObject.h"
 #include <runtime/ProjectionTypes.h>
 #include <runtime/TrackSource.h>
 

@@ -50,6 +50,7 @@ add_executable(ao_test
     unit/rt/NotificationServiceTest.cpp
     unit/rt/ViewServiceTest.cpp
     unit/rt/ConfigStoreTest.cpp
+    unit/rt/ManualListSourceTest.cpp
     unit/rt/HeadlessShellTest.cpp
 
     # integration tests

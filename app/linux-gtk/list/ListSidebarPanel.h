@@ -51,7 +51,7 @@ namespace ao::gtk
 
     void setupSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
     void bindSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem);
-    void onListSelectionChanged(std::uint32_t position, std::uint32_t nItems);
+    void onListSelectionChanged(std::uint32_t position, std::uint32_t nItems) const;
 
     Callbacks _callbacks;
 

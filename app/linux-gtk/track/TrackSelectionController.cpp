@@ -35,9 +35,7 @@ namespace ao::gtk
   TrackSelectionController::TrackSelectionController(Gtk::ColumnView& columnView,
                                                      TrackListAdapter& adapter,
                                                      Glib::RefPtr<Gtk::MultiSelection> selectionModel)
-    : _columnView{columnView}
-    , _adapter{adapter}
-    , _selectionModel{std::move(selectionModel)}
+    : _columnView{columnView}, _adapter{adapter}, _selectionModel{std::move(selectionModel)}
   {
     _selectionChangedConnection = _selectionModel->signal_selection_changed().connect(
       sigc::mem_fun(*this, &TrackSelectionController::onSelectionChanged));

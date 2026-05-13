@@ -50,13 +50,13 @@ namespace ao::gtk
       ao::audio::flow::Graph flow;
     };
 
-    // Layout constants
-    static constexpr int kImportProgressWidth = 200;
-    static constexpr int kTransitionDurationMs = 250;
-
     void applyInitialState();
     void updatePlaybackStatusLabels(ao::audio::Player::Status const& status);
     void updatePlaybackTooltip(ao::audio::Player::Status const& status);
+
+    // Layout constants
+    static constexpr int kImportProgressWidth = 200;
+    static constexpr int kTransitionDurationMs = 250;
 
     // Left: Library info
     Gtk::Label _libraryLabel;

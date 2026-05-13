@@ -3,9 +3,9 @@
 
 #include "list/ListSidebarPanel.h"
 #include "layout/LayoutConstants.h"
+#include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
-#include "list/ListRowObject.h"
 #include <runtime/AppSession.h>
 
 namespace ao::gtk
@@ -241,7 +241,7 @@ namespace ao::gtk
     }
   }
 
-  void ListSidebarPanel::onListSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/)
+  void ListSidebarPanel::onListSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/) const
   {
     if (_callbacks.onSelectionChanged)
     {

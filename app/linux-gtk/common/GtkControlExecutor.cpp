@@ -34,16 +34,16 @@ namespace ao::gtk
 
   void GtkControlExecutor::defer(std::move_only_function<void()> task)
   {
-    auto* ptr = new std::move_only_function<void()>(std::move(task));
-    g_idle_add(
-      [](gpointer data) -> gboolean
+    auto sharedTask = std::make_shared<std::move_only_function<void()>>(std::move(task));
+    Glib::signal_idle().connect(
+      [sharedTask]
       {
-        auto* fn = static_cast<std::move_only_function<void()>*>(data);
-        (*fn)();
-        delete fn;
-        return G_SOURCE_REMOVE;
-      },
-      ptr);
+        if (*sharedTask)
+        {
+          (*sharedTask)();
+        }
+        return false;
+      });
   }
 
   void GtkControlExecutor::onDispatched()

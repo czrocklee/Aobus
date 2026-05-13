@@ -3,8 +3,8 @@
 
 #include "track/TrackListAdapter.h"
 
-#include "track/TrackRowObject.h"
 #include "track/TrackRowCache.h"
+#include "track/TrackRowObject.h"
 
 #include <ao/library/TrackStore.h>
 #include <ao/utility/ScopedTimer.h>
@@ -393,8 +393,7 @@ namespace ao::gtk
       return;
     }
 
-    auto additions = std::vector<Glib::RefPtr<TrackRowObject>>{};
-    additions.push_back(row);
+    auto const additions = std::vector<Glib::RefPtr<TrackRowObject>>{row};
     _listStore->splice(uintIdx, 1, additions);
   }
 
