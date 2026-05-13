@@ -54,7 +54,7 @@ namespace ao::rt
   class SmartListEvaluator final
   {
   public:
-    explicit SmartListEvaluator(ao::library::MusicLibrary& ml);
+    explicit SmartListEvaluator(library::MusicLibrary& ml);
     ~SmartListEvaluator();
 
     // Disable copy/move
@@ -87,7 +87,7 @@ namespace ao::rt
     void evaluateLists(std::span<SmartListSource*> lists);
     void evaluateMembers(TrackSource& source,
                          std::span<SmartListSource*> lists,
-                         ao::library::TrackStore::Reader::LoadMode mode);
+                         library::TrackStore::Reader::LoadMode mode);
 
     void handleSourceReset(SourceBucket& bucket);
     void handleSourceInserted(SourceBucket& bucket, TrackId id, std::size_t sourceIndex);
@@ -100,9 +100,9 @@ namespace ao::rt
 
     void handleSourceDestroyed(SourceBucket& bucket);
 
-    static ao::library::TrackStore::Reader::LoadMode getUnionMode(std::span<SmartListSource*> lists);
+    static library::TrackStore::Reader::LoadMode getUnionMode(std::span<SmartListSource*> lists);
 
-    ao::library::MusicLibrary& _ml;
+    library::MusicLibrary& _ml;
     std::map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;
     bool _alive = true;
 

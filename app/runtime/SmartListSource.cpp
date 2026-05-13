@@ -11,7 +11,7 @@
 
 namespace ao::rt
 {
-  SmartListSource::SmartListSource(TrackSource& source, ao::library::MusicLibrary& ml, SmartListEvaluator& evaluator)
+  SmartListSource::SmartListSource(TrackSource& source, library::MusicLibrary& ml, SmartListEvaluator& evaluator)
     : _source{source}, _ml{ml}, _evaluator{&evaluator}
   {
     _evaluator->registerList(_source, *this);

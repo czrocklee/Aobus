@@ -19,7 +19,7 @@ namespace ao::rt
     ViewService& views;
     PlaybackService& playback;
     LibraryMutationService& mutation;
-    ao::library::MusicLibrary& library;
+    library::MusicLibrary& library;
     LayoutState layoutState;
     std::shared_ptr<ConfigStore> configStore;
     Subscription listsMutatedSub;
@@ -31,7 +31,7 @@ namespace ao::rt
          ViewService& views,
          PlaybackService& playback,
          LibraryMutationService& mutation,
-         ao::library::MusicLibrary& library,
+         library::MusicLibrary& library,
          std::shared_ptr<ConfigStore> configStore)
       : views{views}, playback{playback}, mutation{mutation}, library{library}, configStore{std::move(configStore)}
     {
@@ -64,7 +64,7 @@ namespace ao::rt
   WorkspaceService::WorkspaceService(ViewService& views,
                                      PlaybackService& playback,
                                      LibraryMutationService& mutation,
-                                     ao::library::MusicLibrary& library,
+                                     library::MusicLibrary& library,
                                      std::shared_ptr<ConfigStore> configStore)
     : _impl{std::make_unique<Impl>(this, views, playback, mutation, library, std::move(configStore))}
   {
@@ -203,9 +203,9 @@ namespace ao::rt
 
     if (!snapshot.lastBackend.empty())
     {
-      _impl->playback.setOutput(ao::audio::BackendId{snapshot.lastBackend},
-                                ao::audio::DeviceId{snapshot.lastOutputDeviceId},
-                                ao::audio::ProfileId{snapshot.lastProfile});
+      _impl->playback.setOutput(audio::BackendId{snapshot.lastBackend},
+                                audio::DeviceId{snapshot.lastOutputDeviceId},
+                                audio::ProfileId{snapshot.lastProfile});
     }
 
     _impl->sessionRestoredSignal.emit(snapshot.lastLibraryPath);

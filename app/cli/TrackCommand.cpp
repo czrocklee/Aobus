@@ -20,12 +20,12 @@ namespace ao::cli
   {
     using namespace ao;
 
-    std::vector<std::pair<TrackId, ao::library::TrackView>> collectTracks(ao::library::MusicLibrary& ml,
-                                                                          std::string const& filter)
+    std::vector<std::pair<TrackId, library::TrackView>> collectTracks(library::MusicLibrary& ml,
+                                                                      std::string const& filter)
     {
       auto const txn = ml.readTransaction();
       auto const reader = ml.tracks().reader(txn);
-      auto matches = std::vector<std::pair<TrackId, ao::library::TrackView>>{};
+      auto matches = std::vector<std::pair<TrackId, library::TrackView>>{};
 
       if (filter.empty())
       {
@@ -37,10 +37,10 @@ namespace ao::cli
         return matches;
       }
 
-      auto const expr = ao::query::parse(filter);
-      auto compiler = ao::query::QueryCompiler{&ml.dictionary()};
+      auto const expr = query::parse(filter);
+      auto compiler = query::QueryCompiler{&ml.dictionary()};
       auto const plan = compiler.compile(expr);
-      auto evaluator = ao::query::PlanEvaluator{};
+      auto evaluator = query::PlanEvaluator{};
 
       for (auto const& [id, view] : reader)
       {
@@ -53,10 +53,10 @@ namespace ao::cli
       return matches;
     }
 
-    void formatJson(std::vector<std::pair<TrackId, ao::library::TrackView>> const& matches,
+    void formatJson(std::vector<std::pair<TrackId, library::TrackView>> const& matches,
                     std::size_t offset,
                     std::size_t limit,
-                    ao::library::MusicLibrary& ml,
+                    library::MusicLibrary& ml,
                     std::ostream& os)
     {
       if (offset >= matches.size())
@@ -71,7 +71,7 @@ namespace ao::cli
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& [id, view] = matches[i];
-        os << "  {\"id\": " << id << ", \"title\": \"" << view.metadata().title() << "\"";
+        os << " {\"id\": " << id << ", \"title\": \"" << view.metadata().title() << "\"";
 
         if (view.metadata().artistId() > 0)
         {
@@ -96,7 +96,7 @@ namespace ao::cli
       os << "]\n";
     }
 
-    void formatPlain(std::vector<std::pair<TrackId, ao::library::TrackView>> const& matches,
+    void formatPlain(std::vector<std::pair<TrackId, library::TrackView>> const& matches,
                      std::size_t offset,
                      std::size_t limit,
                      std::ostream& os)
@@ -120,7 +120,7 @@ namespace ao::cli
       }
     }
 
-    void show(ao::library::MusicLibrary& ml,
+    void show(library::MusicLibrary& ml,
               std::string const& filter,
               bool json,
               std::size_t limit,
@@ -139,7 +139,7 @@ namespace ao::cli
       }
     }
 
-    void createTrack(ao::library::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
+    void createTrack(library::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
     {
       auto const optTagFile = tag::File::open(path);
 
@@ -172,7 +172,7 @@ namespace ao::cli
     }
   }
 
-  void setupTrackCommand(CLI::App& app, ao::library::MusicLibrary& ml)
+  void setupTrackCommand(CLI::App& app, library::MusicLibrary& ml)
   {
     auto* track = app.add_subcommand("track", "Track management commands");
 

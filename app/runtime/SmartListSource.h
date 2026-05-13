@@ -26,7 +26,7 @@ namespace ao::rt
   class SmartListSource final : public TrackSource
   {
   public:
-    SmartListSource(TrackSource& source, ao::library::MusicLibrary& ml, SmartListEvaluator& evaluator);
+    SmartListSource(TrackSource& source, library::MusicLibrary& ml, SmartListEvaluator& evaluator);
     ~SmartListSource() override;
 
     void setExpression(std::string expr);
@@ -51,7 +51,7 @@ namespace ao::rt
     void applyStagedState();
 
     TrackSource& _source;
-    ao::library::MusicLibrary& _ml;
+    library::MusicLibrary& _ml;
     SmartListEvaluator* _evaluator = nullptr;
 
     std::flat_set<TrackId> _members;

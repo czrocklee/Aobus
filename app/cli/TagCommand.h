@@ -8,5 +8,5 @@
 
 namespace ao::cli
 {
-  void setupTagCommand(CLI::App& app, ao::library::MusicLibrary& ml);
+  void setupTagCommand(CLI::App& app, library::MusicLibrary& ml);
 }

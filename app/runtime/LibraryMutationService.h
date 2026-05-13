@@ -27,18 +27,17 @@ namespace ao::rt
   class LibraryMutationService final
   {
   public:
-    LibraryMutationService(IControlExecutor& executor, ao::library::MusicLibrary& library);
+    LibraryMutationService(IControlExecutor& executor, library::MusicLibrary& library);
     ~LibraryMutationService();
 
-    ao::Result<UpdateTrackMetadataReply> updateMetadata(std::vector<TrackId> const& trackIds,
-                                                        MetadataPatch const& patch);
-    ao::Result<EditTrackTagsReply> editTags(std::vector<TrackId> const& trackIds,
-                                            std::vector<std::string> const& tagsToAdd,
-                                            std::vector<std::string> const& tagsToRemove);
+    Result<UpdateTrackMetadataReply> updateMetadata(std::vector<TrackId> const& trackIds, MetadataPatch const& patch);
+    Result<EditTrackTagsReply> editTags(std::vector<TrackId> const& trackIds,
+                                        std::vector<std::string> const& tagsToAdd,
+                                        std::vector<std::string> const& tagsToRemove);
     ImportFilesReply importFiles(std::vector<std::filesystem::path> const& paths);
 
-    ListId createList(ao::model::ListDraft const& draft);
-    void updateList(ao::model::ListDraft const& draft);
+    ListId createList(model::ListDraft const& draft);
+    void updateList(model::ListDraft const& draft);
     void deleteList(ListId listId);
 
     struct ListsMutated final

@@ -58,7 +58,7 @@ namespace ao::rt
   {
     DetailTarget target;
     ViewService& views;
-    ao::library::MusicLibrary& library;
+    library::MusicLibrary& library;
     WorkspaceService& workspace;
     LibraryMutationService& mutation;
 
@@ -72,7 +72,7 @@ namespace ao::rt
 
     Impl(DetailTarget target,
          ViewService& views,
-         ao::library::MusicLibrary& library,
+         library::MusicLibrary& library,
          WorkspaceService& workspace,
          LibraryMutationService& mutation)
       : target{std::move(target)}, views{views}, library{library}, workspace{workspace}, mutation{mutation}
@@ -82,7 +82,7 @@ namespace ao::rt
 
   TrackDetailProjection::TrackDetailProjection(DetailTarget target,
                                                ViewService& views,
-                                               ao::library::MusicLibrary& library,
+                                               library::MusicLibrary& library,
                                                WorkspaceService& workspace,
                                                LibraryMutationService& mutation)
     : _impl{std::make_unique<Impl>(std::move(target), views, library, workspace, mutation)}
@@ -216,7 +216,7 @@ namespace ao::rt
 
     for (auto const trackId : ids)
     {
-      auto const optView = reader.get(trackId, ao::library::TrackStore::Reader::LoadMode::Both);
+      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
       if (!optView)
       {
@@ -233,11 +233,11 @@ namespace ao::rt
 
       auto const artistId = optView->metadata().artistId();
       artists.push_back(artistId != DictionaryId{0} ? std::string{_impl->library.dictionary().get(artistId)}
-                                                        : std::string{});
+                                                    : std::string{});
 
       auto const albumId = optView->metadata().albumId();
       albums.push_back(albumId != DictionaryId{0} ? std::string{_impl->library.dictionary().get(albumId)}
-                                                      : std::string{});
+                                                  : std::string{});
 
       if (ids.size() == 1)
       {

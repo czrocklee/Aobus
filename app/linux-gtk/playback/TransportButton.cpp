@@ -11,10 +11,10 @@ namespace ao::gtk
     {
       switch (action)
       {
-      case TransportButton::Action::Play: return "media-playback-start-symbolic";
-      case TransportButton::Action::Pause: return "media-playback-pause-symbolic";
-      case TransportButton::Action::Stop: return "media-playback-stop-symbolic";
-      case TransportButton::Action::PlayPause: return "media-playback-start-symbolic";
+        case TransportButton::Action::Play: return "media-playback-start-symbolic";
+        case TransportButton::Action::Pause: return "media-playback-pause-symbolic";
+        case TransportButton::Action::Stop: return "media-playback-stop-symbolic";
+        case TransportButton::Action::PlayPause: return "media-playback-start-symbolic";
       }
       return "media-playback-start-symbolic";
     }
@@ -23,10 +23,10 @@ namespace ao::gtk
     {
       switch (action)
       {
-      case TransportButton::Action::Play: return "Play";
-      case TransportButton::Action::Pause: return "Pause";
-      case TransportButton::Action::Stop: return "Stop";
-      case TransportButton::Action::PlayPause: return "Play";
+        case TransportButton::Action::Play: return "Play";
+        case TransportButton::Action::Pause: return "Pause";
+        case TransportButton::Action::Stop: return "Stop";
+        case TransportButton::Action::PlayPause: return "Play";
       }
       return "";
     }
@@ -73,45 +73,41 @@ namespace ao::gtk
 
         switch (_action)
         {
-        case Action::Play:
-          if (state.transport == ao::audio::Transport::Paused)
-          {
-            _playbackService.resume();
-          }
-          else if (state.transport != ao::audio::Transport::Playing)
-          {
-            if (_onPlaySelection)
+          case Action::Play:
+            if (state.transport == ao::audio::Transport::Paused)
             {
-              _onPlaySelection();
+              _playbackService.resume();
             }
-          }
-          break;
-
-        case Action::Pause:
-          _playbackService.pause();
-          break;
-
-        case Action::Stop:
-          _playbackService.stop();
-          break;
-
-        case Action::PlayPause:
-          if (state.transport == ao::audio::Transport::Paused)
-          {
-            _playbackService.resume();
-          }
-          else if (state.transport == ao::audio::Transport::Playing)
-          {
-            _playbackService.pause();
-          }
-          else
-          {
-            if (_onPlaySelection)
+            else if (state.transport != ao::audio::Transport::Playing)
             {
-              _onPlaySelection();
+              if (_onPlaySelection)
+              {
+                _onPlaySelection();
+              }
             }
-          }
-          break;
+            break;
+
+          case Action::Pause: _playbackService.pause(); break;
+
+          case Action::Stop: _playbackService.stop(); break;
+
+          case Action::PlayPause:
+            if (state.transport == ao::audio::Transport::Paused)
+            {
+              _playbackService.resume();
+            }
+            else if (state.transport == ao::audio::Transport::Playing)
+            {
+              _playbackService.pause();
+            }
+            else
+            {
+              if (_onPlaySelection)
+              {
+                _onPlaySelection();
+              }
+            }
+            break;
         }
       });
 
@@ -136,27 +132,21 @@ namespace ao::gtk
 
     switch (_action)
     {
-    case Action::Play:
-      _button.set_sensitive(state.ready && !isPlaying);
-      break;
+      case Action::Play: _button.set_sensitive(state.ready && !isPlaying); break;
 
-    case Action::Pause:
-      _button.set_sensitive(state.ready && isPlaying);
-      break;
+      case Action::Pause: _button.set_sensitive(state.ready && isPlaying); break;
 
-    case Action::Stop:
-      _button.set_sensitive(state.transport != ao::audio::Transport::Idle);
-      break;
+      case Action::Stop: _button.set_sensitive(state.transport != ao::audio::Transport::Idle); break;
 
-    case Action::PlayPause:
-      _button.set_icon_name(isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic");
-      _button.set_tooltip_text(isPlaying ? "Pause" : "Play");
-      if (_showLabel)
-      {
-        _button.set_label(isPlaying ? "Pause" : "Play");
-      }
-      _button.set_sensitive(state.ready);
-      break;
+      case Action::PlayPause:
+        _button.set_icon_name(isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic");
+        _button.set_tooltip_text(isPlaying ? "Pause" : "Play");
+        if (_showLabel)
+        {
+          _button.set_label(isPlaying ? "Pause" : "Play");
+        }
+        _button.set_sensitive(state.ready);
+        break;
     }
   }
 } // namespace ao::gtk

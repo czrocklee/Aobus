@@ -55,13 +55,13 @@ namespace ao::rt
     NotificationService& notifications() noexcept;
     ViewService& views() noexcept;
 
-    ao::library::MusicLibrary& musicLibrary() noexcept;
+    library::MusicLibrary& musicLibrary() noexcept;
     ListSourceStore& sources() noexcept;
     void reloadAllTracks();
 
     TrackId playSelectionInFocusedView();
 
-    void addAudioProvider(std::unique_ptr<ao::audio::IBackendProvider> provider);
+    void addAudioProvider(std::unique_ptr<audio::IBackendProvider> provider);
 
   private:
     struct Impl;

@@ -13,7 +13,7 @@ namespace ao::cli
 {
   namespace
   {
-    void show(ao::library::MusicLibrary& ml, std::ostream& os)
+    void show(library::MusicLibrary& ml, std::ostream& os)
     {
       auto const txn = ml.readTransaction();
       auto const reader = ml.lists().reader(txn);
@@ -22,7 +22,7 @@ namespace ao::cli
       for (auto const& [id, view] : reader)
       {
         os << std::setw(idWidth) << id << " " << view.name() << "\n";
-        os << std::string(idWidth, ' ') << "  [" << (view.isSmart() ? "smart" : "manual") << "] parent: ";
+        os << std::string(idWidth, ' ') << " [" << (view.isSmart() ? "smart" : "manual") << "] parent: ";
 
         if (view.isRootParent())
         {
@@ -35,21 +35,21 @@ namespace ao::cli
 
         if (view.isSmart())
         {
-          os << std::string(idWidth, ' ') << "  [smart] filter: \"" << view.filter() << "\"\n";
+          os << std::string(idWidth, ' ') << " [smart] filter: \"" << view.filter() << "\"\n";
         }
         else
         {
-          os << std::string(idWidth, ' ') << "  [manual] " << view.tracks().size() << " tracks\n";
+          os << std::string(idWidth, ' ') << " [manual] " << view.tracks().size() << " tracks\n";
         }
 
         if (!view.description().empty())
         {
-          os << std::string(idWidth, ' ') << "  desc: \"" << view.description() << "\"\n";
+          os << std::string(idWidth, ' ') << " desc: \"" << view.description() << "\"\n";
         }
       }
     }
 
-    void createList(ao::library::MusicLibrary& ml,
+    void createList(library::MusicLibrary& ml,
                     std::string const& name,
                     std::string const& filter,
                     std::string const& desc,
@@ -59,7 +59,7 @@ namespace ao::cli
       auto txn = ml.writeTransaction();
 
       // Build list payload using ListBuilder
-      auto builder = ao::library::ListBuilder::createNew().name(name).description(desc).parentId(parentListId);
+      auto builder = library::ListBuilder::createNew().name(name).description(desc).parentId(parentListId);
 
       if (!filter.empty())
       {
@@ -75,7 +75,7 @@ namespace ao::cli
     }
   }
 
-  void setupListCommand(CLI::App& app, ao::library::MusicLibrary& ml)
+  void setupListCommand(CLI::App& app, library::MusicLibrary& ml)
   {
     auto* list = app.add_subcommand("list", "List management commands");
 

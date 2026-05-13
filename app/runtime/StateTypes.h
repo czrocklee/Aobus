@@ -20,7 +20,7 @@ namespace ao::rt
 {
   struct OutputProfileSnapshot final
   {
-    ao::audio::ProfileId id{};
+    audio::ProfileId id{};
     std::string name{};
     std::string description{};
 
@@ -29,19 +29,19 @@ namespace ao::rt
 
   struct OutputDeviceSnapshot final
   {
-    ao::audio::DeviceId id{};
+    audio::DeviceId id{};
     std::string displayName{};
     std::string description{};
     bool isDefault = false;
-    ao::audio::BackendId backendId{};
-    ao::audio::DeviceCapabilities capabilities{};
+    audio::BackendId backendId{};
+    audio::DeviceCapabilities capabilities{};
 
     bool operator==(OutputDeviceSnapshot const&) const = default;
   };
 
   struct OutputBackendSnapshot final
   {
-    ao::audio::BackendId id{};
+    audio::BackendId id{};
     std::string name{};
     std::string description{};
     std::string iconName{};
@@ -53,16 +53,16 @@ namespace ao::rt
 
   struct OutputSelection final
   {
-    ao::audio::BackendId backendId{};
-    ao::audio::DeviceId deviceId{};
-    ao::audio::ProfileId profileId{};
+    audio::BackendId backendId{};
+    audio::DeviceId deviceId{};
+    audio::ProfileId profileId{};
 
     bool operator==(OutputSelection const&) const = default;
   };
 
   struct PlaybackState final
   {
-    ao::audio::Transport transport = ao::audio::Transport::Idle;
+    audio::Transport transport = audio::Transport::Idle;
     TrackId trackId{};
     ListId sourceListId{};
     std::string trackTitle{};
@@ -76,8 +76,8 @@ namespace ao::rt
 
     OutputSelection selectedOutput{};
     std::vector<OutputBackendSnapshot> availableOutputs{};
-    ao::audio::flow::Graph flow{};
-    ao::audio::Quality quality = ao::audio::Quality::Unknown;
+    audio::flow::Graph flow{};
+    audio::Quality quality = audio::Quality::Unknown;
     std::string qualityTooltip{};
     std::uint64_t revision = 0;
   };

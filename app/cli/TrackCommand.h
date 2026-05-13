@@ -8,5 +8,5 @@
 
 namespace ao::cli
 {
-  void setupTrackCommand(CLI::App& app, ao::library::MusicLibrary& ml);
+  void setupTrackCommand(CLI::App& app, library::MusicLibrary& ml);
 }

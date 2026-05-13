@@ -21,7 +21,7 @@ namespace ao::rt
   {
     std::shared_ptr<IControlExecutor> executor;
 
-    ao::library::MusicLibrary musicLibrary;
+    library::MusicLibrary musicLibrary;
     LibraryMutationService mutationService;
     ListSourceStore sources;
 
@@ -84,7 +84,7 @@ namespace ao::rt
     return _impl->viewService;
   }
 
-  ao::library::MusicLibrary& AppSession::musicLibrary() noexcept
+  library::MusicLibrary& AppSession::musicLibrary() noexcept
   {
     return _impl->musicLibrary;
   }
@@ -111,7 +111,7 @@ namespace ao::rt
     return _impl->playbackService.playSelectionInView(focus.activeViewId);
   }
 
-  void AppSession::addAudioProvider(std::unique_ptr<ao::audio::IBackendProvider> provider)
+  void AppSession::addAudioProvider(std::unique_ptr<audio::IBackendProvider> provider)
   {
     _impl->playbackService.addProvider(std::move(provider));
   }

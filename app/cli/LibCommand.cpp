@@ -51,32 +51,32 @@ namespace ao::cli
       return std::format("{:%Y-%m-%d %H:%M:%S}", tp);
     }
 
-    void show(ao::library::MusicLibrary& ml, std::ostream& os)
+    void show(library::MusicLibrary& ml, std::ostream& os)
     {
       auto const& header = ml.metaHeader();
 
-      os << "Library ID:        " << formatUuid(header.libraryId) << "\n";
-      os << "Library Version:   " << header.libraryVersion << "\n";
-      os << "Flags:             0x" << std::hex << header.flags << std::dec << "\n";
-      os << "Created:           " << formatTimestamp(header.createdAtUnixMs) << "\n";
-      os << "Migrated:          " << formatTimestamp(header.migratedAtUnixMs) << "\n";
+      os << "Library ID:    " << formatUuid(header.libraryId) << "\n";
+      os << "Library Version:  " << header.libraryVersion << "\n";
+      os << "Flags:       0x" << std::hex << header.flags << std::dec << "\n";
+      os << "Created:      " << formatTimestamp(header.createdAtUnixMs) << "\n";
+      os << "Migrated:     " << formatTimestamp(header.migratedAtUnixMs) << "\n";
     }
 
-    void exportLib(ao::library::MusicLibrary& ml, std::string const& path, std::string const& modeStr, std::ostream& os)
+    void exportLib(library::MusicLibrary& ml, std::string const& path, std::string const& modeStr, std::ostream& os)
     {
-      auto mode = ao::library::ExportMode::Full;
+      auto mode = library::ExportMode::Full;
 
       if (modeStr == "minimum")
       {
-        mode = ao::library::ExportMode::Minimum;
+        mode = library::ExportMode::Minimum;
       }
       else if (modeStr == "metadata")
       {
-        mode = ao::library::ExportMode::Metadata;
+        mode = library::ExportMode::Metadata;
       }
       else if (modeStr == "full")
       {
-        mode = ao::library::ExportMode::Full;
+        mode = library::ExportMode::Full;
       }
       else
       {
@@ -84,20 +84,20 @@ namespace ao::cli
         return;
       }
 
-      auto exporter = ao::library::Exporter{ml};
+      auto exporter = library::Exporter{ml};
       exporter.exportToYaml(path, mode);
       os << "Library exported to '" << path << "' using mode '" << modeStr << "'.\n";
     }
 
-    void importLib(ao::library::MusicLibrary& ml, std::string const& path, std::ostream& os)
+    void importLib(library::MusicLibrary& ml, std::string const& path, std::ostream& os)
     {
-      auto importer = ao::library::Importer{ml};
+      auto importer = library::Importer{ml};
       importer.importFromYaml(path);
       os << "Library imported from '" << path << "'.\n";
     }
   }
 
-  void setupLibCommand(CLI::App& app, ao::library::MusicLibrary& ml)
+  void setupLibCommand(CLI::App& app, library::MusicLibrary& ml)
   {
     auto* lib = app.add_subcommand("lib", "Library management commands");
 

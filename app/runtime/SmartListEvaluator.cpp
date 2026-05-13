@@ -132,7 +132,7 @@ namespace ao::rt
 
   // SmartListEvaluator implementation
 
-  SmartListEvaluator::SmartListEvaluator(ao::library::MusicLibrary& ml)
+  SmartListEvaluator::SmartListEvaluator(library::MusicLibrary& ml)
     : _ml{ml}
   {
   }
@@ -145,7 +145,7 @@ namespace ao::rt
     {
       if (bucket->observer)
       {
-        ao::utility::unsafeDowncast<SourceObserver>(bucket->observer.get())->invalidate();
+        utility::unsafeDowncast<SourceObserver>(bucket->observer.get())->invalidate();
 
         if (bucket->sourceAlive)
         {
@@ -282,9 +282,9 @@ namespace ao::rt
 
   void SmartListEvaluator::evaluateMembers(TrackSource& source,
                                            std::span<SmartListSource*> const lists,
-                                           ao::library::TrackStore::Reader::LoadMode const mode)
+                                           library::TrackStore::Reader::LoadMode const mode)
   {
-    auto const timer = ao::utility::ScopedTimer{"SmartListEvaluator::evaluateMembers"};
+    auto const timer = utility::ScopedTimer{"SmartListEvaluator::evaluateMembers"};
     if (lists.empty())
     {
       return;
@@ -650,7 +650,7 @@ namespace ao::rt
     }
   }
 
-  ao::library::TrackStore::Reader::LoadMode SmartListEvaluator::getUnionMode(std::span<SmartListSource*> const lists)
+  library::TrackStore::Reader::LoadMode SmartListEvaluator::getUnionMode(std::span<SmartListSource*> const lists)
   {
     bool needsHot = false;
     bool needsCold = false;
@@ -675,14 +675,14 @@ namespace ao::rt
 
     if (needsHot && needsCold)
     {
-      return ao::library::TrackStore::Reader::LoadMode::Both;
+      return library::TrackStore::Reader::LoadMode::Both;
     }
 
     if (needsCold)
     {
-      return ao::library::TrackStore::Reader::LoadMode::Cold;
+      return library::TrackStore::Reader::LoadMode::Cold;
     }
 
-    return ao::library::TrackStore::Reader::LoadMode::Hot;
+    return library::TrackStore::Reader::LoadMode::Hot;
   }
 }

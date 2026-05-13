@@ -3,8 +3,8 @@
 
 #include "track/TrackViewPage.h"
 
-#include "layout/LayoutConstants.h"
 #include "app/ThemeBus.h"
+#include "layout/LayoutConstants.h"
 #include "track/TrackColumnFactoryBuilder.h"
 #include "track/TrackFilterController.h"
 #include "track/TrackRowCache.h"

@@ -17,7 +17,7 @@ namespace ao::rt
 {
   namespace
   {
-    PlaybackState buildPlaybackState(ao::audio::Player const& player)
+    PlaybackState buildPlaybackState(audio::Player const& player)
     {
       auto const status = player.status();
 
@@ -89,9 +89,9 @@ namespace ao::rt
   {
     IControlExecutor& executor;
     PlaybackState state;
-    std::unique_ptr<ao::audio::Player> player;
+    std::unique_ptr<audio::Player> player;
     ViewService& views;
-    ao::library::MusicLibrary& library;
+    library::MusicLibrary& library;
     TrackId currentTrackId{};
     ListId currentSourceListId{};
     std::string currentTrackTitle{};
@@ -129,7 +129,7 @@ namespace ao::rt
       }
 
       auto const& device = backend.devices.front();
-      auto profileId = ao::audio::kProfileShared;
+      auto profileId = audio::kProfileShared;
 
       if (!backend.metadata.supportedProfiles.empty())
       {
@@ -139,7 +139,7 @@ namespace ao::rt
       player->setOutput(backend.metadata.id, device.id, profileId);
     }
 
-    PlaybackState buildState(ao::audio::Player const& targetPlayer) const
+    PlaybackState buildState(audio::Player const& targetPlayer) const
     {
       auto snapshot = buildPlaybackState(targetPlayer);
       snapshot.trackId = currentTrackId;
@@ -149,11 +149,8 @@ namespace ao::rt
       return snapshot;
     }
 
-    explicit Impl(IControlExecutor& controlExecutor, ViewService& viewService, ao::library::MusicLibrary& musicLibrary)
-      : executor{controlExecutor}
-      , player{std::make_unique<ao::audio::Player>()}
-      , views{viewService}
-      , library{musicLibrary}
+    explicit Impl(IControlExecutor& controlExecutor, ViewService& viewService, library::MusicLibrary& musicLibrary)
+      : executor{controlExecutor}, player{std::make_unique<audio::Player>()}, views{viewService}, library{musicLibrary}
     {
       player->setOnTrackEnded(
         [this]
@@ -167,7 +164,7 @@ namespace ao::rt
         });
 
       player->setOnDevicesChanged(
-        [this](std::vector<ao::audio::IBackendProvider::Status> const&)
+        [this](std::vector<audio::IBackendProvider::Status> const&)
         {
           executor.dispatch(
             [this]
@@ -190,7 +187,7 @@ namespace ao::rt
               }
 
               auto const& device = backend.devices.front();
-              auto profileId = ao::audio::kProfileShared;
+              auto profileId = audio::kProfileShared;
 
               if (!backend.supportedProfiles.empty())
               {
@@ -204,7 +201,7 @@ namespace ao::rt
         });
 
       player->setOnQualityChanged(
-        [this](ao::audio::Quality quality, bool const ready)
+        [this](audio::Quality quality, bool const ready)
         {
           executor.dispatch(
             [this, quality, ready]
@@ -217,7 +214,7 @@ namespace ao::rt
     }
   };
 
-  PlaybackService::PlaybackService(IControlExecutor& executor, ViewService& views, ao::library::MusicLibrary& library)
+  PlaybackService::PlaybackService(IControlExecutor& executor, ViewService& views, library::MusicLibrary& library)
     : _impl{std::make_unique<Impl>(executor, views, library)}
   {
   }
@@ -280,7 +277,7 @@ namespace ao::rt
     return _impl->state;
   }
 
-  void PlaybackService::play(ao::audio::TrackPlaybackDescriptor const& descriptor, ListId const sourceListId)
+  void PlaybackService::play(audio::TrackPlaybackDescriptor const& descriptor, ListId const sourceListId)
   {
     _impl->ensureReady();
 
@@ -317,7 +314,7 @@ namespace ao::rt
       auto const trackId = sel.front();
       auto const txn = _impl->library.readTransaction();
       auto reader = _impl->library.tracks().reader(txn);
-      auto const optView = reader.get(trackId, ao::library::TrackStore::Reader::LoadMode::Both);
+      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
       if (!optView)
       {
@@ -328,7 +325,7 @@ namespace ao::rt
       auto const filePath =
         uri.is_absolute() ? uri.lexically_normal() : (_impl->library.rootPath() / uri).lexically_normal();
 
-      auto const desc = ao::audio::TrackPlaybackDescriptor{
+      auto const desc = audio::TrackPlaybackDescriptor{
         .trackId = trackId,
         .filePath = filePath,
         .title = std::string{optView->metadata().title()},
@@ -377,9 +374,9 @@ namespace ao::rt
     _impl->state = _impl->buildState(*_impl->player);
   }
 
-  void PlaybackService::setOutput(ao::audio::BackendId const& backendId,
-                                  ao::audio::DeviceId const& deviceId,
-                                  ao::audio::ProfileId const& profileId)
+  void PlaybackService::setOutput(audio::BackendId const& backendId,
+                                  audio::DeviceId const& deviceId,
+                                  audio::ProfileId const& profileId)
   {
     _impl->player->setOutput(backendId, deviceId, profileId);
     _impl->state = _impl->buildState(*_impl->player);
@@ -410,7 +407,7 @@ namespace ao::rt
     });
   }
 
-  void PlaybackService::addProvider(std::unique_ptr<ao::audio::IBackendProvider> provider)
+  void PlaybackService::addProvider(std::unique_ptr<audio::IBackendProvider> provider)
   {
     _impl->player->addProvider(std::move(provider));
   }

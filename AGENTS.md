@@ -43,4 +43,4 @@ nix-shell --run "cmake --build /tmp/build/debug --parallel"
 nix-shell --run "/tmp/build/debug/test/ao_test"
 ```
 
-When chasing a failure or clang-tidy warnings, prefer preserving the current `/tmp/build/...` directory and storing the relevant output alongside it in `/tmp` (for example `/tmp/ao-debug.log`) so you can inspect or diff results without paying for another full rebuild.
+When chasing a failure or clang-tidy warnings, prefer preserving the current `/tmp/build/...` directory. Note that `build.sh` automatically redirects all console output (configure, build, and tests) to `$BUILD_DIR/build.log` for easier inspection and diffing without full rebuilds.
