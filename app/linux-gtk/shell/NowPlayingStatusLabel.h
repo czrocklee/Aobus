@@ -11,19 +11,19 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class PlaybackService;
 }
 
 namespace ao::gtk
 {
   /**
-   * NowPlayingStatusLabel displays the currently playing track's Artist - Title.
-   * Clicking the label reveals the track in the UI.
+   * NowPlayingStatusLabel displays the currently playing track metadata
+   * (Artist - Title) and reveals the playing track when clicked.
    */
   class NowPlayingStatusLabel final
   {
   public:
-    explicit NowPlayingStatusLabel(ao::rt::AppSession& session);
+    explicit NowPlayingStatusLabel(ao::rt::PlaybackService& playbackService);
     ~NowPlayingStatusLabel();
 
     Gtk::Widget& widget() { return _label; }
@@ -31,7 +31,7 @@ namespace ao::gtk
   private:
     void updateState();
 
-    ao::rt::AppSession& _session;
+    ao::rt::PlaybackService& _playbackService;
     Gtk::Label _label;
 
     ao::rt::Subscription _startedSub;
