@@ -54,16 +54,13 @@ namespace ao::rt
       ao::ListId listId{};
     };
 
-    ViewService(ao::library::MusicLibrary& library, ListSourceStore& sources);
+    ViewService(IControlExecutor& executor, ao::library::MusicLibrary& library, ListSourceStore& sources);
     ~ViewService();
 
     ViewService(ViewService const&) = delete;
     ViewService& operator=(ViewService const&) = delete;
     ViewService(ViewService&&) = delete;
     ViewService& operator=(ViewService&&) = delete;
-
-    void setWorkspaceService(WorkspaceService& workspace);
-    void setLibraryMutationService(LibraryMutationService& mutation);
 
     CreateTrackListViewReply createView(TrackListViewConfig const& initial, bool attached = true);
     void destroyView(ViewId viewId);
@@ -86,7 +83,9 @@ namespace ao::rt
 
     TrackListViewState trackListState(ViewId viewId) const;
     std::shared_ptr<ITrackListProjection> trackListProjection(ViewId viewId);
-    std::shared_ptr<ITrackDetailProjection> detailProjection(DetailTarget const& target);
+    std::shared_ptr<ITrackDetailProjection> detailProjection(DetailTarget const& target,
+                                                             WorkspaceService& workspace,
+                                                             LibraryMutationService& mutation);
 
   private:
     struct Impl;

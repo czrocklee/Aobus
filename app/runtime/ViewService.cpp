@@ -54,13 +54,12 @@ namespace ao::rt
     std::uint64_t nextViewId = 1;
     std::unordered_map<ViewId, ViewEntry> views;
 
+    IControlExecutor& executor;
     ao::library::MusicLibrary& library;
     ListSourceStore& sources;
-    WorkspaceService* workspace = nullptr;
-    LibraryMutationService* mutation = nullptr;
 
-    Impl(ao::library::MusicLibrary& lib, ListSourceStore& src)
-      : library{lib}, sources{src}
+    Impl(IControlExecutor& exec, ao::library::MusicLibrary& lib, ListSourceStore& src)
+      : executor{exec}, library{lib}, sources{src}
     {
     }
 
@@ -74,22 +73,12 @@ namespace ao::rt
     Signal<ViewService::ListChanged const&> listChangedSignal;
   };
 
-  ViewService::ViewService(ao::library::MusicLibrary& library, ListSourceStore& sources)
-    : _impl{std::make_unique<Impl>(library, sources)}
+  ViewService::ViewService(IControlExecutor& executor, ao::library::MusicLibrary& library, ListSourceStore& sources)
+    : _impl{std::make_unique<Impl>(executor, library, sources)}
   {
   }
 
   ViewService::~ViewService() = default;
-
-  void ViewService::setWorkspaceService(WorkspaceService& workspace)
-  {
-    _impl->workspace = &workspace;
-  }
-
-  void ViewService::setLibraryMutationService(LibraryMutationService& mutation)
-  {
-    _impl->mutation = &mutation;
-  }
 
   Subscription ViewService::onDestroyed(std::move_only_function<void(ViewId)> handler)
   {
@@ -175,7 +164,7 @@ namespace ao::rt
     if (auto it = _impl->views.find(viewId); it != _impl->views.end())
     {
       it->second.state.lifecycle = ViewLifecycleState::Destroyed;
-      _impl->destroyedSignal.emit(viewId);
+      _impl->destroyedSignal.post(_impl->executor, viewId);
     }
   }
 
@@ -190,7 +179,8 @@ namespace ao::rt
 
     it->second.state.filterExpression = filterExpression;
     it->second.state.revision++;
-    _impl->filterChangedSignal.emit(ViewService::FilterChanged{.viewId = viewId, .filterExpression = filterExpression});
+    _impl->filterChangedSignal.post(_impl->executor,
+                                     ViewService::FilterChanged{.viewId = viewId, .filterExpression = filterExpression});
 
     if (it->second.adHocSource)
     {
@@ -210,8 +200,9 @@ namespace ao::rt
       // Need to attach projection to new source
       it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
       applyPresentation(it->second);
-      _impl->projectionChangedSignal.emit(TrackListProjectionChanged{
-        .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision});
+      auto ev = TrackListProjectionChanged{
+      .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision};
+    _impl->projectionChangedSignal.post(_impl->executor, std::move(ev));
     }
     else
     {
@@ -221,8 +212,9 @@ namespace ao::rt
       it->second.activeSource = baseSource;
       it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
       applyPresentation(it->second);
-      _impl->projectionChangedSignal.emit(TrackListProjectionChanged{
-        .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision});
+      auto ev = TrackListProjectionChanged{
+      .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision};
+    _impl->projectionChangedSignal.post(_impl->executor, std::move(ev));
     }
 
     auto status = FilterStatusChanged{};
@@ -249,7 +241,7 @@ namespace ao::rt
 
     it->second.state.sortBy = sortBy;
     it->second.state.revision++;
-    _impl->sortChangedSignal.emit(ViewService::SortChanged{.viewId = viewId, .sortBy = sortBy});
+    _impl->sortChangedSignal.post(_impl->executor, ViewService::SortChanged{.viewId = viewId, .sortBy = sortBy});
 
     if (it->second.projection)
     {
@@ -276,7 +268,8 @@ namespace ao::rt
     it->second.state.groupBy = groupBy;
     it->second.state.revision++;
     applyPresentation(it->second);
-    _impl->groupingChangedSignal.emit(ViewService::GroupingChanged{.viewId = viewId, .groupBy = groupBy});
+    _impl->groupingChangedSignal.post(_impl->executor,
+                                       ViewService::GroupingChanged{.viewId = viewId, .groupBy = groupBy});
   }
 
   void ViewService::setSelection(ViewId viewId, std::vector<ao::TrackId> const& selection)
@@ -322,10 +315,11 @@ namespace ao::rt
 
     it->second.projection = std::make_shared<TrackListProjection>(viewId, *it->second.activeSource, _impl->library);
     applyPresentation(it->second);
-    _impl->projectionChangedSignal.emit(TrackListProjectionChanged{
-      .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision});
+    _impl->projectionChangedSignal.post(_impl->executor,
+      TrackListProjectionChanged{
+        .viewId = viewId, .projection = it->second.projection, .revision = it->second.state.revision});
 
-    _impl->listChangedSignal.emit(ViewService::ListChanged{.viewId = viewId, .listId = listId});
+    _impl->listChangedSignal.post(_impl->executor, ViewService::ListChanged{.viewId = viewId, .listId = listId});
   }
 
   std::vector<ViewRecord> ViewService::listViews() const
@@ -355,8 +349,10 @@ namespace ao::rt
     return _impl->views.at(viewId).projection;
   }
 
-  std::shared_ptr<ITrackDetailProjection> ViewService::detailProjection(DetailTarget const& target)
+  std::shared_ptr<ITrackDetailProjection> ViewService::detailProjection(DetailTarget const& target,
+                                                                         WorkspaceService& workspace,
+                                                                         LibraryMutationService& mutation)
   {
-    return std::make_shared<TrackDetailProjection>(target, *this, _impl->library, *_impl->workspace, *_impl->mutation);
+    return std::make_shared<TrackDetailProjection>(target, *this, _impl->library, workspace, mutation);
   }
 }

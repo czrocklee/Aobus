@@ -1,0 +1,107 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "list/ListTreeModelBuilder.h"
+#include "list/ListRowObject.h"
+#include "track/TrackRowCache.h"
+#include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
+#include <runtime/AppSession.h>
+#include <map>
+#include <string>
+#include <vector>
+
+namespace ao::gtk
+{
+  namespace
+  {
+    ao::ListId allTracksListId()
+    {
+      return ao::ListId{std::numeric_limits<std::uint32_t>::max()};
+    }
+
+    ao::ListId rootParentId()
+    {
+      return ao::ListId{0};
+    }
+
+    struct StoredListNode final
+    {
+      ao::ListId id = ao::ListId{0};
+      ao::ListId parentId = rootParentId();
+      std::string name;
+      bool isSmart = false;
+      std::string localExpression;
+    };
+  }
+
+  ListTreeModelBuilder::Result ListTreeModelBuilder::build(ao::rt::AppSession& session,
+                                                           ao::lmdb::ReadTransaction const& txn)
+  {
+    Result result;
+    result.store = Gio::ListStore<ListTreeItem>::create();
+
+    auto const reader = session.musicLibrary().lists().reader(txn);
+    auto nodes = std::map<ao::ListId, StoredListNode>{};
+
+    for (auto const& [id, listView] : reader)
+    {
+      nodes.emplace(id,
+                    StoredListNode{.id = id,
+                                   .parentId = listView.parentId(),
+                                   .name = std::string(listView.name()),
+                                   .isSmart = listView.isSmart(),
+                                   .localExpression = std::string(listView.filter())});
+    }
+
+    auto children = std::map<ao::ListId, std::vector<ao::ListId>>{};
+    for (auto const& [id, node] : nodes)
+    {
+      if (node.parentId != rootParentId() && node.parentId != id && nodes.contains(node.parentId))
+        children[node.parentId].push_back(id);
+    }
+
+    for (auto const& [id, node] : nodes)
+    {
+      auto listRow = ListRowObject::create(id, node.parentId, 0, node.isSmart, node.name, node.localExpression);
+      auto treeNode = ListTreeItem::create(listRow);
+      result.nodesById[id] = treeNode;
+    }
+
+    auto allRow = ListRowObject::create(allTracksListId(), rootParentId(), 0, false, "All Tracks");
+    auto allTracksNode = ListTreeItem::create(allRow);
+    result.nodesById[allTracksListId()] = allTracksNode;
+
+    for (auto const& [id, node] : nodes)
+    {
+      auto childNode = result.nodesById[id];
+      auto parentId = node.parentId;
+      if (auto parentIt = result.nodesById.find(parentId); parentIt != result.nodesById.end())
+      {
+        parentIt->second->getChildren()->append(childNode);
+        childNode->setParent(parentIt->second.get());
+      }
+      else
+      {
+        allTracksNode->getChildren()->append(childNode);
+        childNode->setParent(allTracksNode.get());
+      }
+    }
+
+    result.store->append(allTracksNode);
+
+    result.treeModel = Gtk::TreeListModel::create(
+      result.store,
+      [](Glib::RefPtr<Glib::ObjectBase> const& item) -> Glib::RefPtr<Gio::ListModel>
+      {
+        auto node = std::dynamic_pointer_cast<ListTreeItem>(item);
+        if (!node || !node->hasChildren()) return nullptr;
+        return node->getChildren();
+      },
+      false,
+      true);
+
+    result.selectionModel = Gtk::SingleSelection::create(result.treeModel);
+    return result;
+  }
+} // namespace ao::gtk

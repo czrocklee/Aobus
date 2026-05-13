@@ -3,15 +3,15 @@
 
 #include "SemanticComponents.h"
 
-#include <CoverArtCache.h>
-#include <CoverArtWidget.h>
-#include <InspectorSidebar.h>
-#include <ListSidebarController.h>
-#include <StatusBar.h>
-#include <TagEditController.h>
-#include <TrackPageGraph.h>
-#include <TrackRowDataProvider.h>
-#include <TrackViewPage.h>
+#include "inspector/CoverArtCache.h"
+#include "inspector/CoverArtWidget.h"
+#include "inspector/TrackInspectorPanel.h"
+#include "list/ListSidebarController.h"
+#include "shell/StatusBar.h"
+#include "tag/TagEditController.h"
+#include "track/TrackPageManager.h"
+#include "track/TrackRowCache.h"
+#include "track/TrackViewPage.h"
 #include <runtime/AppSession.h>
 #include <runtime/ListSourceStore.h>
 #include <runtime/ViewService.h>
@@ -42,7 +42,7 @@ namespace ao::gtk::layout
     class StatusMessageLabelComponent final : public ILayoutComponent
     {
     public:
-      StatusMessageLabelComponent(ComponentContext& /*ctx*/, LayoutNode const& /*node*/)
+      StatusMessageLabelComponent(LayoutDependencies& /*ctx*/, LayoutNode const& /*node*/)
       {
         _label.set_ellipsize(Pango::EllipsizeMode::END);
         _label.set_halign(Gtk::Align::START);
@@ -63,25 +63,25 @@ namespace ao::gtk::layout
     class ListTreeComponent final : public ILayoutComponent
     {
     public:
-      ListTreeComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      ListTreeComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.rowDataProvider == nullptr)
+        if (ctx.track.trackRowCache == nullptr)
         {
-          _error = Gtk::make_managed<Gtk::Label>("Error: rowDataProvider missing");
+          _error = Gtk::make_managed<Gtk::Label>("Error: trackRowCache missing");
           return;
         }
 
-        if (ctx.listSidebarController == nullptr)
+        if (ctx.list.sidebarController == nullptr)
         {
           _error = Gtk::make_managed<Gtk::Label>("Error: listSidebarController missing");
           return;
         }
 
-        _controller = ctx.listSidebarController;
+        _controller = ctx.list.sidebarController;
 
         // Initial rebuild
         auto const txn = ctx.session.musicLibrary().readTransaction();
-        _controller->rebuildTree(*ctx.rowDataProvider, txn);
+        _controller->rebuildTree(*ctx.track.trackRowCache, txn);
       }
 
       Gtk::Widget& widget() override
@@ -100,15 +100,15 @@ namespace ao::gtk::layout
     class TracksTableComponent final : public ILayoutComponent
     {
     public:
-      TracksTableComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      TracksTableComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.trackPageGraph == nullptr)
+        if (ctx.track.pageManager == nullptr)
         {
-          _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageGraph missing"));
+          _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageManager missing"));
           return;
         }
 
-        _container.append(ctx.trackPageGraph->stack());
+        _container.append(ctx.track.pageManager->stack());
         _container.set_hexpand(true);
         _container.set_vexpand(true);
       }
@@ -125,7 +125,7 @@ namespace ao::gtk::layout
     class OpenLibraryButton final : public ILayoutComponent
     {
     public:
-      OpenLibraryButton(ComponentContext& /*ctx*/, LayoutNode const& /*node*/)
+      OpenLibraryButton(LayoutDependencies& /*ctx*/, LayoutNode const& /*node*/)
       {
         _button.set_label("Open Library...");
         _button.set_icon_name("folder-open-symbolic");
@@ -148,16 +148,16 @@ namespace ao::gtk::layout
     class CoverArtComponent final : public ILayoutComponent
     {
     public:
-      CoverArtComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      CoverArtComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.coverArtCache == nullptr)
+        if (ctx.inspector.coverArtCache == nullptr)
         {
           _error = Gtk::make_managed<Gtk::Label>("Error: coverArtCache missing");
           return;
         }
 
-        _widget = std::make_unique<ao::gtk::CoverArtWidget>(ctx.session, *ctx.coverArtCache);
-        _widget->bindToDetailProjection(ctx.session.views().detailProjection(ao::rt::FocusedViewTarget{}));
+        _widget = std::make_unique<ao::gtk::CoverArtWidget>(ctx.session, *ctx.inspector.coverArtCache);
+        _widget->bindToDetailProjection(ctx.session.views().detailProjection(ao::rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
       }
 
       Gtk::Widget& widget() override
@@ -176,18 +176,18 @@ namespace ao::gtk::layout
     class InspectorSidebarComponent final : public ILayoutComponent
     {
     public:
-      InspectorSidebarComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      InspectorSidebarComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.coverArtCache == nullptr)
+        if (ctx.inspector.coverArtCache == nullptr)
         {
           _error = Gtk::make_managed<Gtk::Label>("Error: coverArtCache missing");
           return;
         }
 
-        _widget = std::make_unique<ao::gtk::InspectorSidebar>(ctx.session, *ctx.coverArtCache);
-        _widget->bindToDetailProjection(ctx.session.views().detailProjection(ao::rt::FocusedViewTarget{}));
+        _widget = std::make_unique<ao::gtk::TrackInspectorPanel>(ctx.session, *ctx.inspector.coverArtCache);
+        _widget->bindToDetailProjection(ctx.session.views().detailProjection(ao::rt::FocusedViewTarget{}, ctx.session.workspace(), ctx.session.mutation()));
 
-        if (ctx.tagEditController != nullptr)
+        if (ctx.tag.editController != nullptr)
         {
           _widget->signalTagEditRequested().connect(
             [ctx](std::vector<ao::TrackId> const& ids, Gtk::Widget* relativeTo)
@@ -195,10 +195,10 @@ namespace ao::gtk::layout
               if (relativeTo != nullptr)
               {
                 auto const listId =
-                  (ctx.trackPageGraph != nullptr) ? ctx.trackPageGraph->activeListId() : allTracksListId();
+                  (ctx.track.pageManager != nullptr) ? ctx.track.pageManager->activeListId() : allTracksListId();
 
                 auto const selection = TrackSelectionContext{.listId = listId, .selectedIds = ids};
-                ctx.tagEditController->showTagEditor(selection, *relativeTo);
+                ctx.tag.editController->showTagEditor(selection, *relativeTo);
               }
             });
         }
@@ -210,7 +210,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      std::unique_ptr<ao::gtk::InspectorSidebar> _widget;
+      std::unique_ptr<ao::gtk::TrackInspectorPanel> _widget;
       Gtk::Label* _error = nullptr;
     };
 
@@ -220,15 +220,15 @@ namespace ao::gtk::layout
     class DefaultStatusBarComponent final : public ILayoutComponent
     {
     public:
-      DefaultStatusBarComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      DefaultStatusBarComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.statusBar == nullptr)
+        if (ctx.shell.statusBar == nullptr)
         {
           _error = Gtk::make_managed<Gtk::Label>("Error: statusBar missing");
           return;
         }
 
-        _widget = ctx.statusBar;
+        _widget = ctx.shell.statusBar;
       }
 
       Gtk::Widget& widget() override
@@ -247,11 +247,11 @@ namespace ao::gtk::layout
     class MenuBarComponent final : public ILayoutComponent
     {
     public:
-      MenuBarComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      MenuBarComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
       {
-        if (ctx.menuModel != nullptr)
+        if (ctx.shell.menuModel != nullptr)
         {
-          _menuBar.set_menu_model(ctx.menuModel);
+          _menuBar.set_menu_model(ctx.shell.menuModel);
         }
       }
 
@@ -269,11 +269,11 @@ namespace ao::gtk::layout
     class WorkspaceWithInspectorComponent final : public ILayoutComponent
     {
     public:
-      WorkspaceWithInspectorComponent(ComponentContext& ctx, LayoutNode const& node)
+      WorkspaceWithInspectorComponent(LayoutDependencies& ctx, LayoutNode const& node)
       {
-        if (ctx.trackPageGraph == nullptr)
+        if (ctx.track.pageManager == nullptr)
         {
-          _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageGraph missing"));
+          _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageManager missing"));
           return;
         }
 
@@ -281,7 +281,7 @@ namespace ao::gtk::layout
         _container.set_hexpand(true);
         _container.set_vexpand(true);
 
-        auto& stack = ctx.trackPageGraph->stack();
+        auto& stack = ctx.track.pageManager->stack();
         stack.set_hexpand(true);
         stack.set_vexpand(true);
         _container.append(stack);
@@ -333,7 +333,7 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .maxChildren = 0},
-                               [](ComponentContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<StatusMessageLabelComponent>(ctx, node); });
 
     registry.registerComponent({.type = "library.listTree",
@@ -344,7 +344,7 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .maxChildren = 0},
-                               [](ComponentContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<ListTreeComponent>(ctx, node); });
 
     registry.registerComponent({.type = "tracks.table",
@@ -358,7 +358,7 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .maxChildren = 0},
-                               [](ComponentContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<TracksTableComponent>(ctx, node); });
 
     registry.registerComponent({.type = "library.openLibraryButton",
@@ -369,7 +369,7 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .maxChildren = 0},
-                               [](ComponentContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<OpenLibraryButton>(ctx, node); });
 
     registry.registerComponent({.type = "inspector.coverArt",
@@ -380,7 +380,7 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .maxChildren = 0},
-                               [](ComponentContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<CoverArtComponent>(ctx, node); });
 
     registry.registerComponent({.type = "inspector.sidebar",
@@ -391,7 +391,7 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .maxChildren = 0},
-                               [](ComponentContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<InspectorSidebarComponent>(ctx, node); });
 
     registry.registerComponent({.type = "status.defaultBar",
@@ -402,7 +402,7 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .maxChildren = 0},
-                               [](ComponentContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<DefaultStatusBarComponent>(ctx, node); });
 
     registry.registerComponent({.type = "app.menuBar",
@@ -413,7 +413,7 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .maxChildren = 0},
-                               [](ComponentContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<MenuBarComponent>(ctx, node); });
 
     registry.registerComponent({.type = "app.workspaceWithInspector",
@@ -424,7 +424,7 @@ namespace ao::gtk::layout
                                 .layoutProps = {},
                                 .minChildren = 0,
                                 .maxChildren = 0},
-                               [](ComponentContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<WorkspaceWithInspectorComponent>(ctx, node); });
   }
 } // namespace ao::gtk::layout

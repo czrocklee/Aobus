@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "MainWindow.h"
-#include "TrackRowDataProvider.h"
-#include "ui/GtkControlExecutor.h"
-#include "ui/ThemeBus.h"
+#include "app/MainWindow.h"
+#include "track/TrackRowCache.h"
+#include "common/GtkControlExecutor.h"
+#include "shell/ThemeBus.h"
 #include <ao/utility/Log.h>
 #include <giomm/dbusconnection.h>
 #include <giomm/dbusproxy.h>
@@ -23,6 +23,7 @@
 #include <CLI/CLI.hpp>
 
 #include <runtime/ConfigStore.h>
+#include <runtime/StateTypes.h>
 
 #include <glibmm/miscutils.h>
 

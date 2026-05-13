@@ -26,7 +26,7 @@ namespace
   {
   public:
     bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); }
+    void dispatch(std::move_only_function<void()> task) override { task(); } void defer(std::move_only_function<void()> task) override { task(); }
   };
 
   struct Env final
@@ -43,13 +43,11 @@ namespace
     Env()
       : mutation{executor, lib.library()}
       , sources{lib.library(), mutation}
-      , views{lib.library(), sources}
+      , views{executor, lib.library(), sources}
       , config{std::make_shared<ao::rt::ConfigStore>(lib.library().rootPath() / "config.json")}
       , playback{executor, views, lib.library()}
       , workspace{views, playback, mutation, lib.library(), config}
     {
-      views.setWorkspaceService(workspace);
-      views.setLibraryMutationService(mutation);
     }
   };
 
@@ -68,7 +66,7 @@ TEST_CASE("TrackDetailProjection refreshes on TracksMutated", "[projection]")
   auto const reply = env.views.createView(TrackListViewConfig{.listId = allTracksId()});
   env.views.setSelection(reply.viewId, {id1});
 
-  auto proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId});
+  auto proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);
 
   auto snap = proj->snapshot();
   REQUIRE(snap.selectionKind == SelectionKind::Single);
@@ -97,7 +95,7 @@ TEST_CASE("TrackDetailProjection ignores non-intersecting TracksMutated", "[proj
   auto const reply = env.views.createView(TrackListViewConfig{.listId = allTracksId()});
   env.views.setSelection(reply.viewId, {id1});
 
-  auto proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId});
+  auto proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);
 
   auto const revBefore = proj->snapshot().revision;
 
@@ -118,7 +116,7 @@ TEST_CASE("TrackDetailProjection aggregates metadata for multi-select", "[projec
   auto const reply = env.views.createView(TrackListViewConfig{.listId = allTracksId()});
   env.views.setSelection(reply.viewId, {id1, id2});
 
-  auto proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId});
+  auto proj = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.mutation);
   auto const snap = proj->snapshot();
 
   REQUIRE(snap.selectionKind == SelectionKind::Multiple);

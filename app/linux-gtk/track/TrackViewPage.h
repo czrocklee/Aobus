@@ -1,0 +1,118 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2025 Aobus Contributors
+
+#pragma once
+
+#include "tag/TagPopover.h"
+#include "track/TrackColumnController.h"
+#include "track/TrackFilterController.h"
+#include "track/TrackListAdapter.h"
+#include "track/TrackPresentation.h"
+#include "track/TrackSelectionController.h"
+
+#include <gtkmm.h>
+
+#include <chrono>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace ao::rt
+{
+  class AppSession;
+}
+
+namespace ao::gtk
+{
+  class TrackRowCache;
+
+  class TrackViewPage final : public Gtk::Box
+  {
+  public:
+    using TrackId = TrackListAdapter::TrackId;
+    using SelectionChangedSignal = sigc::signal<void()>;
+    using TrackActivatedSignal = sigc::signal<void(TrackId)>;
+    using ContextMenuRequestedSignal = sigc::signal<void(double, double)>;
+    using TagEditRequestedSignal = sigc::signal<void(std::vector<TrackId> const&, Gtk::Widget*)>;
+    using CreateSmartListRequestedSignal = sigc::signal<void(std::string)>;
+
+    explicit TrackViewPage(ao::ListId listId,
+                           TrackListAdapter& adapter,
+                           TrackColumnLayoutModel& columnLayoutModel,
+                           ao::rt::AppSession& session,
+                           ao::rt::ViewId viewId = ao::rt::ViewId{});
+    ~TrackViewPage() override;
+
+    ao::ListId getListId() const { return _listId; }
+
+    Gtk::ColumnView& getColumnView() { return _columnView; }
+
+    TrackFilterController& filterController() { return *_filterController; }
+    TrackSelectionController& selectionController() { return *_selectionController; }
+
+    CreateSmartListRequestedSignal& signalCreateSmartListRequested();
+    ao::rt::ITrackListProjection* projection() const { return _adapter.projection(); }
+
+    void showTagPopover(TagPopover& popover, double x, double y);
+    void setStatusMessage(std::string_view message);
+    void clearStatusMessage();
+
+  private:
+    void setupPresentationControls();
+    void setupHeaderFactory();
+    void setupStatusBar();
+    void updateSectionHeaders();
+    void onGroupByChanged();
+    void onModelChanged();
+
+    Glib::RefPtr<Gtk::SignalListItemFactory> createTextColumnFactory(TrackColumnDefinition const& definition);
+    void onTextColumnSetup(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                           TrackColumnDefinition const& definition,
+                           bool isEditable,
+                           bool isHyperlink);
+    void onTextColumnBind(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                          TrackColumnDefinition const& definition,
+                          bool isEditable);
+    void onTextColumnBindEditable(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                                  TrackColumnDefinition const& definition,
+                                  Glib::RefPtr<TrackRowObject> const& row);
+    void onTextColumnBindStatic(Glib::RefPtr<Gtk::ListItem> const& listItem,
+                                TrackColumnDefinition const& definition,
+                                Glib::RefPtr<TrackRowObject> const& row);
+    void commitMetadataChange(Gtk::Stack* stack,
+                              Gtk::Entry* entry,
+                              Glib::RefPtr<TrackRowObject> const& row,
+                              TrackColumn column);
+
+    // Child widgets
+    Gtk::Box _controlsBar{Gtk::Orientation::HORIZONTAL};
+    Gtk::Entry _filterEntry;
+    Gtk::Label _groupByLabel;
+    Gtk::DropDown _groupByDropdown;
+    Gtk::Label _statusLabel;
+    Gtk::ScrolledWindow _scrolledWindow;
+    Gtk::ColumnView _columnView;
+    Gtk::Popover _contextPopover;
+
+    // Models
+    ao::ListId _listId;
+    ao::rt::ViewId _viewId{};
+    TrackListAdapter& _adapter;
+    ao::rt::AppSession& _session;
+    Glib::RefPtr<Gtk::SortListModel> _groupModel;
+    Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
+    TrackColumnLayoutModel& _columnLayoutModel;
+    Glib::RefPtr<Gtk::StringList> _groupByOptions;
+    Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
+    ao::rt::TrackGroupKey _activeGroupBy = ao::rt::TrackGroupKey::None;
+
+    // Controllers (owned)
+    std::unique_ptr<TrackColumnController> _columnController;
+    std::unique_ptr<TrackFilterController> _filterController;
+    std::unique_ptr<TrackSelectionController> _selectionController;
+
+    // Signals
+    CreateSmartListRequestedSignal _createSmartListRequested;
+  };
+} // namespace ao::gtk

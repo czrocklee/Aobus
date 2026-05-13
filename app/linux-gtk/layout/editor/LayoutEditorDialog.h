@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "../ComponentRegistry.h"
-#include "../LayoutDocument.h"
+#include "layout/runtime/ComponentRegistry.h"
+#include "layout/document/LayoutDocument.h"
 
 #include <gtkmm.h>
 #include <map>

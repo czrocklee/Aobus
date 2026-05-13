@@ -81,7 +81,7 @@ aobus_apply_clang_tidy(ao_test RELAXED)
 add_executable(ao_test_gtk
     unit/gtk/TrackListAdapterTest.cpp
     unit/gtk/TrackPresentationTest.cpp
-    unit/gtk/TrackRowDataProviderTest.cpp
+    unit/gtk/TrackRowCacheTest.cpp
     unit/gtk/LayoutModelTest.cpp
     unit/gtk/LayoutContainersTest.cpp
     unit/gtk/LayoutComponentsTest.cpp

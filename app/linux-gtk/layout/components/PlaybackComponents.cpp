@@ -3,10 +3,11 @@
 
 #include "PlaybackComponents.h"
 
-#include <AobusSoul.h>
-#include <LayoutConstants.h>
-#include <OutputListItems.h>
-#include <VolumeBar.h>
+#include "playback/AobusSoul.h"
+#include "playback/AobusSoulWindow.h"
+#include "layout/LayoutConstants.h"
+#include "playback/OutputListItems.h"
+#include "playback/VolumeBar.h"
 #include <runtime/AppSession.h>
 #include <runtime/PlaybackService.h>
 
@@ -14,6 +15,7 @@
 #include <glibmm/main.h>
 #include <gtkmm/button.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/gesturelongpress.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
@@ -33,7 +35,7 @@ namespace ao::gtk::layout
     class PlayPauseButtonComponent final : public ILayoutComponent
     {
     public:
-      PlayPauseButtonComponent(ComponentContext& ctx, LayoutNode const& node)
+      PlayPauseButtonComponent(LayoutDependencies& ctx, LayoutNode const& node)
         : _session{ctx.session}
         , _showLabel{node.getProp<bool>("showLabel", false)}
         , _size{node.getProp<std::string>("size", "normal")}
@@ -114,7 +116,7 @@ namespace ao::gtk::layout
     class StopButtonComponent final : public ILayoutComponent
     {
     public:
-      StopButtonComponent(ComponentContext& ctx, LayoutNode const& node)
+      StopButtonComponent(LayoutDependencies& ctx, LayoutNode const& node)
         : _session{ctx.session}
       {
         bool const showLabel = node.getProp<bool>("showLabel", false);
@@ -173,7 +175,7 @@ namespace ao::gtk::layout
     class VolumeControlComponent final : public ILayoutComponent
     {
     public:
-      VolumeControlComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      VolumeControlComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
         : _session{ctx.session}
       {
         int const preferredWidth = 32;
@@ -228,7 +230,7 @@ namespace ao::gtk::layout
     class CurrentTitleLabelComponent final : public ILayoutComponent
     {
     public:
-      CurrentTitleLabelComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      CurrentTitleLabelComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
         : _session{ctx.session}
       {
         _label.set_ellipsize(Pango::EllipsizeMode::END);
@@ -276,7 +278,7 @@ namespace ao::gtk::layout
     class CurrentArtistLabelComponent final : public ILayoutComponent
     {
     public:
-      CurrentArtistLabelComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      CurrentArtistLabelComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
         : _session{ctx.session}
       {
         _label.set_ellipsize(Pango::EllipsizeMode::END);
@@ -324,7 +326,7 @@ namespace ao::gtk::layout
     class SeekSliderComponent final : public ILayoutComponent
     {
     public:
-      SeekSliderComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      SeekSliderComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
         : _session{ctx.session}
       {
         _scale.set_range(0, 100);
@@ -471,7 +473,7 @@ namespace ao::gtk::layout
     class TimeLabelComponent final : public ILayoutComponent
     {
     public:
-      TimeLabelComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      TimeLabelComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
         : _session{ctx.session}
       {
         _label.set_halign(Gtk::Align::END);
@@ -579,7 +581,7 @@ namespace ao::gtk::layout
     class PlayButtonComponent final : public ILayoutComponent
     {
     public:
-      PlayButtonComponent(ComponentContext& ctx, LayoutNode const& node)
+      PlayButtonComponent(LayoutDependencies& ctx, LayoutNode const& node)
         : _session{ctx.session}
       {
         bool const showLabel = node.getProp<bool>("showLabel", false);
@@ -651,7 +653,7 @@ namespace ao::gtk::layout
     class PauseButtonComponent final : public ILayoutComponent
     {
     public:
-      PauseButtonComponent(ComponentContext& ctx, LayoutNode const& node)
+      PauseButtonComponent(LayoutDependencies& ctx, LayoutNode const& node)
         : _session{ctx.session}
       {
         bool const showLabel = node.getProp<bool>("showLabel", false);
@@ -708,7 +710,7 @@ namespace ao::gtk::layout
     class OutputButtonComponent final : public ILayoutComponent
     {
     public:
-      OutputButtonComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      OutputButtonComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
         : _session{ctx.session}
       {
         _button.set_has_frame(false);
@@ -735,6 +737,21 @@ namespace ao::gtk::layout
             rebuildModel();
             _popover.popup();
           });
+
+        auto const longPress = Gtk::GestureLongPress::create();
+        longPress->set_button(GDK_BUTTON_SECONDARY);
+        longPress->set_delay_factor(2.0);
+        longPress->signal_pressed().connect(
+          [this](double, double)
+          {
+            if (!_soulWindow)
+            {
+              _soulWindow = std::make_unique<AobusSoulWindow>();
+            }
+            _soulWindow->updateState(_lastQuality, _isPlaying);
+            _soulWindow->present();
+          });
+        _button.add_controller(longPress);
 
         _listBox.set_selection_mode(Gtk::SelectionMode::NONE);
         _listBox.set_show_separators(true);
@@ -902,6 +919,7 @@ namespace ao::gtk::layout
       ao::rt::AppSession& _session;
       Gtk::Button _button;
       ao::gtk::AobusSoul _soul;
+      std::unique_ptr<AobusSoulWindow> _soulWindow;
       Gtk::Popover _popover;
       Gtk::ListBox _listBox;
       Glib::RefPtr<Gio::ListStore<Glib::Object>> _store;
@@ -922,7 +940,7 @@ namespace ao::gtk::layout
     class QualityIndicatorComponent final : public ILayoutComponent
     {
     public:
-      QualityIndicatorComponent(ComponentContext& ctx, LayoutNode const& /*node*/)
+      QualityIndicatorComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
         : _session{ctx.session}
       {
         _soul.set_size_request(24, 24);
@@ -977,57 +995,57 @@ namespace ao::gtk::layout
       ao::rt::Subscription _startedSub;
     };
 
-    std::unique_ptr<ILayoutComponent> createPlayPauseButton(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createPlayPauseButton(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<PlayPauseButtonComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createStopButton(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createStopButton(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<StopButtonComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createVolumeControl(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createVolumeControl(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<VolumeControlComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createCurrentTitleLabel(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createCurrentTitleLabel(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<CurrentTitleLabelComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createCurrentArtistLabel(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createCurrentArtistLabel(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<CurrentArtistLabelComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createSeekSlider(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createSeekSlider(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<SeekSliderComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createTimeLabel(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createTimeLabel(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<TimeLabelComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createPlayButton(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createPlayButton(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<PlayButtonComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createPauseButton(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createPauseButton(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<PauseButtonComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createOutputButton(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createOutputButton(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<OutputButtonComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createQualityIndicator(ComponentContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createQualityIndicator(LayoutDependencies& ctx, LayoutNode const& node)
     {
       return std::make_unique<QualityIndicatorComponent>(ctx, node);
     }

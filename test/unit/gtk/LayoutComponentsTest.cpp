@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <app/linux-gtk/layout/ComponentRegistry.h>
-#include <app/linux-gtk/layout/LayoutDocument.h>
-#include <app/linux-gtk/layout/LayoutRuntime.h>
-#include <app/linux-gtk/layout/LayoutYaml.h>
+#include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
+#include <app/linux-gtk/layout/document/LayoutDocument.h>
+#include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
+#include <app/linux-gtk/layout/document/LayoutYaml.h>
 #include <app/linux-gtk/layout/components/Containers.h>
 
-#include <CoverArtCache.h>
-#include <StatusBar.h>
-#include <TrackRowDataProvider.h>
+#include "inspector/CoverArtCache.h"
+#include "shell/StatusBar.h"
+#include "track/TrackRowCache.h"
 #include <app/runtime/AppSession.h>
 #include <app/runtime/ConfigStore.h>
 
@@ -34,12 +34,12 @@ namespace
   {
   public:
     bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); }
+    void dispatch(std::move_only_function<void()> task) override { task(); } void defer(std::move_only_function<void()> task) override { task(); }
   };
 
-  ComponentContext makeContext(ComponentRegistry& registry, ao::rt::AppSession& session, Gtk::Window& window)
+  LayoutDependencies makeContext(ComponentRegistry& registry, ao::rt::AppSession& session, Gtk::Window& window)
   {
-    return ComponentContext{.registry = registry, .session = session, .parentWindow = window};
+    return LayoutDependencies{.registry = registry, .session = session, .parentWindow = window};
   }
 } // namespace
 
@@ -255,13 +255,13 @@ TEST_CASE("Semantic component error states", "[layout][components]")
 
     auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
     REQUIRE(label != nullptr);
-    CHECK(label->get_label().find("rowDataProvider missing") != std::string::npos);
+    CHECK(label->get_label().find("trackRowCache missing") != std::string::npos);
   }
 
   SECTION("library.listTree shows error when listSidebarController missing")
   {
-    auto const rdp = std::make_unique<ao::gtk::TrackRowDataProvider>(session.musicLibrary());
-    ctx.rowDataProvider = rdp.get();
+    auto const rdp = std::make_unique<ao::gtk::TrackRowCache>(session.musicLibrary());
+    ctx.track.trackRowCache = rdp.get();
     auto const node = LayoutNode{.type = "library.listTree"};
     auto const comp = registry.create(ctx, node);
 
@@ -287,7 +287,7 @@ TEST_CASE("Semantic component error states", "[layout][components]")
 
     auto* const label = dynamic_cast<Gtk::Label*>(child);
     REQUIRE(label != nullptr);
-    CHECK(label->get_label().find("trackPageGraph missing") != std::string::npos);
+    CHECK(label->get_label().find("trackPageManager missing") != std::string::npos);
   }
 
   SECTION("inspector.coverArt shows error when coverArtCache missing")
@@ -341,7 +341,7 @@ TEST_CASE("Semantic component error states", "[layout][components]")
 
     auto* const label = dynamic_cast<Gtk::Label*>(child);
     REQUIRE(label != nullptr);
-    CHECK(label->get_label().find("trackPageGraph missing") != std::string::npos);
+    CHECK(label->get_label().find("trackPageManager missing") != std::string::npos);
   }
 }
 
@@ -371,13 +371,11 @@ TEST_CASE("Semantic component success states", "[layout][components]")
   auto menuModel = Gio::Menu::create();
   menuModel->append("Test Item", "win.test");
 
-  auto ctx = ComponentContext{.registry = registry,
+  auto ctx = LayoutDependencies{.registry = registry,
                               .session = session,
                               .parentWindow = window,
-                              .coverArtCache = coverArtCache.get(),
-                              .statusBar = statusBar.get(),
-                              .menuModel = menuModel,
-                              .onNodeMoved = {}};
+                              .inspector = {.coverArtCache = coverArtCache.get()},
+                              .shell = {.statusBar = statusBar.get(), .menuModel = menuModel}};
 
   [[maybe_unused]] auto runtime = LayoutRuntime{registry};
   {
@@ -435,7 +433,7 @@ TEST_CASE("Semantic component success states", "[layout][components]")
     CHECK(label == nullptr);
   }
 
-  SECTION("inspector.sidebar creates InspectorSidebar when cache available")
+  SECTION("inspector.sidebar creates TrackInspectorPanel when cache available")
   {
     auto const node = LayoutNode{.type = "inspector.sidebar"};
     auto const comp = registry.create(ctx, node);

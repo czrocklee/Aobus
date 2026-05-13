@@ -1,6 +1,6 @@
 ---
 name: gen-cpp-code
-description: Expert C++23 code generation for Aobus. Use when asked to write, edit, refactor, or fix any C++ code (.cpp, .h, .hpp files). This skill is mandatory for all C++ feature implementation, bug fixing, test generation, or any task that modifies C++ source files.
+description: Mandatory C++ code generation skill for Aobus. You MUST activate this skill whenever you write, edit, refactor, or fix ANY C++ code (.cpp, .h, .hpp files). This applies to feature implementation, bug fixes, test generation, or any C++ task, regardless of whether the user explicitly asks for it.
 ---
 
 # Aobus C++ Code Generation
@@ -9,14 +9,14 @@ Follow these procedures to ensure architectural consistency and adherence to Aob
 
 ## Workflow
 
-1.  **Reference Examples**: Open the representative source files listed below to absorb naming conventions, member ordering, include grouping, error handling, and modern C++ feature usage before generating code. Match the patterns you see — don't invent new ones.
+1.  **Reference Examples**: You MUST read and analyze the most relevant representative source files listed below BEFORE writing or modifying any code. This is required to absorb naming conventions, member ordering, include grouping, error handling, and modern C++ feature usage. Match the patterns you see — don't invent new ones.
 2.  **Context Discovery**: Read a sibling file in the target directory to match existing error handling, logging, and namespace patterns. Prefer the closest neighbor over the reference files when they differ.
 3.  **Implement**: Generate code following the exact conventions observed in the reference files.
 4.  **Verify**: If modifying logic, identify relevant tests in `test/` and match the test style shown in the reference test files.
 
 ## Representative Source Files
 
-Read the files most relevant to your task before writing code — they show the canonical patterns:
+You MUST read the files most relevant to your task before writing code — they show the canonical patterns:
 
 - **`include/ao/Error.h`** — result types, scoped enums, `using` aliases, designated init
 - **`include/ao/Exception.h`** — `AO_THROW` macros, exception hierarchy, `override`+`noexcept`
@@ -27,7 +27,7 @@ Read the files most relevant to your task before writing code — they show the 
 
 ## Representative Test Files
 
-Match these patterns when writing or modifying tests:
+You MUST read these files before writing or modifying tests to match patterns:
 
 - **`test/unit/audio/PlayerTest.cpp`** — fakeit mocking, `SECTION()`, `Catch::Approx`
 - **`test/integration/tag/TagTest.cpp`** — `GENERATE()` parameterized tests, integration I/O
@@ -35,5 +35,5 @@ Match these patterns when writing or modifying tests:
 
 ## References
 
-- **Full Standards**: [CONTRIBUTING.md](../../../CONTRIBUTING.md)
+- **Full Standards**: [CONTRIBUTING.md](../../../CONTRIBUTING.md) (Read this if unsure about general C++ standards)
 - **Build & Test**: [README.md](../../../README.md)

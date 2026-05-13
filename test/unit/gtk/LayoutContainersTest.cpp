@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <app/linux-gtk/layout/ComponentRegistry.h>
-#include <app/linux-gtk/layout/LayoutDocument.h>
-#include <app/linux-gtk/layout/LayoutHost.h>
-#include <app/linux-gtk/layout/LayoutRuntime.h>
+#include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
+#include <app/linux-gtk/layout/document/LayoutDocument.h>
+#include <app/linux-gtk/layout/runtime/LayoutHost.h>
+#include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
 #include <app/linux-gtk/layout/components/Containers.h>
 
 #include <app/runtime/AppSession.h>
@@ -29,7 +29,7 @@ namespace
   {
   public:
     bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); }
+    void dispatch(std::move_only_function<void()> task) override { task(); } void defer(std::move_only_function<void()> task) override { task(); }
   };
 } // namespace
 
@@ -52,7 +52,7 @@ TEST_CASE("LayoutRuntime building", "[layout][containers]")
   LayoutRuntime::registerStandardComponents(registry);
 
   auto window = Gtk::Window{};
-  auto ctx = ComponentContext{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+  auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
 
   auto runtime = LayoutRuntime{registry};
 
@@ -128,7 +128,7 @@ TEST_CASE("Container error states", "[layout][containers]")
   LayoutRuntime::registerStandardComponents(registry);
 
   auto window = Gtk::Window{};
-  auto ctx = ComponentContext{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+  auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
 
   auto runtime = LayoutRuntime{registry};
 
@@ -214,7 +214,7 @@ TEST_CASE("Container success states", "[layout][containers]")
   LayoutRuntime::registerStandardComponents(registry);
 
   auto window = Gtk::Window{};
-  auto ctx = ComponentContext{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+  auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
 
   auto runtime = LayoutRuntime{registry};
 
@@ -366,7 +366,7 @@ TEST_CASE("applyCommonProps coverage", "[layout][containers]")
   LayoutRuntime::registerStandardComponents(registry);
 
   auto window = Gtk::Window{};
-  auto ctx = ComponentContext{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+  auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
 
   auto runtime = LayoutRuntime{registry};
 
@@ -529,7 +529,7 @@ TEST_CASE("LayoutHost rebuild", "[layout][containers]")
   registerContainerComponents(registry);
 
   auto window = Gtk::Window{};
-  auto ctx = ComponentContext{.registry = registry, .session = session, .parentWindow = window};
+  auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window};
 
   auto host = LayoutHost{registry};
 
@@ -577,7 +577,7 @@ TEST_CASE("LayoutHost rebuild", "[layout][containers]")
     auto session2 = ao::rt::AppSession{ao::rt::AppSessionDependencies{
       .executor = executor2, .libraryRoot = tempDir2.path(), .configStore = configStore2}};
     auto ctx2 =
-      ComponentContext{.registry = registry2, .session = session2, .parentWindow = window2, .onNodeMoved = {}};
+      LayoutDependencies{.registry = registry2, .session = session2, .parentWindow = window2, .onNodeMoved = {}};
 
     auto const node = LayoutNode{};
     REQUIRE_NOTHROW(registry2.create(ctx2, node));

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <layout/ComponentRegistry.h>
+#include "layout/runtime/ComponentRegistry.h"
 
 namespace ao::gtk::layout
 {

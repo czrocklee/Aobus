@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <app/linux-gtk/layout/ComponentRegistry.h>
-#include <app/linux-gtk/layout/LayoutDocument.h>
-#include <app/linux-gtk/layout/LayoutRuntime.h>
-#include <app/linux-gtk/layout/LayoutYaml.h>
+#include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
+#include <app/linux-gtk/layout/document/LayoutDocument.h>
+#include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
+#include <app/linux-gtk/layout/document/LayoutYaml.h>
 #include <app/linux-gtk/layout/editor/LayoutEditorDialog.h>
 
 #include <app/runtime/AppSession.h>
@@ -28,7 +28,7 @@ namespace
   {
   public:
     bool isCurrent() const noexcept override { return true; }
-    void dispatch(std::move_only_function<void()> task) override { task(); }
+    void dispatch(std::move_only_function<void()> task) override { task(); } void defer(std::move_only_function<void()> task) override { task(); }
   };
 } // namespace
 
@@ -330,7 +330,7 @@ TEST_CASE("Template system", "[layout][editor]")
 
     auto const app = Gtk::Application::create("io.github.aobus.template_test");
     auto window = Gtk::Window{};
-    auto ctx = ComponentContext{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+    auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
 
     auto doc = LayoutDocument{};
     doc.version = 1;
@@ -362,7 +362,7 @@ TEST_CASE("Template system", "[layout][editor]")
 
     auto const app = Gtk::Application::create("io.github.aobus.recursive_test");
     auto window = Gtk::Window{};
-    auto ctx = ComponentContext{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+    auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
 
     auto doc = LayoutDocument{};
     doc.version = 1;
@@ -411,7 +411,7 @@ TEST_CASE("absoluteCanvas component", "[layout][editor]")
   LayoutRuntime::registerStandardComponents(registry);
 
   auto window = Gtk::Window{};
-  auto ctx = ComponentContext{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+  auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
   SECTION("absoluteCanvas descriptor is registered as container")
   {
     auto const desc = registry.getDescriptor("absoluteCanvas");
