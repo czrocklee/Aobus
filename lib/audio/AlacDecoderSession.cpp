@@ -210,12 +210,12 @@ namespace ao::audio
       {
         auto const src = layout::viewArray<std::int16_t>(std::span{_impl->sourcePcm});
         auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_impl->targetPcm});
-        pcm::Converter::pad<std::int16_t, std::int32_t>(src, dst, 16);
+        PcmConverter::pad<std::int16_t, std::int32_t>(src, dst, 16);
       }
       else if (sourceBps == 24 && targetBps == 32)
       {
         auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_impl->targetPcm});
-        pcm::Converter::unpackS24(_impl->sourcePcm, dst, 8);
+        PcmConverter::unpackS24(_impl->sourcePcm, dst, 8);
       }
       else
       {

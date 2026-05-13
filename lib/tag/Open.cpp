@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/tag/TagFile.h>
 #include "flac/File.h"
 #include "mp4/File.h"
 #include "mpeg/File.h"
+#include <ao/tag/TagFile.h>
 
 #include <algorithm>
 #include <array>

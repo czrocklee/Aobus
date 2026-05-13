@@ -24,181 +24,188 @@
 #include <tuple>
 #include <vector>
 
-TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
+namespace ao::library::test
 {
-  auto temp1 = TempDir{};
-  auto ml1 = ao::library::MusicLibrary{temp1.path()};
-  auto const smartListName = std::string("Smart List ") + std::string(256, 'S');
-  auto const smartFilter = std::string("@duration > 60 and ") + std::string(256, 'x');
-  auto const manualListName = std::string("Manual List ") + std::string(256, 'M');
-  auto const manualListDescription = std::string("Manual Description ") + std::string(256, 'D');
+  using namespace ao::lmdb::test;
 
-  // 1. Setup initial library
+  TEST_CASE("Library Export/Import Cycle", "[app][core][yaml]")
   {
-    auto txn = ml1.writeTransaction();
-    auto& dict = ml1.dictionary();
+    auto const temp1 = TempDir{};
+    auto ml1 = MusicLibrary{temp1.path()};
+    auto const smartListName = std::string("Smart List ") + std::string(256, 'S');
+    auto const smartFilter = std::string("@duration > 60 and ") + std::string(256, 'x');
+    auto const manualListName = std::string("Manual List ") + std::string(256, 'M');
+    auto const manualListDescription = std::string("Manual Description ") + std::string(256, 'D');
 
-    auto resWriter = ml1.resources().writer(txn);
-    auto resId = resWriter.create(createTestData(100));
-    std::ignore = resWriter.create(createTestData(64));
-
-    auto trackBuilder = ao::library::TrackBuilder::createNew();
-    trackBuilder.property().uri("song.flac").durationMs(180000);
-    trackBuilder.metadata().title("Test Title").artist("Test Artist").coverArtId(resId.value());
-    trackBuilder.tags().add("rock").add("favorite");
-    trackBuilder.custom().add("mood", "happy");
-
-    auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml1.resources());
-    auto trackWriter = ml1.tracks().writer(txn);
-    auto [trackId, view] =
-      trackWriter.createHotCold(preparedHot.size(),
-                                preparedCold.size(),
-                                // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-                                [&](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                {
-                                  preparedHot.writeTo(hot);
-                                  preparedCold.writeTo(cold);
-                                });
-
-    auto smartListBuilder = ao::library::ListBuilder::createNew().name(smartListName).filter(smartFilter);
-    ml1.lists().writer(txn).create(smartListBuilder.serialize());
-
-    auto manualListBuilder =
-      ao::library::ListBuilder::createNew().name(manualListName).description(manualListDescription);
-    manualListBuilder.tracks().add(trackId);
-    ml1.lists().writer(txn).create(manualListBuilder.serialize());
-
-    txn.commit();
-  }
-
-  // 2. Export to YAML
-  std::filesystem::path yamlPath = std::filesystem::path(temp1.path()) / "backup.yaml";
-  ao::library::Exporter exporter(ml1);
-  REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, ao::library::ExportMode::Full));
-
-  // 3. Import into a new library
-  auto temp2 = TempDir{};
-  auto ml2 = ao::library::MusicLibrary{temp2.path()};
-
-  // Pre-create the track in ml2 to test overlay (since physical file song.flac doesn't exist)
-  {
-    auto txn = ml2.writeTransaction();
-    auto& dict = ml2.dictionary();
-    auto trackBuilder = ao::library::TrackBuilder::createNew();
-    trackBuilder.property().uri("song.flac"); // technical properties are missing initially
-    auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml2.resources());
-    ml2.tracks().writer(txn).createHotCold(preparedHot.size(),
-                                           preparedCold.size(),
-                                           // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-                                           [&](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                           {
-                                             preparedHot.writeTo(hot);
-                                             preparedCold.writeTo(cold);
-                                           });
-    txn.commit();
-  }
-
-  ao::library::Importer importer(ml2);
-  REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
-
-  // 4. Verify
-  {
-    auto const txn = ml2.readTransaction();
-    auto const reader = ml2.tracks().reader(txn);
-    auto const listReader = ml2.lists().reader(txn);
-    auto& dict = ml2.dictionary();
-
-    // Check tracks
-    std::vector<std::pair<ao::TrackId, ao::library::TrackView>> tracks;
-    for (auto const& item : reader)
+    // 1. Setup initial library
     {
-      tracks.push_back(item);
+      auto txn = ml1.writeTransaction();
+      auto& dict = ml1.dictionary();
+
+      auto resWriter = ml1.resources().writer(txn);
+      auto const resId = resWriter.create(createTestData(100));
+      std::ignore = resWriter.create(createTestData(64));
+
+      auto trackBuilder = TrackBuilder::createNew();
+      trackBuilder.property().uri("song.flac").durationMs(180000);
+      trackBuilder.metadata().title("Test Title").artist("Test Artist").coverArtId(resId.value());
+      trackBuilder.tags().add("rock").add("favorite");
+      trackBuilder.custom().add("mood", "happy");
+
+      auto const [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml1.resources());
+      auto trackWriter = ml1.tracks().writer(txn);
+      auto const [trackId, view] =
+        trackWriter.createHotCold(preparedHot.size(),
+                                  preparedCold.size(),
+                                  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                  [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                  {
+                                    preparedHot.writeTo(hot);
+                                    preparedCold.writeTo(cold);
+                                  });
+
+      auto smartListBuilder = ListBuilder::createNew().name(smartListName).filter(smartFilter);
+      ml1.lists().writer(txn).create(smartListBuilder.serialize());
+
+      auto manualListBuilder = ListBuilder::createNew().name(manualListName).description(manualListDescription);
+      manualListBuilder.tracks().add(trackId);
+      ml1.lists().writer(txn).create(manualListBuilder.serialize());
+
+      txn.commit();
     }
 
-    REQUIRE(tracks.size() == 1);
-    auto const& view = tracks[0].second;
-    REQUIRE(std::string(view.property().uri()) == "song.flac");
-    REQUIRE(std::string(view.metadata().title()) == "Test Title");
-    REQUIRE(std::string(dict.get(view.metadata().artistId())) == "Test Artist");
+    // 2. Export to YAML
+    auto const yamlPath = std::filesystem::path(temp1.path()) / "backup.yaml";
+    auto exporter = Exporter{ml1};
+    REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, ExportMode::Full));
 
-    // Check tags
-    auto tags = view.tags();
-    std::vector<std::string> tagNames;
-    for (auto tid : tags)
+    // 3. Import into a new library
+    auto const temp2 = TempDir{};
+    auto ml2 = MusicLibrary{temp2.path()};
+
+    // Pre-create the track in ml2 to test overlay (since physical file song.flac doesn't exist)
     {
-      tagNames.push_back(std::string(dict.get(tid)));
+      auto txn = ml2.writeTransaction();
+      auto& dict = ml2.dictionary();
+      auto trackBuilder = TrackBuilder::createNew();
+      trackBuilder.property().uri("song.flac"); // technical properties are missing initially
+      auto const [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml2.resources());
+      ml2.tracks().writer(txn).createHotCold(preparedHot.size(),
+                                             preparedCold.size(),
+                                             // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                             [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                             {
+                                               preparedHot.writeTo(hot);
+                                               preparedCold.writeTo(cold);
+                                             });
+      txn.commit();
     }
 
-    REQUIRE(std::ranges::contains(tagNames, "rock"));
-    REQUIRE(std::ranges::contains(tagNames, "favorite"));
+    auto importer = Importer{ml2};
+    REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
 
-    // Check custom
-    auto custom = view.custom();
-    bool foundMood = false;
-    for (auto [k, v] : custom)
+    // 4. Verify
     {
-      if (std::string(dict.get(k)) == "mood" && std::string(v) == "happy")
+      auto txn = ml2.readTransaction();
+      auto reader = ml2.tracks().reader(txn);
+      auto const listReader = ml2.lists().reader(txn);
+      auto& dict = ml2.dictionary();
+
+      // Check tracks
+      auto tracks = std::vector<std::pair<TrackId, TrackView>>{};
+
+      for (auto const& item : reader)
       {
-        foundMood = true;
+        tracks.push_back(item);
       }
+
+      REQUIRE(tracks.size() == 1);
+      auto const& view = tracks[0].second;
+      REQUIRE(std::string(view.property().uri()) == "song.flac");
+      REQUIRE(std::string(view.metadata().title()) == "Test Title");
+      REQUIRE(std::string(dict.get(view.metadata().artistId())) == "Test Artist");
+
+      // Check tags
+      auto const tags = view.tags();
+      auto tagNames = std::vector<std::string>{};
+
+      for (auto tid : tags)
+      {
+        tagNames.push_back(std::string(dict.get(tid)));
+      }
+
+      REQUIRE(std::ranges::contains(tagNames, "rock"));
+      REQUIRE(std::ranges::contains(tagNames, "favorite"));
+
+      // Check custom
+      auto const custom = view.custom();
+      bool foundMood = false;
+
+      for (auto [k, v] : custom)
+      {
+        if (std::string(dict.get(k)) == "mood" && std::string(v) == "happy")
+        {
+          foundMood = true;
+        }
+      }
+
+      REQUIRE(foundMood);
+
+      // Check lists
+      int smartCount = 0;
+      int manualCount = 0;
+
+      for (auto const& [lid, lview] : listReader)
+      {
+        if (lview.isSmart())
+        {
+          smartCount++;
+          REQUIRE(std::string(lview.name()) == smartListName);
+          REQUIRE(std::string(lview.filter()) == smartFilter);
+        }
+        else
+        {
+          manualCount++;
+          REQUIRE(std::string(lview.name()) == manualListName);
+          REQUIRE(std::string(lview.description()) == manualListDescription);
+          REQUIRE(lview.tracks().size() == 1);
+          REQUIRE(lview.tracks()[0] == tracks[0].first);
+        }
+      }
+
+      REQUIRE(smartCount == 1);
+      REQUIRE(manualCount == 1);
     }
+  }
 
-    REQUIRE(foundMood);
+  TEST_CASE("Library import remaps list parents regardless of YAML order", "[core][yaml]")
+  {
+    auto temp = TempDir{};
+    auto ml = MusicLibrary{temp.path()};
 
-    // Check lists
-    int smartCount = 0;
-    int manualCount = 0;
-    for (auto const& [lid, lview] : listReader)
+    auto trackId = TrackId{};
     {
-      if (lview.isSmart())
-      {
-        smartCount++;
-        REQUIRE(std::string(lview.name()) == smartListName);
-        REQUIRE(std::string(lview.filter()) == smartFilter);
-      }
-      else
-      {
-        manualCount++;
-        REQUIRE(std::string(lview.name()) == manualListName);
-        REQUIRE(std::string(lview.description()) == manualListDescription);
-        REQUIRE(lview.tracks().size() == 1);
-        REQUIRE(lview.tracks()[0] == tracks[0].first);
-      }
+      auto txn = ml.writeTransaction();
+      auto& dict = ml.dictionary();
+      auto trackBuilder = TrackBuilder::createNew();
+      trackBuilder.property().uri("song.flac");
+      auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml.resources());
+      std::tie(trackId, std::ignore) =
+        ml.tracks().writer(txn).createHotCold(preparedHot.size(),
+                                              preparedCold.size(),
+                                              // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                              [&](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
+                                              {
+                                                preparedHot.writeTo(hot);
+                                                preparedCold.writeTo(cold);
+                                              });
+      txn.commit();
     }
 
-    REQUIRE(smartCount == 1);
-    REQUIRE(manualCount == 1);
-  }
-}
-
-TEST_CASE("Library import remaps list parents regardless of YAML order", "[core][yaml]")
-{
-  auto temp = TempDir{};
-  auto ml = ao::library::MusicLibrary{temp.path()};
-
-  ao::TrackId trackId;
-  {
-    auto txn = ml.writeTransaction();
-    auto& dict = ml.dictionary();
-    auto trackBuilder = ao::library::TrackBuilder::createNew();
-    trackBuilder.property().uri("song.flac");
-    auto [preparedHot, preparedCold] = trackBuilder.prepare(txn, dict, ml.resources());
-    std::tie(trackId, std::ignore) =
-      ml.tracks().writer(txn).createHotCold(preparedHot.size(),
-                                            preparedCold.size(),
-                                            // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-                                            [&](ao::TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                                            {
-                                              preparedHot.writeTo(hot);
-                                              preparedCold.writeTo(cold);
-                                            });
-    txn.commit();
-  }
-
-  auto const yamlPath = std::filesystem::path(temp.path()) / "child-first.yaml";
-  {
-    auto yaml = std::ofstream{yamlPath};
-    yaml << R"(version: 1
+    auto const yamlPath = std::filesystem::path(temp.path()) / "child-first.yaml";
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << R"(version: 1
 library:
   tracks:
     - id: 10
@@ -213,41 +220,42 @@ library:
       parentId: 0
       name: Parent
 )";
-  }
-
-  ao::library::Importer importer(ml);
-  REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
-
-  {
-    auto const txn = ml.readTransaction();
-    auto const listReader = ml.lists().reader(txn);
-
-    std::optional<ao::library::ListView> parent;
-    std::optional<ao::library::ListView> child;
-    ao::ListId parentId;
-    ao::ListId childId;
-
-    for (auto const& [listId, view] : listReader)
-    {
-      if (std::string(view.name()) == "Parent")
-      {
-        parentId = listId;
-        parent = view;
-      }
-
-      if (std::string(view.name()) == "Child")
-      {
-        childId = listId;
-        child = view;
-      }
     }
 
-    REQUIRE(parent);
-    REQUIRE(child);
-    REQUIRE(parent->parentId() == ao::ListId{0});
-    REQUIRE(child->parentId() == parentId);
-    REQUIRE(childId != parentId);
-    REQUIRE(child->tracks().size() == 1);
-    REQUIRE(child->tracks()[0] == trackId);
+    auto importer = Importer{ml};
+    REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
+
+    {
+      auto txn = ml.readTransaction();
+      auto const listReader = ml.lists().reader(txn);
+
+      auto parent = std::optional<ListView>{};
+      auto child = std::optional<ListView>{};
+      auto parentId = ListId{};
+      auto childId = ListId{};
+
+      for (auto const& [listId, view] : listReader)
+      {
+        if (std::string(view.name()) == "Parent")
+        {
+          parentId = listId;
+          parent = view;
+        }
+
+        if (std::string(view.name()) == "Child")
+        {
+          childId = listId;
+          child = view;
+        }
+      }
+
+      REQUIRE(parent);
+      REQUIRE(child);
+      REQUIRE(parent->parentId() == ListId{0});
+      REQUIRE(child->parentId() == parentId);
+      REQUIRE(childId != parentId);
+      REQUIRE(child->tracks().size() == 1);
+      REQUIRE(child->tracks()[0] == trackId);
+    }
   }
-}
+} // namespace ao::library::test

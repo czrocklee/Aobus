@@ -10,10 +10,8 @@
 #include <ao/library/ListLayout.h>
 #include <cstddef>
 
-namespace
+namespace ao::library::test
 {
-  using ao::library::ListHeader;
-
   TEST_CASE("ListHeader - Size and Alignment")
   {
     CHECK(sizeof(ListHeader) == 20);
@@ -31,4 +29,4 @@ namespace
     CHECK(offsetof(ListHeader, filterLen) == 14);
     CHECK(offsetof(ListHeader, parentId) == 16);
   }
-} // anonymous namespace
+} // namespace ao::library::test

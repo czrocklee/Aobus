@@ -7,18 +7,18 @@
 #include <string>
 #include <vector>
 
-namespace ao::audio
+namespace ao::audio::test
 {
   class CapturingBackend final : public IBackend
   {
   public:
-    struct Event
+    struct Event final
     {
       std::string name;
       Format format;
     };
 
-    ao::Result<> open(Format const& format, IRenderTarget* target) override
+    Result<> open(Format const& format, IRenderTarget* target) override
     {
       _events.push_back({"open", format});
       _target = target;
@@ -50,7 +50,7 @@ namespace ao::audio
         return {};
       }
 
-      return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
+      return std::unexpected(Error{.code = Error::Code::NotSupported});
     }
 
     Result<PropertyValue> getProperty(PropertyId id) const override
@@ -65,7 +65,7 @@ namespace ao::audio
         return _muted;
       }
 
-      return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
+      return std::unexpected(Error{.code = Error::Code::NotSupported});
     }
 
     PropertyInfo queryProperty(PropertyId id) const noexcept override
@@ -79,7 +79,7 @@ namespace ao::audio
     }
 
     // Helpers for tests
-    void setOpenResult(ao::Result<> res) { _openResult = res; }
+    void setOpenResult(Result<> res) { _openResult = res; }
     std::vector<Event> const& events() const { return _events; }
     void clearEvents() { _events.clear(); }
     IRenderTarget* target() const { return _target; }
@@ -132,8 +132,8 @@ namespace ao::audio
     std::vector<Event> _events;
     IRenderTarget* _target = nullptr;
     Format _format{};
-    ao::Result<> _openResult{};
+    Result<> _openResult{};
     float _volume = 1.0f;
     bool _muted = false;
   };
-} // namespace ao::audio
+} // namespace ao::audio::test

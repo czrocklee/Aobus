@@ -13,7 +13,7 @@
 #include <span>
 #include <vector>
 
-namespace ao::audio
+namespace ao::audio::test
 {
   namespace
   {
@@ -82,7 +82,7 @@ namespace ao::audio
 
   TEST_CASE("Decoder Bit-Perfect Conversions", "[playback][integration][codec]")
   {
-    ao::log::Log::init(ao::log::LogLevel::Warn);
+    log::Log::init(log::LogLevel::Warn);
 
     SECTION("FLAC: 16-bit to 32-bit padding alignment")
     {
@@ -241,4 +241,4 @@ namespace ao::audio
       }
     }
   }
-} // namespace ao::audio
+} // namespace ao::audio::test

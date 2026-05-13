@@ -14,54 +14,51 @@
 
 #include <string_view>
 
-using namespace ao::lmdb;
-
-// ============================================================================
-// Environment Tests
-// ============================================================================
-
-TEST_CASE("Environment - create", "[lmdb][environment]")
+namespace ao::lmdb::test
 {
-  auto temp = TempDir{};
-  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  TEST_CASE("Environment - create", "[lmdb][environment]")
+  {
+    auto temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  // Verify by starting a transaction
-  auto txn = WriteTransaction{env};
-}
+    // Verify by starting a transaction
+    auto txn = WriteTransaction{env};
+  }
 
-TEST_CASE("Environment - move constructor", "[lmdb][environment]")
-{
-  auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_test";
-  std::filesystem::create_directory(path);
+  TEST_CASE("Environment - move constructor", "[lmdb][environment]")
+  {
+    auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_test";
+    std::filesystem::create_directory(path);
 
-  auto env1 = Environment{path.string(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env1 = Environment{path.string(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  auto env2 = Environment{std::move(env1)};
-  // env1 is now in moved-from state
-  // env2 should own the environment
+    auto env2 = Environment{std::move(env1)};
+    // env1 is now in moved-from state
+    // env2 should own the environment
 
-  std::filesystem::remove_all(path);
-}
+    std::filesystem::remove_all(path);
+  }
 
-TEST_CASE("Environment - move assignment", "[lmdb][environment]")
-{
-  auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_assign_test";
-  std::filesystem::create_directory(path);
+  TEST_CASE("Environment - move assignment", "[lmdb][environment]")
+  {
+    auto path = std::filesystem::temp_directory_path() / "rs_lmdb_move_assign_test";
+    std::filesystem::create_directory(path);
 
-  auto env1 = Environment{path.string(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    auto env1 = Environment{path.string(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  auto env2 = Environment{path.string(), {.flags = MDB_CREATE, .maxDatabases = 20}};
-  env2 = std::move(env1);
+    auto env2 = Environment{path.string(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+    env2 = std::move(env1);
 
-  std::filesystem::remove_all(path);
-}
+    std::filesystem::remove_all(path);
+  }
 
-TEST_CASE("Environment - constructor with path", "[lmdb][environment]")
-{
-  auto temp = TempDir{};
-  auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
+  TEST_CASE("Environment - constructor with path", "[lmdb][environment]")
+  {
+    auto temp = TempDir{};
+    auto env = Environment{temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20}};
 
-  // Verify we can create a transaction
-  auto txn = ReadTransaction{env};
-  auto wtxn = WriteTransaction{env};
-}
+    // Verify we can create a transaction
+    auto txn = ReadTransaction{env};
+    auto wtxn = WriteTransaction{env};
+  }
+} // namespace ao::lmdb::test

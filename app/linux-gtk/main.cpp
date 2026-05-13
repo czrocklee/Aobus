@@ -30,7 +30,6 @@
 using namespace ao;
 using namespace ao::gtk;
 
-
 namespace
 {
   std::filesystem::path resolveLibraryPath()

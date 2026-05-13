@@ -118,8 +118,7 @@ namespace ao::library
       DictionaryId const* begin() const noexcept
       {
         gsl_Expects(_hotData.size() >= sizeof(TrackHotHeader));
-        return utility::layout::viewArray<DictionaryId>(
-                 _hotData.subspan(sizeof(TrackHotHeader), hotHeader().tagLen))
+        return utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), hotHeader().tagLen))
           .data();
       }
 

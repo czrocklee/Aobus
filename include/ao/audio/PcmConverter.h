@@ -10,12 +10,12 @@
 #include <span>
 #include <vector>
 
-namespace ao::audio::pcm
+namespace ao::audio
 {
   /**
    * @brief High-performance PCM format conversion utilities.
    */
-  class Converter final
+  class PcmConverter final
   {
   public:
     /**
@@ -99,4 +99,4 @@ namespace ao::audio::pcm
       }
     }
   };
-} // namespace ao::audio::pcm
+} // namespace ao::audio

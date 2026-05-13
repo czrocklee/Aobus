@@ -15,36 +15,41 @@
 #include <ao/lmdb/Transaction.h>
 #include <test/unit/lmdb/TestUtils.h>
 
-TEST_CASE("MusicLibrary initializes metadata header", "[core][library]")
+namespace ao::library::test
 {
-  auto temp = TempDir{};
+  using namespace ao::lmdb::test;
 
-  auto const first = ao::library::MusicLibrary{temp.path()};
-  auto const firstHeader = first.metaHeader();
+  TEST_CASE("MusicLibrary initializes metadata header", "[core][library]")
+  {
+    auto const temp = TempDir{};
 
-  REQUIRE(firstHeader.magic == ao::library::kLibraryMetaMagic);
-  REQUIRE(firstHeader.libraryVersion == ao::library::kLibraryVersion);
+    auto const first = MusicLibrary{temp.path()};
+    auto const firstHeader = first.metaHeader();
 
-  auto const reopened = ao::library::MusicLibrary{temp.path()};
-  REQUIRE(reopened.metaHeader().libraryId == firstHeader.libraryId);
-  REQUIRE(reopened.metaHeader().createdAtUnixMs == firstHeader.createdAtUnixMs);
-}
+    REQUIRE(firstHeader.magic == kLibraryMetaMagic);
+    REQUIRE(firstHeader.libraryVersion == kLibraryVersion);
 
-TEST_CASE("MusicLibrary rejects unsupported library versions", "[core][library]")
-{
-  auto temp = TempDir{};
-  auto env = ao::lmdb::Environment{temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8}};
+    auto const reopened = MusicLibrary{temp.path()};
+    REQUIRE(reopened.metaHeader().libraryId == firstHeader.libraryId);
+    REQUIRE(reopened.metaHeader().createdAtUnixMs == firstHeader.createdAtUnixMs);
+  }
 
-  auto txn = ao::lmdb::WriteTransaction{env};
-  auto metaStore = ao::library::MetaStore{ao::lmdb::Database{txn, "meta"}};
-  auto header = ao::library::MetaHeader{.magic = ao::library::kLibraryMetaMagic,
-                                        .libraryVersion = ao::library::kLibraryVersion + 1,
-                                        .flags = 0,
-                                        .createdAtUnixMs = 1,
-                                        .migratedAtUnixMs = 1,
-                                        .libraryId = {}};
-  metaStore.create(txn, header);
-  txn.commit();
+  TEST_CASE("MusicLibrary rejects unsupported library versions", "[core][library]")
+  {
+    auto const temp = TempDir{};
+    auto env = lmdb::Environment{temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8}};
 
-  REQUIRE_THROWS_AS(ao::library::MusicLibrary{temp.path()}, ao::Exception);
-}
+    auto txn = lmdb::WriteTransaction{env};
+    auto metaStore = MetaStore{lmdb::Database{txn, "meta"}};
+    auto header = MetaHeader{.magic = kLibraryMetaMagic,
+                             .libraryVersion = kLibraryVersion + 1,
+                             .flags = 0,
+                             .createdAtUnixMs = 1,
+                             .migratedAtUnixMs = 1,
+                             .libraryId = {}};
+    metaStore.create(txn, header);
+    txn.commit();
+
+    REQUIRE_THROWS_AS(MusicLibrary{temp.path()}, Exception);
+  }
+} // namespace ao::library::test

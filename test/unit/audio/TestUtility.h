@@ -15,7 +15,7 @@ namespace ao::audio::test
   /**
    * @brief A simple dispatcher that executes callbacks immediately.
    */
-  class MockDispatcher : public ao::IMainThreadDispatcher
+  class MockDispatcher final : public IMainThreadDispatcher
   {
   public:
     void dispatch(std::function<void()> callback) override { callback(); }
@@ -33,7 +33,7 @@ namespace ao::audio::test
     {
     }
 
-    ao::Result<> open(Format const& f, IRenderTarget* t) override { return _real.open(f, t); }
+    Result<> open(Format const& f, IRenderTarget* t) override { return _real.open(f, t); }
     void start() override { _real.start(); }
     void pause() override { _real.pause(); }
     void resume() override { _real.resume(); }
@@ -42,12 +42,9 @@ namespace ao::audio::test
     void close() override { _real.close(); }
     BackendId backendId() const noexcept override { return _real.backendId(); }
     ProfileId profileId() const noexcept override { return _real.profileId(); }
-    ao::Result<> setProperty(PropertyId id, PropertyValue const& value) override
-    {
-      return _real.setProperty(id, value);
-    }
+    Result<> setProperty(PropertyId id, PropertyValue const& value) override { return _real.setProperty(id, value); }
 
-    ao::Result<PropertyValue> getProperty(PropertyId id) const override { return _real.getProperty(id); }
+    Result<PropertyValue> getProperty(PropertyId id) const override { return _real.getProperty(id); }
     PropertyInfo queryProperty(PropertyId id) const noexcept override { return _real.queryProperty(id); }
 
   private:
@@ -91,7 +88,7 @@ namespace ao::audio::test
    * It automatically fakes all common IBackend methods to provide 'NiceMock' behavior.
    */
   template<typename T = NullBackend>
-  class SpyBackend
+  class SpyBackend final
   {
   public:
     SpyBackend()
@@ -108,14 +105,14 @@ namespace ao::audio::test
 
       // Properties — delegate to NullBackend for stateful round-trip support
       fakeit::When(Method(_mock, setProperty))
-        .AlwaysDo([this](PropertyId id, PropertyValue const& value) -> ao::Result<>
+        .AlwaysDo([this](PropertyId id, PropertyValue const& value) -> Result<>
                   { return _base.setProperty(id, value); });
 
       fakeit::When(Method(_mock, backendId)).AlwaysReturn(kBackendNone);
       fakeit::When(Method(_mock, profileId)).AlwaysReturn(kProfileShared);
 
       fakeit::When(Method(_mock, getProperty))
-        .AlwaysDo([this](PropertyId id) -> ao::Result<PropertyValue> { return _base.getProperty(id); });
+        .AlwaysDo([this](PropertyId id) -> Result<PropertyValue> { return _base.getProperty(id); });
 
       fakeit::When(Method(_mock, queryProperty))
         .AlwaysDo([this](PropertyId id) -> PropertyInfo { return _base.queryProperty(id); });
