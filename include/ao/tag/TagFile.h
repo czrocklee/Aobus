@@ -14,20 +14,20 @@
 
 namespace ao::tag
 {
-  class File;
+  class TagFile;
 }
 
 namespace ao::tag::detail
 {
-  std::string_view stashOwnedString(ao::tag::File const& owner, std::string value);
+  std::string_view stashOwnedString(TagFile const& owner, std::string value);
 }
 
 namespace ao::tag
 {
   // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
-  class File
+  class TagFile
   {
-    friend std::string_view detail::stashOwnedString(ao::tag::File const& owner, std::string value);
+    friend std::string_view detail::stashOwnedString(TagFile const& owner, std::string value);
 
   public:
     enum class Mode
@@ -36,33 +36,33 @@ namespace ao::tag
       ReadWrite
     };
 
-    File(std::filesystem::path const& path, Mode mode);
+    TagFile(std::filesystem::path const& path, Mode mode);
 
-    virtual ~File() = default;
+    virtual ~TagFile() = default;
 
     // Abstract base class - disable copy/move
-    File(File const&) = delete;
-    File& operator=(File const&) = delete;
-    File(File&&) = delete;
-    File& operator=(File&&) = delete;
+    TagFile(TagFile const&) = delete;
+    TagFile& operator=(TagFile const&) = delete;
+    TagFile(TagFile&&) = delete;
+    TagFile& operator=(TagFile&&) = delete;
 
     /**
      * Parse and return track metadata as a TrackBuilder.
      *
      * The returned builder may borrow memory from two sources:
-     * 1. The mmap'd file data (valid for the lifetime of this File instance).
-     * 2. The _ownedStrings deque (valid until the next loadTrack() call on this File instance).
+     * 1. The mmap'd file data (valid for the lifetime of this TagFile instance).
+     * 2. The _ownedStrings deque (valid until the next loadTrack() call on this TagFile instance).
      *
-     * IMPORTANT: The builder must have serialize() called before this File is destroyed
-     * or before loadTrack() is called again on this File instance.
+     * IMPORTANT: The builder must have serialize() called before this TagFile is destroyed
+     * or before loadTrack() is called again on this TagFile instance.
      */
-    virtual ao::library::TrackBuilder loadTrack() const = 0;
+    virtual library::TrackBuilder loadTrack() const = 0;
 
     /**
      * Open a tag file by path, auto-detecting format from extension.
      * Returns nullptr for unsupported extensions.
      */
-    static std::unique_ptr<File> open(std::filesystem::path const& path, Mode mode = Mode::ReadOnly);
+    static std::unique_ptr<TagFile> open(std::filesystem::path const& path, Mode mode = Mode::ReadOnly);
 
   protected:
     void clearOwnedStrings() const { _ownedStrings.clear(); }
@@ -84,7 +84,7 @@ namespace ao::tag
 
   namespace detail
   {
-    inline std::string_view stashOwnedString(ao::tag::File const& owner, std::string value)
+    inline std::string_view stashOwnedString(TagFile const& owner, std::string value)
     {
       return owner.stashOwnedString(std::move(value));
     }

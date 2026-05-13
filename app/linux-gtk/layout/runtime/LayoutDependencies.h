@@ -70,7 +70,7 @@ namespace ao::gtk::layout
   struct LayoutDependencies final
   {
     ComponentRegistry const& registry;
-    ao::rt::AppSession& session;
+    rt::AppSession& session;
     Gtk::Window& parentWindow;
 
     TrackUiContext track{};

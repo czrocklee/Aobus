@@ -61,7 +61,7 @@ namespace ao::log
 
     spdlog::set_default_logger(_appLogger);
 
-    ao::audio::initializeDecoders();
+    audio::initializeDecoders();
 
     APP_LOG_INFO("========================================================");
     APP_LOG_INFO("Logging initialized. Log file: {}", logPath.string());

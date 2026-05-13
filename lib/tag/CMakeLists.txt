@@ -16,7 +16,7 @@ add_gperf_header(
 )
 
 add_library(ao_tag STATIC
-    File.cpp
+    TagFile.cpp
     Open.cpp
     flac/File.cpp
     mp4/File.cpp

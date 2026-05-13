@@ -52,6 +52,7 @@ namespace ao::media::mp4
       {
         auto const* layout = utility::layout::view<AtomLayout>(data);
         auto length = layout->length.value();
+
         if (length < 8 || length > data.size())
         {
           break;

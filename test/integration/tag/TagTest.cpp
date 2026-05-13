@@ -4,7 +4,7 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/tag/File.h>
+#include <ao/tag/TagFile.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -30,7 +30,7 @@ TEST_CASE("Tag reading - basic metadata", "[tag][integration]")
   auto const* const format = GENERATE("flac", "m4a", "mp3");
   auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
-  auto const file = ao::tag::File::open(path);
+  auto const file = ao::tag::TagFile::open(path);
   REQUIRE(file != nullptr);
 
   auto builder = file->loadTrack();
@@ -55,7 +55,7 @@ TEST_CASE("Tag reading - hires metadata", "[tag][integration]")
   auto const* const format = GENERATE("flac", "m4a", "mp3");
   auto const path = kTestDataDir / ("hires." + std::string{format});
 
-  auto const file = ao::tag::File::open(path);
+  auto const file = ao::tag::TagFile::open(path);
   REQUIRE(file != nullptr);
 
   auto builder = file->loadTrack();
@@ -80,7 +80,7 @@ TEST_CASE("Tag reading - audio properties", "[tag][integration]")
   auto const* const format = GENERATE("flac", "m4a", "mp3");
   auto const path = kTestDataDir / ("basic_metadata." + std::string{format});
 
-  auto const file = ao::tag::File::open(path);
+  auto const file = ao::tag::TagFile::open(path);
   auto builder = file->loadTrack();
   auto& prop = builder.property();
 
@@ -106,7 +106,7 @@ TEST_CASE("Tag reading - hires audio properties", "[tag][integration]")
   auto const* const format = GENERATE("flac", "m4a", "mp3");
   auto const path = kTestDataDir / ("hires." + std::string{format});
 
-  auto const file = ao::tag::File::open(path);
+  auto const file = ao::tag::TagFile::open(path);
   auto builder = file->loadTrack();
   auto& prop = builder.property();
 
@@ -155,7 +155,7 @@ TEST_CASE("Cover art extraction", "[tag][integration]")
   auto const* const format = GENERATE("flac", "m4a", "mp3");
   auto const path = kTestDataDir / ("with_cover." + std::string{format});
 
-  auto const file = ao::tag::File::open(path);
+  auto const file = ao::tag::TagFile::open(path);
   REQUIRE(file != nullptr);
 
   auto builder = file->loadTrack();
@@ -190,7 +190,7 @@ TEST_CASE("Tag reading - empty metadata", "[tag][integration]")
   auto const* const format = GENERATE("flac", "m4a", "mp3");
   auto const path = kTestDataDir / ("empty." + std::string{format});
 
-  auto const file = ao::tag::File::open(path);
+  auto const file = ao::tag::TagFile::open(path);
   REQUIRE(file != nullptr);
 
   auto builder = file->loadTrack();

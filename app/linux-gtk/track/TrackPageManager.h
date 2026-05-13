@@ -33,7 +33,7 @@ namespace ao::gtk
    */
   struct TrackPageContext final
   {
-    ao::rt::ViewId viewId{};
+    rt::ViewId viewId{};
     std::unique_ptr<TrackListAdapter> adapter = {};
     std::unique_ptr<TrackViewPage> page = {};
     std::unique_ptr<PlaylistExporter> exporter = {};
@@ -47,7 +47,7 @@ namespace ao::gtk
   public:
     TrackPageManager(Gtk::Stack& stack,
                      TrackColumnLayoutModel& layoutModel,
-                     ao::rt::AppSession& session,
+                     rt::AppSession& session,
                      PlaybackSequenceController* sequenceController,
                      TagEditController& tagEditController,
                      ListSidebarController& listSidebar);
@@ -58,10 +58,10 @@ namespace ao::gtk
     Gtk::Stack& stack() { return _stack; }
 
     void clear();
-    void rebuild(TrackRowCache& dataProvider, ao::lmdb::ReadTransaction const& txn);
+    void rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn);
 
-    TrackPageContext* find(ao::rt::ViewId viewId);
-    TrackPageContext const* find(ao::rt::ViewId viewId) const;
+    TrackPageContext* find(rt::ViewId viewId);
+    TrackPageContext const* find(rt::ViewId viewId) const;
 
     TrackPageContext* currentVisible();
     TrackPageContext const* currentVisible() const;
@@ -74,24 +74,24 @@ namespace ao::gtk
     ListId activeListId() const;
 
   private:
-    void ensureViewPage(ao::rt::ViewId viewId, TrackRowCache& dataProvider);
+    void ensureViewPage(rt::ViewId viewId, TrackRowCache& dataProvider);
     void bindTrackPage(TrackPageContext& ctx);
     void syncLayout();
-    void handleRevealTrack(ao::rt::PlaybackService::RevealTrackRequested const& ev);
+    void handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev);
 
     Gtk::Stack& _stack;
     TrackColumnLayoutModel& _layoutModel;
-    ao::rt::AppSession& _session;
+    rt::AppSession& _session;
     PlaybackSequenceController* _playbackSequenceController;
     TagEditController& _tagEditController;
     ListSidebarController& _listSidebar;
-    ao::rt::Subscription _revealSub;
-    ao::rt::Subscription _nowPlayingSub;
-    ao::rt::Subscription _focusSub;
-    ao::rt::Subscription _viewDestroyedSub;
-    ao::rt::Subscription _projectionChangedSub;
+    rt::Subscription _revealSub;
+    rt::Subscription _nowPlayingSub;
+    rt::Subscription _focusSub;
+    rt::Subscription _viewDestroyedSub;
+    rt::Subscription _projectionChangedSub;
 
-    std::map<ao::rt::ViewId, TrackPageContext> _trackPages;
+    std::map<rt::ViewId, TrackPageContext> _trackPages;
     std::optional<TrackId> _optPlayingTrackId;
     TrackRowCache* _activeDataProvider = nullptr;
   };

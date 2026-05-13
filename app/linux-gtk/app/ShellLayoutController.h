@@ -18,7 +18,7 @@ namespace ao::gtk
   class ShellLayoutController final
   {
   public:
-    explicit ShellLayoutController(ao::rt::AppSession& session, Gtk::Window& parentWindow);
+    explicit ShellLayoutController(rt::AppSession& session, Gtk::Window& parentWindow);
 
     layout::ComponentRegistry& registry() { return _registry; }
     layout::LayoutDependencies& context() { return _context; }
@@ -26,9 +26,9 @@ namespace ao::gtk
     layout::LayoutDocument const& activeLayout() const { return _activeLayout; }
 
     void attachToWindow();
-    void loadLayout(ao::rt::ConfigStore& configStore);
-    void saveLayout(ao::rt::ConfigStore& configStore) const;
-    void openEditor(ao::rt::ConfigStore& configStore);
+    void loadLayout(rt::ConfigStore& configStore);
+    void saveLayout(rt::ConfigStore& configStore) const;
+    void openEditor(rt::ConfigStore& configStore);
 
   private:
     static void setupCss();

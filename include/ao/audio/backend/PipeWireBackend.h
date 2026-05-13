@@ -12,14 +12,14 @@ namespace ao::audio::backend
   /**
    * @brief Audio backend using PipeWire.
    */
-  class PipeWireBackend final : public ao::audio::IBackend
+  class PipeWireBackend final : public IBackend
   {
   public:
     struct Impl;
-    explicit PipeWireBackend(ao::audio::Device const& device, ao::audio::ProfileId const& profile);
+    explicit PipeWireBackend(Device const& device, ProfileId const& profile);
     ~PipeWireBackend() override;
 
-    ao::Result<> open(ao::audio::Format const& format, ao::audio::IRenderTarget* target) override;
+    Result<> open(Format const& format, IRenderTarget* target) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -27,15 +27,15 @@ namespace ao::audio::backend
     void stop() override;
     void close() override;
 
-    ao::audio::BackendId backendId() const noexcept override;
-    ao::audio::ProfileId profileId() const noexcept override;
+    BackendId backendId() const noexcept override;
+    ProfileId profileId() const noexcept override;
 
     void setExclusiveMode(bool exclusive);
     bool isExclusiveMode() const noexcept;
 
-    ao::Result<> setProperty(ao::audio::PropertyId id, ao::audio::PropertyValue const& value) override;
-    ao::Result<ao::audio::PropertyValue> getProperty(ao::audio::PropertyId id) const override;
-    ao::audio::PropertyInfo queryProperty(ao::audio::PropertyId id) const noexcept override;
+    Result<> setProperty(PropertyId id, PropertyValue const& value) override;
+    Result<PropertyValue> getProperty(PropertyId id) const override;
+    PropertyInfo queryProperty(PropertyId id) const noexcept override;
 
   private:
     std::unique_ptr<Impl> _impl;

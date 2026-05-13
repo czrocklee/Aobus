@@ -50,7 +50,7 @@ namespace ao::gtk
   }
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
-                                   ao::rt::AppSession& session,
+                                   rt::AppSession& session,
                                    ListId parentListId,
                                    TrackRowCache const& provider)
     : _exprBox{session.musicLibrary()}, _session{session}, _parentListId{parentListId}, _trackRowCache{provider}
@@ -68,7 +68,7 @@ namespace ao::gtk
     _exprTimeoutConnection.disconnect();
   }
 
-  void SmartListDialog::populate(ListId id, ao::library::ListView const& view)
+  void SmartListDialog::populate(ListId id, library::ListView const& view)
   {
     _optEditListId = id;
     _nameEntry.set_text(std::string(view.name()));
@@ -218,7 +218,7 @@ namespace ao::gtk
   void SmartListDialog::setupPreview()
   {
     // Create preview engine for expression evaluation
-    _previewEngine = std::make_unique<ao::rt::SmartListEvaluator>(_session.musicLibrary());
+    _previewEngine = std::make_unique<rt::SmartListEvaluator>(_session.musicLibrary());
 
     setupPreviewColumns();
     rebuildPreviewSource();
@@ -309,7 +309,7 @@ namespace ao::gtk
         // Use the parent's membership list as source - this already has the inherited filter applied
         // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
         _previewFilteredList =
-          std::make_unique<ao::rt::SmartListSource>(parentSource, _session.musicLibrary(), *_previewEngine);
+          std::make_unique<rt::SmartListSource>(parentSource, _session.musicLibrary(), *_previewEngine);
         _previewAdapter =
           std::make_unique<TrackListAdapter>(*_previewFilteredList, _session.musicLibrary(), _trackRowCache);
 
@@ -441,10 +441,10 @@ namespace ao::gtk
     updateDialogState();
   }
 
-  ao::model::ListDraft SmartListDialog::draft() const
+  model::ListDraft SmartListDialog::draft() const
   {
-    auto draftData = ao::model::ListDraft{};
-    draftData.kind = ao::model::ListKind::Smart;
+    auto draftData = model::ListDraft{};
+    draftData.kind = model::ListKind::Smart;
     draftData.parentId = _parentListId;
     draftData.listId = editListId();
     draftData.name = _nameEntry.get_text();

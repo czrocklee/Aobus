@@ -35,8 +35,7 @@ namespace ao::gtk
     };
   }
 
-  ListTreeModelBuilder::Result ListTreeModelBuilder::build(ao::rt::AppSession& session,
-                                                           ao::lmdb::ReadTransaction const& txn)
+  ListTreeModelBuilder::Result ListTreeModelBuilder::build(rt::AppSession& session, lmdb::ReadTransaction const& txn)
   {
     Result result;
     result.store = Gio::ListStore<ListTreeItem>::create();

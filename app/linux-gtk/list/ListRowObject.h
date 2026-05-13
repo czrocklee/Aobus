@@ -15,8 +15,6 @@ namespace ao::gtk
   class ListRowObject final : public Glib::Object
   {
   public:
-    using ListId = ao::ListId;
-
     ListId getListId() const { return _listId; }
     void setListId(ListId id) { _listId = id; }
 

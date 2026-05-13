@@ -11,34 +11,34 @@ namespace metadata_dispatch {
 struct Entry
 {
   char const* name;
-  ao::query::Field field;
+  Field field;
 };
 %%
-year, ao::query::Field::Year
-y, ao::query::Field::Year
-trackNumber, ao::query::Field::TrackNumber
-tn, ao::query::Field::TrackNumber
-totalTracks, ao::query::Field::TotalTracks
-tt, ao::query::Field::TotalTracks
-discNumber, ao::query::Field::DiscNumber
-dn, ao::query::Field::DiscNumber
-totalDiscs, ao::query::Field::TotalDiscs
-td, ao::query::Field::TotalDiscs
-artist, ao::query::Field::ArtistId
-a, ao::query::Field::ArtistId
-album, ao::query::Field::AlbumId
-al, ao::query::Field::AlbumId
-genre, ao::query::Field::GenreId
-g, ao::query::Field::GenreId
-composer, ao::query::Field::ComposerId
-c, ao::query::Field::ComposerId
-albumArtist, ao::query::Field::AlbumArtistId
-aa, ao::query::Field::AlbumArtistId
-coverArt, ao::query::Field::CoverArtId
-ca, ao::query::Field::CoverArtId
-title, ao::query::Field::Title
-t, ao::query::Field::Title
-work, ao::query::Field::WorkId
-w, ao::query::Field::WorkId
+year, Field::Year
+y, Field::Year
+trackNumber, Field::TrackNumber
+tn, Field::TrackNumber
+totalTracks, Field::TotalTracks
+tt, Field::TotalTracks
+discNumber, Field::DiscNumber
+dn, Field::DiscNumber
+totalDiscs, Field::TotalDiscs
+td, Field::TotalDiscs
+artist, Field::ArtistId
+a, Field::ArtistId
+album, Field::AlbumId
+al, Field::AlbumId
+genre, Field::GenreId
+g, Field::GenreId
+composer, Field::ComposerId
+c, Field::ComposerId
+albumArtist, Field::AlbumArtistId
+aa, Field::AlbumArtistId
+coverArt, Field::CoverArtId
+ca, Field::CoverArtId
+title, Field::Title
+t, Field::Title
+work, Field::WorkId
+w, Field::WorkId
 %%
 } // namespace metadata_dispatch

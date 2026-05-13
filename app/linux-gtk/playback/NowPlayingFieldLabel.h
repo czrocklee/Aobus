@@ -17,18 +17,18 @@ namespace ao::gtk
       Artist,
     };
 
-    NowPlayingFieldLabel(ao::rt::PlaybackService& playbackService, Field field);
+    NowPlayingFieldLabel(rt::PlaybackService& playbackService, Field field);
 
     Gtk::Widget& widget() { return _label; }
 
   private:
     void refresh();
 
-    ao::rt::PlaybackService& _playbackService;
+    rt::PlaybackService& _playbackService;
     Field _field;
     Gtk::Label _label;
 
-    ao::rt::Subscription _nowPlayingSub;
-    ao::rt::Subscription _idleSub;
+    rt::Subscription _nowPlayingSub;
+    rt::Subscription _idleSub;
   };
 } // namespace ao::gtk

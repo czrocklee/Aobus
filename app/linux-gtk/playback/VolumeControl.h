@@ -14,18 +14,18 @@ namespace ao::gtk
   class VolumeControl final
   {
   public:
-    explicit VolumeControl(ao::rt::PlaybackService& playbackService);
+    explicit VolumeControl(rt::PlaybackService& playbackService);
 
     Gtk::Widget& widget() { return _volumeBar; }
 
   private:
     void refresh();
 
-    ao::rt::PlaybackService& _playbackService;
+    rt::PlaybackService& _playbackService;
     VolumeBar _volumeBar;
     bool _updating = false;
 
-    ao::rt::Subscription _outputSub;
-    ao::rt::Subscription _startedSub;
+    rt::Subscription _outputSub;
+    rt::Subscription _startedSub;
   };
 } // namespace ao::gtk

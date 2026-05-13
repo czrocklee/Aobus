@@ -59,12 +59,12 @@ namespace ao::rt
     bool _hasError = false;
     std::string _errorMessage;
 
-    std::unique_ptr<ao::query::ExecutionPlan> _plan;
-    ao::query::PlanEvaluator _planEvaluator;
+    std::unique_ptr<query::ExecutionPlan> _plan;
+    query::PlanEvaluator _planEvaluator;
 
     // Staging for lazy/batch updates
     std::string _stagedExpression;
-    std::unique_ptr<ao::query::ExecutionPlan> _stagedPlan;
+    std::unique_ptr<query::ExecutionPlan> _stagedPlan;
     bool _stagedHasError = false;
     std::string _stagedErrorMessage;
     bool _dirty = true;

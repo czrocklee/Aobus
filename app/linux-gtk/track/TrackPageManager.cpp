@@ -38,7 +38,7 @@ namespace ao::gtk
 
   TrackPageManager::TrackPageManager(Gtk::Stack& stack,
                                      TrackColumnLayoutModel& layoutModel,
-                                     ao::rt::AppSession& session,
+                                     rt::AppSession& session,
                                      PlaybackSequenceController* sequenceController,
                                      TagEditController& tagEditController,
                                      ListSidebarController& listSidebar)
@@ -59,7 +59,7 @@ namespace ao::gtk
     _viewDestroyedSub = _session.views().onDestroyed([this](auto) { syncLayout(); });
 
     _projectionChangedSub = _session.views().onProjectionChanged(
-      [this](ao::rt::TrackListProjectionChanged const& ev)
+      [this](rt::TrackListProjectionChanged const& ev)
       {
         auto* ctx = find(ev.viewId);
 
@@ -77,12 +77,12 @@ namespace ao::gtk
       });
   }
 
-  void TrackPageManager::handleRevealTrack(ao::rt::PlaybackService::RevealTrackRequested const& ev)
+  void TrackPageManager::handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev)
   {
     auto viewId = ev.preferredViewId;
 
     // Fallback: If no view ID specified, try to find a view currently displaying the requested list
-    if (viewId == ao::rt::ViewId{} && ev.preferredListId != ListId{})
+    if (viewId == rt::ViewId{} && ev.preferredListId != ListId{})
     {
       for (auto const& [id, ctx] : _trackPages)
       {
@@ -94,7 +94,7 @@ namespace ao::gtk
       }
     }
 
-    if (viewId != ao::rt::ViewId{})
+    if (viewId != rt::ViewId{})
     {
       _session.workspace().setFocusedView(viewId);
 
@@ -142,7 +142,7 @@ namespace ao::gtk
     }
 
     // Set active
-    if (state.activeViewId != ao::rt::ViewId{})
+    if (state.activeViewId != rt::ViewId{})
     {
       _stack.set_visible_child(std::format("view-{}", state.activeViewId.value()));
     }
@@ -168,7 +168,7 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageManager::rebuild(TrackRowCache& dataProvider, ao::lmdb::ReadTransaction const& /*txn*/)
+  void TrackPageManager::rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& /*txn*/)
   {
     APP_LOG_DEBUG("TrackPageManager::rebuild called");
     clear();
@@ -182,19 +182,19 @@ namespace ao::gtk
       ensureViewPage(viewId, *_activeDataProvider);
     }
 
-    if (layout.activeViewId != ao::rt::ViewId{})
+    if (layout.activeViewId != rt::ViewId{})
     {
       _stack.set_visible_child(std::format("view-{}", layout.activeViewId.value()));
     }
   }
 
-  TrackPageContext* TrackPageManager::find(ao::rt::ViewId viewId)
+  TrackPageContext* TrackPageManager::find(rt::ViewId viewId)
   {
     auto it = _trackPages.find(viewId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
   }
 
-  TrackPageContext const* TrackPageManager::find(ao::rt::ViewId viewId) const
+  TrackPageContext const* TrackPageManager::find(rt::ViewId viewId) const
   {
     auto it = _trackPages.find(viewId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
@@ -258,7 +258,7 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageManager::ensureViewPage(ao::rt::ViewId viewId, TrackRowCache& dataProvider)
+  void TrackPageManager::ensureViewPage(rt::ViewId viewId, TrackRowCache& dataProvider)
   {
     if (_trackPages.contains(viewId))
     {
@@ -318,7 +318,7 @@ namespace ao::gtk
       {
         auto const ids = page->selectionController().getSelectedTrackIds();
 
-        if (viewId != ao::rt::ViewId{})
+        if (viewId != rt::ViewId{})
         {
           _session.views().setSelection(viewId, ids);
           _session.workspace().setFocusedView(viewId);

@@ -8,7 +8,7 @@
 
 namespace ao::gtk
 {
-  TimeLabel::TimeLabel(ao::rt::PlaybackService& playbackService)
+  TimeLabel::TimeLabel(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
   {
     _label.set_halign(Gtk::Align::END);

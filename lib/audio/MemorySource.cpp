@@ -59,7 +59,7 @@ namespace ao::audio
   {
   }
 
-  ao::Result<> MemorySource::initialize()
+  Result<> MemorySource::initialize()
   {
     auto const estimatedBytes =
       (static_cast<std::uint64_t>(_streamInfo.durationMs) * bytesPerSecond(_streamInfo.outputFormat)) / 1000U;
@@ -75,8 +75,7 @@ namespace ao::audio
 
       if (!blockResult)
       {
-        return std::unexpected(
-          ao::Error{.code = ao::Error::Code::DecodeFailed, .message = blockResult.error().message});
+        return std::unexpected(Error{.code = Error::Code::DecodeFailed, .message = blockResult.error().message});
       }
 
       auto const& block = *blockResult;
@@ -119,7 +118,7 @@ namespace ao::audio
     return bufferedDurationMs(remaining, _bytesPerSecond);
   }
 
-  ao::Result<> MemorySource::seek(std::uint32_t positionMs)
+  Result<> MemorySource::seek(std::uint32_t positionMs)
   {
     _readOffset.store(positionToByteOffset(positionMs), std::memory_order_release);
     return {};

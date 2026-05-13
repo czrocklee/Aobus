@@ -30,7 +30,6 @@ namespace ao::gtk
   class TrackViewPage final : public Gtk::Box
   {
   public:
-    using TrackId = TrackListAdapter::TrackId;
     using SelectionChangedSignal = sigc::signal<void()>;
     using TrackActivatedSignal = sigc::signal<void(TrackId)>;
     using ContextMenuRequestedSignal = sigc::signal<void(double, double)>;
@@ -40,8 +39,8 @@ namespace ao::gtk
     explicit TrackViewPage(ListId listId,
                            TrackListAdapter& adapter,
                            TrackColumnLayoutModel& columnLayoutModel,
-                           ao::rt::AppSession& session,
-                           ao::rt::ViewId viewId = ao::rt::ViewId{});
+                           rt::AppSession& session,
+                           rt::ViewId viewId = rt::ViewId{});
     ~TrackViewPage() override;
 
     ListId getListId() const { return _listId; }
@@ -52,7 +51,7 @@ namespace ao::gtk
     TrackSelectionController& selectionController() { return *_selectionController; }
 
     CreateSmartListRequestedSignal& signalCreateSmartListRequested();
-    ao::rt::ITrackListProjection* projection() const { return _adapter.projection(); }
+    rt::ITrackListProjection* projection() const { return _adapter.projection(); }
 
     void showTagPopover(TagPopover& popover, double x, double y);
     void setStatusMessage(std::string_view message);
@@ -80,15 +79,15 @@ namespace ao::gtk
 
     // Models
     ListId _listId;
-    ao::rt::ViewId _viewId{};
+    rt::ViewId _viewId{};
     TrackListAdapter& _adapter;
-    ao::rt::AppSession& _session;
+    rt::AppSession& _session;
     Glib::RefPtr<Gtk::SortListModel> _groupModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
     TrackColumnLayoutModel& _columnLayoutModel;
     Glib::RefPtr<Gtk::StringList> _groupByOptions;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
-    ao::rt::TrackGroupKey _activeGroupBy = ao::rt::TrackGroupKey::None;
+    rt::TrackGroupKey _activeGroupBy = rt::TrackGroupKey::None;
 
     // Controllers (owned)
     std::unique_ptr<TrackColumnController> _columnController;

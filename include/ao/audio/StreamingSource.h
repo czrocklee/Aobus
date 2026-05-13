@@ -22,13 +22,13 @@ namespace ao::audio
   public:
     StreamingSource(std::unique_ptr<IDecoderSession> decoder,
                     DecodedStreamInfo streamInfo,
-                    std::function<void(ao::Error const&)> onError,
+                    std::function<void(Error const&)> onError,
                     std::uint32_t prerollTargetMs,
                     std::uint32_t decodeHighWatermarkMs);
     ~StreamingSource() override;
 
-    ao::Result<> initialize();
-    ao::Result<> seek(std::uint32_t positionMs) override;
+    Result<> initialize();
+    Result<> seek(std::uint32_t positionMs) override;
 
     std::size_t read(std::span<std::byte> output) noexcept override;
     bool isDrained() const noexcept override;
@@ -38,15 +38,15 @@ namespace ao::audio
     void startDecodeThread();
     void stopDecodeThread();
     void decodeLoop(std::stop_token const& threadStopToken);
-    ao::Result<> fillUntil(std::uint32_t targetBufferedMs, std::stop_token const& seekToken);
-    ao::Result<bool> decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
+    Result<> fillUntil(std::uint32_t targetBufferedMs, std::stop_token const& seekToken);
+    Result<bool> decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
     bool writeBlock(std::span<std::byte const> bytes,
                     std::stop_token const& seekToken,
                     std::stop_token const* threadStopToken);
 
     std::unique_ptr<IDecoderSession> _decoder;
     DecodedStreamInfo _streamInfo;
-    std::function<void(ao::Error const&)> _onError;
+    std::function<void(Error const&)> _onError;
     PcmRingBuffer _ringBuffer;
     std::jthread _decodeThread;
     mutable std::mutex _decoderMutex;

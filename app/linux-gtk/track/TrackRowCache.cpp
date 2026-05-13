@@ -2,67 +2,66 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackRowCache.h"
-
 #include "track/TrackRowObject.h"
 #include <ao/audio/Types.h>
 
 #include <string_view>
 
-namespace
-{
-  Glib::ustring joinResolvedTags(ao::library::TrackView::TagProxy tags, ao::library::DictionaryStore const& dictionary)
-  {
-    auto text = Glib::ustring{};
-    bool first = true;
-
-    for (auto const tagId : tags)
-    {
-      auto const tag = dictionary.get(tagId);
-
-      if (tag.empty())
-      {
-        continue;
-      }
-
-      if (!first)
-      {
-        text.append(", ");
-      }
-
-      text.append(tag.data(), tag.size());
-      first = false;
-    }
-
-    return text;
-  }
-
-  std::optional<std::filesystem::path> resolveLibraryPath(std::filesystem::path const& libraryRoot,
-                                                          std::string_view uri)
-  {
-    if (uri.empty())
-    {
-      return std::nullopt;
-    }
-
-    auto const path = std::filesystem::path{uri};
-
-    if (path.is_absolute())
-    {
-      return path.lexically_normal();
-    }
-
-    return (libraryRoot / path).lexically_normal();
-  }
-}
-
 namespace ao::gtk
 {
-  TrackRowCache::TrackRowCache(ao::library::MusicLibrary& ml)
+  namespace
+  {
+    Glib::ustring joinResolvedTags(library::TrackView::TagProxy tags, library::DictionaryStore const& dictionary)
+    {
+      auto text = Glib::ustring{};
+      bool first = true;
+
+      for (auto const tagId : tags)
+      {
+        auto const tag = dictionary.get(tagId);
+
+        if (tag.empty())
+        {
+          continue;
+        }
+
+        if (!first)
+        {
+          text.append(", ");
+        }
+
+        text.append(tag.data(), tag.size());
+        first = false;
+      }
+
+      return text;
+    }
+
+    std::optional<std::filesystem::path> resolveLibraryPath(std::filesystem::path const& libraryRoot,
+                                                            std::string_view uri)
+    {
+      if (uri.empty())
+      {
+        return std::nullopt;
+      }
+
+      auto const path = std::filesystem::path{uri};
+
+      if (path.is_absolute())
+      {
+        return path.lexically_normal();
+      }
+
+      return (libraryRoot / path).lexically_normal();
+    }
+  }
+
+  TrackRowCache::TrackRowCache(library::MusicLibrary& ml)
     : _ml{ml}, _store{ml.tracks()}, _dict{ml.dictionary()}
   {
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowFromView(TrackId id, ao::library::TrackView const& view) const
+  Glib::RefPtr<TrackRowObject> TrackRowCache::createRowFromView(TrackId id, library::TrackView const& view) const
   {
     auto const row = TrackRowObject::create(id, *this);
 
@@ -103,7 +102,7 @@ namespace ao::gtk
     // Lazy load the row if it's missing from the cache (e.g., after an invalidate)
     auto const txn = _ml.readTransaction();
     auto const reader = _store.reader(txn);
-    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -115,8 +114,7 @@ namespace ao::gtk
     return row;
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowCache::getTrackRow(TrackId id,
-                                                          ao::library::TrackStore::Reader const& reader) const
+  Glib::RefPtr<TrackRowObject> TrackRowCache::getTrackRow(TrackId id, library::TrackStore::Reader const& reader) const
   {
     auto const it = _rowCache.find(id);
 
@@ -125,7 +123,7 @@ namespace ao::gtk
       return it->second;
     }
 
-    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -142,7 +140,7 @@ namespace ao::gtk
     // Need cold data for coverArtId
     auto const txn = _ml.readTransaction();
     auto const reader = _store.reader(txn);
-    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -165,7 +163,7 @@ namespace ao::gtk
     auto const txn = _ml.readTransaction();
     auto const reader = _store.reader(txn);
 
-    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -175,13 +173,13 @@ namespace ao::gtk
     return resolveLibraryPath(_ml.rootPath(), optView->property().uri());
   }
 
-  std::optional<ao::audio::TrackPlaybackDescriptor> TrackRowCache::getPlaybackDescriptor(TrackId id) const
+  std::optional<audio::TrackPlaybackDescriptor> TrackRowCache::getPlaybackDescriptor(TrackId id) const
   {
     // Need cold data for URI and property info
     auto const txn = _ml.readTransaction();
     auto const reader = _store.reader(txn);
 
-    auto const optView = reader.get(id, ao::library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -192,11 +190,11 @@ namespace ao::gtk
     auto const& metadata = view.metadata();
     auto const& property = view.property();
 
-    auto desc = ao::audio::TrackPlaybackDescriptor{.trackId = id,
-                                                   .durationMs = property.durationMs(),
-                                                   .sampleRateHint = property.sampleRate(),
-                                                   .channelsHint = property.channels(),
-                                                   .bitDepthHint = property.bitDepth()};
+    auto desc = audio::TrackPlaybackDescriptor{.trackId = id,
+                                               .durationMs = property.durationMs(),
+                                               .sampleRateHint = property.sampleRate(),
+                                               .channelsHint = property.channels(),
+                                               .bitDepthHint = property.bitDepth()};
 
     // File path
     if (auto const optFilePath = resolveLibraryPath(_ml.rootPath(), property.uri()))

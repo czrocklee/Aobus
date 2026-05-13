@@ -30,6 +30,6 @@ namespace ao::gtk
       std::map<ListId, Glib::RefPtr<ListTreeItem>> nodesById;
     };
 
-    static Result build(ao::rt::AppSession& session, ao::lmdb::ReadTransaction const& txn);
+    static Result build(rt::AppSession& session, lmdb::ReadTransaction const& txn);
   };
 } // namespace ao::gtk

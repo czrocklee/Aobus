@@ -35,7 +35,7 @@ namespace ao::gtk
 
   ListSidebarPanel::~ListSidebarPanel() = default;
 
-  void ListSidebarPanel::rebuildTree(ao::rt::AppSession& session, ao::lmdb::ReadTransaction const& txn)
+  void ListSidebarPanel::rebuildTree(rt::AppSession& session, lmdb::ReadTransaction const& txn)
   {
     auto result = ListTreeModelBuilder::build(session, txn);
     _nodesById = std::move(result.nodesById);

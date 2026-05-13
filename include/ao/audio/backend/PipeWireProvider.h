@@ -11,17 +11,17 @@ namespace ao::audio::backend
   /**
    * @brief Provider for PipeWire audio backends.
    */
-  class PipeWireProvider final : public ao::audio::IBackendProvider
+  class PipeWireProvider final : public IBackendProvider
   {
   public:
     PipeWireProvider();
     ~PipeWireProvider() override;
 
-    ao::audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
-    ao::audio::IBackendProvider::Status status() const override;
-    std::unique_ptr<ao::audio::IBackend> createBackend(ao::audio::Device const& device,
-                                                       ao::audio::ProfileId const& profile) override;
-    ao::audio::Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
+    Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
+    IBackendProvider::Status status() const override;
+    std::unique_ptr<IBackend> createBackend(Device const& device,
+                                                       ProfileId const& profile) override;
+    Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
 
   private:
     struct Impl;

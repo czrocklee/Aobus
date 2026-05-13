@@ -39,7 +39,7 @@ namespace ao::gtk
 
     Gtk::Widget& widget() { return _listScrolledWindow; }
 
-    void rebuildTree(ao::rt::AppSession& session, ao::lmdb::ReadTransaction const& txn);
+    void rebuildTree(rt::AppSession& session, lmdb::ReadTransaction const& txn);
     void selectList(ListId listId);
     bool listHasChildren(ListId listId) const;
     ListId selectedListId() const;

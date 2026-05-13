@@ -8,7 +8,7 @@
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/tag/File.h>
+#include <ao/tag/TagFile.h>
 
 #include <filesystem>
 #include <iomanip>
@@ -141,7 +141,7 @@ namespace ao::cli
 
     void createTrack(library::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
     {
-      auto const optTagFile = tag::File::open(path);
+      auto const optTagFile = tag::TagFile::open(path);
 
       if (!optTagFile)
       {

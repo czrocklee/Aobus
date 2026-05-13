@@ -12,7 +12,7 @@
 
 namespace ao::gtk
 {
-  class GtkControlExecutor final : public ao::rt::IControlExecutor
+  class GtkControlExecutor final : public rt::IControlExecutor
   {
   public:
     GtkControlExecutor();

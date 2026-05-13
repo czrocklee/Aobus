@@ -16,8 +16,6 @@ namespace ao::gtk
   class ListTreeItem final : public Glib::Object
   {
   public:
-    using ListId = ao::ListId;
-
     Glib::RefPtr<ListRowObject> getRow() const { return _row; }
 
     ListId getListId() const { return _row->getListId(); }

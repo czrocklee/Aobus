@@ -26,7 +26,7 @@ namespace ao::gtk
   class CoverArtWidget final : public Gtk::Picture
   {
   public:
-    CoverArtWidget(ao::library::MusicLibrary& library, CoverArtCache& cache);
+    CoverArtWidget(library::MusicLibrary& library, CoverArtCache& cache);
     ~CoverArtWidget() override;
 
     void setCoverFromBytes(std::span<std::byte const> bytes);
@@ -34,14 +34,14 @@ namespace ao::gtk
     void clearCover();
 
     /// Bind to a runtime detail projection for reactive cover art updates.
-    void bindToDetailProjection(std::shared_ptr<ao::rt::ITrackDetailProjection> projection);
+    void bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection);
 
   private:
-    void onDetailSnapshot(ao::rt::TrackDetailSnapshot const& snap);
+    void onDetailSnapshot(rt::TrackDetailSnapshot const& snap);
 
-    ao::library::MusicLibrary& _library;
+    library::MusicLibrary& _library;
     CoverArtCache& _cache;
-    std::shared_ptr<ao::rt::ITrackDetailProjection> _detailProjection;
-    ao::rt::Subscription _detailSub;
+    std::shared_ptr<rt::ITrackDetailProjection> _detailProjection;
+    rt::Subscription _detailSub;
   };
 } // namespace ao::gtk

@@ -34,7 +34,7 @@ namespace ao::audio::backend
   struct AlsaProvider::Impl final
   {
     mutable std::mutex mutex;
-    std::vector<ao::audio::Device> cachedDevices;
+    std::vector<Device> cachedDevices;
     std::jthread monitorThread;
 
     struct DeviceSub
@@ -56,21 +56,20 @@ namespace ao::audio::backend
       monitorThread = std::jthread(
         [this](std::stop_token const& st)
         {
-          ao::setCurrentThreadName("AlsaDeviceMonitor");
+          setCurrentThreadName("AlsaDeviceMonitor");
           monitorLoop(st);
         });
     }
 
     void monitorLoop(std::stop_token const& stopToken)
     {
-      auto udev = ao::utility::makeUniquePtr<::udev_unref>(::udev_new());
+      auto udev = utility::makeUniquePtr<::udev_unref>(::udev_new());
       if (!udev)
       {
         return;
       }
 
-      auto monitor =
-        ao::utility::makeUniquePtr<::udev_monitor_unref>(::udev_monitor_new_from_netlink(udev.get(), "udev"));
+      auto monitor = utility::makeUniquePtr<::udev_monitor_unref>(::udev_monitor_new_from_netlink(udev.get(), "udev"));
       if (!monitor)
       {
         return;
@@ -88,7 +87,7 @@ namespace ao::audio::backend
         if (::poll(fds.data(), static_cast<nfds_t>(fds.size()), kUdevPollTimeoutMs) > 0 &&
             (fds[0].revents & POLLIN) != 0)
         {
-          auto dev = ao::utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitor.get()));
+          auto dev = utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitor.get()));
           if (dev)
           {
             auto newDevices = doAlsaEnumerate();
@@ -119,7 +118,7 @@ namespace ao::audio::backend
 
   AlsaProvider::~AlsaProvider() = default;
 
-  ao::audio::Subscription AlsaProvider::subscribeDevices(OnDevicesChangedCallback callback)
+  Subscription AlsaProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
     auto const id = _impl->nextSubId++;
     auto const devices = [this, id, callback]
@@ -134,18 +133,18 @@ namespace ao::audio::backend
       callback(devices);
     }
 
-    return ao::audio::Subscription{[this, id]
-                                   {
-                                     std::lock_guard lock(_impl->mutex);
-                                     auto const it = std::ranges::find(_impl->deviceSubs, id, &Impl::DeviceSub::id);
-                                     if (it != _impl->deviceSubs.end())
-                                     {
-                                       _impl->deviceSubs.erase(it);
-                                     }
-                                   }};
+    return Subscription{[this, id]
+                        {
+                          std::lock_guard lock(_impl->mutex);
+                          auto const it = std::ranges::find(_impl->deviceSubs, id, &Impl::DeviceSub::id);
+                          if (it != _impl->deviceSubs.end())
+                          {
+                            _impl->deviceSubs.erase(it);
+                          }
+                        }};
   }
 
-  ao::audio::IBackendProvider::Status AlsaProvider::status() const
+  IBackendProvider::Status AlsaProvider::status() const
   {
     auto const lock = std::lock_guard{_impl->mutex};
     return {.metadata = {.id = kBackendAlsa,
@@ -158,27 +157,26 @@ namespace ao::audio::backend
             .devices = _impl->cachedDevices};
   }
 
-  std::unique_ptr<ao::audio::IBackend> AlsaProvider::createBackend(ao::audio::Device const& device,
-                                                                   ao::audio::ProfileId const& /*profile*/)
+  std::unique_ptr<IBackend> AlsaProvider::createBackend(Device const& device, ProfileId const& /*profile*/)
   {
     return std::make_unique<AlsaExclusiveBackend>(device, kProfileExclusive);
   }
 
-  ao::audio::Subscription AlsaProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
+  Subscription AlsaProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
   {
     if (callback)
     {
-      ao::audio::flow::Graph graph;
+      flow::Graph graph;
       graph.nodes.push_back(
-        {.id = "alsa-stream", .type = ao::audio::flow::NodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
+        {.id = "alsa-stream", .type = flow::NodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
       graph.nodes.push_back({.id = "alsa-sink",
-                             .type = ao::audio::flow::NodeType::Sink,
+                             .type = flow::NodeType::Sink,
                              .name = std::string{routeAnchor},
                              .objectPath = std::string{routeAnchor}});
       graph.connections.push_back({.sourceId = "alsa-stream", .destId = "alsa-sink", .isActive = true});
       callback(graph);
     }
 
-    return ao::audio::Subscription{};
+    return Subscription{};
   }
 } // namespace ao::audio::backend

@@ -13,16 +13,16 @@ namespace ao::library
   class MetaStore final
   {
   public:
-    explicit MetaStore(ao::lmdb::Database db)
+    explicit MetaStore(lmdb::Database db)
       : _database{std::move(db)}
     {
     }
 
-    std::optional<MetaHeader> load(ao::lmdb::ReadTransaction const& txn) const;
-    void create(ao::lmdb::WriteTransaction& txn, MetaHeader const& header);
-    void update(ao::lmdb::WriteTransaction& txn, MetaHeader const& header);
+    std::optional<MetaHeader> load(lmdb::ReadTransaction const& txn) const;
+    void create(lmdb::WriteTransaction& txn, MetaHeader const& header);
+    void update(lmdb::WriteTransaction& txn, MetaHeader const& header);
 
   private:
-    ao::lmdb::Database _database;
+    lmdb::Database _database;
   };
 }

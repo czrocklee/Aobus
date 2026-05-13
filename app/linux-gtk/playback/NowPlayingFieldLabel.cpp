@@ -20,7 +20,7 @@ namespace ao::gtk
     }
   } // namespace
 
-  NowPlayingFieldLabel::NowPlayingFieldLabel(ao::rt::PlaybackService& playbackService, Field field)
+  NowPlayingFieldLabel::NowPlayingFieldLabel(rt::PlaybackService& playbackService, Field field)
     : _playbackService{playbackService}, _field{field}
   {
     _label.set_ellipsize(Pango::EllipsizeMode::END);
@@ -37,7 +37,7 @@ namespace ao::gtk
   {
     auto const& state = _playbackService.state();
 
-    if (state.transport == ao::audio::Transport::Idle)
+    if (state.transport == audio::Transport::Idle)
     {
       if (_field == Field::Title)
       {

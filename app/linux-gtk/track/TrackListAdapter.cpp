@@ -199,8 +199,8 @@ namespace ao::gtk
     return ResolvedTrackFilter{};
   }
 
-  TrackListAdapter::TrackListAdapter(ao::rt::TrackSource& source,
-                                     ao::library::MusicLibrary& musicLibrary,
+  TrackListAdapter::TrackListAdapter(rt::TrackSource& source,
+                                     library::MusicLibrary& musicLibrary,
                                      TrackRowCache const& provider)
     : _source{source}
     , _musicLibrary{musicLibrary}
@@ -223,7 +223,7 @@ namespace ao::gtk
     }
   }
 
-  void TrackListAdapter::bindProjection(std::shared_ptr<ao::rt::ITrackListProjection> projection)
+  void TrackListAdapter::bindProjection(std::shared_ptr<rt::ITrackListProjection> projection)
   {
     _rebuildConnection.disconnect();
     _projectionSub.reset();
@@ -240,23 +240,22 @@ namespace ao::gtk
     _modelSize = _projection->size();
 
     _projectionSub =
-      _projection->subscribe([this](ao::rt::TrackListProjectionDeltaBatch const& batch) { applyDeltaBatch(batch); });
+      _projection->subscribe([this](rt::TrackListProjectionDeltaBatch const& batch) { applyDeltaBatch(batch); });
     _signalModelChanged.emit();
   }
 
-  void TrackListAdapter::applyDeltaBatch(ao::rt::TrackListProjectionDeltaBatch const& batch)
+  void TrackListAdapter::applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch)
   {
-    auto const timer = ao::utility::ScopedTimer{
+    auto const timer = utility::ScopedTimer{
       std::format("TrackListAdapter::applyDeltas ({} deltas, rev={})", batch.deltas.size(), batch.revision)};
 
     for (auto const& delta : batch.deltas)
     {
-      std::visit(
-        ao::utility::makeVisitor([this](ao::rt::ProjectionReset const&) { applyResetDelta(); },
-                                 [this](ao::rt::ProjectionInsertRange const& delta) { applyInsertRange(delta); },
-                                 [this](ao::rt::ProjectionRemoveRange const& delta) { applyRemoveRange(delta); },
-                                 [this](ao::rt::ProjectionUpdateRange const& delta) { applyUpdateRange(delta); }),
-        delta);
+      std::visit(utility::makeVisitor([this](rt::ProjectionReset const&) { applyResetDelta(); },
+                                      [this](rt::ProjectionInsertRange const& delta) { applyInsertRange(delta); },
+                                      [this](rt::ProjectionRemoveRange const& delta) { applyRemoveRange(delta); },
+                                      [this](rt::ProjectionUpdateRange const& delta) { applyUpdateRange(delta); }),
+                 delta);
     }
 
     gsl_Expects(_modelSize == _projection->size());
@@ -270,7 +269,7 @@ namespace ao::gtk
     _modelSize = newSize;
   }
 
-  void TrackListAdapter::applyInsertRange(ao::rt::ProjectionInsertRange const& delta)
+  void TrackListAdapter::applyInsertRange(rt::ProjectionInsertRange const& delta)
   {
     auto const pos = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);
@@ -278,7 +277,7 @@ namespace ao::gtk
     _modelSize += count;
   }
 
-  void TrackListAdapter::applyRemoveRange(ao::rt::ProjectionRemoveRange const& delta)
+  void TrackListAdapter::applyRemoveRange(rt::ProjectionRemoveRange const& delta)
   {
     auto const pos = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);
@@ -286,7 +285,7 @@ namespace ao::gtk
     _modelSize -= count;
   }
 
-  void TrackListAdapter::applyUpdateRange(ao::rt::ProjectionUpdateRange const& delta)
+  void TrackListAdapter::applyUpdateRange(rt::ProjectionUpdateRange const& delta)
   {
     auto const pos = static_cast<::guint>(delta.range.start);
     auto const count = static_cast<::guint>(delta.range.count);

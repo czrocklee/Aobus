@@ -5,8 +5,6 @@
 
 #include "track/TrackPresentation.h"
 
-#include <ao/library/MusicLibrary.h>
-
 #include <gtkmm.h>
 
 #include <chrono>
@@ -22,8 +20,6 @@ namespace ao::gtk
   class TrackRowObject final : public Glib::Object
   {
   public:
-    using TrackId = ao::TrackId;
-
     static Glib::RefPtr<TrackRowObject> create(TrackId id, TrackRowCache const& provider);
 
     TrackId getTrackId() const { return _id; }

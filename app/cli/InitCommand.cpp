@@ -4,7 +4,7 @@
 #include "InitCommand.h"
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
-#include <ao/tag/File.h>
+#include <ao/tag/TagFile.h>
 #include <ao/utility/Finder.h>
 
 #include <iostream>
@@ -24,7 +24,7 @@ namespace ao::cli
       {
         try
         {
-          auto const optTagFile = tag::File::open(path);
+          auto const optTagFile = tag::TagFile::open(path);
 
           if (!optTagFile)
           {

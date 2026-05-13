@@ -31,7 +31,7 @@ namespace ao::gtk
   class PlaybackSequenceController final
   {
   public:
-    PlaybackSequenceController(ao::rt::PlaybackService& playback, TrackRowCache& dataProvider);
+    PlaybackSequenceController(rt::PlaybackService& playback, TrackRowCache& dataProvider);
     ~PlaybackSequenceController();
 
     PlaybackSequenceController(PlaybackSequenceController const&) = delete;
@@ -58,10 +58,10 @@ namespace ao::gtk
     void subscribeEvents();
     void unsubscribeEvents();
 
-    ao::rt::PlaybackService& _playback;
+    rt::PlaybackService& _playback;
     TrackRowCache& _dataProvider;
     std::unique_ptr<ActivePlaybackSequence> _sequence;
-    ao::rt::Subscription _idleSub;
-    ao::rt::Subscription _stoppedSub;
+    rt::Subscription _idleSub;
+    rt::Subscription _stoppedSub;
   };
 }

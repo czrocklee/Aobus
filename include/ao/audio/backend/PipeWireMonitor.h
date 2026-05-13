@@ -24,14 +24,14 @@ namespace ao::audio::backend
     void stop();
     void refresh();
 
-    using DeviceCallback = std::function<void(std::vector<ao::audio::Device> const&)>;
-    ao::audio::Subscription subscribeDevices(DeviceCallback callback);
+    using DeviceCallback = std::function<void(std::vector<Device> const&)>;
+    Subscription subscribeDevices(DeviceCallback callback);
 
-    std::vector<ao::audio::Device> enumerateSinks() const;
+    std::vector<Device> enumerateSinks() const;
     std::optional<std::uint32_t> findSinkIdByName(std::string_view name) const;
 
-    ao::audio::Subscription subscribeGraph(std::string_view routeAnchor,
-                                           std::function<void(ao::audio::flow::Graph const&)> callback);
+    Subscription subscribeGraph(std::string_view routeAnchor,
+                                           std::function<void(flow::Graph const&)> callback);
 
   private:
     struct Impl;

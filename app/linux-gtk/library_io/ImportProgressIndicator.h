@@ -23,19 +23,19 @@ namespace ao::gtk
   class ImportProgressIndicator final
   {
   public:
-    explicit ImportProgressIndicator(ao::rt::LibraryMutationService& mutationService);
+    explicit ImportProgressIndicator(rt::LibraryMutationService& mutationService);
     ~ImportProgressIndicator();
 
     Gtk::Widget& widget() { return _container; }
 
   private:
-    ao::rt::LibraryMutationService& _mutationService;
+    rt::LibraryMutationService& _mutationService;
     Gtk::Box _container{Gtk::Orientation::HORIZONTAL};
     Gtk::Label _label;
     Gtk::ProgressBar _progressBar;
 
-    ao::rt::Subscription _progressSub;
-    ao::rt::Subscription _completedSub;
+    rt::Subscription _progressSub;
+    rt::Subscription _completedSub;
 
     static constexpr int kProgressBarWidth = 200;
   };

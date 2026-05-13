@@ -5,7 +5,7 @@
 
 namespace ao::gtk
 {
-  VolumeControl::VolumeControl(ao::rt::PlaybackService& playbackService)
+  VolumeControl::VolumeControl(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
   {
     int const preferredWidth = 32;

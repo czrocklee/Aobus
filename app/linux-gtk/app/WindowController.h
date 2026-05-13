@@ -23,7 +23,7 @@ namespace ao::gtk
   class WindowController final
   {
   public:
-    WindowController(MainWindow& window, ao::rt::AppSession& session, std::shared_ptr<ao::rt::ConfigStore> configStore);
+    WindowController(MainWindow& window, rt::AppSession& session, std::shared_ptr<rt::ConfigStore> configStore);
     ~WindowController();
 
     void initializeSession();
@@ -31,7 +31,7 @@ namespace ao::gtk
     void saveSession();
     void loadSession();
 
-    void rebuildListPages(ao::lmdb::ReadTransaction const& txn);
+    void rebuildListPages(lmdb::ReadTransaction const& txn);
 
     TrackRowCache* trackRowCache() { return _trackRowCache.get(); }
     CoverArtCache* coverArtCache() { return _coverArtCache.get(); }
@@ -46,8 +46,8 @@ namespace ao::gtk
 
   private:
     MainWindow& _window;
-    ao::rt::AppSession& _session;
-    std::shared_ptr<ao::rt::ConfigStore> _configStore;
+    rt::AppSession& _session;
+    std::shared_ptr<rt::ConfigStore> _configStore;
 
     std::unique_ptr<TrackRowCache> _trackRowCache;
     std::unique_ptr<CoverArtCache> _coverArtCache;
@@ -60,9 +60,9 @@ namespace ao::gtk
     Gtk::Stack _stack;
     TrackColumnLayoutModel _trackColumnLayoutModel;
 
-    ao::rt::Subscription _tracksMutatedSubscription;
-    ao::rt::Subscription _importProgressSubscription;
-    ao::rt::Subscription _importCompletedSubscription;
-    ao::rt::Subscription _listsMutatedSubscription;
+    rt::Subscription _tracksMutatedSubscription;
+    rt::Subscription _importProgressSubscription;
+    rt::Subscription _importCompletedSubscription;
+    rt::Subscription _listsMutatedSubscription;
   };
 } // namespace ao::gtk

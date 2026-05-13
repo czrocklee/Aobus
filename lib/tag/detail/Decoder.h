@@ -16,7 +16,7 @@ namespace ao::tag
 {
   inline std::string decodeString(std::span<std::byte const> buf)
   {
-    return std::string{ao::utility::bytes::stringView(buf)};
+    return std::string{utility::bytes::stringView(buf)};
   }
 
   inline std::optional<std::uint16_t> decodeUint16(std::string_view text)

@@ -13,7 +13,7 @@
 namespace ao::gtk
 {
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
-                                                   ao::rt::AppSession& session,
+                                                   rt::AppSession& session,
                                                    ImportExportCallbacks callbacks)
     : _parent{parent}, _session{session}, _callbacks{std::move(callbacks)}
   {
@@ -77,7 +77,7 @@ namespace ao::gtk
 
         if (files.empty())
         {
-          _session.notifications().post(ao::rt::NotificationSeverity::Info, "No music files found");
+          _session.notifications().post(rt::NotificationSeverity::Info, "No music files found");
           return;
         }
 
@@ -121,7 +121,7 @@ namespace ao::gtk
 
   void ImportExportCoordinator::onImportFinished() const
   {
-    _session.notifications().post(ao::rt::NotificationSeverity::Info, "Import complete");
+    _session.notifications().post(rt::NotificationSeverity::Info, "Import complete");
   }
 
   void ImportExportCoordinator::scanDirectory(std::filesystem::path const& dir,
@@ -172,7 +172,7 @@ namespace ao::gtk
     }
     else
     {
-      _session.notifications().post(ao::rt::NotificationSeverity::Info, "No music files found");
+      _session.notifications().post(rt::NotificationSeverity::Info, "No music files found");
     }
   }
 
@@ -216,13 +216,13 @@ namespace ao::gtk
       return;
     }
 
-    auto mode = ao::library::ExportMode::Metadata;
+    auto mode = library::ExportMode::Metadata;
 
     switch (modeCombo->get_selected())
     {
-      case 0: mode = ao::library::ExportMode::Minimum; break;
-      case 1: mode = ao::library::ExportMode::Metadata; break;
-      case 2: mode = ao::library::ExportMode::Full; break;
+      case 0: mode = library::ExportMode::Minimum; break;
+      case 1: mode = library::ExportMode::Metadata; break;
+      case 2: mode = library::ExportMode::Full; break;
       default: break;
     }
 
@@ -246,7 +246,7 @@ namespace ao::gtk
   }
 
   void ImportExportCoordinator::onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
-                                                     ao::library::ExportMode mode,
+                                                     library::ExportMode mode,
                                                      Glib::RefPtr<Gtk::FileDialog> const& fileDialog)
   {
     try
@@ -262,7 +262,7 @@ namespace ao::gtk
     }
   }
 
-  void ImportExportCoordinator::executeExportTask(std::filesystem::path const& path, ao::library::ExportMode mode)
+  void ImportExportCoordinator::executeExportTask(std::filesystem::path const& path, library::ExportMode mode)
   {
     if (_exportThread.joinable())
     {
@@ -273,16 +273,15 @@ namespace ao::gtk
     _exportThread = std::jthread(
       [this, &library, path, mode]
       {
-        ao::setCurrentThreadName("LibraryExport");
+        setCurrentThreadName("LibraryExport");
 
         try
         {
-          auto exporter = ao::library::Exporter{library};
+          auto exporter = library::Exporter{library};
           exporter.exportToYaml(path, mode);
 
           _session.executor().dispatch(
-            [this]
-            { _session.notifications().post(ao::rt::NotificationSeverity::Info, "Library exported successfully"); });
+            [this] { _session.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully"); });
         }
         catch (std::exception const& e)
         {
@@ -291,7 +290,7 @@ namespace ao::gtk
             [this, errorText]
             {
               APP_LOG_ERROR("Export failed: {}", errorText);
-              _session.notifications().post(ao::rt::NotificationSeverity::Error, "Export failed: " + errorText);
+              _session.notifications().post(rt::NotificationSeverity::Error, "Export failed: " + errorText);
             });
         }
       });
@@ -340,11 +339,11 @@ namespace ao::gtk
 
   void ImportExportCoordinator::runLibraryImportTask(std::filesystem::path const& path)
   {
-    ao::setCurrentThreadName("LibraryImport");
+    setCurrentThreadName("LibraryImport");
 
     try
     {
-      auto importer = ao::library::Importer{_session.musicLibrary()};
+      auto importer = library::Importer{_session.musicLibrary()};
       importer.importFromYaml(path);
       reportImportResult(true, "");
     }
@@ -366,12 +365,12 @@ namespace ao::gtk
             _callbacks.onLibraryDataMutated();
           }
 
-          _session.notifications().post(ao::rt::NotificationSeverity::Info, "Library imported successfully");
+          _session.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
         }
         else
         {
           APP_LOG_ERROR("Import failed: {}", errorText);
-          _session.notifications().post(ao::rt::NotificationSeverity::Error, "Import failed: " + errorText);
+          _session.notifications().post(rt::NotificationSeverity::Error, "Import failed: " + errorText);
         }
       });
   }

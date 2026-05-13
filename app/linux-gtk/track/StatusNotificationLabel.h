@@ -27,8 +27,7 @@ namespace ao::gtk
   class StatusNotificationLabel final
   {
   public:
-    explicit StatusNotificationLabel(ao::rt::NotificationService& notificationService,
-                                     ao::rt::ViewService& viewService);
+    explicit StatusNotificationLabel(rt::NotificationService& notificationService, rt::ViewService& viewService);
     ~StatusNotificationLabel();
 
     Gtk::Widget& widget() { return _stack; }
@@ -37,13 +36,13 @@ namespace ao::gtk
     void showMessage(std::string_view message, std::chrono::seconds duration);
     void clearMessage();
 
-    ao::rt::NotificationService& _notificationService;
+    rt::NotificationService& _notificationService;
     Gtk::Stack _stack;
     SelectionInfoLabel _selectionInfo;
     Gtk::Label _statusLabel;
 
     sigc::connection _timerConnection;
-    ao::rt::Subscription _notificationPostedSub;
+    rt::Subscription _notificationPostedSub;
 
     static constexpr int kTransitionDurationMs = 250;
   };

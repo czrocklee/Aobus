@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/tag/File.h>
-#include <ao/tag/flac/File.h>
-#include <ao/tag/mp4/File.h>
-#include <ao/tag/mpeg/File.h>
+#include <ao/tag/TagFile.h>
+#include "flac/File.h"
+#include "mp4/File.h"
+#include "mpeg/File.h"
 
 #include <algorithm>
 #include <array>
@@ -14,19 +14,19 @@
 namespace ao::tag
 {
   // static
-  std::unique_ptr<File> File::open(std::filesystem::path const& path, File::Mode mode)
+  std::unique_ptr<TagFile> TagFile::open(std::filesystem::path const& path, TagFile::Mode mode)
   {
-    using Creator = std::unique_ptr<File> (*)(std::filesystem::path const&, File::Mode);
+    using Creator = std::unique_ptr<TagFile> (*)(std::filesystem::path const&, TagFile::Mode);
 
     static constexpr auto CreatorMap = std::array{
       std::pair{std::string_view{".mp3"},
-                +[](std::filesystem::path const& filePath, File::Mode fileMode) -> std::unique_ptr<File>
+                +[](std::filesystem::path const& filePath, TagFile::Mode fileMode) -> std::unique_ptr<TagFile>
                 { return std::make_unique<mpeg::File>(filePath, fileMode); }},
       std::pair{std::string_view{".m4a"},
-                +[](std::filesystem::path const& filePath, File::Mode fileMode) -> std::unique_ptr<File>
+                +[](std::filesystem::path const& filePath, TagFile::Mode fileMode) -> std::unique_ptr<TagFile>
                 { return std::make_unique<mp4::File>(filePath, fileMode); }},
       std::pair{std::string_view{".flac"},
-                +[](std::filesystem::path const& filePath, File::Mode fileMode) -> std::unique_ptr<File>
+                +[](std::filesystem::path const& filePath, TagFile::Mode fileMode) -> std::unique_ptr<TagFile>
                 { return std::make_unique<flac::File>(filePath, fileMode); }},
     };
 

@@ -22,7 +22,7 @@ namespace ao::media::flac
       if (ptr + sizeof(LengthType) > end)
       {
         AO_THROW_FORMAT(
-          ao::Exception, "invalid flac block, expect length field size {} >= {}", end - ptr, sizeof(LengthType));
+          Exception, "invalid flac block, expect length field size {} >= {}", end - ptr, sizeof(LengthType));
       }
 
       LengthType length;
@@ -39,7 +39,7 @@ namespace ao::media::flac
 
       if (ptr + length > end)
       {
-        AO_THROW_FORMAT(ao::Exception, "invalid flac block, expect available field length {} >= {}", end - ptr, length);
+        AO_THROW_FORMAT(Exception, "invalid flac block, expect available field length {} >= {}", end - ptr, length);
       }
 
       char const* start = ptr;
@@ -117,7 +117,7 @@ namespace ao::media::flac
 
       if (auto sizeLeft = static_cast<std::size_t>(end - ptr); sizeLeft > 0)
       {
-        AO_THROW_FORMAT(ao::Exception,
+        AO_THROW_FORMAT(Exception,
                         "invalid flac vorbis_comment block, unexpected content \"{}\"",
                         std::string_view{ptr, sizeLeft});
       }

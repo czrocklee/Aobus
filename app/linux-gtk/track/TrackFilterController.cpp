@@ -18,9 +18,7 @@ namespace ao::gtk
     constexpr auto kFilterDebounceMs = 200;
   }
 
-  TrackFilterController::TrackFilterController(ao::rt::ViewService& viewService,
-                                               ao::rt::ViewId viewId,
-                                               Gtk::Entry& filterEntry)
+  TrackFilterController::TrackFilterController(rt::ViewService& viewService, rt::ViewId viewId, Gtk::Entry& filterEntry)
     : _viewService{viewService}, _viewId{viewId}, _filterEntry{filterEntry}
   {
     _filterTextConnection =
@@ -58,7 +56,7 @@ namespace ao::gtk
 
     _filterEntry.add_controller(dropTarget);
 
-    if (_viewId != ao::rt::ViewId{})
+    if (_viewId != rt::ViewId{})
     {
       _filterStatusSub =
         _viewService.onFilterStatusChanged(sigc::mem_fun(*this, &TrackFilterController::onFilterStatusChanged));
@@ -94,10 +92,10 @@ namespace ao::gtk
 
   void TrackFilterController::onFilterDebounced()
   {
-    auto const timer = ao::utility::ScopedTimer{"TrackViewPage::onFilterDebounced"};
+    auto const timer = utility::ScopedTimer{"TrackViewPage::onFilterDebounced"};
     auto const filterText = _filterEntry.get_text();
 
-    if (_viewId == ao::rt::ViewId{})
+    if (_viewId == rt::ViewId{})
     {
       updateFilterUi();
       return;
@@ -121,7 +119,7 @@ namespace ao::gtk
     updateFilterUi();
   }
 
-  void TrackFilterController::onFilterStatusChanged(ao::rt::FilterStatusChanged const& status)
+  void TrackFilterController::onFilterStatusChanged(rt::FilterStatusChanged const& status)
   {
     if (status.viewId != _viewId)
     {

@@ -38,7 +38,7 @@ namespace ao::query
             return entry->field;
           }
 
-          AO_THROW_FORMAT(ao::Exception, "unknown property field '@{}'", name);
+          AO_THROW_FORMAT(Exception, "unknown property field '@{}'", name);
         }
         case VariableType::Metadata:
         {
@@ -48,14 +48,14 @@ namespace ao::query
             return entry->field;
           }
 
-          AO_THROW_FORMAT(ao::Exception, "unknown metadata field '${}'", name);
+          AO_THROW_FORMAT(Exception, "unknown metadata field '${}'", name);
         }
         case VariableType::Tag: return Field::Tag;
         case VariableType::Custom: return Field::Custom;
         default: break;
       }
 
-      AO_THROW_FORMAT(ao::Exception, "unsupported variable type for '{}'", name);
+      AO_THROW_FORMAT(Exception, "unsupported variable type for '{}'", name);
     }
 
     OpCode toOpCode(Operator op)
@@ -72,8 +72,8 @@ namespace ao::query
         case Operator::LessEqual: return OpCode::Le;
         case Operator::Greater: return OpCode::Gt;
         case Operator::GreaterEqual: return OpCode::Ge;
-        case Operator::Add: AO_THROW(ao::Exception, "operator '+' is not yet supported in query execution");
-        default: AO_THROW(ao::Exception, "unsupported operator");
+        case Operator::Add: AO_THROW(Exception, "operator '+' is not yet supported in query execution");
+        default: AO_THROW(Exception, "unsupported operator");
       }
     }
 
@@ -123,7 +123,7 @@ namespace ao::query
       }
     }
 
-    std::uint32_t tagBloomBit(ao::library::DictionaryStore* dict, std::string_view tagName)
+    std::uint32_t tagBloomBit(library::DictionaryStore* dict, std::string_view tagName)
     {
       if (dict == nullptr)
       {
@@ -134,9 +134,9 @@ namespace ao::query
       return std::uint32_t{1} << (tagId.value() & kBloomBitMask);
     }
 
-    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, ao::library::DictionaryStore* dict);
+    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, library::DictionaryStore* dict);
 
-    std::uint32_t computeRequiredTagBloomMask(BinaryExpression const& binary, ao::library::DictionaryStore* dict)
+    std::uint32_t computeRequiredTagBloomMask(BinaryExpression const& binary, library::DictionaryStore* dict)
     {
       auto const lhsMask = computeRequiredTagBloomMask(binary.operand, dict);
 
@@ -158,7 +158,7 @@ namespace ao::query
       }
     }
 
-    std::uint32_t computeRequiredTagBloomMask(UnaryExpression const& unary, ao::library::DictionaryStore* dict)
+    std::uint32_t computeRequiredTagBloomMask(UnaryExpression const& unary, library::DictionaryStore* dict)
     {
       if (unary.op == Operator::Not)
       {
@@ -168,7 +168,7 @@ namespace ao::query
       return computeRequiredTagBloomMask(unary.operand, dict);
     }
 
-    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, ao::library::DictionaryStore* dict)
+    std::uint32_t computeRequiredTagBloomMask(Expression const& expr, library::DictionaryStore* dict)
     {
       return std::visit(utility::makeVisitor(
                           [dict](VariableExpression const& variable)
@@ -313,14 +313,14 @@ namespace ao::query
         default: break;
       }
 
-      AO_THROW_FORMAT(ao::Exception, "unit '{}' is not supported for {} constants", normalized, fieldName(field));
+      AO_THROW_FORMAT(Exception, "unit '{}' is not supported for {} constants", normalized, fieldName(field));
     }
 
     std::int64_t scaleUnitConstant(UnitConstantExpression const& constant, Field field)
     {
       if (field == Field::TagBloom)
       {
-        AO_THROW_FORMAT(ao::Exception, "unit literal '{}' requires a numeric field context", constant.lexeme);
+        AO_THROW_FORMAT(Exception, "unit literal '{}' requires a numeric field context", constant.lexeme);
       }
 
       auto lexeme = std::string_view{constant.lexeme};
@@ -336,7 +336,7 @@ namespace ao::query
 
       if (suffixStart == lexeme.end())
       {
-        AO_THROW_FORMAT(ao::Exception, "invalid unit literal '{}'", constant.lexeme);
+        AO_THROW_FORMAT(Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const suffixOffset = static_cast<std::size_t>(std::distance(lexeme.begin(), suffixStart));
@@ -345,14 +345,14 @@ namespace ao::query
 
       if (numberPart.empty() || suffixPart.empty())
       {
-        AO_THROW_FORMAT(ao::Exception, "invalid unit literal '{}'", constant.lexeme);
+        AO_THROW_FORMAT(Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const dotPos = numberPart.find('.');
 
       if (dotPos != std::string_view::npos && numberPart.find('.', dotPos + 1) != std::string_view::npos)
       {
-        AO_THROW_FORMAT(ao::Exception, "invalid unit literal '{}'", constant.lexeme);
+        AO_THROW_FORMAT(Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const wholePart = numberPart.substr(0, dotPos);
@@ -360,7 +360,7 @@ namespace ao::query
 
       if (wholePart.empty() || (dotPos != std::string_view::npos && fractionPart.empty()))
       {
-        AO_THROW_FORMAT(ao::Exception, "invalid unit literal '{}'", constant.lexeme);
+        AO_THROW_FORMAT(Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const whole = parseUnsigned(wholePart);
@@ -370,7 +370,7 @@ namespace ao::query
 
       if (!whole || !fraction || !denominator)
       {
-        AO_THROW_FORMAT(ao::Exception, "invalid unit literal '{}'", constant.lexeme);
+        AO_THROW_FORMAT(Exception, "invalid unit literal '{}'", constant.lexeme);
       }
 
       auto const scaledWhole = checkedMul(*whole, *denominator);
@@ -380,15 +380,13 @@ namespace ao::query
 
       if (!scaledNumerator)
       {
-        AO_THROW_FORMAT(ao::Exception, "unit literal '{}' is out of range", constant.lexeme);
+        AO_THROW_FORMAT(Exception, "unit literal '{}' is out of range", constant.lexeme);
       }
 
       if (*scaledNumerator % *denominator != 0)
       {
-        AO_THROW_FORMAT(ao::Exception,
-                        "unit literal '{}' does not resolve to an integer {} value",
-                        constant.lexeme,
-                        fieldName(field));
+        AO_THROW_FORMAT(
+          Exception, "unit literal '{}' does not resolve to an integer {} value", constant.lexeme, fieldName(field));
       }
 
       auto const magnitude = *scaledNumerator / *denominator;
@@ -397,7 +395,7 @@ namespace ao::query
       {
         if (magnitude > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         {
-          AO_THROW_FORMAT(ao::Exception, "unit literal '{}' is out of range", constant.lexeme);
+          AO_THROW_FORMAT(Exception, "unit literal '{}' is out of range", constant.lexeme);
         }
 
         return static_cast<std::int64_t>(magnitude);
@@ -407,7 +405,7 @@ namespace ao::query
 
       if (magnitude > negativeLimit)
       {
-        AO_THROW_FORMAT(ao::Exception, "unit literal '{}' is out of range", constant.lexeme);
+        AO_THROW_FORMAT(Exception, "unit literal '{}' is out of range", constant.lexeme);
       }
 
       if (magnitude == negativeLimit)
@@ -419,7 +417,7 @@ namespace ao::query
     }
   }
 
-  QueryCompiler::QueryCompiler(ao::library::DictionaryStore* dict)
+  QueryCompiler::QueryCompiler(library::DictionaryStore* dict)
     : _dict{dict}
   {
     gsl_Expects(dict != nullptr);
@@ -460,7 +458,7 @@ namespace ao::query
 
       if (opcode == OpCode::Like && isUnsupportedLikeField(leftField))
       {
-        AO_THROW(ao::Exception, "LIKE operator not supported for coverArt or tags");
+        AO_THROW(Exception, "LIKE operator not supported for coverArt or tags");
       }
 
       auto const previousResolveStringConstantsToIds = _resolveStringConstantsToIds;

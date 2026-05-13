@@ -31,9 +31,9 @@ namespace ao::utility
     /**
      * @brief Maps the specified file into memory (read-only).
      * @param filePath The path to the file to map.
-     * @return ao::Result<>::ok() on success, or an error with message on failure.
+     * @return Result<>::ok() on success, or an error with message on failure.
      */
-    ao::Result<> map(std::filesystem::path const& filePath);
+    Result<> map(std::filesystem::path const& filePath);
 
     /**
      * @brief Closes the mapping.

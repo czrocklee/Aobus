@@ -24,6 +24,7 @@ namespace ao::audio::backend::detail
       PwInitGuard(PwInitGuard&&) = delete;
       PwInitGuard& operator=(PwInitGuard&&) = delete;
     };
+
     static PwInitGuard guard;
   }
 
@@ -36,6 +37,7 @@ namespace ao::audio::backend::detail
 
     char* end = nullptr;
     auto const parsed = ::strtoul(value, &end, 10);
+
     if (end == value || *end != '\0')
     {
       return std::nullopt;
@@ -44,7 +46,7 @@ namespace ao::audio::backend::detail
     return static_cast<std::uint32_t>(parsed);
   }
 
-  std::optional<ao::audio::Format> parseRawStreamFormat(::spa_pod const* param) noexcept
+  std::optional<Format> parseRawStreamFormat(::spa_pod const* param) noexcept
   {
     if (param == nullptr)
     {
@@ -52,12 +54,13 @@ namespace ao::audio::backend::detail
     }
 
     auto info = ::spa_audio_info_raw{};
+
     if (::spa_format_audio_raw_parse(param, &info) < 0)
     {
       return std::nullopt;
     }
 
-    auto format = ao::audio::Format{};
+    auto format = Format{};
     format.sampleRate = info.rate;
     format.channels = static_cast<std::uint8_t>(info.channels);
     format.isInterleaved = true;

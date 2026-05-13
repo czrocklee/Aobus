@@ -118,7 +118,7 @@ namespace ao::library
       DictionaryId const* begin() const noexcept
       {
         gsl_Expects(_hotData.size() >= sizeof(TrackHotHeader));
-        return ao::utility::layout::viewArray<DictionaryId>(
+        return utility::layout::viewArray<DictionaryId>(
                  _hotData.subspan(sizeof(TrackHotHeader), hotHeader().tagLen))
           .data();
       }
@@ -130,7 +130,7 @@ namespace ao::library
       TrackHotHeader const& hotHeader() const
       {
         gsl_Expects(_hotData.size() >= sizeof(TrackHotHeader));
-        return *ao::utility::layout::view<TrackHotHeader>(_hotData);
+        return *utility::layout::view<TrackHotHeader>(_hotData);
       }
 
       std::span<std::byte const> _hotData;
@@ -167,7 +167,7 @@ namespace ao::library
       TrackColdHeader const& coldHeader() const
       {
         gsl_Expects(_coldData.size() >= sizeof(TrackColdHeader));
-        return *ao::utility::layout::view<TrackColdHeader>(_coldData);
+        return *utility::layout::view<TrackColdHeader>(_coldData);
       }
 
       std::span<Entry const> entries() const
@@ -176,7 +176,7 @@ namespace ao::library
         gsl_Expects(_coldData.size() >= kHeaderSize);
         auto const entryBytes = static_cast<std::size_t>(coldHeader().customCount) * sizeof(Entry);
         gsl_Expects(kHeaderSize + entryBytes <= _coldData.size());
-        return ao::utility::layout::viewArray<Entry>(_coldData.subspan(kHeaderSize, entryBytes));
+        return utility::layout::viewArray<Entry>(_coldData.subspan(kHeaderSize, entryBytes));
       }
 
       std::span<std::byte const> _coldData;
@@ -220,13 +220,13 @@ namespace ao::library
     TrackHotHeader const& hotHeader() const
     {
       gsl_Expects(isHotValid());
-      return *ao::utility::layout::view<TrackHotHeader>(_hotData);
+      return *utility::layout::view<TrackHotHeader>(_hotData);
     }
 
     TrackColdHeader const& coldHeader() const
     {
       gsl_Expects(isColdValid());
-      return *ao::utility::layout::view<TrackColdHeader>(_coldData);
+      return *utility::layout::view<TrackColdHeader>(_coldData);
     }
 
   private:

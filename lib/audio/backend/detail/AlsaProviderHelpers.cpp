@@ -16,9 +16,9 @@ extern "C"
 
 namespace ao::audio::backend::detail
 {
-  ao::audio::DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
+  DeviceCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName)
   {
-    auto caps = ao::audio::DeviceCapabilities{};
+    auto caps = DeviceCapabilities{};
 
     ::snd_pcm_t* rawPcm = nullptr;
     if (::snd_pcm_open(&rawPcm, deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK) < 0)
@@ -26,7 +26,7 @@ namespace ao::audio::backend::detail
       return caps;
     }
 
-    auto pcm = ao::utility::makeUniquePtr<::snd_pcm_close>(rawPcm);
+    auto pcm = utility::makeUniquePtr<::snd_pcm_close>(rawPcm);
 
     ::snd_pcm_hw_params_t* params = nullptr;
     snd_pcm_hw_params_alloca(&params);
@@ -46,7 +46,7 @@ namespace ao::audio::backend::detail
     struct AlsaFormatProbe final
     {
       ::snd_pcm_format_t alsaFormat;
-      ao::audio::SampleFormatCapability capability;
+      SampleFormatCapability capability;
     };
 
     for (auto const& probe : std::to_array<AlsaFormatProbe>({
@@ -79,9 +79,9 @@ namespace ao::audio::backend::detail
     return caps;
   }
 
-  std::vector<ao::audio::Device> doAlsaEnumerate()
+  std::vector<Device> doAlsaEnumerate()
   {
-    auto devices = std::vector<ao::audio::Device>{};
+    auto devices = std::vector<Device>{};
 
     int card = -1;
 
@@ -96,7 +96,7 @@ namespace ao::audio::backend::detail
         ::snd_ctl_t* rawCtl = nullptr;
         if (::snd_ctl_open(&rawCtl, cardId.c_str(), 0) >= 0)
         {
-          auto ctl = ao::utility::makeUniquePtr<::snd_ctl_close>(rawCtl);
+          auto ctl = utility::makeUniquePtr<::snd_ctl_close>(rawCtl);
           int device = -1;
 
           while (::snd_ctl_pcm_next_device(ctl.get(), &device) == 0 && device >= 0)
@@ -115,14 +115,14 @@ namespace ao::audio::backend::detail
                                  .displayName = std::string{safeCardName.get()},
                                  .description = plughwId,
                                  .isDefault = false,
-                                 .backendId = ao::audio::kBackendAlsa,
+                                 .backendId = kBackendAlsa,
                                  .capabilities = queryAlsaDeviceCapabilities(hwId)});
 
               devices.push_back({.id = DeviceId{hwId},
                                  .displayName = std::format("{} (Raw)", safeCardName.get()),
                                  .description = hwId,
                                  .isDefault = false,
-                                 .backendId = ao::audio::kBackendAlsa,
+                                 .backendId = kBackendAlsa,
                                  .capabilities = queryAlsaDeviceCapabilities(hwId)});
             }
           }

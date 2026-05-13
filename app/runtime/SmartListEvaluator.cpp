@@ -664,9 +664,9 @@ namespace ao::rt
 
       switch (list->_plan->accessProfile)
       {
-        case ao::query::AccessProfile::HotOnly: needsHot = true; break;
-        case ao::query::AccessProfile::ColdOnly: needsCold = true; break;
-        case ao::query::AccessProfile::HotAndCold:
+        case query::AccessProfile::HotOnly: needsHot = true; break;
+        case query::AccessProfile::ColdOnly: needsCold = true; break;
+        case query::AccessProfile::HotAndCold:
           needsHot = true;
           needsCold = true;
           break;

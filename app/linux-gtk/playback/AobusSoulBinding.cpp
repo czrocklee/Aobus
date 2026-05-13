@@ -17,22 +17,22 @@ namespace ao::gtk
     Gdk::RGBA const kColorOrange{"#F59E0B"};
     Gdk::RGBA const kColorRed{"#EF4444"};
 
-    Gdk::RGBA colorForQuality(ao::audio::Quality const quality)
+    Gdk::RGBA colorForQuality(audio::Quality const quality)
     {
       switch (quality)
       {
-        case ao::audio::Quality::BitwisePerfect:
-        case ao::audio::Quality::LosslessPadded: return kColorPurple;
-        case ao::audio::Quality::LosslessFloat: return kColorGreen;
-        case ao::audio::Quality::LinearIntervention: return kColorOrange;
-        case ao::audio::Quality::Clipped: return kColorRed;
-        case ao::audio::Quality::LossySource:
-        case ao::audio::Quality::Unknown: return kColorGray;
+        case audio::Quality::BitwisePerfect:
+        case audio::Quality::LosslessPadded: return kColorPurple;
+        case audio::Quality::LosslessFloat: return kColorGreen;
+        case audio::Quality::LinearIntervention: return kColorOrange;
+        case audio::Quality::Clipped: return kColorRed;
+        case audio::Quality::LossySource:
+        case audio::Quality::Unknown: return kColorGray;
       }
       return kColorGray;
     }
 
-    Gdk::RGBA computeColor(bool const playing, bool const ready, ao::audio::Quality const quality)
+    Gdk::RGBA computeColor(bool const playing, bool const ready, audio::Quality const quality)
     {
       if (!playing)
       {
@@ -48,7 +48,7 @@ namespace ao::gtk
     }
   } // namespace
 
-  AobusSoulBinding::AobusSoulBinding(AobusSoul& soul, ao::rt::PlaybackService& playback)
+  AobusSoulBinding::AobusSoulBinding(AobusSoul& soul, rt::PlaybackService& playback)
     : _soul{soul}, _playback{playback}
   {
     _qualitySub = _playback.onQualityChanged(
@@ -86,7 +86,7 @@ namespace ao::gtk
 
     // Sync initial state
     auto const& state = _playback.state();
-    _playing = (state.transport == ao::audio::Transport::Playing);
+    _playing = (state.transport == audio::Transport::Playing);
     _ready = state.ready;
     _quality = state.quality;
     _soul.breathe(_playing);

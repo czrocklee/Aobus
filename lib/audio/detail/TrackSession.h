@@ -22,14 +22,14 @@ namespace ao::audio::detail
   public:
     using DecoderFactoryFn =
       std::function<std::unique_ptr<IDecoderSession>(std::filesystem::path const&, Format const&)>;
-    using OnSourceErrorFn = std::function<void(ao::Error const&)>;
+    using OnSourceErrorFn = std::function<void(Error const&)>;
 
     struct Result
     {
       std::shared_ptr<ISource> source = nullptr;
       Format backendFormat{};
       DecodedStreamInfo info{};
-      ao::Error error{};
+      Error error{};
 
       explicit operator bool() const noexcept { return source != nullptr; }
     };

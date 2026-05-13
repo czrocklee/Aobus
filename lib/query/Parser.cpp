@@ -232,7 +232,7 @@ namespace ao::query
       return root;
     }
 
-    AO_THROW_FORMAT(ao::Exception, "parsing {} error", expr);
+    AO_THROW_FORMAT(Exception, "parsing {} error", expr);
   }
 }
 

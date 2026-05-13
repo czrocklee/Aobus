@@ -18,7 +18,7 @@ namespace ao::gtk
   public:
     static Glib::RefPtr<ProjectionTrackModel> create();
 
-    void setProjection(ao::rt::ITrackListProjection* projection, TrackRowCache const& provider);
+    void setProjection(rt::ITrackListProjection* projection, TrackRowCache const& provider);
     void clearProjection();
 
     void notifyReset(::guint oldSize, ::guint newSize);
@@ -34,7 +34,7 @@ namespace ao::gtk
     ::gpointer get_item_vfunc(::guint position) override;
 
   private:
-    ao::rt::ITrackListProjection* _projection = nullptr;
+    rt::ITrackListProjection* _projection = nullptr;
     TrackRowCache const* _provider = nullptr;
     mutable ::GType _cachedItemType = G_TYPE_INVALID;
   };

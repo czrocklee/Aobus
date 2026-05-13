@@ -105,8 +105,8 @@ namespace ao::audio::backend
     }();
 
     // Members
-    ao::audio::IRenderTarget* renderTarget = nullptr;
-    ao::audio::Format format;
+    IRenderTarget* renderTarget = nullptr;
+    Format format;
     std::atomic<bool> drainPending = false;
     bool strictFormatRequired = false;
     bool strictFormatRejected = false;
@@ -240,7 +240,7 @@ namespace ao::audio::backend
       {
         if (std::abs(volFloat - volume.exchange(volFloat)) > kVolumeEpsilon)
         {
-          renderTarget->onPropertyChanged(ao::audio::PropertyId::Volume);
+          renderTarget->onPropertyChanged(PropertyId::Volume);
         }
       }
     }
@@ -253,7 +253,7 @@ namespace ao::audio::backend
       {
         if (muteBool != muted.exchange(muteBool))
         {
-          renderTarget->onPropertyChanged(ao::audio::PropertyId::Muted);
+          renderTarget->onPropertyChanged(PropertyId::Muted);
         }
       }
     }
@@ -287,10 +287,8 @@ namespace ao::audio::backend
     renderTarget->onDrainComplete();
   }
 
-  PipeWireBackend::PipeWireBackend(ao::audio::Device const& device, ao::audio::ProfileId const& profile)
-    : _impl{std::make_unique<Impl>()}
-    , _targetDeviceId{device.id}
-    , _exclusiveMode{profile == ao::audio::kProfileExclusive}
+  PipeWireBackend::PipeWireBackend(Device const& device, ProfileId const& profile)
+    : _impl{std::make_unique<Impl>()}, _targetDeviceId{device.id}, _exclusiveMode{profile == kProfileExclusive}
   {
     _impl->threadLoop.reset(::pw_thread_loop_new("PipeWireBackend", nullptr));
 
@@ -310,7 +308,7 @@ namespace ao::audio::backend
 
   PipeWireBackend::~PipeWireBackend() = default;
 
-  ao::Result<> PipeWireBackend::open(ao::audio::Format const& format, ao::audio::IRenderTarget* target)
+  Result<> PipeWireBackend::open(Format const& format, IRenderTarget* target)
   {
     _impl->renderTarget = target;
     _impl->format = format;
@@ -319,7 +317,7 @@ namespace ao::audio::backend
 
     if (!_impl->threadLoop)
     {
-      return ao::makeError(ao::Error::Code::InitFailed, "PipeWire not initialized");
+      return makeError(Error::Code::InitFailed, "PipeWire not initialized");
     }
 
     ::pw_thread_loop_lock(_impl->threadLoop.get());
@@ -336,7 +334,7 @@ namespace ao::audio::backend
                                          PW_KEY_NODE_NAME,
                                          "Aobus Playback",
                                          nullptr);
-    auto props = ao::utility::makeUniquePtr<::pw_properties_free>(rawProps);
+    auto props = utility::makeUniquePtr<::pw_properties_free>(rawProps);
     ::pw_properties_set(props.get(), PW_KEY_NODE_RATE, std::format("1/{}", format.sampleRate).c_str());
 
     if (!_targetDeviceId.empty())
@@ -353,7 +351,7 @@ namespace ao::audio::backend
     if (!_impl->stream)
     {
       ::pw_thread_loop_unlock(_impl->threadLoop.get());
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to create stream");
+      return makeError(Error::Code::InitFailed, "Failed to create stream");
     }
 
     _impl->streamListener.reset();
@@ -410,7 +408,7 @@ namespace ao::audio::backend
     if (::pw_stream_connect(_impl->stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params.data(), 1) < 0)
     {
       ::pw_thread_loop_unlock(_impl->threadLoop.get());
-      return ao::makeError(ao::Error::Code::InitFailed, "Failed to connect stream");
+      return makeError(Error::Code::InitFailed, "Failed to connect stream");
     }
 
     _impl->volumeAvailable = !useExclusive; // Default to available in shared mode
@@ -502,19 +500,19 @@ namespace ao::audio::backend
     return _exclusiveMode;
   }
 
-  ao::audio::BackendId PipeWireBackend::backendId() const noexcept
+  BackendId PipeWireBackend::backendId() const noexcept
   {
-    return ao::audio::kBackendPipeWire;
+    return kBackendPipeWire;
   }
 
-  ao::audio::ProfileId PipeWireBackend::profileId() const noexcept
+  ProfileId PipeWireBackend::profileId() const noexcept
   {
-    return _exclusiveMode ? ao::audio::kProfileExclusive : ao::audio::kProfileShared;
+    return _exclusiveMode ? kProfileExclusive : kProfileShared;
   }
 
-  ao::Result<> PipeWireBackend::setProperty(ao::audio::PropertyId id, ao::audio::PropertyValue const& value)
+  Result<> PipeWireBackend::setProperty(PropertyId id, PropertyValue const& value)
   {
-    if (id == ao::audio::PropertyId::Volume)
+    if (id == PropertyId::Volume)
     {
       auto const volume = std::get<float>(value);
       auto const clamped = std::clamp(volume, 0.0F, 1.0F);
@@ -545,7 +543,7 @@ namespace ao::audio::backend
       return {};
     }
 
-    if (id == ao::audio::PropertyId::Muted)
+    if (id == PropertyId::Muted)
     {
       auto const muted = std::get<bool>(value);
       _impl->muted.store(muted, std::memory_order_relaxed);
@@ -571,27 +569,27 @@ namespace ao::audio::backend
       return {};
     }
 
-    return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
+    return std::unexpected(Error{.code = Error::Code::NotSupported});
   }
 
-  ao::Result<ao::audio::PropertyValue> PipeWireBackend::getProperty(ao::audio::PropertyId id) const
+  Result<PropertyValue> PipeWireBackend::getProperty(PropertyId id) const
   {
-    if (id == ao::audio::PropertyId::Volume)
+    if (id == PropertyId::Volume)
     {
       return _impl->volume.load(std::memory_order_relaxed);
     }
 
-    if (id == ao::audio::PropertyId::Muted)
+    if (id == PropertyId::Muted)
     {
       return _impl->muted.load(std::memory_order_relaxed);
     }
 
-    return std::unexpected(ao::Error{.code = ao::Error::Code::NotSupported});
+    return std::unexpected(Error{.code = Error::Code::NotSupported});
   }
 
-  ao::audio::PropertyInfo PipeWireBackend::queryProperty(ao::audio::PropertyId id) const noexcept
+  PropertyInfo PipeWireBackend::queryProperty(PropertyId id) const noexcept
   {
-    if (id == ao::audio::PropertyId::Volume || id == ao::audio::PropertyId::Muted)
+    if (id == PropertyId::Volume || id == PropertyId::Muted)
     {
       return {.canRead = true,
               .canWrite = true,

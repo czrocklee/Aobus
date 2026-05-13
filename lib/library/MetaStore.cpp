@@ -8,13 +8,13 @@
 
 #include <cstring>
 
-namespace
-{
-  constexpr auto kHeaderRecordId = static_cast<std::uint32_t>(ao::library::MetaRecordId::Header);
-}
-
 namespace ao::library
 {
+  namespace
+  {
+    constexpr auto kHeaderRecordId = static_cast<std::uint32_t>(MetaRecordId::Header);
+  }
+
   std::optional<MetaHeader> MetaStore::load(lmdb::ReadTransaction const& txn) const
   {
     auto const reader = _database.reader(txn);
@@ -28,7 +28,7 @@ namespace ao::library
     if (bytes->size() != sizeof(MetaHeader))
     {
       AO_THROW_FORMAT(
-        ao::Exception, "Invalid library metadata header size {} (expected {})", bytes->size(), sizeof(MetaHeader));
+        Exception, "Invalid library metadata header size {} (expected {})", bytes->size(), sizeof(MetaHeader));
     }
 
     auto header = MetaHeader{};

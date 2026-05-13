@@ -171,7 +171,7 @@ namespace ao::media::mp4
 
     if (auto const* node = root.find(kMdhdPath))
     {
-      auto const& view = ao::utility::unsafeDowncast<AtomView const>(*node);
+      auto const& view = utility::unsafeDowncast<AtomView const>(*node);
       auto const& layout = view.layout<MdhdAtomLayout>();
       _timescale = layout.timescale.value();
       _duration = layout.duration.value();
@@ -192,7 +192,7 @@ namespace ao::media::mp4
 
     if (auto const* node = root.find(kCookiePath))
     {
-      auto const& view = ao::utility::unsafeDowncast<AtomView const>(*node);
+      auto const& view = utility::unsafeDowncast<AtomView const>(*node);
       auto const bytes = view.bytes();
       _magicCookie.assign(bytes.begin(), bytes.end());
     }
@@ -218,7 +218,7 @@ namespace ao::media::mp4
       [this, &chunkOffsets, &sampleToChunk](Atom const& atom)
       {
         auto type = atom.type();
-        auto const& view = ao::utility::unsafeDowncast<AtomView const>(atom);
+        auto const& view = utility::unsafeDowncast<AtomView const>(atom);
         auto const atomBytes = view.bytes();
 
         if (type == "stsz")

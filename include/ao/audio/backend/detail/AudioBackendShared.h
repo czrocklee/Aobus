@@ -11,8 +11,7 @@ namespace ao::audio::backend::detail
   /**
    * @brief Shared helper to add a sample format capability to DeviceCapabilities.
    */
-  inline void addSampleFormatCapability(ao::audio::DeviceCapabilities& caps,
-                                        ao::audio::SampleFormatCapability const& capability)
+  inline void addSampleFormatCapability(DeviceCapabilities& caps, SampleFormatCapability const& capability)
   {
     if (!std::ranges::contains(caps.sampleFormats, capability))
     {

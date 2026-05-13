@@ -27,14 +27,18 @@
 
 #include <glibmm/miscutils.h>
 
+using namespace ao;
+using namespace ao::gtk;
+
+
 namespace
 {
   std::filesystem::path resolveLibraryPath()
   {
     {
       auto const configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
-      auto store = ao::rt::ConfigStore{configPath};
-      auto snapshot = ao::rt::SessionSnapshot{};
+      auto store = rt::ConfigStore{configPath};
+      auto snapshot = rt::SessionSnapshot{};
 
       if (auto result = store.load("session", snapshot); !result)
       {
@@ -54,22 +58,21 @@ namespace
     return emptyPath;
   }
 
-  Glib::RefPtr<ao::gtk::MainWindow> createWindow(Gtk::Application& app, std::filesystem::path libraryPath)
+  Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app, std::filesystem::path libraryPath)
   {
-    auto executor = std::make_shared<ao::gtk::GtkControlExecutor>();
+    auto executor = std::make_shared<GtkControlExecutor>();
     auto const configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
-    auto configStore = std::make_shared<ao::rt::ConfigStore>(configPath);
+    auto configStore = std::make_shared<rt::ConfigStore>(configPath);
 
-    auto appSession = std::make_unique<ao::rt::AppSession>(ao::rt::AppSessionDependencies{
+    auto appSession = std::make_unique<rt::AppSession>(rt::AppSessionDependencies{
       .executor = std::move(executor), .libraryRoot = std::move(libraryPath), .configStore = configStore});
 
-    auto window =
-      Glib::make_refptr_for_instance<ao::gtk::MainWindow>(new ao::gtk::MainWindow(*appSession, configStore));
+    auto window = Glib::make_refptr_for_instance<MainWindow>(new MainWindow(*appSession, configStore));
 
     // Store AppSession alongside window (lifetime tied to window via pointer)
     window->set_data("app-session",
-                     new std::unique_ptr<ao::rt::AppSession>(std::move(appSession)),
-                     [](void* data) { delete static_cast<std::unique_ptr<ao::rt::AppSession>*>(data); });
+                     new std::unique_ptr<rt::AppSession>(std::move(appSession)),
+                     [](void* data) { delete static_cast<std::unique_ptr<rt::AppSession>*>(data); });
 
     window->initializeSession();
 
@@ -85,16 +88,16 @@ int main(int argc, char* argv[])
   CLI::App cliApp{"Aobus Music Library"};
   cliApp.allow_extras(); // Allow GTK specific arguments
 
-  auto logLevel = ao::log::LogLevel::Info;
+  auto logLevel = log::LogLevel::Info;
 
   // Map strings to LogLevel enum for CLI11
-  auto const logMapping = std::map<std::string, ao::log::LogLevel>{{"trace", ao::log::LogLevel::Trace},
-                                                                   {"debug", ao::log::LogLevel::Debug},
-                                                                   {"info", ao::log::LogLevel::Info},
-                                                                   {"warn", ao::log::LogLevel::Warn},
-                                                                   {"error", ao::log::LogLevel::Error},
-                                                                   {"critical", ao::log::LogLevel::Critical},
-                                                                   {"off", ao::log::LogLevel::Off}};
+  auto const logMapping = std::map<std::string, log::LogLevel>{{"trace", log::LogLevel::Trace},
+                                                               {"debug", log::LogLevel::Debug},
+                                                               {"info", log::LogLevel::Info},
+                                                               {"warn", log::LogLevel::Warn},
+                                                               {"error", log::LogLevel::Error},
+                                                               {"critical", log::LogLevel::Critical},
+                                                               {"off", log::LogLevel::Off}};
 
   int verbosity = 0;
   cliApp.add_flag("-v", verbosity, "Verbosity level (-v for debug, -vv for trace)");
@@ -106,7 +109,7 @@ int main(int argc, char* argv[])
     "--version",
     []
     {
-      std::cout << "Aobus " << ao::kAppVersion << '\n';
+      std::cout << "Aobus " << kAppVersion << '\n';
       std::exit(0);
     },
     "Show version information");
@@ -125,19 +128,19 @@ int main(int argc, char* argv[])
   {
     if (verbosity == 1)
     {
-      logLevel = ao::log::LogLevel::Debug;
+      logLevel = log::LogLevel::Debug;
     }
     else if (verbosity >= 2)
     {
-      logLevel = ao::log::LogLevel::Trace;
+      logLevel = log::LogLevel::Trace;
     }
   }
 
   auto const logDir = std::filesystem::path(Glib::get_user_cache_dir()) / "aobus" / "logs";
-  ao::log::Log::init(logLevel, logDir);
-  auto const logGuard = gsl_lite::finally([] { ao::log::Log::shutdown(); });
+  log::Log::init(logLevel, logDir);
+  auto const logGuard = gsl_lite::finally([] { log::Log::shutdown(); });
 
-  APP_LOG_INFO("Aobus {} starting...", ao::kAppVersion);
+  APP_LOG_INFO("Aobus {} starting...", kAppVersion);
 
   Glib::set_application_name("Aobus");
 
@@ -160,7 +163,7 @@ int main(int argc, char* argv[])
     [](void*) -> ::gboolean
     {
       APP_LOG_INFO("Received SIGUSR1, scheduling global theme refresh...");
-      ao::gtk::emitThemeRefresh();
+      emitThemeRefresh();
       return TRUE;
     },
     nullptr);
@@ -186,7 +189,7 @@ int main(int argc, char* argv[])
         {
           APP_LOG_INFO(
             "GTK config change detected ({} - event: {}), scheduling refresh...", name, static_cast<int>(event));
-          ao::gtk::emitThemeRefresh();
+          emitThemeRefresh();
         }
       }
     });
@@ -205,7 +208,7 @@ int main(int argc, char* argv[])
            Glib::VariantContainerBase const&)
         {
           APP_LOG_INFO("DBus theme change detected via Portal, scheduling refresh...");
-          ao::gtk::emitThemeRefresh();
+          emitThemeRefresh();
         },
         "org.freedesktop.portal.Desktop",  // Sender
         "org.freedesktop.portal.Settings", // Interface
@@ -226,7 +229,7 @@ int main(int argc, char* argv[])
     {
       auto dialog = Gtk::AboutDialog{};
       dialog.set_program_name("Aobus");
-      dialog.set_version(ao::kAppVersion);
+      dialog.set_version(kAppVersion);
       dialog.set_copyright("Copyright 2024-2026 Aobus Contributors");
       dialog.set_license_type(Gtk::License::LGPL_3_0);
 
@@ -246,7 +249,7 @@ int main(int argc, char* argv[])
   app->add_action(quitAction);
 
   // Store open windows
-  auto windows = std::vector<Glib::RefPtr<ao::gtk::MainWindow>>{};
+  auto windows = std::vector<Glib::RefPtr<MainWindow>>{};
 
   // Connect to activate signal to create initial window after startup
   app->signal_activate().connect(

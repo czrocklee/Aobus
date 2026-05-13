@@ -4,7 +4,7 @@
 #include "Reader.h"
 #include "Frame.h"
 #include "Layout.h"
-#include <ao/tag/mpeg/File.h>
+#include "../File.h"
 #include <ao/utility/ByteView.h>
 
 #include <charconv>
@@ -17,9 +17,9 @@ namespace ao::tag::mpeg::id3v2
   namespace
   {
     using TextSetter =
-      ao::library::TrackBuilder::MetadataBuilder& (ao::library::TrackBuilder::MetadataBuilder::*)(std::string_view);
+      library::TrackBuilder::MetadataBuilder& (library::TrackBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter =
-      ao::library::TrackBuilder::MetadataBuilder& (ao::library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
+      library::TrackBuilder::MetadataBuilder& (library::TrackBuilder::MetadataBuilder::*)(std::uint16_t);
 
     template<typename T>
     std::optional<T> parseUnsigned(std::string_view text)
@@ -37,24 +37,18 @@ namespace ao::tag::mpeg::id3v2
       return std::nullopt;
     }
 
-    void handlePicture(ao::library::TrackBuilder& builder,
-                       ao::tag::File const& owner,
-                       void const* data,
-                       std::size_t size);
-    void handleTxxx(ao::library::TrackBuilder& builder, ao::tag::File const& owner, void const* data, std::size_t size);
+    void handlePicture(library::TrackBuilder& builder, TagFile const& owner, void const* data, std::size_t size);
+    void handleTxxx(library::TrackBuilder& builder, TagFile const& owner, void const* data, std::size_t size);
 
     template<TextSetter Setter>
-    void handleText(ao::library::TrackBuilder& builder, ao::tag::File const& owner, void const* data, std::size_t size)
+    void handleText(library::TrackBuilder& builder, TagFile const& owner, void const* data, std::size_t size)
     {
       auto view = V23TextFrameView{data, size};
-      (builder.metadata().*Setter)(ao::tag::detail::stashOwnedString(owner, view.text()));
+      (builder.metadata().*Setter)(detail::stashOwnedString(owner, view.text()));
     }
 
     template<NumberSetter Setter>
-    void handleNumber(ao::library::TrackBuilder& builder,
-                      ao::tag::File const& /*owner*/,
-                      void const* data,
-                      std::size_t size)
+    void handleNumber(library::TrackBuilder& builder, TagFile const& /*owner*/, void const* data, std::size_t size)
     {
       auto const view = V23TextFrameView{data, size};
 
@@ -68,8 +62,8 @@ namespace ao::tag::mpeg::id3v2
     }
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
-    void handleSlashNumber(ao::library::TrackBuilder& builder,
-                           ao::tag::File const& /*owner*/,
+    void handleSlashNumber(library::TrackBuilder& builder,
+                           TagFile const& /*owner*/,
                            void const* data,
                            std::size_t size)
     {
@@ -91,10 +85,7 @@ namespace ao::tag::mpeg::id3v2
       }
     }
 
-    void handlePicture(ao::library::TrackBuilder& builder,
-                       ao::tag::File const& /*owner*/,
-                       void const* data,
-                       std::size_t size)
+    void handlePicture(library::TrackBuilder& builder, TagFile const& /*owner*/, void const* data, std::size_t size)
     {
       // APIC frame layout (after V23CommonFrameLayout header):
       //   encoding byte (1)
@@ -127,10 +118,10 @@ namespace ao::tag::mpeg::id3v2
       ++ptr; // skip null terminator
 
       std::size_t const imageSize = size - (ptr - frameData);
-      builder.metadata().coverArtData(ao::utility::bytes::view(ptr, imageSize));
+      builder.metadata().coverArtData(utility::bytes::view(ptr, imageSize));
     }
 
-    void handleTxxx(ao::library::TrackBuilder& builder, ao::tag::File const& owner, void const* data, std::size_t size)
+    void handleTxxx(library::TrackBuilder& builder, TagFile const& owner, void const* data, std::size_t size)
     {
       // TXXX frame layout:
       //   encoding byte (1)
@@ -155,13 +146,13 @@ namespace ao::tag::mpeg::id3v2
         }
         else if (key == "work" || key == "WORK" || key == "grouping" || key == "GROUPING")
         {
-          builder.metadata().work(ao::tag::detail::stashOwnedString(owner, std::string{value}));
+          builder.metadata().work(detail::stashOwnedString(owner, std::string{value}));
         }
         else
         {
           // Store as custom pair - stash both strings
-          auto const stashedKey = ao::tag::detail::stashOwnedString(owner, std::string{key});
-          auto const stashedValue = ao::tag::detail::stashOwnedString(owner, std::string{value});
+          auto const stashedKey = detail::stashOwnedString(owner, std::string{key});
+          auto const stashedValue = detail::stashOwnedString(owner, std::string{value});
           builder.custom().add(stashedKey, stashedValue);
         }
       }
@@ -170,18 +161,18 @@ namespace ao::tag::mpeg::id3v2
 #include "tag/mpeg/id3v2/FrameDispatch.h"
   } // namespace
 
-  ao::library::TrackBuilder loadFrames(ao::tag::File const& owner,
-                                       HeaderLayout const& header,
-                                       void const* buffer,
-                                       std::size_t size)
+  library::TrackBuilder loadFrames(TagFile const& owner,
+                                   HeaderLayout const& header,
+                                   void const* buffer,
+                                   std::size_t size)
   {
     switch (header.majorVersion)
     {
-      case 2: return ao::library::TrackBuilder::createNew();
+      case 2: return library::TrackBuilder::createNew();
       case 3: // NOLINT(readability-magic-numbers)
       case 4:
       {
-        auto builder = ao::library::TrackBuilder::createNew();
+        auto builder = library::TrackBuilder::createNew();
         auto frameIter = FrameViewIterator<V23FrameView>{buffer, size};
         auto frameEnd = FrameViewIterator<V23FrameView>{};
 
@@ -198,7 +189,7 @@ namespace ao::tag::mpeg::id3v2
 
         return builder;
       }
-      default: return ao::library::TrackBuilder::createNew();
+      default: return library::TrackBuilder::createNew();
     }
   }
 } // namespace ao::tag::mpeg::id3v2

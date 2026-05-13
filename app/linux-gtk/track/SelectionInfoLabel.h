@@ -25,7 +25,7 @@ namespace ao::gtk
   class SelectionInfoLabel final
   {
   public:
-    explicit SelectionInfoLabel(ao::rt::ViewService& viewService);
+    explicit SelectionInfoLabel(rt::ViewService& viewService);
     ~SelectionInfoLabel();
 
     Gtk::Widget& widget() { return _label; }
@@ -33,8 +33,8 @@ namespace ao::gtk
   private:
     void updateState(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
 
-    ao::rt::ViewService& _viewService;
+    rt::ViewService& _viewService;
     Gtk::Label _label;
-    ao::rt::Subscription _selectionChangedSub;
+    rt::Subscription _selectionChangedSub;
   };
 } // namespace ao::gtk

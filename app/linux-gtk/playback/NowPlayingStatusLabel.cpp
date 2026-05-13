@@ -60,7 +60,7 @@ namespace ao::gtk
     }
   }
 
-  NowPlayingStatusLabel::NowPlayingStatusLabel(ao::rt::PlaybackService& playbackService)
+  NowPlayingStatusLabel::NowPlayingStatusLabel(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
   {
     ensureNowPlayingCss();
@@ -88,7 +88,7 @@ namespace ao::gtk
   {
     auto const& state = _playbackService.state();
 
-    if (state.transport == ao::audio::Transport::Idle)
+    if (state.transport == audio::Transport::Idle)
     {
       _label.set_text("");
       return;

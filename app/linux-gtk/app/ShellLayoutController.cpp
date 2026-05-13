@@ -12,7 +12,7 @@
 
 namespace ao::gtk
 {
-  ShellLayoutController::ShellLayoutController(ao::rt::AppSession& session, Gtk::Window& parentWindow)
+  ShellLayoutController::ShellLayoutController(rt::AppSession& session, Gtk::Window& parentWindow)
     : _registry{}
     , _context{.registry = _registry, .session = session, .parentWindow = parentWindow, .onNodeMoved = {}}
     , _host{_registry}
@@ -26,10 +26,10 @@ namespace ao::gtk
     setupCss();
   }
 
-  void ShellLayoutController::loadLayout(ao::rt::ConfigStore& configStore)
+  void ShellLayoutController::loadLayout(rt::ConfigStore& configStore)
   {
     auto doc = layout::createDefaultLayout();
-    if (auto const res = configStore.load("linuxGtkLayout", doc); !res && res.error().code != ao::Error::Code::NotFound)
+    if (auto const res = configStore.load("linuxGtkLayout", doc); !res && res.error().code != Error::Code::NotFound)
     {
       APP_LOG_DEBUG("Failed to load layout from config: {}", res.error().message);
     }
@@ -37,12 +37,12 @@ namespace ao::gtk
     _host.setLayout(_context, _activeLayout);
   }
 
-  void ShellLayoutController::saveLayout(ao::rt::ConfigStore& configStore) const
+  void ShellLayoutController::saveLayout(rt::ConfigStore& configStore) const
   {
     configStore.save("linuxGtkLayout", _activeLayout);
   }
 
-  void ShellLayoutController::openEditor(ao::rt::ConfigStore& configStore)
+  void ShellLayoutController::openEditor(rt::ConfigStore& configStore)
   {
     auto const dialog = std::make_shared<layout::editor::LayoutEditorDialog>(
       dynamic_cast<Gtk::Window&>(_context.parentWindow), _registry, _activeLayout);

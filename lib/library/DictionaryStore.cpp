@@ -62,12 +62,12 @@ namespace ao::library
 
     if (idx == 0)
     {
-      AO_THROW(ao::Exception, "Invalid dictionary ID");
+      AO_THROW(Exception, "Invalid dictionary ID");
     }
 
     if (idx - 1 >= _idToStringStorage.size())
     {
-      AO_THROW(ao::Exception, "Invalid dictionary ID");
+      AO_THROW(Exception, "Invalid dictionary ID");
     }
 
     return _idToStringStorage[idx - 1];
@@ -92,7 +92,7 @@ namespace ao::library
       return it->second;
     }
 
-    AO_THROW(ao::Exception, "String not found in dictionary");
+    AO_THROW(Exception, "String not found in dictionary");
   }
 
   bool DictionaryStore::contains(std::string_view str) const

@@ -37,10 +37,10 @@ namespace ao::library
 
   private:
     void importTracks(YAML::Node const& tracks,
-                      ao::lmdb::WriteTransaction& txn,
+                      lmdb::WriteTransaction& txn,
                       std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId);
     void importLists(YAML::Node const& lists,
-                     ao::lmdb::WriteTransaction& txn,
+                     lmdb::WriteTransaction& txn,
                      std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId);
 
     void overlayMetadata(TrackBuilder& builder,

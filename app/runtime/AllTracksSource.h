@@ -28,7 +28,7 @@ namespace ao::rt
 
     explicit AllTracksSource(library::TrackStore& store);
 
-    void reloadFromStore(ao::lmdb::ReadTransaction const& txn);
+    void reloadFromStore(lmdb::ReadTransaction const& txn);
     void notifyInserted(TrackId id);
     void notifyRemoved(TrackId id);
     void clear();

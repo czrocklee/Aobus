@@ -21,8 +21,8 @@ namespace ao::audio
     MemorySource(MemorySource const&) = delete;
     MemorySource& operator=(MemorySource const&) = delete;
 
-    ao::Result<> initialize();
-    ao::Result<> seek(std::uint32_t positionMs) override;
+    Result<> initialize();
+    Result<> seek(std::uint32_t positionMs) override;
 
     std::size_t read(std::span<std::byte> output) noexcept override;
     bool isDrained() const noexcept override;
