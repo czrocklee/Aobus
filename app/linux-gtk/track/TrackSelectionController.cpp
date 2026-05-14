@@ -30,7 +30,7 @@ namespace ao::gtk
 
       return false;
     }
-  }
+  } // namespace
 
   TrackSelectionController::TrackSelectionController(Gtk::ColumnView& columnView,
                                                      TrackListAdapter& adapter,
@@ -55,9 +55,9 @@ namespace ao::gtk
           return;
         }
 
-        if (auto const trackId = trackIdAtPosition(position))
+        if (auto const optTrackId = trackIdAtPosition(position))
         {
-          _trackActivated.emit(*trackId);
+          _trackActivated.emit(*optTrackId);
           return;
         }
 
@@ -151,9 +151,9 @@ namespace ao::gtk
       return;
     }
 
-    if (auto const trackId = getPrimarySelectedTrackId(); trackId)
+    if (auto const optTrackId = getPrimarySelectedTrackId(); optTrackId)
     {
-      _trackActivated.emit(*trackId);
+      _trackActivated.emit(*optTrackId);
     }
   }
 
@@ -162,7 +162,7 @@ namespace ao::gtk
     _selectionChanged.emit();
   }
 
-  std::optional<TrackId> TrackSelectionController::trackIdAtPosition(std::uint32_t position) const
+  std::optional<TrackId> TrackSelectionController::trackIdAtPosition(std::uint32_t position) const noexcept
   {
     if (!_selectionModel)
     {
@@ -186,7 +186,7 @@ namespace ao::gtk
     return row->getTrackId();
   }
 
-  std::size_t TrackSelectionController::selectedTrackCount() const
+  std::size_t TrackSelectionController::selectedTrackCount() const noexcept
   {
     if (auto const bitset = _selectionModel->get_selection())
     {
@@ -196,63 +196,40 @@ namespace ao::gtk
     return 0;
   }
 
-  std::vector<TrackId> TrackSelectionController::getSelectedTrackIds() const
+  std::vector<TrackId> TrackSelectionController::getSelectedTrackIds() const noexcept
   {
-    auto result = std::vector<TrackId>{};
     auto const model = _selectionModel->get_model();
 
     if (!model)
     {
-      return result;
+      return {};
     }
 
-    auto const nItems = model->get_n_items();
-
-    for (std::uint32_t i = 0; i < nItems; ++i)
-    {
-      if (_selectionModel->is_selected(i))
-      {
-        if (auto const trackId = trackIdAtPosition(i))
-        {
-          result.push_back(*trackId);
-        }
-      }
-    }
-
-    return result;
+    return std::views::iota(0U, model->get_n_items()) |
+           std::views::filter([this](auto i) { return _selectionModel->is_selected(i); }) |
+           std::views::transform([this](auto i) { return trackIdAtPosition(i); }) |
+           std::views::filter([](auto const& opt) { return opt.has_value(); }) |
+           std::views::transform([](auto const& opt) { return *opt; }) | std::ranges::to<std::vector>();
   }
 
-  std::vector<Glib::RefPtr<TrackRowObject>> TrackSelectionController::getSelectedRows() const
+  std::vector<Glib::RefPtr<TrackRowObject>> TrackSelectionController::getSelectedRows() const noexcept
   {
-    auto result = std::vector<Glib::RefPtr<TrackRowObject>>{};
     auto const model = _selectionModel->get_model();
 
     if (!model)
     {
-      return result;
+      return {};
     }
 
-    auto const nItems = model->get_n_items();
-
-    for (std::uint32_t i = 0; i < nItems; ++i)
-    {
-      if (_selectionModel->is_selected(i))
-      {
-        auto item = model->get_object(i);
-
-        if (auto row = std::dynamic_pointer_cast<TrackRowObject>(item))
-        {
-          result.push_back(std::move(row));
-        }
-      }
-    }
-
-    return result;
+    return std::views::iota(0U, model->get_n_items()) |
+           std::views::filter([this](auto i) { return _selectionModel->is_selected(i); }) |
+           std::views::transform([model](auto i)
+                                 { return std::dynamic_pointer_cast<TrackRowObject>(model->get_object(i)); }) |
+           std::views::filter([](auto const& row) { return static_cast<bool>(row); }) | std::ranges::to<std::vector>();
   }
 
-  std::chrono::milliseconds TrackSelectionController::getSelectedTracksDuration() const
+  std::chrono::milliseconds TrackSelectionController::getSelectedTracksDuration() const noexcept
   {
-    auto totalDuration = std::chrono::milliseconds{0};
     auto const model = _selectionModel->get_model();
 
     if (!model)
@@ -260,25 +237,18 @@ namespace ao::gtk
       return std::chrono::milliseconds{0};
     }
 
-    auto const nItems = model->get_n_items();
-
-    for (std::uint32_t i = 0; i < nItems; ++i)
-    {
-      if (_selectionModel->is_selected(i))
-      {
-        auto const item = _selectionModel->get_object(i);
-
-        if (auto const row = std::dynamic_pointer_cast<TrackRowObject>(item))
-        {
-          totalDuration += row->getDuration();
-        }
-      }
-    }
-
-    return totalDuration;
+    return std::ranges::fold_left(
+      std::views::iota(0U, model->get_n_items()) |
+        std::views::filter([this](auto i) { return _selectionModel->is_selected(i); }) |
+        std::views::transform([model](auto i)
+                              { return std::dynamic_pointer_cast<TrackRowObject>(model->get_object(i)); }) |
+        std::views::filter([](auto const& row) { return static_cast<bool>(row); }) |
+        std::views::transform([](auto const& row) { return row->getDuration(); }),
+      std::chrono::milliseconds{0},
+      std::plus<>{});
   }
 
-  std::optional<TrackId> TrackSelectionController::getPrimarySelectedTrackId() const
+  std::optional<TrackId> TrackSelectionController::getPrimarySelectedTrackId() const noexcept
   {
     auto const bitset = _selectionModel->get_selection();
 
@@ -305,7 +275,20 @@ namespace ao::gtk
     _columnView.scroll_to(pos, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
   }
 
-  void TrackSelectionController::setPlayingTrackId(std::optional<TrackId> trackId)
+  void TrackSelectionController::scrollToTrack(TrackId trackId)
+  {
+    auto const optIndex = _adapter.indexOf(trackId);
+
+    if (!optIndex || *optIndex >= _selectionModel->get_n_items())
+    {
+      return;
+    }
+
+    auto const pos = static_cast<guint>(*optIndex);
+    _columnView.scroll_to(pos, nullptr, Gtk::ListScrollFlags::NONE, {});
+  }
+
+  void TrackSelectionController::setPlayingTrackId(std::optional<TrackId> optTrackId)
   {
     auto const model = _selectionModel->get_model();
 
@@ -314,11 +297,11 @@ namespace ao::gtk
       return;
     }
 
-    if (_playingTrackId)
+    if (_optPlayingTrackId)
     {
-      if (auto const optIdx = _adapter.indexOf(*_playingTrackId); optIdx && *optIdx < model->get_n_items())
+      if (auto const optIdx = _adapter.indexOf(*_optPlayingTrackId); optIdx && *optIdx < model->get_n_items())
       {
-        auto const item = model->get_object(static_cast<guint>(*optIdx));
+        auto const item = model->get_object(static_cast<::guint>(*optIdx));
 
         if (auto const row = std::dynamic_pointer_cast<TrackRowObject>(item))
         {
@@ -327,13 +310,13 @@ namespace ao::gtk
       }
     }
 
-    _playingTrackId = trackId;
+    _optPlayingTrackId = optTrackId;
 
-    if (trackId)
+    if (optTrackId)
     {
-      if (auto const optIdx = _adapter.indexOf(*trackId); optIdx && *optIdx < model->get_n_items())
+      if (auto const optIdx = _adapter.indexOf(*optTrackId); optIdx && *optIdx < model->get_n_items())
       {
-        auto const item = model->get_object(static_cast<guint>(*optIdx));
+        auto const item = model->get_object(static_cast<::guint>(*optIdx));
 
         if (auto const row = std::dynamic_pointer_cast<TrackRowObject>(item))
         {
@@ -343,23 +326,16 @@ namespace ao::gtk
     }
   }
 
-  std::vector<TrackId> TrackSelectionController::getVisibleTrackIds() const
+  std::vector<TrackId> TrackSelectionController::getVisibleTrackIds() const noexcept
   {
-    auto result = std::vector<TrackId>{};
     auto* const proj = _adapter.projection();
 
     if (proj == nullptr)
     {
-      return result;
+      return {};
     }
 
-    result.reserve(proj->size());
-
-    for (std::size_t i = 0; i < proj->size(); ++i)
-    {
-      result.push_back(proj->trackIdAt(i));
-    }
-
-    return result;
+    return std::views::iota(0UZ, proj->size()) | std::views::transform([proj](auto i) { return proj->trackIdAt(i); }) |
+           std::ranges::to<std::vector>();
   }
 } // namespace ao::gtk

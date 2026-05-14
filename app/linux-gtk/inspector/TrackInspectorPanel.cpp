@@ -15,6 +15,7 @@
 #include <giomm/memoryinputstream.h>
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <set>
 
@@ -313,7 +314,7 @@ namespace ao::gtk
   {
     _detailProjection = std::move(projection);
     _detailSub =
-      _detailProjection->subscribe([this](rt::TrackDetailSnapshot const& snap) { onTrackDetailSnapshot(snap); });
+      _detailProjection->subscribe(std::bind_front(&TrackInspectorPanel::onTrackDetailSnapshot, this));
   }
 
   void TrackInspectorPanel::onTrackDetailSnapshot(rt::TrackDetailSnapshot const& snap)

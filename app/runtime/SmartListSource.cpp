@@ -65,24 +65,24 @@ namespace ao::rt
 
   void SmartListSource::stageExpression(std::string expr)
   {
-    _stagedExpression = std::move(expr);
+    _staged.expression = std::move(expr);
 
     try
     {
-      auto parsed = _stagedExpression.empty() ? query::parse("true") : query::parse(_stagedExpression);
+      auto parsed = _staged.expression.empty() ? query::parse("true") : query::parse(_staged.expression);
       auto compiler = query::QueryCompiler{&_ml.dictionary()};
 
-      _stagedPlan = std::make_unique<query::ExecutionPlan>(compiler.compile(parsed));
-      _stagedHasError = false;
-      _stagedErrorMessage.clear();
+      _staged.plan = std::make_unique<query::ExecutionPlan>(compiler.compile(parsed));
+      _staged.hasError = false;
+      _staged.errorMessage.clear();
     }
     catch (std::exception const& e)
     {
-      APP_LOG_ERROR("Smart list expression error for '{}': {}", _stagedExpression, e.what());
+      APP_LOG_ERROR("Smart list expression error for '{}': {}", _staged.expression, e.what());
 
-      _stagedHasError = true;
-      _stagedErrorMessage = e.what();
-      _stagedPlan.reset();
+      _staged.hasError = true;
+      _staged.errorMessage = e.what();
+      _staged.plan.reset();
     }
 
     _dirty = true;
@@ -95,10 +95,7 @@ namespace ao::rt
       return;
     }
 
-    _expression = std::move(_stagedExpression);
-    _hasError = _stagedHasError;
-    _errorMessage = std::move(_stagedErrorMessage);
-    _plan = std::move(_stagedPlan);
+    _current = std::move(_staged);
     _dirty = false;
   }
 }

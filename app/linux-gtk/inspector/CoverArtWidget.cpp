@@ -6,6 +6,8 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/utility/Log.h>
+
+#include <functional>
 #include <runtime/AppSession.h>
 
 namespace ao::gtk
@@ -22,7 +24,7 @@ namespace ao::gtk
   void CoverArtWidget::bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection)
   {
     _detailProjection = std::move(projection);
-    _detailSub = _detailProjection->subscribe([this](rt::TrackDetailSnapshot const& snap) { onDetailSnapshot(snap); });
+    _detailSub = _detailProjection->subscribe(std::bind_front(&CoverArtWidget::onDetailSnapshot, this));
   }
 
   void CoverArtWidget::onDetailSnapshot(rt::TrackDetailSnapshot const& snap)

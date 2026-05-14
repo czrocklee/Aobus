@@ -9,6 +9,8 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/utility/Log.h>
+ 
+#include <functional>
 #include <runtime/AllTracksSource.h>
 #include <runtime/AppSession.h>
 #include <runtime/ManualListSource.h>
@@ -19,6 +21,7 @@
 #include <runtime/WorkspaceService.h>
 
 #include <format>
+#include <functional>
 #include <limits>
 
 namespace ao::gtk
@@ -34,22 +37,24 @@ namespace ao::gtk
     {
       return ListId{0};
     }
-  }
+  } // namespace
 
   TrackPageManager::TrackPageManager(Gtk::Stack& stack,
                                      TrackColumnLayoutModel& layoutModel,
                                      rt::AppSession& session,
                                      PlaybackSequenceController* sequenceController,
                                      TagEditController& tagEditController,
-                                     ListSidebarController& listSidebar)
+                                     ListSidebarController& listSidebar,
+                                     TrackPresentationStore& presentationStore)
     : _stack{stack}
     , _layoutModel{layoutModel}
     , _session{session}
     , _playbackSequenceController{sequenceController}
     , _tagEditController{tagEditController}
     , _listSidebar{listSidebar}
+    , _presentationStore{presentationStore}
   {
-    _revealSub = _session.playback().onRevealTrackRequested([this](auto const& ev) { handleRevealTrack(ev); });
+    _revealSub = _session.playback().onRevealTrackRequested(std::bind_front(&TrackPageManager::handleRevealTrack, this));
 
     _nowPlayingSub = _session.playback().onNowPlayingChanged(
       [this](auto const& ev) { setPlayingTrack(ev.trackId != TrackId{} ? std::optional{ev.trackId} : std::nullopt); });
@@ -72,7 +77,7 @@ namespace ao::gtk
 
         if (_optPlayingTrackId)
         {
-          ctx->page->selectionController().setPlayingTrackId(_optPlayingTrackId);
+          ctx->page->setPlayingTrackId(_optPlayingTrackId);
         }
       });
   }
@@ -240,20 +245,20 @@ namespace ao::gtk
     return nullptr;
   }
 
-  void TrackPageManager::setPlayingTrack(std::optional<TrackId> trackId)
+  void TrackPageManager::setPlayingTrack(std::optional<TrackId> optTrackId)
   {
-    if (_optPlayingTrackId == trackId)
+    if (_optPlayingTrackId == optTrackId)
     {
       return;
     }
 
-    _optPlayingTrackId = trackId;
+    _optPlayingTrackId = optTrackId;
 
     for (auto& [id, ctx] : _trackPages)
     {
       if (ctx.page)
       {
-        ctx.page->selectionController().setPlayingTrackId(trackId);
+        ctx.page->setPlayingTrackId(optTrackId);
       }
     }
   }
@@ -280,7 +285,8 @@ namespace ao::gtk
       std::make_unique<TrackListAdapter>(_session.sources().allTracks(), _session.musicLibrary(), dataProvider);
     adapter->bindProjection(proj);
 
-    auto trackPage = std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _session, viewId);
+    auto trackPage =
+      std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _presentationStore, _session, viewId);
     auto const pageId = std::format("view-{}", viewId.value());
 
     auto listName = std::string{"List"};
@@ -313,7 +319,7 @@ namespace ao::gtk
     auto* const page = ctx.page.get();
     auto const viewId = ctx.viewId;
 
-    page->selectionController().signalSelectionChanged().connect(
+    page->signalSelectionChanged().connect(
       [this, page, viewId]
       {
         auto const ids = page->selectionController().getSelectedTrackIds();
@@ -325,7 +331,7 @@ namespace ao::gtk
         }
       });
 
-    page->selectionController().signalContextMenuRequested().connect(
+    page->signalContextMenuRequested().connect(
       [this, page](double posX, double posY)
       {
         TrackSelectionContext sel{
@@ -333,7 +339,7 @@ namespace ao::gtk
         _tagEditController.showTrackContextMenu(*page, sel, posX, posY);
       });
 
-    page->selectionController().signalTagEditRequested().connect(
+    page->signalTagEditRequested().connect(
       [this, page](std::vector<TrackId> const& ids, Gtk::Widget* relativeTo)
       {
         if (!relativeTo)
@@ -345,7 +351,7 @@ namespace ao::gtk
         _tagEditController.showTagEditor(sel, *relativeTo);
       });
 
-    page->selectionController().signalTrackActivated().connect(
+    page->signalTrackActivated().connect(
       [this, page](TrackId id)
       {
         if (_playbackSequenceController)
@@ -370,9 +376,10 @@ namespace ao::gtk
     // Set initial playing track state
     if (_optPlayingTrackId)
     {
-      page->selectionController().setPlayingTrackId(_optPlayingTrackId);
+      page->setPlayingTrackId(_optPlayingTrackId);
     }
   }
+
   ListId TrackPageManager::activeListId() const
   {
     if (auto const* ctx = currentVisible())

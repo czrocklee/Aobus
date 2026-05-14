@@ -65,11 +65,11 @@ namespace ao::gtk
 
     void clearSinkStatusClasses(Gtk::Image& image)
     {
-      image.remove_css_class("sink-status-perfect");
-      image.remove_css_class("sink-status-lossless");
-      image.remove_css_class("sink-status-intervention");
-      image.remove_css_class("sink-status-lossy");
-      image.remove_css_class("sink-status-clipped");
+      for (auto const& cls :
+           {"sink-status-perfect", "sink-status-lossless", "sink-status-intervention", "sink-status-lossy", "sink-status-clipped"})
+      {
+        image.remove_css_class(cls);
+      }
     }
   }
 

@@ -53,6 +53,12 @@ Read these in order when implementing the feature:
    - integration/manual checks
    - regression risks
 
+7. [GTK ColumnView Lifecycle Plan](track-presentation/07-gtk-column-view-lifecycle-plan.md)
+   - why live column mutation is fragile
+   - short-term transition invariant
+   - long-term rebuild-and-swap architecture
+   - staged implementation plan and acceptance criteria
+
 ## Final Target
 
 ```text

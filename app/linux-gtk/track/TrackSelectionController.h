@@ -30,35 +30,36 @@ namespace ao::gtk
 
     void setupActivation();
 
-    std::vector<TrackId> getSelectedTrackIds() const;
-    std::vector<Glib::RefPtr<TrackRowObject>> getSelectedRows() const;
-    std::chrono::milliseconds getSelectedTracksDuration() const;
-    std::optional<TrackId> getPrimarySelectedTrackId() const;
-    std::size_t selectedTrackCount() const;
+    std::vector<TrackId> getSelectedTrackIds() const noexcept;
+    std::vector<Glib::RefPtr<TrackRowObject>> getSelectedRows() const noexcept;
+    std::chrono::milliseconds getSelectedTracksDuration() const noexcept;
+    std::optional<TrackId> getPrimarySelectedTrackId() const noexcept;
+    std::size_t selectedTrackCount() const noexcept;
 
     void selectTrack(TrackId trackId);
-    void setPlayingTrackId(std::optional<TrackId> trackId);
-    std::vector<TrackId> getVisibleTrackIds() const;
+    void scrollToTrack(TrackId trackId);
+    void setPlayingTrackId(std::optional<TrackId> optTrackId);
+    std::vector<TrackId> getVisibleTrackIds() const noexcept;
 
     // Exposed signals for TrackViewPage to wire to external handlers
-    SelectionChangedSignal& signalSelectionChanged() { return _selectionChanged; }
-    TrackActivatedSignal& signalTrackActivated() { return _trackActivated; }
-    ContextMenuRequestedSignal& signalContextMenuRequested() { return _contextMenuRequested; }
-    TagEditRequestedSignal& signalTagEditRequested() { return _tagEditRequested; }
+    SelectionChangedSignal& signalSelectionChanged() noexcept { return _selectionChanged; }
+    TrackActivatedSignal& signalTrackActivated() noexcept { return _trackActivated; }
+    ContextMenuRequestedSignal& signalContextMenuRequested() noexcept { return _contextMenuRequested; }
+    TagEditRequestedSignal& signalTagEditRequested() noexcept { return _tagEditRequested; }
 
   private:
     void onSelectionChanged(std::uint32_t position, std::uint32_t nItems);
     void onActivateCurrentSelection();
-    std::optional<TrackId> trackIdAtPosition(std::uint32_t position) const;
+    std::optional<TrackId> trackIdAtPosition(std::uint32_t position) const noexcept;
 
     Gtk::ColumnView& _columnView;
     TrackListAdapter& _adapter;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
 
-    std::optional<TrackId> _playingTrackId;
+    std::optional<TrackId> _optPlayingTrackId;
     bool _suppressNextTrackActivation = false;
 
-    sigc::connection _selectionChangedConnection;
+    sigc::scoped_connection _selectionChangedConnection;
 
     // Signals
     SelectionChangedSignal _selectionChanged;

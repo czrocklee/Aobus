@@ -38,6 +38,19 @@ namespace ao::gtk
 
     _panel = std::make_unique<ListSidebarPanel>(std::move(panelCallbacks));
     setupActions();
+
+    _focusSub = _session.workspace().onFocusedViewChanged(
+      [this](rt::ViewId viewId)
+      {
+        if (viewId != rt::ViewId{})
+        {
+          auto const state = _session.views().trackListState(viewId);
+          if (state.listId != ListId{})
+          {
+            select(state.listId);
+          }
+        }
+      });
   }
 
   ListSidebarController::~ListSidebarController() = default;

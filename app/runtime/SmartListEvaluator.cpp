@@ -195,7 +195,7 @@ namespace ao::rt
     {
       if (!list._dirty)
       {
-        list.stageExpression(list._expression);
+        list.stageExpression(list._current.expression);
       }
 
       evaluateDirtyLists(*it->second);
@@ -257,7 +257,7 @@ namespace ao::rt
 
     for (auto* const list : lists)
     {
-      if (list->_hasError || !list->_plan)
+      if (list->_current.hasError || !list->_current.plan)
       {
         list->_members.clear();
       }
@@ -307,7 +307,7 @@ namespace ao::rt
 
       for (std::size_t i = 0; i < lists.size(); ++i)
       {
-        if (lists[i]->_planEvaluator.matches(*lists[i]->_plan, *optView))
+        if (lists[i]->_planEvaluator.matches(*lists[i]->_current.plan, *optView))
         {
           nextMembers[i].push_back(id);
         }
@@ -333,7 +333,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_hasError || !list->_plan || list->_dirty)
+      if (list->_current.hasError || !list->_current.plan || list->_dirty)
       {
         continue;
       }
@@ -358,7 +358,7 @@ namespace ao::rt
 
     for (auto* const list : evaluatableLists)
     {
-      if (list->_planEvaluator.matches(*list->_plan, *optView))
+      if (list->_planEvaluator.matches(*list->_current.plan, *optView))
       {
         auto [it, inserted] = list->_members.insert(id);
 
@@ -377,7 +377,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_hasError || !list->_plan || list->_dirty)
+      if (list->_current.hasError || !list->_current.plan || list->_dirty)
       {
         continue;
       }
@@ -397,7 +397,7 @@ namespace ao::rt
 
     for (auto* const list : evaluatableLists)
     {
-      bool const nowMatches = optView && list->_planEvaluator.matches(*list->_plan, *optView);
+      bool const nowMatches = optView && list->_planEvaluator.matches(*list->_current.plan, *optView);
       auto const it = list->_members.find(id);
       bool const wasPresent = it != list->_members.end();
 
@@ -452,7 +452,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_hasError || !list->_plan || list->_dirty)
+      if (list->_current.hasError || !list->_current.plan || list->_dirty)
       {
         continue;
       }
@@ -482,7 +482,7 @@ namespace ao::rt
 
       for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
       {
-        if (evaluatableLists[i]->_planEvaluator.matches(*evaluatableLists[i]->_plan, *optView))
+        if (evaluatableLists[i]->_planEvaluator.matches(*evaluatableLists[i]->_current.plan, *optView))
         {
           matchedIds[i].push_back(id);
         }
@@ -515,7 +515,7 @@ namespace ao::rt
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_hasError || !list->_plan || list->_dirty)
+      if (list->_current.hasError || !list->_current.plan || list->_dirty)
       {
         continue;
       }
@@ -549,7 +549,7 @@ namespace ao::rt
       for (std::size_t i = 0; i < evaluatableLists.size(); ++i)
       {
         auto& list = *evaluatableLists[i];
-        bool const nowMatches = optView && list._planEvaluator.matches(*list._plan, *optView);
+        bool const nowMatches = optView && list._planEvaluator.matches(*list._current.plan, *optView);
         bool const wasPresent = list._members.contains(id);
 
         if (nowMatches && !wasPresent)
@@ -657,12 +657,12 @@ namespace ao::rt
 
     for (auto* const list : lists)
     {
-      if (!list->_plan)
+      if (!list->_current.plan)
       {
         continue;
       }
 
-      switch (list->_plan->accessProfile)
+      switch (list->_current.plan->accessProfile)
       {
         case query::AccessProfile::HotOnly: needsHot = true; break;
         case query::AccessProfile::ColdOnly: needsCold = true; break;

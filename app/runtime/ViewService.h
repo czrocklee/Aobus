@@ -6,6 +6,7 @@
 #include "CorePrimitives.h"
 #include "ProjectionTypes.h"
 #include "StateTypes.h"
+#include "TrackPresentationPreset.h"
 
 #include <memory>
 #include <vector>
@@ -54,6 +55,12 @@ namespace ao::rt
       ListId listId{};
     };
 
+    struct PresentationChanged final
+    {
+      ViewId viewId{};
+      TrackPresentationSpec presentation{};
+    };
+
     ViewService(IControlExecutor& executor, library::MusicLibrary& library, ListSourceStore& sources);
     ~ViewService();
 
@@ -67,6 +74,8 @@ namespace ao::rt
     void setFilter(ViewId viewId, std::string const& filterExpression);
     void setSort(ViewId viewId, std::vector<TrackSortTerm> const& sortBy);
     void setGrouping(ViewId viewId, TrackGroupKey groupBy);
+    void setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
+    TrackPresentationSpec setPresentation(ViewId viewId, std::string_view presentationId);
     void setSelection(ViewId viewId, std::vector<TrackId> const& selection);
     void openListInView(ViewId viewId, ListId listId);
 
@@ -76,6 +85,7 @@ namespace ao::rt
     Subscription onFilterStatusChanged(std::move_only_function<void(FilterStatusChanged const&)> handler);
     Subscription onSortChanged(std::move_only_function<void(SortChanged const&)> handler);
     Subscription onGroupingChanged(std::move_only_function<void(GroupingChanged const&)> handler);
+    Subscription onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler);
     Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler);
     Subscription onListChanged(std::move_only_function<void(ListChanged const&)> handler);
 
@@ -91,4 +101,4 @@ namespace ao::rt
     struct Impl;
     std::unique_ptr<Impl> _impl;
   };
-}
+} // namespace ao::rt

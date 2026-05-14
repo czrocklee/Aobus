@@ -7,6 +7,8 @@
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
 #include <runtime/AppSession.h>
+ 
+#include <format>
 
 namespace ao::gtk
 {
@@ -59,24 +61,11 @@ namespace ao::gtk
     for (guint index = 0; index < itemCount; ++index)
     {
       auto item = _treeListModel->get_object(index);
-      if (!item)
-      {
-        continue;
-      }
-
       auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(item);
-      if (!treeListRow)
-      {
-        continue;
-      }
+      if (!treeListRow) continue;
 
       auto node = std::dynamic_pointer_cast<ListTreeItem>(treeListRow->get_item());
-      if (!node)
-      {
-        continue;
-      }
-
-      if (node->getListId() == listId)
+      if (node && node->getListId() == listId)
       {
         _listSelectionModel->set_selected(index);
         break;
@@ -231,7 +220,7 @@ namespace ao::gtk
     auto const filter = row->getFilter();
     if (!filter.empty())
     {
-      filterLabel->set_text("[" + filter + "]");
+      filterLabel->set_text(std::format("[{}]", filter));
       filterLabel->set_visible(true);
     }
     else

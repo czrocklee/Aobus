@@ -14,11 +14,15 @@ add_library(aobus-gtk-lib STATIC
     track/TrackPageManager.cpp
     track/TrackViewPage.cpp
     track/TrackColumnController.cpp
+    track/TrackColumnViewHost.cpp
+    track/ColumnVisibilityModel.cpp
     track/TrackFilterController.cpp
     track/TrackSelectionController.cpp
     track/TrackListAdapter.cpp
     track/TrackListModel.cpp
     track/TrackPresentation.cpp
+    track/TrackPresentationStore.cpp
+    track/TrackCustomViewDialog.cpp
     track/TrackRowObject.cpp
     track/TrackRowCache.cpp
     track/TrackColumnFactoryBuilder.cpp
