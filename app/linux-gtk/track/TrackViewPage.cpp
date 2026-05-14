@@ -23,7 +23,7 @@
 #include <gtk/gtk.h>
 #include <gtkmm/button.h>
 #include <gtkmm/cssprovider.h>
- 
+
 #include <functional>
 #include <gtkmm/label.h>
 #include <gtkmm/listheader.h>
@@ -140,14 +140,15 @@ namespace ao::gtk
     setupHeaderFactory();
 
     // 1. Configure columns and layout first (Off-tree)
-    _viewHost->setupColumns([this](TrackColumnDefinition const& def)
-                            { return buildColumnFactory(def, std::bind_front(&TrackViewPage::commitMetadataChange, this)); });
- 
+    _viewHost->setupColumns(
+      [this](TrackColumnDefinition const& def)
+      { return buildColumnFactory(def, std::bind_front(&TrackViewPage::commitMetadataChange, this)); });
+
     _viewHost->columnController().syncLayout();
 
     // 2. Configure decorators and styles
     updateSectionHeaders();
- 
+
     setupColumnViewStyles(_viewHost->columnView());
 
     _contextPopover.set_has_arrow(false);
@@ -487,7 +488,7 @@ namespace ao::gtk
 
     // 3. Configure structural properties before attaching model (Safe)
     setupColumnViewStyles(newView);
- 
+
     _viewHost->columnController().setLayoutAndApply(layout);
     _viewHost->columnController().updateTitlePositionVariable();
 

@@ -41,6 +41,7 @@ namespace ao::rt
       }
 
       auto result = AggregateValue<T>{.optValue = values.front()};
+
       for (std::size_t i = 1; i < values.size(); ++i)
       {
         if (values[i] != *result.optValue)
@@ -144,6 +145,7 @@ namespace ao::rt
         }
 
         bool intersect = false;
+
         for (auto const id : trackIds)
         {
           if (std::ranges::find(_impl->cachedSnapshot.trackIds, id) != _impl->cachedSnapshot.trackIds.end())
@@ -181,6 +183,7 @@ namespace ao::rt
   void TrackDetailProjection::publishSnapshot()
   {
     _impl->cachedSnapshot.revision = ++_impl->revision;
+
     for (auto& sub : _impl->subscribers)
     {
       if (sub)
@@ -242,6 +245,7 @@ namespace ao::rt
       if (ids.size() == 1)
       {
         snap.singleCoverArtId = ResourceId{optView->metadata().coverArtId()};
+
         for (auto const tagId : optView->tags())
         {
           snap.commonTagIds.push_back(tagId);

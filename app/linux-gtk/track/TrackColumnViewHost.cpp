@@ -8,7 +8,7 @@ namespace ao::gtk
 {
   TrackColumnViewHost::TrackColumnViewHost(TrackListAdapter& adapter,
                                            TrackColumnLayoutModel& columnLayoutModel,
-                                           Glib::RefPtr<Gtk::MultiSelection> selectionModel)
+                                           Glib::RefPtr<Gtk::MultiSelection> const& selectionModel)
     : _columnView{std::make_unique<Gtk::ColumnView>()}
     , _columnController{std::make_unique<TrackColumnController>(*_columnView, columnLayoutModel)}
     , _selectionController{std::make_unique<TrackSelectionController>(*_columnView, adapter, selectionModel)}
@@ -35,10 +35,10 @@ namespace ao::gtk
 
   void TrackColumnViewHost::connectSelectionSignals()
   {
-    _selectionChangedConn = _selectionController->signalSelectionChanged().connect(
-      [this] { _selectionChangedSignal.emit(); });
-    _trackActivatedConn = _selectionController->signalTrackActivated().connect(
-      [this](TrackId id) { _trackActivatedSignal.emit(id); });
+    _selectionChangedConn =
+      _selectionController->signalSelectionChanged().connect([this] { _selectionChangedSignal.emit(); });
+    _trackActivatedConn =
+      _selectionController->signalTrackActivated().connect([this](TrackId id) { _trackActivatedSignal.emit(id); });
     _contextMenuRequestedConn = _selectionController->signalContextMenuRequested().connect(
       [this](double x, double y) { _contextMenuRequestedSignal.emit(x, y); });
     _tagEditRequestedConn = _selectionController->signalTagEditRequested().connect(
@@ -47,7 +47,7 @@ namespace ao::gtk
 
   Gtk::ColumnView& TrackColumnViewHost::rebuild(TrackListAdapter& adapter,
                                                 TrackColumnLayoutModel& columnLayoutModel,
-                                                Glib::RefPtr<Gtk::MultiSelection> selectionModel,
+                                                Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                                                 FactoryProvider const& factoryProvider)
   {
     auto newView = std::make_unique<Gtk::ColumnView>();

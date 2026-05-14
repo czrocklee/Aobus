@@ -14,7 +14,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
- 
+
 #include <format>
 
 namespace ao::gtk::layout::editor
@@ -556,6 +556,7 @@ namespace ao::gtk::layout::editor
           [this, node, entry]() -> bool
           {
             auto const newId = std::string{entry->get_text().raw()};
+
             if (node->id == newId)
             {
               return false;

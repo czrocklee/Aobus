@@ -21,6 +21,7 @@ namespace ao::audio::backend::detail
     auto caps = DeviceCapabilities{};
 
     ::snd_pcm_t* rawPcm = nullptr;
+
     if (::snd_pcm_open(&rawPcm, deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK) < 0)
     {
       return caps;
@@ -30,6 +31,7 @@ namespace ao::audio::backend::detail
 
     ::snd_pcm_hw_params_t* params = nullptr;
     snd_pcm_hw_params_alloca(&params);
+
     if (::snd_pcm_hw_params_any(pcm.get(), params) < 0)
     {
       return caps;
@@ -88,12 +90,14 @@ namespace ao::audio::backend::detail
     while (::snd_card_next(&card) == 0 && card >= 0)
     {
       char* cardName = nullptr;
+
       if (::snd_card_get_name(card, &cardName) == 0)
       {
         auto const safeCardName = std::unique_ptr<char, void (*)(void*)>(cardName, ::free);
         auto const cardId = std::format("hw:{}", card);
 
         ::snd_ctl_t* rawCtl = nullptr;
+
         if (::snd_ctl_open(&rawCtl, cardId.c_str(), 0) >= 0)
         {
           auto ctl = utility::makeUniquePtr<::snd_ctl_close>(rawCtl);

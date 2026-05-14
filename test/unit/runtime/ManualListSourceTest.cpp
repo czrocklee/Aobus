@@ -1130,7 +1130,7 @@ namespace ao::rt::test
       REQUIRE(outer.size() == 1);
       CHECK(outer.trackIdAt(0) == TrackId{3});
 
-      REQUIRE(outerSpy.events.size() >= 1);
+      REQUIRE(!outerSpy.events.empty());
       CHECK(outerSpy.events.back().kind == ObserverSpy::EventKind::Reset);
 
       outer.detach(&outerSpy);

@@ -48,6 +48,7 @@ namespace ao::audio::backend
     Impl()
     {
       cachedDevices = doAlsaEnumerate();
+
       if (cachedDevices.empty())
       {
         AUDIO_LOG_WARN("ALSA device enumeration returned no devices - ALSA may not be available");
@@ -64,12 +65,14 @@ namespace ao::audio::backend
     void monitorLoop(std::stop_token const& stopToken)
     {
       auto udev = utility::makeUniquePtr<::udev_unref>(::udev_new());
+
       if (!udev)
       {
         return;
       }
 
       auto monitor = utility::makeUniquePtr<::udev_monitor_unref>(::udev_monitor_new_from_netlink(udev.get(), "udev"));
+
       if (!monitor)
       {
         return;
@@ -84,10 +87,12 @@ namespace ao::audio::backend
         auto fds = std::array<struct pollfd, 1>{};
         fds[0].fd = fd;
         fds[0].events = POLLIN;
+
         if (::poll(fds.data(), static_cast<nfds_t>(fds.size()), kUdevPollTimeoutMs) > 0 &&
             (fds[0].revents & POLLIN) != 0)
         {
           auto dev = utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitor.get()));
+
           if (dev)
           {
             auto newDevices = doAlsaEnumerate();
@@ -137,6 +142,7 @@ namespace ao::audio::backend
                         {
                           std::lock_guard lock(_impl->mutex);
                           auto const it = std::ranges::find(_impl->deviceSubs, id, &Impl::DeviceSub::id);
+
                           if (it != _impl->deviceSubs.end())
                           {
                             _impl->deviceSubs.erase(it);

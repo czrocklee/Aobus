@@ -86,6 +86,7 @@ namespace ao::audio
     // Update individual provider cache
     auto const it =
       std::ranges::find_if(providers, [&](auto const& record) { return record->provider.get() == provider; });
+
     if (it != providers.end())
     {
       (*it)->devices = devices;
@@ -159,6 +160,7 @@ namespace ao::audio
 
     cachedSystemGraph = graph;
     updateMergedGraph();
+
     if (onQualityChanged)
     {
       auto const playerStatus = owner->status();
@@ -469,6 +471,7 @@ namespace ao::audio
     }
 
     _impl->updateMergedGraph();
+
     if (_impl->onQualityChanged)
     {
       auto const playerStatus = this->status();

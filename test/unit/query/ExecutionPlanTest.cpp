@@ -51,6 +51,7 @@ namespace ao::query::test
     CHECK(plan.instructions[0].op == OpCode::LoadField);
 
     bool hasEq = false;
+
     for (auto const& instr : plan.instructions)
     {
       if (instr.op == OpCode::Eq)
@@ -73,6 +74,7 @@ namespace ao::query::test
     CHECK(plan.instructions[0].op == OpCode::LoadField);
 
     bool hasGt = false;
+
     for (auto const& instr : plan.instructions)
     {
       if (instr.op == OpCode::Gt)
@@ -159,6 +161,7 @@ namespace ao::query::test
     auto plan = compiler.compile(expr);
 
     bool hasAnd = false;
+
     for (auto const& instr : plan.instructions)
     {
       if (instr.op == OpCode::And)
@@ -179,6 +182,7 @@ namespace ao::query::test
     auto plan = compiler.compile(expr);
 
     bool hasOr = false;
+
     for (auto const& instr : plan.instructions)
     {
       if (instr.op == OpCode::Or)
@@ -198,6 +202,7 @@ namespace ao::query::test
     auto plan = compiler.compile(expr);
 
     bool hasNot = false;
+
     for (auto const& instr : plan.instructions)
     {
       if (instr.op == OpCode::Not)
@@ -217,6 +222,7 @@ namespace ao::query::test
     auto plan = compiler.compile(expr);
 
     bool hasLt = false;
+
     for (auto const& instr : plan.instructions)
     {
       if (instr.op == OpCode::Lt)
@@ -233,6 +239,7 @@ namespace ao::query::test
     plan = compiler.compile(expr);
 
     bool hasLe = false;
+
     for (auto const& instr : plan.instructions)
     {
       if (instr.op == OpCode::Le)
@@ -252,6 +259,7 @@ namespace ao::query::test
     auto plan = compiler.compile(expr);
 
     bool hasLike = false;
+
     for (auto const& instr : plan.instructions)
     {
       if (instr.op == OpCode::Like)
@@ -577,12 +585,14 @@ namespace ao::query::test
 
     // Verify that the instruction uses this ID
     bool foundTagEq = false;
+
     for (auto const& instr : plan.instructions)
     {
       if (instr.op == OpCode::Eq)
       {
         // The register before Eq should contain the constant we loaded
         auto const& loadInstr = plan.instructions[&instr - plan.instructions.data() - 1];
+
         if (loadInstr.op == OpCode::LoadConstant)
         {
           CHECK(loadInstr.constValue == static_cast<std::int64_t>(futureTagId.value()));
@@ -617,6 +627,7 @@ namespace ao::query::test
 
     // Verify that the instruction uses this ID
     bool foundLoadField = false;
+
     for (auto const& instr : plan.instructions)
     {
       if (instr.op == OpCode::LoadField && instr.field == static_cast<std::uint8_t>(Field::Custom))
@@ -727,9 +738,11 @@ namespace ao::query::test
                      "@bitDepth",
                      "@rating",
                      "@codecId"};
+
       for (auto const* f : fields)
       {
         auto expr = parse(f);
+
         if (f[0] != '#' && std::string(f) != "true" && std::string(f) != "false")
         {
           expr = parse(std::string(f) + " = 0");
@@ -753,6 +766,7 @@ namespace ao::query::test
                      "@bitrate",
                      "@sampleRate",
                      "@channels"};
+
       for (auto const* f : fields)
       {
         auto expr = parse(std::string(f) + " >= 0");
@@ -812,6 +826,7 @@ namespace ao::query::test
         std::int64_t expected;
       };
       auto cases = {Case{"1ms", 1}, Case{"1s", 1000}, Case{"1m", 60000}, Case{"1h", 3600000}};
+
       for (auto const& c : cases)
       {
         auto expr = parse("@duration >= " + c.unit);

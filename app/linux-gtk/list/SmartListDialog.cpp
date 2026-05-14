@@ -30,12 +30,12 @@ namespace ao::gtk
       {
         return std::string{local};
       }
-      
-      if (local.empty()) 
-      { 
+
+      if (local.empty())
+      {
         return std::string{parent};
       }
-      
+
       return std::format("({}) and ({})", parent, local);
     }
 
@@ -255,13 +255,25 @@ namespace ao::gtk
           if (!title.empty())
           {
             formatted = title;
-            if (!artist.empty()) formatted = std::format("{} - {}", formatted, artist);
-            if (!album.empty()) formatted = std::format("{} ({})", formatted, album);
+
+            if (!artist.empty())
+            {
+              formatted = std::format("{} - {}", formatted, artist);
+            }
+
+            if (!album.empty())
+            {
+              formatted = std::format("{} ({})", formatted, album);
+            }
           }
           else if (!artist.empty())
           {
             formatted = artist;
-            if (!album.empty()) formatted = std::format("{} ({})", formatted, album);
+
+            if (!album.empty())
+            {
+              formatted = std::format("{} ({})", formatted, album);
+            }
           }
 
           label->set_text(formatted);
@@ -318,6 +330,7 @@ namespace ao::gtk
     {
       auto readTxn = _session.musicLibrary().readTransaction();
       auto reader = _session.musicLibrary().lists().reader(readTxn);
+
       if (auto listView = reader.get(_parentListId); listView)
       {
         inheritedExpr = listView->filter();

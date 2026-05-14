@@ -63,6 +63,7 @@ namespace ao::gtk
     }
 
     auto const it = std::ranges::find(_state.customPresentations, id, &CustomTrackPresentationState::id);
+
     if (it != _state.customPresentations.end())
     {
       return specFromState(*it);

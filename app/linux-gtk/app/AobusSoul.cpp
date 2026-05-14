@@ -154,6 +154,7 @@ namespace ao::gtk
   Gdk::RGBA AobusSoul::shiftColor(Gdk::RGBA const& color, float shift) noexcept
   {
     static constexpr float kMinShift = 0.01F;
+
     if (std::abs(shift) < kMinShift)
     {
       return color;
@@ -196,6 +197,7 @@ namespace ao::gtk
 
     static constexpr float kDegreesFullCircle = 360.0F;
     hue = std::fmod(hue + (shift / kDegreesFullCircle), 1.0F);
+
     if (hue < 0.0F)
     {
       hue += 1.0F;
@@ -255,6 +257,7 @@ namespace ao::gtk
   {
     auto const width = static_cast<float>(get_width());
     auto const height = static_cast<float>(get_height());
+
     if (width <= 0.0F || height <= 0.0F)
     {
       return;
@@ -326,6 +329,7 @@ namespace ao::gtk
     snapshot->scale(height, height);
 
     static constexpr float kOpacityThreshold = 0.999F;
+
     if (currentOpacity < kOpacityThreshold)
     {
       ::gtk_snapshot_push_opacity(snapshot->gobj(), currentOpacity);
@@ -335,6 +339,7 @@ namespace ao::gtk
 
     // Calculate Aura Flow (Hue Shift)
     float hueShift = 0.0F;
+
     if (!_isStopped)
     {
       float const huePhase =

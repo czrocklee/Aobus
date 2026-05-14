@@ -29,6 +29,7 @@ namespace ao::gtk
   void ShellLayoutController::loadLayout(rt::ConfigStore& configStore)
   {
     auto doc = layout::createDefaultLayout();
+
     if (auto const res = configStore.load("linuxGtkLayout", doc); !res && res.error().code != Error::Code::NotFound)
     {
       APP_LOG_DEBUG("Failed to load layout from config: {}", res.error().message);

@@ -285,6 +285,7 @@ namespace ao::rt
                                            library::TrackStore::Reader::LoadMode const mode)
   {
     auto const timer = utility::ScopedTimer{"SmartListEvaluator::evaluateMembers"};
+
     if (lists.empty())
     {
       return;

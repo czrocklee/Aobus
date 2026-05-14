@@ -120,6 +120,7 @@ namespace ao::audio::backend
       }
 
       context.reset(::pw_context_new(::pw_thread_loop_get_loop(threadLoop.get()), nullptr, 0));
+
       if (!context)
       {
         return;
@@ -595,6 +596,7 @@ namespace ao::audio::backend
                         {
                           auto const lock = std::lock_guard{mutex};
                           auto const it = std::ranges::find(deviceSubscriptions, id, &DeviceSubscription::id);
+
                           if (it != deviceSubscriptions.end())
                           {
                             deviceSubscriptions.erase(it);
@@ -618,6 +620,7 @@ namespace ao::audio::backend
                           {
                             auto const lock = std::lock_guard{mutex};
                             auto const it = std::ranges::find(graphSubscriptions, id, &GraphSubscription::id);
+
                             if (it != graphSubscriptions.end())
                             {
                               graphSubscriptions.erase(it);
@@ -631,12 +634,14 @@ namespace ao::audio::backend
   std::vector<Device> PipeWireMonitor::Impl::enumerateSinks() const
   {
     auto devices = std::vector<Device>{};
+
     for (auto const& [id, node] : nodes)
     {
       if (isSinkMediaClass(node.mediaClass))
       {
         auto const deviceId = node.optObjectSerial ? std::format("{}", *node.optObjectSerial) : std::format("{}", id);
         auto displayName = node.nodeNick;
+
         if (displayName.empty())
         {
           displayName = node.nodeName.empty() ? node.objectPath : node.nodeName;
@@ -700,6 +705,7 @@ namespace ao::audio::backend
       for (auto const& sub : graphSubscriptions)
       {
         auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
+
         if (parsedId && *parsedId != PW_ID_ANY && sub.callback)
         {
           auto graph = flow::Graph{};
@@ -711,6 +717,7 @@ namespace ao::audio::backend
       if (!deviceSubscriptions.empty())
       {
         deviceSnapshot = enumerateSinks();
+
         for (auto const& sub : deviceSubscriptions)
         {
           if (sub.callback)
@@ -761,6 +768,7 @@ namespace ao::audio::backend
       }
 
       auto const it = nodes.find(streamId);
+
       if (!registry || it == nodes.end())
       {
         continue;
@@ -875,6 +883,7 @@ namespace ao::audio::backend
                                                        std::unordered_set<std::uint32_t> const& reachableSet) const
   {
     auto const it = nodes.find(id);
+
     if (it == nodes.end())
     {
       if (id == streamId)

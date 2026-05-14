@@ -41,6 +41,7 @@ namespace ao::gtk
       auto takeColumn = [&layout](TrackColumn column) -> std::optional<TrackColumnState>
       {
         auto const it = std::ranges::find(layout.columns, column, &TrackColumnState::column);
+
         if (it == layout.columns.end())
         {
           return std::nullopt;
@@ -56,6 +57,7 @@ namespace ao::gtk
           {
             continue;
           }
+
           if (auto stateEntry = takeColumn(*column))
           {
             ordered.push_back(*stateEntry);
@@ -76,10 +78,12 @@ namespace ao::gtk
       for (auto& entry : layout.columns)
       {
         auto const columnId = std::string{trackColumnId(entry.column)};
+
         if (std::ranges::contains(state.hiddenColumns, columnId))
         {
           entry.visible = false;
         }
+
         if (auto const width = state.columnWidths.find(columnId); width != state.columnWidths.end())
         {
           entry.width = width->second;
@@ -98,10 +102,12 @@ namespace ao::gtk
       {
         auto const columnId = std::string{trackColumnId(entry.column)};
         state.columnOrder.push_back(columnId);
+
         if (!entry.visible)
         {
           state.hiddenColumns.push_back(columnId);
         }
+
         if (auto const def = std::ranges::find(trackColumnDefinitions(), entry.column, &TrackColumnDefinition::column);
             def != trackColumnDefinitions().end() && entry.width != def->defaultWidth)
         {
@@ -206,6 +212,7 @@ namespace ao::gtk
         {
           return;
         }
+
         for (auto const trackId : trackIds)
         {
           _trackRowCache->invalidate(trackId);

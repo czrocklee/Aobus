@@ -35,6 +35,7 @@ namespace ao::gtk
                               {
                                 std::filesystem::path path(folder->get_path());
                                 auto libPath = path / "data.mdb";
+
                                 if (std::filesystem::exists(libPath))
                                 {
                                   openMusicLibrary(path);
@@ -135,6 +136,7 @@ namespace ao::gtk
         {
           auto ext = entry.path().extension().string();
           std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return std::tolower(ch); });
+
           if (ext == ".flac" || ext == ".m4a" || ext == ".mp3" || ext == ".wav")
           {
             files.push_back(entry.path());

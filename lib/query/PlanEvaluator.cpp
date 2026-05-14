@@ -45,6 +45,7 @@ namespace ao::query
     Instruction const* findPrevLoadField(std::vector<Instruction> const& instructions, Instruction const* current)
     {
       auto const it = std::ranges::find(instructions, current, [](auto const& instr) { return &instr; });
+
       if (it == instructions.end())
       {
         return nullptr;
@@ -96,6 +97,7 @@ namespace ao::query
       }
 
       auto const idx = static_cast<size_t>(stringIdx);
+
       if (idx >= plan->stringConstants.size())
       {
         return {};
@@ -242,6 +244,7 @@ namespace ao::query
                    std::vector<Instruction> const& instructions)
     {
       auto const* prevLoadField = findPrevLoadField(instructions, &instr);
+
       if (bool isTagComparison = prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag;
           isTagComparison)
       {

@@ -48,7 +48,7 @@ namespace ao::rt
     TrackId trackIdAt(std::size_t index) const override;
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept override;
 
-    void setPresentation(TrackPresentationSpec presentation);
+    void setPresentation(TrackPresentationSpec const& presentation);
 
     Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) override;
 

@@ -212,6 +212,7 @@ namespace ao::audio
     {
       {
         auto const lock = std::lock_guard{stateMutex};
+
         if (id == PropertyId::Volume)
         {
           if (auto const vol = backend->get(props::Volume))
@@ -445,6 +446,7 @@ namespace ao::audio
     }
 
     auto const bufferedMs = source ? source->bufferedMs() : 0;
+
     if (auto const drained = !source || source->isDrained(); drained && bufferedMs == 0)
     {
       _impl->backend->stop();
@@ -469,6 +471,7 @@ namespace ao::audio
     bool shouldPause = false;
     {
       auto const lock = std::lock_guard{_impl->stateMutex};
+
       if (_impl->status.transport == Transport::Playing || _impl->status.transport == Transport::Buffering)
       {
         AUDIO_LOG_INFO("Playback paused");
@@ -530,6 +533,7 @@ namespace ao::audio
   {
     AUDIO_LOG_INFO("Seek requested: {} ms", positionMs);
     auto const source = _impl->source.load(std::memory_order_acquire);
+
     if (!source)
     {
       return;
@@ -561,6 +565,7 @@ namespace ao::audio
     }
 
     auto const bufferedMs = source->bufferedMs();
+
     if (auto const drained = source->isDrained(); drained && bufferedMs == 0)
     {
       _impl->backend->stop();

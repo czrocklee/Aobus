@@ -74,6 +74,7 @@ namespace ao::tag::mpeg
       // Handle ID3v2.4 footer (10 bytes if flag 0x10 is set)
       constexpr std::size_t kId3v2FooterSize = 10;
       constexpr std::uint8_t kId3v2FooterFlag = 0x10;
+
       if (id3v2Header->majorVersion >= 4 && (id3v2Header->flags & kId3v2FooterFlag) != 0)
       {
         id3v2TotalSize += kId3v2FooterSize;
