@@ -111,6 +111,7 @@ namespace ao::audio::test
 
       // Wait for async failure
       int retries = 0;
+
       while (errorCount.load() == 0 && retries < 100)
       {
         std::this_thread::sleep_for(10ms);

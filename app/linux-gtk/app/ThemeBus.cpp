@@ -9,7 +9,7 @@
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/settings.h>
 #include <gtkmm/stylecontext.h>
- 
+
 #include <filesystem>
 
 namespace ao::gtk
@@ -89,6 +89,7 @@ namespace ao::gtk
     void reloadUserCss(std::string const& cssPath, Glib::RefPtr<Gtk::CssProvider>& s_userCssProvider)
     {
       auto const display = Gdk::Display::get_default();
+
       if (display == nullptr)
       {
         return;

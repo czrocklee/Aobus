@@ -21,7 +21,7 @@ namespace ao::gtk
 
     TrackColumnViewHost(TrackListAdapter& adapter,
                         TrackColumnLayoutModel& columnLayoutModel,
-                        Glib::RefPtr<Gtk::MultiSelection> selectionModel);
+                        Glib::RefPtr<Gtk::MultiSelection> const& selectionModel);
     ~TrackColumnViewHost();
 
     Gtk::ColumnView& columnView() { return *_columnView; }
@@ -36,10 +36,7 @@ namespace ao::gtk
     void setupSelectionActivation();
 
     // Signal accessors — stable across rebuilds
-    TrackSelectionController::SelectionChangedSignal& signalSelectionChanged()
-    {
-      return _selectionChangedSignal;
-    }
+    TrackSelectionController::SelectionChangedSignal& signalSelectionChanged() { return _selectionChangedSignal; }
     TrackSelectionController::TrackActivatedSignal& signalTrackActivated() { return _trackActivatedSignal; }
     TrackSelectionController::ContextMenuRequestedSignal& signalContextMenuRequested()
     {
@@ -51,7 +48,7 @@ namespace ao::gtk
     // The old generation is retired. Caller swaps the scrolled-window child.
     Gtk::ColumnView& rebuild(TrackListAdapter& adapter,
                              TrackColumnLayoutModel& columnLayoutModel,
-                             Glib::RefPtr<Gtk::MultiSelection> selectionModel,
+                             Glib::RefPtr<Gtk::MultiSelection> const& selectionModel,
                              FactoryProvider const& factoryProvider);
 
   private:

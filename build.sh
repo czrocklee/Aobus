@@ -9,6 +9,7 @@ set -o pipefail
 BUILD_TYPE="debug"
 CLEAN="false"
 ENABLE_TIDY="false"
+ENABLE_FIX="false"
 USE_CLANG="false"
 ENABLE_ASAN="false"
 ENABLE_TSAN="false"
@@ -16,7 +17,7 @@ VERBOSE="false"
 TARGET=""
 
 show_usage() {
-    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--clang] [--asan] [--tsan] [--verbose] [--target <target>]"
+    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--fix] [--clang] [--asan] [--tsan] [--verbose] [--target <target>]"
     echo "  debug             - Debug build (default, no sanitizers)"
     echo "  release           - Release build (optimized, no sanitizers)"
     echo "  pgo1              - PGO step 1: instrumented build for profile generation"
@@ -24,6 +25,7 @@ show_usage() {
     echo "  profile           - Optimized build with debug symbols and frame pointers (for perf)"
     echo "  --clean           - Clean build directory before building"
     echo "  --tidy            - Enable clang-tidy during the configure/build (implies --clang)"
+    echo "  --fix             - Enable clang-tidy and apply fixes automatically (implies --tidy)"
     echo "  --clang           - Build with clang/clang++ in a dedicated build directory"
     echo "  --asan            - Enable address/undefined sanitizers (Debug only, default: off)"
     echo "  --tsan            - Enable thread sanitizer (Debug only, default: off)"
@@ -56,6 +58,13 @@ while [[ $# -gt 0 ]]; do
             ;;
         --tidy)
             ENABLE_TIDY="true"
+            USE_CLANG="true"
+            shift
+            ;;
+        --fix)
+            ENABLE_TIDY="true"
+            ENABLE_FIX="true"
+            USE_CLANG="true"
             shift
             ;;
         --asan)
@@ -172,6 +181,10 @@ fi
 if [[ "$ENABLE_TIDY" == "true" ]]; then
     echo "clang-tidy enabled for this build (implies clang toolchain)."
     CONFIGURE_COMMAND+=" -DAOBUS_ENABLE_CLANG_TIDY=ON"
+    if [[ "$ENABLE_FIX" == "true" ]]; then
+        echo "clang-tidy auto-fix enabled."
+        CONFIGURE_COMMAND+=" -DAOBUS_CLANG_TIDY_FIX=ON"
+    fi
 fi
 
 if [[ "$ENABLE_ASAN" == "true" ]]; then

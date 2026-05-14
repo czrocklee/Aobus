@@ -66,6 +66,7 @@ namespace ao::gtk
   void VolumeBar::setVolume(float volume)
   {
     auto const clamped = std::clamp(volume, 0.0F, 1.0F);
+
     if (std::abs(_volume - clamped) > kVolumeEpsilon)
     {
       _volume = clamped;
@@ -128,6 +129,7 @@ namespace ao::gtk
 
     // Dynamically lookup the theme's accent/selection color
     auto activeColor = Gdk::RGBA{};
+
     if (!context->lookup_color("accent_color", activeColor))
     {
       if (!context->lookup_color("theme_selected_bg_color", activeColor))
@@ -141,6 +143,7 @@ namespace ao::gtk
     // This defines the "containers" that will slice our triangle
     cr->save();
     cr->begin_new_path();
+
     for (int i = 0; i < kNumSegments; ++i)
     {
       float const segmentX = static_cast<float>(i) * (segmentWidth + static_cast<float>(kSegmentGap));
@@ -189,6 +192,7 @@ namespace ao::gtk
   void VolumeBar::handleAbsoluteClick(double offsetX)
   {
     auto const width = get_width();
+
     if (width <= 0)
     {
       return;
@@ -202,6 +206,7 @@ namespace ao::gtk
   void VolumeBar::handleDragUpdate(double offsetX)
   {
     auto const width = get_width();
+
     if (width <= 0)
     {
       return;
@@ -217,6 +222,7 @@ namespace ao::gtk
   {
     float const delta = (dy > 0) ? -0.05F : 0.05F;
     float const newVol = std::clamp(_volume + delta, 0.0F, 1.0F);
+
     if (std::abs(_volume - newVol) > kVolumeEpsilon)
     {
       _volume = newVol;

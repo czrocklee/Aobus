@@ -72,18 +72,21 @@ namespace ao::gtk
     _layoutChangedConnection.block(); // Block visibility updates during structural changes
 
     auto const columns = _columnView.get_columns();
+
     if (columns)
     {
       for (auto const& [idx, state] : std::views::enumerate(layout.columns))
       {
         auto* const binding = findColumnBinding(state.column);
-        if (!binding)
+
+        if (binding == nullptr)
         {
           continue;
         }
 
         // Check if the column is already at the target index
         bool needsMove = true;
+
         if (columns->get_n_items() > idx)
         {
           if (auto currentObj = columns->get_object(static_cast<::guint>(idx)))
@@ -246,7 +249,7 @@ namespace ao::gtk
     applyColumnLayout();
     updateTitlePositionVariable();
   }
- 
+
   void TrackColumnController::updateTitlePositionVariable()
   {
     double titleX = 0;

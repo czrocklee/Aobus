@@ -54,6 +54,7 @@ namespace ao::gtk
     }
 
     auto children = std::map<ListId, std::vector<ListId>>{};
+
     for (auto const& [id, node] : nodes)
     {
       if (node.parentId != rootParentId() && node.parentId != id && nodes.contains(node.parentId))
@@ -77,6 +78,7 @@ namespace ao::gtk
     {
       auto childNode = result.nodesById[id];
       auto parentId = node.parentId;
+
       if (auto parentIt = result.nodesById.find(parentId); parentIt != result.nodesById.end())
       {
         parentIt->second->getChildren()->append(childNode);
@@ -96,6 +98,7 @@ namespace ao::gtk
       [](Glib::RefPtr<Glib::ObjectBase> const& item) -> Glib::RefPtr<Gio::ListModel>
       {
         auto node = std::dynamic_pointer_cast<ListTreeItem>(item);
+
         if (!node || !node->hasChildren())
         {
           return nullptr;

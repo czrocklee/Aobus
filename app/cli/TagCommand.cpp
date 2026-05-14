@@ -99,6 +99,7 @@ namespace ao::cli
       }
 
       os << "tags: ";
+
       for (auto const& name : tagNames)
       {
         os << name << " ";

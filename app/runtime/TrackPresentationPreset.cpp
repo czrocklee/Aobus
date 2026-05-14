@@ -222,18 +222,65 @@ namespace ao::rt
 
   std::optional<TrackPresentationField> trackPresentationFieldFromId(std::string_view id)
   {
-    if (id == "title") return TrackPresentationField::Title;
-    if (id == "artist") return TrackPresentationField::Artist;
-    if (id == "album") return TrackPresentationField::Album;
-    if (id == "album-artist") return TrackPresentationField::AlbumArtist;
-    if (id == "genre") return TrackPresentationField::Genre;
-    if (id == "composer") return TrackPresentationField::Composer;
-    if (id == "work") return TrackPresentationField::Work;
-    if (id == "year") return TrackPresentationField::Year;
-    if (id == "disc-number") return TrackPresentationField::DiscNumber;
-    if (id == "track-number") return TrackPresentationField::TrackNumber;
-    if (id == "duration") return TrackPresentationField::Duration;
-    if (id == "tags") return TrackPresentationField::Tags;
+    if (id == "title")
+    {
+      return TrackPresentationField::Title;
+    }
+
+    if (id == "artist")
+    {
+      return TrackPresentationField::Artist;
+    }
+
+    if (id == "album")
+    {
+      return TrackPresentationField::Album;
+    }
+
+    if (id == "album-artist")
+    {
+      return TrackPresentationField::AlbumArtist;
+    }
+
+    if (id == "genre")
+    {
+      return TrackPresentationField::Genre;
+    }
+
+    if (id == "composer")
+    {
+      return TrackPresentationField::Composer;
+    }
+
+    if (id == "work")
+    {
+      return TrackPresentationField::Work;
+    }
+
+    if (id == "year")
+    {
+      return TrackPresentationField::Year;
+    }
+
+    if (id == "disc-number")
+    {
+      return TrackPresentationField::DiscNumber;
+    }
+
+    if (id == "track-number")
+    {
+      return TrackPresentationField::TrackNumber;
+    }
+
+    if (id == "duration")
+    {
+      return TrackPresentationField::Duration;
+    }
+
+    if (id == "tags")
+    {
+      return TrackPresentationField::Tags;
+    }
 
     return std::nullopt;
   }

@@ -29,6 +29,7 @@ namespace ao::audio::detail
       constexpr std::uint32_t kBytesPerSample32 = 4;
 
       std::uint32_t bytesPerSample = kBytesPerSample32;
+
       if (format.bitDepth <= 16)
       {
         bytesPerSample = kBytesPerSample16;
@@ -73,6 +74,7 @@ namespace ao::audio::detail
 
     Format backendFormat;
     std::string errorMsg;
+
     if (!negotiateFormat(
           descriptor.filePath, info, decoder, backendFormat, device, backendId, profileId, decoderFactory, errorMsg))
     {
@@ -81,6 +83,7 @@ namespace ao::audio::detail
 
     info = decoder->streamInfo();
     auto source = createPcmSource(std::move(decoder), info, std::move(onSourceError), errorMsg);
+
     if (!source)
     {
       return {.error = {.message = errorMsg}};

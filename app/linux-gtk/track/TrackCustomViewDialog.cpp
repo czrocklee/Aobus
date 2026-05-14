@@ -88,13 +88,13 @@ namespace ao::gtk
     auto* const contentArea = get_content_area();
     contentArea->add_css_class("custom-view-editor");
 
-    auto mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
+    auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
     mainBox->add_css_class("custom-view-main-box");
 
     // Name
-    auto nameBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    auto* nameBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
     nameBox->add_css_class("custom-view-row");
-    auto nameLabel = Gtk::make_managed<Gtk::Label>("Name");
+    auto* nameLabel = Gtk::make_managed<Gtk::Label>("Name");
     nameLabel->set_halign(Gtk::Align::START);
     nameBox->append(*nameLabel);
     _nameEntry.set_hexpand(true);
@@ -102,9 +102,9 @@ namespace ao::gtk
     mainBox->append(*nameBox);
 
     // Group By
-    auto groupBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    auto* groupBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
     groupBox->add_css_class("custom-view-row");
-    auto groupLabel = Gtk::make_managed<Gtk::Label>("Group By");
+    auto* groupLabel = Gtk::make_managed<Gtk::Label>("Group By");
     groupLabel->set_halign(Gtk::Align::START);
     groupBox->append(*groupLabel);
 
@@ -123,7 +123,7 @@ namespace ao::gtk
     mainBox->append(*groupBox);
 
     // Sort Terms (using boxed list style)
-    auto sortLabel = Gtk::make_managed<Gtk::Label>("Sort Order");
+    auto* sortLabel = Gtk::make_managed<Gtk::Label>("Sort Order");
     sortLabel->set_halign(Gtk::Align::START);
     sortLabel->add_css_class("custom-view-section-title");
     mainBox->append(*sortLabel);
@@ -133,7 +133,7 @@ namespace ao::gtk
     _sortTermsList.set_selection_mode(Gtk::SelectionMode::NONE);
     mainBox->append(_sortTermsList);
 
-    auto addSortBtn = Gtk::make_managed<Gtk::Button>("Add Sort Field");
+    auto* addSortBtn = Gtk::make_managed<Gtk::Button>("Add Sort Field");
     addSortBtn->set_halign(Gtk::Align::START);
     addSortBtn->signal_clicked().connect(
       [this]
@@ -144,7 +144,7 @@ namespace ao::gtk
     mainBox->append(*addSortBtn);
 
     // Visible Fields
-    auto fieldsLabel = Gtk::make_managed<Gtk::Label>("Visible Columns");
+    auto* fieldsLabel = Gtk::make_managed<Gtk::Label>("Visible Columns");
     fieldsLabel->set_halign(Gtk::Align::START);
     fieldsLabel->add_css_class("custom-view-section-title");
     mainBox->append(*fieldsLabel);
@@ -154,7 +154,7 @@ namespace ao::gtk
     _visibleFieldsList.set_selection_mode(Gtk::SelectionMode::NONE);
     mainBox->append(_visibleFieldsList);
 
-    auto addVisibleBtn = Gtk::make_managed<Gtk::Button>("Add Column");
+    auto* addVisibleBtn = Gtk::make_managed<Gtk::Button>("Add Column");
     addVisibleBtn->set_halign(Gtk::Align::START);
     addVisibleBtn->signal_clicked().connect(
       [this]
@@ -164,7 +164,7 @@ namespace ao::gtk
       });
     mainBox->append(*addVisibleBtn);
 
-    auto scroll = Gtk::make_managed<Gtk::ScrolledWindow>();
+    auto* scroll = Gtk::make_managed<Gtk::ScrolledWindow>();
     scroll->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     scroll->set_vexpand(true);
     scroll->set_child(*mainBox);
@@ -174,7 +174,7 @@ namespace ao::gtk
     _saveButton.add_css_class("suggested-action");
     add_action_widget(_saveButton, Gtk::ResponseType::OK);
 
-    auto cancelButton = Gtk::make_managed<Gtk::Button>("Cancel");
+    auto* cancelButton = Gtk::make_managed<Gtk::Button>("Cancel");
     add_action_widget(*cancelButton, Gtk::ResponseType::CANCEL);
   }
 
@@ -198,17 +198,17 @@ namespace ao::gtk
         [this, i, dropdown] { _sortState[i].field = static_cast<std::uint8_t>(dropdown->get_selected()); });
       box->append(*dropdown);
 
-      auto ascBtn = Gtk::make_managed<Gtk::ToggleButton>("Ascending");
+      auto* ascBtn = Gtk::make_managed<Gtk::ToggleButton>("Ascending");
       ascBtn->set_active(term.ascending);
 
       ascBtn->signal_toggled().connect([this, i, ascBtn] { _sortState[i].ascending = ascBtn->get_active(); });
       box->append(*ascBtn);
 
-      auto spacer = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+      auto* spacer = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
       spacer->set_hexpand(true);
       box->append(*spacer);
 
-      auto upBtn = Gtk::make_managed<Gtk::Button>("Up");
+      auto* upBtn = Gtk::make_managed<Gtk::Button>("Up");
       upBtn->set_sensitive(i > 0);
 
       upBtn->signal_clicked().connect(
@@ -219,7 +219,7 @@ namespace ao::gtk
         });
       box->append(*upBtn);
 
-      auto downBtn = Gtk::make_managed<Gtk::Button>("Down");
+      auto* downBtn = Gtk::make_managed<Gtk::Button>("Down");
       downBtn->set_sensitive(i < _sortState.size() - 1);
 
       downBtn->signal_clicked().connect(
@@ -230,7 +230,7 @@ namespace ao::gtk
         });
       box->append(*downBtn);
 
-      auto removeBtn = Gtk::make_managed<Gtk::Button>("Remove");
+      auto* removeBtn = Gtk::make_managed<Gtk::Button>("Remove");
       removeBtn->signal_clicked().connect(
         [this, i]
         {
@@ -254,21 +254,21 @@ namespace ao::gtk
     for (std::size_t i = 0; i < _visibleFieldsState.size(); ++i)
     {
       auto const field = _visibleFieldsState[i];
-      auto row = Gtk::make_managed<Gtk::ListBoxRow>();
-      auto box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
+      auto* row = Gtk::make_managed<Gtk::ListBoxRow>();
+      auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
 
-      auto dropdown = Gtk::make_managed<Gtk::DropDown>(createVisibleFieldsModel());
+      auto* dropdown = Gtk::make_managed<Gtk::DropDown>(createVisibleFieldsModel());
 
       dropdown->set_selected(field);
       dropdown->property_selected().signal_changed().connect(
         [this, i, dropdown] { _visibleFieldsState[i] = static_cast<std::uint8_t>(dropdown->get_selected()); });
       box->append(*dropdown);
 
-      auto spacer = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+      auto* spacer = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
       spacer->set_hexpand(true);
       box->append(*spacer);
 
-      auto upBtn = Gtk::make_managed<Gtk::Button>("Up");
+      auto* upBtn = Gtk::make_managed<Gtk::Button>("Up");
       upBtn->set_sensitive(i > 0);
 
       upBtn->signal_clicked().connect(
@@ -279,7 +279,7 @@ namespace ao::gtk
         });
       box->append(*upBtn);
 
-      auto downBtn = Gtk::make_managed<Gtk::Button>("Down");
+      auto* downBtn = Gtk::make_managed<Gtk::Button>("Down");
       downBtn->set_sensitive(i < _visibleFieldsState.size() - 1);
 
       downBtn->signal_clicked().connect(
@@ -290,7 +290,7 @@ namespace ao::gtk
         });
       box->append(*downBtn);
 
-      auto removeBtn = Gtk::make_managed<Gtk::Button>("Remove");
+      auto* removeBtn = Gtk::make_managed<Gtk::Button>("Remove");
       removeBtn->signal_clicked().connect(
         [this, i]
         {
@@ -324,6 +324,7 @@ namespace ao::gtk
     _groupDropdown.set_selected(groupIndex);
 
     _sortState.clear();
+
     for (auto const& term : spec.sortBy)
     {
       _sortState.push_back({static_cast<std::uint8_t>(term.field), term.ascending});
@@ -331,6 +332,7 @@ namespace ao::gtk
     rebuildSortList();
 
     _visibleFieldsState.clear();
+
     for (auto const field : spec.visibleFields)
     {
       _visibleFieldsState.push_back(static_cast<std::uint8_t>(field));
@@ -345,6 +347,7 @@ namespace ao::gtk
     state.label = _nameEntry.get_text();
 
     auto const groupIndex = _groupDropdown.get_selected();
+
     switch (groupIndex)
     {
       case 0: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::None); break;

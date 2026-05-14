@@ -24,6 +24,7 @@ namespace ao::query::test
 
         oss << "(";
         std::visit(*this, binary->operand);
+
         if (binary->optOperation)
         {
           switch (binary->optOperation->op)

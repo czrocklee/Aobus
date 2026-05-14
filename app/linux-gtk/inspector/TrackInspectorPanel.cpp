@@ -68,6 +68,7 @@ namespace ao::gtk
       auto const totalSeconds = std::chrono::duration_cast<std::chrono::seconds>(ms).count();
       auto const minutes = (totalSeconds % kSecondsPerHour) / kSecondsPerMinute;
       auto const seconds = totalSeconds % kSecondsPerMinute;
+
       if (totalSeconds >= kSecondsPerHour)
       {
         return std::format("{}:{:02}:{:02}", totalSeconds / kSecondsPerHour, minutes, seconds);
@@ -267,6 +268,7 @@ namespace ao::gtk
     if (!result)
     {
       APP_LOG_ERROR("Failed to update artists: {}", result.error().message);
+
       if (_detailProjection)
       {
         auto const snap = _detailProjection->snapshot();
@@ -294,6 +296,7 @@ namespace ao::gtk
     if (!result)
     {
       APP_LOG_ERROR("Failed to update albums: {}", result.error().message);
+
       if (_detailProjection)
       {
         auto const snap = _detailProjection->snapshot();
@@ -313,8 +316,7 @@ namespace ao::gtk
   void TrackInspectorPanel::bindToDetailProjection(std::shared_ptr<rt::ITrackDetailProjection> projection)
   {
     _detailProjection = std::move(projection);
-    _detailSub =
-      _detailProjection->subscribe(std::bind_front(&TrackInspectorPanel::onTrackDetailSnapshot, this));
+    _detailSub = _detailProjection->subscribe(std::bind_front(&TrackInspectorPanel::onTrackDetailSnapshot, this));
   }
 
   void TrackInspectorPanel::onTrackDetailSnapshot(rt::TrackDetailSnapshot const& snap)
@@ -352,9 +354,11 @@ namespace ao::gtk
     }
 
     auto const pixbuf = _coverArtCache.get(static_cast<std::uint64_t>(snap.singleCoverArtId.value()));
+
     if (!pixbuf)
     {
       auto const loadedPixbuf = loadCoverArtFromLibrary(snap.singleCoverArtId);
+
       if (loadedPixbuf)
       {
         _coverArtCache.put(static_cast<std::uint64_t>(snap.singleCoverArtId.value()), loadedPixbuf);

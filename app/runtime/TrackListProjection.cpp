@@ -517,6 +517,7 @@ namespace ao::rt
         {
           OrderEntry entry{.trackId = trackId};
           fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
+
           if (groupBy != TrackGroupKey::None)
           {
             ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
@@ -539,6 +540,7 @@ namespace ao::rt
     {
       positionIndex.clear();
       positionIndex.reserve(orderIndex.size());
+
       for (auto const& [idx, entry] : std::views::enumerate(orderIndex))
       {
         positionIndex[entry.trackId] = idx;
@@ -589,6 +591,7 @@ namespace ao::rt
 
       OrderEntry entry{.trackId = trackId};
       fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
+
       if (groupBy != TrackGroupKey::None)
       {
         ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
@@ -618,6 +621,7 @@ namespace ao::rt
       {
         auto oldSections = sections;
         buildGroupSections();
+
         if (!sectionsEqual(oldSections, sections))
         {
           publishDelta(TrackListProjectionDeltaBatch{
@@ -662,6 +666,7 @@ namespace ao::rt
         {
           OrderEntry entry{.trackId = id};
           fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
+
           if (groupBy != TrackGroupKey::None)
           {
             ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
@@ -718,6 +723,7 @@ namespace ao::rt
     void removeEntry(TrackId trackId)
     {
       auto const optPos = findPosition(trackId);
+
       if (!optPos)
       {
         return;
@@ -736,6 +742,7 @@ namespace ao::rt
       {
         auto oldSections = sections;
         buildGroupSections();
+
         if (!sectionsEqual(oldSections, sections))
         {
           publishDelta(TrackListProjectionDeltaBatch{
@@ -806,6 +813,7 @@ namespace ao::rt
     void updateEntry(TrackId trackId)
     {
       auto optPos = findPosition(trackId);
+
       if (!optPos)
       {
         return;
@@ -911,7 +919,7 @@ namespace ao::rt
     return _impl->rev;
   }
 
-  void TrackListProjection::setPresentation(TrackPresentationSpec presentation)
+  void TrackListProjection::setPresentation(TrackPresentationSpec const& presentation)
   {
     auto spec = normalizeTrackPresentationSpec(presentation);
 

@@ -293,6 +293,7 @@ namespace ao::audio::backend
     for (auto const& name : kSelemNames)
     {
       auto* elem = ::snd_mixer_first_elem(raw);
+
       while (elem != nullptr)
       {
         if (::snd_mixer_selem_get_name(elem) == std::string_view{name})

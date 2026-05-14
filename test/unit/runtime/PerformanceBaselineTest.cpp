@@ -98,7 +98,8 @@ namespace ao::rt::test
       auto const t0 = std::chrono::steady_clock::now();
       auto proj = TrackListProjection{ViewId{1}, source, lib};
       auto const t1 = std::chrono::steady_clock::now();
-      proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
+      proj.setPresentation(TrackPresentationSpec{
+        .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
       auto const t2 = std::chrono::steady_clock::now();
 
       t.createProjection = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);

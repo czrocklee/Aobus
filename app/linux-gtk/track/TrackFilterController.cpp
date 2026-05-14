@@ -138,6 +138,7 @@ namespace ao::gtk
     if (_filterHasError)
     {
       _filterEntry.add_css_class("error");
+
       if (_statusMessageCallback)
       {
         _statusMessageCallback(std::format("Expression error: {}", _filterErrorMessage));
@@ -146,6 +147,7 @@ namespace ao::gtk
     else
     {
       _filterEntry.remove_css_class("error");
+
       if (_statusMessageCallback)
       {
         _statusMessageCallback("");

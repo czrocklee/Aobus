@@ -34,6 +34,8 @@ pkgs.mkShell {
       gcc
       gdb
       clang-tools
+      llvmPackages.llvm.dev
+      llvmPackages.clang-unwrapped.dev
       boost.dev
       lmdb
       lmdb.dev

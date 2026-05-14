@@ -14,9 +14,14 @@ if(AOBUS_ENABLE_CLANG_TIDY)
   find_program(CLANG_TIDY_EXECUTABLE NAMES clang-tidy REQUIRED)
 endif()
 
+option(AOBUS_CLANG_TIDY_FIX "Apply clang-tidy fixes automatically" OFF)
+
 if(CLANG_TIDY_EXECUTABLE)
   # Build GCC system include paths for clang-tidy
   set(_AO_CLANG_TIDY_EXTRA_ARGS)
+  if(AOBUS_CLANG_TIDY_FIX)
+    list(APPEND _AO_CLANG_TIDY_EXTRA_ARGS "-fix")
+  endif()
   execute_process(
     COMMAND ${CMAKE_CXX_COMPILER} -E -x c++ - -v
     INPUT_FILE /dev/null
@@ -71,6 +76,12 @@ if(CLANG_TIDY_EXECUTABLE)
   # Header filters (portable — uses CMAKE_SOURCE_DIR instead of hardcoded path)
   set(_AO_CLANG_TIDY_STRICT_FILTER "'${CMAKE_SOURCE_DIR}/(lib|app|include)/.*'")
   set(_AO_CLANG_TIDY_RELAXED_FILTER "'${CMAKE_SOURCE_DIR}/(test|include)/.*'")
+
+  # Load custom plugin if it exists
+  if(EXISTS "${CMAKE_SOURCE_DIR}/lint/build/libAobusLintPlugin.so")
+    list(APPEND _AO_CLANG_TIDY_EXTRA_ARGS "-load=${CMAKE_SOURCE_DIR}/lint/build/libAobusLintPlugin.so")
+    message(STATUS "clang-tidy: Using custom plugin libAobusLintPlugin.so")
+  endif()
 
   message(STATUS "clang-tidy found: ${CLANG_TIDY_EXECUTABLE}")
   message(STATUS "clang-tidy strict checks for lib/app, relaxed for test/")

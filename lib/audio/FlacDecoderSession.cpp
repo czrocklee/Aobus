@@ -357,6 +357,7 @@ namespace ao::audio
       auto const dst = utility::layout::viewArrayMutable<std::int32_t>(impl->pcmBuffer);
 
       auto channelSpans = std::vector<std::span<std::int32_t const>>(channels);
+
       for (std::uint32_t ch = 0; ch < channels; ++ch)
       {
         channelSpans[ch] = {buffer[ch], blockSize};

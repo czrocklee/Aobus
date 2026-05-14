@@ -282,6 +282,7 @@ namespace ao::media::mp4
     }
 
     auto const& entry = _samples[index];
+
     if (entry.offset + entry.size > _fileData.size())
     {
       return {};

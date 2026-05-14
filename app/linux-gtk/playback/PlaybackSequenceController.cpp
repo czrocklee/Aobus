@@ -26,6 +26,7 @@ namespace ao::gtk
   bool PlaybackSequenceController::playFromPage(TrackViewPage& page, TrackId startTrackId)
   {
     auto trackIds = page.selectionController().getVisibleTrackIds();
+
     if (trackIds.empty())
     {
       return false;
@@ -35,6 +36,7 @@ namespace ao::gtk
     auto const startIndex = static_cast<std::size_t>(std::distance(trackIds.begin(), it));
 
     auto const optDesc = _dataProvider.getPlaybackDescriptor(startTrackId);
+
     if (!optDesc)
     {
       return false;
@@ -98,9 +100,11 @@ namespace ao::gtk
     }
 
     auto const nextIndex = _sequence->currentIndex + 1;
+
     for (auto i = nextIndex; i < _sequence->trackIds.size(); ++i)
     {
       auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[i]);
+
       if (optDesc)
       {
         _sequence->currentIndex = i;

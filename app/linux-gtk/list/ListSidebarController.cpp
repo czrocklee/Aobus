@@ -45,6 +45,7 @@ namespace ao::gtk
         if (viewId != rt::ViewId{})
         {
           auto const state = _session.views().trackListState(viewId);
+
           if (state.listId != ListId{})
           {
             select(state.listId);
@@ -205,6 +206,7 @@ namespace ao::gtk
 
     auto readTxn = _session.musicLibrary().readTransaction();
     auto reader = _session.musicLibrary().lists().reader(readTxn);
+
     if (auto view = reader.get(listId); view)
     {
       auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _session, view->parentId(), *_dataProvider);

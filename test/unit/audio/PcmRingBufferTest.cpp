@@ -93,6 +93,7 @@ namespace ao::audio::test
 
       // Fill remaining if any
       std::byte b{0xDD};
+
       while (buffer.write(std::span<std::byte const>(&b, 1)) == 1)
       {
       }
@@ -113,6 +114,7 @@ namespace ao::audio::test
         for (int i = 0; i < iterations; ++i)
         {
           std::byte b = static_cast<std::byte>(i % 256);
+
           while (buffer.write(std::span(&b, 1)) == 0)
           {
             std::this_thread::yield();
@@ -126,6 +128,7 @@ namespace ao::audio::test
       [&]
       {
         int count = 0;
+
         while (!done || buffer.size() > 0)
         {
           std::byte b{};

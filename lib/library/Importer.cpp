@@ -340,6 +340,7 @@ namespace ao::library
       else if (listNode["tracks"])
       {
         importedList.trackIds.reserve(listNode["tracks"].size());
+
         for (auto const& trackRefNode : listNode["tracks"])
         {
           std::uint32_t yamlId = 0;
@@ -368,6 +369,7 @@ namespace ao::library
 
     std::unordered_map<std::uint32_t, ListId> yamlListIdToNewListId;
     yamlListIdToNewListId.reserve(importedLists.size());
+
     for (auto const& importedList : importedLists)
     {
       auto const [mappingIt, inserted] = yamlListIdToNewListId.emplace(importedList.yamlId, ListId{});
@@ -390,6 +392,7 @@ namespace ao::library
       }
 
       auto const parentIt = yamlListIdToNewListId.find(importedList.yamlParentId);
+
       if (parentIt == yamlListIdToNewListId.end())
       {
         AO_THROW_FORMAT(

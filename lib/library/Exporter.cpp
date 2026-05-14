@@ -84,6 +84,7 @@ namespace ao::library
       if (auto const custom = view.custom(); !custom.empty())
       {
         out << YAML::Key << "custom" << YAML::Value << YAML::BeginMap;
+
         for (auto const& [dictId, value] : custom)
         {
           out << YAML::Key << std::string(dict.get(dictId)) << YAML::Value << std::string(value);
@@ -118,6 +119,7 @@ namespace ao::library
       if (tags.count() != 0)
       {
         out << YAML::Key << "tags" << YAML::Value << YAML::BeginSeq;
+
         for (auto const tagId : tags)
         {
           out << std::string(dict.get(tagId));
@@ -166,6 +168,7 @@ namespace ao::library
   {
     auto const trackReader = _ml.tracks().reader(txn);
     out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
+
     for (auto const& [trackId, view] : trackReader)
     {
       exportTrack(out, trackId, view, mode);
@@ -201,6 +204,7 @@ namespace ao::library
   {
     out << YAML::Key << "lists" << YAML::Value << YAML::BeginSeq;
     auto const listReader = _ml.lists().reader(txn);
+
     for (auto const& [listId, listView] : listReader)
     {
       out << YAML::BeginMap;
@@ -224,6 +228,7 @@ namespace ao::library
         if (!tracks.empty())
         {
           out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
+
           for (auto const tid : tracks)
           {
             out << tid.value();

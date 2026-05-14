@@ -9,7 +9,7 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/utility/Log.h>
- 
+
 #include <functional>
 #include <runtime/AllTracksSource.h>
 #include <runtime/AppSession.h>
@@ -21,7 +21,6 @@
 #include <runtime/WorkspaceService.h>
 
 #include <format>
-#include <functional>
 #include <limits>
 
 namespace ao::gtk
@@ -54,7 +53,8 @@ namespace ao::gtk
     , _listSidebar{listSidebar}
     , _presentationStore{presentationStore}
   {
-    _revealSub = _session.playback().onRevealTrackRequested(std::bind_front(&TrackPageManager::handleRevealTrack, this));
+    _revealSub =
+      _session.playback().onRevealTrackRequested(std::bind_front(&TrackPageManager::handleRevealTrack, this));
 
     _nowPlayingSub = _session.playback().onNowPlayingChanged(
       [this](auto const& ev) { setPlayingTrack(ev.trackId != TrackId{} ? std::optional{ev.trackId} : std::nullopt); });

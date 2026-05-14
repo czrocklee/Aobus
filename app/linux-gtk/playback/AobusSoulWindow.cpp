@@ -38,15 +38,18 @@ namespace ao::gtk
     centerBox->set_halign(Gtk::Align::CENTER);
 
     int logoHeight = kDefaultLogoHeight;
+
     if (auto const display = Gdk::Display::get_default(); display != nullptr)
     {
       auto const monitors = display->get_monitors();
+
       if (monitors->get_n_items() > 0)
       {
         if (auto const monitor = std::dynamic_pointer_cast<Gdk::Monitor>(monitors->get_object(0)))
         {
           auto geometry = Gdk::Rectangle{};
           monitor->get_geometry(geometry);
+
           if (geometry.get_height() > 0)
           {
             logoHeight =
@@ -106,6 +109,7 @@ namespace ao::gtk
   void AobusSoulWindow::bind(rt::PlaybackService& playback)
   {
     _playback = &playback;
+
     if (get_visible())
     {
       _soulBinding = std::make_unique<AobusSoulBinding>(_bigSoul, *_playback);
@@ -115,6 +119,7 @@ namespace ao::gtk
   void AobusSoulWindow::on_show()
   {
     Gtk::Window::on_show();
+
     if (_playback != nullptr)
     {
       _soulBinding = std::make_unique<AobusSoulBinding>(_bigSoul, *_playback);
@@ -133,6 +138,7 @@ namespace ao::gtk
     {
       auto const provider = Gtk::CssProvider::create();
       provider->load_from_data(".soul-window { background-color: rgba(0, 0, 0, 0.85); }");
+
       if (auto const display = Gdk::Display::get_default(); display != nullptr)
       {
         Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);

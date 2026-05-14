@@ -30,6 +30,7 @@ namespace ao::audio::backend::detail::test
     {
       // This will hit real ALSA, so we just check it doesn't crash
       auto devices = doAlsaEnumerate();
+
       for (auto const& dev : devices)
       {
         CHECK_FALSE(dev.id.empty());

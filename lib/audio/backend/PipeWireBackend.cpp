@@ -149,6 +149,7 @@ namespace ao::audio::backend
   void PipeWireBackend::Impl::handleStreamProcess() const
   {
     auto* buffer = ::pw_stream_dequeue_buffer(stream.get());
+
     if (buffer == nullptr)
     {
       return;
@@ -272,6 +273,7 @@ namespace ao::audio::backend
       if (!routeAnchorReported && stream)
       {
         auto id = ::pw_stream_get_node_id(stream.get());
+
         if (id != PW_ID_ANY)
         {
           routeAnchorReported = true;
@@ -348,6 +350,7 @@ namespace ao::audio::backend
     }
 
     _impl->stream.reset(::pw_stream_new(_impl->core.get(), "Aobus Playback", props.release()));
+
     if (!_impl->stream)
     {
       ::pw_thread_loop_unlock(_impl->threadLoop.get());

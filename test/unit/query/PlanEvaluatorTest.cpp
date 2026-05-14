@@ -108,6 +108,7 @@ namespace ao::query::test
         spec.artistId = artistId;
         spec.albumId = albumId;
         spec.genreId = genreId;
+
         for (auto id : tagIds)
         {
           spec.tags.push_back(std::format("tag{}", id));

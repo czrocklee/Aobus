@@ -7,7 +7,7 @@
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
 #include <runtime/AppSession.h>
- 
+
 #include <format>
 
 namespace ao::gtk
@@ -62,9 +62,14 @@ namespace ao::gtk
     {
       auto item = _treeListModel->get_object(index);
       auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(item);
-      if (!treeListRow) continue;
+
+      if (!treeListRow)
+      {
+        continue;
+      }
 
       auto node = std::dynamic_pointer_cast<ListTreeItem>(treeListRow->get_item());
+
       if (node && node->getListId() == listId)
       {
         _listSelectionModel->set_selected(index);
@@ -178,12 +183,14 @@ namespace ao::gtk
   void ListSidebarPanel::bindSidebarListItem(Glib::RefPtr<Gtk::ListItem> const& listItem)
   {
     auto treeListRow = std::dynamic_pointer_cast<Gtk::TreeListRow>(listItem->get_item());
+
     if (!treeListRow)
     {
       return;
     }
 
     auto node = std::dynamic_pointer_cast<ListTreeItem>(treeListRow->get_item());
+
     if (!node)
     {
       return;
@@ -205,6 +212,7 @@ namespace ao::gtk
     }
 
     auto row = node->getRow();
+
     if (!row)
     {
       return;
@@ -218,6 +226,7 @@ namespace ao::gtk
     }
 
     auto const filter = row->getFilter();
+
     if (!filter.empty())
     {
       filterLabel->set_text(std::format("[{}]", filter));

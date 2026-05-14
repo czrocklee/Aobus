@@ -217,6 +217,7 @@ namespace ao::rt
   {
     auto const timer = utility::ScopedTimer{"ViewService::setFilter"};
     auto it = _impl->views.find(viewId);
+
     if (it == _impl->views.end())
     {
       return;
@@ -280,6 +281,7 @@ namespace ao::rt
   void ViewService::setSort(ViewId viewId, std::vector<TrackSortTerm> const& sortBy)
   {
     auto it = _impl->views.find(viewId);
+
     if (it == _impl->views.end())
     {
       return;
@@ -303,6 +305,7 @@ namespace ao::rt
   void ViewService::setGrouping(ViewId viewId, TrackGroupKey groupBy)
   {
     auto it = _impl->views.find(viewId);
+
     if (it == _impl->views.end())
     {
       return;
@@ -323,6 +326,7 @@ namespace ao::rt
   void ViewService::setPresentation(ViewId viewId, TrackPresentationSpec const& presentation)
   {
     auto it = _impl->views.find(viewId);
+
     if (it == _impl->views.end())
     {
       return;
@@ -345,6 +349,7 @@ namespace ao::rt
   TrackPresentationSpec ViewService::setPresentation(ViewId viewId, std::string_view presentationId)
   {
     auto it = _impl->views.find(viewId);
+
     if (it == _impl->views.end())
     {
       return {};
@@ -361,6 +366,7 @@ namespace ao::rt
   void ViewService::setSelection(ViewId viewId, std::vector<TrackId> const& selection)
   {
     auto it = _impl->views.find(viewId);
+
     if (it == _impl->views.end())
     {
       return;
@@ -375,6 +381,7 @@ namespace ao::rt
   void ViewService::openListInView(ViewId viewId, ListId listId)
   {
     auto it = _impl->views.find(viewId);
+
     if (it == _impl->views.end())
     {
       return;

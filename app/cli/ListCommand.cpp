@@ -19,6 +19,7 @@ namespace ao::cli
       auto const reader = ml.lists().reader(txn);
 
       constexpr int idWidth = 5;
+
       for (auto const& [id, view] : reader)
       {
         os << std::setw(idWidth) << id << " " << view.name() << "\n";

@@ -141,6 +141,7 @@ namespace ao::gtk
       case Action::PlayPause:
         _button.set_icon_name(isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic");
         _button.set_tooltip_text(isPlaying ? "Pause" : "Play");
+
         if (_showLabel)
         {
           _button.set_label(isPlaying ? "Pause" : "Play");

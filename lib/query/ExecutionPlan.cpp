@@ -326,6 +326,7 @@ namespace ao::query
       auto lexeme = std::string_view{constant.lexeme};
 
       auto const negative = !lexeme.empty() && lexeme.front() == '-';
+
       if (negative)
       {
         lexeme.remove_prefix(1);
