@@ -6,6 +6,7 @@
 #include "library_io/PlaylistExporter.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackPresentation.h"
+#include "track/TrackPresentationStore.h"
 #include "track/TrackViewPage.h"
 #include <runtime/AppSession.h>
 #include <runtime/CorePrimitives.h>
@@ -50,7 +51,8 @@ namespace ao::gtk
                      rt::AppSession& session,
                      PlaybackSequenceController* sequenceController,
                      TagEditController& tagEditController,
-                     ListSidebarController& listSidebar);
+                     ListSidebarController& listSidebar,
+                     TrackPresentationStore& presentationStore);
     ~TrackPageManager();
 
     void setPlaybackSequenceController(PlaybackSequenceController& c) { _playbackSequenceController = &c; }
@@ -85,6 +87,7 @@ namespace ao::gtk
     PlaybackSequenceController* _playbackSequenceController;
     TagEditController& _tagEditController;
     ListSidebarController& _listSidebar;
+    TrackPresentationStore& _presentationStore;
     rt::Subscription _revealSub;
     rt::Subscription _nowPlayingSub;
     rt::Subscription _focusSub;

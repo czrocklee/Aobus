@@ -5,6 +5,7 @@
 
 #include "ProjectionTypes.h"
 #include "StateTypes.h"
+#include "TrackPresentationPreset.h"
 
 #include "TrackSource.h"
 #include <ao/library/MusicLibrary.h>
@@ -17,13 +18,11 @@ namespace ao::library
 {
   class MusicLibrary;
 }
-namespace ao::rt
-{
-  class SmartListSource;
-}
 
 namespace ao::rt
 {
+  class SmartListSource;
+
   class TrackListProjection final
     : public ITrackListProjection
     , private TrackSourceObserver
@@ -49,7 +48,7 @@ namespace ao::rt
     TrackId trackIdAt(std::size_t index) const override;
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept override;
 
-    void setPresentation(TrackGroupKey groupBy, std::vector<TrackSortTerm> sortBy);
+    void setPresentation(TrackPresentationSpec presentation);
 
     Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) override;
 
@@ -68,4 +67,4 @@ namespace ao::rt
     struct Impl;
     std::unique_ptr<Impl> _impl;
   };
-}
+} // namespace ao::rt

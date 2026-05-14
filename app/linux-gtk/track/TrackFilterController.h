@@ -49,9 +49,9 @@ namespace ao::gtk
     bool _filterHasError = false;
     std::string _filterErrorMessage;
 
-    sigc::connection _filterTextConnection;
-    sigc::connection _filterIconConnection;
-    sigc::connection _filterDebounceTimer;
+    sigc::scoped_connection _filterTextConnection;
+    sigc::scoped_connection _filterIconConnection;
+    sigc::scoped_connection _filterDebounceTimer;
     rt::Subscription _filterStatusSub;
 
     StatusMessageFn _statusMessageCallback;

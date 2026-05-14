@@ -129,17 +129,17 @@ namespace ao::gtk
     {
       if (!value.contains('"'))
       {
-        return std::string{"\""} + std::string{value} + "\"";
+        return std::format("\"{}\"", value);
       }
 
       if (!value.contains('\''))
       {
-        return std::string{"'"} + std::string{value} + "'";
+        return std::format("'{}'", value);
       }
 
       auto sanitized = std::string{value};
       std::ranges::replace(sanitized, '"', '\'');
-      return std::string{"\""} + sanitized + "\"";
+      return std::format("\"{}\"", sanitized);
     }
 
     std::string buildQuickTermExpression(std::string_view term)
@@ -178,16 +178,13 @@ namespace ao::gtk
         return std::nullopt;
       }
 
-      auto expression = buildQuickTermExpression(terms.front());
+      auto const optExpression = std::ranges::fold_left_first(terms | std::views::transform(buildQuickTermExpression),
+                                                              [](auto const& acc, auto const& next)
+                                                              { return std::format("({}) and ({})", acc, next); });
 
-      for (auto const& term : terms | std::views::drop(1))
-      {
-        expression = std::format("({}) and ({})", expression, buildQuickTermExpression(term));
-      }
-
-      return ResolvedTrackFilter{.mode = TrackFilterMode::Quick, .expression = std::move(expression)};
+      return ResolvedTrackFilter{.mode = TrackFilterMode::Quick, .expression = optExpression.value_or("")};
     }
-  }
+  } // namespace
 
   ResolvedTrackFilter TrackListAdapter::resolveFilterExpression(std::string_view rawFilter)
   {
@@ -234,13 +231,22 @@ namespace ao::gtk
       _sourceDetachedForProjection = true;
     }
 
+    auto const oldSize = static_cast<::guint>(_modelSize);
+    auto const newSize = static_cast<::guint>(projection->size());
+
     _projection = std::move(projection);
     _projectionModel->setProjection(_projection.get(), _provider);
     _listModel = _projectionModel;
-    _modelSize = _projection->size();
+    _modelSize = newSize;
 
-    _projectionSub =
-      _projection->subscribe([this](rt::TrackListProjectionDeltaBatch const& batch) { applyDeltaBatch(batch); });
+    // Fulfill GListModel contract: notify wrapper models (like SortListModel)
+    // that the underlying dataset has been completely replaced.
+    if (oldSize != newSize || oldSize > 0)
+    {
+      _projectionModel->notifyReset(oldSize, newSize);
+    }
+
+    _projectionSub = _projection->subscribe(std::bind_front(&TrackListAdapter::applyDeltaBatch, this));
     _signalModelChanged.emit();
   }
 
@@ -252,9 +258,9 @@ namespace ao::gtk
     for (auto const& delta : batch.deltas)
     {
       std::visit(utility::makeVisitor([this](rt::ProjectionReset const&) { applyResetDelta(); },
-                                      [this](rt::ProjectionInsertRange const& delta) { applyInsertRange(delta); },
-                                      [this](rt::ProjectionRemoveRange const& delta) { applyRemoveRange(delta); },
-                                      [this](rt::ProjectionUpdateRange const& delta) { applyUpdateRange(delta); }),
+                                      std::bind_front(&TrackListAdapter::applyInsertRange, this),
+                                      std::bind_front(&TrackListAdapter::applyRemoveRange, this),
+                                      std::bind_front(&TrackListAdapter::applyUpdateRange, this)),
                  delta);
     }
 
@@ -298,7 +304,7 @@ namespace ao::gtk
     _projectionModel->notifyUpdate(pos, count);
   }
 
-  std::optional<std::size_t> TrackListAdapter::indexOf(TrackId trackId) const
+  std::optional<std::size_t> TrackListAdapter::indexOf(TrackId trackId) const noexcept
   {
     if (_projection != nullptr)
     {
@@ -308,7 +314,7 @@ namespace ao::gtk
     return _source.indexOf(trackId);
   }
 
-  std::optional<std::size_t> TrackListAdapter::groupIndexForTrack(TrackId trackId) const
+  std::optional<std::size_t> TrackListAdapter::groupIndexForTrack(TrackId trackId) const noexcept
   {
     if (_projection == nullptr)
     {
@@ -383,6 +389,7 @@ namespace ao::gtk
 
     if (uintIdx >= _listStore->get_n_items())
     {
+      _listStore->remove(uintIdx);
       return;
     }
 

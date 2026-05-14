@@ -6,6 +6,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/model/ListDraft.h>
 #include <gtkmm.h>
+#include <runtime/CorePrimitives.h>
 #include <runtime/TrackSource.h>
 
 #include <functional>
@@ -68,5 +69,6 @@ namespace ao::gtk
     Glib::RefPtr<Gio::SimpleAction> _editListAction;
 
     ListId _pendingSelectId{0};
+    rt::Subscription _focusSub;
   };
 } // namespace ao::gtk

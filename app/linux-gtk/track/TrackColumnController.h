@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "track/ColumnVisibilityModel.h"
 #include "track/TrackPresentation.h"
 
 #include <gtkmm.h>
@@ -10,7 +11,6 @@
 #include <cstdint>
 #include <functional>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace ao::gtk
@@ -19,40 +19,38 @@ namespace ao::gtk
   {
   public:
     using FactoryProvider = std::function<Glib::RefPtr<Gtk::SignalListItemFactory>(TrackColumnDefinition const&)>;
-    using RedundancyProvider = std::function<std::unordered_set<TrackColumn>()>;
 
     TrackColumnController(Gtk::ColumnView& columnView, TrackColumnLayoutModel& layoutModel);
 
-    void setRedundancyProvider(RedundancyProvider provider) { _redundancyProvider = std::move(provider); }
+    Glib::RefPtr<ColumnVisibilityModel> visibilityModel() const noexcept { return _visibilityModel; }
 
     // Column setup — calls factoryProvider for each column definition
     void setupColumns(FactoryProvider const& factoryProvider);
-    void setupColumnControls();
 
     // Layout management
     void applyColumnLayout();
+    void setLayoutAndApply(TrackColumnLayout const& layout);
     void updateColumnVisibility();
     void queueSharedColumnLayoutUpdate();
 
     // Title position CSS variable for the playing-track beam
     void updateTitlePositionVariable();
 
-    // Exposed for TrackViewPage to place in layout
-    Gtk::MenuButton& columnsButton() { return _columnsButton; }
+    // Synchronize visibility, layout, and CSS variables
+    void syncLayout();
 
     // Exposed for TrackViewPage to connect / manage
-    Glib::RefPtr<Gtk::CssProvider> const& cssProvider() const { return _dynamicCssProvider; }
+    Glib::RefPtr<Gtk::CssProvider> const& cssProvider() const noexcept { return _dynamicCssProvider; }
 
   private:
     struct ColumnBinding final
     {
       TrackColumn id;
       Glib::RefPtr<Gtk::ColumnViewColumn> column;
-      Gtk::CheckButton* toggle = nullptr;
       std::int32_t defaultWidth = -1;
     };
 
-    void syncColumnToggleStates();
+    void updateColumnExpansion(TrackColumnLayout const& layout);
     bool flushSharedColumnLayoutUpdate();
     void updateSharedColumnLayout();
     TrackColumnLayout captureCurrentColumnLayout() const;
@@ -62,25 +60,14 @@ namespace ao::gtk
 
     Gtk::ColumnView& _columnView;
     TrackColumnLayoutModel& _columnLayoutModel;
-    Glib::RefPtr<Gio::ListModel> _columnModel;
-
-    Gtk::MenuButton _columnsButton;
-    Gtk::Popover _columnsPopover;
-    Gtk::Box _columnsPopoverBox{Gtk::Orientation::VERTICAL};
-    Gtk::Label _columnsPopoverTitle;
-    Gtk::ListBox _columnToggleList;
-    Gtk::Separator _columnsPopoverSeparator;
-    Gtk::Button _resetColumnsButton;
 
     std::vector<ColumnBinding> _columns;
-    sigc::connection _columnLayoutChangedConnection;
-    sigc::connection _columnModelChangedConnection;
-    sigc::connection _queuedColumnLayoutUpdateConnection;
-    sigc::connection _columnVisibilityIdle;
+    sigc::scoped_connection _queuedColumnLayoutUpdateConnection;
+    sigc::scoped_connection _layoutChangedConnection;
     bool _syncingColumnLayout = false;
     bool _capturingColumnLayout = false;
     Glib::RefPtr<Gtk::CssProvider> _dynamicCssProvider;
-    std::vector<sigc::connection> _columnNotifyConnections;
-    RedundancyProvider _redundancyProvider;
+    Glib::RefPtr<ColumnVisibilityModel> _visibilityModel;
+    std::vector<sigc::scoped_connection> _columnNotifyConnections;
   };
 } // namespace ao::gtk

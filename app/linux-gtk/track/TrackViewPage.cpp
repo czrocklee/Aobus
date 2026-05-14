@@ -6,40 +6,35 @@
 #include "app/ThemeBus.h"
 #include "layout/LayoutConstants.h"
 #include "track/TrackColumnFactoryBuilder.h"
+#include "track/TrackCustomViewDialog.h"
 #include "track/TrackFilterController.h"
-#include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
-#include "track/TrackSelectionController.h"
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
+#include <runtime/TrackPresentationPreset.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
 
 #include <gdk/gdk.h>
-#include <gdkmm/contentprovider.h>
-#include <gdkmm/cursor.h>
-#include <glibmm/bytes.h>
-#include <glibmm/value.h>
 #include <glibmm/wrap.h>
 #include <gtk/gtk.h>
-#include <gtkmm/columnviewcolumn.h>
+#include <gtkmm/button.h>
 #include <gtkmm/cssprovider.h>
+ 
+#include <functional>
 #include <gtkmm/label.h>
 #include <gtkmm/listheader.h>
-#include <gtkmm/listitem.h>
+#include <gtkmm/menubutton.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/stylecontext.h>
 
-#include <cstdint>
 #include <format>
-#include <functional>
 #include <memory>
 #include <ranges>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 namespace ao::gtk
@@ -48,28 +43,9 @@ namespace ao::gtk
   {
     using RowCompareFn = std::move_only_function<int(TrackRowObject const&, TrackRowObject const&)>;
 
-    std::uint32_t dropdownPositionFor(rt::TrackGroupKey groupBy)
-    {
-      return static_cast<std::uint32_t>(groupBy);
-    }
-
-    rt::TrackGroupKey groupByFromDropdownPosition(std::uint32_t position)
-    {
-      if (position <= static_cast<std::uint32_t>(rt::TrackGroupKey::Year))
-      {
-        return static_cast<rt::TrackGroupKey>(position);
-      }
-
-      return rt::TrackGroupKey::None;
-    }
-
     std::string trackCountLabel(::guint count)
     {
-      auto label = std::format("{}", count);
-
-      label += count == 1 ? " track" : " tracks";
-
-      return label;
+      return std::format("{} {}", count, count == 1 ? "track" : "tracks");
     }
 
     TrackRowObject* trackRowFromSorterItem(gpointer item)
@@ -119,98 +95,74 @@ namespace ao::gtk
     private:
       TrackListAdapter& _adapter;
     };
-  }
+  } // namespace
 
   TrackViewPage::TrackViewPage(ListId listId,
                                TrackListAdapter& adapter,
                                TrackColumnLayoutModel& columnLayoutModel,
+                               TrackPresentationStore& presentationStore,
                                rt::AppSession& session,
                                rt::ViewId viewId)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
     , _viewId{viewId}
     , _adapter{adapter}
+    , _presentationStore{presentationStore}
     , _session{session}
     , _groupModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
     , _columnLayoutModel{columnLayoutModel}
   {
     if (_viewId != rt::ViewId{})
     {
-      _activeGroupBy = _session.views().trackListState(_viewId).groupBy;
+      auto const& presState = _session.views().trackListState(_viewId).presentation;
+      _activePresentation = rt::presentationSpecFromState(presState);
     }
 
     _selectionModel = Gtk::MultiSelection::create(_groupModel);
 
     _filterController = std::make_unique<TrackFilterController>(_session.views(), _viewId, _filterEntry);
-    _filterController->setStatusMessageCallback([this](std::string_view msg) { setStatusMessage(msg); });
+    _filterController->setStatusMessageCallback(std::bind_front(&TrackViewPage::setStatusMessage, this));
     _filterController->setCreateSmartListSignal(&_createSmartListRequested);
 
-    _selectionController = std::make_unique<TrackSelectionController>(_columnView, _adapter, _selectionModel);
-    _selectionController->setupActivation();
+    _viewHost = std::make_unique<TrackColumnViewHost>(_adapter, _columnLayoutModel, _selectionModel);
+    _viewHost->setupSelectionActivation();
 
-    _columnController = std::make_unique<TrackColumnController>(_columnView, _columnLayoutModel);
-    _columnController->setRedundancyProvider(
-      [this]
-      {
-        auto redundant = std::unordered_set<TrackColumn>{};
-
-        if (auto* const proj = _adapter.projection(); proj != nullptr)
-        {
-          for (auto const& field : proj->presentation().redundantFields)
-          {
-            if (auto const col = redundantFieldToColumn(field))
-            {
-              redundant.insert(*col);
-            }
-          }
-        }
-        return redundant;
-      });
-
-    signalThemeRefresh().connect(
+    _themeRefreshConnection = signalThemeRefresh().connect(
       [this]
       {
         APP_LOG_INFO("Executing theme refresh for TrackViewPage...");
-        _columnController->updateTitlePositionVariable();
-        _columnView.queue_draw();
+        _viewHost->columnController().updateTitlePositionVariable();
+        _viewHost->columnView().queue_draw();
       });
-
-    _columnView.get_style_context()->add_provider(
-      _columnController->cssProvider(), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
     setupPresentationControls();
     setupStatusBar();
     setupHeaderFactory();
 
-    _columnView.set_model(_selectionModel);
+    // 1. Configure columns and layout first (Off-tree)
+    _viewHost->setupColumns([this](TrackColumnDefinition const& def)
+                            { return buildColumnFactory(def, std::bind_front(&TrackViewPage::commitMetadataChange, this)); });
+ 
+    _viewHost->columnController().syncLayout();
+
+    // 2. Configure decorators and styles
     updateSectionHeaders();
+ 
+    setupColumnViewStyles(_viewHost->columnView());
+
     _contextPopover.set_has_arrow(false);
-    _contextPopover.set_parent(_columnView);
 
-    _columnView.set_show_row_separators(true);
-    _columnView.set_reorderable(true);
+    // 3. Finally attach model and add to scrolled window
+    _viewHost->columnView().set_model(_selectionModel);
 
-    auto const commitFn = [this](
-                            Glib::RefPtr<TrackRowObject> const& row, TrackColumn column, std::string const& newValue)
-    { commitMetadataChange(row, column, newValue); };
-
-    _columnController->setupColumns([&commitFn](TrackColumnDefinition const& def)
-                                    { return buildColumnFactory(def, commitFn); });
-    _columnController->setupColumnControls();
-
-    _scrolledWindow.set_child(_columnView);
+    _scrolledWindow.set_child(_viewHost->columnView());
     _scrolledWindow.set_vexpand(true);
     _scrolledWindow.set_hexpand(true);
-
-    _columnController->updateColumnVisibility();
-    _columnController->applyColumnLayout();
+    _contextPopover.set_parent(_viewHost->columnView());
 
     append(_controlsBar);
     append(_statusLabel);
     append(_scrolledWindow);
-
-    _adapter.signalModelChanged().connect(sigc::mem_fun(*this, &TrackViewPage::onModelChanged));
-    _columnController->updateTitlePositionVariable();
   }
 
   TrackViewPage::~TrackViewPage() = default;
@@ -232,21 +184,21 @@ namespace ao::gtk
     _filterEntry.set_icon_tooltip_text("Create smart list from current filter", Gtk::Entry::IconPosition::SECONDARY);
     _filterEntry.set_menu_entry_icon_text("Create smart list from current filter", Gtk::Entry::IconPosition::SECONDARY);
 
-    _groupByLabel.set_text("Group");
-    _groupByLabel.set_halign(Gtk::Align::START);
-    _groupByLabel.set_valign(Gtk::Align::CENTER);
+    auto const* initialPreset = rt::builtinTrackPresentationPreset(_activePresentation.id);
 
-    _groupByOptions =
-      Gtk::StringList::create({"None", "Artist", "Album", "Album Artist", "Genre", "Composer", "Work", "Year"});
-    _groupByDropdown.set_model(_groupByOptions);
-    _groupByDropdown.set_selected(dropdownPositionFor(_activeGroupBy));
-    _groupByDropdown.property_selected().signal_changed().connect(
-      sigc::mem_fun(*this, &TrackViewPage::onGroupByChanged));
+    _presentationButton.set_label(initialPreset != nullptr ? std::string{initialPreset->label}
+                                                           : std::string{_activePresentation.id});
+    _presentationButton.set_has_frame(true);
+
+    _presentationPopover.set_has_arrow(false);
+    _presentationPopover.set_child(_presentationMenuBox);
+
+    _presentationButton.set_popover(_presentationPopover);
+
+    populatePresentationOptions();
 
     _controlsBar.append(_filterEntry);
-    _controlsBar.append(_groupByLabel);
-    _controlsBar.append(_groupByDropdown);
-    _controlsBar.append(_columnController->columnsButton());
+    _controlsBar.append(_presentationButton);
   }
 
   void TrackViewPage::setupHeaderFactory()
@@ -317,12 +269,12 @@ namespace ao::gtk
     if (groupBy == rt::TrackGroupKey::None)
     {
       _groupModel->set_section_sorter({});
-      _columnView.set_header_factory({});
+      _viewHost->columnView().set_header_factory({});
       return;
     }
 
     _groupModel->set_section_sorter(ProjectionGroupSectionSorter::create(_adapter));
-    _columnView.set_header_factory(_sectionHeaderFactory);
+    _viewHost->columnView().set_header_factory(_sectionHeaderFactory);
   }
 
   void TrackViewPage::setupStatusBar()
@@ -358,28 +310,219 @@ namespace ao::gtk
     _statusLabel.set_visible(false);
   }
 
-  void TrackViewPage::onModelChanged()
+  void TrackViewPage::populatePresentationOptions()
   {
-    _groupModel->set_model(_adapter.getModel());
+    auto* child = _presentationMenuBox.get_first_child();
 
-    updateSectionHeaders();
-    _columnController->updateColumnVisibility();
-  }
-
-  void TrackViewPage::onGroupByChanged()
-  {
-    _activeGroupBy = groupByFromDropdownPosition(_groupByDropdown.get_selected());
-
-    if (_viewId != rt::ViewId{})
+    while (child != nullptr)
     {
-      _session.views().setGrouping(_viewId, _activeGroupBy);
+      auto* const next = child->get_next_sibling();
+      _presentationMenuBox.remove(*child);
+      child = next;
     }
 
-    updateSectionHeaders();
-    _columnController->updateColumnVisibility();
+    auto const builtins = _presentationStore.builtinPresets();
+
+    for (auto const& preset : builtins)
+    {
+      auto* const btn = Gtk::make_managed<Gtk::Button>(std::string{preset.label});
+      btn->set_halign(Gtk::Align::FILL);
+      btn->set_has_frame(false);
+      btn->get_style_context()->add_class("flat");
+
+      auto const id = preset.spec.id;
+      btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
+
+      _presentationMenuBox.append(*btn);
+    }
+
+    auto const& customs = _presentationStore.customPresentations();
+
+    if (!customs.empty())
+    {
+      auto* const sep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
+      sep->set_margin_top(4);
+      sep->set_margin_bottom(4);
+      _presentationMenuBox.append(*sep);
+
+      for (auto const& custom : customs)
+      {
+        auto* const btn = Gtk::make_managed<Gtk::Button>(custom.label);
+        btn->set_halign(Gtk::Align::FILL);
+        btn->set_has_frame(false);
+        btn->get_style_context()->add_class("flat");
+
+        auto const id = custom.id;
+        btn->signal_clicked().connect([this, id] { onPresentationSelected(id); });
+
+        _presentationMenuBox.append(*btn);
+      }
+    }
+
+    auto* const finalSep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
+    finalSep->set_margin_top(4);
+    finalSep->set_margin_bottom(4);
+    _presentationMenuBox.append(*finalSep);
+
+    auto* const createBtn = Gtk::make_managed<Gtk::Button>("Create Custom View...");
+    createBtn->set_halign(Gtk::Align::FILL);
+    createBtn->set_has_frame(false);
+    createBtn->get_style_context()->add_class("flat");
+    createBtn->signal_clicked().connect([this] { onCreateCustomViewClicked(); });
+    _presentationMenuBox.append(*createBtn);
   }
 
-  sigc::signal<void(std::string)>& TrackViewPage::signalCreateSmartListRequested()
+  void TrackViewPage::onCreateCustomViewClicked()
+  {
+    _presentationPopover.popdown();
+
+    auto* parentWindow = dynamic_cast<Gtk::Window*>(get_root());
+
+    if (parentWindow == nullptr)
+    {
+      return;
+    }
+
+    auto const label = std::string{_presentationButton.get_label()} + " Copy";
+    auto dialog = TrackCustomViewDialog{*parentWindow, _activePresentation, label};
+
+    if (auto const optResult = dialog.runDialog())
+    {
+      if (optResult->deleted)
+      {
+        _presentationStore.removeCustomPresentation(optResult->state.id);
+
+        if (_activePresentation.id == optResult->state.id)
+        {
+          onPresentationSelected(rt::kDefaultTrackPresentationId);
+        }
+      }
+      else
+      {
+        _presentationStore.addCustomPresentation(optResult->state);
+        onPresentationSelected(optResult->state.id);
+      }
+
+      populatePresentationOptions();
+    }
+  }
+
+  void TrackViewPage::onPresentationSelected(std::string_view presentationId)
+  {
+    _presentationPopover.popdown();
+
+    if (_viewId == rt::ViewId{})
+    {
+      return;
+    }
+
+    auto const optSpec = _presentationStore.specForId(presentationId);
+
+    if (!optSpec)
+    {
+      return;
+    }
+
+    std::string label = std::string{presentationId};
+
+    if (auto const* builtin = rt::builtinTrackPresentationPreset(presentationId))
+    {
+      label = std::string{builtin->label};
+    }
+    else
+    {
+      auto const& customs = _presentationStore.customPresentations();
+      auto const it = std::ranges::find(customs, presentationId, &CustomTrackPresentationState::id);
+
+      if (it != customs.end())
+      {
+        label = it->label;
+      }
+    }
+
+    _presentationButton.set_label(label);
+
+    auto spec = *optSpec;
+    Glib::signal_idle().connect_once(
+      [this, spec = std::move(spec)]
+      {
+        _session.views().setPresentation(_viewId, spec);
+        _activePresentation = spec;
+
+        rebuildColumnView(trackColumnLayoutForPresentation(spec));
+      });
+  }
+
+  void TrackViewPage::applyPresentation(rt::TrackPresentationSpec const& presentation)
+  {
+    _activePresentation = presentation;
+    rebuildColumnView(trackColumnLayoutForPresentation(presentation));
+  }
+
+  void TrackViewPage::applyPresentation(rt::TrackListPresentationSnapshot const& snapshot)
+  {
+    rebuildColumnView(trackColumnLayoutForPresentation(snapshot));
+  }
+
+  void TrackViewPage::setPlayingTrackId(std::optional<TrackId> optPlayingTrackId)
+  {
+    _optPlayingTrackId = optPlayingTrackId;
+    _viewHost->selectionController().setPlayingTrackId(optPlayingTrackId);
+  }
+
+  void TrackViewPage::rebuildColumnView(TrackColumnLayout const& layout)
+  {
+    auto const factoryProvider = [this](TrackColumnDefinition const& def)
+    { return buildColumnFactory(def, std::bind_front(&TrackViewPage::commitMetadataChange, this)); };
+
+    // 1. Detach UI from Model and Tree immediately.
+    // This ensures the old View is "floating" and not receiving signals
+    // before its C++ wrapper is destroyed by the host.
+    _viewHost->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
+    _scrolledWindow.unset_child();
+    _contextPopover.unparent();
+
+    // 2. Create a new generation off-tree.
+    auto& newView = _viewHost->rebuild(_adapter, _columnLayoutModel, _selectionModel, factoryProvider);
+
+    // 3. Configure structural properties before attaching model (Safe)
+    setupColumnViewStyles(newView);
+ 
+    _viewHost->columnController().setLayoutAndApply(layout);
+    _viewHost->columnController().updateTitlePositionVariable();
+
+    // 4. Apply decorations (Section Headers)
+    // Must be called after rebuild() so _viewHost->columnView() targets the new generation.
+    updateSectionHeaders();
+
+    // 5. Restore playing state in the new controller before attaching model
+
+    if (_optPlayingTrackId)
+    {
+      _viewHost->selectionController().setPlayingTrackId(_optPlayingTrackId);
+    }
+
+    // 6. Attach the model
+    newView.set_model(_selectionModel);
+
+    // 7. Swap the child in the live UI tree
+    _scrolledWindow.set_child(newView);
+    _contextPopover.set_parent(newView);
+
+    // 8. Restore scroll position to selection if possible (Deferred to idle for stability)
+    Glib::signal_idle().connect_once(
+      [this]
+      {
+        if (auto const primaryId = _viewHost->selectionController().getPrimarySelectedTrackId())
+        {
+          _viewHost->selectionController().scrollToTrack(*primaryId);
+        }
+      });
+
+    _viewHost->setupSelectionActivation();
+  }
+
+  TrackViewPage::CreateSmartListRequestedSignal& TrackViewPage::signalCreateSmartListRequested() noexcept
   {
     return _createSmartListRequested;
   }
@@ -388,7 +531,11 @@ namespace ao::gtk
   {
     auto const rect = Gdk::Rectangle{static_cast<int>(xPos), static_cast<int>(yPos), 1, 1};
 
-    popover.set_parent(_columnView);
+    if (popover.get_parent() != &_viewHost->columnView())
+    {
+      popover.set_parent(_viewHost->columnView());
+    }
+
     popover.set_pointing_to(rect);
     popover.popup();
   }
@@ -441,5 +588,11 @@ namespace ao::gtk
         row->setAlbum(oldValue);
       }
     }
+  }
+  void TrackViewPage::setupColumnViewStyles(Gtk::ColumnView& view)
+  {
+    view.set_show_row_separators(true);
+    view.set_reorderable(true);
+    view.get_style_context()->add_provider(_viewHost->cssProvider(), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   }
 } // namespace ao::gtk

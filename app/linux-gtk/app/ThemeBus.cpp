@@ -9,6 +9,8 @@
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/settings.h>
 #include <gtkmm/stylecontext.h>
+ 
+#include <filesystem>
 
 namespace ao::gtk
 {
@@ -119,12 +121,12 @@ namespace ao::gtk
     debounce_connection = Glib::signal_timeout().connect(
       [] -> bool
       {
-        auto const configDir = std::string(Glib::get_user_config_dir()) + "/gtk-4.0";
-        auto const settingsPath = configDir + "/settings.ini";
-        auto const cssPath = configDir + "/gtk.css";
+        auto const configDir = std::filesystem::path{Glib::get_user_config_dir()} / "gtk-4.0";
+        auto const settingsPath = configDir / "settings.ini";
+        auto const cssPath = configDir / "gtk.css";
 
-        syncSettingsFromFile(settingsPath);
-        reloadUserCss(cssPath, s_userCssProvider);
+        syncSettingsFromFile(settingsPath.string());
+        reloadUserCss(cssPath.string(), s_userCssProvider);
 
         signalThemeRefresh().emit();
         return false;

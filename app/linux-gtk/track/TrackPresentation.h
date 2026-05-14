@@ -4,7 +4,9 @@
 #pragma once
 
 #include <ao/Type.h>
+#include <runtime/ProjectionTypes.h>
 #include <runtime/StateTypes.h>
+#include <runtime/TrackPresentationPreset.h>
 
 #include <sigc++/sigc++.h>
 
@@ -64,8 +66,13 @@ namespace ao::gtk
   };
 
   std::optional<TrackColumn> redundantFieldToColumn(rt::TrackSortField field);
+  std::optional<TrackColumn> trackColumnForPresentationField(rt::TrackPresentationField field);
+  TrackColumnLayout trackColumnLayoutForPresentation(rt::TrackPresentationSpec const& presentation);
+  TrackColumnLayout trackColumnLayoutForPresentation(rt::TrackListPresentationSnapshot const& presentation);
 
   std::span<TrackColumnDefinition const> trackColumnDefinitions();
+  TrackColumnDefinition const* trackColumnDefinition(TrackColumn column);
+  TrackColumnState defaultTrackColumnState(TrackColumn column);
 
   std::optional<TrackColumn> trackColumnFromId(std::string_view id);
 
@@ -74,6 +81,7 @@ namespace ao::gtk
   TrackColumnLayout defaultTrackColumnLayout();
 
   TrackColumnLayout normalizeTrackColumnLayout(TrackColumnLayout const& layout);
+  std::vector<TrackColumn> expandingTrackColumnsForLayout(TrackColumnLayout const& layout);
 
   class TrackColumnLayoutModel final
   {

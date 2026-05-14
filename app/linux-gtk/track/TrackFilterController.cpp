@@ -16,7 +16,7 @@ namespace ao::gtk
   namespace
   {
     constexpr auto kFilterDebounceMs = 200;
-  }
+  } // namespace
 
   TrackFilterController::TrackFilterController(rt::ViewService& viewService, rt::ViewId viewId, Gtk::Entry& filterEntry)
     : _viewService{viewService}, _viewId{viewId}, _filterEntry{filterEntry}

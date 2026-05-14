@@ -152,7 +152,7 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}}});
 
     // Expected order (normalized):
     // ANOTHER -> another
@@ -251,11 +251,10 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
                            TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
-                         });
+                         }});
 
     REQUIRE(proj.size() == 20);
 
@@ -339,12 +338,11 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
                            TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
                            TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
-                         });
+                         }});
 
     REQUIRE(proj.size() == 15);
 
@@ -396,7 +394,7 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year}});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year}}});
 
     REQUIRE(proj.size() == 10);
 
@@ -422,7 +420,7 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
 
     auto checkMonotonic = [&](bool ascending)
     {
@@ -451,10 +449,10 @@ namespace ao::rt::test
     REQUIRE(proj.size() == 10);
     checkMonotonic(true);
 
-    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year, .ascending = false}});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = false}}});
     checkMonotonic(false);
 
-    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
     checkMonotonic(true);
   }
 
@@ -475,7 +473,7 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
     REQUIRE(proj.size() == 15);
 
     for (std::size_t i = 0; i < 14; ++i)
@@ -489,7 +487,7 @@ namespace ao::rt::test
       CHECK(a->metadata().year() <= b->metadata().year());
     }
 
-    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}}});
     REQUIRE(proj.size() == 15);
 
     for (std::size_t i = 0; i < 14; ++i)
@@ -518,12 +516,11 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Artist,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
                            TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
                            TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
-                         });
+                         }});
 
     REQUIRE(proj.size() == 5);
 
@@ -562,10 +559,9 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
-                         });
+                         }});
 
     CHECK(proj.groupCount() == 0);
     auto s = proj.groupAt(0);
@@ -582,10 +578,9 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Artist,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
-                         });
+                         }});
 
     CHECK(proj.size() == 0);
     CHECK(proj.groupCount() == 0);
@@ -601,10 +596,9 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Artist,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::Artist, .ascending = true},
-                         });
+                         }});
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
@@ -621,10 +615,9 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Year,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Year, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
-                         });
+                         }});
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
@@ -645,11 +638,10 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Album,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
                            TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
-                         });
+                         }});
 
     REQUIRE(proj.size() == 2);
     REQUIRE(proj.groupCount() == 2);
@@ -665,11 +657,10 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Genre,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Genre, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::Genre, .ascending = true},
                            TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
-                         });
+                         }});
 
     auto snap = proj.presentation();
     CHECK(snap.groupBy == TrackGroupKey::Genre);
@@ -691,11 +682,10 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Album,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
                            TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
-                         });
+                         }});
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
@@ -712,11 +702,10 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::Album,
-                         {
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album, .sortBy = {
                            TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
                            TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
-                         });
+                         }});
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
@@ -733,7 +722,7 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}}});
 
     REQUIRE(proj.size() == 2);
     CHECK(proj.trackIdAt(0) == id1);
@@ -777,7 +766,7 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
 
-    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}}});
 
     REQUIRE(proj.size() == 4);
 

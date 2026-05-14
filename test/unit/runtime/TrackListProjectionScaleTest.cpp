@@ -68,7 +68,7 @@ namespace ao::rt::test
 
     auto const start = std::chrono::steady_clock::now();
     auto proj = TrackListProjection{ViewId{1}, source, lib};
-    proj.setPresentation(TrackGroupKey::None, {TrackSortTerm{.field = TrackSortField::Title}});
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
     auto const end = std::chrono::steady_clock::now();
 
     auto const duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -163,7 +163,7 @@ namespace ao::rt::test
         });
 
       auto const resetStart = std::chrono::steady_clock::now();
-      proj.setPresentation(TrackGroupKey::Artist, {TrackSortTerm{.field = TrackSortField::Artist}});
+      proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist, .sortBy = {TrackSortTerm{.field = TrackSortField::Artist}}});
       auto const resetEnd = std::chrono::steady_clock::now();
 
       auto const resetDuration = std::chrono::duration_cast<std::chrono::milliseconds>(resetEnd - resetStart);

@@ -19,9 +19,11 @@ namespace ao::rt
 {
   struct TrackListPresentationSnapshot final
   {
+    std::string presentationId{};
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> effectiveSortBy{};
-    std::vector<TrackSortField> redundantFields{};
+    std::vector<TrackPresentationField> visibleFields{};
+    std::vector<TrackPresentationField> redundantFields{};
     std::uint64_t revision = 0;
   };
 
@@ -156,4 +158,4 @@ namespace ao::rt
     virtual TrackDetailSnapshot snapshot() const = 0;
     virtual Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) = 0;
   };
-}
+} // namespace ao::rt

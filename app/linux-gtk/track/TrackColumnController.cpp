@@ -2,19 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackColumnController.h"
-#include "layout/LayoutConstants.h"
-#include <gtkmm/checkbutton.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/cssprovider.h>
-#include <gtkmm/label.h>
-#include <gtkmm/listbox.h>
-#include <gtkmm/menubutton.h>
-#include <gtkmm/popover.h>
-#include <gtkmm/separator.h>
 
+#include <algorithm>
 #include <format>
 #include <ranges>
-#include <unordered_set>
 
 namespace ao::gtk
 {
@@ -27,6 +20,10 @@ namespace ao::gtk
     : _columnView{columnView}, _columnLayoutModel{layoutModel}
   {
     _dynamicCssProvider = Gtk::CssProvider::create();
+    _visibilityModel = ColumnVisibilityModel::create();
+
+    _layoutChangedConnection =
+      _columnLayoutModel.signalChanged().connect(sigc::mem_fun(*this, &TrackColumnController::updateColumnVisibility));
   }
 
   void TrackColumnController::setupColumns(FactoryProvider const& factoryProvider)
@@ -43,7 +40,7 @@ namespace ao::gtk
       column->set_resizable(true);
       column->set_fixed_width(definition.defaultWidth);
 
-      column->property_fixed_width().signal_changed().connect(
+      _columnNotifyConnections.push_back(column->property_fixed_width().signal_changed().connect(
         [this]
         {
           if (_syncingColumnLayout)
@@ -52,75 +49,19 @@ namespace ao::gtk
           }
 
           queueSharedColumnLayoutUpdate();
-        });
+        }));
 
       _columnNotifyConnections.push_back(column->property_fixed_width().signal_changed().connect(
         sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable)));
 
       _columnView.append_column(column);
 
-      auto* const toggle = Gtk::make_managed<Gtk::CheckButton>(title);
+      Glib::Binding::bind_property(_visibilityModel->property_visible(definition.column),
+                                   column->property_visible(),
+                                   Glib::Binding::Flags::SYNC_CREATE);
 
-      toggle->signal_toggled().connect(
-        [this, columnId = definition.column, toggleButton = toggle]
-        {
-          if (_syncingColumnLayout)
-          {
-            return;
-          }
-
-          auto layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
-
-          for (auto& state : layout.columns)
-          {
-            if (state.column == columnId)
-            {
-              state.visible = toggleButton->get_active();
-              break;
-            }
-          }
-
-          _columnLayoutModel.setLayout(layout);
-        });
-
-      auto* const row = Gtk::make_managed<Gtk::ListBoxRow>();
-
-      row->set_child(*toggle);
-      row->set_activatable(false);
-      _columnToggleList.append(*row);
-
-      auto binding = ColumnBinding{
-        .id = definition.column, .column = column, .toggle = toggle, .defaultWidth = definition.defaultWidth};
-
-      _columns.push_back(std::move(binding));
+      _columns.push_back({.id = definition.column, .column = column, .defaultWidth = definition.defaultWidth});
     }
-  }
-
-  void TrackColumnController::setupColumnControls()
-  {
-    _columnsButton.set_label("Columns");
-    _columnsButton.set_popover(_columnsPopover);
-
-    _columnsPopoverBox.set_spacing(layout::kSpacingSmall);
-
-    _columnsPopoverTitle.set_markup("<span size='small' weight='bold'>VISIBLE COLUMNS</span>");
-    _columnsPopoverTitle.set_halign(Gtk::Align::START);
-    _columnsPopoverTitle.add_css_class("dim-label");
-
-    _columnToggleList.set_selection_mode(Gtk::SelectionMode::NONE);
-    _columnToggleList.add_css_class("navigation-sidebar");
-
-    _resetColumnsButton.set_label("Reset to Default");
-    _resetColumnsButton.set_sensitive(true);
-    _resetColumnsButton.add_css_class("suggested-action");
-    _resetColumnsButton.signal_clicked().connect([this] { _columnLayoutModel.reset(); });
-
-    _columnsPopoverBox.append(_columnsPopoverTitle);
-    _columnsPopoverBox.append(_columnToggleList);
-    _columnsPopoverBox.append(_columnsPopoverSeparator);
-    _columnsPopoverBox.append(_resetColumnsButton);
-
-    _columnsPopover.set_child(_columnsPopoverBox);
   }
 
   void TrackColumnController::applyColumnLayout()
@@ -128,62 +69,88 @@ namespace ao::gtk
     auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
 
     _syncingColumnLayout = true;
+    _layoutChangedConnection.block(); // Block visibility updates during structural changes
 
-    for (auto const& [idx, state] : std::views::enumerate(layout.columns))
+    auto const columns = _columnView.get_columns();
+    if (columns)
     {
-      auto* const binding = findColumnBinding(state.column);
-
-      if (binding == nullptr)
+      for (auto const& [idx, state] : std::views::enumerate(layout.columns))
       {
-        continue;
-      }
-
-      bool needsInsertion = true;
-
-      if (_columnModel && _columnModel->get_n_items() > idx)
-      {
-        auto const object = _columnModel->get_object(static_cast<::guint>(idx));
-
-        if (auto const currentColumn = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
-            currentColumn && currentColumn->get_id() == binding->column->get_id())
+        auto* const binding = findColumnBinding(state.column);
+        if (!binding)
         {
-          needsInsertion = false;
+          continue;
         }
-      }
 
-      if (needsInsertion)
-      {
-        _columnView.insert_column(static_cast<::guint>(idx), binding->column);
-      }
+        // Check if the column is already at the target index
+        bool needsMove = true;
+        if (columns->get_n_items() > idx)
+        {
+          if (auto currentObj = columns->get_object(static_cast<::guint>(idx)))
+          {
+            if (currentObj == binding->column)
+            {
+              needsMove = false;
+            }
+          }
+        }
 
-      auto const width = state.width == -1 ? binding->defaultWidth : state.width;
+        if (needsMove)
+        {
+          // Check if column is already in the view elsewhere
 
-      if (binding->column->get_fixed_width() != width)
-      {
-        binding->column->set_fixed_width(width);
+          for (::guint i = 0; i < columns->get_n_items(); ++i)
+          {
+            if (columns->get_object(i) == binding->column)
+            {
+              _columnView.remove_column(binding->column);
+              break;
+            }
+          }
+
+          _columnView.insert_column(static_cast<::guint>(idx), binding->column);
+        }
+
+        auto const width = state.width == -1 ? binding->defaultWidth : state.width;
+
+        if (binding->column->get_fixed_width() != width)
+        {
+          binding->column->set_fixed_width(width);
+        }
       }
     }
 
-    syncColumnToggleStates();
+    _layoutChangedConnection.unblock(); // Unblock before manual update
+
+    updateColumnExpansion(layout);
     updateColumnVisibility();
 
     _syncingColumnLayout = false;
   }
 
-  void TrackColumnController::syncColumnToggleStates()
+  void TrackColumnController::setLayoutAndApply(TrackColumnLayout const& layout)
   {
-    auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
+    _syncingColumnLayout = true;
+    _layoutChangedConnection.block();
+    _columnLayoutModel.setLayout(layout);
+    _layoutChangedConnection.unblock();
+    _syncingColumnLayout = false;
 
-    for (auto const& state : layout.columns)
+    applyColumnLayout();
+  }
+
+  void TrackColumnController::updateColumnExpansion(TrackColumnLayout const& layout)
+  {
+    auto const expandingColumns = expandingTrackColumnsForLayout(layout);
+
+    for (auto& binding : _columns)
     {
-      auto* const binding = findColumnBinding(state.column);
+      auto const shouldExpand = std::ranges::contains(expandingColumns, binding.id);
 
-      if (binding == nullptr || binding->toggle == nullptr)
+      if (binding.column->get_expand() != shouldExpand)
       {
-        continue;
+        binding.column->set_expand(shouldExpand);
       }
-
-      binding->toggle->set_active(state.visible);
     }
   }
 
@@ -231,18 +198,20 @@ namespace ao::gtk
       return it != currentLayout.columns.end() ? *it : TrackColumnState{.column = column};
     };
 
-    if (!_columnModel)
+    auto const columns = _columnView.get_columns();
+
+    if (!columns)
     {
       return currentLayout;
     }
 
-    auto const nItems = _columnModel->get_n_items();
+    auto const nItems = columns->get_n_items();
 
     layout.columns.reserve(nItems);
 
     for (std::uint32_t i = 0; i < nItems; ++i)
     {
-      auto const object = _columnModel->get_object(i);
+      auto const object = columns->get_object(i);
       auto const column = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
 
       if (!column)
@@ -268,41 +237,16 @@ namespace ao::gtk
 
   void TrackColumnController::updateColumnVisibility()
   {
-    if (_columnVisibilityIdle)
-    {
-      return;
-    }
-
-    _columnVisibilityIdle = Glib::signal_idle().connect(
-      [this]
-      {
-        _columnVisibilityIdle.disconnect();
-
-        auto const layout = normalizeTrackColumnLayout(_columnLayoutModel.layout());
-
-        auto redundantColumns = std::unordered_set<TrackColumn>{};
-        if (_redundancyProvider)
-        {
-          redundantColumns = _redundancyProvider();
-        }
-
-        for (auto const& state : layout.columns)
-        {
-          auto* const binding = findColumnBinding(state.column);
-
-          if (binding == nullptr)
-          {
-            continue;
-          }
-
-          bool const hiddenByGroup = redundantColumns.contains(state.column);
-          binding->column->set_visible(state.visible && !hiddenByGroup);
-        }
-
-        return false;
-      });
+    _visibilityModel->recompute(normalizeTrackColumnLayout(_columnLayoutModel.layout()));
   }
 
+  void TrackColumnController::syncLayout()
+  {
+    updateColumnVisibility();
+    applyColumnLayout();
+    updateTitlePositionVariable();
+  }
+ 
   void TrackColumnController::updateTitlePositionVariable()
   {
     double titleX = 0;

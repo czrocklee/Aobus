@@ -103,34 +103,11 @@ namespace ao::gtk
       },
     });
 
-    TrackColumnDefinition const* trackColumnDefinition(TrackColumn column)
-    {
-      auto const* const it = std::ranges::find(kTrackColumnDefinitions, column, &TrackColumnDefinition::column);
-
-      if (it == kTrackColumnDefinitions.end())
-      {
-        return nullptr;
-      }
-
-      return &*it;
-    }
-
     TrackColumnState defaultColumnState(TrackColumn column)
     {
-      auto const* definition = trackColumnDefinition(column);
-
-      if (definition == nullptr)
-      {
-        return {.column = column};
-      }
-
-      return {
-        .column = definition->column,
-        .visible = definition->defaultVisible,
-        .width = definition->defaultWidth,
-      };
+      return defaultTrackColumnState(column);
     }
-  }
+  } // namespace
 
   std::optional<TrackColumn> redundantFieldToColumn(rt::TrackSortField field)
   {
@@ -147,9 +124,92 @@ namespace ao::gtk
     }
   }
 
+  std::optional<TrackColumn> trackColumnForPresentationField(rt::TrackPresentationField field)
+  {
+    switch (field)
+    {
+      case rt::TrackPresentationField::Title: return TrackColumn::Title;
+      case rt::TrackPresentationField::Artist: return TrackColumn::Artist;
+      case rt::TrackPresentationField::Album: return TrackColumn::Album;
+      case rt::TrackPresentationField::AlbumArtist: return TrackColumn::AlbumArtist;
+      case rt::TrackPresentationField::Genre: return TrackColumn::Genre;
+      case rt::TrackPresentationField::Composer: return TrackColumn::Composer;
+      case rt::TrackPresentationField::Work: return TrackColumn::Work;
+      case rt::TrackPresentationField::Year: return TrackColumn::Year;
+      case rt::TrackPresentationField::DiscNumber: return TrackColumn::DiscNumber;
+      case rt::TrackPresentationField::TrackNumber: return TrackColumn::TrackNumber;
+      case rt::TrackPresentationField::Duration: return TrackColumn::Duration;
+      case rt::TrackPresentationField::Tags: return TrackColumn::Tags;
+    }
+
+    return std::nullopt;
+  }
+
   std::span<TrackColumnDefinition const> trackColumnDefinitions()
   {
     return kTrackColumnDefinitions;
+  }
+
+  TrackColumnDefinition const* trackColumnDefinition(TrackColumn column)
+  {
+    auto const* const it = std::ranges::find(kTrackColumnDefinitions, column, &TrackColumnDefinition::column);
+
+    if (it == kTrackColumnDefinitions.end())
+    {
+      return nullptr;
+    }
+
+    return &*it;
+  }
+
+  TrackColumnState defaultTrackColumnState(TrackColumn column)
+  {
+    auto const* definition = trackColumnDefinition(column);
+
+    if (definition == nullptr)
+    {
+      return {.column = column};
+    }
+
+    return {
+      .column = definition->column,
+      .visible = definition->defaultVisible,
+      .width = definition->defaultWidth,
+    };
+  }
+
+  TrackColumnLayout trackColumnLayoutForPresentation(rt::TrackPresentationSpec const& presentation)
+  {
+    auto layout = TrackColumnLayout{};
+
+    for (auto const field : presentation.visibleFields)
+    {
+      auto const optColumn = trackColumnForPresentationField(field);
+
+      if (!optColumn)
+      {
+        continue;
+      }
+
+      auto state = defaultTrackColumnState(*optColumn);
+      state.visible = true;
+      layout.columns.push_back(state);
+    }
+
+    return normalizeTrackColumnLayout(layout);
+  }
+
+  TrackColumnLayout trackColumnLayoutForPresentation(rt::TrackListPresentationSnapshot const& presentation)
+  {
+    auto spec = rt::TrackPresentationSpec{
+      .id = presentation.presentationId,
+      .groupBy = presentation.groupBy,
+      .sortBy = presentation.effectiveSortBy,
+      .visibleFields = presentation.visibleFields,
+      .redundantFields = presentation.redundantFields,
+    };
+
+    return trackColumnLayoutForPresentation(spec);
   }
 
   std::optional<TrackColumn> trackColumnFromId(std::string_view id)
@@ -211,11 +271,56 @@ namespace ao::gtk
     {
       if (!hasColumn(definition.column))
       {
-        result.columns.push_back(defaultColumnState(definition.column));
+        auto state = defaultColumnState(definition.column);
+        state.visible = false; // Missing from explicit layout means it should be hidden
+        result.columns.push_back(state);
       }
     }
 
     return result;
+  }
+
+  std::vector<TrackColumn> expandingTrackColumnsForLayout(TrackColumnLayout const& layout)
+  {
+    auto const normalized = normalizeTrackColumnLayout(layout);
+    auto columns = std::vector<TrackColumn>{};
+
+    for (auto const& state : normalized.columns)
+    {
+      if (!state.visible)
+      {
+        continue;
+      }
+
+      auto const* const definition = trackColumnDefinition(state.column);
+
+      if (definition != nullptr && definition->expands)
+      {
+        columns.push_back(state.column);
+      }
+    }
+
+    if (!columns.empty())
+    {
+      return columns;
+    }
+
+    auto const title = std::ranges::find(normalized.columns, TrackColumn::Title, &TrackColumnState::column);
+
+    if (title != normalized.columns.end() && title->visible)
+    {
+      columns.push_back(TrackColumn::Title);
+      return columns;
+    }
+
+    auto const firstVisible = std::ranges::find(normalized.columns, true, &TrackColumnState::visible);
+
+    if (firstVisible != normalized.columns.end())
+    {
+      columns.push_back(firstVisible->column);
+    }
+
+    return columns;
   }
 
   TrackColumnLayoutModel::TrackColumnLayoutModel(TrackColumnLayout const& layout)

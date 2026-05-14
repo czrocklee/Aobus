@@ -40,11 +40,11 @@ namespace ao::gtk
                               TrackRowCache const& provider);
     ~TrackListAdapter() override;
 
-    Glib::RefPtr<Gio::ListModel> getModel() { return _listModel; }
-    library::MusicLibrary& getMusicLibrary() { return _musicLibrary; }
+    Glib::RefPtr<Gio::ListModel> getModel() noexcept { return _listModel; }
+    library::MusicLibrary& getMusicLibrary() noexcept { return _musicLibrary; }
 
     // O(1) index lookup via projection when bound, fallback to source scan.
-    std::optional<std::size_t> indexOf(TrackId trackId) const;
+    std::optional<std::size_t> indexOf(TrackId trackId) const noexcept;
 
     // Bind to a runtime projection for delta-based updates.
     // When bound, the adapter ignores direct TrackIdListObserver callbacks
@@ -52,11 +52,11 @@ namespace ao::gtk
     void bindProjection(std::shared_ptr<rt::ITrackListProjection> projection);
 
     // Access the bound projection for group/presentation queries.
-    rt::ITrackListProjection* projection() const { return _projection.get(); }
-    std::optional<std::size_t> groupIndexForTrack(TrackId trackId) const;
+    rt::ITrackListProjection* projection() const noexcept { return _projection.get(); }
+    std::optional<std::size_t> groupIndexForTrack(TrackId trackId) const noexcept;
 
     // Signal emitted when the underlying ListModel is swapped (e.g. during projection binding).
-    sigc::signal<void()>& signalModelChanged() { return _signalModelChanged; }
+    sigc::signal<void()>& signalModelChanged() noexcept { return _signalModelChanged; }
 
     // Resolve raw filter text to a filter mode and expression.
     static ResolvedTrackFilter resolveFilterExpression(std::string_view rawFilter);

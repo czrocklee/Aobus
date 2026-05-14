@@ -192,6 +192,8 @@ void TrackViewPage::onPresentationSelected(std::string_view presentationId)
 }
 ```
 
+Do not leave `Gtk::ColumnView` model-less across main-loop turns while switching presentations. When column visibility or order must change, temporarily detach the model within the same callback, apply the projection/header/column changes while no live row/cell widgets are attached, then reconnect the selection model before returning to GTK. Reset the horizontal adjustment before applying a presentation that may shrink the visible column set.
+
 ## Applying Presentation to GTK Columns
 
 When active presentation changes:
@@ -201,11 +203,8 @@ void TrackViewPage::applyPresentation(rt::TrackPresentationSpec const& presentat
 {
   _activePresentation = presentation;
 
-  _columnLayoutModel.setLayout(trackColumnLayoutForPresentation(presentation));
-  _columnController->applyColumnLayout();
-  _columnController->updateColumnVisibility();
-
   updateSectionHeaders();
+  _columnController->setLayoutAndApply(trackColumnLayoutForPresentation(presentation));
 }
 ```
 
@@ -214,10 +213,8 @@ If projection snapshot is the source:
 ```cpp
 void TrackViewPage::applyPresentation(rt::TrackListPresentationSnapshot const& snapshot)
 {
-  _columnLayoutModel.setLayout(trackColumnLayoutForPresentation(snapshot));
-  _columnController->applyColumnLayout();
-  _columnController->updateColumnVisibility();
   updateSectionHeaders();
+  _columnController->setLayoutAndApply(trackColumnLayoutForPresentation(snapshot));
 }
 ```
 
@@ -244,6 +241,7 @@ public:
   void setupColumnControls(); // keep for custom editor reuse or remove from main toolbar only
 
   void applyColumnLayout();
+  void setLayoutAndApply(TrackColumnLayout const& layout);
   void updateColumnVisibility();
 
   // Existing columnsButton() can remain temporarily, but TrackViewPage should stop appending it.
@@ -252,6 +250,8 @@ public:
 ```
 
 Longer-term, `setupColumnControls()` can move into the custom view editor or become internal test/debug UI.
+
+Column layout application should keep at least one visible column expandable. If a presentation hides the default expanding column, the controller should fall back to the Title column, or the first visible column if Title is hidden, so the `Gtk::ColumnView` continues to fill the scrolled window width.
 
 ## Redundant Fields
 

@@ -60,6 +60,7 @@ namespace ao::gtk
     if (_projection != nullptr && _provider != nullptr && _projection->size() > 0)
     {
       auto const id = _projection->trackIdAt(0);
+
       if (auto const row = _provider->getTrackRow(id))
       {
         _cachedItemType = G_OBJECT_TYPE(row->gobj()); // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)

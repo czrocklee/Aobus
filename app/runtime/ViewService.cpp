@@ -3,7 +3,6 @@
 
 #include "ViewService.h"
 #include "TrackDetailProjection.h"
-#include "TrackListPresentation.h"
 #include "TrackListProjection.h"
 
 #include "LibraryMutationService.h"
@@ -34,20 +33,60 @@ namespace ao::rt
       std::shared_ptr<ITrackListProjection> projection;
     };
 
+    TrackPresentationSpec resolvePresentation(TrackListPresentationState const& state)
+    {
+      if (auto const* preset = builtinTrackPresentationPreset(state.presentationId))
+      {
+        return preset->spec;
+      }
+
+      return defaultTrackPresentationSpec();
+    }
+
     void applyPresentation(ViewEntry& entry)
     {
-      auto policy = presentationForGroup(entry.state.groupBy);
-      entry.state.sortBy = policy.effectiveSortBy;
+      // Derive sort and redundant fields from the built-in preset whose group-by
+      // matches the entry.  The presentation id on the state may not have been
+      // updated yet (e.g. when setGrouping is called directly).
+      auto const& presets = builtinTrackPresentationPresets();
+      auto const* preset = builtinTrackPresentationPreset(kDefaultTrackPresentationId);
+
+      for (auto const& p : presets)
+      {
+        if (p.spec.groupBy == entry.state.groupBy)
+        {
+          preset = &p;
+          break;
+        }
+      }
+
+      entry.state.presentation = presentationStateFromSpec(preset->spec);
+      entry.state.sortBy = entry.state.presentation.sortBy;
 
       if (entry.projection)
       {
         if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(entry.projection.get()))
         {
-          trackListProj->setPresentation(policy.groupBy, policy.effectiveSortBy);
+          trackListProj->setPresentation(preset->spec);
         }
       }
     }
-  }
+
+    void applyPresentation(ViewEntry& entry, TrackPresentationSpec const& spec)
+    {
+      entry.state.presentation = presentationStateFromSpec(spec);
+      entry.state.groupBy = spec.groupBy;
+      entry.state.sortBy = spec.sortBy;
+
+      if (entry.projection)
+      {
+        if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(entry.projection.get()))
+        {
+          trackListProj->setPresentation(spec);
+        }
+      }
+    }
+  } // namespace
 
   struct ViewService::Impl final
   {
@@ -69,6 +108,7 @@ namespace ao::rt
     Signal<FilterStatusChanged const&> filterStatusChangedSignal;
     Signal<ViewService::SortChanged const&> sortChangedSignal;
     Signal<ViewService::GroupingChanged const&> groupingChangedSignal;
+    Signal<ViewService::PresentationChanged const&> presentationChangedSignal;
     Signal<ViewService::SelectionChanged const&> selectionChangedSignal;
     Signal<ViewService::ListChanged const&> listChangedSignal;
   };
@@ -109,6 +149,11 @@ namespace ao::rt
   Subscription ViewService::onGroupingChanged(std::move_only_function<void(GroupingChanged const&)> handler)
   {
     return _impl->groupingChangedSignal.connect(std::move(handler));
+  }
+
+  Subscription ViewService::onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler)
+  {
+    return _impl->presentationChangedSignal.connect(std::move(handler));
   }
 
   Subscription ViewService::onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler)
@@ -248,7 +293,9 @@ namespace ao::rt
     {
       if (auto* const trackListProj = dynamic_cast<TrackListProjection*>(it->second.projection.get()))
       {
-        trackListProj->setPresentation(it->second.state.groupBy, sortBy);
+        auto spec = presentationSpecFromState(it->second.state.presentation);
+        spec.sortBy = sortBy;
+        trackListProj->setPresentation(spec);
       }
     }
   }
@@ -271,6 +318,44 @@ namespace ao::rt
     applyPresentation(it->second);
     _impl->groupingChangedSignal.post(
       _impl->executor, ViewService::GroupingChanged{.viewId = viewId, .groupBy = groupBy});
+  }
+
+  void ViewService::setPresentation(ViewId viewId, TrackPresentationSpec const& presentation)
+  {
+    auto it = _impl->views.find(viewId);
+    if (it == _impl->views.end())
+    {
+      return;
+    }
+
+    auto spec = normalizeTrackPresentationSpec(presentation);
+
+    if (it->second.state.presentation.presentationId == spec.id && it->second.state.groupBy == spec.groupBy &&
+        it->second.state.sortBy == spec.sortBy)
+    {
+      return;
+    }
+
+    applyPresentation(it->second, spec);
+    it->second.state.revision++;
+    _impl->presentationChangedSignal.post(
+      _impl->executor, ViewService::PresentationChanged{.viewId = viewId, .presentation = spec});
+  }
+
+  TrackPresentationSpec ViewService::setPresentation(ViewId viewId, std::string_view presentationId)
+  {
+    auto it = _impl->views.find(viewId);
+    if (it == _impl->views.end())
+    {
+      return {};
+    }
+
+    auto state = it->second.state.presentation;
+    state.presentationId = presentationId;
+    auto spec = resolvePresentation(state);
+
+    setPresentation(viewId, spec);
+    return spec;
   }
 
   void ViewService::setSelection(ViewId viewId, std::vector<TrackId> const& selection)
@@ -357,4 +442,4 @@ namespace ao::rt
   {
     return std::make_shared<TrackDetailProjection>(target, *this, _impl->library, workspace, mutation);
   }
-}
+} // namespace ao::rt

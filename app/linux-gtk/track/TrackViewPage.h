@@ -4,16 +4,16 @@
 #pragma once
 
 #include "tag/TagPopover.h"
-#include "track/TrackColumnController.h"
+#include "track/TrackColumnViewHost.h"
 #include "track/TrackFilterController.h"
 #include "track/TrackListAdapter.h"
 #include "track/TrackPresentation.h"
-#include "track/TrackSelectionController.h"
+#include "track/TrackPresentationStore.h"
+#include <runtime/CorePrimitives.h>
+#include <runtime/ProjectionTypes.h>
 
 #include <gtkmm.h>
 
-#include <chrono>
-#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -25,8 +25,6 @@ namespace ao::rt
 
 namespace ao::gtk
 {
-  class TrackRowCache;
-
   class TrackViewPage final : public Gtk::Box
   {
   public:
@@ -39,60 +37,79 @@ namespace ao::gtk
     explicit TrackViewPage(ListId listId,
                            TrackListAdapter& adapter,
                            TrackColumnLayoutModel& columnLayoutModel,
+                           TrackPresentationStore& presentationStore,
                            rt::AppSession& session,
                            rt::ViewId viewId = rt::ViewId{});
     ~TrackViewPage() override;
 
-    ListId getListId() const { return _listId; }
+    ListId getListId() const noexcept { return _listId; }
 
-    Gtk::ColumnView& getColumnView() { return _columnView; }
+    TrackFilterController& filterController() noexcept { return *_filterController; }
+    TrackSelectionController& selectionController() noexcept { return _viewHost->selectionController(); }
 
-    TrackFilterController& filterController() { return *_filterController; }
-    TrackSelectionController& selectionController() { return *_selectionController; }
+    // Stable signals forwarded from the current view host generation
+    SelectionChangedSignal& signalSelectionChanged() noexcept { return _viewHost->signalSelectionChanged(); }
+    TrackActivatedSignal& signalTrackActivated() noexcept { return _viewHost->signalTrackActivated(); }
+    ContextMenuRequestedSignal& signalContextMenuRequested() noexcept
+    {
+      return _viewHost->signalContextMenuRequested();
+    }
+    TagEditRequestedSignal& signalTagEditRequested() noexcept { return _viewHost->signalTagEditRequested(); }
 
-    CreateSmartListRequestedSignal& signalCreateSmartListRequested();
-    rt::ITrackListProjection* projection() const { return _adapter.projection(); }
+    CreateSmartListRequestedSignal& signalCreateSmartListRequested() noexcept;
+    rt::ITrackListProjection* projection() const noexcept { return _adapter.projection(); }
 
     void showTagPopover(TagPopover& popover, double x, double y);
     void setStatusMessage(std::string_view message);
     void clearStatusMessage();
 
+    void setPlayingTrackId(std::optional<TrackId> optPlayingTrackId);
+
   private:
     void setupPresentationControls();
     void setupHeaderFactory();
     void setupStatusBar();
+    void setupColumnViewStyles(Gtk::ColumnView& view);
     void updateSectionHeaders();
-    void onGroupByChanged();
-    void onModelChanged();
+
+    void populatePresentationOptions();
+    void onPresentationSelected(std::string_view presentationId);
+    void onCreateCustomViewClicked();
+    void applyPresentation(rt::TrackPresentationSpec const& presentation);
+    void applyPresentation(rt::TrackListPresentationSnapshot const& snapshot);
+
+    void rebuildColumnView(TrackColumnLayout const& layout);
 
     void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& row, TrackColumn column, std::string const& newValue);
 
     // Child widgets
     Gtk::Box _controlsBar{Gtk::Orientation::HORIZONTAL};
     Gtk::Entry _filterEntry;
-    Gtk::Label _groupByLabel;
-    Gtk::DropDown _groupByDropdown;
+    Gtk::MenuButton _presentationButton;
+    Gtk::Popover _presentationPopover;
+    Gtk::Box _presentationMenuBox{Gtk::Orientation::VERTICAL};
     Gtk::Label _statusLabel;
     Gtk::ScrolledWindow _scrolledWindow;
-    Gtk::ColumnView _columnView;
     Gtk::Popover _contextPopover;
 
     // Models
     ListId _listId;
     rt::ViewId _viewId{};
     TrackListAdapter& _adapter;
+    TrackPresentationStore& _presentationStore;
     rt::AppSession& _session;
     Glib::RefPtr<Gtk::SortListModel> _groupModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
     TrackColumnLayoutModel& _columnLayoutModel;
-    Glib::RefPtr<Gtk::StringList> _groupByOptions;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactory;
-    rt::TrackGroupKey _activeGroupBy = rt::TrackGroupKey::None;
+    rt::TrackPresentationSpec _activePresentation;
+    std::optional<TrackId> _optPlayingTrackId;
+
+    sigc::scoped_connection _themeRefreshConnection;
 
     // Controllers (owned)
-    std::unique_ptr<TrackColumnController> _columnController;
+    std::unique_ptr<TrackColumnViewHost> _viewHost;
     std::unique_ptr<TrackFilterController> _filterController;
-    std::unique_ptr<TrackSelectionController> _selectionController;
 
     // Signals
     CreateSmartListRequestedSignal _createSmartListRequested;

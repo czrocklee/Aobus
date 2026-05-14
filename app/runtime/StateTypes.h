@@ -18,6 +18,8 @@
 
 namespace ao::rt
 {
+  inline constexpr std::string_view kDefaultTrackPresentationId = "songs";
+
   struct OutputProfileSnapshot final
   {
     audio::ProfileId id{};
@@ -143,6 +145,35 @@ namespace ao::rt
   {
     TrackSortField field = TrackSortField::Title;
     bool ascending = true;
+
+    bool operator==(TrackSortTerm const&) const = default;
+  };
+
+  enum class TrackPresentationField : std::uint8_t
+  {
+    Title,
+    Artist,
+    Album,
+    AlbumArtist,
+    Genre,
+    Composer,
+    Work,
+    Year,
+    DiscNumber,
+    TrackNumber,
+    Duration,
+    Tags,
+  };
+
+  struct TrackListPresentationState final
+  {
+    std::string presentationId = std::string{kDefaultTrackPresentationId};
+    TrackGroupKey groupBy = TrackGroupKey::None;
+    std::vector<TrackSortTerm> sortBy{};
+    std::vector<TrackPresentationField> visibleFields{};
+    std::vector<TrackPresentationField> redundantFields{};
+
+    bool operator==(TrackListPresentationState const&) const = default;
   };
 
   enum class ViewLifecycleState : std::uint8_t
@@ -166,6 +197,7 @@ namespace ao::rt
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
     std::vector<TrackId> selection{};
+    TrackListPresentationState presentation{};
     std::uint64_t revision = 0;
   };
 
@@ -176,6 +208,7 @@ namespace ao::rt
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
     std::vector<TrackId> selection{};
+    TrackListPresentationState presentation{};
   };
 
   struct ViewRecord final
@@ -229,4 +262,4 @@ namespace ao::rt
     std::vector<TrackListViewConfig> openViews;
     std::optional<std::size_t> optActiveViewIndex;
   };
-}
+} // namespace ao::rt

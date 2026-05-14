@@ -134,13 +134,17 @@ namespace ao::gtk
         .onListSelected = [this](ListId listId) { _session.workspace().navigateTo(listId); },
         .getListMembership = [this](ListId listId) { return &_session.sources().sourceFor(listId); }});
 
+    // Initialize track presentation store
+    _trackPresentationStore = std::make_unique<TrackPresentationStore>(_configStore);
+
     // Initialize track page manager
     _trackPageManager = std::make_unique<TrackPageManager>(_stack,
                                                            _trackColumnLayoutModel,
                                                            _session,
                                                            _playbackSequenceController.get(),
                                                            *_tagEditController,
-                                                           *_listSidebarController);
+                                                           *_listSidebarController,
+                                                           *_trackPresentationStore);
 
     // Initialize import/export coordinator
     _importExportCoordinator = std::make_unique<ImportExportCoordinator>(

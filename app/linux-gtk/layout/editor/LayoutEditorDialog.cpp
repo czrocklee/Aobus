@@ -14,6 +14,8 @@
 #include <memory>
 #include <string>
 #include <string_view>
+ 
+#include <format>
 
 namespace ao::gtk::layout::editor
 {
@@ -520,7 +522,7 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::addSectionTitle(std::string_view text)
   {
-    auto* const label = Gtk::make_managed<Gtk::Label>("<b>" + std::string{text} + "</b>");
+    auto* const label = Gtk::make_managed<Gtk::Label>(std::format("<b>{}</b>", text));
     label->set_use_markup(true);
     label->set_halign(Gtk::Align::START);
     label->set_margin_top(kMarginXLarge);
@@ -703,7 +705,7 @@ namespace ao::gtk::layout::editor
       return;
     }
 
-    auto* const titleLabel = Gtk::make_managed<Gtk::Label>("<b>" + node->type + "</b>");
+    auto* const titleLabel = Gtk::make_managed<Gtk::Label>(std::format("<b>{}</b>", node->type));
     titleLabel->set_use_markup(true);
     titleLabel->set_halign(Gtk::Align::START);
     _propertiesBox.append(*titleLabel);

@@ -18,6 +18,7 @@
 #include <runtime/TrackSource.h>
 
 #include <algorithm>
+#include <format>
 
 namespace ao::gtk
 {
@@ -29,13 +30,13 @@ namespace ao::gtk
       {
         return std::string{local};
       }
-
-      if (local.empty())
-      {
+      
+      if (local.empty()) 
+      { 
         return std::string{parent};
       }
-
-      return std::string{"("} + std::string{parent} + ") and (" + std::string{local} + ")";
+      
+      return std::format("({}) and ({})", parent, local);
     }
 
     std::string displayExpression(std::string_view expression)
@@ -249,34 +250,18 @@ namespace ao::gtk
           auto const& title = row->getTitle();
           auto const& artist = row->getArtist();
           auto const& album = row->getAlbum();
-          std::string formatted;
+          std::string formatted = "(untitled)";
 
           if (!title.empty())
           {
             formatted = title;
-
-            if (!artist.empty())
-            {
-              formatted += " - " + artist;
-            }
-
-            if (!album.empty())
-            {
-              formatted += " (" + album + ")";
-            }
+            if (!artist.empty()) formatted = std::format("{} - {}", formatted, artist);
+            if (!album.empty()) formatted = std::format("{} ({})", formatted, album);
           }
           else if (!artist.empty())
           {
             formatted = artist;
-
-            if (!album.empty())
-            {
-              formatted += " (" + album + ")";
-            }
-          }
-          else
-          {
-            formatted = "(untitled)";
+            if (!album.empty()) formatted = std::format("{} ({})", formatted, album);
           }
 
           label->set_text(formatted);

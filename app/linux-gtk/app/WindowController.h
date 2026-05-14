@@ -11,6 +11,7 @@
 #include "tag/TagEditController.h"
 #include "track/TrackPageManager.h"
 #include "track/TrackPresentation.h"
+#include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
 #include <memory>
 #include <runtime/AppSession.h>
@@ -41,6 +42,7 @@ namespace ao::gtk
     TrackPageManager* trackPageManager() { return _trackPageManager.get(); }
     TrackColumnLayoutModel* columnLayoutModel() { return &_trackColumnLayoutModel; }
     ListSidebarController* listSidebarController() { return _listSidebarController.get(); }
+    TrackPresentationStore* trackPresentationStore() { return _trackPresentationStore.get(); }
 
     ImportExportCoordinator& importExport() { return *_importExportCoordinator; }
 
@@ -53,6 +55,7 @@ namespace ao::gtk
     std::unique_ptr<CoverArtCache> _coverArtCache;
     std::unique_ptr<TagEditController> _tagEditController;
     std::unique_ptr<ListSidebarController> _listSidebarController;
+    std::unique_ptr<TrackPresentationStore> _trackPresentationStore;
     std::unique_ptr<TrackPageManager> _trackPageManager;
     std::unique_ptr<PlaybackSequenceController> _playbackSequenceController;
     std::unique_ptr<ImportExportCoordinator> _importExportCoordinator;

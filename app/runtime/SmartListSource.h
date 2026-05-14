@@ -40,12 +40,21 @@ namespace ao::rt
     using TrackSource::notifyUpdated;
     void notifyUpdated(TrackId id) override;
 
-    bool hasError() const { return _hasError; }
-    std::string const& errorMessage() const { return _errorMessage; }
+    bool hasError() const { return _current.hasError; }
+    std::string const& errorMessage() const { return _current.errorMessage; }
+    std::string const& expression() const { return _current.expression; }
     TrackSource& source() const { return _source; }
 
   private:
     friend class SmartListEvaluator;
+
+    struct QueryState
+    {
+      std::string expression;
+      std::unique_ptr<query::ExecutionPlan> plan;
+      bool hasError = false;
+      std::string errorMessage;
+    };
 
     void stageExpression(std::string expr);
     void applyStagedState();
@@ -55,18 +64,11 @@ namespace ao::rt
     SmartListEvaluator* _evaluator = nullptr;
 
     std::flat_set<TrackId> _members;
-    std::string _expression;
-    bool _hasError = false;
-    std::string _errorMessage;
-
-    std::unique_ptr<query::ExecutionPlan> _plan;
+    QueryState _current;
     query::PlanEvaluator _planEvaluator;
 
     // Staging for lazy/batch updates
-    std::string _stagedExpression;
-    std::unique_ptr<query::ExecutionPlan> _stagedPlan;
-    bool _stagedHasError = false;
-    std::string _stagedErrorMessage;
+    QueryState _staged;
     bool _dirty = true;
   };
 }

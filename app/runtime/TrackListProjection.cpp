@@ -4,7 +4,6 @@
 #include "TrackListProjection.h"
 
 #include "SmartListSource.h"
-#include "TrackListPresentation.h"
 #include "TrackSource.h"
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -404,7 +403,7 @@ namespace ao::rt
 
       return true;
     }
-  }
+  } // namespace
 
   struct TrackListProjection::Impl final
   {
@@ -413,6 +412,9 @@ namespace ao::rt
     library::MusicLibrary& library;
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy;
+    std::string presentationId = std::string{kDefaultTrackPresentationId};
+    std::vector<TrackPresentationField> visibleFields;
+    std::vector<TrackPresentationField> redundantFields;
     Comparator comparator;
     library::TrackStore::Reader::LoadMode loadMode = library::TrackStore::Reader::LoadMode::Hot;
     std::vector<OrderEntry> orderIndex;
@@ -909,11 +911,31 @@ namespace ao::rt
     return _impl->rev;
   }
 
-  void TrackListProjection::setPresentation(TrackGroupKey groupBy, std::vector<TrackSortTerm> sortBy)
+  void TrackListProjection::setPresentation(TrackPresentationSpec presentation)
   {
-    if (_impl->groupBy == groupBy && sameSortDirection(_impl->sortBy, sortBy) && _impl->comparator)
+    auto spec = normalizeTrackPresentationSpec(presentation);
+
+    _impl->presentationId = spec.id;
+    _impl->visibleFields = spec.visibleFields;
+    _impl->redundantFields = spec.redundantFields;
+
+    // Fall back to the built-in preset when redundant fields are unspecified.
+    if (_impl->redundantFields.empty() && spec.groupBy != TrackGroupKey::None)
     {
-      _impl->sortBy = std::move(sortBy);
+      for (auto const& p : builtinTrackPresentationPresets())
+      {
+        if (p.spec.groupBy == spec.groupBy)
+        {
+          _impl->redundantFields = p.spec.redundantFields;
+          break;
+        }
+      }
+    }
+
+    // Same-group / reverse-sort fast path.
+    if (_impl->groupBy == spec.groupBy && sameSortDirection(_impl->sortBy, spec.sortBy) && _impl->comparator)
+    {
+      _impl->sortBy = std::move(spec.sortBy);
       _impl->comparator = buildComparator(_impl->sortBy);
       std::ranges::reverse(_impl->orderIndex);
       _impl->rebuildPositionIndex();
@@ -925,10 +947,11 @@ namespace ao::rt
       return;
     }
 
-    _impl->groupBy = groupBy;
-    _impl->sortBy = std::move(sortBy);
+    _impl->groupBy = spec.groupBy;
+    _impl->sortBy = std::move(spec.sortBy);
     _impl->comparator = buildComparator(_impl->sortBy);
     _impl->loadMode = computeLoadMode(_impl->sortBy, _impl->groupBy);
+
     _impl->rebuildOrderIndex();
 
     _impl->publishDelta(TrackListProjectionDeltaBatch{
@@ -965,9 +988,11 @@ namespace ao::rt
   TrackListPresentationSnapshot TrackListProjection::presentation() const
   {
     return TrackListPresentationSnapshot{
+      .presentationId = _impl->presentationId,
       .groupBy = _impl->groupBy,
       .effectiveSortBy = _impl->sortBy,
-      .redundantFields = presentationForGroup(_impl->groupBy).redundantFields,
+      .visibleFields = _impl->visibleFields,
+      .redundantFields = _impl->redundantFields,
       .revision = _impl->rev,
     };
   }
@@ -1063,4 +1088,4 @@ namespace ao::rt
   {
     _impl->publishDelta(batch);
   }
-}
+} // namespace ao::rt
