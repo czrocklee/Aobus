@@ -2,16 +2,32 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TrackDetailProjection.h"
+
 #include "LibraryMutationService.h"
 #include "ViewService.h"
 #include "WorkspaceService.h"
 
+#include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/ProjectionTypes.h>
+#include <runtime/StateTypes.h>
 
 #include <algorithm>
+#include <functional>
+#include <memory>
+#include <span>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include <cstddef>
+#include <cstdint>
 
 namespace ao::rt
 {
@@ -232,7 +248,7 @@ namespace ao::rt
       bitDepths.push_back(optView->property().bitDepth());
       durations.push_back(optView->property().durationMs());
 
-      titles.push_back(std::string{optView->metadata().title()});
+      titles.emplace_back(optView->metadata().title());
 
       auto const artistId = optView->metadata().artistId();
       artists.push_back(artistId != DictionaryId{0} ? std::string{_impl->library.dictionary().get(artistId)}

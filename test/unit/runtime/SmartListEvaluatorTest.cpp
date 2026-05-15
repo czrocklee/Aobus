@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
 
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
@@ -15,13 +13,16 @@
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <iterator>
+#include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -30,7 +31,7 @@ namespace ao::rt::test
   {
     using namespace ao::library;
     using namespace ao::lmdb::test;
-    struct TrackSpec
+    struct TrackSpec final
     {
       std::string title = "Track";
       std::string artist = "Artist";
@@ -63,17 +64,17 @@ namespace ao::rt::test
 
       void update(TrackId id)
       {
-        auto const index = indexOf(id);
-        REQUIRE(index.has_value());
-        notifyUpdated(id, *index);
+        auto const optIndex = indexOf(id);
+        REQUIRE(optIndex.has_value());
+        notifyUpdated(id, *optIndex);
       }
 
       void remove(TrackId id)
       {
-        auto const index = indexOf(id);
-        REQUIRE(index.has_value());
-        _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*index));
-        notifyRemoved(id, *index);
+        auto const optIndex = indexOf(id);
+        REQUIRE(optIndex.has_value());
+        _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*optIndex));
+        notifyRemoved(id, *optIndex);
       }
 
       void batchInsert(std::span<TrackId const> ids)
@@ -120,9 +121,8 @@ namespace ao::rt::test
       std::vector<TrackId> _ids;
     };
 
-    class ObserverSpy final : public TrackSourceObserver
+    struct ObserverSpy final : public TrackSourceObserver
     {
-    public:
       enum class EventKind : std::uint8_t
       {
         Reset,
@@ -225,10 +225,10 @@ namespace ao::rt::test
       {
         auto txn = _library.writeTransaction();
         auto writer = _library.tracks().writer(txn);
-        auto view = writer.get(id, TrackStore::Reader::LoadMode::Both);
-        REQUIRE(view.has_value());
+        auto optView = writer.get(id, TrackStore::Reader::LoadMode::Both);
+        REQUIRE(optView.has_value());
 
-        auto builder = TrackBuilder::fromView(*view, _library.dictionary());
+        auto builder = TrackBuilder::fromView(*optView, _library.dictionary());
         mutate(builder);
 
         auto hotData = builder.serializeHot(txn, _library.dictionary());
@@ -575,7 +575,7 @@ namespace ao::rt::test
       coldList.setExpression("@duration >= 180000"); // Cold property
 
       auto t1 = testLibrary.addTrack(makeTrackSpec("Track", 2022, 200000));
-      TrackId batchArray[] = {t1};
+      auto const batchArray = std::array{t1};
       source.batchInsert(batchArray);
 
       hotList.reload();

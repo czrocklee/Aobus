@@ -3,13 +3,44 @@
 
 #include "track/TrackCustomViewDialog.h"
 
+#include "app/UIState.h"
+#include <runtime/StateTypes.h>
+#include <runtime/TrackPresentationPreset.h>
+
+#include <glibmm/main.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/button.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/label.h>
+#include <gtkmm/listboxrow.h>
+#include <gtkmm/object.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/stringlist.h>
+#include <gtkmm/togglebutton.h>
+#include <gtkmm/window.h>
+
+#include <cstddef>
+#include <cstdint>
 #include <format>
+#include <optional>
 #include <random>
+#include <string>
+#include <string_view>
+#include <utility>
 
 namespace ao::gtk
 {
   namespace
   {
+    constexpr int kDefaultWidth = 500;
+    constexpr int kDefaultHeight = 600;
+    constexpr int kBoxSpacing = 6;
+    constexpr int kGroupByAlbumArtistIndex = 3;
+    constexpr int kGroupByComposerIndex = 5;
+    constexpr int kGroupByWorkIndex = 6;
+    constexpr int kGroupByYearIndex = 7;
+
     std::string generateId()
     {
       static std::random_device rd;
@@ -31,6 +62,7 @@ namespace ao::gtk
         case rt::TrackGroupKey::Work: return "Work";
         case rt::TrackGroupKey::Year: return "Year";
       }
+
       return "None";
     }
 
@@ -77,7 +109,7 @@ namespace ao::gtk
     set_title("Edit Custom View");
     set_transient_for(parent);
     set_modal(true);
-    set_default_size(500, 600);
+    set_default_size(kDefaultWidth, kDefaultHeight);
 
     setupUi();
     populateFromSpec(initialSpec, initialLabel);
@@ -189,7 +221,7 @@ namespace ao::gtk
     {
       auto const& term = _sortState[i];
       auto* const row = Gtk::make_managed<Gtk::ListBoxRow>();
-      auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
+      auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
 
       auto* const dropdown = Gtk::make_managed<Gtk::DropDown>(createSortFieldsModel());
 
@@ -234,7 +266,7 @@ namespace ao::gtk
       removeBtn->signal_clicked().connect(
         [this, i]
         {
-          _sortState.erase(_sortState.begin() + i);
+          _sortState.erase(_sortState.begin() + static_cast<long>(i));
           rebuildSortList();
         });
       box->append(*removeBtn);
@@ -255,7 +287,7 @@ namespace ao::gtk
     {
       auto const field = _visibleFieldsState[i];
       auto* row = Gtk::make_managed<Gtk::ListBoxRow>();
-      auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
+      auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
 
       auto* dropdown = Gtk::make_managed<Gtk::DropDown>(createVisibleFieldsModel());
 
@@ -294,7 +326,7 @@ namespace ao::gtk
       removeBtn->signal_clicked().connect(
         [this, i]
         {
-          _visibleFieldsState.erase(_visibleFieldsState.begin() + i);
+          _visibleFieldsState.erase(_visibleFieldsState.begin() + static_cast<long>(i));
           rebuildVisibleFieldsList();
         });
       box->append(*removeBtn);
@@ -315,12 +347,13 @@ namespace ao::gtk
       case rt::TrackGroupKey::None: groupIndex = 0; break;
       case rt::TrackGroupKey::Artist: groupIndex = 1; break;
       case rt::TrackGroupKey::Album: groupIndex = 2; break;
-      case rt::TrackGroupKey::AlbumArtist: groupIndex = 3; break;
+      case rt::TrackGroupKey::AlbumArtist: groupIndex = kGroupByAlbumArtistIndex; break;
       case rt::TrackGroupKey::Genre: groupIndex = 4; break;
-      case rt::TrackGroupKey::Composer: groupIndex = 5; break;
-      case rt::TrackGroupKey::Work: groupIndex = 6; break;
-      case rt::TrackGroupKey::Year: groupIndex = 7; break;
+      case rt::TrackGroupKey::Composer: groupIndex = kGroupByComposerIndex; break;
+      case rt::TrackGroupKey::Work: groupIndex = kGroupByWorkIndex; break;
+      case rt::TrackGroupKey::Year: groupIndex = kGroupByYearIndex; break;
     }
+
     _groupDropdown.set_selected(groupIndex);
 
     _sortState.clear();
@@ -329,6 +362,7 @@ namespace ao::gtk
     {
       _sortState.push_back({static_cast<std::uint8_t>(term.field), term.ascending});
     }
+
     rebuildSortList();
 
     _visibleFieldsState.clear();
@@ -337,6 +371,7 @@ namespace ao::gtk
     {
       _visibleFieldsState.push_back(static_cast<std::uint8_t>(field));
     }
+
     rebuildVisibleFieldsList();
   }
 
@@ -353,11 +388,11 @@ namespace ao::gtk
       case 0: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::None); break;
       case 1: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Artist); break;
       case 2: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Album); break;
-      case 3: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::AlbumArtist); break;
+      case kGroupByAlbumArtistIndex: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::AlbumArtist); break;
       case 4: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Genre); break;
-      case 5: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Composer); break;
-      case 6: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Work); break;
-      case 7: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Year); break;
+      case kGroupByComposerIndex: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Composer); break;
+      case kGroupByWorkIndex: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Work); break;
+      case kGroupByYearIndex: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Year); break;
       default: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::None); break;
     }
 

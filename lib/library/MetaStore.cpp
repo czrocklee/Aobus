@@ -2,11 +2,15 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/library/MetaStore.h>
-
+#include <ao/library/Meta.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/Exception.h>
 #include <ao/utility/ByteView.h>
 
+#include <cstdint>
 #include <cstring>
+#include <optional>
 
 namespace ao::library
 {
@@ -18,21 +22,21 @@ namespace ao::library
   std::optional<MetaHeader> MetaStore::load(lmdb::ReadTransaction const& txn) const
   {
     auto const reader = _database.reader(txn);
-    auto const bytes = reader.get(kHeaderRecordId);
+    auto const optBytes = reader.get(kHeaderRecordId);
 
-    if (!bytes)
+    if (!optBytes)
     {
       return std::nullopt;
     }
 
-    if (bytes->size() != sizeof(MetaHeader))
+    if (optBytes->size() != sizeof(MetaHeader))
     {
-      AO_THROW_FORMAT(
-        Exception, "Invalid library metadata header size {} (expected {})", bytes->size(), sizeof(MetaHeader));
+      ao::throwException<Exception>(
+        "Invalid library metadata header size {} (expected {})", optBytes->size(), sizeof(MetaHeader));
     }
 
     auto header = MetaHeader{};
-    std::memcpy(&header, bytes->data(), sizeof(header));
+    std::memcpy(&header, optBytes->data(), sizeof(header));
     return header;
   }
 

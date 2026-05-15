@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/Backend.h>
+#include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/audio/backend/detail/AlsaProviderHelpers.h>
 #include <catch2/catch_test_macros.hpp>
 
@@ -21,7 +23,7 @@ namespace ao::audio::backend::detail::test
       CHECK(caps.sampleFormats.size() == 1);
 
       // Different
-      SampleFormatCapability cap2{.bitDepth = 32, .validBits = 32, .isFloat = true};
+      auto const cap2 = SampleFormatCapability{.bitDepth = 32, .validBits = 32, .isFloat = true};
       addSampleFormatCapability(caps, cap2);
       CHECK(caps.sampleFormats.size() == 2);
     }

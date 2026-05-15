@@ -2,13 +2,23 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/ShellLayoutController.h"
-#include "layout/LayoutConstants.h"
-#include "layout/document/LayoutYaml.h"
+#include "layout/document/LayoutDocument.h"
+#include "layout/document/LayoutYaml.h"  // NOLINT(misc-include-cleaner)
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/LayoutRuntime.h"
 #include <ao/utility/Log.h>
-#include <gtkmm/cssprovider.h>
+#include <runtime/AppSession.h>
 #include <runtime/ConfigStore.h>
+
+#include <gdkmm/display.h>
+#include <gtk/gtkstyleprovider.h>
+#include <gtkmm/cssprovider.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/stylecontext.h>
+#include <gtkmm/window.h>
+
+#include <memory>
+#include <string>
 
 namespace ao::gtk
 {
@@ -34,6 +44,7 @@ namespace ao::gtk
     {
       APP_LOG_DEBUG("Failed to load layout from config: {}", res.error().message);
     }
+
     _activeLayout = doc;
     _host.setLayout(_context, _activeLayout);
   }

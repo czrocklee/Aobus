@@ -2,10 +2,17 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "ConfigStore.h"
+
+#include <ao/Error.h>
 #include <ao/utility/Log.h>
 
+#include <yaml-cpp/node/parse.h>
+
+#include <exception>
+#include <filesystem>
 #include <format>
 #include <fstream>
+#include <utility>
 
 namespace ao::rt
 {

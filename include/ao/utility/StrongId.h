@@ -3,17 +3,18 @@
 
 #pragma once
 
-#include <compare>
-#include <format>
-#include <string>
-#include <string_view>
-#include <utility>
-
 #if __has_include(<spdlog/fmt/fmt.h>)
 #include <spdlog/fmt/fmt.h>
 #elif __has_include(<fmt/format.h>)
 #include <fmt/format.h>
 #endif
+
+#include <compare>
+#include <format>
+#include <functional>
+#include <string>
+#include <string_view>
+#include <utility>
 
 namespace ao::utility
 {
@@ -27,11 +28,11 @@ namespace ao::utility
   public:
     StrongId() = default;
     explicit StrongId(std::string value)
-      : _value(std::move(value))
+      : _value{std::move(value)}
     {
     }
     explicit StrongId(char const* value)
-      : _value(value)
+      : _value{value}
     {
     }
 
@@ -81,7 +82,7 @@ namespace std
   };
 } // namespace std
 
-#if defined(FMT_VERSION)
+#ifdef FMT_VERSION
 namespace fmt
 {
   template<typename Tag>

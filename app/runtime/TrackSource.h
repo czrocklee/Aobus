@@ -24,6 +24,11 @@ namespace ao::rt
   public:
     virtual ~TrackSourceObserver() = default;
 
+    TrackSourceObserver(TrackSourceObserver const&) = delete;
+    TrackSourceObserver& operator=(TrackSourceObserver const&) = delete;
+    TrackSourceObserver(TrackSourceObserver&&) = delete;
+    TrackSourceObserver& operator=(TrackSourceObserver&&) = delete;
+
     virtual void onReset() = 0;
 
     // Single-item notifications for fine-grained UI updates
@@ -42,6 +47,9 @@ namespace ao::rt
      * Observers MUST NOT call any methods on source after this call returns.
      */
     virtual void onSourceDestroyed() {}
+
+  protected:
+    TrackSourceObserver() = default;
   };
 
   /**
@@ -51,6 +59,11 @@ namespace ao::rt
   {
   public:
     virtual ~TrackSource();
+
+    TrackSource(TrackSource const&) = delete;
+    TrackSource& operator=(TrackSource const&) = delete;
+    TrackSource(TrackSource&&) = delete;
+    TrackSource& operator=(TrackSource&&) = delete;
 
     virtual std::size_t size() const = 0;
     virtual TrackId trackIdAt(std::size_t index) const = 0;

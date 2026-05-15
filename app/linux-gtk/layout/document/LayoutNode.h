@@ -5,9 +5,9 @@
 
 #include <cstdint>
 #include <format>
-#include <functional>
 #include <map>
 #include <string>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -23,6 +23,7 @@ namespace ao::gtk::layout
     LayoutValue() = default;
 
     template<typename T>
+    requires(!std::is_same_v<std::remove_cvref_t<T>, LayoutValue>)
     explicit LayoutValue(T&& value)
       : data{std::forward<T>(value)}
     {
@@ -37,9 +38,9 @@ namespace ao::gtk::layout
     template<typename T>
     T as(T defaultValue) const
     {
-      if (auto const* p = getIf<T>())
+      if (auto const* ptr = getIf<T>())
       {
-        return *p;
+        return *ptr;
       }
 
       return defaultValue;
@@ -48,21 +49,21 @@ namespace ao::gtk::layout
     std::string asString(std::string const& defaultValue = "") const
     {
       return std::visit(
-        [&defaultValue](auto const& v) -> std::string
+        [&defaultValue](auto const& val) -> std::string
         {
-          using T = std::decay_t<decltype(v)>;
+          using T = std::decay_t<decltype(val)>;
 
           if constexpr (std::is_same_v<T, std::string>)
           {
-            return v;
+            return val;
           }
           else if constexpr (std::is_same_v<T, bool>)
           {
-            return v ? "true" : "false";
+            return val ? "true" : "false";
           }
           else if constexpr (std::is_arithmetic_v<T>)
           {
-            return std::format("{}", v);
+            return std::format("{}", val);
           }
           else
           {
@@ -75,19 +76,19 @@ namespace ao::gtk::layout
     std::int64_t asInt(std::int64_t defaultValue = 0) const
     {
       return std::visit(
-        [defaultValue](auto const& v) -> std::int64_t
+        [defaultValue](auto const& val) -> std::int64_t
         {
-          using T = std::decay_t<decltype(v)>;
+          using T = std::decay_t<decltype(val)>;
 
           if constexpr (std::is_arithmetic_v<T>)
           {
-            return static_cast<std::int64_t>(v);
+            return static_cast<std::int64_t>(val);
           }
           else if constexpr (std::is_same_v<T, std::string>)
           {
             try
             {
-              return std::stoll(v);
+              return std::stoll(val);
             }
             catch (...)
             {
@@ -105,22 +106,22 @@ namespace ao::gtk::layout
     bool asBool(bool defaultValue = false) const
     {
       return std::visit(
-        [defaultValue](auto const& v) -> bool
+        [defaultValue](auto const& val) -> bool
         {
-          using T = std::decay_t<decltype(v)>;
+          using T = std::decay_t<decltype(val)>;
 
           if constexpr (std::is_same_v<T, bool>)
           {
-            return v;
+            return val;
           }
           else if constexpr (std::is_same_v<T, std::string>)
           {
-            if (v == "true")
+            if (val == "true")
             {
               return true;
             }
 
-            if (v == "false")
+            if (val == "false")
             {
               return false;
             }
@@ -129,7 +130,7 @@ namespace ao::gtk::layout
           }
           else if constexpr (std::is_arithmetic_v<T>)
           {
-            return static_cast<bool>(v);
+            return static_cast<bool>(val);
           }
           else
           {
@@ -142,19 +143,19 @@ namespace ao::gtk::layout
     double asDouble(double defaultValue = 0.0) const
     {
       return std::visit(
-        [defaultValue](auto const& v) -> double
+        [defaultValue](auto const& val) -> double
         {
-          using T = std::decay_t<decltype(v)>;
+          using T = std::decay_t<decltype(val)>;
 
           if constexpr (std::is_arithmetic_v<T>)
           {
-            return static_cast<double>(v);
+            return static_cast<double>(val);
           }
           else if constexpr (std::is_same_v<T, std::string>)
           {
             try
             {
-              return std::stod(v);
+              return std::stod(val);
             }
             catch (...)
             {

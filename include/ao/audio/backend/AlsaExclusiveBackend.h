@@ -18,6 +18,11 @@ namespace ao::audio::backend
     explicit AlsaExclusiveBackend(Device const& device, ProfileId const& profile);
     ~AlsaExclusiveBackend() override;
 
+    AlsaExclusiveBackend(AlsaExclusiveBackend const&) = delete;
+    AlsaExclusiveBackend& operator=(AlsaExclusiveBackend const&) = delete;
+    AlsaExclusiveBackend(AlsaExclusiveBackend&&) = delete;
+    AlsaExclusiveBackend& operator=(AlsaExclusiveBackend&&) = delete;
+
     Result<> open(Format const& format, IRenderTarget* target) override;
     void start() override;
     void pause() override;

@@ -2,8 +2,17 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/Type.h>
 
 #include <gsl-lite/gsl-lite.hpp>
+
+#include <cstddef>
+#include <optional>
+#include <span>
+#include <utility>
 
 namespace ao::library
 {
@@ -115,10 +124,10 @@ namespace ao::library
 
   TrackStore::Reader::Iterator::value_type TrackStore::Reader::Iterator::operator*() const
   {
-    TrackId trackId;
+    auto trackId = TrackId{};
 
-    std::span<std::byte const> hotData;
-    std::span<std::byte const> coldData;
+    auto hotData = std::span<std::byte const>{};
+    auto coldData = std::span<std::byte const>{};
 
     if (_optHotIter)
     {
@@ -181,8 +190,8 @@ namespace ao::library
 
   bool TrackStore::Writer::remove(TrackId id)
   {
-    bool hotDeleted = _hotWriter.del(id.value());
-    bool coldDeleted = _coldWriter.del(id.value());
+    bool const hotDeleted = _hotWriter.del(id.value());
+    bool const coldDeleted = _coldWriter.del(id.value());
     return hotDeleted && coldDeleted;
   }
 

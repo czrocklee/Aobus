@@ -11,7 +11,13 @@ namespace ao::gtk
   {
   public:
     ImportProgressDialog(std::int32_t maxItems, Gtk::Window& parent);
-    virtual ~ImportProgressDialog();
+    ~ImportProgressDialog() override;
+
+    // Not copyable or movable
+    ImportProgressDialog(ImportProgressDialog const&) = delete;
+    ImportProgressDialog& operator=(ImportProgressDialog const&) = delete;
+    ImportProgressDialog(ImportProgressDialog&&) = delete;
+    ImportProgressDialog& operator=(ImportProgressDialog&&) = delete;
 
     void onNewTrack(std::string const& path, std::int32_t itemIndex);
     void ready();

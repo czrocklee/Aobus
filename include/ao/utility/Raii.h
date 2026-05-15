@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <gsl-lite/gsl-lite.hpp>
 #include <memory>
 
 namespace ao::utility
@@ -16,13 +15,13 @@ namespace ao::utility
    *   auto pcm = makeUniquePtr<::snd_pcm_close>(ptr);
    */
   template<auto Fn, typename T>
-  auto makeUniquePtr(T* p)
+  auto makeUniquePtr(T* ptr)
   {
     struct Deleter final
     {
       void operator()(T* ptr) const noexcept { Fn(ptr); }
     };
 
-    return std::unique_ptr<T, Deleter>{p};
+    return std::unique_ptr<T, Deleter>{ptr};
   }
 } // namespace ao::utility

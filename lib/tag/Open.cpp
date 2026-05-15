@@ -8,6 +8,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
+#include <filesystem>
+#include <memory>
 #include <string_view>
 #include <utility>
 
@@ -18,7 +21,7 @@ namespace ao::tag
   {
     using Creator = std::unique_ptr<TagFile> (*)(std::filesystem::path const&, TagFile::Mode);
 
-    static constexpr auto CreatorMap = std::array{
+    static constexpr auto kCreatorMap = std::array{
       std::pair{std::string_view{".mp3"},
                 +[](std::filesystem::path const& filePath, TagFile::Mode fileMode) -> std::unique_ptr<TagFile>
                 { return std::make_unique<mpeg::File>(filePath, fileMode); }},
@@ -34,8 +37,8 @@ namespace ao::tag
     std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return std::tolower(ch); });
 
     if (auto const* const it =
-          std::ranges::find(CreatorMap, std::string_view{ext}, &std::pair<std::string_view, Creator>::first);
-        it != CreatorMap.end())
+          std::ranges::find(kCreatorMap, std::string_view{ext}, &std::pair<std::string_view, Creator>::first);
+        it != kCreatorMap.end())
     {
       return it->second(path, mode);
     }

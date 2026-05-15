@@ -2,20 +2,28 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/library/MusicLibrary.h>
-
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/Meta.h>
 #include <ao/library/MetaStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
-
+#include <ao/lmdb/Transaction.h>
 #include <ao/Exception.h>
 
+#include <lmdb.h>
+
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
 #include <random>
+#include <utility>
 
 namespace ao::library
 {
@@ -57,20 +65,20 @@ namespace ao::library
     {
       if (header.magic != kLibraryMetaMagic)
       {
-        AO_THROW_FORMAT(
-          Exception, "Invalid library metadata magic 0x{:08x} (expected 0x{:08x})", header.magic, kLibraryMetaMagic);
+        ao::throwException<Exception>(
+          "Invalid library metadata magic 0x{:08x} (expected 0x{:08x})", header.magic, kLibraryMetaMagic);
       }
 
       if (header.libraryVersion > kLibraryVersion)
       {
-        AO_THROW_FORMAT(
-          Exception, "Unsupported library version {} (maximum supported {})", header.libraryVersion, kLibraryVersion);
+        ao::throwException<Exception>(
+          "Unsupported library version {} (maximum supported {})", header.libraryVersion, kLibraryVersion);
       }
 
       if (header.libraryVersion < kLibraryVersion)
       {
-        AO_THROW_FORMAT(
-          Exception, "Library version {} requires migration to version {}", header.libraryVersion, kLibraryVersion);
+        ao::throwException<Exception>(
+          "Library version {} requires migration to version {}", header.libraryVersion, kLibraryVersion);
       }
     }
   }
@@ -107,10 +115,10 @@ namespace ao::library
   MusicLibrary::MusicLibrary(std::filesystem::path rootPath)
     : _impl{std::make_unique<Impl>(std::move(rootPath))}
   {
-    if (auto const header = _impl->metaStore.load(_impl->setupTxn))
+    if (auto const optHeader = _impl->metaStore.load(_impl->setupTxn))
     {
-      validateMetaHeader(*header);
-      _impl->metaHeader = *header;
+      validateMetaHeader(*optHeader);
+      _impl->metaHeader = *optHeader;
     }
     else
     {

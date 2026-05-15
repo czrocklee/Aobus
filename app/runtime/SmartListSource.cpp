@@ -2,12 +2,23 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "SmartListSource.h"
-#include "SmartListEvaluator.h"
 
+#include "SmartListEvaluator.h"
+#include "TrackSource.h"
+
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
 #include <ao/utility/Log.h>
 
-#include <algorithm>
+#include <exception>
+#include <iterator>
+#include <memory>
+#include <optional>
+#include <utility>
+
+#include <cstddef>
 
 namespace ao::rt
 {

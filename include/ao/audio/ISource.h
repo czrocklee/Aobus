@@ -3,13 +3,10 @@
 
 #pragma once
 
-#include <ao/audio/Types.h>
-
 #include <ao/Error.h>
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <string>
 
 namespace ao::audio
 {
@@ -17,6 +14,16 @@ namespace ao::audio
   {
   public:
     virtual ~ISource() = default;
+
+    ISource(ISource const&) = delete;
+    ISource& operator=(ISource const&) = delete;
+    ISource(ISource&&) = delete;
+    ISource& operator=(ISource&&) = delete;
+
+  protected:
+    ISource() = default;
+
+  public:
 
     virtual Result<> seek(std::uint32_t positionMs) = 0;
     virtual std::size_t read(std::span<std::byte> output) noexcept = 0;

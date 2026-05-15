@@ -7,6 +7,7 @@
 #include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutDependencies.h"
 
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -16,7 +17,7 @@
 
 namespace ao::gtk::layout
 {
-  enum class PropertyKind
+  enum class PropertyKind : std::uint8_t
   {
     Bool,
     Int,
@@ -46,7 +47,7 @@ namespace ao::gtk::layout
     std::vector<PropertyDescriptor> props = {};
     std::vector<PropertyDescriptor> layoutProps = {};
     std::size_t minChildren = 0;
-    std::optional<std::size_t> maxChildren = {};
+    std::optional<std::size_t> optMaxChildren = {};
   };
 
   using ComponentFactory = std::unique_ptr<ILayoutComponent> (*)(LayoutDependencies&, LayoutNode const&);

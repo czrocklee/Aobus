@@ -3,14 +3,25 @@
 
 #include <ao/audio/AlacDecoderSession.h>
 
-#include <alac/ALACAudioTypes.h>
-#include <alac/ALACBitUtilities.h>
-#include <alac/ALACDecoder.h>
-
+#include <ao/Error.h>
+#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/media/mp4/Demuxer.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/MappedFile.h>
+
+#include <alac/ALACAudioTypes.h>
+#include <alac/ALACBitUtilities.h>
+#include <alac/ALACDecoder.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <filesystem>
+#include <format>
+#include <memory>
+#include <vector>
 
 namespace ao::audio
 {

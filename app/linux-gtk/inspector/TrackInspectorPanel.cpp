@@ -2,7 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "inspector/TrackInspectorPanel.h"
-#include "track/TrackPresentation.h"
+#include "inspector/CoverArtCache.h"
+#include <ao/Type.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
@@ -12,12 +13,28 @@
 #include <runtime/TrackSource.h>
 #include <runtime/ViewService.h>
 
+#include <gdkmm/pixbuf.h>
 #include <giomm/memoryinputstream.h>
+#include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
+#include <gtkmm/box.h>
+#include <gtkmm/editablelabel.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/label.h>
+#include <gtkmm/object.h>
+#include <gtkmm/scrolledwindow.h>
+#include <sigc++/functors/mem_fun.h>
 
-#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <exception>
+#include <format>
 #include <functional>
 #include <iterator>
-#include <set>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -377,9 +394,9 @@ namespace ao::gtk
   {
     auto const txn = _library.readTransaction();
     auto const reader = _library.resources().reader(txn);
-    auto const data = reader.get(static_cast<std::uint32_t>(resourceId.value()));
+    auto const optData = reader.get(static_cast<std::uint32_t>(resourceId.value()));
 
-    if (!data)
+    if (!optData)
     {
       return {};
     }
@@ -387,7 +404,7 @@ namespace ao::gtk
     try
     {
       auto const memStream = Gio::MemoryInputStream::create();
-      memStream->add_data(data->data(), static_cast<gssize>(data->size()), nullptr);
+      memStream->add_data(optData->data(), std::ssize(*optData), nullptr);
       return Gdk::Pixbuf::create_from_stream(memStream);
     }
     catch (std::exception const& ex)

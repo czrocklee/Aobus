@@ -11,7 +11,7 @@ namespace ao::gtk
   class NowPlayingFieldLabel final
   {
   public:
-    enum class Field
+    enum class Field : std::uint8_t
     {
       Title,
       Artist,

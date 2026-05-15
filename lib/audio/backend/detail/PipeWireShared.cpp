@@ -2,13 +2,21 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/backend/detail/PipeWireShared.h>
-#include <cctype>
+
+#include <ao/audio/Format.h>
 
 extern "C"
 {
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/raw-utils.h>
+#include <spa/param/audio/raw.h>
+#include <spa/pod/pod.h>
 }
+
+#include <cctype>
+#include <cstdint>
+#include <cstdlib>
+#include <optional>
 
 namespace ao::audio::backend::detail
 {
@@ -25,7 +33,7 @@ namespace ao::audio::backend::detail
       PwInitGuard& operator=(PwInitGuard&&) = delete;
     };
 
-    static PwInitGuard guard;
+    static PwInitGuard const guard;
   }
 
   std::optional<std::uint32_t> parseUintProperty(char const* value) noexcept
@@ -35,7 +43,7 @@ namespace ao::audio::backend::detail
       return std::nullopt;
     }
 
-    char* end = nullptr;
+    char* end = nullptr; // NOLINT(misc-const-correctness)
     auto const parsed = ::strtoul(value, &end, 10);
 
     if (end == value || *end != '\0')
@@ -65,42 +73,36 @@ namespace ao::audio::backend::detail
     format.channels = static_cast<std::uint8_t>(info.channels);
     format.isInterleaved = true;
 
-    if (info.format == SPA_AUDIO_FORMAT_S16 || info.format == SPA_AUDIO_FORMAT_S16_LE ||
-        info.format == SPA_AUDIO_FORMAT_S16_BE)
+    if (info.format == SPA_AUDIO_FORMAT_S16_LE || info.format == SPA_AUDIO_FORMAT_S16_BE)
     {
       format.bitDepth = 16;
       format.isFloat = false;
     }
-    else if (info.format == SPA_AUDIO_FORMAT_S24 || info.format == SPA_AUDIO_FORMAT_S24_LE ||
-             info.format == SPA_AUDIO_FORMAT_S24_BE)
+    else if (info.format == SPA_AUDIO_FORMAT_S24_LE || info.format == SPA_AUDIO_FORMAT_S24_BE)
     {
       format.bitDepth = 24;
       format.validBits = 24;
       format.isFloat = false;
     }
-    else if (info.format == SPA_AUDIO_FORMAT_S24_32 || info.format == SPA_AUDIO_FORMAT_S24_32_LE ||
-             info.format == SPA_AUDIO_FORMAT_S24_32_BE)
+    else if (info.format == SPA_AUDIO_FORMAT_S24_32_LE || info.format == SPA_AUDIO_FORMAT_S24_32_BE)
     {
       format.bitDepth = 32;
       format.validBits = 24;
       format.isFloat = false;
     }
-    else if (info.format == SPA_AUDIO_FORMAT_S32 || info.format == SPA_AUDIO_FORMAT_S32_LE ||
-             info.format == SPA_AUDIO_FORMAT_S32_BE)
+    else if (info.format == SPA_AUDIO_FORMAT_S32_LE || info.format == SPA_AUDIO_FORMAT_S32_BE)
     {
       format.bitDepth = 32;
       format.validBits = 32;
       format.isFloat = false;
     }
-    else if (info.format == SPA_AUDIO_FORMAT_F32 || info.format == SPA_AUDIO_FORMAT_F32_LE ||
-             info.format == SPA_AUDIO_FORMAT_F32_BE)
+    else if (info.format == SPA_AUDIO_FORMAT_F32_LE || info.format == SPA_AUDIO_FORMAT_F32_BE)
     {
       format.bitDepth = 32;
       format.validBits = 32;
       format.isFloat = true;
     }
-    else if (info.format == SPA_AUDIO_FORMAT_F64 || info.format == SPA_AUDIO_FORMAT_F64_LE ||
-             info.format == SPA_AUDIO_FORMAT_F64_BE)
+    else if (info.format == SPA_AUDIO_FORMAT_F64_LE || info.format == SPA_AUDIO_FORMAT_F64_BE)
     {
       format.bitDepth = 64;
       format.validBits = 64;

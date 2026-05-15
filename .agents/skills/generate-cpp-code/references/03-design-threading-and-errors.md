@@ -191,7 +191,7 @@ public:
 
   std::size_t bufferedBytes() const noexcept
   {
-    auto lock = std::lock_guard{_bufferMutex};
+    auto lock = std::scoped_lock{_bufferMutex};
     return _buffer.size();
   }
 
@@ -207,5 +207,5 @@ private:
 
 - Name background threads with `ao::setCurrentThreadName()`.
 - Use `std::jthread`/`std::stop_token`; do not roll manual stop flags.
-- Use `std::mutex` + `std::lock_guard` for shared state; use `std::unique_lock` only when its extra behavior is needed.
+- Use `std::mutex` + `std::scoped_lock` for shared state; use `std::unique_lock` only when its extra behavior is needed.
 - Use `std::atomic` for simple cross-thread flags/counters; never use `volatile` for synchronization.

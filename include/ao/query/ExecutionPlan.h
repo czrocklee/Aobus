@@ -82,17 +82,17 @@ namespace ao::query
    */
   struct Instruction final
   {
-    OpCode op;
-    std::uint8_t field;   // Field index (for LoadField)
-    std::int32_t operand; // For binary ops: register of left operand. For load: target register
+    OpCode op = OpCode::Nop;
+    std::uint8_t field = 0;   // Field index (for LoadField)
+    std::int32_t operand = 0; // For binary ops: register of left operand. For load: target register
 
     // For constants: stores the constant value directly
-    std::int64_t constValue;
+    std::int64_t constValue = 0;
 
     // For string constants, we store the length and a pointer to the data
     // The actual string data will be stored separately in the plan
-    std::uint32_t strLen;
-    char const* strData;
+    std::uint32_t strLen = 0;
+    char const* strData = nullptr;
   };
 
   /**
@@ -108,9 +108,8 @@ namespace ao::query
   /**
    * ExecutionPlan - Compiled query ready for fast execution.
    */
-  class ExecutionPlan final
+  struct ExecutionPlan final
   {
-  public:
     std::vector<Instruction> instructions;
     std::vector<std::string> stringConstants;
 

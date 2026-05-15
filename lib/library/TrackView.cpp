@@ -2,11 +2,18 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/library/TrackView.h>
+#include <ao/library/TrackLayout.h>
+#include <ao/Type.h>
+#include <ao/utility/ByteView.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <optional>
+#include <string_view>
 
 namespace ao::library
 {
@@ -71,7 +78,6 @@ namespace ao::library
     auto customEntries = entries();
 
     // Small N: linear search via ranges::find_if (cache-friendly, no divisions)
-
     if (customEntries.size() < kSearchThreshold)
     {
       if (auto it = std::ranges::find(customEntries, dictId, &Entry::dictId); it != customEntries.end())
@@ -84,7 +90,6 @@ namespace ao::library
     }
 
     // Large N: binary search via ranges::lower_bound
-
     if (auto it = std::ranges::lower_bound(customEntries, dictId, {}, &Entry::dictId);
         it != customEntries.end() && it->dictId == dictId)
     {
@@ -133,7 +138,7 @@ namespace ao::library
 
   TrackView::CustomProxy::Iterator TrackView::CustomProxy::Iterator::operator++(int)
   {
-    auto tmp = *this;
+    auto tmp = Iterator{*this};
     ++_pos;
     return tmp;
   }

@@ -26,6 +26,11 @@ namespace ao::gtk
     explicit MainWindow(rt::AppSession& session, std::shared_ptr<rt::ConfigStore> configStore);
     ~MainWindow() override;
 
+    MainWindow(MainWindow const&) = delete;
+    MainWindow& operator=(MainWindow const&) = delete;
+    MainWindow(MainWindow&&) = delete;
+    MainWindow& operator=(MainWindow&&) = delete;
+
     void on_hide() override;
 
     ImportExportCoordinator& importExportCoordinator();

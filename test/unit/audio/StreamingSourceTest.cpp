@@ -3,31 +3,36 @@
 
 #include "ScriptedDecoderSession.h"
 
+#include <ao/Error.h>
+#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/StreamingSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <expected>
+#include <memory>
 #include <thread>
+#include <utility>
+#include <vector>
 
 namespace ao::audio::test
 {
-  using namespace std::chrono_literals;
-
   TEST_CASE("StreamingSource - Core Logic", "[audio][unit][streaming_source]")
   {
     auto const format =
       Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
     auto const info = DecodedStreamInfo{.sourceFormat = format, .outputFormat = format, .durationMs = 1000};
 
-    std::atomic<int> errorCount{0};
+    auto errorCount = std::atomic<int>{0};
     auto onError = [&](Error const&) { errorCount.fetch_add(1); };
 
     // NOTE: StreamingSource contains a ~2MB inline ring buffer. Under ASAN, the
     // stack frame for this test function would be ~14MB which exceeds the 8MB
     // default stack. All source instances are heap-allocated for this reason.
-
     SECTION("Initialize matrix")
     {
       SECTION("Preroll success starts thread")
@@ -114,7 +119,7 @@ namespace ao::audio::test
 
       while (errorCount.load() == 0 && retries < 100)
       {
-        std::this_thread::sleep_for(10ms);
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
         retries++;
       }
 
@@ -139,7 +144,7 @@ namespace ao::audio::test
 
       while (!source->isDrained() && retries < 100)
       {
-        std::this_thread::sleep_for(10ms);
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
         retries++;
       }
 

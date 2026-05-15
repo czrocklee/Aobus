@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/NullBackend.h>
-#include <catch2/catch_approx.hpp>
+#include <ao/audio/Types.h>
+
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+
 #include <chrono>
 #include <filesystem>
+#include <memory>
 #include <thread>
+#include <utility>
 
 namespace ao::audio::test
 {

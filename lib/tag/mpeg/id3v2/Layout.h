@@ -10,6 +10,9 @@
 
 namespace ao::tag::mpeg::id3v2
 {
+  static constexpr std::size_t kId22Size = 3;
+  static constexpr std::size_t kId23Size = 4;
+
   struct EncodedSize
   {
     std::array<std::uint8_t, 4> data;
@@ -21,14 +24,21 @@ namespace ao::tag::mpeg::id3v2
 
   inline std::size_t decodeSize(EncodedSize size)
   {
-    return (static_cast<std::size_t>(size.data[0] & 0x7F) << 21) |
-           (static_cast<std::size_t>(size.data[1] & 0x7F) << 14) |
-           (static_cast<std::size_t>(size.data[2] & 0x7F) << 7) | (static_cast<std::size_t>(size.data[3] & 0x7F));
+    static constexpr std::uint8_t kSyncSafeMask = 0x7F;
+    static constexpr std::size_t kByteShift3 = 21;
+    static constexpr std::size_t kByteShift2 = 14;
+    static constexpr std::size_t kByteShift1 = 7;
+
+    return (static_cast<std::size_t>(size.data[0] & kSyncSafeMask) << kByteShift3) |
+           (static_cast<std::size_t>(size.data[1] & kSyncSafeMask) << kByteShift2) |
+           (static_cast<std::size_t>(size.data[2] & kSyncSafeMask) << kByteShift1) |
+           (static_cast<std::size_t>(size.data[3] & kSyncSafeMask)); // NOLINT(readability-magic-numbers)
   }
 
   struct HeaderLayout
   {
-    std::array<char, 3> id;
+    static constexpr std::size_t kSize = 10;
+    std::array<char, kId22Size> id;
     std::uint8_t majorVersion;
     std::uint8_t minorVersion;
 
@@ -55,65 +65,69 @@ namespace ao::tag::mpeg::id3v2
     EncodedSize size;
   };
 
-  static_assert(sizeof(HeaderLayout) == 10);
+  static_assert(sizeof(HeaderLayout) == HeaderLayout::kSize);
   static_assert(alignof(HeaderLayout) == 1);
   static_assert(std::is_trivial_v<HeaderLayout>);
 
   struct V22CommonFrameLayout
   {
+    static constexpr std::size_t kSize = 6;
     using CommonLayout = V22CommonFrameLayout;
-    std::array<char, 3> id;
+    std::array<char, kId22Size> id;
     boost::endian::big_uint24_buf_t size;
   };
 
-  static_assert(sizeof(V22CommonFrameLayout) == 6);
+  static_assert(sizeof(V22CommonFrameLayout) == V22CommonFrameLayout::kSize);
   static_assert(alignof(V22CommonFrameLayout) == 1);
   static_assert(std::is_trivial_v<V22CommonFrameLayout>);
 
-  enum Encoding : std::uint8_t
+  enum class Encoding : std::uint8_t
   {
-    Latin_1 = 0u,
-    UCS_2 = 1u
+    Latin1 = 0U,
+    Ucs2 = 1U
   };
 
   struct V22TextFrameLayout : V22CommonFrameLayout
   {
+    static constexpr std::size_t kSize = 7;
     using CommonLayout = V22CommonFrameLayout;
     Encoding encoding;
     // text
   };
 
-  static_assert(sizeof(V22TextFrameLayout) == 7);
+  static_assert(sizeof(V22TextFrameLayout) == V22TextFrameLayout::kSize);
   static_assert(alignof(V22TextFrameLayout) == 1);
   static_assert(std::is_trivial_v<V22TextFrameLayout>);
 
   struct V22CommentFrameLayout : V22CommonFrameLayout
   {
+    static constexpr std::size_t kSize = 10;
     using CommonLayout = V22CommonFrameLayout;
     Encoding encoding;
-    std::array<char, 3> language;
+    std::array<char, kId22Size> language;
   };
 
-  static_assert(sizeof(V22CommentFrameLayout) == 10);
+  static_assert(sizeof(V22CommentFrameLayout) == V22CommentFrameLayout::kSize);
   static_assert(alignof(V22CommentFrameLayout) == 1);
   static_assert(std::is_trivial_v<V22CommentFrameLayout>);
 
-  enum PictureType : std::uint8_t
+  enum class PictureType : std::uint8_t
   {
     FrontCover = 3
   };
 
   struct V22PictureFrameLayout : V22CommonFrameLayout
   {
+    static constexpr std::size_t kSize = 11;
     using CommonLayout = V22CommonFrameLayout;
     Encoding encoding;
-    std::array<char, 3> format;
+    std::array<char, kId22Size> format;
     PictureType type;
     // description
     // data
   };
 
-  static_assert(sizeof(V22PictureFrameLayout) == 11);
+  static_assert(sizeof(V22PictureFrameLayout) == V22PictureFrameLayout::kSize);
   static_assert(alignof(V22PictureFrameLayout) == 1);
   static_assert(std::is_trivial_v<V22PictureFrameLayout>);
 
@@ -124,24 +138,26 @@ namespace ao::tag::mpeg::id3v2
 
   struct V23CommonFrameLayout
   {
+    static constexpr std::size_t kSize = 10;
     using CommonLayout = V23CommonFrameLayout;
-    std::array<char, 4> id;
+    std::array<char, kId23Size> id;
     boost::endian::big_uint32_buf_t size;
     std::array<std::uint8_t, 2> flags;
   };
 
-  static_assert(sizeof(V23CommonFrameLayout) == 10);
+  static_assert(sizeof(V23CommonFrameLayout) == V23CommonFrameLayout::kSize);
   static_assert(alignof(V23CommonFrameLayout) == 1);
   static_assert(std::is_trivial_v<V23CommonFrameLayout>);
 
   struct V23TextFrameLayout : V23CommonFrameLayout
   {
+    static constexpr std::size_t kSize = 11;
     using CommonLayout = V23CommonFrameLayout;
     Encoding encoding;
     // text
   };
 
-  static_assert(sizeof(V23TextFrameLayout) == 11);
+  static_assert(sizeof(V23TextFrameLayout) == V23TextFrameLayout::kSize);
   static_assert(alignof(V23TextFrameLayout) == 1);
   static_assert(std::is_trivial_v<V23TextFrameLayout>);
 
@@ -152,13 +168,14 @@ namespace ao::tag::mpeg::id3v2
 
   struct V24CommonFrameLayout
   {
+    static constexpr std::size_t kSize = 10;
     using CommonLayout = V24CommonFrameLayout;
-    std::array<char, 4> id;
+    std::array<char, kId23Size> id;
     EncodedSize size;
     std::array<std::uint8_t, 2> flags;
   };
 
-  static_assert(sizeof(V24CommonFrameLayout) == 10);
+  static_assert(sizeof(V24CommonFrameLayout) == V24CommonFrameLayout::kSize);
   static_assert(alignof(V24CommonFrameLayout) == 1);
   static_assert(std::is_trivial_v<V24CommonFrameLayout>);
 

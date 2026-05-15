@@ -15,7 +15,7 @@ namespace ao::query
   struct BinaryExpression;
   struct UnaryExpression;
 
-  enum class VariableType
+  enum class VariableType : std::uint8_t
   {
     Metadata,
     Property,
@@ -25,7 +25,7 @@ namespace ao::query
 
   struct VariableExpression
   {
-    VariableType type;
+    VariableType type = VariableType::Metadata;
     std::string name;
   };
 
@@ -41,7 +41,7 @@ namespace ao::query
                                   std::unique_ptr<BinaryExpression>,
                                   std::unique_ptr<UnaryExpression>>;
 
-  enum class Operator
+  enum class Operator : std::uint8_t
   {
     And,
     Or,
@@ -60,7 +60,7 @@ namespace ao::query
   {
     struct Operation
     {
-      Operator op;
+      Operator op = Operator::Equal;
       Expression operand;
     };
 
@@ -70,7 +70,7 @@ namespace ao::query
 
   struct UnaryExpression
   {
-    Operator op;
+    Operator op = Operator::Not;
     Expression operand;
   };
 

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <variant>
 
 namespace ao::audio
@@ -10,7 +11,7 @@ namespace ao::audio
   /**
    * @brief Unique identifiers for runtime backend properties.
    */
-  enum class PropertyId
+  enum class PropertyId : std::uint8_t
   {
     Volume,
     Muted,
@@ -41,7 +42,7 @@ namespace ao::audio
   struct TypedProperty final
   {
     using ValueType = T;
-    static constexpr PropertyId id = Id;
+    static constexpr PropertyId kId = Id;
   };
 
   /**
@@ -49,7 +50,7 @@ namespace ao::audio
    */
   namespace props
   {
-    inline constexpr auto Volume = TypedProperty<float, PropertyId::Volume>{};
-    inline constexpr auto Muted = TypedProperty<bool, PropertyId::Muted>{};
+    inline constexpr auto kVolume = TypedProperty<float, PropertyId::Volume>{};
+    inline constexpr auto kMuted = TypedProperty<bool, PropertyId::Muted>{};
   }
 } // namespace ao::audio

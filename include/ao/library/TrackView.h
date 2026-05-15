@@ -3,21 +3,19 @@
 
 #pragma once
 
-#include <ao/Exception.h>
-
 #include <ao/Type.h>
 #include <ao/library/TrackLayout.h>
 
 #include <ao/utility/ByteView.h>
+#include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <gsl-lite/gsl-lite.hpp>
+#include <iterator>
 #include <optional>
 #include <ranges>
 #include <span>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::library
 {
@@ -153,8 +151,8 @@ namespace ao::library
       struct Entry
       {
         DictionaryId dictId;  // 4 bytes
-        std::uint16_t offset; // 2 bytes - byte offset from header start to value
-        std::uint16_t len;    // 2 bytes - value length in bytes
+        std::uint16_t offset = 0; // 2 bytes - byte offset from header start to value
+        std::uint16_t len = 0;    // 2 bytes - value length in bytes
       };
 
       class Iterator;
@@ -245,11 +243,11 @@ namespace ao::library
   {
   public:
     // Standard iterator traits
-    using difference_type = std::ptrdiff_t;
-    using value_type = std::pair<DictionaryId const, std::string_view>;
-    using reference = value_type;
-    using pointer = void;
-    using iterator_category = std::forward_iterator_tag;
+    using difference_type = std::ptrdiff_t;     // NOLINT
+    using value_type = std::pair<DictionaryId const, std::string_view>; // NOLINT
+    using reference = value_type;               // NOLINT
+    using pointer = void;                       // NOLINT
+    using iterator_category = std::forward_iterator_tag; // NOLINT
 
     Iterator() = default;
 

@@ -15,6 +15,12 @@ namespace ao::gtk
     TagPopover(library::MusicLibrary& musicLibrary, std::vector<TrackId> selectedTrackIds);
     ~TagPopover() override;
 
+    // Not copyable or movable
+    TagPopover(TagPopover const&) = delete;
+    TagPopover& operator=(TagPopover const&) = delete;
+    TagPopover(TagPopover&&) = delete;
+    TagPopover& operator=(TagPopover&&) = delete;
+
     TagEditor::TagsChangedSignal& signalTagsChanged() { return _tagEditor.signalTagsChanged(); }
 
   private:

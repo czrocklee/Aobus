@@ -27,6 +27,11 @@ namespace ao::library
     explicit MusicLibrary(std::filesystem::path rootPath);
     ~MusicLibrary();
 
+    MusicLibrary(MusicLibrary const&) = delete;
+    MusicLibrary& operator=(MusicLibrary const&) = delete;
+    MusicLibrary(MusicLibrary&&) = delete;
+    MusicLibrary& operator=(MusicLibrary&&) = delete;
+
     lmdb::ReadTransaction readTransaction() const;
     lmdb::WriteTransaction writeTransaction();
 

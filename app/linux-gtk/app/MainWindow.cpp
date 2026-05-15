@@ -3,12 +3,17 @@
 
 #include "app/MainWindow.h"
 #include "app/MenuController.h"
+#include "app/UIState.h"
 #include "app/WindowController.h"
-#include "layout/LayoutConstants.h"
 #include <ao/utility/Log.h>
-#include <exception>
 #include <runtime/AppSession.h>
 #include <runtime/ConfigStore.h>
+
+#include <gtkmm/applicationwindow.h>
+
+#include <exception>
+#include <memory>
+#include <utility>
 
 namespace ao::gtk
 {

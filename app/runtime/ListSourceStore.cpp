@@ -6,10 +6,16 @@
 #include "LibraryMutationService.h"
 #include "ManualListSource.h"
 #include "SmartListSource.h"
+#include "TrackSource.h"
 
 #include <ao/library/ListStore.h>
-
 #include <ao/library/ListView.h>
+
+#include <algorithm>
+#include <memory>
+#include <ranges>
+#include <utility>
+#include <vector>
 
 namespace ao::rt
 {
@@ -115,11 +121,11 @@ namespace ao::rt
           continue;
         }
 
-        TrackSource* parentPtr = nullptr;
+        TrackSource* parentPtr = nullptr; // NOLINT(misc-const-correctness)
 
         if (auto* const manual = dynamic_cast<ManualListSource*>(childSource.get()))
         {
-          parentPtr = manual->_source;
+          parentPtr = manual->source();
         }
         else if (auto* const smart = dynamic_cast<SmartListSource*>(childSource.get()))
         {
@@ -147,9 +153,9 @@ namespace ao::rt
     }
 
     // Erase in reverse order of discovery (children first)
-    for (auto it = toErase.rbegin(); it != toErase.rend(); ++it)
+    for (auto& it : std::ranges::reverse_view(toErase))
     {
-      _sources.erase(*it);
+      _sources.erase(it);
     }
   }
 

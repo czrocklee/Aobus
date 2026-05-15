@@ -6,8 +6,17 @@
 #include "layout/components/PlaybackComponents.h"
 #include "layout/components/SemanticComponents.h"
 #include "layout/components/StatusComponents.h"
+#include "layout/document/LayoutDocument.h"
+#include "layout/document/LayoutNode.h"
+#include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutDependencies.h"
 
 #include <algorithm>
+#include <functional>
+#include <map>
+#include <memory>
+#include <string>
 #include <vector>
 
 namespace ao::gtk::layout
@@ -77,7 +86,7 @@ namespace ao::gtk::layout
         return expanded;
       }
 
-      auto result = node;
+      auto result = LayoutNode{node};
       result.children.clear();
 
       for (auto const& child : node.children)

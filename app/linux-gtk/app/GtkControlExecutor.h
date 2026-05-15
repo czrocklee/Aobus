@@ -18,6 +18,12 @@ namespace ao::gtk
     GtkControlExecutor();
     ~GtkControlExecutor() override = default;
 
+    // Not copyable or movable
+    GtkControlExecutor(GtkControlExecutor const&) = delete;
+    GtkControlExecutor& operator=(GtkControlExecutor const&) = delete;
+    GtkControlExecutor(GtkControlExecutor&&) = delete;
+    GtkControlExecutor& operator=(GtkControlExecutor&&) = delete;
+
     bool isCurrent() const noexcept override;
     void dispatch(std::move_only_function<void()> task) override;
     void defer(std::move_only_function<void()> task) override;

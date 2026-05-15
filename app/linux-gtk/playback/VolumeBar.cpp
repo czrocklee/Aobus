@@ -2,8 +2,19 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/VolumeBar.h"
+
+#include <gdkmm/graphene_rect.h>
+#include <gdkmm/rgba.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/eventcontrollerscroll.h>
+#include <gtkmm/gesturedrag.h>
+#include <gtkmm/gestureclick.h>
+#include <gtkmm/snapshot.h>
+
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace ao::gtk
 {
@@ -26,10 +37,12 @@ namespace ao::gtk
     constexpr double kFallbackBlue = 0.894;
     constexpr double kFallbackAlpha = 1.0;
 
-    constexpr double kAngle90 = 0.5 * M_PI;
-    constexpr double kAngle180 = M_PI;
-    constexpr double kAngle270 = 1.5 * M_PI;
-    constexpr double kAngle360 = 2.0 * M_PI;
+    constexpr double kAngle90 = 0.5 * std::numbers::pi;
+    constexpr double kAngle180 = std::numbers::pi;
+    constexpr double kAngle270 = 1.5 * std::numbers::pi;
+    constexpr double kAngle360 = 2.0 * std::numbers::pi;
+    constexpr float kScrollStep = 0.05F;
+    constexpr float kFullOpacity = 1.0F;
   }
 
   VolumeBar::VolumeBar()
@@ -144,9 +157,9 @@ namespace ao::gtk
     cr->save();
     cr->begin_new_path();
 
-    for (int i = 0; i < kNumSegments; ++i)
+    for (int idx = 0; idx < kNumSegments; ++idx)
     {
-      float const segmentX = static_cast<float>(i) * (segmentWidth + static_cast<float>(kSegmentGap));
+      float const segmentX = static_cast<float>(idx) * (segmentWidth + static_cast<float>(kSegmentGap));
       // We add independent sub-paths for each rounded rect segment
       cr->begin_new_sub_path();
       cr->arc(segmentX + kSegmentRadius, yOffset + kSegmentRadius, kSegmentRadius, kAngle180, kAngle270);
@@ -182,7 +195,7 @@ namespace ao::gtk
     {
       drawTrapezoid(static_cast<float>(width) * _volume);
       // Use the dynamically discovered theme color
-      cr->set_source_rgba(activeColor.get_red(), activeColor.get_green(), activeColor.get_blue(), 1.0);
+      cr->set_source_rgba(activeColor.get_red(), activeColor.get_green(), activeColor.get_blue(), kFullOpacity);
       cr->fill();
     }
 
@@ -220,7 +233,7 @@ namespace ao::gtk
 
   void VolumeBar::handleScroll(double /*dx*/, double dy)
   {
-    float const delta = (dy > 0) ? -0.05F : 0.05F;
+    float const delta = (dy > 0) ? -kScrollStep : kScrollStep;
     float const newVol = std::clamp(_volume + delta, 0.0F, 1.0F);
 
     if (std::abs(_volume - newVol) > kVolumeEpsilon)

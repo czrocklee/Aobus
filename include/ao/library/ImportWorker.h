@@ -3,9 +3,12 @@
 
 #pragma once
 
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/tag/TagFile.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <thread>
@@ -37,6 +40,11 @@ namespace ao::library
 
     ~ImportWorker();
 
+    ImportWorker(ImportWorker const&) = delete;
+    ImportWorker& operator=(ImportWorker const&) = delete;
+    ImportWorker(ImportWorker&&) = delete;
+    ImportWorker& operator=(ImportWorker&&) = delete;
+
     // Run import in the current thread - must be called from background thread
     void run();
 
@@ -55,6 +63,6 @@ namespace ao::library
     FinishedCallback _finishedCallback;
 
     ImportResult _result;
-    std::thread _workerThread;
+    std::jthread _workerThread;
   };
 } // namespace ao::library

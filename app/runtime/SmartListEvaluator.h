@@ -74,7 +74,7 @@ namespace ao::rt
     void notifyUpdated(TrackSource& source, TrackId trackId);
 
   private:
-    struct SourceBucket
+    struct SourceBucket final
     {
       TrackSource* source = nullptr;
       bool sourceAlive = true;

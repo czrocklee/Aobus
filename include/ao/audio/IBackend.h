@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <span>
 #include <string_view>
+#include <variant>
 
 namespace ao::audio
 {
@@ -22,6 +23,11 @@ namespace ao::audio
   {
   public:
     virtual ~IBackend() = default;
+
+    IBackend(IBackend const&) = delete;
+    IBackend& operator=(IBackend const&) = delete;
+    IBackend(IBackend&&) = delete;
+    IBackend& operator=(IBackend&&) = delete;
 
     /**
      * @brief Initialize and open the backend for playback.
@@ -41,13 +47,13 @@ namespace ao::audio
     virtual PropertyInfo queryProperty(PropertyId id) const noexcept = 0;
 
     template<typename T, PropertyId Id>
-    Result<> set(TypedProperty<T, Id>, T value)
+    Result<> set(TypedProperty<T, Id> /*tag*/, T value)
     {
       return setProperty(Id, PropertyValue{value});
     }
 
     template<typename T, PropertyId Id>
-    Result<T> get(TypedProperty<T, Id>) const
+    Result<T> get(TypedProperty<T, Id> /*tag*/) const
     {
       auto const result = getProperty(Id);
 
@@ -61,5 +67,8 @@ namespace ao::audio
 
     virtual BackendId backendId() const noexcept = 0;
     virtual ProfileId profileId() const noexcept = 0;
+
+  protected:
+    IBackend() = default;
   };
 } // namespace ao::audio

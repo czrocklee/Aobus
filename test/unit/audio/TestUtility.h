@@ -121,7 +121,7 @@ namespace ao::audio::test
     fakeit::Mock<IBackend>& mock() { return _mock; }
     IBackend& get() { return _mock.get(); }
 
-    std::unique_ptr<IBackend> make_proxy() { return std::make_unique<MockBackendProxy>(_mock.get()); }
+    std::unique_ptr<IBackend> makeProxy() { return std::make_unique<MockBackendProxy>(_mock.get()); }
 
   private:
     T _base;

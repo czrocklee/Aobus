@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Type.h>
 #include <ao/library/ListLayout.h>
 #include <ao/utility/ByteView.h>
 

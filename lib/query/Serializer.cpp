@@ -2,15 +2,22 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/query/Serializer.h>
+#include <ao/query/Expression.h>
 #include <ao/utility/VariantVisitor.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <sstream>
+#include <string>
+#include <string_view>
+#include <variant>
 
 namespace ao::query
 {
   namespace
   {
-    struct ParenthesisGuard // NOLINT(cppcoreguidelines-special-member-functions)
+    struct ParenthesisGuard final // NOLINT(cppcoreguidelines-special-member-functions)
     {
       ParenthesisGuard(std::ostringstream& oss, bool apply)
         : oss{oss}, apply{apply}
@@ -33,9 +40,9 @@ namespace ao::query
       bool apply;
     };
 
-    struct Serializer
+    struct Serializer final
     {
-      Serializer() {};
+      Serializer() = default;
 
       void operator()(std::unique_ptr<BinaryExpression> const& binary)
       {

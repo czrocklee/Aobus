@@ -3,9 +3,18 @@
 
 #include "ManualListSource.h"
 
+#include "TrackSource.h"
+
 #include <ao/library/ListView.h>
 
 #include <algorithm>
+#include <iterator>
+#include <optional>
+#include <span>
+#include <utility>
+#include <vector>
+
+#include <cstddef>
 
 namespace ao::rt
 {
@@ -79,9 +88,9 @@ namespace ao::rt
 
   void ManualListSource::onUpdated(TrackId const id, std::size_t /*index*/)
   {
-    if (auto const myIndex = indexOf(id))
+    if (auto const optMyIndex = indexOf(id))
     {
-      TrackSource::notifyUpdated(id, *myIndex);
+      TrackSource::notifyUpdated(id, *optMyIndex);
     }
   }
 

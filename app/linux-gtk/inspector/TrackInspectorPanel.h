@@ -42,6 +42,11 @@ namespace ao::gtk
                                  CoverArtCache& coverArtCache);
     ~TrackInspectorPanel() override;
 
+    TrackInspectorPanel(TrackInspectorPanel const&) = delete;
+    TrackInspectorPanel& operator=(TrackInspectorPanel const&) = delete;
+    TrackInspectorPanel(TrackInspectorPanel&&) = delete;
+    TrackInspectorPanel& operator=(TrackInspectorPanel&&) = delete;
+
     TagEditRequestedSignal& signalTagEditRequested() { return _tagEditRequested; }
 
     /// Bind to a runtime detail projection for cover art + audio property auto-updates.

@@ -22,6 +22,15 @@ namespace ao::audio
   public:
     virtual ~IRenderTarget() = default;
 
+    IRenderTarget(IRenderTarget const&) = delete;
+    IRenderTarget& operator=(IRenderTarget const&) = delete;
+    IRenderTarget(IRenderTarget&&) = delete;
+    IRenderTarget& operator=(IRenderTarget&&) = delete;
+
+  protected:
+    IRenderTarget() = default;
+
+  public:
     /// Called by the backend when it needs more PCM data.
     virtual std::size_t readPcm(std::span<std::byte> output) noexcept = 0;
 

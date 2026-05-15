@@ -2,12 +2,28 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "tag/TagEditor.h"
-#include "layout/LayoutConstants.h"
-#include <algorithm>
+#include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+
+#include <gtkmm/box.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/flowbox.h>
+#include <gtkmm/flowboxchild.h>
+#include <gtkmm/label.h>
+#include <gtkmm/object.h>
+#include <gtkmm/togglebutton.h>
+#include <sigc++/functors/mem_fun.h>
+
+#include <algorithm>
+#include <cctype>
+#include <cstddef>
 #include <map>
 #include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -120,16 +136,16 @@ namespace ao::gtk
 
     for (auto const trackId : _selectedTrackIds)
     {
-      auto const view = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
 
-      if (!view)
+      if (!optView)
       {
         continue;
       }
 
       auto tagsOnTrack = std::set<std::string>{};
 
-      for (auto const tagId : view->tags())
+      for (auto const tagId : optView->tags())
       {
         if (auto const tag = std::string(dictionary.get(tagId)); !tag.empty())
         {

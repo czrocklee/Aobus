@@ -8,7 +8,9 @@
 
 #include <atomic>
 #include <cstddef>
-#include <string>
+#include <cstdint>
+#include <memory>
+#include <span>
 #include <vector>
 
 namespace ao::audio
@@ -20,6 +22,10 @@ namespace ao::audio
 
     MemorySource(MemorySource const&) = delete;
     MemorySource& operator=(MemorySource const&) = delete;
+    MemorySource(MemorySource&&) = delete;
+    MemorySource& operator=(MemorySource&&) = delete;
+
+    ~MemorySource() override = default;
 
     Result<> initialize();
     Result<> seek(std::uint32_t positionMs) override;

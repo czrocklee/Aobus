@@ -24,7 +24,8 @@ namespace ao::lmdb::test
     TempDir()
     {
       std::string tmpl = (std::filesystem::temp_directory_path() / "rs_lmdb_test_XXXXXX").string();
-      char* result = mkdtemp(tmpl.data());
+      char const* const result = mkdtemp(tmpl.data());
+
       if (result == nullptr)
       {
         throw std::runtime_error("mkdtemp failed");
@@ -35,7 +36,7 @@ namespace ao::lmdb::test
 
     ~TempDir()
     {
-      std::error_code ec;
+      auto ec = std::error_code{};
       std::filesystem::remove_all(_path, ec);
     }
 
@@ -56,7 +57,8 @@ namespace ao::lmdb::test
    */
   inline std::vector<std::byte> createTestData(std::size_t size)
   {
-    std::vector<std::byte> data(size);
+    auto data = std::vector<std::byte>(size);
+    
     for (std::size_t i = 0; i < size; ++i)
     {
       data[i] = static_cast<std::byte>(i % 256);

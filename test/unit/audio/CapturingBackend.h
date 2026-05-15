@@ -88,7 +88,7 @@ namespace ao::audio::test
     // Trigger callbacks
     void fireRouteReady(std::string_view anchor)
     {
-      if (_target)
+      if (_target != nullptr)
       {
         _target->onRouteReady(anchor);
       }
@@ -98,7 +98,7 @@ namespace ao::audio::test
     {
       _format = fmt;
 
-      if (_target)
+      if (_target != nullptr)
       {
         _target->onFormatChanged(fmt);
       }
@@ -106,7 +106,7 @@ namespace ao::audio::test
 
     void fireBackendError(std::string_view msg)
     {
-      if (_target)
+      if (_target != nullptr)
       {
         _target->onBackendError(msg);
       }
@@ -114,7 +114,7 @@ namespace ao::audio::test
 
     void fireDrainComplete()
     {
-      if (_target)
+      if (_target != nullptr)
       {
         _target->onDrainComplete();
       }
@@ -122,7 +122,7 @@ namespace ao::audio::test
 
     void firePropertyChanged(PropertyId id)
     {
-      if (_target)
+      if (_target != nullptr)
       {
         _target->onPropertyChanged(id);
       }
@@ -133,7 +133,7 @@ namespace ao::audio::test
     IRenderTarget* _target = nullptr;
     Format _format{};
     Result<> _openResult{};
-    float _volume = 1.0f;
+    float _volume = 1.0F;
     bool _muted = false;
   };
 } // namespace ao::audio::test

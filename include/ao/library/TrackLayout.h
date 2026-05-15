@@ -6,11 +6,6 @@
 #include <ao/library/DictionaryStore.h>
 
 #include <cstdint>
-#include <optional>
-#include <span>
-#include <string_view>
-#include <utility>
-#include <vector>
 
 namespace ao::library
 {
@@ -41,25 +36,25 @@ namespace ao::library
   struct TrackHotHeader final
   {
     // 4-byte section
-    std::uint32_t tagBloom;     // Bloom filter for tags (32-bit)
-    DictionaryId artistId;      // Dictionary ID for artist
-    DictionaryId albumId;       // Dictionary ID for album
-    DictionaryId genreId;       // Dictionary ID for genre
-    DictionaryId albumArtistId; // Dictionary ID for album artist
-    DictionaryId composerId;    // Dictionary ID for composer
+    std::uint32_t tagBloom{};     // Bloom filter for tags (32-bit)
+    DictionaryId artistId{};      // Dictionary ID for artist
+    DictionaryId albumId{};       // Dictionary ID for album
+    DictionaryId genreId{};       // Dictionary ID for genre
+    DictionaryId albumArtistId{}; // Dictionary ID for album artist
+    DictionaryId composerId{};    // Dictionary ID for composer
 
     // 2-byte section
-    std::uint16_t year;     // Release year
-    std::uint16_t codecId;  // Audio codec identifier
-    std::uint16_t bitDepth; // Bits per sample
-    std::uint16_t titleLen; // Length of title string
-    std::uint16_t tagLen;   // Length of tags blob in bytes
+    std::uint16_t year{};     // Release year
+    std::uint16_t codecId{};  // Audio codec identifier
+    std::uint16_t bitDepth{}; // Bits per sample
+    std::uint16_t titleLen{}; // Length of title string
+    std::uint16_t tagLen{};   // Length of tags blob in bytes
 
     // 1-byte section
-    std::uint8_t rating; // User rating (0-5)
+    std::uint8_t rating{}; // User rating (0-5)
 
     // 1 byte padding to reach 36 bytes total
-    std::byte padding;
+    std::byte padding{};
   };
 
   // Binary layout constants
@@ -110,32 +105,32 @@ namespace ao::library
   struct TrackColdHeader final
   {
     // 4-byte section (split from original int64)
-    std::uint32_t fileSizeLo; // Lower 32 bits of file size
-    std::uint32_t fileSizeHi; // Upper 32 bits of file size
-    std::uint32_t mtimeLo;    // Lower 32 bits of modification time
-    std::uint32_t mtimeHi;    // Upper 32 bits of modification time
+    std::uint32_t fileSizeLo{}; // Lower 32 bits of file size
+    std::uint32_t fileSizeHi{}; // Upper 32 bits of file size
+    std::uint32_t mtimeLo{};    // Lower 32 bits of modification time
+    std::uint32_t mtimeHi{};    // Upper 32 bits of modification time
 
     // 4-byte section
-    std::uint32_t durationMs; // Track duration in milliseconds
-    std::uint32_t sampleRate; // Sample rate in Hz
-    std::uint32_t coverArtId; // ResourceStore ID for cover art
-    std::uint32_t bitrate;    // Bitrate in bps
-    DictionaryId workId;      // Dictionary ID for work
+    std::uint32_t durationMs{}; // Track duration in milliseconds
+    std::uint32_t sampleRate{}; // Sample rate in Hz
+    std::uint32_t coverArtId{}; // ResourceStore ID for cover art
+    std::uint32_t bitrate{};    // Bitrate in bps
+    DictionaryId workId{};      // Dictionary ID for work
 
     // 2-byte section
-    std::uint16_t trackNumber; // Track number
-    std::uint16_t totalTracks; // Total tracks in album
-    std::uint16_t discNumber;  // Disc number
-    std::uint16_t totalDiscs;  // Total discs in album
-    std::uint16_t customCount; // Number of custom key-value entries
-    std::uint16_t uriOffset;   // Byte offset from header start to uri string
-    std::uint16_t uriLen;      // Length of URI string
+    std::uint16_t trackNumber{}; // Track number
+    std::uint16_t totalTracks{}; // Total tracks in album
+    std::uint16_t discNumber{};  // Disc number
+    std::uint16_t totalDiscs{};  // Total discs in album
+    std::uint16_t customCount{}; // Number of custom key-value entries
+    std::uint16_t uriOffset{};   // Byte offset from header start to uri string
+    std::uint16_t uriLen{};      // Length of URI string
 
     // 1-byte section
-    std::uint8_t channels; // Number of audio channels
+    std::uint8_t channels{}; // Number of audio channels
 
     // 1 byte padding to reach 52 bytes total
-    std::byte padding;
+    std::byte padding{};
   };
 
   // Binary layout constants

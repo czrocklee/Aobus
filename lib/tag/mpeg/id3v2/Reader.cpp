@@ -2,15 +2,19 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "Reader.h"
-#include "../File.h"
 #include "Frame.h"
 #include "Layout.h"
+#include <ao/library/TrackBuilder.h>
+#include <ao/tag/TagFile.h>
 #include <ao/utility/ByteView.h>
 
 #include <charconv>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <optional>
+#include <string_view>
+#include <system_error>
 
 namespace ao::tag::mpeg::id3v2
 {
@@ -96,7 +100,6 @@ namespace ao::tag::mpeg::id3v2
       // Skip encoding byte
       ++ptr;
       // Skip MIME type
-
       while (*ptr != '\0')
       {
         ++ptr;
@@ -106,7 +109,6 @@ namespace ao::tag::mpeg::id3v2
       // Skip picture type
       ++ptr;
       // Skip description (null-terminated)
-
       while (*ptr != '\0')
       {
         ++ptr;
@@ -128,7 +130,6 @@ namespace ao::tag::mpeg::id3v2
       auto text = view.text();
 
       // TXXX format is "description\0value"
-
       if (auto const nullPos = text.find('\0'); nullPos != std::string_view::npos)
       {
         auto const key = text.substr(0, nullPos);
@@ -175,7 +176,7 @@ namespace ao::tag::mpeg::id3v2
 
         for (; frameIter != frameEnd; ++frameIter)
         {
-          std::string_view frameId = frameIter->id();
+          std::string_view const frameId = frameIter->id();
 
           if (auto const* entry = Id3v2FrameDispatchTable::lookupFrame(frameId.data(), frameId.size());
               entry != nullptr)

@@ -3,6 +3,11 @@
 
 #include "list/ListRowObject.h"
 
+#include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
+
+#include <cstdint>
+
 namespace ao::gtk
 {
   ListRowObject::ListRowObject()

@@ -1,12 +1,28 @@
 #include "CapturingBackend.h"
 #include "ScriptedDecoderSession.h"
 #include "TestUtility.h"
+#include "fakeit.hpp"
+
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/DecoderTypes.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/IBackend.h>
+#include <ao/audio/IRenderTarget.h>
+#include <ao/audio/Property.h>
+#include <ao/audio/Types.h>
+
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+
+#include <array>
+#include <cstddef>
+#include <expected>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
 
 namespace ao::audio::test
 {
@@ -22,7 +38,7 @@ namespace ao::audio::test
                                .isDefault = false,
                                .backendId = kBackendNone};
 
-    auto engine = Engine{spy.make_proxy(), device};
+    auto engine = Engine{spy.makeProxy(), device};
 
     SECTION("Stop correctly cleans up backend")
     {
@@ -36,7 +52,7 @@ namespace ao::audio::test
 
     SECTION("Volume and mute controls pass through to backend and update status")
     {
-      PropertyId lastSetPropertyId{};
+      auto lastSetPropertyId = PropertyId{};
       auto lastSetPropertyValue = PropertyValue{false};
 
       When(Method(mockBackend, setProperty))
@@ -78,7 +94,7 @@ namespace ao::audio::test
     When(Method(mockBackend2, backendId)).AlwaysReturn(kBackendAlsa);
     When(Method(mockBackend2, profileId)).AlwaysReturn(kProfileExclusive);
 
-    auto engine = Engine{spy1.make_proxy(),
+    auto engine = Engine{spy1.makeProxy(),
                          {.id = DeviceId{"dev1"},
                           .displayName = "D1",
                           .description = "D1",
@@ -87,7 +103,7 @@ namespace ao::audio::test
 
     SECTION("Switching backend while idle")
     {
-      engine.setBackend(spy2.make_proxy(),
+      engine.setBackend(spy2.makeProxy(),
                         {.id = DeviceId{"dev2"},
                          .displayName = "D2",
                          .description = "D2",
@@ -120,7 +136,7 @@ namespace ao::audio::test
                                .isDefault = false,
                                .backendId = kBackendNone};
 
-    auto engine = Engine{spy.make_proxy(), device};
+    auto engine = Engine{spy.makeProxy(), device};
 
     auto const descriptor =
       TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "Test Title", .artist = "Test Artist"};
@@ -183,7 +199,7 @@ namespace ao::audio::test
         });
     When(Method(mockBackend, backendId)).AlwaysReturn(kBackendPipeWire);
 
-    auto engine = Engine{spy.make_proxy(), device};
+    auto engine = Engine{spy.makeProxy(), device};
 
     auto const descriptor =
       TrackPlaybackDescriptor{.filePath = testFile.string(), .title = "PipeWire Shared", .artist = "Test Artist"};
@@ -233,7 +249,7 @@ namespace ao::audio::test
     When(Method(mockBackend, backendId)).AlwaysReturn(kBackendAlsa);
     When(Method(mockBackend, profileId)).AlwaysReturn(kProfileExclusive);
 
-    auto engine = Engine{spy.make_proxy(), device};
+    auto engine = Engine{spy.makeProxy(), device};
 
     auto const descriptor = TrackPlaybackDescriptor{
       .filePath = testFile.string(), .title = "Unsupported Sample Rate", .artist = "Test Artist"};

@@ -3,12 +3,20 @@
 
 #include <ao/audio/QualityAnalyzer.h>
 
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/flow/Graph.h>
+
 #include <algorithm>
 #include <format>
-#include <ranges>
 #include <set>
+#include <span>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
+
+#include <cstddef>
 
 namespace ao::audio
 {

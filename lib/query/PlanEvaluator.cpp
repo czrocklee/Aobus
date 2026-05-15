@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/TrackView.h>
+#include <ao/query/ExecutionPlan.h>
 #include <ao/query/PlanEvaluator.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <functional>
 #include <gsl-lite/gsl-lite.hpp>
-#include <iostream>
 #include <ranges>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::query
 {
@@ -219,12 +225,11 @@ namespace ao::query
       auto stringIdx = registers[instr.operand];
 
       // Check for string comparison first
-
       if (prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
       {
         auto field = static_cast<Field>(prevLoadField->field);
-        std::string_view fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);
-        std::string_view constantStr = getStringConstant(plan, stringIdx);
+        auto const fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);
+        auto const constantStr = getStringConstant(plan, stringIdx);
         registers[instr.operand - 1] = std::invoke(std::forward<Op>(op), fieldStr, constantStr) ? 1 : 0;
       }
       else
@@ -245,7 +250,8 @@ namespace ao::query
     {
       auto const* prevLoadField = findPrevLoadField(instructions, &instr);
 
-      if (bool isTagComparison = prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag;
+      if (bool const isTagComparison =
+            prevLoadField != nullptr && static_cast<Field>(prevLoadField->field) == Field::Tag;
           isTagComparison)
       {
         auto tagIdToMatch = DictionaryId{static_cast<std::uint32_t>(registers[instr.operand])};
@@ -258,8 +264,8 @@ namespace ao::query
             prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
         {
           auto field = static_cast<Field>(prevLoadField->field);
-          std::string_view fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);
-          std::string_view constantStr = getStringConstant(plan, stringIdx);
+          auto const fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);
+          auto const constantStr = getStringConstant(plan, stringIdx);
           registers[instr.operand - 1] = (fieldStr == constantStr) ? 1 : 0;
         }
         else
@@ -283,7 +289,7 @@ namespace ao::query
       auto rhs = registers[instr.operand];
       auto const* prevLoadField = findPrevLoadField(instructions, &instr);
 
-      std::string_view fieldStr;
+      auto fieldStr = std::string_view();
 
       if (isStringField(field))
       {
@@ -294,7 +300,7 @@ namespace ao::query
         fieldStr = loadDictionaryFieldValue(track, field, plan);
       }
 
-      std::string_view constantStr = getStringConstant(plan, rhs);
+      auto const constantStr = getStringConstant(plan, rhs);
       auto found = fieldStr.contains(constantStr);
       registers[instr.operand - 1] = found ? 1 : 0;
     }
@@ -303,7 +309,6 @@ namespace ao::query
   bool PlanEvaluator::matches(ExecutionPlan const& plan, library::TrackView const& track) const
   {
     // Fast path: empty query matches all
-
     if (plan.matchesAll)
     {
       return true;
@@ -315,7 +320,6 @@ namespace ao::query
     }
 
     // Bloom filter fast-path rejection for tag queries
-
     if (plan.tagBloomMask != 0)
     {
       if (auto trackBloom = track.tags().bloom(); (trackBloom & plan.tagBloomMask) != plan.tagBloomMask)

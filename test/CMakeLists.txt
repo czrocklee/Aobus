@@ -60,7 +60,8 @@ add_executable(ao_test
     integration/tag/TagTest.cpp
 )
 
-target_include_directories(ao_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
+target_include_directories(ao_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
+target_include_directories(ao_test SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/test/external")
 target_link_libraries(ao_test PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
@@ -90,7 +91,8 @@ add_executable(ao_test_gtk
     unit/linux-gtk/layout/components/StatusComponentsTest.cpp
 )
 
-target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
+target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
+target_include_directories(ao_test_gtk SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/test/external")
 target_link_libraries(ao_test_gtk PRIVATE ao aobus-gtk-lib PkgGTKMM Catch2 spdlog::spdlog Catch2::Catch2WithMain)
 add_test(NAME ao_test_gtk COMMAND ao_test_gtk)
 
@@ -99,7 +101,8 @@ add_executable(ao_perf_baseline
     unit/runtime/PerformanceBaselineTest.cpp
 )
 
-target_include_directories(ao_perf_baseline PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/external")
+target_include_directories(ao_perf_baseline PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
+target_include_directories(ao_perf_baseline SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/test/external")
 target_link_libraries(ao_perf_baseline PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)

@@ -3,7 +3,11 @@
 
 #include "TrackSource.h"
 
-#include <algorithm>
+#include <ao/Type.h>
+
+#include <span>
+
+#include <cstddef>
 
 namespace ao::rt
 {
@@ -27,9 +31,9 @@ namespace ao::rt
 
   void TrackSource::notifyUpdated(TrackId id)
   {
-    if (auto const index = indexOf(id))
+    if (auto const optIndex = indexOf(id))
     {
-      notifyUpdated(id, *index);
+      notifyUpdated(id, *optIndex);
     }
   }
 

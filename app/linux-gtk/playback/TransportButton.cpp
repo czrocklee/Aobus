@@ -2,6 +2,15 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/TransportButton.h"
+#include <ao/audio/Types.h>
+#include <runtime/PlaybackService.h>
+#include <runtime/StateTypes.h>
+
+#include <gtkmm/button.h>
+
+#include <functional>
+#include <string>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -16,6 +25,7 @@ namespace ao::gtk
         case TransportButton::Action::Stop: return "media-playback-stop-symbolic";
         case TransportButton::Action::PlayPause: return "media-playback-start-symbolic";
       }
+
       return "media-playback-start-symbolic";
     }
 
@@ -28,6 +38,7 @@ namespace ao::gtk
         case TransportButton::Action::Stop: return "Stop";
         case TransportButton::Action::PlayPause: return "Play";
       }
+
       return "";
     }
 
@@ -85,6 +96,7 @@ namespace ao::gtk
                 _onPlaySelection();
               }
             }
+
             break;
 
           case Action::Pause: _playbackService.pause(); break;
@@ -107,6 +119,7 @@ namespace ao::gtk
                 _onPlaySelection();
               }
             }
+
             break;
         }
       });
@@ -146,6 +159,7 @@ namespace ao::gtk
         {
           _button.set_label(isPlaying ? "Pause" : "Play");
         }
+
         _button.set_sensitive(state.ready);
         break;
     }

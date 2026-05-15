@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <ao/Type.h>
-
 #include <cstdint>
 
 namespace ao::library
@@ -48,16 +46,16 @@ namespace ao::library
   struct ListHeader final
   {
     // 4-byte section
-    std::uint32_t trackIdsCount; // Number of track IDs (trackIds always start at sizeof(header))
+    std::uint32_t trackIdsCount = 0; // Number of track IDs (trackIds always start at sizeof(header))
 
     // 2-byte section
-    std::uint16_t nameOffset;   // Byte offset from the track-id region start to the name string
-    std::uint16_t nameLen;      // Length of name string
-    std::uint16_t descOffset;   // Byte offset from the track-id region start to the description string
-    std::uint16_t descLen;      // Length of description string
-    std::uint16_t filterOffset; // Byte offset from the track-id region start to the filter expression
-    std::uint16_t filterLen;    // Length of filter expression string
-    std::uint32_t parentId;     // Parent list id, 0 = All Tracks
+    std::uint16_t nameOffset = 0;   // Byte offset from the track-id region start to the name string
+    std::uint16_t nameLen = 0;      // Length of name string
+    std::uint16_t descOffset = 0;   // Byte offset from the track-id region start to the description string
+    std::uint16_t descLen = 0;      // Length of description string
+    std::uint16_t filterOffset = 0; // Byte offset from the track-id region start to the filter expression
+    std::uint16_t filterLen = 0;    // Length of filter expression string
+    std::uint32_t parentId = 0;     // Parent list id, 0 = All Tracks
   };
 
   // Binary layout constants

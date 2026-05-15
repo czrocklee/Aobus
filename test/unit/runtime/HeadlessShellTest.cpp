@@ -3,9 +3,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <filesystem>
-#include <memory>
-
 #include <runtime/AppSession.h>
 #include <runtime/ConfigStore.h>
 #include <runtime/CorePrimitives.h>
@@ -14,7 +11,11 @@
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
 
-#include "TestUtils.h"
+#include <filesystem>
+#include <functional>
+#include <memory>
+
+#include <test/unit/lmdb/TestUtils.h>
 
 namespace ao::rt::test
 {
@@ -54,7 +55,7 @@ namespace ao::rt::test
       REQUIRE(layout.openViews.size() == 1);
       CHECK(layout.activeViewId == layout.openViews.front());
 
-      auto const viewId = layout.activeViewId;
+      auto const viewId = ViewId{layout.activeViewId};
       auto const viewState = session.views().trackListState(viewId);
       CHECK(viewState.listId == listId);
     }
@@ -66,8 +67,8 @@ namespace ao::rt::test
 
       auto layout1 = session.workspace().layoutState();
       REQUIRE(layout1.openViews.size() == 2);
-      auto const viewToClose = layout1.openViews.front();
-      auto const remainingView = layout1.openViews.back();
+      auto const viewToClose = ViewId{layout1.openViews.front()};
+      auto const remainingView = ViewId{layout1.openViews.back()};
 
       session.workspace().closeView(viewToClose);
 

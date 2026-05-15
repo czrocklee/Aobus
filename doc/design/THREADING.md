@@ -124,7 +124,7 @@ The pattern:
 // Phase 1: build data under lock
 std::vector<Callback> pending;
 {
-    auto lock = std::lock_guard{mutex};
+    auto lock = std::scoped_lock{mutex};
     // ... collect callbacks and snapshot data ...
 }
 
@@ -210,7 +210,7 @@ No `recursive_mutex` anywhere.
 if (token.stop_requested()) return false;   // fast exit before lock
 
 {
-    auto lock = std::lock_guard{_decoderMutex};
+    auto lock = std::scoped_lock{_decoderMutex};
     auto result = _decoder->readNextBlock(); // lock only where needed
 }
 ```

@@ -2,17 +2,35 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackSelectionController.h"
-
-#include "app/ThemeBus.h"
-#include <ao/utility/Log.h>
+#include "track/TrackListAdapter.h"
+#include "track/TrackRowObject.h"
+#include <ao/Type.h>
 
 #include <gdk/gdk.h>
+#include <gdk/gdkkeysyms.h>
+#include <gdkmm/enums.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerkey.h>
+#include <gtkmm/gesture.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/multiselection.h>
+#include <gtkmm/widget.h>
+#include <sigc++/functors/mem_fun.h>
+#include <glib.h>
 
+#include <algorithm>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <ranges>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -35,10 +53,12 @@ namespace ao::gtk
   TrackSelectionController::TrackSelectionController(Gtk::ColumnView& columnView,
                                                      TrackListAdapter& adapter,
                                                      Glib::RefPtr<Gtk::MultiSelection> selectionModel)
-    : _columnView{columnView}, _adapter{adapter}, _selectionModel{std::move(selectionModel)}
+    : _columnView{columnView}
+    , _adapter{adapter}
+    , _selectionModel{std::move(selectionModel)}
+    , _selectionChangedConnection{_selectionModel->signal_selection_changed().connect(
+        sigc::mem_fun(*this, &TrackSelectionController::onSelectionChanged))}
   {
-    _selectionChangedConnection = _selectionModel->signal_selection_changed().connect(
-      sigc::mem_fun(*this, &TrackSelectionController::onSelectionChanged));
   }
 
   void TrackSelectionController::setupActivation()
@@ -206,9 +226,9 @@ namespace ao::gtk
     }
 
     return std::views::iota(0U, model->get_n_items()) |
-           std::views::filter([this](auto i) { return _selectionModel->is_selected(i); }) |
-           std::views::transform([this](auto i) { return trackIdAtPosition(i); }) |
-           std::views::filter([](auto const& opt) { return opt.has_value(); }) |
+           std::views::filter([this](auto idx) { return _selectionModel->is_selected(idx); }) |
+           std::views::transform([this](auto idx) { return trackIdAtPosition(idx); }) |
+           std::views::filter([](auto const& opt) { return static_cast<bool>(opt); }) |
            std::views::transform([](auto const& opt) { return *opt; }) | std::ranges::to<std::vector>();
   }
 
@@ -222,9 +242,9 @@ namespace ao::gtk
     }
 
     return std::views::iota(0U, model->get_n_items()) |
-           std::views::filter([this](auto i) { return _selectionModel->is_selected(i); }) |
-           std::views::transform([model](auto i)
-                                 { return std::dynamic_pointer_cast<TrackRowObject>(model->get_object(i)); }) |
+           std::views::filter([this](auto idx) { return _selectionModel->is_selected(idx); }) |
+           std::views::transform([model](auto idx)
+                                 { return std::dynamic_pointer_cast<TrackRowObject>(model->get_object(idx)); }) |
            std::views::filter([](auto const& row) { return static_cast<bool>(row); }) | std::ranges::to<std::vector>();
   }
 
@@ -239,9 +259,9 @@ namespace ao::gtk
 
     return std::ranges::fold_left(
       std::views::iota(0U, model->get_n_items()) |
-        std::views::filter([this](auto i) { return _selectionModel->is_selected(i); }) |
-        std::views::transform([model](auto i)
-                              { return std::dynamic_pointer_cast<TrackRowObject>(model->get_object(i)); }) |
+        std::views::filter([this](auto idx) { return _selectionModel->is_selected(idx); }) |
+        std::views::transform([model](auto idx)
+                              { return std::dynamic_pointer_cast<TrackRowObject>(model->get_object(idx)); }) |
         std::views::filter([](auto const& row) { return static_cast<bool>(row); }) |
         std::views::transform([](auto const& row) { return row->getDuration(); }),
       std::chrono::milliseconds{0},
@@ -335,7 +355,7 @@ namespace ao::gtk
       return {};
     }
 
-    return std::views::iota(0UZ, proj->size()) | std::views::transform([proj](auto i) { return proj->trackIdAt(i); }) |
-           std::ranges::to<std::vector>();
+    return std::views::iota(0UZ, proj->size()) |
+           std::views::transform([proj](auto idx) { return proj->trackIdAt(idx); }) | std::ranges::to<std::vector>();
   }
 } // namespace ao::gtk

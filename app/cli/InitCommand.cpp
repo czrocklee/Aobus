@@ -2,12 +2,19 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "InitCommand.h"
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Finder.h>
 
+#include <CLI/App.hpp>
+
+#include <cstddef>
+#include <exception>
+#include <filesystem>
 #include <iostream>
+#include <span>
 
 namespace ao::cli
 {
@@ -15,7 +22,7 @@ namespace ao::cli
   {
     void scanAndImport(library::MusicLibrary& ml, std::ostream& os)
     {
-      utility::Finder finder{".", {".flac", ".m4a", ".mp3"}};
+      utility::Finder const finder{".", {".flac", ".m4a", ".mp3"}};
       auto txn = ml.writeTransaction();
       auto writer = ml.tracks().writer(txn);
       auto& dict = ml.dictionary();

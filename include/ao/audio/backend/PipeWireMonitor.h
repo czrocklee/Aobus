@@ -20,6 +20,11 @@ namespace ao::audio::backend
     PipeWireMonitor();
     ~PipeWireMonitor();
 
+    PipeWireMonitor(PipeWireMonitor const&) = delete;
+    PipeWireMonitor& operator=(PipeWireMonitor const&) = delete;
+    PipeWireMonitor(PipeWireMonitor&&) = delete;
+    PipeWireMonitor& operator=(PipeWireMonitor&&) = delete;
+
     void start();
     void stop();
     void refresh();

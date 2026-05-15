@@ -2,14 +2,17 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TagCommand.h"
-#include <ao/library/DictionaryStore.h>
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 
+#include <CLI/App.hpp>
+
 #include <algorithm>
-#include <ranges>
-#include <sstream>
+#include <cstdint>
+#include <iostream>
+#include <string>
 
 namespace ao::cli
 {
@@ -32,7 +35,6 @@ namespace ao::cli
       auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
 
       // Check if tag already exists by iterating tag names
-
       if (std::ranges::contains(builder.tags().names(), tagName))
       {
         os << "tag already exists: " << tagName << '\n';

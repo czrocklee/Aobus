@@ -3,6 +3,11 @@
 
 #include "layout/runtime/LayoutHost.h"
 #include "layout/components/Containers.h"
+#include "layout/document/LayoutDocument.h"
+#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutDependencies.h"
+
+#include <gtkmm/enums.h>
 
 namespace ao::gtk::layout
 {

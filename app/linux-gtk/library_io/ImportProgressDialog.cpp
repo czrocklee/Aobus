@@ -3,6 +3,13 @@
 
 #include "library_io/ImportProgressDialog.h"
 
+#include <gtkmm/dialog.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/window.h>
+
+#include <cstdint>
+#include <string>
+
 namespace ao::gtk
 {
   ImportProgressDialog::ImportProgressDialog(std::int32_t maxItems, Gtk::Window& parent)

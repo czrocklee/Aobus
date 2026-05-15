@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
-#include <gsl-lite/gsl-lite.hpp>
 #include <memory>
 #include <span>
 #include <string>
@@ -27,7 +27,7 @@ namespace ao::utility
 
     inline bool isAligned(void const* ptr, std::size_t alignment) noexcept
     {
-      return ptr == nullptr || reinterpret_cast<std::uintptr_t>(ptr) % alignment == 0;
+      return ptr == nullptr || reinterpret_cast<std::uintptr_t>(ptr) % alignment == 0; // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
   }
 
@@ -52,14 +52,14 @@ namespace ao::utility
     inline std::span<std::byte const> view(T const* ptr, std::size_t count = 1) noexcept
     {
       detail::requireTrivialLayout<T>();
-      return {reinterpret_cast<std::byte const*>(ptr), count * sizeof(T)};
+      return {reinterpret_cast<std::byte const*>(ptr), count * sizeof(T)}; // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
     template<typename T, std::size_t Extent>
     inline std::span<std::byte const> view(std::span<T, Extent> values) noexcept
     {
       detail::requireTrivialLayout<std::remove_const_t<T>>();
-      return {reinterpret_cast<std::byte const*>(values.data()), values.size_bytes()};
+      return {reinterpret_cast<std::byte const*>(values.data()), values.size_bytes()}; // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
     template<typename T>
@@ -86,7 +86,7 @@ namespace ao::utility
         return {};
       }
 
-      return {reinterpret_cast<char const*>(span.data()), span.size()};
+      return {reinterpret_cast<char const*>(span.data()), span.size()}; // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
   }
 
@@ -98,7 +98,7 @@ namespace ao::utility
       detail::requireTrivialLayout<T>();
       gsl_Expects(span.size() >= sizeof(T));
       gsl_Expects(detail::isAligned(span.data(), alignof(T)));
-      return reinterpret_cast<T const*>(span.data());
+      return reinterpret_cast<T const*>(span.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
     template<typename T>
@@ -107,7 +107,7 @@ namespace ao::utility
       detail::requireTrivialLayout<T>();
       gsl_Expects(span.size() >= sizeof(T));
       gsl_Expects(detail::isAligned(span.data(), alignof(T)));
-      return reinterpret_cast<T*>(span.data());
+      return reinterpret_cast<T*>(span.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
     template<typename T>
@@ -116,7 +116,7 @@ namespace ao::utility
       detail::requireTrivialLayout<T>();
       gsl_Expects(span.size() >= sizeof(T));
       gsl_Expects(detail::isAligned(span.data(), alignof(T)));
-      return reinterpret_cast<T const*>(span.data());
+      return reinterpret_cast<T const*>(span.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
     /**
@@ -135,7 +135,7 @@ namespace ao::utility
     template<typename T, typename U>
     inline T* asLegacyPtr(U const* ptr) noexcept
     {
-      return const_cast<T*>(reinterpret_cast<T const*>(ptr)); // NOLINT(cppcoreguidelines-pro-type-const-cast)
+      return const_cast<T*>(reinterpret_cast<T const*>(ptr)); // NOLINT(cppcoreguidelines-pro-type-const-cast, cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
     /**
@@ -152,7 +152,7 @@ namespace ao::utility
       detail::requireTrivialLayout<T>();
       gsl_Expects(span.size() >= sizeof(T));
       gsl_Expects(detail::isAligned(span.data(), alignof(T)));
-      return reinterpret_cast<T*>(span.data());
+      return reinterpret_cast<T*>(span.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
     template<typename T>
@@ -161,7 +161,7 @@ namespace ao::utility
       detail::requireTrivialLayout<T>();
       gsl_Expects(span.size() % sizeof(T) == 0);
       gsl_Expects(detail::isAligned(span.data(), alignof(T)));
-      return {reinterpret_cast<T const*>(span.data()), span.size() / sizeof(T)};
+      return {reinterpret_cast<T const*>(span.data()), span.size() / sizeof(T)}; // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
     template<typename T>
@@ -170,16 +170,16 @@ namespace ao::utility
       detail::requireTrivialLayout<T>();
       gsl_Expects(span.size() % sizeof(T) == 0);
       gsl_Expects(detail::isAligned(span.data(), alignof(T)));
-      return {reinterpret_cast<T*>(span.data()), span.size() / sizeof(T)};
+      return {reinterpret_cast<T*>(span.data()), span.size() / sizeof(T)}; // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
     template<typename T, typename Base>
     inline T const* viewAt(Base const* base, std::size_t offset) noexcept
     {
       detail::requireTrivialLayout<T>();
-      auto const* const data = reinterpret_cast<std::byte const*>(base) + offset;
+      auto const* const data = reinterpret_cast<std::byte const*>(base) + offset; // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
       gsl_Expects(detail::isAligned(data, alignof(T)));
-      return reinterpret_cast<T const*>(data);
+      return reinterpret_cast<T const*>(data); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
   }
 
@@ -189,9 +189,11 @@ namespace ao::utility
    */
   namespace uint64Parts
   {
+    static constexpr std::uint32_t kMask32 = 0xFFFFFFFF;
+
     constexpr std::pair<std::uint32_t, std::uint32_t> split(std::uint64_t value) noexcept
     {
-      return {static_cast<std::uint32_t>(value & 0xFFFFFFFF), static_cast<std::uint32_t>(value >> 32)};
+      return {static_cast<std::uint32_t>(value & kMask32), static_cast<std::uint32_t>(value >> 32)};
     }
 
     /**

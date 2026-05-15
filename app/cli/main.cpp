@@ -6,10 +6,11 @@
 #include "ListCommand.h"
 #include "TagCommand.h"
 #include "TrackCommand.h"
-
-#include <CLI/CLI.hpp>
 #include <ao/library/MusicLibrary.h>
 
+#include <CLI/CLI.hpp>
+
+#include <exception>
 #include <iostream>
 
 using namespace ao;

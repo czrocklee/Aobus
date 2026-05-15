@@ -2,12 +2,17 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "ListCommand.h"
+#include <ao/Type.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/MusicLibrary.h>
 
+#include <CLI/App.hpp>
+
+#include <cstdint>
 #include <iomanip>
+#include <iostream>
 #include <span>
-#include <vector>
 
 namespace ao::cli
 {
@@ -18,12 +23,12 @@ namespace ao::cli
       auto const txn = ml.readTransaction();
       auto const reader = ml.lists().reader(txn);
 
-      constexpr int idWidth = 5;
+      constexpr int kIdWidth = 5;
 
       for (auto const& [id, view] : reader)
       {
-        os << std::setw(idWidth) << id << " " << view.name() << "\n";
-        os << std::string(idWidth, ' ') << " [" << (view.isSmart() ? "smart" : "manual") << "] parent: ";
+        os << std::setw(kIdWidth) << id << " " << view.name() << "\n";
+        os << std::string(kIdWidth, ' ') << " [" << (view.isSmart() ? "smart" : "manual") << "] parent: ";
 
         if (view.isRootParent())
         {
@@ -36,16 +41,16 @@ namespace ao::cli
 
         if (view.isSmart())
         {
-          os << std::string(idWidth, ' ') << " [smart] filter: \"" << view.filter() << "\"\n";
+          os << std::string(kIdWidth, ' ') << " [smart] filter: \"" << view.filter() << "\"\n";
         }
         else
         {
-          os << std::string(idWidth, ' ') << " [manual] " << view.tracks().size() << " tracks\n";
+          os << std::string(kIdWidth, ' ') << " [manual] " << view.tracks().size() << " tracks\n";
         }
 
         if (!view.description().empty())
         {
-          os << std::string(idWidth, ' ') << " desc: \"" << view.description() << "\"\n";
+          os << std::string(kIdWidth, ' ') << " desc: \"" << view.description() << "\"\n";
         }
       }
     }

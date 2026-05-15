@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
 
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
@@ -12,9 +9,9 @@
 #include <lmdb.h>
 #include <test/unit/lmdb/TestUtils.h>
 
-#include <cstring>
 #include <optional>
 #include <string_view>
+#include <utility>
 
 namespace ao::lmdb::test
 {
@@ -76,7 +73,6 @@ namespace ao::lmdb::test
   // ============================================================================
   // WriteTransaction Tests
   // ============================================================================
-
   TEST_CASE("WriteTransaction - constructor starts transaction", "[lmdb][transaction]")
   {
     auto temp = TempDir{};
@@ -129,8 +125,8 @@ namespace ao::lmdb::test
     // Data should not be visible
     auto txn = ReadTransaction{env};
     auto reader = db.reader(txn);
-    auto data = reader.get(1);
-    REQUIRE(data == std::nullopt);
+    auto optData = reader.get(1);
+    REQUIRE(optData == std::nullopt);
   }
 
   TEST_CASE("WriteTransaction - move", "[lmdb][transaction]")
@@ -154,7 +150,6 @@ namespace ao::lmdb::test
   // ============================================================================
   // Nested Transaction Tests
   // ============================================================================
-
   TEST_CASE("NestedTransaction - child commit merges to parent", "[lmdb][nested]")
   {
     auto temp = TempDir{};
@@ -205,7 +200,7 @@ namespace ao::lmdb::test
     // Verify data is NOT visible
     auto rtxn = ReadTransaction{env};
     auto reader = db.reader(rtxn);
-    auto data = reader.get(1);
-    REQUIRE(data == std::nullopt);
+    auto optData = reader.get(1);
+    REQUIRE(optData == std::nullopt);
   }
 } // namespace ao::lmdb::test

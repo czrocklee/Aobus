@@ -4,6 +4,17 @@
 #include "app/GtkControlExecutor.h"
 #include <ao/utility/Log.h>
 
+#include <glibmm/main.h>
+#include <sigc++/functors/mem_fun.h>
+
+#include <exception>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <utility>
+#include <vector>
+
 namespace ao::gtk
 {
   GtkControlExecutor::GtkControlExecutor()
@@ -25,7 +36,7 @@ namespace ao::gtk
     }
 
     {
-      std::lock_guard lock(_mutex);
+      auto const lock = std::scoped_lock{_mutex};
       _tasks.push_back(std::move(task));
     }
 
@@ -42,15 +53,16 @@ namespace ao::gtk
         {
           (*sharedTask)();
         }
+
         return false;
       });
   }
 
   void GtkControlExecutor::onDispatched()
   {
-    std::vector<std::move_only_function<void()>> tasksToRun;
+    auto tasksToRun = std::vector<std::move_only_function<void()>>();
     {
-      std::lock_guard lock(_mutex);
+      auto const lock = std::scoped_lock{_mutex};
       tasksToRun.swap(_tasks);
     }
 

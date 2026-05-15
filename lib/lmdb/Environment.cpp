@@ -4,6 +4,10 @@
 #include "detail/ThrowError.h"
 #include <ao/lmdb/Environment.h>
 
+#include <lmdb.h>
+
+#include <string>
+
 namespace ao::lmdb
 {
   Environment::Environment(std::string const& path)

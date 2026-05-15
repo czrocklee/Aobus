@@ -6,16 +6,23 @@
 #include "SmartListSource.h"
 #include "TrackSource.h"
 
-#include <ao/lmdb/Transaction.h>
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 #include <ao/query/ExecutionPlan.h>
-#include <ao/query/Parser.h>
-#include <ao/utility/Log.h>
+#include <ao/utility/ByteView.h>
 #include <ao/utility/ScopedTimer.h>
 
 #include <algorithm>
 #include <flat_set>
-#include <stdexcept>
+#include <iterator>
+#include <memory>
+#include <ranges>
+#include <span>
 #include <utility>
+#include <vector>
+
+#include <cstddef>
 
 namespace ao::rt
 {
@@ -207,7 +214,6 @@ namespace ao::rt
     if (auto const it = _buckets.find(&source); it != _buckets.end())
     {
       // Re-evaluate membership for all lists in this bucket
-
       if (auto const optSourceIndex = source.indexOf(trackId))
       {
         handleSourceUpdated(*it->second, trackId, *optSourceIndex);
@@ -318,6 +324,7 @@ namespace ao::rt
     for (std::size_t listIdx = 0; listIdx < lists.size(); ++listIdx)
     {
       std::ranges::sort(nextMembers[listIdx]);
+      // NOLINTNEXTLINE(misc-include-cleaner)
       lists[listIdx]->_members = std::flat_set<TrackId>(std::sorted_unique, std::move(nextMembers[listIdx]));
     }
   }
@@ -583,6 +590,7 @@ namespace ao::rt
         auto newMembers = std::vector<TrackId>{};
         newMembers.reserve(list._members.size());
         std::ranges::set_difference(list._members, trans.removed, std::back_inserter(newMembers));
+        // NOLINTNEXTLINE(misc-include-cleaner)
         list._members = std::flat_set<TrackId>(std::sorted_unique, std::move(newMembers));
 
         list.TrackSource::notifyRemoved(trans.removed);
@@ -633,6 +641,7 @@ namespace ao::rt
         auto newMembers = std::vector<TrackId>{};
         newMembers.reserve(list->_members.size());
         std::ranges::set_difference(list->_members, removed, std::back_inserter(newMembers));
+        // NOLINTNEXTLINE(misc-include-cleaner)
         list->_members = std::flat_set<TrackId>(std::sorted_unique, std::move(newMembers));
 
         list->notifyRemoved(removed);

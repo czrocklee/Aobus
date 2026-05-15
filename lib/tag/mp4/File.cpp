@@ -3,15 +3,16 @@
 
 #include "File.h"
 #include "../detail/Decoder.h"
+#include <ao/library/TrackBuilder.h>
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/utility/ByteView.h>
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <span>
-#include <string>
 #include <string_view>
-#include <vector>
 
 namespace ao::tag::mp4
 {
@@ -59,9 +60,9 @@ namespace ao::tag::mp4
     template<NumberSetter Setter>
     void handleNumber(library::TrackBuilder& builder, AtomView const& view)
     {
-      if (auto year = decodeUint16(atomTextView(view)); year)
+      if (auto optYear = decodeUint16(atomTextView(view)); optYear)
       {
-        (builder.metadata().*Setter)(*year);
+        (builder.metadata().*Setter)(*optYear);
       }
     }
 
@@ -74,7 +75,7 @@ namespace ao::tag::mp4
 
 #include "tag/mp4/AtomDispatch.h"
 
-    static constexpr std::array kIlstPath = {
+    constexpr std::array kIlstPath = {
       std::string_view{"root"},
       std::string_view{"moov"},
       std::string_view{"udta"},
@@ -82,7 +83,7 @@ namespace ao::tag::mp4
       std::string_view{"ilst"},
     };
 
-    static constexpr std::array kMdhdPath = {
+    constexpr std::array kMdhdPath = {
       std::string_view{"root"},
       std::string_view{"moov"},
       std::string_view{"trak"},
@@ -90,7 +91,7 @@ namespace ao::tag::mp4
       std::string_view{"mdhd"},
     };
 
-    static constexpr std::array kStsdPath = {
+    constexpr std::array kStsdPath = {
       std::string_view{"root"},
       std::string_view{"moov"},
       std::string_view{"trak"},
@@ -104,7 +105,6 @@ namespace ao::tag::mp4
     void extractAudioProperties(library::TrackBuilder& builder, RootAtom const& root, std::size_t fileSize)
     {
       // Get mdhd for sample rate and duration
-
       if (auto const* const mdhdNode = root.find(kMdhdPath); mdhdNode != nullptr)
       {
         auto const& view = utility::unsafeDowncast<AtomView const>(*mdhdNode);
@@ -134,7 +134,6 @@ namespace ao::tag::mp4
       }
 
       // Get stsd for channels and bit depth
-
       if (auto const* const stsdNode = root.find(kStsdPath); stsdNode != nullptr)
       {
         auto const& view = utility::unsafeDowncast<AtomView const>(*stsdNode);
@@ -165,7 +164,8 @@ namespace ao::tag::mp4
 
   library::TrackBuilder File::loadTrack() const
   {
-    RootAtom root = media::mp4::fromBuffer(utility::bytes::view(_mappedRegion.get_address(), _mappedRegion.get_size()));
+    RootAtom const root =
+      media::mp4::fromBuffer(utility::bytes::view(address(), size()));
     Atom const* const ilstNode = root.find(kIlstPath);
 
     clearOwnedStrings();
@@ -196,7 +196,7 @@ namespace ao::tag::mp4
         });
     }
 
-    extractAudioProperties(builder, root, _mappedRegion.get_size());
+    extractAudioProperties(builder, root, size());
 
     return builder;
   }

@@ -65,11 +65,11 @@ namespace YAML
       boost::pfr::for_each_field(obj,
                                  [&node, index = std::size_t{0}](auto const& field) mutable
                                  {
-                                   constexpr auto names = boost::pfr::names_as_array<T>();
+                                   constexpr auto kNames = boost::pfr::names_as_array<T>();
 
                                    if (auto const child = Node(field); child.IsDefined())
                                    {
-                                     node[std::string{names[index]}] = std::move(child);
+                                     node[std::string{kNames[index]}] = std::move(child); // NOLINT
                                    }
 
                                    ++index;
@@ -87,9 +87,9 @@ namespace YAML
       boost::pfr::for_each_field(obj,
                                  [&n, index = std::size_t{0}](auto& field) mutable
                                  {
-                                   constexpr auto names = boost::pfr::names_as_array<T>();
+                                   constexpr auto kNames = boost::pfr::names_as_array<T>();
 
-                                   if (auto const child = n[std::string{names[index]}])
+                                   if (auto const child = n[std::string{kNames[index]}]) // NOLINT
                                    {
                                      field = child.as<std::remove_cvref_t<decltype(field)>>();
                                    }
@@ -101,8 +101,8 @@ namespace YAML
   };
 
   template<typename T>
-  concept HasValueMethod = requires(T const& t) {
-    { t.value() };
+  concept HasValueMethod = requires(T const& obj) {
+    { obj.value() };
   } && !std::is_aggregate_v<T>;
 
   template<HasValueMethod T>
@@ -131,6 +131,12 @@ namespace ao::rt
     };
 
     ~ConfigStore() = default;
+
+    ConfigStore(ConfigStore const&) = delete;
+    ConfigStore& operator=(ConfigStore const&) = delete;
+    ConfigStore(ConfigStore&&) = delete;
+    ConfigStore& operator=(ConfigStore&&) = delete;
+
     explicit ConfigStore(std::filesystem::path filePath, OpenMode mode = OpenMode::ReadWrite);
 
     Result<> flush();

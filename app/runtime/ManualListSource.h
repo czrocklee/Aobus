@@ -29,6 +29,11 @@ namespace ao::rt
     explicit ManualListSource();
     ~ManualListSource() override;
 
+    ManualListSource(ManualListSource const&) = delete;
+    ManualListSource& operator=(ManualListSource const&) = delete;
+    ManualListSource(ManualListSource&&) = delete;
+    ManualListSource& operator=(ManualListSource&&) = delete;
+
     void reloadFromListView(library::ListView const& view);
 
     // TrackSource interface
@@ -48,6 +53,11 @@ namespace ao::rt
 
     bool contains(TrackId id) const;
 
+    TrackSource* source() const noexcept { return _source; }
+    std::vector<TrackId>& trackIds() noexcept { return _trackIds; }
+    std::vector<TrackId> const& trackIds() const noexcept { return _trackIds; }
+
+  private:
     std::vector<TrackId> _trackIds;
     TrackSource* _source = nullptr;
   };

@@ -71,7 +71,7 @@ namespace ao::rt
     std::string trackArtist{};
     std::uint32_t positionMs = 0;
     std::uint32_t durationMs = 0;
-    float volume = 1.0f;
+    float volume = 1.0F;
     bool muted = false;
     bool volumeAvailable = false;
     bool ready = false;

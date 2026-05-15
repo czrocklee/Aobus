@@ -2,11 +2,17 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/media/mp4/Atom.h>
+#include <ao/media/mp4/AtomLayout.h>
+#include <ao/utility/ByteView.h>
 
 #include <cassert>
-#include <iostream>
+#include <cstddef>
+#include <functional>
 #include <map>
+#include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 
 namespace ao::media::mp4
 {
@@ -35,25 +41,29 @@ namespace ao::media::mp4
 
   namespace
   {
+    constexpr std::size_t kMetaHeaderSkip = 4;
+    constexpr std::size_t kStsdHeaderSkip = 8;
+    constexpr std::size_t kAtomHeaderSize = 8;
+
     std::map<std::string, std::size_t, std::less<>> const ContainerAtomInterested = {{"moov", 0},
                                                                                      {"udta", 0},
-                                                                                     {"meta", 4},
+                                                                                     {"meta", kMetaHeaderSkip},
                                                                                      {"ilst", 0},
                                                                                      {"trak", 0},
                                                                                      {"mdia", 0},
                                                                                      {"minf", 0},
                                                                                      {"stbl", 0},
-                                                                                     {"stsd", 8}};
+                                                                                     {"stsd", kStsdHeaderSkip}};
 
     template<typename ContainerAtom>
     void parseAtoms(ContainerAtom& parent, std::span<std::byte const> data)
     {
-      while (data.size() >= 8)
+      while (data.size() >= kAtomHeaderSize)
       {
         auto const* layout = utility::layout::view<AtomLayout>(data);
         auto length = layout->length.value();
 
-        if (length < 8 || length > data.size())
+        if (length < kAtomHeaderSize || length > data.size())
         {
           break;
         }
@@ -73,8 +83,7 @@ namespace ao::media::mp4
 
         if (optSkip)
         {
-          // Atom header is 8 bytes (4 for size + 4 for type)
-          constexpr std::size_t kAtomHeaderSize = 8;
+          // Atom header is already defined as kAtomHeaderSize
           auto child = std::make_unique<ContainerAtomView>(data.subspan(0, length), parent);
           parseAtoms(*child, data.subspan(kAtomHeaderSize + *optSkip, length - kAtomHeaderSize - *optSkip));
           parent.add(std::move(child));

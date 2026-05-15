@@ -13,7 +13,7 @@ namespace ao::gtk
   class TransportButton final
   {
   public:
-    enum class Action
+    enum class Action : std::uint8_t
     {
       Play,
       Pause,
@@ -26,6 +26,12 @@ namespace ao::gtk
                     std::function<void()> onPlaySelection = {},
                     bool showLabel = false,
                     std::string const& size = "normal");
+    ~TransportButton() = default;
+
+    TransportButton(TransportButton const&) = delete;
+    TransportButton& operator=(TransportButton const&) = delete;
+    TransportButton(TransportButton&&) = delete;
+    TransportButton& operator=(TransportButton&&) = delete;
 
     Gtk::Widget& widget() { return _button; }
 

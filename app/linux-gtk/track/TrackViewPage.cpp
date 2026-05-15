@@ -2,15 +2,21 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackViewPage.h"
-
 #include "app/ThemeBus.h"
 #include "layout/LayoutConstants.h"
+#include "tag/TagPopover.h"
 #include "track/TrackColumnFactoryBuilder.h"
+#include "track/TrackColumnViewHost.h"
 #include "track/TrackCustomViewDialog.h"
 #include "track/TrackFilterController.h"
+#include "track/TrackListAdapter.h"
+#include "track/TrackPresentation.h"
+#include "track/TrackPresentationStore.h"
 #include "track/TrackRowObject.h"
+#include <ao/Type.h>
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
+#include <runtime/CorePrimitives.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
@@ -18,23 +24,40 @@
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
 
-#include <gdk/gdk.h>
+#include <gdkmm/rectangle.h>
+#include <glib-object.h>
+#include <glibmm/main.h>
+#include <glibmm/object.h>
+#include <glibmm/refptr.h>
 #include <glibmm/wrap.h>
 #include <gtk/gtk.h>
+#include <gtkmm/box.h>
 #include <gtkmm/button.h>
-#include <gtkmm/cssprovider.h>
-
-#include <functional>
+#include <gtkmm/columnview.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listheader.h>
 #include <gtkmm/menubutton.h>
+#include <gtkmm/multiselection.h>
+#include <gtkmm/object.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/selectionmodel.h>
+#include <gtkmm/separator.h>
 #include <gtkmm/signallistitemfactory.h>
-#include <gtkmm/stylecontext.h>
+#include <gtkmm/sortlistmodel.h>
+#include <gtkmm/sorter.h>
+#include <gtkmm/window.h>
+#include <glib.h>
 
+#include <algorithm>
 #include <format>
+#include <functional>
 #include <memory>
-#include <ranges>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::gtk
@@ -79,15 +102,15 @@ namespace ao::gtk
           return Gtk::Ordering::EQUAL;
         }
 
-        auto const lhsGroup = _adapter.groupIndexForTrack(lhs->getTrackId());
-        auto const rhsGroup = _adapter.groupIndexForTrack(rhs->getTrackId());
+        auto const optLhsGroup = _adapter.groupIndexForTrack(lhs->getTrackId());
+        auto const optRhsGroup = _adapter.groupIndexForTrack(rhs->getTrackId());
 
-        if (!lhsGroup || !rhsGroup || *lhsGroup == *rhsGroup)
+        if (!optLhsGroup || !optRhsGroup || *optLhsGroup == *optRhsGroup)
         {
           return Gtk::Ordering::EQUAL;
         }
 
-        return *lhsGroup < *rhsGroup ? Gtk::Ordering::SMALLER : Gtk::Ordering::LARGER;
+        return *optLhsGroup < *optRhsGroup ? Gtk::Ordering::SMALLER : Gtk::Ordering::LARGER;
       }
 
       Order get_order_vfunc() override { return Order::PARTIAL; }
@@ -443,7 +466,7 @@ namespace ao::gtk
 
     _presentationButton.set_label(label);
 
-    auto spec = *optSpec;
+    auto spec = rt::TrackPresentationSpec{*optSpec};
     Glib::signal_idle().connect_once(
       [this, spec = std::move(spec)]
       {
@@ -497,7 +520,6 @@ namespace ao::gtk
     updateSectionHeaders();
 
     // 5. Restore playing state in the new controller before attaching model
-
     if (_optPlayingTrackId)
     {
       _viewHost->selectionController().setPlayingTrackId(_optPlayingTrackId);
@@ -514,9 +536,9 @@ namespace ao::gtk
     Glib::signal_idle().connect_once(
       [this]
       {
-        if (auto const primaryId = _viewHost->selectionController().getPrimarySelectedTrackId())
+        if (auto const optPrimaryId = _viewHost->selectionController().getPrimarySelectedTrackId())
         {
-          _viewHost->selectionController().scrollToTrack(*primaryId);
+          _viewHost->selectionController().scrollToTrack(*optPrimaryId);
         }
       });
 
@@ -528,9 +550,9 @@ namespace ao::gtk
     return _createSmartListRequested;
   }
 
-  void TrackViewPage::showTagPopover(TagPopover& popover, double xPos, double yPos)
+  void TrackViewPage::showTagPopover(TagPopover& popover, double posX, double posY)
   {
-    auto const rect = Gdk::Rectangle{static_cast<int>(xPos), static_cast<int>(yPos), 1, 1};
+    auto const rect = Gdk::Rectangle{static_cast<int>(posX), static_cast<int>(posY), 1, 1};
 
     if (popover.get_parent() != &_viewHost->columnView())
     {

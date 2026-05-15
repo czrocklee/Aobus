@@ -3,13 +3,26 @@
 
 #include "app/WindowController.h"
 #include "app/MainWindow.h"
-#include <ao/audio/Player.h>
+#include "app/UIState.h"
+#include "inspector/CoverArtCache.h"
+#include "library_io/ImportExportCoordinator.h"
+#include "list/ListSidebarController.h"
+#include "playback/PlaybackSequenceController.h"
+#include "tag/TagEditController.h"
+#include "track/TrackPageManager.h"
+#include "track/TrackPresentation.h"
+#include "track/TrackPresentationStore.h"
+#include "track/TrackRowCache.h"
+#include <ao/Type.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/utility/Log.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/NotificationService.h>
 #include <runtime/PlaybackService.h>
+#include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
+
 #ifdef ALSA_FOUND
 #include <ao/audio/backend/AlsaProvider.h>
 #endif
@@ -17,11 +30,14 @@
 #include <ao/audio/backend/PipeWireProvider.h>
 #endif
 
-#include <runtime/StateTypes.h>
-
 #include <algorithm>
+#include <cstdint>
+#include <filesystem>
 #include <limits>
-#include <ranges>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -46,21 +62,22 @@ namespace ao::gtk
         {
           return std::nullopt;
         }
+
         return *it;
       };
 
       for (auto const& id : state.columnOrder)
       {
-        if (auto const column = trackColumnFromId(id))
+        if (auto const optColumn = trackColumnFromId(id))
         {
-          if (std::ranges::find(ordered, *column, &TrackColumnState::column) != ordered.end())
+          if (std::ranges::find(ordered, *optColumn, &TrackColumnState::column) != ordered.end())
           {
             continue;
           }
 
-          if (auto stateEntry = takeColumn(*column))
+          if (auto optStateEntry = takeColumn(*optColumn))
           {
-            ordered.push_back(*stateEntry);
+            ordered.push_back(*optStateEntry);
           }
         }
       }
@@ -217,6 +234,7 @@ namespace ao::gtk
         {
           _trackRowCache->invalidate(trackId);
         }
+
         _session.sources().allTracks().notifyUpdated(trackIds);
       });
 

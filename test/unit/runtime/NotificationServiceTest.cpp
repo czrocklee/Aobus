@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <runtime/NotificationService.h>
+#include <runtime/StateTypes.h>
 
 namespace ao::rt::test
 {

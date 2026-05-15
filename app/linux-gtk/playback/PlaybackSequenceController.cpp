@@ -4,12 +4,17 @@
 #include "playback/PlaybackSequenceController.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
+#include <ao/Type.h>
 #include <runtime/AppSession.h>
 #include <runtime/PlaybackService.h>
-#include <runtime/StateTypes.h>
 
 #include <algorithm>
-#include <ranges>
+#include <cstddef>
+#include <iterator>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -101,13 +106,13 @@ namespace ao::gtk
 
     auto const nextIndex = _sequence->currentIndex + 1;
 
-    for (auto i = nextIndex; i < _sequence->trackIds.size(); ++i)
+    for (auto idx = nextIndex; idx < _sequence->trackIds.size(); ++idx)
     {
-      auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[i]);
+      auto const optDesc = _dataProvider.getPlaybackDescriptor(_sequence->trackIds[idx]);
 
       if (optDesc)
       {
-        _sequence->currentIndex = i;
+        _sequence->currentIndex = idx;
 
         _playback.play(*optDesc, _sequence->optSourceListId.value_or(ListId{}));
         return;

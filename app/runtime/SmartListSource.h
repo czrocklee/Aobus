@@ -29,12 +29,17 @@ namespace ao::rt
     SmartListSource(TrackSource& source, library::MusicLibrary& ml, SmartListEvaluator& evaluator);
     ~SmartListSource() override;
 
+    SmartListSource(SmartListSource const&) = delete;
+    SmartListSource& operator=(SmartListSource const&) = delete;
+    SmartListSource(SmartListSource&&) = delete;
+    SmartListSource& operator=(SmartListSource&&) = delete;
+
     void setExpression(std::string expr);
     void reload();
 
     // TrackSource interface
     std::size_t size() const override { return _members.size(); }
-    TrackId trackIdAt(std::size_t index) const override { return *(_members.begin() + index); }
+    TrackId trackIdAt(std::size_t index) const override { return *(_members.begin() + static_cast<std::ptrdiff_t>(index)); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
     using TrackSource::notifyUpdated;
@@ -48,7 +53,7 @@ namespace ao::rt
   private:
     friend class SmartListEvaluator;
 
-    struct QueryState
+    struct QueryState final
     {
       std::string expression;
       std::unique_ptr<query::ExecutionPlan> plan;

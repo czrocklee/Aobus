@@ -5,12 +5,31 @@
 #include "list/ListSidebarPanel.h"
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"
+#include <ao/Type.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/lmdb/Transaction.h>
+#include <runtime/CorePrimitives.h>
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
+
+#include <gdkmm/rectangle.h>
+#include <giomm/actionmap.h>
+#include <giomm/simpleaction.h>
+#include <glibmm/variant.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/object.h>
+#include <gtkmm/widget.h>
+#include <gtkmm/window.h>
+
+#include <cstdint>
+#include <limits>
+#include <memory>
+#include <string>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -207,10 +226,10 @@ namespace ao::gtk
     auto readTxn = _session.musicLibrary().readTransaction();
     auto reader = _session.musicLibrary().lists().reader(readTxn);
 
-    if (auto view = reader.get(listId); view)
+    if (auto optView = reader.get(listId); optView)
     {
-      auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _session, view->parentId(), *_dataProvider);
-      dialog->populate(listId, *view);
+      auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _session, optView->parentId(), *_dataProvider);
+      dialog->populate(listId, *optView);
       dialog->signal_response().connect(
         [this, dialog](int responseId)
         {

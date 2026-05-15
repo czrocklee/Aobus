@@ -4,6 +4,8 @@
 #include <ao/audio/backend/detail/PipeWireShared.h>
 #include <catch2/catch_test_macros.hpp>
 
+#include <optional>
+
 namespace ao::audio::backend::detail::test
 {
   TEST_CASE("PipeWireShared - Property Parsing", "[audio][unit][pipewire]")

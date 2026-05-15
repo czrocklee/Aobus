@@ -3,6 +3,9 @@
 
 #include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>
 #include <ao/audio/backend/detail/PipeWireShared.h>
+
+#include <ao/audio/Backend.h>
+#include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/utility/ByteView.h>
 
 extern "C"
@@ -11,14 +14,24 @@ extern "C"
 #include <spa/param/audio/raw.h>
 #include <spa/param/format.h>
 #include <spa/param/props.h>
+#include <spa/pod/body.h>
 #include <spa/pod/iter.h>
+#include <spa/pod/pod.h>
 #include <spa/utils/dict.h>
+#include <spa/utils/type.h>
 }
 
 #include <algorithm>
 #include <array>
-#include <format>
+#include <cmath>
+#include <optional>
 #include <ranges>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <cstdint>
 
 namespace ao::audio::backend::detail
 {
@@ -121,12 +134,12 @@ namespace ao::audio::backend::detail
         auto const min = (n_vals > 1) ? vals[1] : vals[0];
         auto const max = (n_vals > 2) ? vals[2] : min;
 
-        static constexpr auto commonRates =
+        static constexpr auto kCommonRates =
           std::array<std::uint32_t, 8>{44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
 
-        for (auto rate : commonRates)
+        for (auto rate : kCommonRates)
         {
-          if (rate >= static_cast<std::uint32_t>(min) && rate <= static_cast<std::uint32_t>(max))
+          if (std::cmp_greater_equal(rate, min) && std::cmp_less_equal(rate, max))
           {
             addUnique(output, rate);
           }
@@ -216,7 +229,7 @@ namespace ao::audio::backend::detail
     {
       if (prop->key == SPA_FORMAT_AUDIO_format)
       {
-        std::vector<std::uint32_t> formats;
+        auto formats = std::vector<std::uint32_t>{};
         collectIdValues(&prop->value, formats);
 
         for (auto const format : formats)
@@ -233,7 +246,7 @@ namespace ao::audio::backend::detail
       }
       else if (prop->key == SPA_FORMAT_AUDIO_channels)
       {
-        std::vector<std::uint32_t> channels;
+        auto channels = std::vector<std::uint32_t>{};
         collectIntValues(&prop->value, channels);
 
         for (auto const channelCount : channels)
@@ -254,19 +267,22 @@ namespace ao::audio::backend::detail
     }
   }
 
-  bool copyFloatArray(::spa_pod const& pod, std::vector<float>& output)
+  namespace
   {
-    auto values = std::array<float, 16>{};
-    auto const count = ::spa_pod_copy_array(
-      &pod, SPA_TYPE_Float, values.data(), values.size()); // NOLINT(readability-simplify-subscript-expr)
-
-    if (count == 0)
+    bool copyFloatArray(::spa_pod const& pod, std::vector<float>& output)
     {
-      return false;
-    }
+      auto values = std::array<float, 16>{};
+      auto const count = ::spa_pod_copy_array(
+        &pod, SPA_TYPE_Float, values.data(), values.size()); // NOLINT(readability-simplify-subscript-expr)
 
-    output.assign_range(values | std::views::take(count));
-    return true;
+      if (count == 0)
+      {
+        return false;
+      }
+
+      output.assign_range(values | std::views::take(count));
+      return true;
+    }
   }
 
   void mergeSinkProps(SinkProps& sinkProps, ::spa_pod const* param)

@@ -7,6 +7,7 @@
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListView.h>
 
+#include <cstddef>
 #include <string_view>
 #include <vector>
 
@@ -47,7 +48,7 @@ namespace ao::library
       TracksBuilder& add(TrackId id);
       TracksBuilder& remove(TrackId id);
       TracksBuilder& clear();
-      TracksBuilder& isSmart(bool v);
+      TracksBuilder& isSmart(bool isSmart);
 
       std::vector<TrackId> const& ids() const { return _trackIds; }
       bool isSmart() const { return _isSmart; }
@@ -63,10 +64,10 @@ namespace ao::library
     TracksBuilder& tracks();
 
     // Direct setters
-    ListBuilder& name(std::string_view v);
-    ListBuilder& description(std::string_view v);
-    ListBuilder& filter(std::string_view v);
-    ListBuilder& parentId(ListId v);
+    ListBuilder& name(std::string_view name);
+    ListBuilder& description(std::string_view description);
+    ListBuilder& filter(std::string_view filter);
+    ListBuilder& parentId(ListId parentId);
 
     // Serialization - returns binary payload for ListStore
     std::vector<std::byte> serialize() const;

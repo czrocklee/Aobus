@@ -4,10 +4,14 @@
 #pragma once
 
 #include <ao/lmdb/Transaction.h>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace ao::lmdb
@@ -59,10 +63,10 @@ namespace ao::lmdb
     Reader(Reader const&) = delete;
     Reader& operator=(Reader const&) = delete;
 
-  protected:
+  private:
     Reader(::MDB_dbi dbi, ::MDB_txn* txn);
 
-    struct MdbCursorDeleter
+    struct MdbCursorDeleter final
     {
       void operator()(::MDB_cursor* cur) const noexcept { ::mdb_cursor_close(cur); }
     };
@@ -81,17 +85,17 @@ namespace ao::lmdb
   {
   public:
     // Standard iterator traits
-    using difference_type = std::ptrdiff_t;
-    using value_type = Value const;
-    using pointer = Value const*;
-    using reference = Value const&;
-    using iterator_category = std::forward_iterator_tag;
+    using difference_type = std::ptrdiff_t;     // NOLINT
+    using value_type = Value const;             // NOLINT
+    using pointer = Value const*;               // NOLINT
+    using reference = Value const&;             // NOLINT
+    using iterator_category = std::forward_iterator_tag; // NOLINT
 
     Iterator();
     Iterator(Iterator const& other);
     Iterator(Iterator&& other) noexcept;
     ~Iterator() noexcept;
-    Iterator& operator=(Iterator const&);
+    Iterator& operator=(Iterator const& /*other*/);
     Iterator& operator=(Iterator&&) = default;
 
     // Forward iterator operations
@@ -123,7 +127,6 @@ namespace ao::lmdb
     void increment();
     Value const& dereference() const;
 
-  private:
     explicit Iterator(CursorPtr cursor);
 
     CursorPtr _cursor;

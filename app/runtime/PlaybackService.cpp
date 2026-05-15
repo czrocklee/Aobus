@@ -2,16 +2,27 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "PlaybackService.h"
+
 #include "ViewService.h"
 
+#include <ao/Type.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/IBackendProvider.h>
 #include <ao/audio/Player.h>
+#include <ao/audio/Types.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
-#include <ao/utility/ThreadUtils.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/StateTypes.h>
 
-#include <algorithm>
+#include <exception>
+#include <functional>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
+
+#include <cstdint>
 
 namespace ao::rt
 {
@@ -129,7 +140,7 @@ namespace ao::rt
       }
 
       auto const& device = backend.devices.front();
-      auto profileId = audio::kProfileShared;
+      auto profileId = audio::ProfileId{audio::kProfileShared};
 
       if (!backend.metadata.supportedProfiles.empty())
       {
@@ -187,7 +198,7 @@ namespace ao::rt
               }
 
               auto const& device = backend.devices.front();
-              auto profileId = audio::kProfileShared;
+              auto profileId = audio::ProfileId{audio::kProfileShared};
 
               if (!backend.supportedProfiles.empty())
               {
@@ -311,7 +322,7 @@ namespace ao::rt
         return TrackId{};
       }
 
-      auto const trackId = sel.front();
+      auto const trackId = TrackId{sel.front()};
       auto const txn = _impl->library.readTransaction();
       auto reader = _impl->library.tracks().reader(txn);
       auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);

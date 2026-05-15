@@ -3,14 +3,24 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <ao/library/MusicLibrary.h>
+#include <ao/Type.h>
+#include <runtime/ProjectionTypes.h>
+#include <runtime/StateTypes.h>
 #include <runtime/TrackListProjection.h>
+#include <runtime/TrackPresentationPreset.h>
 #include <runtime/TrackSource.h>
 
 #include "TestUtils.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <format>
+#include <optional>
+#include <span>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -109,7 +119,7 @@ namespace ao::rt::test
       auto const lastId = proj.trackIdAt(static_cast<std::size_t>(kTrackCount - 1));
 
       // Warm up
-      (void)proj.indexOf(firstId);
+      [[maybe_unused]] auto const optWarmup = proj.indexOf(firstId);
 
       constexpr int kIterations = 10000;
       auto const measureIndexOf = [&](TrackId id)
@@ -118,7 +128,7 @@ namespace ao::rt::test
 
         for (int i = 0; i < kIterations; ++i)
         {
-          (void)proj.indexOf(id);
+          [[maybe_unused]] auto const optResult = proj.indexOf(id);
         }
 
         auto const t1 = std::chrono::steady_clock::now();

@@ -24,6 +24,7 @@ private:
   void checkControlStatement(SourceLocation Loc, SourceManager &SM, ASTContext &Context, StringRef StmtName);
   void checkBlockStart(SourceLocation Loc, SourceManager &SM, ASTContext &Context);
   void checkBlockEnd(SourceLocation Loc, SourceManager &SM, ASTContext &Context);
+  void checkSpacingAfterBlock(SourceLocation RBraceLoc, SourceManager &SM, ASTContext &Context);
 
   llvm::DenseMap<FileID, std::vector<Token>> FileTokens;
   llvm::DenseSet<FileID> ProcessedFiles;

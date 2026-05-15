@@ -6,19 +6,43 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackViewPage.h"
-
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <runtime/AllTracksSource.h>
+#include <ao/model/ListDraft.h>
+#include <ao/Type.h>
 #include <runtime/AppSession.h>
 #include <runtime/ListSourceStore.h>
 #include <runtime/SmartListEvaluator.h>
 #include <runtime/SmartListSource.h>
 #include <runtime/TrackSource.h>
 
+#include <glibmm/main.h>
+#include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
+#include <gtkmm/box.h>
+#include <gtkmm/columnview.h>
+#include <gtkmm/columnviewcolumn.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/label.h>
+#include <gtkmm/listitem.h>
+#include <gtkmm/object.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/selectionmodel.h>
+#include <gtkmm/signallistitemfactory.h>
+#include <gtkmm/singleselection.h>
+#include <gtkmm/window.h>
+#include <pangomm/layout.h>
+
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <format>
+#include <limits>
+#include <memory>
+#include <string>
+#include <string_view>
 
 namespace ao::gtk
 {
@@ -85,10 +109,10 @@ namespace ao::gtk
     return _optEditListId.value_or(ListId{0});
   }
 
-  void SmartListDialog::setLocalExpression(std::string expression)
+  void SmartListDialog::setLocalExpression(std::string const& expression)
   {
     _exprTimeoutConnection.disconnect();
-    _exprBox.entry().set_text(std::move(expression));
+    _exprBox.entry().set_text(expression);
     updatePreview();
   }
 
@@ -320,7 +344,7 @@ namespace ao::gtk
 
   void SmartListDialog::updateSourceLabels()
   {
-    std::string_view inheritedExpr;
+    auto inheritedExpr = std::string_view();
 
     // Check if parent is All Tracks
     auto const isAllTracks =
@@ -331,9 +355,9 @@ namespace ao::gtk
       auto readTxn = _session.musicLibrary().readTransaction();
       auto reader = _session.musicLibrary().lists().reader(readTxn);
 
-      if (auto listView = reader.get(_parentListId); listView)
+      if (auto optListView = reader.get(_parentListId); optListView)
       {
-        inheritedExpr = listView->filter();
+        inheritedExpr = optListView->filter();
       }
       else
       {
@@ -360,7 +384,6 @@ namespace ao::gtk
     updateSourceLabels();
 
     // For other lists, use FilteredTrackIdList
-
     if (!_previewFilteredList)
     {
       _expressionValid = false;

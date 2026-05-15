@@ -2,14 +2,25 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackFilterController.h"
-
-#include <ao/utility/Log.h>
+#include "track/TrackListAdapter.h"
 #include <ao/utility/ScopedTimer.h>
 #include <runtime/AppSession.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/ProjectionTypes.h>
 #include <runtime/ViewService.h>
 
-#include <gdkmm/contentprovider.h>
+#include <gdkmm/enums.h>
+#include <glibmm/main.h>
 #include <glibmm/value.h>
+#include <gtkmm/droptarget.h>
+#include <gtkmm/entry.h>
+#include <sigc++/functors/mem_fun.h>
+#include <glib-object.h>
+
+#include <format>
+#include <string>
+#include <string_view>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -68,7 +79,7 @@ namespace ao::gtk
     _filterEntry.set_text(std::string{expression});
   }
 
-  void TrackFilterController::setStatusMessageCallback(StatusMessageFn callback)
+  void TrackFilterController::setStatusMessageCallback(const StatusMessageFn& callback)
   {
     _statusMessageCallback = std::move(callback);
   }

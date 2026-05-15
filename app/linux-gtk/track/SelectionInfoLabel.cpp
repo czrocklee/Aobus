@@ -5,7 +5,13 @@
 #include <runtime/AppSession.h>
 #include <runtime/ViewService.h>
 
+#include <gtkmm/enums.h>
+
+#include <chrono>
+#include <cstddef>
 #include <format>
+#include <optional>
+#include <string>
 
 namespace ao::gtk
 {
@@ -22,6 +28,7 @@ namespace ao::gtk
       {
         return std::format("{}:{:02}:{:02}", hours, minutes, seconds);
       }
+
       return std::format("{}:{:02}", minutes, seconds);
     }
   }
@@ -40,7 +47,7 @@ namespace ao::gtk
 
   SelectionInfoLabel::~SelectionInfoLabel() = default;
 
-  void SelectionInfoLabel::updateState(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration)
+  void SelectionInfoLabel::updateState(std::size_t count, std::optional<std::chrono::milliseconds> optTotalDuration)
   {
     if (count == 0)
     {
@@ -50,9 +57,9 @@ namespace ao::gtk
 
     auto text = std::format("{} {}", count, count == 1 ? "item selected" : "items selected");
 
-    if (totalDuration && totalDuration->count() > 0)
+    if (optTotalDuration && optTotalDuration->count() > 0)
     {
-      text += std::format(" ({})", formatDuration(*totalDuration));
+      text += std::format(" ({})", formatDuration(*optTotalDuration));
     }
 
     _label.set_text(text);

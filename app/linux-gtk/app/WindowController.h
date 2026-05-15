@@ -27,6 +27,12 @@ namespace ao::gtk
     WindowController(MainWindow& window, rt::AppSession& session, std::shared_ptr<rt::ConfigStore> configStore);
     ~WindowController();
 
+    // Not copyable or movable
+    WindowController(WindowController const&) = delete;
+    WindowController& operator=(WindowController const&) = delete;
+    WindowController(WindowController&&) = delete;
+    WindowController& operator=(WindowController&&) = delete;
+
     void initializeSession();
 
     void saveSession();

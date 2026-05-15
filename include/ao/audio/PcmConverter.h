@@ -53,7 +53,10 @@ namespace ao::audio
                                  std::span<TDst> destination,
                                  std::uint8_t shift) noexcept
     {
-      if (channels.empty()) return;
+      if (channels.empty())
+      {
+        return;
+      }
 
       auto const channelCount = channels.size();
       auto const frameCount = std::min(channels[0].size(), destination.size() / channelCount);
@@ -62,7 +65,7 @@ namespace ao::audio
       {
         for (std::size_t ch = 0; ch < channelCount; ++ch)
         {
-          destination[i * channelCount + ch] = static_cast<TDst>(channels[ch][i]) << shift;
+          destination[(i * channelCount) + ch] = static_cast<TDst>(channels[ch][i]) << shift;
         }
       }
     }
@@ -80,6 +83,9 @@ namespace ao::audio
     {
       auto const count = std::min(source.size() / 3, destination.size());
 
+      static constexpr std::int32_t kS24SignBit = 0x800000;
+      static constexpr std::uint32_t kS24SignExtensionMask = 0xFF000000U;
+
       for (std::size_t i = 0; i < count; ++i)
       {
         auto const offset = i * 3;
@@ -90,9 +96,9 @@ namespace ao::audio
                            (static_cast<std::uint8_t>(source[offset + 2]) << 16);
 
         // Sign extension from 24 to 32 bits
-        if (val & 0x800000)
+        if ((val & kS24SignBit) != 0)
         {
-          val |= 0xFF000000;
+          val |= static_cast<std::int32_t>(kS24SignExtensionMask);
         }
 
         destination[i] = val << shift;

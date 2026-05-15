@@ -3,11 +3,23 @@
 
 #include "list/ListTreeModelBuilder.h"
 #include "list/ListRowObject.h"
-#include "track/TrackRowCache.h"
+#include "list/ListTreeItem.h"
+#include <ao/Type.h>
 #include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
-#include <map>
+#include <ao/library/MusicLibrary.h>
 #include <runtime/AppSession.h>
+
+#include <giomm/listmodel.h>
+#include <giomm/liststore.h>
+#include <glibmm/objectbase.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/singleselection.h>
+#include <gtkmm/treelistmodel.h>
+
+#include <cstdint>
+#include <limits>
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -37,7 +49,7 @@ namespace ao::gtk
 
   ListTreeModelBuilder::Result ListTreeModelBuilder::build(rt::AppSession& session, lmdb::ReadTransaction const& txn)
   {
-    Result result;
+    auto result = Result{};
     result.store = Gio::ListStore<ListTreeItem>::create();
 
     auto const reader = session.musicLibrary().lists().reader(txn);
@@ -103,6 +115,7 @@ namespace ao::gtk
         {
           return nullptr;
         }
+
         return node->getChildren();
       },
       false,

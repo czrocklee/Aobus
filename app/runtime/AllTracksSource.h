@@ -9,7 +9,6 @@
 #include <ao/lmdb/Transaction.h>
 
 #include <flat_set>
-#include <vector>
 
 namespace ao::rt
 {
@@ -35,7 +34,7 @@ namespace ao::rt
 
     // TrackSource interface
     std::size_t size() const override { return _trackIds.size(); }
-    TrackId trackIdAt(std::size_t index) const override { return *(_trackIds.begin() + index); }
+    TrackId trackIdAt(std::size_t index) const override { return *(_trackIds.begin() + static_cast<std::ptrdiff_t>(index)); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
   private:

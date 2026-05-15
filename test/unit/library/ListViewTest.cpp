@@ -1,19 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
 
 #include <ao/Exception.h>
 #include <ao/Type.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListView.h>
 
-#include <ranges>
+#include <cstddef>
 #include <span>
-#include <test/unit/library/TestUtils.h>
 #include <vector>
 
 namespace ao::library::test

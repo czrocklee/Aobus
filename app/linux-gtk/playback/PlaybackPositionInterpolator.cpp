@@ -4,6 +4,7 @@
 #include "playback/PlaybackPositionInterpolator.h"
 
 #include <algorithm>
+#include <cstdint>
 
 namespace ao::gtk
 {

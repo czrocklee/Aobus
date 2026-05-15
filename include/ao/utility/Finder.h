@@ -6,6 +6,9 @@
 #include <filesystem>
 #include <ranges>
 #include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::utility
 {

@@ -1,21 +1,27 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/Player.h>
+
+#include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
-#include <ao/audio/Player.h>
 #include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/Subscription.h>
+#include <ao/audio/Types.h>
+#include <ao/audio/flow/Graph.h>
 #include <ao/utility/Log.h>
 
 #include <algorithm>
-#include <atomic>
-#include <format>
-#include <map>
+#include <functional>
+#include <memory>
 #include <mutex>
-#include <ranges>
-#include <set>
-#include <unordered_map>
+#include <optional>
+#include <utility>
+#include <vector>
+
+#include <cstdint>
 
 namespace ao::audio
 {
@@ -107,7 +113,7 @@ namespace ao::audio
     }
 
     {
-      std::lock_guard lock(backendsMutex);
+      auto const lock = std::scoped_lock{backendsMutex};
       cachedBackends = std::move(snapshots);
       allDevices = std::move(allDevicesList);
     }
@@ -116,7 +122,7 @@ namespace ao::audio
     auto const currentSnap = engine->status();
     auto allDevicesCopy = std::vector<Device>{};
     {
-      std::lock_guard lock(backendsMutex);
+      auto const lock = std::scoped_lock{backendsMutex};
       allDevicesCopy = allDevices;
     }
 
@@ -133,7 +139,7 @@ namespace ao::audio
     if (optPendingOutput)
     {
       // Try to apply pending output
-      auto const pending = *optPendingOutput;
+      auto const pending = PendingOutput{*optPendingOutput};
       owner->setOutput(pending.backend, pending.deviceId, pending.profile);
 
       if (!optPendingOutput)
@@ -189,7 +195,7 @@ namespace ao::audio
         },
     };
 
-    auto const optEngineFormat = rs.engineOutputFormat;
+    auto const optEngineFormat = Format{rs.engineOutputFormat};
 
     for (auto node : cachedSystemGraph.nodes)
     {
@@ -328,7 +334,7 @@ namespace ao::audio
     // 2. Find the Device matching the kind and id from our cache
     auto allDevicesCopy = std::vector<Device>{};
     {
-      std::lock_guard lock(_impl->backendsMutex);
+      auto const lock = std::scoped_lock{_impl->backendsMutex};
       allDevicesCopy = _impl->allDevices;
     }
 
@@ -419,7 +425,7 @@ namespace ao::audio
     }
 
     {
-      std::lock_guard lock(_impl->backendsMutex);
+      auto const lock = std::scoped_lock{_impl->backendsMutex};
       status.availableBackends = _impl->cachedBackends;
     }
 

@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
 
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <lmdb.h>
 #include <test/unit/lmdb/TestUtils.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <vector>
 
@@ -210,13 +210,13 @@ namespace ao::library::test
 
     // Verify hot and cold data
     auto rtxn = ReadTransaction{env};
-    auto trackOpt = store.reader(rtxn).get(id);
-    REQUIRE(trackOpt.has_value());
-    REQUIRE(trackOpt->property().fileSize() == 1000);
-    REQUIRE(trackOpt->property().mtime() == 1234567890);
-    REQUIRE(trackOpt->property().durationMs() == 180000);
-    REQUIRE(trackOpt->metadata().trackNumber() == 1);
-    REQUIRE(trackOpt->metadata().totalTracks() == 10);
+    auto optTrack = store.reader(rtxn).get(id);
+    REQUIRE(optTrack.has_value());
+    REQUIRE(optTrack->property().fileSize() == 1000);
+    REQUIRE(optTrack->property().mtime() == 1234567890);
+    REQUIRE(optTrack->property().durationMs() == 180000);
+    REQUIRE(optTrack->metadata().trackNumber() == 1);
+    REQUIRE(optTrack->metadata().totalTracks() == 10);
   }
 
   TEST_CASE("TrackStore - hot/cold updateHot and updateCold", "[core][track]")
@@ -275,12 +275,12 @@ namespace ao::library::test
 
     // Verify both persisted
     auto rtxn = ReadTransaction{env};
-    auto trackOpt = store.reader(rtxn).get(id);
-    REQUIRE(trackOpt.has_value());
-    REQUIRE(trackOpt->property().fileSize() == 2000);
-    REQUIRE(trackOpt->property().mtime() == 9876543210);
-    REQUIRE(trackOpt->property().durationMs() == 200000);
-    REQUIRE(trackOpt->metadata().trackNumber() == 2);
+    auto optTrack = store.reader(rtxn).get(id);
+    REQUIRE(optTrack.has_value());
+    REQUIRE(optTrack->property().fileSize() == 2000);
+    REQUIRE(optTrack->property().mtime() == 9876543210);
+    REQUIRE(optTrack->property().durationMs() == 200000);
+    REQUIRE(optTrack->metadata().trackNumber() == 2);
   }
 
   TEST_CASE("TrackStore - hot/cold remove", "[core][track]")
@@ -313,8 +313,8 @@ namespace ao::library::test
 
     // Verify both are gone
     auto rtxn = ReadTransaction{env};
-    auto trackOpt = store.reader(rtxn).get(id);
-    REQUIRE(!trackOpt.has_value());
+    auto optTrack = store.reader(rtxn).get(id);
+    REQUIRE(!optTrack.has_value());
   }
 
   TEST_CASE("TrackStore - Writer get with LoadMode", "[core][track]")
@@ -347,18 +347,18 @@ namespace ao::library::test
     // Use Writer get with LoadMode (within same transaction context)
     auto wtxn3 = WriteTransaction{env};
     auto writer = store.writer(wtxn3);
-    auto hotOpt = writer.get(id, TrackStore::Reader::LoadMode::Hot);
-    REQUIRE(hotOpt.has_value());
-    REQUIRE(hotOpt->isHotValid());
-    REQUIRE(!hotOpt->isColdValid());
+    auto optHot = writer.get(id, TrackStore::Reader::LoadMode::Hot);
+    REQUIRE(optHot.has_value());
+    REQUIRE(optHot->isHotValid());
+    REQUIRE(!optHot->isColdValid());
 
-    auto coldOpt = writer.get(id, TrackStore::Reader::LoadMode::Cold);
-    REQUIRE(coldOpt.has_value());
-    REQUIRE(!coldOpt->isHotValid());
-    REQUIRE(coldOpt->isColdValid());
-    REQUIRE(coldOpt->property().fileSize() == 3000);
-    REQUIRE(coldOpt->property().durationMs() == 240000);
-    REQUIRE(coldOpt->metadata().coverArtId() == 42);
+    auto optCold = writer.get(id, TrackStore::Reader::LoadMode::Cold);
+    REQUIRE(optCold.has_value());
+    REQUIRE(!optCold->isHotValid());
+    REQUIRE(optCold->isColdValid());
+    REQUIRE(optCold->property().fileSize() == 3000);
+    REQUIRE(optCold->property().durationMs() == 240000);
+    REQUIRE(optCold->metadata().coverArtId() == 42);
   }
 
   TEST_CASE("TrackStore - unified TrackView iteration", "[core][track]")

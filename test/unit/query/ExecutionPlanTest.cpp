@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
 
 #include <ao/library/DictionaryStore.h>
 #include <ao/lmdb/Database.h>
@@ -12,8 +9,12 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
-
+#include <lmdb.h>
 #include <test/unit/lmdb/TestUtils.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <utility>
 
 namespace ao::query::test
 {
@@ -595,7 +596,7 @@ namespace ao::query::test
 
         if (loadInstr.op == OpCode::LoadConstant)
         {
-          CHECK(loadInstr.constValue == static_cast<std::int64_t>(futureTagId.value()));
+          CHECK(std::cmp_equal(loadInstr.constValue, futureTagId.value()));
           foundTagEq = true;
         }
       }
@@ -604,7 +605,7 @@ namespace ao::query::test
     CHECK(foundTagEq);
 
     // Verify Bloom Filter also contains the bit for this getOrInternd ID
-    std::uint32_t expectedBit = std::uint32_t{1} << (futureTagId.value() & 31); // 31 is kBloomBitMask
+    std::uint32_t const expectedBit = std::uint32_t{1} << (futureTagId.value() & 31); // 31 is kBloomBitMask
     CHECK((plan.tagBloomMask & expectedBit) == expectedBit);
   }
 
@@ -632,7 +633,7 @@ namespace ao::query::test
     {
       if (instr.op == OpCode::LoadField && instr.field == static_cast<std::uint8_t>(Field::Custom))
       {
-        CHECK(instr.constValue == static_cast<std::int64_t>(futureKeyId.value()));
+        CHECK(std::cmp_equal(instr.constValue, futureKeyId.value()));
         foundLoadField = true;
       }
     }
@@ -647,32 +648,32 @@ namespace ao::query::test
       std::string name;
       Field expected;
     };
-    auto cases = {Case{"year", Field::Year},
-                  Case{"y", Field::Year},
-                  Case{"trackNumber", Field::TrackNumber},
-                  Case{"tn", Field::TrackNumber},
-                  Case{"totalTracks", Field::TotalTracks},
-                  Case{"tt", Field::TotalTracks},
-                  Case{"discNumber", Field::DiscNumber},
-                  Case{"dn", Field::DiscNumber},
-                  Case{"totalDiscs", Field::TotalDiscs},
-                  Case{"td", Field::TotalDiscs},
-                  Case{"artist", Field::ArtistId},
-                  Case{"a", Field::ArtistId},
-                  Case{"album", Field::AlbumId},
-                  Case{"al", Field::AlbumId},
-                  Case{"genre", Field::GenreId},
-                  Case{"g", Field::GenreId},
-                  Case{"composer", Field::ComposerId},
-                  Case{"c", Field::ComposerId},
-                  Case{"albumArtist", Field::AlbumArtistId},
-                  Case{"aa", Field::AlbumArtistId},
-                  Case{"coverArt", Field::CoverArtId},
-                  Case{"ca", Field::CoverArtId},
-                  Case{"title", Field::Title},
-                  Case{"t", Field::Title},
-                  Case{"work", Field::WorkId},
-                  Case{"w", Field::WorkId}};
+    auto cases = {Case{.name = "year", .expected = Field::Year},
+                  Case{.name = "y", .expected = Field::Year},
+                  Case{.name = "trackNumber", .expected = Field::TrackNumber},
+                  Case{.name = "tn", .expected = Field::TrackNumber},
+                  Case{.name = "totalTracks", .expected = Field::TotalTracks},
+                  Case{.name = "tt", .expected = Field::TotalTracks},
+                  Case{.name = "discNumber", .expected = Field::DiscNumber},
+                  Case{.name = "dn", .expected = Field::DiscNumber},
+                  Case{.name = "totalDiscs", .expected = Field::TotalDiscs},
+                  Case{.name = "td", .expected = Field::TotalDiscs},
+                  Case{.name = "artist", .expected = Field::ArtistId},
+                  Case{.name = "a", .expected = Field::ArtistId},
+                  Case{.name = "album", .expected = Field::AlbumId},
+                  Case{.name = "al", .expected = Field::AlbumId},
+                  Case{.name = "genre", .expected = Field::GenreId},
+                  Case{.name = "g", .expected = Field::GenreId},
+                  Case{.name = "composer", .expected = Field::ComposerId},
+                  Case{.name = "c", .expected = Field::ComposerId},
+                  Case{.name = "albumArtist", .expected = Field::AlbumArtistId},
+                  Case{.name = "aa", .expected = Field::AlbumArtistId},
+                  Case{.name = "coverArt", .expected = Field::CoverArtId},
+                  Case{.name = "ca", .expected = Field::CoverArtId},
+                  Case{.name = "title", .expected = Field::Title},
+                  Case{.name = "t", .expected = Field::Title},
+                  Case{.name = "work", .expected = Field::WorkId},
+                  Case{.name = "w", .expected = Field::WorkId}};
 
     for (auto const& c : cases)
     {
@@ -695,15 +696,15 @@ namespace ao::query::test
       std::string name;
       Field expected;
     };
-    auto cases = {Case{"duration", Field::DurationMs},
-                  Case{"l", Field::DurationMs},
-                  Case{"bitrate", Field::Bitrate},
-                  Case{"br", Field::Bitrate},
-                  Case{"sampleRate", Field::SampleRate},
-                  Case{"sr", Field::SampleRate},
-                  Case{"channels", Field::Channels},
-                  Case{"bitDepth", Field::BitDepth},
-                  Case{"bd", Field::BitDepth}};
+    auto cases = {Case{.name = "duration", .expected = Field::DurationMs},
+                  Case{.name = "l", .expected = Field::DurationMs},
+                  Case{.name = "bitrate", .expected = Field::Bitrate},
+                  Case{.name = "br", .expected = Field::Bitrate},
+                  Case{.name = "sampleRate", .expected = Field::SampleRate},
+                  Case{.name = "sr", .expected = Field::SampleRate},
+                  Case{.name = "channels", .expected = Field::Channels},
+                  Case{.name = "bitDepth", .expected = Field::BitDepth},
+                  Case{.name = "bd", .expected = Field::BitDepth}};
 
     for (auto const& c : cases)
     {
@@ -798,7 +799,7 @@ namespace ao::query::test
   {
     SECTION("Reuses Identical String Constants")
     {
-      auto expr = parse("$title = \"Bach\" or $title != \"Bach\"");
+      auto expr = parse(R"($title = "Bach" or $title != "Bach")");
       auto compiler = QueryCompiler{};
       auto plan = compiler.compile(expr);
       CHECK(plan.stringConstants.size() == 1);
@@ -807,7 +808,7 @@ namespace ao::query::test
 
     SECTION("Stores Different String Constants Separately")
     {
-      auto expr = parse("$title = \"Bach\" or $title = \"Mozart\"");
+      auto expr = parse(R"($title = "Bach" or $title = "Mozart")");
       auto compiler = QueryCompiler{};
       auto plan = compiler.compile(expr);
       CHECK(plan.stringConstants.size() == 2);
@@ -825,7 +826,10 @@ namespace ao::query::test
         std::string unit;
         std::int64_t expected;
       };
-      auto cases = {Case{"1ms", 1}, Case{"1s", 1000}, Case{"1m", 60000}, Case{"1h", 3600000}};
+      auto cases = {Case{.unit = "1ms", .expected = 1},
+                    Case{.unit = "1s", .expected = 1000},
+                    Case{.unit = "1m", .expected = 60000},
+                    Case{.unit = "1h", .expected = 3600000}};
 
       for (auto const& c : cases)
       {
@@ -886,8 +890,8 @@ namespace ao::query::test
     auto jazzId = dict.put(wtxn, "jazz");
     wtxn.commit();
 
-    std::uint32_t rockBit = std::uint32_t{1} << (rockId.value() & 31);
-    std::uint32_t jazzBit = std::uint32_t{1} << (jazzId.value() & 31);
+    std::uint32_t const rockBit = std::uint32_t{1} << (rockId.value() & 31);
+    std::uint32_t const jazzBit = std::uint32_t{1} << (jazzId.value() & 31);
 
     SECTION("Tag Bloom Mask For SingleTagWithDictionary")
     {
@@ -930,7 +934,7 @@ namespace ao::query::test
       auto plan = compiler.compile(expr);
       REQUIRE(plan.instructions.size() >= 2);
       CHECK(plan.instructions[1].op == OpCode::LoadConstant);
-      CHECK(plan.instructions[1].constValue == static_cast<std::int64_t>(bachId.value()));
+      CHECK(std::cmp_equal(plan.instructions[1].constValue, bachId.value()));
       CHECK(plan.stringConstants.empty());
     }
 

@@ -10,12 +10,15 @@
 
 namespace ao::media::mp4
 {
+  constexpr std::size_t kAtomTypeSize = 4;
+  constexpr std::size_t kAtomMagicSize = 4;
+
   struct AtomLayout
   {
     using FixedSize = std::false_type;
 
     boost::endian::big_uint32_buf_t length;
-    std::array<char, 4> type;
+    std::array<char, kAtomTypeSize> type;
   };
 
   static_assert(sizeof(AtomLayout) == 8);
@@ -26,7 +29,7 @@ namespace ao::media::mp4
   {
     using FixedSize = std::false_type;
 
-    enum class Type : std::uint32_t
+    enum class Type : std::uint8_t
     {
       Text = 1,
       Binary = 0
@@ -34,7 +37,7 @@ namespace ao::media::mp4
 
     AtomLayout common;
     boost::endian::big_uint32_buf_t dataLength;
-    std::array<char, 4> magic;
+    std::array<char, kAtomMagicSize> magic;
     boost::endian::big_uint32_buf_t type;
     boost::endian::big_uint32_buf_t reserved;
   };
@@ -53,10 +56,10 @@ namespace ao::media::mp4
     boost::endian::big_uint16_buf_t totalTracks;
     boost::endian::big_uint16_buf_t pad2;
 
-    static constexpr char const* Type = "trkn";
+    static constexpr char const* kType = "trkn";
   };
 
-  static_assert(sizeof(TrknAtomLayout) == 32);
+  static_assert(sizeof(TrknAtomLayout) == 32); // NOLINT(readability-magic-numbers)
   static_assert(alignof(TrknAtomLayout) == 1);
   static_assert(std::is_trivial_v<TrknAtomLayout>);
 
@@ -69,10 +72,10 @@ namespace ao::media::mp4
     boost::endian::big_uint16_buf_t discNumber;
     boost::endian::big_uint16_buf_t totalDiscs;
 
-    static constexpr char const* Type = "disk";
+    static constexpr char const* kType = "disk";
   };
 
-  static_assert(sizeof(DiskAtomLayout) == 30);
+  static_assert(sizeof(DiskAtomLayout) == 30); // NOLINT(readability-magic-numbers)
   static_assert(alignof(DiskAtomLayout) == 1);
   static_assert(std::is_trivial_v<DiskAtomLayout>);
 
@@ -96,10 +99,10 @@ namespace ao::media::mp4
     boost::endian::big_uint32_buf_t timescale;
     boost::endian::big_uint32_buf_t duration;
 
-    static constexpr char const* Type = "mdhd";
+    static constexpr char const* kType = "mdhd";
   };
 
-  static_assert(sizeof(MdhdAtomLayout) == 28);
+  static_assert(sizeof(MdhdAtomLayout) == 28); // NOLINT(readability-magic-numbers)
   static_assert(alignof(MdhdAtomLayout) == 1);
   static_assert(std::is_trivial_v<MdhdAtomLayout>);
 
@@ -115,7 +118,7 @@ namespace ao::media::mp4
     boost::endian::big_uint32_buf_t entryCount;
   };
 
-  static_assert(sizeof(StsdAtomLayout) == 16);
+  static_assert(sizeof(StsdAtomLayout) == 16); // NOLINT(readability-magic-numbers)
   static_assert(alignof(StsdAtomLayout) == 1);
   static_assert(std::is_trivial_v<StsdAtomLayout>);
 
@@ -136,7 +139,7 @@ namespace ao::media::mp4
     };
   };
 
-  static_assert(sizeof(StszAtomLayout) == 20);
+  static_assert(sizeof(StszAtomLayout) == 20); // NOLINT(readability-magic-numbers)
   static_assert(alignof(StszAtomLayout) == 1);
   static_assert(std::is_trivial_v<StszAtomLayout>);
 
@@ -159,7 +162,7 @@ namespace ao::media::mp4
     };
   };
 
-  static_assert(sizeof(StscAtomLayout) == 16);
+  static_assert(sizeof(StscAtomLayout) == 16); // NOLINT(readability-magic-numbers)
   static_assert(alignof(StscAtomLayout) == 1);
   static_assert(std::is_trivial_v<StscAtomLayout>);
 
@@ -180,7 +183,7 @@ namespace ao::media::mp4
     };
   };
 
-  static_assert(sizeof(StcoAtomLayout) == 16);
+  static_assert(sizeof(StcoAtomLayout) == 16); // NOLINT(readability-magic-numbers)
   static_assert(alignof(StcoAtomLayout) == 1);
   static_assert(std::is_trivial_v<StcoAtomLayout>);
 
@@ -201,7 +204,7 @@ namespace ao::media::mp4
     };
   };
 
-  static_assert(sizeof(Co64AtomLayout) == 16);
+  static_assert(sizeof(Co64AtomLayout) == 16); // NOLINT(readability-magic-numbers)
   static_assert(alignof(Co64AtomLayout) == 1);
   static_assert(std::is_trivial_v<Co64AtomLayout>);
 
@@ -217,10 +220,11 @@ namespace ao::media::mp4
   // bytes 16-19: sample rate (4)
   struct AudioSampleEntryLayout
   {
+    static constexpr std::size_t kReserved1Size = 6;
     using FixedSize = std::true_type;
 
     AtomLayout common;
-    std::array<char, 6> reserved1;
+    std::array<char, kReserved1Size> reserved1;
     boost::endian::big_uint16_buf_t dataReferenceIndex;
     std::array<boost::endian::big_uint16_buf_t, 4> reserved2;
     boost::endian::big_uint16_buf_t channelCount;
@@ -229,10 +233,10 @@ namespace ao::media::mp4
     boost::endian::big_uint16_buf_t reserved3;
     boost::endian::big_uint32_buf_t sampleRate;
 
-    static constexpr char const* Type = "mp4a";
+    static constexpr char const* kType = "mp4a";
   };
 
-  static_assert(sizeof(AudioSampleEntryLayout) == 36);
+  static_assert(sizeof(AudioSampleEntryLayout) == 36); // NOLINT(readability-magic-numbers)
   static_assert(alignof(AudioSampleEntryLayout) == 1);
   static_assert(std::is_trivial_v<AudioSampleEntryLayout>);
 } // namespace ao::media::mp4

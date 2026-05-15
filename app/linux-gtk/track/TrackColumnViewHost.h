@@ -24,6 +24,12 @@ namespace ao::gtk
                         Glib::RefPtr<Gtk::MultiSelection> const& selectionModel);
     ~TrackColumnViewHost();
 
+    // Not copyable or movable
+    TrackColumnViewHost(TrackColumnViewHost const&) = delete;
+    TrackColumnViewHost& operator=(TrackColumnViewHost const&) = delete;
+    TrackColumnViewHost(TrackColumnViewHost&&) = delete;
+    TrackColumnViewHost& operator=(TrackColumnViewHost&&) = delete;
+
     Gtk::ColumnView& columnView() { return *_columnView; }
     Gtk::ColumnView const& columnView() const { return *_columnView; }
 

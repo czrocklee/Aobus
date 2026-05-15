@@ -5,23 +5,39 @@
 #include "list/ListSidebarController.h"
 #include "playback/PlaybackSequenceController.h"
 #include "tag/TagEditController.h"
+#include "track/TrackListAdapter.h"
+#include "track/TrackPresentation.h"
+#include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
+#include "track/TrackViewPage.h"
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/Type.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/utility/Log.h>
-
-#include <functional>
-#include <runtime/AllTracksSource.h>
 #include <runtime/AppSession.h>
 #include <runtime/ManualListSource.h>
 #include <runtime/PlaybackService.h>
-#include <runtime/SmartListSource.h>
+#include <runtime/ProjectionTypes.h>
 #include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
 
+#include <gtkmm/stack.h>
+#include <gtkmm/widget.h>
+
+#include <algorithm>
+#include <cstdint>
 #include <format>
+#include <functional>
+#include <iterator>
 #include <limits>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -84,7 +100,7 @@ namespace ao::gtk
 
   void TrackPageManager::handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev)
   {
-    auto viewId = ev.preferredViewId;
+    auto viewId = rt::ViewId{ev.preferredViewId};
 
     // Fallback: If no view ID specified, try to find a view currently displaying the requested list
     if (viewId == rt::ViewId{} && ev.preferredListId != ListId{})
@@ -278,7 +294,7 @@ namespace ao::gtk
     }
 
     auto const state = _session.views().trackListState(viewId);
-    auto const listId = state.listId;
+    auto const listId = ListId{state.listId};
 
     // Provide dummy source, bindProjection takes over
     auto adapter =
@@ -317,7 +333,7 @@ namespace ao::gtk
   void TrackPageManager::bindTrackPage(TrackPageContext& ctx)
   {
     auto* const page = ctx.page.get();
-    auto const viewId = ctx.viewId;
+    auto const viewId = rt::ViewId{ctx.viewId};
 
     page->signalSelectionChanged().connect(
       [this, page, viewId]
@@ -334,7 +350,7 @@ namespace ao::gtk
     page->signalContextMenuRequested().connect(
       [this, page](double posX, double posY)
       {
-        TrackSelectionContext sel{
+        TrackSelectionContext const sel{
           .listId = page->getListId(), .selectedIds = page->selectionController().getSelectedTrackIds()};
         _tagEditController.showTrackContextMenu(*page, sel, posX, posY);
       });
@@ -347,7 +363,7 @@ namespace ao::gtk
           return;
         }
 
-        TrackSelectionContext sel{.listId = page->getListId(), .selectedIds = ids};
+        TrackSelectionContext const sel{.listId = page->getListId(), .selectedIds = ids};
         _tagEditController.showTagEditor(sel, *relativeTo);
       });
 
@@ -386,6 +402,7 @@ namespace ao::gtk
     {
       return ctx->page->getListId();
     }
+
     return allTracksListId();
   }
 } // namespace ao::gtk

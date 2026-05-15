@@ -3,8 +3,20 @@
 
 #include "AllTracksSource.h"
 
+#include "TrackSource.h"
+
+#include <ao/Type.h>
+#include <ao/library/TrackStore.h>
+#include <ao/lmdb/Transaction.h>
+
 #include <algorithm>
-#include <ranges>
+#include <flat_set>
+#include <iterator>
+#include <optional>
+#include <utility>
+#include <vector>
+
+#include <cstddef>
 
 namespace ao::rt
 {
@@ -26,6 +38,7 @@ namespace ao::rt
 
     // flat_set constructor from sorted vector is efficient.
     std::ranges::sort(ids);
+    // NOLINTNEXTLINE(misc-include-cleaner)
     _trackIds = std::flat_set<TrackId>(std::sorted_unique, std::move(ids));
 
     TrackSource::notifyReset();

@@ -11,14 +11,28 @@ add_definitions(${LLVM_DEFINITIONS})
 include_directories(${LLVM_INCLUDE_DIRS} ${CLANG_INCLUDE_DIRS})
 
 add_library(AobusLintPlugin MODULE
-  ControlBlockSpacingCheck.cpp
+  check/CApiGlobalQualificationCheck.cpp
+  check/ConcreteFinalCheck.cpp
+  check/ControlBlockSpacingCheck.cpp
+  check/ForbidNodiscardCheck.cpp
+  check/ForbidTrailingReturnCheck.cpp
+  check/IdentifierNamingExtensionsCheck.cpp
+  check/LocalInitializationStyleCheck.cpp
+  check/MemberInitializerBracesCheck.cpp
+  check/OptionalNamingAndUsageCheck.cpp
+  check/StdCLibraryQualificationCheck.cpp
+  check/ThreadingPolicyCheck.cpp
+  check/UnusedSuppressionStyleCheck.cpp
+  check/LambdaParamsCheck.cpp
   AobusLintModule.cpp
 )
 
 set_target_properties(AobusLintPlugin PROPERTIES
-  CXX_STANDARD 20
+  CXX_STANDARD 23
   CXX_STANDARD_REQUIRED ON
 )
+
+target_include_directories(AobusLintPlugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(AobusLintPlugin PRIVATE
   clangTidy

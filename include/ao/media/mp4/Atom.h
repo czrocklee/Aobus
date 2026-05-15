@@ -6,9 +6,11 @@
 #include "AtomLayout.h"
 #include <ao/utility/ByteView.h>
 
-#include <algorithm>
-#include <functional>
 #include <gsl-lite/gsl-lite.hpp>
+
+#include <algorithm>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <string_view>
@@ -23,6 +25,15 @@ namespace ao::media::mp4
 
     virtual ~Atom() = default;
 
+    Atom(Atom const&) = delete;
+    Atom& operator=(Atom const&) = delete;
+
+  protected:
+    Atom() = default;
+    Atom(Atom&&) = default;
+    Atom& operator=(Atom&&) = default;
+
+  public:
     virtual std::uint32_t length() const = 0;
 
     virtual std::string_view type() const = 0;
@@ -88,7 +99,7 @@ namespace ao::media::mp4
 
     bool isLeaf() const override { return true; };
 
-    void visitChildren(Visitor) const override {}
+    void visitChildren(Visitor /*visitor*/) const override {}
   };
 
   class ContainerAtomView : public AtomView
@@ -121,7 +132,7 @@ namespace ao::media::mp4
   public:
     std::uint32_t length() const override
     {
-      return std::ranges::fold_left(_children, 0u, [](auto size, auto const& ptr) { return size + ptr->length(); });
+      return std::ranges::fold_left(_children, 0U, [](auto size, auto const& ptr) { return size + ptr->length(); });
     }
 
     std::string_view type() const override { return "root"; }

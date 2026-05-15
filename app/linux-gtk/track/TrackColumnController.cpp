@@ -2,12 +2,26 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackColumnController.h"
+#include "track/ColumnVisibilityModel.h"
+#include "track/TrackPresentation.h"
+
+#include <giomm/listmodel.h>
+#include <glibmm/binding.h>
+#include <glibmm/main.h>
+#include <glibmm/ustring.h>
+#include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/cssprovider.h>
+#include <sigc++/functors/mem_fun.h>
+#include <glib.h>
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <format>
+#include <memory>
 #include <ranges>
+#include <string>
 
 namespace ao::gtk
 {
@@ -40,7 +54,7 @@ namespace ao::gtk
       column->set_resizable(true);
       column->set_fixed_width(definition.defaultWidth);
 
-      _columnNotifyConnections.push_back(column->property_fixed_width().signal_changed().connect(
+      _columnNotifyConnections.emplace_back(column->property_fixed_width().signal_changed().connect(
         [this]
         {
           if (_syncingColumnLayout)
@@ -51,7 +65,7 @@ namespace ao::gtk
           queueSharedColumnLayoutUpdate();
         }));
 
-      _columnNotifyConnections.push_back(column->property_fixed_width().signal_changed().connect(
+      _columnNotifyConnections.emplace_back(column->property_fixed_width().signal_changed().connect(
         sigc::mem_fun(*this, &TrackColumnController::updateTitlePositionVariable)));
 
       _columnView.append_column(column);
@@ -84,35 +98,7 @@ namespace ao::gtk
           continue;
         }
 
-        // Check if the column is already at the target index
-        bool needsMove = true;
-
-        if (columns->get_n_items() > idx)
-        {
-          if (auto currentObj = columns->get_object(static_cast<::guint>(idx)))
-          {
-            if (currentObj == binding->column)
-            {
-              needsMove = false;
-            }
-          }
-        }
-
-        if (needsMove)
-        {
-          // Check if column is already in the view elsewhere
-
-          for (::guint i = 0; i < columns->get_n_items(); ++i)
-          {
-            if (columns->get_object(i) == binding->column)
-            {
-              _columnView.remove_column(binding->column);
-              break;
-            }
-          }
-
-          _columnView.insert_column(static_cast<::guint>(idx), binding->column);
-        }
+        ensureColumnPosition(columns, idx, binding->column);
 
         auto const width = state.width == -1 ? binding->defaultWidth : state.width;
 
@@ -129,6 +115,39 @@ namespace ao::gtk
     updateColumnVisibility();
 
     _syncingColumnLayout = false;
+  }
+
+  void TrackColumnController::ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columns,
+                                                   std::size_t idx,
+                                                   Glib::RefPtr<Gtk::ColumnViewColumn> const& column)
+  {
+    bool needsMove = true;
+
+    if (columns->get_n_items() > idx)
+    {
+      if (auto currentObj = columns->get_object(static_cast<::guint>(idx)))
+      {
+        if (currentObj == column)
+        {
+          needsMove = false;
+        }
+      }
+    }
+
+    if (needsMove)
+    {
+      // Check if column is already in the view elsewhere
+      for (::guint loopIdx = 0; loopIdx < columns->get_n_items(); ++loopIdx)
+      {
+        if (columns->get_object(loopIdx) == column)
+        {
+          _columnView.remove_column(column);
+          break;
+        }
+      }
+
+      _columnView.insert_column(static_cast<::guint>(idx), column);
+    }
   }
 
   void TrackColumnController::setLayoutAndApply(TrackColumnLayout const& layout)
@@ -212,9 +231,9 @@ namespace ao::gtk
 
     layout.columns.reserve(nItems);
 
-    for (std::uint32_t i = 0; i < nItems; ++i)
+    for (std::uint32_t idx = 0; idx < nItems; ++idx)
     {
-      auto const object = columns->get_object(i);
+      auto const object = columns->get_object(idx);
       auto const column = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(object);
 
       if (!column)
@@ -222,14 +241,14 @@ namespace ao::gtk
         continue;
       }
 
-      auto const columnId = trackColumnFromId(std::string{column->get_id()});
+      auto const optColumnId = trackColumnFromId(std::string{column->get_id()});
 
-      if (!columnId)
+      if (!optColumnId)
       {
         continue;
       }
 
-      auto state = currentStateFor(*columnId);
+      auto state = currentStateFor(*optColumnId);
 
       state.width = column->get_fixed_width();
       layout.columns.push_back(state);
@@ -262,9 +281,9 @@ namespace ao::gtk
       return;
     }
 
-    for (std::uint32_t i = 0; i < columns->get_n_items(); ++i)
+    for (std::uint32_t idx = 0; idx < columns->get_n_items(); ++idx)
     {
-      auto const col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(i));
+      auto const col = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columns->get_object(idx));
 
       if (!col || !col->get_visible())
       {

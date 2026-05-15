@@ -2,11 +2,15 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/library/DictionaryStore.h>
-
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/Exception.h>
 #include <ao/utility/ByteView.h>
+
+#include <cstdint>
 #include <span>
 #include <string_view>
+#include <utility>
 
 namespace ao::library
 {
@@ -29,11 +33,9 @@ namespace ao::library
   DictionaryId DictionaryStore::put(lmdb::WriteTransaction& txn, std::string_view value)
   {
     // Check in-memory index first (includes entries from reserve)
-
     if (auto it = _stringToId.find(value); it != _stringToId.end())
     {
       // If this string was reserved, we need to persist it now
-
       if (_reservedStrings.contains(value))
       {
         auto writer = _database.writer(txn);
@@ -59,15 +61,14 @@ namespace ao::library
     auto idx = id.value();
 
     // 0 is null/invalid
-
     if (idx == 0)
     {
-      AO_THROW(Exception, "Invalid dictionary ID");
+      ao::throwException<Exception>("Invalid dictionary ID");
     }
 
     if (idx - 1 >= _idToStringStorage.size())
     {
-      AO_THROW(Exception, "Invalid dictionary ID");
+      ao::throwException<Exception>("Invalid dictionary ID");
     }
 
     return _idToStringStorage[idx - 1];
@@ -92,7 +93,7 @@ namespace ao::library
       return it->second;
     }
 
-    AO_THROW(Exception, "String not found in dictionary");
+    ao::throwException<Exception>("String not found in dictionary");
   }
 
   bool DictionaryStore::contains(std::string_view str) const
@@ -103,7 +104,6 @@ namespace ao::library
   DictionaryId DictionaryStore::getOrIntern(std::string_view str)
   {
     // Check if already exists
-
     if (auto it = _stringToId.find(str); it != _stringToId.end())
     {
       return it->second;

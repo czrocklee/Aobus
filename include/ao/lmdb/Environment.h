@@ -7,7 +7,7 @@
 
 #include <cstddef>
 #include <memory>
-#include <string_view>
+#include <string>
 
 namespace ao::lmdb
 {
@@ -17,7 +17,7 @@ namespace ao::lmdb
     struct Options
     {
       unsigned int flags = 0;
-      mdb_mode_t mode = 0644;
+      mdb_mode_t mode = 0644; // NOLINT(readability-magic-numbers)
       MDB_dbi maxDatabases = 0;
       unsigned int maxReaders = 0;
       std::size_t mapSize = 0;
@@ -33,6 +33,8 @@ namespace ao::lmdb
     Environment& operator=(Environment&& other) noexcept;
 
     ~Environment() noexcept;
+
+    MDB_env* handle() const noexcept { return _handle.get(); }
 
   private:
     std::unique_ptr<MDB_env, decltype([](auto* env) { mdb_env_close(env); })> _handle;

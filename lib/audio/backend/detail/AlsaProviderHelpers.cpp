@@ -2,17 +2,25 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/backend/detail/AlsaProviderHelpers.h>
-#include <ao/utility/Log.h>
-#include <ao/utility/Raii.h>
 
-#include <algorithm>
-#include <array>
-#include <format>
+#include <ao/audio/Backend.h>
+#include <ao/audio/backend/detail/AudioBackendShared.h>
+#include <ao/utility/Raii.h>
 
 extern "C"
 {
 #include <alsa/asoundlib.h>
 }
+
+#include <algorithm>
+#include <array>
+#include <format>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include <cstdint>
+#include <cstdlib>
 
 namespace ao::audio::backend::detail
 {

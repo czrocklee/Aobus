@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Exception.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/Type.h>
+#include <ao/Exception.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
+#include <limits>
 #include <span>
 
 namespace ao::library
@@ -29,7 +33,7 @@ namespace ao::library
 
       std::uint32_t hash = kFnvOffsetBasis;
 
-      for (std::byte byte : data)
+      for (std::byte const byte : data)
       {
         hash ^= static_cast<std::uint8_t>(byte);
         hash *= kFnvPrime;
@@ -57,10 +61,9 @@ namespace ao::library
       }
 
       // Prevent infinite loop (though extremely unlikely with 32-bit hash space)
-
       if (key == std::numeric_limits<std::uint32_t>::max())
       {
-        AO_THROW(Exception, "Hash table full");
+        ao::throwException<Exception>("Hash table full");
       }
     }
   }

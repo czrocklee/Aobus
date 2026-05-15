@@ -5,10 +5,20 @@
 #include "inspector/CoverArtCache.h"
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/utility/Log.h>
+#include <runtime/ProjectionTypes.h>
 
+#include <gdkmm/pixbuf.h>
+#include <giomm/memoryinputstream.h>
+#include <glibmm/error.h>
+#include <glibmm/refptr.h>
+
+#include <cstddef>
+#include <cstdint>
 #include <functional>
-#include <runtime/AppSession.h>
+#include <iterator>
+#include <memory>
+#include <span>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -54,7 +64,7 @@ namespace ao::gtk
       try
       {
         auto const memStream = Gio::MemoryInputStream::create();
-        memStream->add_data(optData->data(), static_cast<gssize>(optData->size()), nullptr);
+        memStream->add_data(optData->data(), std::ssize(*optData), nullptr);
         cached = Gdk::Pixbuf::create_from_stream(memStream);
         _cache.put(rid, cached);
       }
@@ -79,7 +89,7 @@ namespace ao::gtk
     try
     {
       auto const memStream = Gio::MemoryInputStream::create();
-      memStream->add_data(bytes.data(), static_cast<gssize>(bytes.size()), nullptr);
+      memStream->add_data(bytes.data(), std::ssize(bytes), nullptr);
       set_pixbuf(Gdk::Pixbuf::create_from_stream(memStream));
     }
     catch (Glib::Error const&)

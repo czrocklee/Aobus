@@ -9,33 +9,37 @@
 extern "C"
 {
 #include <pipewire/core.h>
-#include <pipewire/keys.h>
 #include <pipewire/link.h>
 #include <pipewire/node.h>
 #include <pipewire/pipewire.h>
-#include <pipewire/proxy.h>
-#include <spa/param/audio/raw-utils.h>
-#include <spa/param/format-utils.h>
-#include <spa/param/props.h>
-#include <spa/pod/builder.h>
-#include <spa/pod/iter.h>
-#include <spa/support/loop.h>
-#include <spa/utils/defs.h>
+#include <spa/param/param.h>
+#include <spa/pod/pod.h>
 #include <spa/utils/dict.h>
-#include <spa/utils/type.h>
 }
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <cstring>
 #include <format>
+#include <functional>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <ranges>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/Subscription.h>
 #include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>
+#include <ao/audio/flow/Graph.h>
 
 namespace ao::audio::backend
 {
@@ -49,15 +53,12 @@ namespace ao::audio::backend
 
   // --- Internal Helpers (Monitor only) ---
 
-  bool isActiveLink(::pw_link_state state) noexcept
+  namespace
   {
-    return state == PW_LINK_STATE_PAUSED || state == PW_LINK_STATE_ACTIVE;
-  }
-
-  std::string formatStreamFormat(Format const& format)
-  {
-    auto const* const sampleType = format.isFloat ? "float" : "pcm";
-    return std::format("{}Hz/{}-bit/{}ch {}", format.sampleRate, format.bitDepth, format.channels, sampleType);
+    bool isActiveLink(::pw_link_state state) noexcept
+    {
+      return state == PW_LINK_STATE_PAUSED || state == PW_LINK_STATE_ACTIVE;
+    }
   }
 
   // --- PipeWireMonitor Impl ---
@@ -141,7 +142,7 @@ namespace ao::audio::backend
     {
       stopping.store(true, std::memory_order_release);
       {
-        auto const lock = std::lock_guard{mutex};
+        auto const lock = std::scoped_lock{mutex};
         deviceSubscriptions.clear();
         graphSubscriptions.clear();
       }
@@ -235,7 +236,7 @@ namespace ao::audio::backend
       auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
 
       {
-        auto const lock = std::lock_guard{impl->mutex};
+        auto const lock = std::scoped_lock{impl->mutex};
 
         if (seq == impl->coreSyncSeq)
         {
@@ -272,7 +273,7 @@ namespace ao::audio::backend
                                                     auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
 
                                                     {
-                                                      auto const lock = std::lock_guard{impl->mutex};
+                                                      auto const lock = std::scoped_lock{impl->mutex};
                                                       auto& link = impl->links[info->id];
 
                                                       link.outputNodeId = info->output_node_id;
@@ -288,7 +289,7 @@ namespace ao::audio::backend
                                                   }};
 
       {
-        auto const lock = std::lock_guard{impl->mutex};
+        auto const lock = std::scoped_lock{impl->mutex};
 
         if (isNode)
         {
@@ -317,7 +318,7 @@ namespace ao::audio::backend
       bool needsRefresh = false;
 
       {
-        auto const lock = std::lock_guard{impl->mutex};
+        auto const lock = std::scoped_lock{impl->mutex};
 
         if (auto const it = impl->linkBindings.find(id); it != impl->linkBindings.end())
         {
@@ -370,7 +371,7 @@ namespace ao::audio::backend
       auto* const impl = binding->impl;
 
       {
-        auto const lock = std::lock_guard{impl->mutex};
+        auto const lock = std::scoped_lock{impl->mutex};
 
         if ((info->change_mask & PW_NODE_CHANGE_MASK_PROPS) != 0)
         {
@@ -399,22 +400,22 @@ namespace ao::audio::backend
       auto* const impl = binding->impl;
 
       {
-        auto const lock = std::lock_guard{impl->mutex};
+        auto const lock = std::scoped_lock{impl->mutex};
 
         if (id == SPA_PARAM_Format)
         {
-          if (auto const fmt = detail::parseRawStreamFormat(param))
+          if (auto const optFmt = detail::parseRawStreamFormat(param))
           {
-            impl->nodeFormatMap[binding->id] = *fmt;
+            impl->nodeFormatMap[binding->id] = *optFmt;
           }
         }
         else if (binding->role == NodeBindingRole::Sink && id == SPA_PARAM_EnumFormat)
         {
           if (!impl->nodeFormatMap.contains(binding->id))
           {
-            if (auto const fmt = detail::parseRawStreamFormat(param))
+            if (auto const optFmt = detail::parseRawStreamFormat(param))
             {
-              impl->nodeFormatMap[binding->id] = *fmt;
+              impl->nodeFormatMap[binding->id] = *optFmt;
             }
           }
 
@@ -521,7 +522,7 @@ namespace ao::audio::backend
 
   void PipeWireMonitor::stop()
   {
-    auto const lock = std::lock_guard{_impl->mutex};
+    auto const lock = std::scoped_lock{_impl->mutex};
     _impl->refreshEvent.reset();
     _impl->linkBindings.clear();
     _impl->streamNodeBindings.clear();
@@ -548,7 +549,7 @@ namespace ao::audio::backend
 
   std::optional<std::uint32_t> PipeWireMonitor::findSinkIdByName(std::string_view name) const
   {
-    auto const lock = std::lock_guard{_impl->mutex};
+    auto const lock = std::scoped_lock{_impl->mutex};
 
     for (auto const& [id, node] : _impl->nodes)
     {
@@ -581,7 +582,7 @@ namespace ao::audio::backend
     auto cb = DeviceCallback{};
 
     {
-      auto const lock = std::lock_guard{mutex};
+      auto const lock = std::scoped_lock{mutex};
       deviceSubscriptions.push_back({id, callback});
       cb = std::move(callback);
       devices = enumerateSinks();
@@ -594,7 +595,7 @@ namespace ao::audio::backend
 
     return Subscription{[this, id]
                         {
-                          auto const lock = std::lock_guard{mutex};
+                          auto const lock = std::scoped_lock{mutex};
                           auto const it = std::ranges::find(deviceSubscriptions, id, &DeviceSubscription::id);
 
                           if (it != deviceSubscriptions.end())
@@ -609,7 +610,7 @@ namespace ao::audio::backend
   {
     auto const id = nextSubscriptionId++;
     {
-      auto const lock = std::lock_guard{mutex};
+      auto const lock = std::scoped_lock{mutex};
       graphSubscriptions.push_back({id, std::string(routeAnchor), std::move(callback)});
     }
 
@@ -618,7 +619,7 @@ namespace ao::audio::backend
     return Subscription{[this, id]
                         {
                           {
-                            auto const lock = std::lock_guard{mutex};
+                            auto const lock = std::scoped_lock{mutex};
                             auto const it = std::ranges::find(graphSubscriptions, id, &GraphSubscription::id);
 
                             if (it != graphSubscriptions.end())
@@ -679,14 +680,14 @@ namespace ao::audio::backend
 
     // Phase 1: sync bindings under mutex
     {
-      auto const lock = std::lock_guard{mutex};
+      auto const lock = std::scoped_lock{mutex};
       auto subscribedStreamIds = std::unordered_set<std::uint32_t>{};
 
       for (auto const& sub : graphSubscriptions)
       {
-        if (auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str()))
+        if (auto const optParsedId = detail::parseUintProperty(sub.routeAnchor.c_str()))
         {
-          subscribedStreamIds.insert(*parsedId);
+          subscribedStreamIds.insert(*optParsedId);
         }
       }
 
@@ -700,16 +701,16 @@ namespace ao::audio::backend
     auto deviceSnapshot = std::vector<Device>{};
 
     {
-      auto const lock = std::lock_guard{mutex};
+      auto const lock = std::scoped_lock{mutex};
 
       for (auto const& sub : graphSubscriptions)
       {
-        auto const parsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
+        auto const optParsedId = detail::parseUintProperty(sub.routeAnchor.c_str());
 
-        if (parsedId && *parsedId != PW_ID_ANY && sub.callback)
+        if (optParsedId && *optParsedId != PW_ID_ANY && sub.callback)
         {
           auto graph = flow::Graph{};
-          populateGraph(graph, *parsedId);
+          populateGraph(graph, *optParsedId);
           pendingGraphCbs.emplace_back(sub.callback, std::move(graph));
         }
       }
@@ -836,7 +837,7 @@ namespace ao::audio::backend
 
   PipeWireMonitor::Impl::ReachableContext PipeWireMonitor::Impl::findReachableNodes(std::uint32_t streamId) const
   {
-    ReachableContext ctx;
+    auto ctx = ReachableContext{};
 
     if (streamId != PW_ID_ANY)
     {

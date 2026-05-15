@@ -1,24 +1,34 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/Backend.h>
+#include <ao/audio/IBackend.h>
+#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/Subscription.h>
 #include <ao/audio/backend/AlsaExclusiveBackend.h>
 #include <ao/audio/backend/AlsaProvider.h>
+#include <ao/audio/flow/Graph.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/Raii.h>
 #include <ao/utility/ThreadUtils.h>
 
-#include <algorithm>
-#include <array>
-#include <mutex>
-#include <thread>
-#include <vector>
+#include <poll.h>
 
 extern "C"
 {
-#include <alsa/asoundlib.h>
 #include <libudev.h>
-#include <poll.h>
 }
+
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <stop_token>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 #include <ao/audio/backend/detail/AlsaProviderHelpers.h>
 
@@ -84,21 +94,23 @@ namespace ao::audio::backend
 
       while (!stopToken.stop_requested())
       {
+        // NOLINTBEGIN(misc-include-cleaner)
         auto fds = std::array<struct pollfd, 1>{};
         fds[0].fd = fd;
         fds[0].events = POLLIN;
 
         if (::poll(fds.data(), static_cast<nfds_t>(fds.size()), kUdevPollTimeoutMs) > 0 &&
             (fds[0].revents & POLLIN) != 0)
+        // NOLINTEND(misc-include-cleaner)
         {
           auto dev = utility::makeUniquePtr<::udev_device_unref>(::udev_monitor_receive_device(monitor.get()));
 
           if (dev)
           {
             auto newDevices = doAlsaEnumerate();
-            std::vector<DeviceSub> subs;
+            auto subs = std::vector<DeviceSub>{};
             {
-              std::lock_guard lock(mutex);
+              auto const lock = std::scoped_lock{mutex};
               cachedDevices = std::move(newDevices);
               subs = deviceSubs;
             }
@@ -128,7 +140,7 @@ namespace ao::audio::backend
     auto const id = _impl->nextSubId++;
     auto const devices = [this, id, callback]
     {
-      auto const lock = std::lock_guard{_impl->mutex};
+      auto const lock = std::scoped_lock{_impl->mutex};
       _impl->deviceSubs.push_back({.id = id, .callback = callback});
       return _impl->cachedDevices;
     }();
@@ -140,7 +152,7 @@ namespace ao::audio::backend
 
     return Subscription{[this, id]
                         {
-                          std::lock_guard lock(_impl->mutex);
+                          auto const lock = std::scoped_lock{_impl->mutex};
                           auto const it = std::ranges::find(_impl->deviceSubs, id, &Impl::DeviceSub::id);
 
                           if (it != _impl->deviceSubs.end())
@@ -152,7 +164,7 @@ namespace ao::audio::backend
 
   IBackendProvider::Status AlsaProvider::status() const
   {
-    auto const lock = std::lock_guard{_impl->mutex};
+    auto const lock = std::scoped_lock{_impl->mutex};
     return {.metadata = {.id = kBackendAlsa,
                          .name = "ALSA",
                          .description = "Advanced Linux Sound Architecture (Direct Hardware Access)",
@@ -172,7 +184,7 @@ namespace ao::audio::backend
   {
     if (callback)
     {
-      flow::Graph graph;
+      auto graph = flow::Graph{};
       graph.nodes.push_back(
         {.id = "alsa-stream", .type = flow::NodeType::Stream, .name = "ALSA Stream", .objectPath = ""});
       graph.nodes.push_back({.id = "alsa-sink",

@@ -3,12 +3,38 @@
 
 #include "library_io/ImportExportCoordinator.h"
 #include "layout/LayoutConstants.h"
+#include "library_io/ImportProgressDialog.h"
+#include <ao/library/Exporter.h>
 #include <ao/library/Importer.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/ThreadUtils.h>
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/NotificationService.h>
+#include <runtime/StateTypes.h>
+
+#include <giomm/asyncresult.h>
+#include <giomm/liststore.h>
+#include <glibmm/error.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/box.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/dropdown.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/filedialog.h>
+#include <gtkmm/filefilter.h>
+#include <gtkmm/label.h>
+#include <gtkmm/object.h>
+#include <gtkmm/stringlist.h>
+#include <gtkmm/window.h>
+
+#include <algorithm>
+#include <cctype>
+#include <exception>
+#include <filesystem>
+#include <memory>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -33,7 +59,7 @@ namespace ao::gtk
                             {
                               if (auto const folder = dialog->select_folder_finish(result); folder)
                               {
-                                std::filesystem::path path(folder->get_path());
+                                std::filesystem::path const path(folder->get_path());
                                 auto libPath = path / "data.mdb";
 
                                 if (std::filesystem::exists(libPath))

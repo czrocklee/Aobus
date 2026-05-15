@@ -20,7 +20,7 @@ namespace ao::audio::test
     };
 
     explicit ScriptedDecoderSession(DecodedStreamInfo info)
-      : _info(info)
+      : _info{info}
     {
     }
 
@@ -46,6 +46,7 @@ namespace ao::audio::test
     Result<PcmBlock> readNextBlock() override
     {
       _readCount++;
+
       if (_scriptIdx >= _script.size())
       {
         return PcmBlock{.bytes = {}, .bitDepth = 16, .frames = 0, .firstFrameIndex = 0, .endOfStream = true};
@@ -60,7 +61,7 @@ namespace ao::audio::test
 
       return PcmBlock{.bytes = entry.data,
                       .bitDepth = 16,
-                      .frames = static_cast<std::uint32_t>(entry.data.size() / (16 / 8 * 2)),
+                      .frames = static_cast<std::uint32_t>(entry.data.size() / std::size_t{4}),
                       .firstFrameIndex = 0,
                       .endOfStream = entry.endOfStream};
     }

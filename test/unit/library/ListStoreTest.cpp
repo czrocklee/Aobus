@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
 
+#include <ao/Type.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <lmdb.h>
 #include <test/unit/lmdb/TestUtils.h>
 
+#include <cstddef>
 #include <cstring>
 #include <vector>
 
@@ -31,7 +31,7 @@ namespace ao::library::test
     wtxn.commit();
 
     // Create a list
-    auto header = ListHeader{.trackIdsCount = 5};
+    auto header = ListHeader{.trackIdsCount = 5, .nameOffset = 0};
 
     auto data = std::vector<std::byte>(sizeof(ListHeader));
     std::memcpy(data.data(), &header, sizeof(ListHeader));
@@ -59,7 +59,7 @@ namespace ao::library::test
     wtxn.commit();
 
     // Create a list
-    auto header = ListHeader{.trackIdsCount = 10};
+    auto header = ListHeader{.trackIdsCount = 10, .nameOffset = 0};
 
     auto const trackIdsSize = static_cast<std::size_t>(header.trackIdsCount) * sizeof(TrackId);
     auto data = std::vector<std::byte>(sizeof(ListHeader) + trackIdsSize);

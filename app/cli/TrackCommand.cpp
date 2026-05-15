@@ -2,7 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TrackCommand.h"
-#include <ao/library/TrackLayout.h>
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/ExecutionPlan.h>
@@ -10,9 +11,18 @@
 #include <ao/query/PlanEvaluator.h>
 #include <ao/tag/TagFile.h>
 
+#include <CLI/App.hpp>
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <span>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::cli
 {
@@ -65,22 +75,22 @@ namespace ao::cli
         return;
       }
 
-      std::size_t end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
+      std::size_t const end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
       os << "[\n";
 
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& [id, view] = matches[i];
-        os << " {\"id\": " << id << ", \"title\": \"" << view.metadata().title() << "\"";
+        os << " {\"id\": " << id << R"(, "title": ")" << view.metadata().title() << "\"";
 
         if (view.metadata().artistId() > 0)
         {
-          os << ", \"artist\": \"" << ml.dictionary().get(view.metadata().artistId()) << "\"";
+          os << R"(, "artist": ")" << ml.dictionary().get(view.metadata().artistId()) << "\"";
         }
 
         if (view.metadata().albumId() > 0)
         {
-          os << ", \"album\": \"" << ml.dictionary().get(view.metadata().albumId()) << "\"";
+          os << R"(, "album": ")" << ml.dictionary().get(view.metadata().albumId()) << "\"";
         }
 
         os << "}";
@@ -106,7 +116,7 @@ namespace ao::cli
         return;
       }
 
-      std::size_t end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
+      std::size_t const end = (limit == 0) ? matches.size() : std::min(offset + limit, matches.size());
 
       for (std::size_t i = offset; i < end; ++i)
       {

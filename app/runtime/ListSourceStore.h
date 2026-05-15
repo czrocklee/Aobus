@@ -26,6 +26,8 @@ namespace ao::rt
 
     ListSourceStore(ListSourceStore const&) = delete;
     ListSourceStore& operator=(ListSourceStore const&) = delete;
+    ListSourceStore(ListSourceStore&&) = delete;
+    ListSourceStore& operator=(ListSourceStore&&) = delete;
 
     TrackSource& allTracks();
     TrackSource& sourceFor(ListId listId);

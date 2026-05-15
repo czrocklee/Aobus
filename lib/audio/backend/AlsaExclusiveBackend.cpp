@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/Backend.h>
 #include <ao/audio/backend/AlsaExclusiveBackend.h>
-#include <ao/utility/ByteView.h>
+
+#include <ao/Error.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/IRenderTarget.h>
+#include <ao/audio/Property.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/ThreadUtils.h>
 
-#include <ao/utility/Raii.h>
+#include <errno.h> // NOLINT(modernize-deprecated-headers)
 #include <poll.h>
 
 extern "C"
@@ -16,11 +20,19 @@ extern "C"
 }
 
 #include <algorithm>
+#include <array>
 #include <atomic>
-#include <mutex>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <format>
+#include <memory>
+#include <stop_token>
 #include <string>
+#include <string_view>
 #include <thread>
-#include <vector>
+#include <utility>
 
 namespace ao::audio::backend
 {
@@ -72,8 +84,8 @@ namespace ao::audio::backend
     bool hasDB = false;
     long dbMin = 0, dbMax = 0;
 
-    explicit Impl(std::string const& name)
-      : deviceName{name}
+    explicit Impl(std::string name)
+      : deviceName{std::move(name)}
     {
     }
 
@@ -202,7 +214,7 @@ namespace ao::audio::backend
       return false;
     }
 
-    if (static_cast<::snd_pcm_uframes_t>(avail) < periodSize)
+    if (std::cmp_less(avail, periodSize))
     {
       // Only block on the pollfd when the device is truly running.
       // In PREPARED / XRUN / SUSPENDED states the fd may never signal,
@@ -234,6 +246,7 @@ namespace ao::audio::backend
       renderTarget->onUnderrun();
       ::snd_pcm_prepare(pcm.get());
     }
+    // NOLINTNEXTLINE(misc-include-cleaner)
     else if (err == -ESTRPIPE)
     {
       while (::snd_pcm_resume(pcm.get()) == -EAGAIN)
@@ -329,17 +342,17 @@ namespace ao::audio::backend
       return;
     }
 
-    float clamped = std::clamp(vol, 0.0F, 1.0F);
+    float const clamped = std::clamp(vol, 0.0F, 1.0F);
 
     if (hasDB)
     {
-      long db = dbMin + static_cast<long>(static_cast<float>(dbMax - dbMin) * clamped);
+      long const db = dbMin + static_cast<long>(static_cast<float>(dbMax - dbMin) * clamped);
       ::snd_mixer_selem_set_playback_dB_all(mixerElem, db, 0);
     }
 
     else
     {
-      long val = volMin + static_cast<long>(static_cast<float>(volMax - volMin) * clamped);
+      long const val = volMin + static_cast<long>(static_cast<float>(volMax - volMin) * clamped);
       ::snd_mixer_selem_set_playback_volume_all(mixerElem, val);
     }
   }
@@ -432,7 +445,7 @@ namespace ao::audio::backend
 
     std::uint32_t rate = format.sampleRate;
 
-    if (::snd_pcm_hw_params_set_rate_near(pcm, params, &rate, 0) < 0)
+    if (::snd_pcm_hw_params_set_rate_near(pcm, params, &rate, nullptr) < 0)
     {
       return makeError(Error::Code::InitFailed, "Failed to set rate");
     }
@@ -451,10 +464,10 @@ namespace ao::audio::backend
     }
 
     std::uint32_t periods = 4;
-    ::snd_pcm_hw_params_set_periods_near(pcm, params, &periods, 0);
+    ::snd_pcm_hw_params_set_periods_near(pcm, params, &periods, nullptr);
 
     periodSize = kDefaultPeriodSize;
-    ::snd_pcm_hw_params_set_period_size_near(pcm, params, &periodSize, 0);
+    ::snd_pcm_hw_params_set_period_size_near(pcm, params, &periodSize, nullptr);
 
     if (::snd_pcm_hw_params(pcm, params) < 0)
     {
@@ -520,7 +533,7 @@ namespace ao::audio::backend
     }
 
     auto safePcm = Impl::AlsaPcmPtr(pcm);
-    auto currentFormat = format;
+    auto currentFormat = Format{format};
     auto alsaFormat = SND_PCM_FORMAT_S16_LE;
     ::snd_pcm_uframes_t periodSize = 0;
 

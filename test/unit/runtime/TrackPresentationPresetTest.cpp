@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <runtime/StateTypes.h>
 #include <runtime/TrackPresentationPreset.h>
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
+#include <string_view>
 
 using namespace ao::rt;
 
@@ -243,10 +247,10 @@ TEST_CASE("trackPresentationFieldId round-trips through trackPresentationFieldFr
   for (auto const field : fields)
   {
     auto const id = trackPresentationFieldId(field);
-    auto const parsed = trackPresentationFieldFromId(id);
+    auto const optParsed = trackPresentationFieldFromId(id);
 
-    REQUIRE(parsed.has_value());
-    CHECK(*parsed == field);
+    REQUIRE(optParsed.has_value());
+    CHECK(*optParsed == field);
   }
 }
 

@@ -1,27 +1,30 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
 
+#include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/Exporter.h>
 #include <ao/library/Importer.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <fstream>
 #include <optional>
+#include <span>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace ao::library::test
@@ -131,7 +134,7 @@ namespace ao::library::test
 
       for (auto tid : tags)
       {
-        tagNames.push_back(std::string(dict.get(tid)));
+        tagNames.emplace_back(dict.get(tid));
       }
 
       REQUIRE(std::ranges::contains(tagNames, "rock"));
@@ -229,8 +232,8 @@ library:
       auto txn = ml.readTransaction();
       auto const listReader = ml.lists().reader(txn);
 
-      auto parent = std::optional<ListView>{};
-      auto child = std::optional<ListView>{};
+      auto optParent = std::optional<ListView>{};
+      auto optChild = std::optional<ListView>{};
       auto parentId = ListId{};
       auto childId = ListId{};
 
@@ -239,23 +242,23 @@ library:
         if (std::string(view.name()) == "Parent")
         {
           parentId = listId;
-          parent = view;
+          optParent = view;
         }
 
         if (std::string(view.name()) == "Child")
         {
           childId = listId;
-          child = view;
+          optChild = view;
         }
       }
 
-      REQUIRE(parent);
-      REQUIRE(child);
-      REQUIRE(parent->parentId() == ListId{0});
-      REQUIRE(child->parentId() == parentId);
+      REQUIRE(optParent);
+      REQUIRE(optChild);
+      REQUIRE(optParent->parentId() == ListId{0});
+      REQUIRE(optChild->parentId() == parentId);
       REQUIRE(childId != parentId);
-      REQUIRE(child->tracks().size() == 1);
-      REQUIRE(child->tracks()[0] == trackId);
+      REQUIRE(optChild->tracks().size() == 1);
+      REQUIRE(optChild->tracks()[0] == trackId);
     }
   }
 } // namespace ao::library::test

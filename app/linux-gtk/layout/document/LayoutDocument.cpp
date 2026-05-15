@@ -3,10 +3,23 @@
 
 #include "layout/document/LayoutDocument.h"
 #include "layout/LayoutConstants.h"
+#include "layout/document/LayoutNode.h"
 #include "layout/document/LayoutYaml.h"
-
 #include <ao/utility/Log.h>
-#include <stdexcept>
+
+#include <yaml-cpp/node/node.h>
+#include <yaml-cpp/node/type.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <functional>
+#include <map>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace YAML
 {
@@ -112,7 +125,7 @@ namespace YAML
 
   Node convert<LayoutNode>::encode(LayoutNode const& rhs)
   {
-    Node node;
+    auto node = Node{};
 
     if (!rhs.id.empty())
     {
@@ -176,7 +189,7 @@ namespace YAML
 
   Node convert<LayoutDocument>::encode(LayoutDocument const& rhs)
   {
-    Node node;
+    auto node = Node{};
     node["version"] = rhs.version;
     node["root"] = rhs.root;
 

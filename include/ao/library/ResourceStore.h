@@ -5,7 +5,10 @@
 
 #include <ao/Type.h>
 #include <ao/lmdb/Database.h>
+#include <ao/lmdb/Transaction.h>
+#include <cstddef>
 #include <span>
+#include <utility>
 
 namespace ao::library
 {

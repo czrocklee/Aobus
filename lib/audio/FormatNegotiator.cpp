@@ -3,8 +3,13 @@
 
 #include <ao/audio/FormatNegotiator.h>
 
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
+
 #include <algorithm>
-#include <ranges>
+#include <string>
+
+#include <cstdint>
 
 namespace ao::audio
 {
@@ -214,7 +219,6 @@ namespace ao::audio
     }
 
     // Ensure deviceFormat matches decoderOutputFormat if no other conversion is needed
-
     if (!plan.requiresBitDepthConversion)
     {
       plan.deviceFormat.bitDepth = plan.decoderOutputFormat.bitDepth;

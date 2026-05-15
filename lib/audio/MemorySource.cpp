@@ -3,9 +3,21 @@
 
 #include <ao/audio/MemorySource.h>
 
+#include <ao/Error.h>
+#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/IDecoderSession.h>
+
 #include <algorithm>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <expected>
 #include <limits>
+#include <memory>
+#include <span>
+#include <utility>
 
 namespace ao::audio
 {

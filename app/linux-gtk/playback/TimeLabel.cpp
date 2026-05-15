@@ -2,9 +2,15 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/TimeLabel.h"
+#include <runtime/PlaybackService.h>
+#include <runtime/StateTypes.h>
 
-#include <format>
 #include <gdkmm/frameclock.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/enums.h>
+
+#include <cstdint>
+#include <format>
 
 namespace ao::gtk
 {

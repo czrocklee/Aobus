@@ -5,6 +5,7 @@
 
 #include <ao/Type.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -13,7 +14,7 @@ namespace ao::model
   /**
    * ListKind - Type of list being created.
    */
-  enum class ListKind
+  enum class ListKind : std::uint8_t
   {
     Smart, // Expression-based filtered list
     Manual // Explicit TrackId list
@@ -28,9 +29,9 @@ namespace ao::model
     ListKind kind = ListKind::Smart;
     ListId parentId = ListId{0};
     ListId listId = ListId{0}; // 0 = create, non-zero = update
-    std::string name;
-    std::string description;
-    std::string expression;        // Only used for Smart lists
+    std::string name{};
+    std::string description{};
+    std::string expression{};        // Only used for Smart lists
     std::vector<TrackId> trackIds; // Only used for Manual lists
   };
 } // namespace ao::model

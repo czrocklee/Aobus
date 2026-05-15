@@ -26,6 +26,12 @@ namespace ao::gtk
     explicit NowPlayingStatusLabel(rt::PlaybackService& playbackService);
     ~NowPlayingStatusLabel();
 
+    // Not copyable or movable
+    NowPlayingStatusLabel(NowPlayingStatusLabel const&) = delete;
+    NowPlayingStatusLabel& operator=(NowPlayingStatusLabel const&) = delete;
+    NowPlayingStatusLabel(NowPlayingStatusLabel&&) = delete;
+    NowPlayingStatusLabel& operator=(NowPlayingStatusLabel&&) = delete;
+
     Gtk::Widget& widget() { return _label; }
 
   private:

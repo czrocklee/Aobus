@@ -4,13 +4,20 @@
 #include <ao/library/ImportWorker.h>
 #include <ao/utility/Log.h>
 
-#include <ao/library/DictionaryStore.h>
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/tag/TagFile.h>
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <filesystem>
+#include <span>
+#include <utility>
+#include <vector>
 
 namespace ao::library
 {
@@ -42,7 +49,6 @@ namespace ao::library
         APP_LOG_DEBUG("Importing file: {}", path.string());
 
         // Report progress
-
         if (_progressCallback)
         {
           _progressCallback(path, static_cast<std::int32_t>(i));
@@ -100,7 +106,6 @@ namespace ao::library
                  _result.skippedCount);
 
     // Call finished callback
-
     if (_finishedCallback)
     {
       _finishedCallback();

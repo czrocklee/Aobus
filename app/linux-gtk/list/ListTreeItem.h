@@ -9,8 +9,6 @@
 
 #include <gtkmm.h>
 
-#include <memory>
-
 namespace ao::gtk
 {
   class ListTreeItem final : public Glib::Object

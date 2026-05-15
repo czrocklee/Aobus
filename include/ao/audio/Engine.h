@@ -3,12 +3,13 @@
 
 #pragma once
 
-#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
-#include <ao/audio/Property.h>
 #include <ao/audio/Types.h>
 #include <ao/audio/detail/RouteTracker.h>
 
+#include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -40,7 +41,7 @@ namespace ao::audio
       DeviceId currentDeviceId;
       detail::RouteState routeState;
 
-      float volume = 1.0f;
+      float volume = 1.0F;
       bool muted = false;
       bool volumeAvailable = false;
 

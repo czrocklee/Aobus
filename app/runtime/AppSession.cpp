@@ -11,9 +11,12 @@
 
 #include "ListSourceStore.h"
 
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 
+#include <filesystem>
 #include <memory>
+#include <utility>
 
 namespace ao::rt
 {

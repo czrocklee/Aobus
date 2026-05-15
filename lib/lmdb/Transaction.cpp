@@ -2,7 +2,13 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "detail/ThrowError.h"
+#include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+
+#include <lmdb.h>
+
+#include <memory>
+#include <tuple>
 
 namespace ao::lmdb
 {
@@ -14,25 +20,25 @@ namespace ao::lmdb
   }
 
   ReadTransaction::ReadTransaction(Environment const& env)
-    : ReadTransaction{create(env._handle.get(), nullptr, MDB_RDONLY)}
+    : ReadTransaction{create(env.handle(), nullptr, MDB_RDONLY)}
   {
   }
 
   WriteTransaction::WriteTransaction(Environment& env)
-    : ReadTransaction{ReadTransaction::create(env._handle.get(), nullptr, 0)}
+    : ReadTransaction{ReadTransaction::create(env.handle(), nullptr, 0)}
   {
   }
 
   // Nested write transaction - child of parent write transaction
   WriteTransaction::WriteTransaction(WriteTransaction& parent)
-    : ReadTransaction{ReadTransaction::create(::mdb_txn_env(parent._handle.get()), parent._handle.get(), 0)}
+    : ReadTransaction{ReadTransaction::create(::mdb_txn_env(parent.handle()), parent.handle(), 0)}
   {
   }
 
   void WriteTransaction::commit()
   {
-    throwOnError("mdb_txn_commit", ::mdb_txn_commit(_handle.get()));
-    std::ignore = _handle.release(); // Prevent destructor from committing/aborting
+    throwOnError("mdb_txn_commit", ::mdb_txn_commit(handle()));
+    std::ignore = releaseHandle(); // Prevent destructor from committing/aborting
     _cursorClosed = true;
   }
 }

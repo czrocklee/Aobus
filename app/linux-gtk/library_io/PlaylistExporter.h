@@ -24,6 +24,11 @@ namespace ao::gtk
                      std::filesystem::path path);
     ~PlaylistExporter() override;
 
+    PlaylistExporter(PlaylistExporter const&) = delete;
+    PlaylistExporter& operator=(PlaylistExporter const&) = delete;
+    PlaylistExporter(PlaylistExporter&&) = delete;
+    PlaylistExporter& operator=(PlaylistExporter&&) = delete;
+
     void triggerWrite();
 
     // TrackIdListObserver interface
