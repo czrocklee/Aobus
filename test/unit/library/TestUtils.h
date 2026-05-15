@@ -19,7 +19,7 @@ namespace ao::library::test
   {
     static_assert(std::is_trivially_copyable_v<T>, "Header must be trivially copyable");
 
-    std::vector<std::byte> data;
+    auto data = std::vector<std::byte>{};
     data.insert_range(data.end(), utility::bytes::view(header));
     return data;
   }

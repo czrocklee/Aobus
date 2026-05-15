@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/audio/IBackend.h>
+
 #include <memory>
-#include <string_view>
 
 namespace ao::audio::backend
 {
@@ -18,6 +18,11 @@ namespace ao::audio::backend
     struct Impl;
     explicit PipeWireBackend(Device const& device, ProfileId const& profile);
     ~PipeWireBackend() override;
+
+    PipeWireBackend(PipeWireBackend const&) = delete;
+    PipeWireBackend& operator=(PipeWireBackend const&) = delete;
+    PipeWireBackend(PipeWireBackend&&) = delete;
+    PipeWireBackend& operator=(PipeWireBackend&&) = delete;
 
     Result<> open(Format const& format, IRenderTarget* target) override;
     void start() override;

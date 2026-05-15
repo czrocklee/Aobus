@@ -67,6 +67,16 @@ namespace ao::rt
   public:
     virtual ~IControlExecutor() = default;
 
+    IControlExecutor(IControlExecutor const&) = delete;
+    IControlExecutor& operator=(IControlExecutor const&) = delete;
+    IControlExecutor(IControlExecutor&&) = delete;
+    IControlExecutor& operator=(IControlExecutor&&) = delete;
+
+  protected:
+    IControlExecutor() = default;
+
+  public:
+
     virtual bool isCurrent() const noexcept = 0;
 
     // Thread-safe: enqueue and wake the control thread (e.g. for cross-thread callbacks).
@@ -90,11 +100,11 @@ namespace ao::rt
 
     void emit(Args... args)
     {
-      for (auto& h : _handlers)
+      for (auto& handler : _handlers)
       {
-        if (h)
+        if (handler)
         {
-          h(args...);
+          handler(args...);
         }
       }
     }
@@ -102,13 +112,13 @@ namespace ao::rt
     void post(IControlExecutor& executor, std::decay_t<Args>... args)
     {
       executor.defer(
-        [this, ... args = std::move(args)]() mutable
+        [this, ... args = std::move(args)] mutable
         {
-          for (auto& h : _handlers)
+          for (auto& handler : _handlers)
           {
-            if (h)
+            if (handler)
             {
-              h(args...);
+              handler(args...);
             }
           }
         });

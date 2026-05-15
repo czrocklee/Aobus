@@ -10,10 +10,13 @@
 #include <runtime/TrackSource.h>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -33,17 +36,17 @@ namespace ao::rt::test
 
       void update(TrackId id)
       {
-        auto const idx = indexOf(id);
-        REQUIRE(idx.has_value());
-        notifyUpdated(id, *idx);
+        auto const optIdx = indexOf(id);
+        REQUIRE(optIdx.has_value());
+        notifyUpdated(id, *optIdx);
       }
 
       void remove(TrackId id)
       {
-        auto const idx = indexOf(id);
-        REQUIRE(idx.has_value());
-        _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*idx));
-        notifyRemoved(id, *idx);
+        auto const optIdx = indexOf(id);
+        REQUIRE(optIdx.has_value());
+        _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*optIdx));
+        notifyRemoved(id, *optIdx);
       }
 
       void resetTo(std::vector<TrackId> ids)
@@ -93,9 +96,8 @@ namespace ao::rt::test
       std::vector<TrackId> _ids;
     };
 
-    class ObserverSpy final : public TrackSourceObserver
+    struct ObserverSpy final : public TrackSourceObserver
     {
-    public:
       enum class EventKind : std::uint8_t
       {
         Reset,
@@ -184,14 +186,13 @@ namespace ao::rt::test
   // =============================================================================
   // Construction
   // =============================================================================
-
   TEST_CASE("ManualListSource - default construction", "[app][manuallist]")
   {
     auto mls = ManualListSource{};
 
     CHECK(mls.size() == 0);
-    CHECK(mls._trackIds.empty());
-    CHECK(mls._source == nullptr);
+    CHECK(mls.trackIds().empty());
+    CHECK(mls.source() == nullptr);
   }
 
   TEST_CASE("ManualListSource - construction from ListView", "[app][manuallist]")
@@ -205,7 +206,7 @@ namespace ao::rt::test
       CHECK(mls.trackIdAt(0) == TrackId{10});
       CHECK(mls.trackIdAt(1) == TrackId{20});
       CHECK(mls.trackIdAt(2) == TrackId{30});
-      CHECK(mls._source == nullptr);
+      CHECK(mls.source() == nullptr);
     }
 
     SECTION("empty ListView creates empty list")
@@ -214,7 +215,7 @@ namespace ao::rt::test
       auto mls = ManualListSource{lv.view()};
 
       CHECK(mls.size() == 0);
-      CHECK(mls._trackIds.empty());
+      CHECK(mls.trackIds().empty());
     }
 
     SECTION("with non-null source attaches as observer")
@@ -226,7 +227,7 @@ namespace ao::rt::test
       auto lv = ListViewOwner{{TrackId{1}}};
       auto mls = ManualListSource{lv.view(), &source};
 
-      CHECK(mls._source == &source);
+      CHECK(mls.source() == &source);
       CHECK(mls.size() == 1);
       CHECK(mls.trackIdAt(0) == TrackId{1});
 
@@ -246,7 +247,6 @@ namespace ao::rt::test
   // =============================================================================
   // TrackSource interface
   // =============================================================================
-
   TEST_CASE("ManualListSource - TrackSource interface", "[app][manuallist]")
   {
     SECTION("size returns number of tracks")
@@ -255,11 +255,11 @@ namespace ao::rt::test
 
       CHECK(mls.size() == 0);
 
-      mls._trackIds.push_back(TrackId{1});
+      mls.trackIds().emplace_back(1);
       CHECK(mls.size() == 1);
 
-      mls._trackIds.push_back(TrackId{2});
-      mls._trackIds.push_back(TrackId{3});
+      mls.trackIds().emplace_back(2);
+      mls.trackIds().emplace_back(3);
       CHECK(mls.size() == 3);
     }
 
@@ -309,7 +309,6 @@ namespace ao::rt::test
   // =============================================================================
   // reloadFromListView
   // =============================================================================
-
   TEST_CASE("ManualListSource - reloadFromListView", "[app][manuallist]")
   {
     SECTION("replaces all tracks when no source")
@@ -418,7 +417,6 @@ namespace ao::rt::test
   // =============================================================================
   // onReset observer
   // =============================================================================
-
   TEST_CASE("ManualListSource - onReset observer", "[app][manuallist]")
   {
     SECTION("no-ops when _source is null")
@@ -433,7 +431,7 @@ namespace ao::rt::test
 
       CHECK(spy.events.empty());
       CHECK(mls.size() == 3);
-      CHECK(mls._trackIds.size() == 3);
+      CHECK(mls.trackIds().size() == 3);
 
       mls.detach(&spy);
     }
@@ -448,7 +446,7 @@ namespace ao::rt::test
       auto lv = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
       auto mls = ManualListSource{lv.view(), &source};
 
-      mls._trackIds.push_back(TrackId{99});
+      mls.trackIds().emplace_back(99);
 
       auto spy = ObserverSpy{};
       mls.attach(&spy);
@@ -481,7 +479,7 @@ namespace ao::rt::test
       REQUIRE(spy.events.size() == 1);
       CHECK(spy.events[0].kind == ObserverSpy::EventKind::Reset);
       CHECK(mls.size() == 0);
-      CHECK(mls._trackIds.empty());
+      CHECK(mls.trackIds().empty());
 
       mls.detach(&spy);
     }
@@ -513,7 +511,6 @@ namespace ao::rt::test
   }
 
   // =============================================================================
-
   TEST_CASE("ManualListSource - onInserted is no-op", "[app][manuallist]")
   {
     SECTION("single item")
@@ -541,7 +538,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      TrackId batch[] = {TrackId{10}, TrackId{20}};
+      auto const batch = std::array{TrackId{10}, TrackId{20}};
       mls.onInserted(std::span{batch});
 
       CHECK(spy.events.empty());
@@ -554,7 +551,6 @@ namespace ao::rt::test
   // =============================================================================
   // onUpdated observer
   // =============================================================================
-
   TEST_CASE("ManualListSource - onUpdated observer", "[app][manuallist]")
   {
     SECTION("single re-emits for member track with correct local index")
@@ -622,7 +618,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      TrackId batch[] = {TrackId{1}, TrackId{2}, TrackId{4}, TrackId{5}};
+      auto const batch = std::array{TrackId{1}, TrackId{2}, TrackId{4}, TrackId{5}};
       source.batchUpdate(batch);
 
       REQUIRE(spy.events.size() == 1);
@@ -645,7 +641,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      TrackId batch[] = {TrackId{99}, TrackId{100}};
+      auto const batch = std::array{TrackId{99}, TrackId{100}};
       source.batchUpdate(batch);
 
       CHECK(spy.events.empty());
@@ -684,7 +680,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      TrackId batch[] = {TrackId{1}, TrackId{2}, TrackId{3}};
+      auto const batch = std::array{TrackId{1}, TrackId{2}, TrackId{3}};
       source.batchUpdate(batch);
 
       REQUIRE(spy.events.size() == 1);
@@ -701,7 +697,6 @@ namespace ao::rt::test
   // =============================================================================
   // onRemoved observer
   // =============================================================================
-
   TEST_CASE("ManualListSource - onRemoved observer", "[app][manuallist]")
   {
     SECTION("single removes member and emits notification with correct index")
@@ -790,7 +785,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      TrackId batch[] = {TrackId{2}, TrackId{5}, TrackId{4}};
+      auto const batch = std::array{TrackId{2}, TrackId{5}, TrackId{4}};
       source.batchRemove(batch);
 
       REQUIRE(spy.events.size() == 1);
@@ -816,7 +811,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      TrackId batch[] = {TrackId{99}, TrackId{100}};
+      auto const batch = std::array{TrackId{99}, TrackId{100}};
       source.batchRemove(batch);
 
       CHECK(spy.events.empty());
@@ -856,7 +851,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      TrackId batch[] = {TrackId{1}, TrackId{2}, TrackId{3}};
+      auto const batch = std::array{TrackId{1}, TrackId{2}, TrackId{3}};
       source.batchRemove(batch);
 
       REQUIRE(spy.events.size() == 1);
@@ -874,7 +869,6 @@ namespace ao::rt::test
   // =============================================================================
   // Sequential removals
   // =============================================================================
-
   TEST_CASE("ManualListSource - sequential removals maintain correct indices", "[app][manuallist]")
   {
     auto source = MutableTrackSource{};
@@ -923,7 +917,6 @@ namespace ao::rt::test
   // =============================================================================
   // Batch then single operations
   // =============================================================================
-
   TEST_CASE("ManualListSource - batch then single operations", "[app][manuallist]")
   {
     SECTION("batch removal followed by single removal")
@@ -940,7 +933,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      TrackId batch[] = {TrackId{1}, TrackId{2}};
+      auto const batch = std::array{TrackId{1}, TrackId{2}};
       source.batchRemove(batch);
 
       REQUIRE(spy.events.size() == 1);
@@ -974,7 +967,7 @@ namespace ao::rt::test
       auto spy = ObserverSpy{};
       mls.attach(&spy);
 
-      TrackId batch[] = {TrackId{1}, TrackId{2}};
+      auto const batch = std::array{TrackId{1}, TrackId{2}};
       source.batchUpdate(batch);
 
       REQUIRE(spy.events.size() == 1);
@@ -994,7 +987,6 @@ namespace ao::rt::test
   // =============================================================================
   // Destruction
   // =============================================================================
-
   TEST_CASE("ManualListSource - destructor detaches from source", "[app][manuallist]")
   {
     auto source = MutableTrackSource{};
@@ -1003,7 +995,7 @@ namespace ao::rt::test
     {
       auto lv = ListViewOwner{{TrackId{1}}};
       auto mls = ManualListSource{lv.view(), &source};
-      CHECK(mls._source == &source);
+      CHECK(mls.source() == &source);
     }
 
     // Triggering events on source after ManualListSource destruction
@@ -1017,7 +1009,6 @@ namespace ao::rt::test
   // =============================================================================
   // Multiple observers
   // =============================================================================
-
   TEST_CASE("ManualListSource - multiple observers", "[app][manuallist]")
   {
     SECTION("all attached observers receive relayed events")
@@ -1074,7 +1065,6 @@ namespace ao::rt::test
   // =============================================================================
   // Chained ManualListSources
   // =============================================================================
-
   TEST_CASE("ManualListSource - chained lists", "[app][manuallist]")
   {
     SECTION("removal propagates through chain")
@@ -1140,13 +1130,12 @@ namespace ao::rt::test
   // =============================================================================
   // Destructor with null source
   // =============================================================================
-
   TEST_CASE("ManualListSource - destructor with null source does not crash", "[app][manuallist]")
   {
     {
       auto lv = ListViewOwner{{TrackId{1}, TrackId{2}}};
       auto mls = ManualListSource{lv.view()};
-      CHECK(mls._source == nullptr);
+      CHECK(mls.source() == nullptr);
     }
 
     // mls destroyed — detach is skipped when _source is nullptr.

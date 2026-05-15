@@ -3,16 +3,24 @@
 
 #include "playback/PlaybackDetailsWidget.h"
 #include "layout/LayoutConstants.h"
-#include <ao/utility/Log.h>
-#include <gdkmm/display.h>
-#include <gtkmm/cssprovider.h>
-#include <gtkmm/stylecontext.h>
-#include <runtime/AppSession.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/Types.h>
+#include <ao/audio/flow/Graph.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
 
+#include <gdkmm/display.h>
+#include <gtkmm/image.h>
+#include <gtkmm/label.h>
+#include <gtkmm/stylecontext.h>
+#include <gtkmm/cssprovider.h>
+#include <gtk/gtkstyleprovider.h>
+
+#include <algorithm>
 #include <format>
-#include <ranges>
+#include <iterator>
+#include <string>
 #include <unordered_set>
 
 namespace ao::gtk
@@ -38,6 +46,7 @@ namespace ao::gtk
         {
           Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
         }
+
         initialized = true;
       }
     }
@@ -159,6 +168,7 @@ namespace ao::gtk
         case Type::Sink: return "[Device]";
         case Type::ExternalSource: return "[Other Source]";
       }
+
       return "[Unknown]";
     };
 

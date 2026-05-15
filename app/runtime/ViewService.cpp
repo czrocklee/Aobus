@@ -2,24 +2,31 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "ViewService.h"
-#include "TrackDetailProjection.h"
-#include "TrackListProjection.h"
 
 #include "LibraryMutationService.h"
 #include "ListSourceStore.h"
-
 #include "SmartListSource.h"
+#include "TrackDetailProjection.h"
+#include "TrackListProjection.h"
 #include "TrackSource.h"
 #include "WorkspaceService.h"
-#include <ao/utility/ScopedTimer.h>
 
-#include <ao/library/ListStore.h>
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/utility/ScopedTimer.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/ProjectionTypes.h>
+#include <runtime/StateTypes.h>
+#include <runtime/TrackPresentationPreset.h>
 
-#include <limits>
+#include <functional>
 #include <memory>
 #include <ranges>
 #include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <cstdint>
 
 namespace ao::rt
 {
@@ -51,11 +58,11 @@ namespace ao::rt
       auto const& presets = builtinTrackPresentationPresets();
       auto const* preset = builtinTrackPresentationPreset(kDefaultTrackPresentationId);
 
-      for (auto const& p : presets)
+      for (auto const& candidate : presets)
       {
-        if (p.spec.groupBy == entry.state.groupBy)
+        if (candidate.spec.groupBy == entry.state.groupBy)
         {
-          preset = &p;
+          preset = &candidate;
           break;
         }
       }
@@ -181,7 +188,7 @@ namespace ao::rt
     };
 
     auto* baseSource = &_impl->sources.sourceFor(initial.listId);
-    std::unique_ptr<SmartListSource> adHocSource;
+    auto adHocSource = std::unique_ptr<SmartListSource>{};
 
     if (!initial.filterExpression.empty())
     {
@@ -355,7 +362,7 @@ namespace ao::rt
       return {};
     }
 
-    auto state = it->second.state.presentation;
+    auto state = TrackListPresentationState{it->second.state.presentation};
     state.presentationId = presentationId;
     auto spec = resolvePresentation(state);
 

@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include <algorithm>
 #include <ao/audio/Backend.h>
+
+#include <algorithm>
 
 namespace ao::audio::backend::detail
 {

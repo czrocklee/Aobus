@@ -6,11 +6,13 @@
 #include <ao/library/TrackBuilder.h>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
-#include <filesystem>
 
 #include <deque>
+#include <filesystem>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::tag
 {
@@ -30,7 +32,7 @@ namespace ao::tag
     friend std::string_view detail::stashOwnedString(TagFile const& owner, std::string value);
 
   public:
-    enum class Mode
+    enum class Mode : std::uint8_t
     {
       ReadOnly,
       ReadWrite
@@ -67,6 +69,10 @@ namespace ao::tag
   protected:
     void clearOwnedStrings() const { _ownedStrings.clear(); }
 
+    boost::interprocess::mapped_region const& region() const noexcept { return _mappedRegion; }
+    void* address() const noexcept { return _mappedRegion.get_address(); }
+    std::size_t size() const noexcept { return _mappedRegion.get_size(); }
+
   private:
     std::string_view stashOwnedString(std::string value) const
     {
@@ -76,7 +82,6 @@ namespace ao::tag
 
     mutable std::deque<std::string> _ownedStrings;
 
-  protected:
     boost::interprocess::file_mapping _fileMapping;
     boost::interprocess::mapped_region _mappedRegion;
   };

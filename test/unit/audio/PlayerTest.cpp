@@ -1,12 +1,19 @@
 #include "TestUtility.h"
+#include "fakeit.hpp"
+
+#include <ao/audio/Backend.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/IBackend.h>
 #include <ao/audio/IBackendProvider.h>
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Player.h>
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+
+#include <memory>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::audio::test
 {

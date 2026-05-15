@@ -37,6 +37,8 @@ namespace ao::media::flac
 
   struct StreamInfoLayout
   {
+    static constexpr std::size_t kSize = 34;
+
     using FixedSize = std::true_type;
     boost::endian::big_uint16_buf_t minBlockSize;
     boost::endian::big_uint16_buf_t maxBlockSize;
@@ -47,7 +49,7 @@ namespace ao::media::flac
     std::array<std::uint8_t, 16> md5;
   };
 
-  static_assert(sizeof(StreamInfoLayout) == 34, "StreamInfoDataLayout should be 34 bytes");
+  static_assert(sizeof(StreamInfoLayout) == StreamInfoLayout::kSize, "StreamInfoDataLayout should be 34 bytes");
   static_assert(alignof(StreamInfoLayout) == 1);
   static_assert(std::is_trivial_v<StreamInfoLayout>);
 } // namespace ao::media::flac

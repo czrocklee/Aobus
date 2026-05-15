@@ -3,8 +3,13 @@
 
 #include "app/MenuController.h"
 #include "library_io/ImportExportCoordinator.h"
+#include <giomm/menu.h>
 #include <giomm/simpleaction.h>
 #include <glibmm/variant.h>
+#include <gtkmm/applicationwindow.h>
+
+#include <functional>
+#include <utility>
 
 namespace ao::gtk
 {

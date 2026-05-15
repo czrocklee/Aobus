@@ -2,11 +2,17 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackPresentation.h"
+#include <runtime/ProjectionTypes.h>
+#include <runtime/StateTypes.h>
+#include <runtime/TrackPresentationPreset.h>
 
 #include <algorithm>
 #include <array>
-#include <ranges>
-#include <string>
+#include <optional>
+#include <span>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {

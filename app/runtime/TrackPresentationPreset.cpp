@@ -3,9 +3,14 @@
 
 #include "TrackPresentationPreset.h"
 
+#include <runtime/StateTypes.h>
+
 #include <algorithm>
-#include <array>
-#include <ranges>
+#include <optional>
+#include <span>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::rt
 {
@@ -16,184 +21,186 @@ namespace ao::rt
 
     std::vector<TrackPresentationPreset> const& getBuiltinPresets()
     {
-      static auto const presets =
-        std::vector<TrackPresentationPreset>{
-          TrackPresentationPreset{
-            .spec =
-              TrackPresentationSpec{
-                .id = "songs",
-                .groupBy = TrackGroupKey::None,
-                .sortBy =
-                  {
-                    TrackSortTerm{Sort::Artist, true},
-                    TrackSortTerm{Sort::Album, true},
-                    TrackSortTerm{Sort::DiscNumber, true},
-                    TrackSortTerm{Sort::TrackNumber, true},
-                    TrackSortTerm{Sort::Title, true},
-                  },
-                .visibleFields = {Field::Title, Field::Artist, Field::Album, Field::Duration, Field::Tags},
-                .redundantFields = {},
-              },
-            .label = "Songs",
-            .description = "General-purpose song list.",
-          },
-          TrackPresentationPreset{
-            .spec =
-              TrackPresentationSpec{
-                .id = "albums",
-                .groupBy = TrackGroupKey::Album,
-                .sortBy =
-                  {
-                    TrackSortTerm{Sort::AlbumArtist, true},
-                    TrackSortTerm{Sort::Album, true},
-                    TrackSortTerm{Sort::DiscNumber, true},
-                    TrackSortTerm{Sort::TrackNumber, true},
-                    TrackSortTerm{Sort::Title, true},
-                  },
-                .visibleFields = {Field::TrackNumber, Field::Title, Field::Duration, Field::Year, Field::Tags},
-                .redundantFields = {Field::Album, Field::AlbumArtist},
-              },
-            .label = "Albums",
-            .description = "Grouped by album with track-oriented columns.",
-          },
-          TrackPresentationPreset{
-            .spec =
-              TrackPresentationSpec{
-                .id = "artists",
-                .groupBy = TrackGroupKey::Artist,
-                .sortBy =
-                  {
-                    TrackSortTerm{Sort::Artist, true},
-                    TrackSortTerm{Sort::Album, true},
-                    TrackSortTerm{Sort::DiscNumber, true},
-                    TrackSortTerm{Sort::TrackNumber, true},
-                    TrackSortTerm{Sort::Title, true},
-                  },
-                .visibleFields = {Field::Album, Field::TrackNumber, Field::Title, Field::Duration, Field::Tags},
-                .redundantFields = {Field::Artist},
-              },
-            .label = "Artists",
-            .description = "Grouped by artist with album-oriented columns.",
-          },
-          TrackPresentationPreset{
-            .spec =
-              TrackPresentationSpec{
-                .id = "album-artists",
-                .groupBy = TrackGroupKey::AlbumArtist,
-                .sortBy =
-                  {
-                    TrackSortTerm{Sort::AlbumArtist, true},
-                    TrackSortTerm{Sort::Album, true},
-                    TrackSortTerm{Sort::DiscNumber, true},
-                    TrackSortTerm{Sort::TrackNumber, true},
-                    TrackSortTerm{Sort::Title, true},
-                  },
-                .visibleFields =
-                  {Field::Album, Field::TrackNumber, Field::Title, Field::Artist, Field::Duration, Field::Year},
-                .redundantFields = {Field::AlbumArtist},
-              },
-            .label = "Album Artists",
-            .description = "Grouped by album artist.",
-          },
-          TrackPresentationPreset{
-            .spec =
-              TrackPresentationSpec{
-                .id = "classical-composers",
-                .groupBy = TrackGroupKey::Composer,
-                .sortBy =
-                  {
-                    TrackSortTerm{Sort::Composer, true},
-                    TrackSortTerm{Sort::Work, true},
-                    TrackSortTerm{Sort::Album, true},
-                    TrackSortTerm{Sort::DiscNumber, true},
-                    TrackSortTerm{Sort::TrackNumber, true},
-                    TrackSortTerm{Sort::Title, true},
-                  },
-                .visibleFields = {Field::Work, Field::Title, Field::Artist, Field::Album, Field::Duration, Field::Year},
-                .redundantFields = {Field::Composer},
-              },
-            .label = "Classical: Composers",
-            .description = "Grouped by composer with work-oriented columns.",
-          },
-          TrackPresentationPreset{
-            .spec =
-              TrackPresentationSpec{
-                .id = "classical-works",
-                .groupBy = TrackGroupKey::Work,
-                .sortBy =
-                  {
-                    TrackSortTerm{Sort::Composer, true},
-                    TrackSortTerm{Sort::Work, true},
-                    TrackSortTerm{Sort::DiscNumber, true},
-                    TrackSortTerm{Sort::TrackNumber, true},
-                    TrackSortTerm{Sort::Title, true},
-                  },
-                .visibleFields = {Field::Composer, Field::Title, Field::Artist, Field::Album, Field::Duration},
-                .redundantFields = {Field::Work},
-              },
-            .label = "Classical: Works",
-            .description = "Grouped by work with composer-oriented columns.",
-          },
-          TrackPresentationPreset{
-            .spec =
-              TrackPresentationSpec{
-                .id = "genres",
-                .groupBy = TrackGroupKey::Genre,
-                .sortBy =
-                  {
-                    TrackSortTerm{Sort::Genre, true},
-                    TrackSortTerm{Sort::Artist, true},
-                    TrackSortTerm{Sort::Album, true},
-                    TrackSortTerm{Sort::DiscNumber, true},
-                    TrackSortTerm{Sort::TrackNumber, true},
-                    TrackSortTerm{Sort::Title, true},
-                  },
-                .visibleFields = {Field::Artist, Field::Album, Field::Title, Field::Duration, Field::Tags},
-                .redundantFields = {Field::Genre},
-              },
-            .label = "Genres",
-            .description = "Grouped by genre.",
-          },
-          TrackPresentationPreset{
-            .spec =
-              TrackPresentationSpec{
-                .id = "years",
-                .groupBy = TrackGroupKey::Year,
-                .sortBy =
-                  {
-                    TrackSortTerm{Sort::Year, true},
-                    TrackSortTerm{Sort::Artist, true},
-                    TrackSortTerm{Sort::Album, true},
-                    TrackSortTerm{Sort::DiscNumber, true},
-                    TrackSortTerm{Sort::TrackNumber, true},
-                    TrackSortTerm{Sort::Title, true},
-                  },
-                .visibleFields = {Field::Artist, Field::Album, Field::Title, Field::Duration, Field::Tags},
-                .redundantFields = {Field::Year},
-              },
-            .label = "Years",
-            .description = "Grouped by year.",
-          },
-          TrackPresentationPreset{
-            .spec =
-              TrackPresentationSpec{
-                .id = "tagging",
-                .groupBy = TrackGroupKey::None,
-                .sortBy =
-                  {
-                    TrackSortTerm{Sort::Artist, true},
-                    TrackSortTerm{Sort::Album, true},
-                    TrackSortTerm{Sort::DiscNumber, true},
-                    TrackSortTerm{Sort::TrackNumber, true},
-                    TrackSortTerm{Sort::Title, true},
-                  },
-                .visibleFields = {Field::Title, Field::Artist, Field::Album, Field::Genre, Field::Year, Field::Tags},
-                .redundantFields = {},
-              },
-            .label = "Tagging",
-            .description = "Flat list with genre, year, and tags for curation.",
-          },
-        };
+      static auto const
+        presets =
+          std::vector<TrackPresentationPreset>{
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
+                  .id = "songs",
+                  .groupBy = TrackGroupKey::None,
+                  .sortBy =
+                    {
+                      TrackSortTerm{.field = Sort::Artist, .ascending = true},
+                      TrackSortTerm{.field = Sort::Album, .ascending = true},
+                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                    },
+                  .visibleFields = {Field::Title, Field::Artist, Field::Album, Field::Duration, Field::Tags},
+                  .redundantFields = {},
+                },
+              .label = "Songs",
+              .description = "General-purpose song list.",
+            },
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
+                  .id = "albums",
+                  .groupBy = TrackGroupKey::Album,
+                  .sortBy =
+                    {
+                      TrackSortTerm{.field = Sort::AlbumArtist, .ascending = true},
+                      TrackSortTerm{.field = Sort::Album, .ascending = true},
+                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                    },
+                  .visibleFields = {Field::TrackNumber, Field::Title, Field::Duration, Field::Year, Field::Tags},
+                  .redundantFields = {Field::Album, Field::AlbumArtist},
+                },
+              .label = "Albums",
+              .description = "Grouped by album with track-oriented columns.",
+            },
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
+                  .id = "artists",
+                  .groupBy = TrackGroupKey::Artist,
+                  .sortBy =
+                    {
+                      TrackSortTerm{.field = Sort::Artist, .ascending = true},
+                      TrackSortTerm{.field = Sort::Album, .ascending = true},
+                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                    },
+                  .visibleFields = {Field::Album, Field::TrackNumber, Field::Title, Field::Duration, Field::Tags},
+                  .redundantFields = {Field::Artist},
+                },
+              .label = "Artists",
+              .description = "Grouped by artist with album-oriented columns.",
+            },
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
+                  .id = "album-artists",
+                  .groupBy = TrackGroupKey::AlbumArtist,
+                  .sortBy =
+                    {
+                      TrackSortTerm{.field = Sort::AlbumArtist, .ascending = true},
+                      TrackSortTerm{.field = Sort::Album, .ascending = true},
+                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                    },
+                  .visibleFields =
+                    {Field::Album, Field::TrackNumber, Field::Title, Field::Artist, Field::Duration, Field::Year},
+                  .redundantFields = {Field::AlbumArtist},
+                },
+              .label = "Album Artists",
+              .description = "Grouped by album artist.",
+            },
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
+                  .id = "classical-composers",
+                  .groupBy = TrackGroupKey::Composer,
+                  .sortBy =
+                    {
+                      TrackSortTerm{.field = Sort::Composer, .ascending = true},
+                      TrackSortTerm{.field = Sort::Work, .ascending = true},
+                      TrackSortTerm{.field = Sort::Album, .ascending = true},
+                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                    },
+                  .visibleFields =
+                    {Field::Work, Field::Title, Field::Artist, Field::Album, Field::Duration, Field::Year},
+                  .redundantFields = {Field::Composer},
+                },
+              .label = "Classical: Composers",
+              .description = "Grouped by composer with work-oriented columns.",
+            },
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
+                  .id = "classical-works",
+                  .groupBy = TrackGroupKey::Work,
+                  .sortBy =
+                    {
+                      TrackSortTerm{.field = Sort::Composer, .ascending = true},
+                      TrackSortTerm{.field = Sort::Work, .ascending = true},
+                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                    },
+                  .visibleFields = {Field::Composer, Field::Title, Field::Artist, Field::Album, Field::Duration},
+                  .redundantFields = {Field::Work},
+                },
+              .label = "Classical: Works",
+              .description = "Grouped by work with composer-oriented columns.",
+            },
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
+                  .id = "genres",
+                  .groupBy = TrackGroupKey::Genre,
+                  .sortBy =
+                    {
+                      TrackSortTerm{.field = Sort::Genre, .ascending = true},
+                      TrackSortTerm{.field = Sort::Artist, .ascending = true},
+                      TrackSortTerm{.field = Sort::Album, .ascending = true},
+                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                    },
+                  .visibleFields = {Field::Artist, Field::Album, Field::Title, Field::Duration, Field::Tags},
+                  .redundantFields = {Field::Genre},
+                },
+              .label = "Genres",
+              .description = "Grouped by genre.",
+            },
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
+                  .id = "years",
+                  .groupBy = TrackGroupKey::Year,
+                  .sortBy =
+                    {
+                      TrackSortTerm{.field = Sort::Year, .ascending = true},
+                      TrackSortTerm{.field = Sort::Artist, .ascending = true},
+                      TrackSortTerm{.field = Sort::Album, .ascending = true},
+                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                    },
+                  .visibleFields = {Field::Artist, Field::Album, Field::Title, Field::Duration, Field::Tags},
+                  .redundantFields = {Field::Year},
+                },
+              .label = "Years",
+              .description = "Grouped by year.",
+            },
+            TrackPresentationPreset{
+              .spec =
+                TrackPresentationSpec{
+                  .id = "tagging",
+                  .groupBy = TrackGroupKey::None,
+                  .sortBy =
+                    {
+                      TrackSortTerm{.field = Sort::Artist, .ascending = true},
+                      TrackSortTerm{.field = Sort::Album, .ascending = true},
+                      TrackSortTerm{.field = Sort::DiscNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::TrackNumber, .ascending = true},
+                      TrackSortTerm{.field = Sort::Title, .ascending = true},
+                    },
+                  .visibleFields = {Field::Title, Field::Artist, Field::Album, Field::Genre, Field::Year, Field::Tags},
+                  .redundantFields = {},
+                },
+              .label = "Tagging",
+              .description = "Flat list with genre, year, and tags for curation.",
+            },
+          };
 
       return presets;
     }
@@ -293,7 +300,8 @@ namespace ao::rt
   TrackPresentationPreset const* builtinTrackPresentationPreset(std::string_view id)
   {
     auto const& presets = getBuiltinPresets();
-    auto const iter = std::ranges::find(presets, id, [](TrackPresentationPreset const& p) { return p.spec.id; });
+    auto const iter =
+      std::ranges::find(presets, id, [](TrackPresentationPreset const& preset) { return preset.spec.id; });
 
     if (iter == presets.end())
     {
@@ -310,7 +318,7 @@ namespace ao::rt
 
   TrackPresentationSpec normalizeTrackPresentationSpec(TrackPresentationSpec const& spec)
   {
-    auto result = spec;
+    auto result = TrackPresentationSpec{spec};
 
     if (result.id.empty())
     {

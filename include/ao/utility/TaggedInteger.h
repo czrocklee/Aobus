@@ -4,10 +4,10 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
 #include <limits>
 #include <ostream>
 #include <type_traits>
-#include <unordered_map>
 
 namespace ao::utility
 {
@@ -65,7 +65,7 @@ namespace ao::utility
 
   // Static assert after class definition (requires complete type)
   template<typename T, typename Tag, T Default>
-  inline constexpr bool is_tagged_integer_trivially_copyable_v =
+  inline constexpr bool kIsTaggedIntegerTriviallyCopyableV =
     std::is_trivially_copyable_v<TaggedInteger<T, Tag, Default>>;
 
   template<typename Tag>

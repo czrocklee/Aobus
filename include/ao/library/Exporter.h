@@ -7,8 +7,8 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackView.h>
 
+#include <cstdint>
 #include <filesystem>
-#include <map>
 #include <string>
 
 namespace YAML
@@ -21,7 +21,7 @@ namespace ao::library
   /**
    * ExportMode - Controls the verbosity of the library export.
    */
-  enum class ExportMode
+  enum class ExportMode : std::uint8_t
   {
     Minimum,  // Only data not in file tags: user tags, ratings, lists.
     Metadata, // Minimum + Metadata (title, artist, etc.) + Custom metadata.

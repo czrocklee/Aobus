@@ -5,6 +5,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
+#include <cstddef>
+#include <span>
 #include <thread>
 #include <vector>
 
@@ -12,7 +15,7 @@ namespace ao::audio::test
 {
   TEST_CASE("PcmRingBuffer - Core Contract", "[audio][unit][ring_buffer]")
   {
-    PcmRingBuffer buffer;
+    auto buffer = PcmRingBuffer{};
 
     SECTION("Empty read and write are no-ops")
     {
@@ -78,7 +81,7 @@ namespace ao::audio::test
 
   TEST_CASE("PcmRingBuffer - Capacity Limits", "[audio][unit][ring_buffer]")
   {
-    PcmRingBuffer buffer;
+    auto buffer = PcmRingBuffer{};
     std::size_t const cap = buffer.capacity();
 
     SECTION("Capacity limit causes short write instead of overflow")
@@ -92,7 +95,7 @@ namespace ao::audio::test
       REQUIRE(buffer.size() == written);
 
       // Fill remaining if any
-      std::byte b{0xDD};
+      auto b = std::byte{0xDD};
 
       while (buffer.write(std::span<std::byte const>(&b, 1)) == 1)
       {
@@ -104,11 +107,11 @@ namespace ao::audio::test
 
   TEST_CASE("PcmRingBuffer - Concurrency", "[audio][unit][ring_buffer]")
   {
-    PcmRingBuffer buffer;
+    auto buffer = PcmRingBuffer{};
     int const iterations = 10000;
-    std::atomic<bool> done{false};
+    auto done = std::atomic<bool>{false};
 
-    std::thread producer(
+    std::jthread producer(
       [&]
       {
         for (int i = 0; i < iterations; ++i)
@@ -124,7 +127,7 @@ namespace ao::audio::test
         done = true;
       });
 
-    std::thread consumer(
+    std::jthread consumer(
       [&]
       {
         int count = 0;

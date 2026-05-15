@@ -2,27 +2,53 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "LayoutEditorDialog.h"
-
 #include "../LayoutConstants.h"
+#include "layout/document/LayoutDocument.h"
+#include "layout/document/LayoutNode.h"
+#include "layout/runtime/ComponentRegistry.h"
+
+#include <giomm/menu.h>
+#include <giomm/simpleactiongroup.h>
+#include <glibmm/main.h>
+#include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
+#include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/checkbutton.h>
 #include <gtkmm/comboboxtext.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/label.h>
+#include <gtkmm/menubutton.h>
+#include <gtkmm/object.h>
+#include <gtkmm/paned.h>
+#include <gtkmm/scrolledwindow.h>
 #include <gtkmm/separator.h>
 #include <gtkmm/spinbutton.h>
+#include <gtkmm/treestore.h>
+#include <gtkmm/treeview.h>
+#include <gtkmm/widget.h>
+#include <gtkmm/window.h>
+#include <sigc++/connection.h>
+#include <sigc++/functors/mem_fun.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <format>
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
-
-#include <format>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk::layout::editor
 {
   LayoutEditorDialog::LayoutEditorDialog(Gtk::Window& parent,
                                          ComponentRegistry const& registry,
-                                         LayoutDocument const& initialDoc)
-    : Gtk::Dialog("Layout Editor", parent, true), _registry(registry), _document(initialDoc)
+                                         LayoutDocument initialDoc)
+    : Gtk::Dialog{"Layout Editor", parent, true}, _registry{registry}, _document{std::move(initialDoc)}
   {
     int const defaultWidth = 800;
     int const defaultHeight = 600;
@@ -82,14 +108,14 @@ namespace ao::gtk::layout::editor
 
       categoryMenus[descriptor.category]->append(descriptor.displayName, "editor." + actionName);
 
-      _actionGroup->add_action(actionName, [this, type = descriptor.type]() { addComponent(type); });
+      _actionGroup->add_action(actionName, [this, type = descriptor.type] { addComponent(type); });
 
       if (descriptor.container)
       {
         auto wrapActionName = "wrap_" + descriptor.type;
         std::ranges::replace(wrapActionName, '.', '_');
         wrapMenu->append(descriptor.displayName, "editor." + wrapActionName);
-        _actionGroup->add_action(wrapActionName, [this, type = descriptor.type]() { wrapNode(type); });
+        _actionGroup->add_action(wrapActionName, [this, type = descriptor.type] { wrapNode(type); });
       }
     }
 
@@ -136,9 +162,9 @@ namespace ao::gtk::layout::editor
     _treeStore->clear();
 
     auto row = *(_treeStore->append());
-    auto const descriptor = _registry.getDescriptor(_document.root.type);
+    auto const optDescriptor = _registry.getDescriptor(_document.root.type);
 
-    row[_columns.displayName] = descriptor ? descriptor->displayName : _document.root.id;
+    row[_columns.displayName] = optDescriptor ? optDescriptor->displayName : _document.root.id;
     row[_columns.type] = _document.root.type;
     row[_columns.nodePtr] = &_document.root;
 
@@ -153,12 +179,12 @@ namespace ao::gtk::layout::editor
   void LayoutEditorDialog::appendNodeToTree(Gtk::TreeModel::Row parentRow, LayoutNode* node)
   {
     auto row = *(_treeStore->append(parentRow.children()));
-    auto const descriptor = _registry.getDescriptor(node->type);
+    auto const optDescriptor = _registry.getDescriptor(node->type);
     auto displayName = node->id;
 
     if (displayName.empty())
     {
-      displayName = descriptor ? descriptor->displayName : node->type;
+      displayName = optDescriptor ? optDescriptor->displayName : node->type;
     }
 
     row[_columns.displayName] = displayName;
@@ -189,22 +215,25 @@ namespace ao::gtk::layout::editor
     return nullptr;
   }
 
-  LayoutNode* findNodeById(LayoutNode* root, std::string const& id)
+  namespace
   {
-    if (root->id == id)
+    LayoutNode* findNodeById(LayoutNode* root, std::string const& id)
     {
-      return root;
-    }
-
-    for (auto& child : root->children)
-    {
-      if (auto* match = findNodeById(&child, id); match != nullptr)
+      if (root->id == id)
       {
-        return match;
+        return root;
       }
-    }
 
-    return nullptr;
+      for (auto& child : root->children)
+      {
+        if (auto* match = findNodeById(&child, id); match != nullptr)
+        {
+          return match;
+        }
+      }
+
+      return nullptr;
+    }
   }
 
   void LayoutEditorDialog::updateNodePosition(std::string const& nodeId, int posX, int posY)
@@ -305,9 +334,9 @@ namespace ao::gtk::layout::editor
       return;
     }
 
-    auto const descriptor = _registry.getDescriptor(parentNode->type);
+    auto const optDescriptor = _registry.getDescriptor(parentNode->type);
 
-    if (descriptor && descriptor->maxChildren.has_value() && parentNode->children.size() >= *descriptor->maxChildren)
+    if (optDescriptor && optDescriptor->optMaxChildren && parentNode->children.size() >= *optDescriptor->optMaxChildren)
     {
       // Cannot add more children
       return;
@@ -553,7 +582,7 @@ namespace ao::gtk::layout::editor
         }
 
         *debounceConn = Glib::signal_timeout().connect(
-          [this, node, entry]() -> bool
+          [this, node, entry] -> bool
           {
             auto const newId = std::string{entry->get_text().raw()};
 
@@ -566,12 +595,12 @@ namespace ao::gtk::layout::editor
 
             if (auto const row = _treeView.get_selection()->get_selected())
             {
-              auto const descriptor = _registry.getDescriptor(node->type);
+              auto const optDescriptor = _registry.getDescriptor(node->type);
               auto displayName = Glib::ustring{node->id};
 
               if (displayName.empty())
               {
-                displayName = descriptor ? descriptor->displayName : node->type;
+                displayName = optDescriptor ? optDescriptor->displayName : node->type;
               }
 
               row->set_value(_columns.displayName, displayName);
@@ -657,7 +686,7 @@ namespace ao::gtk::layout::editor
         }
 
         *debounceConn = Glib::signal_timeout().connect(
-          [this, node, prop, entry, isLayoutProp]() -> bool
+          [this, node, prop, entry, isLayoutProp] -> bool
           {
             applyPropertyChange(node, prop.name, LayoutValue{std::string{entry->get_text().raw()}}, isLayoutProp);
             return false;
@@ -670,7 +699,7 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::dispatchEditor(LayoutNode* node, PropertyDescriptor const& prop, bool isLayoutProp)
   {
-    auto currentVal = prop.defaultValue;
+    auto currentVal = LayoutValue{prop.defaultValue};
     auto const& propertyMap = isLayoutProp ? node->layout : node->props;
 
     if (auto const it = propertyMap.find(prop.name); it != propertyMap.end())
@@ -713,17 +742,17 @@ namespace ao::gtk::layout::editor
 
     _propertiesBox.append(*Gtk::make_managed<Gtk::Separator>());
 
-    auto const descriptorOption = _registry.getDescriptor(node->type);
+    auto const optDescriptorOption = _registry.getDescriptor(node->type);
 
     // 1. ID editor
     renderIdSection(node);
 
     // 2. Component properties
-    if (descriptorOption && !descriptorOption->props.empty())
+    if (optDescriptorOption && !optDescriptorOption->props.empty())
     {
       addSectionTitle("Properties");
 
-      for (auto const& prop : descriptorOption->props)
+      for (auto const& prop : optDescriptorOption->props)
       {
         dispatchEditor(node, prop, false);
       }
@@ -731,7 +760,7 @@ namespace ao::gtk::layout::editor
 
     // 3. Layout properties (component-specific + common)
     {
-      auto layoutProps = descriptorOption ? descriptorOption->layoutProps : std::vector<PropertyDescriptor>{};
+      auto layoutProps = optDescriptorOption ? optDescriptorOption->layoutProps : std::vector<PropertyDescriptor>{};
       auto const addCommon = [&](PropertyDescriptor prop)
       {
         if (std::ranges::find_if(layoutProps, [&](auto const& lp) { return lp.name == prop.name; }) ==
@@ -803,7 +832,7 @@ namespace ao::gtk::layout::editor
       }
     }
 
-    if (!descriptorOption)
+    if (!optDescriptorOption)
     {
       auto* const label = Gtk::make_managed<Gtk::Label>("<i>No descriptor found</i>");
       label->set_use_markup(true);

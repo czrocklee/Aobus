@@ -2,10 +2,19 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "Containers.h"
+#include "layout/document/LayoutNode.h"
+#include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutDependencies.h"
 
 #include <gdk/gdk.h>
+#include <gdk/gdkkeysyms.h>
 #include <gdkmm/graphene_rect.h>
+#include <gdkmm/enums.h>
+#include <glib.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/box.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gesturedrag.h>
 #include <gtkmm/label.h>
@@ -14,6 +23,18 @@
 #include <gtkmm/snapshot.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/stackswitcher.h>
+#include <gtkmm/widget.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <ranges>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk::layout
 {
@@ -387,7 +408,7 @@ namespace ao::gtk::layout
                            std::function<void(std::string const&, int, int)> onMoved,
                            bool snapToGrid = true,
                            int gridSize = 8)
-        : _editMode(editMode), _snapToGrid(snapToGrid), _gridSize(gridSize), _onMoved(std::move(onMoved))
+        : _editMode{editMode}, _snapToGrid{snapToGrid}, _gridSize{gridSize}, _onMoved{std::move(onMoved)}
       {
         set_hexpand(true);
         set_vexpand(true);
@@ -458,6 +479,7 @@ namespace ao::gtk::layout
                                    {
                                      return childA.zIndex < childB.zIndex;
                                    }
+
                                    return childA.insertOrder < childB.insertOrder;
                                  });
       }
@@ -690,46 +712,46 @@ namespace ao::gtk::layout
         _dragChild = nullptr;
         _resizeCorner = ResizeCorner::None;
 
-        for (auto it = _children.rbegin(); it != _children.rend(); ++it)
+        for (auto& child : std::ranges::reverse_view(_children))
         {
           int minWidth = 0;
           int naturalWidth = 0;
           int minBaseline = -1;
           int naturalBaseline = -1;
-          it->widget->measure(Gtk::Orientation::HORIZONTAL, -1, minWidth, naturalWidth, minBaseline, naturalBaseline);
-          int const width = it->reqWidth > 0 ? it->reqWidth : naturalWidth;
+          child.widget->measure(Gtk::Orientation::HORIZONTAL, -1, minWidth, naturalWidth, minBaseline, naturalBaseline);
+          int const width = child.reqWidth > 0 ? child.reqWidth : naturalWidth;
 
           int minHeight = 0;
           int naturalHeight = 0;
-          it->widget->measure(
+          child.widget->measure(
             Gtk::Orientation::VERTICAL, width, minHeight, naturalHeight, minBaseline, naturalBaseline);
-          int const height = it->reqHeight > 0 ? it->reqHeight : naturalHeight;
+          int const height = child.reqHeight > 0 ? child.reqHeight : naturalHeight;
 
-          if (posX >= it->posX && posX <= (it->posX + width) && posY >= it->posY && posY <= (it->posY + height))
+          if (posX >= child.posX && posX <= (child.posX + width) && posY >= child.posY && posY <= (child.posY + height))
           {
-            _dragChild = &(*it);
-            it->startX = it->posX;
-            it->startY = it->posY;
-            it->startReqWidth = it->reqWidth;
-            it->startReqHeight = it->reqHeight;
+            _dragChild = &child;
+            child.startX = child.posX;
+            child.startY = child.posY;
+            child.startReqWidth = child.reqWidth;
+            child.startReqHeight = child.reqHeight;
 
-            _selectedId = it->id;
+            _selectedId = child.id;
             queue_draw();
 
             // Detect corner for resize
-            if (hitCorner(0, 0, posX - it->posX, posY - it->posY))
+            if (hitCorner(0, 0, posX - child.posX, posY - child.posY))
             {
               _resizeCorner = ResizeCorner::TopLeft;
             }
-            else if (hitCorner(width, 0, posX - it->posX, posY - it->posY))
+            else if (hitCorner(width, 0, posX - child.posX, posY - child.posY))
             {
               _resizeCorner = ResizeCorner::TopRight;
             }
-            else if (hitCorner(0, height, posX - it->posX, posY - it->posY))
+            else if (hitCorner(0, height, posX - child.posX, posY - child.posY))
             {
               _resizeCorner = ResizeCorner::BottomLeft;
             }
-            else if (hitCorner(width, height, posX - it->posX, posY - it->posY))
+            else if (hitCorner(width, height, posX - child.posX, posY - child.posY))
             {
               _resizeCorner = ResizeCorner::BottomRight;
             }
@@ -856,7 +878,7 @@ namespace ao::gtk::layout
         _resizeCorner = ResizeCorner::None;
       }
 
-      struct ChildData
+      struct ChildData final
       {
         std::string id;
         Gtk::Widget* widget;
@@ -941,7 +963,7 @@ namespace ao::gtk::layout
                                            .defaultValue = LayoutValue{static_cast<std::int64_t>(8)}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = std::nullopt},
+                                .optMaxChildren = std::nullopt},
                                createAbsoluteCanvas);
     registry.registerComponent({.type = "box",
                                 .displayName = "Box",
@@ -962,7 +984,7 @@ namespace ao::gtk::layout
                                            .defaultValue = LayoutValue{false}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = std::nullopt},
+                                .optMaxChildren = std::nullopt},
                                createBox);
 
     registry.registerComponent(
@@ -992,7 +1014,7 @@ namespace ao::gtk::layout
           {.name = "shrinkEnd", .kind = PropertyKind::Bool, .label = "Shrink End", .defaultValue = LayoutValue{false}}},
        .layoutProps = {},
        .minChildren = 2,
-       .maxChildren = 2},
+       .optMaxChildren = 2},
       createSplit);
 
     registry.registerComponent({.type = "scroll",
@@ -1027,7 +1049,7 @@ namespace ao::gtk::layout
                                            .defaultValue = LayoutValue{false}}},
                                 .layoutProps = {},
                                 .minChildren = 1,
-                                .maxChildren = 1},
+                                .optMaxChildren = 1},
                                createScroll);
 
     registry.registerComponent({.type = "spacer",
@@ -1037,7 +1059,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                createSpacer);
 
     registry.registerComponent(
@@ -1050,7 +1072,7 @@ namespace ao::gtk::layout
          {{.name = "title", .kind = PropertyKind::String, .label = "Tab Title", .defaultValue = LayoutValue{""}},
           {.name = "icon", .kind = PropertyKind::String, .label = "Tab Icon", .defaultValue = LayoutValue{""}}},
        .minChildren = 1,
-       .maxChildren = std::nullopt},
+       .optMaxChildren = std::nullopt},
       createTabs);
   }
 } // namespace ao::gtk::layout

@@ -5,7 +5,10 @@
 
 #include <gdkmm/rgba.h>
 #include <gtkmm/widget.h>
+
+#include <cstdint>
 #include <memory>
+#include <numbers>
 
 namespace ao::gtk
 {
@@ -17,12 +20,14 @@ namespace ao::gtk
 
     AobusSoul(AobusSoul const&) = delete;
     AobusSoul& operator=(AobusSoul const&) = delete;
+    AobusSoul(AobusSoul&&) = delete;
+    AobusSoul& operator=(AobusSoul&&) = delete;
 
     void breathe(bool breathing);
     void setAura(Gdk::RGBA const& aura);
     void setShowFullLogo(bool show);
 
-    static constexpr double kGoldenRatio = 1.61803398875;
+    static constexpr double kGoldenRatio = std::numbers::phi;
 
   protected:
     void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
@@ -35,12 +40,12 @@ namespace ao::gtk
                        int& natural_baseline) const override;
 
   private:
-    struct PathDeleter
+    struct PathDeleter final
     {
       void operator()(::GskPath* path) const noexcept;
     };
 
-    struct StrokeDeleter
+    struct StrokeDeleter final
     {
       void operator()(::GskStroke* stroke) const noexcept;
     };

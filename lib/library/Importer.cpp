@@ -4,27 +4,36 @@
 #include <ao/library/Importer.h>
 
 #include <ao/Exception.h>
-#include <ao/library/DictionaryStore.h>
+#include <ao/Type.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
-#include <ao/library/ResourceStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/tag/TagFile.h>
 
-#include <yaml-cpp/yaml.h>
+#include <yaml-cpp/exceptions.h>
+#include <yaml-cpp/node/parse.h>
+#include <yaml-cpp/yaml.h> // NOLINT(misc-include-cleaner)
 
-#include <algorithm>
-#include <cctype>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <filesystem>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace ao::library
 {
   namespace
   {
-    struct ImportedList
+    struct ImportedList final
     {
       std::uint32_t yamlId = 0;
       std::uint32_t yamlParentId = 0;
@@ -69,19 +78,19 @@ namespace ao::library
     }
     catch (YAML::Exception const& e)
     {
-      AO_THROW_FORMAT(Exception, "Failed to read '{}': {}", path.string(), e.what());
+      ao::throwException<Exception>("Failed to read '{}': {}", path.string(), e.what());
     }
 
     if (!root["version"] || root["version"].as<int>() != 1)
     {
-      AO_THROW(Exception, "Unsupported YAML version");
+      ao::throwException<Exception>("Unsupported YAML version");
     }
 
     YAML::Node library = root["library"];
 
     if (!library)
     {
-      AO_THROW(Exception, "Missing 'library' section in YAML");
+      ao::throwException<Exception>("Missing 'library' section in YAML");
     }
 
     auto txn = _ml.writeTransaction();
@@ -324,7 +333,7 @@ namespace ao::library
 
       if (importedList.yamlId == 0)
       {
-        AO_THROW(Exception, "List id 0 is reserved for the root");
+        ao::throwException<Exception>("List id 0 is reserved for the root");
       }
 
       if (listNode["description"])
@@ -350,7 +359,7 @@ namespace ao::library
           }
           catch (...)
           {
-            AO_THROW_FORMAT(Exception, "List '{}' contains invalid track reference (expected ID)", importedList.name);
+            ao::throwException<Exception>("List '{}' contains invalid track reference (expected ID)", importedList.name);
           }
 
           if (auto const it = yamlTrackIdToInternalId.find(yamlId); it != yamlTrackIdToInternalId.end())
@@ -359,7 +368,7 @@ namespace ao::library
           }
           else
           {
-            AO_THROW_FORMAT(Exception, "List '{}' references unknown track ID {}", importedList.name, yamlId);
+            ao::throwException<Exception>("List '{}' references unknown track ID {}", importedList.name, yamlId);
           }
         }
       }
@@ -367,7 +376,7 @@ namespace ao::library
       importedLists.push_back(std::move(importedList));
     }
 
-    std::unordered_map<std::uint32_t, ListId> yamlListIdToNewListId;
+    auto yamlListIdToNewListId = std::unordered_map<std::uint32_t, ListId>();
     yamlListIdToNewListId.reserve(importedLists.size());
 
     for (auto const& importedList : importedLists)
@@ -376,7 +385,7 @@ namespace ao::library
 
       if (!inserted)
       {
-        AO_THROW_FORMAT(Exception, "Duplicate list id {} in YAML import", importedList.yamlId);
+        ao::throwException<Exception>("Duplicate list id {} in YAML import", importedList.yamlId);
       }
 
       auto [newListId, view] = listWriter.create(serializeList(importedList, ListId{0}));
@@ -395,8 +404,8 @@ namespace ao::library
 
       if (parentIt == yamlListIdToNewListId.end())
       {
-        AO_THROW_FORMAT(
-          Exception, "List '{}' references missing parent id {}", importedList.name, importedList.yamlParentId);
+        ao::throwException<Exception>(
+          "List '{}' references missing parent id {}", importedList.name, importedList.yamlParentId);
       }
 
       auto const childId = yamlListIdToNewListId.at(importedList.yamlId);

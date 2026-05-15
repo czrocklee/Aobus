@@ -18,6 +18,11 @@ namespace ao::audio
     NullBackend() = default;
     ~NullBackend() override = default;
 
+    NullBackend(NullBackend const&) = delete;
+    NullBackend& operator=(NullBackend const&) = delete;
+    NullBackend(NullBackend&&) = delete;
+    NullBackend& operator=(NullBackend&&) = delete;
+
     Result<> open(Format const& /*format*/, IRenderTarget* /*target*/) override { return {}; }
     void start() override {}
     void pause() override {}
@@ -54,6 +59,7 @@ namespace ao::audio
       {
         return _muted;
       }
+
       return std::unexpected(Error{.code = Error::Code::NotSupported});
     }
 
@@ -71,7 +77,7 @@ namespace ao::audio
     ProfileId profileId() const noexcept override { return ProfileId{kProfileShared}; }
 
   private:
-    float _volume = 1.0f;
+    float _volume = 1.0F;
     bool _muted = false;
   };
 } // namespace ao::audio

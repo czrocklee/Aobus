@@ -4,6 +4,7 @@
 #pragma once
 
 #include "runtime/CorePrimitives.h"
+#include <ao/audio/Backend.h>
 #include <ao/audio/Types.h>
 
 namespace ao::rt
@@ -23,6 +24,8 @@ namespace ao::gtk
 
     AobusSoulBinding(AobusSoulBinding const&) = delete;
     AobusSoulBinding& operator=(AobusSoulBinding const&) = delete;
+    AobusSoulBinding(AobusSoulBinding&&) = delete;
+    AobusSoulBinding& operator=(AobusSoulBinding&&) = delete;
 
   private:
     AobusSoul& _soul;

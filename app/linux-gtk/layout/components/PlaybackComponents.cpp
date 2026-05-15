@@ -2,8 +2,11 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "PlaybackComponents.h"
-
 #include "app/AobusSoul.h"
+#include "layout/document/LayoutNode.h"
+#include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutDependencies.h"
 #include "playback/AobusSoulBinding.h"
 #include "playback/NowPlayingFieldLabel.h"
 #include "playback/OutputSelector.h"
@@ -13,7 +16,11 @@
 #include "playback/VolumeControl.h"
 #include <runtime/AppSession.h>
 
+#include <gtkmm/enums.h>
+#include <gtkmm/widget.h>
+
 #include <memory>
+#include <string>
 
 namespace ao::gtk::layout
 {
@@ -299,7 +306,7 @@ namespace ao::gtk::layout
            .enumValues = {"small", "normal", "large"}}},
        .layoutProps = {},
        .minChildren = 0,
-       .maxChildren = 0},
+       .optMaxChildren = 0},
       createPlayPauseButton);
 
     registry.registerComponent(
@@ -316,7 +323,7 @@ namespace ao::gtk::layout
            .enumValues = {"small", "normal", "large"}}},
        .layoutProps = {},
        .minChildren = 0,
-       .maxChildren = 0},
+       .optMaxChildren = 0},
       createStopButton);
 
     registry.registerComponent({.type = "playback.volumeControl",
@@ -326,7 +333,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                createVolumeControl);
 
     registry.registerComponent({.type = "playback.currentTitleLabel",
@@ -336,7 +343,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                createCurrentTitleLabel);
 
     registry.registerComponent({.type = "playback.currentArtistLabel",
@@ -346,7 +353,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                createCurrentArtistLabel);
 
     registry.registerComponent({.type = "playback.seekSlider",
@@ -356,7 +363,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                createSeekSlider);
 
     registry.registerComponent({.type = "playback.timeLabel",
@@ -366,7 +373,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                createTimeLabel);
 
     registry.registerComponent(
@@ -383,7 +390,7 @@ namespace ao::gtk::layout
            .enumValues = {"small", "normal", "large"}}},
        .layoutProps = {},
        .minChildren = 0,
-       .maxChildren = 0},
+       .optMaxChildren = 0},
       createPlayButton);
 
     registry.registerComponent(
@@ -400,7 +407,7 @@ namespace ao::gtk::layout
            .enumValues = {"small", "normal", "large"}}},
        .layoutProps = {},
        .minChildren = 0,
-       .maxChildren = 0},
+       .optMaxChildren = 0},
       createPauseButton);
 
     registry.registerComponent({.type = "playback.outputButton",
@@ -410,7 +417,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                createOutputButton);
 
     registry.registerComponent({.type = "playback.qualityIndicator",
@@ -420,7 +427,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                createQualityIndicator);
   }
 } // namespace ao::gtk::layout

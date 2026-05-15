@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <ao/audio/Player.h>
-#include <ao/audio/Types.h>
 #include <runtime/CorePrimitives.h>
 
 #include <gtkmm/box.h>
@@ -30,6 +28,12 @@ namespace ao::gtk
   public:
     explicit PlaybackDetailsWidget(rt::PlaybackService& playbackService);
     ~PlaybackDetailsWidget();
+
+    // Not copyable or movable
+    PlaybackDetailsWidget(PlaybackDetailsWidget const&) = delete;
+    PlaybackDetailsWidget& operator=(PlaybackDetailsWidget const&) = delete;
+    PlaybackDetailsWidget(PlaybackDetailsWidget&&) = delete;
+    PlaybackDetailsWidget& operator=(PlaybackDetailsWidget&&) = delete;
 
     Gtk::Widget& widget() { return _container; }
 

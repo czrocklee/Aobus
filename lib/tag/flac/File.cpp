@@ -4,11 +4,12 @@
 #include "File.h"
 #include "../detail/Decoder.h"
 #include <ao/Exception.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/media/flac/MetadataBlock.h>
-#include <ao/utility/ByteView.h>
+#include <ao/media/flac/MetadataBlockLayout.h>
 
+#include <cstdint>
 #include <cstring>
-#include <string>
 #include <string_view>
 
 namespace ao::tag::flac
@@ -59,16 +60,16 @@ namespace ao::tag::flac
 
   library::TrackBuilder File::loadTrack() const
   {
-    if (_mappedRegion.get_size() < 4 || std::memcmp(_mappedRegion.get_address(), "fLaC", 4) != 0)
+    if (size() < 4 || std::memcmp(address(), "fLaC", 4) != 0)
     {
-      AO_THROW(Exception, "unrecognized flac file content");
+      ao::throwException<Exception>("unrecognized flac file content");
     }
 
     clearOwnedStrings();
     auto builder = library::TrackBuilder::createNew();
 
     auto iter = MetadataBlockViewIterator{
-      static_cast<char const*>(_mappedRegion.get_address()) + 4, _mappedRegion.get_size() - 4};
+      static_cast<char const*>(address()) + 4, size() - 4};
     auto const end = MetadataBlockViewIterator{};
 
     for (; iter != end; ++iter)
@@ -88,7 +89,7 @@ namespace ao::tag::flac
               builder.property()
                 .durationMs(durationMs)
                 .bitrate(
-                  static_cast<std::uint32_t>((_mappedRegion.get_size() * kBitsPerByte * kMsPerSecond) / durationMs));
+                  static_cast<std::uint32_t>((size() * kBitsPerByte * kMsPerSecond) / durationMs));
             }
           }
 

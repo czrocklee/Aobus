@@ -3,23 +3,32 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <runtime/TrackListProjection.h>
-
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/ProjectionTypes.h>
 #include <runtime/SmartListEvaluator.h>
 #include <runtime/SmartListSource.h>
+#include <runtime/StateTypes.h>
+#include <runtime/TrackListProjection.h>
+#include <runtime/TrackPresentationPreset.h>
 #include <runtime/TrackSource.h>
+
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 
 #include "TestUtils.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <iterator>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -234,7 +243,7 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - sort 20 tracks by year then title", "[app][runtime][projection]")
   {
     auto env = TestEnv{};
-    std::vector<TrackId> ids;
+    auto ids = std::vector<TrackId>{};
     ids.reserve(20);
 
     for (int idx = 0; idx < 10; ++idx)
@@ -266,10 +275,10 @@ namespace ao::rt::test
       {
         auto txn = env.lib.library().readTransaction();
         auto reader = env.lib.library().tracks().reader(txn);
-        auto const v = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
+        auto const optV = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
 
-        CHECK(v.has_value());
-        CHECK(v->metadata().year() == expectedYear);
+        CHECK(optV.has_value());
+        CHECK(optV->metadata().year() == expectedYear);
       }
     };
 
@@ -285,12 +294,12 @@ namespace ao::rt::test
       {
         auto txn = env.lib.library().readTransaction();
         auto reader = env.lib.library().tracks().reader(txn);
-        auto const a = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
-        auto const b = reader.get(proj.trackIdAt(idx + 1), TrackStore::Reader::LoadMode::Hot);
+        auto const optA = reader.get(proj.trackIdAt(idx), TrackStore::Reader::LoadMode::Hot);
+        auto const optB = reader.get(proj.trackIdAt(idx + 1), TrackStore::Reader::LoadMode::Hot);
 
-        REQUIRE(a.has_value());
-        REQUIRE(b.has_value());
-        CHECK(std::string{a->metadata().title()} <= std::string{b->metadata().title()});
+        REQUIRE(optA.has_value());
+        REQUIRE(optB.has_value());
+        CHECK(std::string{optA->metadata().title()} <= std::string{optB->metadata().title()});
       }
     }
   }
@@ -298,7 +307,7 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - sort 15 tracks by album disc track", "[app][runtime][projection]")
   {
     auto env = TestEnv{};
-    std::vector<TrackId> ids;
+    auto ids = std::vector<TrackId>{};
     ids.reserve(20);
     struct Row final
     {
@@ -361,12 +370,12 @@ namespace ao::rt::test
 
     for (std::size_t i = 0; i < 15; ++i)
     {
-      auto const view = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
-      REQUIRE(view.has_value());
+      auto const optView = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView.has_value());
 
-      auto const album = std::string{dict.get(view->metadata().albumId())};
-      auto const disc = view->metadata().discNumber();
-      auto const track = view->metadata().trackNumber();
+      auto const album = std::string{dict.get(optView->metadata().albumId())};
+      auto const disc = optView->metadata().discNumber();
+      auto const track = optView->metadata().trackNumber();
 
       if (i > 0)
       {
@@ -384,7 +393,7 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - sort 10 identical tracks preserves stability", "[app][runtime][projection]")
   {
     auto env = TestEnv{};
-    std::vector<TrackId> ids;
+    auto ids = std::vector<TrackId>{};
     ids.reserve(10);
 
     for (int i = 0; i < 10; ++i)
@@ -411,7 +420,7 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - sort reversal 10 tracks avoids IO", "[app][runtime][projection]")
   {
     auto env = TestEnv{};
-    std::vector<TrackId> ids;
+    auto ids = std::vector<TrackId>{};
     ids.reserve(10);
 
     for (int y = 2019; y >= 2010; --y)
@@ -433,12 +442,12 @@ namespace ao::rt::test
       {
         auto txn = env.lib.library().readTransaction();
         auto reader = env.lib.library().tracks().reader(txn);
-        auto a = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
-        auto b = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
-        REQUIRE(a.has_value());
-        REQUIRE(b.has_value());
-        auto ay = a->metadata().year();
-        auto by = b->metadata().year();
+        auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
+        auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
+        REQUIRE(optA.has_value());
+        REQUIRE(optB.has_value());
+        auto ay = optA->metadata().year();
+        auto by = optB->metadata().year();
 
         if (ascending)
         {
@@ -466,7 +475,7 @@ namespace ao::rt::test
   TEST_CASE("TrackListProjection - switch year to title sort on 15 tracks", "[app][runtime][projection]")
   {
     auto env = TestEnv{};
-    std::vector<TrackId> ids;
+    auto ids = std::vector<TrackId>{};
     ids.reserve(15);
 
     for (int i = 0; i < 15; ++i)
@@ -488,11 +497,11 @@ namespace ao::rt::test
     {
       auto txn = env.lib.library().readTransaction();
       auto reader = env.lib.library().tracks().reader(txn);
-      auto a = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
-      auto b = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
-      REQUIRE(a.has_value());
-      REQUIRE(b.has_value());
-      CHECK(a->metadata().year() <= b->metadata().year());
+      auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
+      auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
+      REQUIRE(optA.has_value());
+      REQUIRE(optB.has_value());
+      CHECK(optA->metadata().year() <= optB->metadata().year());
     }
 
     proj.setPresentation(TrackPresentationSpec{
@@ -503,11 +512,11 @@ namespace ao::rt::test
     {
       auto txn = env.lib.library().readTransaction();
       auto reader = env.lib.library().tracks().reader(txn);
-      auto a = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
-      auto b = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
-      REQUIRE(a.has_value());
-      REQUIRE(b.has_value());
-      CHECK(std::string{a->metadata().title()} <= std::string{b->metadata().title()});
+      auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
+      auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
+      REQUIRE(optA.has_value());
+      REQUIRE(optB.has_value());
+      CHECK(std::string{optA->metadata().title()} <= std::string{optB->metadata().title()});
     }
   }
 

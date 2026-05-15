@@ -19,6 +19,11 @@ namespace ao::gtk
     VolumeBar();
     ~VolumeBar() override;
 
+    VolumeBar(VolumeBar const&) = delete;
+    VolumeBar& operator=(VolumeBar const&) = delete;
+    VolumeBar(VolumeBar&&) = delete;
+    VolumeBar& operator=(VolumeBar&&) = delete;
+
     void setVolume(float volume);
     float getVolume() const;
 
@@ -35,7 +40,7 @@ namespace ao::gtk
     void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
 
   private:
-    void handleAbsoluteClick(double x);
+    void handleAbsoluteClick(double offsetX);
     void handleDragUpdate(double offsetX);
     void handleScroll(double dx, double dy);
 

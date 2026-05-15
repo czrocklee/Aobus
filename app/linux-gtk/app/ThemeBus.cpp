@@ -1,16 +1,24 @@
 #include "app/ThemeBus.h"
 #include <ao/utility/Log.h>
+
 #include <gdkmm/display.h>
-#include <gio/gio.h>
 #include <giomm/settings.h>
+#include <glibmm/error.h>
 #include <glibmm/keyfile.h>
 #include <glibmm/main.h>
 #include <glibmm/miscutils.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/settings.h>
 #include <gtkmm/stylecontext.h>
+#include <sigc++/connection.h>
+#include <sigc++/signal.h>
+#include <gio/gsettingsschema.h>
+#include <glib/gmacros.h>
+#include <gtk/gtk.h>
 
 #include <filesystem>
+#include <string>
 
 namespace ao::gtk
 {

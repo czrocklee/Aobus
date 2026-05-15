@@ -1,17 +1,22 @@
-#include <ao/audio/IBackend.h>
-#include <ao/audio/backend/PipeWireBackend.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/backend/PipeWireProvider.h>
 #include <ao/audio/backend/detail/PipeWireShared.h>
 
-#include <catch2/catch_approx.hpp>
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+
+extern "C"
+{
+#include <pipewire/context.h>
+#include <pipewire/core.h>
+#include <pipewire/main-loop.h>
+#include <pipewire/node.h>
+#include <pipewire/properties.h>
+#include <pipewire/proxy.h>
+#include <pipewire/thread-loop.h>
+}
 
 #include <chrono>
-#include <cstdlib>
-#include <cstring>
-
 #include <memory>
 #include <thread>
 #include <vector>

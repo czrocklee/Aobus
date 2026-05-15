@@ -3,8 +3,12 @@
 
 #include "playback/AobusSoulBinding.h"
 #include "app/AobusSoul.h"
+#include <ao/audio/Backend.h>
+#include <ao/audio/Types.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
+
+#include <gdkmm/rgba.h>
 
 namespace ao::gtk
 {
@@ -29,6 +33,7 @@ namespace ao::gtk
         case audio::Quality::LossySource:
         case audio::Quality::Unknown: return kColorGray;
       }
+
       return kColorGray;
     }
 
@@ -60,7 +65,7 @@ namespace ao::gtk
       });
 
     _outputSub = _playback.onOutputChanged(
-      [this](auto const&)
+      [this](auto const& /*ev*/)
       {
         _ready = _playback.state().ready;
         _soul.setAura(computeColor(_playing, _ready, _quality));

@@ -9,6 +9,8 @@
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Transaction.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -52,23 +54,23 @@ namespace ao::library
     {
     public:
       // String setters
-      MetadataBuilder& title(std::string_view v);
-      MetadataBuilder& artist(std::string_view v);
-      MetadataBuilder& album(std::string_view v);
-      MetadataBuilder& albumArtist(std::string_view v);
-      MetadataBuilder& composer(std::string_view v);
-      MetadataBuilder& genre(std::string_view v);
-      MetadataBuilder& work(std::string_view v);
+      MetadataBuilder& title(std::string_view text);
+      MetadataBuilder& artist(std::string_view text);
+      MetadataBuilder& album(std::string_view text);
+      MetadataBuilder& albumArtist(std::string_view text);
+      MetadataBuilder& composer(std::string_view text);
+      MetadataBuilder& genre(std::string_view text);
+      MetadataBuilder& work(std::string_view text);
 
       // Numeric setters
-      MetadataBuilder& year(std::uint16_t v);
-      MetadataBuilder& trackNumber(std::uint16_t v);
-      MetadataBuilder& totalTracks(std::uint16_t v);
-      MetadataBuilder& discNumber(std::uint16_t v);
-      MetadataBuilder& totalDiscs(std::uint16_t v);
-      MetadataBuilder& coverArtId(std::uint32_t v);
-      MetadataBuilder& coverArtData(std::span<std::byte const> v);
-      MetadataBuilder& rating(std::uint8_t v);
+      MetadataBuilder& year(std::uint16_t year);
+      MetadataBuilder& trackNumber(std::uint16_t number);
+      MetadataBuilder& totalTracks(std::uint16_t count);
+      MetadataBuilder& discNumber(std::uint16_t number);
+      MetadataBuilder& totalDiscs(std::uint16_t count);
+      MetadataBuilder& coverArtId(std::uint32_t id);
+      MetadataBuilder& coverArtData(std::span<std::byte const> data);
+      MetadataBuilder& rating(std::uint8_t rating);
 
       // Accessors
       std::string_view title() const { return _title; }
@@ -112,15 +114,15 @@ namespace ao::library
     class PropertyBuilder
     {
     public:
-      PropertyBuilder& fileSize(std::uint64_t v);
-      PropertyBuilder& mtime(std::uint64_t v);
-      PropertyBuilder& durationMs(std::uint32_t v);
-      PropertyBuilder& bitrate(std::uint32_t v);
-      PropertyBuilder& sampleRate(std::uint32_t v);
-      PropertyBuilder& codecId(std::uint16_t v);
-      PropertyBuilder& channels(std::uint8_t v);
-      PropertyBuilder& bitDepth(std::uint8_t v);
-      PropertyBuilder& uri(std::string_view v);
+      PropertyBuilder& fileSize(std::uint64_t size);
+      PropertyBuilder& mtime(std::uint64_t mtime);
+      PropertyBuilder& durationMs(std::uint32_t durationMs);
+      PropertyBuilder& bitrate(std::uint32_t bitrate);
+      PropertyBuilder& sampleRate(std::uint32_t sampleRate);
+      PropertyBuilder& codecId(std::uint16_t id);
+      PropertyBuilder& channels(std::uint8_t channels);
+      PropertyBuilder& bitDepth(std::uint8_t bitDepth);
+      PropertyBuilder& uri(std::string_view uri);
 
       // Accessors
       std::string_view uri() const { return _uri; }

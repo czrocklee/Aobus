@@ -2,6 +2,12 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/backend/PipeWireBackend.h>
+
+#include <ao/Error.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/IRenderTarget.h>
+#include <ao/audio/Property.h>
 #include <ao/audio/backend/detail/PipeWireShared.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/Raii.h>
@@ -9,17 +15,27 @@
 extern "C"
 {
 #include <pipewire/pipewire.h>
-#include <spa/param/audio/raw-utils.h>
+#include <spa/param/audio/raw.h>
+#include <spa/param/format.h>
 #include <spa/param/param.h>
 #include <spa/param/props.h>
+#include <spa/pod/body.h>
 #include <spa/pod/builder.h>
+#include <spa/pod/iter.h>
+#include <spa/pod/pod.h>
+#include <spa/pod/vararg.h>
+#include <spa/utils/type.h>
 }
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
 #include <format>
-#include <mutex>
+#include <memory>
 
 namespace ao::audio::backend
 {
@@ -220,9 +236,9 @@ namespace ao::audio::backend
 
   void PipeWireBackend::Impl::handleFormatParam(::spa_pod const* param)
   {
-    if (auto negotiated = parseRawStreamFormat(param))
+    if (auto optNegotiated = parseRawStreamFormat(param))
     {
-      format = *negotiated;
+      format = *optNegotiated;
       AUDIO_LOG_INFO(
         "Negotiated PipeWire format: {}Hz, {}b, {} channels", format.sampleRate, format.bitDepth, format.channels);
 
@@ -315,7 +331,7 @@ namespace ao::audio::backend
     _impl->renderTarget = target;
     _impl->format = format;
     _impl->routeAnchorReported = false;
-    bool useExclusive = _exclusiveMode && !_targetDeviceId.empty();
+    bool const useExclusive = _exclusiveMode && !_targetDeviceId.empty();
 
     if (!_impl->threadLoop)
     {
@@ -517,8 +533,8 @@ namespace ao::audio::backend
   {
     if (id == PropertyId::Volume)
     {
-      auto const volume = std::get<float>(value);
-      auto const clamped = std::clamp(volume, 0.0F, 1.0F);
+      auto const volValue = std::get<float>(value);
+      auto const clamped = std::clamp(volValue, 0.0F, 1.0F);
       _impl->volume.store(clamped, std::memory_order_relaxed);
 
       if (!_impl->stream)
@@ -579,12 +595,12 @@ namespace ao::audio::backend
   {
     if (id == PropertyId::Volume)
     {
-      return _impl->volume.load(std::memory_order_relaxed);
+      return PropertyValue{_impl->volume.load(std::memory_order_relaxed)};
     }
 
     if (id == PropertyId::Muted)
     {
-      return _impl->muted.load(std::memory_order_relaxed);
+      return PropertyValue{_impl->muted.load(std::memory_order_relaxed)};
     }
 
     return std::unexpected(Error{.code = Error::Code::NotSupported});

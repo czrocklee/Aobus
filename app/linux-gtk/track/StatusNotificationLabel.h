@@ -30,6 +30,12 @@ namespace ao::gtk
     explicit StatusNotificationLabel(rt::NotificationService& notificationService, rt::ViewService& viewService);
     ~StatusNotificationLabel();
 
+    // Not copyable or movable
+    StatusNotificationLabel(StatusNotificationLabel const&) = delete;
+    StatusNotificationLabel& operator=(StatusNotificationLabel const&) = delete;
+    StatusNotificationLabel(StatusNotificationLabel&&) = delete;
+    StatusNotificationLabel& operator=(StatusNotificationLabel&&) = delete;
+
     Gtk::Widget& widget() { return _stack; }
 
   private:

@@ -30,13 +30,6 @@ Rules are numbered for easy reference in reviews and tooling.
   - 2.5. Member Order
     - 2.5.1. Keep `.cpp` member definitions in the same order as the header
     - 2.5.2. Order header access sections as `public` → `protected` → `private`
-    - 2.5.3. Within each access section, order members as:
-      1. nested types and `using` declarations
-      2. non-static member functions
-      3. static functions
-      4. non-static data members
-      5. static data members
-      6. `friend` declarations
   - 2.6. Namespaces
     - 2.6.1. Use nested namespace syntax: `namespace ao::core { ... }`
     - 2.6.2. Prefer anonymous namespaces to `static` for internal linkage
@@ -97,8 +90,15 @@ Rules are numbered for easy reference in reviews and tooling.
       - Prefer `T() : _mem{a}` over `T() : _mem(a)`
     - 3.4.4. Mark functions `noexcept` when they cannot throw
     - 3.4.5. Initialization style
-      - **Non-primitive types**: prefer `auto x = T{args};` or `auto x = T{};`. The `auto` + braces avoids implicit narrowing and most-vexing-parse.
+      - **Non-primitive types**: prefer `auto x = T{args};` or `auto x = T{};`.
+        - The `auto` + braces style avoids narrowing and most-vexing-parse.
+        - **Exception for containers**: For containers where braced initialization is ambiguous with `std::initializer_list` (e.g., `std::vector`, `std::string`), use `auto x = T(args);` unless you explicitly intend to perform list initialization.
       - **Primitive types** (`int`, `std::size_t`, `float`, etc.): use `T x = val;` (e.g., `std::size_t pos = 0;`, `auto count = 0;`). Do not use brace initialization for primitives.
+      - **Strings and String Views**: Prefer standard literals over explicit construction for constants.
+        - Use `using namespace std::string_literals;` and `using namespace std::string_view_literals;` (often in an anonymous namespace).
+        - Prefer `auto str = "text"s;` over `auto str = std::string("text");`.
+        - Prefer `auto view = "text"sv;` over `auto view = std::string_view("text");`.
+      - **Enums and std::byte**: Treat as non-primitive types and use `auto x = T{...};`.
       - Interfacing with C APIs: use explicit types when an API requires a pointer to a specific C type (e.g., `unsigned int*`).
       - Exception: for null pointer initialization, use `T* ptr = nullptr;`.
     - 3.4.6. Return types: Use traditional return type syntax (`RetType FuncName(...)`) for all non-lambda functions. Avoid trailing return types.
@@ -127,7 +127,7 @@ Rules are numbered for easy reference in reviews and tooling.
   - 4.4. Threading
     - 4.4.1. Name all background threads using `app::core::util::setCurrentThreadName()` for debuggability
     - 4.4.2. Use `std::jthread` with `std::stop_token` for cooperative cancellation — do not roll manual stop flags
-    - 4.4.3. Access shared state through `std::mutex` + `std::lock_guard`; prefer `std::unique_lock` only when needed for conditional unlocking
+    - 4.4.3. Access shared state through `std::mutex` + `std::scoped_lock`; prefer `std::unique_lock` only when needed for conditional unlocking
     - 4.4.4. Use `std::atomic` for simple flags and counters shared between threads; avoid `volatile`
 - 5\. Error Handling
   - 5.1. Three-Layer Policy

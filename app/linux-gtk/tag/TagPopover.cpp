@@ -3,6 +3,12 @@
 
 #include "tag/TagPopover.h"
 
+#include <ao/library/MusicLibrary.h>
+#include <ao/Type.h>
+
+#include <utility>
+#include <vector>
+
 namespace ao::gtk
 {
   TagPopover::TagPopover(library::MusicLibrary& musicLibrary, std::vector<TrackId> selectedTrackIds)

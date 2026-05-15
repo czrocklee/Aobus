@@ -8,8 +8,14 @@
 
 #include <algorithm>
 #include <array>
-#include <boost/endian/conversion.hpp>
 #include <ranges>
+
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace ao::media::mp4
 {
@@ -156,7 +162,7 @@ namespace ao::media::mp4
     _timescale = 0;
     _duration = 0;
 
-    RootAtom root = fromBuffer(_fileData);
+    RootAtom const root = fromBuffer(_fileData);
     auto chunkOffsets = std::vector<std::uint64_t>{};
     auto sampleToChunk = std::vector<SampleToChunkEntry>{};
 
@@ -178,7 +184,7 @@ namespace ao::media::mp4
     }
 
     // Cookie path (extensions in sample entry)
-    std::array const kCookiePath = {
+    auto const kCookiePath = std::array{
       std::string_view{"root"},
       std::string_view{"moov"},
       std::string_view{"trak"},
@@ -268,7 +274,7 @@ namespace ao::media::mp4
   {
     if (index >= _samples.size())
     {
-      return {0, 0};
+      return {.offset = 0, .size = 0};
     }
 
     return _samples[index];

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <functional>
+#include <utility>
 
 namespace ao::audio
 {
@@ -15,7 +16,7 @@ namespace ao::audio
   public:
     Subscription() = default;
     explicit Subscription(std::move_only_function<void()> unsub)
-      : _unsub(std::move(unsub))
+      : _unsub{std::move(unsub)}
     {
     }
 

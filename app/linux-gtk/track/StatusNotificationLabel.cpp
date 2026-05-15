@@ -2,12 +2,19 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/StatusNotificationLabel.h"
-#include <gdkmm/display.h>
-#include <glibmm/main.h>
-#include <gtkmm/cssprovider.h>
-#include <gtkmm/stylecontext.h>
 #include <runtime/AppSession.h>
 #include <runtime/NotificationService.h>
+
+#include <gdkmm/display.h>
+#include <glibmm/main.h>
+#include <gtk/gtkstyleprovider.h>
+#include <gtkmm/cssprovider.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/stylecontext.h>
+
+#include <chrono>
+#include <string>
+#include <string_view>
 
 namespace ao::gtk
 {
@@ -30,6 +37,7 @@ namespace ao::gtk
         {
           Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
         }
+
         initialized = true;
       }
     }

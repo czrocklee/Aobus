@@ -9,7 +9,7 @@ Use this skill to systematically audit C++ source files against the Aobus C++ Co
 
 Focus on concrete rule violations from [CONTRIBUTING.md](../../../CONTRIBUTING.md), not generic style commentary. Prefer reporting a short list of high-confidence violations with precise fixes over a long list of debatable nits.
 
-Use Aobus's built-in `clang-tidy` integration as part of conformance validation when the task involves changed C++ code, linting cleanup, or pre-commit verification. Combine automated findings with manual review; do not treat raw `clang-tidy` output as the final answer.
+Use Aobus's built-in `clang-tidy` integration as the primary conformance signal when the task involves changed C++ code, linting cleanup, or pre-commit verification. Combine automated findings with a small residual manual review; do not treat raw `clang-tidy` output as the final answer.
 
 ## Scope Boundary
 
@@ -22,14 +22,54 @@ This skill owns **style, coding conventions, and tooling gates only**.
 
 ## Default Execution Strategy
 
-Use the smallest execution mode that can reliably finish the task.
+Use the smallest execution mode that can reliably finish the task. Prefer automation first: run the project `clang-tidy` gate when it is relevant, triage diagnostics, then manually audit only rules that are not reliably covered by tooling.
 
-- **Narrow local change**: run this skill in a single agent, audit only the touched files, fix issues directly, and run targeted verification.
+- **Narrow local change**: run this skill in a single agent, audit only the touched files, fix issues directly, and run targeted verification. If C++ files changed, use the targeted `touch` + `./build.sh debug --tidy` path unless the change is clearly too small to benefit from it.
 - **Broad conformance audit or weak-model environment**: use the multi-agent workflow below. Parallel agents should discover findings, not edit files.
 - **Formal code review**: keep this skill read-only and subordinate to the builtin `code-review` workflow; run only the requested standards or tooling checks.
-- **Pre-commit validation**: combine manual checks with the repository `clang-tidy` build path, then report only actionable findings.
+- **Pre-commit validation**: run the repository `clang-tidy` build path first, then perform the residual manual checks below and report only actionable findings.
 
-When multiple agents are available, prefer **rule-sliced read-only auditors plus one fixer** over giving every agent the full standards checklist. Weak models perform better when each agent checks one rule group with a narrow scope.
+When multiple agents are available, prefer **tooling verifier plus residual rule-sliced read-only auditors plus one fixer** over giving every agent the full standards checklist. Weak models perform better when each agent checks one uncovered rule group with a narrow scope.
+
+## Automation Coverage Map
+
+Treat these checks as tooling-owned before spending manual review time on them. Manual auditors should only inspect these areas when `clang-tidy` is unavailable, a diagnostic looks wrong, or a local exception needs judgment.
+
+- `aobus-readability-control-block-spacing`: Rule 2.1.2 blank lines around control blocks and top-level test macros.
+- `readability-identifier-naming` plus `aobus-readability-identifier-naming-extensions`: Rules 2.2.1-2.2.6 naming conventions, including data-member prefix extensions.
+- `aobus-modernize-concrete-final`: Rule 4.2.1 concrete classes/structs that should be `final`.
+- `aobus-readability-c-api-global-qualification`: Rule 2.6.3 external C-library functions and types needing `::`.
+- `aobus-readability-std-c-library-qualification`: Rule 2.6.4 C functions/types from C++ standard headers needing `std::`.
+- Built-in `modernize-concat-nested-namespaces`: Rule 2.6.1 nested namespace syntax.
+- Built-in `modernize-use-using`: Rule 2.7.4 `using` over `typedef`.
+- Built-in `cppcoreguidelines-pro-type-cstyle-cast`: Rule 2.8.1 no C-style casts.
+- Built-in `performance-avoid-endl`: Rule 2.9.1 prefer `'\n'` over `std::endl`.
+- Built-in modernize/performance formatting diagnostics where available: Rule 3.1.2 preference for modern formatting; confirm fixes manually when formatting semantics are non-trivial.
+- Built-in `modernize-use-ranges`: Rule 3.1.4 ranges algorithms where the replacement is clear.
+- Built-in `modernize-use-starts-ends-with`: Rule 3.1.6 prefix/suffix checks.
+- `aobus-modernize-forbid-nodiscard`: Rule 3.2.7 no `[[nodiscard]]`.
+- `aobus-readability-unused-suppression-style`: Rule 3.2.8 unused parameter/variable suppression style.
+- `aobus-readability-optional-naming-and-usage`: Rule 3.2.1.1 `std::optional` `opt` prefix and no `.has_value()` checks.
+- `aobus-modernize-member-initializer-braces`: Rule 3.4.3 brace initialization in member initializer lists.
+- `aobus-modernize-local-initialization-style`: Rule 3.4.5 local initialization style. Treat diagnostics around containers, C APIs, and primitives carefully.
+- `aobus-modernize-forbid-trailing-return`: Rule 3.4.6 traditional return syntax for non-lambda functions.
+- `aobus-modernize-lambda-params`: Rule 3.4.7 omit empty lambda parameter lists.
+- `aobus-threading-policy`: Rule 4.4 mechanical threading-policy checks. Route semantic concurrency risk to `reviewing-code`.
+- Built-in `readability-function-cognitive-complexity`: Hotspot signal only; refactoring decisions remain human-reviewed.
+
+## Residual Manual Review Map
+
+After the tooling pass, focus manual conformance review on rules that are still hard to automate or require project judgment:
+
+- Rule 2.3.1: headers use `#pragma once`.
+- Rule 2.4.1: include groups are separated and ordered as paired/project, third-party, then standard library.
+- Rule 2.5.1: `.cpp` member definitions follow the header declaration order.
+- Rule 2.5.2: header access sections are ordered `public` -> `protected` -> `private`.
+- Rule 2.7.1: plain `int`/`unsigned` are used only for external APIs, toolkit callbacks, or other justified API-shaped boundaries.
+- Rule 2.7.2 and 2.7.3: owning strings and fixed buffers use C++ library types unless an external C API requires otherwise.
+- Rule 2.9.2: runtime diagnostics use the project logging facility rather than `std::cout`/`std::cerr`.
+- Rules 3.1.1, 3.1.3, 3.1.5, 3.1.7, 3.1.8, 3.2.1, 3.2.2-3.2.6, 3.3.1, 3.4.1, 3.4.2, and 3.4.4: review when touched code makes the coding-guide preference directly applicable; avoid speculative rewrites.
+- Rules 4.2.2-4.2.3, 4.3.1, and 5.x: review for clear conformance problems, but route behavior, ownership, error-model semantics, and architecture trade-offs to `reviewing-code` when they are not mechanical.
 
 ## Execution Modes
 
@@ -40,11 +80,12 @@ Use this mode when the task is broad, the file set is unclear, or multiple agent
 Responsibilities:
 
 1. Determine the target files. Prefer changed C++ files unless the user requested a full-project audit.
-2. Split read-only audit work by rule group, not by asking every agent to enforce every rule.
-3. Require structured findings from auditors using the schema below.
-4. Merge, deduplicate, and discard low-confidence findings.
-5. Apply accepted fixes yourself or assign exactly one fixer.
-6. Run the narrowest useful verification and report failures honestly.
+2. Run or assign the tooling verifier first when C++ files changed.
+3. Split residual read-only audit work by uncovered rule group, not by asking every agent to enforce every rule.
+4. Require structured findings from auditors using the schema below.
+5. Merge, deduplicate, and discard low-confidence findings.
+6. Apply accepted fixes yourself or assign exactly one fixer.
+7. Run the narrowest useful verification and report failures honestly.
 
 ### Rule Auditor Mode
 
@@ -85,12 +126,13 @@ Responsibilities:
 Default to this workflow for broad audits or weak models:
 
 1. **Scope**: identify target C++ files (`.cpp`, `.h`, `.hpp`) and any relevant generated or test files.
-2. **Dispatch read-only auditors** by rule group. Do not allow audit agents to modify files.
-3. **Collect findings** using the schema below.
-4. **Merge findings** by `(file, line, rule)` and keep only high-confidence, actionable items.
-5. **Fix serially** with one fixer, or in parallel only when each fixer owns a disjoint file set.
-6. **Verify** with the narrowest command that would increase confidence; broaden only if needed.
-7. **Iterate once** on remaining high-signal issues instead of trying to solve every marginal nit in one pass.
+2. **Tooling pass**: run targeted `clang-tidy` when relevant and turn in-scope diagnostics into structured findings.
+3. **Dispatch read-only auditors** for residual manual rules only. Do not allow audit agents to modify files.
+4. **Collect findings** using the schema below.
+5. **Merge findings** by `(file, line, rule)` and keep only high-confidence, actionable items.
+6. **Fix serially** with one fixer, or in parallel only when each fixer owns a disjoint file set.
+7. **Verify** with the narrowest command that would increase confidence; broaden only if needed.
+8. **Iterate once** on remaining high-signal issues instead of trying to solve every marginal nit in one pass.
 
 Concurrency safety rules:
 
@@ -153,24 +195,24 @@ Rule auditors should return findings in this shape so the coordinator can merge 
 
 Omit low-confidence items. Use `needs_human_judgment: true` only when the issue is likely real but depends on framework constraints, ABI requirements, or ownership semantics.
 
-## Rule-Sliced Auditor Assignments
+## Residual Rule-Sliced Auditor Assignments
 
-For multi-agent audits, prefer these independent passes:
+For multi-agent audits, prefer these independent passes after the tooling pass. Do not manually duplicate diagnostics that are already covered by the automation map unless the tool is unavailable or the result needs exception triage.
 
-1. **Spacing Auditor**: Rule 2.1.2 only. Check blank lines around control blocks, block closures, `TEST_CASE`, and `SECTION`.
-2. **C API Namespace Auditor**: Rule 2.6.3 only. Check FFmpeg (`av_*`, `swr_*`), ALSA (`snd_*`), PipeWire (`pw_*`), and SPA (`spa_*`) function/type references for required `::` prefixes.
-3. **Modern C++ Auditor**: Rules 3.1.2 and 3.1.4. Check `std::to_string`, `printf`-style formatting, `std::sort`, `std::find_if`, and missing `<ranges>` for ranges usage.
-4. **Const/Initialization Auditor**: Rules 4.3.1, 3.4.5, and 3.1.7. Check local `const`, `auto x = T{...}`, braced initialization, and designated initializers. Be conservative around `std::move`, C callback user data, and size-based container construction.
-5. **Header/Class Auditor**: Rules 4.2.1 and 2.5.3. Check missing `final` on concrete classes and header member ordering.
-6. **RAII Convention Auditor**: Rule 3.3.1 only when there is a direct coding-guide violation. Route semantic ownership/lifetime concerns to code review.
+1. **Header/Include Auditor**: Rules 2.3.1 and 2.4.1. Check `#pragma once` and include grouping/order.
+2. **Definition Order Auditor**: Rule 2.5.1. Check `.cpp` member definitions against the header order when the touched class has several methods.
+3. **Access Section Auditor**: Rule 2.5.2. Check `public` -> `protected` -> `private` ordering in touched headers.
+4. **Integer/API Boundary Auditor**: Rule 2.7.1. Check plain `int`/`unsigned` only where not dictated by external APIs, toolkit callbacks, or C interop.
+5. **Resource/Error Policy Auditor**: Rules 3.3.1, 3.4.1, and 5.x only when there is a direct coding-guide violation. Route semantic ownership/lifetime and error-model correctness concerns to `reviewing-code`.
+6. **Logging/Output Auditor**: Rule 2.9.2. Check runtime diagnostics for project logging instead of `std::cout`/`std::cerr`.
 7. **Tooling Verifier**: Run the repository `clang-tidy` path at the scheduled checkpoints above. Summarize actionable diagnostics and feed them back as structured findings; do not treat raw output as the final answer.
 
 Useful candidate searches before manual judgment:
 
 ```bash
-rg '\bstd::sort\b|\bstd::find_if\b|\bstd::to_string\b|printf\(' app lib tool test
-rg '\b(av|swr|snd|pw|spa)_[A-Za-z0-9_]+\s*\(' app lib tool test
-rg '^\s*class\s+[A-Za-z0-9_]+' app lib tool test
+rg '^#pragma once|^#include|^\s*(public|protected|private):' include app lib tool test
+rg '\b(unsigned|int)\b' include app lib tool test
+rg '\bstd::(cout|cerr)\b' include app lib tool test
 ```
 
 ## Subagent Prompt Templates
@@ -227,15 +269,16 @@ Instructions:
 
 1. **Read target files fully**. Do not audit from snippets.
 2. **Load the standard** from [CONTRIBUTING.md](../../../CONTRIBUTING.md) and cite the specific rule being enforced.
-3. **Run `clang-tidy` through the project build when it is relevant**.
+3. **Run `clang-tidy` through the project build when it is relevant; this is the default first pass for changed C++ files**.
    - Prefer `./build.sh debug --tidy` for normal validation because it uses the repository's configured checks and now automatically selects the Clang toolchain.
    - **For targeted audits**: Always `touch` the specific C++ source files (implementation files and/or headers) you wish to audit immediately before running the build. This forces the build system to re-analyze them even if they haven't changed.
    - **For full-project audits**: Use `./build.sh debug --tidy --clean`. A clean build is the only reliable way to ensure a comprehensive analysis of every file in the project.
    - Save reusable output to `/tmp`, for example `/tmp/ao-clang-tidy.log`, when you need to inspect or compare findings across iterations.
    - Treat diagnostics in untouched files as background noise unless the user asked for a broader cleanup.
-4. **Prioritize repeated project violations first**, especially under `app/`, before hunting for marginal style issues.
-5. **Separate real violations from framework constraints**. GTK, GLib, PipeWire, ALSA, FFmpeg, and CLI callback signatures often justify plain `int`, raw C pointers, or fixed callback spellings.
-6. **Report only high-confidence findings** with file/line references and the concrete change needed.
+4. **Triage tooling results before manual auditing**. Convert in-scope diagnostics into structured findings, discard true false positives, and route semantic bug/performance/lifetime diagnostics to `reviewing-code`.
+5. **Prioritize residual manual rules and repeated project violations first**, especially under `app/`, before hunting for marginal style issues.
+6. **Separate real violations from framework constraints**. GTK, GLib, PipeWire, ALSA, FFmpeg, and CLI callback signatures often justify plain `int`, raw C pointers, or fixed callback spellings.
+7. **Report only high-confidence findings** with file/line references and the concrete change needed.
 
 ## `clang-tidy` Guidance
 
@@ -249,44 +292,28 @@ Instructions:
 
 Run the audit in this order.
 
-1. **Rule 2.1.2: Missing blank lines around control blocks**
-   - Must have blank lines before and after `if`, `for`, `while`, `switch`.
-   - Top-level macros like `TEST_CASE` and `SECTION` must have blank lines between them.
-   - Exception: Single-line if-statements that are early returns (though even these are preferred with a blank line if followed by logic).
+1. **Tooling-owned rules from the automation map**
+   - Run the project `clang-tidy` path first for changed C++ files.
+   - Fix or triage in-scope diagnostics before starting manual nit-picking.
 
-2. **Rule 2.6.3: C functions/types missing `::` prefix**
-   - Critical in playback and platform files using FFmpeg (`av_*`, `swr_*`), ALSA (`snd_*`), or PipeWire (`pw_*`, `spa_*`).
-   - Example: `::avformat_open_input`, `::snd_pcm_open`.
+2. **Rules 2.3.1 and 2.4.1: Header and include hygiene**
+   - Check `#pragma once`.
+   - Check include groups: paired/project, third-party, standard library, separated by blank lines.
 
-3. **Rule 3.1.2 & 3.1.4: Pre-C++20 string/algorithm usage**
-   - Prefer `std::format` over `std::to_string` or `printf`.
-   - Prefer `std::ranges::sort` over `std::sort`.
-   - Prefer `std::ranges::find_if` over `std::find_if`.
+3. **Rules 2.5.1 and 2.5.2: Ordering that needs context**
+   - Check `.cpp` member definition order against the header.
+   - Check header access section order: `public`, `protected`, `private`.
 
-4. **Rule 4.3.1: Missing `const` on local variables**
-   - Apply `const` (or `auto const`) to every local variable that is not reassigned.
-   - Flag high-signal cases like complex GTK `RefPtr` or business logic results.
+4. **Rule 2.7.1: Plain integer types**
+   - Prefer `std::int32_t`, `std::uint64_t`, etc.
+   - Do not flag external API, toolkit callback, or C interop signatures.
 
-5. **Rule 4.2.1: Concrete classes missing `final`**
-   - Recurring in UI classes: `StatusBar`, `MainWindow`, `TagPopover`.
-   - Do not flag interfaces (`IAudioBackend`) or observer bases.
+5. **Rules 3.3.1, 3.4.1, and 5.x: Error/resource policy**
+   - Check only direct coding-guide violations such as new `bool` + `lastError()` patterns, `std::optional` used to represent failure, or missing RAII wrappers for owned C resources.
+   - Route semantic ownership, lifetime, or recoverability concerns to `reviewing-code`.
 
-6. **Rule 3.4.5: Non-auto initialization for objects**
-   - Prefer `auto x = T{...};` over `T x;` or `T x{...};` for all non-primitive types.
-   - Exception: Primitive types where `auto` would reduce clarity or require a cast.
-   - Exception: When `const` is needed but the object must be `move`d later (standard `unique_ptr` move pattern).
-
-7. **Rule 3.1.7: Missing designated initializers**
-   - Use `.member = value` syntax for struct initialization to improve clarity and safety.
-   - Especially important for configuration objects like `TrackSpec`, `Device`, and test cases.
-
-8. **Rule 2.5.3: Header member ordering**
-   - Enforce `using` declarations -> non-static methods -> static functions -> data members.
-   - Nested types/structs should appear at the top of their access section.
-
-9. **Rule 3.3.1: RAII and mandatory collaborators**
-   - Check only direct coding-guide violations: references over nullable raw pointers for mandatory services, and `ao::utility::makeUniquePtr` for C resource RAII in implementations.
-   - Route semantic ownership, lifetime, or cleanup correctness concerns to `reviewing-code`.
+6. **Rule 2.9.2: Runtime diagnostics**
+   - Prefer project logging macros/facilities over `std::cout`/`std::cerr` outside CLI output paths and tests.
 
 ## Common Audit Gotchas
 
@@ -317,11 +344,11 @@ These are subtle patterns that are frequently missed but are required for full c
 
 ## The Braced Initialization ({}) Audit (Rule 3.4.5)
 
-The project is migrating to **Uniform Initialization**. This is one of the most pervasive violations in legacy files.
+The project uses a custom `clang-tidy` check for initialization style. Use this section for triage and manual exception judgment, not as a reason to redo a full manual initialization audit after a clean tooling pass.
 
-- **Prefer Braces for Construction**: Replace `T x(a, b);` with `auto x = T{a, b};` or `T x{a, b};`.
+- **Prefer Braces for Construction**: Replace `T x(a, b);` with `auto x = T{a, b};` when the type is non-primitive and not a container-size/initializer-list ambiguity.
 - **Member Initializer Lists**: Modernize `Constructor() : member(val)` to `Constructor() : member{val}`.
-- **Empty Initialization**: Use `auto s = std::string{};` instead of `std::string s;`.
+- **Empty Initialization**: Use `auto s = std::string{};` instead of `std::string s;` when an explicit string object is needed; prefer string literals for constants per CONTRIBUTING.md.
 - **The Vector Pitfall**:
     - `std::vector<int> v(10);` creates 10 elements (correct for size allocation).
     - `std::vector<int> v{10};` creates 1 element with value 10.
@@ -331,7 +358,7 @@ The project is migrating to **Uniform Initialization**. This is one of the most 
 ## Audit Best Practices
 
 - **Constraint Precedence**: Explicit user hints override any skill default. If a user preference (e.g. "explicit types for primitives") conflicts with Rule 3.4.5, immediately treat it as the highest priority rule.
-- **Large File Strategy**: For files >500 lines or structural refactors, prefer `read_file` + `write_file` over multiple `replace` calls to ensure syntax tree integrity and prevent hallucinated edits.
+- **Large File Strategy**: For files >500 lines or structural refactors, read the complete file and make edits with broad, unambiguous context to preserve syntax tree integrity and prevent hallucinated edits.
 - **Pattern Remediation**: Identify and fix recurring violation patterns (e.g. all YAML decoders missing `const`) across all scoped files simultaneously for higher throughput.
 - **Explicit Conditionals**: Prioritize `if (ptr != nullptr)` over `if (ptr)` whenever raw and smart pointers coexist to ensure explicit intent.
 
@@ -344,6 +371,25 @@ The project is migrating to **Uniform Initialization**. This is one of the most 
 - **Struct Hardening**: Resolve `missing-field-initializer` warnings by adding inline default values in the struct definition.
 - **Logging over Silence**: Replace empty `catch` blocks with appropriate logging (e.g. `APP_LOG_TRACE`) to satisfy linters and maintain observability.
 - **Primitive Vigilance**: Strictly preserve explicit types for primitives (`int`, `bool`) as per Rule 3.4.5; prevent automated over-application of `auto`.
+- **misc-include-cleaner resolution**: fix-first, suppress-last. See dedicated section below.
+
+## `misc-include-cleaner` Resolution Guide
+
+**Always try to fix the code before suppressing the warning.**
+
+1. **"No header providing X" — find the actual header:**
+   ```bash
+   rg -l 'X' $(echo $NIX_CFLAGS_COMPILE | grep -oP '\-I\K\S+' | head -3)
+   ```
+   Search nix-store include trees. Don't guess — a wrong guess creates cascading noise. PipeWire and ALSA C headers resolve fine through this path.
+
+2. **Prefer the most specific header** that provides the symbol directly. Umbrella headers are a last resort.
+
+3. **Recognize unfixable system-header cases.** Some glibc/glib C headers (notably `poll.h`, `gtypes.h`, `gtkenums.h`) fail to resolve even when correctly included. This is header-specific — PipeWire and ALSA C headers work correctly. When you hit one of these, switch to fixing the code to eliminate the C symbol reference (e.g., use a C++ equivalent or a local constant). Only if that's impossible, add a NOLINT.
+
+4. **Scope suppressions tightly:** `NOLINT` at usage site > `NOLINT` on include > `NOLINTBEGIN`/`NOLINTEND` for a contiguous block > `IgnoreHeaders` for cross-cutting patterns.
+
+5. **Workflow:** `touch` changed files → `./build.sh debug --tidy` → grep `build.log` for `warning:`.
 
 ## References
 

@@ -2,16 +2,16 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/library/ResourceStore.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/tag/TagFile.h>
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <filesystem>
+#include <lmdb.h>
 
 namespace fs = std::filesystem;
 
@@ -46,7 +46,6 @@ namespace ao::tag::test
   // ============================================================================
   // Tag Reading Tests - HiRes Metadata
   // ============================================================================
-
   TEST_CASE("Tag reading - hires metadata", "[tag][integration]")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3");
@@ -71,7 +70,6 @@ namespace ao::tag::test
   // ============================================================================
   // Tag Reading Tests - Audio Properties
   // ============================================================================
-
   TEST_CASE("Tag reading - audio properties", "[tag][integration]")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3");
@@ -146,7 +144,6 @@ namespace ao::tag::test
   // ============================================================================
   // Cover Art Extraction Tests
   // ============================================================================
-
   TEST_CASE("Cover art extraction", "[tag][integration]")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3");
@@ -181,7 +178,6 @@ namespace ao::tag::test
   // ============================================================================
   // Empty/Missing Metadata Tests
   // ============================================================================
-
   TEST_CASE("Tag reading - empty metadata", "[tag][integration]")
   {
     auto const* const format = GENERATE("flac", "m4a", "mp3");

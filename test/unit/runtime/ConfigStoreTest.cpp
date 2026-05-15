@@ -10,12 +10,16 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <limits>
 #include <map>
+#include <numbers>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
-#include "TestUtils.h"
+#include <test/unit/lmdb/TestUtils.h>
 
 namespace ao::rt::test
 {
@@ -224,7 +228,7 @@ namespace ao::rt::test
     SECTION("All optionals with values")
     {
       auto const original =
-        AllOptional{.optInt = 42, .optDouble = 2.718, .optString = "hello", .optColor = Color::Green};
+        AllOptional{.optInt = 42, .optDouble = std::numbers::e, .optString = "hello", .optColor = Color::Green};
 
       configStore.save("opt", original);
       REQUIRE(configStore.flush());
@@ -236,7 +240,7 @@ namespace ao::rt::test
       REQUIRE(loaded.optInt);
       CHECK(*loaded.optInt == 42);
       REQUIRE(loaded.optDouble);
-      CHECK(*loaded.optDouble == 2.718);
+      CHECK(*loaded.optDouble == std::numbers::e);
       REQUIRE(loaded.optString);
       CHECK(*loaded.optString == "hello");
       REQUIRE(loaded.optColor);

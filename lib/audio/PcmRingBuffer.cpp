@@ -3,13 +3,14 @@
 
 #include <ao/audio/PcmRingBuffer.h>
 
+#include <atomic>
+#include <cstddef>
 #include <cstring>
+#include <span>
 
 namespace ao::audio
 {
-  PcmRingBuffer::PcmRingBuffer()
-  {
-  }
+  PcmRingBuffer::PcmRingBuffer() = default;
 
   std::size_t PcmRingBuffer::write(std::span<std::byte const> input) noexcept
   {
@@ -37,7 +38,7 @@ namespace ao::audio
 
   void PcmRingBuffer::clear() noexcept
   {
-    std::byte dummy{};
+    auto dummy = std::byte{};
 
     while (_queue.pop(dummy))
     {

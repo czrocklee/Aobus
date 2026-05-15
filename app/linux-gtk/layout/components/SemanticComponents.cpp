@@ -2,29 +2,37 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "SemanticComponents.h"
-
-#include "inspector/CoverArtCache.h"
 #include "inspector/CoverArtWidget.h"
 #include "inspector/TrackInspectorPanel.h"
+#include "layout/document/LayoutNode.h"
+#include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutDependencies.h"
 #include "list/ListSidebarController.h"
 #include "tag/TagEditController.h"
 #include "track/TrackPageManager.h"
-#include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
+#include <ao/Type.h>
 #include <runtime/AppSession.h>
-#include <runtime/ListSourceStore.h>
+#include <runtime/ProjectionTypes.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/label.h>
+#include <gtkmm/object.h>
 #include <gtkmm/popovermenubar.h>
 #include <gtkmm/revealer.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/togglebutton.h>
+#include <gtkmm/widget.h>
 
-#include "Containers.h"
+#include <cstdint>
+#include <limits>
+#include <memory>
+#include <vector>
 
 namespace ao::gtk::layout
 {
@@ -286,7 +294,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<ListTreeComponent>(ctx, node); });
 
@@ -300,7 +308,7 @@ namespace ao::gtk::layout
                                            .defaultValue = LayoutValue{"workspace.focused"}}},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<TracksTableComponent>(ctx, node); });
 
@@ -311,7 +319,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<OpenLibraryButton>(ctx, node); });
 
@@ -322,7 +330,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<CoverArtComponent>(ctx, node); });
 
@@ -333,7 +341,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<InspectorSidebarComponent>(ctx, node); });
 
@@ -344,7 +352,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<MenuBarComponent>(ctx, node); });
 
@@ -355,7 +363,7 @@ namespace ao::gtk::layout
                                 .props = {},
                                 .layoutProps = {},
                                 .minChildren = 0,
-                                .maxChildren = 0},
+                                .optMaxChildren = 0},
                                [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<WorkspaceWithInspectorComponent>(ctx, node); });
   }

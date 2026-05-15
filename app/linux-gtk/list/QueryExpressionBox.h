@@ -23,6 +23,11 @@ namespace ao::gtk
     explicit QueryExpressionBox(library::MusicLibrary& musicLibrary);
     ~QueryExpressionBox() override;
 
+    QueryExpressionBox(QueryExpressionBox const&) = delete;
+    QueryExpressionBox& operator=(QueryExpressionBox const&) = delete;
+    QueryExpressionBox(QueryExpressionBox&&) = delete;
+    QueryExpressionBox& operator=(QueryExpressionBox&&) = delete;
+
     void refreshCompletionData();
 
     Gtk::Entry& entry() { return _entry; }

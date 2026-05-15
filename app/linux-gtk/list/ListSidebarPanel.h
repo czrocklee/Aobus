@@ -37,6 +37,12 @@ namespace ao::gtk
     ListSidebarPanel(Callbacks callbacks);
     ~ListSidebarPanel();
 
+    // Not copyable or movable
+    ListSidebarPanel(ListSidebarPanel const&) = delete;
+    ListSidebarPanel& operator=(ListSidebarPanel const&) = delete;
+    ListSidebarPanel(ListSidebarPanel&&) = delete;
+    ListSidebarPanel& operator=(ListSidebarPanel&&) = delete;
+
     Gtk::Widget& widget() { return _listScrolledWindow; }
 
     void rebuildTree(rt::AppSession& session, lmdb::ReadTransaction const& txn);

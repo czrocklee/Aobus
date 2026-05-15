@@ -15,7 +15,7 @@ namespace ao::lmdb
   {
     if (code != MDB_SUCCESS)
     {
-      AO_THROW_FORMAT(Exception, "{}: {}", origin, ::mdb_strerror(code));
+      ao::throwException<Exception>("{}: {}", origin, ::mdb_strerror(code));
     }
   }
 }

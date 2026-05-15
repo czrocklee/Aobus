@@ -5,7 +5,6 @@
 
 #include "track/TrackListAdapter.h"
 
-#include <ao/Type.h>
 #include <runtime/StateTypes.h>
 
 #include <gtkmm/entry.h>
@@ -30,7 +29,7 @@ namespace ao::gtk
     TrackFilterController(rt::ViewService& viewService, rt::ViewId viewId, Gtk::Entry& filterEntry);
 
     void setFilterExpression(std::string_view expression);
-    void setStatusMessageCallback(StatusMessageFn callback);
+    void setStatusMessageCallback(const StatusMessageFn& callback);
     void setCreateSmartListSignal(CreateSmartListSignal* signal);
 
   private:

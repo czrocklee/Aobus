@@ -2,14 +2,14 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/DecoderFactory.h>
-#include <ao/audio/IDecoderSession.h>
+#include <ao/audio/Format.h>
 #include <catch2/catch_test_macros.hpp>
 
 namespace ao::audio::test
 {
   TEST_CASE("DecoderFactory - Creates sessions based on extension", "[audio][unit][decoder]")
   {
-    Format format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
+    auto const format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
 
     SECTION("Creates FLAC session for .flac")
     {

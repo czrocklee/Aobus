@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstdint>
 
 namespace ao::gtk
@@ -36,10 +35,10 @@ namespace ao::gtk
      * @param frameTime The current time from the GDK frame clock (in microseconds).
      * @return The interpolated position in milliseconds, capped at duration.
      */
-    [[nodiscard]] std::uint32_t interpolate(std::int64_t frameTime) noexcept;
+    std::uint32_t interpolate(std::int64_t frameTime) noexcept;
 
-    [[nodiscard]] bool isPlaying() const noexcept { return _isPlaying; }
-    [[nodiscard]] std::uint32_t lastDurationMs() const noexcept { return _lastDurationMs; }
+    bool isPlaying() const noexcept { return _isPlaying; }
+    std::uint32_t lastDurationMs() const noexcept { return _lastDurationMs; }
 
   private:
     std::uint32_t _lastPositionMs = 0;

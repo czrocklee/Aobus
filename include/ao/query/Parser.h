@@ -7,5 +7,5 @@
 
 namespace ao::query
 {
-  Expression parse(std::string_view const expr);
+  Expression parse(std::string_view expr);
 }

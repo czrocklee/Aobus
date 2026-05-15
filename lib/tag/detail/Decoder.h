@@ -21,7 +21,7 @@ namespace ao::tag
 
   inline std::optional<std::uint16_t> decodeUint16(std::string_view text)
   {
-    std::uint16_t result;
+    std::uint16_t result = 0;
     auto const* data = text.data();
     auto [_, ec] = std::from_chars(data, data + text.size(), result);
     return ec == std::errc() ? std::optional{result} : std::nullopt;

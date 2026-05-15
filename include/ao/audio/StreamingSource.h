@@ -8,11 +8,13 @@
 #include <ao/audio/PcmRingBuffer.h>
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
+#include <span>
 #include <stop_token>
-#include <string>
 #include <thread>
 
 namespace ao::audio
@@ -25,6 +27,11 @@ namespace ao::audio
                     std::function<void(Error const&)> onError,
                     std::uint32_t prerollTargetMs,
                     std::uint32_t decodeHighWatermarkMs);
+    StreamingSource(StreamingSource const&) = delete;
+    StreamingSource& operator=(StreamingSource const&) = delete;
+    StreamingSource(StreamingSource&&) = delete;
+    StreamingSource& operator=(StreamingSource&&) = delete;
+
     ~StreamingSource() override;
 
     Result<> initialize();

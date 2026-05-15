@@ -3,12 +3,26 @@
 
 #include <ao/audio/FlacDecoderSession.h>
 
-#include <FLAC/stream_decoder.h>
-#include <algorithm>
+#include <ao/Error.h>
+#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/PcmConverter.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/MappedFile.h>
+
+#include <FLAC/format.h>
+#include <FLAC/ordinals.h>
+#include <FLAC/stream_decoder.h>
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <expected>
+#include <filesystem>
+#include <memory>
+#include <span>
+#include <vector>
 
 namespace ao::audio
 {

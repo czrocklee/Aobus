@@ -7,6 +7,7 @@
 
 #include <ao/lmdb/Environment.h>
 #include <memory>
+#include <utility>
 
 namespace ao::lmdb
 {
@@ -17,6 +18,11 @@ namespace ao::lmdb
   {
   public:
     ReadTransaction(Environment const& env);
+    ~ReadTransaction() = default;
+
+    ReadTransaction(ReadTransaction const&) = delete;
+    ReadTransaction& operator=(ReadTransaction const&) = delete;
+
     ReadTransaction(ReadTransaction&&) = default;
     ReadTransaction& operator=(ReadTransaction&&) = default;
 
@@ -30,8 +36,13 @@ namespace ao::lmdb
       : _handle{std::move(handle)}
     {
     }
+    
     static auto create(MDB_env* env, MDB_txn* parent, unsigned int flags);
 
+    MDB_txn* handle() const noexcept { return _handle.get(); }
+    MDB_txn* releaseHandle() noexcept { return _handle.release(); }
+
+  private:
     std::unique_ptr<MDB_txn, MdbTxnDeleter> _handle;
     friend class Database;
   };

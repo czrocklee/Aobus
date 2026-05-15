@@ -2,21 +2,39 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackListAdapter.h"
-
+#include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
-
-#include <ao/library/TrackStore.h>
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/utility/ScopedTimer.h>
 #include <ao/utility/VariantVisitor.h>
+#include <runtime/ProjectionTypes.h>
+#include <runtime/TrackSource.h>
 
-#include <boost/algorithm/string.hpp>
-#include <format>
-#include <optional>
-#include <string_view>
-#include <vector>
+#include <boost/algorithm/string/classification.hpp>
+#include <boost/algorithm/string/trim.hpp>
+#include <giomm/liststore.h>
+#include <glibmm/main.h>
+#include <glibmm/refptr.h>
+#include <gsl-lite/gsl-lite.hpp>
+#include <glib.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cstddef>
+#include <cstdint>
+#include <format>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <ranges>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -204,7 +222,7 @@ namespace ao::gtk
     , _provider{provider}
     , _listStore(Gio::ListStore<TrackRowObject>::create())
     , _projectionModel(ProjectionTrackModel::create())
-    , _listModel(_listStore)
+    , _listModel{_listStore}
   {
     _source.attach(this);
   }
@@ -321,9 +339,9 @@ namespace ao::gtk
       return std::nullopt;
     }
 
-    if (auto const idx = _projection->indexOf(trackId))
+    if (auto const optIdx = _projection->indexOf(trackId))
     {
-      return _projection->groupIndexAt(*idx);
+      return _projection->groupIndexAt(*optIdx);
     }
 
     return std::nullopt;

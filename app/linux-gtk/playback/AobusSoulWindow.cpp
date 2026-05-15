@@ -2,18 +2,32 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/AobusSoulWindow.h"
+#include "app/AobusSoul.h"
+#include "playback/AobusSoulBinding.h"
+#include <runtime/AppSession.h>
+#include <runtime/PlaybackService.h>
+
 #include <gdkmm/display.h>
 #include <gdkmm/monitor.h>
+#include <gdkmm/rectangle.h>
 #include <glibmm/main.h>
+#include <glibmm/refptr.h>
+#include <glibmm/variant.h>
 #include <gtkmm/box.h>
 #include <gtkmm/cssprovider.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/object.h>
 #include <gtkmm/shortcut.h>
 #include <gtkmm/shortcutaction.h>
 #include <gtkmm/shortcutcontroller.h>
 #include <gtkmm/shortcuttrigger.h>
 #include <gtkmm/stylecontext.h>
-#include <runtime/AppSession.h>
+#include <gtkmm/window.h>
+#include <gtk/gtk.h>
+
+#include <cmath>
+#include <memory>
 
 namespace ao::gtk
 {

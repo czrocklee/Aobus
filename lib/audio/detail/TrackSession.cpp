@@ -2,12 +2,25 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "TrackSession.h"
+
+#include <ao/audio/Backend.h>
 #include <ao/audio/DecoderFactory.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/FormatNegotiator.h>
+#include <ao/audio/IDecoderSession.h>
+#include <ao/audio/ISource.h>
 #include <ao/audio/MemorySource.h>
 #include <ao/audio/StreamingSource.h>
+#include <ao/audio/Types.h>
 #include <ao/utility/Log.h>
+
+#include <filesystem>
 #include <format>
+#include <memory>
+#include <utility>
+
+#include <cstdint>
+#include <string>
 
 namespace ao::audio::detail
 {
@@ -72,8 +85,8 @@ namespace ao::audio::detail
       return {.error = {.message = "Decoder did not return a valid output format"}};
     }
 
-    Format backendFormat;
-    std::string errorMsg;
+    auto backendFormat = Format{};
+    auto errorMsg = std::string();
 
     if (!negotiateFormat(
           descriptor.filePath, info, decoder, backendFormat, device, backendId, profileId, decoderFactory, errorMsg))

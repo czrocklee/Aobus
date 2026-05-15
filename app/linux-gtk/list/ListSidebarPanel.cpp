@@ -3,15 +3,43 @@
 
 #include "list/ListSidebarPanel.h"
 #include "layout/LayoutConstants.h"
-#include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
+#include <ao/Type.h>
+#include <ao/lmdb/Transaction.h>
 #include <runtime/AppSession.h>
 
+#include <gdk/gdk.h>
+#include <gdkmm/graphene_point.h>
+#include <gdkmm/rectangle.h>
+#include <giomm/menu.h>
+#include <glib.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/box.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/gestureclick.h>
+#include <gtkmm/label.h>
+#include <gtkmm/listitem.h>
+#include <gtkmm/object.h>
+#include <gtkmm/signallistitemfactory.h>
+#include <gtkmm/treeexpander.h>
+#include <gtkmm/treelistrow.h>
+#include <pangomm/layout.h>
+#include <sigc++/functors/mem_fun.h>
+
+#include <cstdint>
 #include <format>
+#include <limits>
+#include <memory>
+#include <utility>
 
 namespace ao::gtk
 {
+  namespace
+  {
+    constexpr guint kInvalidListPosition = std::numeric_limits<guint>::max();
+  }
+
   ListSidebarPanel::ListSidebarPanel(Callbacks callbacks)
     : _callbacks{std::move(callbacks)}
   {
@@ -97,7 +125,7 @@ namespace ao::gtk
 
     auto const selectedPosition = _listSelectionModel->get_selected();
 
-    if (selectedPosition == GTK_INVALID_LIST_POSITION)
+    if (selectedPosition == kInvalidListPosition)
     {
       return ListId{0};
     }
@@ -155,20 +183,20 @@ namespace ao::gtk
     clickController->signal_pressed().connect(
       [this, listItem, rowBox](int /*nPress*/, double xPos, double yPos)
       {
-        if (auto const position = listItem->get_position(); position != GTK_INVALID_LIST_POSITION)
+        if (auto const position = listItem->get_position(); position != kInvalidListPosition)
         {
           _listSelectionModel->set_selected(position);
         }
 
-        auto point =
+        auto optPoint =
           rowBox->compute_point(_listView, Gdk::Graphene::Point(static_cast<float>(xPos), static_cast<float>(yPos)));
 
-        if (!point)
+        if (!optPoint)
         {
           return;
         }
 
-        auto rect = Gdk::Rectangle(static_cast<int>(point->get_x()), static_cast<int>(point->get_y()), 1, 1);
+        auto rect = Gdk::Rectangle{static_cast<int>(optPoint->get_x()), static_cast<int>(optPoint->get_y()), 1, 1};
 
         if (_callbacks.onContextMenuRequested)
         {

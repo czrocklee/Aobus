@@ -2,15 +2,29 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "detail/TrackSession.h"
-#include <ao/audio/DecoderFactory.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/FormatNegotiator.h>
+
+#include <ao/Error.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/IBackend.h>
-#include <ao/audio/IDecoderSession.h>
+#include <ao/audio/IRenderTarget.h>
 #include <ao/audio/ISource.h>
+#include <ao/audio/Property.h>
+#include <ao/audio/Types.h>
+#include <ao/audio/detail/RouteTracker.h>
 #include <ao/utility/Log.h>
 
-#include <format>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <string_view>
+#include <utility>
 
 namespace ao::audio
 {
@@ -44,8 +58,8 @@ namespace ao::audio
     std::unique_ptr<IBackend> backend;
 
     // ── Construction ──────────────────────────────────────────────
-    Impl(std::unique_ptr<IBackend> backend, Device const& device, DecoderFactoryFn decoderFactory)
-      : currentDevice{device}, decoderFactory{std::move(decoderFactory)}, backend{std::move(backend)}
+    Impl(std::unique_ptr<IBackend> backend, Device device, DecoderFactoryFn decoderFactory)
+      : currentDevice{std::move(device)}, decoderFactory{std::move(decoderFactory)}, backend{std::move(backend)}
     {
       syncBackendIdentity();
     }
@@ -60,12 +74,12 @@ namespace ao::audio
 
     void syncBackendStatus()
     {
-      if (auto const vol = backend->get(props::Volume))
+      if (auto const vol = backend->get(props::kVolume))
       {
         status.volume = *vol;
       }
 
-      if (auto const mute = backend->get(props::Muted))
+      if (auto const mute = backend->get(props::kMuted))
       {
         status.muted = *mute;
       }
@@ -150,7 +164,7 @@ namespace ao::audio
       backend->stop();
       backend->close();
       source.store({}, std::memory_order_release);
-      auto const lock = std::lock_guard{stateMutex};
+      auto const lock = std::scoped_lock{stateMutex};
       resetEngine();
       status.transport = Transport::Error;
       status.statusText = std::string{message};
@@ -159,7 +173,7 @@ namespace ao::audio
     void handleSourceError(Error const& error)
     {
       {
-        auto const lock = std::lock_guard{stateMutex};
+        auto const lock = std::scoped_lock{stateMutex};
 
         if (status.transport == Transport::Idle)
         {
@@ -180,7 +194,7 @@ namespace ao::audio
       auto callback = Engine::OnRouteChanged{};
       auto snapshot = Engine::RouteStatus{};
       {
-        auto const lock = std::lock_guard{stateMutex};
+        auto const lock = std::scoped_lock{stateMutex};
         callback = onRouteChanged;
         snapshot = Engine::RouteStatus{.state = routeTracker.state(), .optAnchor = routeTracker.anchor()};
       }
@@ -200,7 +214,7 @@ namespace ao::audio
     void handleFormatChanged(Format const& format)
     {
       {
-        auto const lock = std::lock_guard{stateMutex};
+        auto const lock = std::scoped_lock{stateMutex};
         routeTracker.setEngineFormat(format);
         status.routeState.engineOutputFormat = format;
       }
@@ -211,18 +225,18 @@ namespace ao::audio
     void handlePropertyChanged(PropertyId id)
     {
       {
-        auto const lock = std::lock_guard{stateMutex};
+        auto const lock = std::scoped_lock{stateMutex};
 
         if (id == PropertyId::Volume)
         {
-          if (auto const vol = backend->get(props::Volume))
+          if (auto const vol = backend->get(props::kVolume))
           {
             status.volume = *vol;
           }
         }
         else if (id == PropertyId::Muted)
         {
-          if (auto const mute = backend->get(props::Muted))
+          if (auto const mute = backend->get(props::kMuted))
           {
             status.muted = *mute;
           }
@@ -242,7 +256,7 @@ namespace ao::audio
       auto onRouteChangedCallback = Engine::OnRouteChanged{};
 
       {
-        auto const lock = std::lock_guard{stateMutex};
+        auto const lock = std::scoped_lock{stateMutex};
         onRouteChangedCallback = onRouteChanged;
         resetEngine();
         onTrackEndedCallback = onTrackEnded;
@@ -311,7 +325,7 @@ namespace ao::audio
 
     auto const state = [this]
     {
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       return State{
         .optTrack = _impl->optCurrentTrack,
         .positionMs =
@@ -329,7 +343,7 @@ namespace ao::audio
     _impl->backend = std::move(backend);
     _impl->currentDevice = device;
     {
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->status = {};
       _impl->syncBackendIdentity();
       _impl->syncBackendStatus();
@@ -355,13 +369,13 @@ namespace ao::audio
 
   void Engine::setOnTrackEnded(std::function<void()> callback)
   {
-    std::lock_guard lock(_impl->stateMutex);
+    auto const lock = std::scoped_lock{_impl->stateMutex};
     _impl->onTrackEnded = std::move(callback);
   }
 
   void Engine::setOnRouteChanged(OnRouteChanged callback)
   {
-    std::lock_guard lock(_impl->stateMutex);
+    auto const lock = std::scoped_lock{_impl->stateMutex};
     _impl->onRouteChanged = std::move(callback);
   }
 
@@ -372,21 +386,21 @@ namespace ao::audio
 
   Transport Engine::transport() const
   {
-    auto const lock = std::lock_guard{_impl->stateMutex};
+    auto const lock = std::scoped_lock{_impl->stateMutex};
     return _impl->status.transport;
   }
 
   BackendId Engine::backendId() const
   {
-    auto const lock = std::lock_guard{_impl->stateMutex};
+    auto const lock = std::scoped_lock{_impl->stateMutex};
     return _impl->status.backendId;
   }
 
   Engine::Status Engine::status() const
   {
     auto const source = _impl->source.load(std::memory_order_acquire);
-    auto const lock = std::lock_guard{_impl->stateMutex};
-    auto snap = _impl->status;
+    auto const lock = std::scoped_lock{_impl->stateMutex};
+    auto snap = Engine::Status{_impl->status};
     auto const totalFrames = _impl->accumulatedFrames.load(std::memory_order_relaxed);
     auto const sampleRate = _impl->engineSampleRate.load(std::memory_order_relaxed);
     snap.positionMs = sampleRate > 0 ? static_cast<std::uint32_t>((totalFrames * 1000) / sampleRate) : 0;
@@ -409,7 +423,7 @@ namespace ao::audio
     auto backendFormat = Format{};
 
     {
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->underrunCount = 0;
       _impl->routeTracker.clear();
       _impl->backendStarted = false;
@@ -433,7 +447,7 @@ namespace ao::audio
     if (auto const openResult = _impl->backend->open(backendFormat, _impl.get()); !openResult)
     {
       _impl->source.store({}, std::memory_order_release);
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->optCurrentTrack.reset();
       _impl->status.transport = Transport::Error;
       _impl->status.statusText = openResult.error().message;
@@ -441,7 +455,7 @@ namespace ao::audio
     }
 
     {
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->syncBackendStatus();
     }
 
@@ -452,13 +466,13 @@ namespace ao::audio
       _impl->backend->stop();
       _impl->backend->close();
       _impl->source.store({}, std::memory_order_release);
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->resetEngine();
       return;
     }
 
     {
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->status.transport = Transport::Playing;
       _impl->backendStarted = true;
     }
@@ -470,7 +484,7 @@ namespace ao::audio
   {
     bool shouldPause = false;
     {
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
 
       if (_impl->status.transport == Transport::Playing || _impl->status.transport == Transport::Buffering)
       {
@@ -525,7 +539,7 @@ namespace ao::audio
     _impl->backend->stop();
     _impl->backend->close();
     _impl->source.store({}, std::memory_order_release);
-    auto const lock = std::lock_guard{_impl->stateMutex};
+    auto const lock = std::scoped_lock{_impl->stateMutex};
     _impl->resetEngine();
   }
 
@@ -541,7 +555,7 @@ namespace ao::audio
 
     bool wasPaused = false;
     {
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       wasPaused = (_impl->status.transport == Transport::Paused);
       _impl->status.transport = Transport::Buffering;
       _impl->status.positionMs = positionMs;
@@ -558,7 +572,7 @@ namespace ao::audio
 
     if (auto const seekResult = source->seek(positionMs); !seekResult)
     {
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->status.transport = Transport::Error;
       _impl->status.statusText = seekResult.error().message;
       return;
@@ -571,20 +585,20 @@ namespace ao::audio
       _impl->backend->stop();
       _impl->backend->close();
       _impl->source.store({}, std::memory_order_release);
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->resetEngine();
       return;
     }
 
     if (wasPaused)
     {
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->status.transport = Transport::Paused;
       return;
     }
 
     {
-      auto const lock = std::lock_guard{_impl->stateMutex};
+      auto const lock = std::scoped_lock{_impl->stateMutex};
       _impl->status.transport = Transport::Playing;
       _impl->backendStarted = true;
     }
@@ -594,41 +608,41 @@ namespace ao::audio
 
   void Engine::setVolume(float volume)
   {
-    if (auto const result = _impl->backend->set(props::Volume, volume); !result)
+    if (auto const result = _impl->backend->set(props::kVolume, volume); !result)
     {
       AUDIO_LOG_ERROR("Failed to set volume: {}", result.error().message);
     }
 
-    auto const lock = std::lock_guard{_impl->stateMutex};
+    auto const lock = std::scoped_lock{_impl->stateMutex};
     _impl->status.volume = volume;
   }
 
   float Engine::getVolume() const
   {
-    auto const lock = std::lock_guard{_impl->stateMutex};
+    auto const lock = std::scoped_lock{_impl->stateMutex};
     return _impl->status.volume;
   }
 
   void Engine::setMuted(bool muted)
   {
-    if (auto const result = _impl->backend->set(props::Muted, muted); !result)
+    if (auto const result = _impl->backend->set(props::kMuted, muted); !result)
     {
       AUDIO_LOG_ERROR("Failed to set muted state: {}", result.error().message);
     }
 
-    auto const lock = std::lock_guard{_impl->stateMutex};
+    auto const lock = std::scoped_lock{_impl->stateMutex};
     _impl->status.muted = muted;
   }
 
   bool Engine::isMuted() const
   {
-    auto const lock = std::lock_guard{_impl->stateMutex};
+    auto const lock = std::scoped_lock{_impl->stateMutex};
     return _impl->status.muted;
   }
 
   bool Engine::isVolumeAvailable() const
   {
-    auto const lock = std::lock_guard{_impl->stateMutex};
+    auto const lock = std::scoped_lock{_impl->stateMutex};
     return _impl->status.volumeAvailable;
   }
 } // namespace ao::audio

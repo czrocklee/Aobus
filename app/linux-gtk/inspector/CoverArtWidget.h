@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/Type.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/ProjectionTypes.h>
 
@@ -28,6 +27,11 @@ namespace ao::gtk
   public:
     CoverArtWidget(library::MusicLibrary& library, CoverArtCache& cache);
     ~CoverArtWidget() override;
+
+    CoverArtWidget(CoverArtWidget const&) = delete;
+    CoverArtWidget& operator=(CoverArtWidget const&) = delete;
+    CoverArtWidget(CoverArtWidget&&) = delete;
+    CoverArtWidget& operator=(CoverArtWidget&&) = delete;
 
     void setCoverFromBytes(std::span<std::byte const> bytes);
     void setCoverPixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbuf);

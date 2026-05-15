@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/Type.h>
 #include <runtime/ProjectionTypes.h>
 #include <runtime/StateTypes.h>
 #include <runtime/TrackPresentationPreset.h>

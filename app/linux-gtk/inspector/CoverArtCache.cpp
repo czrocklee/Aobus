@@ -3,6 +3,12 @@
 
 #include "inspector/CoverArtCache.h"
 
+#include <gdkmm/pixbuf.h>
+#include <glibmm/refptr.h>
+
+#include <cstddef>
+#include <cstdint>
+
 namespace ao::gtk
 {
   CoverArtCache::CoverArtCache(std::size_t maxSize)
@@ -50,7 +56,7 @@ namespace ao::gtk
     // Evict least recently used if over capacity
     if (_entries.size() > _maxSize)
     {
-      auto const last = _entries.back();
+      auto const last = CacheEntry{_entries.back()};
       _cacheMap.erase(last.resourceId);
       _entries.pop_back();
     }

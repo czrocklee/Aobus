@@ -7,14 +7,44 @@
 #endif
 
 #include <ao/Exception.h>
+#include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
-#include <ao/query/Serializer.h>
 
 #include <lexy/action/parse.hpp>
-#include <lexy/callback.hpp>
-#include <lexy/dsl.hpp>
+#include <lexy/encoding.hpp>
+#include <lexy/grammar.hpp>
+#include <lexy/callback/adapter.hpp>
+#include <lexy/callback/composition.hpp>
+#include <lexy/callback/container.hpp>
+#include <lexy/callback/forward.hpp>
+#include <lexy/callback/noop.hpp>
+#include <lexy/callback/object.hpp>
+#include <lexy/dsl/ascii.hpp>
+#include <lexy/dsl/brackets.hpp>
+#include <lexy/dsl/branch.hpp>
+#include <lexy/dsl/capture.hpp>
+#include <lexy/dsl/choice.hpp>
+#include <lexy/dsl/digit.hpp>
+#include <lexy/dsl/eof.hpp>
+#include <lexy/dsl/error.hpp>
+#include <lexy/dsl/expression.hpp>
+#include <lexy/dsl/identifier.hpp>
+#include <lexy/dsl/if.hpp>
+#include <lexy/dsl/integer.hpp>
+#include <lexy/dsl/list.hpp>
+#include <lexy/dsl/literal.hpp>
+#include <lexy/dsl/operator.hpp>
+#include <lexy/dsl/option.hpp>
+#include <lexy/dsl/peek.hpp>
+#include <lexy/dsl/production.hpp>
+#include <lexy/dsl/sequence.hpp>
+#include <lexy/dsl/sign.hpp>
+#include <lexy/dsl/symbol.hpp>
+#include <lexy/dsl/token.hpp>
+#include <lexy/dsl/until.hpp>
 #include <lexy/input/string_input.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -25,6 +55,8 @@
 
 namespace
 {
+  // LEXY grammar: rule/value/op/operand/operation names follow framework conventions.
+  // NOLINTBEGIN(readability-identifier-naming)
   namespace dsl = lexy::dsl;
   using namespace ao::query;
 
@@ -93,7 +125,7 @@ namespace
     static constexpr auto value = lexy::forward<std::int64_t>;
   };
 
-  struct IntegerConstant
+  struct IntegerConstant final
   {
     static constexpr auto rule = dsl::p<NegativeInteger> | dsl::p<PositiveInteger>;
     static constexpr auto value = lexy::forward<std::int64_t>;
@@ -109,7 +141,7 @@ namespace
       [](auto lexeme) { return UnitConstantExpression{lexeme | std::ranges::to<std::string>()}; });
   };
 
-  struct Constant
+  struct Constant final
   {
     static constexpr auto rule =
       dsl::p<BooleanConstant> | dsl::p<UnitConstant> | dsl::p<IntegerConstant> | dsl::p<StringConstant>;
@@ -141,8 +173,8 @@ namespace
                                         {
                                           auto bin = std::make_unique<BinaryExpression>();
                                           bin->operand = std::move(*it);
-                                          bin->optOperation =
-                                            BinaryExpression::Operation{Operator::Add, std::move(result)};
+                                          bin->optOperation = BinaryExpression::Operation{
+                                            .op = Operator::Add, .operand = std::move(result)};
                                           result = Expression{std::move(bin)};
                                         }
 
@@ -191,30 +223,31 @@ namespace
 
     using operation = MathOr;
 
-    static constexpr auto value = lexy::callback<Expression>([](Expression lhs) { return lhs; },
-                                                             [](Operator op, Expression expr)
-                                                             {
-                                                               auto un = std::make_unique<UnaryExpression>();
-                                                               un->op = op;
-                                                               un->operand = std::move(expr);
-                                                               return Expression{std::move(un)};
-                                                             },
-                                                             [](Expression lhs, Operator op, Expression rhs)
-                                                             {
-                                                               auto bin = std::make_unique<BinaryExpression>();
-                                                               bin->operand = std::move(lhs);
-                                                               bin->optOperation =
-                                                                 BinaryExpression::Operation{op, std::move(rhs)};
-                                                               return Expression{std::move(bin)};
-                                                             });
+    static constexpr auto value =
+      lexy::callback<Expression>([](Expression lhs) { return lhs; },
+                                 [](Operator op, Expression expr)
+                                 {
+                                   auto un = std::make_unique<UnaryExpression>();
+                                   un->op = op;
+                                   un->operand = std::move(expr);
+                                   return Expression{std::move(un)};
+                                 },
+                                 [](Expression lhs, Operator op, Expression rhs)
+                                 {
+                                   auto bin = std::make_unique<BinaryExpression>();
+                                   bin->operand = std::move(lhs);
+                                   bin->optOperation = BinaryExpression::Operation{.op = op, .operand = std::move(rhs)};
+                                   return Expression{std::move(bin)};
+                                 });
   };
 
-  struct Stmt
+  struct Stmt final
   {
     static constexpr auto whitespace = dsl::ascii::space;
     static constexpr auto rule = dsl::p<Expr> + dsl::eof;
     static constexpr auto value = lexy::forward<Expression>;
   };
+  // NOLINTEND(readability-identifier-naming)
 }
 
 namespace ao::query
@@ -232,7 +265,7 @@ namespace ao::query
       return root;
     }
 
-    AO_THROW_FORMAT(Exception, "parsing {} error", expr);
+    ao::throwException<Exception>("parsing {} error", expr);
   }
 }
 

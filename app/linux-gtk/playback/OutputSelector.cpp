@@ -2,17 +2,40 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/OutputSelector.h"
-
+#include "playback/AobusSoulBinding.h"
+#include "playback/AobusSoulWindow.h"
 #include "playback/OutputListItems.h"
-#include "runtime/AppSession.h"
+#include <ao/audio/Backend.h>
+#include <runtime/PlaybackService.h>
+#include <runtime/StateTypes.h>
+
+#include <gdk/gdk.h>
 #include <gdkmm/display.h>
+#include <giomm/liststore.h>
+#include <glibmm/object.h>
+#include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
+#include <gtk/gtkstyleprovider.h>
 #include <gtkmm/box.h>
 #include <gtkmm/cssprovider.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/gesturelongpress.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
+#include <gtkmm/listbox.h>
+#include <gtkmm/listboxrow.h>
+#include <gtkmm/object.h>
+#include <gtkmm/popover.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/stylecontext.h>
+#include <gtkmm/widget.h>
+#include <gtkmm/window.h>
+#include <pangomm/layout.h>
+
+#include <format>
+#include <memory>
+#include <string>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -71,6 +94,7 @@ namespace ao::gtk
         {
           Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
         }
+
         initialized = true;
       }
     }
@@ -147,13 +171,13 @@ namespace ao::gtk
       {
         auto const index = row->get_index();
 
-        if (index >= 0 && static_cast<std::size_t>(index) < _store->get_n_items())
+        if (index >= 0 && std::cmp_less(index, _store->get_n_items()))
         {
           auto const item = _store->get_item(index);
 
           if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
           {
-            _playback.setOutput(deviceItem->backendId, deviceItem->id, deviceItem->profileId);
+            _playback.setOutput(deviceItem->backendId(), deviceItem->id(), deviceItem->profileId());
             _popover.popdown();
           }
         }
@@ -169,7 +193,7 @@ namespace ao::gtk
   {
     if (auto const backendItem = std::dynamic_pointer_cast<BackendItem>(item))
     {
-      auto* const header = Gtk::make_managed<Gtk::Label>(backendItem->name);
+      auto* const header = Gtk::make_managed<Gtk::Label>(backendItem->name());
       header->set_halign(Gtk::Align::FILL);
       header->set_valign(Gtk::Align::CENTER);
       header->set_xalign(0.0);
@@ -191,14 +215,14 @@ namespace ao::gtk
       textBox->set_hexpand(true);
       textBox->set_valign(Gtk::Align::CENTER);
 
-      auto* const nameLabel = Gtk::make_managed<Gtk::Label>(deviceItem->name);
+      auto* const nameLabel = Gtk::make_managed<Gtk::Label>(deviceItem->name());
       nameLabel->set_halign(Gtk::Align::START);
       nameLabel->set_ellipsize(Pango::EllipsizeMode::END);
       textBox->append(*nameLabel);
 
-      if (!deviceItem->description.empty())
+      if (!deviceItem->description().empty())
       {
-        auto* const descLabel = Gtk::make_managed<Gtk::Label>(deviceItem->description);
+        auto* const descLabel = Gtk::make_managed<Gtk::Label>(deviceItem->description());
         descLabel->set_halign(Gtk::Align::START);
         descLabel->add_css_class("menu-description");
         descLabel->set_ellipsize(Pango::EllipsizeMode::END);
@@ -207,7 +231,7 @@ namespace ao::gtk
 
       rowBox->append(*textBox);
 
-      if (deviceItem->active)
+      if (deviceItem->active())
       {
         auto* const checkIcon = Gtk::make_managed<Gtk::Image>();
         checkIcon->set_from_icon_name("object-select-symbolic");
@@ -250,7 +274,7 @@ namespace ao::gtk
 
           auto const item = DeviceItem::create(backend.id, audioDevice, profile, displayName);
 
-          item->active = (backend.id == state.selectedOutput.backendId && profile == state.selectedOutput.profileId &&
+          item->setActive(backend.id == state.selectedOutput.backendId && profile == state.selectedOutput.profileId &&
                           device.id == state.selectedOutput.deviceId);
           _store->append(item);
         }

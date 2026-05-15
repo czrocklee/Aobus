@@ -8,8 +8,10 @@
 #include <ao/library/ListView.h>
 #include <ao/lmdb/Database.h>
 
+#include <cstddef>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace ao::library
@@ -58,7 +60,7 @@ namespace ao::library
   class ListStore::Reader::Iterator
   {
   public:
-    using value_type = std::pair<ListId, ListView>;
+    using value_type = std::pair<ListId, ListView>; // NOLINT
 
     Iterator() = default;
     Iterator(Iterator const&) = default;

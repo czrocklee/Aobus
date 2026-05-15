@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/audio/Backend.h>
 #include <ao/audio/Format.h>
 
 #include <cstdint>
@@ -18,7 +17,7 @@ namespace ao::audio
   // Common audio sample type for internal PCM representation
   using Sample = float;
 
-  enum class Transport
+  enum class Transport : std::uint8_t
   {
     Idle,
     Opening,

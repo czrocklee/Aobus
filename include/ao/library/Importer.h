@@ -6,6 +6,7 @@
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 
+#include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <string>

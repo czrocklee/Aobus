@@ -43,6 +43,12 @@ namespace ao::gtk
     ImportExportCoordinator(Gtk::Window& parent, rt::AppSession& session, ImportExportCallbacks callbacks);
     ~ImportExportCoordinator();
 
+    // Not copyable or movable due to GTK and session references/subscriptions
+    ImportExportCoordinator(ImportExportCoordinator const&) = delete;
+    ImportExportCoordinator& operator=(ImportExportCoordinator const&) = delete;
+    ImportExportCoordinator(ImportExportCoordinator&&) = delete;
+    ImportExportCoordinator& operator=(ImportExportCoordinator&&) = delete;
+
     ImportExportCallbacks& callbacks() { return _callbacks; }
 
     void openLibrary();

@@ -7,6 +7,7 @@
 #include <ao/Exception.h>
 #include <boost/endian/conversion.hpp>
 #include <cstring>
+#include <functional>
 #include <gsl-lite/gsl-lite.hpp>
 #include <span>
 #include <string_view>
@@ -21,8 +22,8 @@ namespace ao::media::flac
     {
       if (ptr + sizeof(LengthType) > end)
       {
-        AO_THROW_FORMAT(
-          Exception, "invalid flac block, expect length field size {} >= {}", end - ptr, sizeof(LengthType));
+        ao::throwException<Exception>(
+          "invalid flac block, expect length field size {} >= {}", end - ptr, sizeof(LengthType));
       }
 
       LengthType length;
@@ -39,7 +40,7 @@ namespace ao::media::flac
 
       if (ptr + length > end)
       {
-        AO_THROW_FORMAT(Exception, "invalid flac block, expect available field length {} >= {}", end - ptr, length);
+        ao::throwException<Exception>("invalid flac block, expect available field length {} >= {}", end - ptr, length);
       }
 
       char const* start = ptr;
@@ -52,6 +53,13 @@ namespace ao::media::flac
   {
   public:
     virtual ~MetadataBlock() = default;
+
+  protected:
+    MetadataBlock() = default;
+    MetadataBlock(MetadataBlock const&) = default;
+    MetadataBlock& operator=(MetadataBlock const&) = default;
+    MetadataBlock(MetadataBlock&&) = default;
+    MetadataBlock& operator=(MetadataBlock&&) = default;
 
     virtual MetadataBlockType type() const = 0;
 
@@ -101,9 +109,8 @@ namespace ao::media::flac
     using MetadataBlockView::MetadataBlockView;
 
     template<typename Visitor>
-    void visitComments(Visitor&& visitor) const
+    void visitComments(Visitor&& visitor) const // NOLINT(cppcoreguidelines-missing-std-forward)
     {
-      auto&& handleComment = visitor;
       char const* ptr = static_cast<char const*>(data()) + sizeof(MetadataBlockLayout);
       char const* end = ptr + size() - sizeof(MetadataBlockLayout);
       detail::parseString<std::uint32_t, boost::endian::order::little>(ptr, end); // vendor string
@@ -112,13 +119,13 @@ namespace ao::media::flac
 
       for (std::uint32_t i = 0; i < count; ++i)
       {
-        handleComment(detail::parseString<std::uint32_t, boost::endian::order::little>(ptr, end));
+        std::invoke(visitor, detail::parseString<std::uint32_t, boost::endian::order::little>(ptr, end));
       }
 
       if (auto sizeLeft = static_cast<std::size_t>(end - ptr); sizeLeft > 0)
       {
-        AO_THROW_FORMAT(
-          Exception, "invalid flac vorbis_comment block, unexpected content \"{}\"", std::string_view{ptr, sizeLeft});
+        ao::throwException<Exception>(
+          "invalid flac vorbis_comment block, unexpected content \"{}\"", std::string_view{ptr, sizeLeft});
       }
     }
 
@@ -145,13 +152,32 @@ namespace ao::media::flac
       return *reinterpret_cast<StreamInfoLayout const*>(ptr);
     }
 
-    std::uint32_t sampleRate() const { return (layout().packedFields.value() >> 44) & 0xFFFFF; }
+  private:
+    static constexpr std::uint64_t kSampleRateShift = 44;
+    static constexpr std::uint64_t kSampleRateMask = 0xFFFFF;
+    static constexpr std::uint64_t kChannelsShift = 41;
+    static constexpr std::uint64_t kChannelsMask = 0x07;
+    static constexpr std::uint64_t kBitDepthShift = 36;
+    static constexpr std::uint64_t kBitDepthMask = 0x1F;
+    static constexpr std::uint64_t kTotalSamplesMask = 0xFFFFFFFFF;
 
-    std::uint8_t channels() const { return ((layout().packedFields.value() >> 41) & 0x07) + 1; }
+  public:
+    std::uint32_t sampleRate() const
+    {
+      return static_cast<std::uint32_t>((layout().packedFields.value() >> kSampleRateShift) & kSampleRateMask);
+    }
 
-    std::uint8_t bitDepth() const { return ((layout().packedFields.value() >> 36) & 0x1F) + 1; }
+    std::uint8_t channels() const
+    {
+      return static_cast<std::uint8_t>(((layout().packedFields.value() >> kChannelsShift) & kChannelsMask) + 1);
+    }
 
-    std::uint64_t totalSamples() const { return layout().packedFields.value() & 0xFFFFFFFFF; }
+    std::uint8_t bitDepth() const
+    {
+      return static_cast<std::uint8_t>(((layout().packedFields.value() >> kBitDepthShift) & kBitDepthMask) + 1);
+    }
+
+    std::uint64_t totalSamples() const { return layout().packedFields.value() & kTotalSamplesMask; }
   };
 
   class MetadataBlockViewIterator
@@ -164,7 +190,7 @@ namespace ao::media::flac
     using reference = MetadataBlockView const&;
     using iterator_category = std::forward_iterator_tag;
 
-    static constexpr std::size_t StreamInfoBlockSize = 38;
+    static constexpr std::size_t kStreamInfoBlockSize = 38;
 
     MetadataBlockViewIterator()
       : _view{nullptr}, _sizeLeft{0}

@@ -1,23 +1,29 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
 
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
+#include <lmdb.h>
 #include <test/unit/library/TestUtils.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <format>
 #include <ranges>
 #include <span>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 namespace ao::library::test
@@ -116,7 +122,6 @@ namespace ao::library::test
   } // namespace
 
   // === Metadata Tests ===
-
   TEST_CASE("TrackView - Hot Title")
   {
     auto const data = createTrackWithStrings("Test Title");
@@ -196,7 +201,6 @@ namespace ao::library::test
   }
 
   // === Property Tests ===
-
   TEST_CASE("TrackView - Hot Codec and BitDepth")
   {
     auto h = TrackHotHeader{};
@@ -261,7 +265,6 @@ namespace ao::library::test
   }
 
   // === Tag Tests ===
-
   TEST_CASE("TrackView - Bloom Filter")
   {
     auto h = TrackHotHeader{};
@@ -303,13 +306,13 @@ namespace ao::library::test
     h.rating = 3;
     h.tagLen = 8; // 2 tags * 4 bytes
 
-    std::string title = "Test Title";
+    auto const title = std::string{"Test Title"};
     h.titleLen = static_cast<std::uint16_t>(title.size());
 
     auto data = serializeHeader(h);
 
-    std::uint32_t tag1 = 10;
-    std::uint32_t tag2 = 20;
+    auto const tag1 = std::uint32_t{10};
+    auto const tag2 = std::uint32_t{20};
     data.insert_range(data.end(), utility::bytes::view(tag1));
     data.insert_range(data.end(), utility::bytes::view(tag2));
 
@@ -334,13 +337,13 @@ namespace ao::library::test
     h.rating = 3;
     h.tagLen = 8; // 2 tags * 4 bytes
 
-    std::string title = "Test Title";
+    auto const title = std::string{"Test Title"};
     h.titleLen = static_cast<std::uint16_t>(title.size());
 
     auto data = serializeHeader(h);
 
-    std::uint32_t tag1 = 10;
-    std::uint32_t tag2 = 20;
+    auto const tag1 = std::uint32_t{10};
+    auto const tag2 = std::uint32_t{20};
     data.insert_range(data.end(), utility::bytes::view(tag1));
     data.insert_range(data.end(), utility::bytes::view(tag2));
 
@@ -370,8 +373,8 @@ namespace ao::library::test
     h.tagLen = 8;
 
     auto data = serializeHeader(h);
-    std::uint32_t tag1 = 10;
-    std::uint32_t tag2 = 20;
+    auto const tag1 = std::uint32_t{10};
+    auto const tag2 = std::uint32_t{20};
     data.insert_range(data.end(), utility::bytes::view(tag1));
     data.insert_range(data.end(), utility::bytes::view(tag2));
 
@@ -398,8 +401,8 @@ namespace ao::library::test
     h.tagLen = 8;
 
     auto data = serializeHeader(h);
-    std::uint32_t tag1 = 10;
-    std::uint32_t tag2 = 20;
+    auto const tag1 = std::uint32_t{10};
+    auto const tag2 = std::uint32_t{20};
     data.insert_range(data.end(), utility::bytes::view(tag1));
     data.insert_range(data.end(), utility::bytes::view(tag2));
 
@@ -410,7 +413,6 @@ namespace ao::library::test
   }
 
   // === Custom Tests ===
-
   TEST_CASE("TrackView - Custom Roundtrip Empty")
   {
     auto const data = createColdData();
@@ -484,7 +486,7 @@ namespace ao::library::test
 
     int count = 0;
 
-    for ([[maybe_unused]] auto [key, value] : view.custom())
+    for ([[maybe_unused]] auto const& [key, value] : view.custom())
     {
       ++count;
     }
@@ -501,7 +503,7 @@ namespace ao::library::test
 
     int count = 0;
 
-    for (auto [key, value] : view.custom())
+    for (auto const& [key, value] : view.custom())
     {
       CHECK(key == DictionaryId{1});
       CHECK(value == "value1");
@@ -518,7 +520,7 @@ namespace ao::library::test
     auto const data = createColdData({}, pairs, "");
     auto const view = makeColdView(data);
 
-    for (auto [key, value] : view.custom())
+    for (auto const& [key, value] : view.custom())
     {
       CHECK(key == DictionaryId{1});
       CHECK(value == "Hello, World! 你好");
@@ -538,7 +540,7 @@ namespace ao::library::test
 
     auto result = std::vector<std::pair<DictionaryId, std::string_view>>{};
 
-    for (auto [key, value] : view.custom())
+    for (auto const& [key, value] : view.custom())
     {
       result.emplace_back(key, value);
     }
@@ -561,9 +563,9 @@ namespace ao::library::test
     auto const view = makeColdView(data);
 
     // DictionaryStore assigns: replaygain->1, isrc->2
-    auto const value = view.custom().get(DictionaryId{2});
-    CHECK(value.has_value() == true);
-    CHECK(*value == "USSM19999999");
+    auto const optValue = view.custom().get(DictionaryId{2});
+    CHECK(optValue.has_value() == true);
+    CHECK(*optValue == "USSM19999999");
   }
 
   TEST_CASE("TrackView - Custom Get Not Found")
@@ -574,8 +576,8 @@ namespace ao::library::test
     auto const view = makeColdView(data);
 
     // ID 99 was never assigned
-    auto const value = view.custom().get(DictionaryId{99});
-    CHECK(value.has_value() == false);
+    auto const optValue = view.custom().get(DictionaryId{99});
+    CHECK(optValue.has_value() == false);
   }
 
   TEST_CASE("TrackView - Custom Get Case Sensitive")
@@ -586,9 +588,9 @@ namespace ao::library::test
     auto const view = makeColdView(data);
 
     // "ISRC" is stored at ID 1, looking up by ID 1 returns the value
-    auto const value = view.custom().get(DictionaryId{1});
-    CHECK(value.has_value() == true);
-    CHECK(*value == "USSM19999999");
+    auto const optValue = view.custom().get(DictionaryId{1});
+    CHECK(optValue.has_value() == true);
+    CHECK(*optValue == "USSM19999999");
   }
 
   TEST_CASE("TrackView - Custom Get Binary Search Path (64+ entries)")
@@ -650,7 +652,6 @@ namespace ao::library::test
   }
 
   // === View Validity Tests ===
-
   TEST_CASE("TrackView - Hot Valid")
   {
     auto const data = createMinimalHotData();
@@ -661,7 +662,7 @@ namespace ao::library::test
   TEST_CASE("TrackView - Hot Invalid Null Data")
   {
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
-    TrackView const nullView{nullSpan, std::span<std::byte const>{}};
+    auto const nullView = TrackView{nullSpan, std::span<std::byte const>{}};
     CHECK(nullView.isHotValid() == false);
   }
 
@@ -675,14 +676,14 @@ namespace ao::library::test
   TEST_CASE("TrackView - Cold Valid")
   {
     auto const data = createColdData();
-    TrackView const view{std::span<std::byte const>{}, data};
+    auto const view = TrackView{std::span<std::byte const>{}, data};
     CHECK(view.isColdValid() == true);
   }
 
   TEST_CASE("TrackView - Cold Invalid Null Data")
   {
     auto const nullSpan = std::span<std::byte const>{static_cast<std::byte const*>(nullptr), 100};
-    TrackView const nullView{std::span<std::byte const>{}, nullSpan};
+    auto const nullView = TrackView{std::span<std::byte const>{}, nullSpan};
     CHECK(nullView.isColdValid() == false);
   }
 

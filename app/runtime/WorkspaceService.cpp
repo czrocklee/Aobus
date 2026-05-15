@@ -2,15 +2,29 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "WorkspaceService.h"
+
 #include "ConfigStore.h"
 #include "LibraryMutationService.h"
 #include "PlaybackService.h"
 #include "ViewService.h"
 
-#include <algorithm>
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/utility/Log.h>
-#include <ranges>
+#include <runtime/CorePrimitives.h>
+#include <runtime/StateTypes.h>
+
+#include <algorithm>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include <cstddef>
+#include <cstdint>
 
 namespace ao::rt
 {
@@ -96,11 +110,11 @@ namespace ao::rt
 
   void WorkspaceService::navigateTo(std::variant<ListId, std::string, GlobalViewKind> const& target)
   {
-    ViewId targetViewId{};
+    auto targetViewId = ViewId{};
 
     if (std::holds_alternative<ListId>(target))
     {
-      auto const listId = std::get<ListId>(target);
+      auto const listId = ListId{std::get<ListId>(target)};
 
       for (auto const& record : _impl->views.listViews())
       {
@@ -230,7 +244,7 @@ namespace ao::rt
 
     for (std::size_t i = 0; i < layout.openViews.size(); ++i)
     {
-      auto const viewId = layout.openViews[i];
+      auto const viewId = ViewId{layout.openViews[i]};
 
       if (viewId == layout.activeViewId)
       {

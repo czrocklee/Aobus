@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/audio/Format.h>
-#include <ao/audio/Types.h>
 #include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -15,12 +14,14 @@
 
 extern "C"
 {
-  struct spa_dict;
-  struct spa_pod;
+#include <spa/pod/pod.h>
+#include <spa/utils/dict.h>
 }
 
 namespace ao::audio::backend::detail
 {
+  static constexpr std::uint32_t kPwIdAny = 0xFFFFFFFFU;
+
   struct NodeRecord final
   {
     std::uint32_t version = 0;
@@ -35,8 +36,8 @@ namespace ao::audio::backend::detail
 
   struct LinkRecord final
   {
-    std::uint32_t outputNodeId = 0xffffffffu; // PW_ID_ANY
-    std::uint32_t inputNodeId = 0xffffffffu;
+    std::uint32_t outputNodeId = kPwIdAny; // PW_ID_ANY
+    std::uint32_t inputNodeId = kPwIdAny;
     int state = 0; // pw_link_state
   };
 

@@ -6,7 +6,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
-#include <vector>
+#include <cstddef>
+#include <cstdint>
+#include <span>
 
 namespace ao::audio::test
 {
@@ -23,7 +25,7 @@ namespace ao::audio::test
       CHECK(destination[1] == -0x56780000);
       CHECK(destination[2] == 0x00000000);
       CHECK(destination[3] == 0x7FFF0000);
-      CHECK(destination[4] == static_cast<std::int32_t>(-0x80000000));
+      CHECK(destination[4] == static_cast<std::int32_t>(-0x80000000)); // NOLINT(modernize-use-integer-sign-comparison)
     }
 
     SECTION("24-bit to 32-bit padding")
@@ -133,7 +135,7 @@ namespace ao::audio::test
       auto destination = std::array<std::int32_t, 3>{};
       PcmConverter::unpackS24(source, destination, 0);
 
-      CHECK(destination[0] == static_cast<std::int32_t>(0xFF800000));
+      CHECK(destination[0] == static_cast<std::int32_t>(0xFF800000)); // NOLINT(modernize-use-integer-sign-comparison)
       CHECK(destination[1] == 0x7FFFFF);
       CHECK(destination[2] == -1);
     }

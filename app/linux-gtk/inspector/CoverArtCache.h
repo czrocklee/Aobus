@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/Type.h>
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
 
@@ -20,8 +19,16 @@ namespace ao::gtk
   class CoverArtCache final
   {
   public:
-    explicit CoverArtCache(std::size_t maxSize = 50);
+    static constexpr std::size_t kDefaultMaxSize = 50;
+
+    explicit CoverArtCache(std::size_t maxSize = kDefaultMaxSize);
     ~CoverArtCache();
+
+    // Not copyable or movable
+    CoverArtCache(CoverArtCache const&) = delete;
+    CoverArtCache& operator=(CoverArtCache const&) = delete;
+    CoverArtCache(CoverArtCache&&) = delete;
+    CoverArtCache& operator=(CoverArtCache&&) = delete;
 
     /**
      * @brief Try to get a Pixbuf from the cache.

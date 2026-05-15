@@ -2,8 +2,18 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "NotificationService.h"
+
+#include <runtime/CorePrimitives.h>
+#include <runtime/StateTypes.h>
+
 #include <algorithm>
-#include <ranges>
+#include <chrono>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
 
 namespace ao::rt
 {

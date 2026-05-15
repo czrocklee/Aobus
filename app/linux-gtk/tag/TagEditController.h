@@ -45,12 +45,18 @@ namespace ao::gtk
     TagEditController(Gtk::Window& parent, rt::AppSession& session, Callbacks callbacks);
     ~TagEditController();
 
+    // Not copyable or movable
+    TagEditController(TagEditController const&) = delete;
+    TagEditController& operator=(TagEditController const&) = delete;
+    TagEditController(TagEditController&&) = delete;
+    TagEditController& operator=(TagEditController&&) = delete;
+
     void setDataProvider(TrackRowCache* provider);
 
     // Add to action group for menu access
     void addActionsTo(Gio::ActionMap& actionMap);
 
-    void showTrackContextMenu(TrackViewPage& page, TrackSelectionContext const& selection, double x, double y);
+    void showTrackContextMenu(TrackViewPage& page, TrackSelectionContext const& selection, double posX, double posY);
 
     void showTagEditor(TrackSelectionContext const& selection, Gtk::Widget& relativeTo);
 

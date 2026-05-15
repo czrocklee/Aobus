@@ -55,7 +55,13 @@ namespace ao::gtk
                      TrackPresentationStore& presentationStore);
     ~TrackPageManager();
 
-    void setPlaybackSequenceController(PlaybackSequenceController& c) { _playbackSequenceController = &c; }
+    // Not copyable or movable
+    TrackPageManager(TrackPageManager const&) = delete;
+    TrackPageManager& operator=(TrackPageManager const&) = delete;
+    TrackPageManager(TrackPageManager&&) = delete;
+    TrackPageManager& operator=(TrackPageManager&&) = delete;
+
+    void setPlaybackSequenceController(PlaybackSequenceController& controller) { _playbackSequenceController = &controller; }
 
     Gtk::Stack& stack() { return _stack; }
 
@@ -68,7 +74,7 @@ namespace ao::gtk
     TrackPageContext* currentVisible();
     TrackPageContext const* currentVisible() const;
 
-    void setPlayingTrack(std::optional<TrackId> trackId);
+    void setPlayingTrack(std::optional<TrackId> optTrackId);
 
     /**
      * @return The list ID of the currently visible page, or allTracksListId() if none.

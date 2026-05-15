@@ -2,11 +2,21 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackPresentationStore.h"
+#include "app/UIState.h"
+#include <runtime/ConfigStore.h>
+#include <runtime/StateTypes.h>
+#include <runtime/TrackPresentationPreset.h>
 
 #include <ao/utility/Log.h>
 
 #include <algorithm>
+#include <memory>
+#include <optional>
 #include <ranges>
+#include <span>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -28,13 +38,15 @@ namespace ao::gtk
                     }) |
                   std::ranges::to<std::vector>();
 
-    spec.visibleFields = state.visibleFields |
-                         std::views::transform([](auto f) { return static_cast<rt::TrackPresentationField>(f); }) |
-                         std::ranges::to<std::vector>();
+    spec.visibleFields =
+      state.visibleFields |
+      std::views::transform([](auto field) { return static_cast<rt::TrackPresentationField>(field); }) |
+      std::ranges::to<std::vector>();
 
-    spec.redundantFields = state.redundantFields |
-                           std::views::transform([](auto f) { return static_cast<rt::TrackPresentationField>(f); }) |
-                           std::ranges::to<std::vector>();
+    spec.redundantFields =
+      state.redundantFields |
+      std::views::transform([](auto field) { return static_cast<rt::TrackPresentationField>(field); }) |
+      std::ranges::to<std::vector>();
 
     return spec;
   }
@@ -89,7 +101,7 @@ namespace ao::gtk
 
   void TrackPresentationStore::removeCustomPresentation(std::string_view id)
   {
-    auto const removed = std::erase_if(_state.customPresentations, [&](auto const& s) { return s.id == id; });
+    auto const removed = std::erase_if(_state.customPresentations, [&](auto const& pres) { return pres.id == id; });
 
     if (removed > 0)
     {

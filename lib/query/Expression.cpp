@@ -3,11 +3,15 @@
 
 #include <ao/query/Expression.h>
 
+#include <memory>
+#include <utility>
+#include <variant>
+
 namespace ao::query
 {
   namespace
   {
-    struct Normalizer
+    struct Normalizer final
     {
       void operator()(std::unique_ptr<BinaryExpression> const& binary)
       {
@@ -20,7 +24,7 @@ namespace ao::query
 
         if (!binary->optOperation)
         {
-          auto extracted = std::move(binary->operand);
+          auto extracted = Expression{std::move(binary->operand)};
           root = std::move(extracted);
           return;
         }

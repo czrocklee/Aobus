@@ -2,17 +2,27 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/SeekControl.h"
+#include <runtime/PlaybackService.h>
+#include <runtime/StateTypes.h>
 
 #include <gdkmm/frameclock.h>
-#include <gtkmm/adjustment.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/gestureclick.h>
+
+#include <cstdint>
 
 namespace ao::gtk
 {
+  namespace
+  {
+    constexpr double kDefaultMaxRange = 100.0;
+  }
+
   SeekControl::SeekControl(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
   {
-    _scale.set_range(0, 100);
+    _scale.set_range(0, kDefaultMaxRange);
     _scale.set_value(0);
     _scale.set_sensitive(false);
     _scale.set_hexpand(true);
@@ -29,8 +39,7 @@ namespace ao::gtk
 
         if (width > 0)
         {
-          double const range = _scale.get_adjustment()->get_upper() - _scale.get_adjustment()->get_lower();
-          double const newValue = _scale.get_adjustment()->get_lower() + ((posX / static_cast<double>(width)) * range);
+          double const newValue = (posX / static_cast<double>(width)) * static_cast<double>(_durationMs);
           _scale.set_value(newValue);
           _playbackService.seek(static_cast<std::uint32_t>(newValue));
         }
@@ -55,6 +64,7 @@ namespace ao::gtk
 
         if (state.durationMs > 0)
         {
+          _durationMs = state.durationMs;
           _updating = true;
           _scale.set_range(0, static_cast<double>(state.durationMs));
           _scale.set_value(static_cast<double>(state.positionMs));
@@ -63,8 +73,8 @@ namespace ao::gtk
         }
         else
         {
-          double const defaultMax = 100.0;
-          _scale.set_range(0, defaultMax);
+          _durationMs = 0;
+          _scale.set_range(0, kDefaultMaxRange);
           _scale.set_sensitive(false);
         }
       });
@@ -102,8 +112,8 @@ namespace ao::gtk
   {
     _scale.set_value(0);
 
-    double const defaultMax = 100.0;
-    _scale.set_range(0, defaultMax);
+    _durationMs = 0;
+    _scale.set_range(0, kDefaultMaxRange);
     _scale.set_sensitive(false);
     _interpolator.reset();
   }

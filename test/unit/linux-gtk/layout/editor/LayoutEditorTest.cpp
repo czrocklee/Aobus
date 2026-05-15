@@ -85,13 +85,13 @@ namespace ao::gtk::layout::editor::test
       }
     }
 
-    SECTION("leaf types have container=false and maxChildren=0")
+    SECTION("leaf types have container=false and optMaxChildren=0")
     {
       for (auto const& desc : descriptors)
       {
         if (!desc.container)
         {
-          CHECK(desc.maxChildren.value_or(0) == 0);
+          CHECK(desc.optMaxChildren.value_or(0) == 0);
         }
       }
     }
@@ -102,8 +102,8 @@ namespace ao::gtk::layout::editor::test
 
       REQUIRE(desc.has_value());
       CHECK(desc->minChildren == 2);
-      CHECK(desc->maxChildren.has_value());
-      CHECK(*desc->maxChildren == 2);
+      CHECK(desc->optMaxChildren.has_value());
+      CHECK(*desc->optMaxChildren == 2);
     }
 
     SECTION("scroll requires exactly 1 child")
@@ -112,8 +112,8 @@ namespace ao::gtk::layout::editor::test
 
       REQUIRE(desc.has_value());
       CHECK(desc->minChildren == 1);
-      CHECK(desc->maxChildren.has_value());
-      CHECK(*desc->maxChildren == 1);
+      CHECK(desc->optMaxChildren.has_value());
+      CHECK(*desc->optMaxChildren == 1);
     }
 
     SECTION("tabs requires at least 1 child")
@@ -122,7 +122,7 @@ namespace ao::gtk::layout::editor::test
 
       REQUIRE(desc.has_value());
       CHECK(desc->minChildren == 1);
-      CHECK(!desc->maxChildren.has_value()); // unbounded
+      CHECK(!desc->optMaxChildren.has_value()); // unbounded
     }
 
     SECTION("box has orientation, spacing, homogeneous props")
@@ -416,7 +416,7 @@ namespace ao::gtk::layout::editor::test
       REQUIRE(desc.has_value());
       CHECK(desc->container == true);
       CHECK(desc->minChildren == 0);
-      CHECK(!desc->maxChildren.has_value());
+      CHECK(!desc->optMaxChildren.has_value());
     }
 
     SECTION("absoluteCanvas with no children builds without crash")

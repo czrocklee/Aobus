@@ -48,7 +48,7 @@ Use this checklist when auditing generated code against `CONTRIBUTING.md`:
 - 4.1.1: trivial one-line getters/setters inline in headers.
 - 4.2.1-4.2.3: concrete classes/POD structs `final`, narrow type exposure, Pimpl for complex implementation details.
 - 4.3.1: const locals, member functions, pointed-to data, parameters, and mandatory services by reference.
-- 4.4.1-4.4.4: name background threads, `std::jthread`/`std::stop_token`, mutex + `std::lock_guard`, atomics for simple shared flags/counters, no `volatile` synchronization.
+- 4.4.1-4.4.4: name background threads, `std::jthread`/`std::stop_token`, mutex + `std::scoped_lock`, atomics for simple shared flags/counters, no `volatile` synchronization.
 - 5.1.1-5.1.3: `ao::Result<T>` for recoverable operations, `AO_THROW`/`AO_THROW_FORMAT` for invariant violations, `std::optional<T>` for legitimate absence.
 - 5.2.1-5.2.2: `ao::Error` with `Code` and message; `ao::makeError`; `return {};` for `ao::Result<>` success; `std::unexpected(ao::Error{...})` for explicit errors.
 - 5.3.1-5.3.4: avoid bool+lastError, empty-string success, optional-as-error, and low-level exception-to-string conversion.

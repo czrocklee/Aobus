@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::media::mp4
@@ -28,6 +29,11 @@ namespace ao::media::mp4
      */
     explicit Demuxer(std::span<std::byte const> fileData);
     ~Demuxer() = default;
+
+    Demuxer(Demuxer const&) = delete;
+    Demuxer& operator=(Demuxer const&) = delete;
+    Demuxer(Demuxer&&) = delete;
+    Demuxer& operator=(Demuxer&&) = delete;
 
     /**
      * @brief Parses the MP4 atoms, looking for an audio track matching the given format (e.g. "alac").

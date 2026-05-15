@@ -3,26 +3,51 @@
 
 #include "list/QueryExpressionBox.h"
 #include "layout/LayoutConstants.h"
-
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 
-#include <gdk/gdk.h>
+#include <gdk/gdkkeysyms.h>
+#include <gdkmm/enums.h>
+#include <glib.h>
+#include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
+#include <gtkmm/box.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/eventcontrollerkey.h>
+#include <gtkmm/gestureclick.h>
+#include <gtkmm/label.h>
+#include <gtkmm/listitem.h>
+#include <gtkmm/object.h>
+#include <gtkmm/popover.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/signallistitemfactory.h>
+#include <gtkmm/singleselection.h>
+#include <gtkmm/stringlist.h>
+#include <gtkmm/stringobject.h>
 
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstddef>
+#include <limits>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <set>
 #include <span>
+#include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
   namespace
   {
-    struct CompletionQuery
+    constexpr guint kInvalidListPosition = std::numeric_limits<guint>::max();
+
+    struct CompletionQuery final
     {
       char trigger = '\0';
       int tokenStart = -1;
@@ -92,12 +117,12 @@ namespace ao::gtk
 
     std::optional<CompletionQuery> completionQueryForCursor(std::string_view text, int cursor)
     {
-      if (cursor <= 0 || cursor > static_cast<int>(text.size()))
+      if (cursor <= 0 || std::cmp_greater(cursor, text.size()))
       {
         return std::nullopt;
       }
 
-      if (cursor < static_cast<int>(text.size()) && isIdentifierChar(text[static_cast<std::size_t>(cursor)]))
+      if (std::cmp_less(cursor, text.size()) && isIdentifierChar(text[static_cast<std::size_t>(cursor)]))
       {
         return std::nullopt;
       }
@@ -340,9 +365,9 @@ namespace ao::gtk
       return;
     }
 
-    auto selected = _completionSelection ? _completionSelection->get_selected() : GTK_INVALID_LIST_POSITION;
+    auto selected = _completionSelection ? _completionSelection->get_selected() : kInvalidListPosition;
 
-    if (selected == GTK_INVALID_LIST_POSITION || selected >= _completionItems->get_n_items())
+    if (selected == kInvalidListPosition || selected >= _completionItems->get_n_items())
     {
       selected = 0;
     }
@@ -369,7 +394,7 @@ namespace ao::gtk
 
     auto selected = _completionSelection->get_selected();
     auto const itemCount = static_cast<int>(_completionItems->get_n_items());
-    auto const current = (selected == GTK_INVALID_LIST_POSITION) ? 0 : static_cast<int>(selected);
+    auto const current = (selected == kInvalidListPosition) ? 0 : static_cast<int>(selected);
     auto const next = std::clamp(current + delta, 0, itemCount - 1);
 
     _completionSelection->set_selected(static_cast<guint>(next));

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/Backend.h>
+#include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <ao/audio/backend/detail/PipeWireMonitorHelpers.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -10,12 +12,22 @@ extern "C"
 #include <pipewire/keys.h>
 #include <spa/param/audio/raw.h>
 #include <spa/param/format.h>
+#include <spa/param/param.h>
 #include <spa/param/props.h>
+#include <spa/pod/body.h>
 #include <spa/pod/builder.h>
+#include <spa/pod/pod.h>
+#include <spa/pod/vararg.h>
 #include <spa/utils/dict.h>
+#include <spa/utils/type.h>
 }
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <vector>
 
 #ifdef __clang__
 #pragma clang diagnostic push
@@ -67,15 +79,15 @@ namespace ao::audio::backend::detail::test
   {
     SECTION("sampleFormatCapabilityFromSpaFormat")
     {
-      auto cap16 = sampleFormatCapabilityFromSpaFormat(SPA_AUDIO_FORMAT_S16_LE);
-      REQUIRE(cap16);
-      CHECK(cap16->bitDepth == 16);
-      CHECK(cap16->isFloat == false);
+      auto optCap16 = sampleFormatCapabilityFromSpaFormat(SPA_AUDIO_FORMAT_S16_LE);
+      REQUIRE(optCap16);
+      CHECK(optCap16->bitDepth == 16);
+      CHECK(optCap16->isFloat == false);
 
-      auto capF32 = sampleFormatCapabilityFromSpaFormat(SPA_AUDIO_FORMAT_F32_LE);
-      REQUIRE(capF32);
-      CHECK(capF32->bitDepth == 32);
-      CHECK(capF32->isFloat == true);
+      auto optCapF32 = sampleFormatCapabilityFromSpaFormat(SPA_AUDIO_FORMAT_F32_LE);
+      REQUIRE(optCapF32);
+      CHECK(optCapF32->bitDepth == 32);
+      CHECK(optCapF32->isFloat == true);
 
       CHECK_FALSE(sampleFormatCapabilityFromSpaFormat(SPA_AUDIO_FORMAT_UNKNOWN));
     }
@@ -98,8 +110,8 @@ namespace ao::audio::backend::detail::test
 
   TEST_CASE("PipeWireMonitorHelpers - SPA Pod Parsing", "[audio][pipewire][monitor]")
   {
-    std::byte buffer[1024];
-    struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer)); // NOLINT
+    auto buffer = std::array<std::byte, 1024>{};
+    struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer.data(), buffer.size()); // NOLINT
 
     SECTION("parseEnumFormat - Sample Rates and Channels")
     {
@@ -191,12 +203,12 @@ namespace ao::audio::backend::detail::test
 
     SECTION("mergeSinkProps - channel volumes")
     {
-      float vols[] = {1.0F, 0.8F};
+      auto const vols = std::array{1.0F, 0.8F};
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
       ::spa_pod_builder_array(
-        &b, sizeof(float), SPA_TYPE_Float, 2, vols); // NOLINT(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), vols.data()); // NOLINT(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
       auto props = SinkProps{};

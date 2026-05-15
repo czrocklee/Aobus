@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
 
 #include <ao/Exception.h>
 #include <ao/library/Meta.h>
@@ -13,6 +10,7 @@
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <lmdb.h>
 #include <test/unit/lmdb/TestUtils.h>
 
 namespace ao::library::test
@@ -24,7 +22,7 @@ namespace ao::library::test
     auto const temp = TempDir{};
 
     auto const first = MusicLibrary{temp.path()};
-    auto const firstHeader = first.metaHeader();
+    auto const firstHeader = MetaHeader{first.metaHeader()};
 
     REQUIRE(firstHeader.magic == kLibraryMetaMagic);
     REQUIRE(firstHeader.libraryVersion == kLibraryVersion);

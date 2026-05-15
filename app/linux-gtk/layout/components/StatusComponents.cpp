@@ -3,21 +3,31 @@
 
 #include "StatusComponents.h"
 #include "layout/LayoutConstants.h"
+#include "layout/document/LayoutNode.h"
+#include "layout/runtime/ComponentRegistry.h"
+#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutDependencies.h"
 #include "library_io/ImportProgressIndicator.h"
 #include "playback/NowPlayingStatusLabel.h"
 #include "track/LibraryTrackCountLabel.h"
-#include <gdkmm/display.h>
-#include <gtkmm/cssprovider.h>
-#include <gtkmm/stylecontext.h>
 #include <playback/PlaybackDetailsWidget.h>
 #include <track/StatusNotificationLabel.h>
-
 #include <runtime/AppSession.h>
 #include <runtime/ListSourceStore.h>
 
+#include <gdkmm/display.h>
+#include <gtk/gtkstyleprovider.h>
 #include <gtkmm/box.h>
+#include <gtkmm/cssprovider.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/label.h>
+#include <gtkmm/object.h>
 #include <gtkmm/separator.h>
+#include <gtkmm/stylecontext.h>
+#include <gtkmm/widget.h>
+#include <pangomm/layout.h>
+
+#include <memory>
 
 namespace ao::gtk::layout
 {

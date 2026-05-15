@@ -3,17 +3,20 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <runtime/ViewService.h>
-
-#include <runtime/AllTracksSource.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/ListSourceStore.h>
+#include <runtime/ProjectionTypes.h>
+#include <runtime/StateTypes.h>
+#include <runtime/ViewService.h>
 
 #include "TestUtils.h"
 
-#include <filesystem>
+#include <cstddef>
+#include <functional>
 #include <memory>
+#include <variant>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -94,7 +97,7 @@ namespace ao::rt::test
     auto service = env.makeService();
 
     auto const result = service.createView({}, true);
-    auto const viewId = result.viewId;
+    auto const viewId = ViewId{result.viewId};
 
     SECTION("destroying a view removes it from listViews")
     {
@@ -238,7 +241,7 @@ namespace ao::rt::test
     auto service = env.makeService();
 
     auto const result = service.createView({}, true);
-    auto const viewId = result.viewId;
+    auto const viewId = ViewId{result.viewId};
 
     service.setGrouping(viewId, TrackGroupKey::Genre);
     auto const snap = service.trackListState(viewId);

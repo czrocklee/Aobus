@@ -2,8 +2,18 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "layout/runtime/ComponentRegistry.h"
+#include "layout/document/LayoutNode.h"
+#include "layout/runtime/ILayoutComponent.h"
+#include "layout/runtime/LayoutDependencies.h"
 
 #include <gtkmm/label.h>
+#include <gtkmm/widget.h>
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk::layout
 {
@@ -34,7 +44,7 @@ namespace ao::gtk::layout
 
   void ComponentRegistry::registerComponent(ComponentDescriptor descriptor, ComponentFactory factory)
   {
-    std::string const type = descriptor.type;
+    auto const type = std::string(descriptor.type);
     _factories[type] = factory;
 
     if (auto const it = _descriptorIndexMap.find(type); it != _descriptorIndexMap.end())
@@ -69,6 +79,7 @@ namespace ao::gtk::layout
     {
       return _descriptors[it->second];
     }
+
     return std::nullopt;
   }
 } // namespace ao::gtk::layout

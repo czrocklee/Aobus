@@ -1,8 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/Exception.h>
 #include <ao/library/ListView.h>
+#include <ao/library/ListLayout.h>
+#include <ao/Exception.h>
+#include <ao/Type.h>
+#include <ao/utility/ByteView.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <string_view>
 
 namespace ao::library
 {
@@ -11,7 +19,7 @@ namespace ao::library
   {
     if (_payload.data() == nullptr || _payload.size() < kListHeaderSize)
     {
-      AO_THROW(Exception, "Invalid data for ListView");
+      ao::throwException<Exception>("Invalid data for ListView");
     }
   }
 
@@ -26,7 +34,7 @@ namespace ao::library
 
     if (start + length > _payload.size())
     {
-      AO_THROW(Exception, "Invalid string field");
+      ao::throwException<Exception>("Invalid string field");
     }
 
     return utility::bytes::stringView(_payload.subspan(start, length));
@@ -64,7 +72,7 @@ namespace ao::library
 
     if (offset + (count * sizeof(TrackId)) > _payload.size())
     {
-      AO_THROW(Exception, "Invalid trackIds field");
+      ao::throwException<Exception>("Invalid trackIds field");
     }
 
     return TrackProxy{utility::layout::viewArray<TrackId>(_payload.subspan(offset, count * sizeof(TrackId)))};
@@ -79,7 +87,7 @@ namespace ao::library
   {
     if (index >= _trackIds.size())
     {
-      AO_THROW(Exception, "Index out of range");
+      ao::throwException<Exception>("Index out of range");
     }
 
     return _trackIds[index];

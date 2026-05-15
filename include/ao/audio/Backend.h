@@ -3,10 +3,6 @@
 
 #pragma once
 
-#include <ao/Type.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/flow/Graph.h>
-
 #include <ao/utility/StrongId.h>
 
 #include <cstdint>
@@ -88,7 +84,7 @@ namespace ao::audio
   /**
    * @brief Final conclusion on the quality of the current audio path.
    */
-  enum class Quality
+  enum class Quality : std::uint8_t
   {
     Unknown,
     BitwisePerfect,

@@ -17,6 +17,11 @@ namespace ao::audio::backend
     AlsaProvider();
     ~AlsaProvider() override;
 
+    AlsaProvider(AlsaProvider const&) = delete;
+    AlsaProvider& operator=(AlsaProvider const&) = delete;
+    AlsaProvider(AlsaProvider&&) = delete;
+    AlsaProvider& operator=(AlsaProvider&&) = delete;
+
     Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
     IBackendProvider::Status status() const override;
     std::unique_ptr<IBackend> createBackend(Device const& device, ProfileId const& profile) override;

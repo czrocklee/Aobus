@@ -2,23 +2,35 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackColumnFactoryBuilder.h"
+#include "track/TrackPresentation.h"
+#include "track/TrackRowObject.h"
 
-#include <gdk/gdk.h>
+#include <gdk/gdkkeysyms.h>
 #include <gdkmm/contentprovider.h>
+#include <gdkmm/display.h>
+#include <gdkmm/enums.h>
+#include <glib.h>
 #include <glibmm/bytes.h>
+#include <gtk/gtkstyleprovider.h>
 #include <gtkmm/box.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/dragsource.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/eventcontrollerfocus.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gesturelongpress.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listitem.h>
+#include <gtkmm/object.h>
+#include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/stylecontext.h>
+#include <pangomm/layout.h>
+#include <sigc++/functors/slot.h>
 
 #include <format>
+#include <memory>
 
 namespace ao::gtk
 {

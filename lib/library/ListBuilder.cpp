@@ -2,11 +2,13 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/library/ListBuilder.h>
-
+#include <ao/library/ListLayout.h>
+#include <ao/library/ListView.h>
+#include <ao/Type.h>
 #include <ao/utility/ByteView.h>
 
-#include <algorithm>
-#include <cstring>
+#include <cstddef>
+#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -43,27 +45,27 @@ namespace ao::library
   // Direct setters
   //=============================================================================
 
-  ListBuilder& ListBuilder::name(std::string_view val)
+  ListBuilder& ListBuilder::name(std::string_view name)
   {
-    _name = val;
+    _name = name;
     return *this;
   }
 
-  ListBuilder& ListBuilder::description(std::string_view val)
+  ListBuilder& ListBuilder::description(std::string_view description)
   {
-    _description = val;
+    _description = description;
     return *this;
   }
 
-  ListBuilder& ListBuilder::filter(std::string_view val)
+  ListBuilder& ListBuilder::filter(std::string_view filter)
   {
-    _filter = val;
+    _filter = filter;
     return *this;
   }
 
-  ListBuilder& ListBuilder::parentId(ListId val)
+  ListBuilder& ListBuilder::parentId(ListId parentId)
   {
-    _parentId = val;
+    _parentId = parentId;
     return *this;
   }
 
@@ -89,9 +91,9 @@ namespace ao::library
     return *this;
   }
 
-  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::isSmart(bool val)
+  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::isSmart(bool isSmart)
   {
-    _isSmart = val;
+    _isSmart = isSmart;
     return *this;
   }
 
@@ -138,7 +140,6 @@ namespace ao::library
     result.insert_range(result.end(), utility::bytes::view(header));
 
     // Copy trackIds
-
     if (!trackIds.empty())
     {
       result.insert_range(result.end(), utility::bytes::view(std::span<TrackId const>{trackIds}));
@@ -150,7 +151,6 @@ namespace ao::library
     result.insert_range(result.end(), utility::bytes::view(expression));
 
     // Pad to 4-byte alignment
-
     while (result.size() % 4 != 0)
     {
       result.push_back(std::byte{0});

@@ -3,13 +3,19 @@
 
 #include "app/AobusSoul.h"
 
-#include <algorithm>
-#include <cmath>
 #include <gdkmm/frameclock.h>
 #include <gdkmm/graphene_point.h>
 #include <gdkmm/graphene_rect.h>
+#include <glibmm/refptr.h>
+#include <gsk/gsk.h>
 #include <gtk/gtk.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/snapshot.h>
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
 #include <numbers>
 
 namespace ao::gtk
@@ -37,7 +43,7 @@ namespace ao::gtk
     static constexpr float kNormalizedRadius = kRefRadius / kRefHeight;
 
     auto* const oBuilder = ::gsk_path_builder_new();
-    ::graphene_point_t const origin = {.x = 0.0F, .y = 0.0F};
+    auto const origin = ::graphene_point_t{.x = 0.0F, .y = 0.0F};
 
     ::gsk_path_builder_add_circle(oBuilder, &origin, kNormalizedRadius);
     _unitPathO.reset(::gsk_path_builder_free_to_path(oBuilder));
@@ -250,7 +256,7 @@ namespace ao::gtk
         break;
     }
 
-    return Gdk::RGBA(resultRed, resultGreen, resultBlue, color.get_alpha());
+    return {resultRed, resultGreen, resultBlue, color.get_alpha()};
   }
 
   void AobusSoul::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot)
@@ -263,7 +269,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const aura = _isStopped ? _cyan : _aura;
+    auto const aura = Gdk::RGBA{_isStopped ? _cyan : _aura};
 
     float const centerX = width / 2.0F;
     float const centerY = height / 2.0F;
@@ -290,7 +296,7 @@ namespace ao::gtk
       static constexpr float kRefBoundsY = -kRefR * 2.0F;
       static constexpr float kRefBoundsW = kRefR * 4.5F;
       static constexpr float kRefBoundsH = kRefR * 4.0F;
-      ::graphene_rect_t const aBounds = {
+      auto const aBounds = ::graphene_rect_t{
         .origin = {.x = kRefBoundsX, .y = kRefBoundsY}, .size = {.width = kRefBoundsW, .height = kRefBoundsH}};
 
       ::gtk_snapshot_append_color(snapshot->gobj(), _amber.gobj(), &aBounds);
@@ -366,10 +372,10 @@ namespace ao::gtk
     static constexpr float kUnitR = 30.0F / 65.0F;
     float const normalizedStrokeWidth = currentStrokeBase / kRefHeight;
     float const outerRadius = kUnitR + normalizedStrokeWidth;
-    ::graphene_rect_t const gradientBounds = {.origin = {.x = -outerRadius, .y = -outerRadius},
+    auto const gradientBounds = ::graphene_rect_t{.origin = {.x = -outerRadius, .y = -outerRadius},
                                               .size = {.width = outerRadius * 2.0F, .height = outerRadius * 2.0F}};
-    ::graphene_point_t const startPoint = {.x = kUnitR, .y = kUnitR};
-    ::graphene_point_t const endPoint = {.x = -kUnitR, .y = -kUnitR};
+    auto const startPoint = ::graphene_point_t{.x = kUnitR, .y = kUnitR};
+    auto const endPoint = ::graphene_point_t{.x = -kUnitR, .y = -kUnitR};
 
     ::gtk_snapshot_append_linear_gradient(
       snapshot->gobj(), &gradientBounds, &startPoint, &endPoint, stops.data(), stops.size());

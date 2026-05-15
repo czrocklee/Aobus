@@ -3,9 +3,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <ao/Type.h>
 #include <runtime/LibraryMutationService.h>
+#include <runtime/StateTypes.h>
 
 #include "TestUtils.h"
+
+#include <functional>
+#include <vector>
 
 namespace ao::rt::test
 {

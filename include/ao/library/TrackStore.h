@@ -7,10 +7,12 @@
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Database.h>
 
+#include <cstddef>
 #include <functional>
 #include <gsl-lite/gsl-lite.hpp>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace ao::library
@@ -50,7 +52,7 @@ namespace ao::library
     /**
      * LoadMode - Controls which data is loaded for each track.
      */
-    enum class LoadMode
+    enum class LoadMode : std::uint8_t
     {
       Hot,  // Only hot data
       Cold, // Only cold data
@@ -80,7 +82,7 @@ namespace ao::library
   class TrackStore::Reader::Iterator final
   {
   public:
-    using value_type = std::pair<TrackId, TrackView>;
+    using value_type = std::pair<TrackId, TrackView>; // NOLINT
 
     Iterator() = default;
     Iterator(Iterator const&) = default;
@@ -197,7 +199,7 @@ namespace ao::library
     auto coldSpan = _coldWriter.create(id, coldSize);
 
     // Populate both spans via callback
-    fill(TrackId{id}, hotSpan, coldSpan);
+    std::invoke(std::forward<F>(fill), TrackId{id}, hotSpan, coldSpan);
 
     return {TrackId{id}, TrackView{hotSpan, coldSpan}};
   }
@@ -208,7 +210,7 @@ namespace ao::library
     gsl_Expects((size % 4) == 0);
 
     auto span = _hotWriter.update(id.value(), size);
-    fill(span);
+    std::invoke(std::forward<F>(fill), span);
   }
 
   template<class F>
@@ -217,6 +219,6 @@ namespace ao::library
     gsl_Expects((size % 4) == 0);
 
     auto span = _coldWriter.update(id.value(), size);
-    fill(span);
+    std::invoke(std::forward<F>(fill), span);
   }
 } // namespace ao::library

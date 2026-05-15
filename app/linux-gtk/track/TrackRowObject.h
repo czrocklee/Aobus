@@ -50,6 +50,7 @@ namespace ao::gtk
     std::uint16_t getCodecId() const { return _codecId; }
 
     Glib::PropertyProxy<bool> property_playing();
+
     bool isPlaying() const;
     void setPlaying(bool playing);
 
@@ -66,7 +67,7 @@ namespace ao::gtk
                   std::uint16_t discNumber,
                   std::uint16_t totalDiscs,
                   std::uint16_t trackNumber,
-                  std::optional<std::uint64_t> resourceId,
+                  std::optional<std::uint64_t> optResourceId,
                   std::uint32_t sampleRate,
                   std::uint8_t channels,
                   std::uint8_t bitDepth,

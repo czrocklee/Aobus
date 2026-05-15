@@ -13,7 +13,14 @@ namespace ao::gtk::layout
   class ILayoutComponent
   {
   public:
+    ILayoutComponent() = default;
     virtual ~ILayoutComponent() = default;
+
+    // Not copyable or movable
+    ILayoutComponent(ILayoutComponent const&) = delete;
+    ILayoutComponent& operator=(ILayoutComponent const&) = delete;
+    ILayoutComponent(ILayoutComponent&&) = delete;
+    ILayoutComponent& operator=(ILayoutComponent&&) = delete;
 
     /**
      * @brief Get the underlying GTK widget.

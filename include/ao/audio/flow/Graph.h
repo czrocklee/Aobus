@@ -5,6 +5,7 @@
 
 #include <ao/audio/Format.h>
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -14,7 +15,7 @@ namespace ao::audio::flow
   /**
    * @brief Type of an audio processing node in the playback graph.
    */
-  enum class NodeType
+  enum class NodeType : std::uint8_t
   {
     Decoder,
     Engine,
@@ -29,14 +30,14 @@ namespace ao::audio::flow
    */
   struct Node final
   {
-    std::string id = "";
+    std::string id{};
     NodeType type = NodeType::Intermediary;
-    std::string name = "";
+    std::string name{};
     std::optional<Format> optFormat = std::nullopt;
     bool volumeNotUnity = false;
     bool isMuted = false;
     bool isLossySource = false;
-    std::string objectPath = "";
+    std::string objectPath{};
 
     bool operator==(Node const&) const = default;
   };
@@ -46,8 +47,8 @@ namespace ao::audio::flow
    */
   struct Connection final
   {
-    std::string sourceId = "";
-    std::string destId = "";
+    std::string sourceId{};
+    std::string destId{};
     bool isActive = true;
 
     bool operator==(Connection const&) const = default;

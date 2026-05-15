@@ -7,6 +7,7 @@
 #include <ao/lmdb/Database.h>
 
 #include <optional>
+#include <utility>
 
 namespace ao::library
 {

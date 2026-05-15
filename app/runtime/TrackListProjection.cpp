@@ -3,19 +3,37 @@
 
 #include "TrackListProjection.h"
 
-#include "SmartListSource.h"
 #include "TrackSource.h"
+
+#include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/utility/ScopedTimer.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/ProjectionTypes.h>
+#include <runtime/StateTypes.h>
+#include <runtime/TrackPresentationPreset.h>
 
 #include <algorithm>
+#include <cctype>
+#include <format>
+#include <functional>
+#include <iterator>
 #include <memory>
+#include <optional>
 #include <ranges>
+#include <span>
+#include <string>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
+
+#include <cstddef>
+#include <cstdint>
 
 namespace ao::rt
 {
@@ -54,7 +72,7 @@ namespace ao::rt
 
     constexpr std::size_t kArticleAnLen = 3;
 
-    bool iequals_prefix(std::string_view str, std::string_view prefix)
+    bool iStartsWith(std::string_view str, std::string_view prefix)
     {
       if (str.size() < prefix.size())
       {
@@ -76,15 +94,15 @@ namespace ao::rt
     {
       auto offset = 0UZ;
 
-      if (iequals_prefix(title, "the "))
+      if (iStartsWith(title, "the "))
       {
         offset = 4;
       }
-      else if (iequals_prefix(title, "a "))
+      else if (iStartsWith(title, "a "))
       {
         offset = 2;
       }
-      else if (iequals_prefix(title, "an "))
+      else if (iStartsWith(title, "an "))
       {
         offset = kArticleAnLen;
       }
@@ -341,7 +359,7 @@ namespace ao::rt
             intern(stringPool, std::string{entry.keys.albumArtistKey} + "\x1F" + std::string{entry.keys.albumKey});
           {
             std::string album{dict.getOrDefault(view.metadata().albumId())};
-            std::string albumArtist{dict.getOrDefault(view.metadata().albumArtistId())};
+            std::string const albumArtist{dict.getOrDefault(view.metadata().albumArtistId())};
 
             if (entry.keys.albumKey.empty())
             {
@@ -439,12 +457,12 @@ namespace ao::rt
 
       for (auto& entry : orderIndex)
       {
-        auto view = reader.get(entry.trackId, loadMode);
+        auto optView = reader.get(entry.trackId, loadMode);
 
-        if (view)
+        if (optView)
         {
-          ensureGroupSortKeys(entry.keys, *view, dict, groupBy, normCache);
-          fillGroupMetadata(entry, *view, dict, groupBy, stringPool);
+          ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
+          fillGroupMetadata(entry, *optView, dict, groupBy, stringPool);
         }
       }
     }
@@ -476,7 +494,7 @@ namespace ao::rt
       }
 
       sections.push_back(GroupSection{
-        .rows = {0, 1},
+        .rows = {.start = 0, .count = 1},
         .label = orderIndex[0].groupLabel,
       });
 
@@ -485,7 +503,7 @@ namespace ao::rt
         if (orderIndex[idx].groupKey != orderIndex[idx - 1].groupKey)
         {
           sections.push_back(GroupSection{
-            .rows = {idx, 1},
+            .rows = {.start = idx, .count = 1},
             .label = orderIndex[idx].groupLabel,
           });
         }
@@ -515,7 +533,7 @@ namespace ao::rt
 
         if (optView)
         {
-          OrderEntry entry{.trackId = trackId};
+          auto entry = OrderEntry{.trackId = trackId};
           fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
 
           if (groupBy != TrackGroupKey::None)
@@ -523,6 +541,7 @@ namespace ao::rt
             ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
             fillGroupMetadata(entry, *optView, dict, groupBy, stringPool);
           }
+
           orderIndex.push_back(entry);
         }
       }
@@ -589,7 +608,7 @@ namespace ao::rt
         return;
       }
 
-      OrderEntry entry{.trackId = trackId};
+      auto entry = OrderEntry{.trackId = trackId};
       fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
 
       if (groupBy != TrackGroupKey::None)
@@ -672,6 +691,7 @@ namespace ao::rt
             ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
             fillGroupMetadata(entry, *optView, dict, groupBy, stringPool);
           }
+
           sortedNew.push_back(entry);
         }
       }
@@ -696,7 +716,7 @@ namespace ao::rt
         return;
       }
 
-      std::vector<OrderEntry> merged;
+      auto merged = std::vector<OrderEntry>{};
       merged.reserve(orderIndex.size() + sortedNew.size());
 
       if (comparator)
@@ -930,11 +950,11 @@ namespace ao::rt
     // Fall back to the built-in preset when redundant fields are unspecified.
     if (_impl->redundantFields.empty() && spec.groupBy != TrackGroupKey::None)
     {
-      for (auto const& p : builtinTrackPresentationPresets())
+      for (auto const& preset : builtinTrackPresentationPresets())
       {
-        if (p.spec.groupBy == spec.groupBy)
+        if (preset.spec.groupBy == spec.groupBy)
         {
-          _impl->redundantFields = p.spec.redundantFields;
+          _impl->redundantFields = preset.spec.redundantFields;
           break;
         }
       }

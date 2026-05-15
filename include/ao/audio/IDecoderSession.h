@@ -6,9 +6,8 @@
 #include <ao/audio/DecoderTypes.h>
 
 #include <ao/Error.h>
+#include <cstdint>
 #include <filesystem>
-#include <optional>
-#include <string_view>
 
 namespace ao::audio
 {
@@ -21,6 +20,15 @@ namespace ao::audio
   public:
     virtual ~IDecoderSession() = default;
 
+    IDecoderSession(IDecoderSession const&) = delete;
+    IDecoderSession& operator=(IDecoderSession const&) = delete;
+    IDecoderSession(IDecoderSession&&) = delete;
+    IDecoderSession& operator=(IDecoderSession&&) = delete;
+
+  protected:
+    IDecoderSession() = default;
+
+  public:
     /**
      * @brief Opens an audio file for decoding.
      */

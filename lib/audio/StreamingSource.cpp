@@ -2,10 +2,25 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/StreamingSource.h>
-#include <ao/utility/Log.h>
+
+#include <ao/Error.h>
+#include <ao/audio/DecoderTypes.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/IDecoderSession.h>
 #include <ao/utility/ThreadUtils.h>
 
+#include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <span>
+#include <stop_token>
+#include <thread>
+#include <utility>
 
 namespace ao::audio
 {
@@ -115,7 +130,7 @@ namespace ao::audio
     _ringBuffer.clear();
 
     {
-      auto lock = std::lock_guard{_decoderMutex};
+      auto lock = std::scoped_lock{_decoderMutex};
 
       auto const seekResult = _decoder->seek(positionMs);
 
@@ -252,7 +267,7 @@ namespace ao::audio
     auto block = PcmBlock{};
 
     {
-      auto lock = std::lock_guard{_decoderMutex};
+      auto lock = std::scoped_lock{_decoderMutex};
 
       if (seekToken.stop_requested())
       {

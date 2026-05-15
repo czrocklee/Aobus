@@ -3,7 +3,11 @@
 
 #pragma once
 
+#include <ao/audio/Format.h>
 #include <ao/audio/IDecoderSession.h>
+
+#include <filesystem>
+#include <memory>
 
 namespace ao::audio
 {
@@ -12,6 +16,11 @@ namespace ao::audio
   public:
     explicit AlacDecoderSession(Format outputFormat);
     ~AlacDecoderSession() override;
+
+    AlacDecoderSession(AlacDecoderSession const&) = delete;
+    AlacDecoderSession& operator=(AlacDecoderSession const&) = delete;
+    AlacDecoderSession(AlacDecoderSession&&) = delete;
+    AlacDecoderSession& operator=(AlacDecoderSession&&) = delete;
 
     Result<> open(std::filesystem::path const& filePath) override;
     void close() override;

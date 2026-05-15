@@ -4,8 +4,13 @@
 #include <ao/query/Expression.h>
 #include <ao/utility/VariantVisitor.h>
 #include <catch2/catch_test_macros.hpp>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <variant>
 
 namespace ao::query::test
 {
@@ -76,7 +81,7 @@ namespace ao::query::test
 
     std::string canonicalize(Expression const& expr)
     {
-      Canonicalizer c;
+      auto c = Canonicalizer{};
       std::visit(c, expr);
       return c.oss.str();
     }
@@ -86,7 +91,7 @@ namespace ao::query::test
   {
     // Input: (a) where (a) is a BinaryExpression with no optOperation
     auto binary = std::make_unique<BinaryExpression>();
-    binary->operand = VariableExpression{VariableType::Metadata, "a"};
+    binary->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
     binary->optOperation = std::nullopt;
 
     Expression expr = std::move(binary);
@@ -105,7 +110,7 @@ namespace ao::query::test
 
   TEST_CASE("Expression - Normalize Leaves Variable Unchanged")
   {
-    Expression expr = VariableExpression{VariableType::Metadata, "artist"};
+    Expression expr = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
     normalize(expr);
     CHECK(canonicalize(expr) == "artist");
   }
@@ -114,12 +119,13 @@ namespace ao::query::test
   {
     // Input: a + (b + c)
     auto inner = std::make_unique<BinaryExpression>();
-    inner->operand = VariableExpression{VariableType::Metadata, "b"};
-    inner->optOperation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "c"}};
+    inner->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
+    inner->optOperation = BinaryExpression::Operation{
+      .op = Operator::Add, .operand = VariableExpression{.type = VariableType::Metadata, .name = "c"}};
 
     auto root = std::make_unique<BinaryExpression>();
-    root->operand = VariableExpression{VariableType::Metadata, "a"};
-    root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+    root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    root->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
 
     Expression expr = std::move(root);
     normalize(expr);
@@ -132,17 +138,17 @@ namespace ao::query::test
   {
     // Input: a + (b + (c + d))
     auto innermost = std::make_unique<BinaryExpression>();
-    innermost->operand = VariableExpression{VariableType::Metadata, "c"};
-    innermost->optOperation =
-      BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "d"}};
+    innermost->operand = VariableExpression{.type = VariableType::Metadata, .name = "c"};
+    innermost->optOperation = BinaryExpression::Operation{
+      .op = Operator::Add, .operand = VariableExpression{.type = VariableType::Metadata, .name = "d"}};
 
     auto inner = std::make_unique<BinaryExpression>();
-    inner->operand = VariableExpression{VariableType::Metadata, "b"};
-    inner->optOperation = BinaryExpression::Operation{Operator::Add, std::move(innermost)};
+    inner->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
+    inner->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(innermost)};
 
     auto root = std::make_unique<BinaryExpression>();
-    root->operand = VariableExpression{VariableType::Metadata, "a"};
-    root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+    root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    root->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
 
     Expression expr = std::move(root);
     normalize(expr);
@@ -155,12 +161,13 @@ namespace ao::query::test
   {
     // Input: a and (b and c)
     auto inner = std::make_unique<BinaryExpression>();
-    inner->operand = VariableExpression{VariableType::Metadata, "b"};
-    inner->optOperation = BinaryExpression::Operation{Operator::And, VariableExpression{VariableType::Metadata, "c"}};
+    inner->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
+    inner->optOperation = BinaryExpression::Operation{
+      .op = Operator::And, .operand = VariableExpression{.type = VariableType::Metadata, .name = "c"}};
 
     auto root = std::make_unique<BinaryExpression>();
-    root->operand = VariableExpression{VariableType::Metadata, "a"};
-    root->optOperation = BinaryExpression::Operation{Operator::And, std::move(inner)};
+    root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    root->optOperation = BinaryExpression::Operation{.op = Operator::And, .operand = std::move(inner)};
 
     Expression expr = std::move(root);
     normalize(expr);
@@ -172,8 +179,9 @@ namespace ao::query::test
   {
     // Input: a + 1
     auto root = std::make_unique<BinaryExpression>();
-    root->operand = VariableExpression{VariableType::Metadata, "a"};
-    root->optOperation = BinaryExpression::Operation{Operator::Add, ConstantExpression{std::int64_t{1}}};
+    root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    root->optOperation =
+      BinaryExpression::Operation{.op = Operator::Add, .operand = ConstantExpression{std::int64_t{1}}};
 
     Expression expr = std::move(root);
     normalize(expr);
@@ -185,12 +193,13 @@ namespace ao::query::test
   {
     // Input: a + (b and c)
     auto inner = std::make_unique<BinaryExpression>();
-    inner->operand = VariableExpression{VariableType::Metadata, "b"};
-    inner->optOperation = BinaryExpression::Operation{Operator::And, VariableExpression{VariableType::Metadata, "c"}};
+    inner->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
+    inner->optOperation = BinaryExpression::Operation{
+      .op = Operator::And, .operand = VariableExpression{.type = VariableType::Metadata, .name = "c"}};
 
     auto root = std::make_unique<BinaryExpression>();
-    root->operand = VariableExpression{VariableType::Metadata, "a"};
-    root->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+    root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    root->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
 
     Expression expr = std::move(root);
     normalize(expr);
@@ -202,12 +211,13 @@ namespace ao::query::test
   {
     // Input: not (a + (b + c))
     auto inner = std::make_unique<BinaryExpression>();
-    inner->operand = VariableExpression{VariableType::Metadata, "b"};
-    inner->optOperation = BinaryExpression::Operation{Operator::Add, VariableExpression{VariableType::Metadata, "c"}};
+    inner->operand = VariableExpression{.type = VariableType::Metadata, .name = "b"};
+    inner->optOperation = BinaryExpression::Operation{
+      .op = Operator::Add, .operand = VariableExpression{.type = VariableType::Metadata, .name = "c"}};
 
     auto binary = std::make_unique<BinaryExpression>();
-    binary->operand = VariableExpression{VariableType::Metadata, "a"};
-    binary->optOperation = BinaryExpression::Operation{Operator::Add, std::move(inner)};
+    binary->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
+    binary->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
 
     auto unary = std::make_unique<UnaryExpression>();
     unary->op = Operator::Not;

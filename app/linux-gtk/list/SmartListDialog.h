@@ -38,6 +38,11 @@ namespace ao::gtk
     SmartListDialog(Gtk::Window& parent, rt::AppSession& session, ListId parentListId, TrackRowCache const& provider);
     ~SmartListDialog() override;
 
+    SmartListDialog(SmartListDialog const&) = delete;
+    SmartListDialog& operator=(SmartListDialog const&) = delete;
+    SmartListDialog(SmartListDialog&&) = delete;
+    SmartListDialog& operator=(SmartListDialog&&) = delete;
+
     // Populate dialog fields from an existing list for editing
     void populate(ListId id, library::ListView const& view);
 
@@ -47,7 +52,7 @@ namespace ao::gtk
     // Returns a ListDraft populated from the dialog fields
     model::ListDraft draft() const;
 
-    void setLocalExpression(std::string expression);
+    void setLocalExpression(std::string const& expression);
 
   private:
     void setupUi();

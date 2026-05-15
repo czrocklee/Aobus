@@ -4,11 +4,17 @@
 #include "LibCommand.h"
 #include <ao/library/Exporter.h>
 #include <ao/library/Importer.h>
-#include <chrono>
+#include <ao/library/MusicLibrary.h>
+
+#include <CLI/App.hpp>
 
 #include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <format>
-#include <ranges>
+#include <iostream>
+#include <string>
 
 namespace ao::cli
 {

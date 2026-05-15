@@ -2,16 +2,17 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/NowPlayingStatusLabel.h"
-#include <ao/utility/Log.h>
-#include <gdkmm/display.h>
-#include <gtkmm/cssprovider.h>
-#include <gtkmm/stylecontext.h>
-#include <runtime/AppSession.h>
+#include <ao/audio/Types.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
 
 #include <gdkmm/cursor.h>
+#include <gdkmm/display.h>
+#include <gtk/gtkstyleprovider.h>
+#include <gtkmm/cssprovider.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/label.h>
+#include <gtkmm/stylecontext.h>
 
 #include <format>
 
@@ -55,6 +56,7 @@ namespace ao::gtk
         {
           Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
         }
+
         initialized = true;
       }
     }

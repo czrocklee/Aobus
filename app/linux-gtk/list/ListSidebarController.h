@@ -35,6 +35,12 @@ namespace ao::gtk
     ListSidebarController(Gtk::Window& parent, rt::AppSession& session, Callbacks callbacks);
     ~ListSidebarController();
 
+    // Not copyable or movable
+    ListSidebarController(ListSidebarController const&) = delete;
+    ListSidebarController& operator=(ListSidebarController const&) = delete;
+    ListSidebarController(ListSidebarController&&) = delete;
+    ListSidebarController& operator=(ListSidebarController&&) = delete;
+
     Gtk::Widget& widget();
 
     void rebuildTree(TrackRowCache& dataProvider, lmdb::ReadTransaction const& txn);

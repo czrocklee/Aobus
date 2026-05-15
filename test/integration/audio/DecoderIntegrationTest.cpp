@@ -3,12 +3,15 @@
 
 #include <ao/audio/AlacDecoderSession.h>
 #include <ao/audio/FlacDecoderSession.h>
-#include <ao/utility/ByteView.h>
+#include <ao/audio/Format.h>
+#include <ao/audio/IDecoderSession.h>
 #include <ao/utility/Log.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <span>
 #include <vector>
@@ -60,7 +63,7 @@ namespace ao::audio::test
      */
     std::vector<std::int32_t> unpackS24(std::span<std::byte const> bytes)
     {
-      std::vector<std::int32_t> samples;
+      auto samples = std::vector<std::int32_t>{};
 
       for (std::size_t i = 0; i + 2 < bytes.size(); i += 3)
       {

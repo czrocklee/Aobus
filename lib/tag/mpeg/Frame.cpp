@@ -2,10 +2,13 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "Frame.h"
+#include "FrameLayout.h"
+
 #include <array>
-#include <boost/endian/conversion.hpp>
+#include <boost/endian/conversion.hpp>  // NOLINT(misc-include-cleaner)
 #include <cstdint>
 #include <cstring>
+#include <optional>
 
 namespace ao::tag::mpeg
 {
@@ -25,7 +28,7 @@ namespace ao::tag::mpeg
     using SamplingRateArray = std::array<std::uint32_t, 4>;
     using VersionSamplingRateArray = std::array<SamplingRateArray, 4>;
 
-    constexpr VersionSamplingRateArray VersionSamplingRateTable = {{
+    constexpr VersionSamplingRateArray kVersionSamplingRateTable = {{
       {kSamplingRate11025, kSamplingRate12000, kSamplingRate8000, 0},  // V2.5 (00)
       {0, 0, 0, 0},                                                    // Reserved (01)
       {kSamplingRate22050, kSamplingRate24000, kSamplingRate16000, 0}, // V2 (10)
@@ -36,25 +39,26 @@ namespace ao::tag::mpeg
     constexpr std::size_t kBitrateCount = 16;
     using BitrateArray = std::array<std::uint16_t, kBitrateCount>;
 
-    constexpr BitrateArray BitrateTableV1L1 = {0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0};
-    constexpr BitrateArray BitrateTableV1L2 = {0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0};
-    constexpr BitrateArray BitrateTableV1L3 = {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0};
-    constexpr BitrateArray BitrateTableV2L1 = {0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256, 0};
-    constexpr BitrateArray BitrateTableV2L23 = {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0};
-    constexpr BitrateArray BitrateTableReserved = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    constexpr BitrateArray kBitrateTableV1L1 =
+      {0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0};
+    constexpr BitrateArray kBitrateTableV1L2 = {0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0};
+    constexpr BitrateArray kBitrateTableV1L3 = {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0};
+    constexpr BitrateArray kBitrateTableV2L1 = {0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256, 0};
+    constexpr BitrateArray kBitrateTableV2L23 = {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0};
+    constexpr BitrateArray kBitrateTableReserved = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
     using LayerBitrateArray = std::array<BitrateArray, 4>;
     using VersionLayerBitrateArray = std::array<LayerBitrateArray, 4>;
 
-    constexpr VersionLayerBitrateArray VersionLayerBitrateTable = {{
-      {BitrateTableReserved, BitrateTableV2L23, BitrateTableV2L23, BitrateTableV2L1},           // V2.5
-      {BitrateTableReserved, BitrateTableReserved, BitrateTableReserved, BitrateTableReserved}, // Reserved
-      {BitrateTableReserved, BitrateTableV2L23, BitrateTableV2L23, BitrateTableV2L1},           // V2
-      {BitrateTableReserved, BitrateTableV1L3, BitrateTableV1L2, BitrateTableV1L1}              // V1
+    constexpr VersionLayerBitrateArray kVersionLayerBitrateTable = {{
+      {kBitrateTableReserved, kBitrateTableV2L23, kBitrateTableV2L23, kBitrateTableV2L1},           // V2.5
+      {kBitrateTableReserved, kBitrateTableReserved, kBitrateTableReserved, kBitrateTableReserved}, // Reserved
+      {kBitrateTableReserved, kBitrateTableV2L23, kBitrateTableV2L23, kBitrateTableV2L1},           // V2
+      {kBitrateTableReserved, kBitrateTableV1L3, kBitrateTableV1L2, kBitrateTableV1L1}              // V1
     }};
 
-    constexpr std::uint8_t FrameSyncByte1 = 0xFF;
-    constexpr std::uint8_t FrameSyncByte2Mask = 0xE0;
+    constexpr std::uint8_t kFrameSyncByte1 = 0xFF;
+    constexpr std::uint8_t kFrameSyncByte2Mask = 0xE0;
     constexpr std::size_t kXingDataFieldOffset = 8;
 
     std::uint8_t const* findFrameSync(std::uint8_t const* begin, std::uint8_t const* end)
@@ -62,7 +66,7 @@ namespace ao::tag::mpeg
       while (static_cast<std::size_t>(end - begin) >= sizeof(FrameLayout))
       {
         auto const size = static_cast<std::size_t>(end - begin);
-        auto const* sync = static_cast<std::uint8_t const*>(std::memchr(begin, FrameSyncByte1, size));
+        auto const* sync = static_cast<std::uint8_t const*>(std::memchr(begin, kFrameSyncByte1, size));
 
         if (sync == nullptr)
         {
@@ -74,7 +78,7 @@ namespace ao::tag::mpeg
           return nullptr;
         }
 
-        if ((*(sync + 1) & FrameSyncByte2Mask) == FrameSyncByte2Mask)
+        if ((*(sync + 1) & kFrameSyncByte2Mask) == kFrameSyncByte2Mask)
         {
           return sync;
         }
@@ -97,42 +101,36 @@ namespace ao::tag::mpeg
     auto const& header = layout();
 
     // sync1 must be 0xFF
-
     if (header.sync1() != kFrameSyncByte)
     {
       return false;
     }
 
     // sync2 bits (top 3 bits of second byte) must be 0b111
-
     if (header.sync2() != kSync2Expected)
     {
       return false;
     }
 
     // versionId cannot be Reserved (0b01)
-
     if (header.versionId() == VersionID::Reserved)
     {
       return false;
     }
 
     // layer cannot be Reserved (0b00)
-
     if (header.layer() == LayerDescription::Reserved)
     {
       return false;
     }
 
     // bitrateIndex cannot be 0 (free) or 15 (reserved)
-
     if (header.bitrateIndex() == kBitrateIndexFree || header.bitrateIndex() == kBitrateIndexReserved)
     {
       return false;
     }
 
     // samplingRateIndex cannot be 3 (reserved)
-
     if (header.samplingRateIndex() == kSamplingRateIndexReserved)
     {
       return false;
@@ -149,8 +147,8 @@ namespace ao::tag::mpeg
     auto const bitrateIndex = static_cast<std::size_t>(fl.bitrateIndex());
     auto const samplingRateIndex = static_cast<std::size_t>(fl.samplingRateIndex());
 
-    auto const bitrate = VersionLayerBitrateTable.at(versionId).at(layer).at(bitrateIndex);
-    auto const samplingRate = VersionSamplingRateTable.at(versionId).at(samplingRateIndex);
+    auto const bitrate = kVersionLayerBitrateTable.at(versionId).at(layer).at(bitrateIndex);
+    auto const samplingRate = kVersionSamplingRateTable.at(versionId).at(samplingRateIndex);
 
     if (bitrate == 0 || samplingRate == 0)
     {
@@ -194,7 +192,7 @@ namespace ao::tag::mpeg
   std::uint32_t FrameView::sampleRate() const
   {
     auto const& fl = layout();
-    return VersionSamplingRateTable.at(static_cast<std::size_t>(fl.versionId()))
+    return kVersionSamplingRateTable.at(static_cast<std::size_t>(fl.versionId()))
       .at(static_cast<std::size_t>(fl.samplingRateIndex()));
   }
 
@@ -203,7 +201,7 @@ namespace ao::tag::mpeg
     auto const& fl = layout();
     // Table values are in kbps, convert to bps
     constexpr std::uint32_t kBpsPerKbps = 1000;
-    return VersionLayerBitrateTable.at(static_cast<std::size_t>(fl.versionId()))
+    return kVersionLayerBitrateTable.at(static_cast<std::size_t>(fl.versionId()))
              .at(static_cast<std::size_t>(fl.layer()))
              .at(static_cast<std::size_t>(fl.bitrateIndex())) *
            kBpsPerKbps;
@@ -254,11 +252,11 @@ namespace ao::tag::mpeg
 
     // Offset of "Xing" or "Info" relative to frame start (excluding 4-byte header)
     std::size_t offset = 0;
-    constexpr std::size_t kXingHeaderSize = 4;
-    constexpr std::size_t kXingOffsetVer1Stereo = 32;
-    constexpr std::size_t kXingOffsetVer1Mono = 17;
-    constexpr std::size_t kXingOffsetVer2Stereo = 17;
-    constexpr std::size_t kXingOffsetVer2Mono = 9;
+    static constexpr std::size_t kXingHeaderSize = 4;
+    static constexpr std::size_t kXingOffsetVer1Stereo = 32;
+    static constexpr std::size_t kXingOffsetVer1Mono = 17;
+    static constexpr std::size_t kXingOffsetVer2Stereo = 17;
+    static constexpr std::size_t kXingOffsetVer2Mono = 9;
 
     if (fl.versionId() == VersionID::Ver1)
     {
@@ -274,15 +272,18 @@ namespace ao::tag::mpeg
 
     auto const* ptr = static_cast<std::uint8_t const*>(_data) + offset;
 
-    if (std::memcmp(ptr, "Xing", 4) != 0 && std::memcmp(ptr, "Info", 4) != 0)
+    static constexpr std::size_t kXingMagicSize = 4;
+    
+    if (std::memcmp(ptr, "Xing", kXingMagicSize) != 0 && std::memcmp(ptr, "Info", kXingMagicSize) != 0)
     {
       return {};
     }
 
-    XingInfo info;
+    auto info = XingInfo{};
     std::uint32_t flags = 0;
-    std::memcpy(&flags, ptr + 4, 4);
-    flags = boost::endian::endian_reverse(flags);
+    static constexpr std::size_t kXingFlagsSize = 4;
+    std::memcpy(&flags, ptr + kXingFlagsSize, kXingFlagsSize);
+    flags = boost::endian::endian_reverse(flags);  // NOLINT(misc-include-cleaner)
 
     std::size_t fieldOffset = kXingDataFieldOffset;
     constexpr std::uint32_t kXingFlagFrames = 0x01;
@@ -291,17 +292,19 @@ namespace ao::tag::mpeg
     if ((flags & kXingFlagFrames) != 0)
     {
       std::uint32_t frames = 0;
-      std::memcpy(&frames, ptr + fieldOffset, 4);
-      info.frames = boost::endian::endian_reverse(frames);
-      fieldOffset += 4;
+      static constexpr std::size_t kXingFramesFieldSize = 4;
+      std::memcpy(&frames, ptr + fieldOffset, kXingFramesFieldSize);
+      info.frames = boost::endian::endian_reverse(frames);  // NOLINT(misc-include-cleaner)
+      fieldOffset += kXingFramesFieldSize;
     }
 
     if ((flags & kXingFlagBytes) != 0) // Bytes field present
     {
       std::uint32_t bytes = 0;
-      std::memcpy(&bytes, ptr + fieldOffset, 4);
-      info.bytes = boost::endian::endian_reverse(bytes);
-      fieldOffset += 4;
+      static constexpr std::size_t kXingBytesFieldSize = 4;
+      std::memcpy(&bytes, ptr + fieldOffset, kXingBytesFieldSize);
+      info.bytes = boost::endian::endian_reverse(bytes);  // NOLINT(misc-include-cleaner)
+      fieldOffset += kXingBytesFieldSize;
     }
 
     return info;

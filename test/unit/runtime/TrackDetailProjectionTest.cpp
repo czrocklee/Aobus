@@ -8,14 +8,18 @@
 #include <runtime/LibraryMutationService.h>
 #include <runtime/ListSourceStore.h>
 #include <runtime/PlaybackService.h>
+#include <runtime/ProjectionTypes.h>
 #include <runtime/StateTypes.h>
 #include <runtime/TrackDetailProjection.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
 
-#include <ao/library/TrackBuilder.h>
+#include <ao/Type.h>
 
+#include <cstdint>
+#include <functional>
 #include <limits>
+#include <memory>
 
 namespace ao::rt::test
 {
@@ -75,7 +79,7 @@ namespace ao::rt::test
 
     // Mutate the track in the library using the service
     {
-      MetadataPatch patch{.optTitle = "After"};
+      auto const patch = MetadataPatch{.optTitle = "After"};
       env.mutation.updateMetadata({id1}, patch);
     }
 

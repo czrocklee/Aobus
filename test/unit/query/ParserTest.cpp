@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
 #include <ao/utility/VariantVisitor.h>
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-
+#include <cstdint>
+#include <memory>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <variant>
 
 namespace ao::query::test
 {
-  char const* toString(Operator op)
+  namespace
+  {
+    char const* toString(Operator op)
   {
     switch (op)
     {
@@ -90,11 +93,12 @@ namespace ao::query::test
     std::ostringstream oss;
   };
 
-  std::string canonicalize(Expression const& expr)
-  {
-    auto canonicalizer = Canonicalizer{};
-    std::visit(canonicalizer, expr);
-    return canonicalizer.oss.str();
+    std::string canonicalize(Expression const& expr)
+    {
+      auto canonicalizer = Canonicalizer{};
+      std::visit(canonicalizer, expr);
+      return canonicalizer.oss.str();
+    }
   }
 
   TEST_CASE("Parser - String Literal")

@@ -42,6 +42,11 @@ namespace ao::gtk
                            rt::ViewId viewId = rt::ViewId{});
     ~TrackViewPage() override;
 
+    TrackViewPage(TrackViewPage const&) = delete;
+    TrackViewPage& operator=(TrackViewPage const&) = delete;
+    TrackViewPage(TrackViewPage&&) = delete;
+    TrackViewPage& operator=(TrackViewPage&&) = delete;
+
     ListId getListId() const noexcept { return _listId; }
 
     TrackFilterController& filterController() noexcept { return *_filterController; }
@@ -59,7 +64,7 @@ namespace ao::gtk
     CreateSmartListRequestedSignal& signalCreateSmartListRequested() noexcept;
     rt::ITrackListProjection* projection() const noexcept { return _adapter.projection(); }
 
-    void showTagPopover(TagPopover& popover, double x, double y);
+    void showTagPopover(TagPopover& popover, double posX, double posY);
     void setStatusMessage(std::string_view message);
     void clearStatusMessage();
 

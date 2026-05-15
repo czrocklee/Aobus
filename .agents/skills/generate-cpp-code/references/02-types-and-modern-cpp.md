@@ -205,8 +205,13 @@ private:
 Initialization style:
 
 ```cpp
+using namespace std::string_literals;
+using namespace std::string_view_literals;
+
 auto device = Device{.id = DeviceId{"default"}, .displayName = "Default"};
 auto bytes = std::vector<std::byte>{};
+auto title = "Title"s;
+auto view = "View"sv;
 std::size_t offset = 0;
 float volume = 1.0F;
 ::spa_pod* pod = nullptr;

@@ -4,13 +4,20 @@
 #include "detail/ThrowError.h"
 #include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <string>
 #include <lmdb.h>
-#include <vector>
+#include <optional>
+#include <span>
+#include <tuple>
+#include <utility>
 
 namespace ao::lmdb
 {
@@ -32,7 +39,7 @@ namespace ao::lmdb
     {
       if (val.mv_size != sizeof(T))
       {
-        AO_THROW(Exception, "read: bad value size");
+        ao::throwException<Exception>("read: bad value size");
       }
 
       T value;
@@ -198,7 +205,6 @@ namespace ao::lmdb
   Writer::~Writer() noexcept
   {
     // When transaction is committed, LMDB automatically closes all cursors - release without closing
-
     if (_txn->isCommitted())
     {
       std::ignore = _cursor.release();

@@ -24,6 +24,11 @@ namespace ao::gtk
     TagEditor();
     ~TagEditor() override;
 
+    TagEditor(TagEditor const&) = delete;
+    TagEditor& operator=(TagEditor const&) = delete;
+    TagEditor(TagEditor&&) = delete;
+    TagEditor& operator=(TagEditor&&) = delete;
+
     void setup(library::MusicLibrary& library, std::vector<TrackId> selectedTrackIds);
 
     // Signals

@@ -28,6 +28,8 @@ namespace ao::gtk
 
     OutputSelector(OutputSelector const&) = delete;
     OutputSelector& operator=(OutputSelector const&) = delete;
+    OutputSelector(OutputSelector&&) = delete;
+    OutputSelector& operator=(OutputSelector&&) = delete;
 
     Gtk::Widget& widget() { return _button; }
 

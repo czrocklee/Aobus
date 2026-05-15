@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Types.h>
+#include <ao/audio/Format.h>
 
 #include <cstddef>
 #include <cstdint>

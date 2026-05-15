@@ -67,6 +67,16 @@ namespace ao::rt
   public:
     virtual ~ITrackListProjection() = default;
 
+    ITrackListProjection(ITrackListProjection const&) = delete;
+    ITrackListProjection& operator=(ITrackListProjection const&) = delete;
+    ITrackListProjection(ITrackListProjection&&) = delete;
+    ITrackListProjection& operator=(ITrackListProjection&&) = delete;
+
+  protected:
+    ITrackListProjection() = default;
+
+  public:
+
     virtual ViewId viewId() const noexcept = 0;
     virtual std::uint64_t revision() const noexcept = 0;
 
@@ -154,6 +164,16 @@ namespace ao::rt
   {
   public:
     virtual ~ITrackDetailProjection() = default;
+
+    ITrackDetailProjection(ITrackDetailProjection const&) = delete;
+    ITrackDetailProjection& operator=(ITrackDetailProjection const&) = delete;
+    ITrackDetailProjection(ITrackDetailProjection&&) = delete;
+    ITrackDetailProjection& operator=(ITrackDetailProjection&&) = delete;
+
+  protected:
+    ITrackDetailProjection() = default;
+
+  public:
 
     virtual TrackDetailSnapshot snapshot() const = 0;
     virtual Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) = 0;

@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
 #include <catch2/catch_test_macros.hpp>
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <utility>
 
 namespace ao::query::test
 {
@@ -120,10 +124,10 @@ namespace ao::query::test
 
   TEST_CASE("Serializer - RoundTrip ParseSerializeParse Preserves Canonical Shape")
   {
-    auto queries = {"$artist = \"Bach\" and $year >= 2020",
+    auto queries = {R"($artist = "Bach" and $year >= 2020)",
                     "not ($year = 2020)",
-                    "$title ~ \"Bach\" or $composer ~ \"Mozart\"",
-                    "%isrc = \"X\" and @duration >= 3m"};
+                    R"($title ~ "Bach" or $composer ~ "Mozart")",
+                    R"(%isrc = "X" and @duration >= 3m)"};
 
     for (auto const& q : queries)
     {

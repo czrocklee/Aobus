@@ -9,6 +9,7 @@
 #include <ao/audio/Types.h>
 #include <ao/audio/flow/Graph.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -32,7 +33,7 @@ namespace ao::audio
       flow::Graph flow;
       Quality quality = Quality::Unknown;
       std::string qualityTooltip;
-      float volume = 1.0f;
+      float volume = 1.0F;
       bool muted = false;
       bool volumeAvailable = false;
       bool isReady = false;
@@ -42,6 +43,11 @@ namespace ao::audio
 
     Player();
     ~Player();
+
+    Player(Player const&) = delete;
+    Player& operator=(Player const&) = delete;
+    Player(Player&&) = delete;
+    Player& operator=(Player&&) = delete;
 
     void addProvider(std::unique_ptr<IBackendProvider> provider);
 

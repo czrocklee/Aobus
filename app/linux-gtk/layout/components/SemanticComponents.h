@@ -11,5 +11,4 @@ namespace ao::gtk::layout
    * @brief Register semantic components for library and tracks.
    */
   void registerSemanticComponents(ComponentRegistry& registry);
-  void registerStatusComponents(ComponentRegistry& registry);
 } // namespace ao::gtk::layout

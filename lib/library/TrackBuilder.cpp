@@ -2,11 +2,23 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackView.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/ResourceStore.h>
+#include <ao/library/TrackLayout.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/Type.h>
 #include <ao/utility/ByteView.h>
 
-#include <algorithm>
-#include <cstring>
 #include <gsl-lite/gsl-lite.hpp>
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <span>
+#include <utility>
+#include <vector>
 
 namespace ao::library
 {
@@ -119,94 +131,94 @@ namespace ao::library
   // MetadataBuilder
   //=============================================================================
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::title(std::string_view val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::title(std::string_view text)
   {
-    _title = val;
+    _title = text;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::artist(std::string_view val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::artist(std::string_view text)
   {
-    _artist = val;
+    _artist = text;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::album(std::string_view val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::album(std::string_view text)
   {
-    _album = val;
+    _album = text;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::albumArtist(std::string_view val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::albumArtist(std::string_view text)
   {
-    _albumArtist = val;
+    _albumArtist = text;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::composer(std::string_view val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::composer(std::string_view text)
   {
-    _composer = val;
+    _composer = text;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::genre(std::string_view val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::genre(std::string_view text)
   {
-    _genre = val;
+    _genre = text;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::work(std::string_view val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::work(std::string_view text)
   {
-    _work = val;
+    _work = text;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::year(std::uint16_t val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::year(std::uint16_t year)
   {
-    _year = val;
+    _year = year;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::trackNumber(std::uint16_t val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::trackNumber(std::uint16_t number)
   {
-    _trackNumber = val;
+    _trackNumber = number;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalTracks(std::uint16_t val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalTracks(std::uint16_t count)
   {
-    _totalTracks = val;
+    _totalTracks = count;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::discNumber(std::uint16_t val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::discNumber(std::uint16_t number)
   {
-    _discNumber = val;
+    _discNumber = number;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalDiscs(std::uint16_t val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::totalDiscs(std::uint16_t count)
   {
-    _totalDiscs = val;
+    _totalDiscs = count;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtId(std::uint32_t val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtId(std::uint32_t id)
   {
-    _coverArtId = val;
+    _coverArtId = id;
     _embeddedCoverArt = {};
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtData(std::span<std::byte const> val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::coverArtData(std::span<std::byte const> data)
   {
-    _embeddedCoverArt = val;
+    _embeddedCoverArt = data;
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::rating(std::uint8_t val)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::rating(std::uint8_t rating)
   {
-    _rating = val;
+    _rating = rating;
     return *this;
   }
 
@@ -214,57 +226,57 @@ namespace ao::library
   // PropertyBuilder
   //=============================================================================
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::fileSize(std::uint64_t val)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::fileSize(std::uint64_t size)
   {
-    _fileSize = val;
+    _fileSize = size;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::mtime(std::uint64_t val)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::mtime(std::uint64_t mtime)
   {
-    _mtime = val;
+    _mtime = mtime;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::durationMs(std::uint32_t val)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::durationMs(std::uint32_t durationMs)
   {
-    _durationMs = val;
+    _durationMs = durationMs;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitrate(std::uint32_t val)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitrate(std::uint32_t bitrate)
   {
-    _bitrate = val;
+    _bitrate = bitrate;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::sampleRate(std::uint32_t val)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::sampleRate(std::uint32_t sampleRate)
   {
-    _sampleRate = val;
+    _sampleRate = sampleRate;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::codecId(std::uint16_t val)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::codecId(std::uint16_t id)
   {
-    _codecId = val;
+    _codecId = id;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::channels(std::uint8_t val)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::channels(std::uint8_t channels)
   {
-    _channels = val;
+    _channels = channels;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitDepth(std::uint8_t val)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::bitDepth(std::uint8_t bitDepth)
   {
-    _bitDepth = val;
+    _bitDepth = bitDepth;
     return *this;
   }
 
-  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::uri(std::string_view val)
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::uri(std::string_view uri)
   {
-    _uri = val;
+    _uri = uri;
     return *this;
   }
 
@@ -372,7 +384,6 @@ namespace ao::library
     }
 
     // Resolve metadata strings to DictionaryIds for header
-
     if (!builder->_metadataBuilder._artist.empty())
     {
       _artistId = dict.put(txn, builder->_metadataBuilder._artist);
@@ -440,7 +451,6 @@ namespace ao::library
     }
 
     // Write title
-
     if (!builder._metadataBuilder._title.empty())
     {
       std::memcpy(out.data() + pos, builder._metadataBuilder._title.data(), builder._metadataBuilder._title.size());
@@ -448,7 +458,6 @@ namespace ao::library
     }
 
     // Pad to 4 bytes
-
     while (pos % 4 != 0)
     {
       out[pos++] = std::byte{0};
@@ -462,7 +471,6 @@ namespace ao::library
     : _builder{builder}
   {
     // Handle embedded cover art - store resolved ID in PreparedCold
-
     if (!_builder->_metadataBuilder._embeddedCoverArt.empty())
     {
       auto writer = resources.writer(txn);
@@ -491,7 +499,7 @@ namespace ao::library
     std::ranges::sort(_resolvedPairs, {}, &std::pair<DictionaryId, std::string_view>::first);
 
     // Compute sizes
-    std::size_t entryCount = _resolvedPairs.size();
+    std::size_t const entryCount = _resolvedPairs.size();
     std::size_t totalValueSize = 0;
 
     // NOLINTNEXTLINE(readability-identifier-length)
@@ -584,7 +592,6 @@ namespace ao::library
     }
 
     // Write uri
-
     if (_uriLen > 0)
     {
       std::memcpy(out.data() + pos, _builder->_propertyBuilder._uri.data(), _uriLen);
@@ -592,7 +599,6 @@ namespace ao::library
     }
 
     // Pad to 4 bytes
-
     while (pos % 4 != 0)
     {
       out[pos++] = std::byte{0};

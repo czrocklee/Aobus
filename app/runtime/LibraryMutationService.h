@@ -59,6 +59,7 @@ namespace ao::rt
 
     LibraryMutationService(LibraryMutationService const&) = delete;
     LibraryMutationService& operator=(LibraryMutationService const&) = delete;
+    LibraryMutationService(LibraryMutationService&&) = delete;
     LibraryMutationService& operator=(LibraryMutationService&&) = delete;
 
   private:

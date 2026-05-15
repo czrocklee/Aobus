@@ -7,9 +7,14 @@
 #include "track/TrackRowCache.h"
 #include <runtime/TrackSource.h>
 
-#include <glibmm.h>
+#include <ao/Type.h>
+#include <glibmm/main.h>
 
+#include <cstddef>
+#include <filesystem>
 #include <fstream>
+#include <memory>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -56,7 +61,6 @@ namespace ao::gtk
   void PlaylistExporter::scheduleForWrite()
   {
     // Cancel any existing timeout
-
     if (_timeoutConnection)
     {
       _timeoutConnection->disconnect();

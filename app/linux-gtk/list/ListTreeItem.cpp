@@ -2,8 +2,11 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "list/ListTreeItem.h"
-
 #include "list/ListRowObject.h"
+
+#include <giomm/liststore.h>
+#include <glibmm/refptr.h>
+#include <glib.h>
 
 namespace ao::gtk
 {

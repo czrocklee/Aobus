@@ -28,10 +28,16 @@ namespace ao::gtk
     explicit SelectionInfoLabel(rt::ViewService& viewService);
     ~SelectionInfoLabel();
 
+    // Not copyable or movable
+    SelectionInfoLabel(SelectionInfoLabel const&) = delete;
+    SelectionInfoLabel& operator=(SelectionInfoLabel const&) = delete;
+    SelectionInfoLabel(SelectionInfoLabel&&) = delete;
+    SelectionInfoLabel& operator=(SelectionInfoLabel&&) = delete;
+
     Gtk::Widget& widget() { return _label; }
 
   private:
-    void updateState(std::size_t count, std::optional<std::chrono::milliseconds> totalDuration = std::nullopt);
+    void updateState(std::size_t count, std::optional<std::chrono::milliseconds> optTotalDuration = std::nullopt);
 
     rt::ViewService& _viewService;
     Gtk::Label _label;

@@ -17,6 +17,7 @@ namespace ao::gtk
     static Glib::RefPtr<ColumnVisibilityModel> create();
 
     Glib::PropertyProxy<bool> property_visible(TrackColumn column);
+
     bool isVisible(TrackColumn column) const noexcept;
 
     void recompute(TrackColumnLayout const& layout);

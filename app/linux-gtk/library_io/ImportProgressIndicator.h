@@ -26,6 +26,12 @@ namespace ao::gtk
     explicit ImportProgressIndicator(rt::LibraryMutationService& mutationService);
     ~ImportProgressIndicator();
 
+    // Not copyable or movable
+    ImportProgressIndicator(ImportProgressIndicator const&) = delete;
+    ImportProgressIndicator& operator=(ImportProgressIndicator const&) = delete;
+    ImportProgressIndicator(ImportProgressIndicator&&) = delete;
+    ImportProgressIndicator& operator=(ImportProgressIndicator&&) = delete;
+
     Gtk::Widget& widget() { return _container; }
 
   private:

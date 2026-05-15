@@ -4,11 +4,26 @@
 #include "tag/TagEditController.h"
 #include "tag/TagPopover.h"
 #include "track/TrackRowCache.h"
-#include <ao/library/TrackBuilder.h>
+#include "track/TrackViewPage.h"
 #include <ao/utility/Log.h>
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/NotificationService.h>
+#include <runtime/StateTypes.h>
+
+#include <giomm/actionmap.h>
+#include <giomm/simpleaction.h>
+#include <glibmm/variant.h>
+#include <glibmm/varianttype.h>
+#include <gtkmm/widget.h>
+#include <gtkmm/window.h>
+
+#include <cstddef>
+#include <format>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {

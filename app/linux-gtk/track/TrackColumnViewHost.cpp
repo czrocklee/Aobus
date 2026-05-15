@@ -2,7 +2,21 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackColumnViewHost.h"
+#include "track/TrackColumnController.h"
 #include "track/TrackListAdapter.h"
+#include "track/TrackPresentation.h"
+#include "track/TrackSelectionController.h"
+#include <ao/Type.h>
+
+#include <glibmm/refptr.h>
+#include <gtkmm/columnview.h>
+#include <gtkmm/cssprovider.h>
+#include <gtkmm/multiselection.h>
+#include <gtkmm/widget.h>
+
+#include <memory>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -40,9 +54,9 @@ namespace ao::gtk
     _trackActivatedConn =
       _selectionController->signalTrackActivated().connect([this](TrackId id) { _trackActivatedSignal.emit(id); });
     _contextMenuRequestedConn = _selectionController->signalContextMenuRequested().connect(
-      [this](double x, double y) { _contextMenuRequestedSignal.emit(x, y); });
+      [this](double xPos, double yPos) { _contextMenuRequestedSignal.emit(xPos, yPos); });
     _tagEditRequestedConn = _selectionController->signalTagEditRequested().connect(
-      [this](std::vector<TrackId> const& ids, Gtk::Widget* w) { _tagEditRequestedSignal.emit(ids, w); });
+      [this](std::vector<TrackId> const& ids, Gtk::Widget* widget) { _tagEditRequestedSignal.emit(ids, widget); });
   }
 
   Gtk::ColumnView& TrackColumnViewHost::rebuild(TrackListAdapter& adapter,

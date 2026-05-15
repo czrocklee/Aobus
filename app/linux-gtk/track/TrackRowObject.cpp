@@ -3,12 +3,20 @@
 
 #include "track/TrackRowObject.h"
 #include "track/TrackRowCache.h"
+#include "track/TrackPresentation.h"
+#include <ao/Type.h>
+
+#include <glibmm/objectbase.h>
+#include <glibmm/propertyproxy.h>
+#include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
 
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <string>
+
 
 namespace ao::gtk
 {

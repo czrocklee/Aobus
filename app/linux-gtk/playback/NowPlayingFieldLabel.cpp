@@ -2,8 +2,15 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/NowPlayingFieldLabel.h"
+#include <ao/audio/Types.h>
+#include <runtime/PlaybackService.h>
+#include <runtime/StateTypes.h>
+
+#include <gtkmm/label.h>
+#include <pangomm/layout.h>
 
 #include <format>
+#include <string>
 
 namespace ao::gtk
 {
@@ -16,6 +23,7 @@ namespace ao::gtk
         case NowPlayingFieldLabel::Field::Title: return "playback-title";
         case NowPlayingFieldLabel::Field::Artist: return "playback-artist";
       }
+
       return "";
     }
   } // namespace
@@ -47,6 +55,7 @@ namespace ao::gtk
       {
         _label.set_text("");
       }
+
       return;
     }
 

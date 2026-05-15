@@ -2,11 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/LibraryTrackCountLabel.h"
-#include <runtime/AllTracksSource.h>
-#include <runtime/AppSession.h>
-#include <runtime/LibraryMutationService.h>
+#include <ao/Type.h>
 #include <runtime/TrackSource.h>
 
+#include <cstddef>
 #include <format>
 
 namespace ao::gtk

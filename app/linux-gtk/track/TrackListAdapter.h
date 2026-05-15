@@ -19,7 +19,7 @@
 
 namespace ao::gtk
 {
-  enum class TrackFilterMode
+  enum class TrackFilterMode : std::uint8_t
   {
     None,
     Quick,
@@ -39,6 +39,11 @@ namespace ao::gtk
                               library::MusicLibrary& musicLibrary,
                               TrackRowCache const& provider);
     ~TrackListAdapter() override;
+
+    TrackListAdapter(TrackListAdapter const&) = delete;
+    TrackListAdapter& operator=(TrackListAdapter const&) = delete;
+    TrackListAdapter(TrackListAdapter&&) = delete;
+    TrackListAdapter& operator=(TrackListAdapter&&) = delete;
 
     Glib::RefPtr<Gio::ListModel> getModel() noexcept { return _listModel; }
     library::MusicLibrary& getMusicLibrary() noexcept { return _musicLibrary; }

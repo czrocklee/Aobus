@@ -2,18 +2,22 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/library/Exporter.h>
-
-#include <ao/Exception.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ListStore.h>
-#include <ao/library/ResourceStore.h>
+#include <ao/library/ListView.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/Type.h>
+#include <ao/Exception.h>
 
-#include <yaml-cpp/yaml.h>
+#include <yaml-cpp/emitter.h>
+#include <yaml-cpp/emittermanip.h>
 
+#include <filesystem>
 #include <fstream>
-#include <map>
-#include <unordered_map>
+#include <string>
 
 namespace ao::library
 {
@@ -141,7 +145,7 @@ namespace ao::library
 
     if (!ofs)
     {
-      AO_THROW_FORMAT(Exception, "Failed to open '{}' for writing", path.string());
+      ao::throwException<Exception>("Failed to open '{}' for writing", path.string());
     }
 
     auto out = YAML::Emitter{ofs};
@@ -160,7 +164,7 @@ namespace ao::library
 
     if (!out.good())
     {
-      AO_THROW_FORMAT(Exception, "YAML emitter error while writing '{}': {}", path.string(), out.GetLastError());
+      ao::throwException<Exception>("YAML emitter error while writing '{}': {}", path.string(), out.GetLastError());
     }
   }
 

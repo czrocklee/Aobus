@@ -2,6 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "LibraryMutationService.h"
+
+#include <ao/Error.h>
+#include <ao/Type.h>
 #include <ao/library/ImportWorker.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
@@ -10,11 +13,19 @@
 #include <ao/library/TrackStore.h>
 #include <ao/model/ListDraft.h>
 #include <ao/utility/ThreadUtils.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/StateTypes.h>
 
-#include <algorithm>
+#include <filesystem>
+#include <functional>
 #include <memory>
-#include <stop_token>
+#include <string>
+#include <thread>
+#include <utility>
 #include <vector>
+
+#include <cstddef>
+#include <cstdint>
 
 namespace ao::rt
 {

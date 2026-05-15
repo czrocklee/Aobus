@@ -6,9 +6,11 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/IBackend.h>
 #include <ao/audio/Subscription.h>
+#include <ao/audio/flow/Graph.h>
 
 #include <functional>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -59,6 +61,16 @@ namespace ao::audio
     using OnGraphChangedCallback = std::function<void(flow::Graph const&)>;
 
     virtual ~IBackendProvider() = default;
+
+    IBackendProvider(IBackendProvider const&) = delete;
+    IBackendProvider& operator=(IBackendProvider const&) = delete;
+    IBackendProvider(IBackendProvider&&) = delete;
+    IBackendProvider& operator=(IBackendProvider&&) = delete;
+
+  protected:
+    IBackendProvider() = default;
+
+  public:
 
     /**
      * @brief Subscribe to incremental device updates.

@@ -16,20 +16,24 @@ namespace ao::gtk::layout::editor
   class LayoutEditorDialog final : public Gtk::Dialog
   {
   public:
-    LayoutEditorDialog(Gtk::Window& parent, ComponentRegistry const& registry, LayoutDocument const& initialDoc);
+    LayoutEditorDialog(Gtk::Window& parent, ComponentRegistry const& registry, LayoutDocument initialDoc);
     ~LayoutEditorDialog() override;
+
+    LayoutEditorDialog(LayoutEditorDialog const&) = delete;
+    LayoutEditorDialog& operator=(LayoutEditorDialog const&) = delete;
+    LayoutEditorDialog(LayoutEditorDialog&&) = delete;
+    LayoutEditorDialog& operator=(LayoutEditorDialog&&) = delete;
 
     LayoutDocument const& document() const { return _document; }
 
     sigc::signal<void(LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
 
-    void updateNodePosition(std::string const& nodeId, int x, int y);
+    void updateNodePosition(std::string const& nodeId, int posX, int posY);
 
   private:
     // Tree Model columns
-    class ModelColumns : public Gtk::TreeModel::ColumnRecord
+    struct ModelColumns : Gtk::TreeModel::ColumnRecord
     {
-    public:
       ModelColumns()
       {
         add(displayName);

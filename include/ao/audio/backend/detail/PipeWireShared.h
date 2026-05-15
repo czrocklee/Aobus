@@ -19,72 +19,79 @@ extern "C"
 namespace ao::audio::backend::detail
 {
   // --- RAII Deleters (inline implementations) ---
-
   struct PwProxyDeleter final
   {
-    void operator()(void* p) const noexcept { ::pw_proxy_destroy(static_cast<::pw_proxy*>(p)); }
+    void operator()(void* ptr) const noexcept { ::pw_proxy_destroy(static_cast<::pw_proxy*>(ptr)); }
   };
+
   template<typename T>
   using PwProxyPtr = std::unique_ptr<T, PwProxyDeleter>;
 
   struct PwThreadLoopDeleter final
   {
-    void operator()(::pw_thread_loop* p) const noexcept { ::pw_thread_loop_destroy(p); }
+    void operator()(::pw_thread_loop* ptr) const noexcept { ::pw_thread_loop_destroy(ptr); }
   };
+
   using PwThreadLoopPtr = std::unique_ptr<::pw_thread_loop, PwThreadLoopDeleter>;
 
   struct PwContextDeleter final
   {
-    void operator()(::pw_context* p) const noexcept { ::pw_context_destroy(p); }
+    void operator()(::pw_context* ptr) const noexcept { ::pw_context_destroy(ptr); }
   };
+
   using PwContextPtr = std::unique_ptr<::pw_context, PwContextDeleter>;
 
   struct PwCoreDeleter final
   {
-    void operator()(::pw_core* p) const noexcept { ::pw_core_disconnect(p); }
+    void operator()(::pw_core* ptr) const noexcept { ::pw_core_disconnect(ptr); }
   };
+
   using PwCorePtr = std::unique_ptr<::pw_core, PwCoreDeleter>;
 
   struct PwStreamDeleter final
   {
-    void operator()(::pw_stream* p) const noexcept { ::pw_stream_destroy(p); }
+    void operator()(::pw_stream* ptr) const noexcept { ::pw_stream_destroy(ptr); }
   };
+
   using PwStreamPtr = std::unique_ptr<::pw_stream, PwStreamDeleter>;
 
-  struct PwRegistryDeleter final
-  {
-    void operator()(::pw_registry* p) const noexcept { ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p)); }
-  };
-  using PwRegistryPtr = std::unique_ptr<::pw_registry, PwRegistryDeleter>;
-
-  struct PwLinkDeleter final
-  {
-    void operator()(::pw_link* p) const noexcept { ::pw_proxy_destroy(reinterpret_cast<::pw_proxy*>(p)); }
-  };
-  using PwLinkPtr = std::unique_ptr<::pw_link, PwLinkDeleter>;
+  using PwRegistryPtr = PwProxyPtr<::pw_registry>;
+  using PwLinkPtr = PwProxyPtr<::pw_link>;
 
   struct SpaSourceDeleter final
   {
     ::pw_thread_loop* loop = nullptr;
-    void operator()(::spa_source* p) const noexcept
+
+    void operator()(::spa_source* ptr) const noexcept
     {
-      if (loop) ::pw_loop_destroy_source(::pw_thread_loop_get_loop(loop), p);
+        ::pw_loop_destroy_source(::pw_thread_loop_get_loop(loop), ptr);
     }
   };
+
   using SpaSourcePtr = std::unique_ptr<::spa_source, SpaSourceDeleter>;
 
   class SpaHookGuard final
   {
   public:
-    SpaHookGuard() noexcept { std::memset(&_hook, 0, sizeof(_hook)); }
+    SpaHookGuard() noexcept : _hook{} {}
     ~SpaHookGuard() noexcept { reset(); }
+
     SpaHookGuard(SpaHookGuard const&) = delete;
     SpaHookGuard& operator=(SpaHookGuard const&) = delete;
+
+    SpaHookGuard(SpaHookGuard&&) = delete;
+    SpaHookGuard& operator=(SpaHookGuard&&) = delete;
+
     void reset() noexcept
     {
-      if (_hook.link.next != nullptr) ::spa_hook_remove(&_hook);
+      if (_hook.link.next != nullptr)
+      {
+        ::spa_hook_remove(&_hook);
+      }
+
       std::memset(&_hook, 0, sizeof(_hook));
     }
+    
     ::spa_hook* get() noexcept { return &_hook; }
 
   private:

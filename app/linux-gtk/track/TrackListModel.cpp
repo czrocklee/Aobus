@@ -2,15 +2,23 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackListModel.h"
-
+#include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
+#include <ao/Type.h>
+#include <runtime/ProjectionTypes.h>
 
+#include <giomm/listmodel.h>
 #include <giomm/private/listmodel_p.h>
+#include <glib-object.h>
+#include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
+#include <glib.h>
+
+
 
 namespace
 {
-  Glib::Interface_Class const& get_listmodel_iface_class()
+  Glib::Interface_Class const& getListModelIfaceClass()
   {
     static auto the_class = Gio::ListModel_Class{};
     return the_class.init();
@@ -20,7 +28,7 @@ namespace
 namespace ao::gtk
 {
   ProjectionTrackModel::ProjectionTrackModel()
-    : Glib::ObjectBase(typeid(ProjectionTrackModel)), Gio::ListModel(get_listmodel_iface_class())
+    : Glib::ObjectBase(typeid(ProjectionTrackModel)), Gio::ListModel(getListModelIfaceClass())
   {
   }
 

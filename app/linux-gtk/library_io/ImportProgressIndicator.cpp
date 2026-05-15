@@ -6,6 +6,8 @@
 #include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
 
+#include <gtkmm/enums.h>
+
 namespace ao::gtk
 {
   ImportProgressIndicator::ImportProgressIndicator(rt::LibraryMutationService& mutationService)

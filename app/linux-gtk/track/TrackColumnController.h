@@ -55,6 +55,10 @@ namespace ao::gtk
     void updateSharedColumnLayout();
     TrackColumnLayout captureCurrentColumnLayout() const;
 
+    void ensureColumnPosition(Glib::RefPtr<Gio::ListModel> const& columns,
+                              std::size_t idx,
+                              Glib::RefPtr<Gtk::ColumnViewColumn> const& column);
+
     ColumnBinding* findColumnBinding(TrackColumn column);
     ColumnBinding const* findColumnBinding(TrackColumn column) const;
 

@@ -6,11 +6,16 @@
 #include <ao/audio/DecoderFactory.h>
 
 #include <spdlog/async.h>
+#include <spdlog/async_logger.h>
+#include <spdlog/common.h>
+#include <spdlog/logger.h>
 #include <spdlog/sinks/null_sink.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
 
 #include <filesystem>
+#include <memory>
 #include <vector>
 
 namespace ao::log

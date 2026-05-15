@@ -19,6 +19,12 @@ namespace ao::gtk
     explicit LibraryTrackCountLabel(rt::TrackSource& source);
     ~LibraryTrackCountLabel() override;
 
+    // Not copyable or movable
+    LibraryTrackCountLabel(LibraryTrackCountLabel const&) = delete;
+    LibraryTrackCountLabel& operator=(LibraryTrackCountLabel const&) = delete;
+    LibraryTrackCountLabel(LibraryTrackCountLabel&&) = delete;
+    LibraryTrackCountLabel& operator=(LibraryTrackCountLabel&&) = delete;
+
     // TrackSourceObserver interface
     void onReset() override;
     void onInserted(TrackId id, std::size_t index) override;
