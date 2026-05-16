@@ -92,7 +92,7 @@ namespace ao::audio::test
       auto engineSnap = createBaseEngineRoute();
       auto const initialGeneration = player.playbackGeneration();
 
-      player.stop(); // Increment to simulate new playback session
+      player.stop(); // Increment to simulate new playback runtime
 
       player.handleRouteChanged(engineSnap, initialGeneration);
 

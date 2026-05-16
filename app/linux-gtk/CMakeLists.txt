@@ -6,12 +6,14 @@ add_library(aobus-gtk-lib STATIC
     app/MenuController.cpp
     app/ShellLayoutController.cpp
     app/ThemeBus.cpp
-    app/WindowController.cpp
+    app/MainWindowCoordinator.cpp
+    app/WindowStatePersistence.cpp
+    platform/AudioBackendBootstrap.cpp
 
     track/LibraryTrackCountLabel.cpp
     track/SelectionInfoLabel.cpp
     track/StatusNotificationLabel.cpp
-    track/TrackPageManager.cpp
+    track/TrackPageHost.cpp
     track/TrackViewPage.cpp
     track/TrackColumnController.cpp
     track/TrackColumnViewHost.cpp

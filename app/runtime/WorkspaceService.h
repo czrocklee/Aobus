@@ -27,8 +27,7 @@ namespace ao::rt
     WorkspaceService(ViewService& views,
                      PlaybackService& playback,
                      LibraryMutationService& mutation,
-                     library::MusicLibrary& library,
-                     std::shared_ptr<ConfigStore> configStore);
+                     library::MusicLibrary& library);
     ~WorkspaceService();
 
     WorkspaceService(WorkspaceService const&) = delete;
@@ -39,13 +38,11 @@ namespace ao::rt
     LayoutState layoutState() const;
 
     void setFocusedView(ViewId viewId);
+    void addView(ViewId viewId);
     void navigateTo(std::variant<ListId, std::string, GlobalViewKind> const& target);
     void closeView(ViewId viewId);
-    void restoreSession();
-    void saveSession();
 
     Subscription onFocusedViewChanged(std::move_only_function<void(ViewId)> handler);
-    Subscription onSessionRestored(std::move_only_function<void(std::string const&)> handler);
 
   private:
     struct Impl;

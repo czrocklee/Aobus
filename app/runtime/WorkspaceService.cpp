@@ -3,28 +3,22 @@
 
 #include "WorkspaceService.h"
 
-#include "ConfigStore.h"
 #include "LibraryMutationService.h"
 #include "PlaybackService.h"
 #include "ViewService.h"
 
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/utility/Log.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/StateTypes.h>
 
 #include <algorithm>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
 #include <vector>
-
-#include <cstddef>
-#include <cstdint>
 
 namespace ao::rt
 {
@@ -35,19 +29,16 @@ namespace ao::rt
     LibraryMutationService& mutation;
     library::MusicLibrary& library;
     LayoutState layoutState;
-    std::shared_ptr<ConfigStore> configStore;
     Subscription listsMutatedSub;
 
     Signal<ViewId> focusedViewChangedSignal;
-    Signal<std::string const&> sessionRestoredSignal;
 
     Impl(WorkspaceService* self,
          ViewService& views,
          PlaybackService& playback,
          LibraryMutationService& mutation,
-         library::MusicLibrary& library,
-         std::shared_ptr<ConfigStore> configStore)
-      : views{views}, playback{playback}, mutation{mutation}, library{library}, configStore{std::move(configStore)}
+         library::MusicLibrary& library)
+      : views{views}, playback{playback}, mutation{mutation}, library{library}
     {
       listsMutatedSub = mutation.onListsMutated(
         [this, self](LibraryMutationService::ListsMutated const& ev)
@@ -78,9 +69,8 @@ namespace ao::rt
   WorkspaceService::WorkspaceService(ViewService& views,
                                      PlaybackService& playback,
                                      LibraryMutationService& mutation,
-                                     library::MusicLibrary& library,
-                                     std::shared_ptr<ConfigStore> configStore)
-    : _impl{std::make_unique<Impl>(this, views, playback, mutation, library, std::move(configStore))}
+                                     library::MusicLibrary& library)
+    : _impl{std::make_unique<Impl>(this, views, playback, mutation, library)}
   {
   }
 
@@ -89,11 +79,6 @@ namespace ao::rt
   Subscription WorkspaceService::onFocusedViewChanged(std::move_only_function<void(ViewId)> handler)
   {
     return _impl->focusedViewChangedSignal.connect(std::move(handler));
-  }
-
-  Subscription WorkspaceService::onSessionRestored(std::move_only_function<void(std::string const&)> handler)
-  {
-    return _impl->sessionRestoredSignal.connect(std::move(handler));
   }
 
   LayoutState WorkspaceService::layoutState() const
@@ -106,6 +91,15 @@ namespace ao::rt
     _impl->layoutState.activeViewId = viewId;
     _impl->layoutState.revision++;
     _impl->focusedViewChangedSignal.emit(viewId);
+  }
+
+  void WorkspaceService::addView(ViewId const viewId)
+  {
+    if (std::ranges::find(_impl->layoutState.openViews, viewId) == _impl->layoutState.openViews.end())
+    {
+      _impl->layoutState.openViews.push_back(viewId);
+      _impl->layoutState.revision++;
+    }
   }
 
   void WorkspaceService::navigateTo(std::variant<ListId, std::string, GlobalViewKind> const& target)
@@ -183,94 +177,4 @@ namespace ao::rt
 
     _impl->views.destroyView(viewId);
   }
-
-  void WorkspaceService::restoreSession()
-  {
-    if (!_impl->configStore)
-    {
-      return;
-    }
-
-    auto snapshot = SessionSnapshot{};
-
-    if (auto const res = _impl->configStore->load("session", snapshot); !res)
-    {
-      APP_LOG_WARN("WorkspaceService: Failed to restore session - {}", res.error().message);
-    }
-
-    for (auto const& viewConfig : snapshot.openViews)
-    {
-      auto const res = _impl->views.createView(viewConfig, true);
-      _impl->layoutState.openViews.push_back(res.viewId);
-    }
-
-    if (snapshot.optActiveViewIndex && *snapshot.optActiveViewIndex < _impl->layoutState.openViews.size())
-    {
-      _impl->layoutState.activeViewId = _impl->layoutState.openViews[*snapshot.optActiveViewIndex];
-    }
-    else if (!_impl->layoutState.openViews.empty())
-    {
-      _impl->layoutState.activeViewId = _impl->layoutState.openViews.front();
-    }
-
-    _impl->layoutState.revision++;
-
-    if (!snapshot.lastBackend.empty())
-    {
-      _impl->playback.setOutput(audio::BackendId{snapshot.lastBackend},
-                                audio::DeviceId{snapshot.lastOutputDeviceId},
-                                audio::ProfileId{snapshot.lastProfile});
-    }
-
-    _impl->sessionRestoredSignal.emit(snapshot.lastLibraryPath);
-
-    if (_impl->layoutState.activeViewId != ViewId{})
-    {
-      _impl->focusedViewChangedSignal.emit(_impl->layoutState.activeViewId);
-    }
-  }
-
-  void WorkspaceService::saveSession()
-  {
-    if (!_impl->configStore)
-    {
-      return;
-    }
-
-    auto const& layout = _impl->layoutState;
-    auto snapshot = SessionSnapshot{};
-    snapshot.optActiveViewIndex = std::nullopt;
-    snapshot.lastLibraryPath = _impl->library.rootPath().string();
-
-    for (std::size_t i = 0; i < layout.openViews.size(); ++i)
-    {
-      auto const viewId = ViewId{layout.openViews[i]};
-
-      if (viewId == layout.activeViewId)
-      {
-        snapshot.optActiveViewIndex = static_cast<std::uint32_t>(i);
-      }
-
-      auto const& state = _impl->views.trackListState(viewId);
-      snapshot.openViews.push_back(TrackListViewConfig{
-        .listId = state.listId,
-        .filterExpression = state.filterExpression,
-        .groupBy = state.groupBy,
-        .sortBy = state.sortBy,
-      });
-    }
-
-    // Capture playback output state for restoration
-    auto const& pb = _impl->playback.state();
-    snapshot.lastBackend = pb.selectedOutput.backendId.value();
-    snapshot.lastOutputDeviceId = pb.selectedOutput.deviceId.value();
-    snapshot.lastProfile = pb.selectedOutput.profileId.value();
-
-    _impl->configStore->save("session", snapshot);
-
-    if (auto const res = _impl->configStore->flush(); !res)
-    {
-      APP_LOG_ERROR("WorkspaceService: Failed to flush session - {}", res.error().message);
-    }
-  }
-}
+} // namespace ao::rt

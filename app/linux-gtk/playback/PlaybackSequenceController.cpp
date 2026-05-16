@@ -5,7 +5,7 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/Type.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/PlaybackService.h>
 
 #include <algorithm>

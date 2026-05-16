@@ -132,7 +132,7 @@ public:
   explicit TrackViewPage(ListId listId,
                          TrackListAdapter& adapter,
                          TrackColumnLayoutModel& columnLayoutModel,
-                         rt::AppSession& session,
+                         rt::AppRuntime& session,
                          rt::ViewId viewId = rt::ViewId{});
 
 private:

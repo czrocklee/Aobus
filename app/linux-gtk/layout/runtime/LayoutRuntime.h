@@ -6,14 +6,14 @@
 #include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
-#include "layout/runtime/LayoutDependencies.h"
+#include "layout/runtime/LayoutContext.h"
 
 #include <memory>
 
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
-  struct LayoutDependencies;
+  struct LayoutContext;
 
   /**
    * @brief Manages the building of component trees from layout documents.
@@ -26,7 +26,7 @@ namespace ao::gtk::layout
     /**
      * @brief Build a GTK widget tree from a layout document.
      */
-    std::unique_ptr<ILayoutComponent> build(LayoutDependencies& ctx, LayoutDocument const& doc);
+    std::unique_ptr<ILayoutComponent> build(LayoutContext& ctx, LayoutDocument const& doc);
 
     /**
      * @brief Register all built-in components (containers, playback, semantic) to the registry.

@@ -7,7 +7,7 @@
 #include "list/ListTreeModelBuilder.h"
 #include <ao/Type.h>
 #include <ao/lmdb/Transaction.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 
 #include <gdk/gdk.h>
 #include <gdkmm/graphene_point.h>
@@ -65,9 +65,9 @@ namespace ao::gtk
 
   ListSidebarPanel::~ListSidebarPanel() = default;
 
-  void ListSidebarPanel::rebuildTree(rt::AppSession& session, lmdb::ReadTransaction const& txn)
+  void ListSidebarPanel::rebuildTree(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn)
   {
-    auto result = ListTreeModelBuilder::build(session, txn);
+    auto result = ListTreeModelBuilder::build(runtime, txn);
     _nodesById = std::move(result.nodesById);
     _listTreeStore = std::move(result.store);
     _treeListModel = std::move(result.treeModel);

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "track/TrackPageManager.h"
+#include "track/TrackPageHost.h"
+#include "library_io/PlaylistExporter.h" // NOLINT(misc-include-cleaner)
 #include "list/ListSidebarController.h"
 #include "playback/PlaybackSequenceController.h"
 #include "tag/TagEditController.h"
@@ -10,13 +11,14 @@
 #include "track/TrackPresentationStore.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
+#include <ao/Type.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/Type.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/Log.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
+#include <runtime/ListSourceStore.h>
 #include <runtime/ManualListSource.h>
 #include <runtime/PlaybackService.h>
 #include <runtime/ProjectionTypes.h>
@@ -54,32 +56,31 @@ namespace ao::gtk
     }
   } // namespace
 
-  TrackPageManager::TrackPageManager(Gtk::Stack& stack,
-                                     TrackColumnLayoutModel& layoutModel,
-                                     rt::AppSession& session,
-                                     PlaybackSequenceController* sequenceController,
-                                     TagEditController& tagEditController,
-                                     ListSidebarController& listSidebar,
-                                     TrackPresentationStore& presentationStore)
+  TrackPageHost::TrackPageHost(Gtk::Stack& stack,
+                               TrackColumnLayoutModel& layoutModel,
+                               rt::AppRuntime& runtime,
+                               PlaybackSequenceController* sequenceController,
+                               TagEditController& tagEditController,
+                               ListSidebarController& listSidebar,
+                               TrackPresentationStore& presentationStore)
     : _stack{stack}
     , _layoutModel{layoutModel}
-    , _session{session}
+    , _runtime{runtime}
     , _playbackSequenceController{sequenceController}
     , _tagEditController{tagEditController}
     , _listSidebar{listSidebar}
     , _presentationStore{presentationStore}
   {
-    _revealSub =
-      _session.playback().onRevealTrackRequested(std::bind_front(&TrackPageManager::handleRevealTrack, this));
+    _revealSub = _runtime.playback().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));
 
-    _nowPlayingSub = _session.playback().onNowPlayingChanged(
+    _nowPlayingSub = _runtime.playback().onNowPlayingChanged(
       [this](auto const& ev) { setPlayingTrack(ev.trackId != TrackId{} ? std::optional{ev.trackId} : std::nullopt); });
 
-    _focusSub = _session.workspace().onFocusedViewChanged([this](auto) { syncLayout(); });
+    _focusSub = _runtime.workspace().onFocusedViewChanged([this](auto) { syncLayout(); });
 
-    _viewDestroyedSub = _session.views().onDestroyed([this](auto) { syncLayout(); });
+    _viewDestroyedSub = _runtime.views().onDestroyed([this](auto) { syncLayout(); });
 
-    _projectionChangedSub = _session.views().onProjectionChanged(
+    _projectionChangedSub = _runtime.views().onProjectionChanged(
       [this](rt::TrackListProjectionChanged const& ev)
       {
         auto* ctx = find(ev.viewId);
@@ -98,7 +99,7 @@ namespace ao::gtk
       });
   }
 
-  void TrackPageManager::handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev)
+  void TrackPageHost::handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev)
   {
     auto viewId = rt::ViewId{ev.preferredViewId};
 
@@ -117,7 +118,7 @@ namespace ao::gtk
 
     if (viewId != rt::ViewId{})
     {
-      _session.workspace().setFocusedView(viewId);
+      _runtime.workspace().setFocusedView(viewId);
 
       if (ev.trackId != TrackId{})
       {
@@ -129,14 +130,14 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageManager::syncLayout()
+  void TrackPageHost::syncLayout()
   {
     if (_activeDataProvider == nullptr)
     {
       return;
     }
 
-    auto const state = _session.workspace().layoutState();
+    auto const state = _runtime.workspace().layoutState();
 
     // Remove closed views
     for (auto it = _trackPages.begin(); it != _trackPages.end();)
@@ -169,12 +170,12 @@ namespace ao::gtk
     }
   }
 
-  TrackPageManager::~TrackPageManager()
+  TrackPageHost::~TrackPageHost()
   {
     clear();
   }
 
-  void TrackPageManager::clear()
+  void TrackPageHost::clear()
   {
     while (!_trackPages.empty())
     {
@@ -189,14 +190,14 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageManager::rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& /*txn*/)
+  void TrackPageHost::rebuild(TrackRowCache& dataProvider, lmdb::ReadTransaction const& /*txn*/)
   {
-    APP_LOG_DEBUG("TrackPageManager::rebuild called");
+    APP_LOG_DEBUG("TrackPageHost::rebuild called");
     clear();
     _activeDataProvider = &dataProvider;
 
     // Force layout state re-evaluation now that dataProvider is ready
-    auto const layout = _session.workspace().layoutState();
+    auto const layout = _runtime.workspace().layoutState();
 
     for (auto const viewId : layout.openViews)
     {
@@ -209,19 +210,19 @@ namespace ao::gtk
     }
   }
 
-  TrackPageContext* TrackPageManager::find(rt::ViewId viewId)
+  TrackPageContext* TrackPageHost::find(rt::ViewId viewId)
   {
     auto it = _trackPages.find(viewId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
   }
 
-  TrackPageContext const* TrackPageManager::find(rt::ViewId viewId) const
+  TrackPageContext const* TrackPageHost::find(rt::ViewId viewId) const
   {
     auto it = _trackPages.find(viewId);
     return (it != _trackPages.end()) ? &it->second : nullptr;
   }
 
-  TrackPageContext* TrackPageManager::currentVisible()
+  TrackPageContext* TrackPageHost::currentVisible()
   {
     auto* const visibleChild = _stack.get_visible_child();
 
@@ -241,7 +242,7 @@ namespace ao::gtk
     return nullptr;
   }
 
-  TrackPageContext const* TrackPageManager::currentVisible() const
+  TrackPageContext const* TrackPageHost::currentVisible() const
   {
     auto const* const visibleChild = _stack.get_visible_child();
 
@@ -261,7 +262,7 @@ namespace ao::gtk
     return nullptr;
   }
 
-  void TrackPageManager::setPlayingTrack(std::optional<TrackId> optTrackId)
+  void TrackPageHost::setPlayingTrack(std::optional<TrackId> optTrackId)
   {
     if (_optPlayingTrackId == optTrackId)
     {
@@ -279,38 +280,38 @@ namespace ao::gtk
     }
   }
 
-  void TrackPageManager::ensureViewPage(rt::ViewId viewId, TrackRowCache& dataProvider)
+  void TrackPageHost::ensureViewPage(rt::ViewId viewId, TrackRowCache& dataProvider)
   {
     if (_trackPages.contains(viewId))
     {
       return; // Already exists
     }
 
-    auto proj = _session.views().trackListProjection(viewId);
+    auto proj = _runtime.views().trackListProjection(viewId);
 
     if (!proj)
     {
       return;
     }
 
-    auto const state = _session.views().trackListState(viewId);
+    auto const state = _runtime.views().trackListState(viewId);
     auto const listId = ListId{state.listId};
 
     // Provide dummy source, bindProjection takes over
     auto adapter =
-      std::make_unique<TrackListAdapter>(_session.sources().allTracks(), _session.musicLibrary(), dataProvider);
+      std::make_unique<TrackListAdapter>(_runtime.sources().allTracks(), _runtime.musicLibrary(), dataProvider);
     adapter->bindProjection(proj);
 
     auto trackPage =
-      std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _presentationStore, _session, viewId);
+      std::make_unique<TrackViewPage>(listId, *adapter, _layoutModel, _presentationStore, _runtime, viewId);
     auto const pageId = std::format("view-{}", viewId.value());
 
     auto listName = std::string{"List"};
 
     if (listId != allTracksListId() && listId != ListId{})
     {
-      auto const txn = _session.musicLibrary().readTransaction();
-      auto lists = _session.musicLibrary().lists().reader(txn);
+      auto const txn = _runtime.musicLibrary().readTransaction();
+      auto lists = _runtime.musicLibrary().lists().reader(txn);
 
       if (auto optView = lists.get(listId))
       {
@@ -330,7 +331,7 @@ namespace ao::gtk
     _trackPages[viewId] = std::move(ctx);
   }
 
-  void TrackPageManager::bindTrackPage(TrackPageContext& ctx)
+  void TrackPageHost::bindTrackPage(TrackPageContext& ctx)
   {
     auto* const page = ctx.page.get();
     auto const viewId = rt::ViewId{ctx.viewId};
@@ -342,8 +343,8 @@ namespace ao::gtk
 
         if (viewId != rt::ViewId{})
         {
-          _session.views().setSelection(viewId, ids);
-          _session.workspace().setFocusedView(viewId);
+          _runtime.views().setSelection(viewId, ids);
+          _runtime.workspace().setFocusedView(viewId);
         }
       });
 
@@ -396,7 +397,7 @@ namespace ao::gtk
     }
   }
 
-  ListId TrackPageManager::activeListId() const
+  ListId TrackPageHost::activeListId() const
   {
     if (auto const* ctx = currentVisible())
     {

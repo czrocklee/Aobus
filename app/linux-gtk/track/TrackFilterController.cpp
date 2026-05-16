@@ -4,18 +4,18 @@
 #include "track/TrackFilterController.h"
 #include "track/TrackListAdapter.h"
 #include <ao/utility/ScopedTimer.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/ProjectionTypes.h>
 #include <runtime/ViewService.h>
 
 #include <gdkmm/enums.h>
+#include <glib-object.h>
 #include <glibmm/main.h>
 #include <glibmm/value.h>
 #include <gtkmm/droptarget.h>
 #include <gtkmm/entry.h>
 #include <sigc++/functors/mem_fun.h>
-#include <glib-object.h>
 
 #include <format>
 #include <string>
@@ -79,7 +79,7 @@ namespace ao::gtk
     _filterEntry.set_text(std::string{expression});
   }
 
-  void TrackFilterController::setStatusMessageCallback(const StatusMessageFn& callback)
+  void TrackFilterController::setStatusMessageCallback(StatusMessageFn const& callback)
   {
     _statusMessageCallback = std::move(callback);
   }

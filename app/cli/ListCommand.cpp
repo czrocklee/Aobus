@@ -6,6 +6,7 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <runtime/CoreRuntime.h>
 
 #include <CLI/App.hpp>
 
@@ -81,8 +82,9 @@ namespace ao::cli
     }
   }
 
-  void setupListCommand(CLI::App& app, library::MusicLibrary& ml)
+  void setupListCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {
+    auto& ml = runtime.musicLibrary();
     auto* list = app.add_subcommand("list", "List management commands");
 
     list->add_subcommand("show", "Show all lists")->callback([&ml] { show(ml, std::cout); });

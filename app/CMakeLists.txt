@@ -1,7 +1,9 @@
 # app/runtime: Shared application runtime (UI-neutral, used by all frontends)
 add_library(app_runtime STATIC
-    runtime/AppSession.cpp
-    runtime/AppSession.h
+    runtime/AppRuntime.cpp
+    runtime/AppRuntime.h
+    runtime/CoreRuntime.cpp
+    runtime/CoreRuntime.h
     runtime/AllTracksSource.cpp
     runtime/AllTracksSource.h
     runtime/CorePrimitives.h
@@ -10,6 +12,8 @@ add_library(app_runtime STATIC
     runtime/ProjectionTypes.h
     runtime/PlaybackService.cpp
     runtime/PlaybackService.h
+    runtime/SessionPersistenceService.cpp
+    runtime/SessionPersistenceService.h
     runtime/LibraryMutationService.cpp
     runtime/LibraryMutationService.h
     runtime/ListSourceStore.cpp
@@ -21,6 +25,8 @@ add_library(app_runtime STATIC
     runtime/NotificationService.cpp
     runtime/NotificationService.h
     runtime/StateTypes.h
+    runtime/TrackCommandService.cpp
+    runtime/TrackCommandService.h
     runtime/SmartListEvaluator.cpp
     runtime/SmartListEvaluator.h
     runtime/SmartListSource.cpp

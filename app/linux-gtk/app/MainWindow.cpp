@@ -2,11 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/MainWindow.h"
+#include "app/MainWindowCoordinator.h"
 #include "app/MenuController.h"
 #include "app/UIState.h"
-#include "app/WindowController.h"
+#include "library_io/ImportExportCoordinator.h"
 #include <ao/utility/Log.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/ConfigStore.h>
 
 #include <gtkmm/applicationwindow.h>
@@ -17,19 +18,19 @@
 
 namespace ao::gtk
 {
-  MainWindow::MainWindow(rt::AppSession& session, std::shared_ptr<rt::ConfigStore> configStore)
-    : _session{session}
+  MainWindow::MainWindow(rt::AppRuntime& runtime, std::shared_ptr<rt::ConfigStore> configStore)
+    : _runtime{runtime}
     , _configStore{std::move(configStore)}
-    , _windowController{std::make_unique<WindowController>(*this, _session, _configStore)}
-    , _shellLayout{_session, *this}
+    , _mainWindowCoordinator{std::make_unique<MainWindowCoordinator>(*this, _runtime, _configStore)}
+    , _shellLayout{_runtime, *this}
   {
     set_title("Aobus");
     set_default_size(kDefaultWindowWidth, kDefaultWindowHeight);
 
-    _windowController->loadSession();
+    _mainWindowCoordinator->loadSession();
 
     _menuController = std::make_unique<MenuController>(
-      _windowController->importExport(), [this] { _shellLayout.openEditor(*_configStore); });
+      _mainWindowCoordinator->importExport(), [this] { _shellLayout.openEditor(*_configStore); });
     _menuController->setup(*this);
     _shellLayout.context().shell.menuModel = _menuController->menuModel();
 
@@ -40,44 +41,36 @@ namespace ao::gtk
   {
     try
     {
-      _windowController->saveSession();
+      _mainWindowCoordinator->saveSession();
       _shellLayout.saveLayout(*_configStore);
     }
     catch (std::exception const& e)
     {
-      APP_LOG_ERROR("Failed to save session in destructor: {}", e.what());
+      APP_LOG_ERROR("Failed to save runtime in destructor: {}", e.what());
     }
     catch (...)
     {
-      APP_LOG_ERROR("Failed to save session in destructor: unknown exception");
+      APP_LOG_ERROR("Failed to save runtime in destructor: unknown exception");
     }
   }
 
   void MainWindow::on_hide()
   {
-    _windowController->saveSession();
+    _mainWindowCoordinator->saveSession();
     _shellLayout.saveLayout(*_configStore);
     Gtk::ApplicationWindow::on_hide();
   }
 
   ImportExportCoordinator& MainWindow::importExportCoordinator()
   {
-    return _windowController->importExport();
+    return _mainWindowCoordinator->importExport();
   }
 
   void MainWindow::initializeSession()
   {
-    _windowController->initializeSession();
+    _mainWindowCoordinator->initializeSession();
 
-    auto& ctx = _shellLayout.context();
-    ctx.track.trackRowCache = _windowController->trackRowCache();
-    ctx.inspector.coverArtCache = _windowController->coverArtCache();
-    ctx.playback.sequenceController = _windowController->playbackSequenceController();
-    ctx.tag.editController = _windowController->tagEditController();
-    ctx.libraryIo.coordinator = _windowController->importExportCoordinator();
-    ctx.track.pageManager = _windowController->trackPageManager();
-    ctx.track.columnLayoutModel = _windowController->columnLayoutModel();
-    ctx.list.sidebarController = _windowController->listSidebarController();
+    _shellLayout.context().bind(_mainWindowCoordinator->uiServices());
 
     _shellLayout.loadLayout(*_configStore);
   }

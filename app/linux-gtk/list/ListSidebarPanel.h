@@ -13,7 +13,7 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class AppRuntime;
 }
 
 namespace ao::lmdb
@@ -45,7 +45,7 @@ namespace ao::gtk
 
     Gtk::Widget& widget() { return _listScrolledWindow; }
 
-    void rebuildTree(rt::AppSession& session, lmdb::ReadTransaction const& txn);
+    void rebuildTree(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn);
     void selectList(ListId listId);
     bool listHasChildren(ListId listId) const;
     ListId selectedListId() const;

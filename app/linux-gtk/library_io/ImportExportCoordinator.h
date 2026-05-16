@@ -19,7 +19,7 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class AppRuntime;
 }
 
 namespace ao::gtk
@@ -40,10 +40,10 @@ namespace ao::gtk
   class ImportExportCoordinator final
   {
   public:
-    ImportExportCoordinator(Gtk::Window& parent, rt::AppSession& session, ImportExportCallbacks callbacks);
+    ImportExportCoordinator(Gtk::Window& parent, rt::AppRuntime& runtime, ImportExportCallbacks callbacks);
     ~ImportExportCoordinator();
 
-    // Not copyable or movable due to GTK and session references/subscriptions
+    // Not copyable or movable due to GTK and runtime references/subscriptions
     ImportExportCoordinator(ImportExportCoordinator const&) = delete;
     ImportExportCoordinator& operator=(ImportExportCoordinator const&) = delete;
     ImportExportCoordinator(ImportExportCoordinator&&) = delete;
@@ -77,7 +77,7 @@ namespace ao::gtk
     void executeExportTask(std::filesystem::path const& path, library::ExportMode mode);
 
     Gtk::Window& _parent;
-    rt::AppSession& _session;
+    rt::AppRuntime& _runtime;
     ImportExportCallbacks _callbacks;
 
     rt::Subscription _importProgressSub;

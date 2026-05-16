@@ -5,7 +5,7 @@
 #include "layout/components/Containers.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ILayoutComponent.h"
-#include "layout/runtime/LayoutDependencies.h"
+#include "layout/runtime/LayoutContext.h"
 
 #include <gtkmm/enums.h>
 
@@ -17,7 +17,7 @@ namespace ao::gtk::layout
     set_orientation(Gtk::Orientation::VERTICAL);
   }
 
-  void LayoutHost::setLayout(LayoutDependencies& ctx, LayoutDocument const& doc)
+  void LayoutHost::setLayout(LayoutContext& ctx, LayoutDocument const& doc)
   {
     if (_activeComponent)
     {

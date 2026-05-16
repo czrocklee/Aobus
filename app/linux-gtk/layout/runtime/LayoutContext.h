@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/GtkUiServices.h"
 #include <giomm/menumodel.h>
 #include <gtkmm/window.h>
 
@@ -11,7 +12,7 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class AppRuntime;
 }
 
 namespace ao::gtk
@@ -21,7 +22,7 @@ namespace ao::gtk
   class PlaybackSequenceController;
   class TagEditController;
   class ImportExportCoordinator;
-  class TrackPageManager;
+  class TrackPageHost;
   class TrackColumnLayoutModel;
   class ListSidebarController;
 } // namespace ao::gtk
@@ -32,7 +33,7 @@ namespace ao::gtk::layout
 
   struct TrackUiContext final
   {
-    TrackPageManager* pageManager = nullptr;
+    TrackPageHost* pageHost = nullptr;
     TrackColumnLayoutModel* columnLayoutModel = nullptr;
     TrackRowCache* trackRowCache = nullptr;
   };
@@ -67,10 +68,10 @@ namespace ao::gtk::layout
     ImportExportCoordinator* coordinator = nullptr;
   };
 
-  struct LayoutDependencies final
+  struct LayoutContext final
   {
     ComponentRegistry const& registry;
-    rt::AppSession& session;
+    rt::AppRuntime& runtime;
     Gtk::Window& parentWindow;
 
     TrackUiContext track{};
@@ -83,5 +84,17 @@ namespace ao::gtk::layout
 
     std::function<void(std::string const& nodeId, int posX, int posY)> onNodeMoved{};
     bool editMode = false;
+
+    void bind(GtkUiServices const& services)
+    {
+      track.pageHost = services.trackPageHost;
+      track.columnLayoutModel = services.columnLayoutModel;
+      track.trackRowCache = services.trackRowCache;
+      list.sidebarController = services.listSidebarController;
+      playback.sequenceController = services.playbackSequenceController;
+      inspector.coverArtCache = services.coverArtCache;
+      tag.editController = services.tagEditController;
+      libraryIo.coordinator = services.importExportCoordinator;
+    }
   };
 } // namespace ao::gtk::layout

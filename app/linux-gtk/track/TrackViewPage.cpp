@@ -15,7 +15,7 @@
 #include "track/TrackRowObject.h"
 #include <ao/Type.h>
 #include <ao/utility/Log.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/PlaybackService.h>
@@ -26,6 +26,7 @@
 
 #include <gdkmm/rectangle.h>
 #include <glib-object.h>
+#include <glib.h>
 #include <glibmm/main.h>
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
@@ -45,10 +46,9 @@
 #include <gtkmm/selectionmodel.h>
 #include <gtkmm/separator.h>
 #include <gtkmm/signallistitemfactory.h>
-#include <gtkmm/sortlistmodel.h>
 #include <gtkmm/sorter.h>
+#include <gtkmm/sortlistmodel.h>
 #include <gtkmm/window.h>
-#include <glib.h>
 
 #include <algorithm>
 #include <format>
@@ -124,26 +124,26 @@ namespace ao::gtk
                                TrackListAdapter& adapter,
                                TrackColumnLayoutModel& columnLayoutModel,
                                TrackPresentationStore& presentationStore,
-                               rt::AppSession& session,
+                               rt::AppRuntime& runtime,
                                rt::ViewId viewId)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
     , _viewId{viewId}
     , _adapter{adapter}
     , _presentationStore{presentationStore}
-    , _session{session}
+    , _runtime{runtime}
     , _groupModel{Gtk::SortListModel::create(adapter.getModel(), Glib::RefPtr<Gtk::Sorter>{})}
     , _columnLayoutModel{columnLayoutModel}
   {
     if (_viewId != rt::ViewId{})
     {
-      auto const& presState = _session.views().trackListState(_viewId).presentation;
+      auto const& presState = _runtime.views().trackListState(_viewId).presentation;
       _activePresentation = rt::presentationSpecFromState(presState);
     }
 
     _selectionModel = Gtk::MultiSelection::create(_groupModel);
 
-    _filterController = std::make_unique<TrackFilterController>(_session.views(), _viewId, _filterEntry);
+    _filterController = std::make_unique<TrackFilterController>(_runtime.views(), _viewId, _filterEntry);
     _filterController->setStatusMessageCallback(std::bind_front(&TrackViewPage::setStatusMessage, this));
     _filterController->setCreateSmartListSignal(&_createSmartListRequested);
 
@@ -470,7 +470,7 @@ namespace ao::gtk
     Glib::signal_idle().connect_once(
       [this, spec = std::move(spec)]
       {
-        _session.views().setPresentation(_viewId, spec);
+        _runtime.views().setPresentation(_viewId, spec);
         _activePresentation = spec;
 
         rebuildColumnView(trackColumnLayoutForPresentation(spec));
@@ -592,7 +592,7 @@ namespace ao::gtk
       row->setAlbum(newValue);
     }
 
-    auto const result = _session.mutation().updateMetadata({row->getTrackId()}, patch);
+    auto const result = _runtime.mutation().updateMetadata({row->getTrackId()}, patch);
 
     if (!result)
     {

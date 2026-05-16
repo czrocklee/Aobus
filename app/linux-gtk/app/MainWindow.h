@@ -4,26 +4,26 @@
 #pragma once
 
 #include "app/ShellLayoutController.h"
-#include "library_io/ImportExportCoordinator.h"
 
-#include <gtkmm.h>
+#include <gtkmm/applicationwindow.h>
 #include <memory>
 
 namespace ao::rt
 {
-  class AppSession;
+  class AppRuntime;
   class ConfigStore;
 }
 
 namespace ao::gtk
 {
   class MenuController;
-  class WindowController;
+  class MainWindowCoordinator;
+  class ImportExportCoordinator;
 
   class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
-    explicit MainWindow(rt::AppSession& session, std::shared_ptr<rt::ConfigStore> configStore);
+    explicit MainWindow(rt::AppRuntime& runtime, std::shared_ptr<rt::ConfigStore> configStore);
     ~MainWindow() override;
 
     MainWindow(MainWindow const&) = delete;
@@ -39,10 +39,10 @@ namespace ao::gtk
     void rebuildLayout();
 
   private:
-    rt::AppSession& _session;
+    rt::AppRuntime& _runtime;
     std::shared_ptr<rt::ConfigStore> _configStore;
 
-    std::unique_ptr<WindowController> _windowController;
+    std::unique_ptr<MainWindowCoordinator> _mainWindowCoordinator;
     ShellLayoutController _shellLayout;
     std::unique_ptr<MenuController> _menuController;
   };

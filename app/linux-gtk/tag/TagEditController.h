@@ -16,7 +16,7 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class AppRuntime;
 }
 namespace ao::gtk
 {
@@ -42,7 +42,7 @@ namespace ao::gtk
       std::function<void()> onTagsMutated;
     };
 
-    TagEditController(Gtk::Window& parent, rt::AppSession& session, Callbacks callbacks);
+    TagEditController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks);
     ~TagEditController();
 
     // Not copyable or movable
@@ -69,7 +69,7 @@ namespace ao::gtk
                                           std::vector<std::string> const& tagsToRemove);
 
     Callbacks _callbacks;
-    rt::AppSession& _session;
+    rt::AppRuntime& _runtime;
     TrackRowCache* _dataProvider = nullptr;
 
     // The explicit selection to apply the tags to

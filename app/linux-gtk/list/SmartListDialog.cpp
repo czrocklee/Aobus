@@ -6,12 +6,12 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackViewPage.h"
+#include <ao/Type.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/model/ListDraft.h>
-#include <ao/Type.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/ListSourceStore.h>
 #include <runtime/SmartListEvaluator.h>
 #include <runtime/SmartListSource.h>
@@ -75,10 +75,10 @@ namespace ao::gtk
   }
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
-                                   rt::AppSession& session,
+                                   rt::AppRuntime& runtime,
                                    ListId parentListId,
                                    TrackRowCache const& provider)
-    : _exprBox{session.musicLibrary()}, _session{session}, _parentListId{parentListId}, _trackRowCache{provider}
+    : _exprBox{runtime.musicLibrary()}, _runtime{runtime}, _parentListId{parentListId}, _trackRowCache{provider}
   {
     set_title("New List");
     set_transient_for(parent);
@@ -243,7 +243,7 @@ namespace ao::gtk
   void SmartListDialog::setupPreview()
   {
     // Create preview engine for expression evaluation
-    _previewEngine = std::make_unique<rt::SmartListEvaluator>(_session.musicLibrary());
+    _previewEngine = std::make_unique<rt::SmartListEvaluator>(_runtime.musicLibrary());
 
     setupPreviewColumns();
     rebuildPreviewSource();
@@ -325,14 +325,14 @@ namespace ao::gtk
         _previewFilteredList.reset();
         _previewAdapter.reset();
 
-        auto& parentSource = _session.sources().sourceFor(_parentListId);
+        auto& parentSource = _runtime.sources().sourceFor(_parentListId);
 
         // Use the parent's membership list as source - this already has the inherited filter applied
         // ALWAYS use FilteredTrackIdList for preview so we can apply the local filter
         _previewFilteredList =
-          std::make_unique<rt::SmartListSource>(parentSource, _session.musicLibrary(), *_previewEngine);
+          std::make_unique<rt::SmartListSource>(parentSource, _runtime.musicLibrary(), *_previewEngine);
         _previewAdapter =
-          std::make_unique<TrackListAdapter>(*_previewFilteredList, _session.musicLibrary(), _trackRowCache);
+          std::make_unique<TrackListAdapter>(*_previewFilteredList, _runtime.musicLibrary(), _trackRowCache);
 
         auto selectionModel = Gtk::SingleSelection::create(_previewAdapter->getModel());
         _previewColumnView.set_model(selectionModel);
@@ -352,8 +352,8 @@ namespace ao::gtk
 
     if (!isAllTracks)
     {
-      auto readTxn = _session.musicLibrary().readTransaction();
-      auto reader = _session.musicLibrary().lists().reader(readTxn);
+      auto readTxn = _runtime.musicLibrary().readTransaction();
+      auto reader = _runtime.musicLibrary().lists().reader(readTxn);
 
       if (auto optListView = reader.get(_parentListId); optListView)
       {

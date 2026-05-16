@@ -40,6 +40,9 @@ namespace ao::rt
     void updateList(model::ListDraft const& draft);
     void deleteList(ListId listId);
 
+    void notifyTracksMutated(std::vector<TrackId> const& trackIds);
+    void notifyListsMutated(std::vector<ListId> const& upserted, std::vector<ListId> const& deleted);
+
     struct ListsMutated final
     {
       std::vector<ListId> upserted{};

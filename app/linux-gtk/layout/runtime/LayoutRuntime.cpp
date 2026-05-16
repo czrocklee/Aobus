@@ -10,7 +10,7 @@
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
-#include "layout/runtime/LayoutDependencies.h"
+#include "layout/runtime/LayoutContext.h"
 
 #include <algorithm>
 #include <functional>
@@ -111,7 +111,7 @@ namespace ao::gtk::layout
     registerStatusComponents(registry);
   }
 
-  std::unique_ptr<ILayoutComponent> LayoutRuntime::build(LayoutDependencies& ctx, LayoutDocument const& doc)
+  std::unique_ptr<ILayoutComponent> LayoutRuntime::build(LayoutContext& ctx, LayoutDocument const& doc)
   {
     auto visited = std::vector<std::string>{};
     auto const expandedRoot = expandNode(doc.root, doc.templates, visited);

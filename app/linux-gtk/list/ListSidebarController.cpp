@@ -9,9 +9,9 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/lmdb/Transaction.h>
-#include <runtime/CorePrimitives.h>
 #include <ao/utility/Log.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
+#include <runtime/CorePrimitives.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
@@ -46,8 +46,8 @@ namespace ao::gtk
     }
   }
 
-  ListSidebarController::ListSidebarController(Gtk::Window& parent, rt::AppSession& session, Callbacks callbacks)
-    : _parent{parent}, _callbacks{std::move(callbacks)}, _session{session}
+  ListSidebarController::ListSidebarController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks)
+    : _parent{parent}, _callbacks{std::move(callbacks)}, _runtime{runtime}
   {
     auto panelCallbacks = ListSidebarPanel::Callbacks{
       .onSelectionChanged = [this](ListId listId) { onSelectionChanged(listId); },
@@ -58,12 +58,12 @@ namespace ao::gtk
     _panel = std::make_unique<ListSidebarPanel>(std::move(panelCallbacks));
     setupActions();
 
-    _focusSub = _session.workspace().onFocusedViewChanged(
+    _focusSub = _runtime.workspace().onFocusedViewChanged(
       [this](rt::ViewId viewId)
       {
         if (viewId != rt::ViewId{})
         {
-          auto const state = _session.views().trackListState(viewId);
+          auto const state = _runtime.views().trackListState(viewId);
 
           if (state.listId != ListId{})
           {
@@ -107,12 +107,12 @@ namespace ao::gtk
   {
     _dataProvider = &dataProvider;
 
-    _panel->rebuildTree(_session, txn);
+    _panel->rebuildTree(_runtime, txn);
 
     if (_pendingSelectId != ListId{0})
     {
       _panel->selectList(_pendingSelectId);
-      _session.workspace().navigateTo(_pendingSelectId);
+      _runtime.workspace().navigateTo(_pendingSelectId);
       _pendingSelectId = ListId{0};
     }
   }
@@ -183,7 +183,7 @@ namespace ao::gtk
       return;
     }
 
-    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _session, parentListId, *_dataProvider);
+    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, parentListId, *_dataProvider);
 
     if (!initialExpression.empty())
     {
@@ -223,12 +223,12 @@ namespace ao::gtk
       return;
     }
 
-    auto readTxn = _session.musicLibrary().readTransaction();
-    auto reader = _session.musicLibrary().lists().reader(readTxn);
+    auto readTxn = _runtime.musicLibrary().readTransaction();
+    auto reader = _runtime.musicLibrary().lists().reader(readTxn);
 
     if (auto optView = reader.get(listId); optView)
     {
-      auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _session, optView->parentId(), *_dataProvider);
+      auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, optView->parentId(), *_dataProvider);
       dialog->populate(listId, *optView);
       dialog->signal_response().connect(
         [this, dialog](int responseId)
@@ -252,13 +252,13 @@ namespace ao::gtk
 
   void ListSidebarController::createList(model::ListDraft const& draft)
   {
-    auto listId = _session.mutation().createList(draft);
+    auto listId = _runtime.mutation().createList(draft);
     _pendingSelectId = listId;
   }
 
   void ListSidebarController::updateList(model::ListDraft const& draft)
   {
-    _session.mutation().updateList(draft);
+    _runtime.mutation().updateList(draft);
     _pendingSelectId = draft.listId;
   }
 
@@ -299,7 +299,7 @@ namespace ao::gtk
       return;
     }
 
-    _session.mutation().deleteList(listId);
+    _runtime.mutation().deleteList(listId);
 
     _pendingSelectId = allTracksListId();
   }

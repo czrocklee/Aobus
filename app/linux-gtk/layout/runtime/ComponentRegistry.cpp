@@ -4,7 +4,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ILayoutComponent.h"
-#include "layout/runtime/LayoutDependencies.h"
+#include "layout/runtime/LayoutContext.h"
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -58,7 +58,7 @@ namespace ao::gtk::layout
     }
   }
 
-  std::unique_ptr<ILayoutComponent> ComponentRegistry::create(LayoutDependencies& ctx, LayoutNode const& node) const
+  std::unique_ptr<ILayoutComponent> ComponentRegistry::create(LayoutContext& ctx, LayoutNode const& node) const
   {
     if (auto const it = _factories.find(node.type); it != _factories.end())
     {

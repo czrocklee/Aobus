@@ -15,7 +15,7 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class AppRuntime;
 }
 
 namespace ao::gtk
@@ -32,7 +32,7 @@ namespace ao::gtk
       std::function<rt::TrackSource*(ListId)> getListMembership;
     };
 
-    ListSidebarController(Gtk::Window& parent, rt::AppSession& session, Callbacks callbacks);
+    ListSidebarController(Gtk::Window& parent, rt::AppRuntime& runtime, Callbacks callbacks);
     ~ListSidebarController();
 
     // Not copyable or movable
@@ -65,7 +65,7 @@ namespace ao::gtk
 
     Gtk::Window& _parent;
     Callbacks _callbacks;
-    rt::AppSession& _session;
+    rt::AppRuntime& _runtime;
     TrackRowCache* _dataProvider = nullptr;
 
     std::unique_ptr<ListSidebarPanel> _panel;

@@ -6,12 +6,14 @@
 #include "ListCommand.h"
 #include "TagCommand.h"
 #include "TrackCommand.h"
-#include <ao/library/MusicLibrary.h>
+#include <runtime/CoreRuntime.h>
+#include <runtime/ImmediateControlExecutor.h>
 
 #include <CLI/CLI.hpp>
 
 #include <exception>
 #include <iostream>
+#include <memory>
 
 using namespace ao;
 
@@ -19,16 +21,17 @@ int main(int argc, char const* argv[])
 {
   try
   {
-    auto ml = library::MusicLibrary{"."};
+    auto executor = std::make_shared<rt::ImmediateControlExecutor>();
+    auto runtime = rt::CoreRuntime{executor, "."};
 
     CLI::App app{"Aobus CLI - aobus"};
     app.require_subcommand(1);
 
-    cli::setupTrackCommand(app, ml);
-    cli::setupListCommand(app, ml);
-    cli::setupInitCommand(app, ml);
-    cli::setupTagCommand(app, ml);
-    cli::setupLibCommand(app, ml);
+    cli::setupTrackCommand(app, runtime);
+    cli::setupListCommand(app, runtime);
+    cli::setupInitCommand(app, runtime);
+    cli::setupTagCommand(app, runtime);
+    cli::setupLibCommand(app, runtime);
 
     CLI11_PARSE(app, argc, argv);
     return 0;

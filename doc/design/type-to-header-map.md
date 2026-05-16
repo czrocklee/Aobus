@@ -416,7 +416,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 
 | Type | Header | Namespace |
 | :--- | :--- | :--- |
-| `ao::rt::AppSession` | `<runtime/AppSession.h>` | `ao::rt` |
+| `ao::rt::AppRuntime` | `<runtime/AppRuntime.h>` | `ao::rt` |
 | `ao::rt::ViewService` | `<runtime/ViewService.h>` | `ao::rt` |
 | `ao::rt::ViewId` | `<runtime/CorePrimitives.h>` | `ao::rt` |
 | `ao::rt::NotificationId` | `<runtime/CorePrimitives.h>` | `ao::rt` |
@@ -512,7 +512,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | Type | Header | Namespace |
 | :--- | :--- | :--- |
 | `ao::gtk::MainWindow` | `"app/MainWindow.h"` | `ao::gtk` |
-| `ao::gtk::WindowController` | `"app/WindowController.h"` | `ao::gtk` |
+| `ao::gtk::MainWindowCoordinator` | `"app/MainWindowCoordinator.h"` | `ao::gtk` |
 | `ao::gtk::MenuController` | `"app/MenuController.h"` | `ao::gtk` |
 | `ao::gtk::ShellLayoutController` | `"app/ShellLayoutController.h"` | `ao::gtk` |
 | `ao::gtk::GtkControlExecutor` | `"app/GtkControlExecutor.h"` | `ao::gtk` |
@@ -553,7 +553,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `ao::gtk::TrackFilterMode` | `"track/TrackListAdapter.h"` | `ao::gtk` |
 | `ao::gtk::ProjectionTrackModel` | `"track/TrackListModel.h"` | `ao::gtk` |
 | `ao::gtk::TrackViewPage` | `"track/TrackViewPage.h"` | `ao::gtk` |
-| `ao::gtk::TrackPageManager` | `"track/TrackPageManager.h"` | `ao::gtk` |
+| `ao::gtk::TrackPageHost` | `"track/TrackPageHost.h"` | `ao::gtk` |
 | `ao::gtk::TrackColumnViewHost` | `"track/TrackColumnViewHost.h"` | `ao::gtk` |
 | `ao::gtk::TrackColumnController` | `"track/TrackColumnController.h"` | `ao::gtk` |
 | `ao::gtk::TrackSelectionController` | `"track/TrackSelectionController.h"` | `ao::gtk` |
@@ -620,7 +620,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `ao::gtk::layout::ComponentDescriptor` | `"layout/runtime/ComponentRegistry.h"` | `ao::gtk::layout` |
 | `ao::gtk::layout::PropertyDescriptor` | `"layout/runtime/ComponentRegistry.h"` | `ao::gtk::layout` |
 | `ao::gtk::layout::ILayoutComponent` | `"layout/runtime/ILayoutComponent.h"` | `ao::gtk::layout` |
-| `ao::gtk::layout::LayoutDependencies` | `"layout/runtime/LayoutDependencies.h"` | `ao::gtk::layout` |
+| `ao::gtk::layout::LayoutContext` | `"layout/runtime/LayoutContext.h"` | `ao::gtk::layout` |
 | `ao::gtk::layout::LayoutHost` | `"layout/runtime/LayoutHost.h"` | `ao::gtk::layout` |
 | `ao::gtk::layout::LayoutRuntime` | `"layout/runtime/LayoutRuntime.h"` | `ao::gtk::layout` |
 | YAML::convert specializations for LayoutValue, LayoutNode, LayoutDocument | `"layout/document/LayoutYaml.h"` | `YAML` |

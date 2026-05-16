@@ -21,7 +21,7 @@ namespace ao::audio::test
   namespace
   {
     /**
-     * @brief Extracts a specific number of samples from a decoder session for verification.
+     * @brief Extracts a specific number of samples from a decoder runtime for verification.
      */
     template<typename T>
     std::vector<T> extractSamples(IDecoderSession& decoder, std::size_t count)

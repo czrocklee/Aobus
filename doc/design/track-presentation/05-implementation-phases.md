@@ -240,7 +240,7 @@ Persist custom view definitions and expose them to the selector.
 
 ```text
 app/linux-gtk/app/UIState.h
-app/linux-gtk/app/WindowController.cpp
+app/linux-gtk/app/MainWindowCoordinator.cpp
 app/linux-gtk/track/TrackPresentationStore.h/.cpp      # optional new GTK/app store
 test/unit/linux-gtk/track/TrackPresentationStoreTest.cpp
 ```

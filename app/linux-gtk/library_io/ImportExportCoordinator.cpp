@@ -8,7 +8,7 @@
 #include <ao/library/Importer.h>
 #include <ao/utility/Log.h>
 #include <ao/utility/ThreadUtils.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/NotificationService.h>
 #include <runtime/StateTypes.h>
@@ -39,9 +39,9 @@
 namespace ao::gtk
 {
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
-                                                   rt::AppSession& session,
+                                                   rt::AppRuntime& runtime,
                                                    ImportExportCallbacks callbacks)
-    : _parent{parent}, _session{session}, _callbacks{std::move(callbacks)}
+    : _parent{parent}, _runtime{runtime}, _callbacks{std::move(callbacks)}
   {
   }
 
@@ -104,7 +104,7 @@ namespace ao::gtk
 
         if (files.empty())
         {
-          _session.notifications().post(rt::NotificationSeverity::Info, "No music files found");
+          _runtime.notifications().post(rt::NotificationSeverity::Info, "No music files found");
           return;
         }
 
@@ -123,11 +123,11 @@ namespace ao::gtk
     auto* const dialogPtr = _importDialog.get();
     _importDialog->signal_response().connect([dialogPtr](int /*responseId*/) { dialogPtr->close(); });
 
-    _importProgressSub = _session.mutation().onImportProgress(
+    _importProgressSub = _runtime.mutation().onImportProgress(
       [dialogPtr, total = files.size()](auto const& ev)
       { dialogPtr->onNewTrack(ev.message, static_cast<int>(ev.fraction * static_cast<double>(total))); });
 
-    _importCompleteSub = _session.mutation().onImportCompleted(
+    _importCompleteSub = _runtime.mutation().onImportCompleted(
       [this, dialogPtr, isNewLibrary](auto)
       {
         dialogPtr->ready();
@@ -142,13 +142,13 @@ namespace ao::gtk
         _importCompleteSub.reset();
       });
 
-    _session.mutation().importFiles(files);
+    _runtime.mutation().importFiles(files);
     _importDialog->show();
   }
 
   void ImportExportCoordinator::onImportFinished() const
   {
-    _session.notifications().post(rt::NotificationSeverity::Info, "Import complete");
+    _runtime.notifications().post(rt::NotificationSeverity::Info, "Import complete");
   }
 
   void ImportExportCoordinator::scanDirectory(std::filesystem::path const& dir,
@@ -200,7 +200,7 @@ namespace ao::gtk
     }
     else
     {
-      _session.notifications().post(rt::NotificationSeverity::Info, "No music files found");
+      _runtime.notifications().post(rt::NotificationSeverity::Info, "No music files found");
     }
   }
 
@@ -297,7 +297,7 @@ namespace ao::gtk
       return;
     }
 
-    auto& library = _session.musicLibrary();
+    auto& library = _runtime.musicLibrary();
     _exportThread = std::jthread(
       [this, &library, path, mode]
       {
@@ -308,17 +308,17 @@ namespace ao::gtk
           auto exporter = library::Exporter{library};
           exporter.exportToYaml(path, mode);
 
-          _session.executor().dispatch(
-            [this] { _session.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully"); });
+          _runtime.executor().dispatch(
+            [this] { _runtime.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully"); });
         }
         catch (std::exception const& e)
         {
           auto const errorText = std::string{e.what()};
-          _session.executor().dispatch(
+          _runtime.executor().dispatch(
             [this, errorText]
             {
               APP_LOG_ERROR("Export failed: {}", errorText);
-              _session.notifications().post(rt::NotificationSeverity::Error, "Export failed: " + errorText);
+              _runtime.notifications().post(rt::NotificationSeverity::Error, "Export failed: " + errorText);
             });
         }
       });
@@ -371,7 +371,7 @@ namespace ao::gtk
 
     try
     {
-      auto importer = library::Importer{_session.musicLibrary()};
+      auto importer = library::Importer{_runtime.musicLibrary()};
       importer.importFromYaml(path);
       reportImportResult(true, "");
     }
@@ -383,7 +383,7 @@ namespace ao::gtk
 
   void ImportExportCoordinator::reportImportResult(bool success, std::string const& errorText)
   {
-    _session.executor().dispatch(
+    _runtime.executor().dispatch(
       [this, success, errorText]
       {
         if (success)
@@ -393,12 +393,12 @@ namespace ao::gtk
             _callbacks.onLibraryDataMutated();
           }
 
-          _session.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
+          _runtime.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
         }
         else
         {
           APP_LOG_ERROR("Import failed: {}", errorText);
-          _session.notifications().post(rt::NotificationSeverity::Error, "Import failed: " + errorText);
+          _runtime.notifications().post(rt::NotificationSeverity::Error, "Import failed: " + errorText);
         }
       });
   }

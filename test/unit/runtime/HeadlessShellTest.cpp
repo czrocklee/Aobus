@@ -3,10 +3,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/ConfigStore.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/PlaybackService.h>
+#include <runtime/SessionPersistenceService.h>
 #include <runtime/StateTypes.h>
 #include <runtime/ViewService.h>
 #include <runtime/WorkspaceService.h>
@@ -36,12 +37,12 @@ namespace ao::rt::test
     auto executor = std::make_shared<MockExecutor>();
     auto configStore = std::make_shared<ConfigStore>(std::filesystem::path(tempDir.path()) / "config.yaml");
 
-    auto session = AppSession{
-      AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = AppRuntime{
+      AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     SECTION("Initial layout is empty")
     {
-      auto const layout = session.workspace().layoutState();
+      auto const layout = runtime.workspace().layoutState();
       CHECK(layout.openViews.empty());
       CHECK(layout.activeViewId == ViewId{});
     }
@@ -49,30 +50,30 @@ namespace ao::rt::test
     SECTION("Navigate to list ID creates a view and marks it active")
     {
       auto const listId = ListId{42};
-      session.workspace().navigateTo(listId);
+      runtime.workspace().navigateTo(listId);
 
-      auto const layout = session.workspace().layoutState();
+      auto const layout = runtime.workspace().layoutState();
       REQUIRE(layout.openViews.size() == 1);
       CHECK(layout.activeViewId == layout.openViews.front());
 
       auto const viewId = ViewId{layout.activeViewId};
-      auto const viewState = session.views().trackListState(viewId);
+      auto const viewState = runtime.views().trackListState(viewId);
       CHECK(viewState.listId == listId);
     }
 
     SECTION("Closing a view updates the layout")
     {
-      session.workspace().navigateTo(ListId{1});
-      session.workspace().navigateTo(ListId{2});
+      runtime.workspace().navigateTo(ListId{1});
+      runtime.workspace().navigateTo(ListId{2});
 
-      auto layout1 = session.workspace().layoutState();
+      auto layout1 = runtime.workspace().layoutState();
       REQUIRE(layout1.openViews.size() == 2);
       auto const viewToClose = ViewId{layout1.openViews.front()};
       auto const remainingView = ViewId{layout1.openViews.back()};
 
-      session.workspace().closeView(viewToClose);
+      runtime.workspace().closeView(viewToClose);
 
-      auto const layout2 = session.workspace().layoutState();
+      auto const layout2 = runtime.workspace().layoutState();
       CHECK(layout2.openViews.size() == 1);
       CHECK(layout2.openViews.front() == remainingView);
       CHECK(layout2.activeViewId == remainingView);
@@ -80,20 +81,20 @@ namespace ao::rt::test
 
     SECTION("Session persistence works across instances")
     {
-      // Setup state in first session
-      session.workspace().navigateTo(ListId{10});
-      session.workspace().navigateTo(ListId{20});
-      session.workspace().saveSession();
+      // Setup state in first runtime
+      runtime.workspace().navigateTo(ListId{10});
+      runtime.workspace().navigateTo(ListId{20});
+      runtime.persistence().save();
 
       auto loaded = rt::SessionSnapshot{};
-      configStore->load("session", loaded);
+      configStore->load("runtime", loaded);
       CHECK(loaded.openViews.size() == 2);
 
-      // Create new session with same persistence
-      AppSession session2(
-        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
+      // Create new runtime with same persistence
+      AppRuntime session2(
+        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
 
-      session2.workspace().restoreSession();
+      session2.persistence().restore();
 
       auto const layout = session2.workspace().layoutState();
       CHECK(layout.openViews.size() == 2);
@@ -102,27 +103,27 @@ namespace ao::rt::test
 
     SECTION("Session persistence preserves groupBy across instances")
     {
-      // Setup grouped view in first session
-      session.workspace().navigateTo(ListId{10});
-      auto const viewId = session.workspace().layoutState().activeViewId;
-      session.views().setGrouping(viewId, TrackGroupKey::Artist);
+      // Setup grouped view in first runtime
+      runtime.workspace().navigateTo(ListId{10});
+      auto const viewId = runtime.workspace().layoutState().activeViewId;
+      runtime.views().setGrouping(viewId, TrackGroupKey::Artist);
 
-      auto const savedState = session.views().trackListState(viewId);
+      auto const savedState = runtime.views().trackListState(viewId);
       CHECK(savedState.groupBy == TrackGroupKey::Artist);
       CHECK_FALSE(savedState.sortBy.empty());
 
-      session.workspace().saveSession();
+      runtime.persistence().save();
 
       auto loaded = rt::SessionSnapshot{};
-      configStore->load("session", loaded);
+      configStore->load("runtime", loaded);
       REQUIRE(loaded.openViews.size() == 1);
       CHECK(loaded.openViews[0].groupBy == TrackGroupKey::Artist);
 
-      // Restore in new session
-      AppSession session2(
-        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
+      // Restore in new runtime
+      AppRuntime session2(
+        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
 
-      session2.workspace().restoreSession();
+      session2.persistence().restore();
 
       auto const layout2 = session2.workspace().layoutState();
       REQUIRE(layout2.openViews.size() == 1);
@@ -134,13 +135,13 @@ namespace ao::rt::test
     SECTION("Session persistence preserves groupBy=None")
     {
       // Ungrouped view
-      session.workspace().navigateTo(ListId{10});
-      session.workspace().saveSession();
+      runtime.workspace().navigateTo(ListId{10});
+      runtime.persistence().save();
 
-      AppSession session2(
-        AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
+      AppRuntime session2(
+        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
 
-      session2.workspace().restoreSession();
+      session2.persistence().restore();
 
       auto const layout2 = session2.workspace().layoutState();
       REQUIRE(layout2.openViews.size() == 1);

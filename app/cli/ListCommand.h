@@ -4,9 +4,13 @@
 #pragma once
 
 #include <CLI/CLI.hpp>
-#include <ao/library/MusicLibrary.h>
+
+namespace ao::rt
+{
+  class CoreRuntime;
+}
 
 namespace ao::cli
 {
-  void setupListCommand(CLI::App& app, library::MusicLibrary& ml);
+  void setupListCommand(CLI::App& app, rt::CoreRuntime& runtime);
 }

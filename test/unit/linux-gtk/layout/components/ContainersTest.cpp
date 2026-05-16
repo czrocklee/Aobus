@@ -7,7 +7,7 @@
 #include <app/linux-gtk/layout/runtime/LayoutHost.h>
 #include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
 
-#include <app/runtime/AppSession.h>
+#include <app/runtime/AppRuntime.h>
 #include <app/runtime/ConfigStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -44,21 +44,21 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    rt::AppSession session{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    rt::AppRuntime runtime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     ComponentRegistry registry;
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+    auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
-    LayoutRuntime runtime{registry};
+    LayoutRuntime layoutRuntime{registry};
 
     SECTION("Build default layout")
     {
       auto const doc = createDefaultLayout();
-      auto const rootComponent = runtime.build(ctx, doc);
+      auto const rootComponent = layoutRuntime.build(ctx, doc);
 
       REQUIRE(rootComponent != nullptr);
 
@@ -81,7 +81,7 @@ namespace ao::gtk::layout::test
       child2.props["orientation"] = LayoutValue{std::string{"vertical"}};
       doc.root.children.push_back(child2);
 
-      auto const rootComponent = runtime.build(ctx, doc);
+      auto const rootComponent = layoutRuntime.build(ctx, doc);
 
       REQUIRE(rootComponent != nullptr);
 
@@ -96,7 +96,7 @@ namespace ao::gtk::layout::test
       auto doc = LayoutDocument{};
       doc.root.type = "nonexistent.component";
 
-      auto const rootComponent = runtime.build(ctx, doc);
+      auto const rootComponent = layoutRuntime.build(ctx, doc);
 
       REQUIRE(rootComponent != nullptr);
 
@@ -120,16 +120,16 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    rt::AppSession session{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    rt::AppRuntime runtime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     ComponentRegistry registry;
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+    auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
-    LayoutRuntime runtime{registry};
+    LayoutRuntime layoutRuntime{registry};
 
     auto const checkError = [](ILayoutComponent& comp, std::string const& expectedFragment)
     {
@@ -143,7 +143,7 @@ namespace ao::gtk::layout::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "split";
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       checkError(*comp, "2 children");
     }
 
@@ -152,7 +152,7 @@ namespace ao::gtk::layout::test
       auto doc = LayoutDocument{};
       doc.root.type = "split";
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       checkError(*comp, "2 children");
     }
 
@@ -163,7 +163,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       checkError(*comp, "2 children");
     }
 
@@ -171,7 +171,7 @@ namespace ao::gtk::layout::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "scroll";
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       checkError(*comp, "1 child");
     }
 
@@ -181,7 +181,7 @@ namespace ao::gtk::layout::test
       doc.root.type = "scroll";
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       checkError(*comp, "1 child");
     }
 
@@ -189,7 +189,7 @@ namespace ao::gtk::layout::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "tabs";
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       checkError(*comp, "at least 1 child");
     }
   }
@@ -206,16 +206,16 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    rt::AppSession session{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    rt::AppRuntime runtime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     ComponentRegistry registry;
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+    auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
-    LayoutRuntime runtime{registry};
+    LayoutRuntime layoutRuntime{registry};
 
     SECTION("split with 2 children builds Gtk::Paned")
     {
@@ -229,7 +229,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       auto* const paned = dynamic_cast<Gtk::Paned*>(&comp->widget());
 
       REQUIRE(paned != nullptr);
@@ -253,7 +253,7 @@ namespace ao::gtk::layout::test
 
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       auto* const sw = dynamic_cast<Gtk::ScrolledWindow*>(&comp->widget());
 
       REQUIRE(sw != nullptr);
@@ -279,7 +279,7 @@ namespace ao::gtk::layout::test
       doc.root.type = "scroll";
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       auto* const sw = dynamic_cast<Gtk::ScrolledWindow*>(&comp->widget());
 
       REQUIRE(sw != nullptr);
@@ -309,7 +309,7 @@ namespace ao::gtk::layout::test
       c2.layout["title"] = LayoutValue{std::string{"Second Tab"}};
       doc.root.children.push_back(c2);
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
 
       REQUIRE(box != nullptr);
@@ -337,7 +337,7 @@ namespace ao::gtk::layout::test
       c1.layout["title"] = LayoutValue{std::string{"Spacer Tab"}};
       doc.root.children.push_back(c1);
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
 
       REQUIRE(comp != nullptr);
 
@@ -358,16 +358,16 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    rt::AppSession session{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    rt::AppRuntime runtime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     ComponentRegistry registry;
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+    auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
-    LayoutRuntime runtime{registry};
+    LayoutRuntime layoutRuntime{registry};
 
     SECTION("hexpand/vexpand applied to child")
     {
@@ -380,7 +380,7 @@ namespace ao::gtk::layout::test
       child.layout["vexpand"] = LayoutValue{false};
       doc.root.children.push_back(child);
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
 
       REQUIRE(box != nullptr);
@@ -402,7 +402,7 @@ namespace ao::gtk::layout::test
       child.layout["valign"] = LayoutValue{std::string{"end"}};
       doc.root.children.push_back(child);
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
 
       REQUIRE(box != nullptr);
@@ -423,7 +423,7 @@ namespace ao::gtk::layout::test
       child.layout["margin"] = LayoutValue{static_cast<std::int64_t>(10)};
       doc.root.children.push_back(child);
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
 
       REQUIRE(box != nullptr);
@@ -448,7 +448,7 @@ namespace ao::gtk::layout::test
       child.layout["visible"] = LayoutValue{false};
       doc.root.children.push_back(child);
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
 
       REQUIRE(box != nullptr);
@@ -468,7 +468,7 @@ namespace ao::gtk::layout::test
       child.layout["cssClasses"] = LayoutValue{std::vector<std::string>{"my-class", "another"}};
       doc.root.children.push_back(child);
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
 
       REQUIRE(box != nullptr);
@@ -490,7 +490,7 @@ namespace ao::gtk::layout::test
       child.layout["minHeight"] = LayoutValue{static_cast<std::int64_t>(100)};
       doc.root.children.push_back(child);
 
-      auto const comp = runtime.build(ctx, doc);
+      auto const comp = layoutRuntime.build(ctx, doc);
       auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
 
       REQUIRE(box != nullptr);
@@ -521,14 +521,14 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    rt::AppSession session{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    rt::AppRuntime runtime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     ComponentRegistry registry;
     registerContainerComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window};
+    auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
     LayoutHost host{registry};
 
@@ -573,10 +573,9 @@ namespace ao::gtk::layout::test
       auto const configStore2 =
         std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir2.path()} / "config.yaml");
 
-      rt::AppSession session2{
-        rt::AppSessionDependencies{.executor = executor2, .libraryRoot = tempDir2.path(), .configStore = configStore2}};
-      auto ctx2 =
-        LayoutDependencies{.registry = registry2, .session = session2, .parentWindow = window2, .onNodeMoved = {}};
+      rt::AppRuntime session2{
+        rt::AppRuntimeDependencies{.executor = executor2, .libraryRoot = tempDir2.path(), .configStore = configStore2}};
+      auto ctx2 = LayoutContext{.registry = registry2, .runtime = session2, .parentWindow = window2};
 
       auto const node = LayoutNode{};
       REQUIRE_NOTHROW(registry2.create(ctx2, node));

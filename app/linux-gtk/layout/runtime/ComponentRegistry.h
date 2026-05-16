@@ -5,7 +5,7 @@
 
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ILayoutComponent.h"
-#include "layout/runtime/LayoutDependencies.h"
+#include "layout/runtime/LayoutContext.h"
 
 #include <cstdint>
 #include <functional>
@@ -50,7 +50,7 @@ namespace ao::gtk::layout
     std::optional<std::size_t> optMaxChildren = {};
   };
 
-  using ComponentFactory = std::unique_ptr<ILayoutComponent> (*)(LayoutDependencies&, LayoutNode const&);
+  using ComponentFactory = std::unique_ptr<ILayoutComponent> (*)(LayoutContext&, LayoutNode const&);
 
   /**
    * @brief Registry for layout component types and their metadata.
@@ -70,7 +70,7 @@ namespace ao::gtk::layout
      *
      * Returns an error placeholder component if the type is unknown.
      */
-    std::unique_ptr<ILayoutComponent> create(LayoutDependencies& ctx, LayoutNode const& node) const;
+    std::unique_ptr<ILayoutComponent> create(LayoutContext& ctx, LayoutNode const& node) const;
 
     /**
      * @brief Get all registered component descriptors.

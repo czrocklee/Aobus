@@ -298,16 +298,16 @@ TrackDetailProjection(DetailTarget target, ViewService& views, WorkspaceService&
 
 ### Option B: Keep EventBus as private runtime implementation detail
 
-EventBus stays but is only used within `app/runtime`. No UI code accesses it. `AppSession::events()` is removed.
+EventBus stays but is only used within `app/runtime`. No UI code accesses it. `AppRuntime::events()` is removed.
 
 - `ListSourceStore`, `WorkspaceService`, `TrackDetailProjection` continue to use EventBus internally.
-- EventBus is passed between services at construction time inside `AppSession::Impl` only.
+- EventBus is passed between services at construction time inside `AppRuntime::Impl` only.
 
 **Trade-off**: Less churn in the runtime layer, but EventBus still exists.
 
 ### Recommendation: Phase 3 → Option A
 
-The dependency chain is already explicit in `AppSession::Impl` (services are constructed with references to each other). Adding one more reference (`LibraryMutationService&` to `WorkspaceService` and `ListSourceStore`) is a small, natural extension.
+The dependency chain is already explicit in `AppRuntime::Impl` (services are constructed with references to each other). Adding one more reference (`LibraryMutationService&` to `WorkspaceService` and `ListSourceStore`) is a small, natural extension.
 
 For `TrackDetailProjection`, the extra parameters are justified: the class already depends on those services' events, making it visible in the constructor is honest.
 
@@ -315,7 +315,7 @@ For `TrackDetailProjection`, the extra parameters are justified: the class alrea
 1.  [x] Remove `EventBus&` constructor parameter and member from all services.
 2.  [x] Remove all `publish()` calls from runtime services.
 3.  [x] Remove `EventBus.h` and `EventTypes.h`.
-4.  [x] Remove `AppSession::events()` accessor.
+4.  [x] Remove `AppRuntime::events()` accessor.
 5.  [x] Remove all redundant `#include` directives.
 6.  [x] Verify build and unit tests.
 
@@ -342,8 +342,8 @@ For `TrackDetailProjection`, the extra parameters are justified: the class alrea
 - `app/linux-gtk/ui/MainWindow.cpp` — switch subscriptions to `session.mutation().onXxx()`
 
 ### Phase 3
-- `app/runtime/AppSession.cpp` — update construction to pass service refs instead of EventBus
-- `app/runtime/AppSession.h` — add LibraryMutationService& to accessors if needed
+- `app/runtime/AppRuntime.cpp` — update construction to pass service refs instead of EventBus
+- `app/runtime/AppRuntime.h` — add LibraryMutationService& to accessors if needed
 - `app/runtime/ListSourceStore.h` / `.cpp` — EventBus& → LibraryMutationService&
 - `app/runtime/WorkspaceService.cpp` — EventBus& → LibraryMutationService& for ListsMutated
 - `app/runtime/ViewService.cpp` — pass WorkspaceService& + LibraryMutationService& to TrackDetailProjection
@@ -354,8 +354,8 @@ For `TrackDetailProjection`, the extra parameters are justified: the class alrea
 - `app/runtime/EventTypes.h` — delete
 - `app/runtime/BusLog.h` — delete
 - All files with `#include "EventBus.h"` or `#include "EventTypes.h"` — remove includes
-- `app/runtime/AppSession.h` — remove `events()` method
-- `app/runtime/AppSession.cpp` — remove `EventBus eventBus` member
+- `app/runtime/AppRuntime.h` — remove `events()` method
+- `app/runtime/AppRuntime.cpp` — remove `EventBus eventBus` member
 
 ## Risk Assessment
 

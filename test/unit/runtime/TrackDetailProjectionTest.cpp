@@ -50,7 +50,7 @@ namespace ao::rt::test
         , views{executor, lib.library(), sources}
         , config{std::make_shared<ConfigStore>(lib.library().rootPath() / "config.json")}
         , playback{executor, views, lib.library()}
-        , workspace{views, playback, mutation, lib.library(), config}
+        , workspace{views, playback, mutation, lib.library()}
       {
       }
     };

@@ -4,7 +4,7 @@
 #include "playback/AobusSoulWindow.h"
 #include "app/AobusSoul.h"
 #include "playback/AobusSoulBinding.h"
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/PlaybackService.h>
 
 #include <gdkmm/display.h>
@@ -13,6 +13,7 @@
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <glibmm/variant.h>
+#include <gtk/gtk.h>
 #include <gtkmm/box.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/enums.h>
@@ -24,7 +25,6 @@
 #include <gtkmm/shortcuttrigger.h>
 #include <gtkmm/stylecontext.h>
 #include <gtkmm/window.h>
-#include <gtk/gtk.h>
 
 #include <cmath>
 #include <memory>

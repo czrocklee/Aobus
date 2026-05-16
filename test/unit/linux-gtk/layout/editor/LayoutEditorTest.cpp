@@ -7,7 +7,7 @@
 #include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
 #include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
 
-#include <app/runtime/AppSession.h>
+#include <app/runtime/AppRuntime.h>
 #include <app/runtime/ConfigStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -321,13 +321,12 @@ namespace ao::gtk::layout::editor::test
       auto const executor = std::make_shared<MockExecutor>();
       auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-      rt::AppSession session{
-        rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+      rt::AppRuntime runtime{
+        rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
       auto const app = Gtk::Application::create("io.github.aobus.template_test");
       auto window = Gtk::Window{};
-      auto ctx =
-        LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+      auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
       auto doc = LayoutDocument{};
       doc.version = 1;
@@ -335,8 +334,8 @@ namespace ao::gtk::layout::editor::test
       doc.root.type = "template";
       doc.root.props["templateId"] = LayoutValue{std::string{"playback.compactControls"}};
 
-      LayoutRuntime runtime{registry};
-      auto const comp = runtime.build(ctx, doc);
+      LayoutRuntime layoutRuntime{registry};
+      auto const comp = layoutRuntime.build(ctx, doc);
 
       REQUIRE(comp != nullptr);
 
@@ -353,13 +352,12 @@ namespace ao::gtk::layout::editor::test
       auto const executor = std::make_shared<MockExecutor>();
       auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-      auto session = rt::AppSession{
-        rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+      auto runtime = rt::AppRuntime{
+        rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
       auto const app = Gtk::Application::create("io.github.aobus.recursive_test");
       auto window = Gtk::Window{};
-      auto ctx =
-        LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+      auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
       auto doc = LayoutDocument{};
       doc.version = 1;
@@ -368,8 +366,8 @@ namespace ao::gtk::layout::editor::test
       doc.root.type = "template";
       doc.root.props["templateId"] = LayoutValue{std::string{"selfRef"}};
 
-      auto runtime = LayoutRuntime{registry};
-      auto const comp = runtime.build(ctx, doc);
+      auto layoutRuntime = LayoutRuntime{registry};
+      auto const comp = layoutRuntime.build(ctx, doc);
 
       REQUIRE(comp != nullptr);
       CHECK(dynamic_cast<Gtk::Widget*>(&comp->widget()) != nullptr);
@@ -401,14 +399,14 @@ namespace ao::gtk::layout::editor::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto session = rt::AppSession{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = LayoutDependencies{.registry = registry, .session = session, .parentWindow = window, .onNodeMoved = {}};
+    auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
     SECTION("absoluteCanvas descriptor is registered as container")
     {
       auto const desc = registry.getDescriptor("absoluteCanvas");
@@ -424,8 +422,8 @@ namespace ao::gtk::layout::editor::test
       auto doc = LayoutDocument{};
       doc.root.type = "absoluteCanvas";
 
-      auto runtime = LayoutRuntime{registry};
-      auto const comp = runtime.build(ctx, doc);
+      auto layoutRuntime = LayoutRuntime{registry};
+      auto const comp = layoutRuntime.build(ctx, doc);
 
       REQUIRE(comp != nullptr);
     }
@@ -445,8 +443,8 @@ namespace ao::gtk::layout::editor::test
       child.layout["zIndex"] = LayoutValue{static_cast<std::int64_t>(2)};
       doc.root.children.push_back(std::move(child));
 
-      auto runtime = LayoutRuntime{registry};
-      auto const comp = runtime.build(ctx, doc);
+      auto layoutRuntime = LayoutRuntime{registry};
+      auto const comp = layoutRuntime.build(ctx, doc);
 
       REQUIRE(comp != nullptr);
     }

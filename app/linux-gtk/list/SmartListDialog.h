@@ -20,7 +20,7 @@ namespace ao::library
 
 namespace ao::rt
 {
-  class AppSession;
+  class AppRuntime;
   class AllTracksSource;
   class SmartListSource;
   class SmartListEvaluator;
@@ -35,7 +35,7 @@ namespace ao::gtk
   class SmartListDialog final : public Gtk::Dialog
   {
   public:
-    SmartListDialog(Gtk::Window& parent, rt::AppSession& session, ListId parentListId, TrackRowCache const& provider);
+    SmartListDialog(Gtk::Window& parent, rt::AppRuntime& runtime, ListId parentListId, TrackRowCache const& provider);
     ~SmartListDialog() override;
 
     SmartListDialog(SmartListDialog const&) = delete;
@@ -79,7 +79,7 @@ namespace ao::gtk
     sigc::connection _exprTimeoutConnection;
 
     // Preview infrastructure
-    rt::AppSession& _session;
+    rt::AppRuntime& _runtime;
     ListId _parentListId;
     TrackRowCache const& _trackRowCache;
     std::unique_ptr<rt::SmartListSource> _previewFilteredList;

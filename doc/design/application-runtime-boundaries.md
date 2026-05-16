@@ -150,14 +150,14 @@ names understate or misdescribe their responsibilities:
 
 | Current name | Preferred name | Rationale |
 | --- | --- | --- |
-| `rt::AppSession` | `rt::AppRuntime` | It constructs and exposes the runtime service graph; it is not only a user session. |
-| `rt::AppSessionDependencies` | `rt::AppRuntimeDependencies` | Matches the runtime container role. |
-| `gtk::WindowController` | `gtk::MainWindowCoordinator` | It wires controllers, caches, subscriptions, persistence, and platform bootstrap. |
-| `gtk::layout::LayoutDependencies` | `gtk::layout::LayoutContext` | It is a mutable runtime context/service bundle, not just a dependency declaration. |
-| `gtk::TrackPageManager` | `gtk::TrackPageHost` | It owns track page lifecycle inside a GTK stack. |
+| `rt::AppRuntime` | `rt::AppRuntime` | It constructs and exposes the runtime service graph; it is not only a user session. |
+| `rt::AppRuntimeDependencies` | `rt::AppRuntimeDependencies` | Matches the runtime container role. |
+| `gtk::MainWindowCoordinator` | `gtk::MainWindowCoordinator` | It wires controllers, caches, subscriptions, persistence, and platform bootstrap. |
+| `gtk::layout::LayoutContext` | `gtk::layout::LayoutContext` | It is a mutable runtime context/service bundle, not just a dependency declaration. |
+| `gtk::TrackPageHost` | `gtk::TrackPageHost` | It owns track page lifecycle inside a GTK stack. |
 
 Renames should be paired with small responsibility tightening when practical.
-For example, renaming `WindowController` to `MainWindowCoordinator` should also
+For example, renaming `MainWindowCoordinator` to `MainWindowCoordinator` should also
 move at least one non-window concern out of the class.
 
 ## Responsibility Rules

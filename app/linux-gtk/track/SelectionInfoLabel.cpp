@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/SelectionInfoLabel.h"
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/ViewService.h>
 
 #include <gtkmm/enums.h>

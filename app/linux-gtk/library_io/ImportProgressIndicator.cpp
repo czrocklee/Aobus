@@ -3,7 +3,6 @@
 
 #include "library_io/ImportProgressIndicator.h"
 #include "layout/LayoutConstants.h"
-#include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
 
 #include <gtkmm/enums.h>

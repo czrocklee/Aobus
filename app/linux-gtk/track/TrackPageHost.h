@@ -3,18 +3,11 @@
 
 #pragma once
 
-#include "library_io/PlaylistExporter.h"
-#include "track/TrackListAdapter.h"
-#include "track/TrackPresentation.h"
-#include "track/TrackPresentationStore.h"
-#include "track/TrackViewPage.h"
-#include <runtime/AppSession.h>
+#include <ao/Type.h>
+#include <gtkmm/stack.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/PlaybackService.h>
-
-#include <ao/library/ListView.h>
-#include <gtkmm.h>
-#include <runtime/TrackSource.h>
 
 #include <functional>
 #include <map>
@@ -22,12 +15,22 @@
 #include <optional>
 #include <vector>
 
+namespace ao::lmdb
+{
+  class ReadTransaction;
+}
+
 namespace ao::gtk
 {
   class ListSidebarController;
   class PlaybackSequenceController;
   class TagEditController;
   class TrackRowCache;
+  class TrackListAdapter;
+  class TrackViewPage;
+  class PlaylistExporter;
+  class TrackPresentationStore;
+  class TrackColumnLayoutModel;
 
   /**
    * TrackPageContext holds the per-page state for a track list.
@@ -41,27 +44,30 @@ namespace ao::gtk
   };
 
   /**
-   * TrackPageManager manages the creation, lookup, and lifecycle of track pages.
+   * TrackPageHost manages the creation, lookup, and lifecycle of track pages.
    */
-  class TrackPageManager final
+  class TrackPageHost final
   {
   public:
-    TrackPageManager(Gtk::Stack& stack,
-                     TrackColumnLayoutModel& layoutModel,
-                     rt::AppSession& session,
-                     PlaybackSequenceController* sequenceController,
-                     TagEditController& tagEditController,
-                     ListSidebarController& listSidebar,
-                     TrackPresentationStore& presentationStore);
-    ~TrackPageManager();
+    TrackPageHost(Gtk::Stack& stack,
+                  TrackColumnLayoutModel& layoutModel,
+                  rt::AppRuntime& runtime,
+                  PlaybackSequenceController* sequenceController,
+                  TagEditController& tagEditController,
+                  ListSidebarController& listSidebar,
+                  TrackPresentationStore& presentationStore);
+    ~TrackPageHost();
 
     // Not copyable or movable
-    TrackPageManager(TrackPageManager const&) = delete;
-    TrackPageManager& operator=(TrackPageManager const&) = delete;
-    TrackPageManager(TrackPageManager&&) = delete;
-    TrackPageManager& operator=(TrackPageManager&&) = delete;
+    TrackPageHost(TrackPageHost const&) = delete;
+    TrackPageHost& operator=(TrackPageHost const&) = delete;
+    TrackPageHost(TrackPageHost&&) = delete;
+    TrackPageHost& operator=(TrackPageHost&&) = delete;
 
-    void setPlaybackSequenceController(PlaybackSequenceController& controller) { _playbackSequenceController = &controller; }
+    void setPlaybackSequenceController(PlaybackSequenceController& controller)
+    {
+      _playbackSequenceController = &controller;
+    }
 
     Gtk::Stack& stack() { return _stack; }
 
@@ -89,7 +95,7 @@ namespace ao::gtk
 
     Gtk::Stack& _stack;
     TrackColumnLayoutModel& _layoutModel;
-    rt::AppSession& _session;
+    rt::AppRuntime& _runtime;
     PlaybackSequenceController* _playbackSequenceController;
     TagEditController& _tagEditController;
     ListSidebarController& _listSidebar;

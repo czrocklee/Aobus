@@ -14,7 +14,7 @@ namespace ao::lmdb
 
 namespace ao::rt
 {
-  class AppSession;
+  class AppRuntime;
 }
 
 namespace ao::gtk
@@ -30,6 +30,6 @@ namespace ao::gtk
       std::map<ListId, Glib::RefPtr<ListTreeItem>> nodesById;
     };
 
-    static Result build(rt::AppSession& session, lmdb::ReadTransaction const& txn);
+    static Result build(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn);
   };
 } // namespace ao::gtk

@@ -9,15 +9,16 @@ namespace ao::audio::test
 {
   TEST_CASE("DecoderFactory - Creates sessions based on extension", "[audio][unit][decoder]")
   {
-    auto const format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
+    auto const format =
+      Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
 
-    SECTION("Creates FLAC session for .flac")
+    SECTION("Creates FLAC runtime for .flac")
     {
-      auto session = createDecoderSession("song.flac", format);
-      REQUIRE(session != nullptr);
+      auto runtime = createDecoderSession("song.flac", format);
+      REQUIRE(runtime != nullptr);
     }
 
-    SECTION("Creates ALAC session for .m4a and .mp4")
+    SECTION("Creates ALAC runtime for .m4a and .mp4")
     {
       auto session1 = createDecoderSession("song.m4a", format);
       REQUIRE(session1 != nullptr);

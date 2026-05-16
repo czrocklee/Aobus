@@ -7,7 +7,7 @@
 #include <ao/Type.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 
 #include <giomm/listmodel.h>
 #include <giomm/liststore.h>
@@ -47,12 +47,12 @@ namespace ao::gtk
     };
   }
 
-  ListTreeModelBuilder::Result ListTreeModelBuilder::build(rt::AppSession& session, lmdb::ReadTransaction const& txn)
+  ListTreeModelBuilder::Result ListTreeModelBuilder::build(rt::AppRuntime& runtime, lmdb::ReadTransaction const& txn)
   {
     auto result = Result{};
     result.store = Gio::ListStore<ListTreeItem>::create();
 
-    auto const reader = session.musicLibrary().lists().reader(txn);
+    auto const reader = runtime.musicLibrary().lists().reader(txn);
     auto nodes = std::map<ListId, StoredListNode>{};
 
     for (auto const& [id, listView] : reader)

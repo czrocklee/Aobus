@@ -4,13 +4,14 @@
 #include "app/GtkControlExecutor.h"
 #include "app/MainWindow.h"
 #include "app/ThemeBus.h"
+#include "library_io/ImportExportCoordinator.h"
 #include "track/TrackRowCache.h"
 #include <ao/utility/Log.h>
 #include <giomm/dbusconnection.h>
 #include <giomm/dbusproxy.h>
 #include <giomm/file.h>
 #include <giomm/filemonitor.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 
 #include <ao/AppVersion.h>
 
@@ -39,9 +40,9 @@ namespace
       auto store = rt::ConfigStore{configPath};
       auto snapshot = rt::SessionSnapshot{};
 
-      if (auto result = store.load("session", snapshot); !result)
+      if (auto result = store.load("runtime", snapshot); !result)
       {
-        APP_LOG_WARN("Failed to load session config: {}", result.error().message);
+        APP_LOG_WARN("Failed to load runtime config: {}", result.error().message);
       }
 
       auto const& path = snapshot.lastLibraryPath;
@@ -63,15 +64,15 @@ namespace
     auto const configPath = std::filesystem::path{Glib::get_user_config_dir()} / "aobus" / "config.yaml";
     auto configStore = std::make_shared<rt::ConfigStore>(configPath);
 
-    auto appSession = std::make_unique<rt::AppSession>(rt::AppSessionDependencies{
+    auto appRuntime = std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{
       .executor = std::move(executor), .libraryRoot = std::move(libraryPath), .configStore = configStore});
 
-    auto window = Glib::make_refptr_for_instance<MainWindow>(new MainWindow(*appSession, configStore));
+    auto window = Glib::make_refptr_for_instance<MainWindow>(new MainWindow(*appRuntime, configStore));
 
-    // Store AppSession alongside window (lifetime tied to window via pointer)
-    window->set_data("app-session",
-                     new std::unique_ptr<rt::AppSession>(std::move(appSession)),
-                     [](void* data) { delete static_cast<std::unique_ptr<rt::AppSession>*>(data); });
+    // Store AppRuntime alongside window (lifetime tied to window via pointer)
+    window->set_data("app-runtime",
+                     new std::unique_ptr<rt::AppRuntime>(std::move(appRuntime)),
+                     [](void* data) { delete static_cast<std::unique_ptr<rt::AppRuntime>*>(data); });
 
     window->initializeSession();
 

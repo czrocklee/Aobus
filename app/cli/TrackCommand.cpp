@@ -9,7 +9,8 @@
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
-#include <ao/tag/TagFile.h>
+#include <runtime/CoreRuntime.h>
+#include <runtime/TrackCommandService.h>
 
 #include <CLI/App.hpp>
 
@@ -19,7 +20,6 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
-#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -148,41 +148,9 @@ namespace ao::cli
         formatPlain(matches, offset, limit, os);
       }
     }
-
-    void createTrack(library::MusicLibrary& ml, std::filesystem::path const& path, std::ostream& os)
-    {
-      auto const optTagFile = tag::TagFile::open(path);
-
-      if (!optTagFile)
-      {
-        os << "unsupported file format: " << path << '\n';
-        return;
-      }
-
-      auto txn = ml.writeTransaction();
-      auto writer = ml.tracks().writer(txn);
-      auto builder = optTagFile->loadTrack();
-      builder.property()
-        .uri(path.string())
-        .fileSize(std::filesystem::file_size(path))
-        .mtime(std::filesystem::last_write_time(path).time_since_epoch().count());
-
-      auto const [preparedHot, preparedCold] = builder.prepare(txn, ml.dictionary(), ml.resources());
-      auto const [id, trackView] =
-        writer.createHotCold(preparedHot.size(),
-                             preparedCold.size(),
-                             [&preparedHot, &preparedCold](TrackId, std::span<std::byte> hot, std::span<std::byte> cold)
-                             {
-                               preparedHot.writeTo(hot);
-                               preparedCold.writeTo(cold);
-                             });
-      txn.commit();
-
-      os << "add track: " << id << " " << trackView.metadata().title() << '\n';
-    }
   }
 
-  void setupTrackCommand(CLI::App& app, library::MusicLibrary& ml)
+  void setupTrackCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {
     auto* track = app.add_subcommand("track", "Track management commands");
 
@@ -192,9 +160,9 @@ namespace ao::cli
     auto* limit = showCmd->add_option("-l,--limit", "limit number of results (0 = all)")->default_val(0);
     auto* offset = showCmd->add_option("-o,--offset", "offset results")->default_val(0);
     showCmd->callback(
-      [&ml, filter, json, limit, offset]
+      [&runtime, filter, json, limit, offset]
       {
-        show(ml,
+        show(runtime.musicLibrary(),
              filter->as<std::string>(),
              json->count() > 0,
              limit->as<std::size_t>(),
@@ -204,21 +172,31 @@ namespace ao::cli
 
     auto* create = track->add_subcommand("create", "Create a track from a file");
     auto* path = create->add_option("path", "audio file path")->required();
-    create->callback([&ml, path] { createTrack(ml, path->as<std::string>(), std::cout); });
+    create->callback(
+      [&runtime, path]
+      {
+        auto const trackId = runtime.trackCommands().createTrackFromFile(path->as<std::string>());
+
+        if (trackId != TrackId{})
+        {
+          std::cout << "added track: " << trackId << '\n';
+        }
+        else
+        {
+          std::cout << "error adding track from: " << path->as<std::string>() << '\n';
+        }
+      });
 
     auto* del = track->add_subcommand("delete", "Delete a track by id");
     auto* id = del->add_option("id", "track id")->required();
     del->callback(
-      [&ml, id]
+      [&runtime, id]
       {
-        auto txn = ml.writeTransaction();
-        auto writer = ml.tracks().writer(txn);
         auto const trackId = TrackId{id->as<std::uint32_t>()};
 
-        if (writer.remove(trackId))
+        if (runtime.trackCommands().deleteTrack(trackId))
         {
           std::cout << "deleted track: " << trackId << '\n';
-          txn.commit();
         }
         else
         {

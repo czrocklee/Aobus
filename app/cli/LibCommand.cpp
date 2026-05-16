@@ -5,6 +5,7 @@
 #include <ao/library/Exporter.h>
 #include <ao/library/Importer.h>
 #include <ao/library/MusicLibrary.h>
+#include <runtime/CoreRuntime.h>
 
 #include <CLI/App.hpp>
 
@@ -103,20 +104,23 @@ namespace ao::cli
     }
   }
 
-  void setupLibCommand(CLI::App& app, library::MusicLibrary& ml)
+  void setupLibCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {
     auto* lib = app.add_subcommand("lib", "Library management commands");
 
-    lib->add_subcommand("show", "Show library information")->callback([&ml] { show(ml, std::cout); });
+    lib->add_subcommand("show", "Show library information")
+      ->callback([&runtime] { show(runtime.musicLibrary(), std::cout); });
 
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");
     auto* exportPath = exportCmd->add_option("output,-o,--output", "Output YAML file path")->required();
     auto* exportMode = exportCmd->add_option("-m,--mode", "Export mode (minimum, metadata, full)")->default_val("full");
-    exportCmd->callback([&ml, exportPath, exportMode]
-                        { exportLib(ml, exportPath->as<std::string>(), exportMode->as<std::string>(), std::cout); });
+    exportCmd->callback(
+      [&runtime, exportPath, exportMode]
+      { exportLib(runtime.musicLibrary(), exportPath->as<std::string>(), exportMode->as<std::string>(), std::cout); });
 
     auto* importCmd = lib->add_subcommand("import", "Import library from YAML");
     auto* importPath = importCmd->add_option("input,-i,--input", "Input YAML file path")->required();
-    importCmd->callback([&ml, importPath] { importLib(ml, importPath->as<std::string>(), std::cout); });
+    importCmd->callback([&runtime, importPath]
+                        { importLib(runtime.musicLibrary(), importPath->as<std::string>(), std::cout); });
   }
 }

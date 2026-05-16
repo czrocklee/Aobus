@@ -20,7 +20,7 @@
 
 namespace ao::rt
 {
-  class AppSession;
+  class AppRuntime;
 }
 
 namespace ao::gtk
@@ -38,7 +38,7 @@ namespace ao::gtk
                            TrackListAdapter& adapter,
                            TrackColumnLayoutModel& columnLayoutModel,
                            TrackPresentationStore& presentationStore,
-                           rt::AppSession& session,
+                           rt::AppRuntime& runtime,
                            rt::ViewId viewId = rt::ViewId{});
     ~TrackViewPage() override;
 
@@ -102,7 +102,7 @@ namespace ao::gtk
     rt::ViewId _viewId{};
     TrackListAdapter& _adapter;
     TrackPresentationStore& _presentationStore;
-    rt::AppSession& _session;
+    rt::AppRuntime& _runtime;
     Glib::RefPtr<Gtk::SortListModel> _groupModel;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModel;
     TrackColumnLayoutModel& _columnLayoutModel;

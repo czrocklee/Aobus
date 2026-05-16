@@ -3,14 +3,14 @@
 
 #include "inspector/TrackInspectorPanel.h"
 #include "inspector/CoverArtCache.h"
+#include "runtime/ListSourceStore.h"
+#include "runtime/TrackSource.h"
 #include <ao/Type.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/utility/Log.h>
-#include <runtime/AppSession.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/ProjectionTypes.h>
 #include <runtime/StateTypes.h>
-#include <runtime/TrackSource.h>
 #include <runtime/ViewService.h>
 
 #include <gdkmm/pixbuf.h>

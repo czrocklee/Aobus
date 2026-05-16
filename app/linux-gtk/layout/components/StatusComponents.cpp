@@ -6,14 +6,14 @@
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
-#include "layout/runtime/LayoutDependencies.h"
+#include "layout/runtime/LayoutContext.h"
 #include "library_io/ImportProgressIndicator.h"
 #include "playback/NowPlayingStatusLabel.h"
 #include "track/LibraryTrackCountLabel.h"
 #include <playback/PlaybackDetailsWidget.h>
-#include <track/StatusNotificationLabel.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/ListSourceStore.h>
+#include <track/StatusNotificationLabel.h>
 
 #include <gdkmm/display.h>
 #include <gtk/gtkstyleprovider.h>
@@ -60,8 +60,8 @@ namespace ao::gtk::layout
     class PlaybackDetailsComponent final : public ILayoutComponent
     {
     public:
-      PlaybackDetailsComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.session.playback()}
+      PlaybackDetailsComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.runtime.playback()}
       {
       }
 
@@ -74,8 +74,8 @@ namespace ao::gtk::layout
     class NowPlayingStatusComponent final : public ILayoutComponent
     {
     public:
-      NowPlayingStatusComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.session.playback()}
+      NowPlayingStatusComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.runtime.playback()}
       {
       }
 
@@ -88,8 +88,8 @@ namespace ao::gtk::layout
     class ImportProgressComponent final : public ILayoutComponent
     {
     public:
-      ImportProgressComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.session.mutation()}
+      ImportProgressComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.runtime.mutation()}
       {
       }
 
@@ -102,8 +102,8 @@ namespace ao::gtk::layout
     class StatusNotificationComponent final : public ILayoutComponent
     {
     public:
-      StatusNotificationComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.session.notifications(), ctx.session.views()}
+      StatusNotificationComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.runtime.notifications(), ctx.runtime.views()}
       {
       }
 
@@ -116,8 +116,8 @@ namespace ao::gtk::layout
     class LibraryTrackCountComponent final : public ILayoutComponent
     {
     public:
-      LibraryTrackCountComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _widget{ctx.session.sources().allTracks()}
+      LibraryTrackCountComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+        : _widget{ctx.runtime.sources().allTracks()}
       {
       }
 
@@ -133,7 +133,7 @@ namespace ao::gtk::layout
     class StatusMessageLabelComponent final : public ILayoutComponent
     {
     public:
-      StatusMessageLabelComponent(LayoutDependencies& /*ctx*/, LayoutNode const& /*node*/)
+      StatusMessageLabelComponent(LayoutContext& /*ctx*/, LayoutNode const& /*node*/)
       {
         _label.set_ellipsize(Pango::EllipsizeMode::END);
         _label.set_halign(Gtk::Align::START);
@@ -152,12 +152,12 @@ namespace ao::gtk::layout
     class DefaultStatusBarComponent final : public ILayoutComponent
     {
     public:
-      DefaultStatusBarComponent(LayoutDependencies& ctx, LayoutNode const& /*node*/)
-        : _playbackDetails{ctx.session.playback()}
-        , _nowPlaying{ctx.session.playback()}
-        , _importProgress{ctx.session.mutation()}
-        , _notification{ctx.session.notifications(), ctx.session.views()}
-        , _trackCount{ctx.session.sources().allTracks()}
+      DefaultStatusBarComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
+        : _playbackDetails{ctx.runtime.playback()}
+        , _nowPlaying{ctx.runtime.playback()}
+        , _importProgress{ctx.runtime.mutation()}
+        , _notification{ctx.runtime.notifications(), ctx.runtime.views()}
+        , _trackCount{ctx.runtime.sources().allTracks()}
       {
         ensureStatusBarContainerCss();
         _container.add_css_class("status-bar");
@@ -204,35 +204,35 @@ namespace ao::gtk::layout
   {
     registry.registerComponent(
       {.type = "status.playbackDetails", .displayName = "Playback Details", .category = "Status"},
-      [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
       { return std::make_unique<PlaybackDetailsComponent>(ctx, node); });
 
     registry.registerComponent({.type = "status.nowPlaying", .displayName = "Now Playing Status", .category = "Status"},
-                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<NowPlayingStatusComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "status.importProgress", .displayName = "Import Progress", .category = "Status"},
-      [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
       { return std::make_unique<ImportProgressComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "status.notification", .displayName = "Status Notifications", .category = "Status"},
-      [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
       { return std::make_unique<StatusNotificationComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "status.trackCount", .displayName = "Library Track Count", .category = "Status"},
-      [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
       { return std::make_unique<LibraryTrackCountComponent>(ctx, node); });
 
     registry.registerComponent(
       {.type = "status.messageLabel", .displayName = "Status Message (Basic)", .category = "Status"},
-      [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+      [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
       { return std::make_unique<StatusMessageLabelComponent>(ctx, node); });
 
     registry.registerComponent({.type = "status.defaultBar", .displayName = "Default Status Bar", .category = "Status"},
-                               [](LayoutDependencies& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
+                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
                                { return std::make_unique<DefaultStatusBarComponent>(ctx, node); });
   }
 } // namespace ao::gtk::layout

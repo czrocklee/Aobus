@@ -46,26 +46,26 @@ Make class names match their existing roles before deeper extraction.
 ### Changes
 
 1. Rename runtime container:
-   - `app/runtime/AppSession.h` -> `app/runtime/AppRuntime.h`
-   - `app/runtime/AppSession.cpp` -> `app/runtime/AppRuntime.cpp`
-   - `rt::AppSession` -> `rt::AppRuntime`
-   - `rt::AppSessionDependencies` -> `rt::AppRuntimeDependencies`
+   - `app/runtime/AppRuntime.h` -> `app/runtime/AppRuntime.h`
+   - `app/runtime/AppRuntime.cpp` -> `app/runtime/AppRuntime.cpp`
+   - `rt::AppRuntime` -> `rt::AppRuntime`
+   - `rt::AppRuntimeDependencies` -> `rt::AppRuntimeDependencies`
 
 2. Rename GTK main coordinator:
-   - `app/linux-gtk/app/WindowController.h` ->
+   - `app/linux-gtk/app/MainWindowCoordinator.h` ->
      `app/linux-gtk/app/MainWindowCoordinator.h`
-   - `app/linux-gtk/app/WindowController.cpp` ->
+   - `app/linux-gtk/app/MainWindowCoordinator.cpp` ->
      `app/linux-gtk/app/MainWindowCoordinator.cpp`
-   - `gtk::WindowController` -> `gtk::MainWindowCoordinator`
+   - `gtk::MainWindowCoordinator` -> `gtk::MainWindowCoordinator`
 
 3. Rename layout context:
-   - `gtk::layout::LayoutDependencies` -> `gtk::layout::LayoutContext`
-   - `LayoutDependencies.h` -> `LayoutContext.h`
+   - `gtk::layout::LayoutContext` -> `gtk::layout::LayoutContext`
+   - `LayoutContext.h` -> `LayoutContext.h`
    - Update includes and field names only where needed.
 
 4. Rename track page host:
-   - `TrackPageManager` -> `TrackPageHost`
-   - `TrackPageManager.h/.cpp` -> `TrackPageHost.h/.cpp`
+   - `TrackPageHost` -> `TrackPageHost`
+   - `TrackPageHost.h/.cpp` -> `TrackPageHost.h/.cpp`
 
 5. Update CMake source lists and all includes.
 
@@ -394,10 +394,10 @@ app/linux-gtk
 ## Suggested Commit Order
 
 1. Add design and plan documents.
-2. Rename `AppSession` to `AppRuntime`.
-3. Rename `LayoutDependencies` to `LayoutContext`.
-4. Rename `TrackPageManager` to `TrackPageHost`.
-5. Rename `WindowController` to `MainWindowCoordinator`.
+2. Rename `AppRuntime` to `AppRuntime`.
+3. Rename `LayoutContext` to `LayoutContext`.
+4. Rename `TrackPageHost` to `TrackPageHost`.
+5. Rename `MainWindowCoordinator` to `MainWindowCoordinator`.
 6. Extract GTK audio backend bootstrap.
 7. Extract window/track-view persistence.
 8. Extract workspace/session persistence.

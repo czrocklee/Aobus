@@ -293,7 +293,7 @@ The plan was implemented with a revised phase order that merges overlapping step
 
 - Removed dead `setupColumnControls()` code from `TrackColumnController` (old "Columns" popover, toggle checkbuttons, `syncColumnToggleStates()`).
 - Removed `ColumnBinding::toggle` field — toggles were never displayed.
-- Moved `TrackPageManager` signal connections from `selectionController().signal*()` to `TrackViewPage::signal*()` (stable across rebuilds).
+- Moved `TrackPageHost` signal connections from `selectionController().signal*()` to `TrackViewPage::signal*()` (stable across rebuilds).
 
 ### Key design decisions
 

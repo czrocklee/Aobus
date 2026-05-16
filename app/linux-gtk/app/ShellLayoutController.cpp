@@ -3,11 +3,11 @@
 
 #include "app/ShellLayoutController.h"
 #include "layout/document/LayoutDocument.h"
-#include "layout/document/LayoutYaml.h"  // NOLINT(misc-include-cleaner)
+#include "layout/document/LayoutYaml.h" // NOLINT(misc-include-cleaner)
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/LayoutRuntime.h"
 #include <ao/utility/Log.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/ConfigStore.h>
 
 #include <gdkmm/display.h>
@@ -22,9 +22,9 @@
 
 namespace ao::gtk
 {
-  ShellLayoutController::ShellLayoutController(rt::AppSession& session, Gtk::Window& parentWindow)
+  ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime, Gtk::Window& parentWindow)
     : _registry{}
-    , _context{.registry = _registry, .session = session, .parentWindow = parentWindow, .onNodeMoved = {}}
+    , _context{.registry = _registry, .runtime = runtime, .parentWindow = parentWindow}
     , _host{_registry}
   {
     layout::LayoutRuntime::registerStandardComponents(_registry);

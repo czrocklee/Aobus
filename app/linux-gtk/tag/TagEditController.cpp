@@ -6,7 +6,7 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/utility/Log.h>
-#include <runtime/AppSession.h>
+#include <runtime/AppRuntime.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/NotificationService.h>
 #include <runtime/StateTypes.h>
@@ -59,8 +59,8 @@ namespace ao::gtk
     }
   }
 
-  TagEditController::TagEditController(Gtk::Window& /*parent*/, rt::AppSession& session, Callbacks callbacks)
-    : _callbacks{std::move(callbacks)}, _session{session}
+  TagEditController::TagEditController(Gtk::Window& /*parent*/, rt::AppRuntime& runtime, Callbacks callbacks)
+    : _callbacks{std::move(callbacks)}, _runtime{runtime}
   {
     setupActions();
   }
@@ -112,7 +112,7 @@ namespace ao::gtk
 
     _optActiveSelection = selection;
 
-    _tagPopover = std::make_unique<TagPopover>(_session.musicLibrary(), selection.selectedIds);
+    _tagPopover = std::make_unique<TagPopover>(_runtime.musicLibrary(), selection.selectedIds);
 
     _tagPopover->signalTagsChanged().connect(
       [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
@@ -130,7 +130,7 @@ namespace ao::gtk
 
     _optActiveSelection = selection;
 
-    _tagPopover = std::make_unique<TagPopover>(_session.musicLibrary(), selection.selectedIds);
+    _tagPopover = std::make_unique<TagPopover>(_runtime.musicLibrary(), selection.selectedIds);
 
     _tagPopover->signalTagsChanged().connect(
       [this](std::vector<std::string> const& tagsToAdd, std::vector<std::string> const& tagsToRemove)
@@ -165,13 +165,13 @@ namespace ao::gtk
       return;
     }
 
-    auto const result = _session.mutation().editTags(selection.selectedIds, tagsToAdd, tagsToRemove);
+    auto const result = _runtime.mutation().editTags(selection.selectedIds, tagsToAdd, tagsToRemove);
 
     if (!result)
     {
       auto const errorMsg = std::format("Failed to edit tags: {}", result.error().message);
       APP_LOG_ERROR("{}", errorMsg);
-      _session.notifications().post(rt::NotificationSeverity::Error, errorMsg);
+      _runtime.notifications().post(rt::NotificationSeverity::Error, errorMsg);
       return;
     }
 
@@ -180,7 +180,7 @@ namespace ao::gtk
       _callbacks.onTagsMutated();
     }
 
-    _session.notifications().post(
+    _runtime.notifications().post(
       rt::NotificationSeverity::Info,
       tagChangeStatusMessage(selection.selectedIds.size(), tagsToAdd.size(), tagsToRemove.size()));
   }

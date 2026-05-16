@@ -9,7 +9,7 @@
 
 #include <app/linux-gtk/inspector/CoverArtCache.h>
 #include <app/linux-gtk/track/TrackRowCache.h>
-#include <app/runtime/AppSession.h>
+#include <app/runtime/AppRuntime.h>
 #include <app/runtime/ConfigStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -39,9 +39,9 @@ namespace ao::gtk::layout::test
       void defer(std::move_only_function<void()> task) override { task(); }
     };
 
-    LayoutDependencies makeContext(ComponentRegistry& registry, rt::AppSession& session, Gtk::Window& window)
+    LayoutContext makeContext(ComponentRegistry& registry, rt::AppRuntime& runtime, Gtk::Window& window)
     {
-      return LayoutDependencies{.registry = registry, .session = session, .parentWindow = window};
+      return LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
     }
   } // namespace
   TEST_CASE("Playback component instantiation", "[layout][components]")
@@ -52,14 +52,14 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto session = rt::AppSession{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = makeContext(registry, session, window);
+    auto ctx = makeContext(registry, runtime, window);
 
     SECTION("playPauseButton creates Gtk::Button")
     {
@@ -234,14 +234,14 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto session = rt::AppSession{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = makeContext(registry, session, window);
+    auto ctx = makeContext(registry, runtime, window);
 
     SECTION("library.listTree shows error when rowDataProvider missing")
     {
@@ -257,7 +257,7 @@ namespace ao::gtk::layout::test
 
     SECTION("library.listTree shows error when listSidebarController missing")
     {
-      auto const rdp = std::make_unique<TrackRowCache>(session.musicLibrary());
+      auto const rdp = std::make_unique<TrackRowCache>(runtime.musicLibrary());
       ctx.track.trackRowCache = rdp.get();
       auto const node = LayoutNode{.type = "library.listTree"};
       auto const comp = registry.create(ctx, node);
@@ -284,7 +284,7 @@ namespace ao::gtk::layout::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(child);
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("trackPageManager missing") != std::string::npos);
+      CHECK(label->get_label().find("trackPageHost missing") != std::string::npos);
     }
 
     SECTION("inspector.coverArt shows error when coverArtCache missing")
@@ -326,7 +326,7 @@ namespace ao::gtk::layout::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(child);
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().find("trackPageManager missing") != std::string::npos);
+      CHECK(label->get_label().find("trackPageHost missing") != std::string::npos);
     }
   }
 
@@ -342,8 +342,8 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto session = rt::AppSession{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -355,13 +355,13 @@ namespace ao::gtk::layout::test
     auto menuModel = Gio::Menu::create();
     menuModel->append("Test Item", "win.test");
 
-    auto ctx = LayoutDependencies{.registry = registry,
-                                  .session = session,
-                                  .parentWindow = window,
-                                  .inspector = {.coverArtCache = coverArtCache.get()},
-                                  .shell = {.menuModel = menuModel}};
+    auto ctx = LayoutContext{.registry = registry,
+                             .runtime = runtime,
+                             .parentWindow = window,
+                             .inspector = {.coverArtCache = coverArtCache.get()},
+                             .shell = {.menuModel = menuModel}};
 
-    [[maybe_unused]] auto runtime = LayoutRuntime{registry};
+    [[maybe_unused]] auto layoutRuntime = LayoutRuntime{registry};
 
     {
       auto const node = LayoutNode{.type = "status.messageLabel"};
@@ -399,7 +399,7 @@ namespace ao::gtk::layout::test
 
     SECTION("app.menuBar tolerates absent menu model")
     {
-      auto ctx2 = makeContext(registry, session, window);
+      auto ctx2 = makeContext(registry, runtime, window);
       auto const node = LayoutNode{.type = "app.menuBar"};
       auto const comp = registry.create(ctx2, node);
 
@@ -451,14 +451,14 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto session = rt::AppSession{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = makeContext(registry, session, window);
+    auto ctx = makeContext(registry, runtime, window);
 
     SECTION("all 14 status and semantic types")
     {
@@ -498,14 +498,14 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    auto session = rt::AppSession{
-      rt::AppSessionDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
+    auto runtime = rt::AppRuntime{
+      rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
-    auto ctx = makeContext(registry, session, window);
+    auto ctx = makeContext(registry, runtime, window);
 
     SECTION("custom playback row YAML builds without errors")
     {
@@ -588,8 +588,8 @@ namespace ao::gtk::layout::test
       CHECK(doc.version == 1);
       CHECK(doc.root.children.size() == 4);
 
-      auto runtime = LayoutRuntime{registry};
-      auto const comp = runtime.build(ctx, doc);
+      auto layoutRuntime = LayoutRuntime{registry};
+      auto const comp = layoutRuntime.build(ctx, doc);
 
       REQUIRE(comp != nullptr);
     }

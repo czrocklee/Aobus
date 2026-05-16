@@ -4,7 +4,7 @@
 #pragma once
 
 #include "layout/document/LayoutDocument.h"
-#include "layout/runtime/LayoutDependencies.h"
+#include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutRuntime.h"
 
 #include <gtkmm/box.h>
@@ -25,7 +25,7 @@ namespace ao::gtk::layout
      *
      * This will rebuild the entire layout tree.
      */
-    void setLayout(LayoutDependencies& ctx, LayoutDocument const& doc);
+    void setLayout(LayoutContext& ctx, LayoutDocument const& doc);
 
   private:
     LayoutRuntime _runtime;

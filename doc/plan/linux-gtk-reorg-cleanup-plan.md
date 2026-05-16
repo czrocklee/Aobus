@@ -69,7 +69,7 @@ These classes are still used by active components or runtime wiring and must not
 
 | Class / files | Why it is still needed |
 | --- | --- |
-| `GtkControlExecutor` | Created in `main.cpp` and passed into `AppSession`; runtime services depend on `IControlExecutor`. |
+| `GtkControlExecutor` | Created in `main.cpp` and passed into `AppRuntime`; runtime services depend on `IControlExecutor`. |
 | `AobusSoul` | Used by `playback.outputButton` and `playback.qualityIndicator` components. |
 | `VolumeBar` | Used by `playback.volumeControl`. |
 | `OutputListItems` | Used by `playback.outputButton`; also included by `StatusBar`. |
@@ -100,7 +100,7 @@ app/linux-gtk/
 
   app/
     MainWindow.h/.cpp
-    WindowController.h/.cpp       # Phase 5: split from MainWindow
+    MainWindowCoordinator.h/.cpp       # Phase 5: split from MainWindow
     WindowContext.h                # Phase 5: split from MainWindow
     MenuController.h/.cpp          # Phase 5: split from MainWindow
 
@@ -122,7 +122,7 @@ app/linux-gtk/
       LayoutYaml.h
     runtime/
       ILayoutComponent.h           # current name preserved
-      ComponentContext.h           # Phase 7: rename to LayoutDependencies.h
+      ComponentContext.h           # Phase 7: rename to LayoutContext.h
       ComponentRegistry.h/.cpp
       LayoutHost.h/.cpp
       LayoutRuntime.h/.cpp
@@ -134,7 +134,7 @@ app/linux-gtk/
       LayoutEditorDialog.h/.cpp
 
   track/
-    TrackPageManager.h/.cpp        # Phase 4: rename of TrackPageGraph
+    TrackPageHost.h/.cpp        # Phase 4: rename of TrackPageGraph
     TrackViewPage.h/.cpp
     TrackListAdapter.h/.cpp
     TrackListModel.h/.cpp
@@ -510,7 +510,7 @@ Do this after folders are stable. Rename one class at a time so compiler errors 
 
 | Current name | New name | Reason |
 | --- | --- | --- |
-| `TrackPageGraph` | `TrackPageManager` | It manages `Gtk::Stack` page lifecycle, not a graph. |
+| `TrackPageGraph` | `TrackPageHost` | It manages `Gtk::Stack` page lifecycle, not a graph. |
 | `PlaybackController` | `PlaybackSequenceController` | It builds and advances playback sequences from visible track order. |
 | `TrackRowDataProvider` | `TrackRowCache` | It caches and creates `TrackRow` objects. |
 | `TrackRow` | `TrackRowObject` | It is a `Glib::Object` model item, not a row widget. Keep the singular `Track` prefix. |
@@ -564,7 +564,7 @@ Should not:
 - Save/load track column layout.
 - Rebuild list pages.
 
-#### `app::WindowController`
+#### `app::MainWindowCoordinator`
 
 Responsibilities:
 
@@ -602,20 +602,20 @@ Responsibilities:
 
 ### Interim Ownership Map
 
-Before starting the split, document the **current** ownership of every pointer in `ComponentContext` as an interim ownership map. This map determines which new controller owns which dependency and is the input for Phase 7's `LayoutDependencies` design. Without it, Phase 5 and Phase 7 risk contradictory ownership decisions.
+Before starting the split, document the **current** ownership of every pointer in `ComponentContext` as an interim ownership map. This map determines which new controller owns which dependency and is the input for Phase 7's `LayoutContext` design. Without it, Phase 5 and Phase 7 risk contradictory ownership decisions.
 
 Capture at minimum:
 
 | Dependency | Current owner | Phase 5 owner |
 | --- | --- | --- |
-| `TrackRowDataProvider` | `MainWindow` | `WindowController` |
-| `CoverArtCache` | `MainWindow` | `WindowController` |
-| `PlaybackController` | `MainWindow` | `WindowController` |
-| `TagEditController` | `MainWindow` | `WindowController` |
-| `ImportExportCoordinator` | `MainWindow` | `WindowController` |
-| `TrackPageGraph` | `MainWindow` | `WindowController` |
-| `TrackColumnLayoutModel` | `MainWindow` | `WindowController` |
-| `ListSidebarController` | `MainWindow` | `WindowController` |
+| `TrackRowDataProvider` | `MainWindow` | `MainWindowCoordinator` |
+| `CoverArtCache` | `MainWindow` | `MainWindowCoordinator` |
+| `PlaybackController` | `MainWindow` | `MainWindowCoordinator` |
+| `TagEditController` | `MainWindow` | `MainWindowCoordinator` |
+| `ImportExportCoordinator` | `MainWindow` | `MainWindowCoordinator` |
+| `TrackPageGraph` | `MainWindow` | `MainWindowCoordinator` |
+| `TrackColumnLayoutModel` | `MainWindow` | `MainWindowCoordinator` |
+| `ListSidebarController` | `MainWindow` | `MainWindowCoordinator` |
 | `StatusBar` | `MainWindow` | `ShellLayoutController` |
 | `ComponentRegistry` | `MainWindow` | `ShellLayoutController` |
 | `ComponentContext` | `MainWindow` | `ShellLayoutController` |
@@ -736,10 +736,10 @@ Split `ImportExportCoordinator`:
 ### Target Shape
 
 ```cpp
-struct LayoutDependencies final
+struct LayoutContext final
 {
   ComponentRegistry const& registry;
-  ao::rt::AppSession& session;
+  ao::rt::AppRuntime& session;
   Gtk::Window& parentWindow;
 
   ShellUiContext& shell;
@@ -833,7 +833,7 @@ Because this reorganization changes maintainers' mental model but should not int
 | Runtime callback lifetime regressions. | Keep ownership unchanged during mechanical moves; split ownership only in later phases. |
 | Playback UI regressions after deleting `PlaybackBar`. | Verify every old visible control has an equivalent `playback.*` component in the default layout. |
 | Easter egg regression after deleting `PlaybackBar`. | `AobusSoulWindow` must be re-wired into `OutputButtonComponent` (right-click-hold-1s) in Phase 6. Verify long-press behavior in smoke test. |
-| Threading regression after deleting `GtkMainThreadDispatcher`. | Confirm `GtkControlExecutor` remains the only executor passed to `AppSession` and runtime services. |
+| Threading regression after deleting `GtkMainThreadDispatcher`. | Confirm `GtkControlExecutor` remains the only executor passed to `AppRuntime` and runtime services. |
 
 ## Git Commit Strategy
 

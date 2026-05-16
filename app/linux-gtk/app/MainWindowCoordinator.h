@@ -3,40 +3,55 @@
 
 #pragma once
 
+#include "app/GtkUiServices.h"
 #include "app/UIState.h"
-#include "inspector/CoverArtCache.h"
-#include "library_io/ImportExportCoordinator.h"
-#include "list/ListSidebarController.h"
-#include "playback/PlaybackSequenceController.h"
-#include "tag/TagEditController.h"
-#include "track/TrackPageManager.h"
 #include "track/TrackPresentation.h"
-#include "track/TrackPresentationStore.h"
-#include "track/TrackRowCache.h"
+#include <gtkmm/stack.h>
 #include <memory>
-#include <runtime/AppSession.h>
-#include <runtime/ConfigStore.h>
+#include <runtime/AppRuntime.h>
+#include <runtime/CorePrimitives.h>
+
+namespace ao::rt
+{
+  class ConfigStore;
+}
+
+namespace ao::lmdb
+{
+  class ReadTransaction;
+}
 
 namespace ao::gtk
 {
   class MainWindow;
+  class WindowStatePersistence;
+  class TrackRowCache;
+  class CoverArtCache;
+  class TagEditController;
+  class ListSidebarController;
+  class TrackPresentationStore;
+  class TrackPageHost;
+  class PlaybackSequenceController;
+  class ImportExportCoordinator;
 
-  class WindowController final
+  class MainWindowCoordinator final
   {
   public:
-    WindowController(MainWindow& window, rt::AppSession& session, std::shared_ptr<rt::ConfigStore> configStore);
-    ~WindowController();
+    MainWindowCoordinator(MainWindow& window, rt::AppRuntime& runtime, std::shared_ptr<rt::ConfigStore> configStore);
+    ~MainWindowCoordinator();
 
     // Not copyable or movable
-    WindowController(WindowController const&) = delete;
-    WindowController& operator=(WindowController const&) = delete;
-    WindowController(WindowController&&) = delete;
-    WindowController& operator=(WindowController&&) = delete;
+    MainWindowCoordinator(MainWindowCoordinator const&) = delete;
+    MainWindowCoordinator& operator=(MainWindowCoordinator const&) = delete;
+    MainWindowCoordinator(MainWindowCoordinator&&) = delete;
+    MainWindowCoordinator& operator=(MainWindowCoordinator&&) = delete;
 
     void initializeSession();
 
     void saveSession();
     void loadSession();
+
+    GtkUiServices uiServices();
 
     void rebuildListPages(lmdb::ReadTransaction const& txn);
 
@@ -45,7 +60,7 @@ namespace ao::gtk
     PlaybackSequenceController* playbackSequenceController() { return _playbackSequenceController.get(); }
     TagEditController* tagEditController() { return _tagEditController.get(); }
     ImportExportCoordinator* importExportCoordinator() { return _importExportCoordinator.get(); }
-    TrackPageManager* trackPageManager() { return _trackPageManager.get(); }
+    TrackPageHost* trackPageHost() { return _trackPageHost.get(); }
     TrackColumnLayoutModel* columnLayoutModel() { return &_trackColumnLayoutModel; }
     ListSidebarController* listSidebarController() { return _listSidebarController.get(); }
     TrackPresentationStore* trackPresentationStore() { return _trackPresentationStore.get(); }
@@ -54,15 +69,16 @@ namespace ao::gtk
 
   private:
     MainWindow& _window;
-    rt::AppSession& _session;
+    rt::AppRuntime& _runtime;
     std::shared_ptr<rt::ConfigStore> _configStore;
+    std::unique_ptr<WindowStatePersistence> _persistence;
 
     std::unique_ptr<TrackRowCache> _trackRowCache;
     std::unique_ptr<CoverArtCache> _coverArtCache;
     std::unique_ptr<TagEditController> _tagEditController;
     std::unique_ptr<ListSidebarController> _listSidebarController;
     std::unique_ptr<TrackPresentationStore> _trackPresentationStore;
-    std::unique_ptr<TrackPageManager> _trackPageManager;
+    std::unique_ptr<TrackPageHost> _trackPageHost;
     std::unique_ptr<PlaybackSequenceController> _playbackSequenceController;
     std::unique_ptr<ImportExportCoordinator> _importExportCoordinator;
 

@@ -328,4 +328,15 @@ namespace ao::rt
     auto const ev = LibraryMutationService::ListsMutated{.upserted = {}, .deleted = {listId}};
     _impl->listsMutatedSignal.emit(ev);
   }
-}
+
+  void LibraryMutationService::notifyTracksMutated(std::vector<TrackId> const& trackIds)
+  {
+    _impl->tracksMutatedSignal.emit(trackIds);
+  }
+
+  void LibraryMutationService::notifyListsMutated(std::vector<ListId> const& upserted,
+                                                  std::vector<ListId> const& deleted)
+  {
+    _impl->listsMutatedSignal.emit({.upserted = upserted, .deleted = deleted});
+  }
+} // namespace ao::rt

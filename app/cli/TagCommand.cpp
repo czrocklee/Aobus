@@ -6,10 +6,11 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <runtime/CoreRuntime.h>
+#include <runtime/TrackCommandService.h>
 
 #include <CLI/App.hpp>
 
-#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -19,65 +20,6 @@ namespace ao::cli
   namespace
   {
     using namespace ao::library;
-
-    void addTag(MusicLibrary& ml, TrackId trackId, std::string const& tagName, std::ostream& os)
-    {
-      auto txn = ml.writeTransaction();
-      auto writer = ml.tracks().writer(txn);
-      auto const optTrackView = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
-
-      if (!optTrackView)
-      {
-        os << "error: track not found: " << trackId << '\n';
-        return;
-      }
-
-      auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
-
-      // Check if tag already exists by iterating tag names
-      if (std::ranges::contains(builder.tags().names(), tagName))
-      {
-        os << "tag already exists: " << tagName << '\n';
-        return;
-      }
-
-      builder.tags().add(tagName);
-
-      auto const hotData = builder.serializeHot(txn, ml.dictionary());
-      writer.updateHot(trackId, hotData);
-      txn.commit();
-
-      os << "added tag: " << tagName << " to track " << trackId << '\n';
-    }
-
-    void removeTag(MusicLibrary& ml, TrackId trackId, std::string const& tagName, std::ostream& os)
-    {
-      auto txn = ml.writeTransaction();
-      auto writer = ml.tracks().writer(txn);
-      auto const optTrackView = writer.get(trackId, TrackStore::Reader::LoadMode::Hot);
-
-      if (!optTrackView)
-      {
-        os << "error: track not found: " << trackId << '\n';
-        return;
-      }
-
-      auto builder = TrackBuilder::fromView(*optTrackView, ml.dictionary());
-
-      if (!std::ranges::contains(builder.tags().names(), tagName))
-      {
-        os << "tag not found on track: " << tagName << '\n';
-        return;
-      }
-
-      builder.tags().remove(tagName);
-
-      auto const hotData = builder.serializeHot(txn, ml.dictionary());
-      writer.updateHot(trackId, hotData);
-      txn.commit();
-
-      os << "removed tag: " << tagName << " from track " << trackId << '\n';
-    }
 
     void showTags(MusicLibrary& ml, TrackId trackId, std::ostream& os)
     {
@@ -111,24 +53,47 @@ namespace ao::cli
     }
   }
 
-  void setupTagCommand(CLI::App& app, library::MusicLibrary& ml)
+  void setupTagCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {
     auto* tag = app.add_subcommand("tag", "Tag management commands");
 
     auto* add = tag->add_subcommand("add", "Add a tag to a track");
     auto* addId = add->add_option("id", "track id")->required();
     auto* addTagName = add->add_option("tag", "tag name")->required();
-    add->callback([&ml, addId, addTagName]
-                  { addTag(ml, TrackId{addId->as<std::uint32_t>()}, addTagName->as<std::string>(), std::cout); });
+    add->callback(
+      [&runtime, addId, addTagName]
+      {
+        if (runtime.trackCommands().addTag(TrackId{addId->as<std::uint32_t>()}, addTagName->as<std::string>()))
+        {
+          std::cout << "added tag: " << addTagName->as<std::string>() << " to track " << addId->as<std::uint32_t>()
+                    << '\n';
+        }
+        else
+        {
+          std::cout << "error adding tag (track not found or tag already exists)\n";
+        }
+      });
 
     auto* remove = tag->add_subcommand("remove", "Remove a tag from a track");
     auto* remId = remove->add_option("id", "track id")->required();
     auto* remTagName = remove->add_option("tag", "tag name")->required();
-    remove->callback([&ml, remId, remTagName]
-                     { removeTag(ml, TrackId{remId->as<std::uint32_t>()}, remTagName->as<std::string>(), std::cout); });
+    remove->callback(
+      [&runtime, remId, remTagName]
+      {
+        if (runtime.trackCommands().removeTag(TrackId{remId->as<std::uint32_t>()}, remTagName->as<std::string>()))
+        {
+          std::cout << "removed tag: " << remTagName->as<std::string>() << " from track " << remId->as<std::uint32_t>()
+                    << '\n';
+        }
+        else
+        {
+          std::cout << "error removing tag (track not found or tag missing)\n";
+        }
+      });
 
     auto* show = tag->add_subcommand("show", "Show tags for a track");
     auto* showId = show->add_option("id", "track id")->required();
-    show->callback([&ml, showId] { showTags(ml, TrackId{showId->as<std::uint32_t>()}, std::cout); });
+    show->callback([&runtime, showId]
+                   { showTags(runtime.musicLibrary(), TrackId{showId->as<std::uint32_t>()}, std::cout); });
   }
 }

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "CorePrimitives.h"
-#include "ListSourceStore.h"
+#include "CoreRuntime.h"
 #include <ao/Type.h>
 #include <filesystem>
 #include <memory>
@@ -14,49 +14,37 @@ namespace ao::audio
   class IBackendProvider;
 }
 
-namespace ao::library
-{
-  class MusicLibrary;
-}
-
 namespace ao::rt
 {
-  class IControlExecutor;
   class ConfigStore;
   class PlaybackService;
-  class LibraryMutationService;
   class WorkspaceService;
-  class NotificationService;
+  class SessionPersistenceService;
   class ViewService;
 
-  struct AppSessionDependencies final
+  struct AppRuntimeDependencies final
   {
     std::shared_ptr<IControlExecutor> executor{};
     std::filesystem::path libraryRoot{};
     std::shared_ptr<ConfigStore> configStore{};
   };
 
-  class AppSession final
+  class AppRuntime final : public CoreRuntime
   {
   public:
-    explicit AppSession(AppSessionDependencies dependencies);
-    ~AppSession();
+    explicit AppRuntime(AppRuntimeDependencies dependencies);
+    ~AppRuntime() override;
 
-    AppSession(AppSession const&) = delete;
-    AppSession& operator=(AppSession const&) = delete;
-    AppSession(AppSession&&) = delete;
-    AppSession& operator=(AppSession&&) = delete;
-
-    IControlExecutor& executor() noexcept;
+    AppRuntime(AppRuntime const&) = delete;
+    AppRuntime& operator=(AppRuntime const&) = delete;
+    AppRuntime(AppRuntime&&) = delete;
+    AppRuntime& operator=(AppRuntime&&) = delete;
 
     PlaybackService& playback() noexcept;
     WorkspaceService& workspace() noexcept;
-    LibraryMutationService& mutation() noexcept;
-    NotificationService& notifications() noexcept;
+    SessionPersistenceService& persistence() noexcept;
     ViewService& views() noexcept;
 
-    library::MusicLibrary& musicLibrary() noexcept;
-    ListSourceStore& sources() noexcept;
     void reloadAllTracks();
 
     TrackId playSelectionInFocusedView();
@@ -67,4 +55,4 @@ namespace ao::rt
     struct Impl;
     std::unique_ptr<Impl> _impl;
   };
-}
+} // namespace ao::rt

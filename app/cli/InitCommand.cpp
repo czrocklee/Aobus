@@ -7,6 +7,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/tag/TagFile.h>
 #include <ao/utility/Finder.h>
+#include <runtime/CoreRuntime.h>
 
 #include <CLI/App.hpp>
 
@@ -67,9 +68,9 @@ namespace ao::cli
     }
   }
 
-  void setupInitCommand(CLI::App& app, library::MusicLibrary& ml)
+  void setupInitCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {
     auto* const cmd = app.add_subcommand("init", "Scan current directory and initialize library");
-    cmd->callback([&ml] { scanAndImport(ml, std::cout); });
+    cmd->callback([&runtime] { scanAndImport(runtime.musicLibrary(), std::cout); });
   }
 }
