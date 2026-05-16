@@ -2,9 +2,9 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/Exception.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
-#include <ao/library/DictionaryStore.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <algorithm>

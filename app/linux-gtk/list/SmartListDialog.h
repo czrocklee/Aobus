@@ -4,9 +4,18 @@
 #pragma once
 
 #include "list/QueryExpressionBox.h"
+#include <ao/Type.h>
 #include <ao/model/ListDraft.h>
 
-#include <gtkmm.h>
+#include <gtkmm/box.h>
+#include <gtkmm/button.h>
+#include <gtkmm/columnview.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/label.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/window.h>
+#include <sigc++/connection.h>
 
 #include <memory>
 #include <optional>

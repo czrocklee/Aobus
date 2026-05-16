@@ -7,6 +7,7 @@
 #include <ao/library/ListLayout.h>
 #include <ao/utility/ByteView.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <ranges>
 #include <span>

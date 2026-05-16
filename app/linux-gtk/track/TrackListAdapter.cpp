@@ -15,10 +15,10 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <giomm/liststore.h>
+#include <glib.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <gsl-lite/gsl-lite.hpp>
-#include <glib.h>
 
 #include <algorithm>
 #include <cctype>

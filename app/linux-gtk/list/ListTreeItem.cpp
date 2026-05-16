@@ -5,8 +5,8 @@
 #include "list/ListRowObject.h"
 
 #include <giomm/liststore.h>
-#include <glibmm/refptr.h>
 #include <glib.h>
+#include <glibmm/refptr.h>
 
 namespace ao::gtk
 {

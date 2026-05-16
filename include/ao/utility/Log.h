@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include <spdlog/fmt/ostr.h> // for logging custom types
-#include <spdlog/spdlog.h>
+#include <spdlog/common.h>
+#include <spdlog/logger.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <source_location>
-#include <string>
 
 namespace ao::log
 {

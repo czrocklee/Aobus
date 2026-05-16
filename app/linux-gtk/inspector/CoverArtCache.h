@@ -6,6 +6,7 @@
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <list>
 #include <unordered_map>

@@ -3,12 +3,13 @@
 
 #pragma once
 
-#include <ao/library/MusicLibrary.h>
+#include <ao/Type.h>
+
+#include <glibmm/object.h>
+#include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
 
 #include <cstdint>
-#include <gtkmm.h>
-
-#include <string>
 
 namespace ao::gtk
 {

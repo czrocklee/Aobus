@@ -5,13 +5,13 @@
 #include "layout/LayoutConstants.h"
 #include "library_io/ImportProgressDialog.h"
 #include <ao/library/Exporter.h>
-#include <ao/library/Importer.h>
 #include <ao/utility/Log.h>
-#include <ao/utility/ThreadUtils.h>
 #include <runtime/AppRuntime.h>
 #include <runtime/LibraryMutationService.h>
 #include <runtime/NotificationService.h>
 #include <runtime/StateTypes.h>
+#include <runtime/async/LifetimeScope.h>
+#include <runtime/async/Task.h>
 
 #include <giomm/asyncresult.h>
 #include <giomm/liststore.h>
@@ -28,8 +28,6 @@
 #include <gtkmm/stringlist.h>
 #include <gtkmm/window.h>
 
-#include <algorithm>
-#include <cctype>
 #include <exception>
 #include <filesystem>
 #include <memory>
@@ -99,16 +97,23 @@ namespace ao::gtk
         auto const path = std::filesystem::path{pathStr};
         APP_LOG_INFO("Importing from: {}", pathStr);
 
-        auto files = std::vector<std::filesystem::path>{};
-        scanDirectory(path, files);
+        rt::async::spawnWithLifetime(
+          _runtime.async(),
+          _tasks,
+          [](
+            ImportExportCoordinator* self, std::filesystem::path importPath, bool isNewLibrary) -> rt::async::Task<void>
+          {
+            auto files =
+              co_await self->_runtime.mutation().scanLibraryAsync(self->_runtime.async(), std::move(importPath));
 
-        if (files.empty())
-        {
-          _runtime.notifications().post(rt::NotificationSeverity::Info, "No music files found");
-          return;
-        }
+            if (files.empty())
+            {
+              self->_runtime.notifications().post(rt::NotificationSeverity::Info, "No music files found");
+              co_return;
+            }
 
-        executeImportTask(files, false);
+            self->executeImportTask(files, isNewLibrary);
+          }(this, path, false));
       }
     }
     catch (Glib::Error const& e)
@@ -127,53 +132,33 @@ namespace ao::gtk
       [dialogPtr, total = files.size()](auto const& ev)
       { dialogPtr->onNewTrack(ev.message, static_cast<int>(ev.fraction * static_cast<double>(total))); });
 
-    _importCompleteSub = _runtime.mutation().onImportCompleted(
-      [this, dialogPtr, isNewLibrary](auto)
-      {
-        dialogPtr->ready();
-        onImportFinished();
-
-        if (isNewLibrary && _callbacks.onLibraryDataMutated)
-        {
-          _callbacks.onLibraryDataMutated();
-        }
-
-        _importProgressSub.reset();
-        _importCompleteSub.reset();
-      });
-
-    _runtime.mutation().importFiles(files);
     _importDialog->show();
+
+    rt::async::spawnWithLifetime(_runtime.async(),
+                                 _tasks,
+                                 [](ImportExportCoordinator* self,
+                                    std::vector<std::filesystem::path> paths,
+                                    bool importToNewLibrary,
+                                    ImportProgressDialog* dialog) -> rt::async::Task<void>
+                                 {
+                                   co_await self->_runtime.mutation().importFilesAsync(
+                                     self->_runtime.async(), std::move(paths));
+
+                                   dialog->ready();
+                                   self->onImportFinished();
+
+                                   if (importToNewLibrary && self->_callbacks.onLibraryDataMutated)
+                                   {
+                                     self->_callbacks.onLibraryDataMutated();
+                                   }
+
+                                   self->_importProgressSub.reset();
+                                 }(this, files, isNewLibrary, dialogPtr));
   }
 
   void ImportExportCoordinator::onImportFinished() const
   {
     _runtime.notifications().post(rt::NotificationSeverity::Info, "Import complete");
-  }
-
-  void ImportExportCoordinator::scanDirectory(std::filesystem::path const& dir,
-                                              std::vector<std::filesystem::path>& files) const
-  {
-    try
-    {
-      for (auto const& entry : std::filesystem::recursive_directory_iterator(dir))
-      {
-        if (entry.is_regular_file())
-        {
-          auto ext = entry.path().extension().string();
-          std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return std::tolower(ch); });
-
-          if (ext == ".flac" || ext == ".m4a" || ext == ".mp3" || ext == ".wav")
-          {
-            files.push_back(entry.path());
-          }
-        }
-      }
-    }
-    catch (std::exception const& e)
-    {
-      APP_LOG_ERROR("Error scanning directory: {}", e.what());
-    }
   }
 
   void ImportExportCoordinator::openMusicLibrary(std::filesystem::path const& path) const
@@ -191,17 +176,21 @@ namespace ao::gtk
       _callbacks.onOpenNewLibrary(path);
     }
 
-    auto files = std::vector<std::filesystem::path>{};
-    scanDirectory(path, files);
+    rt::async::spawnWithLifetime(
+      _runtime.async(),
+      _tasks,
+      [](ImportExportCoordinator* self, std::filesystem::path importPath, bool isNewLibrary) -> rt::async::Task<void>
+      {
+        auto files = co_await self->_runtime.mutation().scanLibraryAsync(self->_runtime.async(), std::move(importPath));
 
-    if (!files.empty())
-    {
-      executeImportTask(files, true);
-    }
-    else
-    {
-      _runtime.notifications().post(rt::NotificationSeverity::Info, "No music files found");
-    }
+        if (files.empty())
+        {
+          self->_runtime.notifications().post(rt::NotificationSeverity::Info, "No music files found");
+          co_return;
+        }
+
+        self->executeImportTask(files, isNewLibrary);
+      }(this, path, true));
   }
 
   void ImportExportCoordinator::exportLibrary()
@@ -292,36 +281,37 @@ namespace ao::gtk
 
   void ImportExportCoordinator::executeExportTask(std::filesystem::path const& path, library::ExportMode mode)
   {
-    if (_exportThread.joinable())
-    {
-      return;
-    }
-
-    auto& library = _runtime.musicLibrary();
-    _exportThread = std::jthread(
-      [this, &library, path, mode]
+    rt::async::spawnWithLifetime(
+      _runtime.async(),
+      _tasks,
+      [](ImportExportCoordinator* self,
+         std::filesystem::path exportPath,
+         library::ExportMode exportMode) -> rt::async::Task<void>
       {
-        setCurrentThreadName("LibraryExport");
+        bool success = true;
+        std::string errorText;
 
         try
         {
-          auto exporter = library::Exporter{library};
-          exporter.exportToYaml(path, mode);
-
-          _runtime.executor().dispatch(
-            [this] { _runtime.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully"); });
+          co_await self->_runtime.mutation().exportLibraryAsync(
+            self->_runtime.async(), std::move(exportPath), exportMode);
         }
         catch (std::exception const& e)
         {
-          auto const errorText = std::string{e.what()};
-          _runtime.executor().dispatch(
-            [this, errorText]
-            {
-              APP_LOG_ERROR("Export failed: {}", errorText);
-              _runtime.notifications().post(rt::NotificationSeverity::Error, "Export failed: " + errorText);
-            });
+          success = false;
+          errorText = e.what();
         }
-      });
+
+        if (success)
+        {
+          self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully");
+        }
+        else
+        {
+          APP_LOG_ERROR("Export failed: {}", errorText);
+          self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Export failed: " + errorText);
+        }
+      }(this, path, mode));
   }
 
   void ImportExportCoordinator::importLibrary()
@@ -351,55 +341,44 @@ namespace ao::gtk
       {
         auto const path = std::filesystem::path{file->get_path()};
 
-        if (_importTaskThread.joinable())
-        {
-          return;
-        }
+        rt::async::spawnWithLifetime(
+          _runtime.async(),
+          _tasks,
+          [](ImportExportCoordinator* self, std::filesystem::path importPath) -> rt::async::Task<void>
+          {
+            bool success = true;
+            std::string errorText;
 
-        _importTaskThread = std::jthread([this, path] { runLibraryImportTask(path); });
+            try
+            {
+              co_await self->_runtime.mutation().importLibraryAsync(self->_runtime.async(), std::move(importPath));
+            }
+            catch (std::exception const& e)
+            {
+              success = false;
+              errorText = e.what();
+            }
+
+            if (success)
+            {
+              if (self->_callbacks.onLibraryDataMutated)
+              {
+                self->_callbacks.onLibraryDataMutated();
+              }
+
+              self->_runtime.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
+            }
+            else
+            {
+              APP_LOG_ERROR("Import failed: {}", errorText);
+              self->_runtime.notifications().post(rt::NotificationSeverity::Error, "Import failed: " + errorText);
+            }
+          }(this, path));
       }
     }
     catch (Glib::Error const& e)
     {
       APP_LOG_ERROR("Error selecting import file: {}", e.what());
     }
-  }
-
-  void ImportExportCoordinator::runLibraryImportTask(std::filesystem::path const& path)
-  {
-    setCurrentThreadName("LibraryImport");
-
-    try
-    {
-      auto importer = library::Importer{_runtime.musicLibrary()};
-      importer.importFromYaml(path);
-      reportImportResult(true, "");
-    }
-    catch (std::exception const& e)
-    {
-      reportImportResult(false, e.what());
-    }
-  }
-
-  void ImportExportCoordinator::reportImportResult(bool success, std::string const& errorText)
-  {
-    _runtime.executor().dispatch(
-      [this, success, errorText]
-      {
-        if (success)
-        {
-          if (_callbacks.onLibraryDataMutated)
-          {
-            _callbacks.onLibraryDataMutated();
-          }
-
-          _runtime.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
-        }
-        else
-        {
-          APP_LOG_ERROR("Import failed: {}", errorText);
-          _runtime.notifications().post(rt::NotificationSeverity::Error, "Import failed: " + errorText);
-        }
-      });
   }
 } // namespace ao::gtk

@@ -5,10 +5,11 @@
 
 #include "CorePrimitives.h"
 #include "ProjectionTypes.h"
-#include "StateTypes.h"
+#include <ao/Type.h>
 
+#include <functional>
 #include <memory>
-#include <vector>
+#include <span>
 
 namespace ao::rt
 {

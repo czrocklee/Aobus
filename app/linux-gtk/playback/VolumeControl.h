@@ -4,7 +4,10 @@
 #pragma once
 
 #include "playback/VolumeBar.h"
+#include "runtime/CorePrimitives.h"
 #include "runtime/PlaybackService.h"
+
+#include <gtkmm/widget.h>
 
 namespace ao::gtk
 {

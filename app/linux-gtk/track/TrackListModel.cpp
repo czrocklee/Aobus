@@ -10,11 +10,9 @@
 #include <giomm/listmodel.h>
 #include <giomm/private/listmodel_p.h>
 #include <glib-object.h>
+#include <glib.h>
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
-#include <glib.h>
-
-
 
 namespace
 {

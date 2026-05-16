@@ -5,7 +5,6 @@
 
 #include "runtime/CorePrimitives.h"
 #include <ao/audio/Backend.h>
-#include <ao/audio/Types.h>
 
 namespace ao::rt
 {

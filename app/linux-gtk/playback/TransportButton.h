@@ -4,8 +4,13 @@
 #pragma once
 
 #include "runtime/PlaybackService.h"
-#include <functional>
+#include <runtime/CorePrimitives.h>
+
 #include <gtkmm/button.h>
+#include <gtkmm/widget.h>
+
+#include <cstdint>
+#include <functional>
 #include <string>
 
 namespace ao::gtk

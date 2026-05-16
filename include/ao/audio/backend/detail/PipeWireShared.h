@@ -8,13 +8,15 @@
 extern "C"
 {
 #include <pipewire/pipewire.h>
-#include <spa/param/audio/raw.h>
+#include <spa/pod/pod.h>
+#include <spa/support/loop.h>
+#include <spa/utils/hook.h>
 }
 
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <optional>
-#include <string>
 
 namespace ao::audio::backend::detail
 {
@@ -64,7 +66,7 @@ namespace ao::audio::backend::detail
 
     void operator()(::spa_source* ptr) const noexcept
     {
-        ::pw_loop_destroy_source(::pw_thread_loop_get_loop(loop), ptr);
+      ::pw_loop_destroy_source(::pw_thread_loop_get_loop(loop), ptr);
     }
   };
 
@@ -73,7 +75,10 @@ namespace ao::audio::backend::detail
   class SpaHookGuard final
   {
   public:
-    SpaHookGuard() noexcept : _hook{} {}
+    SpaHookGuard() noexcept
+      : _hook{}
+    {
+    }
     ~SpaHookGuard() noexcept { reset(); }
 
     SpaHookGuard(SpaHookGuard const&) = delete;
@@ -91,7 +96,7 @@ namespace ao::audio::backend::detail
 
       std::memset(&_hook, 0, sizeof(_hook));
     }
-    
+
     ::spa_hook* get() noexcept { return &_hook; }
 
   private:

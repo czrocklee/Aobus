@@ -3,8 +3,13 @@
 
 #pragma once
 
+#include "runtime/CorePrimitives.h"
 #include "runtime/PlaybackService.h"
+
 #include <gtkmm/label.h>
+#include <gtkmm/widget.h>
+
+#include <cstdint>
 
 namespace ao::gtk
 {

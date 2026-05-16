@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include <ao/library/TrackBuilder.h>
 #include <ao/tag/TagFile.h>
+
+#include <cstdint>
 
 namespace ao::tag::mpeg
 {

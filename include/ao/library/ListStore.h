@@ -4,15 +4,14 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/library/ListLayout.h>
 #include <ao/library/ListView.h>
 #include <ao/lmdb/Database.h>
+#include <ao/lmdb/Transaction.h>
 
 #include <cstddef>
 #include <optional>
 #include <span>
 #include <utility>
-#include <vector>
 
 namespace ao::library
 {

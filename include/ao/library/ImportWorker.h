@@ -5,7 +5,6 @@
 
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/tag/TagFile.h>
 
 #include <cstddef>
 #include <cstdint>

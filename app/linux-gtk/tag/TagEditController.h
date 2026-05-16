@@ -3,14 +3,20 @@
 
 #pragma once
 
+#include "tag/TagPopover.h"
 #include "track/TrackViewPage.h"
 
-#include <ao/library/MusicLibrary.h>
-#include <gtkmm.h>
-#include <runtime/TrackSource.h>
+#include <ao/Type.h>
+
+#include <giomm/actionmap.h>
+#include <giomm/simpleaction.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/widget.h>
+#include <gtkmm/window.h>
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 

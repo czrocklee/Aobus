@@ -3,9 +3,13 @@
 
 #pragma once
 
+#include <ao/Type.h>
 #include <runtime/TrackSource.h>
 
 #include <gtkmm/label.h>
+#include <gtkmm/widget.h>
+
+#include <cstddef>
 
 namespace ao::gtk
 {

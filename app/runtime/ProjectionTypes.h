@@ -3,12 +3,13 @@
 
 #pragma once
 
-#include <ao/Type.h>
-
 #include "CorePrimitives.h"
 #include "StateTypes.h"
+#include <ao/Type.h>
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -76,7 +77,6 @@ namespace ao::rt
     ITrackListProjection() = default;
 
   public:
-
     virtual ViewId viewId() const noexcept = 0;
     virtual std::uint64_t revision() const noexcept = 0;
 
@@ -174,7 +174,6 @@ namespace ao::rt
     ITrackDetailProjection() = default;
 
   public:
-
     virtual TrackDetailSnapshot snapshot() const = 0;
     virtual Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) = 0;
   };

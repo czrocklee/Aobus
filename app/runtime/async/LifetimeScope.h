@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#pragma once
+
+#include "Task.h"
+#include <boost/asio/cancellation_signal.hpp>
+#include <memory>
+#include <mutex>
+#include <vector>
+
+namespace ao::rt::async
+{
+  class Runtime;
+
+  struct LifetimeScopeState final
+  {
+    std::mutex mutex;
+    std::vector<std::shared_ptr<boost::asio::cancellation_signal>> signals;
+    bool isAlive{true};
+  };
+
+  class LifetimeScope final
+  {
+  public:
+    LifetimeScope();
+    ~LifetimeScope();
+
+    LifetimeScope(LifetimeScope const&) = delete;
+    LifetimeScope& operator=(LifetimeScope const&) = delete;
+    LifetimeScope(LifetimeScope&&) = delete;
+    LifetimeScope& operator=(LifetimeScope&&) = delete;
+
+    void cancelAll();
+    std::shared_ptr<LifetimeScopeState> state() const noexcept;
+
+  private:
+    std::shared_ptr<LifetimeScopeState> _state;
+  };
+
+  void spawnWithLifetime(Runtime& runtime, LifetimeScope& scope, Task<void> task);
+} // namespace ao::rt::async

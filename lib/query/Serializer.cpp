@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/query/Serializer.h>
 #include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <cstddef>
@@ -17,7 +17,7 @@ namespace ao::query
 {
   namespace
   {
-    struct ParenthesisGuard final // NOLINT(cppcoreguidelines-special-member-functions)
+    struct ParenthesisGuard final
     {
       ParenthesisGuard(std::ostringstream& oss, bool apply)
         : oss{oss}, apply{apply}
@@ -27,6 +27,11 @@ namespace ao::query
           oss << "(";
         }
       }
+
+      ParenthesisGuard(ParenthesisGuard const&) = delete;
+      ParenthesisGuard& operator=(ParenthesisGuard const&) = delete;
+      ParenthesisGuard(ParenthesisGuard&&) = delete;
+      ParenthesisGuard& operator=(ParenthesisGuard&&) = delete;
 
       ~ParenthesisGuard()
       {

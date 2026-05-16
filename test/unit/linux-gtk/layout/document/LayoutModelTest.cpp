@@ -2,10 +2,14 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <app/linux-gtk/layout/document/LayoutDocument.h>
-#include <app/linux-gtk/layout/document/LayoutYaml.h>
+#include <app/linux-gtk/layout/document/LayoutNode.h>
+#include <app/linux-gtk/layout/document/LayoutYaml.h> // NOLINT(misc-include-cleaner)
 
 #include <catch2/catch_test_macros.hpp>
 #include <yaml-cpp/yaml.h>
+
+#include <cstdint>
+#include <vector>
 
 // ---------------------------------------------------------------------------
 // YAML serialization
@@ -65,7 +69,7 @@ namespace ao::gtk::layout::test
 
       CHECK(decoded.version == 1);
       CHECK(decoded.root.type == "box");
-      REQUIRE(decoded.root.children.size() >= 1);
+      REQUIRE(!decoded.root.children.empty());
       CHECK(decoded.root.children[0].type == "app.menuBar");
     }
 
@@ -142,7 +146,6 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // LayoutValue cross-type coercion
   // ---------------------------------------------------------------------------
-
   TEST_CASE("LayoutValue coercion", "[layout][model]")
   {
     SECTION("asString coerces bool")
@@ -244,7 +247,6 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // LayoutNode helpers
   // ---------------------------------------------------------------------------
-
   TEST_CASE("LayoutNode getProp/getLayout", "[layout][model]")
   {
     auto node = LayoutNode{};

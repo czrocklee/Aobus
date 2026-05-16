@@ -150,7 +150,7 @@ namespace ao::library
        */
       struct Entry
       {
-        DictionaryId dictId;  // 4 bytes
+        DictionaryId dictId;      // 4 bytes
         std::uint16_t offset = 0; // 2 bytes - byte offset from header start to value
         std::uint16_t len = 0;    // 2 bytes - value length in bytes
       };
@@ -243,11 +243,11 @@ namespace ao::library
   {
   public:
     // Standard iterator traits
-    using difference_type = std::ptrdiff_t;     // NOLINT
+    using difference_type = std::ptrdiff_t;                             // NOLINT
     using value_type = std::pair<DictionaryId const, std::string_view>; // NOLINT
-    using reference = value_type;               // NOLINT
-    using pointer = void;                       // NOLINT
-    using iterator_category = std::forward_iterator_tag; // NOLINT
+    using reference = value_type;                                       // NOLINT
+    using pointer = void;                                               // NOLINT
+    using iterator_category = std::forward_iterator_tag;                // NOLINT
 
     Iterator() = default;
 

@@ -6,8 +6,7 @@
 #include <runtime/CorePrimitives.h>
 
 #include <gtkmm/label.h>
-
-#include <string>
+#include <gtkmm/widget.h>
 
 namespace ao::rt
 {

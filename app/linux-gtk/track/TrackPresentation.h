@@ -7,12 +7,11 @@
 #include <runtime/StateTypes.h>
 #include <runtime/TrackPresentationPreset.h>
 
-#include <sigc++/sigc++.h>
+#include <sigc++/signal.h>
 
 #include <cstdint>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
 #include <vector>
 

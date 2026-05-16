@@ -3,13 +3,22 @@
 
 #pragma once
 
-#include <ao/library/MusicLibrary.h>
+#include <ao/Type.h>
 
-#include <gtkmm.h>
+#include <gdkmm/rectangle.h>
+#include <giomm/liststore.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/listitem.h>
+#include <gtkmm/listview.h>
+#include <gtkmm/popovermenu.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/singleselection.h>
+#include <gtkmm/treelistmodel.h>
+#include <gtkmm/widget.h>
 
+#include <cstdint>
 #include <functional>
 #include <map>
-#include <memory>
 
 namespace ao::rt
 {

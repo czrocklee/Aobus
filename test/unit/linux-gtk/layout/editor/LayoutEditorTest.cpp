@@ -2,25 +2,32 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <app/linux-gtk/layout/document/LayoutDocument.h>
-#include <app/linux-gtk/layout/document/LayoutYaml.h>
+#include <app/linux-gtk/layout/document/LayoutYaml.h> // NOLINT(misc-include-cleaner)
 #include <app/linux-gtk/layout/editor/LayoutEditorDialog.h>
 #include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
 #include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
 
 #include <app/runtime/AppRuntime.h>
 #include <app/runtime/ConfigStore.h>
+#include <runtime/CorePrimitives.h>
+
+#include <test/unit/lmdb/TestUtils.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
+#include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 #include <yaml-cpp/yaml.h>
 
-#include <test/unit/lmdb/TestUtils.h>
-
 #include <algorithm>
+#include <array>
+#include <cstdint>
+#include <functional>
+#include <memory>
 #include <set>
 #include <string>
+#include <utility>
 
 namespace ao::gtk::layout::editor::test
 {
@@ -36,9 +43,10 @@ namespace ao::gtk::layout::editor::test
   } // namespace
 
   using namespace ao::lmdb::test;
+
   TEST_CASE("Component descriptor validation", "[layout][editor]")
   {
-    ComponentRegistry registry;
+    auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto const& descriptors = registry.getDescriptors();
@@ -98,42 +106,42 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("split requires exactly 2 children")
     {
-      auto const desc = registry.getDescriptor("split");
+      auto const optDesc = registry.getDescriptor("split");
 
-      REQUIRE(desc.has_value());
-      CHECK(desc->minChildren == 2);
-      CHECK(desc->optMaxChildren.has_value());
-      CHECK(*desc->optMaxChildren == 2);
+      REQUIRE(optDesc.has_value());
+      CHECK(optDesc->minChildren == 2);
+      CHECK(optDesc->optMaxChildren.has_value());
+      CHECK(*optDesc->optMaxChildren == 2);
     }
 
     SECTION("scroll requires exactly 1 child")
     {
-      auto const desc = registry.getDescriptor("scroll");
+      auto const optDesc = registry.getDescriptor("scroll");
 
-      REQUIRE(desc.has_value());
-      CHECK(desc->minChildren == 1);
-      CHECK(desc->optMaxChildren.has_value());
-      CHECK(*desc->optMaxChildren == 1);
+      REQUIRE(optDesc.has_value());
+      CHECK(optDesc->minChildren == 1);
+      CHECK(optDesc->optMaxChildren.has_value());
+      CHECK(*optDesc->optMaxChildren == 1);
     }
 
     SECTION("tabs requires at least 1 child")
     {
-      auto const desc = registry.getDescriptor("tabs");
+      auto const optDesc = registry.getDescriptor("tabs");
 
-      REQUIRE(desc.has_value());
-      CHECK(desc->minChildren == 1);
-      CHECK(!desc->optMaxChildren.has_value()); // unbounded
+      REQUIRE(optDesc.has_value());
+      CHECK(optDesc->minChildren == 1);
+      CHECK(!optDesc->optMaxChildren.has_value()); // unbounded
     }
 
     SECTION("box has orientation, spacing, homogeneous props")
     {
-      auto const desc = registry.getDescriptor("box");
+      auto const optDesc = registry.getDescriptor("box");
 
-      REQUIRE(desc.has_value());
-      CHECK(desc->container == true);
+      REQUIRE(optDesc.has_value());
+      CHECK(optDesc->container == true);
 
       auto const hasProp = [&](std::string const& name)
-      { return std::ranges::any_of(desc->props, [&](auto const& prop) { return prop.name == name; }); };
+      { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
 
       CHECK(hasProp("orientation"));
       CHECK(hasProp("spacing"));
@@ -142,13 +150,13 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("playPauseButton has showLabel and size props")
     {
-      auto const desc = registry.getDescriptor("playback.playPauseButton");
+      auto const optDesc = registry.getDescriptor("playback.playPauseButton");
 
-      REQUIRE(desc.has_value());
-      CHECK(desc->category == "Playback");
+      REQUIRE(optDesc.has_value());
+      CHECK(optDesc->category == "Playback");
 
       auto const hasProp = [&](std::string const& name)
-      { return std::ranges::any_of(desc->props, [&](auto const& prop) { return prop.name == name; }); };
+      { return std::ranges::any_of(optDesc->props, [&](auto const& prop) { return prop.name == name; }); };
 
       CHECK(hasProp("showLabel"));
       CHECK(hasProp("size"));
@@ -156,8 +164,8 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("getDescriptor returns nullopt for unknown type")
     {
-      auto const desc = registry.getDescriptor("nonexistent.component");
-      CHECK(!desc.has_value());
+      auto const optDesc = registry.getDescriptor("nonexistent.component");
+      CHECK(!optDesc.has_value());
     }
 
     SECTION("categories span expected groups")
@@ -180,36 +188,37 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("all 20 types individually retrievable")
     {
-      char const* types[] = {"box",
-                             "split",
-                             "scroll",
-                             "spacer",
-                             "tabs",
-                             "playback.playPauseButton",
-                             "playback.stopButton",
-                             "playback.volumeControl",
-                             "playback.currentTitleLabel",
-                             "playback.currentArtistLabel",
-                             "playback.seekSlider",
-                             "playback.timeLabel",
-                             "playback.playButton",
-                             "playback.pauseButton",
-                             "playback.outputButton",
-                             "playback.qualityIndicator",
-                             "status.messageLabel",
-                             "library.listTree",
-                             "tracks.table",
-                             "library.openLibraryButton",
-                             "inspector.coverArt",
-                             "inspector.sidebar",
-                             "status.defaultBar",
-                             "app.menuBar",
-                             "app.workspaceWithInspector"};
+      // NOLINTNEXTLINE(modernize-avoid-c-arrays)
+      auto const types = std::to_array({"box",
+                                        "split",
+                                        "scroll",
+                                        "spacer",
+                                        "tabs",
+                                        "playback.playPauseButton",
+                                        "playback.stopButton",
+                                        "playback.volumeControl",
+                                        "playback.currentTitleLabel",
+                                        "playback.currentArtistLabel",
+                                        "playback.seekSlider",
+                                        "playback.timeLabel",
+                                        "playback.playButton",
+                                        "playback.pauseButton",
+                                        "playback.outputButton",
+                                        "playback.qualityIndicator",
+                                        "status.messageLabel",
+                                        "library.listTree",
+                                        "tracks.table",
+                                        "library.openLibraryButton",
+                                        "inspector.coverArt",
+                                        "inspector.sidebar",
+                                        "status.defaultBar",
+                                        "app.menuBar",
+                                        "app.workspaceWithInspector"});
 
-      for (auto const* type : types)
+      for (auto const& type : types)
       {
-        auto const desc = registry.getDescriptor(type);
-        CHECK(desc.has_value());
+        auto const optDesc = registry.getDescriptor(type);
+        CHECK(optDesc.has_value());
       }
     }
   }
@@ -217,12 +226,11 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   // LayoutEditorDialog
   // ---------------------------------------------------------------------------
-
   TEST_CASE("LayoutEditorDialog", "[layout][editor]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_editor_test");
 
-    ComponentRegistry registry;
+    auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
@@ -230,22 +238,20 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("Dialog constructs without crash")
     {
-      auto* const dialog = new LayoutEditorDialog(window, registry, doc);
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc);
       REQUIRE(dialog != nullptr);
       dialog->close();
-      delete dialog;
     }
 
     SECTION("document returns the initial document on construction")
     {
-      auto* const dialog = new LayoutEditorDialog(window, registry, doc);
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc);
       auto const& returned = dialog->document();
 
       CHECK(returned.root.type == doc.root.type);
       CHECK(returned.root.id == doc.root.id);
 
       dialog->close();
-      delete dialog;
     }
 
     SECTION("reset default restores to createDefaultLayout shape")
@@ -254,19 +260,18 @@ namespace ao::gtk::layout::editor::test
       auto modified = LayoutDocument{};
       modified.root.type = "spacer";
 
-      auto* const dialog = new LayoutEditorDialog(window, registry, modified);
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, modified);
 
       // The dialog copies the document, so modifications to the dialog's copy
       // are reflected. Just verify the initial copy is correct.
       CHECK(dialog->document().root.type == "spacer");
 
       dialog->close();
-      delete dialog;
     }
 
     SECTION("signalApplyPreview is emitted on document changes")
     {
-      auto* const dialog = new LayoutEditorDialog(window, registry, doc);
+      auto dialog = std::make_unique<LayoutEditorDialog>(window, registry, doc);
       int count = 0;
 
       dialog->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });
@@ -274,14 +279,12 @@ namespace ao::gtk::layout::editor::test
       CHECK(count == 0);
 
       dialog->close();
-      delete dialog;
     }
   }
 
   // ---------------------------------------------------------------------------
   // Template system
   // ---------------------------------------------------------------------------
-
   TEST_CASE("Template system", "[layout][editor]")
   {
     SECTION("getBuiltInTemplates returns all 7 built-ins")
@@ -314,7 +317,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("template expansion via expandNode in build")
     {
-      ComponentRegistry registry;
+      auto registry = ComponentRegistry{};
       LayoutRuntime::registerStandardComponents(registry);
 
       auto const tempDir = TempDir{};
@@ -334,7 +337,7 @@ namespace ao::gtk::layout::editor::test
       doc.root.type = "template";
       doc.root.props["templateId"] = LayoutValue{std::string{"playback.compactControls"}};
 
-      LayoutRuntime layoutRuntime{registry};
+      auto layoutRuntime = LayoutRuntime{registry};
       auto const comp = layoutRuntime.build(ctx, doc);
 
       REQUIRE(comp != nullptr);
@@ -390,7 +393,6 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   // absoluteCanvas
   // ---------------------------------------------------------------------------
-
   TEST_CASE("absoluteCanvas component", "[layout][editor]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.canvas_test");
@@ -407,14 +409,15 @@ namespace ao::gtk::layout::editor::test
 
     auto window = Gtk::Window{};
     auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
+
     SECTION("absoluteCanvas descriptor is registered as container")
     {
-      auto const desc = registry.getDescriptor("absoluteCanvas");
+      auto const optDesc = registry.getDescriptor("absoluteCanvas");
 
-      REQUIRE(desc.has_value());
-      CHECK(desc->container == true);
-      CHECK(desc->minChildren == 0);
-      CHECK(!desc->optMaxChildren.has_value());
+      REQUIRE(optDesc.has_value());
+      CHECK(optDesc->container == true);
+      CHECK(optDesc->minChildren == 0);
+      CHECK(!optDesc->optMaxChildren.has_value());
     }
 
     SECTION("absoluteCanvas with no children builds without crash")

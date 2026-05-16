@@ -5,7 +5,11 @@
 
 #include "Layout.h"
 #include <ao/Exception.h>
+
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <string>
 #include <string_view>
 
@@ -58,8 +62,10 @@ namespace ao::tag::mpeg::id3v2
         return {};
       }
 
-      auto const* u16_begin = reinterpret_cast<std::uint8_t const*>(begin); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-      auto const* u16_end = reinterpret_cast<std::uint8_t const*>(end);     // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+      auto const* u16_begin =
+        reinterpret_cast<std::uint8_t const*>(begin); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+      auto const* u16_end =
+        reinterpret_cast<std::uint8_t const*>(end); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
 
       bool big_endian = true;
       static constexpr std::uint8_t kBomByte1Le = 0xFF;
@@ -126,7 +132,8 @@ namespace ao::tag::mpeg::id3v2
     {
       if (availableSize > 0 && (availableSize < sizeof(CommonFrameLayout) || availableSize < size()))
       {
-        ao::throwException<Exception>("invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
+        ao::throwException<Exception>(
+          "invalid id3v2 tag: frame size {} exceeds tag boundary {}", size(), availableSize);
       }
     }
 
@@ -175,7 +182,7 @@ namespace ao::tag::mpeg::id3v2
 
     std::string text() const
     {
-      const auto* begin = static_cast<char const*>(Base::data()) + sizeof(FrameViewLayout);
+      auto const* begin = static_cast<char const*>(Base::data()) + sizeof(FrameViewLayout);
       auto end = static_cast<char const*>(Base::data()) + Base::size();
       auto encoding = Base::template layout<FrameViewLayout>().encoding;
       std::string result = convertToUtf8(begin, end, encoding);

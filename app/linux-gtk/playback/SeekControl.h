@@ -5,7 +5,10 @@
 
 #include "playback/PlaybackPositionInterpolator.h"
 #include "runtime/PlaybackService.h"
+#include <runtime/CorePrimitives.h>
+
 #include <gtkmm/scale.h>
+#include <gtkmm/widget.h>
 
 #include <cstdint>
 

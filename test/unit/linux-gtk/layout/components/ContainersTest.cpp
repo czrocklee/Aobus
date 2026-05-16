@@ -9,10 +9,12 @@
 
 #include <app/runtime/AppRuntime.h>
 #include <app/runtime/ConfigStore.h>
+#include <runtime/CorePrimitives.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/paned.h>
 #include <gtkmm/scrolledwindow.h>
@@ -20,6 +22,11 @@
 #include <gtkmm/window.h>
 
 #include <test/unit/lmdb/TestUtils.h>
+
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <vector>
 
 namespace ao::gtk::layout::test
 {
@@ -47,13 +54,13 @@ namespace ao::gtk::layout::test
     rt::AppRuntime runtime{
       rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
-    ComponentRegistry registry;
+    auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
     auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
-    LayoutRuntime layoutRuntime{registry};
+    auto layoutRuntime = LayoutRuntime{registry};
 
     SECTION("Build default layout")
     {
@@ -111,7 +118,6 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Container error states
   // ---------------------------------------------------------------------------
-
   TEST_CASE("Container error states", "[layout][containers]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
@@ -123,13 +129,13 @@ namespace ao::gtk::layout::test
     rt::AppRuntime runtime{
       rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
-    ComponentRegistry registry;
+    auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
     auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
-    LayoutRuntime layoutRuntime{registry};
+    auto layoutRuntime = LayoutRuntime{registry};
 
     auto const checkError = [](ILayoutComponent& comp, std::string const& expectedFragment)
     {
@@ -197,7 +203,6 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Container success states
   // ---------------------------------------------------------------------------
-
   TEST_CASE("Container success states", "[layout][containers]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
@@ -209,13 +214,13 @@ namespace ao::gtk::layout::test
     rt::AppRuntime runtime{
       rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
-    ComponentRegistry registry;
+    auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
     auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
-    LayoutRuntime layoutRuntime{registry};
+    auto layoutRuntime = LayoutRuntime{registry};
 
     SECTION("split with 2 children builds Gtk::Paned")
     {
@@ -349,7 +354,6 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // applyCommonProps
   // ---------------------------------------------------------------------------
-
   TEST_CASE("applyCommonProps coverage", "[layout][containers]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
@@ -361,13 +365,13 @@ namespace ao::gtk::layout::test
     rt::AppRuntime runtime{
       rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
-    ComponentRegistry registry;
+    auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
 
     auto window = Gtk::Window{};
     auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
-    LayoutRuntime layoutRuntime{registry};
+    auto layoutRuntime = LayoutRuntime{registry};
 
     SECTION("hexpand/vexpand applied to child")
     {
@@ -512,7 +516,6 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // LayoutHost
   // ---------------------------------------------------------------------------
-
   TEST_CASE("LayoutHost rebuild", "[layout][containers]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
@@ -524,13 +527,13 @@ namespace ao::gtk::layout::test
     rt::AppRuntime runtime{
       rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
-    ComponentRegistry registry;
+    auto registry = ComponentRegistry{};
     registerContainerComponents(registry);
 
     auto window = Gtk::Window{};
     auto ctx = LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
 
-    LayoutHost host{registry};
+    auto host = LayoutHost{registry};
 
     SECTION("Initial layout is empty before setLayout")
     {
@@ -564,7 +567,7 @@ namespace ao::gtk::layout::test
 
     SECTION("Semantic components registration")
     {
-      ComponentRegistry registry2;
+      auto registry2 = ComponentRegistry{};
       LayoutRuntime::registerStandardComponents(registry2);
 
       auto window2 = Gtk::Window{};

@@ -7,8 +7,7 @@
 #include "layout/document/LayoutYaml.h"
 #include <ao/utility/Log.h>
 
-#include <yaml-cpp/node/node.h>
-#include <yaml-cpp/node/type.h>
+#include <yaml-cpp/yaml.h>
 
 #include <cstddef>
 #include <cstdint>

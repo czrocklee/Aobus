@@ -5,16 +5,20 @@
 
 #include "library_io/ImportProgressDialog.h"
 #include <ao/library/Exporter.h>
-#include <ao/library/ImportWorker.h>
 #include <runtime/CorePrimitives.h>
+#include <runtime/async/LifetimeScope.h>
 
-#include <gtkmm.h>
+#include <giomm/asyncresult.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/dropdown.h>
+#include <gtkmm/filedialog.h>
+#include <gtkmm/window.h>
 
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace ao::rt
@@ -56,8 +60,6 @@ namespace ao::gtk
     void importLibrary(); // YAML import
     void exportLibrary(); // YAML export
 
-    void scanDirectory(std::filesystem::path const& dir, std::vector<std::filesystem::path>& files) const;
-
     void openMusicLibrary(std::filesystem::path const& path) const;
     void importFilesFromPath(std::filesystem::path const& path);
 
@@ -67,8 +69,6 @@ namespace ao::gtk
     void onImportFinished() const;
 
     void onLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& result, Glib::RefPtr<Gtk::FileDialog> const& dialog);
-    void runLibraryImportTask(std::filesystem::path const& path);
-    void reportImportResult(bool success, std::string const& errorText);
 
     void onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
@@ -82,8 +82,7 @@ namespace ao::gtk
 
     rt::Subscription _importProgressSub;
     rt::Subscription _importCompleteSub;
-    std::jthread _exportThread;
-    std::jthread _importTaskThread;
+    rt::async::LifetimeScope _tasks;
     std::unique_ptr<ImportProgressDialog> _importDialog;
   };
 } // namespace ao::gtk

@@ -16,4 +16,3 @@ add_library(ao_library STATIC
 )
 target_include_directories(ao_library PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
 target_link_libraries(ao_library PUBLIC ao_lmdb yaml-cpp)
-aobus_apply_clang_tidy(ao_library STRICT)

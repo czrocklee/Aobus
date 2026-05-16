@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-
 // Standalone test for app::uigtk::TrackListAdapter without GTKMM dependency.
 // Tests adapter functionality with test doubles for GTK objects.
 
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
@@ -16,7 +12,16 @@
 #include <runtime/TrackSource.h>
 #include <test/unit/lmdb/TestUtils.h>
 
+#include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
+#include <cctype>
+#include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <iterator>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -77,7 +82,7 @@ namespace ao::model::test
       return it->second;
     }
 
-    std::string result;
+    auto result = std::string{};
 
     try
     {
@@ -120,7 +125,7 @@ namespace ao::model::test
 
     if (!optView)
     {
-      RowData row;
+      auto row = RowData{};
       row.id = id;
       row.missing = true;
       _rowCache.emplace(id, std::move(row));
@@ -131,7 +136,7 @@ namespace ao::model::test
     auto const& view = *optView;
     auto const& metadata = view.metadata();
 
-    RowData row;
+    auto row = RowData{};
     row.id = id;
     row.title = std::string(metadata.title());
 
@@ -293,19 +298,19 @@ namespace ao::gtk::test
 
       void update(TrackId id)
       {
-        auto const index = indexOf(id);
-        REQUIRE(index.has_value());
-        TrackSource::notifyUpdated(id, *index);
+        auto const optIndex = indexOf(id);
+        REQUIRE(optIndex.has_value());
+        TrackSource::notifyUpdated(id, *optIndex);
       }
 
       void onReset() { TrackSource::notifyReset(); }
 
       void remove(TrackId id)
       {
-        auto const index = indexOf(id);
-        REQUIRE(index.has_value());
-        _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*index));
-        TrackSource::notifyRemoved(id, *index);
+        auto const optIndex = indexOf(id);
+        REQUIRE(optIndex.has_value());
+        _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*optIndex));
+        TrackSource::notifyRemoved(id, *optIndex);
       }
 
       std::size_t size() const override { return _ids.size(); }
@@ -333,10 +338,10 @@ namespace ao::gtk::test
     /**
      * ObserverSpy - Records observer events for verification.
      */
-    class ObserverSpy final : public TrackSourceObserver
+    struct ObserverSpy final : public TrackSourceObserver
     {
     public:
-      enum class EventKind
+      enum class EventKind : std::uint8_t
       {
         Reset,
         Inserted,
@@ -387,18 +392,17 @@ namespace ao::gtk::test
       std::ranges::transform(
         needle, needle.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-      auto const check = [&needle](std::string const& field) -> bool
+      auto const check = [&needle](std::string field) -> bool
       {
         if (field.empty())
         {
           return false;
         }
 
-        auto lower = field;
         std::ranges::transform(
-          lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+          field, field.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-        return lower.find(needle) != std::string::npos;
+        return field.find(needle) != std::string::npos;
       };
 
       return check(rowData.artist) || check(rowData.album) || check(rowData.albumArtist) || check(rowData.genre) ||
@@ -407,6 +411,7 @@ namespace ao::gtk::test
   } // namespace
 
   using namespace ao::lmdb::test;
+
   TEST_CASE("app::uigtk::TrackListAdapter", "[app][adapter]")
   {
     SECTION("TestTrackRowProvider loads row data for filtering")
@@ -415,12 +420,12 @@ namespace ao::gtk::test
       auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
       auto const trackId = testLibrary.addTrack(makeTrackSpec("My Song", "Beatles", "Abbey Road", 2023));
 
-      auto const row = provider->getRow(trackId);
-      REQUIRE(row.has_value());
-      CHECK(row->title == "My Song");
-      CHECK(row->artist == "Beatles");
-      CHECK(row->album == "Abbey Road");
-      CHECK(row->year == 2023);
+      auto const optRow = provider->getRow(trackId);
+      REQUIRE(optRow.has_value());
+      CHECK(optRow->title == "My Song");
+      CHECK(optRow->artist == "Beatles");
+      CHECK(optRow->album == "Abbey Road");
+      CHECK(optRow->year == 2023);
     }
 
     SECTION("filter matcher works for artist")
@@ -429,11 +434,11 @@ namespace ao::gtk::test
       auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
       auto const trackId = testLibrary.addTrack(makeTrackSpec("Song", "Beatles", "Album", 2020));
 
-      auto const row = provider->getRow(trackId);
-      REQUIRE(row.has_value());
+      auto const optRow = provider->getRow(trackId);
+      REQUIRE(optRow.has_value());
 
-      CHECK(matchesFilter(*row, "beatles") == true);
-      CHECK(matchesFilter(*row, "stones") == false);
+      CHECK(matchesFilter(*optRow, "beatles") == true);
+      CHECK(matchesFilter(*optRow, "stones") == false);
     }
 
     SECTION("filter matcher works for album")
@@ -442,11 +447,11 @@ namespace ao::gtk::test
       auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
       auto const trackId = testLibrary.addTrack(makeTrackSpec("Song", "Artist", "Abbey Road", 2020));
 
-      auto const row = provider->getRow(trackId);
-      REQUIRE(row.has_value());
+      auto const optRow = provider->getRow(trackId);
+      REQUIRE(optRow.has_value());
 
-      CHECK(matchesFilter(*row, "abbey") == true);
-      CHECK(matchesFilter(*row, "revolver") == false);
+      CHECK(matchesFilter(*optRow, "abbey") == true);
+      CHECK(matchesFilter(*optRow, "revolver") == false);
     }
 
     SECTION("filter matcher works for title")
@@ -455,11 +460,11 @@ namespace ao::gtk::test
       auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
       auto const trackId = testLibrary.addTrack(makeTrackSpec("Yesterday", "Artist", "Album", 2020));
 
-      auto const row = provider->getRow(trackId);
-      REQUIRE(row.has_value());
+      auto const optRow = provider->getRow(trackId);
+      REQUIRE(optRow.has_value());
 
-      CHECK(matchesFilter(*row, "yesterday") == true);
-      CHECK(matchesFilter(*row, "today") == false);
+      CHECK(matchesFilter(*optRow, "yesterday") == true);
+      CHECK(matchesFilter(*optRow, "today") == false);
     }
 
     SECTION("filter matcher is case-insensitive")
@@ -468,12 +473,12 @@ namespace ao::gtk::test
       auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
       auto const trackId = testLibrary.addTrack(makeTrackSpec("Song", "The Beatles", "Album", 2020));
 
-      auto const row = provider->getRow(trackId);
-      REQUIRE(row.has_value());
+      auto const optRow = provider->getRow(trackId);
+      REQUIRE(optRow.has_value());
 
-      CHECK(matchesFilter(*row, "BEATLES") == true);
-      CHECK(matchesFilter(*row, "beatles") == true);
-      CHECK(matchesFilter(*row, "BeAtLeS") == true);
+      CHECK(matchesFilter(*optRow, "BEATLES") == true);
+      CHECK(matchesFilter(*optRow, "beatles") == true);
+      CHECK(matchesFilter(*optRow, "BeAtLeS") == true);
     }
 
     SECTION("filter matcher returns true for empty filter")
@@ -482,10 +487,10 @@ namespace ao::gtk::test
       auto provider = std::make_shared<TestTrackRowProvider>(testLibrary.library());
       auto const trackId = testLibrary.addTrack(makeTrackSpec("Song", "Artist", "Album", 2020));
 
-      auto const row = provider->getRow(trackId);
-      REQUIRE(row.has_value());
+      auto const optRow = provider->getRow(trackId);
+      REQUIRE(optRow.has_value());
 
-      CHECK(matchesFilter(*row, "") == true);
+      CHECK(matchesFilter(*optRow, "") == true);
     }
 
     SECTION("MutableTrackSource notifies observers on insert")
@@ -497,7 +502,7 @@ namespace ao::gtk::test
       auto const id = TrackId{1};
       source.addInitial(id);
 
-      CHECK(spy.events.size() == 0); // addInitial doesn't notify
+      CHECK(spy.events.empty()); // addInitial doesn't notify
 
       source.insert(TrackId{2}, 0);
       CHECK(spy.events.size() == 1);
@@ -563,16 +568,16 @@ namespace ao::gtk::test
       auto const trackId = testLibrary.addTrack(makeTrackSpec("Cache Test", "Artist", "Album", 2020));
 
       // First load
-      auto const first = provider->getRow(trackId);
-      REQUIRE(first.has_value());
+      auto const optFirst = provider->getRow(trackId);
+      REQUIRE(optFirst.has_value());
 
       // Invalidate
       provider->invalidateHot(trackId);
 
       // Should reload
-      auto const second = provider->getRow(trackId);
-      REQUIRE(second.has_value());
-      CHECK(second->title == "Cache Test");
+      auto const optSecond = provider->getRow(trackId);
+      REQUIRE(optSecond.has_value());
+      CHECK(optSecond->title == "Cache Test");
     }
 
     SECTION("multiple tracks can be loaded and filtered")
@@ -584,18 +589,18 @@ namespace ao::gtk::test
       auto const track2 = testLibrary.addTrack(makeTrackSpec("Song B", "Stones", "Album 2", 2021));
       auto const track3 = testLibrary.addTrack(makeTrackSpec("Song C", "Beatles", "Album 3", 2022));
 
-      auto const row1 = provider->getRow(track1);
-      auto const row2 = provider->getRow(track2);
-      auto const row3 = provider->getRow(track3);
+      auto const optRow1 = provider->getRow(track1);
+      auto const optRow2 = provider->getRow(track2);
+      auto const optRow3 = provider->getRow(track3);
 
-      REQUIRE(row1.has_value());
-      REQUIRE(row2.has_value());
-      REQUIRE(row3.has_value());
+      REQUIRE(optRow1.has_value());
+      REQUIRE(optRow2.has_value());
+      REQUIRE(optRow3.has_value());
 
       // Filter for Beatles
-      CHECK(matchesFilter(*row1, "beatles") == true);
-      CHECK(matchesFilter(*row2, "beatles") == false);
-      CHECK(matchesFilter(*row3, "beatles") == true);
+      CHECK(matchesFilter(*optRow1, "beatles") == true);
+      CHECK(matchesFilter(*optRow2, "beatles") == false);
+      CHECK(matchesFilter(*optRow3, "beatles") == true);
     }
   }
 } // namespace ao::gtk::test

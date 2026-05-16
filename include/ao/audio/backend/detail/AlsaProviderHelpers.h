@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/audio/Backend.h>
-#include <ao/audio/backend/detail/AudioBackendShared.h>
 #include <string>
 #include <vector>
 

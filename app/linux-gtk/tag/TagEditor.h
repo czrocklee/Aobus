@@ -5,10 +5,22 @@
 
 #include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
-#include <gtkmm.h>
+
+#include <gtkmm/box.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/flowbox.h>
+#include <gtkmm/flowboxchild.h>
+#include <gtkmm/label.h>
+#include <gtkmm/separator.h>
+#include <gtkmm/togglebutton.h>
+#include <sigc++/signal.h>
+
+#include <cstddef>
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::gtk

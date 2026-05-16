@@ -9,13 +9,33 @@
 #include "track/TrackListAdapter.h"
 #include "track/TrackPresentation.h"
 #include "track/TrackPresentationStore.h"
+#include "track/TrackRowObject.h"
+#include "track/TrackSelectionController.h"
+#include <ao/Type.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/ProjectionTypes.h>
+#include <runtime/TrackPresentationPreset.h>
 
-#include <gtkmm.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/box.h>
+#include <gtkmm/columnview.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/label.h>
+#include <gtkmm/menubutton.h>
+#include <gtkmm/multiselection.h>
+#include <gtkmm/popover.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/signallistitemfactory.h>
+#include <gtkmm/sortlistmodel.h>
+#include <gtkmm/widget.h>
+#include <sigc++/scoped_connection.h>
+#include <sigc++/signal.h>
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::rt

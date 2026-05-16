@@ -335,7 +335,8 @@ namespace ao::audio::backend::detail
 
   bool SinkProps::isUnity() const noexcept
   {
-    auto const checkUnity = [](float val) { return std::abs(val - 1.0F) < 1e-4F; }; // NOLINT(readability-magic-numbers)
+    static constexpr float kUnityEpsilon = 1e-4F;
+    auto const checkUnity = [](float val) { return std::abs(val - 1.0F) < kUnityEpsilon; };
 
     if (!checkUnity(volume))
     {

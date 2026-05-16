@@ -3,17 +3,16 @@
 
 #pragma once
 
+#include "library_io/PlaylistExporter.h"
 #include <ao/Type.h>
 #include <gtkmm/stack.h>
 #include <runtime/AppRuntime.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/PlaybackService.h>
 
-#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
-#include <vector>
 
 namespace ao::lmdb
 {

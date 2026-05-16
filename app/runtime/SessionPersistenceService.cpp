@@ -31,16 +31,8 @@ namespace ao::rt
 
     Signal<std::string const&> sessionRestoredSignal;
 
-    Impl(WorkspaceService& ws,
-         ViewService& vs,
-         PlaybackService& pb,
-         library::MusicLibrary& lib,
-         ConfigStore& cs)
-      : workspace{ws}
-      , views{vs}
-      , playback{pb}
-      , library{lib}
-      , configStore{cs}
+    Impl(WorkspaceService& ws, ViewService& vs, PlaybackService& pb, library::MusicLibrary& lib, ConfigStore& cs)
+      : workspace{ws}, views{vs}, playback{pb}, library{lib}, configStore{cs}
     {
     }
   };

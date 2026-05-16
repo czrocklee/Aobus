@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/library/TrackBuilder.h>
 #include <ao/tag/TagFile.h>
 
 namespace ao::tag::flac

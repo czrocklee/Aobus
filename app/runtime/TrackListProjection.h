@@ -3,16 +3,19 @@
 
 #pragma once
 
+#include "CorePrimitives.h"
 #include "ProjectionTypes.h"
-#include "StateTypes.h"
 #include "TrackPresentationPreset.h"
-
 #include "TrackSource.h"
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <span>
-#include <vector>
 
 namespace ao::library
 {

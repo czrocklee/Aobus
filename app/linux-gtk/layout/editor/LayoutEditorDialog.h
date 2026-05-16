@@ -4,12 +4,29 @@
 #pragma once
 
 #include "layout/document/LayoutDocument.h"
+#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 
-#include <gtkmm.h>
-#include <map>
-#include <memory>
-#include <vector>
+#include <giomm/simpleactiongroup.h>
+#include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
+#include <gtkmm/box.h>
+#include <gtkmm/button.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/menubutton.h>
+#include <gtkmm/paned.h>
+#include <gtkmm/popovermenu.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/treemodel.h>
+#include <gtkmm/treemodelcolumn.h>
+#include <gtkmm/treestore.h>
+#include <gtkmm/treeview.h>
+#include <gtkmm/window.h>
+#include <sigc++/signal.h>
+
+#include <string>
+#include <string_view>
 
 namespace ao::gtk::layout::editor
 {

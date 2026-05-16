@@ -7,7 +7,6 @@
 #include <ao/audio/Format.h>
 
 #include <string>
-#include <vector>
 
 namespace ao::audio
 {

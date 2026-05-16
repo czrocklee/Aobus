@@ -9,7 +9,16 @@
 #include <runtime/CorePrimitives.h>
 #include <runtime/ProjectionTypes.h>
 
-#include <gtkmm.h>
+#include <gdkmm/pixbuf.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/box.h>
+#include <gtkmm/editablelabel.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/label.h>
+#include <gtkmm/picture.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/widget.h>
+#include <sigc++/signal.h>
 
 #include <memory>
 #include <vector>

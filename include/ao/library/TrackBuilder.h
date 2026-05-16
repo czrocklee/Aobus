@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Transaction.h>
 

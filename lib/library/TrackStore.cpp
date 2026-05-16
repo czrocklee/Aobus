@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/Type.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/Type.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 

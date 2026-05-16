@@ -18,6 +18,11 @@ namespace ao
   public:
     virtual ~IMainThreadDispatcher() = default;
 
+    IMainThreadDispatcher(IMainThreadDispatcher const&) = delete;
+    IMainThreadDispatcher& operator=(IMainThreadDispatcher const&) = delete;
+    IMainThreadDispatcher(IMainThreadDispatcher&&) = delete;
+    IMainThreadDispatcher& operator=(IMainThreadDispatcher&&) = delete;
+
     /**
      * @brief Dispatches a task to be executed on the main UI thread.
      *

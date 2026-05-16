@@ -6,6 +6,7 @@
 #include "layout/document/LayoutNode.h"
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <string>
 

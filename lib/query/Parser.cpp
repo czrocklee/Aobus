@@ -11,8 +11,6 @@
 #include <ao/query/Parser.h>
 
 #include <lexy/action/parse.hpp>
-#include <lexy/encoding.hpp>
-#include <lexy/grammar.hpp>
 #include <lexy/callback/adapter.hpp>
 #include <lexy/callback/composition.hpp>
 #include <lexy/callback/container.hpp>
@@ -42,6 +40,8 @@
 #include <lexy/dsl/symbol.hpp>
 #include <lexy/dsl/token.hpp>
 #include <lexy/dsl/until.hpp>
+#include <lexy/encoding.hpp>
+#include <lexy/grammar.hpp>
 #include <lexy/input/string_input.hpp>
 
 #include <cstdint>

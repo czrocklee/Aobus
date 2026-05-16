@@ -5,9 +5,10 @@
 
 #include "track/TrackPresentation.h"
 
-#include <gtkmm.h>
-
-#include <unordered_set>
+#include <glibmm/object.h>
+#include <glibmm/property.h>
+#include <glibmm/propertyproxy.h>
+#include <glibmm/refptr.h>
 
 namespace ao::gtk
 {

@@ -1,102 +1,129 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <app/runtime/TrackPresentationPreset.h>
+#include <runtime/StateTypes.h>
+
 #include <catch2/catch_test_macros.hpp>
 
-#include <runtime/TrackListPresentation.h>
+#include <algorithm>
+#include <cstddef>
+#include <vector>
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    TrackPresentationPreset const* presetForGroup(TrackGroupKey key)
+    {
+      auto const presets = builtinTrackPresentationPresets();
+      auto const iter =
+        std::ranges::find(presets, key, [](TrackPresentationPreset const& p) { return p.spec.groupBy; });
+
+      if (iter == presets.end())
+      {
+        return nullptr;
+      }
+
+      return &*iter;
+    }
+  } // namespace
+
   TEST_CASE("TrackListPresentation: None mapping", "[app][runtime][presentation]")
   {
-    auto const snapshot = presentationForGroup(TrackGroupKey::None);
-    REQUIRE(snapshot.groupBy == TrackGroupKey::None);
+    auto const* const preset = presetForGroup(TrackGroupKey::None);
+    REQUIRE(preset != nullptr);
+    REQUIRE(preset->spec.groupBy == TrackGroupKey::None);
 
     auto const expectedSort = std::vector<TrackSortField>{TrackSortField::Artist,
                                                           TrackSortField::Album,
                                                           TrackSortField::DiscNumber,
                                                           TrackSortField::TrackNumber,
                                                           TrackSortField::Title};
-    REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+    REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
-    for (size_t i = 0; i < expectedSort.size(); ++i)
+    for (std::size_t i = 0; i < expectedSort.size(); ++i)
     {
-      REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
-      REQUIRE(snapshot.effectiveSortBy[i].ascending == true);
+      REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
+      REQUIRE(preset->spec.sortBy[i].ascending == true);
     }
 
-    REQUIRE(snapshot.redundantFields.empty());
+    REQUIRE(preset->spec.redundantFields.empty());
   }
 
   TEST_CASE("TrackListPresentation: Artist mapping", "[app][runtime][presentation]")
   {
-    auto const snapshot = presentationForGroup(TrackGroupKey::Artist);
-    REQUIRE(snapshot.groupBy == TrackGroupKey::Artist);
+    auto const* const preset = presetForGroup(TrackGroupKey::Artist);
+    REQUIRE(preset != nullptr);
+    REQUIRE(preset->spec.groupBy == TrackGroupKey::Artist);
 
     auto const expectedSort = std::vector<TrackSortField>{TrackSortField::Artist,
                                                           TrackSortField::Album,
                                                           TrackSortField::DiscNumber,
                                                           TrackSortField::TrackNumber,
                                                           TrackSortField::Title};
-    REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+    REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
-    for (size_t i = 0; i < expectedSort.size(); ++i)
+    for (std::size_t i = 0; i < expectedSort.size(); ++i)
     {
-      REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
-      REQUIRE(snapshot.effectiveSortBy[i].ascending == true);
+      REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
+      REQUIRE(preset->spec.sortBy[i].ascending == true);
     }
 
     std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::Artist};
-    REQUIRE(snapshot.redundantFields == expectedRedundant);
+    REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
   TEST_CASE("TrackListPresentation: Album mapping", "[app][runtime][presentation]")
   {
-    auto const snapshot = presentationForGroup(TrackGroupKey::Album);
-    REQUIRE(snapshot.groupBy == TrackGroupKey::Album);
+    auto const* const preset = presetForGroup(TrackGroupKey::Album);
+    REQUIRE(preset != nullptr);
+    REQUIRE(preset->spec.groupBy == TrackGroupKey::Album);
 
     auto const expectedSort = std::vector<TrackSortField>{TrackSortField::AlbumArtist,
                                                           TrackSortField::Album,
                                                           TrackSortField::DiscNumber,
                                                           TrackSortField::TrackNumber,
                                                           TrackSortField::Title};
-    REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+    REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
-    for (size_t i = 0; i < expectedSort.size(); ++i)
+    for (std::size_t i = 0; i < expectedSort.size(); ++i)
     {
-      REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
+      REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
     std::vector<TrackPresentationField> const expectedRedundant = {
       TrackPresentationField::Artist, TrackPresentationField::Album, TrackPresentationField::AlbumArtist};
-    REQUIRE(snapshot.redundantFields == expectedRedundant);
+    REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
   TEST_CASE("TrackListPresentation: AlbumArtist mapping", "[app][runtime][presentation]")
   {
-    auto const snapshot = presentationForGroup(TrackGroupKey::AlbumArtist);
-    REQUIRE(snapshot.groupBy == TrackGroupKey::AlbumArtist);
+    auto const* const preset = presetForGroup(TrackGroupKey::AlbumArtist);
+    REQUIRE(preset != nullptr);
+    REQUIRE(preset->spec.groupBy == TrackGroupKey::AlbumArtist);
 
     auto const expectedSort = std::vector<TrackSortField>{TrackSortField::AlbumArtist,
                                                           TrackSortField::Album,
                                                           TrackSortField::DiscNumber,
                                                           TrackSortField::TrackNumber,
                                                           TrackSortField::Title};
-    REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+    REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
-    for (size_t i = 0; i < expectedSort.size(); ++i)
+    for (std::size_t i = 0; i < expectedSort.size(); ++i)
     {
-      REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
+      REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
     std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::AlbumArtist};
-    REQUIRE(snapshot.redundantFields == expectedRedundant);
+    REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
   TEST_CASE("TrackListPresentation: Genre mapping", "[app][runtime][presentation]")
   {
-    auto const snapshot = presentationForGroup(TrackGroupKey::Genre);
-    REQUIRE(snapshot.groupBy == TrackGroupKey::Genre);
+    auto const* const preset = presetForGroup(TrackGroupKey::Genre);
+    REQUIRE(preset != nullptr);
+    REQUIRE(preset->spec.groupBy == TrackGroupKey::Genre);
 
     std::vector<TrackSortField> const expectedSort = {TrackSortField::Genre,
                                                       TrackSortField::Artist,
@@ -104,21 +131,22 @@ namespace ao::rt::test
                                                       TrackSortField::DiscNumber,
                                                       TrackSortField::TrackNumber,
                                                       TrackSortField::Title};
-    REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+    REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
-    for (size_t i = 0; i < expectedSort.size(); ++i)
+    for (std::size_t i = 0; i < expectedSort.size(); ++i)
     {
-      REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
+      REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
     std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::Genre};
-    REQUIRE(snapshot.redundantFields == expectedRedundant);
+    REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
   TEST_CASE("TrackListPresentation: Composer mapping", "[app][runtime][presentation]")
   {
-    auto const snapshot = presentationForGroup(TrackGroupKey::Composer);
-    REQUIRE(snapshot.groupBy == TrackGroupKey::Composer);
+    auto const* const preset = presetForGroup(TrackGroupKey::Composer);
+    REQUIRE(preset != nullptr);
+    REQUIRE(preset->spec.groupBy == TrackGroupKey::Composer);
 
     std::vector<TrackSortField> const expectedSort = {TrackSortField::Composer,
                                                       TrackSortField::Artist,
@@ -126,21 +154,22 @@ namespace ao::rt::test
                                                       TrackSortField::DiscNumber,
                                                       TrackSortField::TrackNumber,
                                                       TrackSortField::Title};
-    REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+    REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
-    for (size_t i = 0; i < expectedSort.size(); ++i)
+    for (std::size_t i = 0; i < expectedSort.size(); ++i)
     {
-      REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
+      REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
     std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::Composer};
-    REQUIRE(snapshot.redundantFields == expectedRedundant);
+    REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
   TEST_CASE("TrackListPresentation: Work mapping", "[app][runtime][presentation]")
   {
-    auto const snapshot = presentationForGroup(TrackGroupKey::Work);
-    REQUIRE(snapshot.groupBy == TrackGroupKey::Work);
+    auto const* const preset = presetForGroup(TrackGroupKey::Work);
+    REQUIRE(preset != nullptr);
+    REQUIRE(preset->spec.groupBy == TrackGroupKey::Work);
 
     std::vector<TrackSortField> const expectedSort = {TrackSortField::Work,
                                                       TrackSortField::Artist,
@@ -148,21 +177,22 @@ namespace ao::rt::test
                                                       TrackSortField::DiscNumber,
                                                       TrackSortField::TrackNumber,
                                                       TrackSortField::Title};
-    REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+    REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
-    for (size_t i = 0; i < expectedSort.size(); ++i)
+    for (std::size_t i = 0; i < expectedSort.size(); ++i)
     {
-      REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
+      REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
     std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::Work};
-    REQUIRE(snapshot.redundantFields == expectedRedundant);
+    REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
   TEST_CASE("TrackListPresentation: Year mapping", "[app][runtime][presentation]")
   {
-    auto const snapshot = presentationForGroup(TrackGroupKey::Year);
-    REQUIRE(snapshot.groupBy == TrackGroupKey::Year);
+    auto const* const preset = presetForGroup(TrackGroupKey::Year);
+    REQUIRE(preset != nullptr);
+    REQUIRE(preset->spec.groupBy == TrackGroupKey::Year);
 
     std::vector<TrackSortField> const expectedSort = {TrackSortField::Year,
                                                       TrackSortField::Artist,
@@ -170,14 +200,14 @@ namespace ao::rt::test
                                                       TrackSortField::DiscNumber,
                                                       TrackSortField::TrackNumber,
                                                       TrackSortField::Title};
-    REQUIRE(snapshot.effectiveSortBy.size() == expectedSort.size());
+    REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
-    for (size_t i = 0; i < expectedSort.size(); ++i)
+    for (std::size_t i = 0; i < expectedSort.size(); ++i)
     {
-      REQUIRE(snapshot.effectiveSortBy[i].field == expectedSort[i]);
+      REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
     std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::Year};
-    REQUIRE(snapshot.redundantFields == expectedRedundant);
+    REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 } // namespace ao::rt::test

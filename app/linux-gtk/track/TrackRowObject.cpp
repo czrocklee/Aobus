@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackRowObject.h"
-#include "track/TrackRowCache.h"
 #include "track/TrackPresentation.h"
+#include "track/TrackRowCache.h"
 #include <ao/Type.h>
 
 #include <glibmm/objectbase.h>
@@ -16,7 +16,6 @@
 #include <format>
 #include <optional>
 #include <string>
-
 
 namespace ao::gtk
 {

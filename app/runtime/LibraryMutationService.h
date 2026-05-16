@@ -5,7 +5,13 @@
 
 #include "CorePrimitives.h"
 #include "StateTypes.h"
+#include "async/Task.h"
+#include <ao/Error.h>
+#include <ao/Type.h>
+#include <ao/library/Exporter.h>
+#include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -24,6 +30,11 @@ namespace ao::rt
 {
   class IControlExecutor;
 
+  namespace async
+  {
+    class Runtime;
+  }
+
   class LibraryMutationService final
   {
   public:
@@ -34,7 +45,16 @@ namespace ao::rt
     Result<EditTrackTagsReply> editTags(std::vector<TrackId> const& trackIds,
                                         std::vector<std::string> const& tagsToAdd,
                                         std::vector<std::string> const& tagsToRemove);
+
+    // Legacy synchronous/thread-spawning API
     ImportFilesReply importFiles(std::vector<std::filesystem::path> const& paths);
+
+    // C++20 Async variants
+    async::Task<void> importFilesAsync(async::Runtime& runtime, std::vector<std::filesystem::path> paths);
+    async::Task<void> importLibraryAsync(async::Runtime& runtime, std::filesystem::path path);
+    async::Task<void> exportLibraryAsync(async::Runtime& runtime, std::filesystem::path path, library::ExportMode mode);
+    async::Task<std::vector<std::filesystem::path>> scanLibraryAsync(async::Runtime& runtime,
+                                                                     std::filesystem::path dir);
 
     ListId createList(model::ListDraft const& draft);
     void updateList(model::ListDraft const& draft);

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #Build script for Aobus
-#Usage :./ build.sh[debug | release | pgo1 | pgo2 | profile][--clean][--tidy][--clang]
+#Usage :./ build.sh[debug | release | pgo1 | pgo2 | profile][--clean][--clang]
 
 set -e
 set -o pipefail
@@ -8,8 +8,6 @@ set -o pipefail
 #Default to debug build
 BUILD_TYPE="debug"
 CLEAN="false"
-ENABLE_TIDY="false"
-ENABLE_FIX="false"
 USE_CLANG="false"
 ENABLE_ASAN="false"
 ENABLE_TSAN="false"
@@ -17,20 +15,20 @@ VERBOSE="false"
 TARGET=""
 
 show_usage() {
-    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--tidy] [--fix] [--clang] [--asan] [--tsan] [--verbose] [--target <target>]"
+    echo "Usage: $0 [debug|release|pgo1|pgo2|profile] [--clean] [--clang] [--asan] [--tsan] [--verbose] [--target <target>]"
     echo "  debug             - Debug build (default, no sanitizers)"
     echo "  release           - Release build (optimized, no sanitizers)"
     echo "  pgo1              - PGO step 1: instrumented build for profile generation"
     echo "  pgo2              - PGO step 2: optimized build using collected profile"
     echo "  profile           - Optimized build with debug symbols and frame pointers (for perf)"
     echo "  --clean           - Clean build directory before building"
-    echo "  --tidy            - Enable clang-tidy during the configure/build (implies --clang)"
-    echo "  --fix             - Enable clang-tidy and apply fixes automatically (implies --tidy)"
     echo "  --clang           - Build with clang/clang++ in a dedicated build directory"
     echo "  --asan            - Enable address/undefined sanitizers (Debug only, default: off)"
     echo "  --tsan            - Enable thread sanitizer (Debug only, default: off)"
     echo "  --verbose         - Show full build lines"
     echo "  --target <target> - Build a specific target instead of all, and skip tests"
+    echo ""
+    echo "  For clang-tidy, use ./script/run-clang-tidy.sh instead."
 }
 
 while [[ $# -gt 0 ]]; do
@@ -54,17 +52,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --target=*)
             TARGET="${1#*=}"
-            shift
-            ;;
-        --tidy)
-            ENABLE_TIDY="true"
-            USE_CLANG="true"
-            shift
-            ;;
-        --fix)
-            ENABLE_TIDY="true"
-            ENABLE_FIX="true"
-            USE_CLANG="true"
             shift
             ;;
         --asan)
@@ -111,16 +98,10 @@ esac
 
 #Build directory
 SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
-TIDY_SUFFIX=""
 COMPILER_SUFFIX=""
 ASAN_SUFFIX=""
 TSAN_SUFFIX=""
 COMPILER_NAME="gcc"
-
-if [[ "$ENABLE_TIDY" == "true" ]]; then
-    USE_CLANG="true"
-    TIDY_SUFFIX="-tidy"
-fi
 
 if [[ "$USE_CLANG" == "true" ]]; then
     COMPILER_SUFFIX="-clang"
@@ -133,11 +114,11 @@ fi
 
 case "$BUILD_TYPE" in
     debug|release|profile)
-        BUILD_DIR="/tmp/build/${BUILD_TYPE}${COMPILER_SUFFIX}${TIDY_SUFFIX}${ASAN_SUFFIX}"
+        BUILD_DIR="/tmp/build/${BUILD_TYPE}${COMPILER_SUFFIX}${ASAN_SUFFIX}"
         ;;
     pgo1|pgo2)
 #PGO generate / use steps must share a build tree so profile data stays available.
-        BUILD_DIR="/tmp/build/pgo${COMPILER_SUFFIX}${TIDY_SUFFIX}"
+        BUILD_DIR="/tmp/build/pgo${COMPILER_SUFFIX}"
         ;;
 esac
 
@@ -178,15 +159,6 @@ if [[ "$USE_CLANG" == "true" ]]; then
     TEST_COMMAND="CC=clang CXX=clang++ $TEST_COMMAND"
 fi
 
-if [[ "$ENABLE_TIDY" == "true" ]]; then
-    echo "clang-tidy enabled for this build (implies clang toolchain)."
-    CONFIGURE_COMMAND+=" -DAOBUS_ENABLE_CLANG_TIDY=ON"
-    if [[ "$ENABLE_FIX" == "true" ]]; then
-        echo "clang-tidy auto-fix enabled."
-        CONFIGURE_COMMAND+=" -DAOBUS_CLANG_TIDY_FIX=ON"
-    fi
-fi
-
 if [[ "$ENABLE_ASAN" == "true" ]]; then
     echo "ASan/UBSan enabled for this build."
     CONFIGURE_COMMAND+=" -DAOBUS_ENABLE_ASAN=ON"
@@ -214,10 +186,6 @@ if [[ "$BUILD_TYPE" == "pgo1" ]]; then
     if [[ "$USE_CLANG" == "true" ]]; then
         NEXT_COMMAND+=" --clang"
     fi
-    if [[ "$ENABLE_TIDY" == "true" ]]; then
-        NEXT_COMMAND+=" --tidy"
-    fi
-
     echo ""
     echo "============================================"
     echo "PGO Step 1 complete."
@@ -245,7 +213,6 @@ echo "  Preset: $PRESET"
 echo "  Build dir: $BUILD_DIR"
 echo "  Log file: $BUILD_DIR/build.log"
 echo "  compiler: $COMPILER_NAME"
-echo "  clang-tidy: $ENABLE_TIDY"
 echo "  asan: $ENABLE_ASAN"
 echo "  tsan: $ENABLE_TSAN"
 echo "  verbose: $VERBOSE"

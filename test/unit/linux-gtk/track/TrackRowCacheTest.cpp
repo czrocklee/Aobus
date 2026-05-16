@@ -1,26 +1,27 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators_all.hpp>
-#include <catch2/matchers/catch_matchers_all.hpp>
-
 // Standalone test for row data loading without GTKMM dependency.
 // Tests ao::model::TrackRowCache functionality in isolation.
 
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
 #include <ao/lmdb/Transaction.h>
 #include <test/unit/lmdb/TestUtils.h>
 
+#include <catch2/catch_test_macros.hpp>
+
+#include <chrono>
 #include <cstdint>
+#include <exception>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 
 namespace ao::gtk::test
 {
@@ -28,7 +29,7 @@ namespace ao::gtk::test
   {
     using namespace ao::lmdb::test;
 
-    struct RowData
+    struct RowData final
     {
       TrackId id;
       std::string artist;
@@ -75,7 +76,7 @@ namespace ao::gtk::test
         return it->second;
       }
 
-      std::string result;
+      auto result = std::string{};
 
       try
       {
@@ -237,11 +238,11 @@ namespace ao::gtk::test
 
   TEST_CASE("TrackRowCache loads track data correctly", "[app][model]")
   {
-    TestMusicLibrary testLibrary;
+    auto testLibrary = TestMusicLibrary{};
 
     SECTION("Basic data loading")
     {
-      TrackSpec spec1;
+      auto spec1 = TrackSpec{};
       spec1.artist = "Artist 1";
       spec1.album = "Album 1";
       spec1.title = "Track 1";
@@ -250,7 +251,7 @@ namespace ao::gtk::test
       spec1.trackNumber = 1;
       spec1.durationMs = 180000;
 
-      TrackSpec spec2;
+      auto spec2 = TrackSpec{};
       spec2.title = "Track 2";
       spec2.durationMs = 240000;
 
@@ -259,20 +260,20 @@ namespace ao::gtk::test
 
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const row1 = provider.getRow(id1);
-      REQUIRE(row1.has_value());
-      CHECK(row1->artist == "Artist 1");
-      CHECK(row1->album == "Album 1");
-      CHECK(row1->title == "Track 1");
-      CHECK(row1->genre == "Genre 1");
-      CHECK(row1->year == 2021);
-      CHECK(row1->trackNumber == 1);
-      CHECK(row1->duration.count() == 180000);
+      auto const optRow1 = provider.getRow(id1);
+      REQUIRE(optRow1.has_value());
+      CHECK(optRow1->artist == "Artist 1");
+      CHECK(optRow1->album == "Album 1");
+      CHECK(optRow1->title == "Track 1");
+      CHECK(optRow1->genre == "Genre 1");
+      CHECK(optRow1->year == 2021);
+      CHECK(optRow1->trackNumber == 1);
+      CHECK(optRow1->duration.count() == 180000);
 
-      auto const row2 = provider.getRow(id2);
-      REQUIRE(row2.has_value());
-      CHECK(row2->title == "Track 2");
-      CHECK(row2->duration.count() == 240000);
+      auto const optRow2 = provider.getRow(id2);
+      REQUIRE(optRow2.has_value());
+      CHECK(optRow2->title == "Track 2");
+      CHECK(optRow2->duration.count() == 240000);
     }
 
     SECTION("Caching works")
@@ -280,10 +281,10 @@ namespace ao::gtk::test
       auto const id1 = testLibrary.addTrack({});
       auto provider = TrackRowCache{testLibrary.library()};
 
-      auto const row1_a = provider.getRow(id1);
-      auto const row1_b = provider.getRow(id1);
+      auto const optRow1A = provider.getRow(id1);
+      auto const optRow1B = provider.getRow(id1);
 
-      CHECK(row1_a->title == row1_b->title);
+      CHECK(optRow1A->title == optRow1B->title);
     }
 
     SECTION("Invalidation")
@@ -301,8 +302,8 @@ namespace ao::gtk::test
       auto provider = TrackRowCache{testLibrary.library()};
       auto const dummyId = TrackId{9999};
 
-      auto const row = provider.getRow(dummyId);
-      CHECK_FALSE(row.has_value());
+      auto const optRow = provider.getRow(dummyId);
+      CHECK_FALSE(optRow.has_value());
     }
   }
 } // namespace ao::gtk::test

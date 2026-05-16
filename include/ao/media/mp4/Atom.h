@@ -9,11 +9,13 @@
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::media::mp4

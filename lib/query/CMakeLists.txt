@@ -27,4 +27,3 @@ add_library(ao_query STATIC
 )
 target_include_directories(ao_query PUBLIC ${AO_PUBLIC_INCLUDE_DIR} ${AO_GENERATED_INCLUDE_DIR})
 target_link_libraries(ao_query PUBLIC ao_library)
-aobus_apply_clang_tidy(ao_query STRICT)

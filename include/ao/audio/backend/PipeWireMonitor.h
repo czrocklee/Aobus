@@ -3,13 +3,14 @@
 #pragma once
 
 #include <ao/audio/Backend.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/IBackendProvider.h>
+#include <ao/audio/Subscription.h>
+#include <ao/audio/flow/Graph.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
-#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::audio::backend

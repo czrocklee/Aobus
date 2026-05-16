@@ -11,6 +11,7 @@
 #include <glibmm/main.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -18,6 +19,11 @@
 
 namespace ao::gtk
 {
+  namespace
+  {
+    constexpr std::uint32_t kPlaylistWriteDelayMs = 3000;
+  }
+
   PlaylistExporter::PlaylistExporter(rt::TrackSource& list,
                                      TrackRowCache const& provider,
                                      std::filesystem::path root,
@@ -73,7 +79,7 @@ namespace ao::gtk
         writeFile();
         return false;
       },
-      3000)); // NOLINT(readability-magic-numbers)
+      kPlaylistWriteDelayMs));
   }
 
   void PlaylistExporter::writeFile()

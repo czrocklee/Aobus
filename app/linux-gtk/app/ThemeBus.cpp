@@ -2,21 +2,22 @@
 #include <ao/utility/Log.h>
 
 #include <gdkmm/display.h>
+#include <gio/gsettingsschema.h>
 #include <giomm/settings.h>
+#include <glib/gmacros.h>
 #include <glibmm/error.h>
 #include <glibmm/keyfile.h>
 #include <glibmm/main.h>
 #include <glibmm/miscutils.h>
 #include <glibmm/refptr.h>
+#include <gtk/gtk.h> // NOLINT(misc-header-include-cycle)
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/settings.h>
 #include <gtkmm/stylecontext.h>
 #include <sigc++/connection.h>
 #include <sigc++/signal.h>
-#include <gio/gsettingsschema.h>
-#include <glib/gmacros.h>
-#include <gtk/gtk.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 
@@ -30,6 +31,8 @@ namespace ao::gtk
 
   namespace
   {
+    constexpr std::uint32_t kThemeRefreshDebounceMs = 150;
+
     bool schemaExists(char const* schemaId)
     {
       auto* const source = ::g_settings_schema_source_get_default();
@@ -140,6 +143,6 @@ namespace ao::gtk
         signalThemeRefresh().emit();
         return false;
       },
-      150); // NOLINT(readability-magic-numbers)
+      kThemeRefreshDebounceMs);
   }
 }

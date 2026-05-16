@@ -7,7 +7,10 @@
 #include <runtime/ProjectionTypes.h>
 
 #include <giomm/listmodel.h>
+#include <glib-object.h>
+#include <glib.h>
 #include <glibmm/object.h>
+#include <glibmm/refptr.h>
 
 namespace ao::gtk
 {

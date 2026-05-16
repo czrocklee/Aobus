@@ -16,6 +16,11 @@ namespace ao::audio
 
 namespace ao::rt
 {
+  namespace async
+  {
+    class Runtime;
+  }
+
   class ConfigStore;
   class PlaybackService;
   class WorkspaceService;
@@ -44,6 +49,7 @@ namespace ao::rt
     WorkspaceService& workspace() noexcept;
     SessionPersistenceService& persistence() noexcept;
     ViewService& views() noexcept;
+    async::Runtime& async() noexcept;
 
     void reloadAllTracks();
 

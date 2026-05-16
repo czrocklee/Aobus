@@ -9,6 +9,9 @@
 #include <ao/utility/Log.h>
 #include <runtime/AppRuntime.h>
 #include <runtime/ConfigStore.h>
+#include <runtime/async/LifetimeScope.h>
+#include <runtime/async/Runtime.h>
+#include <runtime/async/Task.h>
 
 #include <gdkmm/display.h>
 #include <gtk/gtkstyleprovider.h>
@@ -23,9 +26,7 @@
 namespace ao::gtk
 {
   ShellLayoutController::ShellLayoutController(rt::AppRuntime& runtime, Gtk::Window& parentWindow)
-    : _registry{}
-    , _context{.registry = _registry, .runtime = runtime, .parentWindow = parentWindow}
-    , _host{_registry}
+    : _registry{}, _context{.registry = _registry, .runtime = runtime, .parentWindow = parentWindow}, _host{_registry}
   {
     layout::LayoutRuntime::registerStandardComponents(_registry);
   }
@@ -38,15 +39,31 @@ namespace ao::gtk
 
   void ShellLayoutController::loadLayout(rt::ConfigStore& configStore)
   {
-    auto doc = layout::createDefaultLayout();
+    auto& runtime = _context.runtime.async();
+    rt::async::spawnWithLifetime(runtime,
+                                 _tasks,
+                                 [](ShellLayoutController* self, rt::ConfigStore* store) -> rt::async::Task<void>
+                                 {
+                                   APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
 
-    if (auto const res = configStore.load("linuxGtkLayout", doc); !res && res.error().code != Error::Code::NotFound)
-    {
-      APP_LOG_DEBUG("Failed to load layout from config: {}", res.error().message);
-    }
+                                   auto* const asyncRuntime = &self->_context.runtime.async();
+                                   co_await rt::async::resumeOnWorker(*asyncRuntime);
+                                   APP_LOG_DEBUG("ShellLayoutController: loading config on background worker thread");
 
-    _activeLayout = doc;
-    _host.setLayout(_context, _activeLayout);
+                                   auto doc = layout::createDefaultLayout();
+
+                                   if (auto const res = store->load("linuxGtkLayout", doc);
+                                       !res && res.error().code != Error::Code::NotFound)
+                                   {
+                                     APP_LOG_DEBUG("Failed to load layout from config: {}", res.error().message);
+                                   }
+
+                                   co_await rt::async::resumeOnUi(*asyncRuntime);
+                                   APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
+
+                                   self->_activeLayout = doc;
+                                   self->_host.setLayout(self->_context, self->_activeLayout);
+                                 }(this, &configStore));
   }
 
   void ShellLayoutController::saveLayout(rt::ConfigStore& configStore) const

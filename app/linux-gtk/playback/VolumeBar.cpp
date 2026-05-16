@@ -8,8 +8,8 @@
 #include <glibmm/refptr.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerscroll.h>
-#include <gtkmm/gesturedrag.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/gesturedrag.h>
 #include <gtkmm/snapshot.h>
 
 #include <algorithm>

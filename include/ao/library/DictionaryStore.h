@@ -5,8 +5,8 @@
 
 #include <ao/Type.h>
 #include <ao/lmdb/Database.h>
+#include <ao/lmdb/Transaction.h>
 
-#include <cstdint>
 #include <string>
 #include <string_view>
 #include <unordered_map>

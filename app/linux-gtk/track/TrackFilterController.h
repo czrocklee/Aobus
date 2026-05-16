@@ -5,9 +5,12 @@
 
 #include "track/TrackListAdapter.h"
 
-#include <runtime/StateTypes.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/ProjectionTypes.h>
 
 #include <gtkmm/entry.h>
+#include <sigc++/scoped_connection.h>
+#include <sigc++/signal.h>
 
 #include <functional>
 #include <string>
@@ -29,7 +32,7 @@ namespace ao::gtk
     TrackFilterController(rt::ViewService& viewService, rt::ViewId viewId, Gtk::Entry& filterEntry);
 
     void setFilterExpression(std::string_view expression);
-    void setStatusMessageCallback(const StatusMessageFn& callback);
+    void setStatusMessageCallback(StatusMessageFn const& callback);
     void setCreateSmartListSignal(CreateSmartListSignal* signal);
 
   private:

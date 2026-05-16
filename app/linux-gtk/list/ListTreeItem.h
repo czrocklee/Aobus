@@ -4,10 +4,12 @@
 #pragma once
 
 #include "list/ListRowObject.h"
+#include <ao/Type.h>
 
-#include <ao/library/MusicLibrary.h>
-
-#include <gtkmm.h>
+#include <giomm/liststore.h>
+#include <glib.h>
+#include <glibmm/object.h>
+#include <glibmm/refptr.h>
 
 namespace ao::gtk
 {

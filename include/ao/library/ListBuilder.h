@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/library/ListLayout.h>
 #include <ao/library/ListView.h>
 
 #include <cstddef>

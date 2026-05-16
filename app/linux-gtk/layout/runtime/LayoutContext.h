@@ -5,6 +5,7 @@
 
 #include "app/GtkUiServices.h"
 #include <giomm/menumodel.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/window.h>
 
 #include <functional>

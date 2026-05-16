@@ -3,8 +3,10 @@
 
 #pragma once
 
-#include <array>
 #include <boost/endian/buffers.hpp>
+
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 

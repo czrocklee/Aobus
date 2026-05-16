@@ -2,6 +2,11 @@
 add_library(app_runtime STATIC
     runtime/AppRuntime.cpp
     runtime/AppRuntime.h
+    runtime/async/Runtime.cpp
+    runtime/async/Runtime.h
+    runtime/async/Task.h
+    runtime/async/LifetimeScope.cpp
+    runtime/async/LifetimeScope.h
     runtime/CoreRuntime.cpp
     runtime/CoreRuntime.h
     runtime/AllTracksSource.cpp
@@ -43,8 +48,7 @@ add_library(app_runtime STATIC
     runtime/ViewService.h
 )
 target_include_directories(app_runtime PUBLIC "${CMAKE_SOURCE_DIR}/app")
-target_link_libraries(app_runtime PRIVATE ao yaml-cpp::yaml-cpp)
-aobus_apply_clang_tidy(app_runtime STRICT)
+target_link_libraries(app_runtime PRIVATE ao yaml-cpp::yaml-cpp Boost::headers)
 
 # Frontends
 add_subdirectory(linux-gtk)

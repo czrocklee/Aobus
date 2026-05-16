@@ -7,10 +7,15 @@
 #include "playback/AobusSoulBinding.h"
 #include "playback/AobusSoulWindow.h"
 #include "runtime/PlaybackService.h"
+
 #include <giomm/liststore.h>
+#include <glibmm/object.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/button.h>
 #include <gtkmm/listbox.h>
 #include <gtkmm/popover.h>
+#include <gtkmm/widget.h>
+
 #include <memory>
 
 namespace ao::rt

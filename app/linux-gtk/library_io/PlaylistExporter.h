@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include <ao/library/MusicLibrary.h>
-
 #include "track/TrackRowCache.h"
+#include <ao/Type.h>
 #include <runtime/TrackSource.h>
 
-#include <sigc++/sigc++.h>
+#include <sigc++/connection.h>
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 

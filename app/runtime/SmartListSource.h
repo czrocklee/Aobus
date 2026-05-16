@@ -5,12 +5,15 @@
 
 #include "TrackSource.h"
 
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/PlanEvaluator.h>
 
+#include <cstddef>
 #include <flat_set>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace ao::rt
@@ -39,7 +42,10 @@ namespace ao::rt
 
     // TrackSource interface
     std::size_t size() const override { return _members.size(); }
-    TrackId trackIdAt(std::size_t index) const override { return *(_members.begin() + static_cast<std::ptrdiff_t>(index)); }
+    TrackId trackIdAt(std::size_t index) const override
+    {
+      return *(_members.begin() + static_cast<std::ptrdiff_t>(index));
+    }
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
     using TrackSource::notifyUpdated;

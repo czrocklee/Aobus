@@ -36,7 +36,7 @@ namespace ao::lmdb
       : _handle{std::move(handle)}
     {
     }
-    
+
     static auto create(MDB_env* env, MDB_txn* parent, unsigned int flags);
 
     MDB_txn* handle() const noexcept { return _handle.get(); }

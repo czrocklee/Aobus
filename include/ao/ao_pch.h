@@ -7,16 +7,16 @@
 #pragma once
 
 // Stable headers with high include counts
-#include <ao/Type.h>
-#include <ao/utility/ByteView.h>
+#include <ao/Type.h>             // NOLINT(misc-include-cleaner)
+#include <ao/utility/ByteView.h> // NOLINT(misc-include-cleaner)
 
 // Common std headers used everywhere
-#include <array>
-#include <cstddef>
-#include <cstdint>
-#include <functional>
-#include <memory>
-#include <optional>
-#include <span>
-#include <string_view>
-#include <vector>
+#include <array>       // NOLINT(misc-include-cleaner)
+#include <cstddef>     // NOLINT(misc-include-cleaner)
+#include <cstdint>     // NOLINT(misc-include-cleaner)
+#include <functional>  // NOLINT(misc-include-cleaner)
+#include <memory>      // NOLINT(misc-include-cleaner)
+#include <optional>    // NOLINT(misc-include-cleaner)
+#include <span>        // NOLINT(misc-include-cleaner)
+#include <string_view> // NOLINT(misc-include-cleaner)
+#include <vector>      // NOLINT(misc-include-cleaner)

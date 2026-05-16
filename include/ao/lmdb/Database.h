@@ -4,6 +4,9 @@
 #pragma once
 
 #include <ao/lmdb/Transaction.h>
+
+#include <lmdb.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
@@ -11,8 +14,8 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <utility>
-#include <vector>
 
 namespace ao::lmdb
 {
@@ -85,10 +88,10 @@ namespace ao::lmdb
   {
   public:
     // Standard iterator traits
-    using difference_type = std::ptrdiff_t;     // NOLINT
-    using value_type = Value const;             // NOLINT
-    using pointer = Value const*;               // NOLINT
-    using reference = Value const&;             // NOLINT
+    using difference_type = std::ptrdiff_t;              // NOLINT
+    using value_type = Value const;                      // NOLINT
+    using pointer = Value const*;                        // NOLINT
+    using reference = Value const&;                      // NOLINT
     using iterator_category = std::forward_iterator_tag; // NOLINT
 
     Iterator();

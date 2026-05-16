@@ -5,13 +5,17 @@
 
 #include "track/TrackPresentation.h"
 
-#include <gtkmm.h>
+#include <glibmm/object.h>
+#include <glibmm/property.h>
+#include <glibmm/propertyproxy.h>
+#include <glibmm/refptr.h>
+#include <glibmm/ustring.h>
+
+#include <ao/Type.h>
 
 #include <chrono>
 #include <cstdint>
-#include <memory>
 #include <optional>
-#include <string>
 
 namespace ao::gtk
 {

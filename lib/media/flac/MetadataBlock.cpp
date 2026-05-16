@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/media/flac/MetadataBlock.h>
 #include <ao/Exception.h>
+#include <ao/media/flac/MetadataBlock.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/utility/ByteView.h>
 

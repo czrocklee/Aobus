@@ -6,6 +6,7 @@
 #include "track/TrackPresentation.h"
 
 #include <giomm/listmodel.h>
+#include <glib.h>
 #include <glibmm/binding.h>
 #include <glibmm/main.h>
 #include <glibmm/ustring.h>
@@ -13,7 +14,6 @@
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/cssprovider.h>
 #include <sigc++/functors/mem_fun.h>
-#include <glib.h>
 
 #include <algorithm>
 #include <cstddef>

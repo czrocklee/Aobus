@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
+
+#include <gtkmm/widget.h>
 
 namespace ao::gtk::layout
 {

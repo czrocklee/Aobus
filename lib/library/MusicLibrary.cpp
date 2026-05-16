@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/library/MusicLibrary.h>
+#include <ao/Exception.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/Meta.h>
 #include <ao/library/MetaStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/Exception.h>
 
 #include <lmdb.h>
 

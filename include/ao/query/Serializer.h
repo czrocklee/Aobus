@@ -5,6 +5,8 @@
 
 #include <ao/query/Expression.h>
 
+#include <string>
+
 namespace ao::query
 {
   std::string serialize(Expression const& expr);

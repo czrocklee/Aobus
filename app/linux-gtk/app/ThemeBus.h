@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <sigc++/sigc++.h>
+#include <sigc++/signal.h>
 
 namespace ao::gtk
 {

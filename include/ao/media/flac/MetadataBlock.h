@@ -3,12 +3,18 @@
 
 #pragma once
 
-#include "MetadataBlockLayout.h"
 #include <ao/Exception.h>
+#include <ao/media/flac/MetadataBlockLayout.h>
+
 #include <boost/endian/conversion.hpp>
+#include <boost/endian/detail/order.hpp>
+#include <gsl-lite/gsl-lite.hpp>
+
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <functional>
-#include <gsl-lite/gsl-lite.hpp>
+#include <iterator>
 #include <span>
 #include <string_view>
 #include <vector>

@@ -12,10 +12,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <string>
 #include <lmdb.h>
 #include <optional>
 #include <span>
+#include <string>
 #include <tuple>
 #include <utility>
 

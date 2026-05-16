@@ -17,8 +17,8 @@
 #include <gtkmm/checkbutton.h>
 #include <gtkmm/comboboxtext.h>
 #include <gtkmm/dialog.h>
-#include <gtkmm/enums.h>
 #include <gtkmm/entry.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/object.h>

@@ -32,7 +32,7 @@
 ## 架构
 
 ```
-StyleManager (单例, app/StyleManager.h/cpp)
+StyleManager (单例, app/linux-gtk/app/StyleManager.h/cpp)
 │
 ├── 系统主题同步
 │   ├── syncGtkSettings()        从 ~/.config/gtk-4.0/settings.ini 读取并写入 GSettings/Gtk::Settings
@@ -110,7 +110,7 @@ playback-row:
   children: [...]
 ```
 
-C++ 端 `BoxComponent` 从 token 解析 spacing 值，不再用 `kSpacingMedium = 6` 这种硬编码常量。
+C++ 端 `BoxComponent` 从 C++ token 表（`LayoutConstants.h` 或 `LayoutToken.h`）解析 spacing 值，不再用 `kSpacingMedium = 6` 这种硬编码常量。StyleManager 用同一组 C++ token 生成 `--ao-gap-*` CSS 变量，CSS 变量是 C++ token 的投影，不是反向数据源。用户在 `user.css` 里覆盖 `--ao-gap-*` 只影响 CSS 引用这些变量的规则，不会反向影响 `Gtk::Box::set_spacing()`。Box spacing 的用户入口仍然是 layout 配置（`spacing: md` / `spacing: 0`），在 layout 重建时生效。
 
 两个按钮需要 0 间距紧贴时，嵌套子 Box：
 
@@ -128,8 +128,7 @@ transport-group:
 归 CSS 管理。每个组件的默认 margin/padding 定义在 StyleManager 里：
 
 ```css
-/* 全局默认: 组件无外边距 */
-* { margin: 0; padding: 0; }
+/* 只对 Aobus 自己的 class 写样式，不搞全局 reset（会破坏 GTK/Adwaita 内部控件默认 padding） */
 
 /* 具体组件按需定义 */
 .ao-playback-button {
@@ -160,7 +159,7 @@ transport-group:
 
 - **Phase 2**: 各组件的 C++ `set_margin_*()`、`set_padding()` 调用移除，对应样式迁入 StyleManager CSS
 - **Phase 2**: `applyCommonProps()` 中的 `margin` prop 处理标记 deprecated（不删代码，只是 layout 文档不再使用）
-- **Phase 4**: `LayoutConstants.h` 中的 `kMargin*` 系列标记 deprecated，CSS token 作为间距的唯一数据源
+- **Phase 4**: `LayoutConstants.h` 中的 `kMargin*` 系列标记 deprecated；margin/padding 的数据源统一到 C++ token 表，StyleManager 用同一组 token 生成 CSS 变量
 - **不迁移**: `spacing` prop 保留在 layout system，值改为从 token 查询
 
 ## 设计 token（从现有代码提取的实际值）
@@ -174,7 +173,7 @@ transport-group:
   --ao-gap-lg: 8px;      /* 宽松 */
   --ao-gap-xl: 12px;     /* 极宽 */
 
-  /* margin/padding 间距 — 与 LayoutConstants.h 一致（kSpacingXSmall=2 将在 Phase 1 同步补充） */
+  /* margin/padding 间距 — 值来自 C++ token 表，StyleManager 生成 CSS 变量作为投影 */
   --ao-spacing-xs: 2px;
   --ao-spacing-sm: 4px;
   --ao-spacing-md: 6px;
@@ -229,10 +228,10 @@ transport-group:
 | `device-row` | `ao-device-row` | OutputSelector |
 | `menu-header` | `ao-menu-header` | OutputSelector |
 | `menu-description` | `ao-menu-description` | OutputSelector |
-| `selected-row` | `ao-selected-row` | OutputSelector |
+| `selected-row` | `ao-output-selected-row` | OutputSelector |
 | `output-button-logo` | `ao-output-logo` | OutputSelector |
 | `rich-list` | `ao-rich-list` | OutputSelector |
-| `sink-status-*` | `ao-sink-*` | PlaybackDetailsWidget |
+| `sink-status-*` | `ao-quality-*` | PlaybackDetailsWidget |
 | `soul-window` | `ao-soul-window` | AobusSoulWindow |
 | `playing-row` | `ao-playing-row` | TrackColumnFactoryBuilder |
 | `playing-title` | `ao-playing-title` | TrackColumnFactoryBuilder |
@@ -243,7 +242,6 @@ transport-group:
 | `track-tags-cell` | `ao-track-tags-cell` | TrackColumnFactoryBuilder |
 | `status-bar` | `ao-status-bar` | StatusComponents |
 | `status-message` | `ao-status-message` | StatusNotificationLabel |
-| `error` | `ao-error` | TrackFilterController, SmartListDialog |
 | `playback-button` | `ao-playback-button` | TransportButton |
 | `playback-button-small` | `ao-playback-button-small` | TransportButton |
 | `playback-button-large` | `ao-playback-button-large` | TransportButton |
@@ -275,6 +273,7 @@ transport-group:
 | class | 说明 |
 |-------|------|
 | `dim-label` | GTK/Adwaita 内置样式 |
+| `error` | GTK/Adwaita 语义状态 class（Entry 验证错误），保留不重命名 |
 | `flat` | GTK 内置 |
 | `boxed-list` | Adwaita 内置 |
 | `suggested-action` | GTK 内置 |
@@ -312,9 +311,25 @@ _scale.add_css_class("ao-seekbar");
 
 ## 实现步骤
 
+### Phase 0: CSS 能力 smoke test
+
+在写任何 StyleManager 代码之前，先用一个临时 `Gtk::CssProvider::load_from_data()` 验证 GTK4 CSS 子集是否支持我们依赖的语法：
+
+```cpp
+// 最小验证代码
+auto provider = Gtk::CssProvider::create();
+provider->load_from_data(R"css(
+  :root { --ao-test-px: 8px; --ao-test-rem: 0.85rem; --ao-test-ms: 200ms; }
+  .ao-smoke { padding: var(--ao-test-px); font-size: var(--ao-test-rem); }
+  .ao-smoke trough { min-height: var(--ao-test-px); background: alpha(currentColor, 0.12); }
+)css");
+```
+
+验证点：`:root` 自定义属性、`var()` 引用、`rem` 单位、`ms` 单位、`alpha(currentColor, ...)`。如果任一项不支持，调整设计 token 和 CSS 策略。
+
 ### Phase 1: StyleManager 骨架 + 设计 token
 
-**新文件**: `app/StyleManager.h`, `app/StyleManager.cpp`
+**新文件**: `app/linux-gtk/app/StyleManager.h`, `app/linux-gtk/app/StyleManager.cpp`
 
 ```cpp
 // StyleManager API
@@ -326,6 +341,7 @@ public:
 
     // 初始化：注册 provider + 启动文件监听 + DBus 订阅 + SIGUSR1
     // 前提：Gdk::Display::get_default() 必须已可用
+    // 幂等：可重复调用，内部只注册一次（provider/monitor/subscription/signal handler 均持有在成员中）
     void initialize();
 
     // 完整重载：syncGtkSettings + reloadAppCss + reloadUserCss + signalRefreshed
@@ -369,8 +385,8 @@ private:
 - 两个独立的 CSS 文件加载：
   - `~/.config/gtk-4.0/gtk.css` → `_gtkUserCssProvider`（USER priority）— 系统级用户 CSS
   - `~/.config/aobus/user.css` → `_userProvider`（USER priority）— Aobus 专用覆盖
-  两者都是 USER priority，CSS 级联中后加载的优先（`loadUserCss()` 在 `reloadGtkUserCss()` 之后调用）。
-- Phase 1 同步补充 `LayoutConstants.h` 的 `kSpacingXSmall = 2`，与 `--ao-spacing-xs` 对齐。
+  两者都是 USER priority（800），同 priority 下后加载者胜。因此 Aobus 用户 CSS 必须在系统 gtk.css 之后加载，确保用户覆盖优先生效。`loadUserCss()` 在 `reloadGtkUserCss()` 之后调用——每次 `reload()` 也必须严格维持此顺序，需要测试覆盖。
+- Phase 1 在 `LayoutConstants.h` 中补充 `kSpacingXSmall = 2`，作为 spacing token 的 C++ 源。StyleManager 用同一组常量生成 `--ao-spacing-xs` CSS 变量。
 
 ### Phase 2: 迁移现有 CSS 到 StyleManager
 
@@ -382,8 +398,8 @@ private:
 2. `StatusComponents` — `.status-bar` → `ao-status-bar`
 3. `AobusSoulWindow` — `.soul-window` → `ao-soul-window`
 4. `NowPlayingStatusLabel` — `.now-playing-label` + `.clickable-label` → `ao-nowplaying` + `ao-clickable`
-5. `OutputSelector` — `.device-row` + `.menu-header` + `.selected-row` + `.menu-description` → `ao-*`
-6. `PlaybackDetailsWidget` — `.sink-status-*` → `ao-sink-*`
+5. `OutputSelector` — `.device-row` + `.menu-header` + `.selected-row` + `.menu-description` → `ao-*`（`selected-row` → `ao-output-selected-row`）
+6. `PlaybackDetailsWidget` — `.sink-status-*` → `ao-quality-*`（这些颜色对应音频质量语义）
 7. `TrackColumnFactoryBuilder` — `.playing-row` + `.inline-editor-*` + `.track-tags-cell` → `ao-*`（最大块）
 8. `ShellLayoutController` — `.tag-chip` + `.inspector-handle` + `.tags-entry` + `.tag-remove-button` + `.tags-section` → `ao-*`（第二大块）
 
@@ -394,8 +410,8 @@ private:
 11. `TransportButton` — 3 个 class 重命名（`playback-button*` 系列）
 12. `TagEditor` — `tags-entry`, `tag-chip`, `dim-label`（`dim-label` 保持）
 13. `NowPlayingFieldLabel` — `playback-title`, `playback-artist`
-14. `TrackFilterController` — `error` → `ao-error`
-15. `SmartListDialog` — `error` → `ao-error`
+
+> **已排除**: `TrackFilterController` 和 `SmartListDialog` 的 `error` class 保留不改——`error` 是 GTK/Adwaita 语义状态 class（Entry 验证错误），属于系统信任范围，不重命名为 `ao-*`。
 
 **每个 CSS 迁移的模式**：
 - 删除 `ensure*Css()` 函数体
@@ -410,7 +426,7 @@ private:
 - `main.cpp` FileMonitor（`~/.config/gtk-4.0/`）→ 移入 `StyleManager::setupFileMonitors()`
 - `main.cpp` ThemeBus include → 改为 StyleManager include
 - `TrackViewPage` → `StyleManager::instance().signalRefreshed()` 替代 `signalThemeRefresh()`
-- `TrackSelectionController` → 删除 stale `#include "app/ThemeBus.h"`（该文件不调用任何 ThemeBus API）
+- `TrackSelectionController` → ~~删除 stale `#include "app/ThemeBus.h"`~~ ✅ 已完成（当前代码已无此 include）
 - `ThemeBus` 变为空壳转发，标记 deprecated
 
 ### Phase 4: 验证 + 收尾
@@ -425,33 +441,31 @@ private:
 
 | 文件 | 变更 |
 |------|------|
-| `app/StyleManager.h` | **NEW** |
-| `app/StyleManager.cpp` | **NEW** |
-| `app/CMakeLists.txt` | 加 `app/StyleManager.cpp` |
-| `app/ThemeBus.h` | 标记 deprecated |
-| `app/ThemeBus.cpp` | 转发到 StyleManager |
-| `main.cpp` | SIGUSR1/DBus/Monitor → StyleManager |
-| `layout/LayoutConstants.h` | 补充 `kSpacingXSmall = 2`；`kMargin*` 系列标记 deprecated（CSS token 作为唯一数据源） |
-| `layout/components/Containers.cpp` | `applyCommonProps()` 的 `margin` prop 处理标记 deprecated；BoxComponent `spacing` 改为从 token 查询 |
-| `layout/editor/LayoutEditorDialog.cpp` | margin prop 标记 deprecated（保留代码但不推荐使用） |
-| `track/TrackViewPage.cpp` | signalRefreshed 换源 |
-| `track/TrackSelectionController.cpp` | 删除 stale `#include "app/ThemeBus.h"` |
-| `app/ShellLayoutController.cpp` | 删 `setupCss()`，更新类名 |
-| `track/TrackColumnFactoryBuilder.cpp` | 删 `ensureTrackPageCss()`，更新类名 |
-| `track/StatusNotificationLabel.cpp` | 删 `ensureStatusNotificationCss()`，更新类名 |
-| `playback/NowPlayingStatusLabel.cpp` | 删 `ensureNowPlayingCss()`，更新类名 |
-| `playback/OutputSelector.cpp` | 删 `ensureOutputSelectorCss()`，更新类名 |
-| `playback/PlaybackDetailsWidget.cpp` | 删 `ensurePlaybackDetailsCss()`，更新类名 |
-| `playback/AobusSoulWindow.cpp` | 删 `ensureCss()`，更新类名 |
-| `playback/TransportButton.cpp` | 更新类名 |
-| `playback/NowPlayingFieldLabel.cpp` | 更新类名 |
-| `layout/components/StatusComponents.cpp` | 删 `ensureStatusBarContainerCss()`，更新类名 |
-| `playback/SeekControl.cpp` | 加 `add_css_class("ao-seekbar")` |
-| `inspector/TrackInspectorPanel.cpp` | 更新类名 |
-| `track/TrackCustomViewDialog.cpp` | 更新类名 |
-| `tag/TagEditor.cpp` | 更新类名 |
-| `track/TrackFilterController.cpp` | 更新类名 |
-| `list/SmartListDialog.cpp` | 更新类名 |
+| `app/linux-gtk/app/StyleManager.h` | **NEW** |
+| `app/linux-gtk/app/StyleManager.cpp` | **NEW** |
+| `app/linux-gtk/CMakeLists.txt` | 加 `app/StyleManager.cpp` |
+| `app/linux-gtk/app/ThemeBus.h` | 标记 deprecated |
+| `app/linux-gtk/app/ThemeBus.cpp` | 转发到 StyleManager |
+| `app/linux-gtk/main.cpp` | SIGUSR1/DBus/Monitor → StyleManager |
+| `app/linux-gtk/layout/LayoutConstants.h` | 补充 `kSpacingXSmall = 2`；token 数据源统一到 C++，StyleManager 用同一组 token 生成 CSS 变量 |
+| `app/linux-gtk/layout/components/Containers.cpp` | `applyCommonProps()` 的 `margin` prop 处理标记 deprecated；BoxComponent `spacing` 改为从 token 查询 |
+| `app/linux-gtk/layout/editor/LayoutEditorDialog.cpp` | margin prop 标记 deprecated（保留代码但不推荐使用） |
+| `app/linux-gtk/track/TrackViewPage.cpp` | signalRefreshed 换源 |
+| `app/linux-gtk/track/TrackSelectionController.cpp` | ~~删除 stale `#include "app/ThemeBus.h"`~~ ✅ 已完成 |
+| `app/linux-gtk/app/ShellLayoutController.cpp` | 删 `setupCss()`，更新类名 |
+| `app/linux-gtk/track/TrackColumnFactoryBuilder.cpp` | 删 `ensureTrackPageCss()`，更新类名 |
+| `app/linux-gtk/track/StatusNotificationLabel.cpp` | 删 `ensureStatusNotificationCss()`，更新类名 |
+| `app/linux-gtk/playback/NowPlayingStatusLabel.cpp` | 删 `ensureNowPlayingCss()`，更新类名 |
+| `app/linux-gtk/playback/OutputSelector.cpp` | 删 `ensureOutputSelectorCss()`，更新类名 |
+| `app/linux-gtk/playback/PlaybackDetailsWidget.cpp` | 删 `ensurePlaybackDetailsCss()`，`sink-status-*` → `ao-quality-*` |
+| `app/linux-gtk/playback/AobusSoulWindow.cpp` | 删 `ensureCss()`，更新类名 |
+| `app/linux-gtk/playback/TransportButton.cpp` | 更新类名 |
+| `app/linux-gtk/playback/NowPlayingFieldLabel.cpp` | 更新类名 |
+| `app/linux-gtk/layout/components/StatusComponents.cpp` | 删 `ensureStatusBarContainerCss()`，更新类名 |
+| `app/linux-gtk/playback/SeekControl.cpp` | 加 `add_css_class("ao-seekbar")` |
+| `app/linux-gtk/inspector/TrackInspectorPanel.cpp` | 更新类名 |
+| `app/linux-gtk/track/TrackCustomViewDialog.cpp` | 更新类名 |
+| `app/linux-gtk/tag/TagEditor.cpp` | 更新类名 |
 
 ## 验证
 

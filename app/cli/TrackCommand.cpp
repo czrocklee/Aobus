@@ -30,6 +30,8 @@ namespace ao::cli
   {
     using namespace ao;
 
+    constexpr int kPlainTrackIdWidth = 5;
+
     std::vector<std::pair<TrackId, library::TrackView>> collectTracks(library::MusicLibrary& ml,
                                                                       std::string const& filter)
     {
@@ -121,7 +123,7 @@ namespace ao::cli
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const& [id, view] = matches[i];
-        os << std::setw(5) << id << " " << view.metadata().title() << '\n'; // NOLINT(readability-magic-numbers)
+        os << std::setw(kPlainTrackIdWidth) << id << " " << view.metadata().title() << '\n';
       }
 
       if (limit > 0 && offset + limit < matches.size())

@@ -71,7 +71,6 @@ namespace ao::audio
     IBackendProvider() = default;
 
   public:
-
     /**
      * @brief Subscribe to incremental device updates.
      * The callback is typically triggered immediately with current devices.

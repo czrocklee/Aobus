@@ -4,7 +4,6 @@
 #pragma once
 
 #include "app/GtkUiServices.h"
-#include "app/UIState.h"
 #include "track/TrackPresentation.h"
 #include <gtkmm/stack.h>
 #include <memory>

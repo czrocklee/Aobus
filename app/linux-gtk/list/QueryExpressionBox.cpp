@@ -3,7 +3,7 @@
 
 #include "list/QueryExpressionBox.h"
 #include "layout/LayoutConstants.h"
-#include <ao/Type.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 

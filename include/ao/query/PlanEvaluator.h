@@ -6,7 +6,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/ExecutionPlan.h>
 
-#include <string_view>
+#include <cstdint>
 #include <vector>
 
 namespace ao::query

@@ -5,7 +5,7 @@
 #include "FrameLayout.h"
 
 #include <array>
-#include <boost/endian/conversion.hpp>  // NOLINT(misc-include-cleaner)
+#include <boost/endian/conversion.hpp> // NOLINT(misc-include-cleaner)
 #include <cstdint>
 #include <cstring>
 #include <optional>
@@ -273,7 +273,7 @@ namespace ao::tag::mpeg
     auto const* ptr = static_cast<std::uint8_t const*>(_data) + offset;
 
     static constexpr std::size_t kXingMagicSize = 4;
-    
+
     if (std::memcmp(ptr, "Xing", kXingMagicSize) != 0 && std::memcmp(ptr, "Info", kXingMagicSize) != 0)
     {
       return {};
@@ -283,7 +283,7 @@ namespace ao::tag::mpeg
     std::uint32_t flags = 0;
     static constexpr std::size_t kXingFlagsSize = 4;
     std::memcpy(&flags, ptr + kXingFlagsSize, kXingFlagsSize);
-    flags = boost::endian::endian_reverse(flags);  // NOLINT(misc-include-cleaner)
+    flags = boost::endian::endian_reverse(flags); // NOLINT(misc-include-cleaner)
 
     std::size_t fieldOffset = kXingDataFieldOffset;
     constexpr std::uint32_t kXingFlagFrames = 0x01;
@@ -294,7 +294,7 @@ namespace ao::tag::mpeg
       std::uint32_t frames = 0;
       static constexpr std::size_t kXingFramesFieldSize = 4;
       std::memcpy(&frames, ptr + fieldOffset, kXingFramesFieldSize);
-      info.frames = boost::endian::endian_reverse(frames);  // NOLINT(misc-include-cleaner)
+      info.frames = boost::endian::endian_reverse(frames); // NOLINT(misc-include-cleaner)
       fieldOffset += kXingFramesFieldSize;
     }
 
@@ -303,7 +303,7 @@ namespace ao::tag::mpeg
       std::uint32_t bytes = 0;
       static constexpr std::size_t kXingBytesFieldSize = 4;
       std::memcpy(&bytes, ptr + fieldOffset, kXingBytesFieldSize);
-      info.bytes = boost::endian::endian_reverse(bytes);  // NOLINT(misc-include-cleaner)
+      info.bytes = boost::endian::endian_reverse(bytes); // NOLINT(misc-include-cleaner)
       fieldOffset += kXingBytesFieldSize;
     }
 

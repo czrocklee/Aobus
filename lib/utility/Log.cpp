@@ -14,12 +14,21 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <vector>
 
 namespace ao::log
 {
+  namespace
+  {
+    constexpr std::size_t kAsyncQueueSize = 8192;
+    constexpr std::size_t kAsyncThreadCount = 1;
+    constexpr std::size_t kRotatingLogMaxSize = std::size_t{5} * 1024 * 1024;
+    constexpr std::size_t kRotatingLogMaxFiles = 3;
+  }
+
   std::shared_ptr<spdlog::logger> Log::_appLogger = spdlog::null_logger_mt("app");
   std::shared_ptr<spdlog::logger> Log::_audioLogger = spdlog::null_logger_mt("audio");
 
@@ -40,14 +49,14 @@ namespace ao::log
     consoleSink->set_level(spdLevel);
 
     auto const fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-      logPath.string(), 1024 * 1024 * 5, 3); // NOLINT(readability-magic-numbers)
+      logPath.string(), kRotatingLogMaxSize, kRotatingLogMaxFiles);
     fileSink->set_pattern("[%Y-%m-%d %T.%e] [%l] %n: %v");
     fileSink->set_level(spdlog::level::trace);
 
     auto const sinks = std::vector<spdlog::sink_ptr>{consoleSink, fileSink};
 
     // Initialize async registry
-    spdlog::init_thread_pool(8192, 1);
+    spdlog::init_thread_pool(kAsyncQueueSize, kAsyncThreadCount);
 
     // Drop existing loggers to replace them with async versions
     spdlog::drop("app");

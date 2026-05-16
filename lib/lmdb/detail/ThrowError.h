@@ -4,10 +4,7 @@
 #pragma once
 
 #include <ao/Exception.h>
-#include <format>
 #include <lmdb.h>
-#include <stdexcept>
-#include <string>
 
 namespace ao::lmdb
 {

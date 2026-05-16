@@ -5,6 +5,8 @@
 
 #include <ao/query/Expression.h>
 
+#include <string_view>
+
 namespace ao::query
 {
   Expression parse(std::string_view expr);

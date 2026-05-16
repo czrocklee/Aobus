@@ -3,8 +3,16 @@
 
 #pragma once
 
+#include <ao/Error.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/IBackend.h>
+#include <ao/audio/IRenderTarget.h>
+#include <ao/audio/Property.h>
+
+#include <expected>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::audio::test

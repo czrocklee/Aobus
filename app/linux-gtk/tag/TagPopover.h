@@ -4,7 +4,11 @@
 #pragma once
 
 #include "tag/TagEditor.h"
-#include <gtkmm.h>
+#include <ao/Type.h>
+#include <ao/library/MusicLibrary.h>
+
+#include <gtkmm/popover.h>
+
 #include <vector>
 
 namespace ao::gtk

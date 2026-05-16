@@ -4,11 +4,11 @@
 #pragma once
 
 #include <ao/library/DictionaryStore.h>
-#include <ao/library/TrackLayout.h>
 #include <ao/query/Expression.h>
 
 #include <cstdint>
-#include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::query

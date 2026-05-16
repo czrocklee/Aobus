@@ -5,15 +5,14 @@
 
 #include "TrackSource.h"
 
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 
-#include <cstdint>
+#include <cstddef>
 #include <map>
 #include <memory>
-#include <optional>
 #include <span>
-#include <string>
 #include <vector>
 
 namespace ao::rt

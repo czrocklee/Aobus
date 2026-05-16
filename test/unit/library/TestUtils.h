@@ -5,7 +5,7 @@
 
 #include <ao/utility/ByteView.h>
 
-#include <cstdint>
+#include <cstddef>
 #include <string_view>
 #include <vector>
 

@@ -6,6 +6,7 @@
 #include <ao/audio/Backend.h>
 
 #include <glibmm/object.h>
+#include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
 
 #include <string>
@@ -21,7 +22,8 @@ namespace ao::gtk
   public:
     static Glib::RefPtr<BackendItem> create(audio::BackendId id, std::string name)
     {
-      return Glib::make_refptr_for_instance<BackendItem>(new BackendItem{std::move(id), std::move(name)}); // NOLINT(cppcoreguidelines-owning-memory)
+      return Glib::make_refptr_for_instance<BackendItem>(
+        new BackendItem{std::move(id), std::move(name)}); // NOLINT(cppcoreguidelines-owning-memory)
     }
 
     audio::BackendId const& id() const { return _id; }
@@ -49,7 +51,11 @@ namespace ao::gtk
                                            audio::ProfileId profile,
                                            std::string customName = "")
     {
-      return Glib::make_refptr_for_instance<DeviceItem>(new DeviceItem(std::move(backend), device, std::move(profile), std::move(customName))); // NOLINT(cppcoreguidelines-owning-memory)
+      return Glib::make_refptr_for_instance<DeviceItem>(
+        new DeviceItem(std::move(backend), // NOLINT(cppcoreguidelines-owning-memory)
+                       device,
+                       std::move(profile),
+                       std::move(customName)));
     }
 
     audio::BackendId const& backendId() const { return _backendId; }
@@ -67,10 +73,7 @@ namespace ao::gtk
     }
 
   protected:
-    DeviceItem(audio::BackendId backend,
-               audio::Device const& device,
-               audio::ProfileId profile,
-               std::string customName)
+    DeviceItem(audio::BackendId backend, audio::Device const& device, audio::ProfileId profile, std::string customName)
       : Glib::ObjectBase{typeid(DeviceItem)}
       , _backendId{std::move(backend)}
       , _profileId{std::move(profile)}

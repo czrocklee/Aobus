@@ -6,14 +6,16 @@
 #include <ao/Type.h>
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Database.h>
+#include <ao/lmdb/Transaction.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
-#include <gsl-lite/gsl-lite.hpp>
 #include <optional>
 #include <span>
 #include <utility>
-#include <vector>
 
 namespace ao::library
 {

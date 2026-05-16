@@ -11,6 +11,8 @@
 
 #include "ListSourceStore.h"
 
+#include "async/Runtime.h"
+
 #include <ao/Type.h>
 
 #include <memory>
@@ -20,17 +22,30 @@ namespace ao::rt
 {
   struct AppRuntime::Impl final
   {
+    async::Runtime asyncRuntime;
     ViewService viewService;
     PlaybackService playbackService;
     WorkspaceService workspaceService;
     SessionPersistenceService persistenceService;
 
     Impl(AppRuntime& runtime, std::shared_ptr<ConfigStore> configStore)
-      : viewService{runtime.executor(), runtime.musicLibrary(), runtime.sources()}
+      : asyncRuntime{runtime.executor()}
+      , viewService{runtime.executor(), runtime.musicLibrary(), runtime.sources()}
       , playbackService{runtime.executor(), viewService, runtime.musicLibrary()}
       , workspaceService{viewService, playbackService, runtime.mutation(), runtime.musicLibrary()}
       , persistenceService{workspaceService, viewService, playbackService, runtime.musicLibrary(), *configStore}
     {
+    }
+
+    Impl(Impl const&) = delete;
+    Impl& operator=(Impl const&) = delete;
+    Impl(Impl&&) = delete;
+    Impl& operator=(Impl&&) = delete;
+
+    ~Impl()
+    {
+      asyncRuntime.requestStop();
+      asyncRuntime.join();
     }
   };
 
@@ -60,6 +75,11 @@ namespace ao::rt
   ViewService& AppRuntime::views() noexcept
   {
     return _impl->viewService;
+  }
+
+  async::Runtime& AppRuntime::async() noexcept
+  {
+    return _impl->asyncRuntime;
   }
 
   void AppRuntime::reloadAllTracks()

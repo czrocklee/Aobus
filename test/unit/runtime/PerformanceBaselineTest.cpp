@@ -3,23 +3,25 @@
 //
 // Phase 0 baseline measurement — synthetic data, no fixed pass/fail thresholds.
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
+#include <ao/Type.h>
 #include <ao/utility/Log.h>
-#include <runtime/ListSourceStore.h>
 #include <runtime/SmartListEvaluator.h>
 #include <runtime/SmartListSource.h>
+#include <runtime/StateTypes.h>
 #include <runtime/TrackListProjection.h>
+#include <runtime/TrackPresentationPreset.h>
 #include <runtime/TrackSource.h>
 
 #include "TestUtils.h"
 
+#include <catch2/catch_test_macros.hpp>
+
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <format>
-#include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -120,14 +122,14 @@ namespace ao::rt::test
 
       // 3. indexOf — 10k iterations at a fixed position
       auto const midId = proj.trackIdAt(static_cast<std::size_t>(trackCount / 2));
-      (void)proj.indexOf(midId); // warm
+      [[maybe_unused]] auto const optWarm = proj.indexOf(midId); // warm
 
       constexpr int kLookupIters = 10000;
       auto const t5 = std::chrono::steady_clock::now();
 
       for (int i = 0; i < kLookupIters; ++i)
       {
-        (void)proj.indexOf(midId);
+        [[maybe_unused]] auto const optResult = proj.indexOf(midId);
       }
 
       auto const t6 = std::chrono::steady_clock::now();

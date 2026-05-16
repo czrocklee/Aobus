@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CorePrimitives.h"
+#include <functional>
 
 namespace ao::rt
 {

@@ -3,9 +3,12 @@
 
 #pragma once
 
-#include <functional>
 #include <giomm/menu.h>
+#include <giomm/menumodel.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/applicationwindow.h>
+
+#include <functional>
 
 namespace ao::gtk
 {

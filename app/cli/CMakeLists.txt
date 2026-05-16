@@ -7,4 +7,3 @@ add_executable(aobus
     TrackCommand.cpp
 )
 target_link_libraries(aobus PRIVATE app_runtime ao CLI11::CLI11 mimalloc)
-aobus_apply_clang_tidy(aobus STRICT)

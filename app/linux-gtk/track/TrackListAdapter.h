@@ -3,19 +3,30 @@
 
 #pragma once
 
+#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
+#include <runtime/CorePrimitives.h>
+#include <runtime/ProjectionTypes.h>
+#include <runtime/TrackSource.h>
 
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
-#include <runtime/ProjectionTypes.h>
-#include <runtime/TrackSource.h>
 
+#include <giomm/listmodel.h>
 #include <giomm/liststore.h>
+#include <glibmm/refptr.h>
 
+#include <sigc++/connection.h>
+#include <sigc++/signal.h>
+
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 
 namespace ao::gtk
 {

@@ -3,14 +3,14 @@
 
 #pragma once
 
-#include <ao/Error.h>
 #include <ao/utility/TaggedInteger.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <optional>
-#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace ao::rt
 {
@@ -76,7 +76,6 @@ namespace ao::rt
     IControlExecutor() = default;
 
   public:
-
     virtual bool isCurrent() const noexcept = 0;
 
     // Thread-safe: enqueue and wake the control thread (e.g. for cross-thread callbacks).

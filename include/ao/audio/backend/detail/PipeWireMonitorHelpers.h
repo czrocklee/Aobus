@@ -3,10 +3,9 @@
 
 #pragma once
 
-#include <ao/audio/Format.h>
-#include <ao/audio/backend/detail/AudioBackendShared.h>
-#include <ao/audio/flow/Graph.h>
+#include <ao/audio/Backend.h>
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>

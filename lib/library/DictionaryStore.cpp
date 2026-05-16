@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/Exception.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/Exception.h>
 #include <ao/utility/ByteView.h>
 
 #include <cstdint>

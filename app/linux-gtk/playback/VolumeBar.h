@@ -3,8 +3,11 @@
 
 #pragma once
 
-#include <gtkmm.h>
-#include <sigc++/sigc++.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/snapshot.h>
+#include <gtkmm/widget.h>
+#include <sigc++/signal.h>
 
 namespace ao::gtk
 {

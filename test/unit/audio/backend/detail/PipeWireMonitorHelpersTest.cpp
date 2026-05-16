@@ -207,8 +207,11 @@ namespace ao::audio::backend::detail::test
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
-      ::spa_pod_builder_array(
-        &b, sizeof(float), SPA_TYPE_Float, vols.size(), vols.data()); // NOLINT(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
+      ::spa_pod_builder_array(&b,
+                              sizeof(float),
+                              SPA_TYPE_Float,
+                              vols.size(),
+                              vols.data()); // NOLINT(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
       auto props = SinkProps{};

@@ -6,9 +6,17 @@
 #include "app/UIState.h"
 #include <runtime/TrackPresentationPreset.h>
 
-#include <gtkmm.h>
+#include <gtkmm/button.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/dropdown.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/listbox.h>
+#include <gtkmm/window.h>
+
+#include <cstdint>
 #include <optional>
-#include <span>
+#include <string_view>
+#include <vector>
 
 namespace ao::gtk
 {

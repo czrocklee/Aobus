@@ -31,4 +31,3 @@ if(LINUX)
     target_link_libraries(ao_audio PRIVATE PkgALSA PkgPipeWire PkgUDEV)
 endif()
 
-aobus_apply_clang_tidy(ao_audio STRICT)

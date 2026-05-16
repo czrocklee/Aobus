@@ -6,8 +6,10 @@
 #include <runtime/CorePrimitives.h>
 
 #include <gtkmm/box.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
+#include <gtkmm/widget.h>
 
 #include <string>
 

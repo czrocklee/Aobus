@@ -4,7 +4,11 @@
 #pragma once
 
 #include "TrackSource.h"
+#include <ao/Type.h>
 
+#include <cstddef>
+#include <optional>
+#include <span>
 #include <vector>
 
 namespace ao::library

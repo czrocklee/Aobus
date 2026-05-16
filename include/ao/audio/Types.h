@@ -4,13 +4,11 @@
 #pragma once
 
 #include <ao/Type.h>
-#include <ao/audio/Format.h>
 
 #include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace ao::audio
 {

@@ -7,6 +7,8 @@
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <memory>

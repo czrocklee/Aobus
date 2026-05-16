@@ -5,6 +5,7 @@
 
 #include <array>
 #include <boost/endian/buffers.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 

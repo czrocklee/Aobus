@@ -26,6 +26,7 @@ namespace ao::audio
 {
   namespace
   {
+    constexpr auto kDecodeBackoff = std::chrono::milliseconds{5};
     constexpr std::uint8_t kBytesPer24BitSample = 3;
 
     std::uint64_t bytesPerSecond(Format const& format) noexcept
@@ -196,7 +197,7 @@ namespace ao::audio
     {
       if (bufferedMs() >= _decodeHighWatermarkMs)
       {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5)); // NOLINT(readability-magic-numbers)
+        std::this_thread::sleep_for(kDecodeBackoff);
         continue;
       }
 

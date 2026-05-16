@@ -6,11 +6,19 @@
 #include "track/TrackListAdapter.h"
 #include "track/TrackRowObject.h"
 
-#include <gtkmm.h>
+#include <ao/Type.h>
+
+#include <glibmm/refptr.h>
+#include <gtkmm/columnview.h>
+#include <gtkmm/multiselection.h>
+#include <gtkmm/widget.h>
+
+#include <sigc++/scoped_connection.h>
+#include <sigc++/signal.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <optional>
 #include <vector>
 

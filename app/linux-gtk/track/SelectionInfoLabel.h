@@ -6,10 +6,11 @@
 #include <runtime/CorePrimitives.h>
 
 #include <gtkmm/label.h>
+#include <gtkmm/widget.h>
 
 #include <chrono>
+#include <cstddef>
 #include <optional>
-#include <string>
 
 namespace ao::rt
 {

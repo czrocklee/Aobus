@@ -6,7 +6,7 @@
 #include <ao/Type.h>
 #include <runtime/CorePrimitives.h>
 
-#include <cstdint>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <vector>

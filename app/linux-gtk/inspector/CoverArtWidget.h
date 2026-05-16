@@ -6,10 +6,11 @@
 #include <runtime/CorePrimitives.h>
 #include <runtime/ProjectionTypes.h>
 
-#include <giomm/memoryinputstream.h>
-#include <gtkmm.h>
+#include <gdkmm/pixbuf.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/picture.h>
 
-#include <cstdint>
+#include <cstddef>
 #include <memory>
 #include <span>
 

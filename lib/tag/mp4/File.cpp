@@ -164,8 +164,7 @@ namespace ao::tag::mp4
 
   library::TrackBuilder File::loadTrack() const
   {
-    RootAtom const root =
-      media::mp4::fromBuffer(utility::bytes::view(address(), size()));
+    RootAtom const root = media::mp4::fromBuffer(utility::bytes::view(address(), size()));
     Atom const* const ilstNode = root.find(kIlstPath);
 
     clearOwnedStrings();

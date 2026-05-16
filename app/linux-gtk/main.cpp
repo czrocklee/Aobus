@@ -5,19 +5,21 @@
 #include "app/MainWindow.h"
 #include "app/ThemeBus.h"
 #include "library_io/ImportExportCoordinator.h"
-#include "track/TrackRowCache.h"
 #include <ao/utility/Log.h>
 #include <giomm/dbusconnection.h>
-#include <giomm/dbusproxy.h>
 #include <giomm/file.h>
 #include <giomm/filemonitor.h>
+#include <giomm/simpleaction.h>
 #include <runtime/AppRuntime.h>
 
 #include <ao/AppVersion.h>
 
+#include <glibmm/error.h>
+#include <glibmm/refptr.h>
+#include <glibmm/variant.h>
 #include <gsl-lite/gsl-lite.hpp>
-#include <gtkmm.h>
 #include <gtkmm/aboutdialog.h>
+#include <gtkmm/application.h>
 
 #include <glib-unix.h>
 
@@ -27,6 +29,14 @@
 #include <runtime/StateTypes.h>
 
 #include <glibmm/miscutils.h>
+
+#include <cstdlib>
+#include <filesystem>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <utility>
+#include <vector>
 
 using namespace ao;
 using namespace ao::gtk;
@@ -67,12 +77,14 @@ namespace
     auto appRuntime = std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{
       .executor = std::move(executor), .libraryRoot = std::move(libraryPath), .configStore = configStore});
 
+    // NOLINTBEGIN(cppcoreguidelines-owning-memory)
     auto window = Glib::make_refptr_for_instance<MainWindow>(new MainWindow(*appRuntime, configStore));
 
     // Store AppRuntime alongside window (lifetime tied to window via pointer)
     window->set_data("app-runtime",
                      new std::unique_ptr<rt::AppRuntime>(std::move(appRuntime)),
                      [](void* data) { delete static_cast<std::unique_ptr<rt::AppRuntime>*>(data); });
+    // NOLINTEND(cppcoreguidelines-owning-memory)
 
     window->initializeSession();
 
@@ -83,6 +95,7 @@ namespace
   }
 }
 
+// NOLINTBEGIN(bugprone-exception-escape,readability-function-cognitive-complexity)
 int main(int argc, char* argv[])
 {
   CLI::App cliApp{"Aobus Music Library"};
@@ -147,6 +160,7 @@ int main(int argc, char* argv[])
   auto app = Gtk::Application::create("org.aobus.app");
 
   // Handle Ctrl-C and SIGTERM gracefully via GLib main loop
+  // NOLINTBEGIN(misc-include-cleaner)
   auto const signal_handler = [](void* data) -> ::gboolean
   {
     auto* app_ptr = static_cast<Glib::RefPtr<Gtk::Application>*>(data);
@@ -167,6 +181,7 @@ int main(int argc, char* argv[])
       return TRUE;
     },
     nullptr);
+  // NOLINTEND(misc-include-cleaner)
 
   // Auto-detection for NixOS/HM: Monitor GTK config directory for changes
   auto const configPath = std::string(Glib::get_user_config_dir()) + "/gtk-4.0";
@@ -181,10 +196,12 @@ int main(int argc, char* argv[])
       Glib::RefPtr<Gio::File> const& file, Glib::RefPtr<Gio::File> const& /*other_file*/, Gio::FileMonitor::Event event)
     {
       using Event = Gio::FileMonitor::Event;
+
       if (event == Event::CHANGED || event == Event::CREATED || event == Event::DELETED ||
           event == Event::CHANGES_DONE_HINT)
       {
         auto const name = file->get_basename();
+
         if (name == "settings.ini" || name == "gtk.css")
         {
           APP_LOG_INFO(
@@ -271,6 +288,7 @@ int main(int argc, char* argv[])
 
   auto gtkArgv = std::vector<char*>{};
   gtkArgv.reserve(remainingArgs.size());
+
   for (auto& arg : remainingArgs)
   {
     gtkArgv.push_back(arg.data());
@@ -282,3 +300,4 @@ int main(int argc, char* argv[])
   auto const result = app->run(gtkArgc, gtkArgv.data());
   return result;
 }
+// NOLINTEND(bugprone-exception-escape,readability-function-cognitive-complexity)

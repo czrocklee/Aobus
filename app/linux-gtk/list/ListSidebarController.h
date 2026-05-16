@@ -3,11 +3,18 @@
 
 #pragma once
 
-#include <ao/library/MusicLibrary.h>
+#include <ao/Type.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/model/ListDraft.h>
-#include <gtkmm.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/TrackSource.h>
+
+#include <gdkmm/rectangle.h>
+#include <giomm/actionmap.h>
+#include <giomm/simpleaction.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/widget.h>
+#include <gtkmm/window.h>
 
 #include <functional>
 #include <memory>

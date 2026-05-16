@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <app/linux-gtk/layout/components/Containers.h>
 #include <app/linux-gtk/layout/document/LayoutDocument.h>
-#include <app/linux-gtk/layout/document/LayoutYaml.h>
+#include <app/linux-gtk/layout/document/LayoutNode.h>
+#include <app/linux-gtk/layout/document/LayoutYaml.h> // NOLINT(misc-include-cleaner)
 #include <app/linux-gtk/layout/runtime/ComponentRegistry.h>
 #include <app/linux-gtk/layout/runtime/LayoutRuntime.h>
 
@@ -11,6 +11,7 @@
 #include <app/linux-gtk/track/TrackRowCache.h>
 #include <app/runtime/AppRuntime.h>
 #include <app/runtime/ConfigStore.h>
+#include <runtime/CorePrimitives.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/menu.h>
@@ -24,6 +25,12 @@
 #include <yaml-cpp/yaml.h>
 
 #include <test/unit/lmdb/TestUtils.h>
+
+#include <array>
+#include <functional>
+#include <memory>
+#include <string>
+#include <string_view>
 
 namespace ao::gtk::layout::test
 {
@@ -44,6 +51,7 @@ namespace ao::gtk::layout::test
       return LayoutContext{.registry = registry, .runtime = runtime, .parentWindow = window};
     }
   } // namespace
+
   TEST_CASE("Playback component instantiation", "[layout][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
@@ -159,7 +167,7 @@ namespace ao::gtk::layout::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
       REQUIRE(label != nullptr);
-      CHECK(label->get_text() == "");
+      CHECK(label->get_text().empty());
     }
 
     SECTION("volumeControl shows hidden when volume unavailable")
@@ -201,21 +209,21 @@ namespace ao::gtk::layout::test
 
     SECTION("all 11 playback types register and instantiate")
     {
-      char const* types[] = {"playback.playPauseButton",
-                             "playback.stopButton",
-                             "playback.volumeControl",
-                             "playback.currentTitleLabel",
-                             "playback.currentArtistLabel",
-                             "playback.seekSlider",
-                             "playback.timeLabel",
-                             "playback.playButton",
-                             "playback.pauseButton",
-                             "playback.outputButton",
-                             "playback.qualityIndicator"};
+      auto const types = std::to_array<std::string_view>({"playback.playPauseButton",
+                                                          "playback.stopButton",
+                                                          "playback.volumeControl",
+                                                          "playback.currentTitleLabel",
+                                                          "playback.currentArtistLabel",
+                                                          "playback.seekSlider",
+                                                          "playback.timeLabel",
+                                                          "playback.playButton",
+                                                          "playback.pauseButton",
+                                                          "playback.outputButton",
+                                                          "playback.qualityIndicator"});
 
-      for (auto const* type : types)
+      for (auto const type : types)
       {
-        auto const node = LayoutNode{.type = type};
+        auto const node = LayoutNode{.type = std::string{type}};
         auto const comp = registry.create(ctx, node);
         CHECK(comp != nullptr);
       }
@@ -225,7 +233,6 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Semantic components — error states
   // ---------------------------------------------------------------------------
-
   TEST_CASE("Semantic component error states", "[layout][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
@@ -333,7 +340,6 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Semantic components — success states
   // ---------------------------------------------------------------------------
-
   TEST_CASE("Semantic component success states", "[layout][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
@@ -442,7 +448,6 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // All types registration
   // ---------------------------------------------------------------------------
-
   TEST_CASE("All component types register and instantiate", "[layout][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
@@ -462,24 +467,24 @@ namespace ao::gtk::layout::test
 
     SECTION("all 14 status and semantic types")
     {
-      char const* types[] = {"status.messageLabel",
-                             "library.listTree",
-                             "tracks.table",
-                             "library.openLibraryButton",
-                             "inspector.coverArt",
-                             "inspector.sidebar",
-                             "status.defaultBar",
-                             "app.menuBar",
-                             "app.workspaceWithInspector",
-                             "status.playbackDetails",
-                             "status.nowPlaying",
-                             "status.importProgress",
-                             "status.notification",
-                             "status.trackCount"};
+      auto const types = std::to_array<std::string_view>({"status.messageLabel",
+                                                          "library.listTree",
+                                                          "tracks.table",
+                                                          "library.openLibraryButton",
+                                                          "inspector.coverArt",
+                                                          "inspector.sidebar",
+                                                          "status.defaultBar",
+                                                          "app.menuBar",
+                                                          "app.workspaceWithInspector",
+                                                          "status.playbackDetails",
+                                                          "status.nowPlaying",
+                                                          "status.importProgress",
+                                                          "status.notification",
+                                                          "status.trackCount"});
 
-      for (auto const* type : types)
+      for (auto const type : types)
       {
-        auto const node = LayoutNode{.type = type};
+        auto const node = LayoutNode{.type = std::string{type}};
         auto const comp = registry.create(ctx, node);
         CHECK(comp != nullptr);
       }
@@ -489,7 +494,6 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // YAML round-trip with semantic components
   // ---------------------------------------------------------------------------
-
   TEST_CASE("YAML layout with semantic components", "[layout][components]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.layout_test");
@@ -567,7 +571,7 @@ namespace ao::gtk::layout::test
 
     SECTION("full layout document round-trip then build")
     {
-      auto const yaml = R"(
+      auto const* const yaml = R"(
       version: 1
       root:
         type: box

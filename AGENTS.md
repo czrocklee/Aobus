@@ -31,8 +31,11 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 ./build.sh debug               # Configures and builds with sanitizers, runs tests
 ./build.sh debug --clang       # Clang build in its own cache/build tree
 ./build.sh debug --clean       # Full clean rebuild
-./build.sh debug --tidy        # Debug build with clang-tidy enabled (uses clang)
-./build.sh debug --clean --tidy # Clean debug build with clang-tidy enabled (uses clang)
+
+# clang-tidy (standalone, via shell script)
+./script/run-clang-tidy.sh --all              # Check entire repo
+./script/run-clang-tidy.sh --folder test      # Check test folder
+./script/run-clang-tidy.sh --summary          # Changed files, summary output
 ```
 
 ### Manual CMake

@@ -31,8 +31,10 @@ This document maps public types from third-party libraries used in Aobus to thei
 | `Glib::Dispatcher` | `<glibmm/dispatcher.h>` | `Glib` |
 | `Glib::VariantBase` | `<glibmm/variant.h>` | `Glib` |
 | `Glib::KeyFile` | `<glibmm/keyfile.h>` | `Glib` |
-| Glib::Object | <glibmm/object.h> | Glib |
+| `Glib::Object` | `<glibmm/object.h>` | `Glib` |
 | `Glib::Error` | `<glibmm/error.h>` | `Glib` |
+| `Glib::Property` | `<glibmm/property.h>` | `Glib` |
+| `Glib::PropertyProxy` | `<glibmm/propertyproxy.h>` | `Glib` |
 | `Gio::Menu` | `<giomm/menu.h>` | `Gio` |
 | `Gio::MenuModel` | `<giomm/menumodel.h>` | `Gio` |
 | `Gio::Application` | `<giomm/application.h>` | `Gio` |
@@ -47,9 +49,11 @@ This document maps public types from third-party libraries used in Aobus to thei
 | `Gtk::ColumnView` | `<gtkmm/columnview.h>` | `Gtk` |
 | `Gtk::ColumnViewColumn` | `<gtkmm/columnviewcolumn.h>` | `Gtk` |
 | `Gtk::ListItem` | `<gtkmm/listitem.h>` | `Gtk` |
+| `Gtk::ListItemFactory` | `<gtkmm/listitemfactory.h>` | `Gtk` |
 | `Gtk::SignalListItemFactory` | `<gtkmm/signallistitemfactory.h>` | `Gtk` |
 | `Gtk::SelectionModel` | `<gtkmm/selectionmodel.h>` | `Gtk` |
 | `Gtk::SingleSelection` | `<gtkmm/singleselection.h>` | `Gtk` |
+| `Gtk::MultiSelection` | `<gtkmm/multiselection.h>` | `Gtk` |
 | `Gtk::FlowBoxChild` | `<gtkmm/flowboxchild.h>` | `Gtk` |
 | `Gtk::ListBox` | `<gtkmm/listbox.h>` | `Gtk` |
 | `Gtk::ListBoxRow` | `<gtkmm/listboxrow.h>` | `Gtk` |
@@ -64,7 +68,6 @@ This document maps public types from third-party libraries used in Aobus to thei
 | `Gtk::Sorter` | `<gtkmm/sorter.h>` | `Gtk` |
 | `Gtk::ListHeader` | `<gtkmm/listheader.h>` | `Gtk` |
 | `Gtk::MenuButton` | `<gtkmm/menubutton.h>` | `Gtk` |
-| `Gtk::MultiSelection` | `<gtkmm/multiselection.h>` | `Gtk` |
 | `Gtk::PropagationPhase` | `<gtkmm/eventcontroller.h>` | `Gtk` |
 | `Gtk::EventSequenceState` | `<gtkmm/gesture.h>` | `Gtk` |
 | `Gtk::SelectionMode` | `<gtkmm/enums.h>` | `Gtk` |
@@ -100,8 +103,8 @@ This document maps public types from third-party libraries used in Aobus to thei
 | `Gdk::RGBA` | `<gdkmm/rgba.h>` | `Gdk` |
 | `Gdk::Rectangle` | `<gdkmm/rectangle.h>` | `Gdk` |
 | `Gdk::Texture` | `<gdkmm/texture.h>` | `Gdk` |
-| `::GskPath` | `<gsk/gskpath.h>` (C header) | N/A |
-| `::GskStroke` | `<gsk/gskstroke.h>` (C header) | N/A |
+
+> **Note on GSK headers:** Always include the GSK umbrella header `<gsk/gsk.h>` instead of individual C headers like `<gsk/gskpath.h>`. GTK4 requires this, and granular inclusion will trigger compile errors. Use `// NOLINT(misc-include-cleaner)` to suppress clang-tidy warnings about the umbrella header.
 
 ## GDK / GTK C-level Constants
 
@@ -114,6 +117,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `GTK_STYLE_PROVIDER_PRIORITY_USER` | `<gtk/gtkstyleprovider.h>` | C header |
 | `GTK_INVALID_LIST_POSITION` | `<gtk/gtk.h>` | C macro, NOLINT recommended |
 | `gssize` / `guint` / `gpointer` | `<glib.h>` | C typedefs, NOLINT recommended |
+| `::GskPath` / `::GskStroke` | `<gsk/gsk.h>` | Use umbrella header with NOLINT |
 
 ## CLI & Configuration
 
@@ -126,8 +130,12 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `YAML::Node` | `<yaml-cpp/node/node.h>` | `YAML` |
 | `YAML::Emitter` | `<yaml-cpp/emitter.h>` | `YAML` |
 | `YAML::LoadFile` | `<yaml-cpp/node/parse.h>` | `YAML` |
+| `YAML::Load` | `<yaml-cpp/node/parse.h>` | `YAML` |
 | `YAML::Key` / `YAML::Value` / `YAML::BeginMap` / `YAML::EndMap` / `YAML::BeginSeq` / `YAML::EndSeq` | `<yaml-cpp/emittermanip.h>` | `YAML` |
 | `YAML::Exception` | `<yaml-cpp/exceptions.h>` | `YAML` |
+| `YAML::convert<T>` | `<yaml-cpp/yaml.h>` | `YAML` |
+
+> **Note on YAML umbrella vs granular:** Prefer granular headers (`<yaml-cpp/node/node.h>`, `<yaml-cpp/node/parse.h>`) for basic `YAML::Node` usage. **HOWEVER**, if the file performs serialization (`file << node;`) or defines `YAML::convert` specializations, you **MUST** use the umbrella `<yaml-cpp/yaml.h>` to ensure all template machinery is available. Add `// NOLINT(misc-include-cleaner)` to keep it clean.
 
 ## Logging & Diagnostics
 
@@ -157,8 +165,22 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `boost::interprocess::read_only` | `<boost/interprocess/detail/os_file_functions.hpp>` | `boost::interprocess` |
 | `boost::interprocess::read_write` | `<boost/interprocess/detail/os_file_functions.hpp>` | `boost::interprocess` |
 | `boost::endian::endian_reverse` | `<boost/endian/detail/endian_reverse.hpp>` | `boost::endian` |
+| `boost::endian::order` | `<boost/endian/detail/order.hpp>` | `boost::endian` |
+| `boost::lockfree::spsc_queue` | `<boost/lockfree/spsc_queue.hpp>` | `boost::lockfree` |
+| `boost::lockfree::capacity` | `<boost/lockfree/policies.hpp>` | `boost::lockfree` |
 | `boost::algorithm::trim_copy_if` | `<boost/algorithm/string/trim.hpp>` | `boost::algorithm` |
 | `boost::algorithm::is_space` | `<boost/algorithm/string/classification.hpp>` | `boost::algorithm` |
+| `boost::asio::co_spawn` | `<boost/asio/co_spawn.hpp>` | `boost::asio` |
+| `boost::pfr::for_each_field` | `<boost/pfr/core.hpp>` | `boost::pfr` |
+| `boost::pfr::names_as_array` | `<boost/pfr/core_name.hpp>` | `boost::pfr` |
+
+> **Note on Boost.Asio:** `boost::asio::co_spawn` is provided by `<boost/asio/co_spawn.hpp>`, but clang-tidy's include-cleaner may simultaneously flag the header as "not used directly" and the usage as "no header providing" — a known false positive with Boost's template-heavy headers. Add `// NOLINT(misc-include-cleaner)` at both the include and usage site.
+
+## POSIX / System Extensions
+
+| Type | Header | Notes |
+| :--- | :--- | :--- |
+| `mkdtemp` | `<stdlib.h>` | POSIX extension; not in `<cstdlib>`. Suppress `modernize-deprecated-headers` with NOLINT on the include. |
 
 ## Database
 
@@ -197,6 +219,8 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `spa_pod_frame` / `spa_pod_is_*` / `spa_pod_get_*` | `<spa/pod/body.h>` | N/A |
 | `spa_pod_builder` | `<spa/pod/builder.h>` | N/A |
 | `spa_pod_iterator` / `spa_pod_foreach` | `<spa/pod/iter.h>` | N/A |
+| `spa_source` | `<spa/support/loop.h>` | N/A |
+| `spa_hook` | `<spa/utils/hook.h>` | N/A |
 | `SPA_POD_*` constructor macros | `<spa/pod/vararg.h>` | N/A |
 | `SPA_TYPE_*` constants | `<spa/utils/type.h>` | N/A |
 | `SPA_PARAM_*` constants | `<spa/param/param.h>` | N/A |
@@ -250,6 +274,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `std::span` | `<span>` | `std` |
 | `std::byte` | `<cstddef>` | `std` |
 | `std::size_t` | `<cstddef>` | `std` |
+| `std::ptrdiff_t` | `<cstddef>` | `std` |
 | `std::uint8_t` | `<cstdint>` | `std` |
 | `std::uint16_t` | `<cstdint>` | `std` |
 | `std::uint32_t` | `<cstdint>` | `std` |
@@ -261,6 +286,8 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `std::pair` | `<utility>` | `std` |
 | `std::move_only_function` | `<functional>` | `std` |
 | `std::function` | `<functional>` | `std` |
+| `std::less` | `<functional>` | `std` |
+| `std::plus` | `<functional>` | `std` |
 | `std::jthread` | `<thread>` | `std` |
 | `std::mutex` | `<mutex>` | `std` |
 | `std::deque` | `<deque>` | `std` |
@@ -271,23 +298,23 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `std::filesystem::file_size` | `<filesystem>` | `std` |
 | `std::filesystem::last_write_time` | `<filesystem>` | `std` |
 | `std::exception` | `<exception>` | `std` |
+| `std::source_location` | `<source_location>` | `std` |
 | `std::errc` | `<system_error>` | `std` |
 | `std::from_chars` | `<charconv>` | `std` |
-| `std::less` | `<functional>` | `std` |
-| `std::plus` | `<functional>` | `std` |
 | `std::dynamic_pointer_cast` | `<memory>` | `std` |
-| `std::numbers::pi` | `<numbers>` | `std` |
+| `std::numbers::pi` / `std::numbers::phi` | `<numbers>` | `std` |
 | `std::operator""ms` / `std::chrono_literals` | `<chrono>` | `std` |
-| `std::ostream` | `<ostream>` | `std` |
+| `std::ostream` / `std::ofstream` | `<ostream>` / `<fstream>` | `std` |
 | `std::hex` / `std::dec` | `<ios>` | `std` |
 | `std::tolower` | `<cctype>` | `std` |
 | `std::cout` | `<iostream>` | `std` |
-| `std::ranges::transform` | `<algorithm>` | `std::ranges` |
-| `std::ranges::sort` | `<algorithm>` | `std::ranges` |
-| `std::ranges::find_if` | `<algorithm>` | `std::ranges` |
+| `std::ranges::distance` | `<iterator>` | `std::ranges` |
 | `std::ranges::find` | `<algorithm>` | `std::ranges` |
+| `std::ranges::find_if` | `<algorithm>` | `std::ranges` |
 | `std::ranges::fold_left` | `<algorithm>` | `std::ranges` |
+| `std::ranges::sort` | `<algorithm>` | `std::ranges` |
 | `std::ranges::to` | `<algorithm>` | `std::ranges` |
+| `std::ranges::transform` | `<algorithm>` | `std::ranges` |
 | `std::ranges::views::enumerate` | `<ranges>` | `std::ranges::views` |
 | `std::ranges::views::iota` | `<ranges>` | `std::ranges::views` |
 | `std::ranges::views::filter` | `<ranges>` | `std::ranges::views` |
@@ -296,21 +323,12 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `std::monostate` | `<variant>` | `std` |
 | `std::decay_t` / `std::is_same_v` / `std::is_constructible_v` | `<type_traits>` | `std` |
 | `std::begin` / `std::end` / `std::next` / `std::distance` | `<iterator>` | `std` |
+| `std::forward_iterator_tag` | `<iterator>` | `std` |
 | `std::stop_token` / `std::stop_source` | `<stop_token>` | `std` |
 | `std::flat_set` | `<flat_set>` | `std` |
 | `std::sorted_unique` | `<ranges>` | `std` |
 
-> **Note on `std::sorted_unique`:** This is a C++23 tag type in `<ranges>`, but clang-tidy's include-cleaner may false-positive flag it even when `<algorithm>` is included. Use `// NOLINTNEXTLINE(misc-include-cleaner)` at the usage site.
->
-> **Note on C headers with Linux-specific extensions:** `ESTRPIPE` (Linux errno 86) is only available via `<errno.h>`, not `<cerrno>`. `pollfd`, `POLLIN`, `poll`, `nfds_t` are only available via `<poll.h>`. These C headers may cause false positives from clang-tidy's `misc-include-cleaner`. Suppress with `NOLINTBEGIN(misc-include-cleaner)` / `NOLINTEND(misc-include-cleaner)` around the affected block.
->
-> **Note on GLib C typedefs:** `gssize`, `guint`, and `gpointer` are C typedefs from `<glib.h>`. clang-tidy's include-cleaner often cannot resolve symbols defined inside `extern "C"` blocks in C headers. When these types are the ONLY reason for including a C header, suppress with `// NOLINT(misc-include-cleaner)` at each usage site, or keep the umbrella `<glib.h>` with a NOLINT on the include.
->
-> **Note on GTK/GDK C macros:** `GTK_INVALID_LIST_POSITION` (from `<gtk/gtk.h>`) and `GDK_BUTTON_SECONDARY` (from `<gdk/gdk.h>`) are C macros. If the granular C header (e.g., `<gtk/gtkenums.h>` or `<gdk/gdktypes.h>`) doesn't resolve the warning, suppress with NOLINT — these are the same `extern "C"` resolution limitation.
->
-> **Note on incomplete type false positives:** clang-tidy may flag `<gtkmm/adjustment.h>` as unused even when `get_adjustment()->get_upper()` is called, because the type `Gtk::Adjustment` is accessed through a `Glib::RefPtr` indirection. Similarly, headers providing YAML template specializations (like `YAML::convert<LayoutValue>`) may be flagged as unused because the template is only implicitly instantiated. If removing such a header causes a compile error, restore it and add `// NOLINT(misc-include-cleaner)`.
->
-> **Note on UDL (user-defined literal) operators:** clang-tidy may fail to associate `std::operator""ms` with `<chrono>` when the literal operator is brought into scope via `using namespace std::chrono_literals`. If `<chrono>` is flagged as unused but `10ms` style literals are used, add NOLINT at the include or usage site.
+> **Note on standard types in headers:** Always prefer `<cstddef>` for `std::size_t`, `std::byte`, and `std::ptrdiff_t`. Prefer `<cstdint>` for fixed-width integers like `std::uint32_t`.
 
 ## Aobus Internal Types
 
@@ -343,7 +361,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `ao::library::MetaStore` | `<ao/library/MetaStore.h>` | `ao::library` |
 | `ao::library::MetaHeader` | `<ao/library/Meta.h>` | `ao::library` |
 | `ao::library::TrackHotHeader` | `<ao/library/TrackLayout.h>` | `ao::library` |
-| `ao::library::TrackColdHeader` | `<ao/library/TrackLayout.h>` | `ao::library` |
+| `ao::library::TrackColdHeader" | `<ao/library/TrackLayout.h>` | `ao::library` |
 | `ao::library::ListHeader` | `<ao/library/ListLayout.h>` | `ao::library` |
 | `ao::library::Exporter` | `<ao/library/Exporter.h>` | `ao::library` |
 | `ao::library::ExportMode` | `<ao/library/Exporter.h>` | `ao::library` |
@@ -363,13 +381,12 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `ao::audio::SampleFormatCapability` | `<ao/audio/Backend.h>` | `ao::audio` |
 | `ao::audio::Quality` | `<ao/audio/Backend.h>` | `ao::audio` |
 | `ao::audio::RouteAnchor` | `<ao/audio/Backend.h>` | `ao::audio` |
-| `ao::audio::Transport` | `<ao/audio/Types.h>` | `ao::audio` |
+| `ao::audio::Transport" | `<ao/audio/Types.h>` | `ao::audio` |
 | `ao::audio::Sample` | `<ao/audio/Types.h>` | `ao::audio` |
 | `ao::audio::TrackPlaybackDescriptor` | `<ao/audio/Types.h>` | `ao::audio` |
 | `ao::audio::PcmBlock` | `<ao/audio/DecoderTypes.h>` | `ao::audio` |
 | `ao::audio::DecodedStreamInfo` | `<ao/audio/DecoderTypes.h>` | `ao::audio` |
 | `ao::audio::Player` | `<ao/audio/Player.h>` | `ao::audio` |
-| `ao::audio::Player::Status` | `<ao/audio/Player.h>` | `ao::audio` |
 | `ao::audio::IBackend` | `<ao/audio/IBackend.h>` | `ao::audio` |
 | `ao::audio::IBackendProvider` | `<ao/audio/IBackendProvider.h>` | `ao::audio` |
 | `ao::audio::IDecoderSession` | `<ao/audio/IDecoderSession.h>` | `ao::audio` |
@@ -383,34 +400,13 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `ao::audio::PcmRingBuffer` | `<ao/audio/PcmRingBuffer.h>` | `ao::audio` |
 | `ao::audio::PcmConverter` | `<ao/audio/PcmConverter.h>` | `ao::audio` |
 | `ao::audio::MemorySource` | `<ao/audio/MemorySource.h>` | `ao::audio` |
-| `ao::audio::StreamingSource` | `<ao/audio/StreamingSource.h>` | `ao::audio` |
+| `ao::audio::StreamingSource" | `<ao/audio/StreamingSource.h>` | `ao::audio` |
 | `ao::audio::FormatNegotiator` | `<ao/audio/FormatNegotiator.h>` | `ao::audio` |
 | `ao::audio::RenderPlan` | `<ao/audio/FormatNegotiator.h>` | `ao::audio` |
 | `ao::audio::QualityResult` | `<ao/audio/QualityAnalyzer.h>` | `ao::audio` |
 | `ao::audio::analyzeAudioQuality` | `<ao/audio/QualityAnalyzer.h>` | `ao::audio` |
 | `ao::audio::flow::Graph` | `<ao/audio/flow/Graph.h>` | `ao::audio::flow` |
-| `ao::audio::flow::Node` | `<ao/audio/flow/Graph.h>` | `ao::audio::flow` |
-| `ao::audio::flow::Connection` | `<ao/audio/flow/Graph.h>` | `ao::audio::flow` |
-| `ao::audio::flow::NodeType` | `<ao/audio/flow/Graph.h>` | `ao::audio::flow` |
 | `ao::audio::Engine` | `<ao/audio/Engine.h>` | `ao::audio` |
-| `ao::audio::Engine::RouteStatus` | `<ao/audio/Engine.h>` | `ao::audio` |
-
-### Model (`ao::model::`)
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::model::ListDraft` | `<ao/model/ListDraft.h>` | `ao::model` |
-| `ao::model::ListKind` | `<ao/model/ListDraft.h>` | `ao::model` |
-
-### Query (`ao::query::`)
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::query::Expression` | `<ao/query/Expression.h>` | `ao::query` |
-| `ao::query::parse` | `<ao/query/Parser.h>` | `ao::query` |
-| `ao::query::serialize` | `<ao/query/Serializer.h>` | `ao::query` |
-| `ao::query::ExecutionPlan` | `<ao/query/ExecutionPlan.h>` | `ao::query` |
-| `ao::query::PlanEvaluator` | `<ao/query/PlanEvaluator.h>` | `ao::query` |
 
 ### Runtime (`ao::rt::`)
 
@@ -420,208 +416,28 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `ao::rt::ViewService` | `<runtime/ViewService.h>` | `ao::rt` |
 | `ao::rt::ViewId` | `<runtime/CorePrimitives.h>` | `ao::rt` |
 | `ao::rt::NotificationId` | `<runtime/CorePrimitives.h>` | `ao::rt` |
-| `ao::rt::Range` | `<runtime/CorePrimitives.h>` | `ao::rt` |
 | `ao::rt::Subscription` | `<runtime/CorePrimitives.h>` | `ao::rt` |
-| `ao::rt::IControlExecutor` | `<runtime/CorePrimitives.h>` | `ao::rt` |
-| `ao::rt::Signal` | `<runtime/CorePrimitives.h>` | `ao::rt` |
 | `ao::rt::PlaybackService` | `<runtime/PlaybackService.h>` | `ao::rt` |
 | `ao::rt::TrackSource` | `<runtime/TrackSource.h>` | `ao::rt` |
 | `ao::rt::ConfigStore` | `<runtime/ConfigStore.h>` | `ao::rt` |
-| `ao::rt::WorkspaceService` | `<runtime/WorkspaceService.h>` | `ao::rt` |
-| `ao::rt::LibraryMutationService` | `<runtime/LibraryMutationService.h>` | `ao::rt` |
-| `ao::rt::NotificationService` | `<runtime/NotificationService.h>` | `ao::rt` |
-| `ao::rt::SmartListEvaluator` | `<runtime/SmartListEvaluator.h>` | `ao::rt` |
-| `ao::rt::SmartListSource` | `<runtime/SmartListSource.h>` | `ao::rt` |
-| `ao::rt::PlaybackState` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::OutputSelection` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::OutputBackendSnapshot` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::LayoutState` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::NotificationSeverity` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::NotificationEntry` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::NotificationFeedState` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::TrackGroupKey` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::TrackSortField` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::TrackSortTerm` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::TrackPresentationField` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::TrackListPresentationState` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::TrackListViewState` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::ViewRecord` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::SessionSnapshot` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::MetadataPatch` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::UpdateTrackMetadataReply` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::EditTrackTagsReply` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::ImportFilesReply` | `<runtime/StateTypes.h>` | `ao::rt` |
-| `ao::rt::TrackPresentationSpec` | `<runtime/TrackPresentationPreset.h>` | `ao::rt` |
-| `ao::rt::TrackPresentationPreset` | `<runtime/TrackPresentationPreset.h>` | `ao::rt` |
 | `ao::rt::ITrackListProjection` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::TrackListPresentationSnapshot` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::FilterStatusChanged` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
 | `ao::rt::TrackListProjectionDeltaBatch` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::ITrackDetailProjection` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::TrackDetailSnapshot` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::AudioPropertySnapshot` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::SelectionKind` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
-| `ao::rt::TrackListProjection` | `<runtime/TrackListProjection.h>` | `ao::rt` |
-| `ao::rt::TrackDetailProjection` | `<runtime/TrackDetailProjection.h>` | `ao::rt` |
+| `ao::rt::ProjectionInsertRange` | `<runtime/ProjectionTypes.h>` | `ao::rt` |
+| `ao::rt::ProjectionRemoveRange" | `<runtime/ProjectionTypes.h>` | `ao::rt` |
+| `ao::rt::ProjectionUpdateRange" | `<runtime/ProjectionTypes.h>` | `ao::rt` |
+| `ao::rt::PlaybackState` | `<runtime/StateTypes.h>` | `ao::rt` |
+| `ao::rt::SessionSnapshot` | `<runtime/StateTypes.h>` | `ao::rt` |
 
-### Media (`ao::media::`)
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::media::flac::MetadataBlockLayout` | `<ao/media/flac/MetadataBlockLayout.h>` | `ao::media::flac` |
-| `ao::media::flac::MetadataBlockType` | `<ao/media/flac/MetadataBlockLayout.h>` | `ao::media::flac` |
-| `ao::media::mp4::AtomLayout` | `<ao/media/mp4/AtomLayout.h>` | `ao::media::mp4` |
-
-### Tag (`ao::tag::`)
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::tag::TagFile` | `<ao/tag/TagFile.h>` | `ao::tag` |
-| `ao::tag::mpeg::VersionID` | `<ao/tag/mpeg/FrameLayout.h>` | `ao::tag::mpeg` |
-| `ao::tag::mpeg::LayerDescription` | `<ao/tag/mpeg/FrameLayout.h>` | `ao::tag::mpeg` |
-| `ao::tag::mpeg::ChannelMode` | `<ao/tag/mpeg/FrameLayout.h>` | `ao::tag::mpeg` |
-| `ao::tag::mpeg::FrameLayout` | `<ao/tag/mpeg/FrameLayout.h>` | `ao::tag::mpeg` |
-
-### LMDB (`ao::lmdb::`)
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::lmdb::Environment` | `<ao/lmdb/Environment.h>` | `ao::lmdb` |
-| `ao::lmdb::Transaction` | `<ao/lmdb/Transaction.h>` | `ao::lmdb` |
-| `ao::lmdb::ReadTransaction` | `<ao/lmdb/Transaction.h>` | `ao::lmdb` |
-| `ao::lmdb::WriteTransaction` | `<ao/lmdb/Transaction.h>` | `ao::lmdb` |
-
-### Utility (`ao::utility::`)
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::utility::ScopedTimer` | `<ao/utility/ScopedTimer.h>` | `ao::utility` |
-| `ao::utility::bytes::view` | `<ao/utility/ByteView.h>` | `ao::utility::bytes` |
-| `ao::utility::bytes::stringView` | `<ao/utility/ByteView.h>` | `ao::utility::bytes` |
-| `ao::utility::layout::view` | `<ao/utility/ByteView.h>` | `ao::utility::layout` |
-| `ao::utility::layout::viewArray` | `<ao/utility/ByteView.h>` | `ao::utility::layout` |
-| `ao::utility::layout::asPtr` | `<ao/utility/ByteView.h>` | `ao::utility::layout` |
-| `ao::utility::layout::viewAt` | `<ao/utility/ByteView.h>` | `ao::utility::layout` |
-| `ao::utility::unsafeDowncast` | `<ao/utility/ByteView.h>` | `ao::utility` |
-| `ao::utility::makeUniquePtr` | `<ao/utility/UniquePtr.h>` | `ao::utility` |
+> **Internal Path Rule:** Always prefer relative paths (e.g., `"runtime/CorePrimitives.h"`) when including from within the same module (e.g., `app/linux-gtk/track/`). Use global paths (`<ao/rt/...>`) when including from other modules.
 
 ### GTK/App (`ao::gtk::`)
 
-#### App Shell
-
 | Type | Header | Namespace |
 | :--- | :--- | :--- |
-| `ao::gtk::MainWindow` | `"app/MainWindow.h"` | `ao::gtk` |
-| `ao::gtk::MainWindowCoordinator` | `"app/MainWindowCoordinator.h"` | `ao::gtk` |
-| `ao::gtk::MenuController` | `"app/MenuController.h"` | `ao::gtk` |
-| `ao::gtk::ShellLayoutController` | `"app/ShellLayoutController.h"` | `ao::gtk` |
-| `ao::gtk::GtkControlExecutor` | `"app/GtkControlExecutor.h"` | `ao::gtk` |
 | `ao::gtk::AobusSoul` | `"app/AobusSoul.h"` | `ao::gtk` |
-| `ao::gtk::ThemeBus` / `signalThemeRefresh` / `emitThemeRefresh` | `"app/ThemeBus.h"` | `ao::gtk` |
-| `ao::gtk::WindowState` | `"app/UIState.h"` | `ao::gtk` |
-| `ao::gtk::TrackViewState` | `"app/UIState.h"` | `ao::gtk` |
-| `ao::gtk::CustomTrackPresentationState` | `"app/UIState.h"` | `ao::gtk` |
-| `ao::gtk::TrackPresentationStoreState` | `"app/UIState.h"` | `ao::gtk` |
-
-#### Playback
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::gtk::AobusSoulBinding` | `"playback/AobusSoulBinding.h"` | `ao::gtk` |
-| `ao::gtk::AobusSoulWindow` | `"playback/AobusSoulWindow.h"` | `ao::gtk` |
-| `ao::gtk::OutputSelector` | `"playback/OutputSelector.h"` | `ao::gtk` |
-| `ao::gtk::OutputListItems` / `BackendItem` / `DeviceItem` | `"playback/OutputListItems.h"` | `ao::gtk` |
-| `ao::gtk::PlaybackDetailsWidget` | `"playback/PlaybackDetailsWidget.h"` | `ao::gtk` |
-| `ao::gtk::PlaybackSequenceController` | `"playback/PlaybackSequenceController.h"` | `ao::gtk` |
-| `ao::gtk::ActivePlaybackSequence` | `"playback/PlaybackSequenceController.h"` | `ao::gtk` |
-| `ao::gtk::SeekControl` | `"playback/SeekControl.h"` | `ao::gtk` |
-| `ao::gtk::TimeLabel` | `"playback/TimeLabel.h"` | `ao::gtk` |
-| `ao::gtk::TransportButton` | `"playback/TransportButton.h"` | `ao::gtk` |
-| `ao::gtk::VolumeBar` | `"playback/VolumeBar.h"` | `ao::gtk` |
-| `ao::gtk::VolumeControl` | `"playback/VolumeControl.h"` | `ao::gtk` |
-| `ao::gtk::NowPlayingFieldLabel` | `"playback/NowPlayingFieldLabel.h"` | `ao::gtk` |
-| `ao::gtk::NowPlayingStatusLabel` | `"playback/NowPlayingStatusLabel.h"` | `ao::gtk` |
-| `ao::gtk::PlaybackPositionInterpolator` | `"playback/PlaybackPositionInterpolator.h"` | `ao::gtk` |
-
-#### Track
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
 | `ao::gtk::TrackRowCache` | `"track/TrackRowCache.h"` | `ao::gtk` |
 | `ao::gtk::TrackRowObject` | `"track/TrackRowObject.h"` | `ao::gtk` |
 | `ao::gtk::TrackListAdapter` | `"track/TrackListAdapter.h"` | `ao::gtk` |
-| `ao::gtk::TrackFilterMode` | `"track/TrackListAdapter.h"` | `ao::gtk` |
-| `ao::gtk::ProjectionTrackModel` | `"track/TrackListModel.h"` | `ao::gtk` |
-| `ao::gtk::TrackViewPage` | `"track/TrackViewPage.h"` | `ao::gtk` |
-| `ao::gtk::TrackPageHost` | `"track/TrackPageHost.h"` | `ao::gtk` |
-| `ao::gtk::TrackColumnViewHost` | `"track/TrackColumnViewHost.h"` | `ao::gtk` |
-| `ao::gtk::TrackColumnController` | `"track/TrackColumnController.h"` | `ao::gtk` |
-| `ao::gtk::TrackSelectionController` | `"track/TrackSelectionController.h"` | `ao::gtk` |
-| `ao::gtk::TrackFilterController` | `"track/TrackFilterController.h"` | `ao::gtk` |
-| `ao::gtk::TrackColumnLayoutModel` | `"track/TrackPresentation.h"` | `ao::gtk` |
-| `ao::gtk::TrackColumn` | `"track/TrackPresentation.h"` | `ao::gtk` |
-| `ao::gtk::TrackColumnDefinition` | `"track/TrackPresentation.h"` | `ao::gtk` |
-| `ao::gtk::TrackColumnLayout` | `"track/TrackPresentation.h"` | `ao::gtk` |
-| `ao::gtk::TrackColumnState` | `"track/TrackPresentation.h"` | `ao::gtk` |
-| `ao::gtk::TrackPresentationStore` | `"track/TrackPresentationStore.h"` | `ao::gtk` |
-| `ao::gtk::TrackColumnFactoryBuilder` / `buildColumnFactory` | `"track/TrackColumnFactoryBuilder.h"` | `ao::gtk` |
-| `ao::gtk::ColumnVisibilityModel` | `"track/ColumnVisibilityModel.h"` | `ao::gtk` |
-| `ao::gtk::SelectionInfoLabel` | `"track/SelectionInfoLabel.h"` | `ao::gtk` |
-| `ao::gtk::StatusNotificationLabel` | `"track/StatusNotificationLabel.h"` | `ao::gtk` |
-| `ao::gtk::LibraryTrackCountLabel` | `"track/LibraryTrackCountLabel.h"` | `ao::gtk` |
-| `ao::gtk::TrackCustomViewDialog` | `"track/TrackCustomViewDialog.h"` | `ao::gtk` |
-
-#### List / Sidebar
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::gtk::ListSidebarController` | `"list/ListSidebarController.h"` | `ao::gtk` |
-| `ao::gtk::ListSidebarPanel` | `"list/ListSidebarPanel.h"` | `ao::gtk` |
-| `ao::gtk::ListTreeItem` | `"list/ListTreeItem.h"` | `ao::gtk` |
-| `ao::gtk::ListRowObject` | `"list/ListRowObject.h"` | `ao::gtk` |
-| `ao::gtk::ListTreeModelBuilder` | `"list/ListTreeModelBuilder.h"` | `ao::gtk` |
-| `ao::gtk::SmartListDialog` | `"list/SmartListDialog.h"` | `ao::gtk` |
-| `ao::gtk::QueryExpressionBox` | `"list/QueryExpressionBox.h"` | `ao::gtk` |
-
-#### Inspector / Cover Art
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::gtk::TrackInspectorPanel` | `"inspector/TrackInspectorPanel.h"` | `ao::gtk` |
-| `ao::gtk::CoverArtWidget` | `"inspector/CoverArtWidget.h"` | `ao::gtk` |
-| `ao::gtk::CoverArtCache` | `"inspector/CoverArtCache.h"` | `ao::gtk` |
-
-#### Tag Editing
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::gtk::TagEditController` | `"tag/TagEditController.h"` | `ao::gtk` |
-| `ao::gtk::TagEditor` | `"tag/TagEditor.h"` | `ao::gtk` |
-| `ao::gtk::TagPopover` | `"tag/TagPopover.h"` | `ao::gtk` |
-
-#### Library I/O
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::gtk::ImportExportCoordinator` | `"library_io/ImportExportCoordinator.h"` | `ao::gtk` |
-| `ao::gtk::ImportExportCallbacks` | `"library_io/ImportExportCoordinator.h"` | `ao::gtk` |
-| `ao::gtk::ImportProgressDialog` | `"library_io/ImportProgressDialog.h"` | `ao::gtk` |
-| `ao::gtk::ImportProgressIndicator` | `"library_io/ImportProgressIndicator.h"` | `ao::gtk` |
-| `ao::gtk::PlaylistExporter` | `"library_io/PlaylistExporter.h"` | `ao::gtk` |
-
-#### Layout System
-
-| Type | Header | Namespace |
-| :--- | :--- | :--- |
-| `ao::gtk::layout::LayoutDocument` | `"layout/document/LayoutDocument.h"` | `ao::gtk::layout` |
-| `ao::gtk::layout::LayoutNode` | `"layout/document/LayoutNode.h"` | `ao::gtk::layout` |
-| `ao::gtk::layout::LayoutValue` | `"layout/document/LayoutNode.h"` | `ao::gtk::layout` |
-| `ao::gtk::layout::ComponentRegistry` | `"layout/runtime/ComponentRegistry.h"` | `ao::gtk::layout` |
-| `ao::gtk::layout::ComponentDescriptor` | `"layout/runtime/ComponentRegistry.h"` | `ao::gtk::layout` |
-| `ao::gtk::layout::PropertyDescriptor` | `"layout/runtime/ComponentRegistry.h"` | `ao::gtk::layout` |
-| `ao::gtk::layout::ILayoutComponent` | `"layout/runtime/ILayoutComponent.h"` | `ao::gtk::layout` |
-| `ao::gtk::layout::LayoutContext` | `"layout/runtime/LayoutContext.h"` | `ao::gtk::layout` |
-| `ao::gtk::layout::LayoutHost` | `"layout/runtime/LayoutHost.h"` | `ao::gtk::layout` |
-| `ao::gtk::layout::LayoutRuntime` | `"layout/runtime/LayoutRuntime.h"` | `ao::gtk::layout` |
-| YAML::convert specializations for LayoutValue, LayoutNode, LayoutDocument | `"layout/document/LayoutYaml.h"` | `YAML` |
-| `ao::gtk::layout::editor::LayoutEditorDialog` | `"layout/editor/LayoutEditorDialog.h"` | `ao::gtk::layout::editor` |
+| `ao::gtk::TrackColumnController" | `"track/TrackColumnController.h"` | `ao::gtk` |
+| `ao::gtk::TrackSelectionController" | `"track/TrackSelectionController.h"` | `ao::gtk` |
+| `ao::gtk::QueryExpressionBox" | `"list/QueryExpressionBox.h"` | `ao::gtk` |

@@ -4,12 +4,12 @@
 #pragma once
 
 #if __has_include(<spdlog/fmt/fmt.h>)
-#include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/fmt.h> // NOLINT(misc-include-cleaner)
 #elif __has_include(<fmt/format.h>)
-#include <fmt/format.h>
+#include <fmt/format.h> // NOLINT(misc-include-cleaner)
 #endif
 
-#include <compare>
+#include <cstddef>
 #include <format>
 #include <functional>
 #include <string>
@@ -86,9 +86,9 @@ namespace std
 namespace fmt
 {
   template<typename Tag>
-  struct formatter<ao::utility::StrongId<Tag>> : formatter<std::string_view>
+  struct formatter<ao::utility::StrongId<Tag>> : formatter<std::string_view> // NOLINT(misc-include-cleaner)
   {
-    auto format(ao::utility::StrongId<Tag> const& id, format_context& ctx) const
+    auto format(ao::utility::StrongId<Tag> const& id, format_context& ctx) const // NOLINT(misc-include-cleaner)
     {
       return formatter<std::string_view>::format(static_cast<std::string_view>(id), ctx);
     }

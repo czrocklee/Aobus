@@ -43,6 +43,7 @@ namespace ao::media::mp4
   {
     constexpr std::size_t kMetaHeaderSkip = 4;
     constexpr std::size_t kStsdHeaderSkip = 8;
+    constexpr std::size_t kAudioSampleEntryHeaderSkip = 28;
     constexpr std::size_t kAtomHeaderSize = 8;
 
     std::map<std::string, std::size_t, std::less<>> const ContainerAtomInterested = {{"moov", 0},
@@ -77,8 +78,7 @@ namespace ao::media::mp4
         }
         else if (parent.type() == "stsd" && (type == "alac" || type == "mp4a"))
         {
-          // Audio sample entries (alac, mp4a) in stsd have 28 bytes of fixed data
-          optSkip = 28; // NOLINT(readability-magic-numbers)
+          optSkip = kAudioSampleEntryHeaderSkip;
         }
 
         if (optSkip)

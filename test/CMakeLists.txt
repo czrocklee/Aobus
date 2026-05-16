@@ -41,6 +41,8 @@ add_executable(ao_test
     unit/audio/backend/detail/AlsaProviderHelpersTest.cpp
 
     # app unit tests (no platform deps)
+    unit/runtime/AsyncRuntimeTest.cpp
+    unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/SmartListEvaluatorTest.cpp
     unit/runtime/TrackPresentationPresetTest.cpp
     unit/runtime/TrackListProjectionTest.cpp
@@ -77,7 +79,6 @@ endif()
 target_compile_definitions(ao_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
 target_compile_options(ao_test PRIVATE -Wno-array-bounds)
 add_test(NAME ao_test COMMAND ao_test)
-aobus_apply_clang_tidy(ao_test RELAXED)
 
 # ao_test_gtk: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_test_gtk

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -41,6 +42,8 @@ namespace ao::tag::mpeg
 
   struct FrameLayout
   {
+    static constexpr std::size_t kHeaderByteCount = 4;
+
     static constexpr std::uint8_t kSyncMask1 = 0xFF;
     static constexpr std::uint8_t kSyncMask2 = 0x07;
     static constexpr std::uint8_t kSyncShift2 = 5;
@@ -77,8 +80,9 @@ namespace ao::tag::mpeg
     static constexpr std::uint8_t kOriginalShift = 2;
 
     static constexpr std::uint8_t kEmphasisMask = 0x03;
+    static constexpr std::size_t kSideInfoByteIndex = 3;
 
-    std::array<std::uint8_t, 4> data;
+    std::array<std::uint8_t, kHeaderByteCount> data;
 
     std::uint8_t sync1() const { return data[0]; }
     std::uint8_t sync2() const { return (data[1] >> kSyncShift2) & kSyncMask2; }
@@ -89,11 +93,17 @@ namespace ao::tag::mpeg
     std::uint8_t samplingRateIndex() const { return (data[2] >> kSamplingShift) & kSamplingMask; }
     std::uint8_t paddingBit() const { return (data[2] >> kPaddingShift) & kPaddingMask; }
     std::uint8_t privateBit() const { return data[2] & kPrivateMask; }
-    ChannelMode channelMode() const { return static_cast<ChannelMode>((data[3] >> kChannelModeShift) & kChannelModeMask); } // NOLINT(readability-magic-numbers)
-    std::uint8_t modeExtension() const { return (data[3] >> kModeExtensionShift) & kModeExtensionMask; }                // NOLINT(readability-magic-numbers)
-    std::uint8_t copyrightBit() const { return (data[3] >> kCopyrightShift) & kCopyrightMask; }                         // NOLINT(readability-magic-numbers)
-    std::uint8_t originalBit() const { return (data[3] >> kOriginalShift) & kOriginalMask; }                           // NOLINT(readability-magic-numbers)
-    std::uint8_t emphasis() const { return data[3] & kEmphasisMask; }                                                   // NOLINT(readability-magic-numbers)
+    ChannelMode channelMode() const
+    {
+      return static_cast<ChannelMode>((data[kSideInfoByteIndex] >> kChannelModeShift) & kChannelModeMask);
+    }
+    std::uint8_t modeExtension() const
+    {
+      return (data[kSideInfoByteIndex] >> kModeExtensionShift) & kModeExtensionMask;
+    }
+    std::uint8_t copyrightBit() const { return (data[kSideInfoByteIndex] >> kCopyrightShift) & kCopyrightMask; }
+    std::uint8_t originalBit() const { return (data[kSideInfoByteIndex] >> kOriginalShift) & kOriginalMask; }
+    std::uint8_t emphasis() const { return data[kSideInfoByteIndex] & kEmphasisMask; }
   };
 
   static_assert(sizeof(FrameLayout) == 4);

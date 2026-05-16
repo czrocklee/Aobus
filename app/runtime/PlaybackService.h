@@ -5,7 +5,13 @@
 
 #include "CorePrimitives.h"
 #include "StateTypes.h"
+#include <ao/Type.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/IBackendProvider.h>
+#include <ao/audio/Types.h>
+
+#include <cstdint>
+#include <functional>
 #include <memory>
 
 namespace ao::library

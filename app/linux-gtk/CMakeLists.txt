@@ -79,7 +79,6 @@ target_link_libraries(aobus-gtk-lib PUBLIC app_runtime)
 target_link_libraries(aobus-gtk-lib PRIVATE ao ao_audio PkgGTKMM glibmm-2.68 Boost::headers)
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 
-aobus_apply_clang_tidy(aobus-gtk-lib STRICT)
 
 # aobus-gtk executable
 add_executable(aobus-gtk main.cpp)

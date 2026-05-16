@@ -5,7 +5,7 @@
 
 #include <ao/Type.h>
 
-#include <functional>
+#include <cstddef>
 #include <optional>
 #include <span>
 #include <vector>

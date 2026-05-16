@@ -3,10 +3,17 @@
 
 #pragma once
 
-#include <gtkmm.h>
+#include <gtkmm/box.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/listview.h>
+#include <gtkmm/popover.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/singleselection.h>
+#include <gtkmm/stringlist.h>
+
+#include <glibmm/refptr.h>
 
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <vector>
 

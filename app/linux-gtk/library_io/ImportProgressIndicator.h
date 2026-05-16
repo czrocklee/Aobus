@@ -6,8 +6,10 @@
 #include <runtime/CorePrimitives.h>
 
 #include <gtkmm/box.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/progressbar.h>
+#include <gtkmm/widget.h>
 
 namespace ao::rt
 {

@@ -5,8 +5,10 @@
 
 #include <cstdint>
 #include <format>
+#include <functional>
 #include <map>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <variant>
 #include <vector>
@@ -23,7 +25,7 @@ namespace ao::gtk::layout
     LayoutValue() = default;
 
     template<typename T>
-    requires(!std::is_same_v<std::remove_cvref_t<T>, LayoutValue>)
+      requires(!std::is_same_v<std::remove_cvref_t<T>, LayoutValue>)
     explicit LayoutValue(T&& value)
       : data{std::forward<T>(value)}
     {

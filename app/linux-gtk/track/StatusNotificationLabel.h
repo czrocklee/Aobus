@@ -8,9 +8,11 @@
 
 #include <gtkmm/label.h>
 #include <gtkmm/stack.h>
+#include <gtkmm/widget.h>
+#include <sigc++/connection.h>
 
 #include <chrono>
-#include <memory>
+#include <string_view>
 
 namespace ao::rt
 {

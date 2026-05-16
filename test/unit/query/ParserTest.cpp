@@ -17,81 +17,81 @@ namespace ao::query::test
   namespace
   {
     char const* toString(Operator op)
-  {
-    switch (op)
     {
-      case Operator::And: return "and";
-      case Operator::Or: return "or";
-      case Operator::Not: return "not";
-      case Operator::Equal: return "eq";
-      case Operator::NotEqual: return "ne";
-      case Operator::Like: return "like";
-      case Operator::Less: return "lt";
-      case Operator::LessEqual: return "le";
-      case Operator::Greater: return "gt";
-      case Operator::GreaterEqual: return "ge";
-      case Operator::Add: return "add";
-      default: return "unknown";
-    }
-  }
-
-  struct Canonicalizer final
-  {
-    void operator()(std::unique_ptr<BinaryExpression> const& binary)
-    {
-      if (!binary)
+      switch (op)
       {
-        return;
+        case Operator::And: return "and";
+        case Operator::Or: return "or";
+        case Operator::Not: return "not";
+        case Operator::Equal: return "eq";
+        case Operator::NotEqual: return "ne";
+        case Operator::Like: return "like";
+        case Operator::Less: return "lt";
+        case Operator::LessEqual: return "le";
+        case Operator::Greater: return "gt";
+        case Operator::GreaterEqual: return "ge";
+        case Operator::Add: return "add";
+        default: return "unknown";
+      }
+    }
+
+    struct Canonicalizer final
+    {
+      void operator()(std::unique_ptr<BinaryExpression> const& binary)
+      {
+        if (!binary)
+        {
+          return;
+        }
+
+        oss << "[b{" << toString(binary->optOperation->op) << "}";
+        std::visit(*this, binary->operand);
+        oss << ",";
+        std::visit(*this, binary->optOperation->operand);
+        oss << "]";
       }
 
-      oss << "[b{" << toString(binary->optOperation->op) << "}";
-      std::visit(*this, binary->operand);
-      oss << ",";
-      std::visit(*this, binary->optOperation->operand);
-      oss << "]";
-    }
-
-    void operator()(std::unique_ptr<UnaryExpression> const& unary)
-    {
-      if (!unary)
+      void operator()(std::unique_ptr<UnaryExpression> const& unary)
       {
-        return;
+        if (!unary)
+        {
+          return;
+        }
+
+        oss << "[u{!}";
+        std::visit(*this, unary->operand);
+        oss << "]";
       }
 
-      oss << "[u{!}";
-      std::visit(*this, unary->operand);
-      oss << "]";
-    }
-
-    void operator()(VariableExpression const& variable)
-    {
-      oss << "[v{";
-
-      switch (variable.type)
+      void operator()(VariableExpression const& variable)
       {
-        case VariableType::Metadata: oss << 'm'; break;
-        case VariableType::Property: oss << 'p'; break;
-        case VariableType::Tag: oss << 't'; break;
-        case VariableType::Custom: oss << 'c'; break;
+        oss << "[v{";
+
+        switch (variable.type)
+        {
+          case VariableType::Metadata: oss << 'm'; break;
+          case VariableType::Property: oss << 'p'; break;
+          case VariableType::Tag: oss << 't'; break;
+          case VariableType::Custom: oss << 'c'; break;
+        }
+
+        oss << "}" << variable.name << "]";
       }
 
-      oss << "}" << variable.name << "]";
-    }
+      void operator()(ConstantExpression const& constant)
+      {
+        oss << "[c{";
+        std::visit(utility::makeVisitor([this](std::monostate) { oss << "n}"; },
+                                        [this](bool val) { oss << "b}" << (val ? "true" : "false"); },
+                                        [this](std::int64_t val) { oss << "i}" << val; },
+                                        [this](UnitConstantExpression const& val) { oss << "u}" << val.lexeme; },
+                                        [this](std::string_view val) { oss << "s}" << val; }),
+                   constant);
+        oss << "]";
+      }
 
-    void operator()(ConstantExpression const& constant)
-    {
-      oss << "[c{";
-      std::visit(utility::makeVisitor([this](std::monostate) { oss << "n}"; },
-                                      [this](bool val) { oss << "b}" << (val ? "true" : "false"); },
-                                      [this](std::int64_t val) { oss << "i}" << val; },
-                                      [this](UnitConstantExpression const& val) { oss << "u}" << val.lexeme; },
-                                      [this](std::string_view val) { oss << "s}" << val; }),
-                 constant);
-      oss << "]";
-    }
-
-    std::ostringstream oss;
-  };
+      std::ostringstream oss;
+    };
 
     std::string canonicalize(Expression const& expr)
     {

@@ -68,8 +68,7 @@ namespace ao::tag::flac
     clearOwnedStrings();
     auto builder = library::TrackBuilder::createNew();
 
-    auto iter = MetadataBlockViewIterator{
-      static_cast<char const*>(address()) + 4, size() - 4};
+    auto iter = MetadataBlockViewIterator{static_cast<char const*>(address()) + 4, size() - 4};
     auto const end = MetadataBlockViewIterator{};
 
     for (; iter != end; ++iter)
@@ -88,8 +87,7 @@ namespace ao::tag::flac
             {
               builder.property()
                 .durationMs(durationMs)
-                .bitrate(
-                  static_cast<std::uint32_t>((size() * kBitsPerByte * kMsPerSecond) / durationMs));
+                .bitrate(static_cast<std::uint32_t>((size() * kBitsPerByte * kMsPerSecond) / durationMs));
             }
           }
 

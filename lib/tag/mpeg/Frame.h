@@ -4,13 +4,11 @@
 #pragma once
 
 #include "FrameLayout.h"
+
 #include <cassert>
-#include <functional>
-#include <memory>
-#include <numeric>
+#include <cstddef>
+#include <cstdint>
 #include <optional>
-#include <string_view>
-#include <vector>
 
 namespace ao::tag::mpeg
 {

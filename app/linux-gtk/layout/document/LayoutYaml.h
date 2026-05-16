@@ -8,9 +8,9 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include <functional>
 #include <map>
 #include <string>
-#include <vector>
 
 namespace YAML
 {
@@ -28,7 +28,7 @@ namespace YAML
   {
     static Node encode(std::map<std::string, LayoutValue, std::less<>> const& rhs)
     {
-      auto node = Node{NodeType::Map};
+      auto node = Node{NodeType::Map}; // NOLINT(misc-include-cleaner)
 
       for (auto const& [key, value] : rhs)
       {

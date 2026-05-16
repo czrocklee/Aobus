@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include <ao/library/DictionaryStore.h>
+#include <ao/Type.h>
 
+#include <cstddef>
 #include <cstdint>
 
 namespace ao::library

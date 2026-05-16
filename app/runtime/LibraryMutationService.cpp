@@ -2,10 +2,12 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "LibraryMutationService.h"
-
+#include "async/Runtime.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
+#include <ao/library/Exporter.h>
 #include <ao/library/ImportWorker.h>
+#include <ao/library/Importer.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -16,6 +18,8 @@
 #include <runtime/CorePrimitives.h>
 #include <runtime/StateTypes.h>
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -75,7 +79,7 @@ namespace ao::rt
       if (patch.optWork)
       {
         meta.work(*patch.optWork);
-        result.changedCold = true;
+        result.changedHot = true;
       }
 
       return result;
@@ -87,10 +91,16 @@ namespace ao::rt
     IControlExecutor& executor;
     library::MusicLibrary& library;
     std::jthread importThread;
+
     Signal<std::vector<TrackId> const&> tracksMutatedSignal;
     Signal<LibraryMutationService::ListsMutated const&> listsMutatedSignal;
     Signal<std::size_t> importCompletedSignal;
     Signal<LibraryMutationService::ImportProgressUpdated const&> importProgressSignal;
+
+    Impl(IControlExecutor& ex, library::MusicLibrary& lib)
+      : executor{ex}, library{lib}
+    {
+    }
   };
 
   LibraryMutationService::LibraryMutationService(IControlExecutor& executor, library::MusicLibrary& library)
@@ -131,7 +141,7 @@ namespace ao::rt
 
     for (auto const trackId : trackIds)
     {
-      auto const optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
       if (!optView)
       {
@@ -176,7 +186,7 @@ namespace ao::rt
 
     for (auto const trackId : trackIds)
     {
-      auto const optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+      auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
 
       if (!optView)
       {
@@ -257,6 +267,96 @@ namespace ao::rt
       });
 
     return ImportFilesReply{};
+  }
+
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters,misc-include-cleaner)
+  async::Task<void> LibraryMutationService::importFilesAsync(async::Runtime& runtime,
+                                                             std::vector<std::filesystem::path> paths)
+  {
+    co_await async::resumeOnWorker(runtime);
+    setCurrentThreadName("FileImportAsync");
+
+    auto resultIds = std::vector<TrackId>{};
+    auto const totalFiles = paths.size();
+
+    auto worker = ao::library::ImportWorker(
+      _impl->library,
+      paths,
+      [this, totalFiles](std::filesystem::path const& filePath, std::int32_t index)
+      {
+        _impl->executor.dispatch(
+          [this, filePath, index, totalFiles]
+          {
+            auto const fraction = totalFiles > 0 ? static_cast<double>(index) / static_cast<double>(totalFiles) : 0.0;
+            auto const message = "Importing: " + filePath.filename().string();
+            _impl->importProgressSignal.emit(LibraryMutationService::ImportProgressUpdated{
+              .fraction = fraction,
+              .message = message,
+            });
+          });
+      },
+      [] {});
+
+    worker.run();
+    resultIds = worker.result().insertedIds;
+
+    co_await async::resumeOnUi(runtime);
+
+    _impl->importCompletedSignal.emit(resultIds.size());
+
+    if (!resultIds.empty())
+    {
+      _impl->tracksMutatedSignal.emit(resultIds);
+    }
+  }
+
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
+  async::Task<void> LibraryMutationService::importLibraryAsync(async::Runtime& runtime, std::filesystem::path path)
+  {
+    co_await async::resumeOnWorker(runtime);
+    setCurrentThreadName("LibraryImport");
+    auto importer = ao::library::Importer{_impl->library};
+    importer.importFromYaml(path);
+    co_await async::resumeOnUi(runtime);
+  }
+
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
+  async::Task<void> LibraryMutationService::exportLibraryAsync(async::Runtime& runtime,
+                                                               std::filesystem::path path,
+                                                               library::ExportMode mode)
+  {
+    co_await async::resumeOnWorker(runtime);
+    setCurrentThreadName("LibraryExport");
+    auto exporter = ao::library::Exporter{_impl->library};
+    exporter.exportToYaml(path, mode);
+    co_await async::resumeOnUi(runtime);
+  }
+
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
+  async::Task<std::vector<std::filesystem::path>> LibraryMutationService::scanLibraryAsync(async::Runtime& runtime,
+                                                                                           std::filesystem::path dir)
+  {
+    co_await async::resumeOnWorker(runtime);
+    setCurrentThreadName("LibraryScan");
+
+    auto files = std::vector<std::filesystem::path>{};
+
+    for (auto const& entry : std::filesystem::recursive_directory_iterator(dir))
+    {
+      if (entry.is_regular_file())
+      {
+        auto ext = entry.path().extension().string();
+        std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return std::tolower(ch); });
+
+        if (ext == ".flac" || ext == ".m4a" || ext == ".mp3" || ext == ".wav")
+        {
+          files.push_back(entry.path());
+        }
+      }
+    }
+
+    co_await async::resumeOnUi(runtime);
+    co_return files;
   }
 
   ListId LibraryMutationService::createList(model::ListDraft const& draft)

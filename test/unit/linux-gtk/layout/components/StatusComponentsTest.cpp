@@ -9,13 +9,17 @@
 #include <app/runtime/AppRuntime.h>
 #include <app/runtime/ConfigStore.h>
 #include <app/runtime/ListSourceStore.h>
+#include <runtime/CorePrimitives.h>
+#include <test/unit/lmdb/TestUtils.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
+#include <gtkmm/stack.h>
 
-#include <test/unit/lmdb/TestUtils.h>
+#include <functional>
+#include <memory>
 
 namespace ao::gtk::test
 {
@@ -31,6 +35,7 @@ namespace ao::gtk::test
   } // namespace
 
   using namespace ao::lmdb::test;
+
   TEST_CASE("Status bar components", "[gtk][shell]")
   {
     auto const app = Gtk::Application::create("io.github.aobus.status_test");
@@ -55,7 +60,7 @@ namespace ao::gtk::test
       auto label = NowPlayingStatusLabel{runtime.playback()};
       auto* gtkLabel = dynamic_cast<Gtk::Label*>(&label.widget());
       REQUIRE(gtkLabel != nullptr);
-      CHECK(gtkLabel->get_text() == "");
+      CHECK(gtkLabel->get_text().empty());
     }
 
     SECTION("ImportProgressIndicator instantiates and is hidden by default")

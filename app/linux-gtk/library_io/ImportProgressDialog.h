@@ -3,7 +3,14 @@
 
 #pragma once
 
-#include <gtkmm.h>
+#include <gtkmm/button.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/label.h>
+#include <gtkmm/progressbar.h>
+#include <gtkmm/window.h>
+
+#include <cstdint>
+#include <string>
 
 namespace ao::gtk
 {

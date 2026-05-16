@@ -7,8 +7,12 @@
 #include "ProjectionTypes.h"
 #include "StateTypes.h"
 #include "TrackPresentationPreset.h"
+#include <ao/Type.h>
 
+#include <functional>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::library

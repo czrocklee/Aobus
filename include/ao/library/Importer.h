@@ -3,24 +3,13 @@
 
 #pragma once
 
-#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
 
-#include <cstdint>
-#include <deque>
 #include <filesystem>
-#include <string>
-#include <unordered_map>
-
-namespace YAML
-{
-  class Node;
-}
+#include <memory>
 
 namespace ao::library
 {
-  class TrackBuilder;
-
   /**
    * Importer - Logical YAML importer for MusicLibrary.
    */
@@ -28,6 +17,12 @@ namespace ao::library
   {
   public:
     explicit Importer(MusicLibrary& ml);
+    ~Importer();
+
+    Importer(Importer const&) = delete;
+    Importer& operator=(Importer const&) = delete;
+    Importer(Importer&&) noexcept = default;
+    Importer& operator=(Importer&&) noexcept = default;
 
     /**
      * Import the library from a YAML file.
@@ -37,21 +32,7 @@ namespace ao::library
     void importFromYaml(std::filesystem::path const& path);
 
   private:
-    void importTracks(YAML::Node const& tracks,
-                      lmdb::WriteTransaction& txn,
-                      std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId);
-    void importLists(YAML::Node const& lists,
-                     lmdb::WriteTransaction& txn,
-                     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId);
-
-    void overlayMetadata(TrackBuilder& builder,
-                         YAML::Node const& trackNode,
-                         std::deque<std::string>& trackStrings) const;
-    void overlayCustomData(TrackBuilder& builder,
-                           YAML::Node const& trackNode,
-                           std::deque<std::string>& trackStrings) const;
-    void overlayTechnicalProperties(TrackBuilder& builder, YAML::Node const& trackNode) const;
-
-    MusicLibrary& _ml;
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
   };
 } // namespace ao::library

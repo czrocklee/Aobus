@@ -257,7 +257,7 @@ namespace ao::gtk
 
     if (!filter.empty())
     {
-      filterLabel->set_text(std::format("[{}]", filter));
+      filterLabel->set_text(std::format("[{}]", filter.raw()));
       filterLabel->set_visible(true);
     }
     else

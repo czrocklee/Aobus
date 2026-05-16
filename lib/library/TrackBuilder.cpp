@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackView.h>
+#include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
+#include <ao/library/TrackView.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/Type.h>
 #include <ao/utility/ByteView.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -23,6 +23,8 @@
 namespace ao::library
 {
   constexpr std::uint32_t kBloomBitMask = 31;
+  constexpr std::size_t kSerializedAlignmentBytes = 4;
+  constexpr std::size_t kSerializedAlignmentMask = kSerializedAlignmentBytes - 1;
 
   //=============================================================================
   // TrackBuilder - factory methods
@@ -415,7 +417,7 @@ namespace ao::library
     _size = sizeof(TrackHotHeader);
     _size += _tagIds.size() * sizeof(DictionaryId);
     _size += builder->_metadataBuilder._title.size();
-    _size = (_size + 3) & ~3; // NOLINT(readability-magic-numbers) pad to 4 bytes
+    _size = (_size + kSerializedAlignmentMask) & ~kSerializedAlignmentMask;
   }
 
   void TrackBuilder::PreparedHot::writeTo(std::span<std::byte> out) const
@@ -502,10 +504,9 @@ namespace ao::library
     std::size_t const entryCount = _resolvedPairs.size();
     std::size_t totalValueSize = 0;
 
-    // NOLINTNEXTLINE(readability-identifier-length)
-    for (auto const& [_, value] : _resolvedPairs)
+    for (auto const& resolvedPair : _resolvedPairs)
     {
-      totalValueSize += value.size();
+      totalValueSize += resolvedPair.second.size();
     }
 
     _uriLen = static_cast<std::uint16_t>(_builder->_propertyBuilder._uri.size());
@@ -513,12 +514,10 @@ namespace ao::library
     // Cold layout: header(52) + entries(N*8) + values + uri
     std::size_t size = sizeof(TrackColdHeader);
     constexpr std::size_t kEntrySize = 8;
-    constexpr std::size_t kAlignmentBytes = 4;
-    constexpr std::size_t kAlignmentMask = kAlignmentBytes - 1;
     size += entryCount * kEntrySize;
     size += totalValueSize;
     size += _uriLen;
-    size = (size + kAlignmentMask) & ~kAlignmentMask;
+    size = (size + kSerializedAlignmentMask) & ~kSerializedAlignmentMask;
 
     _uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + (entryCount * kEntrySize) + totalValueSize);
     _size = size;
@@ -580,9 +579,10 @@ namespace ao::library
     }
 
     // Write all values contiguously
-    // NOLINTNEXTLINE(readability-identifier-length)
-    for (auto const& [_, value] : _resolvedPairs)
+    for (auto const& resolvedPair : _resolvedPairs)
     {
+      auto const& value = resolvedPair.second;
+
       if (!value.empty())
       {
         std::memcpy(out.data() + pos, value.data(), value.size());

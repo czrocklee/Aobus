@@ -5,10 +5,9 @@
 
 #include "app/UIState.h"
 
-#include <runtime/ConfigStore.h>
 #include <runtime/TrackPresentationPreset.h>
 
-#include <sigc++/sigc++.h>
+#include <sigc++/signal.h>
 
 #include <memory>
 #include <optional>
@@ -16,8 +15,11 @@
 #include <string_view>
 #include <vector>
 
+namespace ao::rt { class ConfigStore; }
+
 namespace ao::gtk
 {
+
   class TrackPresentationStore final
   {
   public:

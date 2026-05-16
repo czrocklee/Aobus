@@ -4,6 +4,7 @@
 #pragma once
 
 #include "layout/document/LayoutDocument.h"
+#include "layout/runtime/ILayoutComponent.h"
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutRuntime.h"
 

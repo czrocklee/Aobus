@@ -5,7 +5,9 @@
 
 #include "CorePrimitives.h"
 #include "StateTypes.h"
+
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>

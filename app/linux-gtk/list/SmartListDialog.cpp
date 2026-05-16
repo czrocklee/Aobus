@@ -278,25 +278,25 @@ namespace ao::gtk
 
           if (!title.empty())
           {
-            formatted = title;
+            formatted = title.raw();
 
             if (!artist.empty())
             {
-              formatted = std::format("{} - {}", formatted, artist);
+              formatted = std::format("{} - {}", formatted, artist.raw());
             }
 
             if (!album.empty())
             {
-              formatted = std::format("{} ({})", formatted, album);
+              formatted = std::format("{} ({})", formatted, album.raw());
             }
           }
           else if (!artist.empty())
           {
-            formatted = artist;
+            formatted = artist.raw();
 
             if (!album.empty())
             {
-              formatted = std::format("{} ({})", formatted, album);
+              formatted = std::format("{} ({})", formatted, album.raw());
             }
           }
 

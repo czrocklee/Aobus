@@ -3,12 +3,10 @@
 
 #pragma once
 
-#include <ao/utility/ByteView.h>
-
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <span>
-#include <vector>
 
 namespace ao::audio
 {

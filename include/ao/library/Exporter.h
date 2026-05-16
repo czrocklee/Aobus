@@ -3,18 +3,11 @@
 
 #pragma once
 
-#include <ao/Type.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackView.h>
 
 #include <cstdint>
 #include <filesystem>
-#include <string>
-
-namespace YAML
-{
-  class Emitter;
-}
+#include <memory>
 
 namespace ao::library
 {
@@ -35,6 +28,12 @@ namespace ao::library
   {
   public:
     explicit Exporter(MusicLibrary& ml);
+    ~Exporter();
+
+    Exporter(Exporter const&) = delete;
+    Exporter& operator=(Exporter const&) = delete;
+    Exporter(Exporter&&) noexcept = default;
+    Exporter& operator=(Exporter&&) noexcept = default;
 
     /**
      * Export the library to a YAML file.
@@ -45,10 +44,7 @@ namespace ao::library
     void exportToYaml(std::filesystem::path const& path, ExportMode mode);
 
   private:
-    void exportTracks(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode);
-    void exportTrack(YAML::Emitter& out, TrackId id, TrackView const& view, ExportMode mode);
-    void exportLists(YAML::Emitter& out, lmdb::ReadTransaction const& txn);
-
-    MusicLibrary& _ml;
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
   };
 } // namespace ao::library

@@ -11,11 +11,11 @@
 #include <runtime/StateTypes.h>
 
 #include <gdkmm/display.h>
+#include <gtk/gtkstyleprovider.h>
+#include <gtkmm/cssprovider.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
 #include <gtkmm/stylecontext.h>
-#include <gtkmm/cssprovider.h>
-#include <gtk/gtkstyleprovider.h>
 
 #include <algorithm>
 #include <format>

@@ -29,4 +29,3 @@ add_library(ao_tag STATIC
 )
 target_include_directories(ao_tag PUBLIC ${AO_PUBLIC_INCLUDE_DIR} ${AO_GENERATED_INCLUDE_DIR})
 target_link_libraries(ao_tag PUBLIC ao_media ao_utility)
-aobus_apply_clang_tidy(ao_tag STRICT)

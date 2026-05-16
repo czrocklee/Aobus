@@ -4,9 +4,14 @@
 #pragma once
 
 #include "track/TrackColumnController.h"
+#include "track/TrackPresentation.h"
 #include "track/TrackSelectionController.h"
 
-#include <gtkmm.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/columnview.h>
+#include <gtkmm/cssprovider.h>
+#include <gtkmm/multiselection.h>
+#include <sigc++/scoped_connection.h>
 
 #include <memory>
 

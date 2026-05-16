@@ -9,6 +9,7 @@
 #include <gdk/gdk.h>
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
+#include <glib.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/enums.h>
@@ -19,7 +20,6 @@
 #include <gtkmm/multiselection.h>
 #include <gtkmm/widget.h>
 #include <sigc++/functors/mem_fun.h>
-#include <glib.h>
 
 #include <algorithm>
 #include <chrono>

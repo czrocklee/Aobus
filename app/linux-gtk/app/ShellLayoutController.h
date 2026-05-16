@@ -7,6 +7,9 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutContext.h"
 #include "layout/runtime/LayoutHost.h"
+#include <runtime/async/LifetimeScope.h>
+
+#include <gtkmm/window.h>
 
 namespace ao::rt
 {
@@ -37,5 +40,6 @@ namespace ao::gtk
     layout::LayoutContext _context;
     layout::LayoutHost _host;
     layout::LayoutDocument _activeLayout;
+    rt::async::LifetimeScope _tasks;
   };
 } // namespace ao::gtk

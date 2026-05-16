@@ -3,8 +3,15 @@
 
 #pragma once
 
+#include <ao/Error.h>
+#include <ao/audio/DecoderTypes.h>
 #include <ao/audio/IDecoderSession.h>
-#include <functional>
+
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <filesystem>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::test

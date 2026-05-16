@@ -18,7 +18,8 @@ namespace ao::audio::test
 {
   TEST_CASE("MemorySource - Core Logic", "[audio][unit][memory_source]")
   {
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
+    auto const format =
+      Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
     auto const info = DecodedStreamInfo{.sourceFormat = format, .outputFormat = format, .durationMs = 10};
 
     SECTION("Initialize buffers all blocks until EOS and closes decoder")
@@ -78,7 +79,8 @@ namespace ao::audio::test
 
     SECTION("Seek aligns 24-bit stereo offsets and clamps")
     {
-      auto const format24 = Format{.sampleRate = 1000, .channels = 2, .bitDepth = 24, .isFloat = false, .isInterleaved = true};
+      auto const format24 =
+        Format{.sampleRate = 1000, .channels = 2, .bitDepth = 24, .isFloat = false, .isInterleaved = true};
       auto const info24 = DecodedStreamInfo{.sourceFormat = format24, .outputFormat = format24, .durationMs = 100};
 
       auto decoder = std::make_unique<ScriptedDecoderSession>(info24);

@@ -5,10 +5,13 @@
 
 #include "TrackSource.h"
 
+#include <ao/Type.h>
 #include <ao/library/TrackStore.h>
 #include <ao/lmdb/Transaction.h>
 
+#include <cstddef>
 #include <flat_set>
+#include <optional>
 
 namespace ao::rt
 {
@@ -34,7 +37,10 @@ namespace ao::rt
 
     // TrackSource interface
     std::size_t size() const override { return _trackIds.size(); }
-    TrackId trackIdAt(std::size_t index) const override { return *(_trackIds.begin() + static_cast<std::ptrdiff_t>(index)); }
+    TrackId trackIdAt(std::size_t index) const override
+    {
+      return *(_trackIds.begin() + static_cast<std::ptrdiff_t>(index));
+    }
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
   private:

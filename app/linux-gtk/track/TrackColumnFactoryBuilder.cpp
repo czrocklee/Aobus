@@ -15,8 +15,8 @@
 #include <gtkmm/box.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/dragsource.h>
-#include <gtkmm/enums.h>
 #include <gtkmm/entry.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerfocus.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gesturelongpress.h>
@@ -27,10 +27,12 @@
 #include <gtkmm/stack.h>
 #include <gtkmm/stylecontext.h>
 #include <pangomm/layout.h>
+#include <sigc++/connection.h>
 #include <sigc++/functors/slot.h>
 
 #include <format>
 #include <memory>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -71,6 +73,23 @@ namespace ao::gtk
       auto const bytes = Glib::Bytes::create(expr.data(), expr.size());
 
       return Gdk::ContentProvider::create("text/plain", bytes);
+    }
+
+    void destroyConnectionData(::gpointer data) noexcept
+    {
+      if (data == nullptr)
+      {
+        return;
+      }
+
+      auto conn = std::unique_ptr<sigc::connection>{static_cast<sigc::connection*>(data)};
+      conn->disconnect();
+    }
+
+    void setConnectionData(Glib::RefPtr<Gtk::ListItem> const& listItem, char const* key, sigc::connection connection)
+    {
+      auto stored = std::make_unique<sigc::connection>(std::move(connection));
+      listItem->set_data(key, stored.release(), destroyConnectionData); // NOLINT(cppcoreguidelines-owning-memory)
     }
 
     void ensureTrackPageCss(bool force = false)
@@ -335,27 +354,8 @@ namespace ao::gtk
             });
         }
 
-        listItem->set_data("model-connection",
-                           new sigc::connection{modelConnection}, // NOLINT(cppcoreguidelines-owning-memory)
-                           [](::gpointer data)
-                           {
-                             auto* const conn =
-                               static_cast<sigc::connection*>(data); // NOLINT(cppcoreguidelines-owning-memory)
-
-                             conn->disconnect();
-                             delete conn; // NOLINT(cppcoreguidelines-owning-memory)
-                           });
-
-        listItem->set_data("activate-connection",
-                           new sigc::connection{activateConn}, // NOLINT(cppcoreguidelines-owning-memory)
-                           [](::gpointer data)
-                           {
-                             auto* const conn =
-                               static_cast<sigc::connection*>(data); // NOLINT(cppcoreguidelines-owning-memory)
-
-                             conn->disconnect();
-                             delete conn; // NOLINT(cppcoreguidelines-owning-memory)
-                           });
+        setConnectionData(listItem, "model-connection", modelConnection);
+        setConnectionData(listItem, "activate-connection", activateConn);
       }
     }
 
@@ -445,16 +445,7 @@ namespace ao::gtk
 
       auto const connection = row->property_playing().signal_changed().connect(updateStyles);
 
-      listItem->set_data("playing-connection",
-                         new sigc::connection{connection}, // NOLINT(cppcoreguidelines-owning-memory)
-                         [](::gpointer data)
-                         {
-                           auto* const conn =
-                             static_cast<sigc::connection*>(data); // NOLINT(cppcoreguidelines-owning-memory)
-
-                           conn->disconnect();
-                           delete conn; // NOLINT(cppcoreguidelines-owning-memory)
-                         });
+      setConnectionData(listItem, "playing-connection", connection);
     }
   } // namespace
 

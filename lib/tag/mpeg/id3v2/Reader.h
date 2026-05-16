@@ -6,6 +6,8 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/tag/TagFile.h>
 
+#include <cstddef>
+
 namespace ao::tag::mpeg::id3v2
 {
   struct HeaderLayout;

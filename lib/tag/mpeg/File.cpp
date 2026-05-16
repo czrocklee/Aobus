@@ -40,8 +40,7 @@ namespace ao::tag::mpeg
     if (durationMs == 0 && frame.bitrate() > 0)
     {
       auto const* firstFramePtr = static_cast<std::uint8_t const*>(frame.data());
-      auto const* lastBytePtr =
-        static_cast<std::uint8_t const*>(address()) + size();
+      auto const* lastBytePtr = static_cast<std::uint8_t const*>(address()) + size();
 
       if (hasId3v1)
       {
@@ -69,8 +68,7 @@ namespace ao::tag::mpeg
     // 1. Try to parse ID3v2 tag at the beginning
     static constexpr std::string_view kId3v2Magic = "ID3";
 
-    if (size() >= sizeof(id3v2::HeaderLayout) &&
-        std::memcmp(address(), kId3v2Magic.data(), kId3v2Magic.size()) == 0)
+    if (size() >= sizeof(id3v2::HeaderLayout) && std::memcmp(address(), kId3v2Magic.data(), kId3v2Magic.size()) == 0)
     {
       auto const* id3v2Header = static_cast<id3v2::HeaderLayout const*>(address());
       std::size_t const id3v2BodySize = id3v2::decodeSize(id3v2Header->size);

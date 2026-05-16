@@ -10,8 +10,11 @@
 #include <ao/audio/IDecoderSession.h>
 #include <ao/audio/ISource.h>
 #include <ao/audio/Types.h>
+
+#include <filesystem>
 #include <functional>
 #include <memory>
+#include <string>
 
 namespace ao::audio::detail
 {

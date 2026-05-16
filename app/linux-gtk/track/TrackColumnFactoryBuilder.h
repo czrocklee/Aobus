@@ -6,6 +6,7 @@
 #include "track/TrackPresentation.h"
 #include "track/TrackRowObject.h"
 
+#include <glibmm/refptr.h>
 #include <gtkmm/signallistitemfactory.h>
 
 #include <functional>

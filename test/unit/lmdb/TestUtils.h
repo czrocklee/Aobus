@@ -3,13 +3,16 @@
 
 #pragma once
 
-#include <cstdint>
+#include <ao/utility/ByteView.h>
+
+#include <cstddef>
 #include <cstdlib>
 #include <filesystem>
+#include <stdexcept>
+#include <stdlib.h> // NOLINT(modernize-deprecated-headers)
 #include <string>
+#include <string_view>
 #include <vector>
-
-#include <ao/utility/ByteView.h>
 
 namespace ao::lmdb::test
 {
@@ -58,7 +61,7 @@ namespace ao::lmdb::test
   inline std::vector<std::byte> createTestData(std::size_t size)
   {
     auto data = std::vector<std::byte>(size);
-    
+
     for (std::size_t i = 0; i < size; ++i)
     {
       data[i] = static_cast<std::byte>(i % 256);
