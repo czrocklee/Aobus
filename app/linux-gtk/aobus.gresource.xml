@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/org/aobus">
+    <file preprocess="xml-stripblanks">app.css</file>
+  </gresource>
+</gresources>

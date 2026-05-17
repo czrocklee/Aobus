@@ -1,5 +1,19 @@
+# GResource compilation
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/resources.c
+    COMMAND ${GLIB_COMPILE_RESOURCES_EXECUTABLE}
+            --target=${CMAKE_CURRENT_BINARY_DIR}/resources.c
+            --sourcedir=${CMAKE_CURRENT_SOURCE_DIR}
+            --generate-source
+            ${CMAKE_CURRENT_SOURCE_DIR}/aobus.gresource.xml
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/aobus.gresource.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/app.css
+)
+set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/resources.c PROPERTIES COMPILE_OPTIONS "-Wno-overlength-strings")
+
 # aobus-gtk-lib: GTK implementation for Linux
 add_library(aobus-gtk-lib STATIC
+    ${CMAKE_CURRENT_BINARY_DIR}/resources.c
     app/AobusSoul.cpp
     app/GtkControlExecutor.cpp
     app/MainWindow.cpp

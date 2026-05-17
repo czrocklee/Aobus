@@ -5,17 +5,12 @@
 
 namespace ao::gtk::layout
 {
-  // Spacing presets
+  // Spacing presets (Used for Gtk::Box spacing and other UI gaps in C++)
+  constexpr int kSpacingXSmall = 2;
   constexpr int kSpacingSmall = 4;
   constexpr int kSpacingMedium = 6;
   constexpr int kSpacingLarge = 8;
   constexpr int kSpacingXLarge = 12;
-
-  // Margin presets
-  constexpr int kMarginSmall = 4;
-  constexpr int kMarginMedium = 6;
-  constexpr int kMarginLarge = 8;
-  constexpr int kMarginXLarge = 12;
 
   // Icon size presets
   constexpr int kIconSizeSmall = 16;

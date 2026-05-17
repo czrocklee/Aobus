@@ -242,10 +242,9 @@ namespace ao::gtk
         auto* const label = Gtk::make_managed<Gtk::Label>("");
 
         label->set_halign(Gtk::Align::START);
-        label->set_margin_start(layout::kSpacingLarge);
-        label->set_margin_end(layout::kSpacingLarge);
-        label->set_margin_top(layout::kSpacingLarge);
-        label->set_margin_bottom(layout::kMarginSmall);
+        label->add_css_class("ao-margin-x-large");
+        label->add_css_class("ao-margin-top-large");
+        label->add_css_class("ao-margin-bottom-small");
         label->set_xalign(0.0F);
 
         header->set_child(*label);

@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponents.h"
-#include "layout/LayoutConstants.h"
 #include "layout/document/LayoutNode.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/ILayoutComponent.h"
@@ -132,7 +131,7 @@ namespace ao::gtk::layout
         , _trackCount{ctx.runtime.sources().allTracks()}
       {
         _container.add_css_class("ao-status-bar");
-        _container.set_margin(layout::kMarginSmall);
+        _container.set_margin(4);
         _container.set_valign(Gtk::Align::END);
         _container.set_hexpand(true);
 
@@ -152,8 +151,7 @@ namespace ao::gtk::layout
         _container.append(_notification.widget());
 
         auto* const sep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
-        sep->set_margin_start(layout::kMarginMedium);
-        sep->set_margin_end(layout::kMarginMedium);
+        sep->add_css_class("ao-margin-x-medium");
         _container.append(*sep);
 
         _container.append(_trackCount.widget());

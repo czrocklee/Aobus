@@ -135,7 +135,7 @@ namespace ao::gtk::layout::editor
     _treeBox.append(_toolbar);
     _treeBox.append(_treeScroll);
 
-    int const padding = kMarginXLarge;
+    int const padding = 12;
     _propertiesBox.set_margin_start(padding);
     _propertiesBox.set_margin_end(padding);
     _propertiesBox.set_margin_top(padding);
@@ -554,7 +554,7 @@ namespace ao::gtk::layout::editor
     auto* const label = Gtk::make_managed<Gtk::Label>(std::format("<b>{}</b>", text));
     label->set_use_markup(true);
     label->set_halign(Gtk::Align::START);
-    label->set_margin_top(kMarginXLarge);
+    label->add_css_class("ao-margin-top-xlarge");
     _propertiesBox.append(*label);
   }
 
@@ -837,7 +837,7 @@ namespace ao::gtk::layout::editor
       auto* const label = Gtk::make_managed<Gtk::Label>("<i>No descriptor found</i>");
       label->set_use_markup(true);
       label->set_halign(Gtk::Align::START);
-      label->set_margin_top(kMarginXLarge);
+      label->add_css_class("ao-margin-top-xlarge");
       _propertiesBox.append(*label);
     }
   }

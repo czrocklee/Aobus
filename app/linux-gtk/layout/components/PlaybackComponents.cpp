@@ -19,6 +19,7 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -27,15 +28,28 @@ namespace ao::gtk::layout
   namespace
   {
     /**
-     * @brief playback.playPauseButton
+     * @brief Helper to get the transport button callback.
      */
-    class PlayPauseButtonComponent final : public ILayoutComponent
+    std::function<void()> getTransportCallback(rt::AppRuntime& runtime, TransportButton::Action action)
+    {
+      if (action == TransportButton::Action::Play || action == TransportButton::Action::PlayPause)
+      {
+        return [&runtime] { runtime.playSelectionInFocusedView(); };
+      }
+
+      return {};
+    }
+
+    /**
+     * @brief Generic transport button component.
+     */
+    class TransportButtonComponent final : public ILayoutComponent
     {
     public:
-      PlayPauseButtonComponent(LayoutContext& ctx, LayoutNode const& node)
+      TransportButtonComponent(LayoutContext& ctx, LayoutNode const& node, TransportButton::Action action)
         : _button{ctx.runtime.playback(),
-                  TransportButton::Action::PlayPause,
-                  [&runtime = ctx.runtime] { runtime.playSelectionInFocusedView(); },
+                  action,
+                  getTransportCallback(ctx.runtime, action),
                   node.getProp<bool>("showLabel", false),
                   node.getProp<std::string>("size", "normal")}
       {
@@ -48,24 +62,20 @@ namespace ao::gtk::layout
     };
 
     /**
-     * @brief playback.stopButton
+     * @brief Generic now-playing field label component.
      */
-    class StopButtonComponent final : public ILayoutComponent
+    class NowPlayingFieldComponent final : public ILayoutComponent
     {
     public:
-      StopButtonComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _button{ctx.runtime.playback(),
-                  TransportButton::Action::Stop,
-                  {},
-                  node.getProp<bool>("showLabel", false),
-                  node.getProp<std::string>("size", "normal")}
+      NowPlayingFieldComponent(LayoutContext& ctx, NowPlayingFieldLabel::Field field)
+        : _label{ctx.runtime.playback(), field}
       {
       }
 
-      Gtk::Widget& widget() override { return _button.widget(); }
+      Gtk::Widget& widget() override { return _label.widget(); }
 
     private:
-      TransportButton _button;
+      NowPlayingFieldLabel _label;
     };
 
     /**
@@ -83,40 +93,6 @@ namespace ao::gtk::layout
 
     private:
       VolumeControl _control;
-    };
-
-    /**
-     * @brief playback.currentTitleLabel
-     */
-    class CurrentTitleLabelComponent final : public ILayoutComponent
-    {
-    public:
-      CurrentTitleLabelComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _label{ctx.runtime.playback(), NowPlayingFieldLabel::Field::Title}
-      {
-      }
-
-      Gtk::Widget& widget() override { return _label.widget(); }
-
-    private:
-      NowPlayingFieldLabel _label;
-    };
-
-    /**
-     * @brief playback.currentArtistLabel
-     */
-    class CurrentArtistLabelComponent final : public ILayoutComponent
-    {
-    public:
-      CurrentArtistLabelComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _label{ctx.runtime.playback(), NowPlayingFieldLabel::Field::Artist}
-      {
-      }
-
-      Gtk::Widget& widget() override { return _label.widget(); }
-
-    private:
-      NowPlayingFieldLabel _label;
     };
 
     /**
@@ -151,48 +127,6 @@ namespace ao::gtk::layout
 
     private:
       TimeLabel _label;
-    };
-
-    /**
-     * @brief playback.playButton
-     */
-    class PlayButtonComponent final : public ILayoutComponent
-    {
-    public:
-      PlayButtonComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _button{ctx.runtime.playback(),
-                  TransportButton::Action::Play,
-                  [&runtime = ctx.runtime] { runtime.playSelectionInFocusedView(); },
-                  node.getProp<bool>("showLabel", false),
-                  node.getProp<std::string>("size", "normal")}
-      {
-      }
-
-      Gtk::Widget& widget() override { return _button.widget(); }
-
-    private:
-      TransportButton _button;
-    };
-
-    /**
-     * @brief playback.pauseButton
-     */
-    class PauseButtonComponent final : public ILayoutComponent
-    {
-    public:
-      PauseButtonComponent(LayoutContext& ctx, LayoutNode const& node)
-        : _button{ctx.runtime.playback(),
-                  TransportButton::Action::Pause,
-                  {},
-                  node.getProp<bool>("showLabel", false),
-                  node.getProp<std::string>("size", "normal")}
-      {
-      }
-
-      Gtk::Widget& widget() override { return _button.widget(); }
-
-    private:
-      TransportButton _button;
     };
 
     /**
@@ -236,12 +170,12 @@ namespace ao::gtk::layout
 
     std::unique_ptr<ILayoutComponent> createPlayPauseButton(LayoutContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<PlayPauseButtonComponent>(ctx, node);
+      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::PlayPause);
     }
 
     std::unique_ptr<ILayoutComponent> createStopButton(LayoutContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<StopButtonComponent>(ctx, node);
+      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Stop);
     }
 
     std::unique_ptr<ILayoutComponent> createVolumeControl(LayoutContext& ctx, LayoutNode const& node)
@@ -249,14 +183,14 @@ namespace ao::gtk::layout
       return std::make_unique<VolumeControlComponent>(ctx, node);
     }
 
-    std::unique_ptr<ILayoutComponent> createCurrentTitleLabel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createCurrentTitleLabel(LayoutContext& ctx, LayoutNode const& /*node*/)
     {
-      return std::make_unique<CurrentTitleLabelComponent>(ctx, node);
+      return std::make_unique<NowPlayingFieldComponent>(ctx, NowPlayingFieldLabel::Field::Title);
     }
 
-    std::unique_ptr<ILayoutComponent> createCurrentArtistLabel(LayoutContext& ctx, LayoutNode const& node)
+    std::unique_ptr<ILayoutComponent> createCurrentArtistLabel(LayoutContext& ctx, LayoutNode const& /*node*/)
     {
-      return std::make_unique<CurrentArtistLabelComponent>(ctx, node);
+      return std::make_unique<NowPlayingFieldComponent>(ctx, NowPlayingFieldLabel::Field::Artist);
     }
 
     std::unique_ptr<ILayoutComponent> createSeekSlider(LayoutContext& ctx, LayoutNode const& node)
@@ -271,12 +205,12 @@ namespace ao::gtk::layout
 
     std::unique_ptr<ILayoutComponent> createPlayButton(LayoutContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<PlayButtonComponent>(ctx, node);
+      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Play);
     }
 
     std::unique_ptr<ILayoutComponent> createPauseButton(LayoutContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<PauseButtonComponent>(ctx, node);
+      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Pause);
     }
 
     std::unique_ptr<ILayoutComponent> createOutputButton(LayoutContext& ctx, LayoutNode const& node)

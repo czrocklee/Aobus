@@ -1,0 +1,270 @@
+/* ===== Aobus Design Tokens ===== */
+:root {
+  /* Box spacing (Gap) - 虽然 GTK CSS 不支持 gap 属性，
+     但在这里定义变量可以作为 user.css 的参考，
+     或在 Grid 等支持的场景下使用。
+     注意：C++ 布局仍使用 LayoutConstants.h 中的 kGap* 
+  */
+  --ao-gap-none: 0px;
+  --ao-gap-sm: 4px;
+  --ao-gap-md: 6px;
+  --ao-gap-lg: 8px;
+  --ao-gap-xl: 12px;
+
+  /* Margin/Padding 间距 - 所有的边距控制都应该通过这些变量在 CSS 中完成 */
+  --ao-spacing-xs: 2px;
+  --ao-spacing-sm: 4px;
+  --ao-spacing-md: 6px;
+  --ao-spacing-lg: 8px;
+  --ao-spacing-xl: 12px;
+
+  /* 圆角 */
+  --ao-radius-sm: 4px;
+  --ao-radius-md: 8px;
+  --ao-radius-full: 100px;
+
+  /* 音频质量语义色 */
+  --ao-quality-perfect: #A855F7;
+  --ao-quality-lossless: #10B981;
+  --ao-quality-intervention: #F59E0B;
+  --ao-quality-lossy: #6B7280;
+  --ao-quality-clipped: #EF4444;
+
+  /* 透明度 */
+  --ao-opacity-dim: 0.4;
+  --ao-opacity-muted: 0.7;
+
+  /* 动画过渡 */
+  --ao-transition-fast: 200ms;
+  --ao-transition-normal: 250ms;
+
+  /* 进度条 */
+  --ao-seek-trough-height: 6px;
+  --ao-seek-slider-size: 14px;
+
+  /* 字号 */
+  --ao-font-size-sm: 0.85rem;
+  --ao-font-size-md: 0.9rem;
+}
+
+/* ===== Utility Classes ===== */
+.ao-margin-small { margin: var(--ao-spacing-sm); }
+.ao-margin-medium { margin: var(--ao-spacing-md); }
+.ao-margin-large { margin: var(--ao-spacing-lg); }
+
+.ao-margin-x-small { margin-left: var(--ao-spacing-sm); margin-right: var(--ao-spacing-sm); }
+.ao-margin-x-medium { margin-left: var(--ao-spacing-md); margin-right: var(--ao-spacing-md); }
+.ao-margin-x-large { margin-left: var(--ao-spacing-lg); margin-right: var(--ao-spacing-lg); }
+
+.ao-margin-y-small { margin-top: var(--ao-spacing-sm); margin-bottom: var(--ao-spacing-sm); }
+.ao-margin-y-medium { margin-top: var(--ao-spacing-md); margin-bottom: var(--ao-spacing-md); }
+
+.ao-margin-top-small { margin-top: var(--ao-spacing-sm); }
+.ao-margin-top-medium { margin-top: var(--ao-spacing-md); }
+.ao-margin-top-xlarge { margin-top: var(--ao-spacing-xl); }
+
+.ao-margin-bottom-small { margin-bottom: var(--ao-spacing-sm); }
+
+.ao-margin-start-medium { margin-left: var(--ao-spacing-md); }
+
+/* ===== Component CSS ===== */
+
+/* StatusBar */
+.ao-status-bar {
+  min-height: 24px;
+  padding-top: 1px;
+  padding-bottom: 1px;
+  margin: var(--ao-spacing-sm); /* 原 C++ set_margin(kMarginSmall) */
+}
+
+/* StatusNotificationLabel */
+.ao-status-message { }
+
+/* AobusSoulWindow */
+.ao-soul-window { background-color: rgba(0, 0, 0, 0.85); }
+
+/* NowPlayingStatusLabel */
+.ao-nowplaying {
+  transition: all 200ms ease-in-out;
+  padding: 2px 12px;
+  border-radius: 6px;
+  color: @theme_fg_color;
+  opacity: 0.85;
+}
+.ao-nowplaying:hover {
+  background-color: alpha(@theme_selected_bg_color, 0.15);
+  color: @theme_selected_bg_color;
+  opacity: 1.0;
+}
+.ao-nowplaying:active {
+  background-color: alpha(@theme_selected_bg_color, 0.25);
+  opacity: 0.7;
+}
+
+.ao-clickable { }
+
+/* OutputSelector */
+.ao-device-row {
+  padding: 6px 16px;
+  transition: background 150ms ease;
+}
+.ao-menu-header {
+  font-weight: 800;
+  font-size: 0.75em;
+  padding-top: 12px;
+  padding-bottom: 4px;
+  padding-left: 12px;
+  padding-right: 12px;
+  color: @theme_selected_bg_color;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  opacity: 0.7;
+}
+listboxrow:first-child .ao-menu-header {
+  padding-top: 8px;
+}
+.ao-output-selected-row {
+  background-color: alpha(@theme_selected_bg_color, 0.15);
+  border-left: 4px solid @theme_selected_bg_color;
+}
+.ao-output-selected-row label {
+  color: @theme_selected_bg_color;
+  font-weight: bold;
+}
+.ao-menu-description {
+  font-size: 0.8em;
+  opacity: 0.6;
+}
+.ao-output-logo { }
+.ao-rich-list { }
+
+/* PlaybackDetailsWidget */
+.ao-quality-perfect { color: #A855F7; }
+.ao-quality-lossless { color: #10B981; }
+.ao-quality-intervention { color: #F59E0B; }
+.ao-quality-lossy { color: #6B7280; }
+.ao-quality-clipped { color: #EF4444; }
+
+/* ShellLayoutController */
+.ao-inspector-handle {
+  min-width: 14px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  transition: background 0.2s;
+}
+.ao-inspector-handle:hover {
+  background: alpha(currentColor, 0.08);
+}
+.ao-inspector-handle image {
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+.ao-inspector-handle:hover image {
+  opacity: 1.0;
+}
+.ao-tags-section {
+  margin-top: 4px;
+}
+.ao-tag-chip {
+  border-radius: 100px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+togglebutton.ao-tag-chip {
+  background: alpha(currentColor, 0.05);
+  border: 1px solid transparent;
+  color: alpha(currentColor, 0.7);
+}
+togglebutton.ao-tag-chip:checked {
+  background: alpha(currentColor, 0.15);
+  color: currentColor;
+  border-color: alpha(currentColor, 0.1);
+}
+togglebutton.ao-tag-chip:hover {
+  background: alpha(currentColor, 0.2);
+}
+.ao-tag-remove {
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  margin-left: 4px;
+  border-radius: 100px;
+  background: transparent;
+  border: none;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+.ao-tag-remove:hover {
+  opacity: 1.0;
+  background: alpha(@error_color, 0.1);
+}
+.ao-tags-entry {
+  background: alpha(currentColor, 0.05);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin-top: 8px;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+.ao-tags-entry:focus {
+  border-color: alpha(@accent_color, 0.5);
+  background: alpha(currentColor, 0.08);
+  box-shadow: none;
+}
+
+/* TrackColumnFactoryBuilder */
+columnview row.ao-playing-row {
+  background-image: linear-gradient(to right,
+    transparent 0%,
+    alpha(@warning_bg_color, 0.2) var(--ao-title-x, 35%),
+    transparent 100%
+  );
+  background-color: transparent;
+  border-color: transparent;
+  transition: background-image 1.0s ease-out;
+}
+.ao-playing-title {
+  color: @theme_fg_color;
+  font-weight: bold;
+}
+.ao-playing-dim { }
+columnview row {
+  transition: all 450ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ao-inline-editor-stack { min-height: 0; margin: 0; }
+.ao-inline-editor-label { border: 1px solid transparent; min-height: 0; }
+.ao-inline-editor-entry {
+  background: @view_bg_color;
+  border: 1px solid @accent_color;
+  border-radius: 4px;
+  padding: 0 6px;
+  margin: 0;
+  min-height: 0;
+  box-shadow: none;
+  font-weight: bold;
+}
+.ao-inline-editor-entry text { padding-top: 0; padding-bottom: 0; min-height: 0; }
+.ao-track-tags-cell { }
+
+/* SeekControl */
+.ao-seekbar { padding: var(--ao-spacing-sm) 0; }
+.ao-seekbar trough {
+  min-height: var(--ao-seek-trough-height);
+  border-radius: 3px;
+  background: alpha(currentColor, 0.12);
+}
+.ao-seekbar highlight {
+  background: @theme_selected_bg_color;
+  border-radius: 3px;
+}
+.ao-seekbar slider {
+  min-width: var(--ao-seek-slider-size);
+  min-height: var(--ao-seek-slider-size);
+  border-radius: 50%;
+}
