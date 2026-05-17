@@ -10,14 +10,12 @@
 #include <runtime/StateTypes.h>
 
 #include <gdk/gdk.h>
-#include <gdkmm/display.h>
 #include <giomm/liststore.h>
 #include <glibmm/object.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 #include <gtk/gtkstyleprovider.h>
 #include <gtkmm/box.h>
-#include <gtkmm/cssprovider.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/gesturelongpress.h>
 #include <gtkmm/image.h>
@@ -27,7 +25,6 @@
 #include <gtkmm/object.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/scrolledwindow.h>
-#include <gtkmm/stylecontext.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
@@ -42,70 +39,13 @@ namespace ao::gtk
   namespace
   {
     constexpr double kLongPressDelayFactor = 2.0;
-
-    void ensureOutputSelectorCss()
-    {
-      static auto const provider = Gtk::CssProvider::create();
-      static bool initialized = false;
-
-      if (!initialized)
-      {
-        provider->load_from_data(R"(
-          .device-row {
-             padding: 6px 16px;
-             transition: background 150ms ease;
-          }
-
-          .menu-header {
-             font-weight: 800;
-             font-size: 0.75em;
-             padding-top: 12px;
-             padding-bottom: 4px;
-             padding-left: 12px;
-             padding-right: 12px;
-             color: @theme_selected_bg_color;
-             text-transform: uppercase;
-             letter-spacing: 0.12em;
-             opacity: 0.7;
-          }
-
-          /* Restore clean top spacing for the first header */
-          listboxrow:first-child .menu-header {
-             padding-top: 8px;
-          }
-
-          .selected-row {
-             background-color: alpha(@theme_selected_bg_color, 0.15);
-             border-left: 4px solid @theme_selected_bg_color;
-          }
-
-          .selected-row label {
-             color: @theme_selected_bg_color;
-             font-weight: bold;
-          }
-
-          .menu-description {
-             font-size: 0.8em;
-             opacity: 0.6;
-          }
-        )");
-
-        if (auto display = Gdk::Display::get_default(); display)
-        {
-          Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
-        }
-
-        initialized = true;
-      }
-    }
   }
 
   OutputSelector::OutputSelector(rt::PlaybackService& playback)
     : _playback{playback}
   {
-    ensureOutputSelectorCss();
     _button.set_has_frame(false);
-    _button.add_css_class("output-button-logo");
+    _button.add_css_class("ao-output-logo");
     _button.set_child(_soul);
 
     _soulBinding = std::make_unique<AobusSoulBinding>(_soul, _playback);
@@ -161,7 +101,7 @@ namespace ao::gtk
 
     _listBox.set_selection_mode(Gtk::SelectionMode::NONE);
     _listBox.set_show_separators(true);
-    _listBox.add_css_class("rich-list");
+    _listBox.add_css_class("ao-rich-list");
 
     _store = Gio::ListStore<Glib::Object>::create();
     _listBox.bind_model(_store, [this](auto const& item) { return createRow(item); });
@@ -197,7 +137,7 @@ namespace ao::gtk
       header->set_halign(Gtk::Align::FILL);
       header->set_valign(Gtk::Align::CENTER);
       header->set_xalign(0.0);
-      header->add_css_class("menu-header");
+      header->add_css_class("ao-menu-header");
 
       return header;
     }
@@ -208,7 +148,7 @@ namespace ao::gtk
       int const rowSpacing = 10;
       rowBox->set_spacing(rowSpacing);
       rowBox->set_valign(Gtk::Align::CENTER);
-      rowBox->add_css_class("device-row");
+      rowBox->add_css_class("ao-device-row");
 
       auto* const textBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
       textBox->set_spacing(0);
@@ -224,7 +164,7 @@ namespace ao::gtk
       {
         auto* const descLabel = Gtk::make_managed<Gtk::Label>(deviceItem->description());
         descLabel->set_halign(Gtk::Align::START);
-        descLabel->add_css_class("menu-description");
+        descLabel->add_css_class("ao-menu-description");
         descLabel->set_ellipsize(Pango::EllipsizeMode::END);
         textBox->append(*descLabel);
       }
@@ -237,7 +177,7 @@ namespace ao::gtk
         checkIcon->set_from_icon_name("object-select-symbolic");
         checkIcon->set_pixel_size(16);
         rowBox->append(*checkIcon);
-        rowBox->add_css_class("selected-row");
+        rowBox->add_css_class("ao-output-selected-row");
       }
 
       return rowBox;

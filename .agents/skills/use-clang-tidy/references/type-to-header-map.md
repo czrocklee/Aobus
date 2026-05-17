@@ -7,6 +7,7 @@ This document maps public types from third-party libraries used in Aobus to thei
 | Type | Header | Namespace |
 | :--- | :--- | :--- |
 | `Gtk::Widget` | `<gtkmm/widget.h>` | `Gtk` |
+| `Gtk::Window` | `<gtkmm/window.h>` | `Gtk` |
 | `Gtk::ApplicationWindow` | `<gtkmm/applicationwindow.h>` | `Gtk` |
 | `Gtk::Box` | `<gtkmm/box.h>` | `Gtk` |
 | `Gtk::Label` | `<gtkmm/label.h>` | `Gtk` |
@@ -30,6 +31,8 @@ This document maps public types from third-party libraries used in Aobus to thei
 | `Glib::ustring` | `<glibmm/ustring.h>` | `Glib` |
 | `Glib::Dispatcher` | `<glibmm/dispatcher.h>` | `Glib` |
 | `Glib::VariantBase` | `<glibmm/variant.h>` | `Glib` |
+| `Glib::VariantContainerBase` | `<glibmm/variant.h>` | `Glib` |
+| `Glib::Variant` | `<glibmm/variant.h>` | `Glib` |
 | `Glib::KeyFile` | `<glibmm/keyfile.h>` | `Glib` |
 | `Glib::Object` | `<glibmm/object.h>` | `Glib` |
 | `Glib::Error` | `<glibmm/error.h>` | `Glib` |
@@ -39,6 +42,10 @@ This document maps public types from third-party libraries used in Aobus to thei
 | `Gio::MenuModel` | `<giomm/menumodel.h>` | `Gio` |
 | `Gio::Application` | `<giomm/application.h>` | `Gio` |
 | `Gio::File` | `<giomm/file.h>` | `Gio` |
+| `Gio::FileMonitor` | `<giomm/filemonitor.h>` | `Gio` |
+| `Gio::FileMonitor::Event` | `<giomm/filemonitor.h>` | `Gio` |
+| `Gio::DBus::Connection` | `<giomm/dbusconnection.h>` | `Gio` |
+| `Gio::Settings` | `<giomm/settings.h>` | `Gio` |
 | `Gdk::Display` | `<gdkmm/display.h>` | `Gdk` |
 | `Gdk::Pixbuf` | `<gdk-pixbuf/gdk-pixbuf.h>` | `Gdk` |
 | `Gdk::FrameClock` | `<gdkmm/frameclock.h>` | `Gdk` |
@@ -116,6 +123,7 @@ These are C macros/constants that clang-tidy may not be able to resolve through 
 | `GDK_BUTTON_PRIMARY` / `GDK_BUTTON_SECONDARY` | `<gdk/gdk.h>` | C header, or use umbrella |
 | `GTK_STYLE_PROVIDER_PRIORITY_USER` | `<gtk/gtkstyleprovider.h>` | C header |
 | `GTK_INVALID_LIST_POSITION` | `<gtk/gtk.h>` | C macro, NOLINT recommended |
+| `TRUE` / `FALSE` | `<glib/gmacros.h>` | C macros for gboolean |
 | `gssize` / `guint` / `gpointer` | `<glib.h>` | C typedefs, NOLINT recommended |
 | `::GskPath` / `::GskStroke` | `<gsk/gsk.h>` | Use umbrella header with NOLINT |
 

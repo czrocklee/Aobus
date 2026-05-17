@@ -427,7 +427,7 @@ private:
 - `main.cpp` ThemeBus include → 改为 StyleManager include
 - `TrackViewPage` → `StyleManager::instance().signalRefreshed()` 替代 `signalThemeRefresh()`
 - `TrackSelectionController` → ~~删除 stale `#include "app/ThemeBus.h"`~~ ✅ 已完成（当前代码已无此 include）
-- `ThemeBus` 变为空壳转发，标记 deprecated
+- ~~`ThemeBus` 变为空壳转发，标记 deprecated~~ → ✅ 已删除，无调用者
 
 ### Phase 4: 验证 + 收尾
 
@@ -444,8 +444,6 @@ private:
 | `app/linux-gtk/app/StyleManager.h` | **NEW** |
 | `app/linux-gtk/app/StyleManager.cpp` | **NEW** |
 | `app/linux-gtk/CMakeLists.txt` | 加 `app/StyleManager.cpp` |
-| `app/linux-gtk/app/ThemeBus.h` | 标记 deprecated |
-| `app/linux-gtk/app/ThemeBus.cpp` | 转发到 StyleManager |
 | `app/linux-gtk/main.cpp` | SIGUSR1/DBus/Monitor → StyleManager |
 | `app/linux-gtk/layout/LayoutConstants.h` | 补充 `kSpacingXSmall = 2`；token 数据源统一到 C++，StyleManager 用同一组 token 生成 CSS 变量 |
 | `app/linux-gtk/layout/components/Containers.cpp` | `applyCommonProps()` 的 `margin` prop 处理标记 deprecated；BoxComponent `spacing` 改为从 token 查询 |

@@ -20,8 +20,8 @@ namespace ao::gtk
     {
       switch (field)
       {
-        case NowPlayingFieldLabel::Field::Title: return "playback-title";
-        case NowPlayingFieldLabel::Field::Artist: return "playback-artist";
+        case NowPlayingFieldLabel::Field::Title: return "ao-playback-title";
+        case NowPlayingFieldLabel::Field::Artist: return "ao-playback-artist";
       }
 
       return "";

@@ -15,15 +15,11 @@
 #include <runtime/ListSourceStore.h>
 #include <track/StatusNotificationLabel.h>
 
-#include <gdkmm/display.h>
-#include <gtk/gtkstyleprovider.h>
 #include <gtkmm/box.h>
-#include <gtkmm/cssprovider.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/separator.h>
-#include <gtkmm/stylecontext.h>
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 
@@ -33,30 +29,6 @@ namespace ao::gtk::layout
 {
   namespace
   {
-    void ensureStatusBarContainerCss()
-    {
-      static auto const provider = Gtk::CssProvider::create();
-      static bool initialized = false;
-
-      if (!initialized)
-      {
-        provider->load_from_data(R"(
-          .status-bar {
-            min-height: 24px;
-            padding-top: 1px;
-            padding-bottom: 1px;
-          }
-        )");
-
-        if (auto display = Gdk::Display::get_default(); display)
-        {
-          Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
-        }
-
-        initialized = true;
-      }
-    }
-
     class PlaybackDetailsComponent final : public ILayoutComponent
     {
     public:
@@ -159,8 +131,7 @@ namespace ao::gtk::layout
         , _notification{ctx.runtime.notifications(), ctx.runtime.views()}
         , _trackCount{ctx.runtime.sources().allTracks()}
       {
-        ensureStatusBarContainerCss();
-        _container.add_css_class("status-bar");
+        _container.add_css_class("ao-status-bar");
         _container.set_margin(layout::kMarginSmall);
         _container.set_valign(Gtk::Align::END);
         _container.set_hexpand(true);

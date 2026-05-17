@@ -118,14 +118,14 @@ namespace ao::gtk
   void TrackCustomViewDialog::setupUi()
   {
     auto* const contentArea = get_content_area();
-    contentArea->add_css_class("custom-view-editor");
+    contentArea->add_css_class("ao-custom-view-editor");
 
     auto* mainBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
-    mainBox->add_css_class("custom-view-main-box");
+    mainBox->add_css_class("ao-custom-view-main-box");
 
     // Name
     auto* nameBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-    nameBox->add_css_class("custom-view-row");
+    nameBox->add_css_class("ao-custom-view-row");
     auto* nameLabel = Gtk::make_managed<Gtk::Label>("Name");
     nameLabel->set_halign(Gtk::Align::START);
     nameBox->append(*nameLabel);
@@ -135,7 +135,7 @@ namespace ao::gtk
 
     // Group By
     auto* groupBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-    groupBox->add_css_class("custom-view-row");
+    groupBox->add_css_class("ao-custom-view-row");
     auto* groupLabel = Gtk::make_managed<Gtk::Label>("Group By");
     groupLabel->set_halign(Gtk::Align::START);
     groupBox->append(*groupLabel);
@@ -157,11 +157,11 @@ namespace ao::gtk
     // Sort Terms (using boxed list style)
     auto* sortLabel = Gtk::make_managed<Gtk::Label>("Sort Order");
     sortLabel->set_halign(Gtk::Align::START);
-    sortLabel->add_css_class("custom-view-section-title");
+    sortLabel->add_css_class("ao-custom-view-section-title");
     mainBox->append(*sortLabel);
 
     _sortTermsList.add_css_class("boxed-list");
-    _sortTermsList.add_css_class("custom-view-list");
+    _sortTermsList.add_css_class("ao-custom-view-list");
     _sortTermsList.set_selection_mode(Gtk::SelectionMode::NONE);
     mainBox->append(_sortTermsList);
 
@@ -178,11 +178,11 @@ namespace ao::gtk
     // Visible Fields
     auto* fieldsLabel = Gtk::make_managed<Gtk::Label>("Visible Columns");
     fieldsLabel->set_halign(Gtk::Align::START);
-    fieldsLabel->add_css_class("custom-view-section-title");
+    fieldsLabel->add_css_class("ao-custom-view-section-title");
     mainBox->append(*fieldsLabel);
 
     _visibleFieldsList.add_css_class("boxed-list");
-    _visibleFieldsList.add_css_class("custom-view-list");
+    _visibleFieldsList.add_css_class("ao-custom-view-list");
     _visibleFieldsList.set_selection_mode(Gtk::SelectionMode::NONE);
     mainBox->append(_visibleFieldsList);
 

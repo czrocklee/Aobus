@@ -66,7 +66,7 @@ namespace ao::gtk
     , _showLabel{showLabel}
   {
     _button.set_has_frame(false);
-    _button.add_css_class("playback-button");
+    _button.add_css_class("ao-playback-button");
     applySizeClass(_button, size);
 
     _button.set_icon_name(iconForAction(action));

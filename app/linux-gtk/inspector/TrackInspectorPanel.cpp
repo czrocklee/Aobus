@@ -112,7 +112,7 @@ namespace ao::gtk
 
   void TrackInspectorPanel::setupUi()
   {
-    add_css_class("inspector-sidebar");
+    add_css_class("ao-inspector-sidebar");
 
     _scrolledWindow.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     _scrolledWindow.set_child(_contentBox);
@@ -134,11 +134,11 @@ namespace ao::gtk
 
   void TrackInspectorPanel::buildHeroSection()
   {
-    _heroBox.add_css_class("hero-section");
+    _heroBox.add_css_class("ao-hero-section");
     _heroBox.set_halign(Gtk::Align::CENTER);
 
     _coverImage.set_size_request(kHeroImageSize, kHeroImageSize);
-    _coverImage.add_css_class("hero-cover");
+    _coverImage.add_css_class("ao-hero-cover");
 
     _heroBox.append(_coverImage);
     _heroBox.append(_noCoverLabel);
@@ -164,7 +164,7 @@ namespace ao::gtk
 
   void TrackInspectorPanel::buildMetadataSection()
   {
-    _metadataBox.add_css_class("metadata-section");
+    _metadataBox.add_css_class("ao-metadata-section");
     _metadataBox.set_spacing(kMetadataSpacing);
 
     auto const createEditableRow = [this](std::string const& labelText, Gtk::EditableLabel& editable)
@@ -173,13 +173,13 @@ namespace ao::gtk
       auto* const title = Gtk::make_managed<Gtk::Label>(labelText);
 
       title->set_halign(Gtk::Align::START);
-      title->add_css_class("property-label");
+      title->add_css_class("ao-property-label");
       title->set_opacity(kLabelOpacity);
 
       editable.set_halign(Gtk::Align::START);
       editable.set_hexpand(true);
       editable.set_vexpand(false);
-      editable.add_css_class("property-editable");
+      editable.add_css_class("ao-property-editable");
 
       box->append(*title);
       box->append(editable);
@@ -203,7 +203,7 @@ namespace ao::gtk
 
   void TrackInspectorPanel::buildAudioSection()
   {
-    _audioBox.add_css_class("audio-section");
+    _audioBox.add_css_class("ao-audio-section");
     _audioBox.set_spacing(4);
 
     auto const createTechnicalRow = [](Gtk::Box& container, std::string const& labelText, Gtk::Label& valueLabel)
@@ -213,11 +213,11 @@ namespace ao::gtk
 
       title->set_halign(Gtk::Align::START);
       title->set_opacity(kLabelOpacity);
-      title->add_css_class("technical-label");
+      title->add_css_class("ao-technical-label");
 
       valueLabel.set_halign(Gtk::Align::END);
       valueLabel.set_hexpand(true);
-      valueLabel.add_css_class("technical-value");
+      valueLabel.add_css_class("ao-technical-value");
 
       row->append(*title);
       row->append(valueLabel);
@@ -229,7 +229,7 @@ namespace ao::gtk
     header->set_halign(Gtk::Align::START);
     header->set_margin_bottom(4);
     header->set_opacity(kHeaderOpacity);
-    header->add_css_class("section-header");
+    header->add_css_class("ao-section-header");
     _audioBox.append(*header);
 
     createTechnicalRow(_audioBox, "Format", _formatLabel);

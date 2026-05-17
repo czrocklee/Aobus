@@ -80,6 +80,7 @@ namespace ao::gtk::layout::test
       REQUIRE(btn != nullptr);
       CHECK(btn->get_icon_name() == "media-playback-start-symbolic");
       CHECK(btn->get_sensitive() == false);
+      CHECK(btn->has_css_class("ao-playback-button"));
     }
 
     SECTION("stopButton creates Gtk::Button, insensitive when idle")
@@ -93,6 +94,7 @@ namespace ao::gtk::layout::test
       REQUIRE(btn != nullptr);
       CHECK(btn->get_icon_name() == "media-playback-stop-symbolic");
       CHECK(btn->get_sensitive() == false);
+      CHECK(btn->has_css_class("ao-playback-button"));
     }
 
     SECTION("playButton creates Gtk::Button, insensitive when not ready")
@@ -106,6 +108,7 @@ namespace ao::gtk::layout::test
       REQUIRE(btn != nullptr);
       CHECK(btn->get_icon_name() == "media-playback-start-symbolic");
       CHECK(btn->get_sensitive() == false);
+      CHECK(btn->has_css_class("ao-playback-button"));
     }
 
     SECTION("pauseButton creates Gtk::Button, insensitive when not playing")
@@ -119,6 +122,7 @@ namespace ao::gtk::layout::test
       REQUIRE(btn != nullptr);
       CHECK(btn->get_icon_name() == "media-playback-pause-symbolic");
       CHECK(btn->get_sensitive() == false);
+      CHECK(btn->has_css_class("ao-playback-button"));
     }
 
     SECTION("seekSlider creates Gtk::Scale, insensitive when idle")
@@ -132,6 +136,7 @@ namespace ao::gtk::layout::test
       REQUIRE(scale != nullptr);
       CHECK(scale->get_sensitive() == false);
       CHECK(scale->get_value() == 0.0);
+      CHECK(scale->has_css_class("ao-seekbar"));
     }
 
     SECTION("timeLabel creates Gtk::Label with default text")
@@ -156,6 +161,7 @@ namespace ao::gtk::layout::test
       auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_text() == "Not Playing");
+      CHECK(label->has_css_class("ao-playback-title"));
     }
 
     SECTION("currentArtistLabel shows empty when idle")
@@ -168,6 +174,7 @@ namespace ao::gtk::layout::test
       auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
       REQUIRE(label != nullptr);
       CHECK(label->get_text().empty());
+      CHECK(label->has_css_class("ao-playback-artist"));
     }
 
     SECTION("volumeControl shows hidden when volume unavailable")
@@ -188,7 +195,7 @@ namespace ao::gtk::layout::test
 
       auto* const btn = dynamic_cast<Gtk::Button*>(&comp->widget());
       REQUIRE(btn != nullptr);
-      CHECK(btn->has_css_class("output-button-logo"));
+      CHECK(btn->has_css_class("ao-output-logo"));
     }
 
     SECTION("qualityIndicator creates AobusSoul widget")
@@ -433,6 +440,7 @@ namespace ao::gtk::layout::test
 
       auto* const label = dynamic_cast<Gtk::Label*>(&comp->widget());
       CHECK(label == nullptr);
+      CHECK(comp->widget().has_css_class("ao-inspector-sidebar"));
     }
 
     SECTION("status.defaultBar returns a Gtk::Box")
@@ -441,7 +449,10 @@ namespace ao::gtk::layout::test
       auto const comp = registry.create(ctx, node);
 
       REQUIRE(comp != nullptr);
-      CHECK(dynamic_cast<Gtk::Box*>(&comp->widget()) != nullptr);
+
+      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
+      REQUIRE(box != nullptr);
+      CHECK(box->has_css_class("ao-status-bar"));
     }
   }
 

@@ -4,7 +4,6 @@ set -uo pipefail
 
 BUILD_DIR="/tmp/build/debug-clang-tidy"
 FIX_MODE=false
-SUMMARY_MODE=false
 OUTPUT_FILE=""
 JOBS=$(nproc)
 
@@ -17,7 +16,7 @@ Each file is classified as STRICT (lib/app/include) or RELAXED (test/).
 
 === Scope (choose one) ================================================
 
-  (none)                Changed files — git diff + working tree + staged + untracked
+  (none)                Changed files — local main..HEAD + working tree + staged + untracked
   <file>...             Explicit list of files to check
   --all                 Every .cpp/.h/.hpp under lib/ app/ include/ test/
   --folder <d>          All files under <d> (repeatable: --folder lib --folder test)
@@ -26,7 +25,6 @@ Each file is classified as STRICT (lib/app/include) or RELAXED (test/).
 === Output control ====================================================
 
   (none)                Full clang-tidy output to stdout
-  --summary             Group warnings by check name with line numbers, no full text
   -o <file>             Write full clang-tidy output to <file>
 
 === Other =============================================================
@@ -42,8 +40,8 @@ Each file is classified as STRICT (lib/app/include) or RELAXED (test/).
   # Check everything
   ./script/run-clang-tidy.sh --all
 
-  # Check a folder with summary
-  ./script/run-clang-tidy.sh --folder test/unit/audio --summary
+  # Check a folder
+  ./script/run-clang-tidy.sh --folder test/unit/audio
 
   # Check changes since a commit, write to file
   ./script/run-clang-tidy.sh --commit HEAD~3 -o report.txt
@@ -52,7 +50,7 @@ Each file is classified as STRICT (lib/app/include) or RELAXED (test/).
   ./script/run-clang-tidy.sh --fix lib/audio/Foo.cpp lib/audio/Foo.h
 
   # Check production code only
-  ./script/run-clang-tidy.sh --folder lib --folder app --folder include --summary
+  ./script/run-clang-tidy.sh --folder lib --folder app --folder include
 
 === Config per mode ===================================================
 
@@ -76,7 +74,6 @@ while [[ $# -gt 0 ]]; do
         -j) JOBS="$2"; shift 2 ;;
         -j*) JOBS="${1#-j}"; shift ;;
         --fix) FIX_MODE=true; shift ;;
-        --summary) SUMMARY_MODE=true; shift ;;
         -o) OUTPUT_FILE="$2"; shift 2 ;;
         --all) ALL_MODE=true; shift ;;
         --folder) FOLDER_DIRS+=("$2"); shift 2 ;;
@@ -262,17 +259,16 @@ if [[ ${#FILES[@]} -eq 0 ]]; then
                 ! -name 'fakeit.hpp' | sort
         )
     else
-        # Auto-detect base branch (prefer origin/ to avoid diffing against self)
+        # Default to the local main branch; when already on main, use the previous commit.
         if [[ -n "$COMMIT_REF" ]]; then
             BASE="$COMMIT_REF"
         else
-            BASE=""
-            for candidate in origin/main origin/master main master; do
-                BASE=$(git rev-parse --abbrev-ref "$candidate" 2>/dev/null || echo "")
-                [[ -n "$BASE" && "$BASE" != "$(git branch --show-current)" ]] && break
-                BASE=""
-            done
-            [[ -z "$BASE" ]] && BASE="HEAD~1"
+            current_branch=$(git branch --show-current)
+            if [[ "$current_branch" != "main" ]] && git rev-parse --verify --quiet main >/dev/null; then
+                BASE="main"
+            else
+                BASE="HEAD~1"
+            fi
         fi
         echo "No files specified — using git diff ${BASE}..HEAD + working tree + staged + untracked" >&2
         mapfile -t FILES < <(
@@ -296,6 +292,55 @@ while IFS=' ' read -r mode path; do
         RELAXED) RELX_FILES+=("$path") ;;
     esac
 done < <(for f in "${FILES[@]}"; do classify_file "$f"; done)
+
+DEDUPLICATOR_PY=$(cat <<'EOF'
+import sys, re
+seen = set()
+cid = None
+block = []
+diag_re = re.compile(r"^([^:]+):([0-9]+):([0-9]+):\s+(warning|error|note):\s+(.*)")
+noise_re = re.compile(r"^([0-9]+ warnings? generated\.|Suppressed [0-9]+ warnings?|Use -header-filter=.*)$")
+
+def flush(out):
+    global cid, block, seen
+    if block and cid and cid not in seen:
+        out.write("".join(block))
+        seen.add(cid)
+    block = []
+    cid = None
+
+outfile = sys.argv[1]
+logs = sys.argv[2:]
+
+out = open(outfile, "a", encoding="utf-8") if outfile else sys.stdout
+
+for arg in logs:
+    with open(arg, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            m = diag_re.match(line)
+            if m:
+                if m.group(4) in ("warning", "error"):
+                    flush(out)
+                    cid = f"{m.group(1)}:{m.group(2)}:{m.group(3)}:{m.group(5)}"
+                    block.append(line)
+                else:
+                    if cid is not None:
+                        block.append(line)
+            elif line.startswith("In file included from") or line.strip().startswith("from "):
+                pass
+            elif noise_re.match(line):
+                pass
+            else:
+                if cid is not None:
+                    block.append(line)
+                elif line.strip() and line not in seen:
+                    out.write(line)
+                    seen.add(line)
+flush(out)
+if outfile:
+    out.close()
+EOF
+)
 
 # Export arrays for subprocesses, then run in parallel
 run_batch() {
@@ -332,75 +377,20 @@ run_batch() {
     done
     printf "\r  [%d/%d]\n" $done $total >&2
 
-    if $SUMMARY_MODE; then
-        # Collect per-file warnings grouped by check name with line numbers
-        local warn_total=0 file_count=0
-        for log in "$tmpdir"/*.log; do
-            local n
-            n=$(grep -c "warning:" "$log" 2>/dev/null; true)
-            [[ $n -eq 0 ]] && continue
-
-            ((file_count++))
-            ((warn_total += n))
-
-            local logname
-            logname=$(basename "$log" .log | tr '_' '/')
-
-            printf "\n  %s (%d warning(s))\n" "$logname" "$n"
-
-            # Extract check names with line numbers, deduplicate per check+line
-            grep -oP '^/[^:]+:\d+:\d+:.*?\[.*?\]' "$log" 2>/dev/null | \
-              sed -n 's/^[^:]*:\([0-9]*\):.*\[\([^]]*\)\].*/\2:\1/p' | \
-              sort -t: -k1,1 -k2,2n | \
-              awk -F: '{
-                check=$1; line=$2
-                if (check != prev_check) {
-                  if (prev_check != "") printf "\n"
-                  printf "    [%s] L%s", check, line
-                  prev_check=check
-                  prev_line=line
-                } else if (line != prev_line) {
-                  printf ",%s", line
-                  prev_line=line
-                }
-              }
-              END { if (prev_check != "") printf "\n" }'
-        done
-
-        if [[ $warn_total -eq 0 ]]; then
-            echo "  No warnings found."
-        else
-            echo ""
-            echo "  ---"
-            echo "  $file_count file(s), $warn_total warning(s) total"
+    local logs_with_warnings=()
+    for log in "$tmpdir"/*.log; do
+        if grep -q -E "warning:|error:" "$log" 2>/dev/null; then
+            logs_with_warnings+=("$log")
         fi
-    elif [[ -n "$OUTPUT_FILE" ]]; then
-        # Append full output to file
-        for log in "$tmpdir"/*.log; do
-            if grep -q "warning:" "$log" 2>/dev/null; then
-                cat "$log" >> "$OUTPUT_FILE"
-            fi
-        done
-        local has_warn
-        has_warn=$(grep -rl "warning:" "$tmpdir" 2>/dev/null | wc -l)
-        if [[ $has_warn -eq 0 ]]; then
-            echo "  No warnings found."
-        else
-            echo "  Output written to $OUTPUT_FILE"
+    done
+
+    if [[ ${#logs_with_warnings[@]} -gt 0 ]]; then
+        python3 -c "$DEDUPLICATOR_PY" "$OUTPUT_FILE" "${logs_with_warnings[@]}"
+        if [[ -n "$OUTPUT_FILE" ]]; then
+            echo "  Output appended to $OUTPUT_FILE"
         fi
     else
-        # Print warnings from all logs to stdout
-        local count=0
-        for log in "$tmpdir"/*.log; do
-            if grep -q "warning:" "$log" 2>/dev/null; then
-                cat "$log"
-                ((count++))
-            fi
-        done
-
-        if [[ $count -eq 0 ]]; then
-            echo "  No warnings found."
-        fi
+        echo "  No warnings found."
     fi
 
     rm -rf "$tmpdir"

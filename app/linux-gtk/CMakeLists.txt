@@ -5,7 +5,7 @@ add_library(aobus-gtk-lib STATIC
     app/MainWindow.cpp
     app/MenuController.cpp
     app/ShellLayoutController.cpp
-    app/ThemeBus.cpp
+    app/StyleManager.cpp
     app/MainWindowCoordinator.cpp
     app/WindowStatePersistence.cpp
     platform/AudioBackendBootstrap.cpp

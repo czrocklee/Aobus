@@ -7,15 +7,12 @@
 #include <runtime/AppRuntime.h>
 #include <runtime/PlaybackService.h>
 
-#include <gdkmm/display.h>
 #include <gdkmm/monitor.h>
 #include <gdkmm/rectangle.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <glibmm/variant.h>
-#include <gtk/gtk.h>
 #include <gtkmm/box.h>
-#include <gtkmm/cssprovider.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/object.h>
@@ -23,7 +20,6 @@
 #include <gtkmm/shortcutaction.h>
 #include <gtkmm/shortcutcontroller.h>
 #include <gtkmm/shortcuttrigger.h>
-#include <gtkmm/stylecontext.h>
 #include <gtkmm/window.h>
 
 #include <cmath>
@@ -44,8 +40,7 @@ namespace ao::gtk
     set_modal(true);
     set_hide_on_close(true);
 
-    ensureCss();
-    add_css_class("soul-window");
+    add_css_class("ao-soul-window");
 
     auto* const centerBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
     centerBox->set_valign(Gtk::Align::CENTER);
@@ -144,21 +139,5 @@ namespace ao::gtk
   {
     _soulBinding.reset();
     Gtk::Window::on_hide();
-  }
-
-  void AobusSoulWindow::ensureCss()
-  {
-    [[maybe_unused]] static auto const cssInitialized = []
-    {
-      auto const provider = Gtk::CssProvider::create();
-      provider->load_from_data(".soul-window { background-color: rgba(0, 0, 0, 0.85); }");
-
-      if (auto const display = Gdk::Display::get_default(); display != nullptr)
-      {
-        Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-      }
-
-      return true;
-    }();
   }
 } // namespace ao::gtk

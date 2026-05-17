@@ -10,12 +10,8 @@
 #include <runtime/PlaybackService.h>
 #include <runtime/StateTypes.h>
 
-#include <gdkmm/display.h>
-#include <gtk/gtkstyleprovider.h>
-#include <gtkmm/cssprovider.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
-#include <gtkmm/stylecontext.h>
 
 #include <algorithm>
 #include <format>
@@ -27,30 +23,6 @@ namespace ao::gtk
 {
   namespace
   {
-    void ensurePlaybackDetailsCss()
-    {
-      static auto const provider = Gtk::CssProvider::create();
-      static bool initialized = false;
-
-      if (!initialized)
-      {
-        provider->load_from_data(R"(
-          .sink-status-perfect { color: #A855F7; }
-          .sink-status-lossless { color: #10B981; }
-          .sink-status-intervention { color: #F59E0B; }
-          .sink-status-lossy { color: #6B7280; }
-          .sink-status-clipped { color: #EF4444; }
-        )");
-
-        if (auto display = Gdk::Display::get_default(); display)
-        {
-          Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
-        }
-
-        initialized = true;
-      }
-    }
-
     std::string formatStream(audio::Format const& format)
     {
       constexpr auto kKhzMultiplier = 1000.0;
@@ -74,11 +46,11 @@ namespace ao::gtk
 
     void clearSinkStatusClasses(Gtk::Image& image)
     {
-      for (auto const& cls : {"sink-status-perfect",
-                              "sink-status-lossless",
-                              "sink-status-intervention",
-                              "sink-status-lossy",
-                              "sink-status-clipped"})
+      for (auto const& cls : {"ao-quality-perfect",
+                              "ao-quality-lossless",
+                              "ao-quality-intervention",
+                              "ao-quality-lossy",
+                              "ao-quality-clipped"})
       {
         image.remove_css_class(cls);
       }
@@ -88,7 +60,6 @@ namespace ao::gtk
   PlaybackDetailsWidget::PlaybackDetailsWidget(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
   {
-    ensurePlaybackDetailsCss();
     _container.set_spacing(layout::kSpacingLarge);
     _container.set_margin_start(layout::kMarginMedium);
     _container.set_margin_end(layout::kMarginMedium);
@@ -143,11 +114,11 @@ namespace ao::gtk
     switch (state.quality)
     {
       case Quality::BitwisePerfect:
-      case Quality::LosslessPadded: _sinkStatusIcon.add_css_class("sink-status-perfect"); break;
-      case Quality::LosslessFloat: _sinkStatusIcon.add_css_class("sink-status-lossless"); break;
-      case Quality::LinearIntervention: _sinkStatusIcon.add_css_class("sink-status-intervention"); break;
-      case Quality::LossySource: _sinkStatusIcon.add_css_class("sink-status-lossy"); break;
-      case Quality::Clipped: _sinkStatusIcon.add_css_class("sink-status-clipped"); break;
+      case Quality::LosslessPadded: _sinkStatusIcon.add_css_class("ao-quality-perfect"); break;
+      case Quality::LosslessFloat: _sinkStatusIcon.add_css_class("ao-quality-lossless"); break;
+      case Quality::LinearIntervention: _sinkStatusIcon.add_css_class("ao-quality-intervention"); break;
+      case Quality::LossySource: _sinkStatusIcon.add_css_class("ao-quality-lossy"); break;
+      case Quality::Clipped: _sinkStatusIcon.add_css_class("ao-quality-clipped"); break;
       case Quality::Unknown: _sinkStatusIcon.set_visible(false); break;
     }
   }

@@ -33,8 +33,6 @@ namespace ao::gtk
     void on_hide() override;
 
   private:
-    void ensureCss();
-
     rt::PlaybackService* _playback = nullptr;
     AobusSoul _bigSoul{};
     std::unique_ptr<AobusSoulBinding> _soulBinding;

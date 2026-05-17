@@ -7,67 +7,18 @@
 #include <runtime/StateTypes.h>
 
 #include <gdkmm/cursor.h>
-#include <gdkmm/display.h>
-#include <gtk/gtkstyleprovider.h>
-#include <gtkmm/cssprovider.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/label.h>
-#include <gtkmm/stylecontext.h>
 
 #include <format>
 
 namespace ao::gtk
 {
-  namespace
-  {
-    void ensureNowPlayingCss()
-    {
-      static auto const provider = Gtk::CssProvider::create();
-      static bool initialized = false;
-
-      if (!initialized)
-      {
-        provider->load_from_data(R"(
-          .now-playing-label {
-            transition: all 200ms ease-in-out;
-            padding: 2px 12px;
-            border-radius: 6px;
-            color: @theme_fg_color;
-            opacity: 0.85;
-          }
-
-          .now-playing-label:hover {
-            background-color: alpha(@theme_selected_bg_color, 0.15);
-            color: @theme_selected_bg_color;
-            opacity: 1.0;
-          }
-
-          .now-playing-label:active {
-            background-color: alpha(@theme_selected_bg_color, 0.25);
-            opacity: 0.7;
-          }
-
-          .clickable-label {
-            /* No direct cursor property in standard GTK CSS for Label */
-          }
-        )");
-
-        if (auto display = Gdk::Display::get_default(); display)
-        {
-          Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
-        }
-
-        initialized = true;
-      }
-    }
-  }
-
   NowPlayingStatusLabel::NowPlayingStatusLabel(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
   {
-    ensureNowPlayingCss();
-    _label.add_css_class("now-playing-label");
-    _label.add_css_class("clickable-label");
+    _label.add_css_class("ao-nowplaying");
+    _label.add_css_class("ao-clickable");
     _label.set_tooltip_text("Click to show playing list");
 
     auto const clickGesture = Gtk::GestureClick::create();

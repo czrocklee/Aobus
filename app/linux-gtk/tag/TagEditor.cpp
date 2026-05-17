@@ -58,7 +58,7 @@ namespace ao::gtk
     set_margin(kMargin);
 
     _searchEntry.set_placeholder_text("Search or add tags...");
-    _searchEntry.add_css_class("tags-entry");
+    _searchEntry.add_css_class("ao-tags-entry");
     _searchEntry.signal_activate().connect(sigc::mem_fun(*this, &TagEditor::onEntryActivated));
     _searchEntry.signal_changed().connect([this] { _availableTagsBox.invalidate_filter(); });
 
@@ -338,7 +338,7 @@ namespace ao::gtk
 
   void TagEditor::setChipStyle(Gtk::ToggleButton& chip, bool isHighlighted)
   {
-    chip.add_css_class("tag-chip");
+    chip.add_css_class("ao-tag-chip");
 
     if (!isHighlighted)
     {

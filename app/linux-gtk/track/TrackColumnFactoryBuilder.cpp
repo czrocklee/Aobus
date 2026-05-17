@@ -7,13 +7,11 @@
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/contentprovider.h>
-#include <gdkmm/display.h>
 #include <gdkmm/enums.h>
 #include <glib.h>
 #include <glibmm/bytes.h>
 #include <gtk/gtkstyleprovider.h>
 #include <gtkmm/box.h>
-#include <gtkmm/cssprovider.h>
 #include <gtkmm/dragsource.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
@@ -25,7 +23,6 @@
 #include <gtkmm/object.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/stack.h>
-#include <gtkmm/stylecontext.h>
 #include <pangomm/layout.h>
 #include <sigc++/connection.h>
 #include <sigc++/functors/slot.h>
@@ -92,73 +89,6 @@ namespace ao::gtk
       listItem->set_data(key, stored.release(), destroyConnectionData); // NOLINT(cppcoreguidelines-owning-memory)
     }
 
-    void ensureTrackPageCss(bool force = false)
-    {
-      static auto const provider = Gtk::CssProvider::create();
-      static bool initialized = false;
-
-      if (initialized && !force)
-      {
-        return;
-      }
-
-      if (force)
-      {
-        if (auto const display = Gdk::Display::get_default(); display)
-        {
-          Gtk::StyleContext::remove_provider_for_display(display, provider);
-        }
-      }
-
-      provider->load_from_data(R"(
-        /* 1. The Dynamic Beam: Seamlessly following the Title column via CSS variables */
-        columnview row.playing-row {
-          /* We use var(--ao-title-x) which is updated in real-time by C++ */
-          background-image: linear-gradient(to right,
-            transparent 0%,
-            alpha(@warning_bg_color, 0.2) var(--ao-title-x, 35%),
-            transparent 100%
-          );
-          background-color: transparent;
-          border-color: transparent;
-          transition: background-image 1.0s ease-out; /* Smooth sliding of the beam */
-        }
-
-        /* 2. Sharp Title Text */
-        .playing-title {
-          color: @theme_fg_color;
-          font-weight: bold;
-        }
-
-        /* Sophisticated transition */
-        columnview row {
-          transition: all 450ms cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .inline-editor-stack { min-height: 0; margin: 0; }
-        .inline-editor-label { border: 1px solid transparent; min-height: 0; }
-        .inline-editor-entry {
-          background: @view_bg_color;
-          border: 1px solid @accent_color;
-          border-radius: 4px;
-          padding: 0 6px;
-          margin: 0;
-          min-height: 0;
-          box-shadow: none;
-          font-weight: bold;
-        }
-
-        .inline-editor-entry text { padding-top: 0; padding-bottom: 0; min-height: 0; }
-      )");
-
-      if (auto const display = Gdk::Display::get_default(); display)
-      {
-        Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
-      }
-
-      initialized = true;
-    }
-
     void onTextColumnSetup(Glib::RefPtr<Gtk::ListItem> const& listItem, TrackColumnDefinition const& definition)
     {
       if (definition.tagsCell)
@@ -167,7 +97,7 @@ namespace ao::gtk
 
         box->set_halign(Gtk::Align::FILL);
         box->set_hexpand(true);
-        box->add_css_class("track-tags-cell");
+        box->add_css_class("ao-track-tags-cell");
 
         auto* const label = Gtk::make_managed<Gtk::Label>("");
 
@@ -185,7 +115,7 @@ namespace ao::gtk
       {
         auto* const stack = Gtk::make_managed<Gtk::Stack>();
 
-        stack->add_css_class("inline-editor-stack");
+        stack->add_css_class("ao-inline-editor-stack");
         stack->set_transition_type(Gtk::StackTransitionType::CROSSFADE);
         stack->set_vhomogeneous(false);
         stack->set_hexpand(true);
@@ -198,7 +128,7 @@ namespace ao::gtk
         label->set_halign(Gtk::Align::START);
         label->set_ellipsize(Pango::EllipsizeMode::END);
         label->set_hexpand(true);
-        label->add_css_class("inline-editor-label");
+        label->add_css_class("ao-inline-editor-label");
 
         if (definition.draggable)
         {
@@ -217,7 +147,7 @@ namespace ao::gtk
 
         auto* const entry = Gtk::make_managed<Gtk::Entry>();
 
-        entry->add_css_class("inline-editor-entry");
+        entry->add_css_class("ao-inline-editor-entry");
         entry->set_hexpand(true);
         entry->set_vexpand(true);
         entry->set_halign(Gtk::Align::FILL);
@@ -412,16 +342,16 @@ namespace ao::gtk
           {
             if (auto* const rowWidget = cell->get_parent())
             {
-              rowWidget->add_css_class("playing-row");
+              rowWidget->add_css_class("ao-playing-row");
             }
 
             if (definition.column == TrackColumn::Title)
             {
-              cell->add_css_class("playing-title");
+              cell->add_css_class("ao-playing-title");
             }
             else
             {
-              child->add_css_class("playing-dim");
+              child->add_css_class("ao-playing-dim");
             }
           }
         }
@@ -431,13 +361,13 @@ namespace ao::gtk
           {
             if (auto* const rowWidget = cell->get_parent())
             {
-              rowWidget->remove_css_class("playing-row");
+              rowWidget->remove_css_class("ao-playing-row");
             }
 
-            cell->remove_css_class("playing-title");
+            cell->remove_css_class("ao-playing-title");
           }
 
-          child->remove_css_class("playing-dim");
+          child->remove_css_class("ao-playing-dim");
         }
       };
 
@@ -452,8 +382,6 @@ namespace ao::gtk
   Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(TrackColumnDefinition const& definition,
                                                               MetadataCommitFn const& commitFn)
   {
-    ensureTrackPageCss();
-
     auto const factory = Gtk::SignalListItemFactory::create();
 
     factory->signal_setup().connect([definition](Glib::RefPtr<Gtk::ListItem> const& listItem)

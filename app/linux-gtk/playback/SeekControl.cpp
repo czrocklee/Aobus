@@ -27,6 +27,7 @@ namespace ao::gtk
     _scale.set_sensitive(false);
     _scale.set_hexpand(true);
     _scale.set_valign(Gtk::Align::CENTER);
+    _scale.add_css_class("ao-seekbar");
 
     auto const gesture = Gtk::GestureClick::create();
     gesture->set_button(1);

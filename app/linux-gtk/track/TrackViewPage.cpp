@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "track/TrackViewPage.h"
-#include "app/ThemeBus.h"
+#include "app/StyleManager.h"
 #include "layout/LayoutConstants.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnFactoryBuilder.h"
@@ -150,7 +150,7 @@ namespace ao::gtk
     _viewHost = std::make_unique<TrackColumnViewHost>(_adapter, _columnLayoutModel, _selectionModel);
     _viewHost->setupSelectionActivation();
 
-    _themeRefreshConnection = signalThemeRefresh().connect(
+    _themeRefreshConnection = StyleManager::instance().signalRefreshed().connect(
       [this]
       {
         APP_LOG_INFO("Executing theme refresh for TrackViewPage...");

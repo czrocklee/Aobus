@@ -3,18 +3,14 @@
 
 #include "app/GtkControlExecutor.h"
 #include "app/MainWindow.h"
-#include "app/ThemeBus.h"
+#include "app/StyleManager.h"
 #include "library_io/ImportExportCoordinator.h"
 #include <ao/utility/Log.h>
-#include <giomm/dbusconnection.h>
-#include <giomm/file.h>
-#include <giomm/filemonitor.h>
 #include <giomm/simpleaction.h>
 #include <runtime/AppRuntime.h>
 
 #include <ao/AppVersion.h>
 
-#include <glibmm/error.h>
 #include <glibmm/refptr.h>
 #include <glibmm/variant.h>
 #include <gsl-lite/gsl-lite.hpp>
@@ -170,74 +166,7 @@ int main(int argc, char* argv[])
   };
   ::g_unix_signal_add(SIGINT, signal_handler, &app);
   ::g_unix_signal_add(SIGTERM, signal_handler, &app);
-
-  // Global Theme Refresh: Manual poke for NixOS/Theme changes
-  ::g_unix_signal_add(
-    SIGUSR1,
-    [](void*) -> ::gboolean
-    {
-      APP_LOG_INFO("Received SIGUSR1, scheduling global theme refresh...");
-      emitThemeRefresh();
-      return TRUE;
-    },
-    nullptr);
   // NOLINTEND(misc-include-cleaner)
-
-  // Auto-detection for NixOS/HM: Monitor GTK config directory for changes
-  auto const configPath = std::string(Glib::get_user_config_dir()) + "/gtk-4.0";
-  auto const configFile = Gio::File::create_for_path(configPath);
-  auto monitor = configFile->monitor_directory();
-
-  // Need to keep the monitor alive, so we attach it to the application or use a static
-  static auto monitor_keep_alive = monitor;
-
-  monitor->signal_changed().connect(
-    [](
-      Glib::RefPtr<Gio::File> const& file, Glib::RefPtr<Gio::File> const& /*other_file*/, Gio::FileMonitor::Event event)
-    {
-      using Event = Gio::FileMonitor::Event;
-
-      if (event == Event::CHANGED || event == Event::CREATED || event == Event::DELETED ||
-          event == Event::CHANGES_DONE_HINT)
-      {
-        auto const name = file->get_basename();
-
-        if (name == "settings.ini" || name == "gtk.css")
-        {
-          APP_LOG_INFO(
-            "GTK config change detected ({} - event: {}), scheduling refresh...", name, static_cast<int>(event));
-          emitThemeRefresh();
-        }
-      }
-    });
-
-  // DBus Theme Detection (Stylix/Portal support)
-  try
-  {
-    if (auto bus = Gio::DBus::Connection::get_sync(Gio::DBus::BusType::SESSION); bus)
-    {
-      bus->signal_subscribe(
-        [](Glib::RefPtr<Gio::DBus::Connection> const&,
-           Glib::ustring const&,
-           Glib::ustring const&,
-           Glib::ustring const&,
-           Glib::ustring const&,
-           Glib::VariantContainerBase const&)
-        {
-          APP_LOG_INFO("DBus theme change detected via Portal, scheduling refresh...");
-          emitThemeRefresh();
-        },
-        "org.freedesktop.portal.Desktop",  // Sender
-        "org.freedesktop.portal.Settings", // Interface
-        "SettingChanged",                  // Member
-        "/org/freedesktop/portal/desktop"  // Path
-      );
-    }
-  }
-  catch (Glib::Error const& ex)
-  {
-    APP_LOG_WARN("Failed to subscribe to DBus theme signals: {}", ex.what());
-  }
 
   // Add about action to application
   auto const aboutAction = Gio::SimpleAction::create("about");
@@ -272,6 +201,10 @@ int main(int argc, char* argv[])
   app->signal_activate().connect(
     [&app, &windows]
     {
+      // Initialize the unified style system before any window is created.
+      // Idempotent — safe to call across multiple activate signals.
+      StyleManager::instance().initialize();
+
       auto libraryPath = resolveLibraryPath();
 
       auto window = createWindow(*app, libraryPath);

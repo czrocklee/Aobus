@@ -5,12 +5,9 @@
 #include <runtime/AppRuntime.h>
 #include <runtime/NotificationService.h>
 
-#include <gdkmm/display.h>
 #include <glibmm/main.h>
 #include <gtk/gtkstyleprovider.h>
-#include <gtkmm/cssprovider.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/stylecontext.h>
 
 #include <chrono>
 #include <string>
@@ -18,40 +15,14 @@
 
 namespace ao::gtk
 {
-  namespace
-  {
-    void ensureStatusNotificationCss()
-    {
-      static auto const provider = Gtk::CssProvider::create();
-      static bool initialized = false;
-
-      if (!initialized)
-      {
-        provider->load_from_data(R"(
-          .status-message {
-            /* Styles for status messages in the stack */
-          }
-        )");
-
-        if (auto display = Gdk::Display::get_default(); display)
-        {
-          Gtk::StyleContext::add_provider_for_display(display, provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
-        }
-
-        initialized = true;
-      }
-    }
-  }
-
   StatusNotificationLabel::StatusNotificationLabel(rt::NotificationService& notificationService,
                                                    rt::ViewService& viewService)
     : _notificationService{notificationService}, _selectionInfo{viewService}
   {
-    ensureStatusNotificationCss();
     _stack.set_transition_type(Gtk::StackTransitionType::SLIDE_UP_DOWN);
     _stack.set_transition_duration(kTransitionDurationMs);
 
-    _statusLabel.add_css_class("status-message");
+    _statusLabel.add_css_class("ao-status-message");
     _statusLabel.set_halign(Gtk::Align::END);
 
     _stack.add(_selectionInfo.widget(), "info");

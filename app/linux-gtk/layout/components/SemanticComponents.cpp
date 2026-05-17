@@ -250,7 +250,7 @@ namespace ao::gtk::layout
 
         // Handle
         _handle.set_icon_name("pan-start-symbolic");
-        _handle.add_css_class("inspector-handle");
+        _handle.add_css_class("ao-inspector-handle");
         _handle.set_valign(Gtk::Align::CENTER);
         _handle.set_focus_on_click(false);
         _container.append(_handle);
