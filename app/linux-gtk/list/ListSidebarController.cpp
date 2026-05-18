@@ -245,13 +245,13 @@ namespace ao::gtk
     }
   }
 
-  void ListSidebarController::createList(model::ListDraft const& draft)
+  void ListSidebarController::createList(rt::LibraryMutationService::ListDraft const& draft)
   {
     auto listId = _runtime.mutation().createList(draft);
     _pendingSelectId = listId;
   }
 
-  void ListSidebarController::updateList(model::ListDraft const& draft)
+  void ListSidebarController::updateList(rt::LibraryMutationService::ListDraft const& draft)
   {
     _runtime.mutation().updateList(draft);
     _pendingSelectId = draft.listId;

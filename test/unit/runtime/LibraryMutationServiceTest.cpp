@@ -92,4 +92,25 @@ namespace ao::rt::test
     REQUIRE(result.has_value());
     CHECK(mutated.empty());
   }
-}
+
+  TEST_CASE("LibraryMutationService - createList publishes ListsMutated", "[app][runtime][mutation]")
+  {
+    auto testLib = TestMusicLibrary{};
+    auto executor = NullExecutor{};
+    auto service = LibraryMutationService{executor, testLib.library()};
+
+    auto upserted = std::vector<ListId>{};
+    auto sub = service.onListsMutated([&](auto const& ev) { upserted = ev.upserted; });
+
+    auto draft = LibraryMutationService::ListDraft{};
+    draft.name = "Test List";
+    draft.kind = LibraryMutationService::ListKind::Smart;
+    draft.expression = "artist:test";
+
+    auto const listId = service.createList(draft);
+
+    REQUIRE(listId != ListId{0});
+    REQUIRE(upserted.size() == 1);
+    CHECK(upserted[0] == listId);
+  }
+} // namespace ao::rt::test

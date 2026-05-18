@@ -51,7 +51,7 @@ namespace ao::audio::test
       {
         auto decoder = std::make_unique<ScriptedDecoderSession>(info);
         auto block = std::vector(20, std::byte{0}); // 10ms
-        decoder->setReadScript({{block, true}});               // EOF immediately
+        decoder->setReadScript({{block, true}});    // EOF immediately
 
         auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
         REQUIRE(source->initialize());

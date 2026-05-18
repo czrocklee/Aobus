@@ -143,10 +143,10 @@ namespace ao::rt::test
     CHECK(snap.groupBy == TrackGroupKey::None);
 
     auto const expectedNone = std::vector{TrackSortField::Artist,
-                                                          TrackSortField::Album,
-                                                          TrackSortField::DiscNumber,
-                                                          TrackSortField::TrackNumber,
-                                                          TrackSortField::Title};
+                                          TrackSortField::Album,
+                                          TrackSortField::DiscNumber,
+                                          TrackSortField::TrackNumber,
+                                          TrackSortField::Title};
     REQUIRE(snap.sortBy.size() == expectedNone.size());
 
     for (std::size_t i = 0; i < expectedNone.size(); ++i)
@@ -199,10 +199,10 @@ namespace ao::rt::test
     CHECK(snap.groupBy == TrackGroupKey::Artist);
 
     auto const expected = std::vector{TrackSortField::Artist,
-                                                      TrackSortField::Album,
-                                                      TrackSortField::DiscNumber,
-                                                      TrackSortField::TrackNumber,
-                                                      TrackSortField::Title};
+                                      TrackSortField::Album,
+                                      TrackSortField::DiscNumber,
+                                      TrackSortField::TrackNumber,
+                                      TrackSortField::Title};
     REQUIRE(snap.sortBy.size() == expected.size());
 
     for (std::size_t i = 0; i < expected.size(); ++i)
@@ -223,10 +223,10 @@ namespace ao::rt::test
     CHECK(snap.groupBy == TrackGroupKey::Album);
 
     auto const expected = std::vector{TrackSortField::AlbumArtist,
-                                                      TrackSortField::Album,
-                                                      TrackSortField::DiscNumber,
-                                                      TrackSortField::TrackNumber,
-                                                      TrackSortField::Title};
+                                      TrackSortField::Album,
+                                      TrackSortField::DiscNumber,
+                                      TrackSortField::TrackNumber,
+                                      TrackSortField::Title};
     REQUIRE(snap.sortBy.size() == expected.size());
 
     for (std::size_t i = 0; i < expected.size(); ++i)
@@ -249,11 +249,11 @@ namespace ao::rt::test
     CHECK(snap.groupBy == TrackGroupKey::Genre);
 
     auto const expected = std::vector{TrackSortField::Genre,
-                                                      TrackSortField::Artist,
-                                                      TrackSortField::Album,
-                                                      TrackSortField::DiscNumber,
-                                                      TrackSortField::TrackNumber,
-                                                      TrackSortField::Title};
+                                      TrackSortField::Artist,
+                                      TrackSortField::Album,
+                                      TrackSortField::DiscNumber,
+                                      TrackSortField::TrackNumber,
+                                      TrackSortField::Title};
     REQUIRE(snap.sortBy.size() == expected.size());
 
     for (std::size_t i = 0; i < expected.size(); ++i)

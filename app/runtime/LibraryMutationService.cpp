@@ -13,7 +13,6 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/model/ListDraft.h>
 #include <ao/utility/ThreadUtils.h>
 #include <runtime/CorePrimitives.h>
 #include <runtime/StateTypes.h>
@@ -359,14 +358,14 @@ namespace ao::rt
     co_return files;
   }
 
-  ListId LibraryMutationService::createList(model::ListDraft const& draft)
+  ListId LibraryMutationService::createList(ListDraft const& draft)
   {
     auto txn = _impl->library.writeTransaction();
 
     auto builder =
       library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
 
-    if (draft.kind == model::ListKind::Smart)
+    if (draft.kind == ListKind::Smart)
     {
       builder.filter(draft.expression);
     }
@@ -390,14 +389,14 @@ namespace ao::rt
     return listId;
   }
 
-  void LibraryMutationService::updateList(model::ListDraft const& draft)
+  void LibraryMutationService::updateList(ListDraft const& draft)
   {
     auto txn = _impl->library.writeTransaction();
 
     auto builder =
       library::ListBuilder::createNew().name(draft.name).description(draft.description).parentId(draft.parentId);
 
-    if (draft.kind == model::ListKind::Smart)
+    if (draft.kind == ListKind::Smart)
     {
       builder.filter(draft.expression);
     }

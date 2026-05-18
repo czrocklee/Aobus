@@ -5,7 +5,7 @@
 
 #include "list/QueryExpressionBox.h"
 #include <ao/Type.h>
-#include <ao/model/ListDraft.h>
+#include <runtime/LibraryMutationService.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -59,7 +59,7 @@ namespace ao::gtk
     ListId editListId() const;
 
     // Returns a ListDraft populated from the dialog fields
-    model::ListDraft draft() const;
+    rt::LibraryMutationService::ListDraft draft() const;
 
     void setLocalExpression(std::string const& expression);
 

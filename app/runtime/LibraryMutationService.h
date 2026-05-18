@@ -10,6 +10,7 @@
 #include <ao/Error.h>
 #include <ao/Type.h>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -19,11 +20,6 @@
 namespace ao::library
 {
   class MusicLibrary;
-}
-
-namespace ao::model
-{
-  struct ListDraft;
 }
 
 namespace ao::rt
@@ -38,6 +34,26 @@ namespace ao::rt
   class LibraryMutationService final
   {
   public:
+    enum class ListKind : std::uint8_t
+    {
+      Smart, // Expression-based filtered list
+      Manual // Explicit TrackId list
+    };
+
+    /**
+     * ListDraft - Plain data transfer object for list creation.
+     */
+    struct ListDraft final
+    {
+      ListKind kind = ListKind::Smart;
+      ListId parentId = ListId{0};
+      ListId listId = ListId{0}; // 0 = create, non-zero = update
+      std::string name{};
+      std::string description{};
+      std::string expression{};      // Only used for Smart lists
+      std::vector<TrackId> trackIds; // Only used for Manual lists
+    };
+
     LibraryMutationService(IControlExecutor& executor, library::MusicLibrary& library);
     ~LibraryMutationService();
 
@@ -56,8 +72,8 @@ namespace ao::rt
     async::Task<std::vector<std::filesystem::path>> scanLibraryAsync(async::Runtime& runtime,
                                                                      std::filesystem::path dir);
 
-    ListId createList(model::ListDraft const& draft);
-    void updateList(model::ListDraft const& draft);
+    ListId createList(ListDraft const& draft);
+    void updateList(ListDraft const& draft);
     void deleteList(ListId listId);
 
     void notifyTracksMutated(std::vector<TrackId> const& trackIds);

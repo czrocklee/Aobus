@@ -10,7 +10,6 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/model/ListDraft.h>
 #include <runtime/AppRuntime.h>
 #include <runtime/ListSourceStore.h>
 #include <runtime/SmartListEvaluator.h>
@@ -461,10 +460,10 @@ namespace ao::gtk
     updateDialogState();
   }
 
-  model::ListDraft SmartListDialog::draft() const
+  rt::LibraryMutationService::ListDraft SmartListDialog::draft() const
   {
-    auto draftData = model::ListDraft{};
-    draftData.kind = model::ListKind::Smart;
+    auto draftData = rt::LibraryMutationService::ListDraft{};
+    draftData.kind = rt::LibraryMutationService::ListKind::Smart;
     draftData.parentId = _parentListId;
     draftData.listId = editListId();
     draftData.name = _nameEntry.get_text();

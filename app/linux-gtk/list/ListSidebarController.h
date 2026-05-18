@@ -5,8 +5,8 @@
 
 #include <ao/Type.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/model/ListDraft.h>
 #include <runtime/CorePrimitives.h>
+#include <runtime/LibraryMutationService.h>
 #include <runtime/TrackSource.h>
 
 #include <gdkmm/rectangle.h>
@@ -65,8 +65,8 @@ namespace ao::gtk
     void openNewSmartListDialog();
     void openEditListDialog(ListId listId);
 
-    void createList(model::ListDraft const& draft);
-    void updateList(model::ListDraft const& draft);
+    void createList(rt::LibraryMutationService::ListDraft const& draft);
+    void updateList(rt::LibraryMutationService::ListDraft const& draft);
     void onDeleteList();
     void onEditList();
 

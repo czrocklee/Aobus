@@ -36,10 +36,10 @@ namespace ao::rt::test
     REQUIRE(preset->spec.groupBy == TrackGroupKey::None);
 
     auto const expectedSort = std::vector{TrackSortField::Artist,
-                                                          TrackSortField::Album,
-                                                          TrackSortField::DiscNumber,
-                                                          TrackSortField::TrackNumber,
-                                                          TrackSortField::Title};
+                                          TrackSortField::Album,
+                                          TrackSortField::DiscNumber,
+                                          TrackSortField::TrackNumber,
+                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -58,10 +58,10 @@ namespace ao::rt::test
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Artist);
 
     auto const expectedSort = std::vector{TrackSortField::Artist,
-                                                          TrackSortField::Album,
-                                                          TrackSortField::DiscNumber,
-                                                          TrackSortField::TrackNumber,
-                                                          TrackSortField::Title};
+                                          TrackSortField::Album,
+                                          TrackSortField::DiscNumber,
+                                          TrackSortField::TrackNumber,
+                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -81,10 +81,10 @@ namespace ao::rt::test
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Album);
 
     auto const expectedSort = std::vector{TrackSortField::AlbumArtist,
-                                                          TrackSortField::Album,
-                                                          TrackSortField::DiscNumber,
-                                                          TrackSortField::TrackNumber,
-                                                          TrackSortField::Title};
+                                          TrackSortField::Album,
+                                          TrackSortField::DiscNumber,
+                                          TrackSortField::TrackNumber,
+                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -92,8 +92,8 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    auto const expectedRedundant = std::vector{
-      TrackPresentationField::Artist, TrackPresentationField::Album, TrackPresentationField::AlbumArtist};
+    auto const expectedRedundant =
+      std::vector{TrackPresentationField::Artist, TrackPresentationField::Album, TrackPresentationField::AlbumArtist};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -104,10 +104,10 @@ namespace ao::rt::test
     REQUIRE(preset->spec.groupBy == TrackGroupKey::AlbumArtist);
 
     auto const expectedSort = std::vector{TrackSortField::AlbumArtist,
-                                                          TrackSortField::Album,
-                                                          TrackSortField::DiscNumber,
-                                                          TrackSortField::TrackNumber,
-                                                          TrackSortField::Title};
+                                          TrackSortField::Album,
+                                          TrackSortField::DiscNumber,
+                                          TrackSortField::TrackNumber,
+                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -126,11 +126,11 @@ namespace ao::rt::test
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Genre);
 
     auto const expectedSort = std::vector{TrackSortField::Genre,
-                                                          TrackSortField::Artist,
-                                                          TrackSortField::Album,
-                                                          TrackSortField::DiscNumber,
-                                                          TrackSortField::TrackNumber,
-                                                          TrackSortField::Title};
+                                          TrackSortField::Artist,
+                                          TrackSortField::Album,
+                                          TrackSortField::DiscNumber,
+                                          TrackSortField::TrackNumber,
+                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -149,11 +149,11 @@ namespace ao::rt::test
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Composer);
 
     auto const expectedSort = std::vector{TrackSortField::Composer,
-                                                          TrackSortField::Artist,
-                                                          TrackSortField::Album,
-                                                          TrackSortField::DiscNumber,
-                                                          TrackSortField::TrackNumber,
-                                                          TrackSortField::Title};
+                                          TrackSortField::Artist,
+                                          TrackSortField::Album,
+                                          TrackSortField::DiscNumber,
+                                          TrackSortField::TrackNumber,
+                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -172,11 +172,11 @@ namespace ao::rt::test
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Work);
 
     auto const expectedSort = std::vector{TrackSortField::Work,
-                                                          TrackSortField::Artist,
-                                                          TrackSortField::Album,
-                                                          TrackSortField::DiscNumber,
-                                                          TrackSortField::TrackNumber,
-                                                          TrackSortField::Title};
+                                          TrackSortField::Artist,
+                                          TrackSortField::Album,
+                                          TrackSortField::DiscNumber,
+                                          TrackSortField::TrackNumber,
+                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -195,11 +195,11 @@ namespace ao::rt::test
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Year);
 
     auto const expectedSort = std::vector{TrackSortField::Year,
-                                                          TrackSortField::Artist,
-                                                          TrackSortField::Album,
-                                                          TrackSortField::DiscNumber,
-                                                          TrackSortField::TrackNumber,
-                                                          TrackSortField::Title};
+                                          TrackSortField::Artist,
+                                          TrackSortField::Album,
+                                          TrackSortField::DiscNumber,
+                                          TrackSortField::TrackNumber,
+                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
