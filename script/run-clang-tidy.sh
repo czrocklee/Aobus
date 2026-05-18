@@ -2,6 +2,10 @@
 set -uo pipefail
 # Note: not using -e because background job exit codes propagate through wait
 
+if [[ -z "${IN_NIX_SHELL:-}" ]]; then
+    exec "$(printf '%q ' "$0" "$@")"
+fi
+
 BUILD_DIR="/tmp/build/debug-clang-tidy"
 FIX_MODE=false
 OUTPUT_FILE=""
@@ -100,18 +104,21 @@ cmake_cache="$BUILD_DIR/CMakeCache.txt"
 if [[ ! -f "$COMPILE_DB" ]]; then
     echo "compile_commands.json missing, running cmake configure..."
     if [[ ! -f "$cmake_cache" ]]; then
-        nix-shell --run "cmake -S '$PROJECT_ROOT' --preset linux-debug -B '$BUILD_DIR' \
-            -DAOBUS_ENABLE_CLANG_TIDY=ON" 2>&1 | tail -5
+        cmake -S "$PROJECT_ROOT" --preset linux-debug -B "$BUILD_DIR" \
+            -DAOBUS_ENABLE_CLANG_TIDY=ON 2>&1 | tail -5
     else
-        nix-shell --run "cmake '$PROJECT_ROOT' -B '$BUILD_DIR' \
-            -DAOBUS_ENABLE_CLANG_TIDY=ON" 2>&1 | tail -5
+        cmake "$PROJECT_ROOT" -B "$BUILD_DIR" \
+            -DAOBUS_ENABLE_CLANG_TIDY=ON 2>&1 | tail -5
     fi
     echo "Configure done."
+    echo "Building targets to generate necessary headers (gperf)..."
+    cmake --build "$BUILD_DIR" -j$(nproc) 2>&1 | tail -5
+    echo "Build done."
 fi
 
 if [[ ! -f "$PLUGIN" ]]; then
     echo "AobusLintPlugin missing, building..."
-    nix-shell --run "cmake --build '$BUILD_DIR' --target AobusLintPlugin -j$(nproc)" 2>&1 | tail -5
+    cmake --build "$BUILD_DIR" --target AobusLintPlugin -j$(nproc) 2>&1 | tail -5
     echo "Plugin built."
 fi
 

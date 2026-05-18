@@ -7,11 +7,6 @@ description: Runs Aobus clang-tidy checks through ./script/run-clang-tidy.sh and
 
 Use `./script/run-clang-tidy.sh` as the single entry point for clang-tidy in Aobus. Do not call `clang-tidy` directly or invent alternate check lists; the script owns file discovery, strict/relaxed modes, the custom plugin, include paths, and diagnostic de-duplication.
 
-> [!IMPORTANT]
-> **Must wrap with `nix-shell`!**
-> Always run with `nix-shell --run "./script/run-clang-tidy.sh ..."` from the repository root to avoid false-positive "No warnings found" results.
-
-
 ## Required Companion Skills
 
 - Load `generate-cpp-code` before editing any `.cpp`, `.h`, or `.hpp` file.
@@ -22,10 +17,10 @@ Choose the smallest useful scope, then widen only when needed.
 
 1. **Run the script for the relevant scope.** Use default for local changes, explicit files for focused work, `--folder` for a subtree, `--commit <ref>` for a base comparison, and `--all` only for whole-repo checks.
    ```bash
-   nix-shell --run "./script/run-clang-tidy.sh"
-   nix-shell --run "./script/run-clang-tidy.sh lib/audio/Foo.cpp include/aobus/Foo.h"
-   nix-shell --run "./script/run-clang-tidy.sh --folder app/linux-gtk"
-   nix-shell --run "./script/run-clang-tidy.sh --commit HEAD~3 -o /tmp/aobus-clang-tidy.log"
+   ./script/run-clang-tidy.sh
+   ./script/run-clang-tidy.sh lib/audio/Foo.cpp include/aobus/Foo.h
+   ./script/run-clang-tidy.sh --folder app/linux-gtk
+   ./script/run-clang-tidy.sh --commit HEAD~3 -o /tmp/aobus-clang-tidy.log
    ```
 
 2. **Fix the warnings.** Prefer real code improvements: direct includes, clearer ownership, named constants, simpler control flow, safer APIs. Use `NOLINT` only for justified tool/API boundaries.
@@ -33,7 +28,7 @@ Choose the smallest useful scope, then widen only when needed.
 3. **Re-run narrowly after edits.**
    Recheck only modified files first. If the initial scope was a folder, commit range, or `--all`, re-run that broader scope only after the narrow checks are clean or when the fix could affect other files.
    ```bash
-   nix-shell --run "./script/run-clang-tidy.sh app/linux-gtk/modified_file.cpp"
+   ./script/run-clang-tidy.sh app/linux-gtk/modified_file.cpp
    ```
 
 4. **Build/test when code changed.** Run the narrowest meaningful build or test; use the standard debug validation when in doubt.
@@ -45,26 +40,26 @@ Choose the smallest useful scope, then widen only when needed.
 
 ```bash
 # Changed files (default — local main..HEAD + working tree + staged + untracked)
-nix-shell --run "./script/run-clang-tidy.sh"
+./script/run-clang-tidy.sh
 
 # Specific files or folders
-nix-shell --run "./script/run-clang-tidy.sh app/foo.cpp app/bar.h"
-nix-shell --run "./script/run-clang-tidy.sh --folder app/linux-gtk/app"
+./script/run-clang-tidy.sh app/foo.cpp app/bar.h
+./script/run-clang-tidy.sh --folder app/linux-gtk/app
 
 # Changes since a specific base commit plus working tree and untracked files
-nix-shell --run "./script/run-clang-tidy.sh --commit HEAD~3"
+./script/run-clang-tidy.sh --commit HEAD~3
 
 # Full project
-nix-shell --run "./script/run-clang-tidy.sh --all"
+./script/run-clang-tidy.sh --all
 
 # Full output to file
-nix-shell --run "./script/run-clang-tidy.sh -o /tmp/tidy.log"
+./script/run-clang-tidy.sh -o /tmp/tidy.log
 
 # Automatic fixes, only when the diagnostics are straightforward and reviewable
-nix-shell --run "./script/run-clang-tidy.sh --fix lib/audio/Foo.cpp"
+./script/run-clang-tidy.sh --fix lib/audio/Foo.cpp
 
 # Use an alternate build directory or job count
-nix-shell --run "./script/run-clang-tidy.sh -p /tmp/build/debug-clang-tidy -j 8 --folder lib"
+./script/run-clang-tidy.sh -p /tmp/build/debug-clang-tidy -j 8 --folder lib
 ```
 
 Scope behavior from the script:

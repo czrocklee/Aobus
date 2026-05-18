@@ -49,6 +49,10 @@ else()
   add_compile_definitions(gsl_CONFIG_CONTRACT_CHECKING_OFF=1)
 endif()
 
+# ── spdlog ──────────────────────────────────────────────────────────────────
+# Force spdlog to use C++20 std::format instead of the external fmt library
+add_compile_definitions(SPDLOG_USE_STD_FORMAT)
+
 # ── Fast Linker ─────────────────────────────────────────────────────────────
 option(USE_FAST_LINKER "Try to use mold or lld for faster linking if available" ON)
 

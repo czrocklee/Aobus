@@ -33,9 +33,9 @@ Build is CMake-based and uses `nix-shell` for dependency management.
 ./build.sh debug --clean       # Full clean rebuild
 
 # clang-tidy (standalone, via shell script)
-./script/run-clang-tidy.sh --all              # Check entire repo
-./script/run-clang-tidy.sh --folder test      # Check test folder
-./script/run-clang-tidy.sh --summary          # Changed files, summary output
+./script/run-clang-tidy.sh                     # Changed files (default)
+./script/run-clang-tidy.sh --all               # Check entire repo
+./script/run-clang-tidy.sh --folder test       # Check test folder
 ```
 
 ### Manual CMake

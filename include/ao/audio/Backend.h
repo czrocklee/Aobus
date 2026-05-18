@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/utility/StrongId.h>
+#include <ao/utility/StrongType.h>
 
 #include <cstdint>
 #include <string>
@@ -14,9 +14,9 @@ namespace ao::audio
   /**
    * @brief Type aliases for backend and profile identification.
    */
-  using BackendId = utility::StrongId<struct BackendTag>;
-  using ProfileId = utility::StrongId<struct ProfileTag>;
-  using DeviceId = utility::StrongId<struct DeviceTag>;
+  using BackendId = utility::StrongType<std::string, struct BackendTag>;
+  using ProfileId = utility::StrongType<std::string, struct ProfileTag>;
+  using DeviceId = utility::StrongType<std::string, struct DeviceTag>;
 
   /**
    * @brief Standard Backend and Profile IDs.

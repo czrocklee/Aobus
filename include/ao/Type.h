@@ -3,14 +3,14 @@
 
 #pragma once
 
-#include <ao/utility/TaggedInteger.h>
+#include <ao/utility/StrongType.h>
 
 #include <cstdint>
 
 namespace ao
 {
-  using TrackId = utility::TaggedInteger<std::uint32_t, struct TrackIdTag>;
-  using ListId = utility::TaggedInteger<std::uint32_t, struct ListIdTag>;
-  using ResourceId = utility::TaggedInteger<std::uint32_t, struct ResourceIdTag>;
-  using DictionaryId = utility::TaggedInteger<std::uint32_t, struct DictionaryIdTag>;
+  using TrackId = utility::StrongType<std::uint32_t, struct TrackIdTag>;
+  using ListId = utility::StrongType<std::uint32_t, struct ListIdTag>;
+  using ResourceId = utility::StrongType<std::uint32_t, struct ResourceIdTag>;
+  using DictionaryId = utility::StrongType<std::uint32_t, struct DictionaryIdTag>;
 } // namespace ao

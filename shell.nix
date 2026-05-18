@@ -39,7 +39,12 @@ pkgs.mkShell {
       boost.dev
       lmdb
       lmdb.dev
-      spdlog
+      (spdlog.overrideAttrs (oldAttrs: {
+        cmakeFlags = (oldAttrs.cmakeFlags or []) ++ [
+          "-DSPDLOG_USE_STD_FORMAT=ON"
+          "-DSPDLOG_FMT_EXTERNAL=OFF"
+        ];
+      }))
       mimalloc
       cli11
       catch2_3

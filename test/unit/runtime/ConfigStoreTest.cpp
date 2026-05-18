@@ -5,8 +5,7 @@
 
 #include <runtime/ConfigStore.h>
 
-#include <ao/utility/StrongId.h>
-#include <ao/utility/TaggedInteger.h>
+#include <ao/utility/StrongType.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -82,7 +81,7 @@ namespace ao::rt::test
 
     struct TestIdTag final
     {};
-    using TestId = utility::TaggedInteger<std::uint32_t, TestIdTag>;
+    using TestId = utility::StrongType<std::uint32_t, TestIdTag>;
 
     struct WithTaggedId final
     {
@@ -92,7 +91,7 @@ namespace ao::rt::test
 
     struct TestStringTag final
     {};
-    using TestStringId = utility::StrongId<TestStringTag>;
+    using TestStringId = utility::StrongType<std::string, TestStringTag>;
 
     struct WithStrongId final
     {

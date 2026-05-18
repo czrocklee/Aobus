@@ -5,6 +5,10 @@
 set -e
 set -o pipefail
 
+if [[ -z "${IN_NIX_SHELL:-}" ]]; then
+    exec eval "$(printf '%q ' "$0" "$@")"
+fi
+
 #Default to debug build
 BUILD_TYPE="debug"
 CLEAN="false"
@@ -128,12 +132,6 @@ if [[ "$CLEAN" == "true" ]]; then
     rm -rf "$BUILD_DIR"
 fi
 
-#Ensure nix - shell is available
-if ! command -v nix-shell &> /dev/null; then
-    echo "Error: nix-shell is required"
-    exit 1
-fi
-
 #Configure
 mkdir -p "$BUILD_DIR"
 echo "Configuring Aobus with preset '$PRESET' in '$BUILD_DIR'..."
@@ -164,17 +162,17 @@ if [[ "$ENABLE_ASAN" == "true" ]]; then
     CONFIGURE_COMMAND+=" -DAOBUS_ENABLE_ASAN=ON"
 fi
 
-nix-shell --run "$CONFIGURE_COMMAND" 2>&1 | tee "$BUILD_DIR/build.log"
+eval "$CONFIGURE_COMMAND" 2>&1 | tee "$BUILD_DIR/build.log"
 
 #Build
 echo "Building Aobus..."
-nix-shell --run "$BUILD_COMMAND" 2>&1 | tee -a "$BUILD_DIR/build.log"
+eval "$BUILD_COMMAND" 2>&1 | tee -a "$BUILD_DIR/build.log"
 
 #Run tests(only for debug and release)
 if [[ "$BUILD_TYPE" == "debug" || "$BUILD_TYPE" == "release" ]]; then
     if [[ -z "$TARGET" ]]; then
         echo "Running tests..."
-        nix-shell --run "$TEST_COMMAND && $TEST_LINUX_COMMAND" 2>&1 | tee -a "$BUILD_DIR/build.log"
+        eval "$TEST_COMMAND && $TEST_LINUX_COMMAND" 2>&1 | tee -a "$BUILD_DIR/build.log"
     else
         echo "Target specified ($TARGET), skipping tests."
     fi

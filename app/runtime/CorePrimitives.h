@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/utility/TaggedInteger.h>
+#include <ao/utility/StrongType.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -14,8 +14,8 @@
 
 namespace ao::rt
 {
-  using ViewId = utility::TaggedInteger<std::uint64_t, struct ViewIdTag>;
-  using NotificationId = utility::TaggedInteger<std::uint64_t, struct NotificationIdTag>;
+  using ViewId = utility::StrongType<std::uint64_t, struct ViewIdTag>;
+  using NotificationId = utility::StrongType<std::uint64_t, struct NotificationIdTag>;
 
   struct Range final
   {

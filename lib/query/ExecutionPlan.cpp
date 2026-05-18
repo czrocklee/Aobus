@@ -15,12 +15,12 @@
 #include <gsl-lite/gsl-lite.hpp>
 #include <iterator>
 #include <limits>
-#include <memory>
+#include <memory> // NOLINT(misc-include-cleaner)
 #include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
-#include <system_error>
+#include <system_error> // NOLINT(misc-include-cleaner)
 #include <variant>
 
 namespace ao::query
@@ -237,9 +237,9 @@ namespace ao::query
     std::optional<std::uint64_t> parseUnsigned(std::string_view value)
     {
       std::uint64_t parsed = 0;
+      auto const [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsed);
 
-      if (auto const [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsed);
-          ec != std::errc{} || ptr != value.data() + value.size())
+      if (ec != std::errc{} || ptr != value.data() + value.size())
       {
         return std::nullopt;
       }
