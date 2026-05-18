@@ -181,10 +181,9 @@ namespace ao::gtk
     factory->signal_setup().connect(
       [](Glib::RefPtr<Gtk::ListItem> const& listItem)
       {
-        auto* label = Gtk::make_managed<Gtk::Label>("");
+        auto* const label = Gtk::make_managed<Gtk::Label>("");
         label->set_halign(Gtk::Align::START);
-        label->add_css_class("ao-margin-x-large");
-        label->add_css_class("ao-margin-y-small");
+        label->add_css_class("ao-query-completion-row");
         listItem->set_child(*label);
       });
 

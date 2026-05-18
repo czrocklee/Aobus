@@ -16,7 +16,7 @@ namespace ao::gtk::layout
   void registerContainerComponents(ComponentRegistry& registry);
 
   /**
-   * @brief Apply common layout properties (margin, align, etc.) to a widget.
+   * @brief Apply common layout properties (align, sizing, etc.) to a widget.
    */
   void applyCommonProps(Gtk::Widget& widget, LayoutNode const& node);
 }

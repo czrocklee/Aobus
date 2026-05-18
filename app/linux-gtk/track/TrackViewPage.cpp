@@ -194,10 +194,7 @@ namespace ao::gtk
   void TrackViewPage::setupPresentationControls()
   {
     _controlsBar.set_spacing(layout::kSpacingLarge);
-    _controlsBar.set_margin_start(4);
-    _controlsBar.set_margin_end(4);
-    _controlsBar.set_margin_top(4);
-    _controlsBar.set_margin_bottom(4);
+    _controlsBar.add_css_class("ao-track-controls-bar");
 
     _filterEntry.set_placeholder_text("Quick filter or expression...");
     _filterEntry.set_hexpand(true);
@@ -242,9 +239,7 @@ namespace ao::gtk
         auto* const label = Gtk::make_managed<Gtk::Label>("");
 
         label->set_halign(Gtk::Align::START);
-        label->add_css_class("ao-margin-x-large");
-        label->add_css_class("ao-margin-top-large");
-        label->add_css_class("ao-margin-bottom-small");
+        label->add_css_class("ao-track-section-header");
         label->set_xalign(0.0F);
 
         header->set_child(*label);
@@ -305,10 +300,7 @@ namespace ao::gtk
     _statusLabel.set_visible(false);
     _statusLabel.set_halign(Gtk::Align::START);
     _statusLabel.set_valign(Gtk::Align::CENTER);
-    _statusLabel.set_margin_start(4);
-    _statusLabel.set_margin_end(4);
-    _statusLabel.set_margin_top(2);
-    _statusLabel.set_margin_bottom(2);
+    _statusLabel.add_css_class("ao-track-status-message");
 
     auto const context = _statusLabel.get_style_context();
     context->add_class("dim-label");
@@ -364,8 +356,7 @@ namespace ao::gtk
     if (!customs.empty())
     {
       auto* const sep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
-      sep->set_margin_top(4);
-      sep->set_margin_bottom(4);
+      sep->add_css_class("ao-presentation-menu-separator");
       _presentationMenuBox.append(*sep);
 
       for (auto const& custom : customs)
@@ -383,8 +374,7 @@ namespace ao::gtk
     }
 
     auto* const finalSep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
-    finalSep->set_margin_top(4);
-    finalSep->set_margin_bottom(4);
+    finalSep->add_css_class("ao-presentation-menu-separator");
     _presentationMenuBox.append(*finalSep);
 
     auto* const createBtn = Gtk::make_managed<Gtk::Button>("Create Custom View...");

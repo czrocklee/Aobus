@@ -99,16 +99,6 @@ namespace ao::gtk::layout
       }
     }
 
-    if (auto const it = layout.find("margin"); it != layout.end())
-    {
-      int const margin = static_cast<int>(it->second.asInt());
-
-      widget.set_margin_start(margin);
-      widget.set_margin_end(margin);
-      widget.set_margin_top(margin);
-      widget.set_margin_bottom(margin);
-    }
-
     int width = -1;
     int height = -1;
     bool sizeChanged = false;
@@ -196,8 +186,7 @@ namespace ao::gtk::layout
         {
           _error = std::make_unique<Gtk::Label>();
           _error->set_markup("<span foreground='red'><b>[Layout Error]</b> split requires exactly 2 children</span>");
-          int const errorMargin = 10;
-          _error->set_margin(errorMargin);
+          _error->add_css_class("ao-layout-error");
           return;
         }
 
@@ -253,8 +242,7 @@ namespace ao::gtk::layout
         {
           _error = std::make_unique<Gtk::Label>();
           _error->set_markup("<span foreground='red'><b>[Layout Error]</b> scroll requires exactly 1 child</span>");
-          int const errorMargin = 10;
-          _error->set_margin(errorMargin);
+          _error->add_css_class("ao-layout-error");
           return;
         }
 
@@ -333,8 +321,7 @@ namespace ao::gtk::layout
         {
           _error = std::make_unique<Gtk::Label>();
           _error->set_markup("<span foreground='red'><b>[Layout Error]</b> tabs require at least 1 child</span>");
-          int const errorMargin = 10;
-          _error->set_margin(errorMargin);
+          _error->add_css_class("ao-layout-error");
           return;
         }
 

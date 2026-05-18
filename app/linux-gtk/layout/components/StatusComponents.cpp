@@ -131,7 +131,6 @@ namespace ao::gtk::layout
         , _trackCount{ctx.runtime.sources().allTracks()}
       {
         _container.add_css_class("ao-status-bar");
-        _container.set_margin(4);
         _container.set_valign(Gtk::Align::END);
         _container.set_hexpand(true);
 
@@ -151,7 +150,7 @@ namespace ao::gtk::layout
         _container.append(_notification.widget());
 
         auto* const sep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
-        sep->add_css_class("ao-margin-x-medium");
+        sep->add_css_class("ao-status-separator");
         _container.append(*sep);
 
         _container.append(_trackCount.widget());

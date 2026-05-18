@@ -157,8 +157,7 @@ namespace ao::gtk
     auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
     rowBox->set_halign(Gtk::Align::FILL);
     rowBox->set_hexpand(true);
-    rowBox->add_css_class("ao-margin-x-medium");
-    rowBox->add_css_class("ao-margin-y-small");
+    rowBox->add_css_class("ao-sidebar-row");
 
     auto* expander = Gtk::make_managed<Gtk::TreeExpander>();
     rowBox->append(*expander);
@@ -170,7 +169,7 @@ namespace ao::gtk
     auto* filterLabel = Gtk::make_managed<Gtk::Label>("");
     filterLabel->set_halign(Gtk::Align::START);
     filterLabel->add_css_class("dim-label");
-    filterLabel->add_css_class("ao-margin-start-medium");
+    filterLabel->add_css_class("ao-sidebar-filter-label");
     filterLabel->set_ellipsize(Pango::EllipsizeMode::END);
     filterLabel->set_hexpand(true);
     rowBox->append(*filterLabel);

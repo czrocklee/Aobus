@@ -135,7 +135,10 @@ namespace ao::library
 
   struct Exporter::Impl final
   {
-    explicit Impl(MusicLibrary& ml) : ml{ml} {}
+    explicit Impl(MusicLibrary& ml)
+      : ml{ml}
+    {
+    }
 
     void exportToYaml(std::filesystem::path const& path, ExportMode mode);
     void exportTracks(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode);

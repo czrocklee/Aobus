@@ -41,7 +41,6 @@ namespace ao::gtk
   namespace
   {
     constexpr int kSectionSpacing = 24;
-    constexpr int kInternalPadding = 12;
     constexpr int kMetadataSpacing = 12;
     constexpr int kHeroImageSize = 280;
     constexpr float kLabelOpacity = 0.6F;
@@ -118,7 +117,7 @@ namespace ao::gtk
     _scrolledWindow.set_child(_contentBox);
     _scrolledWindow.set_expand(true);
 
-    _contentBox.set_margin(kInternalPadding);
+    _contentBox.add_css_class("ao-inspector-content");
     _contentBox.set_spacing(kSectionSpacing);
     _contentBox.set_valign(Gtk::Align::START);
 
@@ -227,7 +226,6 @@ namespace ao::gtk
     auto* const header = Gtk::make_managed<Gtk::Label>("AUDIO PROPERTIES");
 
     header->set_halign(Gtk::Align::START);
-    header->set_margin_bottom(4);
     header->set_opacity(kHeaderOpacity);
     header->add_css_class("ao-section-header");
     _audioBox.append(*header);

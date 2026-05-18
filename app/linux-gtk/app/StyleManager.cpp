@@ -69,9 +69,9 @@ namespace ao::gtk
     _initialized = true;
 
     loadAppCss();
-    loadUserCss();
     syncGtkSettings();
     reloadGtkUserCss();
+    loadUserCss();
     setupFileMonitors();
     setupDBusMonitor();
     setupSignalHandler();
@@ -136,12 +136,13 @@ namespace ao::gtk
 
     // Load CSS from GResource
     auto appCss = Glib::ustring{};
+    
     try
     {
       auto const data = Gio::Resource::lookup_data_global("/org/aobus/app.css");
       gsize size = 0;
       auto const* const buf = static_cast<char const*>(data->get_data(size));
-      appCss = Glib::ustring{buf, size};
+      appCss = std::string{buf, size};
     }
     catch (Glib::Error const& err)
     {

@@ -47,38 +47,104 @@
   --ao-font-size-md: 0.9rem;
 }
 
-/* ===== Utility Classes ===== */
-.ao-margin-small { margin: var(--ao-spacing-sm); }
-.ao-margin-medium { margin: var(--ao-spacing-md); }
-.ao-margin-large { margin: var(--ao-spacing-lg); }
-
-.ao-margin-x-small { margin-left: var(--ao-spacing-sm); margin-right: var(--ao-spacing-sm); }
-.ao-margin-x-medium { margin-left: var(--ao-spacing-md); margin-right: var(--ao-spacing-md); }
-.ao-margin-x-large { margin-left: var(--ao-spacing-lg); margin-right: var(--ao-spacing-lg); }
-
-.ao-margin-y-small { margin-top: var(--ao-spacing-sm); margin-bottom: var(--ao-spacing-sm); }
-.ao-margin-y-medium { margin-top: var(--ao-spacing-md); margin-bottom: var(--ao-spacing-md); }
-
-.ao-margin-top-small { margin-top: var(--ao-spacing-sm); }
-.ao-margin-top-medium { margin-top: var(--ao-spacing-md); }
-.ao-margin-top-xlarge { margin-top: var(--ao-spacing-xl); }
-
-.ao-margin-bottom-small { margin-bottom: var(--ao-spacing-sm); }
-
-.ao-margin-start-medium { margin-left: var(--ao-spacing-md); }
-
 /* ===== Component CSS ===== */
+
+/* Status Region */
+.ao-status-region {
+  padding: var(--ao-spacing-sm);
+}
 
 /* StatusBar */
 .ao-status-bar {
   min-height: 24px;
   padding-top: 1px;
   padding-bottom: 1px;
-  margin: var(--ao-spacing-sm); /* 原 C++ set_margin(kMarginSmall) */
 }
 
 /* StatusNotificationLabel */
 .ao-status-message { }
+
+/* Section Header (generic) */
+.ao-section-header {
+  margin-bottom: var(--ao-spacing-sm);
+}
+
+/* Track Section Header */
+.ao-track-section-header {
+  padding-top: var(--ao-spacing-xl);
+  padding-bottom: var(--ao-spacing-sm);
+  padding-left: var(--ao-spacing-lg);
+  padding-right: var(--ao-spacing-lg);
+}
+
+/* Playback Strip */
+.ao-playback-strip {
+  padding: var(--ao-spacing-sm) var(--ao-spacing-md);
+}
+
+/* Track Controls Bar */
+.ao-track-controls-bar {
+  padding: var(--ao-spacing-sm);
+}
+
+/* Track Status Message */
+.ao-track-status-message {
+  padding: var(--ao-spacing-xs) var(--ao-spacing-sm);
+}
+
+/* Presentation Menu */
+.ao-presentation-menu-separator {
+  margin-top: var(--ao-spacing-sm);
+  margin-bottom: var(--ao-spacing-sm);
+}
+
+/* Dialogs */
+.ao-dialog-content {
+  padding: var(--ao-spacing-lg);
+}
+
+.ao-dialog-actions {
+  margin-top: var(--ao-spacing-xl);
+}
+
+/* Layout Editor */
+.ao-layout-editor-properties {
+  padding: var(--ao-spacing-lg);
+}
+
+.ao-layout-error {
+  margin: var(--ao-spacing-xl);
+}
+
+.ao-layout-editor-section-title {
+  margin-top: var(--ao-spacing-xl);
+}
+
+/* Sidebar */
+.ao-sidebar-row {
+  padding: var(--ao-spacing-sm) var(--ao-spacing-md);
+}
+
+.ao-sidebar-filter-label {
+  margin-left: var(--ao-spacing-md);
+}
+
+/* Query Box */
+.ao-query-completion-row {
+  padding: var(--ao-spacing-sm) var(--ao-spacing-lg);
+}
+
+/* Playback Details */
+.ao-playback-details {
+  margin-left: var(--ao-spacing-md);
+  margin-right: var(--ao-spacing-md);
+}
+
+/* Status Separator */
+.ao-status-separator {
+  margin-left: var(--ao-spacing-md);
+  margin-right: var(--ao-spacing-md);
+}
 
 /* AobusSoulWindow */
 .ao-soul-window { background-color: rgba(0, 0, 0, 0.85); }
@@ -145,6 +211,11 @@ listboxrow:first-child .ao-menu-header {
 .ao-quality-lossy { color: #6B7280; }
 .ao-quality-clipped { color: #EF4444; }
 
+/* InspectorPanel */
+.ao-inspector-content {
+  padding: var(--ao-spacing-xl);
+}
+
 /* ShellLayoutController */
 .ao-inspector-handle {
   min-width: 14px;
@@ -168,9 +239,10 @@ listboxrow:first-child .ao-menu-header {
 .ao-tags-section {
   margin-top: 4px;
 }
+.ao-tag-editor { }
 .ao-tag-chip {
   border-radius: 100px;
-  padding: 4px 10px;
+  padding: var(--ao-spacing-sm) var(--ao-spacing-lg);
   font-size: 0.85rem;
   font-weight: 500;
   transition: all 0.2s ease;
@@ -208,7 +280,6 @@ togglebutton.ao-tag-chip:hover {
   border: 1px solid transparent;
   border-radius: 8px;
   padding: 6px 12px;
-  margin-top: 8px;
   transition: all 0.2s;
   font-size: 0.9rem;
 }

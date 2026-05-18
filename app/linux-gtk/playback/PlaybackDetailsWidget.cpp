@@ -61,7 +61,7 @@ namespace ao::gtk
     : _playbackService{playbackService}
   {
     _container.set_spacing(layout::kSpacingLarge);
-    _container.add_css_class("ao-margin-x-medium");
+    _container.add_css_class("ao-playback-details");
 
     _streamInfoLabel.add_css_class("dim-label");
     _sinkStatusIcon.set_from_icon_name("media-record-symbolic");

@@ -417,31 +417,6 @@ namespace ao::gtk::layout::test
       CHECK(spacer->get_valign() == Gtk::Align::END);
     }
 
-    SECTION("margin applied to child")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "box";
-
-      auto child = LayoutNode{};
-      child.type = "spacer";
-      child.layout["margin"] = LayoutValue{static_cast<std::int64_t>(10)};
-      doc.root.children.push_back(child);
-
-      auto const comp = layoutRuntime.build(ctx, doc);
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
-
-      REQUIRE(box != nullptr);
-
-      auto* const spacer = box->get_first_child();
-      REQUIRE(spacer != nullptr);
-
-      int const expectedMargin = 10;
-      CHECK(spacer->get_margin_top() == expectedMargin);
-      CHECK(spacer->get_margin_bottom() == expectedMargin);
-      CHECK(spacer->get_margin_start() == expectedMargin);
-      CHECK(spacer->get_margin_end() == expectedMargin);
-    }
-
     SECTION("visible=false hides child")
     {
       auto doc = LayoutDocument{};

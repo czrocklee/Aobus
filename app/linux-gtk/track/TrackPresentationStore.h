@@ -15,11 +15,13 @@
 #include <string_view>
 #include <vector>
 
-namespace ao::rt { class ConfigStore; }
+namespace ao::rt
+{
+  class ConfigStore;
+}
 
 namespace ao::gtk
 {
-
   class TrackPresentationStore final
   {
   public:

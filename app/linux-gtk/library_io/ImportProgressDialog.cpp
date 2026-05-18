@@ -28,13 +28,12 @@ namespace ao::gtk
     constexpr std::int32_t kDialogWidth = 400;
     constexpr std::int32_t kDialogHeight = 150;
     constexpr std::int32_t kBoxSpacing = 8;
-    constexpr std::int32_t kBoxMargin = 12;
     constexpr std::int32_t kActionAreaSpacing = 6;
 
     set_default_size(kDialogWidth, kDialogHeight);
 
     auto box = Gtk::Box{Gtk::Orientation::VERTICAL, kBoxSpacing};
-    box.set_margin(kBoxMargin);
+    box.add_css_class("ao-dialog-content");
 
     _progressLabel.set_text("Preparing to import...");
     _progressLabel.set_halign(Gtk::Align::START);
@@ -46,13 +45,12 @@ namespace ao::gtk
     _okButton.set_label("OK");
     _okButton.set_sensitive(false);
     _okButton.signal_clicked().connect([this] { response(Gtk::ResponseType::OK); });
-    box.append(_okButton);
 
     // Add action area for the button
     auto actionArea = Gtk::Box(Gtk::Orientation::HORIZONTAL, kActionAreaSpacing);
     actionArea.set_halign(Gtk::Align::END);
+    actionArea.add_css_class("ao-dialog-actions");
     actionArea.append(_okButton);
-    actionArea.set_margin(kBoxMargin);
     box.append(actionArea);
 
     set_child(box);

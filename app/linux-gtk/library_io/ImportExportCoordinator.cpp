@@ -202,7 +202,7 @@ namespace ao::gtk
 
     auto* const contentArea = dialog->get_content_area();
     auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, layout::kSpacingMedium);
-    box->add_css_class("ao-margin-medium");
+    box->add_css_class("ao-dialog-content");
 
     auto* const label = Gtk::make_managed<Gtk::Label>("Choose what to include in the backup:");
     label->set_halign(Gtk::Align::START);

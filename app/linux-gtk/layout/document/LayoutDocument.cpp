@@ -9,12 +9,12 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include <cstddef>
+#include <charconv>
 #include <cstdint>
-#include <exception>
 #include <functional>
 #include <map>
 #include <string>
+#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -55,52 +55,51 @@ namespace YAML
     {
       auto const& scalar = node.Scalar();
 
-      if (scalar == "true")
       {
-        rhs.data = true;
-        return true;
-      }
-
-      if (scalar == "false")
-      {
-        rhs.data = false;
-        return true;
-      }
-
-      try
-      {
-        std::size_t pos = 0;
-        long long const intValue = std::stoll(scalar, &pos);
-
-        if (pos == scalar.size())
+        if (scalar == "true")
         {
-          rhs.data = static_cast<std::int64_t>(intValue);
+          rhs.data = true;
+          return true;
+        }
+
+        if (scalar == "false")
+        {
+          rhs.data = false;
           return true;
         }
       }
-      catch (std::exception const& /*ex*/)
+
+      auto const* const first = scalar.data();
+      auto const* const last = first + scalar.size();
+
       {
+        std::int64_t intValue = 0;
+
+        if (auto const intResult = std::from_chars(first, last, intValue);
+            intResult.ec == std::errc{} && intResult.ptr == last)
+        {
+          rhs.data = intValue;
+          return true;
+        }
+
         APP_LOG_TRACE("LayoutDocument: Failed to parse scalar '{}' as integer, trying double", scalar);
       }
 
-      try
       {
-        std::size_t pos = 0;
-        double const doubleValue = std::stod(scalar, &pos);
+        double doubleValue = 0.0;
 
-        if (pos == scalar.size())
+        if (auto const doubleResult = std::from_chars(first, last, doubleValue);
+            doubleResult.ec == std::errc{} && doubleResult.ptr == last)
         {
           rhs.data = doubleValue;
           return true;
         }
-      }
-      catch (std::exception const& /*ex*/)
-      {
-        APP_LOG_TRACE("LayoutDocument: Failed to parse scalar '{}' as numeric, keeping as string", scalar);
-      }
 
-      rhs.data = scalar;
-      return true;
+        APP_LOG_TRACE("LayoutDocument: Failed to parse scalar '{}' as numeric, keeping as string", scalar);
+
+        rhs.data = scalar;
+        return true;
+      }
     }
 
     if (node.IsSequence())
@@ -235,7 +234,7 @@ namespace ao::gtk::layout
                    .type = "box",
                    .props = {{"orientation", LayoutValue{std::string{"horizontal"}}},
                              {"spacing", LayoutValue{static_cast<std::int64_t>(kSpacingMedium)}}},
-
+                   .layout = {{"cssClasses", LayoutValue{std::string{"ao-playback-strip"}}}},
                    .children = {LayoutNode{.type = "playback.outputButton"},
                                 LayoutNode{.type = "playback.playPauseButton"},
                                 LayoutNode{.type = "playback.stopButton"},
@@ -257,7 +256,10 @@ namespace ao::gtk::layout
                                                                                LayoutValue{static_cast<std::int64_t>(
                                                                                  kMinCoverArtHeight)}}}}}},
                                 LayoutNode{.id = "workspace-with-inspector", .type = "app.workspaceWithInspector"}}},
-        LayoutNode{.type = "status.defaultBar"}}};
+        LayoutNode{.type = "box",
+                   .props = {{"orientation", LayoutValue{std::string{"horizontal"}}}},
+                   .layout = {{"cssClasses", LayoutValue{std::string{"ao-status-region"}}}},
+                   .children = {LayoutNode{.type = "status.defaultBar", .layout = {{"hexpand", LayoutValue{true}}}}}}}};
 
     doc.templates = getBuiltInTemplates();
 

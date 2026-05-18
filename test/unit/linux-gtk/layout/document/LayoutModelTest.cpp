@@ -82,7 +82,7 @@ namespace ao::gtk::layout::test
       auto c1 = LayoutNode{};
       c1.type = "spacer";
       c1.layout["hexpand"] = LayoutValue{true};
-      c1.layout["margin"] = LayoutValue{static_cast<std::int64_t>(4)};
+      c1.layout["vexpand"] = LayoutValue{true};
       doc.root.children.push_back(c1);
 
       auto c2 = LayoutNode{};
@@ -98,7 +98,7 @@ namespace ao::gtk::layout::test
       REQUIRE(decoded.root.children.size() == 2);
       CHECK(decoded.root.children[0].type == "spacer");
       CHECK(decoded.root.children[0].layout.at("hexpand").asBool() == true);
-      CHECK(decoded.root.children[0].layout.at("margin").asInt() == 4);
+      CHECK(decoded.root.children[0].layout.at("vexpand").asBool() == true);
       CHECK(decoded.root.children[1].type == "scroll");
       CHECK(decoded.root.children[1].id == "scroller");
       CHECK(decoded.root.children[1].layout.at("vexpand").asBool() == true);
@@ -254,7 +254,7 @@ namespace ao::gtk::layout::test
     node.props["count"] = LayoutValue{static_cast<std::int64_t>(5)};
     node.props["enabled"] = LayoutValue{true};
     node.layout["hexpand"] = LayoutValue{true};
-    node.layout["margin"] = LayoutValue{static_cast<std::int64_t>(8)};
+    node.layout["vexpand"] = LayoutValue{true};
 
     SECTION("getProp returns value when key exists")
     {
@@ -273,7 +273,7 @@ namespace ao::gtk::layout::test
     SECTION("getLayout returns value when key exists")
     {
       CHECK(node.getLayout<bool>("hexpand", false) == true);
-      CHECK(node.getLayout<std::int64_t>("margin", 0) == 8);
+      CHECK(node.getLayout<bool>("vexpand", false) == true);
     }
 
     SECTION("getLayout returns default when key missing")

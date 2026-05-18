@@ -29,8 +29,7 @@ namespace ao::gtk::layout
       {
         _label.set_markup("<span foreground='red'><b>[Layout Error]</b></span> " + message);
 
-        int const margin = 10;
-        _label.set_margin(margin);
+        _label.add_css_class("ao-layout-error");
       }
 
       Gtk::Widget& widget() override { return _label; }

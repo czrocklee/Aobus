@@ -15,11 +15,11 @@
 #include <yaml-cpp/yaml.h>
 
 #include <chrono>
-#include <memory>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -65,7 +65,10 @@ namespace ao::library
 
   struct Importer::Impl final
   {
-    explicit Impl(MusicLibrary& ml) : ml{ml} {}
+    explicit Impl(MusicLibrary& ml)
+      : ml{ml}
+    {
+    }
 
     void importFromYaml(std::filesystem::path const& path);
     void importTracks(YAML::Node const& tracks,
@@ -144,8 +147,8 @@ namespace ao::library
   }
 
   void Importer::Impl::importTracks(YAML::Node const& tracks,
-                              lmdb::WriteTransaction& txn,
-                              std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
+                                    lmdb::WriteTransaction& txn,
+                                    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
   {
     auto trackWriter = ml.tracks().writer(txn);
     auto& dict = ml.dictionary();
@@ -208,8 +211,8 @@ namespace ao::library
   }
 
   void Importer::Impl::overlayMetadata(TrackBuilder& builder,
-                                 YAML::Node const& trackNode,
-                                 std::deque<std::string>& trackStrings) const
+                                       YAML::Node const& trackNode,
+                                       std::deque<std::string>& trackStrings) const
   {
     auto const keepAlive = [&](YAML::Node const& node) -> std::string_view
     {
@@ -278,8 +281,8 @@ namespace ao::library
   }
 
   void Importer::Impl::overlayCustomData(TrackBuilder& builder,
-                                   YAML::Node const& trackNode,
-                                   std::deque<std::string>& trackStrings) const
+                                         YAML::Node const& trackNode,
+                                         std::deque<std::string>& trackStrings) const
   {
     auto const keepAlive = [&](YAML::Node const& node) -> std::string_view
     {
@@ -346,8 +349,8 @@ namespace ao::library
   }
 
   void Importer::Impl::importLists(YAML::Node const& lists,
-                             lmdb::WriteTransaction& txn,
-                             std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId)
+                                   lmdb::WriteTransaction& txn,
+                                   std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId)
   {
     auto listWriter = ml.lists().writer(txn);
     auto importedLists = std::vector<ImportedList>{};

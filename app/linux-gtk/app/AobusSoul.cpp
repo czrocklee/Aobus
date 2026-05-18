@@ -67,7 +67,8 @@ namespace ao::gtk
     std::unique_ptr<::GskStroke, StrokeDeleter> cachedStrokeA{};
   };
 
-  AobusSoul::AobusSoul() : _impl{std::make_unique<Impl>()}
+  AobusSoul::AobusSoul()
+    : _impl{std::make_unique<Impl>()}
   {
     set_can_focus(false);
     set_focusable(false);

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "playback/OutputSelector.h"
+#include "layout/LayoutConstants.h"
 #include "playback/AobusSoulBinding.h"
 #include "playback/AobusSoulWindow.h"
 #include "playback/OutputListItems.h"
@@ -145,8 +146,7 @@ namespace ao::gtk
     if (auto const deviceItem = std::dynamic_pointer_cast<DeviceItem>(item))
     {
       auto* const rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-      int const rowSpacing = 10;
-      rowBox->set_spacing(rowSpacing);
+      rowBox->set_spacing(layout::kSpacingLarge); // 8
       rowBox->set_valign(Gtk::Align::CENTER);
       rowBox->add_css_class("ao-device-row");
 

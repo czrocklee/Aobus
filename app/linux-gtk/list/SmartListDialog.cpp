@@ -121,7 +121,6 @@ namespace ao::gtk
     constexpr std::int32_t kDialogWidth = 800;
     constexpr std::int32_t kDialogHeight = 500;
     constexpr std::int32_t kBoxSpacing = 8;
-    constexpr std::int32_t kBoxMargin = 12;
     constexpr std::int32_t kButtonBoxSpacing = 6;
     constexpr std::int32_t kLabelMinLines = 2;
 
@@ -129,7 +128,7 @@ namespace ao::gtk
 
     // Main container: horizontal box (left: inputs, right: preview)
     auto mainBox = Gtk::Box{Gtk::Orientation::HORIZONTAL, kBoxSpacing * 2};
-    mainBox.set_margin(kBoxMargin);
+    mainBox.add_css_class("ao-dialog-content");
 
     // Left panel: input fields
     _leftPanel.set_orientation(Gtk::Orientation::VERTICAL);
@@ -195,7 +194,7 @@ namespace ao::gtk
     // Buttons
     auto buttonBox = Gtk::Box(Gtk::Orientation::HORIZONTAL, kButtonBoxSpacing);
     buttonBox.set_halign(Gtk::Align::END);
-    buttonBox.set_margin_top(kBoxSpacing * 2);
+    buttonBox.add_css_class("ao-dialog-actions");
 
     _cancelButton.set_label("Cancel");
     _cancelButton.signal_clicked().connect([this] { response(Gtk::ResponseType::CANCEL); });

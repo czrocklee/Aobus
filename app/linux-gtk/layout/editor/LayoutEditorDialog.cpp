@@ -135,11 +135,7 @@ namespace ao::gtk::layout::editor
     _treeBox.append(_toolbar);
     _treeBox.append(_treeScroll);
 
-    int const padding = 12;
-    _propertiesBox.set_margin_start(padding);
-    _propertiesBox.set_margin_end(padding);
-    _propertiesBox.set_margin_top(padding);
-    _propertiesBox.set_margin_bottom(padding);
+    _propertiesBox.add_css_class("ao-layout-editor-properties");
 
     int const spacing = 6;
     _propertiesBox.set_spacing(spacing);
@@ -554,7 +550,7 @@ namespace ao::gtk::layout::editor
     auto* const label = Gtk::make_managed<Gtk::Label>(std::format("<b>{}</b>", text));
     label->set_use_markup(true);
     label->set_halign(Gtk::Align::START);
-    label->add_css_class("ao-margin-top-xlarge");
+    label->add_css_class("ao-layout-editor-section-title");
     _propertiesBox.append(*label);
   }
 
@@ -770,10 +766,6 @@ namespace ao::gtk::layout::editor
         }
       };
 
-      addCommon({.name = "margin",
-                 .kind = PropertyKind::Int,
-                 .label = "Margin",
-                 .defaultValue = LayoutValue{static_cast<std::int64_t>(0)}});
       addCommon({.name = "hexpand",
                  .kind = PropertyKind::Bool,
                  .label = "Expand Horizontal",
@@ -837,7 +829,7 @@ namespace ao::gtk::layout::editor
       auto* const label = Gtk::make_managed<Gtk::Label>("<i>No descriptor found</i>");
       label->set_use_markup(true);
       label->set_halign(Gtk::Align::START);
-      label->add_css_class("ao-margin-top-xlarge");
+      label->add_css_class("ao-layout-editor-section-title");
       _propertiesBox.append(*label);
     }
   }

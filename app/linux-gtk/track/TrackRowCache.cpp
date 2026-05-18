@@ -15,7 +15,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <exception>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -266,17 +265,8 @@ namespace ao::gtk
     }
 
     // Resolve from dictionary and cache
-    auto result = Glib::ustring{};
-
-    try
-    {
-      auto const str = _dict.get(id);
-      result = Glib::ustring(str.begin(), str.end());
-    }
-    catch (std::exception const&)
-    {
-      result.clear();
-    }
+    auto const str = _dict.getOrDefault(id, "");
+    auto result = Glib::ustring(str.begin(), str.end());
 
     auto const insertResult = _stringCache.emplace(id, std::move(result));
     return insertResult.first->second;

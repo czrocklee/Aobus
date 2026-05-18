@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "tag/TagEditor.h"
+#include "layout/LayoutConstants.h"
 #include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -29,9 +30,8 @@ namespace ao::gtk
 {
   namespace
   {
-    constexpr int kBoxSpacing = 10;
-    constexpr int kMargin = 12;
-    constexpr int kChipSpacing = 5;
+    constexpr int kBoxSpacing = layout::kSpacingLarge;  // 8
+    constexpr int kChipSpacing = layout::kSpacingSmall; // 4
     constexpr std::size_t kMaxAvailableTags = 50;
   }
 
@@ -55,7 +55,7 @@ namespace ao::gtk
 
   void TagEditor::setupUi()
   {
-    set_margin(kMargin);
+    add_css_class("ao-tag-editor");
 
     _searchEntry.set_placeholder_text("Search or add tags...");
     _searchEntry.add_css_class("ao-tags-entry");
