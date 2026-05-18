@@ -54,12 +54,6 @@ add_executable(ao_test
     unit/runtime/ManualListSourceTest.cpp
     unit/runtime/HeadlessShellTest.cpp
     unit/runtime/LibraryExportImportTest.cpp
-
-    # integration tests
-    integration/audio/DecoderIntegrationTest.cpp
-    integration/audio/GraphIntegrityTest.cpp
-    integration/audio/backend/PipeWireProviderTest.cpp
-    integration/tag/TagTest.cpp
 )
 
 target_include_directories(ao_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
@@ -78,6 +72,34 @@ endif()
 target_compile_definitions(ao_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
 target_compile_options(ao_test PRIVATE -Wno-array-bounds)
 add_test(NAME ao_test COMMAND ao_test)
+
+# ao_integration_test: standalone integration tests (excluded from default build.sh runs)
+add_executable(ao_integration_test
+    integration/audio/DecoderIntegrationTest.cpp
+    integration/audio/GraphIntegrityTest.cpp
+    integration/audio/backend/PipeWireProviderTest.cpp
+    integration/tag/TagTest.cpp
+)
+
+target_include_directories(ao_integration_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
+target_link_libraries(ao_integration_test PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain FakeIt::FakeIt-catch spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
+
+if(PIPEWIRE_FOUND)
+  target_compile_definitions(ao_integration_test PRIVATE PIPEWIRE_FOUND)
+  target_link_libraries(ao_integration_test PRIVATE PkgPipeWire)
+endif()
+
+if(ALSA_FOUND)
+  target_compile_definitions(ao_integration_test PRIVATE ALSA_FOUND)
+  target_link_libraries(ao_integration_test PRIVATE PkgALSA PkgUDEV)
+endif()
+
+target_compile_definitions(ao_integration_test PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
+target_compile_options(ao_integration_test PRIVATE -Wno-array-bounds)
+
+# Not using add_test() here to keep it out of default 'ctest' runs, 
+# or use labels/properties if preferred. For now, it's just a manual driver.
+
 
 # ao_test_gtk: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_test_gtk
