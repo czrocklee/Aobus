@@ -16,7 +16,6 @@
 #include "playback/VolumeControl.h"
 #include <runtime/AppRuntime.h>
 
-#include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
 
 #include <functional>
@@ -155,9 +154,6 @@ namespace ao::gtk::layout
       QualityIndicatorComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
         : _runtime{ctx.runtime}, _soulBinding{std::make_unique<AobusSoulBinding>(_soul, _runtime.playback())}
       {
-        _soul.set_size_request(24, 24);
-        _soul.set_valign(Gtk::Align::CENTER);
-        _soul.set_halign(Gtk::Align::CENTER);
       }
 
       Gtk::Widget& widget() override { return _soul; }

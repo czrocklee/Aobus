@@ -49,9 +49,26 @@
 
 /* ===== Component CSS ===== */
 
+/* Grouping Region — pure structural box, zero visual footprint */
+.ao-grouping-region {
+  padding: 0;
+  margin: 0;
+  border: none;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* Status Region */
 .ao-status-region {
   padding: var(--ao-spacing-sm);
+}
+
+/* Playback strip */
+.ao-playback-strip {
+  padding-top: var(--ao-spacing-xs);
+  padding-bottom: var(--ao-spacing-xs);
+  padding-left: var(--ao-spacing-lg);
+  padding-right: var(--ao-spacing-lg);
 }
 
 /* StatusBar */
@@ -62,7 +79,7 @@
 }
 
 /* StatusNotificationLabel */
-.ao-status-message { }
+.ao-status-message {}
 
 /* Section Header (generic) */
 .ao-section-header {
@@ -77,14 +94,16 @@
   padding-right: var(--ao-spacing-lg);
 }
 
-/* Playback Strip */
-.ao-playback-strip {
-  padding: var(--ao-spacing-sm) var(--ao-spacing-md);
+.ao-playback-button {
+  padding: 0;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--ao-radius-md);
 }
 
 /* Track Controls Bar */
 .ao-track-controls-bar {
-  padding: var(--ao-spacing-sm);
+  padding: var(--ao-spacing-lg) var(--ao-spacing-xl);
 }
 
 /* Track Status Message */
@@ -147,7 +166,9 @@
 }
 
 /* AobusSoulWindow */
-.ao-soul-window { background-color: rgba(0, 0, 0, 0.85); }
+.ao-soul-window {
+  background-color: rgba(0, 0, 0, 0.85);
+}
 
 /* NowPlayingStatusLabel */
 .ao-nowplaying {
@@ -157,23 +178,37 @@
   color: @theme_fg_color;
   opacity: 0.85;
 }
+
 .ao-nowplaying:hover {
   background-color: alpha(@theme_selected_bg_color, 0.15);
   color: @theme_selected_bg_color;
   opacity: 1.0;
 }
+
 .ao-nowplaying:active {
   background-color: alpha(@theme_selected_bg_color, 0.25);
   opacity: 0.7;
 }
 
-.ao-clickable { }
+.ao-clickable {}
+
+.ao-volume-bar {
+  min-height: 24px;
+  padding: 2px;
+}
+
+.ao-time-label {
+  font-feature-settings: "tnum";
+  text-align: center;
+  margin-top: 6px;
+}
 
 /* OutputSelector */
 .ao-device-row {
   padding: 6px 16px;
   transition: background 150ms ease;
 }
+
 .ao-menu-header {
   font-weight: 800;
   font-size: 0.75em;
@@ -186,30 +221,60 @@
   letter-spacing: 0.12em;
   opacity: 0.7;
 }
+
 listboxrow:first-child .ao-menu-header {
   padding-top: 8px;
 }
+
 .ao-output-selected-row {
   background-color: alpha(@theme_selected_bg_color, 0.15);
   border-left: 4px solid @theme_selected_bg_color;
 }
+
 .ao-output-selected-row label {
   color: @theme_selected_bg_color;
   font-weight: bold;
 }
+
 .ao-menu-description {
   font-size: 0.8em;
   opacity: 0.6;
 }
-.ao-output-logo { }
-.ao-rich-list { }
+
+.ao-output-logo {
+  padding: 0px;
+  /* Keep it aligned with the compact playback buttons. */
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--ao-radius-md);
+}
+
+.ao-soul {
+  margin: 2px;
+}
+
+.ao-rich-list {}
 
 /* PlaybackDetailsWidget */
-.ao-quality-perfect { color: #A855F7; }
-.ao-quality-lossless { color: #10B981; }
-.ao-quality-intervention { color: #F59E0B; }
-.ao-quality-lossy { color: #6B7280; }
-.ao-quality-clipped { color: #EF4444; }
+.ao-quality-perfect {
+  color: #A855F7;
+}
+
+.ao-quality-lossless {
+  color: #10B981;
+}
+
+.ao-quality-intervention {
+  color: #F59E0B;
+}
+
+.ao-quality-lossy {
+  color: #6B7280;
+}
+
+.ao-quality-clipped {
+  color: #EF4444;
+}
 
 /* InspectorPanel */
 .ao-inspector-content {
@@ -226,20 +291,26 @@ listboxrow:first-child .ao-menu-header {
   background: transparent;
   transition: background 0.2s;
 }
+
 .ao-inspector-handle:hover {
   background: alpha(currentColor, 0.08);
 }
+
 .ao-inspector-handle image {
   opacity: 0.4;
   transition: opacity 0.2s;
 }
+
 .ao-inspector-handle:hover image {
   opacity: 1.0;
 }
+
 .ao-tags-section {
   margin-top: 4px;
 }
-.ao-tag-editor { }
+
+.ao-tag-editor {}
+
 .ao-tag-chip {
   border-radius: 100px;
   padding: var(--ao-spacing-sm) var(--ao-spacing-lg);
@@ -247,19 +318,23 @@ listboxrow:first-child .ao-menu-header {
   font-weight: 500;
   transition: all 0.2s ease;
 }
+
 togglebutton.ao-tag-chip {
   background: alpha(currentColor, 0.05);
   border: 1px solid transparent;
   color: alpha(currentColor, 0.7);
 }
+
 togglebutton.ao-tag-chip:checked {
   background: alpha(currentColor, 0.15);
   color: currentColor;
   border-color: alpha(currentColor, 0.1);
 }
+
 togglebutton.ao-tag-chip:hover {
   background: alpha(currentColor, 0.2);
 }
+
 .ao-tag-remove {
   min-width: 18px;
   min-height: 18px;
@@ -271,10 +346,12 @@ togglebutton.ao-tag-chip:hover {
   opacity: 0.4;
   transition: opacity 0.2s;
 }
+
 .ao-tag-remove:hover {
   opacity: 1.0;
   background: alpha(@error_color, 0.1);
 }
+
 .ao-tags-entry {
   background: alpha(currentColor, 0.05);
   border: 1px solid transparent;
@@ -283,6 +360,7 @@ togglebutton.ao-tag-chip:hover {
   transition: all 0.2s;
   font-size: 0.9rem;
 }
+
 .ao-tags-entry:focus {
   border-color: alpha(@accent_color, 0.5);
   background: alpha(currentColor, 0.08);
@@ -292,24 +370,35 @@ togglebutton.ao-tag-chip:hover {
 /* TrackColumnFactoryBuilder */
 columnview row.ao-playing-row {
   background-image: linear-gradient(to right,
-    transparent 0%,
-    alpha(@warning_bg_color, 0.2) var(--ao-title-x, 35%),
-    transparent 100%
-  );
+      transparent 0%,
+      alpha(@warning_bg_color, 0.2) var(--ao-title-x, 35%),
+      transparent 100%);
   background-color: transparent;
   border-color: transparent;
   transition: background-image 1.0s ease-out;
 }
+
 .ao-playing-title {
   color: @theme_fg_color;
   font-weight: bold;
 }
-.ao-playing-dim { }
+
+.ao-playing-dim {}
+
 columnview row {
   transition: all 450ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.ao-inline-editor-stack { min-height: 0; margin: 0; }
-.ao-inline-editor-label { border: 1px solid transparent; min-height: 0; }
+
+.ao-inline-editor-stack {
+  min-height: 0;
+  margin: 0;
+}
+
+.ao-inline-editor-label {
+  border: 1px solid transparent;
+  min-height: 0;
+}
+
 .ao-inline-editor-entry {
   background: @view_bg_color;
   border: 1px solid @accent_color;
@@ -320,20 +409,32 @@ columnview row {
   box-shadow: none;
   font-weight: bold;
 }
-.ao-inline-editor-entry text { padding-top: 0; padding-bottom: 0; min-height: 0; }
-.ao-track-tags-cell { }
+
+.ao-inline-editor-entry text {
+  padding-top: 0;
+  padding-bottom: 0;
+  min-height: 0;
+}
+
+.ao-track-tags-cell {}
 
 /* SeekControl */
-.ao-seekbar { padding: var(--ao-spacing-sm) 0; }
+.ao-seekbar {
+  padding: 0;
+}
+
 .ao-seekbar trough {
+  margin: 0 var(--ao-spacing-sm);
   min-height: var(--ao-seek-trough-height);
   border-radius: 3px;
   background: alpha(currentColor, 0.12);
 }
+
 .ao-seekbar highlight {
   background: @theme_selected_bg_color;
   border-radius: 3px;
 }
+
 .ao-seekbar slider {
   min-width: var(--ao-seek-slider-size);
   min-height: var(--ao-seek-slider-size);

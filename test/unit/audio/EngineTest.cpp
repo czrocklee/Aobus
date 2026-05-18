@@ -349,7 +349,7 @@ namespace ao::audio::test
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
 
       // provide some data for preroll
-      std::vector<std::byte> data(100, std::byte{0});
+      auto data = std::vector(100, std::byte{0});
 
       dec->setReadScript({{data, false}, {{}, true}});
       return dec;
@@ -393,7 +393,7 @@ namespace ao::audio::test
     {
       auto dec = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
-      std::vector<std::byte> data(200, std::byte{0}); // 100ms
+      auto data = std::vector(200, std::byte{0}); // 100ms
 
       dec->setReadScript({{data, false}, {data, false}, {{}, true}});
       return dec;
@@ -433,7 +433,7 @@ namespace ao::audio::test
     {
       auto dec = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
-      std::vector<std::byte> data(20, std::byte{0}); // 10ms
+      auto data = std::vector(20, std::byte{0}); // 10ms
 
       dec->setReadScript({{data, false}, {{}, true}});
       return dec;
@@ -587,7 +587,7 @@ namespace ao::audio::test
     {
       auto dec = std::make_unique<ScriptedDecoderSession>(
         DecodedStreamInfo{.sourceFormat = fmt, .outputFormat = fmt, .durationMs = 0, .isLossy = false});
-      std::vector<std::byte> data(100, std::byte{0});
+      auto data = std::vector(100, std::byte{0});
 
       dec->setReadScript({{data, false}, {{}, true}});
       return dec;

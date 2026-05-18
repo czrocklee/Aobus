@@ -47,6 +47,8 @@ namespace ao::gtk
   {
     _button.set_has_frame(false);
     _button.add_css_class("ao-output-logo");
+    _button.set_halign(Gtk::Align::START);
+    _button.set_valign(Gtk::Align::CENTER);
     _button.set_child(_soul);
 
     _soulBinding = std::make_unique<AobusSoulBinding>(_soul, _playback);

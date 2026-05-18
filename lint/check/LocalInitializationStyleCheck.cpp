@@ -2,6 +2,17 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Lex/Lexer.h"
+#include <clang/AST/ASTTypeTraits.h>
+#include <clang/AST/Decl.h>
+#include <clang/AST/Expr.h>
+#include <clang/AST/ExprCXX.h>
+#include <clang/AST/Stmt.h>
+#include <clang/AST/StmtCXX.h>
+#include <clang/AST/Type.h>
+#include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/LLVM.h>
+#include <clang/Basic/SourceLocation.h>
+#include <llvm/ADT/StringSwitch.h>
 
 using namespace clang::ast_matchers;
 
@@ -12,7 +23,11 @@ namespace clang::tidy::readability
     bool isPrimitiveType(QualType type)
     {
       type = type.getCanonicalType();
-      if (type->isPointerType() || type->isReferenceType()) return true;
+
+      if (type->isPointerType() || type->isReferenceType())
+      {
+        return true;
+      }
       // Note: We exclude isEnumeralType() so that enums (like std::byte)
       // follow the 'auto x = T{...}' rule for non-primitives.
       return type->isArithmeticType() || type->isAnyCharacterType() || type->isNullPtrType();
@@ -20,10 +35,14 @@ namespace clang::tidy::readability
 
     bool isContainerWithInitializerList(QualType type)
     {
-      auto const* record = type->getAsCXXRecordDecl();
-      if (!record) return false;
+      auto const* record = type.getCanonicalType()->getAsCXXRecordDecl();
 
-      StringRef name = record->getName();
+      if (record == nullptr)
+      {
+        return false;
+      }
+
+      StringRef const name = record->getName();
       return llvm::StringSwitch<bool>(name)
         .Cases("vector", "deque", "list", "forward_list", true)
         .Cases("set", "multiset", "unordered_set", "unordered_multiset", true)
@@ -34,17 +53,25 @@ namespace clang::tidy::readability
 
     bool isStringOrStringView(QualType type)
     {
-      auto const* record = type->getAsCXXRecordDecl();
-      if (!record) return false;
+      auto const* record = type.getCanonicalType()->getAsCXXRecordDecl();
 
-      StringRef name = record->getName();
+      if (record == nullptr)
+      {
+        return false;
+      }
+
+      StringRef const name = record->getName();
       return name == "basic_string" || name == "string" || name == "basic_string_view" || name == "string_view";
     }
 
-    bool hasStringLiteralArg(Expr const* Init)
+    bool hasStringLiteralArg(Expr const* init)
     {
-      if (!Init) return false;
-      if (auto const* ctor = dyn_cast<CXXConstructExpr>(Init->IgnoreImplicit()))
+      if (init == nullptr)
+      {
+        return false;
+      }
+
+      if (auto const* ctor = dyn_cast<CXXConstructExpr>(init->IgnoreImplicit()))
       {
         if (ctor->getNumArgs() > 0)
         {
@@ -52,134 +79,193 @@ namespace clang::tidy::readability
           return isa<StringLiteral>(arg);
         }
       }
+
       return false;
     }
   } // namespace
 
-  void LocalInitializationStyleCheck::registerMatchers(MatchFinder* Finder)
+  void LocalInitializationStyleCheck::registerMatchers(MatchFinder* finder)
   {
     // Match explicit type declarations that use CXXConstructExpr or InitListExpr.
     // We want to skip 'auto x = some_function()' which binds a CallExpr to the VarDecl.
-    auto HasBadInit = anyOf(hasInitializer(cxxConstructExpr().bind("init")),
-                            hasInitializer(initListExpr().bind("init")),
+    auto hasBadInit = anyOf(hasInitializer(ignoringImplicit(cxxConstructExpr().bind("init"))),
+                            hasInitializer(ignoringImplicit(initListExpr().bind("init"))),
                             unless(hasInitializer(expr())));
 
-    Finder->addMatcher(varDecl(unless(parmVarDecl()),
+    finder->addMatcher(varDecl(unless(parmVarDecl()),
                                unless(isImplicit()),
-                               HasBadInit,
+                               hasBadInit,
                                unless(hasType(isAnyCharacter())),
                                unless(hasType(qualType(anyOf(isInteger(), booleanType(), realFloatingPointType())))))
                          .bind("var"),
                        this);
 
     // Primitive: brace-initialized (Rule 3.4.5: primitives use assignment-style)
-    Finder->addMatcher(
+    finder->addMatcher(
       varDecl(unless(parmVarDecl()),
-              hasInitializer(cxxConstructExpr(isListInitialization()).bind("ctor")),
+              hasInitializer(ignoringImplicit(initListExpr().bind("init"))),
               hasType(qualType(anyOf(isInteger(), booleanType(), realFloatingPointType(), isAnyCharacter()))))
         .bind("var"),
       this);
   }
 
-  void LocalInitializationStyleCheck::check(MatchFinder::MatchResult const& Result)
+  namespace
   {
-    auto const& SM = *Result.SourceManager;
-    auto const* Var = Result.Nodes.getNodeAs<VarDecl>("var");
-    auto const* Init = Result.Nodes.getNodeAs<Expr>("init");
-    auto const* Ctor = Result.Nodes.getNodeAs<CXXConstructExpr>("ctor");
-
-    if (!Var) return;
-
-    SourceLocation Loc = Var->getLocation();
-    // Only check local (non-static) variables
-    if (!Var->hasLocalStorage() || Var->isStaticLocal()) return;
-
-    // Skip auto-deduced variables
-    if (Var->getType()->isUndeducedType()) return;
-    if (Var->getType()->isDependentType()) return;
-    if (TypeSourceInfo* TSI = Var->getTypeSourceInfo())
+    bool isInsideForRangeOrLambda(DynTypedNode node, ASTContext* context)
     {
-      if (TSI->getType()->getContainedAutoType()) return;
-    }
-
-    if (Loc.isInvalid() || Loc.isMacroID() || SM.isInSystemHeader(Loc)) return;
-
-    // Skip range-based for loop variables — their init is implicit.
-    {
-      auto Node = DynTypedNode::create(*Var);
       for (;;)
       {
-        auto Parents = Result.Context->getParents(Node);
-        if (Parents.empty()) break;
-        Node = Parents[0];
-        if (Node.get<CompoundStmt>()) break;
-        if (Node.get<CXXForRangeStmt>() || Node.get<LambdaExpr>()) return;
-        if (Node.get<TranslationUnitDecl>()) break;
+        auto parents = context->getParents(node);
+
+        if (parents.empty())
+        {
+          break;
+        }
+
+        node = parents[0];
+
+        if (node.get<CompoundStmt>() != nullptr)
+        {
+          break;
+        }
+
+        if ((node.get<CXXForRangeStmt>() != nullptr) || (node.get<LambdaExpr>() != nullptr))
+        {
+          return true;
+        }
+
+        if (node.get<TranslationUnitDecl>() != nullptr)
+        {
+          break;
+        }
       }
+
+      return false;
     }
 
-    QualType VarType = Var->getType();
-    bool Primitive = isPrimitiveType(VarType);
-
-    if (!Primitive)
+    bool isEligibleLocalVar(VarDecl const* var, SourceManager const& sm, ASTContext* context)
     {
-      bool IsListInit = false;
-      bool IsEmptyInit = false;
-      bool IsContainer = isContainerWithInitializerList(VarType);
-      bool IsString = isStringOrStringView(VarType);
-      bool HasLiteral = hasStringLiteralArg(Init);
-
-      if (Init)
+      if (var == nullptr || !var->hasLocalStorage() || var->isStaticLocal())
       {
-        if (auto const* ctor = dyn_cast<CXXConstructExpr>(Init->IgnoreImplicit()))
-        {
-          // Skip nullptr initialization — T* ptr = nullptr is fine
-          if (ctor->getNumArgs() == 1 && ctor->getArg(0)->getType()->isNullPtrType()) return;
+        return false;
+      }
 
-          // Skip lambda closure types
-          auto const* ctorDecl = ctor->getConstructor();
-          if (ctorDecl)
+      if (QualType const type = var->getType(); type->isUndeducedType() || type->isDependentType())
+      {
+        return false;
+      }
+
+      if (TypeSourceInfo const* tsi = var->getTypeSourceInfo())
+      {
+        if (tsi->getType()->getContainedAutoType() != nullptr)
+        {
+          return false;
+        }
+      }
+
+      if (SourceLocation const loc = var->getLocation(); loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
+      {
+        return false;
+      }
+
+      return !isInsideForRangeOrLambda(DynTypedNode::create(*var), context);
+    }
+
+    struct InitInfo final
+    {
+      bool isListInit{false};
+      bool isEmptyInit{false};
+      bool shouldSkip{false};
+    };
+
+    InitInfo analyzeInitialization(Expr const* init)
+    {
+      auto info = InitInfo{};
+
+      if (init == nullptr)
+      {
+        info.isEmptyInit = true;
+        return info;
+      }
+
+      if (auto const* ctorExpr = dyn_cast<CXXConstructExpr>(init->IgnoreImplicit()))
+      {
+        if (ctorExpr->getNumArgs() == 1 && ctorExpr->getArg(0)->getType()->isNullPtrType())
+        {
+          info.shouldSkip = true;
+          return info;
+        }
+
+        if (auto const* ctorDecl = ctorExpr->getConstructor(); ctorDecl != nullptr)
+        {
+          if (auto const* record = ctorDecl->getParent(); record != nullptr && record->isLambda())
           {
-            auto const* record = ctorDecl->getParent();
-            if (record && record->isLambda()) return;
+            info.shouldSkip = true;
+            return info;
           }
+        }
 
-          IsListInit = ctor->isListInitialization();
-          IsEmptyInit = ctor->getNumArgs() == 0;
-        }
-        else if (isa<InitListExpr>(Init->IgnoreImplicit()))
-        {
-          IsListInit = true;
-        }
+        info.isListInit = ctorExpr->isListInitialization();
+        info.isEmptyInit = ctorExpr->getNumArgs() == 0;
+      }
+      else if (isa<InitListExpr>(init->IgnoreImplicit()))
+      {
+        info.isListInit = true;
+      }
+
+      return info;
+    }
+  }
+
+  void LocalInitializationStyleCheck::check(MatchFinder::MatchResult const& result)
+  {
+    auto const& sm = *result.SourceManager;
+    auto const* var = result.Nodes.getNodeAs<VarDecl>("var");
+    auto const* init = result.Nodes.getNodeAs<Expr>("init");
+    auto const* ctor = result.Nodes.getNodeAs<CXXConstructExpr>("ctor");
+
+    if (!isEligibleLocalVar(var, sm, result.Context))
+    {
+      return;
+    }
+
+    SourceLocation const loc = var->getLocation();
+    QualType const varType = var->getType();
+
+    if (bool const primitive = isPrimitiveType(varType); !primitive)
+    {
+      auto const info = analyzeInitialization(init);
+
+      if (info.shouldSkip)
+      {
+        return;
+      }
+
+      bool const isContainer = isContainerWithInitializerList(varType);
+      bool const isString = isStringOrStringView(varType);
+
+      if (bool const hasLiteral = hasStringLiteralArg(init); isString && hasLiteral)
+      {
+        auto const suffix = StringRef{varType.getAsString().find("string_view") != StringRef::npos ? "sv" : "s"};
+        diag(loc, "prefer standard literals 'auto %0 = \"...\"%1' over explicit string construction")
+          << var->getName() << suffix;
+      }
+      else if (isContainer && !info.isListInit && !info.isEmptyInit)
+      {
+        diag(loc, "use 'auto %0 = Type(...)' for container initialization to avoid ambiguity") << var->getName();
       }
       else
       {
-        // If there's no initializer, it's default initialization (e.g. `Type var;`)
-        IsEmptyInit = true;
-      }
-
-      if (IsString && HasLiteral)
-      {
-        StringRef suffix = VarType.getAsString().find("string_view") != StringRef::npos ? "sv" : "s";
-        diag(Loc, "prefer standard literals 'auto %0 = \"...\"%1' over explicit string construction")
-          << Var->getName() << suffix;
-      }
-      else if (IsContainer && !IsListInit && !IsEmptyInit)
-      {
-        diag(Loc, "use 'auto %0 = Type(...)' for container initialization to avoid ambiguity") << Var->getName();
-      }
-      else
-      {
-        diag(Loc, "use 'auto %0 = Type{...}' instead of explicit type initialization") << Var->getName();
+        diag(loc, "use 'auto %0 = Type{...}' instead of explicit type initialization") << var->getName();
       }
     }
-    else if (Ctor)
+    else if (ctor != nullptr || init != nullptr)
     {
       // Primitive type with brace initialization — use T x = val instead.
-      diag(Loc,
+      diag(loc,
            "primitive type should use assignment-style initialization "
            "'Type %0 = ...', not brace initialization")
-        << Var->getName();
+        << var->getName();
     }
   }
 } // namespace clang::tidy::readability

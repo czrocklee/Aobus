@@ -37,7 +37,7 @@ namespace ao::library::test
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
     // Empty cold data (padded to 4-byte alignment)
-    auto coldData = std::vector<std::byte>(4, std::byte{0});
+    auto coldData = std::vector(4, std::byte{0});
 
     auto wtxn2 = WriteTransaction{env};
     auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -67,7 +67,7 @@ namespace ao::library::test
     auto hotData = std::vector<std::byte>(sizeof(TrackHotHeader));
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-    auto coldData = std::vector<std::byte>(4, std::byte{0});
+    auto coldData = std::vector(4, std::byte{0});
 
     auto wtxn2 = WriteTransaction{env};
     auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -94,7 +94,7 @@ namespace ao::library::test
     auto hotData = std::vector<std::byte>(sizeof(TrackHotHeader));
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-    auto coldData = std::vector<std::byte>(4, std::byte{0});
+    auto coldData = std::vector(4, std::byte{0});
 
     auto wtxn2 = WriteTransaction{env};
     auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -126,7 +126,7 @@ namespace ao::library::test
     auto hotData = std::vector<std::byte>(sizeof(TrackHotHeader));
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-    auto coldData = std::vector<std::byte>(4, std::byte{0});
+    auto coldData = std::vector(4, std::byte{0});
 
     auto wtxn2 = WriteTransaction{env};
     auto [id, view] = store.writer(wtxn2).createHotCold(hotData, coldData);
@@ -160,7 +160,7 @@ namespace ao::library::test
     auto hotData = std::vector<std::byte>(sizeof(TrackHotHeader));
     std::memcpy(hotData.data(), &hotHeader, sizeof(TrackHotHeader));
 
-    auto coldData = std::vector<std::byte>(4, std::byte{0});
+    auto coldData = std::vector(4, std::byte{0});
 
     auto wtxn2 = WriteTransaction{env};
     auto [id1, view1] = store.writer(wtxn2).createHotCold(hotData, coldData);

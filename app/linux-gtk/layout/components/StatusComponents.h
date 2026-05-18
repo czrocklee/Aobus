@@ -15,7 +15,6 @@ namespace ao::gtk::layout
    * - status.notification (includes selection info)
    * - status.trackCount
    * - status.messageLabel
-   * - status.defaultBar (composite)
    */
   void registerStatusComponents(ComponentRegistry& registry);
 } // namespace ao::gtk::layout

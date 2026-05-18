@@ -31,8 +31,6 @@ namespace ao::tag
   // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
   class TagFile
   {
-    friend std::string_view detail::stashOwnedString(TagFile const& owner, std::string value);
-
   public:
     enum class Mode : std::uint8_t
     {
@@ -76,6 +74,8 @@ namespace ao::tag
     std::size_t size() const noexcept { return _mappedRegion.get_size(); }
 
   private:
+    friend std::string_view detail::stashOwnedString(TagFile const& owner, std::string value);
+
     std::string_view stashOwnedString(std::string value) const
     {
       _ownedStrings.push_back(std::move(value));

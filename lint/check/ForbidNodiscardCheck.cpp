@@ -1,54 +1,56 @@
 #include "check/ForbidNodiscardCheck.h"
-#include "clang/AST/ASTContext.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
+
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclCXX.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/AttrKinds.h>
+#include <clang/Basic/SourceLocation.h>
+#include <clang/Basic/SourceManager.h>
 
 using namespace clang::ast_matchers;
 
-namespace clang::tidy::readability {
-
-void ForbidNodiscardCheck::registerMatchers(MatchFinder *Finder)
+namespace clang::tidy::readability
 {
-  Finder->addMatcher(
-    functionDecl(
-      hasAttr(attr::WarnUnusedResult)
-    ).bind("func"),
-    this);
-
-  Finder->addMatcher(
-    cxxRecordDecl(
-      isDefinition(),
-      hasAttr(attr::WarnUnusedResult)
-    ).bind("record"),
-    this);
-}
-
-void ForbidNodiscardCheck::check(const MatchFinder::MatchResult &Result)
-{
-  const auto &SM = *Result.SourceManager;
-
-  if (const auto *Func = Result.Nodes.getNodeAs<FunctionDecl>("func"))
+  void ForbidNodiscardCheck::registerMatchers(MatchFinder* finder)
   {
-    SourceLocation Loc = Func->getLocation();
-    if (Loc.isInvalid() || Loc.isMacroID() || SM.isInSystemHeader(Loc))
-      return;
+    finder->addMatcher(functionDecl(hasAttr(attr::WarnUnusedResult)).bind("func"), this);
 
-    diag(Loc,
-         "remove [[nodiscard]] from '%0'; rely on clang-tidy "
-         "unused-return diagnostics instead")
-      << Func;
+    finder->addMatcher(cxxRecordDecl(isDefinition(), hasAttr(attr::WarnUnusedResult)).bind("record"), this);
   }
 
-  if (const auto *Record = Result.Nodes.getNodeAs<CXXRecordDecl>("record"))
+  void ForbidNodiscardCheck::check(MatchFinder::MatchResult const& result)
   {
-    SourceLocation Loc = Record->getLocation();
-    if (Loc.isInvalid() || Loc.isMacroID() || SM.isInSystemHeader(Loc))
-      return;
+    auto const& sm = *result.SourceManager;
 
-    diag(Loc,
-         "remove [[nodiscard]] from '%0'; rely on clang-tidy "
-         "unused-return diagnostics instead")
-      << Record;
+    if (auto const* func = result.Nodes.getNodeAs<FunctionDecl>("func"))
+    {
+      SourceLocation const loc = func->getLocation();
+
+      if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
+      {
+        return;
+      }
+
+      diag(loc,
+           "remove [[nodiscard]] from '%0'; rely on clang-tidy "
+           "unused-return diagnostics instead")
+        << func;
+    }
+
+    if (auto const* record = result.Nodes.getNodeAs<CXXRecordDecl>("record"))
+    {
+      SourceLocation const loc = record->getLocation();
+
+      if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
+      {
+        return;
+      }
+
+      diag(loc,
+           "remove [[nodiscard]] from '%0'; rely on clang-tidy "
+           "unused-return diagnostics instead")
+        << record;
+    }
   }
-}
-
 } // namespace clang::tidy::readability

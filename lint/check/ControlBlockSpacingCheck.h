@@ -4,30 +4,54 @@
 #include "clang/Lex/Lexer.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include <clang-tidy/ClangTidyDiagnosticConsumer.h>
+#include <clang/AST/ASTContext.h>
+#include <clang/AST/Stmt.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/Basic/LLVM.h>
+#include <clang/Basic/SourceLocation.h>
+#include <clang/Lex/Token.h>
+#include <cstddef>
 #include <vector>
 
-namespace clang::tidy::readability {
+namespace clang::tidy::readability
+{
+  class ControlBlockSpacingCheck : public ClangTidyCheck
+  {
+  public:
+    ControlBlockSpacingCheck(StringRef name, ClangTidyContext* context)
+      : ClangTidyCheck(name, context)
+    {
+    }
 
-class ControlBlockSpacingCheck : public ClangTidyCheck {
-public:
-  ControlBlockSpacingCheck(StringRef Name, ClangTidyContext *Context)
-      : ClangTidyCheck(Name, Context) {}
+    void registerMatchers(ast_matchers::MatchFinder* finder) override;
+    void check(ast_matchers::MatchFinder::MatchResult const& result) override;
+    void onEndOfTranslationUnit() override;
 
-  void registerMatchers(ast_matchers::MatchFinder *Finder) override;
-  void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
-  void onEndOfTranslationUnit() override;
+  private:
+    std::vector<Token> const& getTokens(FileID fid, SourceManager& sm, LangOptions const& langOpts);
+    void checkFileOnce(FileID fid, SourceManager& sm, ASTContext& context);
+    void checkSpacingBefore(size_t tokenIndex,
+                            std::vector<Token> const& tokens,
+                            StringRef buffer,
+                            SourceManager& sm,
+                            StringRef stmtName);
+    void checkControlStatement(SourceLocation loc, SourceManager& sm, ASTContext& context, StringRef stmtName);
+    void checkBlockStart(SourceLocation loc, SourceManager& sm, ASTContext& context);
+    void checkBlockEnd(SourceLocation loc, SourceManager& sm, ASTContext& context);
+    void checkSpacingAfterBlock(SourceLocation rBraceLoc, SourceManager& sm, ASTContext& context);
 
-private:
-  const std::vector<Token>& getTokens(FileID FID, SourceManager &SM, const LangOptions &LangOpts);
-  void checkFileOnce(FileID FID, SourceManager &SM, ASTContext &Context);
-  void checkSpacingBefore(int TokenIndex, const std::vector<Token> &Tokens, StringRef Buffer, SourceManager &SM, StringRef StmtName);
-  void checkControlStatement(SourceLocation Loc, SourceManager &SM, ASTContext &Context, StringRef StmtName);
-  void checkBlockStart(SourceLocation Loc, SourceManager &SM, ASTContext &Context);
-  void checkBlockEnd(SourceLocation Loc, SourceManager &SM, ASTContext &Context);
-  void checkSpacingAfterBlock(SourceLocation RBraceLoc, SourceManager &SM, ASTContext &Context);
+    void handleControlStatement(Stmt const* ctrl,
+                                SourceManager& sm,
+                                ast_matchers::MatchFinder::MatchResult const& result);
+    void handleCompoundBlock(CompoundStmt const* block,
+                             SourceManager& sm,
+                             ast_matchers::MatchFinder::MatchResult const& result);
+    void handleControlBody(CompoundStmt const* ctrlBody,
+                           SourceManager& sm,
+                           ast_matchers::MatchFinder::MatchResult const& result);
 
-  llvm::DenseMap<FileID, std::vector<Token>> FileTokens;
-  llvm::DenseSet<FileID> ProcessedFiles;
-};
-
+    llvm::DenseMap<FileID, std::vector<Token>> _fileTokens;
+    llvm::DenseSet<FileID> _processedFiles;
+  };
 } // namespace clang::tidy::readability

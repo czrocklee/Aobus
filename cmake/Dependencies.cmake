@@ -12,6 +12,31 @@ find_package(CLI11 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
+# ── spdlog ABI guard ────────────────────────────────────────────────────────
+# Aobus compiles spdlog call sites with SPDLOG_USE_STD_FORMAT.  If CMake reuses
+# a stale cache entry that points at the default fmt-backed spdlog package, the
+# build can succeed but fail at runtime with missing log_msg(std::string_view)
+# symbols.  Fail during configure instead.
+get_target_property(AOBUS_SPDLOG_COMPILE_DEFINITIONS spdlog::spdlog INTERFACE_COMPILE_DEFINITIONS)
+if(NOT AOBUS_SPDLOG_COMPILE_DEFINITIONS)
+  set(AOBUS_SPDLOG_COMPILE_DEFINITIONS "")
+endif()
+
+if(NOT SPDLOG_USE_STD_FORMAT IN_LIST AOBUS_SPDLOG_COMPILE_DEFINITIONS)
+  message(FATAL_ERROR
+    "Aobus requires spdlog built with SPDLOG_USE_STD_FORMAT, but the located "
+    "spdlog package does not advertise that ABI. spdlog_DIR='${spdlog_DIR}', "
+    "INTERFACE_COMPILE_DEFINITIONS='${AOBUS_SPDLOG_COMPILE_DEFINITIONS}'. "
+    "Remove the build directory or CMakeCache.txt, then reconfigure inside nix-shell.")
+endif()
+
+if(SPDLOG_FMT_EXTERNAL IN_LIST AOBUS_SPDLOG_COMPILE_DEFINITIONS)
+  message(FATAL_ERROR
+    "Aobus requires std::format-backed spdlog, but the located spdlog target "
+    "uses SPDLOG_FMT_EXTERNAL. spdlog_DIR='${spdlog_DIR}'. Remove the build "
+    "directory or CMakeCache.txt, then reconfigure inside nix-shell.")
+endif()
+
 find_program(GLIB_COMPILE_RESOURCES_EXECUTABLE glib-compile-resources REQUIRED)
 find_program(GPERF_EXECUTABLE gperf REQUIRED)
 
@@ -80,3 +105,12 @@ pkg_check_modules(LMDB REQUIRED lmdb)
 
 # ── mimalloc ────────────────────────────────────────────────────────────────
 find_package(mimalloc REQUIRED)
+
+# ── FakeIt (Header-only Mocking Framework for tests) ────────────────────────
+include(FetchContent)
+FetchContent_Declare(
+    FakeIt
+    GIT_REPOSITORY https://github.com/eranpeer/FakeIt.git
+    GIT_TAG        2.5.0
+)
+FetchContent_MakeAvailable(FakeIt)

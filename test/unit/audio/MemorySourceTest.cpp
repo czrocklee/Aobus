@@ -27,11 +27,11 @@ namespace ao::audio::test
       auto decoder = std::make_unique<ScriptedDecoderSession>(info);
       auto* decoderPtr = decoder.get();
 
-      std::vector<std::byte> block1 = {std::byte{1}, std::byte{2}};
-      std::vector<std::byte> block2 = {std::byte{3}, std::byte{4}};
+      auto block1 = std::vector{std::byte{1}, std::byte{2}};
+      auto block2 = std::vector{std::byte{3}, std::byte{4}};
       decoderPtr->setReadScript({{block1, false}, {block2, false}, {{}, true}});
 
-      MemorySource source(std::move(decoder), info);
+      auto source = MemorySource{std::move(decoder), info};
       REQUIRE(source.initialize());
       REQUIRE(decoderPtr->isClosed());
       REQUIRE(source.bufferedMs() == 2); // 4 bytes / (1000 Hz * 2 bytes/frame) = 2 ms
@@ -43,7 +43,7 @@ namespace ao::audio::test
       decoder->setReadScript(
         {{{}, false, std::unexpected(Error{.code = Error::Code::DecodeFailed, .message = "failure"})}});
 
-      MemorySource source(std::move(decoder), info);
+      auto source = MemorySource{std::move(decoder), info};
       auto result = source.initialize();
       REQUIRE_FALSE(result);
       REQUIRE(result.error().code == Error::Code::DecodeFailed);
@@ -53,22 +53,22 @@ namespace ao::audio::test
     SECTION("Read returns bytes sequentially until drained")
     {
       auto decoder = std::make_unique<ScriptedDecoderSession>(info);
-      std::vector<std::byte> allData = {std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};
+      auto allData = std::vector{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}};
       decoder->setReadScript({{allData, false}, {{}, true}});
 
-      MemorySource source(std::move(decoder), info);
+      auto source = MemorySource{std::move(decoder), info};
       REQUIRE(source.initialize());
 
       REQUIRE_FALSE(source.isDrained());
 
-      std::vector<std::byte> out1(2);
+      auto out1 = std::vector<std::byte>(2);
       REQUIRE(source.read(out1) == 2);
       REQUIRE(out1[0] == std::byte{1});
       REQUIRE(out1[1] == std::byte{2});
 
       REQUIRE(source.bufferedMs() == 1);
 
-      std::vector<std::byte> out2(10);
+      auto out2 = std::vector<std::byte>(10);
       REQUIRE(source.read(out2) == 2);
       REQUIRE(out2[0] == std::byte{3});
       REQUIRE(out2[1] == std::byte{4});
@@ -84,15 +84,15 @@ namespace ao::audio::test
       auto const info24 = DecodedStreamInfo{.sourceFormat = format24, .outputFormat = format24, .durationMs = 100};
 
       auto decoder = std::make_unique<ScriptedDecoderSession>(info24);
-      std::vector<std::byte> data(60, std::byte{0}); // 10 frames of 6 bytes each = 10ms
+      auto data = std::vector(60, std::byte{0}); // 10 frames of 6 bytes each = 10ms
       decoder->setReadScript({{data, false}, {{}, true}});
 
-      MemorySource source(std::move(decoder), info24);
+      auto source = MemorySource{std::move(decoder), info24};
       REQUIRE(source.initialize());
 
       // Seek to 1 ms = offset 6
       REQUIRE(source.seek(1));
-      std::vector<std::byte> out(6);
+      auto out = std::vector<std::byte>(6);
       REQUIRE(source.read(out) == 6);
 
       // Seek beyond end
@@ -108,7 +108,7 @@ namespace ao::audio::test
       auto decoder = std::make_unique<ScriptedDecoderSession>(zeroInfo);
       decoder->setReadScript({{{}, true}});
 
-      MemorySource source(std::move(decoder), zeroInfo);
+      auto source = MemorySource{std::move(decoder), zeroInfo};
       REQUIRE(source.initialize());
 
       REQUIRE(source.bufferedMs() == 0);

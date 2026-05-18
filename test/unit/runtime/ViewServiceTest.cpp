@@ -142,7 +142,7 @@ namespace ao::rt::test
     CHECK(snap.lifecycle == ViewLifecycleState::Attached);
     CHECK(snap.groupBy == TrackGroupKey::None);
 
-    auto const expectedNone = std::vector<TrackSortField>{TrackSortField::Artist,
+    auto const expectedNone = std::vector{TrackSortField::Artist,
                                                           TrackSortField::Album,
                                                           TrackSortField::DiscNumber,
                                                           TrackSortField::TrackNumber,
@@ -198,7 +198,7 @@ namespace ao::rt::test
 
     CHECK(snap.groupBy == TrackGroupKey::Artist);
 
-    auto const expected = std::vector<TrackSortField>{TrackSortField::Artist,
+    auto const expected = std::vector{TrackSortField::Artist,
                                                       TrackSortField::Album,
                                                       TrackSortField::DiscNumber,
                                                       TrackSortField::TrackNumber,
@@ -222,7 +222,7 @@ namespace ao::rt::test
 
     CHECK(snap.groupBy == TrackGroupKey::Album);
 
-    auto const expected = std::vector<TrackSortField>{TrackSortField::AlbumArtist,
+    auto const expected = std::vector{TrackSortField::AlbumArtist,
                                                       TrackSortField::Album,
                                                       TrackSortField::DiscNumber,
                                                       TrackSortField::TrackNumber,
@@ -248,7 +248,7 @@ namespace ao::rt::test
 
     CHECK(snap.groupBy == TrackGroupKey::Genre);
 
-    auto const expected = std::vector<TrackSortField>{TrackSortField::Genre,
+    auto const expected = std::vector{TrackSortField::Genre,
                                                       TrackSortField::Artist,
                                                       TrackSortField::Album,
                                                       TrackSortField::DiscNumber,

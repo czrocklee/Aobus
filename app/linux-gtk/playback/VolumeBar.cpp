@@ -21,11 +21,6 @@ namespace ao::gtk
   namespace
   {
     constexpr float kVolumeEpsilon = 0.001F;
-    constexpr int kMinHorizontalWidth = 32;
-    constexpr int kNaturalHorizontalWidth = 42;
-    constexpr int kMinVerticalHeight = 20;
-    constexpr int kNaturalVerticalHeight = 26;
-    constexpr float kVerticalPadding = 4.0F;
     constexpr float kMinDrawHeight = 2.0F;
     constexpr float kBackgroundOpacity = 0.15F;
     constexpr float kMinHeightFactor = 0.1F;
@@ -47,6 +42,7 @@ namespace ao::gtk
 
   VolumeBar::VolumeBar()
   {
+    add_css_class("ao-volume-bar");
     set_focusable(true);
     set_can_target(true);
 
@@ -97,25 +93,28 @@ namespace ao::gtk
 
   Gtk::SizeRequestMode VolumeBar::get_request_mode_vfunc() const
   {
-    return Gtk::SizeRequestMode::CONSTANT_SIZE;
+    return Gtk::SizeRequestMode::WIDTH_FOR_HEIGHT;
   }
 
   void VolumeBar::measure_vfunc(Gtk::Orientation orientation,
-                                int /*for_size*/,
+                                int forSize,
                                 int& minimum,
                                 int& natural,
-                                int& /*minimum_baseline*/,
-                                int& /*natural_baseline*/) const
+                                int& /*minimumBaseline*/,
+                                int& /*naturalBaseline*/) const
   {
-    if (orientation == Gtk::Orientation::HORIZONTAL)
+    if (orientation == Gtk::Orientation::HORIZONTAL && forSize > 0)
     {
-      minimum = kMinHorizontalWidth;
-      natural = kNaturalHorizontalWidth; // Golden ratio width
+      static constexpr double kAspectRatio = std::numbers::phi + 1;
+      auto const width = static_cast<int>(static_cast<double>(forSize) * kAspectRatio);
+      minimum = width;
+      natural = width;
     }
     else
     {
-      minimum = kMinVerticalHeight;
-      natural = kNaturalVerticalHeight; // Golden ratio height
+      // CSS min-height controls the vertical dimension.
+      minimum = 0;
+      natural = 0;
     }
   }
 
@@ -127,16 +126,21 @@ namespace ao::gtk
     auto const cr =
       snapshot->append_cairo(Gdk::Graphene::Rect{0, 0, static_cast<float>(width), static_cast<float>(height)});
 
-    float const segmentWidth =
-      (static_cast<float>(width) - (static_cast<float>(kNumSegments) - 1.0F) * static_cast<float>(kSegmentGap)) /
-      static_cast<float>(kNumSegments);
     auto const context = get_style_context();
     auto const color = context->get_color();
+    auto const cssPadding = context->get_padding();
 
-    // Internal Padding for "Breathing Room"
-    float const vPadding = kVerticalPadding;
+    float const vPadding = static_cast<float>(cssPadding.get_top());
+    float const hPadding = static_cast<float>(cssPadding.get_left());
     float const drawHeight = std::max(kMinDrawHeight, static_cast<float>(height) - (2.0F * vPadding));
     float const yOffset = vPadding;
+
+    // Segment gap and radius scale with the available width.
+    float const segmentGap = std::max(1.0F, (static_cast<float>(width) - 2.0F * hPadding) * 0.025F);
+    float const segmentWidth =
+      ((static_cast<float>(width) - 2.0F * hPadding) - (static_cast<float>(kNumSegments) - 1.0F) * segmentGap) /
+      static_cast<float>(kNumSegments);
+    float const segmentRadius = segmentWidth * 0.08F;
 
     // Dynamically lookup the theme's accent/selection color
     auto activeColor = Gdk::RGBA{};
@@ -157,14 +161,13 @@ namespace ao::gtk
 
     for (int idx = 0; idx < kNumSegments; ++idx)
     {
-      float const segmentX = static_cast<float>(idx) * (segmentWidth + static_cast<float>(kSegmentGap));
-      // We add independent sub-paths for each rounded rect segment
+      float const segmentX = hPadding + (static_cast<float>(idx) * (segmentWidth + segmentGap));
       cr->begin_new_sub_path();
-      cr->arc(segmentX + kSegmentRadius, yOffset + kSegmentRadius, kSegmentRadius, kAngle180, kAngle270);
-      cr->arc(segmentX + segmentWidth - kSegmentRadius, yOffset + kSegmentRadius, kSegmentRadius, kAngle270, kAngle360);
+      cr->arc(segmentX + segmentRadius, yOffset + segmentRadius, segmentRadius, kAngle180, kAngle270);
+      cr->arc(segmentX + segmentWidth - segmentRadius, yOffset + segmentRadius, segmentRadius, kAngle270, kAngle360);
       cr->arc(
-        segmentX + segmentWidth - kSegmentRadius, yOffset + drawHeight - kSegmentRadius, kSegmentRadius, 0, kAngle90);
-      cr->arc(segmentX + kSegmentRadius, yOffset + drawHeight - kSegmentRadius, kSegmentRadius, kAngle90, kAngle180);
+        segmentX + segmentWidth - segmentRadius, yOffset + drawHeight - segmentRadius, segmentRadius, 0, kAngle90);
+      cr->arc(segmentX + segmentRadius, yOffset + drawHeight - segmentRadius, segmentRadius, kAngle90, kAngle180);
       cr->close_path();
     }
 

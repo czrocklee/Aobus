@@ -196,6 +196,24 @@ namespace ao::gtk::layout::test
       auto* const btn = dynamic_cast<Gtk::Button*>(&comp->widget());
       REQUIRE(btn != nullptr);
       CHECK(btn->has_css_class("ao-output-logo"));
+
+      // CSS controls the hit-target size; no explicit set_size_request.
+      int buttonWidth = -1;
+      int buttonHeight = -1;
+      btn->get_size_request(buttonWidth, buttonHeight);
+      CHECK(buttonWidth == -1);
+      CHECK(buttonHeight == -1);
+
+      auto* const child = btn->get_child();
+      REQUIRE(child != nullptr);
+      CHECK(child->has_css_class("ao-soul"));
+
+      // CSS controls the glyph size; no explicit set_size_request.
+      int childWidth = -1;
+      int childHeight = -1;
+      child->get_size_request(childWidth, childHeight);
+      CHECK(childWidth == -1);
+      CHECK(childHeight == -1);
     }
 
     SECTION("qualityIndicator creates AobusSoul widget")
@@ -204,14 +222,14 @@ namespace ao::gtk::layout::test
       auto const comp = registry.create(ctx, node);
 
       REQUIRE(comp != nullptr);
+      CHECK(comp->widget().has_css_class("ao-soul"));
 
+      // CSS controls the glyph size; no explicit set_size_request.
       int width = -1;
       int height = -1;
       comp->widget().get_size_request(width, height);
-
-      int const expectedSize = 24;
-      CHECK(width == expectedSize);
-      CHECK(height == expectedSize);
+      CHECK(width == -1);
+      CHECK(height == -1);
     }
 
     SECTION("all 11 playback types register and instantiate")
@@ -442,18 +460,6 @@ namespace ao::gtk::layout::test
       CHECK(label == nullptr);
       CHECK(comp->widget().has_css_class("ao-inspector-sidebar"));
     }
-
-    SECTION("status.defaultBar returns a Gtk::Box")
-    {
-      auto const node = LayoutNode{.type = "status.defaultBar"};
-      auto const comp = registry.create(ctx, node);
-
-      REQUIRE(comp != nullptr);
-
-      auto* const box = dynamic_cast<Gtk::Box*>(&comp->widget());
-      REQUIRE(box != nullptr);
-      CHECK(box->has_css_class("ao-status-bar"));
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -476,7 +482,7 @@ namespace ao::gtk::layout::test
     auto window = Gtk::Window{};
     auto ctx = makeContext(registry, runtime, window);
 
-    SECTION("all 14 status and semantic types")
+    SECTION("all 13 status and semantic types")
     {
       auto const types = std::to_array<std::string_view>({"status.messageLabel",
                                                           "library.listTree",
@@ -484,7 +490,6 @@ namespace ao::gtk::layout::test
                                                           "library.openLibraryButton",
                                                           "inspector.coverArt",
                                                           "inspector.sidebar",
-                                                          "status.defaultBar",
                                                           "app.menuBar",
                                                           "app.workspaceWithInspector",
                                                           "status.playbackDetails",

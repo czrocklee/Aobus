@@ -94,7 +94,7 @@ namespace ao::query::test
     binary->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
     binary->optOperation = std::nullopt;
 
-    Expression expr = std::move(binary);
+    auto expr = Expression{std::move(binary)};
 
     normalize(expr);
 
@@ -103,14 +103,14 @@ namespace ao::query::test
 
   TEST_CASE("Expression - Normalize Leaves Constant Unchanged")
   {
-    Expression expr = ConstantExpression{true};
+    auto expr = Expression{ConstantExpression{true}};
     normalize(expr);
     CHECK(canonicalize(expr) == "true");
   }
 
   TEST_CASE("Expression - Normalize Leaves Variable Unchanged")
   {
-    Expression expr = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
+    auto expr = Expression{VariableExpression{.type = VariableType::Metadata, .name = "artist"}};
     normalize(expr);
     CHECK(canonicalize(expr) == "artist");
   }
@@ -127,7 +127,7 @@ namespace ao::query::test
     root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
     root->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
 
-    Expression expr = std::move(root);
+    auto expr = Expression{std::move(root)};
     normalize(expr);
 
     // Expected: (a + b) + c
@@ -150,7 +150,7 @@ namespace ao::query::test
     root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
     root->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
 
-    Expression expr = std::move(root);
+    auto expr = Expression{std::move(root)};
     normalize(expr);
 
     // Expected: ((a + b) + c) + d
@@ -169,7 +169,7 @@ namespace ao::query::test
     root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
     root->optOperation = BinaryExpression::Operation{.op = Operator::And, .operand = std::move(inner)};
 
-    Expression expr = std::move(root);
+    auto expr = Expression{std::move(root)};
     normalize(expr);
 
     CHECK(canonicalize(expr) == "(a and (b and c))");
@@ -183,7 +183,7 @@ namespace ao::query::test
     root->optOperation =
       BinaryExpression::Operation{.op = Operator::Add, .operand = ConstantExpression{std::int64_t{1}}};
 
-    Expression expr = std::move(root);
+    auto expr = Expression{std::move(root)};
     normalize(expr);
 
     CHECK(canonicalize(expr) == "(a + 1)");
@@ -201,7 +201,7 @@ namespace ao::query::test
     root->operand = VariableExpression{.type = VariableType::Metadata, .name = "a"};
     root->optOperation = BinaryExpression::Operation{.op = Operator::Add, .operand = std::move(inner)};
 
-    Expression expr = std::move(root);
+    auto expr = Expression{std::move(root)};
     normalize(expr);
 
     CHECK(canonicalize(expr) == "(a + (b and c))");
@@ -223,7 +223,7 @@ namespace ao::query::test
     unary->op = Operator::Not;
     unary->operand = std::move(binary);
 
-    Expression expr = std::move(unary);
+    auto expr = Expression{std::move(unary)};
     normalize(expr);
 
     CHECK(canonicalize(expr) == "not ((a + b) + c)");

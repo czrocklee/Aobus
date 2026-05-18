@@ -231,16 +231,9 @@ namespace ao::gtk::layout
       .children = {
         LayoutNode{.type = "app.menuBar"},
         LayoutNode{.id = "playback-row",
-                   .type = "box",
-                   .props = {{"orientation", LayoutValue{std::string{"horizontal"}}},
-                             {"spacing", LayoutValue{static_cast<std::int64_t>(kSpacingMedium)}}},
-                   .layout = {{"cssClasses", LayoutValue{std::string{"ao-playback-strip"}}}},
-                   .children = {LayoutNode{.type = "playback.outputButton"},
-                                LayoutNode{.type = "playback.playPauseButton"},
-                                LayoutNode{.type = "playback.stopButton"},
-                                LayoutNode{.type = "playback.seekSlider", .layout = {{"hexpand", LayoutValue{true}}}},
-                                LayoutNode{.type = "playback.timeLabel"},
-                                LayoutNode{.type = "playback.volumeControl"}}},
+                   .type = "template",
+                   .props = {{"templateId", LayoutValue{std::string{"playback.defaultBar"}}}},
+                   .layout = {{"cssClasses", LayoutValue{std::string{"ao-playback-strip"}}}}},
         LayoutNode{.id = "main-paned",
                    .type = "split",
                    .props = {{"orientation", LayoutValue{std::string{"horizontal"}}},
@@ -259,7 +252,9 @@ namespace ao::gtk::layout
         LayoutNode{.type = "box",
                    .props = {{"orientation", LayoutValue{std::string{"horizontal"}}}},
                    .layout = {{"cssClasses", LayoutValue{std::string{"ao-status-region"}}}},
-                   .children = {LayoutNode{.type = "status.defaultBar", .layout = {{"hexpand", LayoutValue{true}}}}}}}};
+                   .children = {LayoutNode{.type = "template",
+                                           .props = {{"templateId", LayoutValue{std::string{"status.defaultBar"}}}},
+                                           .layout = {{"hexpand", LayoutValue{true}}}}}}}};
 
     doc.templates = getBuiltInTemplates();
 
@@ -283,21 +278,56 @@ namespace ao::gtk::layout
       templates["playback.compactControls"] = std::move(node);
     }
 
+    // playback.transportGroup
+    {
+      auto node = LayoutNode{.type = "box"};
+      node.props["orientation"] = LayoutValue{std::string{"horizontal"}};
+      node.props["spacing"] = LayoutValue{static_cast<std::int64_t>(0)};
+      node.layout["cssClasses"] = LayoutValue{std::vector<std::string>{"linked"}};
+      node.layout["halign"] = LayoutValue{std::string{"start"}};
+
+      node.children.push_back(LayoutNode{.type = "playback.playPauseButton"});
+      node.children.push_back(LayoutNode{.type = "playback.stopButton"});
+      templates["playback.transportGroup"] = std::move(node);
+    }
+
     // playback.defaultBar
     {
       auto node = LayoutNode{.type = "box"};
       node.props["orientation"] = LayoutValue{std::string{"horizontal"}};
+      node.props["spacing"] = LayoutValue{static_cast<std::int64_t>(kSpacingMedium)};
 
-      int const barSpacing = 6;
-      node.props["spacing"] = LayoutValue{static_cast<std::int64_t>(barSpacing)};
-      node.children.push_back(LayoutNode{.type = "playback.outputButton"});
-      node.children.push_back(LayoutNode{.type = "playback.playPauseButton"});
-      node.children.push_back(LayoutNode{.type = "playback.stopButton"});
+      auto leftGroup = LayoutNode{.type = "box"};
+      leftGroup.props["orientation"] = LayoutValue{std::string{"horizontal"}};
+      leftGroup.props["spacing"] = LayoutValue{static_cast<std::int64_t>(kSpacingMedium)};
+      leftGroup.layout["halign"] = LayoutValue{std::string{"start"}};
+      leftGroup.layout["valign"] = LayoutValue{std::string{"center"}};
+      leftGroup.layout["cssClasses"] = LayoutValue{std::string{"ao-grouping-region"}};
+
+      auto output = LayoutNode{.type = "playback.outputButton"};
+      output.layout["halign"] = LayoutValue{std::string{"start"}};
+      output.layout["valign"] = LayoutValue{std::string{"center"}};
+      leftGroup.children.push_back(std::move(output));
+
+      auto transport = LayoutNode{.type = "template"};
+      transport.props["templateId"] = LayoutValue{std::string{"playback.transportGroup"}};
+      leftGroup.children.push_back(std::move(transport));
+      node.children.push_back(std::move(leftGroup));
+
       auto seek = LayoutNode{.type = "playback.seekSlider"};
       seek.layout["hexpand"] = LayoutValue{true};
       node.children.push_back(std::move(seek));
-      node.children.push_back(LayoutNode{.type = "playback.timeLabel"});
-      node.children.push_back(LayoutNode{.type = "playback.volumeControl"});
+
+      auto rightGroup = LayoutNode{.type = "box"};
+      rightGroup.props["orientation"] = LayoutValue{std::string{"horizontal"}};
+      rightGroup.props["spacing"] = LayoutValue{static_cast<std::int64_t>(kSpacingMedium)};
+      rightGroup.layout["halign"] = LayoutValue{std::string{"end"}};
+      rightGroup.layout["valign"] = LayoutValue{std::string{"center"}};
+      rightGroup.layout["cssClasses"] = LayoutValue{std::string{"ao-grouping-region"}};
+      rightGroup.children.push_back(LayoutNode{.type = "playback.timeLabel"});
+      rightGroup.children.push_back(LayoutNode{.type = "playback.volumeControl"});
+
+      node.children.push_back(std::move(rightGroup));
       templates["playback.defaultBar"] = std::move(node);
     }
 
@@ -322,7 +352,34 @@ namespace ao::gtk::layout
 
     // status.defaultBar
     {
-      templates["status.defaultBar"] = LayoutNode{.type = "status.defaultBar"};
+      auto node = LayoutNode{.type = "box"};
+      node.props["orientation"] = LayoutValue{std::string{"horizontal"}};
+      node.layout["cssClasses"] = LayoutValue{std::vector<std::string>{"ao-status-bar"}};
+      node.layout["hexpand"] = LayoutValue{true};
+
+      node.children.push_back(LayoutNode{.type = "status.playbackDetails"});
+
+      auto spacer1 = LayoutNode{.type = "spacer"};
+      spacer1.layout["hexpand"] = LayoutValue{true};
+      node.children.push_back(std::move(spacer1));
+
+      node.children.push_back(LayoutNode{.type = "status.nowPlaying"});
+
+      auto spacer2 = LayoutNode{.type = "spacer"};
+      spacer2.layout["hexpand"] = LayoutValue{true};
+      node.children.push_back(std::move(spacer2));
+
+      node.children.push_back(LayoutNode{.type = "status.importProgress"});
+      node.children.push_back(LayoutNode{.type = "status.notification"});
+
+      auto sep = LayoutNode{.type = "separator"};
+      sep.props["orientation"] = LayoutValue{std::string{"vertical"}};
+      sep.layout["cssClasses"] = LayoutValue{std::vector<std::string>{"ao-status-separator"}};
+      node.children.push_back(std::move(sep));
+
+      node.children.push_back(LayoutNode{.type = "status.trackCount"});
+
+      templates["status.defaultBar"] = std::move(node);
     }
 
     // tracks.defaultWorkspace

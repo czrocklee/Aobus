@@ -73,10 +73,6 @@ namespace ao::rt
     ITrackListProjection(ITrackListProjection&&) = delete;
     ITrackListProjection& operator=(ITrackListProjection&&) = delete;
 
-  protected:
-    ITrackListProjection() = default;
-
-  public:
     virtual ViewId viewId() const noexcept = 0;
     virtual std::uint64_t revision() const noexcept = 0;
 
@@ -90,6 +86,9 @@ namespace ao::rt
     virtual std::optional<std::size_t> indexOf(TrackId trackId) const noexcept = 0;
 
     virtual Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) = 0;
+
+  protected:
+    ITrackListProjection() = default;
   };
 
   struct TrackListProjectionChanged final
@@ -170,11 +169,10 @@ namespace ao::rt
     ITrackDetailProjection(ITrackDetailProjection&&) = delete;
     ITrackDetailProjection& operator=(ITrackDetailProjection&&) = delete;
 
-  protected:
-    ITrackDetailProjection() = default;
-
-  public:
     virtual TrackDetailSnapshot snapshot() const = 0;
     virtual Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) = 0;
+
+  protected:
+    ITrackDetailProjection() = default;
   };
 } // namespace ao::rt

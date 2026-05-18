@@ -25,6 +25,7 @@ add_library(AobusLintPlugin MODULE
   check/UnusedSuppressionStyleCheck.cpp
   check/UseIfInitStatementCheck.cpp
   check/LambdaParamsCheck.cpp
+  check/MemberOrderCheck.cpp
   AobusLintModule.cpp
 )
 

@@ -23,7 +23,7 @@ namespace ao::cli
   {
     void scanAndImport(library::MusicLibrary& ml, std::ostream& os)
     {
-      utility::Finder const finder{".", {".flac", ".m4a", ".mp3"}};
+      auto const finder = utility::Finder{".", {".flac", ".m4a", ".mp3"}};
       auto txn = ml.writeTransaction();
       auto writer = ml.tracks().writer(txn);
       auto& dict = ml.dictionary();

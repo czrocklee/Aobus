@@ -158,16 +158,6 @@ namespace ao::media::flac
       return *reinterpret_cast<StreamInfoLayout const*>(ptr);
     }
 
-  private:
-    static constexpr std::uint64_t kSampleRateShift = 44;
-    static constexpr std::uint64_t kSampleRateMask = 0xFFFFF;
-    static constexpr std::uint64_t kChannelsShift = 41;
-    static constexpr std::uint64_t kChannelsMask = 0x07;
-    static constexpr std::uint64_t kBitDepthShift = 36;
-    static constexpr std::uint64_t kBitDepthMask = 0x1F;
-    static constexpr std::uint64_t kTotalSamplesMask = 0xFFFFFFFFF;
-
-  public:
     std::uint32_t sampleRate() const
     {
       return static_cast<std::uint32_t>((layout().packedFields.value() >> kSampleRateShift) & kSampleRateMask);
@@ -184,6 +174,15 @@ namespace ao::media::flac
     }
 
     std::uint64_t totalSamples() const { return layout().packedFields.value() & kTotalSamplesMask; }
+
+  private:
+    static constexpr std::uint64_t kSampleRateShift = 44;
+    static constexpr std::uint64_t kSampleRateMask = 0xFFFFF;
+    static constexpr std::uint64_t kChannelsShift = 41;
+    static constexpr std::uint64_t kChannelsMask = 0x07;
+    static constexpr std::uint64_t kBitDepthShift = 36;
+    static constexpr std::uint64_t kBitDepthMask = 0x1F;
+    static constexpr std::uint64_t kTotalSamplesMask = 0xFFFFFFFFF;
   };
 
   class MetadataBlockViewIterator

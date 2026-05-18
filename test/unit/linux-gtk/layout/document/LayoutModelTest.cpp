@@ -71,6 +71,23 @@ namespace ao::gtk::layout::test
       CHECK(decoded.root.type == "box");
       REQUIRE(!decoded.root.children.empty());
       CHECK(decoded.root.children[0].type == "app.menuBar");
+
+      // Verify playback row is a template
+      REQUIRE(decoded.root.children.size() > 1);
+      auto const& playbackRow = decoded.root.children[1];
+      CHECK(playbackRow.id == "playback-row");
+      CHECK(playbackRow.type == "template");
+      CHECK(playbackRow.getProp<std::string>("templateId", "") == "playback.defaultBar");
+
+      // Verify status bar is a template inside a box
+      REQUIRE(decoded.root.children.size() > 3);
+      auto const& statusRegion = decoded.root.children[3];
+      CHECK(statusRegion.type == "box");
+      CHECK(statusRegion.getLayout<std::string>("cssClasses", "") == "ao-status-region");
+      REQUIRE(!statusRegion.children.empty());
+      auto const& statusTemplate = statusRegion.children[0];
+      CHECK(statusTemplate.type == "template");
+      CHECK(statusTemplate.getProp<std::string>("templateId", "") == "status.defaultBar");
     }
 
     SECTION("LayoutDocument round-trip preserves layout props and child order")

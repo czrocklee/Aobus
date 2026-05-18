@@ -91,8 +91,8 @@ namespace ao::rt::test
       CHECK(loaded.openViews.size() == 2);
 
       // Create new runtime with same persistence
-      AppRuntime session2(
-        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
+      auto session2 = AppRuntime{
+        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
       session2.persistence().restore();
 
@@ -120,8 +120,8 @@ namespace ao::rt::test
       CHECK(loaded.openViews[0].groupBy == TrackGroupKey::Artist);
 
       // Restore in new runtime
-      AppRuntime session2(
-        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
+      auto session2 = AppRuntime{
+        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
       session2.persistence().restore();
 
@@ -138,8 +138,8 @@ namespace ao::rt::test
       runtime.workspace().navigateTo(ListId{10});
       runtime.persistence().save();
 
-      AppRuntime session2(
-        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore});
+      auto session2 = AppRuntime{
+        AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
       session2.persistence().restore();
 

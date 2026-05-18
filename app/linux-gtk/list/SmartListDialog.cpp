@@ -44,6 +44,8 @@
 #include <string>
 #include <string_view>
 
+using namespace std::string_literals;
+
 namespace ao::gtk
 {
   namespace
@@ -275,7 +277,7 @@ namespace ao::gtk
           auto const& title = row->getTitle();
           auto const& artist = row->getArtist();
           auto const& album = row->getAlbum();
-          std::string formatted = "(untitled)";
+          auto formatted = std::string{"(untitled)"};
 
           if (!title.empty())
           {

@@ -27,10 +27,6 @@ namespace ao::audio
     IRenderTarget(IRenderTarget&&) = delete;
     IRenderTarget& operator=(IRenderTarget&&) = delete;
 
-  protected:
-    IRenderTarget() = default;
-
-  public:
     /// Called by the backend when it needs more PCM data.
     virtual std::size_t readPcm(std::span<std::byte> output) noexcept = 0;
 
@@ -57,5 +53,8 @@ namespace ao::audio
 
     /// Called by the backend when a terminal error occurs (e.g. device lost).
     virtual void onBackendError(std::string_view message) noexcept = 0;
+
+  protected:
+    IRenderTarget() = default;
   };
 } // namespace ao::audio

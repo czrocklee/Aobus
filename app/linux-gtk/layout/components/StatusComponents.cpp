@@ -14,11 +14,8 @@
 #include <runtime/ListSourceStore.h>
 #include <track/StatusNotificationLabel.h>
 
-#include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
-#include <gtkmm/object.h>
-#include <gtkmm/separator.h>
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 
@@ -116,56 +113,6 @@ namespace ao::gtk::layout
     private:
       Gtk::Label _label;
     };
-
-    /**
-     * @brief status.defaultBar (Composite)
-     */
-    class DefaultStatusBarComponent final : public ILayoutComponent
-    {
-    public:
-      DefaultStatusBarComponent(LayoutContext& ctx, LayoutNode const& /*node*/)
-        : _playbackDetails{ctx.runtime.playback()}
-        , _nowPlaying{ctx.runtime.playback()}
-        , _importProgress{ctx.runtime.mutation()}
-        , _notification{ctx.runtime.notifications(), ctx.runtime.views()}
-        , _trackCount{ctx.runtime.sources().allTracks()}
-      {
-        _container.add_css_class("ao-status-bar");
-        _container.set_valign(Gtk::Align::END);
-        _container.set_hexpand(true);
-
-        _container.append(_playbackDetails.widget());
-
-        auto* const spacer1 = Gtk::make_managed<Gtk::Box>();
-        spacer1->set_hexpand(true);
-        _container.append(*spacer1);
-
-        _container.append(_nowPlaying.widget());
-
-        auto* const spacer2 = Gtk::make_managed<Gtk::Box>();
-        spacer2->set_hexpand(true);
-        _container.append(*spacer2);
-
-        _container.append(_importProgress.widget());
-        _container.append(_notification.widget());
-
-        auto* const sep = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL);
-        sep->add_css_class("ao-status-separator");
-        _container.append(*sep);
-
-        _container.append(_trackCount.widget());
-      }
-
-      Gtk::Widget& widget() override { return _container; }
-
-    private:
-      Gtk::Box _container{Gtk::Orientation::HORIZONTAL};
-      PlaybackDetailsWidget _playbackDetails;
-      NowPlayingStatusLabel _nowPlaying;
-      ImportProgressIndicator _importProgress;
-      StatusNotificationLabel _notification;
-      LibraryTrackCountLabel _trackCount;
-    };
   }
 
   void registerStatusComponents(ComponentRegistry& registry)
@@ -198,9 +145,5 @@ namespace ao::gtk::layout
       {.type = "status.messageLabel", .displayName = "Status Message (Basic)", .category = "Status"},
       [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
       { return std::make_unique<StatusMessageLabelComponent>(ctx, node); });
-
-    registry.registerComponent({.type = "status.defaultBar", .displayName = "Default Status Bar", .category = "Status"},
-                               [](LayoutContext& ctx, LayoutNode const& node) -> std::unique_ptr<ILayoutComponent>
-                               { return std::make_unique<DefaultStatusBarComponent>(ctx, node); });
   }
 } // namespace ao::gtk::layout

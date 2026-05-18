@@ -1,52 +1,62 @@
 #include "check/ForbidTrailingReturnCheck.h"
-#include "clang/AST/ASTContext.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
+
+#include <clang/AST/ASTContext.h>
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclCXX.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/LLVM.h>
+#include <clang/Basic/SourceLocation.h>
+#include <clang/Basic/SourceManager.h>
 
 using namespace clang::ast_matchers;
 
-namespace clang::tidy::readability {
-
-void ForbidTrailingReturnCheck::registerMatchers(MatchFinder *Finder)
+namespace clang::tidy::readability
 {
-  Finder->addMatcher(
-    functionDecl(
-      hasTrailingReturn(),
-      unless(isImplicit())
-    ).bind("func"),
-    this);
-}
-
-void ForbidTrailingReturnCheck::check(const MatchFinder::MatchResult &Result)
-{
-  const auto &SM = *Result.SourceManager;
-  const auto *Func = Result.Nodes.getNodeAs<FunctionDecl>("func");
-
-  if (!Func)
-    return;
-
-  SourceLocation Loc = Func->getLocation();
-  if (Loc.isInvalid() || Loc.isMacroID() || SM.isInSystemHeader(Loc))
-    return;
-
-  // Skip lambda call operators — trailing return is allowed on lambdas
-  if (auto const *RD = dyn_cast<CXXRecordDecl>(Func->getParent()))
+  void ForbidTrailingReturnCheck::registerMatchers(MatchFinder* finder)
   {
-    if (RD->isLambda())
-      return;
+    finder->addMatcher(functionDecl(hasTrailingReturn(), unless(isImplicit())).bind("func"), this);
   }
 
-  // Skip deduction guides (CTAD)
-  if (isa<CXXDeductionGuideDecl>(Func))
-    return;
+  void ForbidTrailingReturnCheck::check(MatchFinder::MatchResult const& result)
+  {
+    auto const& sm = *result.SourceManager;
+    auto const* func = result.Nodes.getNodeAs<FunctionDecl>("func");
 
-  // Skip if already has `auto` return type with no trailing return
-  // (hasTrailingReturnType already filtered this, so if we get here
-  // it's a non-lambda function with trailing return)
+    if (func == nullptr)
+    {
+      return;
+    }
 
-  diag(Loc,
-       "non-lambda function '%0' uses trailing return type; "
-       "use traditional return type syntax")
-    << Func->getName();
-}
+    SourceLocation const loc = func->getLocation();
 
+    if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
+    {
+      return;
+    }
+
+    // Skip lambda call operators — trailing return is allowed on lambdas
+    if (auto const* rd = dyn_cast<CXXRecordDecl>(func->getParent()))
+    {
+      if (rd->isLambda())
+      {
+        return;
+      }
+    }
+
+    // Skip deduction guides (CTAD)
+    if (isa<CXXDeductionGuideDecl>(func))
+    {
+      return;
+    }
+
+    // Skip if already has `auto` return type with no trailing return
+    // (hasTrailingReturnType already filtered this, so if we get here
+    // it's a non-lambda function with trailing return)
+
+    diag(loc,
+         "non-lambda function '%0' uses trailing return type; "
+         "use traditional return type syntax")
+      << func->getName();
+  }
 } // namespace clang::tidy::readability

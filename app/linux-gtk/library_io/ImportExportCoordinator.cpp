@@ -57,7 +57,7 @@ namespace ao::gtk
                             {
                               if (auto const folder = dialog->select_folder_finish(result); folder)
                               {
-                                std::filesystem::path const path(folder->get_path());
+                                auto const path = std::filesystem::path{folder->get_path()};
 
                                 if (auto const libPath = path / "data.mdb"; std::filesystem::exists(libPath))
                                 {

@@ -9,7 +9,6 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/error.hpp>
 // NOLINTEND(misc-include-cleaner)
-#include <algorithm>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -73,12 +72,7 @@ namespace ao::rt::async
 
                                 if (state->isAlive)
                                 {
-                                  auto const it = std::find(state->signals.begin(), state->signals.end(), sig);
-
-                                  if (it != state->signals.end())
-                                  {
-                                    state->signals.erase(it);
-                                  }
+                                  std::erase(state->signals, sig);
                                 }
                               }
 

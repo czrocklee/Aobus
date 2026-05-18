@@ -63,7 +63,7 @@ add_executable(ao_test
 )
 
 target_include_directories(ao_test PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_include_directories(ao_test SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/test/external")
+target_include_directories(ao_test SYSTEM PRIVATE "${fakeit_SOURCE_DIR}/single_header/catch")
 target_link_libraries(ao_test PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
@@ -93,7 +93,7 @@ add_executable(ao_test_gtk
 )
 
 target_include_directories(ao_test_gtk PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_include_directories(ao_test_gtk SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/test/external")
+target_include_directories(ao_test_gtk SYSTEM PRIVATE "${fakeit_SOURCE_DIR}/single_header/catch")
 target_link_libraries(ao_test_gtk PRIVATE ao aobus-gtk-lib PkgGTKMM Catch2 spdlog::spdlog Catch2::Catch2WithMain)
 add_test(NAME ao_test_gtk COMMAND ao_test_gtk)
 
@@ -103,7 +103,7 @@ add_executable(ao_perf_baseline
 )
 
 target_include_directories(ao_perf_baseline PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_include_directories(ao_perf_baseline SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/test/external")
+target_include_directories(ao_perf_baseline SYSTEM PRIVATE "${fakeit_SOURCE_DIR}/single_header/catch")
 target_link_libraries(ao_perf_baseline PRIVATE ao ao_audio app_runtime Catch2 Catch2::Catch2WithMain spdlog::spdlog yaml-cpp PkgFLAC PkgALAC)
 
 if(PIPEWIRE_FOUND)
@@ -118,3 +118,8 @@ endif()
 
 target_compile_definitions(ao_perf_baseline PRIVATE TAG_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/integration/tag/test_data")
 target_compile_options(ao_perf_baseline PRIVATE -Wno-array-bounds)
+
+# Compilation database support for custom linter integration fixture
+add_library(ao_lint_fixture OBJECT EXCLUDE_FROM_ALL integration/lint/LintAllCheckFixture.cpp)
+target_include_directories(ao_lint_fixture PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
+target_include_directories(ao_lint_fixture SYSTEM PRIVATE integration/lint/mock_sys)

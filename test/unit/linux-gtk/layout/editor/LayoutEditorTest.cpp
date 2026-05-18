@@ -27,7 +27,9 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk::layout::editor::test
 {
@@ -51,9 +53,9 @@ namespace ao::gtk::layout::editor::test
 
     auto const& descriptors = registry.getDescriptors();
 
-    SECTION("all 20 component types have descriptors")
+    SECTION("all 21 component types have descriptors")
     {
-      REQUIRE(descriptors.size() >= 20);
+      REQUIRE(descriptors.size() >= 21);
     }
 
     SECTION("all descriptors have non-empty type")
@@ -189,35 +191,35 @@ namespace ao::gtk::layout::editor::test
     SECTION("all 20 types individually retrievable")
     {
       // NOLINTNEXTLINE(modernize-avoid-c-arrays)
-      auto const types = std::to_array({"box",
-                                        "split",
-                                        "scroll",
-                                        "spacer",
-                                        "tabs",
-                                        "playback.playPauseButton",
-                                        "playback.stopButton",
-                                        "playback.volumeControl",
-                                        "playback.currentTitleLabel",
-                                        "playback.currentArtistLabel",
-                                        "playback.seekSlider",
-                                        "playback.timeLabel",
-                                        "playback.playButton",
-                                        "playback.pauseButton",
-                                        "playback.outputButton",
-                                        "playback.qualityIndicator",
-                                        "status.messageLabel",
-                                        "library.listTree",
-                                        "tracks.table",
-                                        "library.openLibraryButton",
-                                        "inspector.coverArt",
-                                        "inspector.sidebar",
-                                        "status.defaultBar",
-                                        "app.menuBar",
-                                        "app.workspaceWithInspector"});
+      auto const types = std::to_array<std::string_view>({"box",
+                                                          "split",
+                                                          "scroll",
+                                                          "spacer",
+                                                          "separator",
+                                                          "tabs",
+                                                          "playback.playPauseButton",
+                                                          "playback.stopButton",
+                                                          "playback.volumeControl",
+                                                          "playback.currentTitleLabel",
+                                                          "playback.currentArtistLabel",
+                                                          "playback.seekSlider",
+                                                          "playback.timeLabel",
+                                                          "playback.playButton",
+                                                          "playback.pauseButton",
+                                                          "playback.outputButton",
+                                                          "playback.qualityIndicator",
+                                                          "status.messageLabel",
+                                                          "library.listTree",
+                                                          "tracks.table",
+                                                          "library.openLibraryButton",
+                                                          "inspector.coverArt",
+                                                          "inspector.sidebar",
+                                                          "app.menuBar",
+                                                          "app.workspaceWithInspector"});
 
       for (auto const& type : types)
       {
-        auto const optDesc = registry.getDescriptor(type);
+        auto const optDesc = registry.getDescriptor(std::string{type});
         CHECK(optDesc.has_value());
       }
     }
@@ -287,11 +289,12 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   TEST_CASE("Template system", "[layout][editor]")
   {
-    SECTION("getBuiltInTemplates returns all 7 built-ins")
+    SECTION("getBuiltInTemplates returns all 8 built-ins")
     {
       auto const templates = getBuiltInTemplates();
 
       CHECK(templates.contains("playback.compactControls"));
+      CHECK(templates.contains("playback.transportGroup"));
       CHECK(templates.contains("playback.defaultBar"));
       CHECK(templates.contains("library.defaultSidebar"));
       CHECK(templates.contains("inspector.defaultPanel"));
@@ -299,8 +302,21 @@ namespace ao::gtk::layout::editor::test
       CHECK(templates.contains("tracks.defaultWorkspace"));
       CHECK(templates.contains("app.defaultLayout"));
 
-      int const expectedCount = 7;
+      int const expectedCount = 8;
       CHECK(templates.size() >= expectedCount);
+    }
+
+    SECTION("playback.transportGroup has 2 children and linked class")
+    {
+      auto const templates = getBuiltInTemplates();
+      auto const& group = templates.at("playback.transportGroup");
+
+      CHECK(group.type == "box");
+      CHECK(group.getProp<std::int64_t>("spacing", -1) == 0);
+
+      auto const classes = group.getLayout<std::vector<std::string>>("cssClasses", {});
+      CHECK(std::ranges::contains(classes, "linked"));
+      CHECK(group.children.size() == 2);
     }
 
     SECTION("playback.defaultBar contains all expected children")
@@ -310,8 +326,35 @@ namespace ao::gtk::layout::editor::test
 
       CHECK(bar.type == "box");
 
-      // 6 children: outputButton, playPauseButton, stopButton, seekSlider, timeLabel, volumeControl
-      int const expectedChildren = 6;
+      // 3 children: left fixed controls, flexible seek slider, right fixed status controls.
+      int const expectedChildren = 3;
+      CHECK(bar.children.size() == expectedChildren);
+      CHECK(bar.children[0].type == "box");
+      CHECK(bar.children[0].children.size() == 2);
+      CHECK(bar.children[0].children[0].type == "playback.outputButton");
+      CHECK(bar.children[0].children[1].type == "template");
+      CHECK(bar.children[0].children[1].getProp<std::string>("templateId", "") == "playback.transportGroup");
+      CHECK(bar.children[1].type == "playback.seekSlider");
+      CHECK(bar.children[1].getLayout<bool>("hexpand", false));
+      CHECK(bar.children[2].type == "box");
+      CHECK(bar.children[2].children.size() == 2);
+      CHECK(bar.children[2].children[0].type == "playback.timeLabel");
+      CHECK(bar.children[2].children[1].type == "playback.volumeControl");
+
+      // Grouping regions carry ao-grouping-region CSS class.
+      CHECK(bar.children[0].getLayout<std::string>("cssClasses", "") == "ao-grouping-region");
+      CHECK(bar.children[2].getLayout<std::string>("cssClasses", "") == "ao-grouping-region");
+    }
+
+    SECTION("status.defaultBar template contains 8 children")
+    {
+      auto const templates = getBuiltInTemplates();
+      auto const& bar = templates.at("status.defaultBar");
+
+      CHECK(bar.type == "box");
+
+      // 8 children: playbackDetails, spacer, nowPlaying, spacer, importProgress, notification, separator, trackCount
+      int const expectedChildren = 8;
       CHECK(bar.children.size() == expectedChildren);
     }
 
@@ -324,7 +367,7 @@ namespace ao::gtk::layout::editor::test
       auto const executor = std::make_shared<MockExecutor>();
       auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-      rt::AppRuntime runtime{
+      auto runtime = rt::AppRuntime{
         rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
       auto const app = Gtk::Application::create("io.github.aobus.template_test");

@@ -111,27 +111,27 @@ namespace ao::audio::backend::detail
 
     void processChoiceIntValues(::spa_pod_choice const* choice, std::vector<std::uint32_t>& output)
     {
-      auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
+      auto const nVals = SPA_POD_CHOICE_N_VALUES(choice);
 
-      if (n_vals == 0 || SPA_POD_CHOICE_VALUE_TYPE(choice) != SPA_TYPE_Int)
+      if (nVals == 0 || SPA_POD_CHOICE_VALUE_TYPE(choice) != SPA_TYPE_Int)
       {
         return;
       }
 
       auto const* vals = static_cast<std::int32_t const*>(SPA_POD_CHOICE_VALUES(choice));
 
-      if (auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
-          choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
+      if (auto const choiceType = SPA_POD_CHOICE_TYPE(choice);
+          choiceType == SPA_CHOICE_Enum || choiceType == SPA_CHOICE_None)
       {
-        for (std::uint32_t i = 0; i < n_vals; ++i)
+        for (std::uint32_t i = 0; i < nVals; ++i)
         {
           addUnique(output, static_cast<std::uint32_t>(vals[i]));
         }
       }
-      else if (choice_type == SPA_CHOICE_Range)
+      else if (choiceType == SPA_CHOICE_Range)
       {
-        auto const min = (n_vals > 1) ? vals[1] : vals[0];
-        auto const max = (n_vals > 2) ? vals[2] : min;
+        auto const min = (nVals > 1) ? vals[1] : vals[0];
+        auto const max = (nVals > 2) ? vals[2] : min;
 
         static constexpr auto kCommonRates =
           std::array<std::uint32_t, 8>{44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
@@ -188,19 +188,19 @@ namespace ao::audio::backend::detail
       {
         auto const podSpan = utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
         auto const* choice = utility::layout::view<::spa_pod_choice>(podSpan);
-        auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
+        auto const nVals = SPA_POD_CHOICE_N_VALUES(choice);
 
-        if (n_vals == 0 || SPA_POD_CHOICE_VALUE_TYPE(choice) != SPA_TYPE_Id)
+        if (nVals == 0 || SPA_POD_CHOICE_VALUE_TYPE(choice) != SPA_TYPE_Id)
         {
           return;
         }
 
         auto const* vals = static_cast<std::uint32_t const*>(SPA_POD_CHOICE_VALUES(choice));
 
-        if (auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
-            choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
+        if (auto const choiceType = SPA_POD_CHOICE_TYPE(choice);
+            choiceType == SPA_CHOICE_Enum || choiceType == SPA_CHOICE_None)
         {
-          for (std::uint32_t i = 0; i < n_vals; ++i)
+          for (std::uint32_t i = 0; i < nVals; ++i)
           {
             addUnique(output, vals[i]);
           }

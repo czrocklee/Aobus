@@ -1,18 +1,23 @@
 #pragma once
 
 #include "clang-tidy/ClangTidyCheck.h"
+#include <clang-tidy/ClangTidyDiagnosticConsumer.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/Basic/LLVM.h>
 
-namespace clang::tidy::readability {
+namespace clang::tidy::readability
+{
+  /// Enforces Rule 3.4.6: non-lambda functions must use traditional return type
+  /// syntax, not trailing return type.
+  class ForbidTrailingReturnCheck : public ClangTidyCheck
+  {
+  public:
+    ForbidTrailingReturnCheck(StringRef name, ClangTidyContext* context)
+      : ClangTidyCheck(name, context)
+    {
+    }
 
-/// Enforces Rule 3.4.6: non-lambda functions must use traditional return type
-/// syntax, not trailing return type.
-class ForbidTrailingReturnCheck : public ClangTidyCheck {
-public:
-  ForbidTrailingReturnCheck(StringRef Name, ClangTidyContext *Context)
-      : ClangTidyCheck(Name, Context) {}
-
-  void registerMatchers(ast_matchers::MatchFinder *Finder) override;
-  void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
-};
-
+    void registerMatchers(ast_matchers::MatchFinder* finder) override;
+    void check(ast_matchers::MatchFinder::MatchResult const& result) override;
+  };
 } // namespace clang::tidy::readability

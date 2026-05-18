@@ -104,6 +104,7 @@ namespace ao::rt
   void LibraryImporter::Impl::importFromYaml(std::filesystem::path const& path)
   {
     auto root = YAML::Node{};
+
     try
     {
       root = YAML::LoadFile(path.string());
@@ -385,6 +386,7 @@ namespace ao::rt
         for (auto const& trackRefNode : listNode["tracks"])
         {
           std::uint32_t yamlId = 0;
+
           try
           {
             yamlId = trackRefNode.as<std::uint32_t>();

@@ -351,7 +351,7 @@ namespace ao::library::test
 
     auto const view = TrackView{data, std::span<std::byte const>{}};
 
-    std::vector<DictionaryId> ids(view.tags().begin(), view.tags().end());
+    auto ids = std::vector<DictionaryId>(view.tags().begin(), view.tags().end());
     CHECK(ids.size() == 2);
     CHECK(ids[0] == DictionaryId{10});
     CHECK(ids[1] == DictionaryId{20});

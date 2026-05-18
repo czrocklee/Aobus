@@ -34,19 +34,16 @@ namespace ao::gtk
     void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
     Gtk::SizeRequestMode get_request_mode_vfunc() const override;
     void measure_vfunc(Gtk::Orientation orientation,
-                       int for_size,
+                       int forSize,
                        int& minimum,
                        int& natural,
-                       int& minimum_baseline,
-                       int& natural_baseline) const override;
+                       int& minimumBaseline,
+                       int& naturalBaseline) const override;
 
   private:
     struct Impl;
 
     static Gdk::RGBA shiftColor(Gdk::RGBA const& color, float shift) noexcept;
-
-    static constexpr int kFullLogoMinSize = 54;
-    static constexpr int kSoulMinSize = 24;
 
     std::unique_ptr<Impl> _impl;
   };

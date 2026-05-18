@@ -179,7 +179,7 @@ namespace ao::audio::backend
       return;
     }
 
-    auto const max_size = buffer->buffer->datas[0].maxsize;
+    auto const maxSize = buffer->buffer->datas[0].maxsize;
     auto stride = buffer->buffer->datas[0].chunk->stride;
 
     if (stride == 0 && format.channels > 0 && format.bitDepth > 0)
@@ -193,7 +193,7 @@ namespace ao::audio::backend
       return;
     }
 
-    auto const bytesRead = renderTarget->readPcm({static_cast<std::byte*>(data), max_size});
+    auto const bytesRead = renderTarget->readPcm({static_cast<std::byte*>(data), maxSize});
 
     if (bytesRead > 0)
     {

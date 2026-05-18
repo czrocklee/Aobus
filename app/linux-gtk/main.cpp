@@ -92,7 +92,7 @@ namespace
 // NOLINTBEGIN(bugprone-exception-escape,readability-function-cognitive-complexity)
 int main(int argc, char* argv[])
 {
-  CLI::App cliApp{"Aobus Music Library"};
+  auto cliApp = CLI::App{"Aobus Music Library"};
   cliApp.allow_extras(); // Allow GTK specific arguments
 
   auto logLevel = log::LogLevel::Info;
@@ -155,15 +155,15 @@ int main(int argc, char* argv[])
 
   // Handle Ctrl-C and SIGTERM gracefully via GLib main loop
   // NOLINTBEGIN(misc-include-cleaner)
-  auto const signal_handler = [](void* data) -> ::gboolean
+  auto const signalHandler = [](void* data) -> ::gboolean
   {
-    auto* app_ptr = static_cast<Glib::RefPtr<Gtk::Application>*>(data);
+    auto* appPtr = static_cast<Glib::RefPtr<Gtk::Application>*>(data);
     APP_LOG_INFO("Received termination signal, shutting down...");
-    (*app_ptr)->quit();
+    (*appPtr)->quit();
     return FALSE; // Remove source
   };
-  ::g_unix_signal_add(SIGINT, signal_handler, &app);
-  ::g_unix_signal_add(SIGTERM, signal_handler, &app);
+  ::g_unix_signal_add(SIGINT, signalHandler, &app);
+  ::g_unix_signal_add(SIGTERM, signalHandler, &app);
   // NOLINTEND(misc-include-cleaner)
 
   // Add about action to application

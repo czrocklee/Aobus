@@ -922,7 +922,8 @@ namespace ao::audio::backend
       name = it->second.nodeName.empty() ? it->second.objectPath : it->second.nodeName;
     }
 
-    flow::Node node{.id = std::format("{}", id), .type = type, .name = name, .objectPath = it->second.objectPath};
+    auto node =
+      flow::Node{.id = std::format("{}", id), .type = type, .name = name, .objectPath = it->second.objectPath};
 
     if (auto const optFormatIt = nodeFormatMap.find(id); optFormatIt != nodeFormatMap.end())
     {

@@ -356,8 +356,8 @@ namespace ao::rt
           entry.groupKey =
             intern(stringPool, std::string{entry.keys.albumArtistKey} + "\x1F" + std::string{entry.keys.albumKey});
           {
-            std::string album{dict.getOrDefault(view.metadata().albumId())};
-            std::string const albumArtist{dict.getOrDefault(view.metadata().albumArtistId())};
+            auto album = std::string{dict.getOrDefault(view.metadata().albumId())};
+            auto const albumArtist = std::string{dict.getOrDefault(view.metadata().albumArtistId())};
 
             if (entry.keys.albumKey.empty())
             {

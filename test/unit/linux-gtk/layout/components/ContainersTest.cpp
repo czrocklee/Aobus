@@ -18,6 +18,7 @@
 #include <gtkmm/label.h>
 #include <gtkmm/paned.h>
 #include <gtkmm/scrolledwindow.h>
+#include <gtkmm/separator.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/window.h>
 
@@ -51,7 +52,7 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    rt::AppRuntime runtime{
+    auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
@@ -113,6 +114,67 @@ namespace ao::gtk::layout::test
       CHECK(label->get_label().find("[Layout Error]") != std::string::npos);
       CHECK(label->get_label().find("nonexistent.component") != std::string::npos);
     }
+
+    SECTION("Box component forwards cssClasses to widget")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+      doc.root.layout["cssClasses"] = LayoutValue{std::string{"ao-test-class"}};
+
+      auto const rootComponent = layoutRuntime.build(ctx, doc);
+
+      REQUIRE(rootComponent != nullptr);
+      auto* const box = dynamic_cast<Gtk::Box*>(&rootComponent->widget());
+      REQUIRE(box != nullptr);
+      CHECK(box->has_css_class("ao-test-class"));
+    }
+
+    SECTION("Playback bar groups carry ao-grouping-region (direct template)")
+    {
+      auto const templates = getBuiltInTemplates();
+      auto const& barTemplate = templates.at("playback.defaultBar");
+      auto const barComp = ctx.registry.create(ctx, barTemplate);
+
+      REQUIRE(barComp != nullptr);
+      auto* const barBox = dynamic_cast<Gtk::Box*>(&barComp->widget());
+      REQUIRE(barBox != nullptr);
+
+      auto* const leftChild = barBox->get_first_child();
+      REQUIRE(leftChild != nullptr);
+      CHECK(leftChild->has_css_class("ao-grouping-region"));
+
+      auto* const rightChild = leftChild->get_next_sibling()->get_next_sibling();
+      REQUIRE(rightChild != nullptr);
+      CHECK(rightChild->has_css_class("ao-grouping-region"));
+    }
+
+    SECTION("Playback bar groups carry ao-grouping-region (via template expansion)")
+    {
+      // This exercises the same path as the real app: default layout with
+      // template reference node, expanded through LayoutRuntime::build().
+      auto doc = createDefaultLayout();
+      doc.templates = getBuiltInTemplates();
+      auto const fullLayout = layoutRuntime.build(ctx, doc);
+
+      REQUIRE(fullLayout != nullptr);
+      // Find the playback row child within the root box.
+      auto* const rootBox = dynamic_cast<Gtk::Box*>(&fullLayout->widget());
+      REQUIRE(rootBox != nullptr);
+
+      // Child order: 0=menuBar, 1=playback-row (expanded template), 2=split, 3=status region
+      auto* const playbackRow = rootBox->get_first_child()->get_next_sibling();
+      REQUIRE(playbackRow != nullptr);
+      auto* const barBox = dynamic_cast<Gtk::Box*>(playbackRow);
+      REQUIRE(barBox != nullptr);
+
+      auto* const leftChild = barBox->get_first_child();
+      REQUIRE(leftChild != nullptr);
+      CHECK(leftChild->has_css_class("ao-grouping-region"));
+
+      auto* const rightChild = leftChild->get_next_sibling()->get_next_sibling();
+      REQUIRE(rightChild != nullptr);
+      CHECK(rightChild->has_css_class("ao-grouping-region"));
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -126,7 +188,7 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    rt::AppRuntime runtime{
+    auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
@@ -211,7 +273,7 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    rt::AppRuntime runtime{
+    auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
@@ -297,6 +359,19 @@ namespace ao::gtk::layout::test
       CHECK(vpolicy == Gtk::PolicyType::AUTOMATIC);
     }
 
+    SECTION("separator builds Gtk::Separator")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "separator";
+      doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
+
+      auto const comp = layoutRuntime.build(ctx, doc);
+      auto* const sep = dynamic_cast<Gtk::Separator*>(&comp->widget());
+
+      REQUIRE(sep != nullptr);
+      CHECK(sep->get_orientation() == Gtk::Orientation::VERTICAL);
+    }
+
     SECTION("tabs with children builds Gtk::Stack")
     {
       auto doc = LayoutDocument{};
@@ -362,7 +437,7 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    rt::AppRuntime runtime{
+    auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
@@ -499,7 +574,7 @@ namespace ao::gtk::layout::test
     auto const executor = std::make_shared<MockExecutor>();
     auto const configStore = std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir.path()} / "config.yaml");
 
-    rt::AppRuntime runtime{
+    auto runtime = rt::AppRuntime{
       rt::AppRuntimeDependencies{.executor = executor, .libraryRoot = tempDir.path(), .configStore = configStore}};
 
     auto registry = ComponentRegistry{};
@@ -551,7 +626,7 @@ namespace ao::gtk::layout::test
       auto const configStore2 =
         std::make_shared<rt::ConfigStore>(std::filesystem::path{tempDir2.path()} / "config.yaml");
 
-      rt::AppRuntime session2{
+      auto session2 = rt::AppRuntime{
         rt::AppRuntimeDependencies{.executor = executor2, .libraryRoot = tempDir2.path(), .configStore = configStore2}};
       auto ctx2 = LayoutContext{.registry = registry2, .runtime = session2, .parentWindow = window2};
 

@@ -2,8 +2,12 @@
 set -uo pipefail
 # Note: not using -e because background job exit codes propagate through wait
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 if [[ -z "${IN_NIX_SHELL:-}" ]]; then
-    exec "$(printf '%q ' "$0" "$@")"
+    SCRIPT_PATH="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
+    exec nix-shell "$PROJECT_ROOT/shell.nix" --run "cd $(printf '%q' "$PROJECT_ROOT") && $(printf '%q ' "$SCRIPT_PATH" "$@")"
 fi
 
 BUILD_DIR="/tmp/build/debug-clang-tidy"
@@ -94,7 +98,6 @@ if [[ -n "$OUTPUT_FILE" ]]; then
     : > "$OUTPUT_FILE"
 fi
 
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 COMPILE_DB="$BUILD_DIR/compile_commands.json"
 PLUGIN="$BUILD_DIR/lint/libAobusLintPlugin.so"
 
@@ -185,6 +188,8 @@ CONFIG_BASE="
   {key: 'readability-identifier-naming.MethodCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.MethodIgnoredRegexp', value: '^property_.*|^signal_.*|^vfunc_.*|^on_.*'},
   {key: 'readability-identifier-naming.PublicMemberCase', value: 'camelBack'},
+  {key: 'readability-identifier-naming.ParameterCase', value: 'camelBack'},
+  {key: 'readability-identifier-naming.LocalVariableCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.TypeAliasCase', value: 'CamelCase'},
   {key: 'readability-identifier-naming.TypeAliasIgnoredRegexp', value: '^(difference_type|value_type|pointer|reference|iterator_category)\$'},
   {key: 'readability-magic-numbers.IgnorePowersOf2IntegerValues', value: true},
@@ -224,8 +229,10 @@ classify_file() {
         return
     fi
     f=$(realpath -e "$f" 2>/dev/null || realpath "$f" 2>/dev/null || echo "$f")
-    if [[ "$f" == */lint/* ]]; then
+    if [[ "$f" == */test/integration/lint/* || "$f" == */test/main.cpp ]]; then
         echo "IGNORE $f"
+    elif [[ "$f" == */lint/* ]]; then
+        echo "STRICT $f"
     elif [[ "$f" == */test/* ]]; then
         echo "RELAXED $f"
     else
@@ -236,7 +243,7 @@ classify_file() {
 run_one() {
     local mode="$1" f="$2" tmp="$3"
     local checks="$STRICT_CHECKS" config="$STRICT_CONFIG"
-    local header_filter="${PROJECT_ROOT}/(lib|app|include)/.*"
+    local header_filter="${PROJECT_ROOT}/(lib|app|include|lint)/.*"
 
     if [[ "$mode" == "RELAXED" ]]; then
         checks="$RELAXED_CHECKS"
@@ -270,13 +277,13 @@ if [[ ${#FILES[@]} -eq 0 ]]; then
         echo "Checking all .cpp/.h/.hpp files in lib/ app/ include/ test/" >&2
         mapfile -t FILES < <(
             find lib app include test -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
-                ! -name 'fakeit.hpp' | sort
+                ! -name 'fakeit.hpp' ! -name 'main.cpp' ! -path '*/test/integration/lint/*' | sort
         )
     elif [[ ${#FOLDER_DIRS[@]} -gt 0 ]]; then
         echo "Checking folders: ${FOLDER_DIRS[*]}" >&2
         mapfile -t FILES < <(
             find "${FOLDER_DIRS[@]}" -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
-                ! -name 'fakeit.hpp' | sort
+                ! -name 'fakeit.hpp' ! -name 'main.cpp' ! -path '*/test/integration/lint/*' | sort
         )
     else
         # Default to the local main branch; when already on main, use the previous commit.
@@ -306,7 +313,13 @@ fi
 # Classify all files
 STRT_FILES=()
 RELX_FILES=()
+declare -A SEEN_CLASSIFIED_FILES=()
 while IFS=' ' read -r mode path; do
+    if [[ -n "${SEEN_CLASSIFIED_FILES[$path]+x}" ]]; then
+        continue
+    fi
+    SEEN_CLASSIFIED_FILES["$path"]=1
+
     case "$mode" in
         STRICT)  STRT_FILES+=("$path") ;;
         RELAXED) RELX_FILES+=("$path") ;;
@@ -315,11 +328,24 @@ done < <(for f in "${FILES[@]}"; do classify_file "$f"; done)
 
 DEDUPLICATOR_PY=$(cat <<'EOF'
 import sys, re
+from pathlib import Path
+
 seen = set()
 cid = None
 block = []
 diag_re = re.compile(r"^([^:]+):([0-9]+):([0-9]+):\s+(warning|error|note):\s+(.*)")
-noise_re = re.compile(r"^([0-9]+ warnings? generated\.|Suppressed [0-9]+ warnings?|Use -header-filter=.*)$")
+noise_re = re.compile(r"^([0-9]+ warnings? generated\.|Suppressed [0-9]+ warnings?(?: \([^)]+\))?\.?|Use -header-filter=.*)$")
+
+project_root = Path(sys.argv[1]).resolve()
+
+def normalize_diag_path(path):
+    p = Path(path)
+    if not p.is_absolute():
+        p = project_root / p
+    try:
+        return str(p.resolve())
+    except OSError:
+        return str(p)
 
 def flush(out):
     global cid, block, seen
@@ -329,8 +355,8 @@ def flush(out):
     block = []
     cid = None
 
-outfile = sys.argv[1]
-logs = sys.argv[2:]
+outfile = sys.argv[2]
+logs = sys.argv[3:]
 
 out = open(outfile, "a", encoding="utf-8") if outfile else sys.stdout
 
@@ -341,7 +367,8 @@ for arg in logs:
             if m:
                 if m.group(4) in ("warning", "error"):
                     flush(out)
-                    cid = f"{m.group(1)}:{m.group(2)}:{m.group(3)}:{m.group(5)}"
+                    normalized_path = normalize_diag_path(m.group(1))
+                    cid = f"{normalized_path}:{m.group(2)}:{m.group(3)}:{m.group(4)}:{m.group(5)}"
                     block.append(line)
                 else:
                     if cid is not None:
@@ -374,10 +401,15 @@ run_batch() {
     local tmpdir
     tmpdir=$(mktemp -d /tmp/tidy-XXXXXX)
     local running=0 total=${#files[@]} done=0
+    local logs=()
+    local index=0
     for f in "${files[@]}"; do
         local name="$f"
         name="${name#$PROJECT_ROOT/}"
-        local tmp="$tmpdir/${name//\//_}.log"
+        local tmp
+        tmp=$(printf '%s/%06d_%s.log' "$tmpdir" "$index" "${name//\//_}")
+        logs+=("$tmp")
+        ((index++))
         run_one "$mode" "$f" "$tmp" &
         ((running++))
 
@@ -398,14 +430,14 @@ run_batch() {
     printf "\r  [%d/%d]\n" $done $total >&2
 
     local logs_with_warnings=()
-    for log in "$tmpdir"/*.log; do
-        if grep -q -E "warning:|error:" "$log" 2>/dev/null; then
+    for log in "${logs[@]}"; do
+        if grep -q -E "^[^:]+:[0-9]+:[0-9]+:[[:space:]]+(warning|error):" "$log" 2>/dev/null; then
             logs_with_warnings+=("$log")
         fi
     done
 
     if [[ ${#logs_with_warnings[@]} -gt 0 ]]; then
-        python3 -c "$DEDUPLICATOR_PY" "$OUTPUT_FILE" "${logs_with_warnings[@]}"
+        python3 -c "$DEDUPLICATOR_PY" "$PROJECT_ROOT" "$OUTPUT_FILE" "${logs_with_warnings[@]}"
         if [[ -n "$OUTPUT_FILE" ]]; then
             echo "  Output appended to $OUTPUT_FILE"
         fi

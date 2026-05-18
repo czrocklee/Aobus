@@ -692,7 +692,7 @@ namespace ao::rt::test
     CHECK(snap.effectiveSortBy[0].field == TrackSortField::Genre);
     CHECK(snap.effectiveSortBy[1].field == TrackSortField::Title);
 
-    std::vector<TrackPresentationField> expectedRedundant = {TrackPresentationField::Genre};
+    auto expectedRedundant = std::vector<TrackPresentationField>{TrackPresentationField::Genre};
     CHECK(snap.redundantFields == expectedRedundant);
   }
 

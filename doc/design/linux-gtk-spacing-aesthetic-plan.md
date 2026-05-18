@@ -138,7 +138,7 @@ Recommendation: normalize layout values to the proposed scale. `10` should gener
 | Area | Current State | Recommendation |
 | --- | --- | --- |
 | `app-root` | Vertical box with menu, playback row, main paned, status bar. | Root should own vertical region order only. It should not depend on child margins to create global rhythm. |
-| `playback-row` | Layout document uses horizontal `spacing = 6`. | Add a semantic class such as `.ao-playback-strip` through layout `cssClasses`; keep child margins at zero. Use edge padding on the strip if the row needs distance from the window edge. |
+| `playback-row` | Layout document applies `.ao-playback-strip` and `playback.defaultBar` groups fixed left controls, an expandable seek slider, and fixed right status controls. | Keep edge padding on `.ao-playback-strip`, keep child margins at zero, and leave only the seek slider expandable. |
 | `main-paned` | Split owns workspace/sidebar proportions. | No cosmetic margin on split children. Use pane content classes for internal padding. |
 | `status.defaultBar` | Child sets margin in both C++ and CSS. | Parent/status region owns outer inset; status bar owns height and internal padding. |
 

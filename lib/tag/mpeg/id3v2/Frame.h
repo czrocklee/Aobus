@@ -60,26 +60,26 @@ namespace ao::tag::mpeg::id3v2
         return {};
       }
 
-      auto const* u16_begin =
+      auto const* u16Begin =
         reinterpret_cast<std::uint8_t const*>(begin); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-      auto const* u16_end =
+      auto const* u16End =
         reinterpret_cast<std::uint8_t const*>(end); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
 
-      bool big_endian = true;
+      bool bigEndian = true;
       static constexpr std::uint8_t kBomByte1Le = 0xFF;
       static constexpr std::uint8_t kBomByte2Le = 0xFE;
       static constexpr std::uint8_t kBomByte1Be = 0xFE;
       static constexpr std::uint8_t kBomByte2Be = 0xFF;
 
-      if (u16_begin[0] == kBomByte1Le && u16_begin[1] == kBomByte2Le)
+      if (u16Begin[0] == kBomByte1Le && u16Begin[1] == kBomByte2Le)
       {
-        big_endian = false;
-        u16_begin += 2;
+        bigEndian = false;
+        u16Begin += 2;
       }
-      else if (u16_begin[0] == kBomByte1Be && u16_begin[1] == kBomByte2Be)
+      else if (u16Begin[0] == kBomByte1Be && u16Begin[1] == kBomByte2Be)
       {
-        big_endian = true;
-        u16_begin += 2;
+        bigEndian = true;
+        u16Begin += 2;
       }
 
       static constexpr std::uint16_t kUcs2AsciiLimit = 0x80;
@@ -94,10 +94,10 @@ namespace ao::tag::mpeg::id3v2
       auto result = std::string{};
       result.reserve(size); // Heuristic
 
-      for (auto const* it = u16_begin; it + 1 < u16_end; it += 2)
+      for (auto const* it = u16Begin; it + 1 < u16End; it += 2)
       {
-        if (std::uint16_t const cp = big_endian ? (static_cast<std::uint16_t>(it[0]) << 8) | it[1]
-                                                : (static_cast<std::uint16_t>(it[1]) << 8) | it[0];
+        if (std::uint16_t const cp = bigEndian ? (static_cast<std::uint16_t>(it[0]) << 8) | it[1]
+                                               : (static_cast<std::uint16_t>(it[1]) << 8) | it[0];
             cp < kUcs2AsciiLimit)
         {
           result.push_back(static_cast<char>(cp));
@@ -173,9 +173,9 @@ namespace ao::tag::mpeg::id3v2
   template<typename FrameViewLayout>
   class TextFrameView : public FrameView<typename FrameViewLayout::CommonLayout>
   {
+  public:
     using Base = FrameView<typename FrameViewLayout::CommonLayout>;
 
-  public:
     using Base::Base;
 
     std::string text() const

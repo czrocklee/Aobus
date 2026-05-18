@@ -20,6 +20,7 @@
 #include <gtkmm/label.h>
 #include <gtkmm/paned.h>
 #include <gtkmm/scrolledwindow.h>
+#include <gtkmm/separator.h>
 #include <gtkmm/snapshot.h>
 #include <gtkmm/stack.h>
 #include <gtkmm/stackswitcher.h>
@@ -130,6 +131,10 @@ namespace ao::gtk::layout
           widget.add_css_class(className);
         }
       }
+      else if (auto const className = it->second.asString(); !className.empty())
+      {
+        widget.add_css_class(className);
+      }
     }
   }
 
@@ -153,6 +158,7 @@ namespace ao::gtk::layout
         _box.set_orientation(orientation);
         _box.set_spacing(static_cast<int>(node.getProp<std::int64_t>("spacing", 0)));
         _box.set_homogeneous(node.getProp<bool>("homogeneous", false));
+        applyCommonProps(_box, node);
 
         for (auto const& childNode : node.children)
         {
@@ -305,6 +311,30 @@ namespace ao::gtk::layout
     };
 
     /**
+     * @brief A visual separator component (Gtk::Separator).
+     */
+    class SeparatorComponent final : public ILayoutComponent
+    {
+    public:
+      SeparatorComponent(LayoutContext& /*ctx*/, LayoutNode const& node)
+      {
+        auto orientation = Gtk::Orientation::HORIZONTAL;
+
+        if (node.getProp<std::string>("orientation", "") == "vertical")
+        {
+          orientation = Gtk::Orientation::VERTICAL;
+        }
+
+        _separator.set_orientation(orientation);
+      }
+
+      Gtk::Widget& widget() override { return _separator; }
+
+    private:
+      Gtk::Separator _separator;
+    };
+
+    /**
      * @brief A stack of tabs (Gtk::Stack).
      */
     class TabsComponent final : public ILayoutComponent
@@ -377,6 +407,11 @@ namespace ao::gtk::layout
     std::unique_ptr<ILayoutComponent> createSpacer(LayoutContext& ctx, LayoutNode const& node)
     {
       return std::make_unique<SpacerComponent>(ctx, node);
+    }
+
+    std::unique_ptr<ILayoutComponent> createSeparator(LayoutContext& ctx, LayoutNode const& node)
+    {
+      return std::make_unique<SeparatorComponent>(ctx, node);
     }
 
     std::unique_ptr<ILayoutComponent> createTabs(LayoutContext& ctx, LayoutNode const& node)
@@ -474,13 +509,13 @@ namespace ao::gtk::layout
                          int /*for_size*/,
                          int& minimum,
                          int& natural,
-                         int& minimum_baseline,
-                         int& natural_baseline) const override
+                         int& minimumBaseline,
+                         int& naturalBaseline) const override
       {
         minimum = 0;
         natural = 0;
-        minimum_baseline = -1;
-        natural_baseline = -1;
+        minimumBaseline = -1;
+        naturalBaseline = -1;
 
         for (auto const& child : _children)
         {
@@ -1040,6 +1075,20 @@ namespace ao::gtk::layout
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createSpacer);
+
+    registry.registerComponent({.type = "separator",
+                                .displayName = "Separator",
+                                .category = "Containers",
+                                .container = false,
+                                .props = {{.name = "orientation",
+                                           .kind = PropertyKind::Enum,
+                                           .label = "Orientation",
+                                           .defaultValue = LayoutValue{"horizontal"},
+                                           .enumValues = {"horizontal", "vertical"}}},
+                                .layoutProps = {},
+                                .minChildren = 0,
+                                .optMaxChildren = 0},
+                               createSeparator);
 
     registry.registerComponent(
       {.type = "tabs",

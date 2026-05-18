@@ -436,7 +436,7 @@ namespace ao::gtk
       return;
     }
 
-    std::string label = std::string{presentationId};
+    auto label = std::string{presentationId};
 
     if (auto const* builtin = rt::builtinTrackPresentationPreset(presentationId))
     {

@@ -35,13 +35,13 @@ namespace ao::utility
     T& value() noexcept { return _value; }
 
     bool empty() const noexcept
-      requires requires(T const& type_val) { type_val.empty(); }
+      requires requires(T const& typeVal) { typeVal.empty(); }
     {
       return _value.empty();
     }
 
     void clear() noexcept
-      requires requires(T& type_val) { type_val.clear(); }
+      requires requires(T& typeVal) { typeVal.clear(); }
     {
       _value.clear();
     }

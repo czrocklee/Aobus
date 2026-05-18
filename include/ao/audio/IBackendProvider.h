@@ -67,10 +67,6 @@ namespace ao::audio
     IBackendProvider(IBackendProvider&&) = delete;
     IBackendProvider& operator=(IBackendProvider&&) = delete;
 
-  protected:
-    IBackendProvider() = default;
-
-  public:
     /**
      * @brief Subscribe to incremental device updates.
      * The callback is typically triggered immediately with current devices.
@@ -94,5 +90,8 @@ namespace ao::audio
      * @return A subscription handle that unregisters the callback upon destruction.
      */
     virtual Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) = 0;
+
+  protected:
+    IBackendProvider() = default;
   };
 } // namespace ao::audio

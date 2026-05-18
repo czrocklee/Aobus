@@ -25,10 +25,6 @@ namespace ao::audio
     IDecoderSession(IDecoderSession&&) = delete;
     IDecoderSession& operator=(IDecoderSession&&) = delete;
 
-  protected:
-    IDecoderSession() = default;
-
-  public:
     /**
      * @brief Opens an audio file for decoding.
      */
@@ -59,5 +55,8 @@ namespace ao::audio
      * @brief Returns information about the decoded stream.
      */
     virtual DecodedStreamInfo streamInfo() const = 0;
+
+  protected:
+    IDecoderSession() = default;
   };
 } // namespace ao::audio

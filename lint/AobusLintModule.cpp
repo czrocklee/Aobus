@@ -7,6 +7,7 @@
 #include "check/LambdaParamsCheck.h"
 #include "check/LocalInitializationStyleCheck.h"
 #include "check/MemberInitializerBracesCheck.h"
+#include "check/MemberOrderCheck.h"
 #include "check/OptionalNamingAndUsageCheck.h"
 #include "check/StdCLibraryQualificationCheck.h"
 #include "check/ThreadingPolicyCheck.h"
@@ -20,26 +21,35 @@ namespace clang::tidy::readability
   class AobusLintModule : public ClangTidyModule
   {
   public:
-    void addCheckFactories(ClangTidyCheckFactories& CheckFactories) override
+    void addCheckFactories(ClangTidyCheckFactories& checkFactories) override
     {
-      CheckFactories.registerCheck<CApiGlobalQualificationCheck>("aobus-readability-c-api-global-qualification");
-      CheckFactories.registerCheck<ConcreteFinalCheck>("aobus-modernize-concrete-final");
-      CheckFactories.registerCheck<ControlBlockSpacingCheck>("aobus-readability-control-block-spacing");
-      CheckFactories.registerCheck<ForbidNodiscardCheck>("aobus-modernize-forbid-nodiscard");
-      CheckFactories.registerCheck<ForbidTrailingReturnCheck>("aobus-modernize-forbid-trailing-return");
-      CheckFactories.registerCheck<IdentifierNamingExtensionsCheck>("aobus-readability-identifier-naming-extensions");
-      CheckFactories.registerCheck<LambdaParamsCheck>("aobus-modernize-lambda-params");
-      CheckFactories.registerCheck<LocalInitializationStyleCheck>("aobus-modernize-local-initialization-style");
-      CheckFactories.registerCheck<MemberInitializerBracesCheck>("aobus-modernize-member-initializer-braces");
-      CheckFactories.registerCheck<OptionalNamingAndUsageCheck>("aobus-readability-optional-naming-and-usage");
-      CheckFactories.registerCheck<StdCLibraryQualificationCheck>("aobus-readability-std-c-library-qualification");
-      CheckFactories.registerCheck<ThreadingPolicyCheck>("aobus-threading-policy");
-      CheckFactories.registerCheck<UnusedSuppressionStyleCheck>("aobus-readability-unused-suppression-style");
-      CheckFactories.registerCheck<UseIfInitStatementCheck>("aobus-readability-use-if-init-statement");
+      checkFactories.registerCheck<CApiGlobalQualificationCheck>("aobus-readability-c-api-global-qualification");
+      checkFactories.registerCheck<ConcreteFinalCheck>("aobus-modernize-concrete-final");
+      checkFactories.registerCheck<ControlBlockSpacingCheck>("aobus-readability-control-block-spacing");
+      checkFactories.registerCheck<ForbidNodiscardCheck>("aobus-modernize-forbid-nodiscard");
+      checkFactories.registerCheck<ForbidTrailingReturnCheck>("aobus-modernize-forbid-trailing-return");
+      checkFactories.registerCheck<IdentifierNamingExtensionsCheck>("aobus-readability-identifier-naming-extensions");
+      checkFactories.registerCheck<LambdaParamsCheck>("aobus-modernize-lambda-params");
+      checkFactories.registerCheck<LocalInitializationStyleCheck>("aobus-modernize-local-initialization-style");
+      checkFactories.registerCheck<MemberInitializerBracesCheck>("aobus-modernize-member-initializer-braces");
+      checkFactories.registerCheck<MemberOrderCheck>("aobus-readability-member-order");
+      checkFactories.registerCheck<OptionalNamingAndUsageCheck>("aobus-readability-optional-naming-and-usage");
+      checkFactories.registerCheck<StdCLibraryQualificationCheck>("aobus-readability-std-c-library-qualification");
+      checkFactories.registerCheck<ThreadingPolicyCheck>("aobus-threading-policy");
+      checkFactories.registerCheck<UnusedSuppressionStyleCheck>("aobus-readability-unused-suppression-style");
+      checkFactories.registerCheck<UseIfInitStatementCheck>("aobus-readability-use-if-init-statement");
     }
   };
 
-  static ClangTidyModuleRegistry::Add<AobusLintModule> X("aobus-lint-module", "Adds Aobus custom checks.");
+  namespace
+  {
+    ClangTidyModuleRegistry::Add<AobusLintModule> const aobusLintModuleRegistration("aobus-lint-module",
+                                                                                    "Adds Aobus custom checks.");
+  } // namespace
 } // namespace clang::tidy::readability
 
-int volatile AobusLintModuleAnchorSource = 0;
+namespace
+{
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables,aobus-threading-policy)
+  int volatile AobusLintModuleAnchorSource = 0;
+} // namespace

@@ -17,12 +17,13 @@ namespace ao::gtk
   TimeLabel::TimeLabel(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
   {
-    _label.set_halign(Gtk::Align::END);
+    _label.set_halign(Gtk::Align::CENTER);
     _label.set_valign(Gtk::Align::CENTER);
+    _label.add_css_class("ao-time-label");
 
-    int const preferredWidthChars = 15;
-    _label.set_width_chars(preferredWidthChars);
-    _label.set_text("00:00 / 00:00");
+    auto const idleText = std::string{"00:00 / 00:00"};
+    _label.set_text(idleText);
+    _label.set_width_chars(static_cast<int>(idleText.size()));
 
     auto const resetCallback = [this] { reset(); };
 

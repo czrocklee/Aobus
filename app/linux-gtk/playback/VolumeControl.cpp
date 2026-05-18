@@ -12,9 +12,6 @@ namespace ao::gtk
   VolumeControl::VolumeControl(rt::PlaybackService& playbackService)
     : _playbackService{playbackService}
   {
-    int const preferredWidth = 32;
-    int const preferredHeight = 24;
-    _volumeBar.set_size_request(preferredWidth, preferredHeight);
     _volumeBar.set_valign(Gtk::Align::CENTER);
     _volumeBar.set_tooltip_text("Volume");
 

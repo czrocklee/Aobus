@@ -35,7 +35,7 @@ namespace ao::rt::test
     REQUIRE(preset != nullptr);
     REQUIRE(preset->spec.groupBy == TrackGroupKey::None);
 
-    auto const expectedSort = std::vector<TrackSortField>{TrackSortField::Artist,
+    auto const expectedSort = std::vector{TrackSortField::Artist,
                                                           TrackSortField::Album,
                                                           TrackSortField::DiscNumber,
                                                           TrackSortField::TrackNumber,
@@ -57,7 +57,7 @@ namespace ao::rt::test
     REQUIRE(preset != nullptr);
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Artist);
 
-    auto const expectedSort = std::vector<TrackSortField>{TrackSortField::Artist,
+    auto const expectedSort = std::vector{TrackSortField::Artist,
                                                           TrackSortField::Album,
                                                           TrackSortField::DiscNumber,
                                                           TrackSortField::TrackNumber,
@@ -70,7 +70,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].ascending == true);
     }
 
-    std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::Artist};
+    auto const expectedRedundant = std::vector{TrackPresentationField::Artist};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -80,7 +80,7 @@ namespace ao::rt::test
     REQUIRE(preset != nullptr);
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Album);
 
-    auto const expectedSort = std::vector<TrackSortField>{TrackSortField::AlbumArtist,
+    auto const expectedSort = std::vector{TrackSortField::AlbumArtist,
                                                           TrackSortField::Album,
                                                           TrackSortField::DiscNumber,
                                                           TrackSortField::TrackNumber,
@@ -92,7 +92,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    std::vector<TrackPresentationField> const expectedRedundant = {
+    auto const expectedRedundant = std::vector{
       TrackPresentationField::Artist, TrackPresentationField::Album, TrackPresentationField::AlbumArtist};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
@@ -103,7 +103,7 @@ namespace ao::rt::test
     REQUIRE(preset != nullptr);
     REQUIRE(preset->spec.groupBy == TrackGroupKey::AlbumArtist);
 
-    auto const expectedSort = std::vector<TrackSortField>{TrackSortField::AlbumArtist,
+    auto const expectedSort = std::vector{TrackSortField::AlbumArtist,
                                                           TrackSortField::Album,
                                                           TrackSortField::DiscNumber,
                                                           TrackSortField::TrackNumber,
@@ -115,7 +115,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::AlbumArtist};
+    auto const expectedRedundant = std::vector{TrackPresentationField::AlbumArtist};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -125,12 +125,12 @@ namespace ao::rt::test
     REQUIRE(preset != nullptr);
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Genre);
 
-    std::vector<TrackSortField> const expectedSort = {TrackSortField::Genre,
-                                                      TrackSortField::Artist,
-                                                      TrackSortField::Album,
-                                                      TrackSortField::DiscNumber,
-                                                      TrackSortField::TrackNumber,
-                                                      TrackSortField::Title};
+    auto const expectedSort = std::vector{TrackSortField::Genre,
+                                                          TrackSortField::Artist,
+                                                          TrackSortField::Album,
+                                                          TrackSortField::DiscNumber,
+                                                          TrackSortField::TrackNumber,
+                                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -138,7 +138,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::Genre};
+    auto const expectedRedundant = std::vector{TrackPresentationField::Genre};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -148,12 +148,12 @@ namespace ao::rt::test
     REQUIRE(preset != nullptr);
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Composer);
 
-    std::vector<TrackSortField> const expectedSort = {TrackSortField::Composer,
-                                                      TrackSortField::Artist,
-                                                      TrackSortField::Album,
-                                                      TrackSortField::DiscNumber,
-                                                      TrackSortField::TrackNumber,
-                                                      TrackSortField::Title};
+    auto const expectedSort = std::vector{TrackSortField::Composer,
+                                                          TrackSortField::Artist,
+                                                          TrackSortField::Album,
+                                                          TrackSortField::DiscNumber,
+                                                          TrackSortField::TrackNumber,
+                                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -161,7 +161,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::Composer};
+    auto const expectedRedundant = std::vector{TrackPresentationField::Composer};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -171,12 +171,12 @@ namespace ao::rt::test
     REQUIRE(preset != nullptr);
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Work);
 
-    std::vector<TrackSortField> const expectedSort = {TrackSortField::Work,
-                                                      TrackSortField::Artist,
-                                                      TrackSortField::Album,
-                                                      TrackSortField::DiscNumber,
-                                                      TrackSortField::TrackNumber,
-                                                      TrackSortField::Title};
+    auto const expectedSort = std::vector{TrackSortField::Work,
+                                                          TrackSortField::Artist,
+                                                          TrackSortField::Album,
+                                                          TrackSortField::DiscNumber,
+                                                          TrackSortField::TrackNumber,
+                                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -184,7 +184,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::Work};
+    auto const expectedRedundant = std::vector{TrackPresentationField::Work};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 
@@ -194,12 +194,12 @@ namespace ao::rt::test
     REQUIRE(preset != nullptr);
     REQUIRE(preset->spec.groupBy == TrackGroupKey::Year);
 
-    std::vector<TrackSortField> const expectedSort = {TrackSortField::Year,
-                                                      TrackSortField::Artist,
-                                                      TrackSortField::Album,
-                                                      TrackSortField::DiscNumber,
-                                                      TrackSortField::TrackNumber,
-                                                      TrackSortField::Title};
+    auto const expectedSort = std::vector{TrackSortField::Year,
+                                                          TrackSortField::Artist,
+                                                          TrackSortField::Album,
+                                                          TrackSortField::DiscNumber,
+                                                          TrackSortField::TrackNumber,
+                                                          TrackSortField::Title};
     REQUIRE(preset->spec.sortBy.size() == expectedSort.size());
 
     for (std::size_t i = 0; i < expectedSort.size(); ++i)
@@ -207,7 +207,7 @@ namespace ao::rt::test
       REQUIRE(preset->spec.sortBy[i].field == expectedSort[i]);
     }
 
-    std::vector<TrackPresentationField> const expectedRedundant = {TrackPresentationField::Year};
+    auto const expectedRedundant = std::vector{TrackPresentationField::Year};
     REQUIRE(preset->spec.redundantFields == expectedRedundant);
   }
 } // namespace ao::rt::test

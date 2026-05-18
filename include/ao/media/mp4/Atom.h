@@ -30,12 +30,6 @@ namespace ao::media::mp4
     Atom(Atom const&) = delete;
     Atom& operator=(Atom const&) = delete;
 
-  protected:
-    Atom() = default;
-    Atom(Atom&&) = default;
-    Atom& operator=(Atom&&) = default;
-
-  public:
     virtual std::uint32_t length() const = 0;
 
     virtual std::string_view type() const = 0;
@@ -51,6 +45,11 @@ namespace ao::media::mp4
      * @return Pointer to the found atom, or nullptr if not found.
      */
     Atom const* find(std::span<std::string_view const> path) const;
+
+  protected:
+    Atom() = default;
+    Atom(Atom&&) = default;
+    Atom& operator=(Atom&&) = default;
   };
 
   class AtomView : public Atom

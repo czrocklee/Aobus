@@ -18,8 +18,8 @@ namespace
 {
   Glib::Interface_Class const& getListModelIfaceClass()
   {
-    static auto the_class = Gio::ListModel_Class{};
-    return the_class.init();
+    static auto theClass = Gio::ListModel_Class{};
+    return theClass.init();
   }
 } // namespace
 

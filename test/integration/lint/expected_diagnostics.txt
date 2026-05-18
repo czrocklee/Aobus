@@ -1,0 +1,182 @@
+76 warnings generated.
+test/integration/lint/LintAllCheckFixture.cpp:66:9: warning: concrete class ''UnmarkedConcrete'' should be marked 'final' [aobus-modernize-concrete-final]
+   66 |   class UnmarkedConcrete
+      |         ^
+   67 |   { // Warning: concrete class 'UnmarkedConcrete' should be marked 'final'
+      |   final 
+test/integration/lint/LintAllCheckFixture.cpp:73:10: warning: concrete struct ''UnmarkedStruct'' should be marked 'final' [aobus-modernize-concrete-final]
+   73 |   struct UnmarkedStruct
+      |          ^
+   74 |   { // Warning: concrete struct 'UnmarkedStruct' should be marked 'final'
+      |   final 
+test/integration/lint/LintAllCheckFixture.cpp:132:9: warning: concrete class ''OuterClass'' should be marked 'final' [aobus-modernize-concrete-final]
+  132 |   class OuterClass
+      |         ^
+  133 |   {
+      |   final 
+test/integration/lint/LintAllCheckFixture.cpp:136:11: warning: concrete class ''PrivateNested'' should be marked 'final' [aobus-modernize-concrete-final]
+  136 |     class PrivateNested
+      |           ^
+  137 |     { // Warning: concrete class 'PrivateNested' should be marked 'final'
+      |     final 
+test/integration/lint/LintAllCheckFixture.cpp:201:3: warning: expected a blank line after closing '}' of control block [aobus-readability-control-block-spacing]
+  201 |   }
+      |   ^
+  202 |   x--; // Warning: expected a blank line after closing '}' of control block
+test/integration/lint/LintAllCheckFixture.cpp:206:3: warning: expected a blank line before 'if' [aobus-readability-control-block-spacing]
+  206 |   if (x > 0)
+      |   ^
+test/integration/lint/LintAllCheckFixture.cpp:213:3: warning: expected a blank line before 'for' [aobus-readability-control-block-spacing]
+  213 |   for (int i = 0; i < 10; ++i)
+      |   ^
+test/integration/lint/LintAllCheckFixture.cpp:220:3: warning: expected a blank line before 'while' [aobus-readability-control-block-spacing]
+  220 |   while (x > 100)
+      |   ^
+test/integration/lint/LintAllCheckFixture.cpp:227:3: warning: expected a blank line before 'switch' [aobus-readability-control-block-spacing]
+  227 |   switch (x)
+      |   ^
+test/integration/lint/LintAllCheckFixture.cpp:234:3: warning: expected a blank line before 'do' [aobus-readability-control-block-spacing]
+  234 |   do
+      |   ^
+test/integration/lint/LintAllCheckFixture.cpp:244:3: warning: expected a blank line after closing '}' of control block [aobus-readability-control-block-spacing]
+  244 |   }
+      |   ^
+  245 |   x++; // Warning: expected a blank line after closing '}' of control block
+test/integration/lint/LintAllCheckFixture.cpp:251:3: warning: expected a blank line after closing '}' of control block [aobus-readability-control-block-spacing]
+  251 |   }
+      |   ^
+  252 |   x++; // Warning: expected a blank line after closing '}' of control block
+test/integration/lint/LintAllCheckFixture.cpp:258:3: warning: expected a blank line after closing '}' of control block [aobus-readability-control-block-spacing]
+  258 |   }
+      |   ^
+  259 |   x++; // Warning: expected a blank line after closing '}' of control block
+test/integration/lint/LintAllCheckFixture.cpp:275:3: warning: comment should be directly above 'if' without a blank line [aobus-readability-control-block-spacing]
+  275 |   if (x > 0)
+      |   ^
+test/integration/lint/LintAllCheckFixture.cpp:292:3: warning: expected a blank line before 'try' [aobus-readability-control-block-spacing]
+  292 |   try
+      |   ^
+test/integration/lint/LintAllCheckFixture.cpp:312:3: warning: expected a blank line after closing '}' of control block [aobus-readability-control-block-spacing]
+  312 |   }
+      |   ^
+  313 |   x--; // Warning: expected a blank line after closing '}' of control block
+test/integration/lint/LintAllCheckFixture.cpp:317:3: warning: comment should be directly above 'try' without a blank line [aobus-readability-control-block-spacing]
+  317 |   try
+      |   ^
+test/integration/lint/LintAllCheckFixture.cpp:345:19: warning: remove [[nodiscard]] from ''getForbiddenVal''; rely on clang-tidy unused-return diagnostics instead [aobus-modernize-forbid-nodiscard]
+  345 | [[nodiscard]] int getForbiddenVal()
+      |                   ^
+test/integration/lint/LintAllCheckFixture.cpp:351:22: warning: remove [[nodiscard]] from ''ForbiddenStruct''; rely on clang-tidy unused-return diagnostics instead [aobus-modernize-forbid-nodiscard]
+  351 | struct [[nodiscard]] ForbiddenStruct
+      |                      ^
+test/integration/lint/LintAllCheckFixture.cpp:353:21: warning: remove [[nodiscard]] from ''ForbiddenClass''; rely on clang-tidy unused-return diagnostics instead [aobus-modernize-forbid-nodiscard]
+  353 | class [[nodiscard]] ForbiddenClass
+      |                     ^
+test/integration/lint/LintAllCheckFixture.cpp:366:6: warning: non-lambda function 'testTrailing' uses trailing return type; use traditional return type syntax [aobus-modernize-forbid-trailing-return]
+  366 | auto testTrailing() -> int
+      |      ^
+test/integration/lint/LintAllCheckFixture.cpp:372:6: warning: non-lambda function 'testNecessaryTrailing' uses trailing return type; use traditional return type syntax [aobus-modernize-forbid-trailing-return]
+  372 | auto testNecessaryTrailing() -> decltype(auto)
+      |      ^
+test/integration/lint/LintAllCheckFixture.cpp:396:7: warning: class data member 'memberValue' must use _camelCase (underscore prefix) [aobus-readability-identifier-naming-extensions]
+  396 |   int memberValue = 10; // Warning: class data member 'memberValue' must use _camelCase (underscore prefix)
+      |       ^
+test/integration/lint/LintAllCheckFixture.cpp:399:7: warning: class data member '_member_invalid' should be _camelCase after the underscore [aobus-readability-identifier-naming-extensions]
+  399 |   int _member_invalid = 5; // Warning: class data member '_member_invalid' should be _camelCase after the underscore
+      |       ^
+test/integration/lint/LintAllCheckFixture.cpp:402:7: warning: class data member '_InvalidTitle' should be _camelCase after the underscore [aobus-readability-identifier-naming-extensions]
+  402 |   int _InvalidTitle = 6; // Warning: class data member '_InvalidTitle' should be _camelCase after the underscore
+      |       ^
+test/integration/lint/LintAllCheckFixture.cpp:411:7: warning: struct data member '_invalidStructVal' should use camelCase without underscore prefix [aobus-readability-identifier-naming-extensions]
+  411 |   int _invalidStructVal =
+      |       ^
+test/integration/lint/LintAllCheckFixture.cpp:430:26: warning: omit empty parameter list '()' in lambda [aobus-modernize-lambda-params]
+  430 |   auto invalidLambda = []() { std::cout << "Hi"; }; // Warning: omit empty parameter list '()' in lambda
+      |                          ^~
+test/integration/lint/LintAllCheckFixture.cpp:448:12: warning: use 'auto explicitLocal = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
+  448 |   LocalFoo explicitLocal{10}; // Warning: use 'auto explicitLocal = Type{...}' instead of explicit type initialization
+      |            ^
+test/integration/lint/LintAllCheckFixture.cpp:451:15: warning: prefer standard literals 'auto explicitStr = "..."s' over explicit string construction [aobus-modernize-local-initialization-style]
+  451 |   std::string explicitStr(
+      |               ^
+test/integration/lint/LintAllCheckFixture.cpp:453:20: warning: prefer standard literals 'auto explicitSv = "..."sv' over explicit string construction [aobus-modernize-local-initialization-style]
+  453 |   std::string_view explicitSv(
+      |                    ^
+test/integration/lint/LintAllCheckFixture.cpp:457:20: warning: use 'auto explicitVec = Type(...)' for container initialization to avoid ambiguity [aobus-modernize-local-initialization-style]
+  457 |   std::vector<int> explicitVec(
+      |                    ^
+test/integration/lint/LintAllCheckFixture.cpp:461:7: warning: primitive type should use assignment-style initialization 'Type bracedPrimitive = ...', not brace initialization [aobus-modernize-local-initialization-style]
+  461 |   int bracedPrimitive{5}; // Warning: primitive type should use assignment-style initialization 'Type bracedPrimitive =
+      |       ^
+test/integration/lint/LintAllCheckFixture.cpp:483:7: warning: member initializer should use brace initialization '_data{...}' [aobus-modernize-member-initializer-braces]
+  483 |     : _data(10)
+      |       ^    ~  ~
+      |            {  }
+test/integration/lint/LintAllCheckFixture.cpp:502:7: warning: struct data member '_foo' should use camelCase without underscore prefix [aobus-readability-identifier-naming-extensions]
+  502 |   Foo _foo;
+      |       ^
+test/integration/lint/LintAllCheckFixture.cpp:511:7: warning: struct data member '_bar' should use camelCase without underscore prefix [aobus-readability-identifier-naming-extensions]
+  511 |   Foo _bar;
+      |       ^
+test/integration/lint/LintAllCheckFixture.cpp:520:22: warning: use 'auto invalidOptName = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
+  520 |   std::optional<int> invalidOptName =
+      |                      ^
+test/integration/lint/LintAllCheckFixture.cpp:520:22: warning: std::optional variable 'invalidOptName' must have 'opt' prefix (e.g., 'optInvalidOptName') [aobus-readability-optional-naming-and-usage]
+test/integration/lint/LintAllCheckFixture.cpp:527:14: warning: prefer concise 'if (opt)' or 'if (!opt)' over '.has_value()' [aobus-readability-optional-naming-and-usage]
+  527 |   if (optVal.has_value())
+      |              ^
+test/integration/lint/LintAllCheckFixture.cpp:560:15: warning: use 'auto t = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
+  560 |   std::thread t([] {}); // Warning: prefer std::jthread over std::thread (Rule 4.4.2)
+      |               ^
+test/integration/lint/LintAllCheckFixture.cpp:560:15: warning: prefer std::jthread over std::thread (Rule 4.4.2); std::jthread provides automatic joining and stop_token support [aobus-threading-policy]
+test/integration/lint/LintAllCheckFixture.cpp:560:15: warning: prefer std::jthread over std::thread for ''t'' (Rule 4.4.2); std::jthread provides automatic joining and stop_token support [aobus-threading-policy]
+test/integration/lint/LintAllCheckFixture.cpp:564:16: warning: use 'auto jt = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
+  564 |   std::jthread jt([] {}); // OK
+      |                ^
+test/integration/lint/LintAllCheckFixture.cpp:567:16: warning: ''volatileVar'' is volatile; use std::atomic<> for inter-thread communication instead (Rule 4.4.4) [aobus-threading-policy]
+  567 |   int volatile volatileVar =
+      |                ^
+test/integration/lint/LintAllCheckFixture.cpp:571:14: warning: use 'auto m = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
+  571 |   std::mutex m;
+      |              ^
+test/integration/lint/LintAllCheckFixture.cpp:574:32: warning: use 'auto redundantLock = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
+  574 |   std::unique_lock<std::mutex> redundantLock(
+      |                                ^
+test/integration/lint/LintAllCheckFixture.cpp:574:32: warning: prefer std::scoped_lock over std::unique_lock for ''redundantLock'' unless you need deferred locking, early unlock, or condition_variable integration (Rule 4.4.3) [aobus-threading-policy]
+test/integration/lint/LintAllCheckFixture.cpp:579:32: warning: use 'auto deferLock = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
+  579 |   std::unique_lock<std::mutex> deferLock(m, std::defer_lock); // OK
+      |                                ^
+test/integration/lint/LintAllCheckFixture.cpp:579:32: warning: prefer std::scoped_lock over std::unique_lock for ''deferLock'' unless you need deferred locking, early unlock, or condition_variable integration (Rule 4.4.3) [aobus-threading-policy]
+test/integration/lint/LintAllCheckFixture.cpp:582:32: warning: use 'auto manualLock = Type{...}' instead of explicit type initialization [aobus-modernize-local-initialization-style]
+  582 |   std::unique_lock<std::mutex> manualLock(m);
+      |                                ^
+test/integration/lint/LintAllCheckFixture.cpp:592:3: warning: void cast '(void)expr' suppresses unused warnings; use [[maybe_unused]] on the declaration or an anonymous parameter instead [aobus-readability-unused-suppression-style]
+  592 |   (void)param; // Warning: void cast '(void)expr' suppresses unused warnings; use [[maybe_unused]] on the declaration or
+      |   ^
+test/integration/lint/LintAllCheckFixture.cpp:596:3: warning: void cast 'static_cast<void>(expr)' suppresses unused warnings; use [[maybe_unused]] on the declaration or an anonymous parameter instead [aobus-readability-unused-suppression-style]
+  596 |   static_cast<void>(param); // Warning: void cast 'static_cast<void>(expr)' suppresses unused warnings; use
+      |   ^
+test/integration/lint/LintAllCheckFixture.cpp:611:3: warning: variable 'localX' is only used inside the following 'if' statement; move its declaration into the init-statement [aobus-readability-use-if-init-statement]
+  611 |   int localX = cond * 2;
+      |   ^~~~~~~~~~~~~~~~~~~~~~
+  612 | 
+  613 |   if (localX > 10)
+      |       
+      |       int localX = cond * 2; 
+test/integration/lint/LintAllCheckFixture.cpp:621:3: warning: variable 'localSwitch' is only used inside the following 'switch' statement; move its declaration into the init-statement [aobus-readability-use-if-init-statement]
+  621 |   int localSwitch = cond + 1;
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+  622 | 
+  623 |   switch (localSwitch)
+      |           
+      |           int localSwitch = cond + 1; 
+test/integration/lint/LintAllCheckFixture.h:26:1: warning: 'public' access section appears after 'private'; expected public before protected before private (Rule 2.5.2) [aobus-readability-member-order]
+   26 | public: // Warning: 'public' access section appears after 'private'; expected public before protected before private
+      | ^
+test/integration/lint/LintAllCheckFixture.h:35:7: warning: class data member 'val1' must use _camelCase (underscore prefix) [aobus-readability-identifier-naming-extensions]
+   35 |   int val1;
+      |       ^
+test/integration/lint/LintAllCheckFixture.h:37:1: warning: 'public' access section appears after 'protected'; expected public before protected before private (Rule 2.5.2) [aobus-readability-member-order]
+   37 | public: // Warning: 'public' access section appears after 'protected'; expected public before protected before private
+      | ^
+Suppressed 20 warnings (20 with check filters).

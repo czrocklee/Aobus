@@ -1,111 +1,144 @@
 #include "check/MemberOrderCheck.h"
-#include "clang/AST/ASTContext.h"
-#include "clang/ASTMatchers/ASTMatchFinder.h"
+
+#include <clang-tidy/ClangTidyCheck.h>
+#include <clang/AST/DeclCXX.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Basic/LLVM.h>
+#include <clang/Basic/SourceLocation.h>
+#include <clang/Basic/Specifiers.h>
 
 using namespace clang::ast_matchers;
 
-namespace clang::tidy::readability {
-
-namespace {
-
-char const *accessName(AccessSpecifier AS)
+namespace clang::tidy::readability
 {
-  switch (AS)
+  namespace
   {
-    case AS_public: return "public";
-    case AS_protected: return "protected";
-    case AS_private: return "private";
-    default: return "";
-  }
-}
-
-} // namespace
-
-void MemberOrderCheck::registerMatchers(MatchFinder *Finder)
-{
-  Finder->addMatcher(
-    cxxRecordDecl(
-      isDefinition(),
-      unless(isExpansionInSystemHeader()),
-      unless(isImplicit())
-    ).bind("record"),
-    this);
-}
-
-void MemberOrderCheck::check(const MatchFinder::MatchResult &Result)
-{
-  const auto &SM = *Result.SourceManager;
-  const auto *Record = Result.Nodes.getNodeAs<CXXRecordDecl>("record");
-
-  if (!Record)
-    return;
-
-  SourceLocation Loc = Record->getLocation();
-  if (Loc.isInvalid() || Loc.isMacroID() || SM.isInSystemHeader(Loc))
-    return;
-
-  // Only check header files (.h / .hpp)
-  auto FID = SM.getFileID(Loc);
-  auto File = SM.getFileEntryRefForID(FID);
-  if (!File)
-    return;
-  StringRef filename = File->getName();
-  if (!filename.ends_with(".h") && !filename.ends_with(".hpp") &&
-      !filename.ends_with(".hxx"))
-    return;
-
-  // Skip truly empty records (no fields, no methods, no bases)
-  if (Record->field_empty() &&
-      Record->method_begin() == Record->method_end() &&
-      Record->getNumBases() == 0)
-    return;
-
-  // class: default is private (2), struct: default is public (0)
-  int lastAccessValue = (Record->isClass() && !Record->isStruct()) ? 2 : 0;
-
-  // If the implicit-default section has real members, treat it as an
-  // explicit section so that a later, earlier access specifier triggers
-  // Rule 2.5.2 (e.g. class { int x_; public: ... }).
-  bool sawMemberInImplicit = false;
-  for (auto *D : Record->decls())
-  {
-    if (D->isImplicit() || D == Record) continue;
-    if (isa<AccessSpecDecl>(D)) break;
-    if (!D->isImplicit() && !isa<AccessSpecDecl>(D))
-      { sawMemberInImplicit = true; break; }
-  }
-  bool sawExplicitAccess = sawMemberInImplicit;
-
-  bool reported = false;
-
-  for (auto *D : Record->decls())
-  {
-    if (D->isImplicit() || D == Record)
-      continue;
-
-    SourceLocation DLOC = D->getLocation();
-    if (DLOC.isInvalid() || DLOC.isMacroID())
-      continue;
-
-    if (auto const *AS = dyn_cast<AccessSpecDecl>(D))
+    char const* accessName(AccessSpecifier as)
     {
-      int newAccess = static_cast<int>(AS->getAccess());
-      if (sawExplicitAccess && newAccess < lastAccessValue && !reported)
+      switch (as)
       {
-        diag(AS->getLocation(),
-             "'%0' access section appears after '%1'; "
-             "expected public before protected before private (Rule 2.5.2)")
-          << accessName(AS->getAccess())
-          << accessName(static_cast<AccessSpecifier>(lastAccessValue));
-        reported = true;
+        case AS_public: return "public";
+        case AS_protected: return "protected";
+        case AS_private: return "private";
+        default: return "";
       }
-      if (!sawExplicitAccess)
-        lastAccessValue = newAccess;
-      else if (newAccess > lastAccessValue)
-        lastAccessValue = newAccess;
-      sawExplicitAccess = true;
     }
-  }
-}
 
+    bool hasImplicitMembersBeforeAccessSpecifier(CXXRecordDecl const* record)
+    {
+      for (auto const* decl : record->decls())
+      {
+        if (decl->isImplicit() || decl == record)
+        {
+          continue;
+        }
+
+        if (isa<AccessSpecDecl>(decl))
+        {
+          break;
+        }
+
+        if (!decl->isImplicit() && !isa<AccessSpecDecl>(decl))
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    void verifyAccessSpecifierOrder(CXXRecordDecl const* record,
+                                    int lastAccessValue,
+                                    bool sawExplicitAccess,
+                                    ClangTidyCheck& check)
+    {
+      bool reported = false;
+
+      for (auto const* decl : record->decls())
+      {
+        if (decl->isImplicit() || decl == record)
+        {
+          continue;
+        }
+
+        if (SourceLocation const dloc = decl->getLocation(); dloc.isInvalid() || dloc.isMacroID())
+        {
+          continue;
+        }
+
+        if (auto const* as = dyn_cast<AccessSpecDecl>(decl))
+        {
+          int const newAccess = static_cast<int>(as->getAccess());
+
+          if (sawExplicitAccess && newAccess < lastAccessValue && !reported)
+          {
+            check.diag(as->getLocation(),
+                       "'%0' access section appears after '%1'; "
+                       "expected public before protected before private (Rule 2.5.2)")
+              << accessName(as->getAccess()) << accessName(static_cast<AccessSpecifier>(lastAccessValue));
+            reported = true;
+          }
+
+          if (!sawExplicitAccess || newAccess > lastAccessValue)
+          {
+            lastAccessValue = newAccess;
+          }
+
+          sawExplicitAccess = true;
+        }
+      }
+    }
+  } // namespace
+
+  void MemberOrderCheck::registerMatchers(MatchFinder* finder)
+  {
+    finder->addMatcher(
+      cxxRecordDecl(isDefinition(), unless(isExpansionInSystemHeader()), unless(isImplicit())).bind("record"), this);
+  }
+
+  void MemberOrderCheck::check(MatchFinder::MatchResult const& result)
+  {
+    auto const& sm = *result.SourceManager;
+    auto const* record = result.Nodes.getNodeAs<CXXRecordDecl>("record");
+
+    if (record == nullptr)
+    {
+      return;
+    }
+
+    SourceLocation const loc = record->getLocation();
+
+    if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
+    {
+      return;
+    }
+
+    // Only check header files (.h / .hpp)
+    auto const fid = sm.getFileID(loc);
+    auto const file = sm.getFileEntryRefForID(fid);
+
+    if (!file)
+    {
+      return;
+    }
+
+    if (StringRef const filename = file->getName();
+        !filename.ends_with(".h") && !filename.ends_with(".hpp") && !filename.ends_with(".hxx"))
+    {
+      return;
+    }
+
+    // Skip truly empty records (no fields, no methods, no bases)
+    if (record->field_empty() && (record->method_begin() == record->method_end()) && record->getNumBases() == 0)
+    {
+      return;
+    }
+
+    // class: default is private (2), struct: default is public (0)
+    int const lastAccessValue = (record->isClass() && !record->isStruct()) ? 2 : 0;
+    bool const sawMemberInImplicit = hasImplicitMembersBeforeAccessSpecifier(record);
+
+    verifyAccessSpecifierOrder(record, lastAccessValue, sawMemberInImplicit, *this);
+  }
 } // namespace clang::tidy::readability

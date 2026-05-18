@@ -42,6 +42,11 @@ namespace ao::gtk
     constexpr double kStrokeWidthBase = 9.0;
     constexpr double kStrokeWidthVariance = kStrokeWidthBase * (AobusSoul::kGoldenRatio - 1.0);
     constexpr float kRefHeight = 65.0F;
+    constexpr float kUnitRadius = 30.0F / kRefHeight;
+    constexpr float kMaxStrokeWidth = static_cast<float>(kStrokeWidthBase + kStrokeWidthVariance);
+    constexpr float kMaxNormalizedStrokeWidth = kMaxStrokeWidth / kRefHeight;
+    constexpr float kSoulOuterRadius = kUnitRadius + kMaxNormalizedStrokeWidth;
+    constexpr float kLogoXOffset = 43.5F / kRefHeight;
     constexpr float kStrokeWidthA = 10.0F;
     constexpr float kPhaseShift = 0.5F;
   } // namespace
@@ -70,6 +75,7 @@ namespace ao::gtk
   AobusSoul::AobusSoul()
     : _impl{std::make_unique<Impl>()}
   {
+    add_css_class("ao-soul");
     set_can_focus(false);
     set_focusable(false);
 
@@ -178,23 +184,16 @@ namespace ao::gtk
     return Gtk::SizeRequestMode::CONSTANT_SIZE;
   }
 
-  void AobusSoul::measure_vfunc(Gtk::Orientation orientation,
+  void AobusSoul::measure_vfunc(Gtk::Orientation /*orientation*/,
                                 int /*for_size*/,
                                 int& minimum,
                                 int& natural,
                                 int& /*minimum_baseline*/,
                                 int& /*natural_baseline*/) const
   {
-    if (orientation == Gtk::Orientation::HORIZONTAL && _impl->showFullLogo)
-    {
-      minimum = kFullLogoMinSize;
-      natural = kFullLogoMinSize;
-    }
-    else
-    {
-      minimum = kSoulMinSize;
-      natural = kSoulMinSize;
-    }
+    // CSS controls the real glyph size via parent padding or min-width/min-height.
+    minimum = 0;
+    natural = 0;
   }
 
   Gdk::RGBA AobusSoul::shiftColor(Gdk::RGBA const& color, float const shift) noexcept
@@ -310,31 +309,28 @@ namespace ao::gtk
     }
 
     auto const aura = Gdk::RGBA{_impl->isStopped ? _impl->cyan : _impl->aura};
+    float const horizontalRadius = _impl->showFullLogo ? (kLogoXOffset + kSoulOuterRadius) : kSoulOuterRadius;
+    float const drawingScale = std::min(width / (horizontalRadius * 2.0F), height / (kSoulOuterRadius * 2.0F));
 
     float const centerX = width / 2.0F;
     float const centerY = height / 2.0F;
 
-    // SVG Proportions (Reference Height = 65)
-    static constexpr float kRefXOffset = 43.5F;
-    static constexpr float kNormalizedXOffset = kRefXOffset / kRefHeight;
-
-    float const oCenterX = _impl->showFullLogo ? (centerX + (kNormalizedXOffset * height)) : centerX;
-    float const aCenterX = centerX - (kNormalizedXOffset * height);
+    float const oCenterX = _impl->showFullLogo ? (centerX + (kLogoXOffset * drawingScale)) : centerX;
+    float const aCenterX = centerX - (kLogoXOffset * drawingScale);
 
     // 1. Draw 'a' if requested
     if (_impl->showFullLogo)
     {
       snapshot->save();
       snapshot->translate({aCenterX, centerY});
-      snapshot->scale(height, height);
+      snapshot->scale(drawingScale, drawingScale);
 
       ::gtk_snapshot_push_stroke(snapshot->gobj(), _impl->unitPathA.get(), _impl->cachedStrokeA.get());
 
-      static constexpr float kRefR = 30.0F / 65.0F;
-      static constexpr float kRefBoundsX = -kRefR * 2.0F;
-      static constexpr float kRefBoundsY = -kRefR * 2.0F;
-      static constexpr float kRefBoundsW = kRefR * 4.5F;
-      static constexpr float kRefBoundsH = kRefR * 4.0F;
+      static constexpr float kRefBoundsX = -kUnitRadius * 2.0F;
+      static constexpr float kRefBoundsY = -kUnitRadius * 2.0F;
+      static constexpr float kRefBoundsW = kUnitRadius * 4.5F;
+      static constexpr float kRefBoundsH = kUnitRadius * 4.0F;
       auto const aBounds = ::graphene_rect_t{
         .origin = {.x = kRefBoundsX, .y = kRefBoundsY}, .size = {.width = kRefBoundsW, .height = kRefBoundsH}};
 
@@ -371,7 +367,7 @@ namespace ao::gtk
     snapshot->save();
     snapshot->translate({oCenterX, centerY});
     snapshot->rotate(rotationAngle);
-    snapshot->scale(height, height);
+    snapshot->scale(drawingScale, drawingScale);
 
     static constexpr float kOpacityThreshold = 0.999F;
 
@@ -408,13 +404,12 @@ namespace ao::gtk
     stops[2].offset = 1.0F;
     stops[2].color = *(shiftedAura.gobj());
 
-    static constexpr float kUnitR = 30.0F / 65.0F;
     float const normalizedStrokeWidth = currentStrokeBase / kRefHeight;
-    float const outerRadius = kUnitR + normalizedStrokeWidth;
+    float const outerRadius = kUnitRadius + normalizedStrokeWidth;
     auto const gradientBounds = ::graphene_rect_t{.origin = {.x = -outerRadius, .y = -outerRadius},
                                                   .size = {.width = outerRadius * 2.0F, .height = outerRadius * 2.0F}};
-    auto const startPoint = ::graphene_point_t{.x = kUnitR, .y = kUnitR};
-    auto const endPoint = ::graphene_point_t{.x = -kUnitR, .y = -kUnitR};
+    auto const startPoint = ::graphene_point_t{.x = kUnitRadius, .y = kUnitRadius};
+    auto const endPoint = ::graphene_point_t{.x = -kUnitRadius, .y = -kUnitRadius};
 
     ::gtk_snapshot_append_linear_gradient(
       snapshot->gobj(), &gradientBounds, &startPoint, &endPoint, stops.data(), stops.size());

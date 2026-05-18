@@ -38,7 +38,7 @@ namespace ao::audio::test
       SECTION("Preroll success starts thread")
       {
         auto decoder = std::make_unique<ScriptedDecoderSession>(info);
-        std::vector<std::byte> block(400, std::byte{0}); // 200ms
+        auto block = std::vector(400, std::byte{0}); // 200ms
         decoder->setReadScript({{block, false}, {{}, true}});
 
         auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
@@ -50,8 +50,8 @@ namespace ao::audio::test
       SECTION("EOF during preroll succeeds without thread error")
       {
         auto decoder = std::make_unique<ScriptedDecoderSession>(info);
-        std::vector<std::byte> block(20, std::byte{0}); // 10ms
-        decoder->setReadScript({{block, true}});        // EOF immediately
+        auto block = std::vector(20, std::byte{0}); // 10ms
+        decoder->setReadScript({{block, true}});               // EOF immediately
 
         auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
         REQUIRE(source->initialize());
@@ -74,7 +74,7 @@ namespace ao::audio::test
     SECTION("Seek matrix")
     {
       auto decoder = std::make_unique<ScriptedDecoderSession>(info);
-      std::vector<std::byte> block(400, std::byte{0});
+      auto block = std::vector(400, std::byte{0});
       decoder->setReadScript({{block, false}, {block, false}, {{}, true}});
 
       auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 100, 500);
@@ -105,7 +105,7 @@ namespace ao::audio::test
     SECTION("Background decode failure marks source failed")
     {
       auto decoder = std::make_unique<ScriptedDecoderSession>(info);
-      std::vector<std::byte> block(200, std::byte{0}); // 100ms
+      auto block = std::vector(200, std::byte{0}); // 100ms
       decoder->setReadScript({
         {block, false},                                              // first block for preroll
         {{}, false, std::unexpected(Error{.message = "async fail"})} // second block fails
@@ -129,14 +129,14 @@ namespace ao::audio::test
     SECTION("BufferedMs and isDrained track EOF plus ring exhaustion")
     {
       auto decoder = std::make_unique<ScriptedDecoderSession>(info);
-      std::vector<std::byte> block(20, std::byte{0}); // 10ms
+      auto block = std::vector(20, std::byte{0}); // 10ms
       decoder->setReadScript({{block, false}, {{}, true}});
 
       auto source = std::make_unique<StreamingSource>(std::move(decoder), info, onError, 5, 500);
       REQUIRE(source->initialize());
 
       // Consume data
-      std::vector<std::byte> out(20);
+      auto out = std::vector<std::byte>(20);
       REQUIRE(source->read(out) == 20);
 
       // Wait for EOF to be processed if not already

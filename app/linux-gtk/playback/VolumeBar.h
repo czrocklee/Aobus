@@ -35,11 +35,11 @@ namespace ao::gtk
   protected:
     Gtk::SizeRequestMode get_request_mode_vfunc() const override;
     void measure_vfunc(Gtk::Orientation orientation,
-                       int for_size,
+                       int forSize,
                        int& minimum,
                        int& natural,
-                       int& minimum_baseline,
-                       int& natural_baseline) const override;
+                       int& minimumBaseline,
+                       int& naturalBaseline) const override;
     void snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshot) override;
 
   private:
@@ -52,7 +52,5 @@ namespace ao::gtk
     VolumeChangedSignal _volumeChanged;
 
     static constexpr int kNumSegments = 10;
-    static constexpr int kSegmentGap = 1;
-    static constexpr float kSegmentRadius = 0.8F;
   };
 } // namespace ao::gtk

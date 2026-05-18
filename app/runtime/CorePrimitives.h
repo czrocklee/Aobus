@@ -72,10 +72,6 @@ namespace ao::rt
     IControlExecutor(IControlExecutor&&) = delete;
     IControlExecutor& operator=(IControlExecutor&&) = delete;
 
-  protected:
-    IControlExecutor() = default;
-
-  public:
     virtual bool isCurrent() const noexcept = 0;
 
     // Thread-safe: enqueue and wake the control thread (e.g. for cross-thread callbacks).
@@ -83,6 +79,9 @@ namespace ao::rt
 
     // Always deferred: run in the next idle iteration, even from the control thread.
     virtual void defer(std::move_only_function<void()> task) = 0;
+
+  protected:
+    IControlExecutor() = default;
   };
 
   template<typename... Args>
