@@ -134,9 +134,7 @@ namespace ao::audio::test
 
         while (!done || buffer.size() > 0)
         {
-          std::byte b{};
-
-          if (buffer.read(std::span(&b, 1)) == 1)
+          if (auto b = std::byte{}; buffer.read(std::span(&b, 1)) == 1)
           {
             REQUIRE(b == static_cast<std::byte>(count % 256));
             count++;

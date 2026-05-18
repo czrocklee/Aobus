@@ -249,9 +249,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const filter = row->getFilter();
-
-    if (!filter.empty())
+    if (auto const filter = row->getFilter(); !filter.empty())
     {
       filterLabel->set_text(std::format("[{}]", filter.raw()));
       filterLabel->set_visible(true);

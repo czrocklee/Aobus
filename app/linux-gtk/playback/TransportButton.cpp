@@ -80,9 +80,7 @@ namespace ao::gtk
     _button.signal_clicked().connect(
       [this]
       {
-        auto const& state = _playbackService.state();
-
-        switch (_action)
+        switch (auto const& state = _playbackService.state(); _action)
         {
           case Action::Play:
             if (state.transport == audio::Transport::Paused)

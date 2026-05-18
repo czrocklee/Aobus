@@ -13,23 +13,12 @@
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/Subscription.h>
-#include <ao/utility/IMainThreadDispatcher.h>
 
-#include <functional>
 #include <memory>
 #include <string_view>
 
 namespace ao::audio::test
 {
-  /**
-   * @brief A simple dispatcher that executes callbacks immediately.
-   */
-  class MockDispatcher final : public IMainThreadDispatcher
-  {
-  public:
-    void dispatch(std::function<void()> callback) override { callback(); }
-  };
-
   /**
    * @brief A proxy that allows using a FakeIt mock (which is a reference)
    * where a unique_ptr is required. It forwards all calls to the provided reference.

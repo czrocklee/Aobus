@@ -136,7 +136,7 @@ namespace ao::gtk
 
     // Load CSS from GResource
     auto appCss = Glib::ustring{};
-    
+
     try
     {
       auto const data = Gio::Resource::lookup_data_global("/org/aobus/app.css");
@@ -321,9 +321,7 @@ namespace ao::gtk
           if (event == Event::CHANGED || event == Event::CREATED || event == Event::DELETED ||
               event == Event::CHANGES_DONE_HINT)
           {
-            auto const name = file->get_basename();
-
-            if (name == "settings.ini" || name == "gtk.css")
+            if (auto const name = file->get_basename(); name == "settings.ini" || name == "gtk.css")
             {
               APP_LOG_DEBUG("StyleManager: gtk-4.0 change detected ({}), scheduling reload...", name);
               reload();

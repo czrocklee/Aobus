@@ -109,14 +109,12 @@ namespace ao::tag::mp4
       {
         auto const& view = utility::unsafeDowncast<AtomView const>(*mdhdNode);
         auto const& layout = view.layout<MdhdAtomLayout>();
-        auto const timescale = layout.timescale.value();
-        auto const duration = layout.duration.value();
 
-        if (timescale > 0)
+        if (auto const timescale = layout.timescale.value(); timescale > 0)
         {
           builder.property().sampleRate(timescale);
 
-          if (duration > 0)
+          if (auto const duration = layout.duration.value(); duration > 0)
           {
             constexpr std::uint32_t kMsPerSecond = 1000;
             constexpr std::uint32_t kBitsPerByte = 8;

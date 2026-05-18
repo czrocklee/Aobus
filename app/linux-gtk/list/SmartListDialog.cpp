@@ -72,6 +72,8 @@ namespace ao::gtk
 
       return std::string{expression};
     }
+
+    constexpr std::size_t kMaxPreview = 10;
   }
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
@@ -403,9 +405,8 @@ namespace ao::gtk
       _previewFilteredList->setExpression("");
       _previewFilteredList->reload();
       _expressionValid = true;
-      auto const total = _previewFilteredList->size();
 
-      if (total == 0)
+      if (auto const total = _previewFilteredList->size(); total == 0)
       {
         _matchCountLabel.set_markup(isAllTracks ? "<i>No tracks in library</i>" : "<i>No tracks in source</i>");
       }
@@ -440,11 +441,7 @@ namespace ao::gtk
       _previewScrolledWindow.set_visible(true);
       _expressionValid = true;
 
-      auto const total = _previewFilteredList->size();
-      constexpr std::size_t kMaxPreview = 10;
-      auto const shown = std::min(total, kMaxPreview);
-
-      if (total == 0)
+      if (auto const total = _previewFilteredList->size(); total == 0)
       {
         _matchCountLabel.set_markup("<i>No matches</i>");
       }
@@ -454,6 +451,7 @@ namespace ao::gtk
       }
       else
       {
+        auto const shown = std::min(total, kMaxPreview);
         _matchCountLabel.set_markup(Glib::ustring::format("<i>Showing ", shown, " of ", total, " matches</i>"));
       }
     }

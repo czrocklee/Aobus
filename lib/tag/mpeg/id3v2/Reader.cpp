@@ -133,9 +133,8 @@ namespace ao::tag::mpeg::id3v2
       if (auto const nullPos = text.find('\0'); nullPos != std::string_view::npos)
       {
         auto const key = text.substr(0, nullPos);
-        auto const value = text.substr(nullPos + 1);
 
-        if (key == "rating")
+        if (auto const value = text.substr(nullPos + 1); key == "rating")
         {
           if (auto const optRating = parseUnsigned<std::uint8_t>(value); optRating)
           {

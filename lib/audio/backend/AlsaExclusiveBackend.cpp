@@ -283,9 +283,7 @@ namespace ao::audio::backend
 
     mixer.reset(raw);
 
-    auto const cardStr = std::format("hw:{}", card);
-
-    if (::snd_mixer_attach(raw, cardStr.c_str()) < 0)
+    if (auto const cardStr = std::format("hw:{}", card); ::snd_mixer_attach(raw, cardStr.c_str()) < 0)
     {
       return false;
     }
@@ -342,14 +340,11 @@ namespace ao::audio::backend
       return;
     }
 
-    float const clamped = std::clamp(vol, 0.0F, 1.0F);
-
-    if (hasDB)
+    if (float const clamped = std::clamp(vol, 0.0F, 1.0F); hasDB)
     {
       long const db = dbMin + static_cast<long>(static_cast<float>(dbMax - dbMin) * clamped);
       ::snd_mixer_selem_set_playback_dB_all(mixerElem, db, 0);
     }
-
     else
     {
       long const val = volMin + static_cast<long>(static_cast<float>(volMax - volMin) * clamped);

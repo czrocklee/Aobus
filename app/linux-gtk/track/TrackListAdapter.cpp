@@ -390,9 +390,7 @@ namespace ao::gtk
   {
     if (auto const row = _provider.getTrackRow(id))
     {
-      auto const uintIdx = static_cast<std::uint32_t>(index);
-
-      if (uintIdx <= _listStore->get_n_items())
+      if (auto const uintIdx = static_cast<std::uint32_t>(index); uintIdx <= _listStore->get_n_items())
       {
         _listStore->insert(uintIdx, row);
       }
@@ -402,7 +400,6 @@ namespace ao::gtk
   void TrackListAdapter::onUpdated(TrackId id, std::size_t index)
   {
     auto const row = _provider.getTrackRow(id);
-
     auto const uintIdx = static_cast<std::uint32_t>(index);
 
     if (uintIdx >= _listStore->get_n_items())
@@ -423,9 +420,7 @@ namespace ao::gtk
 
   void TrackListAdapter::onRemoved(TrackId /*id*/, std::size_t index)
   {
-    auto const uintIdx = static_cast<std::uint32_t>(index);
-
-    if (uintIdx < _listStore->get_n_items())
+    if (auto const uintIdx = static_cast<std::uint32_t>(index); uintIdx < _listStore->get_n_items())
     {
       _listStore->remove(uintIdx);
     }

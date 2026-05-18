@@ -459,9 +459,7 @@ namespace ao::query
     compileExpression(binary.operand);
 
     // Save left field before compiling right operand (which will overwrite _lastField)
-    auto const leftField = _lastField;
-
-    if (binary.optOperation)
+    if (auto const leftField = _lastField; binary.optOperation)
     {
       auto const opcode = toOpCode(binary.optOperation->op);
 

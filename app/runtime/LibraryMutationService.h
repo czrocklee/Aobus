@@ -6,9 +6,9 @@
 #include "CorePrimitives.h"
 #include "StateTypes.h"
 #include "async/Task.h"
+#include "runtime/LibraryExporter.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
-#include <ao/library/Exporter.h>
 #include <cstddef>
 #include <filesystem>
 #include <functional>
@@ -52,7 +52,7 @@ namespace ao::rt
     // C++20 Async variants
     async::Task<void> importFilesAsync(async::Runtime& runtime, std::vector<std::filesystem::path> paths);
     async::Task<void> importLibraryAsync(async::Runtime& runtime, std::filesystem::path path);
-    async::Task<void> exportLibraryAsync(async::Runtime& runtime, std::filesystem::path path, library::ExportMode mode);
+    async::Task<void> exportLibraryAsync(async::Runtime& runtime, std::filesystem::path path, rt::ExportMode mode);
     async::Task<std::vector<std::filesystem::path>> scanLibraryAsync(async::Runtime& runtime,
                                                                      std::filesystem::path dir);
 

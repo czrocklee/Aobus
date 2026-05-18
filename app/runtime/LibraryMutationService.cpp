@@ -3,11 +3,11 @@
 
 #include "LibraryMutationService.h"
 #include "async/Runtime.h"
+#include "runtime/LibraryExporter.h"
+#include "runtime/LibraryImporter.h"
 #include <ao/Error.h>
 #include <ao/Type.h>
-#include <ao/library/Exporter.h>
 #include <ao/library/ImportWorker.h>
-#include <ao/library/Importer.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -315,7 +315,7 @@ namespace ao::rt
   {
     co_await async::resumeOnWorker(runtime);
     setCurrentThreadName("LibraryImport");
-    auto importer = ao::library::Importer{_impl->library};
+    auto importer = ao::rt::LibraryImporter{_impl->library};
     importer.importFromYaml(path);
     co_await async::resumeOnUi(runtime);
   }
@@ -323,11 +323,11 @@ namespace ao::rt
   // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
   async::Task<void> LibraryMutationService::exportLibraryAsync(async::Runtime& runtime,
                                                                std::filesystem::path path,
-                                                               library::ExportMode mode)
+                                                               rt::ExportMode mode)
   {
     co_await async::resumeOnWorker(runtime);
     setCurrentThreadName("LibraryExport");
-    auto exporter = ao::library::Exporter{_impl->library};
+    auto exporter = ao::rt::LibraryExporter{_impl->library};
     exporter.exportToYaml(path, mode);
     co_await async::resumeOnUi(runtime);
   }

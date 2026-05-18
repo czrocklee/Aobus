@@ -222,10 +222,9 @@ namespace ao::query
                            Op&& op)
     {
       auto const* prevLoadField = findPrevLoadField(plan->instructions, &instr);
-      auto stringIdx = registers[instr.operand];
 
-      // Check for string comparison first
-      if (prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
+      if (auto const stringIdx = registers[instr.operand];
+          prevLoadField != nullptr && isStringField(static_cast<Field>(prevLoadField->field)))
       {
         auto field = static_cast<Field>(prevLoadField->field);
         auto const fieldStr = loadStringFieldValue(track, field, prevLoadField, plan);

@@ -91,9 +91,7 @@ namespace ao::rt::test
 
         for (auto id : ids)
         {
-          auto it = std::ranges::find(_ids, id);
-
-          if (it != _ids.end())
+          if (auto it = std::ranges::find(_ids, id); it != _ids.end())
           {
             _ids.erase(it);
             actualRemoved.push_back(id);

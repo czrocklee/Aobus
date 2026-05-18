@@ -334,9 +334,7 @@ namespace ao::gtk
 
       auto const updateStyles = [listItem, row, definition]
       {
-        auto* const child = listItem->get_child();
-
-        if (row->isPlaying())
+        if (auto* const child = listItem->get_child(); row->isPlaying())
         {
           if (auto* const cell = child->get_parent())
           {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/library/Importer.h>
+#include "runtime/LibraryImporter.h"
 
 #include <ao/Exception.h>
 #include <ao/Type.h>
@@ -28,7 +28,7 @@
 #include <utility>
 #include <vector>
 
-namespace ao::library
+namespace ao::rt
 {
   namespace
   {
@@ -45,7 +45,7 @@ namespace ao::library
 
     std::vector<std::byte> serializeList(ImportedList const& list, ListId parentId)
     {
-      auto builder = ListBuilder::createNew().name(list.name).description(list.description).parentId(parentId);
+      auto builder = library::ListBuilder::createNew().name(list.name).description(list.description).parentId(parentId);
 
       if (list.isSmart)
       {
@@ -63,9 +63,9 @@ namespace ao::library
     }
   }
 
-  struct Importer::Impl final
+  struct LibraryImporter::Impl final
   {
-    explicit Impl(MusicLibrary& ml)
+    explicit Impl(library::MusicLibrary& ml)
       : ml{ml}
     {
     }
@@ -78,30 +78,30 @@ namespace ao::library
                      lmdb::WriteTransaction& txn,
                      std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId);
 
-    void overlayMetadata(TrackBuilder& builder,
+    void overlayMetadata(library::TrackBuilder& builder,
                          YAML::Node const& trackNode,
                          std::deque<std::string>& trackStrings) const;
-    void overlayCustomData(TrackBuilder& builder,
+    void overlayCustomData(library::TrackBuilder& builder,
                            YAML::Node const& trackNode,
                            std::deque<std::string>& trackStrings) const;
-    void overlayTechnicalProperties(TrackBuilder& builder, YAML::Node const& trackNode) const;
+    void overlayTechnicalProperties(library::TrackBuilder& builder, YAML::Node const& trackNode) const;
 
-    MusicLibrary& ml;
+    library::MusicLibrary& ml;
   };
 
-  Importer::Importer(MusicLibrary& ml)
+  LibraryImporter::LibraryImporter(library::MusicLibrary& ml)
     : _impl{std::make_unique<Impl>(ml)}
   {
   }
 
-  Importer::~Importer() = default;
+  LibraryImporter::~LibraryImporter() = default;
 
-  void Importer::importFromYaml(std::filesystem::path const& path)
+  void LibraryImporter::importFromYaml(std::filesystem::path const& path)
   {
     _impl->importFromYaml(path);
   }
 
-  void Importer::Impl::importFromYaml(std::filesystem::path const& path)
+  void LibraryImporter::Impl::importFromYaml(std::filesystem::path const& path)
   {
     auto root = YAML::Node{};
     try
@@ -146,9 +146,9 @@ namespace ao::library
     txn.commit();
   }
 
-  void Importer::Impl::importTracks(YAML::Node const& tracks,
-                                    lmdb::WriteTransaction& txn,
-                                    std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
+  void LibraryImporter::Impl::importTracks(YAML::Node const& tracks,
+                                           lmdb::WriteTransaction& txn,
+                                           std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId)
   {
     auto trackWriter = ml.tracks().writer(txn);
     auto& dict = ml.dictionary();
@@ -160,10 +160,9 @@ namespace ao::library
       std::string const uriStr = trackNode["uri"].as<std::string>();
 
       // 1. Try load from physical file (availability fallback)
-      std::optional<TrackBuilder> optFileBuilder;
-      auto const fullPath = ml.rootPath() / uriStr;
+      auto optFileBuilder = std::optional<library::TrackBuilder>{};
 
-      if (std::filesystem::exists(fullPath))
+      if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath))
       {
         if (auto tagFile = tag::TagFile::open(fullPath); tagFile != nullptr)
         {
@@ -177,7 +176,7 @@ namespace ao::library
       }
 
       // 2. Initialize builder
-      auto builder = optFileBuilder ? *optFileBuilder : TrackBuilder::createNew();
+      auto builder = optFileBuilder ? *optFileBuilder : library::TrackBuilder::createNew();
 
       if (!optFileBuilder)
       {
@@ -210,9 +209,9 @@ namespace ao::library
     }
   }
 
-  void Importer::Impl::overlayMetadata(TrackBuilder& builder,
-                                       YAML::Node const& trackNode,
-                                       std::deque<std::string>& trackStrings) const
+  void LibraryImporter::Impl::overlayMetadata(library::TrackBuilder& builder,
+                                              YAML::Node const& trackNode,
+                                              std::deque<std::string>& trackStrings) const
   {
     auto const keepAlive = [&](YAML::Node const& node) -> std::string_view
     {
@@ -280,9 +279,9 @@ namespace ao::library
     }
   }
 
-  void Importer::Impl::overlayCustomData(TrackBuilder& builder,
-                                         YAML::Node const& trackNode,
-                                         std::deque<std::string>& trackStrings) const
+  void LibraryImporter::Impl::overlayCustomData(library::TrackBuilder& builder,
+                                                YAML::Node const& trackNode,
+                                                std::deque<std::string>& trackStrings) const
   {
     auto const keepAlive = [&](YAML::Node const& node) -> std::string_view
     {
@@ -315,7 +314,8 @@ namespace ao::library
     }
   }
 
-  void Importer::Impl::overlayTechnicalProperties(TrackBuilder& builder, YAML::Node const& trackNode) const
+  void LibraryImporter::Impl::overlayTechnicalProperties(library::TrackBuilder& builder,
+                                                         YAML::Node const& trackNode) const
   {
     if (trackNode["durationMs"])
     {
@@ -348,9 +348,9 @@ namespace ao::library
     }
   }
 
-  void Importer::Impl::importLists(YAML::Node const& lists,
-                                   lmdb::WriteTransaction& txn,
-                                   std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId)
+  void LibraryImporter::Impl::importLists(YAML::Node const& lists,
+                                          lmdb::WriteTransaction& txn,
+                                          std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId)
   {
     auto listWriter = ml.lists().writer(txn);
     auto importedLists = std::vector<ImportedList>{};
@@ -445,4 +445,4 @@ namespace ao::library
       listWriter.update(childId, serializeList(importedList, parentIt->second));
     }
   }
-} // namespace ao::library
+} // namespace ao::rt

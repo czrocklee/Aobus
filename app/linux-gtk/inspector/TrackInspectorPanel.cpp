@@ -152,9 +152,7 @@ namespace ao::gtk
       {
         auto const ids = _currentTrackIds;
 
-        auto const result = _mutation.editTags(ids, toAdd, toRemove);
-
-        if (result)
+        if (auto const result = _mutation.editTags(ids, toAdd, toRemove); result)
         {
           _sources.allTracks().notifyUpdated(ids);
         }

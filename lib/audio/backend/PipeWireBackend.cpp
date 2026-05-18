@@ -251,9 +251,7 @@ namespace ao::audio::backend
     // Parse SPA_PROP_volume and SPA_PROP_mute from the Props pod
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
     {
-      float volFloat = 0.0F;
-
-      if (::spa_pod_get_float(&prop->value, &volFloat) == 0)
+      if (float volFloat = 0.0F; ::spa_pod_get_float(&prop->value, &volFloat) == 0)
       {
         if (std::abs(volFloat - volume.exchange(volFloat)) > kVolumeEpsilon)
         {
@@ -264,9 +262,7 @@ namespace ao::audio::backend
 
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
     {
-      bool muteBool = false;
-
-      if (::spa_pod_get_bool(&prop->value, &muteBool) == 0)
+      if (bool muteBool = false; ::spa_pod_get_bool(&prop->value, &muteBool) == 0)
       {
         if (muteBool != muted.exchange(muteBool))
         {
@@ -288,9 +284,7 @@ namespace ao::audio::backend
     {
       if (!routeAnchorReported && stream)
       {
-        auto id = ::pw_stream_get_node_id(stream.get());
-
-        if (id != PW_ID_ANY)
+        if (auto id = ::pw_stream_get_node_id(stream.get()); id != PW_ID_ANY)
         {
           routeAnchorReported = true;
           renderTarget->onRouteReady(std::format("{}", id));

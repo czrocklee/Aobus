@@ -102,9 +102,9 @@ namespace ao::tag::flac
               if (auto const pos = comment.find('='); pos != std::string_view::npos)
               {
                 auto const key = comment.substr(0, pos);
-                auto const value = comment.substr(pos + 1);
 
-                if (auto const* entry = FlacVorbisDispatchTable::lookupVorbisField(key.data(), key.size()))
+                if (auto const value = comment.substr(pos + 1);
+                    auto const* entry = FlacVorbisDispatchTable::lookupVorbisField(key.data(), key.size()))
                 {
                   entry->handler(builder, value);
                 }

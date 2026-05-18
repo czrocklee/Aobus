@@ -3,10 +3,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "runtime/LibraryExporter.h"
+#include "runtime/LibraryImporter.h"
 #include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
-#include <ao/library/Exporter.h>
-#include <ao/library/Importer.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
@@ -79,8 +79,8 @@ namespace ao::library::test
 
     // 2. Export to YAML
     auto const yamlPath = std::filesystem::path(temp1.path()) / "backup.yaml";
-    auto exporter = Exporter{ml1};
-    REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, ExportMode::Full));
+    auto exporter = rt::LibraryExporter{ml1};
+    REQUIRE_NOTHROW(exporter.exportToYaml(yamlPath, rt::ExportMode::Full));
 
     // 3. Import into a new library
     auto const temp2 = TempDir{};
@@ -104,7 +104,7 @@ namespace ao::library::test
       txn.commit();
     }
 
-    auto importer = Importer{ml2};
+    auto importer = rt::LibraryImporter{ml2};
     REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
 
     // 4. Verify
@@ -225,7 +225,7 @@ library:
 )";
     }
 
-    auto importer = Importer{ml};
+    auto importer = rt::LibraryImporter{ml};
     REQUIRE_NOTHROW(importer.importFromYaml(yamlPath));
 
     {

@@ -79,9 +79,7 @@ namespace ao::gtk
   {
     for (auto const& state : layout.columns)
     {
-      auto proxy = property_visible(state.column);
-
-      if (proxy.get_value() != state.visible)
+      if (auto proxy = property_visible(state.column); proxy.get_value() != state.visible)
       {
         proxy.set_value(state.visible);
       }

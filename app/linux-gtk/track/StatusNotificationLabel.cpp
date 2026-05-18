@@ -32,9 +32,7 @@ namespace ao::gtk
     _notificationPostedSub = _notificationService.onPosted(
       [this](auto)
       {
-        auto const feed = _notificationService.feed();
-
-        if (!feed.entries.empty())
+        if (auto const feed = _notificationService.feed(); !feed.entries.empty())
         {
           auto const& latest = feed.entries.back();
           auto const duration = latest.optTimeout.value_or(std::chrono::seconds{5});

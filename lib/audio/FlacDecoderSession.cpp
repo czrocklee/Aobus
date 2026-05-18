@@ -256,9 +256,8 @@ namespace ao::audio
                                                                          void* clientData)
   {
     auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-    auto const fileBytes = impl->mappedFile.bytes();
 
-    if (*bytes > 0)
+    if (auto const fileBytes = impl->mappedFile.bytes(); *bytes > 0)
     {
       auto const remaining = fileBytes.size() - impl->currentOffset;
 
@@ -284,9 +283,8 @@ namespace ao::audio
                                                                          void* clientData)
   {
     auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-    auto const fileBytes = impl->mappedFile.bytes();
 
-    if (absoluteByteOffset >= fileBytes.size())
+    if (auto const fileBytes = impl->mappedFile.bytes(); absoluteByteOffset >= fileBytes.size())
     {
       return ::FLAC__STREAM_DECODER_SEEK_STATUS_ERROR;
     }
@@ -397,9 +395,8 @@ namespace ao::audio
                                                   ::FLAC__StreamMetadata const* metadata,
                                                   void* clientData)
   {
-    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-
-    if (metadata->type == ::FLAC__METADATA_TYPE_STREAMINFO)
+    if (auto* const impl = utility::unsafeDowncast<Impl>(clientData);
+        metadata->type == ::FLAC__METADATA_TYPE_STREAMINFO)
     {
       auto const& streamInfo = getStreamInfo(metadata);
 

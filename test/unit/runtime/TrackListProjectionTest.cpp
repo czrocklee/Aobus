@@ -447,9 +447,8 @@ namespace ao::rt::test
         REQUIRE(optA.has_value());
         REQUIRE(optB.has_value());
         auto ay = optA->metadata().year();
-        auto by = optB->metadata().year();
 
-        if (ascending)
+        if (auto by = optB->metadata().year(); ascending)
         {
           CHECK(ay <= by);
         }

@@ -68,9 +68,8 @@ namespace ao::rt
       _impl->workspace.addView(res.viewId);
     }
 
-    auto const layout = _impl->workspace.layoutState();
-
-    if (snapshot.optActiveViewIndex && *snapshot.optActiveViewIndex < layout.openViews.size())
+    if (auto const layout = _impl->workspace.layoutState();
+        snapshot.optActiveViewIndex && *snapshot.optActiveViewIndex < layout.openViews.size())
     {
       _impl->workspace.setFocusedView(layout.openViews[*snapshot.optActiveViewIndex]);
     }

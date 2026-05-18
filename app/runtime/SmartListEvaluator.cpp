@@ -406,10 +406,8 @@ namespace ao::rt
     for (auto* const list : evaluatableLists)
     {
       bool const nowMatches = optView && list->_planEvaluator.matches(*list->_current.plan, *optView);
-      auto const it = list->_members.find(id);
-      bool const wasPresent = it != list->_members.end();
 
-      if (nowMatches && !wasPresent)
+      if (auto const it = list->_members.find(id); nowMatches && it == list->_members.end())
       {
         if (auto [it2, inserted] = list->_members.insert(id); inserted)
         {
@@ -417,13 +415,13 @@ namespace ao::rt
           list->TrackSource::notifyInserted(id, index);
         }
       }
-      else if (!nowMatches && wasPresent)
+      else if (!nowMatches && it != list->_members.end())
       {
         auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
         list->_members.erase(it);
         list->TrackSource::notifyRemoved(id, index);
       }
-      else if (nowMatches && wasPresent)
+      else if (nowMatches && it != list->_members.end())
       {
         auto const index = static_cast<std::size_t>(std::distance(list->_members.begin(), it));
         list->TrackSource::notifyUpdated(id, index);
@@ -558,9 +556,8 @@ namespace ao::rt
       {
         auto& list = *evaluatableLists[i];
         bool const nowMatches = optView && list._planEvaluator.matches(*list._current.plan, *optView);
-        bool const wasPresent = list._members.contains(id);
 
-        if (nowMatches && !wasPresent)
+        if (bool const wasPresent = list._members.contains(id); nowMatches && !wasPresent)
         {
           transitions[i].inserted.push_back(id);
         }

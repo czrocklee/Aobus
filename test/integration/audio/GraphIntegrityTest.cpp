@@ -46,9 +46,7 @@ namespace ao::audio::test
 
     for (int i = 0; i < 50; ++i)
     {
-      auto const snap = engine.status();
-
-      if (snap.routeState.sourceFormat.sampleRate != 0)
+      if (auto const snap = engine.status(); snap.routeState.sourceFormat.sampleRate != 0)
       {
         routeReady = true;
         break;

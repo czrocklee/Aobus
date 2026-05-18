@@ -438,7 +438,7 @@ namespace ao::audio::backend
 
     static inline ::pw_core_events const coreEvents = []
     {
-      ::pw_core_events ev = {};
+      auto ev = ::pw_core_events{};
       ev.version = PW_VERSION_CORE_EVENTS;
       ev.done = onCoreDone;
       return ev;
@@ -446,7 +446,7 @@ namespace ao::audio::backend
 
     static inline ::pw_registry_events const registryEvents = []
     {
-      ::pw_registry_events ev = {};
+      auto ev = ::pw_registry_events{};
       ev.version = PW_VERSION_REGISTRY_EVENTS;
       ev.global = onRegistryGlobal;
       ev.global_remove = onRegistryGlobalRemove;
@@ -455,7 +455,7 @@ namespace ao::audio::backend
 
     static inline ::pw_node_events const streamNodeEvents = []
     {
-      ::pw_node_events ev = {};
+      auto ev = ::pw_node_events{};
       ev.version = PW_VERSION_NODE_EVENTS;
       ev.info = onNodeInfo;
       ev.param = onNodeParam;
@@ -464,7 +464,7 @@ namespace ao::audio::backend
 
     static inline ::pw_node_events const sinkNodeEvents = []
     {
-      ::pw_node_events ev = {};
+      auto ev = ::pw_node_events{};
       ev.version = PW_VERSION_NODE_EVENTS;
       ev.info = onNodeInfo;
       ev.param = onNodeParam;

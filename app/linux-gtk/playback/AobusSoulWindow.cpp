@@ -50,9 +50,7 @@ namespace ao::gtk
 
     if (auto const display = Gdk::Display::get_default(); display != nullptr)
     {
-      auto const monitors = display->get_monitors();
-
-      if (monitors->get_n_items() > 0)
+      if (auto const monitors = display->get_monitors(); monitors->get_n_items() > 0)
       {
         if (auto const monitor = std::dynamic_pointer_cast<Gdk::Monitor>(monitors->get_object(0)))
         {

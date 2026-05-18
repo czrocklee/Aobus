@@ -49,9 +49,7 @@ namespace ao::rt
           {
             for (auto const viewId : this->layoutState.openViews)
             {
-              auto const& state = this->views.trackListState(viewId);
-
-              if (state.listId == id)
+              if (auto const& state = this->views.trackListState(viewId); state.listId == id)
               {
                 toClose.push_back(viewId);
               }
@@ -114,9 +112,8 @@ namespace ao::rt
       {
         if (record.kind == ViewKind::TrackList)
         {
-          auto const& state = _impl->views.trackListState(record.id);
-
-          if (state.listId == listId && state.filterExpression.empty())
+          if (auto const& state = _impl->views.trackListState(record.id);
+              state.listId == listId && state.filterExpression.empty())
           {
             targetViewId = record.id;
             break;

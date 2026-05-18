@@ -110,9 +110,7 @@ namespace ao::gtk
     _listBox.signal_row_activated().connect(
       [this](Gtk::ListBoxRow* row)
       {
-        auto const index = row->get_index();
-
-        if (index >= 0 && std::cmp_less(index, _store->get_n_items()))
+        if (auto const index = row->get_index(); index >= 0 && std::cmp_less(index, _store->get_n_items()))
         {
           auto const item = _store->get_item(index);
 

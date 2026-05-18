@@ -4,7 +4,7 @@
 #pragma once
 
 #include "library_io/ImportProgressDialog.h"
-#include <ao/library/Exporter.h>
+#include "runtime/LibraryExporter.h"
 #include <runtime/CorePrimitives.h>
 #include <runtime/async/LifetimeScope.h>
 
@@ -72,9 +72,9 @@ namespace ao::gtk
 
     void onExportModeConfirmed(int responseId, Gtk::DropDown* modeCombo, Gtk::Dialog* dialog);
     void onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
-                              library::ExportMode mode,
+                              rt::ExportMode mode,
                               Glib::RefPtr<Gtk::FileDialog> const& fileDialog);
-    void executeExportTask(std::filesystem::path const& path, library::ExportMode mode);
+    void executeExportTask(std::filesystem::path const& path, rt::ExportMode mode);
 
     Gtk::Window& _parent;
     rt::AppRuntime& _runtime;

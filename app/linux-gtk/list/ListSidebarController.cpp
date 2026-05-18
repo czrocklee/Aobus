@@ -63,9 +63,7 @@ namespace ao::gtk
       {
         if (viewId != rt::ViewId{})
         {
-          auto const state = _runtime.views().trackListState(viewId);
-
-          if (state.listId != ListId{})
+          if (auto const state = _runtime.views().trackListState(viewId); state.listId != ListId{})
           {
             select(state.listId);
           }
@@ -166,9 +164,8 @@ namespace ao::gtk
   void ListSidebarController::openNewSmartListDialog()
   {
     auto parentListId = rootParentId();
-    auto const selectedId = _panel->selectedListId();
 
-    if (selectedId != ListId{0} && selectedId != allTracksListId())
+    if (auto const selectedId = _panel->selectedListId(); selectedId != ListId{0} && selectedId != allTracksListId())
     {
       parentListId = selectedId;
     }
@@ -235,9 +232,7 @@ namespace ao::gtk
         {
           if (responseId == Gtk::ResponseType::OK)
           {
-            auto const draft = dialog->draft();
-
-            if (draft.listId != ListId{0})
+            if (auto const draft = dialog->draft(); draft.listId != ListId{0})
             {
               updateList(draft);
             }

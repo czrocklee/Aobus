@@ -112,9 +112,8 @@ namespace ao::cli
       {
         auto txn = ml.writeTransaction();
         auto writer = ml.lists().writer(txn);
-        auto const listId = ListId{id->as<std::uint32_t>()};
 
-        if (writer.del(listId))
+        if (auto const listId = ListId{id->as<std::uint32_t>()}; writer.del(listId))
         {
           std::cout << "deleted list: " << listId << "\n";
           txn.commit();

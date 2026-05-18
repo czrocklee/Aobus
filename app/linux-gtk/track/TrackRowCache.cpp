@@ -106,9 +106,7 @@ namespace ao::gtk
 
   Glib::RefPtr<TrackRowObject> TrackRowCache::getTrackRow(TrackId id) const
   {
-    auto const it = _rowCache.find(id);
-
-    if (it != _rowCache.end())
+    if (auto const it = _rowCache.find(id); it != _rowCache.end())
     {
       return it->second;
     }
@@ -130,9 +128,7 @@ namespace ao::gtk
 
   Glib::RefPtr<TrackRowObject> TrackRowCache::getTrackRow(TrackId id, library::TrackStore::Reader const& reader) const
   {
-    auto const it = _rowCache.find(id);
-
-    if (it != _rowCache.end())
+    if (auto const it = _rowCache.find(id); it != _rowCache.end())
     {
       return it->second;
     }

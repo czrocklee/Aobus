@@ -125,9 +125,7 @@ namespace ao::gtk::test
 
     std::optional<RowData> TrackRowCache::getRow(TrackId id)
     {
-      auto it = _rowCache.find(id);
-
-      if (it != _rowCache.end())
+      if (auto it = _rowCache.find(id); it != _rowCache.end())
       {
         if (it->second.missing)
         {

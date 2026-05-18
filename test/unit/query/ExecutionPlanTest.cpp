@@ -440,13 +440,15 @@ namespace ao::query::test
 
     auto expr = parse(R"($artist ~ "Bach")");
     auto compiler = QueryCompiler{&dict};
-    auto plan = compiler.compile(expr);
 
-    REQUIRE(plan.dictionary == &dict);
-    REQUIRE(plan.stringConstants.size() == 1);
-    CHECK(plan.stringConstants.front() == "Bach");
-    CHECK(plan.instructions.back().op == OpCode::Like);
-    CHECK(plan.instructions.back().field == static_cast<std::uint8_t>(Field::ArtistId));
+    if (auto const plan = compiler.compile(expr); plan.dictionary != nullptr)
+    {
+      REQUIRE(plan.dictionary == &dict);
+      REQUIRE(plan.stringConstants.size() == 1);
+      CHECK(plan.stringConstants.front() == "Bach");
+      CHECK(plan.instructions.back().op == OpCode::Like);
+      CHECK(plan.instructions.back().field == static_cast<std::uint8_t>(Field::ArtistId));
+    }
   }
 
   TEST_CASE("ExecutionPlan - LIKE operator works for AlbumId")

@@ -135,6 +135,8 @@ namespace ao::audio::backend::test
       return;
     }
 
+    REQUIRE(sinkGuard.isValid());
+
     auto currentDevices = std::make_shared<std::vector<Device>>();
     auto provider = PipeWireProvider{};
     auto const sub =

@@ -112,17 +112,16 @@ namespace ao::audio::backend::detail
     void processChoiceIntValues(::spa_pod_choice const* choice, std::vector<std::uint32_t>& output)
     {
       auto const n_vals = SPA_POD_CHOICE_N_VALUES(choice);
-      auto const type = SPA_POD_CHOICE_VALUE_TYPE(choice);
 
-      if (n_vals == 0 || type != SPA_TYPE_Int)
+      if (n_vals == 0 || SPA_POD_CHOICE_VALUE_TYPE(choice) != SPA_TYPE_Int)
       {
         return;
       }
 
       auto const* vals = static_cast<std::int32_t const*>(SPA_POD_CHOICE_VALUES(choice));
-      auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
 
-      if (choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
+      if (auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
+          choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
       {
         for (std::uint32_t i = 0; i < n_vals; ++i)
         {
@@ -158,9 +157,7 @@ namespace ao::audio::backend::detail
 
       if (::spa_pod_is_int(pod) != 0)
       {
-        std::int32_t val = 0;
-
-        if (::spa_pod_get_int(pod, &val) == 0)
+        if (std::int32_t val = 0; ::spa_pod_get_int(pod, &val) == 0)
         {
           addUnique(output, static_cast<std::uint32_t>(val));
         }
@@ -182,9 +179,7 @@ namespace ao::audio::backend::detail
 
       if (::spa_pod_is_id(pod) != 0)
       {
-        std::uint32_t val = 0;
-
-        if (::spa_pod_get_id(pod, &val) == 0)
+        if (std::uint32_t val = 0; ::spa_pod_get_id(pod, &val) == 0)
         {
           addUnique(output, val);
         }
@@ -201,9 +196,9 @@ namespace ao::audio::backend::detail
         }
 
         auto const* vals = static_cast<std::uint32_t const*>(SPA_POD_CHOICE_VALUES(choice));
-        auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
 
-        if (choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
+        if (auto const choice_type = SPA_POD_CHOICE_TYPE(choice);
+            choice_type == SPA_CHOICE_Enum || choice_type == SPA_CHOICE_None)
         {
           for (std::uint32_t i = 0; i < n_vals; ++i)
           {
@@ -255,9 +250,7 @@ namespace ao::audio::backend::detail
 
           if (channelCount > 0 && channelCount <= kMaxChannelCount)
           {
-            auto const c8 = static_cast<std::uint8_t>(channelCount);
-
-            if (!std::ranges::contains(caps.channelCounts, c8))
+            if (auto const c8 = static_cast<std::uint8_t>(channelCount); !std::ranges::contains(caps.channelCounts, c8))
             {
               caps.channelCounts.push_back(c8);
             }
@@ -294,9 +287,7 @@ namespace ao::audio::backend::detail
 
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_volume))
     {
-      float val = 0.0F;
-
-      if (::spa_pod_get_float(&prop->value, &val) == 0)
+      if (float val = 0.0F; ::spa_pod_get_float(&prop->value, &val) == 0)
       {
         sinkProps.volume = val;
       }
@@ -304,9 +295,7 @@ namespace ao::audio::backend::detail
 
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_mute))
     {
-      bool val = false;
-
-      if (::spa_pod_get_bool(&prop->value, &val) == 0)
+      if (bool val = false; ::spa_pod_get_bool(&prop->value, &val) == 0)
       {
         sinkProps.isMuted = val;
       }
@@ -319,9 +308,7 @@ namespace ao::audio::backend::detail
 
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softMute))
     {
-      bool val = false;
-
-      if (::spa_pod_get_bool(&prop->value, &val) == 0)
+      if (bool val = false; ::spa_pod_get_bool(&prop->value, &val) == 0)
       {
         sinkProps.isSoftMuted = val;
       }

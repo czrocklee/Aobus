@@ -51,9 +51,7 @@ namespace
         APP_LOG_WARN("Failed to load runtime config: {}", result.error().message);
       }
 
-      auto const& path = snapshot.lastLibraryPath;
-
-      if (!path.empty())
+      if (auto const& path = snapshot.lastLibraryPath; !path.empty())
       {
         return std::filesystem::path{path};
       }

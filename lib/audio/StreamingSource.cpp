@@ -133,9 +133,7 @@ namespace ao::audio
     {
       auto lock = std::scoped_lock{_decoderMutex};
 
-      auto const seekResult = _decoder->seek(positionMs);
-
-      if (!seekResult)
+      if (auto const seekResult = _decoder->seek(positionMs); !seekResult)
       {
         if (!_failed.exchange(true, std::memory_order_relaxed))
         {

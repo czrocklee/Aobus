@@ -36,9 +36,8 @@ namespace ao::gtk
       [this](int /*n_press*/, double posX, double /*posY*/)
       {
         _isDragging = true;
-        int const width = _scale.get_width();
 
-        if (width > 0)
+        if (int const width = _scale.get_width(); width > 0)
         {
           double const newValue = (posX / static_cast<double>(width)) * static_cast<double>(_durationMs);
           _scale.set_value(newValue);

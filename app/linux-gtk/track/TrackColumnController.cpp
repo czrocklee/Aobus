@@ -85,9 +85,7 @@ namespace ao::gtk
     _syncingColumnLayout = true;
     _layoutChangedConnection.block(); // Block visibility updates during structural changes
 
-    auto const columns = _columnView.get_columns();
-
-    if (columns)
+    if (auto const columns = _columnView.get_columns(); columns)
     {
       for (auto const& [idx, state] : std::views::enumerate(layout.columns))
       {

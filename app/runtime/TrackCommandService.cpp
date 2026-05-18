@@ -81,9 +81,8 @@ namespace ao::rt
   bool TrackCommandService::deleteTrack(TrackId trackId)
   {
     auto txn = _library.writeTransaction();
-    auto writer = _library.tracks().writer(txn);
 
-    if (writer.remove(trackId))
+    if (auto writer = _library.tracks().writer(txn); writer.remove(trackId))
     {
       txn.commit();
       _mutation.notifyTracksMutated({trackId});

@@ -234,9 +234,7 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::updateNodePosition(std::string const& nodeId, int posX, int posY)
   {
-    auto* const node = findNodeById(&_document.root, nodeId);
-
-    if (node != nullptr)
+    if (auto* const node = findNodeById(&_document.root, nodeId); node != nullptr)
     {
       node->layout["x"] = LayoutValue{static_cast<std::int64_t>(posX)};
       node->layout["y"] = LayoutValue{static_cast<std::int64_t>(posY)};

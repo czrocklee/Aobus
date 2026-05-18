@@ -57,9 +57,7 @@ namespace ao::gtk::layout
 
     if (auto const it = layout.find("halign"); it != layout.end())
     {
-      auto const alignment = it->second.asString();
-
-      if (alignment == "fill")
+      if (auto const alignment = it->second.asString(); alignment == "fill")
       {
         widget.set_halign(Gtk::Align::FILL);
       }
@@ -79,9 +77,7 @@ namespace ao::gtk::layout
 
     if (auto const it = layout.find("valign"); it != layout.end())
     {
-      auto const alignment = it->second.asString();
-
-      if (alignment == "fill")
+      if (auto const alignment = it->second.asString(); alignment == "fill")
       {
         widget.set_valign(Gtk::Align::FILL);
       }
@@ -567,10 +563,10 @@ namespace ao::gtk::layout
             Gtk::Orientation::VERTICAL, width, minHeight, naturalHeight, minBaseline, naturalBaseline);
           int const height = child.reqHeight > 0 ? child.reqHeight : naturalHeight;
 
-          Gdk::Graphene::Rect const rect(static_cast<float>(child.posX),
-                                         static_cast<float>(child.posY),
-                                         static_cast<float>(width),
-                                         static_cast<float>(height));
+          auto const rect = Gdk::Graphene::Rect(static_cast<float>(child.posX),
+                                                static_cast<float>(child.posY),
+                                                static_cast<float>(width),
+                                                static_cast<float>(height));
           auto const cr = snapshot->append_cairo(rect);
 
           // Adwaita blue: #3584e4
@@ -755,10 +751,8 @@ namespace ao::gtk::layout
           return;
         }
 
-        int const offX = static_cast<int>(offsetX);
-        int const offY = static_cast<int>(offsetY);
-
-        if (_resizeCorner != ResizeCorner::None)
+        if (int const offX = static_cast<int>(offsetX), offY = static_cast<int>(offsetY);
+            _resizeCorner != ResizeCorner::None)
         {
           auto const snap = [this](int value)
           { return _snapToGrid ? ((value + _gridSize / 2) / _gridSize) * _gridSize : value; };
@@ -828,10 +822,8 @@ namespace ao::gtk::layout
           return;
         }
 
-        int const offX = static_cast<int>(offsetX);
-        int const offY = static_cast<int>(offsetY);
-
-        if (_resizeCorner == ResizeCorner::None)
+        if (int const offX = static_cast<int>(offsetX), offY = static_cast<int>(offsetY);
+            _resizeCorner == ResizeCorner::None)
         {
           _dragChild->posX = _dragChild->startX + offX;
           _dragChild->posY = _dragChild->startY + offY;

@@ -4,7 +4,7 @@
 #include "library_io/ImportExportCoordinator.h"
 #include "layout/LayoutConstants.h"
 #include "library_io/ImportProgressDialog.h"
-#include <ao/library/Exporter.h>
+#include "runtime/LibraryExporter.h"
 #include <ao/utility/Log.h>
 #include <runtime/AppRuntime.h>
 #include <runtime/LibraryMutationService.h>
@@ -58,9 +58,8 @@ namespace ao::gtk
                               if (auto const folder = dialog->select_folder_finish(result); folder)
                               {
                                 std::filesystem::path const path(folder->get_path());
-                                auto libPath = path / "data.mdb";
 
-                                if (std::filesystem::exists(libPath))
+                                if (auto const libPath = path / "data.mdb"; std::filesystem::exists(libPath))
                                 {
                                   openMusicLibrary(path);
                                 }
@@ -233,13 +232,13 @@ namespace ao::gtk
       return;
     }
 
-    auto mode = library::ExportMode::Metadata;
+    auto mode = rt::ExportMode::Metadata;
 
     switch (modeCombo->get_selected())
     {
-      case 0: mode = library::ExportMode::Minimum; break;
-      case 1: mode = library::ExportMode::Metadata; break;
-      case 2: mode = library::ExportMode::Full; break;
+      case 0: mode = rt::ExportMode::Minimum; break;
+      case 1: mode = rt::ExportMode::Metadata; break;
+      case 2: mode = rt::ExportMode::Full; break;
       default: break;
     }
 
@@ -263,7 +262,7 @@ namespace ao::gtk
   }
 
   void ImportExportCoordinator::onExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& result,
-                                                     library::ExportMode mode,
+                                                     rt::ExportMode mode,
                                                      Glib::RefPtr<Gtk::FileDialog> const& fileDialog)
   {
     try
@@ -279,17 +278,17 @@ namespace ao::gtk
     }
   }
 
-  void ImportExportCoordinator::executeExportTask(std::filesystem::path const& path, library::ExportMode mode)
+  void ImportExportCoordinator::executeExportTask(std::filesystem::path const& path, rt::ExportMode mode)
   {
     rt::async::spawnWithLifetime(
       _runtime.async(),
       _tasks,
       [](ImportExportCoordinator* self,
          std::filesystem::path exportPath,
-         library::ExportMode exportMode) -> rt::async::Task<void>
+         rt::ExportMode exportMode) -> rt::async::Task<void>
       {
         bool success = true;
-        std::string errorText;
+        auto errorText = std::string{};
 
         try
         {
@@ -347,7 +346,7 @@ namespace ao::gtk
           [](ImportExportCoordinator* self, std::filesystem::path importPath) -> rt::async::Task<void>
           {
             bool success = true;
-            std::string errorText;
+            auto errorText = std::string{};
 
             try
             {

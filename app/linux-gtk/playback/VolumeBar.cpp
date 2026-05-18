@@ -78,9 +78,7 @@ namespace ao::gtk
 
   void VolumeBar::setVolume(float volume)
   {
-    auto const clamped = std::clamp(volume, 0.0F, 1.0F);
-
-    if (std::abs(_volume - clamped) > kVolumeEpsilon)
+    if (auto const clamped = std::clamp(volume, 0.0F, 1.0F); std::abs(_volume - clamped) > kVolumeEpsilon)
     {
       _volume = clamped;
       queue_draw();
@@ -234,9 +232,8 @@ namespace ao::gtk
   void VolumeBar::handleScroll(double /*dx*/, double dy)
   {
     float const delta = (dy > 0) ? -kScrollStep : kScrollStep;
-    float const newVol = std::clamp(_volume + delta, 0.0F, 1.0F);
 
-    if (std::abs(_volume - newVol) > kVolumeEpsilon)
+    if (auto const newVol = std::clamp(_volume + delta, 0.0F, 1.0F); std::abs(_volume - newVol) > kVolumeEpsilon)
     {
       _volume = newVol;
       _volumeChanged.emit(_volume);

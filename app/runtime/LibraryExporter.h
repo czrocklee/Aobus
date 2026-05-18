@@ -9,7 +9,7 @@
 #include <filesystem>
 #include <memory>
 
-namespace ao::library
+namespace ao::rt
 {
   /**
    * ExportMode - Controls the verbosity of the library export.
@@ -22,18 +22,18 @@ namespace ao::library
   };
 
   /**
-   * Exporter - Streaming YAML exporter for MusicLibrary.
+   * Exporter - Streaming YAML exporter for library::MusicLibrary.
    */
-  class Exporter final
+  class LibraryExporter final
   {
   public:
-    explicit Exporter(MusicLibrary& ml);
-    ~Exporter();
+    explicit LibraryExporter(library::MusicLibrary& ml);
+    ~LibraryExporter();
 
-    Exporter(Exporter const&) = delete;
-    Exporter& operator=(Exporter const&) = delete;
-    Exporter(Exporter&&) noexcept = default;
-    Exporter& operator=(Exporter&&) noexcept = default;
+    LibraryExporter(LibraryExporter const&) = delete;
+    LibraryExporter& operator=(LibraryExporter const&) = delete;
+    LibraryExporter(LibraryExporter&&) noexcept = default;
+    LibraryExporter& operator=(LibraryExporter&&) noexcept = default;
 
     /**
      * Export the library to a YAML file.
@@ -47,4 +47,4 @@ namespace ao::library
     struct Impl;
     std::unique_ptr<Impl> _impl;
   };
-} // namespace ao::library
+} // namespace ao::rt

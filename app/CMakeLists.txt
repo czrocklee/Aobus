@@ -9,6 +9,10 @@ add_library(app_runtime STATIC
     runtime/async/LifetimeScope.h
     runtime/CoreRuntime.cpp
     runtime/CoreRuntime.h
+    runtime/LibraryImporter.cpp
+    runtime/LibraryImporter.h
+    runtime/LibraryExporter.cpp
+    runtime/LibraryExporter.h
     runtime/AllTracksSource.cpp
     runtime/AllTracksSource.h
     runtime/CorePrimitives.h

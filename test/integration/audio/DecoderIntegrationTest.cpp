@@ -227,16 +227,12 @@ namespace ao::audio::test
       {
         auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
         REQUIRE(decoder.open(testFile));
-        auto const info = decoder.streamInfo();
 
-        // Seek to last 10ms
-        if (info.durationMs > 10)
+        if (auto const info = decoder.streamInfo(); info.durationMs > 10)
         {
           REQUIRE(decoder.seek(info.durationMs - 10));
-          auto const block = decoder.readNextBlock();
-
           // Should either get some frames or EOF immediately
-          if (block)
+          if (auto const block = decoder.readNextBlock(); block)
           {
             CHECK(block->frames > 0);
           }

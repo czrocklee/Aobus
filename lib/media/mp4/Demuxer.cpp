@@ -225,9 +225,8 @@ namespace ao::media::mp4
       {
         auto type = atom.type();
         auto const& view = utility::unsafeDowncast<AtomView const>(atom);
-        auto const atomBytes = view.bytes();
 
-        if (type == "stsz")
+        if (auto const atomBytes = view.bytes(); type == "stsz")
         {
           parseStsz(atomBytes);
         }

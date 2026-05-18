@@ -8,21 +8,21 @@
 #include <filesystem>
 #include <memory>
 
-namespace ao::library
+namespace ao::rt
 {
   /**
-   * Importer - Logical YAML importer for MusicLibrary.
+   * Importer - Logical YAML importer for library::MusicLibrary.
    */
-  class Importer final
+  class LibraryImporter final
   {
   public:
-    explicit Importer(MusicLibrary& ml);
-    ~Importer();
+    explicit LibraryImporter(library::MusicLibrary& ml);
+    ~LibraryImporter();
 
-    Importer(Importer const&) = delete;
-    Importer& operator=(Importer const&) = delete;
-    Importer(Importer&&) noexcept = default;
-    Importer& operator=(Importer&&) noexcept = default;
+    LibraryImporter(LibraryImporter const&) = delete;
+    LibraryImporter& operator=(LibraryImporter const&) = delete;
+    LibraryImporter(LibraryImporter&&) noexcept = default;
+    LibraryImporter& operator=(LibraryImporter&&) noexcept = default;
 
     /**
      * Import the library from a YAML file.
@@ -35,4 +35,4 @@ namespace ao::library
     struct Impl;
     std::unique_ptr<Impl> _impl;
   };
-} // namespace ao::library
+} // namespace ao::rt

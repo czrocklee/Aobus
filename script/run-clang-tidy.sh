@@ -83,6 +83,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Truncate output file if specified to start with a fresh slate for this run.
+# Since individual runs of STRICT and RELAXED batches will append to it,
+# we only truncate it once at the very start of the script.
+if [[ -n "$OUTPUT_FILE" ]]; then
+    : > "$OUTPUT_FILE"
+fi
+
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 COMPILE_DB="$BUILD_DIR/compile_commands.json"
 PLUGIN="$BUILD_DIR/lint/libAobusLintPlugin.so"
@@ -205,8 +212,14 @@ RELAXED_CONFIG="$STRICT_CONFIG"
 classify_file() {
     local f="$1"
     [[ "$f" != /* ]] && f="$PWD/$f"
+    if [[ ! -f "$f" ]]; then
+        echo "IGNORE $f"
+        return
+    fi
     f=$(realpath -e "$f" 2>/dev/null || realpath "$f" 2>/dev/null || echo "$f")
-    if [[ "$f" == */test/* ]]; then
+    if [[ "$f" == */lint/* ]]; then
+        echo "IGNORE $f"
+    elif [[ "$f" == */test/* ]]; then
         echo "RELAXED $f"
     else
         echo "STRICT $f"

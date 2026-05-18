@@ -139,9 +139,7 @@ namespace ao::cli
               std::size_t offset,
               std::ostream& os)
     {
-      auto matches = collectTracks(ml, filter);
-
-      if (json)
+      if (auto const matches = collectTracks(ml, filter); json)
       {
         formatJson(matches, offset, limit, ml, os);
       }
@@ -155,12 +153,12 @@ namespace ao::cli
   void setupTrackCommand(CLI::App& app, rt::CoreRuntime& runtime)
   {
     auto* track = app.add_subcommand("track", "Track management commands");
-
     auto* showCmd = track->add_subcommand("show", "Show tracks matching a filter");
     auto* filter = showCmd->add_option("filter,-f,--filter", "track filter expression");
     auto* json = showCmd->add_flag("-j,--json", "output as JSON");
     auto* limit = showCmd->add_option("-l,--limit", "limit number of results (0 = all)")->default_val(0);
     auto* offset = showCmd->add_option("-o,--offset", "offset results")->default_val(0);
+
     showCmd->callback(
       [&runtime, filter, json, limit, offset]
       {
@@ -177,9 +175,8 @@ namespace ao::cli
     create->callback(
       [&runtime, path]
       {
-        auto const trackId = runtime.trackCommands().createTrackFromFile(path->as<std::string>());
-
-        if (trackId != TrackId{})
+        if (auto const trackId = runtime.trackCommands().createTrackFromFile(path->as<std::string>());
+            trackId != TrackId{})
         {
           std::cout << "added track: " << trackId << '\n';
         }
@@ -194,9 +191,7 @@ namespace ao::cli
     del->callback(
       [&runtime, id]
       {
-        auto const trackId = TrackId{id->as<std::uint32_t>()};
-
-        if (runtime.trackCommands().deleteTrack(trackId))
+        if (auto const trackId = TrackId{id->as<std::uint32_t>()}; runtime.trackCommands().deleteTrack(trackId))
         {
           std::cout << "deleted track: " << trackId << '\n';
         }

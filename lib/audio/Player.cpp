@@ -322,10 +322,8 @@ namespace ao::audio
 
   void Player::setOutput(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
   {
-    auto const currentSnap = _impl->engine->status();
-
-    // 1. Check if we already have this output active
-    if (backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
+    if (auto const currentSnap = _impl->engine->status();
+        backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
     {
       _impl->optPendingOutput.reset();
       return;

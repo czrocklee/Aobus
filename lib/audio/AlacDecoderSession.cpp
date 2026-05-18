@@ -89,9 +89,8 @@ namespace ao::audio
     }
 
     _impl->demuxer = std::make_unique<Demuxer>(_impl->mappedFile.bytes());
-    auto const demuxError = _impl->demuxer->parseTrack("alac");
 
-    if (!demuxError.empty())
+    if (auto const demuxError = _impl->demuxer->parseTrack("alac"); !demuxError.empty())
     {
       return makeError(Error::Code::InitFailed, demuxError);
     }

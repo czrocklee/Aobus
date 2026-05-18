@@ -381,9 +381,7 @@ namespace ao::gtk
     state.id = generateId();
     state.label = _nameEntry.get_text();
 
-    auto const groupIndex = _groupDropdown.get_selected();
-
-    switch (groupIndex)
+    switch (auto const groupIndex = _groupDropdown.get_selected(); groupIndex)
     {
       case 0: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::None); break;
       case 1: state.groupBy = static_cast<std::uint8_t>(rt::TrackGroupKey::Artist); break;

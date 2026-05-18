@@ -19,7 +19,6 @@ add_executable(ao_test
     unit/library/ListStoreTest.cpp
     unit/library/ListBuilderTest.cpp
     unit/library/MusicLibraryTest.cpp
-    unit/library/LibraryExportImportTest.cpp
 
     # lmdb tests
     unit/lmdb/EnvironmentTest.cpp
@@ -54,6 +53,7 @@ add_executable(ao_test
     unit/runtime/ConfigStoreTest.cpp
     unit/runtime/ManualListSourceTest.cpp
     unit/runtime/HeadlessShellTest.cpp
+    unit/runtime/LibraryExportImportTest.cpp
 
     # integration tests
     integration/audio/DecoderIntegrationTest.cpp

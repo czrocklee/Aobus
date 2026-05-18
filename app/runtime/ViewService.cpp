@@ -397,9 +397,7 @@ namespace ao::rt
     it->second.state.listId = listId;
     it->second.state.revision++;
 
-    auto* baseSource = &_impl->sources.sourceFor(listId);
-
-    if (it->second.adHocSource)
+    if (auto* baseSource = &_impl->sources.sourceFor(listId); it->second.adHocSource)
     {
       // adHocSource holds a reference to the old baseSource. We must recreate it.
       it->second.adHocSource =

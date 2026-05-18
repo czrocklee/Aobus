@@ -39,9 +39,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const it = _cacheMap.find(resourceId);
-
-    if (it != _cacheMap.end())
+    if (auto const it = _cacheMap.find(resourceId); it != _cacheMap.end())
     {
       // Update existing entry and move to front
       it->second->pixbuf = pixbuf;

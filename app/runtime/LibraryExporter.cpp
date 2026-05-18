@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "runtime/LibraryExporter.h"
 #include <ao/Exception.h>
 #include <ao/Type.h>
 #include <ao/library/DictionaryStore.h>
-#include <ao/library/Exporter.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
@@ -18,7 +18,7 @@
 #include <memory>
 #include <string>
 
-namespace ao::library
+namespace ao::rt
 {
   namespace
   {
@@ -34,7 +34,10 @@ namespace ao::library
       return "unknown";
     }
 
-    void emitTrackMetadata(YAML::Emitter& out, TrackView const& view, DictionaryStore& dict, ExportMode /*mode*/)
+    void emitTrackMetadata(YAML::Emitter& out,
+                           library::TrackView const& view,
+                           library::DictionaryStore& dict,
+                           ExportMode /*mode*/)
     {
       auto const metadata = view.metadata();
       out << YAML::Key << "title" << YAML::Value << std::string(metadata.title());
@@ -97,7 +100,7 @@ namespace ao::library
       }
     }
 
-    void emitTrackProperties(YAML::Emitter& out, TrackView::PropertyProxy const& property)
+    void emitTrackProperties(YAML::Emitter& out, library::TrackView::PropertyProxy const& property)
     {
       out << YAML::Key << "durationMs" << YAML::Value << property.durationMs();
       out << YAML::Key << "bitrate" << YAML::Value << property.bitrate();
@@ -110,9 +113,9 @@ namespace ao::library
     }
 
     void emitTrackCommon(YAML::Emitter& out,
-                         TrackView::MetadataProxy const& metadata,
-                         TrackView::TagProxy const& tags,
-                         DictionaryStore& dict)
+                         library::TrackView::MetadataProxy const& metadata,
+                         library::TrackView::TagProxy const& tags,
+                         library::DictionaryStore& dict)
     {
       if (metadata.rating() != 0)
       {
@@ -133,34 +136,34 @@ namespace ao::library
     }
   } // namespace
 
-  struct Exporter::Impl final
+  struct LibraryExporter::Impl final
   {
-    explicit Impl(MusicLibrary& ml)
+    explicit Impl(library::MusicLibrary& ml)
       : ml{ml}
     {
     }
 
     void exportToYaml(std::filesystem::path const& path, ExportMode mode);
     void exportTracks(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode);
-    void exportTrack(YAML::Emitter& out, TrackId id, TrackView const& view, ExportMode mode);
+    void exportTrack(YAML::Emitter& out, TrackId id, library::TrackView const& view, ExportMode mode);
     void exportLists(YAML::Emitter& out, lmdb::ReadTransaction const& txn);
 
-    MusicLibrary& ml;
+    library::MusicLibrary& ml;
   };
 
-  Exporter::Exporter(MusicLibrary& ml)
+  LibraryExporter::LibraryExporter(library::MusicLibrary& ml)
     : _impl{std::make_unique<Impl>(ml)}
   {
   }
 
-  Exporter::~Exporter() = default;
+  LibraryExporter::~LibraryExporter() = default;
 
-  void Exporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
+  void LibraryExporter::exportToYaml(std::filesystem::path const& path, ExportMode mode)
   {
     _impl->exportToYaml(path, mode);
   }
 
-  void Exporter::Impl::exportToYaml(std::filesystem::path const& path, ExportMode mode)
+  void LibraryExporter::Impl::exportToYaml(std::filesystem::path const& path, ExportMode mode)
   {
     auto ofs = std::ofstream{path};
 
@@ -189,7 +192,7 @@ namespace ao::library
     }
   }
 
-  void Exporter::Impl::exportTracks(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode)
+  void LibraryExporter::Impl::exportTracks(YAML::Emitter& out, lmdb::ReadTransaction const& txn, ExportMode mode)
   {
     auto const trackReader = ml.tracks().reader(txn);
     out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
@@ -202,7 +205,10 @@ namespace ao::library
     out << YAML::EndSeq;
   }
 
-  void Exporter::Impl::exportTrack(YAML::Emitter& out, TrackId id, TrackView const& view, ExportMode mode)
+  void LibraryExporter::Impl::exportTrack(YAML::Emitter& out,
+                                          TrackId id,
+                                          library::TrackView const& view,
+                                          ExportMode mode)
   {
     auto& dict = ml.dictionary();
     out << YAML::BeginMap;
@@ -225,7 +231,7 @@ namespace ao::library
     out << YAML::EndMap;
   }
 
-  void Exporter::Impl::exportLists(YAML::Emitter& out, lmdb::ReadTransaction const& txn)
+  void LibraryExporter::Impl::exportLists(YAML::Emitter& out, lmdb::ReadTransaction const& txn)
   {
     out << YAML::Key << "lists" << YAML::Value << YAML::BeginSeq;
     auto const listReader = ml.lists().reader(txn);
@@ -248,9 +254,7 @@ namespace ao::library
       }
       else
       {
-        auto const tracks = listView.tracks();
-
-        if (!tracks.empty())
+        if (auto const tracks = listView.tracks(); !tracks.empty())
         {
           out << YAML::Key << "tracks" << YAML::Value << YAML::BeginSeq;
 
@@ -268,4 +272,4 @@ namespace ao::library
 
     out << YAML::EndSeq;
   }
-} // namespace ao::library
+} // namespace ao::rt

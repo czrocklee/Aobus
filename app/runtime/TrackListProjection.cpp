@@ -212,9 +212,7 @@ namespace ao::rt
       {
         for (auto const& term : sortBy)
         {
-          int const cmp = compareSingleField(term, lhs.keys, rhs.keys);
-
-          if (cmp != 0)
+          if (auto const cmp = compareSingleField(term, lhs.keys, rhs.keys); cmp != 0)
           {
             return term.ascending ? (cmp < 0) : (cmp > 0);
           }
@@ -457,9 +455,7 @@ namespace ao::rt
 
       for (auto& entry : orderIndex)
       {
-        auto optView = reader.get(entry.trackId, loadMode);
-
-        if (optView)
+        if (auto const optView = reader.get(entry.trackId, loadMode); optView)
         {
           ensureGroupSortKeys(entry.keys, *optView, dict, groupBy, normCache);
           fillGroupMetadata(entry, *optView, dict, groupBy, stringPool);
@@ -529,9 +525,8 @@ namespace ao::rt
       for (std::size_t idx = 0; idx < source.size(); ++idx)
       {
         auto const trackId = source.trackIdAt(idx);
-        auto const optView = reader.get(trackId, loadMode);
 
-        if (optView)
+        if (auto const optView = reader.get(trackId, loadMode); optView)
         {
           auto entry = OrderEntry{.trackId = trackId};
           fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
@@ -679,11 +674,9 @@ namespace ao::rt
 
       for (auto const id : ids)
       {
-        auto const optView = reader.get(id, loadMode);
-
-        if (optView)
+        if (auto const optView = reader.get(id, loadMode); optView)
         {
-          OrderEntry entry{.trackId = id};
+          auto entry = OrderEntry{.trackId = id};
           fillSortKeys(entry.keys, *optView, dict, sortBy, normCache, stringPool);
 
           if (groupBy != TrackGroupKey::None)
@@ -1048,9 +1041,8 @@ namespace ao::rt
   {
     for (std::size_t idx = 0; idx < _impl->sections.size(); ++idx)
     {
-      auto const& section = _impl->sections[idx];
-
-      if (rowIndex >= section.rows.start && rowIndex < section.rows.start + section.rows.count)
+      if (auto const& section = _impl->sections[idx];
+          rowIndex >= section.rows.start && rowIndex < section.rows.start + section.rows.count)
       {
         return idx;
       }

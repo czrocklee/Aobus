@@ -37,9 +37,7 @@ namespace ao::tag::mpeg::id3v2
 
       for (auto const* it = begin; it != end; ++it)
       {
-        auto const ch = static_cast<unsigned char>(*it);
-
-        if (ch < kAsciiLimit)
+        if (auto const ch = static_cast<unsigned char>(*it); ch < kAsciiLimit)
         {
           result.push_back(static_cast<char>(ch));
         }

@@ -97,16 +97,12 @@ namespace ao::audio::backend::detail
 
     while (::snd_card_next(&card) == 0 && card >= 0)
     {
-      char* cardName = nullptr;
-
-      if (::snd_card_get_name(card, &cardName) == 0)
+      if (char* cardName = nullptr; ::snd_card_get_name(card, &cardName) == 0)
       {
         auto const safeCardName = std::unique_ptr<char, void (*)(void*)>(cardName, ::free);
         auto const cardId = std::format("hw:{}", card);
 
-        ::snd_ctl_t* rawCtl = nullptr;
-
-        if (::snd_ctl_open(&rawCtl, cardId.c_str(), 0) >= 0)
+        if (::snd_ctl_t* rawCtl = nullptr; ::snd_ctl_open(&rawCtl, cardId.c_str(), 0) >= 0)
         {
           auto ctl = utility::makeUniquePtr<::snd_ctl_close>(rawCtl);
           int device = -1;

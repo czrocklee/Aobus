@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "LibCommand.h"
-#include <ao/library/Exporter.h>
-#include <ao/library/Importer.h>
+#include "runtime/LibraryExporter.h"
+#include "runtime/LibraryImporter.h"
 #include <ao/library/MusicLibrary.h>
 #include <runtime/CoreRuntime.h>
 
@@ -71,19 +71,19 @@ namespace ao::cli
 
     void exportLib(library::MusicLibrary& ml, std::string const& path, std::string const& modeStr, std::ostream& os)
     {
-      auto mode = library::ExportMode::Full;
+      auto mode = rt::ExportMode::Full;
 
       if (modeStr == "minimum")
       {
-        mode = library::ExportMode::Minimum;
+        mode = rt::ExportMode::Minimum;
       }
       else if (modeStr == "metadata")
       {
-        mode = library::ExportMode::Metadata;
+        mode = rt::ExportMode::Metadata;
       }
       else if (modeStr == "full")
       {
-        mode = library::ExportMode::Full;
+        mode = rt::ExportMode::Full;
       }
       else
       {
@@ -91,14 +91,14 @@ namespace ao::cli
         return;
       }
 
-      auto exporter = library::Exporter{ml};
+      auto exporter = rt::LibraryExporter{ml};
       exporter.exportToYaml(path, mode);
       os << "Library exported to '" << path << "' using mode '" << modeStr << "'.\n";
     }
 
     void importLib(library::MusicLibrary& ml, std::string const& path, std::ostream& os)
     {
-      auto importer = library::Importer{ml};
+      auto importer = rt::LibraryImporter{ml};
       importer.importFromYaml(path);
       os << "Library imported from '" << path << "'.\n";
     }

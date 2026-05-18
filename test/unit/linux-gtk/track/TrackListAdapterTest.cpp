@@ -75,9 +75,7 @@ namespace ao::model::test
 
   std::string TestTrackRowProvider::resolveDictionaryString(DictionaryId id)
   {
-    auto it = _stringCache.find(id);
-
-    if (it != _stringCache.end())
+    if (auto it = _stringCache.find(id); it != _stringCache.end())
     {
       return it->second;
     }
@@ -106,9 +104,7 @@ namespace ao::model::test
 
   std::optional<RowData> TestTrackRowProvider::getRow(TrackId id)
   {
-    auto it = _rowCache.find(id);
-
-    if (it != _rowCache.end())
+    if (auto it = _rowCache.find(id); it != _rowCache.end())
     {
       if (it->second.missing)
       {
@@ -121,67 +117,55 @@ namespace ao::model::test
     lmdb::ReadTransaction const txn(_ml->readTransaction());
     auto reader = _store->reader(txn);
 
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
-
-    if (!optView)
+    if (auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both))
     {
+      auto const& view = *optView;
+      auto const& metadata = view.metadata();
+
       auto row = RowData{};
       row.id = id;
-      row.missing = true;
-      _rowCache.emplace(id, std::move(row));
+      row.title = std::string(metadata.title());
 
-      return std::nullopt;
+      if (auto const artistId = metadata.artistId(); artistId != DictionaryId{0})
+      {
+        row.artist = resolveDictionaryString(artistId);
+      }
+
+      if (auto const albumId = metadata.albumId(); albumId != DictionaryId{0})
+      {
+        row.album = resolveDictionaryString(albumId);
+      }
+
+      if (auto const albumArtistId = metadata.albumArtistId(); albumArtistId != DictionaryId{0})
+      {
+        row.albumArtist = resolveDictionaryString(albumArtistId);
+      }
+
+      if (auto const genreId = metadata.genreId(); genreId != DictionaryId{0})
+      {
+        row.genre = resolveDictionaryString(genreId);
+      }
+
+      row.year = metadata.year();
+      row.discNumber = metadata.discNumber();
+      row.trackNumber = metadata.trackNumber();
+
+      if (auto const coverArtId = metadata.coverArtId(); coverArtId != 0)
+      {
+        row.coverArtId = coverArtId;
+      }
+
+      auto const result = _rowCache.emplace(id, std::move(row));
+
+      return result.first->second;
     }
-
-    auto const& view = *optView;
-    auto const& metadata = view.metadata();
 
     auto row = RowData{};
     row.id = id;
-    row.title = std::string(metadata.title());
+    row.missing = true;
+    _rowCache.emplace(id, std::move(row));
 
-    auto const artistId = metadata.artistId();
-
-    if (artistId != DictionaryId{0})
-    {
-      row.artist = resolveDictionaryString(artistId);
-    }
-
-    auto const albumId = metadata.albumId();
-
-    if (albumId != DictionaryId{0})
-    {
-      row.album = resolveDictionaryString(albumId);
-    }
-
-    auto const albumArtistId = metadata.albumArtistId();
-
-    if (albumArtistId != DictionaryId{0})
-    {
-      row.albumArtist = resolveDictionaryString(albumArtistId);
-    }
-
-    auto const genreId = metadata.genreId();
-
-    if (genreId != DictionaryId{0})
-    {
-      row.genre = resolveDictionaryString(genreId);
-    }
-
-    row.year = metadata.year();
-    row.discNumber = metadata.discNumber();
-    row.trackNumber = metadata.trackNumber();
-
-    auto const coverArtId = metadata.coverArtId();
-
-    if (coverArtId != 0)
-    {
-      row.coverArtId = coverArtId;
-    }
-
-    auto const result = _rowCache.emplace(id, std::move(row));
-
-    return result.first->second;
+    return std::nullopt;
   }
 
   void TestTrackRowProvider::invalidateHot(TrackId id)

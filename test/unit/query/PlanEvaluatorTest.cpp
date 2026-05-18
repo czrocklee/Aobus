@@ -1161,9 +1161,8 @@ namespace ao::query::test
       for (int i = 0; i < 1000; ++i)
       {
         auto const candidate = std::format("collision_tag_{}", i);
-        auto const idB = dict.getOrIntern(candidate).value();
 
-        if (idB != idA && (idB % 32) == bitIndex)
+        if (auto const idB = dict.getOrIntern(candidate).value(); idB != idA && (idB % 32) == bitIndex)
         {
           tagB = candidate;
           break;
